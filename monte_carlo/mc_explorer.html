@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monte Carlo Explorer — interactive explainer</title>
+<meta name="description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+
+<!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Monte Carlo Explorer — interactive explainer">
+<meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+<meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
+<meta property="og:image:width" content="2966">
+<meta property="og:image:height" content="1484">
+<meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html">
+<meta property="fb:app_id" content="2385695445236853">
+
+<!-- Twitter/X card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Monte Carlo Explorer — interactive explainer">
+<meta name="twitter:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+<meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
+
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Y66V2TS0R6"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Y66V2TS0R6');</script>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8; --card: #ffffff; --green: #1a3d2b; --green2: #2d6a4f;
+  --orange: #c85a0a; --accept: #1a7a4a; --reject: #c85a0a;
+  --text: #1c1c1c; --muted: #777; --border: #ddd5c8;
+  --sq-fill: #eceaf5; --sq-stroke: #6a5d9e; --circ-stroke: #8b6914;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+.widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
+.wh-copy { text-align:right; font-size:.72rem; color:var(--muted); margin-top:4px; }
+.wh-copy a { color:inherit; text-decoration:underline; }
+.wh-title { font-size: 1.4rem; font-weight: 700; color: var(--green); }
+.wh-sub   { font-size: 0.875rem; color: var(--muted); margin-top: 3px; }
+.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--green); margin: 14px 0 18px; }
+.tab {
+  font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 500;
+  padding: 8px 24px; border: 2px solid transparent; border-bottom: none;
+  border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
+  cursor: pointer; margin-bottom: -2px; transition: .15s;
+}
+.tab.active { background: var(--card); color: var(--green); font-weight: 700; border-color: var(--green); border-bottom-color: var(--card); }
+.tab:hover:not(.active) { color: var(--green); background: rgba(26,61,43,.05); }
+.tp { display: none; } .tp.active { display: block; }
+.ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
+.btn-run { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--green); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run:hover { background: var(--green2); }
+.btn-run:disabled { background: #aaa; cursor: not-allowed; }
+.btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-clear:hover { color: var(--orange); border-color: var(--orange); }
+.viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px; flex: 0 0 auto; }
+canvas { display: block; }
+.cv-leg { font-size: .7rem; color: var(--muted); text-align: center; margin-top: 6px; }
+.stats-panel { flex: 1; min-width: 0; }
+.sg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+.sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sc-val.acc { color: var(--orange); }
+.sc-val.dim { color: var(--muted); font-size: .9rem; }
+.hint { background: #f8f6f1; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+.bridge-note { font-size: .8rem; background: rgba(26,61,43,.09); color: var(--green); border-radius: 6px; padding: 7px 11px; border-left: 3px solid var(--green2); display: none; margin-bottom: 4px; }
+.sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
+.sec-hd { font-size: .75rem; font-weight: 800; color: var(--green); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
+.hist-empty { font-size: .85rem; color: var(--muted); font-style: italic; text-align: center; padding: 18px 0; }
+svg.hsv { display: block; width: 100%; height: auto; }
+.exp-cv  { display: block; border-radius: 4px; }
+.exp-cap { font-size: .75rem; color: var(--muted); text-align: center; margin-top: 5px; }
+.exp-svg { display: block; width: 100%; }
+.pi-exp-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.pi-exp-dart { flex: 0 0 auto; width: 172px; height: auto; display: block; }
+.pi-exp-math { flex: 1 1 380px; min-width: 0; display: block; }
+.pi-eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.pi-eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
+             color: var(--green); flex-shrink: 0; min-width: 148px; }
+.pi-eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--green); }
+.pi-eq-hr  { border: none; border-top: 1px solid var(--border); margin: 5px 0; }
+.pi-therefore { background: rgba(26,61,43,.07); border-radius: 7px;
+                padding: 9px 11px; margin-top: 8px; }
+.pi-therefore-row { display: flex; flex-wrap: wrap; gap: 3px 8px;
+                    align-items: baseline; margin-bottom: 5px; }
+.pi-therefore strong { font-family: 'Outfit',sans-serif; font-size: .85rem;
+                        font-weight: 700; color: var(--green); flex-shrink: 0; }
+.pi-therefore-eq { font-family: 'IBM Plex Mono',monospace; font-size: .83rem;
+                   color: var(--orange); }
+.pi-borel { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+@media (max-width: 680px) {
+  .pi-exp-wrap { flex-direction: column; gap: 10px; }
+  .pi-exp-dart { width: 100%; max-width: 310px; height: auto; margin: 0 auto; }
+  .pi-exp-math { width: 100%; }
+  .pi-eq-lbl { font-size: 1rem; }
+  .pi-eq-val { font-size: .92rem; }
+  .pi-therefore-eq { font-size: .9rem; }
+  .pi-borel { font-size: .82rem; }
+}
+.exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
+footer { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
+footer a { color: var(--muted); text-decoration: underline; }
+footer a:hover { color: var(--orange); }
+.cr-sep { display: inline; }
+.cr-br { display: none; }
+@media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
+.tab-select {
+  display: none; width: 100%; font-family: 'Outfit', sans-serif;
+  font-size: .95rem; font-weight: 700; padding: 8px 14px;
+  border: 2px solid var(--green); border-radius: 7px;
+  background: var(--card); color: var(--green); cursor: pointer;
+  margin-bottom: 14px; appearance: auto;
+}
+@media (max-width: 345px) {
+  .tabs { display: none; }
+  .tab-select { display: block; }
+}
+@media (max-width: 620px) { .viz-row { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div style="margin-bottom:14px">
+    <div class="wh-title">Monte Carlo Explorer</div>
+    <div class="wh-sub">Random sampling for estimation and numerical integration — run experiments and watch confidence intervals accumulate</div>
+    <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="pi" onclick="showTab('pi',this)">① Estimating π</button>
+    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">② MC Integration</button>
+  </nav>
+  <select id="tab-select" class="tab-select" onchange="showTabFromSelect(this)">
+    <option value="pi">① Estimating π</option>
+    <option value="mc">② MC Integration</option>
+  </select>
+
+  <!-- TAB 1 -->
+  <section id="tab-pi" class="tp active">
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Samples per run</span>
+      <select id="pi-n">
+        <option value="50">50</option><option value="100">100</option>
+        <option value="500" selected>500</option><option value="1000">1,000</option>
+        <option value="5000">5,000</option><option value="10000">10,000</option>
+      </select>
+      <button class="btn-run" id="pi-run" onclick="runPi()">▶ Run Experiment</button>
+      <button class="btn-clear" onclick="clearPi()">Clear history</button>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <canvas id="pi-cv"></canvas>
+        <div class="cv-leg">
+          <span style="color:var(--accept)">● inside circle</span>&nbsp;&nbsp;
+          <span style="color:var(--reject)">✕ outside circle</span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Total samples</div><div class="sc-val" id="pi-sn">—</div></div>
+          <div class="sc"><div class="sc-lbl">Inside circle</div><div class="sc-val" id="pi-sk">—</div></div>
+          <div class="sc"><div class="sc-lbl">Estimate of π/4</div><div class="sc-val acc" id="pi-sq">—</div></div>
+          <div class="sc"><div class="sc-lbl">Estimate of π</div><div class="sc-val acc" id="pi-sp">—</div></div>
+          <div class="sc"><div class="sc-lbl">True π/4</div><div class="sc-val dim">0.78539816339744…</div></div>
+          <div class="sc"><div class="sc-lbl">True π</div><div class="sc-val dim">3.14159265358979…</div></div>
+        </div>
+        <div class="hint">Each "dart" lands at a uniform random point in the square. The fraction landing inside the inscribed circle estimates π/4. Run many experiments to watch 95% confidence intervals accumulate — nearly all should capture the dashed true value.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Experiment History — 95% Confidence Intervals for π/4</div>
+      <div id="pi-hw">
+        <svg class="hsv" id="pi-hs"></svg>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why does dartboard sampling estimate π?</div>
+      <div class="pi-exp-wrap">
+        <svg id="pi-exp-dart" class="pi-exp-dart" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="pi-exp-math" class="pi-exp-math">
+          <div class="pi-eq-row"><span class="pi-eq-lbl">Area of square:</span><span class="pi-eq-val" style="color:var(--sq-stroke)">(2r)² = 4r²</span></div>
+          <div class="pi-eq-row"><span class="pi-eq-lbl">Area of circle:</span><span class="pi-eq-val" style="color:var(--circ-stroke)">πr²</span></div>
+          <div class="pi-eq-hr"></div>
+          <div class="pi-eq-row"><span class="pi-eq-lbl">Pr(dart inside):</span><span class="pi-eq-val">πr²&thinsp;/&thinsp;4r² = π/4</span></div>
+          <div class="pi-eq-row"><span class="pi-eq-lbl">By LLN as N → ∞:</span><span class="pi-eq-val" style="color:var(--orange)">(# inside) / N  →  π/4</span></div>
+          <div class="pi-therefore">
+            <div class="pi-therefore-row">
+              <strong>Therefore:</strong>
+              <span class="pi-therefore-eq">π ≈ 4 × (# inside circle) / (# total samples)</span>
+            </div>
+            <div class="pi-borel">Borel’s Law of Large Numbers guarantees convergence — the 95% CI will capture π ≈ 95% of the time.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2 -->
+  <section id="tab-mc" class="tp">
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Function</span>
+      <select id="mc-fn" onchange="mcFnChange()">
+        <option value="sin">sin(x) on [0, π]</option>
+        <option value="xsq">x² on [0, 1]</option>
+        <option value="expneg">e^(−x) on [0, 3]</option>
+        <option value="semi">√(1−x²) on [0, 1]  [integral = π/4]</option>
+        <option value="cosx">cos(x) on [0, π/2]</option>
+      </select>
+      <span class="ctrl-lbl">Samples</span>
+      <select id="mc-n">
+        <option value="10">10</option><option value="20">20</option>
+        <option value="50">50</option><option value="100" selected>100</option>
+        <option value="500">500</option><option value="1000">1,000</option>
+        <option value="5000">5,000</option>
+      </select>
+      <button class="btn-run" id="mc-run" onclick="runMC()">▶ Run Experiment</button>
+      <button class="btn-clear" onclick="clearMC()">Clear history</button>
+    </div>
+    <div class="viz-row" style="margin-top:4px">
+      <div class="cv-card">
+        <canvas id="mc-cv"></canvas>
+        <div class="cv-leg">Random rectangles of width <span style="font-family:'IBM Plex Mono',monospace">L/M</span> and height f(x<sub>i</sub>)</div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Samples (M)</div><div class="sc-val" id="mc-sm">—</div></div>
+          <div class="sc"><div class="sc-lbl">Domain length (L)</div><div class="sc-val" id="mc-sl">—</div></div>
+          <div class="sc"><div class="sc-lbl">Rect. width (L/M)</div><div class="sc-val acc" id="mc-sw">—</div></div>
+          <div class="sc"><div class="sc-lbl">MC Estimate</div><div class="sc-val acc" id="mc-se">—</div></div>
+          <div class="sc"><div class="sc-lbl">True Integral</div><div class="sc-val dim" id="mc-st">—</div></div>
+          <div class="sc"><div class="sc-lbl">Relative Error</div><div class="sc-val" id="mc-serr">—</div></div>
+        </div>
+        <!-- Bridge note lives inside the stats panel — no layout shift when it appears -->
+        <div class="bridge-note" id="mc-bridge">
+          ① Connection: this function's integral equals <strong>π/4</strong> — the same quantity estimated by dartboard sampling on Tab ①. Both are Monte Carlo estimates of the same number!
+        </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Experiment History — 95% Confidence Intervals for ∫f(x)dx</div>
+      <div id="mc-hw">
+        <svg class="hsv" id="mc-hs"></svg>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Random Riemann Rectangles — as M grows, width L/M shrinks</div>
+      <div class="exp-note">Each rectangle has width L/M and height f(x<sub>i</sub>) at a random x<sub>i</sub> ~ U(a, b). As M → ∞, overlaps and gaps average out and the estimate converges to the true integral. The formula (L/M)·Σf(x<sub>i</sub>) is a Riemann sum with <em>random</em> partition points. This animation always uses <strong>f(x) = sin(x) on [0, π]</strong>.</div>
+      <canvas class="exp-cv" id="mc-exp-cv"></canvas>
+      <div class="exp-cap" id="mc-exp-cap">Loading…</div>
+    </div>
+  </section>
+</div>
+<footer>© 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> · </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></footer>
+
+<script>
+const C = {
+  green:'#1a3d2b', green2:'#2d6a4f', orange:'#c85a0a',
+  orangePale:'rgba(200,90,10,0.13)', accept:'#1a7a4a', reject:'#c85a0a',
+  muted:'#888', sqFill:'#eceaf5', sqStroke:'#6a5d9e', circStroke:'#8b6914', bg:'#f8f6f1',
+};
+const FF_MONO = 'IBM Plex Mono,monospace';
+const FF_SANS = 'Outfit,sans-serif';
+
+// ── HiDPI ──────────────────────────────────────────────
+const DPR = window.devicePixelRatio || 1;
+
+function initHiDPI(cv, logW, logH) {
+  cv.dataset.logW = logW; cv.dataset.logH = logH;
+  cv.width  = Math.round(logW * DPR);
+  cv.height = Math.round(logH * DPR);
+  cv.style.width  = logW + 'px';
+  cv.style.height = logH + 'px';
+}
+
+// Resets transform + clears; safe to call on every draw entry point
+function getCtx(cv) {
+  const W = +cv.dataset.logW, H = +cv.dataset.logH;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
+}
+
+// ── Function library ────────────────────────────────────
+const FUNCS = {
+  sin:   { name:'sin(x)',   a:0,         b:Math.PI,  f:x=>Math.sin(x),
+           trueVal:2,         trueStr:'2.000000',           domStr:'[0,π]'   },
+  xsq:   { name:'x²',      a:0,         b:1,         f:x=>x*x,
+           trueVal:1/3,       trueStr:'0.333333',           domStr:'[0,1]'   },
+  expneg:{ name:'e^(−x)',  a:0,         b:3,         f:x=>Math.exp(-x),
+           trueVal:1-Math.exp(-3), trueStr:'0.950213',      domStr:'[0,3]'   },
+  semi:  { name:'√(1−x²)', a:0,         b:1,         f:x=>Math.sqrt(Math.max(0,1-x*x)),
+           trueVal:Math.PI/4, trueStr:'0.785398 (= π/4)',   domStr:'[0,1]'   },
+  cosx:  { name:'cos(x)',  a:0,         b:Math.PI/2, f:x=>Math.cos(x),
+           trueVal:1,         trueStr:'1.000000',           domStr:'[0,π/2]' },
+};
+
+// ── State ───────────────────────────────────────────────
+let piExps = [], mcExps = {}, piAnimId = null, mcAnimId = null, mcExpTimer = null, mcExpStep = 0;
+let expInitialized = false;
+const MC_EXP_STEPS = [4, 8, 16, 32, 64, 128];
+let curFn = 'sin';
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tp').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'mc') {
+    if (!expInitialized) {
+      expInitialized = true;
+      const expCv = document.getElementById('mc-exp-cv');
+      const expSec = expCv.closest('.sec');
+      let expResizeTimer = null;
+
+      // Size (or re-size) the canvas to match its container; returns true if changed
+      const initExpSize = () => {
+        const sec = expCv.closest('.sec');
+        if (!sec) return false;
+        const newW = Math.max(200, sec.clientWidth - 26);  // subtract sec padding
+        const curW = +expCv.dataset.logW || 0;
+        if (Math.abs(newW - curW) > 2) {
+          expCv.dataset.logW = newW;
+          expCv.dataset.logH = 214;
+          expCv.width  = Math.round(newW * DPR);
+          expCv.height = Math.round(214 * DPR);
+          expCv.style.width  = newW + 'px';
+          expCv.style.height = '214px';
+          return true;
+        }
+        return false;
+      };
+
+      initExpSize();  // initial sizing
+
+      // Reinitialize canvas whenever the section resizes (window resize, etc.)
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+          clearTimeout(expResizeTimer);
+          expResizeTimer = setTimeout(() => {
+            if (initExpSize()) drawMCExpFrame();  // immediate redraw at new size
+          }, 80);
+        }).observe(expSec || expCv.parentElement);
+      }
+
+      drawMCExpFrame();
+      mcExpTimer = setInterval(drawMCExpFrame, 2200);
+    }
+    renderMCHist();
+  }
+}
+
+function showTabFromSelect(sel){ showTab(sel.value, null); }
+
+// ── Tab 1: π estimation ─────────────────────────────────
+function runPi() {
+  const N = +document.getElementById('pi-n').value;
+  const btn = document.getElementById('pi-run');
+  btn.disabled = true;
+  const xs=[],ys=[],ins=[]; let k=0;
+  for(let i=0;i<N;i++){
+    const x=Math.random()*2-1, y=Math.random()*2-1, inside=x*x+y*y<=1;
+    xs.push(x);ys.push(y);ins.push(inside); if(inside)k++;
+  }
+  const phat=k/N, se=Math.sqrt(phat*(1-phat)/N);
+  piExps.push({n:N,k,estQ:phat,ciLowQ:Math.max(0,phat-1.96*se),ciHighQ:Math.min(1,phat+1.96*se)});
+  setText('pi-sn',N.toLocaleString()); setText('pi-sk',k.toLocaleString());
+  setText('pi-sq',phat.toFixed(6));    setText('pi-sp',(4*phat).toFixed(6));
+
+  const cv=document.getElementById('pi-cv');
+  const {ctx,W,H}=getCtx(cv);
+  piBase(ctx,W,H);
+  if(piAnimId)cancelAnimationFrame(piAnimId);
+  let drawn=0; const batch=Math.max(1,Math.ceil(N/45));
+  function frame(){
+    const end=Math.min(drawn+batch,N);
+    for(let i=drawn;i<end;i++){
+      const px=(xs[i]+1)/2*W, py=(ys[i]+1)/2*H;
+      if(ins[i]){ctx.beginPath();ctx.fillStyle=C.accept;ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
+      else{const s=2.5;ctx.strokeStyle=C.reject;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(px-s,py-s);ctx.lineTo(px+s,py+s);
+        ctx.moveTo(px+s,py-s);ctx.lineTo(px-s,py+s);ctx.stroke();}
+    }
+    drawn=end;
+    if(drawn<N){piAnimId=requestAnimationFrame(frame);}
+    else{piOverlay(ctx,W,H);btn.disabled=false;}
+  }
+  piAnimId=requestAnimationFrame(frame);
+  renderPiHist();
+}
+function piBase(ctx,W,H){ctx.fillStyle=C.sqFill;ctx.fillRect(0,0,W,H);}
+function piOverlay(ctx,W,H){
+  const r=Math.min(W,H)/2-1.5;
+  ctx.beginPath();ctx.arc(W/2,H/2,r,0,Math.PI*2);
+  ctx.strokeStyle=C.circStroke;ctx.lineWidth=2.5;ctx.stroke();
+  ctx.strokeStyle=C.sqStroke;ctx.lineWidth=2.5;ctx.strokeRect(1.5,1.5,W-3,H-3);
+}
+function clearPi(){
+  piExps=[];
+  if(piAnimId)cancelAnimationFrame(piAnimId);
+  document.getElementById('pi-run').disabled=false;
+  const cv=document.getElementById('pi-cv');
+  const {ctx,W,H}=getCtx(cv);
+  piBase(ctx,W,H);piOverlay(ctx,W,H);
+  ['pi-sn','pi-sk','pi-sq','pi-sp'].forEach(id=>setText(id,'—'));
+  renderPiHist();
+}
+function renderPiHist(){
+  const hw=document.getElementById('pi-hw'), hs=document.getElementById('pi-hs');
+  timeSeriesPlot(hs,hw,piExps,e=>({est:e.estQ,ciLow:e.ciLowQ,ciHigh:e.ciHighQ,n:e.n}),
+    Math.PI/4,'π/4 = 0.7854','Estimated π/4');
+}
+
+// ── Pi SVG explainer ────────────────────────────────────
+function drawPiExp(){
+  // ── Dartboard SVG (left / top when stacked) ─────────────────────
+  const dartSvg=document.getElementById('pi-exp-dart');
+  const r=64,cx=86,cy=96; let dh='';
+  dh+=svgRect(cx-r,cy-r,r*2,r*2,C.sqFill,C.sqStroke,2.2);
+  dh+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(26,122,74,.07)" stroke="${C.circStroke}" stroke-width="2.2"/>`;
+  dh+=svgLine(cx,cy,cx+r,cy,C.circStroke,1.5,'4,3');
+  dh+=svgTxt(cx+r/2,cy-8,'r',C.circStroke,13,FF_MONO,'middle','600');
+  const by=cy+r+13;
+  dh+=svgLine(cx-r,by,cx+r,by,C.sqStroke,1.2);
+  dh+=svgLine(cx-r,by-4,cx-r,by+4,C.sqStroke,1.2);
+  dh+=svgLine(cx+r,by-4,cx+r,by+4,C.sqStroke,1.2);
+  dh+=svgTxt(cx,by+15,'2r',C.sqStroke,12,FF_MONO,'middle');
+  [[.28,.22,1],[-.44,.37,1],[.54,.17,1],[-.27,-.54,1],[.62,.59,0],[-.72,.61,0],[.1,-.7,1]].forEach(([dx,dy,inside])=>{
+    const px=cx+dx*r,py=cy+dy*r;
+    if(inside)dh+=`<circle cx="${px}" cy="${py}" r="3.5" fill="${C.accept}" opacity=".85"/>`;
+    else{const s=3;dh+=svgLine(px-s,py-s,px+s,py+s,C.reject,1.8)+svgLine(px+s,py-s,px-s,py+s,C.reject,1.8);}
+  });
+  dartSvg.innerHTML=dh;
+  // Tight viewBox crops internal coordinate padding (was '0 0 172 200')
+  dartSvg.setAttribute('viewBox','12 22 148 174');
+}
+
+// ── Tab 2: MC integration ───────────────────────────────
+function mcFnChange(){
+  curFn=document.getElementById('mc-fn').value;
+  document.getElementById('mc-bridge').style.display=curFn==='semi'?'block':'none';
+  if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
+  mcDrawBase([]);resetMCStats();renderMCHist();
+}
+function resetMCStats(){
+  setText('mc-st',FUNCS[curFn].trueStr);
+  ['mc-sm','mc-sl','mc-sw','mc-se','mc-serr'].forEach(id=>setText(id,'—'));
+}
+function mcDrawBase(samples){
+  const cv=document.getElementById('mc-cv');
+  const {ctx,W,H}=getCtx(cv);
+  drawMCPlot(ctx,W,H,FUNCS[curFn],samples);
+}
+
+// mc-cv: 408 × 302 logical
+// pT=16  pL=40  pR=12  pB=70   cH = 302-16-70 = 216
+// x-axis labels at cH+pT+16 = 248
+// annotation span  at cH+pT+32 = 264  ticks ±4  text at +46 = 278  ✓ < 302
+// totalM: if provided, use it for rect-width/annotation instead of samples.length
+// This keeps geometry stable during incremental animation.
+function drawMCPlot(ctx,W,H,fn,samples,totalM){
+  const pL=40,pR=12,pT=16,pB=70;
+  const cW=W-pL-pR, cH=H-pT-pB;
+  const {a,b,f,name}=fn, L=b-a;
+  const M=samples.length;       // how many rects to actually draw
+  const TM=totalM||M;           // basis for width + annotation
+  let yMax=0;
+  for(let i=0;i<=200;i++) yMax=Math.max(yMax,f(a+i/200*L));
+  yMax*=1.13;
+  const xP=x=>pL+(x-a)/L*cW;
+  const yP=y=>pT+cH-y/yMax*cH;
+
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  if(M===0){
+    ctx.beginPath();
+    for(let i=0;i<=200;i++){const x=a+i/200*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
+    ctx.lineTo(xP(b),yP(0));ctx.lineTo(xP(a),yP(0));ctx.closePath();
+    ctx.fillStyle='rgba(26,61,43,.06)';ctx.fill();
+  }
+  if(M>0){
+    const rWpx=cW/TM;  // width based on TM for stable anim
+    samples.forEach(({x,y})=>{
+      const px=xP(x)-rWpx/2, py=yP(y), ph=Math.max(yP(0)-py,1);
+      ctx.fillStyle=C.orangePale;ctx.fillRect(px,py,rWpx,ph);
+      ctx.strokeStyle=C.orange;ctx.lineWidth=M<=100?1:0.5;ctx.strokeRect(px,py,rWpx,ph);
+    });
+  }
+  ctx.beginPath();ctx.strokeStyle=C.green;ctx.lineWidth=2.2;
+  for(let i=0;i<=300;i++){const x=a+i/300*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
+  ctx.stroke();
+  ctx.strokeStyle='#ccc';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pL,pT+cH);ctx.lineTo(pL+cW,pT+cH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pL,pT);ctx.lineTo(pL,pT+cH);ctx.stroke();
+  ctx.fillStyle=C.muted;ctx.font=`10px ${FF_MONO}`;ctx.textAlign='center';
+  ctx.fillText(fn.a===0?'0':fn.a.toFixed(2), pL, pT+cH+16);
+  const bL=fn.b===Math.PI?'π':fn.b===Math.PI/2?'π/2':fn.b.toFixed(2);
+  ctx.fillText(bL, pL+cW, pT+cH+16);
+  const midL=fn.b===Math.PI?'π/2':fn.b===Math.PI/2?'π/4':((fn.a+fn.b)/2).toFixed(2);
+  ctx.fillText(midL, pL+cW/2, pT+cH+16);
+  ctx.textAlign='right';
+  ctx.fillText('0',pL-4,yP(0)+4);ctx.fillText('1',pL-4,yP(1)+4);
+  ctx.fillStyle=C.green;ctx.font=`bold 11.5px ${FF_SANS}`;ctx.textAlign='left';
+  ctx.fillText('f(x) = '+name, pL+4, pT+13);
+
+  // Width annotation — always shown, drafting-style for any M
+  // visW = max(actual_px_width, 3) so ticks are always visible
+  // text centred below span line regardless of indicator size
+  if(TM>0&&samples.length>0){
+    const midS=samples[Math.floor(M/2)];
+    const bx=xP(midS.x), rWpx=cW/TM, visW=Math.max(rWpx,3);
+    const ay=pT+cH+32, tkH=4;
+    ctx.strokeStyle=C.orange;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(bx-visW/2,ay);ctx.lineTo(bx+visW/2,ay);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx-visW/2,ay-tkH);ctx.lineTo(bx-visW/2,ay+tkH);
+    ctx.moveTo(bx+visW/2,ay-tkH);ctx.lineTo(bx+visW/2,ay+tkH);
+    ctx.stroke();
+    const Lstr=fn.b===Math.PI?'π':fn.b===Math.PI/2?'π/2':L.toFixed(2);
+    ctx.fillStyle=C.orange;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
+    ctx.fillText(`L/M = ${Lstr}/${TM}`, bx, ay+14);
+  }
+}
+
+function runMC(){
+  const M=+document.getElementById('mc-n').value;
+  const fkey=document.getElementById('mc-fn').value;
+  const fn=FUNCS[fkey], btn=document.getElementById('mc-run');
+  btn.disabled=true;
+  if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
+  const {a,b,f,trueVal}=fn, L=b-a;
+
+  // Generate all samples upfront — stats are exact from the start
+  const samples=[]; let sum=0,sumSq=0;
+  for(let i=0;i<M;i++){const x=a+Math.random()*L,y=f(x);samples.push({x,y});sum+=y;sumSq+=y*y;}
+  const mean=sum/M, variance=Math.max(0,sumSq/M-mean*mean), se=Math.sqrt(variance/M);
+  const est=L*mean, relErr=Math.abs(est-trueVal)/trueVal;
+  if(!mcExps[fkey])mcExps[fkey]=[];
+  mcExps[fkey].push({M,est,ciLow:L*(mean-1.96*se),ciHigh:L*(mean+1.96*se)});
+  curFn=fkey;
+
+  // Update stat cards and history immediately (before animation finishes)
+  setText('mc-sm',M.toLocaleString());
+  setText('mc-sl',L===Math.PI?`π ≈ ${L.toFixed(4)}`:L===Math.PI/2?`π/2 ≈ ${L.toFixed(4)}`:L.toFixed(4));
+  setText('mc-sw',(L/M).toFixed(6));setText('mc-se',est.toFixed(6));setText('mc-st',fn.trueStr);
+  const errEl=document.getElementById('mc-serr');
+  errEl.textContent=(relErr*100).toFixed(3)+'%';
+  errEl.style.color=relErr<.05?C.green2:relErr<.2?C.orange:'#c0392b';
+  renderMCHist();
+
+  // Animate rectangles one-by-one (batched so total frames ≈ 45)
+  const cv=document.getElementById('mc-cv');
+  let drawn=0;
+  const batch=Math.max(1,Math.ceil(M/45));
+
+  function frame(){
+    const end=Math.min(drawn+batch,M);
+    // Full redraw each frame: clear → rects so far → curve+axes on top
+    // Canvas is fast enough; this keeps the curve always above the rects.
+    const {ctx,W,H}=getCtx(cv);
+    drawMCPlot(ctx,W,H,fn,samples.slice(0,end),M);
+    drawn=end;
+    if(drawn<M){
+      mcAnimId=requestAnimationFrame(frame);
+    } else {
+      mcAnimId=null;
+      btn.disabled=false;
+    }
+  }
+  mcAnimId=requestAnimationFrame(frame);
+}
+function clearMC(){
+  if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
+  document.getElementById('mc-run').disabled=false;
+  const fkey=document.getElementById('mc-fn').value;
+  mcExps[fkey]=[];mcDrawBase([]);resetMCStats();renderMCHist();
+}
+function renderMCHist(){
+  const hw=document.getElementById('mc-hw'), hs=document.getElementById('mc-hs');
+  const fkey=document.getElementById('mc-fn').value;
+  const exps=mcExps[fkey]||[], fn=FUNCS[fkey];
+  timeSeriesPlot(hs,hw,exps,e=>({est:e.est,ciLow:e.ciLow,ciHigh:e.ciHigh,n:e.M}),
+    fn.trueVal,'True = '+fn.trueStr.split(' ')[0],'∫f(x)dx  estimate');
+}
+
+// ── Time-series history plot ────────────────────────────────────────
+// Left→right time axis; old runs pushed off left (circular buffer).
+// Blank axes shown on init. Fixed SVG height; viewBox scales responsively.
+// SH=260  pL=56 pR=12 pT=30 pB=52  cH=178  colW=56
+function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLabel){
+  // Use container width; fall back to widget when container is hidden (e.g., inactive tab)
+  const widget=document.querySelector('.widget');
+  const W=Math.max(300, containerEl.offsetWidth||(widget?widget.clientWidth:600));
+  const SH=260, pL=56,pR=12,pT=30,pB=52;
+  const cW=W-pL-pR, cH=SH-pT-pB;
+  const colW=56, maxVis=Math.max(1,Math.floor(cW/colW));
+  const shown=allExps.slice(-maxVis);
+  const firstRunIdx=allExps.length-shown.length+1;
+  const pts=shown.map(accessor);
+
+  // Y range: fixed symmetric window for blank init; capped auto-scale with data
+  let yMin,yMax;
+  if(allExps.length===0){
+    const halfR=Math.max(Math.abs(trueVal)*0.38+0.04,0.08);
+    yMin=trueVal-halfR; yMax=trueVal+halfR;
+  } else {
+    let ydMin=trueVal,ydMax=trueVal;
+    pts.forEach(p=>{ydMin=Math.min(ydMin,p.ciLow);ydMax=Math.max(ydMax,p.ciHigh);});
+    const span=Math.max(ydMax-ydMin,Math.abs(trueVal)*0.18+0.005);
+    yMin=ydMin-span*0.15; yMax=ydMax+span*0.15;
+    // Cap: tiny-N CIs can span enormous ranges; keep scale readable
+    const cap=Math.abs(trueVal)*3+0.3;
+    yMin=Math.max(trueVal-cap,yMin); yMax=Math.min(trueVal+cap,yMax);
+  }
+
+  const yP=v=>pT+cH-(v-yMin)/(yMax-yMin)*cH;
+  const xC=i=>pL+(i+0.5)*colW;
+
+  // Build inner SVG content (no outer <svg> tag — set as attributes on the element)
+  let h='';
+  h+=`<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="#faf9f6" rx="3"/>`;
+
+  // True-value dashed line, clamped to plot area
+  const tvy=Math.min(Math.max(yP(trueVal),pT+2),pT+cH-2);
+  h+=`<line x1="${pL}" y1="${tvy}" x2="${pL+cW}" y2="${tvy}" stroke="${C.green}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".75"/>`;
+
+  // Label drawn LAST (after CI bars) so it always sits on top
+  const lblY=tvy<pT+18?tvy+14:tvy-5;
+  const lblBgW=trueLabel.length*6.8+8;
+  const lblH=`<rect x="${pL+3}" y="${lblY-12}" width="${lblBgW}" height="16" fill="white" opacity=".92" rx="2"/>`
+    +`<text x="${pL+5}" y="${lblY}" fill="${C.green}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">${trueLabel}</text>`;
+
+  // Y axis
+  h+=`<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT+cH}" stroke="#ccc" stroke-width="1"/>`;
+  const prec=Math.abs(trueVal)<2?3:2;
+  for(let i=0;i<=4;i++){
+    const v=yMin+i*(yMax-yMin)/4, ty=yP(v);
+    h+=`<line x1="${pL-4}" y1="${ty}" x2="${pL}" y2="${ty}" stroke="#bbb" stroke-width="1"/>`;
+    h+=`<text x="${pL-7}" y="${ty+4}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${v.toFixed(prec)}</text>`;
+  }
+  const yLX=13,yLY=pT+cH/2;
+  h+=`<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">${yLabel}</text>`;
+
+  // X axis baseline
+  h+=`<line x1="${pL}" y1="${pT+cH}" x2="${pL+cW}" y2="${pT+cH}" stroke="#ccc" stroke-width="1"/>`;
+
+  if(allExps.length===0){
+    // Empty state: axes + message; true-value line already drawn above
+    // Message placed in upper quarter of chart, well above the true-value line
+    h+=`<text x="${pL+cW/2}" y="${pT+24}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment to begin collecting results.</text>`;
+  } else {
+    shown.forEach((e,i)=>{
+      const p=accessor(e), runN=firstRunIdx+i, cx=xC(i);
+      const yTop=yP(Math.min(yMax,p.ciHigh)), yBot=yP(Math.max(yMin,p.ciLow));
+      const ym=yP(Math.min(yMax,Math.max(yMin,p.est)));
+      const hit=p.ciLow<=trueVal&&trueVal<=p.ciHigh;
+      const col=hit?C.green2:C.reject;
+      h+=`<rect x="${cx-3}" y="${yTop}" width="6" height="${Math.max(1,yBot-yTop)}" fill="${col}" opacity=".15" rx="1"/>`;
+      h+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="1.8"/>`;
+      h+=`<line x1="${cx-5}" y1="${yTop}" x2="${cx+5}" y2="${yTop}" stroke="${col}" stroke-width="1.8"/>`;
+      h+=`<line x1="${cx-5}" y1="${yBot}" x2="${cx+5}" y2="${yBot}" stroke="${col}" stroke-width="1.8"/>`;
+      h+=`<circle cx="${cx}" cy="${ym}" r="4" fill="${col}"/>`;
+      h+=`<line x1="${cx}" y1="${pT+cH}" x2="${cx}" y2="${pT+cH+4}" stroke="#bbb" stroke-width="1"/>`;
+      h+=`<text x="${cx}" y="${pT+cH+17}" text-anchor="middle" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`;
+      h+=`<text x="${cx}" y="${pT+cH+29}" text-anchor="middle" fill="#aaa" font-size="9" font-family="${FF_MONO}">N=${p.n.toLocaleString()}</text>`;
+    });
+  }
+
+  // Legend
+  const ly=SH-14;
+  h+=`<circle cx="${pL+7}" cy="${ly}" r="4" fill="${C.green2}"/>`;
+  h+=`<text x="${pL+15}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI captures true value</text>`;
+  h+=`<circle cx="${pL+165}" cy="${ly}" r="4" fill="${C.reject}"/>`;
+  h+=`<text x="${pL+173}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI misses  (≈5% expected)</text>`;
+
+  // Append label last so it renders on top of CI bars
+  h+=lblH;
+  // Set viewBox for CSS-driven responsive scaling (no nested SVG)
+  svgEl.innerHTML=h;
+  svgEl.setAttribute('viewBox',`0 0 ${W} ${SH}`);
+  svgEl.style.width='100%';
+  svgEl.style.height='auto';
+  svgEl.style.display='block';
+}
+
+// ── MC animated explainer ────────────────────────────────
+// exp-cv: expLogW × 214
+// pT=20  pL=34  pR=16  pB=58   cH = 214-20-58 = 136
+// x labels at cH+pT+17 = 173  annotation at +32 = 188  text at +46 = 202  ✓ < 214
+function drawMCExpFrame(){
+  const cv=document.getElementById('mc-exp-cv');
+  if(!cv.dataset.logW)return;
+  const {ctx,W,H}=getCtx(cv);
+  const M=MC_EXP_STEPS[mcExpStep];
+  const a=0,b=Math.PI,L=Math.PI,f=x=>Math.sin(x);
+  const pL=34,pR=40,pT=20,pB=58;  // extra right margin prevents L/M label clipping
+  const cW=W-pL-pR, cH=H-pT-pB;
+  const xP=x=>pL+(x-a)/L*cW;
+  const yP=y=>pT+cH-y/1.06*cH;
+  ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+  const samp=[]; let sum=0;
+  for(let i=0;i<M;i++){const x=a+Math.random()*L,y=f(x);samp.push({x,y});sum+=y;}
+  const est=L*sum/M;
+  const rWpx=cW/M;
+  samp.forEach(({x,y})=>{
+    const px=xP(x)-rWpx/2,py=yP(y),ph=Math.max(yP(0)-py,1);
+    ctx.fillStyle=C.orangePale;ctx.fillRect(px,py,rWpx,ph);
+    ctx.strokeStyle=C.orange;ctx.lineWidth=M<=16?1.2:0.7;ctx.strokeRect(px,py,rWpx,ph);
+  });
+  ctx.beginPath();ctx.strokeStyle=C.green;ctx.lineWidth=2;
+  for(let i=0;i<=250;i++){const x=a+i/250*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
+  ctx.stroke();
+  ctx.strokeStyle='#ccc';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pL,pT+cH);ctx.lineTo(pL+cW,pT+cH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pL,pT);ctx.lineTo(pL,pT+cH);ctx.stroke();
+  ctx.fillStyle=C.muted;ctx.font=`10px ${FF_MONO}`;ctx.textAlign='center';
+  ctx.fillText('0',pL,pT+cH+17);ctx.fillText('π',pL+cW,pT+cH+17);
+  ctx.textAlign='right';ctx.fillText('1',pL-4,yP(1)+4);
+  // Width callout — always shown (draft-style)
+  if(samp.length>0){
+    const s=samp[Math.floor(M/2)];
+    const rawBx=xP(s.x), visW=Math.max(rWpx,3), ay=pT+cH+32, tkH=4;
+    // Clamp so annotation label never clips at right/left edge
+    const bx=Math.max(pL+visW/2+4, Math.min(rawBx, pL+cW-visW/2-4));
+    ctx.strokeStyle=C.orange;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(bx-visW/2,ay);ctx.lineTo(bx+visW/2,ay);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bx-visW/2,ay-tkH);ctx.lineTo(bx-visW/2,ay+tkH);
+    ctx.moveTo(bx+visW/2,ay-tkH);ctx.lineTo(bx+visW/2,ay+tkH);
+    ctx.stroke();
+    ctx.fillStyle=C.orange;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
+    ctx.fillText(`L/M = π/${M}`,bx,ay+14);
+  }
+  ctx.fillStyle=C.green;ctx.font=`bold 12px ${FF_SANS}`;ctx.textAlign='left';
+  ctx.fillText(`M = ${M} samples`,pL+3,pT+13);
+  // Caption explicitly names the function
+  document.getElementById('mc-exp-cap').textContent=
+    `f(x) = sin(x) on [0, π]  |  M = ${M}:  width L/M = π/${M} ≈ ${(L/M).toFixed(4)};  estimate = ${est.toFixed(4)}  (true = 2.0000)`;
+  mcExpStep=(mcExpStep+1)%MC_EXP_STEPS.length;
+}
+
+// ── SVG helpers ─────────────────────────────────────────
+function svgLine(x1,y1,x2,y2,stroke,sw,dash){
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${sw||1}"${dash?` stroke-dasharray="${dash}"`:''}/>`;
+}
+function svgRect(x,y,w,h,fill,stroke,sw){
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill||'none'}" stroke="${stroke||'none'}" stroke-width="${sw||1}"/>`;
+}
+function svgTxt(x,y,content,fill,size,ff,anchor,weight){
+  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size||13}" font-family="${ff||FF_SANS}" text-anchor="${anchor||'middle'}" ${weight?`font-weight="${weight}"`:''}>${content}</text>`;
+}
+function setText(id,v){document.getElementById(id).textContent=v;}
+
+// ── Init ────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  // Pi canvas — 304×304
+  const piCv=document.getElementById('pi-cv');
+  initHiDPI(piCv,304,304);
+  {const {ctx,W,H}=getCtx(piCv);piBase(ctx,W,H);piOverlay(ctx,W,H);}
+  drawPiExp();
+
+  // MC main canvas — 408×302  (pT=16 cH=216 pB=70)
+  const mcCv=document.getElementById('mc-cv');
+  initHiDPI(mcCv,408,302);
+  curFn='sin'; mcDrawBase([]); setText('mc-st',FUNCS['sin'].trueStr);
+
+  // MC animated explainer: lazy-init on first Tab 2 visit (see showTab)
+  // Tab 2 is hidden at load so clientWidth === 0; defer until it's visible.
+
+  // Draw blank history chart for Tab 1 immediately (blank axes on init)
+  renderPiHist();
+});
+</script>
+<footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:#78786A;text-align:left;">
+  <div style="max-width:1020px;margin:0 auto;padding:2px 18px 10px;">
+    <a href="../" style="color:inherit;text-decoration:underline;"><span style="font-family:sans-serif">&larr;</span> All course visualizations</a>
+  </div>
+</footer>
+<script>
+if (window.self !== window.top) { var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; } }
+</script>
+</body>
+</html>

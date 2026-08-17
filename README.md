@@ -18,19 +18,15 @@ methods and to be usable both standalone and embedded in Canvas LMS pages as ifr
 
 ## Contents
 
-No visualizations yet. Topic sections are added alongside the first demo that belongs in them, so
-this list grows section by section as the course progresses; see
-[Adding a new visualization](#adding-a-new-visualization) below.
+Topic sections are added alongside the first demo that belongs in them, so this list grows section
+by section as the course progresses; see [Adding a new visualization](#adding-a-new-visualization)
+below.
 
-<!-- Add each new section as a "### <Section>" heading with a two-column table:
-
-### Section Name
+### Monte Carlo Methods
 
 | Directory | Description |
 | --- | --- |
-| [`my_demo/`](my_demo/) | One-sentence description matching the index entry |
-
--->
+| [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π and Monte Carlo integration, with accumulating 95% confidence intervals |
 
 ---
 

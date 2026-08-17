@@ -281,8 +281,6 @@ it. To add one:
    "Random Variates" for "Random Variate Generation"). The `#more` entry stays last in both.
 3. Add a matching `### Section Name` heading and table to the Contents in `README.md`.
 4. Record the section and its demos under "Current sections and demos" below.
-5. Delete the `.empty-state` paragraph in `index.html` (and its CSS rule) once the first section
-   is in place; it exists only to keep the page from looking broken while empty.
 
 Order sections to follow the arc of the course rather than the order demos happen to be written.
 
@@ -331,8 +329,14 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 
 ## Current sections and demos
 
-None yet — this repository is a stub. Add each section here as its first demo lands, following the
-"Adding a new section" procedure above.
+### Monte Carlo Methods
+
+- `monte_carlo/mc_explorer.html` *(two tabs: dartboard estimation of π and Monte Carlo integration,
+  both with accumulating 95% confidence intervals; copied from the companion Bio-Inspired AI &
+  Optimization repository and expected to gain further tabs tailored to this course)*
+
+Add each new section here as its first demo lands, following the "Adding a new section" procedure
+above.
 
 ## Course topic vocabulary
 

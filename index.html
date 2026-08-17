@@ -215,13 +215,6 @@
     .link-list p { font-size: 0.83rem; color: #666; line-height: 1.45; margin-top: 0.15rem; }
     .link-list p a { font-weight: 400; }
 
-    /* ── Empty state (remove once the first section is added) ─ */
-    .empty-state {
-      font-size: 0.9rem;
-      color: #666;
-      margin-bottom: 2.25rem;
-    }
-
     /* ── Footer ─────────────────────────────────────────── */
     footer {
       margin-top: 2rem;
@@ -306,6 +299,7 @@
       <span class="side-nav-label">Sections</span>
       <ul>
         <!-- Each topic section needs a link here AND a matching one in #nav-drawer below. -->
+        <li><a href="#monte-carlo">Monte Carlo</a></li>
         <li><a href="#more">More from Ted Pavlic</a></li>
       </ul>
     </nav>
@@ -330,14 +324,36 @@
   </header>
 
   <!-- ══════════════════════════════════════════════════════
-       Topic sections go here, each one added with its first
-       demo. Copy the section template from CLAUDE.md ("Adding
-       a new section"), then add its nav link to BOTH the
-       .side-nav list above and the #nav-drawer list below.
-       Delete the .empty-state paragraph once the first
-       section lands.
+       Monte Carlo Methods
   ═══════════════════════════════════════════════════════ -->
-  <p class="empty-state">Visualizations will be added here as the course progresses.</p>
+  <section id="monte-carlo" class="demo-section">
+    <h2>Monte Carlo Methods</h2>
+    <ul class="demo-list">
+
+      <li>
+        <a class="demo-row" href="monte_carlo/mc_explorer.html">
+          <img class="demo-thumb"
+               src="monte_carlo/mc_explorer-preview.png"
+               alt="Monte Carlo Explorer preview"
+               width="120" height="90">
+          <div class="demo-text">
+            <h3>Monte Carlo Explorer — interactive explainer</h3>
+            <p>Estimate π by dartboard sampling and integrate a function by averaging random draws, running repeated experiments to watch 95% confidence intervals accumulate around the true value.</p>
+          </div>
+        </a>
+      </li>
+
+      <!-- Add more Monte Carlo demos here -->
+
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       New topic sections go here, each one added with its
+       first demo. Copy the section template from CLAUDE.md
+       ("Adding a new section"), then add its nav link to BOTH
+       the .side-nav list above and the #nav-drawer list below.
+  ═══════════════════════════════════════════════════════ -->
 
   <section id="more" class="demo-section">
     <h2>More from Ted Pavlic</h2>
@@ -377,6 +393,7 @@
   <nav id="nav-drawer" aria-label="Section navigation">
     <ul>
       <!-- Keep this list in sync with the .side-nav list above. -->
+      <li><a href="#monte-carlo">Monte Carlo</a></li>
       <li><a href="#more">More from Ted Pavlic</a></li>
     </ul>
   </nav>
