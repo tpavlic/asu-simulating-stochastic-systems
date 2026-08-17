@@ -324,8 +324,10 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 - Each demo is a **self-contained, single-file HTML page** with all CSS and JS inlined
 - Preview images live alongside their HTML file in the same subdirectory
 - The site is deployed via **GitHub Pages** directly from the `main` branch (no build step)
-- `index-preview.png` (2400×1200, referenced by the root page's OG/Twitter tags) is **not yet
-  created**; add it at that size so the committed `og:image:width`/`height` stay accurate
+- `index-preview.png` is the root page's OG/Twitter card image. It is currently a copy of
+  `monte_carlo/mc_explorer-preview.png` (2966×1484) standing in until a landing-page image exists;
+  when you replace it, update the `og:image:width`/`height` in `index.html` to the new size and keep
+  the ratio near 2:1 for Twitter/X
 
 ## Current sections and demos
 
