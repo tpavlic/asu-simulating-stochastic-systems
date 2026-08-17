@@ -136,7 +136,7 @@ sit flush against the viewport edge. Add `padding-bottom` to the body or `margin
 the footer if needed.
 
 **Footer/copyright layout — conventions and pitfalls** (carried over from a full pass over every
-demo in the companion Bio-Inspired AI & Optimization repository):
+demo in the `asu-bioinspired-ai-and-optimization` repository, which uses this same infrastructure):
 
 - **Footer copyright centered; back-link left-aligned** to the content's left edge, with only a
   small gap between them. Put a subtle footer copyright line (`© 2026 Theodore P. Pavlic ·
@@ -334,8 +334,9 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 ### Monte Carlo Methods
 
 - `monte_carlo/mc_explorer.html` *(two tabs: dartboard estimation of π and Monte Carlo integration,
-  both with accumulating 95% confidence intervals; copied from the companion Bio-Inspired AI &
-  Optimization repository and expected to gain further tabs tailored to this course)*
+  both with accumulating 95% confidence intervals; copied from the
+  `asu-bioinspired-ai-and-optimization` repository, which covers sampling from a different angle,
+  and expected to gain further tabs tailored to this course)*
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.
@@ -359,5 +360,6 @@ verification and validation.
 - **Google Analytics ID:** `G-Y66V2TS0R6` — include the two-line GA4 snippet in every `<head>`, after the Twitter/X card block and before `</head>`
 - **GitHub Pages base URL:** `https://tpavlic.github.io/asu-simulating-stochastic-systems/`
 - **YouTube channel:** <https://www.youtube.com/@TedPavlic> — linked from the index header
-- **Companion repository:** `asu-bioinspired-ai-and-optimization` shares this infrastructure; when a
-  convention changes here and is general, consider mirroring it there
+- **Shared infrastructure:** `asu-bioinspired-ai-and-optimization` is built from the same page
+  scaffolding (it is a separate course, unrelated in content); when a convention changes here and
+  is general, consider mirroring it there
