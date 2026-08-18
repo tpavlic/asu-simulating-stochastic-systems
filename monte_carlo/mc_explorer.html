@@ -417,9 +417,15 @@ function parseSeed(raw) {
   if (!/^[+-]?\d{1,10}$/.test(s))
     return { ok: false, value: null, msg: '⚠ Seed must be a whole number from 0 to ' + SEED_MAX + '.' };
   const n = Number(s), v = Math.min(Math.max(n, 0), SEED_MAX);
+  // Worded neutrally ("using") because this fires both when a seed is about to
+  // be run and when the field is merely edited, where nothing has run yet.
   return { ok: true, value: v,
-           msg: v === n ? '' : 'Seed ' + s + ' is outside 0–' + SEED_MAX + '; used ' + v + ' instead.' };
+           msg: v === n ? '' : 'Seed ' + s + ' is outside 0–' + SEED_MAX + '; using ' + v + '.' };
 }
+
+// The last completed run per tab. Kept so that editing the seed can update the
+// "Next run" figure while preserving the record of what the last run actually did.
+const lastRun = { pi: null, mc: null };
 
 function seedMsg(tab, text, bad) {
   const inp = document.getElementById(tab + '-seed');
@@ -441,13 +447,19 @@ function readSeed(tab) {
   return r.value;
 }
 
-// Same normalization on change, but never steals focus.
+// Same normalization on change, but never steals focus. Editing the seed only
+// changes what the NEXT run will do, and so the record of the last run is kept
+// and just the "Next run" figure is re-pointed at the new value.
 function normalizeSeed(tab) {
   const inp = document.getElementById(tab + '-seed');
   const r = parseSeed(inp.value);
   if (!r.ok) { seedMsg(tab, r.msg, true); return; }
   inp.value = String(r.value);
-  seedMsg(tab, r.msg, false);
+  const last = lastRun[tab], bits = [];
+  if (r.msg) bits.push(r.msg);
+  if (last) bits.push('Run ' + last.idx + ' used seed ' + last.seed + '.',
+                      'Next run: ' + r.value + '.');
+  seedMsg(tab, bits.join(' '), false);
 }
 
 function randomSeed() {
@@ -465,6 +477,7 @@ function randomSeed() {
 // Unticked, repeated clicks genuinely do reproduce the run -- say so, or it
 // reads as a broken button rather than as the point of the exercise.
 function noteRun(tab, seed, runIdx, repeat) {
+  lastRun[tab] = { idx: runIdx, seed: seed };
   if (document.getElementById(tab + '-newseed').checked) {
     const next = randomSeed();
     document.getElementById(tab + '-seed').value = String(next);
@@ -638,7 +651,7 @@ function clearPi(){
   const {ctx,W,H}=getCtx(cv);
   piBase(ctx,W,H);piOverlay(ctx,W,H);
   ['pi-sn','pi-sk','pi-sq','pi-sp'].forEach(id=>setText(id,'—'));
-  seedMsg('pi','',false);
+  lastRun.pi = null; seedMsg('pi','',false);
   renderPiHist();
 }
 function renderPiHist(){
@@ -836,7 +849,7 @@ function clearMC(){
   if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
   document.getElementById('mc-run').disabled=false;
   const fkey=document.getElementById('mc-fn').value;
-  mcExps[fkey]=[];mcDrawBase([]);resetMCStats();seedMsg('mc','',false);renderMCHist();
+  mcExps[fkey]=[];mcDrawBase([]);resetMCStats();lastRun.mc=null;seedMsg('mc','',false);renderMCHist();
 }
 function renderMCHist(){
   const hw=document.getElementById('mc-hw'), hs=document.getElementById('mc-hs');
