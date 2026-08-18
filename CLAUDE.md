@@ -81,11 +81,12 @@ Inside `<head>`, include all of the following, filling in the actual values:
 
 **Twitter/X image requirements** (stricter than other platforms):
 
-- Aspect ratio must be close to **2:1** (e.g. 1200×600, 2400×1200). Twitter silently drops
-  images that deviate significantly, even if Facebook/Mastodon/Bluesky render them fine.
+- Aim for an aspect ratio near **2:1** (e.g. 1200×600, 2400×1200) and keep the important
+  content centered. Twitter's own card code enforces only a 280×150 minimum, so a wider ratio
+  is not rejected, but the card is rendered toward 2:1 and the edges may not survive.
 - File size must be **under 5 MB**.
-- If the natural preview image is the wrong ratio, create a cropped/padded version for
-  `twitter:image` while leaving `og:image` pointing at the full-resolution original.
+- Only if a ratio actually causes a problem, add a cropped or padded version for `twitter:image`
+  while leaving `og:image` on the full-resolution original. Do not do this pre-emptively.
 
 **Use literal characters, not HTML entities, in `og:*` and `twitter:*` `content` attributes.**
 Social-card scrapers read these values as plain text, not HTML, so they often do not decode
@@ -116,15 +117,29 @@ Replace `MAX_WIDTH` with the page's primary content `max-width` (e.g. `860px`). 
 `<div>` constrains the link to the same width as the page body so it aligns on wide screens.
 
 **Back-link color: match the page's own link color — but mind how `color:inherit` works.**
-Each demo has its own palette, so a fixed course-maroon clashes. The anchor keeps
-`color:inherit`, but note that `inherit` takes the **footer element's** computed color, NOT
+The anchor keeps `color:inherit`, but `inherit` takes the **footer element's** computed color, NOT
 the page's `a { color: ... }` rule (an inline `color:inherit` on the anchor outranks the `a`
-selector). So to make the back-link match the page's other links, set the **`#course-nav-footer`
-element's** `color` to the page's link/accent color (often a CSS var such as `var(--accent)`)
-and let the anchor inherit it. Check contrast against the footer's background: on dark-themed
-pages whose links are white/light, use the nearest readable accent instead. Where the page has
-no distinct link color, the muted default (`#78786A`) is fine. Keep `text-decoration:none`
-plus the hover-underline. Never hardcode `#8C1D40`.
+selector). So the color is set on the **`#course-nav-footer` element** and the anchor inherits it.
+
+Resolve that color at import time, in this order:
+
+1. **If the page follows the `THEME.md` token contract** (it declares `--accent` in `:root`), write
+   `color:var(--accent,#XXXXXX)`, where the fallback `#XXXXXX` is that page's accent value copied
+   out of its `:root` at import. The token keeps the back-link correct if the page is later
+   re-themed, and the literal keeps it correct if a re-imported body drops the token.
+2. **If the page has a distinct link or accent color but no token**, hardcode that color.
+3. **If the page has no distinct link color**, use the muted default `#78786A`.
+
+A page already on the course palette therefore ends up maroon through step 1, and an off-palette
+page ends up matching itself through step 2 or 3 — neither outcome needs a special case. What to
+avoid is hardcoding `#8C1D40` on a page that is not on the course palette: a lone maroon link under
+a green-and-cream widget looks like a mistake, and the fix is to theme the page (see `THEME.md`),
+not to recolor the link in isolation.
+
+Check contrast against the footer's background: on dark-themed pages whose links are white or
+light, use the nearest readable accent instead. Keep `text-decoration:none` plus the
+hover-underline, and match the underline behavior of the page's other footer links — see the
+link-decoration rule below.
 
 The `<script>` hides the footer when the page is embedded in a Canvas LMS iframe. Use
 `getElementById('course-nav-footer')` rather than `querySelector('footer')` — some demos
@@ -135,8 +150,7 @@ it finds instead of the back-link footer.
 sit flush against the viewport edge. Add `padding-bottom` to the body or `margin-bottom` to
 the footer if needed.
 
-**Footer/copyright layout — conventions and pitfalls** (carried over from a full pass over every
-demo in the `asu-bioinspired-ai-and-optimization` repository, which uses this same infrastructure):
+**Footer/copyright layout — conventions and pitfalls:**
 
 - **Footer copyright centered; back-link left-aligned** to the content's left edge, with only a
   small gap between them. Put a subtle footer copyright line (`© 2026 Theodore P. Pavlic ·
@@ -325,7 +339,7 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 - Preview images live alongside their HTML file in the same subdirectory
 - The site is deployed via **GitHub Pages** directly from the `main` branch (no build step)
 - `index-preview.png` is the root page's OG/Twitter card image. It is currently a copy of
-  `monte_carlo/mc_explorer-preview.png` (2966×1484) standing in until a landing-page image exists;
+  `monte_carlo/mc_explorer-preview.png`, standing in until a landing-page image exists;
   when you replace it, update the `og:image:width`/`height` in `index.html` to the new size and keep
   the ratio near 2:1 for Twitter/X
 
@@ -334,9 +348,8 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 ### Monte Carlo Methods
 
 - `monte_carlo/mc_explorer.html` *(two tabs: dartboard estimation of π and Monte Carlo integration,
-  both with accumulating 95% confidence intervals; copied from the
-  `asu-bioinspired-ai-and-optimization` repository, which covers sampling from a different angle,
-  and expected to gain further tabs tailored to this course)*
+  both with accumulating 95% confidence intervals; expected to gain further tabs tailored to this
+  course)*
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.
@@ -360,6 +373,3 @@ verification and validation.
 - **Google Analytics ID:** `G-Y66V2TS0R6` — include the two-line GA4 snippet in every `<head>`, after the Twitter/X card block and before `</head>`
 - **GitHub Pages base URL:** `https://tpavlic.github.io/asu-simulating-stochastic-systems/`
 - **YouTube channel:** <https://www.youtube.com/@TedPavlic> — linked from the index header
-- **Shared infrastructure:** `asu-bioinspired-ai-and-optimization` is built from the same page
-  scaffolding (it is a separate course, unrelated in content); when a convention changes here and
-  is general, consider mirroring it there
