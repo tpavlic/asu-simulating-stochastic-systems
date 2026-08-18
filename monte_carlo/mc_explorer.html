@@ -11,8 +11,8 @@
 <meta property="og:title" content="Monte Carlo Explorer — interactive explainer">
 <meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
-<meta property="og:image:width" content="2966">
-<meta property="og:image:height" content="1484">
+<meta property="og:image:width" content="2000">
+<meta property="og:image:height" content="832">
 <meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html">
 <meta property="fb:app_id" content="2385695445236853">
 
@@ -29,36 +29,60 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f5f0e8; --card: #ffffff; --green: #1a3d2b; --green2: #2d6a4f;
-  --orange: #c85a0a; --accept: #1a7a4a; --reject: #c85a0a;
-  --text: #1c1c1c; --muted: #777; --border: #ddd5c8;
-  --sq-fill: #eceaf5; --sq-stroke: #6a5d9e; --circ-stroke: #8b6914;
+  /* ── Chrome: course palette (see ../THEME.md) ─────────────────────── */
+  --accent:      #8C1D40;  /* ASU maroon */
+  --accent-dark: #6b1631;
+  --bg:          #ffffff;  /* matches a white Canvas LMS page when embedded */
+  --card:        #ffffff;
+  --border:      #e3dadd;
+  --text:        #191919;
+  --muted:       #6e6e6e;
+  --accent-wash: rgba(140,29,64,.06);
+  --accent-tint: rgba(140,29,64,.10);
+  --chart-bg:    #fbfafa;
+
+  /* ── Data: widget-owned, these encode meaning and are NOT themed ───
+     Teal reads as "the exact thing" (true curve, dart inside, CI hit);
+     orange reads as "the sampled thing" (estimate, dart outside, CI miss).
+     Teal/orange stays separable under red-green color deficiency, and the
+     dart marks are shape-coded (filled dot vs cross) on top of that. */
+  --truth:       #0F6E8C;
+  --est:         #C2570A;
+  --est-pale:    rgba(194,87,10,.13);
+  --accept:      #0F6E8C;
+  --reject:      #C2570A;
+  --hit:         #0F6E8C;
+  --miss:        #C2570A;
+  --warn:        #8b6914;
+  --sq-fill:     #eaecf6; --sq-stroke: #3F4C8C;  /* square geometry */
+  --circ-stroke: #8b6914;                        /* circle geometry */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
 .widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
 .wh-copy { text-align:right; font-size:.72rem; color:var(--muted); margin-top:4px; }
-.wh-copy a { color:inherit; text-decoration:underline; }
-.wh-title { font-size: 1.4rem; font-weight: 700; color: var(--green); }
+.wh-copy a { color:var(--accent); text-decoration:none; }
+.wh-copy a:hover { text-decoration:underline; }
+.wh-title { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
 .wh-sub   { font-size: 0.875rem; color: var(--muted); margin-top: 3px; }
-.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--green); margin: 14px 0 18px; }
+.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 14px 0 18px; }
 .tab {
   font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 500;
   padding: 8px 24px; border: 2px solid transparent; border-bottom: none;
   border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
   cursor: pointer; margin-bottom: -2px; transition: .15s;
 }
-.tab.active { background: var(--card); color: var(--green); font-weight: 700; border-color: var(--green); border-bottom-color: var(--card); }
-.tab:hover:not(.active) { color: var(--green); background: rgba(26,61,43,.05); }
+.tab.active { background: var(--card); color: var(--accent); font-weight: 700; border-color: var(--accent); border-bottom-color: var(--card); }
+.tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
 .tp { display: none; } .tp.active { display: block; }
 .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
 select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
-.btn-run { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--green); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
-.btn-run:hover { background: var(--green2); }
+.btn-run { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run:hover { background: var(--accent-dark); }
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
-.btn-clear:hover { color: var(--orange); border-color: var(--orange); }
+.btn-clear:hover { color: var(--accent); border-color: var(--accent); }
 .viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
 .cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px; flex: 0 0 auto; }
 canvas { display: block; }
@@ -67,13 +91,13 @@ canvas { display: block; }
 .sg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
-.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sc-val.acc { color: var(--orange); }
-.sc-val.dim { color: var(--muted); font-size: .9rem; }
-.hint { background: #f8f6f1; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
-.bridge-note { font-size: .8rem; background: rgba(26,61,43,.09); color: var(--green); border-radius: 6px; padding: 7px 11px; border-left: 3px solid var(--green2); display: none; margin-bottom: 4px; }
+.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sc-val.acc { color: var(--est); }
+.sc-val.dim { color: var(--truth); font-size: .9rem; }
+.hint { background: #f5f2f3; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+.bridge-note { font-size: .8rem; background: var(--accent-tint); color: var(--accent); border-radius: 6px; padding: 7px 11px; border-left: 3px solid var(--accent-dark); display: none; margin-bottom: 4px; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
-.sec-hd { font-size: .75rem; font-weight: 800; color: var(--green); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
+.sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 .hist-empty { font-size: .85rem; color: var(--muted); font-style: italic; text-align: center; padding: 18px 0; }
 svg.hsv { display: block; width: 100%; height: auto; }
 .exp-cv  { display: block; border-radius: 4px; }
@@ -84,17 +108,17 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .pi-exp-math { flex: 1 1 380px; min-width: 0; display: block; }
 .pi-eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
 .pi-eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
-             color: var(--green); flex-shrink: 0; min-width: 148px; }
-.pi-eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--green); }
+             color: var(--accent); flex-shrink: 0; min-width: 148px; }
+.pi-eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--accent); }
 .pi-eq-hr  { border: none; border-top: 1px solid var(--border); margin: 5px 0; }
-.pi-therefore { background: rgba(26,61,43,.07); border-radius: 7px;
+.pi-therefore { background: var(--accent-wash); border-radius: 7px;
                 padding: 9px 11px; margin-top: 8px; }
 .pi-therefore-row { display: flex; flex-wrap: wrap; gap: 3px 8px;
                     align-items: baseline; margin-bottom: 5px; }
 .pi-therefore strong { font-family: 'Outfit',sans-serif; font-size: .85rem;
-                        font-weight: 700; color: var(--green); flex-shrink: 0; }
+                        font-weight: 700; color: var(--accent); flex-shrink: 0; }
 .pi-therefore-eq { font-family: 'IBM Plex Mono',monospace; font-size: .83rem;
-                   color: var(--orange); }
+                   color: var(--est); }
 .pi-borel { font-size: .76rem; color: var(--muted); line-height: 1.4; }
 @media (max-width: 680px) {
   .pi-exp-wrap { flex-direction: column; gap: 10px; }
@@ -106,17 +130,17 @@ svg.hsv { display: block; width: 100%; height: auto; }
   .pi-borel { font-size: .82rem; }
 }
 .exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
-footer { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
-footer a { color: var(--muted); text-decoration: underline; }
-footer a:hover { color: var(--orange); }
+footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
 .cr-sep { display: inline; }
 .cr-br { display: none; }
 @media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
 .tab-select {
   display: none; width: 100%; font-family: 'Outfit', sans-serif;
   font-size: .95rem; font-weight: 700; padding: 8px 14px;
-  border: 2px solid var(--green); border-radius: 7px;
-  background: var(--card); color: var(--green); cursor: pointer;
+  border: 2px solid var(--accent); border-radius: 7px;
+  background: var(--card); color: var(--accent); cursor: pointer;
   margin-bottom: 14px; appearance: auto;
 }
 @media (max-width: 345px) {
@@ -125,6 +149,7 @@ footer a:hover { color: var(--orange); }
 }
 @media (max-width: 620px) { .viz-row { flex-direction: column; } }
 </style>
+
 </head>
 <body>
 <div class="widget">
@@ -189,7 +214,7 @@ footer a:hover { color: var(--orange); }
           <div class="pi-eq-row"><span class="pi-eq-lbl">Area of circle:</span><span class="pi-eq-val" style="color:var(--circ-stroke)">πr²</span></div>
           <div class="pi-eq-hr"></div>
           <div class="pi-eq-row"><span class="pi-eq-lbl">Pr(dart inside):</span><span class="pi-eq-val">πr²&thinsp;/&thinsp;4r² = π/4</span></div>
-          <div class="pi-eq-row"><span class="pi-eq-lbl">By LLN as N → ∞:</span><span class="pi-eq-val" style="color:var(--orange)">(# inside) / N  →  π/4</span></div>
+          <div class="pi-eq-row"><span class="pi-eq-lbl">By LLN as N → ∞:</span><span class="pi-eq-val" style="color:var(--est)">(# inside) / N  →  π/4</span></div>
           <div class="pi-therefore">
             <div class="pi-therefore-row">
               <strong>Therefore:</strong>
@@ -260,10 +285,16 @@ footer a:hover { color: var(--orange); }
 <footer>© 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> · </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></footer>
 
 <script>
+const css = getComputedStyle(document.documentElement);
+const tok = n => css.getPropertyValue(n).trim();
 const C = {
-  green:'#1a3d2b', green2:'#2d6a4f', orange:'#c85a0a',
-  orangePale:'rgba(200,90,10,0.13)', accept:'#1a7a4a', reject:'#c85a0a',
-  muted:'#888', sqFill:'#eceaf5', sqStroke:'#6a5d9e', circStroke:'#8b6914', bg:'#f8f6f1',
+  // Chrome: read from the CSS tokens so a palette change reaches the canvas/SVG too.
+  accent: tok('--accent'), muted: tok('--muted'), bg: tok('--chart-bg'),
+  // Data: these encode meaning, so they are the widget's own (see :root for the rationale).
+  truth: tok('--truth'), est: tok('--est'), estPale: tok('--est-pale'),
+  accept: tok('--accept'), reject: tok('--reject'),
+  hit: tok('--hit'), miss: tok('--miss'), warn: tok('--warn'),
+  sqFill: tok('--sq-fill'), sqStroke: tok('--sq-stroke'), circStroke: tok('--circ-stroke'),
 };
 const FF_MONO = 'IBM Plex Mono,monospace';
 const FF_SANS = 'Outfit,sans-serif';
@@ -424,7 +455,7 @@ function drawPiExp(){
   const dartSvg=document.getElementById('pi-exp-dart');
   const r=64,cx=86,cy=96; let dh='';
   dh+=svgRect(cx-r,cy-r,r*2,r*2,C.sqFill,C.sqStroke,2.2);
-  dh+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(26,122,74,.07)" stroke="${C.circStroke}" stroke-width="2.2"/>`;
+  dh+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(139,105,20,.07)" stroke="${C.circStroke}" stroke-width="2.2"/>`;
   dh+=svgLine(cx,cy,cx+r,cy,C.circStroke,1.5,'4,3');
   dh+=svgTxt(cx+r/2,cy-8,'r',C.circStroke,13,FF_MONO,'middle','600');
   const by=cy+r+13;
@@ -482,19 +513,21 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
     ctx.beginPath();
     for(let i=0;i<=200;i++){const x=a+i/200*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
     ctx.lineTo(xP(b),yP(0));ctx.lineTo(xP(a),yP(0));ctx.closePath();
-    ctx.fillStyle='rgba(26,61,43,.06)';ctx.fill();
+    ctx.fillStyle='rgba(15,110,140,.07)';ctx.fill();
   }
   if(M>0){
     const rWpx=cW/TM;  // width based on TM for stable anim
     samples.forEach(({x,y})=>{
       const px=xP(x)-rWpx/2, py=yP(y), ph=Math.max(yP(0)-py,1);
-      ctx.fillStyle=C.orangePale;ctx.fillRect(px,py,rWpx,ph);
-      ctx.strokeStyle=C.orange;ctx.lineWidth=M<=100?1:0.5;ctx.strokeRect(px,py,rWpx,ph);
+      ctx.fillStyle=C.estPale;ctx.fillRect(px,py,rWpx,ph);
+      ctx.strokeStyle=C.est;ctx.lineWidth=M<=100?1:0.5;ctx.strokeRect(px,py,rWpx,ph);
     });
   }
-  ctx.beginPath();ctx.strokeStyle=C.green;ctx.lineWidth=2.2;
+  ctx.beginPath();
   for(let i=0;i<=300;i++){const x=a+i/300*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
-  ctx.stroke();
+  ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.strokeStyle='#fff';ctx.lineWidth=5.2;ctx.stroke();   // halo: keeps the curve legible over the bars
+  ctx.strokeStyle=C.truth;ctx.lineWidth=2.2;ctx.stroke();
   ctx.strokeStyle='#ccc';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(pL,pT+cH);ctx.lineTo(pL+cW,pT+cH);ctx.stroke();
   ctx.beginPath();ctx.moveTo(pL,pT);ctx.lineTo(pL,pT+cH);ctx.stroke();
@@ -506,7 +539,7 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
   ctx.fillText(midL, pL+cW/2, pT+cH+16);
   ctx.textAlign='right';
   ctx.fillText('0',pL-4,yP(0)+4);ctx.fillText('1',pL-4,yP(1)+4);
-  ctx.fillStyle=C.green;ctx.font=`bold 11.5px ${FF_SANS}`;ctx.textAlign='left';
+  ctx.fillStyle=C.truth;ctx.font=`bold 11.5px ${FF_SANS}`;ctx.textAlign='left';
   ctx.fillText('f(x) = '+name, pL+4, pT+13);
 
   // Width annotation — always shown, drafting-style for any M
@@ -516,14 +549,14 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
     const midS=samples[Math.floor(M/2)];
     const bx=xP(midS.x), rWpx=cW/TM, visW=Math.max(rWpx,3);
     const ay=pT+cH+32, tkH=4;
-    ctx.strokeStyle=C.orange;ctx.lineWidth=1;
+    ctx.strokeStyle=C.est;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(bx-visW/2,ay);ctx.lineTo(bx+visW/2,ay);ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(bx-visW/2,ay-tkH);ctx.lineTo(bx-visW/2,ay+tkH);
     ctx.moveTo(bx+visW/2,ay-tkH);ctx.lineTo(bx+visW/2,ay+tkH);
     ctx.stroke();
     const Lstr=fn.b===Math.PI?'π':fn.b===Math.PI/2?'π/2':L.toFixed(2);
-    ctx.fillStyle=C.orange;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
+    ctx.fillStyle=C.est;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
     ctx.fillText(`L/M = ${Lstr}/${TM}`, bx, ay+14);
   }
 }
@@ -551,7 +584,7 @@ function runMC(){
   setText('mc-sw',(L/M).toFixed(6));setText('mc-se',est.toFixed(6));setText('mc-st',fn.trueStr);
   const errEl=document.getElementById('mc-serr');
   errEl.textContent=(relErr*100).toFixed(3)+'%';
-  errEl.style.color=relErr<.05?C.green2:relErr<.2?C.orange:'#c0392b';
+  errEl.style.color=relErr<.05?C.hit:relErr<.2?C.warn:C.miss;
   renderMCHist();
 
   // Animate rectangles one-by-one (batched so total frames ≈ 45)
@@ -624,17 +657,17 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
 
   // Build inner SVG content (no outer <svg> tag — set as attributes on the element)
   let h='';
-  h+=`<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="#faf9f6" rx="3"/>`;
+  h+=`<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
 
   // True-value dashed line, clamped to plot area
   const tvy=Math.min(Math.max(yP(trueVal),pT+2),pT+cH-2);
-  h+=`<line x1="${pL}" y1="${tvy}" x2="${pL+cW}" y2="${tvy}" stroke="${C.green}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".75"/>`;
+  h+=`<line x1="${pL}" y1="${tvy}" x2="${pL+cW}" y2="${tvy}" stroke="${C.truth}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".75"/>`;
 
   // Label drawn LAST (after CI bars) so it always sits on top
   const lblY=tvy<pT+18?tvy+14:tvy-5;
   const lblBgW=trueLabel.length*6.8+8;
   const lblH=`<rect x="${pL+3}" y="${lblY-12}" width="${lblBgW}" height="16" fill="white" opacity=".92" rx="2"/>`
-    +`<text x="${pL+5}" y="${lblY}" fill="${C.green}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">${trueLabel}</text>`;
+    +`<text x="${pL+5}" y="${lblY}" fill="${C.truth}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">${trueLabel}</text>`;
 
   // Y axis
   h+=`<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT+cH}" stroke="#ccc" stroke-width="1"/>`;
@@ -660,12 +693,15 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
       const yTop=yP(Math.min(yMax,p.ciHigh)), yBot=yP(Math.max(yMin,p.ciLow));
       const ym=yP(Math.min(yMax,Math.max(yMin,p.est)));
       const hit=p.ciLow<=trueVal&&trueVal<=p.ciHigh;
-      const col=hit?C.green2:C.reject;
+      const col=hit?C.hit:C.miss;
+      // Capture vs miss must not rest on hue alone: a miss also gets a dashed bar and a hollow dot.
+      const dash=hit?'':' stroke-dasharray="3,2.5"';
       h+=`<rect x="${cx-3}" y="${yTop}" width="6" height="${Math.max(1,yBot-yTop)}" fill="${col}" opacity=".15" rx="1"/>`;
-      h+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="1.8"/>`;
+      h+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="1.8"${dash}/>`;
       h+=`<line x1="${cx-5}" y1="${yTop}" x2="${cx+5}" y2="${yTop}" stroke="${col}" stroke-width="1.8"/>`;
       h+=`<line x1="${cx-5}" y1="${yBot}" x2="${cx+5}" y2="${yBot}" stroke="${col}" stroke-width="1.8"/>`;
-      h+=`<circle cx="${cx}" cy="${ym}" r="4" fill="${col}"/>`;
+      h+=hit?`<circle cx="${cx}" cy="${ym}" r="4" fill="${col}"/>`
+             :`<circle cx="${cx}" cy="${ym}" r="3.6" fill="#fff" stroke="${col}" stroke-width="2"/>`;
       h+=`<line x1="${cx}" y1="${pT+cH}" x2="${cx}" y2="${pT+cH+4}" stroke="#bbb" stroke-width="1"/>`;
       h+=`<text x="${cx}" y="${pT+cH+17}" text-anchor="middle" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`;
       h+=`<text x="${cx}" y="${pT+cH+29}" text-anchor="middle" fill="#aaa" font-size="9" font-family="${FF_MONO}">N=${p.n.toLocaleString()}</text>`;
@@ -674,9 +710,9 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
 
   // Legend
   const ly=SH-14;
-  h+=`<circle cx="${pL+7}" cy="${ly}" r="4" fill="${C.green2}"/>`;
+  h+=`<circle cx="${pL+7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
   h+=`<text x="${pL+15}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI captures true value</text>`;
-  h+=`<circle cx="${pL+165}" cy="${ly}" r="4" fill="${C.reject}"/>`;
+  h+=`<circle cx="${pL+165}" cy="${ly}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
   h+=`<text x="${pL+173}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI misses  (≈5% expected)</text>`;
 
   // Append label last so it renders on top of CI bars
@@ -710,12 +746,14 @@ function drawMCExpFrame(){
   const rWpx=cW/M;
   samp.forEach(({x,y})=>{
     const px=xP(x)-rWpx/2,py=yP(y),ph=Math.max(yP(0)-py,1);
-    ctx.fillStyle=C.orangePale;ctx.fillRect(px,py,rWpx,ph);
-    ctx.strokeStyle=C.orange;ctx.lineWidth=M<=16?1.2:0.7;ctx.strokeRect(px,py,rWpx,ph);
+    ctx.fillStyle=C.estPale;ctx.fillRect(px,py,rWpx,ph);
+    ctx.strokeStyle=C.est;ctx.lineWidth=M<=16?1.2:0.7;ctx.strokeRect(px,py,rWpx,ph);
   });
-  ctx.beginPath();ctx.strokeStyle=C.green;ctx.lineWidth=2;
+  ctx.beginPath();
   for(let i=0;i<=250;i++){const x=a+i/250*L;if(i===0)ctx.moveTo(xP(x),yP(f(x)));else ctx.lineTo(xP(x),yP(f(x)));}
-  ctx.stroke();
+  ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.stroke();   // halo, as in the static plot
+  ctx.strokeStyle=C.truth;ctx.lineWidth=2;ctx.stroke();
   ctx.strokeStyle='#ccc';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(pL,pT+cH);ctx.lineTo(pL+cW,pT+cH);ctx.stroke();
   ctx.beginPath();ctx.moveTo(pL,pT);ctx.lineTo(pL,pT+cH);ctx.stroke();
@@ -728,16 +766,16 @@ function drawMCExpFrame(){
     const rawBx=xP(s.x), visW=Math.max(rWpx,3), ay=pT+cH+32, tkH=4;
     // Clamp so annotation label never clips at right/left edge
     const bx=Math.max(pL+visW/2+4, Math.min(rawBx, pL+cW-visW/2-4));
-    ctx.strokeStyle=C.orange;ctx.lineWidth=1;
+    ctx.strokeStyle=C.est;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(bx-visW/2,ay);ctx.lineTo(bx+visW/2,ay);ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(bx-visW/2,ay-tkH);ctx.lineTo(bx-visW/2,ay+tkH);
     ctx.moveTo(bx+visW/2,ay-tkH);ctx.lineTo(bx+visW/2,ay+tkH);
     ctx.stroke();
-    ctx.fillStyle=C.orange;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
+    ctx.fillStyle=C.est;ctx.font=`${rWpx<28?8.5:9.5}px ${FF_MONO}`;ctx.textAlign='center';
     ctx.fillText(`L/M = π/${M}`,bx,ay+14);
   }
-  ctx.fillStyle=C.green;ctx.font=`bold 12px ${FF_SANS}`;ctx.textAlign='left';
+  ctx.fillStyle=C.truth;ctx.font=`bold 12px ${FF_SANS}`;ctx.textAlign='left';
   ctx.fillText(`M = ${M} samples`,pL+3,pT+13);
   // Caption explicitly names the function
   document.getElementById('mc-exp-cap').textContent=
@@ -777,9 +815,9 @@ window.addEventListener('load',()=>{
   renderPiHist();
 });
 </script>
-<footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:#78786A;text-align:left;">
+<footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">
   <div style="max-width:1020px;margin:0 auto;padding:2px 18px 10px;">
-    <a href="../" style="color:inherit;text-decoration:underline;"><span style="font-family:sans-serif">&larr;</span> All course visualizations</a>
+    <a href="../" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"><span style="font-family:sans-serif">&larr;</span> All course visualizations</a>
   </div>
 </footer>
 <script>
