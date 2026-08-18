@@ -71,6 +71,8 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
   padding: 8px 24px; border: 2px solid transparent; border-bottom: none;
   border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
   cursor: pointer; margin-bottom: -2px; transition: .15s;
+  /* Never break a tab label across two lines; the dropdown takes over first. */
+  white-space: nowrap; flex-shrink: 0;
 }
 .tab.active { background: var(--card); color: var(--accent); font-weight: 700; border-color: var(--accent); border-bottom-color: var(--card); }
 .tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
@@ -83,28 +85,36 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
-/* Keeps a label + input + button from being split across a flex-wrap boundary */
-.ctrl-grp { display: inline-flex; align-items: center; gap: 8px; }
+/* Holds the seed label, field and checkbox together so the row does not split
+   them at ordinary widths; wraps internally only when it genuinely cannot fit. */
+.ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
 .ctrl-row + .ctrl-row { margin-top: -4px; }
-.seed-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 96px;
+.seed-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 108px;
             padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
             background: #fff; color: var(--text); }
 /* Invalid state is border + wash + aria-invalid + a text message, never color alone */
 .seed-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.ctrl-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+            font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; }
+.ctrl-chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
 /* Own line inside the wrapping row, with the height reserved so text causes no shift */
 .seed-msg { flex: 0 0 100%; min-height: 1.15em; margin-top: -2px;
             font-size: .75rem; line-height: 1.35; color: var(--muted); }
 .seed-msg.bad { color: var(--accent); font-weight: 600; }
 .seed-inp:focus-visible, select:focus-visible, .tab-select:focus-visible,
-.btn-run:focus-visible, .btn-clear:focus-visible, .tab:focus-visible {
+.btn-run:focus-visible, .btn-clear:focus-visible, .tab:focus-visible,
+.ctrl-chk input:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 .viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
-.cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px; flex: 0 0 auto; }
-canvas { display: block; }
+/* Shrinkable, so a narrow viewport scales the plot down instead of overflowing */
+.cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px; flex: 0 1 auto; min-width: 0; }
+canvas { display: block; max-width: 100%; }
 .cv-leg { font-size: .7rem; color: var(--muted); text-align: center; margin-top: 6px; }
 .stats-panel { flex: 1; min-width: 0; }
-.sg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+/* minmax(0,1fr), not 1fr: the stat values are nowrap, so an auto minimum would
+   give the columns a large min-content width and push the page into h-scroll. */
+.sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
 .sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 .sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -172,7 +182,11 @@ footer a:hover { text-decoration: underline; }
   background: var(--card); color: var(--accent); cursor: pointer;
   margin-bottom: 14px; appearance: auto;
 }
-@media (max-width: 345px) {
+/* The two tab labels need ~357px of viewport side by side, so swap to the
+   dropdown before they would wrap. Expressed in em rather than px so the
+   switch also happens sooner for a reader whose default font size is larger:
+   in a media query, em tracks the browser's default font size. */
+@media (max-width: 24em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -215,8 +229,9 @@ footer a:hover { text-decoration: underline; }
                title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('pi')"
                onkeydown="if(event.key==='Enter'){event.preventDefault();runPi();}">
-        <button type="button" class="btn-clear" onclick="rollSeed('pi')"
-                title="Pick a new random seed">New seed</button>
+        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
+          <input type="checkbox" id="pi-newseed" checked> New seed after each run
+        </label>
       </span>
       <button class="btn-run" id="pi-run" onclick="runPi()"><span aria-hidden="true">▶</span> Run Experiment</button>
       <button class="btn-clear" onclick="clearPi()">Clear history</button>
@@ -298,8 +313,9 @@ footer a:hover { text-decoration: underline; }
                title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('mc')"
                onkeydown="if(event.key==='Enter'){event.preventDefault();runMC();}">
-        <button type="button" class="btn-clear" onclick="rollSeed('mc')"
-                title="Pick a new random seed">New seed</button>
+        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
+          <input type="checkbox" id="mc-newseed" checked> New seed after each run
+        </label>
       </span>
       <button class="btn-run" id="mc-run" onclick="runMC()"><span aria-hidden="true">▶</span> Run Experiment</button>
       <button class="btn-clear" onclick="clearMC()">Clear history</button>
@@ -434,19 +450,29 @@ function normalizeSeed(tab) {
   seedMsg(tab, r.msg, false);
 }
 
-function rollSeed(tab) {
-  // Math.random here only picks WHICH seed to use. The experiment itself never
-  // touches Math.random -- see the mulberry32 stream built in runPi/runMC.
-  const s = Math.floor(Math.random() * (SEED_MAX + 1));
-  document.getElementById(tab + '-seed').value = String(s);
-  seedMsg(tab, 'New seed ' + s + ' — click Run Experiment.', false);
+function randomSeed() {
+  // Math.random here only picks WHICH seed to use next. The experiment itself
+  // never touches Math.random -- see the mulberry32 stream built in runPi/runMC.
+  // Six digits, always: short enough to read aloud or copy into a lab notebook,
+  // and a constant width so the field never jumps. Typed seeds may still be any
+  // value up to SEED_MAX; mulberry32 mixes low seeds as well as high ones.
+  return 100000 + Math.floor(Math.random() * 900000);
 }
 
-// With a fixed seed, repeated clicks genuinely do reproduce the run. Say so, or
-// it reads as a broken button rather than as the point of the exercise.
+// Called after a run has already drawn its samples, so the run always used the
+// seed the student could see. With the box ticked, queue a fresh one for next
+// time and name both, so the field changing under them is never a surprise.
+// Unticked, repeated clicks genuinely do reproduce the run -- say so, or it
+// reads as a broken button rather than as the point of the exercise.
 function noteRun(tab, seed, runIdx, repeat) {
+  if (document.getElementById(tab + '-newseed').checked) {
+    const next = randomSeed();
+    document.getElementById(tab + '-seed').value = String(next);
+    seedMsg(tab, 'Run ' + runIdx + ' used seed ' + seed + '. Next run: ' + next + '.', false);
+    return;
+  }
   seedMsg(tab, repeat
-    ? 'Run ' + runIdx + ' is identical to Run ' + (runIdx - 1) + ' — same seed, same sample size. Use “New seed” to vary it.'
+    ? 'Run ' + runIdx + ' repeats Run ' + (runIdx - 1) + ' exactly — same seed, same sample size. Tick “New seed after each run” to vary it.'
     : 'Run ' + runIdx + ' used seed ' + seed + '.', false);
 }
 
@@ -457,8 +483,11 @@ function initHiDPI(cv, logW, logH) {
   cv.dataset.logW = logW; cv.dataset.logH = logH;
   cv.width  = Math.round(logW * DPR);
   cv.height = Math.round(logH * DPR);
-  cv.style.width  = logW + 'px';
-  cv.style.height = logH + 'px';
+  // Scale down on narrow viewports rather than overflow. The backing store stays
+  // at logical x DPR, so a shrunk canvas is drawn from more pixels, not fewer.
+  cv.style.width    = logW + 'px';
+  cv.style.maxWidth = '100%';
+  cv.style.height   = 'auto';
 }
 
 // Resets transform + clears; safe to call on every draw entry point
