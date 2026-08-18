@@ -83,6 +83,22 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
+/* Keeps a label + input + button from being split across a flex-wrap boundary */
+.ctrl-grp { display: inline-flex; align-items: center; gap: 8px; }
+.ctrl-row + .ctrl-row { margin-top: -4px; }
+.seed-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 96px;
+            padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+            background: #fff; color: var(--text); }
+/* Invalid state is border + wash + aria-invalid + a text message, never color alone */
+.seed-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
+/* Own line inside the wrapping row, with the height reserved so text causes no shift */
+.seed-msg { flex: 0 0 100%; min-height: 1.15em; margin-top: -2px;
+            font-size: .75rem; line-height: 1.35; color: var(--muted); }
+.seed-msg.bad { color: var(--accent); font-weight: 600; }
+.seed-inp:focus-visible, select:focus-visible, .tab-select:focus-visible,
+.btn-run:focus-visible, .btn-clear:focus-visible, .tab:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 .viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
 .cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px; flex: 0 0 auto; }
 canvas { display: block; }
@@ -106,28 +122,41 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .pi-exp-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .pi-exp-dart { flex: 0 0 auto; width: 172px; height: auto; display: block; }
 .pi-exp-math { flex: 1 1 380px; min-width: 0; display: block; }
-.pi-eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
-.pi-eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
-             color: var(--accent); flex-shrink: 0; min-width: 148px; }
-.pi-eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--accent); }
-.pi-eq-hr  { border: none; border-top: 1px solid var(--border); margin: 5px 0; }
-.pi-therefore { background: var(--accent-wash); border-radius: 7px;
-                padding: 9px 11px; margin-top: 8px; }
-.pi-therefore-row { display: flex; flex-wrap: wrap; gap: 3px 8px;
-                    align-items: baseline; margin-bottom: 5px; }
-.pi-therefore strong { font-family: 'Outfit',sans-serif; font-size: .85rem;
-                        font-weight: 700; color: var(--accent); flex-shrink: 0; }
-.pi-therefore-eq { font-family: 'IBM Plex Mono',monospace; font-size: .83rem;
-                   color: var(--est); }
-.pi-borel { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+/* Shared equation vocabulary — used by the Tab 1 explainer and the Tab 2 formula
+   block. Neutral names on purpose: further tabs are expected to reuse these. */
+.eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
+          color: var(--accent); flex-shrink: 0; min-width: 148px; }
+.eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--accent); }
+.eq-hr  { border: none; border-top: 1px solid var(--border); margin: 5px 0; }
+.eq-note { background: var(--accent-wash); border-radius: 7px;
+           padding: 9px 11px; margin-top: 8px; }
+.eq-note-row { display: flex; flex-wrap: wrap; gap: 3px 8px;
+               align-items: baseline; margin-bottom: 5px; }
+.eq-note strong { font-family: 'Outfit',sans-serif; font-size: .85rem;
+                  font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.eq-note-eq { font-family: 'IBM Plex Mono',monospace; font-size: .83rem;
+              color: var(--est); }
+.eq-fine { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+/* Compact scope for the Tab 2 block, which lives in the narrow stats column */
+.mc-eq { margin-bottom: 10px; }
+.mc-eq .eq-row  { padding: 2px 0; }
+.mc-eq .eq-lbl  { min-width: 104px; font-size: .8rem; }
+.mc-eq .eq-val  { font-size: .78rem; }
+.mc-eq .eq-note { margin-top: 6px; padding: 7px 10px; }
+.mc-eq .eq-note-eq { font-size: .82rem; }
+.mc-eq .eq-fine    { font-size: .74rem; color: var(--truth); }
+/* The font bump below is scoped to the Tab 1 explainer, which goes full-width here.
+   Tab 2's block is still a narrow sibling of the canvas card between 620 and 680px,
+   so it must not inherit the enlargement. */
 @media (max-width: 680px) {
   .pi-exp-wrap { flex-direction: column; gap: 10px; }
   .pi-exp-dart { width: 100%; max-width: 310px; height: auto; margin: 0 auto; }
   .pi-exp-math { width: 100%; }
-  .pi-eq-lbl { font-size: 1rem; }
-  .pi-eq-val { font-size: .92rem; }
-  .pi-therefore-eq { font-size: .9rem; }
-  .pi-borel { font-size: .82rem; }
+  .pi-exp-math .eq-lbl     { font-size: 1rem; }
+  .pi-exp-math .eq-val     { font-size: .92rem; }
+  .pi-exp-math .eq-note-eq { font-size: .9rem; }
+  .pi-exp-math .eq-fine    { font-size: .82rem; }
 }
 .exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
 footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
@@ -170,14 +199,28 @@ footer a:hover { text-decoration: underline; }
   <!-- TAB 1 -->
   <section id="tab-pi" class="tp active">
     <div class="ctrl-row">
-      <span class="ctrl-lbl">Samples per run</span>
+      <label class="ctrl-lbl" for="pi-n">Samples per run</label>
       <select id="pi-n">
         <option value="50">50</option><option value="100">100</option>
         <option value="500" selected>500</option><option value="1000">1,000</option>
         <option value="5000">5,000</option><option value="10000">10,000</option>
       </select>
-      <button class="btn-run" id="pi-run" onclick="runPi()">▶ Run Experiment</button>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="pi-seed">Seed</label>
+        <input class="seed-inp" id="pi-seed" type="text" inputmode="numeric"
+               value="12345" maxlength="10" autocomplete="off" spellcheck="false"
+               aria-describedby="pi-seed-msg"
+               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
+               onchange="normalizeSeed('pi')"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();runPi();}">
+        <button type="button" class="btn-clear" onclick="rollSeed('pi')"
+                title="Pick a new random seed">New seed</button>
+      </span>
+      <button class="btn-run" id="pi-run" onclick="runPi()"><span aria-hidden="true">▶</span> Run Experiment</button>
       <button class="btn-clear" onclick="clearPi()">Clear history</button>
+      <span class="seed-msg" id="pi-seed-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="viz-row">
       <div class="cv-card">
@@ -210,17 +253,17 @@ footer a:hover { text-decoration: underline; }
       <div class="pi-exp-wrap">
         <svg id="pi-exp-dart" class="pi-exp-dart" xmlns="http://www.w3.org/2000/svg"></svg>
         <div id="pi-exp-math" class="pi-exp-math">
-          <div class="pi-eq-row"><span class="pi-eq-lbl">Area of square:</span><span class="pi-eq-val" style="color:var(--sq-stroke)">(2r)² = 4r²</span></div>
-          <div class="pi-eq-row"><span class="pi-eq-lbl">Area of circle:</span><span class="pi-eq-val" style="color:var(--circ-stroke)">πr²</span></div>
-          <div class="pi-eq-hr"></div>
-          <div class="pi-eq-row"><span class="pi-eq-lbl">Pr(dart inside):</span><span class="pi-eq-val">πr²&thinsp;/&thinsp;4r² = π/4</span></div>
-          <div class="pi-eq-row"><span class="pi-eq-lbl">By LLN as N → ∞:</span><span class="pi-eq-val" style="color:var(--est)">(# inside) / N  →  π/4</span></div>
-          <div class="pi-therefore">
-            <div class="pi-therefore-row">
+          <div class="eq-row"><span class="eq-lbl">Area of square:</span><span class="eq-val" style="color:var(--sq-stroke)">(2r)² = 4r²</span></div>
+          <div class="eq-row"><span class="eq-lbl">Area of circle:</span><span class="eq-val" style="color:var(--circ-stroke)">πr²</span></div>
+          <div class="eq-hr"></div>
+          <div class="eq-row"><span class="eq-lbl">Pr(dart inside):</span><span class="eq-val">πr²&thinsp;/&thinsp;4r² = π/4</span></div>
+          <div class="eq-row"><span class="eq-lbl">By LLN as N → ∞:</span><span class="eq-val" style="color:var(--est)">(# inside) / N  →  π/4</span></div>
+          <div class="eq-note">
+            <div class="eq-note-row">
               <strong>Therefore:</strong>
-              <span class="pi-therefore-eq">π ≈ 4 × (# inside circle) / (# total samples)</span>
+              <span class="eq-note-eq">π ≈ 4 × (# inside circle) / (# total samples)</span>
             </div>
-            <div class="pi-borel">Borel’s Law of Large Numbers guarantees convergence — the 95% CI will capture π ≈ 95% of the time.</div>
+            <div class="eq-fine">Borel’s Law of Large Numbers guarantees convergence — the 95% CI will capture π ≈ 95% of the time.</div>
           </div>
         </div>
       </div>
@@ -230,7 +273,7 @@ footer a:hover { text-decoration: underline; }
   <!-- TAB 2 -->
   <section id="tab-mc" class="tp">
     <div class="ctrl-row">
-      <span class="ctrl-lbl">Function</span>
+      <label class="ctrl-lbl" for="mc-fn">Function</label>
       <select id="mc-fn" onchange="mcFnChange()">
         <option value="sin">sin(x) on [0, π]</option>
         <option value="xsq">x² on [0, 1]</option>
@@ -238,15 +281,29 @@ footer a:hover { text-decoration: underline; }
         <option value="semi">√(1−x²) on [0, 1]  [integral = π/4]</option>
         <option value="cosx">cos(x) on [0, π/2]</option>
       </select>
-      <span class="ctrl-lbl">Samples</span>
+      <label class="ctrl-lbl" for="mc-n">Samples</label>
       <select id="mc-n">
         <option value="10">10</option><option value="20">20</option>
         <option value="50">50</option><option value="100" selected>100</option>
         <option value="500">500</option><option value="1000">1,000</option>
         <option value="5000">5,000</option>
       </select>
-      <button class="btn-run" id="mc-run" onclick="runMC()">▶ Run Experiment</button>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="mc-seed">Seed</label>
+        <input class="seed-inp" id="mc-seed" type="text" inputmode="numeric"
+               value="54321" maxlength="10" autocomplete="off" spellcheck="false"
+               aria-describedby="mc-seed-msg"
+               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
+               onchange="normalizeSeed('mc')"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();runMC();}">
+        <button type="button" class="btn-clear" onclick="rollSeed('mc')"
+                title="Pick a new random seed">New seed</button>
+      </span>
+      <button class="btn-run" id="mc-run" onclick="runMC()"><span aria-hidden="true">▶</span> Run Experiment</button>
       <button class="btn-clear" onclick="clearMC()">Clear history</button>
+      <span class="seed-msg" id="mc-seed-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="viz-row" style="margin-top:4px">
       <div class="cv-card">
@@ -261,6 +318,26 @@ footer a:hover { text-decoration: underline; }
           <div class="sc"><div class="sc-lbl">MC Estimate</div><div class="sc-val acc" id="mc-se">—</div></div>
           <div class="sc"><div class="sc-lbl">True Integral</div><div class="sc-val dim" id="mc-st">—</div></div>
           <div class="sc"><div class="sc-lbl">Relative Error</div><div class="sc-val" id="mc-serr">—</div></div>
+        </div>
+        <!-- How the draws become the estimate. Always visible, with placeholders before
+             the first run, so switching functions causes no layout shift. -->
+        <div class="mc-eq">
+          <div class="eq-row">
+            <span class="eq-lbl">Estimator:</span>
+            <span class="eq-val" style="color:var(--est)">(L/M) · Σ f(x<sub>i</sub>), <span id="mc-eq-dom">x<sub>i</sub> ~ U[0,π]</span></span>
+          </div>
+          <div class="eq-row">
+            <span class="eq-lbl">This run:</span>
+            <span class="eq-val" id="mc-eq-sub">—</span>
+          </div>
+          <div class="eq-hr"></div>
+          <div class="eq-note">
+            <div class="eq-note-row">
+              <strong>Estimate:</strong>
+              <span class="eq-note-eq" id="mc-eq-est">—</span>
+            </div>
+            <div class="eq-fine" id="mc-eq-true">Exact value: —</div>
+          </div>
         </div>
         <!-- Bridge note lives inside the stats panel — no layout shift when it appears -->
         <div class="bridge-note" id="mc-bridge">
@@ -298,6 +375,80 @@ const C = {
 };
 const FF_MONO = 'IBM Plex Mono,monospace';
 const FF_SANS = 'Outfit,sans-serif';
+
+// ── Seeded PRNG ────────────────────────────────────────
+// mulberry32: 32 bits of state, one integer seed, no library. Chosen over a
+// textbook Park-Miller LCG because seed 0 is legal here (0 is an absorbing fixed
+// point for a multiplicative LCG, and "seed 0 gives a blank dartboard" is a bad
+// first lesson), the output is avalanche-mixed so consecutive pairs show no
+// lattice banding on the dartboard at N = 10,000, and adjacent seeds give
+// well-separated streams -- which matters because students step seeds by hand.
+const SEED_MAX = 2147483647;   // 2^31 - 1, the largest seed a student can type
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;   // [0, 1)
+  };
+}
+
+// Pure, so it can be exercised from the console.
+function parseSeed(raw) {
+  const s = String(raw).trim();
+  if (!/^[+-]?\d{1,10}$/.test(s))
+    return { ok: false, value: null, msg: '⚠ Seed must be a whole number from 0 to ' + SEED_MAX + '.' };
+  const n = Number(s), v = Math.min(Math.max(n, 0), SEED_MAX);
+  return { ok: true, value: v,
+           msg: v === n ? '' : 'Seed ' + s + ' is outside 0–' + SEED_MAX + '; used ' + v + ' instead.' };
+}
+
+function seedMsg(tab, text, bad) {
+  const inp = document.getElementById(tab + '-seed');
+  const msg = document.getElementById(tab + '-seed-msg');
+  msg.textContent = text;
+  msg.classList.toggle('bad', !!bad);
+  inp.setAttribute('aria-invalid', bad ? 'true' : 'false');
+}
+
+// Returns an integer, or null if the field cannot be interpreted. Always writes
+// the value actually used back into the box, so what the student reads is what
+// the generator received.
+function readSeed(tab) {
+  const inp = document.getElementById(tab + '-seed');
+  const r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); inp.focus(); inp.select(); return null; }
+  inp.value = String(r.value);
+  seedMsg(tab, r.msg, false);
+  return r.value;
+}
+
+// Same normalization on change, but never steals focus.
+function normalizeSeed(tab) {
+  const inp = document.getElementById(tab + '-seed');
+  const r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); return; }
+  inp.value = String(r.value);
+  seedMsg(tab, r.msg, false);
+}
+
+function rollSeed(tab) {
+  // Math.random here only picks WHICH seed to use. The experiment itself never
+  // touches Math.random -- see the mulberry32 stream built in runPi/runMC.
+  const s = Math.floor(Math.random() * (SEED_MAX + 1));
+  document.getElementById(tab + '-seed').value = String(s);
+  seedMsg(tab, 'New seed ' + s + ' — click Run Experiment.', false);
+}
+
+// With a fixed seed, repeated clicks genuinely do reproduce the run. Say so, or
+// it reads as a broken button rather than as the point of the exercise.
+function noteRun(tab, seed, runIdx, repeat) {
+  seedMsg(tab, repeat
+    ? 'Run ' + runIdx + ' is identical to Run ' + (runIdx - 1) + ' — same seed, same sample size. Use “New seed” to vary it.'
+    : 'Run ' + runIdx + ' used seed ' + seed + '.', false);
+}
 
 // ── HiDPI ──────────────────────────────────────────────
 const DPR = window.devicePixelRatio || 1;
@@ -343,7 +494,14 @@ function showTab(name, btn) {
   document.querySelectorAll('.tp').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
-  btn.classList.add('active');
+  // btn is null when the change came from the narrow-viewport <select>; the
+  // data-tab attributes on the .tab buttons exist for exactly this fallback.
+  const tabBtn = btn || document.querySelector('.tab[data-tab="'+name+'"]');
+  if (tabBtn) tabBtn.classList.add('active');
+  // Keep the dropdown in sync when the tab was changed from a .tab button, so
+  // shrinking the window below 345px does not reveal the wrong option.
+  const tabSel = document.getElementById('tab-select');
+  if (tabSel && tabSel.value !== name) tabSel.value = name;
   if (name === 'mc') {
     if (!expInitialized) {
       expInitialized = true;
@@ -392,16 +550,26 @@ function showTabFromSelect(sel){ showTab(sel.value, null); }
 
 // ── Tab 1: π estimation ─────────────────────────────────
 function runPi() {
+  // Validate BEFORE disabling: the button is only re-enabled inside the animation's
+  // completion branch, so an early return after disabling would lock it for good.
+  const seed = readSeed('pi');
+  if (seed === null) return;
   const N = +document.getElementById('pi-n').value;
   const btn = document.getElementById('pi-run');
   btn.disabled = true;
+  // A fresh stream on every click, so the same seed always reproduces the run.
+  const rand = mulberry32(seed);
   const xs=[],ys=[],ins=[]; let k=0;
   for(let i=0;i<N;i++){
-    const x=Math.random()*2-1, y=Math.random()*2-1, inside=x*x+y*y<=1;
+    // Relies on left-to-right evaluation of the declarator list; do not reorder.
+    const x=rand()*2-1, y=rand()*2-1, inside=x*x+y*y<=1;
     xs.push(x);ys.push(y);ins.push(inside); if(inside)k++;
   }
   const phat=k/N, se=Math.sqrt(phat*(1-phat)/N);
-  piExps.push({n:N,k,estQ:phat,ciLowQ:Math.max(0,phat-1.96*se),ciHighQ:Math.min(1,phat+1.96*se)});
+  const prevPi=piExps[piExps.length-1];
+  const repeatPi=!!prevPi && prevPi.seed===seed && prevPi.n===N;
+  piExps.push({n:N,k,seed,estQ:phat,ciLowQ:Math.max(0,phat-1.96*se),ciHighQ:Math.min(1,phat+1.96*se)});
+  noteRun('pi',seed,piExps.length,repeatPi);
   setText('pi-sn',N.toLocaleString()); setText('pi-sk',k.toLocaleString());
   setText('pi-sq',phat.toFixed(6));    setText('pi-sp',(4*phat).toFixed(6));
 
@@ -441,6 +609,7 @@ function clearPi(){
   const {ctx,W,H}=getCtx(cv);
   piBase(ctx,W,H);piOverlay(ctx,W,H);
   ['pi-sn','pi-sk','pi-sq','pi-sp'].forEach(id=>setText(id,'—'));
+  seedMsg('pi','',false);
   renderPiHist();
 }
 function renderPiHist(){
@@ -483,6 +652,23 @@ function mcFnChange(){
 function resetMCStats(){
   setText('mc-st',FUNCS[curFn].trueStr);
   ['mc-sm','mc-sl','mc-sw','mc-se','mc-serr'].forEach(id=>setText(id,'—'));
+  updateMCFormula(null);
+}
+// Readable form for a domain length that is an exact multiple of π.
+function piStr(v){
+  return v===Math.PI?'π':v===Math.PI/2?'π/2':v===Math.PI/4?'π/4':v.toFixed(4);
+}
+// Shows how the draws become the estimate. Pass null to reset to placeholders.
+// Every line is verbally labeled, so the colors reinforce meaning without carrying it.
+function updateMCFormula(run){
+  const fn=FUNCS[curFn];
+  document.getElementById('mc-eq-dom').innerHTML='x<sub>i</sub> ~ U'+fn.domStr;
+  document.getElementById('mc-eq-true').textContent='Exact value: '+fn.trueStr;
+  const sub=document.getElementById('mc-eq-sub'), est=document.getElementById('mc-eq-est');
+  if(!run){ sub.textContent='—'; est.textContent='—'; return; }
+  sub.innerHTML='('+piStr(run.L)+'/'+run.M+') × '+run.sum.toFixed(4)
+               +' &nbsp;[Σ f(x<sub>i</sub>) over M = '+run.M.toLocaleString()+']';
+  est.textContent='∫ '+fn.name+' dx ≈ '+run.est.toFixed(6);
 }
 function mcDrawBase(samples){
   const cv=document.getElementById('mc-cv');
@@ -562,6 +748,9 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
 }
 
 function runMC(){
+  // Validate BEFORE disabling — see the note in runPi.
+  const seed=readSeed('mc');
+  if(seed===null)return;
   const M=+document.getElementById('mc-n').value;
   const fkey=document.getElementById('mc-fn').value;
   const fn=FUNCS[fkey], btn=document.getElementById('mc-run');
@@ -569,14 +758,19 @@ function runMC(){
   if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
   const {a,b,f,trueVal}=fn, L=b-a;
 
-  // Generate all samples upfront — stats are exact from the start
+  // Generate all samples upfront — stats are exact from the start.
+  // A fresh stream on every click, so the same seed always reproduces the run.
+  const rand=mulberry32(seed);
   const samples=[]; let sum=0,sumSq=0;
-  for(let i=0;i<M;i++){const x=a+Math.random()*L,y=f(x);samples.push({x,y});sum+=y;sumSq+=y*y;}
+  for(let i=0;i<M;i++){const x=a+rand()*L,y=f(x);samples.push({x,y});sum+=y;sumSq+=y*y;}
   const mean=sum/M, variance=Math.max(0,sumSq/M-mean*mean), se=Math.sqrt(variance/M);
   const est=L*mean, relErr=Math.abs(est-trueVal)/trueVal;
   if(!mcExps[fkey])mcExps[fkey]=[];
-  mcExps[fkey].push({M,est,ciLow:L*(mean-1.96*se),ciHigh:L*(mean+1.96*se)});
+  const mcHist=mcExps[fkey], prevMC=mcHist[mcHist.length-1];
+  const repeatMC=!!prevMC && prevMC.seed===seed && prevMC.M===M;
+  mcHist.push({M,seed,est,ciLow:L*(mean-1.96*se),ciHigh:L*(mean+1.96*se)});
   curFn=fkey;
+  noteRun('mc',seed,mcHist.length,repeatMC);
 
   // Update stat cards and history immediately (before animation finishes)
   setText('mc-sm',M.toLocaleString());
@@ -586,6 +780,7 @@ function runMC(){
   errEl.textContent=(relErr*100).toFixed(3)+'%';
   errEl.style.color=relErr<.05?C.hit:relErr<.2?C.warn:C.miss;
   renderMCHist();
+  updateMCFormula({M,L,sum,est});
 
   // Animate rectangles one-by-one (batched so total frames ≈ 45)
   const cv=document.getElementById('mc-cv');
@@ -612,7 +807,7 @@ function clearMC(){
   if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
   document.getElementById('mc-run').disabled=false;
   const fkey=document.getElementById('mc-fn').value;
-  mcExps[fkey]=[];mcDrawBase([]);resetMCStats();renderMCHist();
+  mcExps[fkey]=[];mcDrawBase([]);resetMCStats();seedMsg('mc','',false);renderMCHist();
 }
 function renderMCHist(){
   const hw=document.getElementById('mc-hw'), hs=document.getElementById('mc-hs');
@@ -740,6 +935,8 @@ function drawMCExpFrame(){
   const xP=x=>pL+(x-a)/L*cW;
   const yP=y=>pT+cH-y/1.06*cH;
   ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+  // Math.random on purpose: this illustration free-runs on its own interval and must
+  // never draw from a seeded experiment stream. See the mulberry32 use in runPi/runMC.
   const samp=[]; let sum=0;
   for(let i=0;i<M;i++){const x=a+Math.random()*L,y=f(x);samp.push({x,y});sum+=y;}
   const est=L*sum/M;
@@ -806,7 +1003,7 @@ window.addEventListener('load',()=>{
   // MC main canvas — 408×302  (pT=16 cH=216 pB=70)
   const mcCv=document.getElementById('mc-cv');
   initHiDPI(mcCv,408,302);
-  curFn='sin'; mcDrawBase([]); setText('mc-st',FUNCS['sin'].trueStr);
+  curFn='sin'; mcDrawBase([]); resetMCStats();   // also primes the formula block
 
   // MC animated explainer: lazy-init on first Tab 2 visit (see showTab)
   // Tab 2 is hidden at load so clientWidth === 0; defer until it's visible.
