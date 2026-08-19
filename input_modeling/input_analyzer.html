@@ -443,7 +443,7 @@ footer a:hover { text-decoration: underline; }
         <div class="drop" id="drop">
           <textarea id="data-in" class="data-in" spellcheck="false" autocomplete="off"
             aria-label="Sample data: one number per line"
-            placeholder="Paste one number per line, for example&#10;&#10;4.67&#10;3.51&#10;5.01&#10;1.82&#10;&#10;A header row, blank lines, and trailing commas are all fine. Several columns are fine too -- you pick one below."></textarea>
+            placeholder="Paste one number per line, for example&#10;&#10;4.67&#10;3.51&#10;5.01&#10;1.82&#10;&#10;A header row, blank lines, and trailing commas are all fine. Several columns are fine too, and a picker appears so you can choose which one to analyze. Durations written as clock time (MM:SS or HH:MM:SS) are accepted."></textarea>
           <div class="drop-hint">Drop the file to load it</div>
         </div>
         <div class="samples">
@@ -464,6 +464,16 @@ footer a:hover { text-decoration: underline; }
       </div>
 
       <div>
+        <div class="ctrl-row" id="clock-row" style="display:none">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="clock-conv">Clock times mean</label>
+            <select id="clock-conv">
+              <option value="ms">MM:SS (and HH:MM:SS) &rarr; minutes</option>
+              <option value="hm">HH:MM (and HH:MM:SS) &rarr; hours</option>
+            </select>
+          </span>
+          <span class="ctrl-note" id="clock-note"></span>
+        </div>
         <div class="ctrl-row" id="col-row" style="display:none">
           <label class="ctrl-lbl" for="col-pick">Column</label>
           <select id="col-pick"></select>
@@ -973,13 +983,13 @@ footer a:hover { text-decoration: underline; }
 <section id="tab-arr" class="tp">
 
   <section class="sec">
-    <div class="sec-hd">1 &middot; Arrival times <span class="sec-note">when each arrival happened, or the interarrival gaps between them</span></div>
+    <div class="sec-hd">1 &middot; Arrival times or interarrival durations</div>
     <div class="data-grid">
       <div>
         <div class="drop" id="a-drop">
           <textarea id="a-data-in" class="data-in" spellcheck="false" autocomplete="off"
-            aria-label="Arrival timestamps, one per line"
-            placeholder="Paste one arrival time per line, for example&#10;&#10;0.7&#10;2.1&#10;2.9&#10;5.4&#10;&#10;Clock times work too -- 8:05, 08:05:30 -- and are converted to minutes past midnight."></textarea>
+            aria-label="Arrival times or interarrival durations, one per line"
+            placeholder="Paste one value per line, for example&#10;&#10;0.7&#10;2.1&#10;2.9&#10;5.4&#10;&#10;A header row, blank lines, and trailing commas are all fine. Several columns are fine too, and a picker appears so you can choose which one to analyze.&#10;&#10;Clock times work as well -- HH:MM or HH:MM:SS, as in 8:05 or 08:05:30 -- and are read as minutes past midnight."></textarea>
           <div class="drop-hint">Drop the file to load it</div>
         </div>
         <div class="samples">
@@ -1006,6 +1016,13 @@ footer a:hover { text-decoration: underline; }
               <option value="gaps">interarrival gaps (durations)</option>
             </select>
           </span>
+        </div>
+        <div class="ctrl-row" id="a-clock-row" style="display:none">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="a-clock-conv">Clock times mean</label>
+            <select id="a-clock-conv"></select>
+          </span>
+          <span class="ctrl-note" id="a-clock-note"></span>
         </div>
         <div class="ctrl-row" id="a-col-row" style="display:none">
           <label class="ctrl-lbl" for="a-col-pick">Column</label>
@@ -1102,6 +1119,13 @@ footer a:hover { text-decoration: underline; }
         your model.</p>
         <p>Either kind of data is welcome here. If what you collected is gaps rather than
         timestamps, say so beside the box above and they will be added up for you.</p>
+        <p>The two tabs read <code>12:30</code> differently, and deliberately. Here it is a
+        <em>moment</em>: the readings are <code>HH:MM</code> and <code>HH:MM:SS</code>, and the
+        result is minutes past midnight. On tab ① it is a <em>duration</em> off a stopwatch, where
+        the default reading is <code>MM:SS</code> and a control lets you switch. That is not an
+        inconsistency between the tabs but the two conventions the world already uses: nobody
+        writes a time of day as minutes and seconds, and nobody times a task in hours and
+        minutes.</p>
       </div>
     </details>
   </section>
@@ -1135,8 +1159,11 @@ footer a:hover { text-decoration: underline; }
     <div class="ctrl-row">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="a-width">Interval width</label>
-        <input type="range" id="a-width" min="1" max="40" step="1" value="22">
-        <span class="mono" id="a-width-val" style="min-width:5em;display:inline-block"></span>
+        <input type="range" id="a-width" min="0" max="20" step="1" value="0">
+        <input class="mono-in" type="number" id="a-width-val" step="any" min="0"
+               style="width:6.5em" aria-label="Interval width">
+        <span class="ctrl-lbl" id="a-width-unit" style="font-weight:500"></span>
+        <span class="ctrl-note" id="a-width-msg" style="color:var(--warn)"></span>
       </span>
       <span class="ctrl-note" id="a-width-hint"></span>
     </div>
@@ -1733,11 +1760,28 @@ function toNum(cell) {
   return Number.isFinite(v) ? v : NaN;
 }
 
-/* Picks the delimiter that appears the same nonzero number of times on the
-   most lines.  Falls back to runs of whitespace, which is what a column
-   pasted out of a spreadsheet or typed by hand looks like. */
+/* Picks the delimiter that organizes the file, judged only against the
+   lines that actually contain it.
+
+   The earlier rule asked for a consistent count on at least half of ALL
+   lines, which two ordinary things defeat. A file with a preamble --
+   seven lines of notes, or a block of "#" comments, before the data --
+   has those lines voting against every delimiter they do not contain. And
+   a file with ragged rows, which is what a spreadsheet emits when the
+   last few cells are empty, has rows whose count differs from the modal
+   one voting against it too. Either could tip a perfectly good CSV below
+   the threshold, and then the whole file was read as one column of
+   unparseable text.
+
+   So: a candidate is scored by how many lines share its modal count, and
+   accepted when at least three do and they account for a third of the
+   lines containing it at all. Lines without the character are ignored
+   rather than counted against it. The looser rule can call prose with
+   commas a two-column table, which costs nothing -- the column picker
+   then reports that neither column holds numbers -- whereas the strict
+   rule made real files unusable. */
 function detectDelim(lines) {
-  var probe = lines.slice(0, 40), best = null, bestScore = 0;
+  var probe = lines.slice(0, 60), best = null, bestScore = 0;
   for (var d = 0; d < DELIMS.length; d++) {
     var ch = DELIMS[d], counts = {}, any = 0;
     for (var i = 0; i < probe.length; i++) {
@@ -1748,45 +1792,79 @@ function detectDelim(lines) {
     if (!any) continue;
     var mode = 0;
     for (var k in counts) if (counts[k] > mode) mode = counts[k];
-    var score = mode;
-    if (score > bestScore) { bestScore = score; best = ch; }
+    if (mode < 3 || mode < any / 3) continue;
+    if (mode > bestScore) { bestScore = mode; best = ch; }
   }
-  /* Require the delimiter to organize at least half the lines before
-     believing in it; one stray comma in a note line should not win. */
-  if (best && bestScore >= Math.max(1, Math.ceil(probe.length / 2))) return best;
-  return null;   /* null means "split on whitespace" */
+  return best;   /* null means "split on whitespace" */
 }
 
 function parseTable(text) {
   var raw = String(text).replace(/^﻿/, '').split(/\r\n|\r|\n/);
-  var lines = [];
-  for (var i = 0; i < raw.length; i++) if (raw[i].trim() !== '') lines.push(raw[i]);
-  if (!lines.length) return { names: [], cols: [], nLines: 0, delim: null, ragged: 0 };
+  var lines = [], i, j;
+  for (i = 0; i < raw.length; i++) if (raw[i].trim() !== '') lines.push(raw[i]);
+  if (!lines.length) return { names: [], cols: [], nLines: 0, delim: null, ragged: 0, dropped: 0 };
 
   var delim = detectDelim(lines);
-  var rows = [];
-  for (var j = 0; j < lines.length; j++) {
+  var rows = [], dropped = 0;
+  for (j = 0; j < lines.length; j++) {
+    var trimmed = lines[j].trim();
+    /* A "#" line is a comment by long convention, and the CSVs this page
+       writes use it. Never data. */
+    if (trimmed.charAt(0) === '#') { dropped++; continue; }
     /* A trailing separator is stripped whatever the detected delimiter is.
        A one-column file whose lines all read "4.2," has no INTERNAL commas
        at all, so it is correctly detected as whitespace-separated -- and
        then the trailing comma still has to come off, or every value parses
        as NaN. */
-    var body = lines[j].trim().replace(/[,;|\t]+$/, '');
+    var body = delim ? trimmed : trimmed.replace(/[,;|\t]+$/, '');
     rows.push(delim ? body.split(delim) : body.split(/\s+/));
+  }
+  if (!rows.length) return { names: [], cols: [], nLines: 0, delim: delim, ragged: 0, dropped: dropped };
+
+  /* Preamble, dropped BEFORE the column count is taken rather than after.
+     Once a delimiter has been found, a line that yields a single cell is a
+     line without that delimiter: a note, a title, a stray word. It is not
+     a row with one value and the rest blank, which would have kept its
+     separators and split into more.
+
+     The order matters and was the whole bug. Seven lines of notes above a
+     six-column table are seven rows of width one against six of width
+     six, so the modal width came out as one, the table was read as a
+     single column of unparseable text, and the preamble filter -- which
+     only ran for tables of more than one column -- never got the chance. */
+  if (delim) {
+    var kept = [];
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].length === 1) { dropped++; continue; }
+      kept.push(rows[i]);
+    }
+    if (kept.length) rows = kept;
   }
 
   /* Column count: the most common row width, so one malformed line does
      not widen the whole table. */
   var widths = {}, ncol = 1, wbest = 0;
-  for (var r = 0; r < rows.length; r++) {
-    var w = rows[r].length;
+  for (i = 0; i < rows.length; i++) {
+    var w = rows[i].length;
     widths[w] = (widths[w] || 0) + 1;
     if (widths[w] > wbest || (widths[w] === wbest && w > ncol)) { wbest = widths[w]; ncol = w; }
   }
-  var ragged = rows.length - wbest;
+
+  /* A file where every row ends in a separator splits one column too wide,
+     with the last cell empty throughout. */
+  if (delim && ncol > 1) {
+    var allTrail = true;
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].length !== ncol || String(rows[i][ncol - 1]).trim() !== '') { allTrail = false; break; }
+    }
+    if (allTrail) ncol--;
+  }
+
+  var ragged = 0;
+  for (i = 0; i < rows.length; i++) if (rows[i].length !== ncol) ragged++;
 
   /* Header row: the first row counts as a header when at least one of its
-     cells is present but is neither a number nor a clock time.  Clock
+     cells is present but is neither a number nor a clock time. Clock
      times have to be allowed through, or the first arrival in a column of
      "08:05:30" values is silently eaten as a column name. */
   var head = rows[0], isHeader = false;
@@ -1806,7 +1884,7 @@ function parseTable(text) {
     for (var c3 = 0; c3 < ncol; c3++) cols[c3].push(rows[r2][c3] === undefined ? '' : rows[r2][c3]);
   }
   return { names: names, cols: cols, nLines: rows.length, delim: delim,
-           header: isHeader, ragged: ragged };
+           header: isHeader, ragged: ragged, dropped: dropped };
 }
 
 /* Turns one raw column into numbers, reporting what it had to throw away. */
@@ -1870,25 +1948,86 @@ function toClockMinutes(cell) {
   if (h > 23 && !m[4]) return NaN;
   return h * 60 + mi + se / 60;
 }
+/* A DURATION written as clock time, which is what a stopwatch produces.
+   Unlike a moment on the clock this is genuinely ambiguous -- "2:45" is
+   two hours and three quarters to one reader and two and three quarter
+   minutes to another -- so the convention is supplied by the caller and
+   never guessed:
+
+     'ms'  two parts are MM:SS, three are HH:MM:SS, answer in MINUTES
+     'hm'  two parts are HH:MM, three are HH:MM:SS, answer in HOURS
+
+   A three-part value has only one sensible structure either way; what the
+   convention settles there is the unit of the answer. */
+function toClockDuration(cell, conv) {
+  var t = String(cell).trim().replace(/^["']+|["']+$/g, '').trim();
+  var m = t.match(/^(\d{1,3}):([0-5]?\d(?:\.\d+)?)(?::([0-5]?\d(?:\.\d+)?))?$/);
+  if (!m) return NaN;
+  var a = Number(m[1]), b = Number(m[2]), c = m[3] === undefined ? null : Number(m[3]);
+  if (c === null) {
+    /* Two parts. */
+    return conv === 'hm' ? a + b / 60 : a + b / 60;   /* hours or minutes, same arithmetic */
+  }
+  /* Three parts are hours, minutes, seconds. */
+  return conv === 'hm' ? a + b / 60 + c / 3600 : a * 60 + b + c / 60;
+}
+/* Reads a column as durations when EVERY non-empty cell is clock-shaped,
+   for the same reason columnTimes does: guessing cell by cell would mix
+   two units in one series. */
+function columnDurations(col, conv) {
+  var vals = [], skipped = 0, clocky = 0, plain = 0, i, v;
+  for (i = 0; i < col.length; i++) {
+    if (String(col[i]).trim() === '') continue;
+    if (!Number.isNaN(toClockDuration(col[i], conv))) clocky++;
+    else if (!Number.isNaN(toNum(col[i]))) plain++;
+  }
+  var asClock = clocky > 0 && plain === 0;
+  for (i = 0; i < col.length; i++) {
+    if (String(col[i]).trim() === '') continue;
+    v = asClock ? toClockDuration(col[i], conv) : toNum(col[i]);
+    if (Number.isNaN(v)) skipped++; else vals.push(v);
+  }
+  return { values: vals, skipped: skipped, clock: asClock,
+           unit: asClock ? (conv === 'hm' ? 'hours' : 'minutes') : null };
+}
+
 /* A column is read as clock times only when EVERY non-empty cell is one;
    a single bare number in the column means the whole thing is numeric, and
    guessing per-cell would silently mix minutes-past-midnight with raw
    numbers in the same series. */
-function columnTimes(col) {
+function columnTimes(col, conv) {
+  /* Two readings of the same string, and the difference is not only a
+     unit. 'hm' treats "12:30" as half past twelve, a MOMENT, and returns
+     minutes past midnight. 'ms' treats it as twelve and a half minutes
+     ELAPSED. Both answer in minutes and differ by a factor of 60 on
+     two-part values, agreeing on three-part ones, which are HH:MM:SS
+     either way.
+
+     The distinction earns a control rather than a default because it
+     decides how the times are displayed as well as what they mean:
+     elapsed durations shown on a wall clock, with an origin at midnight
+     nobody chose, are actively misleading. */
+  var wall = conv !== 'ms';
+  var readOne = wall ? function (c) { return toClockMinutes(c); }
+                     : function (c) { return toClockDuration(c, 'ms'); };
   var vals = [], skipped = 0, clock = 0, plain = 0, i, t;
   for (i = 0; i < col.length; i++) {
     if (String(col[i]).trim() === '') continue;
-    t = toClockMinutes(col[i]);
+    t = readOne(col[i]);
     if (!Number.isNaN(t)) clock++;
     else if (!Number.isNaN(toNum(col[i]))) plain++;
   }
   var asClock = clock > 0 && plain === 0;
   for (i = 0; i < col.length; i++) {
     if (String(col[i]).trim() === '') continue;
-    var v = asClock ? toClockMinutes(col[i]) : toNum(col[i]);
+    var v = asClock ? readOne(col[i]) : toNum(col[i]);
     if (Number.isNaN(v)) skipped++; else vals.push(v);
   }
-  return { values: vals, skipped: skipped, clock: asClock };
+  /* `clock` drives the wall-clock display, so it is set only for the
+     reading that really is a time of day; `parsed` says a clock format was
+     recognised either way. */
+  return { values: vals, skipped: skipped, parsed: asClock,
+           clock: asClock && wall, elapsed: asClock && !wall };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -1918,6 +2057,13 @@ function columnTimes(col) {
 
 var DISTS = {};
 var LOG_2PI = 1.8378770664093453;
+
+/* The name to use mid-sentence. Not name.toLowerCase(): Poisson, Weibull,
+   Erlang, and Johnson are people, and their distributions keep the capital
+   wherever they appear. Everything else here is a common noun and really
+   is lowercase, so one blanket rule gets half of them wrong either way.
+   Each distribution therefore carries its own `lower`. */
+function distLower(d) { return d && d.lower ? d.lower : String(d.name).toLowerCase(); }
 var POISSON_MAX = 1e5;   /* see DISTS.poisson.fit */
 
 /* Helpers shared by several fits. */
@@ -1927,7 +2073,7 @@ function meanLog(x) { var s = 0; for (var i = 0; i < x.length; i++) s += Math.lo
 
 /* ══ Exponential(beta), beta the mean ══════════════════════════════ */
 DISTS.expo = {
-  key: 'expo', name: 'Exponential', kind: 'continuous', np: 1, shiftable: true,
+  key: 'expo', name: 'Exponential', lower: 'exponential', kind: 'continuous', np: 1, shiftable: true,
   params: [{ sym: 'β', name: 'mean' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -1961,7 +2107,7 @@ DISTS.expo = {
    good to a few percent, after which Newton on the one remaining equation
    converges in three or four steps. */
 DISTS.gamma = {
-  key: 'gamma', name: 'Gamma', kind: 'continuous', np: 2, shiftable: true,
+  key: 'gamma', name: 'Gamma', lower: 'gamma', kind: 'continuous', np: 2, shiftable: true,
   params: [{ sym: 'α', name: 'shape' }, { sym: 'β', name: 'scale' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2031,7 +2177,7 @@ function gammaVariate(u01, a) {
    comparing the two neighbouring integers -- the profile likelihood in the
    shape is unimodal, so the integer optimum is one of those two. */
 DISTS.erlang = {
-  key: 'erlang', name: 'Erlang', kind: 'continuous', np: 2, shiftable: true,
+  key: 'erlang', name: 'Erlang', lower: 'Erlang', kind: 'continuous', np: 2, shiftable: true,
   params: [{ sym: 'k', name: 'stages (whole number)' }, { sym: 'β', name: 'scale' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2065,7 +2211,7 @@ DISTS.erlang = {
    bisection.  Sums of x^k are accumulated through logSumExp because k can
    reach the hundreds on tightly clustered data, where x^k overflows. */
 DISTS.weibull = {
-  key: 'weibull', name: 'Weibull', kind: 'continuous', np: 2, shiftable: true,
+  key: 'weibull', name: 'Weibull', lower: 'Weibull', kind: 'continuous', np: 2, shiftable: true,
   params: [{ sym: 'β', name: 'scale' }, { sym: 'α', name: 'shape' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2122,7 +2268,7 @@ DISTS.weibull = {
    uses whichever each tool expects.  The MLE is the sample mean and the
    sample standard deviation of the logs, the latter with the n divisor. */
 DISTS.lognormal = {
-  key: 'lognormal', name: 'Lognormal', kind: 'continuous', np: 2, shiftable: true,
+  key: 'lognormal', name: 'Lognormal', lower: 'lognormal', kind: 'continuous', np: 2, shiftable: true,
   params: [{ sym: 'μ', name: 'mean of ln X' }, { sym: 'σ', name: 'std. dev. of ln X' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2154,7 +2300,7 @@ DISTS.lognormal = {
 
 /* ══ Normal(mu, sigma) ═════════════════════════════════════════════ */
 DISTS.normal = {
-  key: 'normal', name: 'Normal', kind: 'continuous', np: 2, shiftable: false, locParam: 0,
+  key: 'normal', name: 'Normal', lower: 'normal', kind: 'continuous', np: 2, shiftable: false, locParam: 0,
   params: [{ sym: 'μ', name: 'mean' }, { sym: 'σ', name: 'std. dev.' }],
   lo: function () { return -Infinity; },
   fit: function (x) {
@@ -2183,7 +2329,7 @@ DISTS.normal = {
    otherwise, so it is maximized by the tightest such interval: a = min,
    b = max.  Both endpoints count as estimated parameters. */
 DISTS.uniform = {
-  key: 'uniform', name: 'Uniform', kind: 'continuous', np: 2, shiftable: false,
+  key: 'uniform', name: 'Uniform', lower: 'uniform', kind: 'continuous', np: 2, shiftable: false,
   /* a and b are the sample minimum and maximum.  See ORDER_STAT_NOTE. */
   orderStat: [0, 1], locParam: 0,
   params: [{ sym: 'a', name: 'minimum' }, { sym: 'b', name: 'maximum' }],
@@ -2217,7 +2363,7 @@ DISTS.uniform = {
    which is also why this fit is the one worth showing a student as "what
    a numerical optimizer is for". */
 DISTS.triangular = {
-  key: 'triangular', name: 'Triangular', kind: 'continuous', np: 3, shiftable: false,
+  key: 'triangular', name: 'Triangular', lower: 'triangular', kind: 'continuous', np: 3, shiftable: false,
   /* a and b are NOT order statistics here: the triangular density is zero
      at its endpoints, so the maximum-likelihood endpoints lie strictly
      outside the data and are found by search like any regular parameter. */
@@ -2301,7 +2447,7 @@ DISTS.triangular = {
    solved by Newton on the 2x2 system whose Jacobian is built from
    trigamma, started from the method-of-moments estimate. */
 DISTS.beta = {
-  key: 'beta', name: 'Beta', kind: 'continuous', np: 4, shiftable: false,
+  key: 'beta', name: 'Beta', lower: 'beta', kind: 'continuous', np: 4, shiftable: false,
   /* L and U come from the sample range.  See ORDER_STAT_NOTE. */
   orderStat: [2, 3], locParam: 2,
   /* Only the first two parameters are found by maximizing the likelihood;
@@ -2396,7 +2542,7 @@ DISTS.beta = {
    believed.  It earns its place as an export option and as the thing to
    fall back on when no named distribution will sit on the data. */
 DISTS.empirical = {
-  key: 'empirical', name: 'Empirical (piecewise linear)', kind: 'continuous',
+  key: 'empirical', name: 'Empirical (piecewise linear)', lower: 'empirical (piecewise linear)', kind: 'continuous',
   np: 0, shiftable: false, noCriteria: true,
   params: [{ sym: 'n', name: 'breakpoints' }],
   lo: function (p) { return p[0][0]; },
@@ -2453,7 +2599,7 @@ function lowerBound(q, v) {
 
 /* ══ Poisson(lambda) ═══════════════════════════════════════════════ */
 DISTS.poisson = {
-  key: 'poisson', name: 'Poisson', kind: 'discrete', np: 1, shiftable: false,
+  key: 'poisson', name: 'Poisson', lower: 'Poisson', kind: 'discrete', np: 1, shiftable: false,
   params: [{ sym: 'λ', name: 'mean count' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2497,7 +2643,7 @@ DISTS.poisson = {
    rgeom uses this one while scipy's geom uses the other.  The export panel
    adjusts for each tool. */
 DISTS.geometric = {
-  key: 'geometric', name: 'Geometric', kind: 'discrete', np: 1, shiftable: false,
+  key: 'geometric', name: 'Geometric', lower: 'geometric', kind: 'discrete', np: 1, shiftable: false,
   params: [{ sym: 'p', name: 'success probability' }],
   lo: function () { return 0; },
   fit: function (x) {
@@ -2528,7 +2674,7 @@ DISTS.geometric = {
 
 /* ══ Discrete uniform(a, b) over the whole numbers a..b ════════════ */
 DISTS.discreteUniform = {
-  key: 'discreteUniform', name: 'Discrete uniform', kind: 'discrete', np: 2, shiftable: false,
+  key: 'discreteUniform', name: 'Discrete uniform', lower: 'discrete uniform', kind: 'discrete', np: 2, shiftable: false,
   orderStat: [0, 1], locParam: 0,
   params: [{ sym: 'a', name: 'smallest value' }, { sym: 'b', name: 'largest value' }],
   lo: function (p) { return p[0]; },
@@ -2565,7 +2711,7 @@ DISTS.discreteUniform = {
    per distinct value it will always describe the sample it was built from
    better than any two-parameter law can. */
 DISTS.discreteEmpirical = {
-  key: 'discreteEmpirical', name: 'Empirical (discrete)', kind: 'discrete',
+  key: 'discreteEmpirical', name: 'Empirical (discrete)', lower: 'empirical (discrete)', kind: 'discrete',
   np: 0, shiftable: false, noCriteria: true,
   params: [{ sym: 'k', name: 'distinct values' }],
   lo: function (p) { return p[0][0]; },
@@ -2635,7 +2781,7 @@ function johnsonZ_SB(x, p) {
   return p[0] + p[1] * Math.log(y / (1 - y));
 }
 DISTS.johnsonSB = {
-  key: 'johnsonSB', name: 'Johnson Sᵦ (bounded)', kind: 'continuous',
+  key: 'johnsonSB', name: 'Johnson Sᵦ (bounded)', lower: 'Johnson Sᵦ (bounded)', kind: 'continuous',
   np: 4, shiftable: false, generateOnly: true,
   params: [{ sym: 'γ', name: 'shape 1' }, { sym: 'δ', name: 'shape 2' },
            { sym: 'ξ', name: 'lower end' }, { sym: 'λ', name: 'range' }],
@@ -2676,7 +2822,7 @@ DISTS.johnsonSB = {
 };
 
 DISTS.johnsonSU = {
-  key: 'johnsonSU', name: 'Johnson Sᵤ (unbounded)', kind: 'continuous',
+  key: 'johnsonSU', name: 'Johnson Sᵤ (unbounded)', lower: 'Johnson Sᵤ (unbounded)', kind: 'continuous',
   np: 4, shiftable: false, generateOnly: true,
   params: [{ sym: 'γ', name: 'shape 1' }, { sym: 'δ', name: 'shape 2' },
            { sym: 'ξ', name: 'location' }, { sym: 'λ', name: 'scale' }],
@@ -4167,7 +4313,7 @@ function reproScripts(fit, x, seed, B) {
       '# R\'s generator is not this page\'s MRG32k3a, and so expect agreement to\n' +
       '# bootstrap noise (a few thousandths), not to the last digit.';
   } else {
-    out.r = '# R has no MASS::fitdistr entry for the ' + fit.dist.name.toLowerCase() + '.' + shiftNote + '\n' +
+    out.r = '# R has no MASS::fitdistr entry for the ' + distLower(fit.dist) + '.' + shiftNote + '\n' +
       rdata + '\n' +
       (k === 'uniform' ? 'a <- min(x); b <- max(x)          # the maximum-likelihood estimates\n' +
                          'ks.test(x, "punif", a, b)          # p-value still too large; parameters were estimated\n'
@@ -4200,7 +4346,7 @@ function reproScripts(fit, x, seed, B) {
       'end\n' +
       "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));";
   } else {
-    out.matlab = '% MATLAB\'s fitdist has no entry for the ' + fit.dist.name.toLowerCase() + '.\n' +
+    out.matlab = '% MATLAB\'s fitdist has no entry for the ' + distLower(fit.dist) + '.\n' +
       mdata + '\n% Estimate it directly, or use one of the named distributions above.';
   }
 
@@ -4228,7 +4374,7 @@ function reproScripts(fit, x, seed, B) {
       "# NumPy's generator is not this page's MRG32k3a, and so expect agreement to\n" +
       '# bootstrap noise, not to the last digit.';
   } else {
-    out.python = '# SciPy has no direct fit for the ' + fit.dist.name.toLowerCase() + '.\n' +
+    out.python = '# SciPy has no direct fit for the ' + distLower(fit.dist) + '.\n' +
       'import numpy as np\n' + pdata + '\n# Estimate it directly, or use one of the named distributions above.';
   }
   return out;
@@ -4244,7 +4390,15 @@ function csvEscape(v) {
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function toCsv(rows) {
-  return rows.map(function (r) { return r.map(csvEscape).join(','); }).join('\n') + '\n';
+  return rows.map(function (r) {
+    /* A row that is a single string beginning with "#" is a comment and
+       goes out as a line of text. Splitting it across cells put the
+       provenance into a spreadsheet's columns as though it were data, and
+       the quoting rules then wrapped anything containing a comma. A
+       comment is not meant to be rendered in cells at all. */
+    if (r.length === 1 && typeof r[0] === 'string' && r[0].charAt(0) === '#') return r[0];
+    return r.map(csvEscape).join(',');
+  }).join('\n') + '\n';
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -4259,6 +4413,7 @@ var IA = {
   bisect: bisect, bracketRoot: bracketRoot, invertCdf: invertCdf,
   nelderMead: nelderMead, logSumExp: logSumExp,
   toNum: toNum, detectDelim: detectDelim, parseTable: parseTable,
+  toClockDuration: toClockDuration, columnDurations: columnDurations,
   columnValues: columnValues, columnTimes: columnTimes, toClockMinutes: toClockMinutes,
   summarize: summarize,
   DISTS: DISTS, CONTINUOUS_KEYS: CONTINUOUS_KEYS, DISCRETE_KEYS: DISCRETE_KEYS,
@@ -4464,6 +4619,29 @@ function Plot(W, H, m) {
       }
       return api;
     },
+    /* A second y-axis on the right, for the same bars read in different
+       units.  This is only honest when the two scales are related by a
+       constant factor -- here count = density x n x w, with n and w fixed
+       across the plot -- which holds because every bin has equal width.
+       Unequal bins would make the two axes disagree about the same bar,
+       and this would become a lie. The gridlines belong to the LEFT axis;
+       the right one is a conversion table read off the same positions,
+       which is why its numbers are not round. */
+    rightTicks: function (ticks, fmt) {
+      for (var i = 0; i < ticks.length; i++) {
+        var t = ticks[i];
+        if (t < ylo || t > yhi) continue;
+        g.push('<text x="' + (mL + pw + 6) + '" y="' + (api.Y(t) + 3.5).toFixed(1) +
+               '" text-anchor="start" font-size="10" fill="var(--muted)">' + esc(fmt(t)) + '</text>');
+      }
+      return api;
+    },
+    rightLabel: function (text) {
+      g.push('<text x="' + (W - 9) + '" y="' + (mT + ph / 2) + '" text-anchor="middle" ' +
+             'font-size="11.5" fill="var(--text)" transform="rotate(90 ' + (W - 9) + ' ' +
+             (mT + ph / 2) + ')">' + esc(text) + '</text>');
+      return api;
+    },
     labels: function (xlab, ylab) {
       g.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 7) + '" text-anchor="middle" ' +
              'font-size="11.5" fill="var(--text)">' + esc(xlab) + '</text>');
@@ -4560,6 +4738,31 @@ function tickFmt(step) {
     return v.toFixed(Math.min(dp, 6));
   };
 }
+/* Ticks for a count axis: the 1-2-5 rule, floored at a step of 1 so a
+   histogram with a maximum of four never gets labelled in halves. */
+function niceCountTicks(hi, target) {
+  var t = niceTicks(0, hi, target || 5);
+  var step = t.length > 1 ? t[1] - t[0] : 1;
+  if (step >= 1) return t;
+  var out = [];
+  for (var v = 0; v <= hi + 1e-9; v++) out.push(v);
+  return out;
+}
+/* Which top corner of a histogram is free.  A right-skewed sample piles
+   its bars against the left, a left-skewed one against the right, and a
+   legend parked in a fixed corner will sit on top of the tallest bar for
+   one of them.  Compares the tallest bar in the left third with the
+   tallest in the right third and returns the emptier side. */
+function legendCorner(P, heights, yhi, width) {
+  var k = heights.length, i, l = 0, r = 0;
+  for (i = 0; i < k; i++) {
+    if (i < k / 3) l = Math.max(l, heights[i]);
+    else if (i >= 2 * k / 3) r = Math.max(r, heights[i]);
+  }
+  var right = l > r;
+  return { x: right ? P.mL + P.pw - (width || 158) : P.mL + 12, y: P.mT + 14 };
+}
+
 function tickPair(lo, hi, target) {
   var t = niceTicks(lo, hi, target);
   return { ticks: t, fmt: tickFmt(t.length > 1 ? t[1] - t[0] : 1) };
@@ -4572,6 +4775,8 @@ var ST = {
   x: [],            /* the numeric values in play                      */
   s: null,          /* summarize(x)                                    */
   unit: null,       /* description of a loaded sample, null if pasted  */
+  clockConv: 'ms',  /* how to read a duration written as clock time    */
+  clockUnit: null,  /* the unit that reading produced, when one was used */
   genTruth: null,   /* what the generator last produced, for the readout */
   family: 'auto',
   shift: false,
@@ -4592,8 +4797,10 @@ var ST = {
 };
 var AST = {          /* tab 2 */
   table: null, col: 0, times: [], gaps: [], clock: false, unit: null,
-  widthIdx: 22, prof: null,
+  widthIdx: 0, ladderSpan: null, customWidth: null, prof: null,
   mode: 'times',    /* whether the pasted column is times or durations */
+  clockConv: 'hm',  /* a clock string is a time of day by default here  */
+  minutes: false,   /* whether the values are known to be in minutes    */
   flags: null,      /* the sanity checks from interarrivals()          */
   truth: null       /* the process the generator last produced, if any */
 };
@@ -4652,12 +4859,20 @@ function makeLoader(cfg) {
     var bits = ['Read ' + cv.values.length + ' value' + (cv.values.length === 1 ? '' : 's')];
     if (t.names.length > 1) bits.push('from column “' + t.names[i] + '” of ' + t.names.length);
     if (t.header) bits.push('header row skipped');
-    if (cv.clock) bits.push('read as clock times, converted to minutes past midnight');
+    if (cv.clock && cfg.state() === AST && AST.mode !== 'gaps')
+      bits.push('read as HH:MM or HH:MM:SS clock times, converted to minutes past midnight');
+    else if (cv.elapsed)
+      bits.push('read as MM:SS or HH:MM:SS, converted to minutes elapsed');
+    else if (cv.clock || cv.unit)
+      bits.push('read as ' +
+        ((cfg.state() === AST ? AST.clockConv : ST.clockConv) === 'hm' ? 'HH:MM' : 'MM:SS') +
+        ' durations, converted to ' + (cv.unit || 'minutes'));
     if (cv.skipped) bits.push(cv.skipped + ' non-numeric cell' + (cv.skipped === 1 ? '' : 's') + ' skipped');
     if (t.ragged) bits.push(t.ragged + ' line' + (t.ragged === 1 ? '' : 's') + ' had a different number of columns');
-    var bad = cv.values.length < cfg.minN;
+    var need = typeof cfg.minN === 'function' ? cfg.minN() : cfg.minN;
+    var bad = cv.values.length < need;
     api.say((sourceLabel ? sourceLabel + '—' : '') + bits.join(', ') + '.' +
-            (bad ? ' At least ' + cfg.minN + ' are needed.' : ''), bad);
+            (bad ? ' At least ' + need + ' are needed.' : ''), bad);
     cfg.accept(cv);
   };
   api.say = function (msg, bad) {
@@ -4707,10 +4922,42 @@ var LOADER = makeLoader({
   ta: 'data-in', pick: 'col-pick', row: 'col-row', msg: 'parse-msg',
   file: 'file-in', clearBtn: 'btn-clear', drop: 'drop', minN: 2,
   state: function () { return ST; },
-  extract: function (col) { return IA.columnValues(col); },
+  /* Durations written as clock time are accepted here as well as plain
+     numbers. "2:45" is ambiguous between two and three quarter minutes and
+     two and three quarter hours, so the reading comes from a control
+     rather than a guess, and the control appears only once a column that
+     needs it turns up. */
+  extract: function (col) { return IA.columnDurations(col, ST.clockConv); },
   accept: function (cv) {
     ST.x = cv.values;
     ST.s = ST.x.length ? IA.summarize(ST.x) : null;
+    ST.clockUnit = cv.clock ? cv.unit : null;
+    $('clock-row').style.display = cv.clock ? 'flex' : 'none';
+    if (cv.clock) {
+      /* Which reading you pick changes the numbers by a factor of 60 on
+         three-part values, and changes nothing else: rescaling every
+         observation leaves the ranking, the chi-square p-value, and both
+         K-S statistics exactly where they were, and moves only the fitted
+         parameters, by that same 60. It matters because those parameters
+         are what gets typed into a model, and a model does care whether
+         its service times are minutes or hours.
+
+         The one thing it can genuinely change is the family: whole
+         numbers set off the automatic count detection, so a column that
+         reads as 90, 45, 135 in minutes and 1.5, 0.75, 2.25 in hours will
+         be offered discrete candidates under one reading and continuous
+         ones under the other. The Family control overrides that. */
+      $('clock-note').innerHTML =
+        'Everything but the parameter values is unchanged by this choice; rescaling the data ' +
+        'leaves the ranking and every p-value exactly where they were. It decides the units your ' +
+        'fitted parameters are in, which is what you will type into a model.' +
+        (ST.s && ST.s.allInt
+          ? ' <strong>This reading gives whole numbers</strong>, which would normally set off the ' +
+            'automatic count detection. It does not here: these came from a clock, and so they are ' +
+            'durations recorded to the second rather than counts of anything. Use Family below if ' +
+            'you really do want the discrete candidates.'
+          : '');
+    }
     ST.userPicked = false;
     /* Values held for one dataset mean nothing for the next one. */
     ST.holds = {}; ST.holdShift = {};
@@ -4719,8 +4966,9 @@ var LOADER = makeLoader({
   },
   clear: function () {
     ST.table = null; ST.x = []; ST.s = null; ST.rows = []; ST.pick = null;
-    ST.gof = null; ST.unit = null;
+    ST.gof = null; ST.unit = null; ST.clockUnit = null;
     $('col-row').style.display = 'none';
+    $('clock-row').style.display = 'none';
     LOADER.say('');
     renderStats();
     renderAllEmpty();
@@ -4909,13 +5157,23 @@ function runGenerator() {
 
 /* Which candidates to offer.  "Choose for me" reads the data: whole
    numbers with few distinct values are counts. */
-/* Whole numbers alone do not make data discrete in any useful sense.  Ten
+/* Whole numbers alone do not make data discrete in any useful sense. Ten
    readings of a counter in the hundreds of millions are integers, and
-   fitting a Poisson to them is meaningless -- so the automatic choice also
+   fitting a Poisson to them is meaningless, so the automatic choice also
    asks whether the values are small enough for the identity of each
-   individual count to matter. */
+   individual count to matter.
+
+   Integrality is only ever a PROXY for "these are counts", and it is a
+   poor one for a measured quantity that happens to land on whole numbers:
+   60, 120, 181 looks exactly as discrete as 60, 120, 180 does, and neither
+   is a count of anything. Where the provenance of the numbers is known,
+   the provenance wins. A column parsed from a clock format is a duration,
+   and a duration is a continuous quantity that was written down to some
+   recording granularity -- never a count -- so it is never offered the
+   discrete candidates whatever the seconds field happened to be. */
 var DISCRETE_MAX_SPAN = 5000;
 function isCountData(s) {
+  if (ST.clockUnit) return false;   /* known to be a duration, not a count */
   return !!(s && s.allInt && s.nUnique <= 30 && s.min >= 0 && (s.max - s.min) <= DISCRETE_MAX_SPAN);
 }
 function activeKeys() {
@@ -5103,10 +5361,10 @@ function renderShiftNote() {
        it is the beta's L, not its α -- so it is read from the
        distribution rather than assumed to be the first one. */
     var lp = d.locParam;
-    el.innerHTML = '<strong>The ' + esc(d.name.toLowerCase()) + ' takes no separate shift.</strong> ' +
+    el.innerHTML = '<strong>The ' + esc(distLower(d)) + ' takes no separate shift.</strong> ' +
       (lp === undefined
         ? 'It is defined on the counts 0, 1, 2, … and sliding it sideways would produce something ' +
-          'that is no longer a ' + esc(d.name.toLowerCase()) + '.'
+          'that is no longer a ' + esc(distLower(d)) + '.'
         : 'It already carries a location parameter of its own—<span class="mono">' +
           esc(d.params[lp].sym) + '</span>, its ' + esc(d.params[lp].name) +
           '—so a second one would simply be subtracted straight back out, and nothing in the ' +
@@ -5116,7 +5374,7 @@ function renderShiftNote() {
       'Weibull, and lognormal.';
     return;
   }
-  el.innerHTML = '<strong>What the shift does:</strong> the ' + esc(d.name.toLowerCase()) +
+  el.innerHTML = '<strong>What the shift does:</strong> the ' + esc(distLower(d)) +
     ' starts at zero, and can therefore produce values arbitrarily close to zero. Tick the box to fit ' +
     '<span class="mono">γ + ' + esc(d.name) + '(…)</span> instead, the same shape slid sideways to ' +
     'start at <span class="mono">γ</span>. Use it when the task has an unavoidable minimum—a fixed ' +
@@ -5434,79 +5692,86 @@ function renderDensity() {
   var lo = b.edges[0], hi = b.edges[b.k];
   var pad = (hi - lo) * 0.04;
   var xlo = lo - pad, xhi = hi + pad;
+  var discrete = f.dist.kind === 'discrete';
 
-  var dens = new Array(b.k);
+  /* The bars are drawn in COUNTS, which is the axis a student has met
+     before and the only one that shows quantisation: a bin holding three
+     observations should say three, not 0.0407. The fitted curve lives in
+     density, so density gets the right-hand axis. The two are the same
+     bar measured twice, since count = density x n x w with n and w fixed
+     across the plot -- see Plot.rightTicks. */
   var ymax = 0;
-  for (i = 0; i < b.k; i++) {
-    dens[i] = b.counts[i] / (n * b.width);
-    if (dens[i] > ymax) ymax = dens[i];
-  }
-  /* The fitted curve, sampled finely; for a discrete fit it is drawn as
-     the probability of each whole number spread over its bin width, so
-     bars and model live in the same units. */
-  var curve = [], NPT = 220, v, y;
-  if (f.dist.kind === 'discrete') {
-    /* One spike per whole number in view -- but only while that is a
-       drawable number of them.  Count data spread over a wide range would
-       otherwise ask for a mark per integer across the whole span, which is
-       both unreadable and, at large values, enough to exhaust memory. */
-    var atom = IA.fitAtom(f);
-    var v0 = Math.ceil(xlo), v1 = Math.floor(xhi);
-    if (v1 - v0 <= 400) {
-      for (v = v0; v <= v1; v++) {
-        y = atom(v) / b.width;
-        if (y > ymax) ymax = y;
-        curve.push([v, y]);
-      }
-    } else {
-      /* Too many atoms to draw individually: show the model as the
-         probability it puts in each histogram bin, on the same scale as
-         the bars beside it. */
-      var bp = IA.binProbabilities(f, b.edges);
-      for (i = 0; i < b.k; i++) {
-        y = bp[i] / b.width;
-        if (y > ymax) ymax = y;
-        curve.push([0.5 * (b.edges[i] + b.edges[i + 1]), y]);
-      }
+  for (i = 0; i < b.k; i++) if (b.counts[i] > ymax) ymax = b.counts[i];
+
+  /* Model, expressed in the same counts: expected count in a bin is
+     n x (model probability of that bin). For a continuous fit the curve is
+     the density scaled by n x w, which is the same thing sampled finely. */
+  var curve = [], NPT = 240, v, y;
+  /* The right-hand axis converts bar heights back out of counts. For a
+     continuous fit that is a density, so the divisor carries the bin
+     width; for a discrete one the model's claim about a bin is a plain
+     probability, and dividing by the width would invent a "probability per
+     unit" that means nothing. */
+  var scale = discrete ? n : n * b.width;
+  if (discrete) {
+    /* One marker per BIN at its expected count, not one per integer: when
+       a bin spans several whole numbers the model's claim about that bin
+       is the sum over them, and that sum is what the bar can be compared
+       with. With one integer per bin the two coincide and this is the pmf. */
+    var bp = IA.binProbabilities(f, b.edges);
+    for (i = 0; i < b.k; i++) {
+      y = n * bp[i];
+      if (y > ymax) ymax = y;
+      curve.push([0.5 * (b.edges[i] + b.edges[i + 1]), y]);
     }
   } else {
     var pdf = IA.fitPdf(f);
     for (i = 0; i <= NPT; i++) {
       v = xlo + (xhi - xlo) * i / NPT;
-      y = pdf(v);
+      y = pdf(v) * scale;
       if (Number.isFinite(y)) { if (y > ymax) ymax = y; curve.push([v, y]); }
     }
   }
   if (!(ymax > 0)) ymax = 1;
   var yhi = ymax * 1.12;
 
-  /* 420 x 330 here and in drawCDF: the two share a row, and equal
-     aspect ratios are what keep the row from ending in a hole under
-     whichever plot is shorter. */
-  var P = Plot(420, 330, { l: 56, r: 12, t: 12, b: 46 }).domain(xlo, xhi, 0, yhi);
-  var xt = tickPair(xlo, xhi, 6), yt = tickPair(0, yhi, 5);
-  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  var P = Plot(460, 330, { l: 46, r: 62, t: 12, b: 46 }).domain(xlo, xhi, 0, yhi);
+  var xt = tickPair(xlo, xhi, 6);
+  var yt = niceCountTicks(yhi, 5);
+  P.frame().axes(xt.ticks, yt, xt.fmt, function (t) { return String(Math.round(t)); });
   for (i = 0; i < b.k; i++) {
     if (b.counts[i] === 0) continue;
-    P.rect(b.edges[i], 0, b.edges[i + 1], dens[i], 'var(--obs-fill)', 'var(--obs)');
+    P.rect(b.edges[i], 0, b.edges[i + 1], b.counts[i], 'var(--obs-fill)', 'var(--obs)');
   }
-  if (f.dist.kind === 'discrete') {
-    /* Vertical spikes with a marker on top: a smooth curve through the
-       atoms of a discrete distribution would imply values between them. */
-    for (i = 0; i < curve.length; i++) {
-      P.seg(curve[i][0], 0, curve[i][0], curve[i][1], 'var(--fit)', 2);
-    }
+  if (discrete) {
+    for (i = 0; i < curve.length; i++) P.seg(curve[i][0], 0, curve[i][0], curve[i][1], 'var(--fit)', 2);
     P.dots(curve, 'var(--fit)', 3.2);
   } else {
     P.line(curve, 'var(--fit)', 2.2);
   }
-  P.labels('Value', 'Relative frequency per unit');
-  P.legend(P.mL + 12, P.mT + 14, [
+  /* The right-hand scale: the same heights read as a density. */
+  P.rightTicks(yt, function (t) { return fmt(t / scale, 3); });
+  P.rightLabel(discrete ? 'Probability' : 'Probability density');
+  P.labels('Value', 'Frequency (count)');
+  var lc = legendCorner(P, b.counts, yhi, 168);
+  P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your data (' + b.k + ' bins)' },
-    { mark: f.dist.kind === 'discrete' ? 'dot' : 'line', color: 'var(--fit)', label: 'fitted ' + r.dist.name.toLowerCase() }
+    { mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
+      label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) }
   ]);
   host.innerHTML = P.svg('Histogram of the data with the fitted ' + r.dist.name + ' density',
-    'Histogram of the data with the fitted density laid over it');
+    'Histogram of the data in counts, with the fitted density over it') +
+    '<div class="plot-cap" style="text-align:left">Bars are counts, on the left axis. The same ' +
+    'heights read on the right as ' + (discrete ? 'probabilities' : 'a density') + ': ' +
+    (discrete
+      ? 'each bar is that value\'s share of the ' + n + ' observations, and each marker is the ' +
+        'probability the fitted model gives it.'
+      : 'with n = ' + n + ' and bins of width ' + fmt(b.width, 3) + ', one unit of density is ' +
+        fmt(scale, 4) + ' observations.') +
+    (discrete && b.width > 1
+      ? ' Each marker is the model\'s expected count for a whole bin, summed over the ' +
+        fmt(b.width, 3) + ' whole numbers it spans.'
+      : '') + '</div>';
 }
 
 function renderChi() {
@@ -5530,10 +5795,10 @@ function renderChi() {
         : 'Drag the slider to the right.') + '</div>';
   } else {
     var verdict = chi.p < 0.05
-      ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(r.dist.name.toLowerCase()) +
+      ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(distLower(r.dist)) +
         ' on this binning.'
       : 'At the 5% level this <strong>does not reject</strong> the fitted ' +
-        esc(r.dist.name.toLowerCase()) + ' on this binning.';
+        esc(distLower(r.dist)) + ' on this binning.';
     var bres = (ST.gof && ST.gofFor === fitSignature()) ? ST.gof.res : null;
     var bootP = bres && Number.isFinite(bres.pChi)
       ? fmtP(bres.pChi, 1 / (bres.usedChi + 1)) : '—';
@@ -5806,7 +6071,7 @@ function renderGof() {
     verdict =
       '<div class="hint" style="margin-top:8px">At the 5% level the bootstrap has K–S <strong>' +
       vD + '</strong> and A–D <strong>' + vA + '</strong> the fitted ' +
-      esc(r.dist.name.toLowerCase()) + '. ' +
+      esc(distLower(r.dist)) + '. ' +
       (vD !== vA
         ? 'They disagree, which usually means the misfit sits in a tail: A–D weights the tails more ' +
           'heavily; for a queueing model believe A–D. '
@@ -5885,7 +6150,7 @@ function drawQQ() {
   var pts = [];
   for (i = 0; i < n; i++) pts.push([xs[i], ys[i]]);
   P.dots(pts, 'var(--obs)', 2.9);
-  P.labels('Quantile of the fitted ' + r.dist.name.toLowerCase() + ' model',
+  P.labels('Quantile of the fitted ' + distLower(r.dist) + ' model',
            'Quantile of the data (sorted observations)');
   P.legend(P.mL + 12, P.mT + 16, [
     { mark: 'line', color: 'var(--fit)', label: 'perfect fit' },
@@ -5964,7 +6229,7 @@ function drawCDF() {
      any right-skewed fit, which is most of what this page is used on. */
   P.legend(P.mL + P.pw - 152, P.mT + P.ph - 48, [
     { mark: 'line', color: 'var(--obs)', width: 1.6, label: 'your data (step)' },
-    { mark: 'line', color: 'var(--fit)', label: 'fitted model' },
+    { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) },
     { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' }
   ]);
   host.innerHTML = P.svg('Empirical and fitted cumulative distribution functions',
@@ -5988,7 +6253,7 @@ function renderExport() {
   var r = pickedRow(), host = $('export-out');
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   var ex = IA.expressions(r.fit);
-  var h = '<div class="plot-hd">One draw from the fitted ' + esc(r.dist.name.toLowerCase()) +
+  var h = '<div class="plot-hd">One draw from the fitted ' + esc(distLower(r.dist)) +
           (r.fit.shift ? ', shift included' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
@@ -6184,14 +6449,14 @@ function download(name, text) {
    traced back to the run that produced it. */
 function provenance() {
   return [
-    ['# Input Analyzer', 'https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
-    ['# observations', ST.s ? ST.s.n : 0],
-    ['# family', ST.family === 'auto' ? 'chosen automatically' : ST.family],
-    ['# location shift', ST.shift ? 'estimated' : 'off'],
-    ['# histogram bins', ST.bins ? ST.bins.k : ''],
-    ['# bootstrap seed', ST.seed],
-    ['# bootstrap replications', ST.B],
-    ['# generator', 'MRG32k3a (L\'Ecuyer 1999)'],
+    ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# observations: ' + (ST.s ? ST.s.n : 0)],
+    ['# family: ' + (ST.family === 'auto' ? 'chosen automatically' : ST.family)],
+    ['# location shift: ' + (ST.shift ? 'estimated' : 'off')],
+    ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')],
+    ['# bootstrap seed: ' + ST.seed],
+    ['# bootstrap replications: ' + ST.B],
+    ['# generator: MRG32k3a (L\'Ecuyer 1999)'],
     []
   ];
 }
@@ -6231,29 +6496,57 @@ function csvGof() {
   var D = IA.ksStat(ST.s.sorted, F, IA.fitAtom(r.fit)).D;
   var A = IA.adStat(ST.s.sorted, F);
   var have = ST.gof && ST.gofFor === fitSignature();
-  rows.push(['test', 'statistic', 'df', 'p_value', 'critical_value_5pct', 'source_of_p_value']);
+  var res = have ? ST.gof.res : null;
+  var n = ST.s.n;
+
+  /* One row per test, with the two p-values in their own columns. The
+     earlier layout gave each SOURCE its own row, which left a row whose
+     only populated cell was a critical value sitting under a column headed
+     "source of p-value" -- so "published table" appeared to be explaining
+     a p-value that was not there. */
+  rows.push(['test', 'statistic', 'df',
+             'p_from_table', 'p_from_bootstrap',
+             'crit_5pct_table', 'crit_5pct_bootstrap', 'notes']);
   if (chi) {
-    rows.push(['chi-square', IA.num(chi.stat, 8), chi.df, Number.isFinite(chi.p) ? IA.num(chi.p, 6) : '',
-               '', 'chi-square distribution on ' + chi.df + ' df, from the ' + ST.bins.k +
-               ' histogram bins pooled into ' + chi.nGroups + ' groups of expected count >= ' +
-               chi.minExpected]);
+    rows.push(['chi-square', IA.num(chi.stat, 8), chi.df,
+               Number.isFinite(chi.p) ? IA.num(chi.p, 6) : '',
+               res && Number.isFinite(res.pChi) ? IA.num(res.pChi, 6) : '',
+               '',
+               res && Number.isFinite(res.critChi) ? IA.num(res.critChi, 8) : '',
+               'df = groups - 1 - regular parameters. ' + ST.bins.k + ' histogram bins pooled into ' +
+               chi.nGroups + ' groups so every expected count reaches ' + chi.minExpected +
+               '. ' + chi.kChi + ' of the ' + r.fit.k + ' estimated quantities are subtracted; ' +
+               'any others are extreme order statistics, which cost no degrees of freedom.']);
   }
   rows.push(['Kolmogorov-Smirnov', IA.num(D, 8), '',
-             have ? IA.num(ST.gof.res.pD, 6) : '',
-             have ? IA.num(ST.gof.res.critD, 8) : '',
-             have ? 'parametric bootstrap, ' + ST.gof.res.used + ' replications, seed ' + ST.seed
-                  : 'not run']);
+             IA.num(IA.ksPvalueClassical(D, n), 6),
+             res ? IA.num(res.pD, 6) : '',
+             IA.num(IA.ksTableCritical(n), 8),
+             res ? IA.num(res.critD, 8) : '',
+             'The table columns assume the distribution and its parameters were fixed before the ' +
+             'data was seen. ' + r.fit.k + ' parameter(s) were estimated from this sample, which ' +
+             'makes D smaller than the table expects, so the table p-value runs TOO LARGE and the ' +
+             'test built on it is too permissive. Use the bootstrap columns.']);
   rows.push(['Anderson-Darling', IA.num(A, 8), '',
-             have ? IA.num(ST.gof.res.pA, 6) : '',
-             have ? IA.num(ST.gof.res.critA, 8) : '',
-             have ? 'parametric bootstrap, ' + ST.gof.res.used + ' replications, seed ' + ST.seed
-                  : 'not run']);
-  rows.push(['Kolmogorov-Smirnov', IA.num(D, 8), '', '', IA.num(IA.ksTableCritical(ST.s.n), 8),
-             'published table -- NOT VALID here, parameters were estimated from the same data']);
+             IA.num(IA.adPvalueClassical(A, n), 6),
+             res ? IA.num(res.pA, 6) : '',
+             IA.num(IA.AD_TABLE[0.05], 8),
+             res ? IA.num(res.critA, 8) : '',
+             'Same caveat as Kolmogorov-Smirnov. The tabled critical value is the published 5% ' +
+             'point for a fully specified null (D\'Agostino & Stephens 1986, Table 4.2).']);
+  if (!res) {
+    rows.push([]);
+    rows.push(['# the bootstrap columns are empty because the bootstrap was not run for this fit']);
+  } else {
+    rows.push([]);
+    rows.push(['# bootstrap: ' + res.used + ' usable replications of ' + res.B + '; seed ' +
+               ST.seed + '; each drew ' + n + ' values from the fitted model and refitted it']);
+  }
+
   if (chi) {
     rows.push([]);
-    rows.push(['# chi-square groups', chi.nGroups, 'from', chi.nBins, 'histogram bins,',
-               'pooled so every expected count reaches', chi.minExpected]);
+    rows.push(['# chi-square: ' + chi.nGroups + ' groups from ' + chi.nBins +
+               ' histogram bins; pooled so every expected count reaches ' + chi.minExpected]);
     rows.push(['group_lower', 'group_upper', 'bins_pooled', 'observed', 'expected', 'contribution']);
     for (var i = 0; i < chi.groups.length; i++) {
       var g = chi.groups[i];
@@ -6278,10 +6571,18 @@ function csvData() {
    ═══════════════════════════════════════════════════════════════════ */
 var A_LOADER = makeLoader({
   ta: 'a-data-in', pick: 'a-col-pick', row: 'a-col-row', msg: 'a-parse-msg',
-  file: 'a-file-in', clearBtn: 'a-btn-clear', drop: 'a-drop', minN: 3,
+  file: 'a-file-in', clearBtn: 'a-btn-clear', drop: 'a-drop',
+  /* Three arrivals are the floor, and n gaps describe n+1 arrivals, so two
+     gaps clear it. */
+  minN: function () { return AST.mode === 'gaps' ? 2 : 3; },
   allowMonotone: true,      /* an increasing column of times is the point here */
   state: function () { return AST; },
-  extract: function (col) { return IA.columnTimes(col); },
+  /* Durations go through the duration reader, moments through the clock
+     reader; both take the same convention. */
+  extract: function (col) {
+    return AST.mode === 'gaps' ? IA.columnDurations(col, AST.clockConv === 'hm' ? 'hm' : 'ms')
+                               : IA.columnTimes(col, AST.clockConv);
+  },
   accept: function (cv) {
     /* Gaps and timestamps hold the same thing apart from where the zero
        sits, so a column of durations is turned into arrival times by
@@ -6290,7 +6591,13 @@ var A_LOADER = makeLoader({
        works on timestamps and needs no special case. */
     var vals = cv.values, negGaps = 0, i;
     if (AST.mode === 'gaps') {
-      var t = 0, times = [];
+      /* n gaps sit BETWEEN n+1 arrivals, so the first arrival goes at the
+         origin and each gap steps forward from it. Starting the sum at the
+         first gap instead would quietly discard one arrival and make the
+         round trip lossy: hand the tab a set of gaps and it would give back
+         one fewer than it started with. Where the origin sits is arbitrary
+         and nothing here depends on it, so zero is as good a choice as any. */
+      var t = 0, times = [0];
       for (i = 0; i < vals.length; i++) {
         if (vals[i] < 0) { negGaps++; continue; }   /* a duration cannot run backwards */
         t += vals[i];
@@ -6301,8 +6608,24 @@ var A_LOADER = makeLoader({
     var ia = IA.interarrivals(vals);
     AST.times = ia.sorted;
     AST.gaps = ia.gaps;
-    /* A duration is not a clock reading, whatever it looks like. */
-    AST.clock = AST.mode === 'gaps' ? false : cv.clock;
+    /* Wall-clock display only for values that really are times of day: a
+       duration is never one, and neither is an elapsed MM:SS reading. */
+    AST.clock = AST.mode === 'gaps' ? false : !!cv.clock;
+    /* Elapsed clock readings are minutes just as much as times of day are;
+       only the wall-clock DISPLAY differs, so the unit word follows the
+       parse and not the display. */
+    AST.minutes = !!(cv.clock || cv.elapsed);
+    $('a-clock-row').style.display = (cv.parsed || cv.clock) ? 'flex' : 'none';
+    if (cv.parsed || cv.clock) {
+      $('a-clock-note').textContent = AST.mode === 'gaps'
+        ? 'Durations, added up into arrival times. Everything here works on differences, so the ' +
+          'reading sets the units and changes nothing else.'
+        : (AST.clockConv === 'hm'
+          ? 'Read as times of day and shown on a clock. Everything here works on differences, so ' +
+            'the reading changes the units of the rate and the axis labels and nothing else.'
+          : 'Read as minutes elapsed, and shown as plain numbers rather than on a clock, which is ' +
+            'what an elapsed time deserves.');
+    }
     AST.flags = ia;
     AST.flags.negGaps = negGaps;
     AST.flags.fromGaps = AST.mode === 'gaps';
@@ -6311,32 +6634,57 @@ var A_LOADER = makeLoader({
   clear: function () {
     AST.table = null; AST.times = []; AST.gaps = []; AST.unit = null;
     AST.flags = null; AST.truth = null;
+    $('a-clock-row').style.display = 'none';
     $('a-col-row').style.display = 'none';
     A_LOADER.say('');
     renderArrivals();
   }
 });
 
-/* The interval-width slider is geometric rather than linear: the useful
-   widths for a 480-minute shift run from a couple of minutes to a couple
-   of hours, and a linear slider would spend most of its travel in the
-   range nobody wants. */
-function widthFromIdx(idx, span) {
-  /* From 60 intervals down to 2, geometrically.  The default index puts
-     the opening view at about 10 intervals, which is the range where a
-     rate estimate has enough arrivals behind it to mean something and
-     still enough intervals to show a peak.  A wider range at the narrow
-     end would only offer settings that estimate every rate from one or
-     two arrivals. */
-  var lo = span / 60, hi = span / 2;
-  return lo * Math.pow(hi / lo, (idx - 1) / 39);
+/* The interval widths the slider can take: every one a number a person
+   would actually choose, and every slider position a different one. The
+   previous version computed a width geometrically and then rounded it,
+   which left long stretches of the track mapping to the same value -- the
+   slider looked broken because most of it did nothing.
+
+   The ladder is 1, 2, 5, 10, 15, 20, 30, 60 in every decade, which is the
+   set clock time is actually divided into: it holds 10, 15, 30, and 60 for
+   a window measured in minutes, and their multiples elsewhere. That
+   matters beyond taste, because an arrival schedule typed into Arena or
+   Simio is usually in hour or ten-minute blocks and the table below is
+   what gets typed. Widths leaving fewer than 2 or more than 60 intervals
+   are dropped as unusable. */
+function widthLadder(span) {
+  var mult = [1, 2, 5, 10, 15, 20, 30, 60], out = [], e, i, w, k;
+  for (e = -6; e <= 9; e++) {
+    var pw = Math.pow(10, e);
+    for (i = 0; i < mult.length; i++) {
+      w = mult[i] * pw;
+      k = span / w;
+      if (k >= 2 && k <= 60) out.push(Number(w.toPrecision(12)));
+    }
+  }
+  out.sort(function (a, b) { return a - b; });
+  var uniq = [];
+  for (i = 0; i < out.length; i++) if (!i || out[i] !== out[i - 1]) uniq.push(out[i]);
+  /* A span so small or so odd that nothing on the ladder fits still needs
+     something to offer. */
+  if (!uniq.length) uniq = [span / 10, span / 5, span / 2];
+  return uniq;
 }
-/* Rounded to something a person would actually type. */
-function niceWidth(w) {
-  var mag = Math.pow(10, Math.floor(Math.log10(w)));
-  var n = w / mag;
-  return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * mag;
+/* The entry nearest ten intervals, which is where a rate estimate has
+   enough arrivals behind it to mean something and still enough intervals
+   to show a peak. */
+function defaultWidthIdx(ladder, span) {
+  var want = span / 10, best = 0, bestD = Infinity, i, d;
+  for (i = 0; i < ladder.length; i++) {
+    d = Math.abs(Math.log(ladder[i] / want));
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
+
+function aWidthSay(msg) { $('a-width-msg').textContent = msg || ''; }
 
 function renderArrivals() {
   var t = AST.times;
@@ -6411,7 +6759,7 @@ function renderArrivals() {
   $('a-kind').innerHTML = warn +
     (AST.unit ? '<div style="margin-bottom:6px">These are ' + esc(AST.unit) + '.</div>' : '') +
     '<strong>' + t.length + ' arrivals over ' + fmt(span, 4) + ' ' +
-      (AST.clock ? 'minutes' : 'units of time') + '.</strong> ' +
+      (AST.minutes ? 'minutes' : 'units of time') + '.</strong> ' +
     'The gaps between them have coefficient of variation ' + fmt(cvg, 3) + '. ' +
     (Math.abs(cvg - 1) < 0.2
       ? 'That is close to 1, which is what a Poisson process gives—but a cv near 1 is necessary, ' +
@@ -6424,11 +6772,45 @@ function renderArrivals() {
         : 'That is below 1: arrivals are more evenly spaced than a Poisson process would make ' +
           'them—a scheduled or appointment-driven system often looks like this.'));
 
-  var w = niceWidth(widthFromIdx(AST.widthIdx, span));
+  /* Rebuilt whenever the span changes, so the slider always offers widths
+     that suit the data in front of it. */
+  var ladder = widthLadder(span);
+  if (AST.ladderSpan !== span) {
+    AST.ladderSpan = span;
+    AST.widthIdx = defaultWidthIdx(ladder, span);
+    AST.customWidth = null;      /* a new dataset gets the ladder's default */
+  }
+  AST.widthIdx = Math.max(0, Math.min(ladder.length - 1, AST.widthIdx));
+  var sl = $('a-width');
+  sl.min = '0';
+  sl.max = String(ladder.length - 1);
+
+  /* The slider offers round widths that suit the span; the box beside it
+     takes any width at all. The ladder is derived from the data, so on a
+     window of 32,000 units its smallest rung is 500, and a reader who
+     wants 60-unit blocks anyway -- because that is what the schedule in
+     their model uses -- can simply type 60. The slider then parks at its
+     nearest rung rather than pretending to be the source of the value. */
+  var w;
+  if (AST.customWidth && AST.customWidth > 0) {
+    w = AST.customWidth;
+    var near = 0, nd = Infinity;
+    for (var li = 0; li < ladder.length; li++) {
+      var dd = Math.abs(Math.log(ladder[li] / w));
+      if (dd < nd) { nd = dd; near = li; }
+    }
+    AST.widthIdx = near;
+  } else {
+    w = ladder[AST.widthIdx];
+  }
+  sl.value = String(AST.widthIdx);
   AST.prof = IA.rateProfile(t, w, t0, t1);
-  /* "50 min" is a width; "50 unit" is not English. With no clock to
-     anchor them the numbers carry no unit, so none is printed. */
-  $('a-width-val').textContent = fmt(w, 3) + (AST.clock ? ' min' : '');
+  /* "50 min" is a width; "50 unit" is not English, so with no clock to
+     anchor them the numbers carry no unit. */
+  var wv = $('a-width-val');
+  if (document.activeElement !== wv) wv.value = IA.num(w, 8);
+  $('a-width-unit').textContent = (AST.minutes ? 'min' : '') +
+    '  (' + AST.prof.rows.length + ' interval' + (AST.prof.rows.length === 1 ? '' : 's') + ')';
   drawCumulative();
   drawRate();
   renderRateTable();
@@ -6439,7 +6821,7 @@ function renderArrivals() {
   drawCounts();
   armPlotDownloads();
 }
-function unitWord() { return AST.clock ? 'min' : 'unit'; }
+function unitWord() { return AST.minutes ? 'min' : 'unit'; }
 function fmtTime(v) {
   if (!AST.clock) return fmt(v, 5);
   var h = Math.floor(v / 60), m = Math.floor(v % 60);
@@ -6690,36 +7072,40 @@ function drawGapsHist() {
   var pad = (hi - lo) * 0.04;
   var xhi = hi + pad;
 
-  var dens = new Array(bins.k), ymax = 0;
-  for (i = 0; i < bins.k; i++) {
-    dens[i] = bins.counts[i] / (s.n * bins.width);
-    if (dens[i] > ymax) ymax = dens[i];
-  }
-  var curve = [], NPT = 220, v, y;
+  /* Counts on the left, density on the right; see renderDensity. */
+  var scale = s.n * bins.width;
+  var ymax = 0;
+  for (i = 0; i < bins.k; i++) if (bins.counts[i] > ymax) ymax = bins.counts[i];
+  var curve = [], NPT = 240, v, y;
   for (i = 0; i <= NPT; i++) {
     v = lo + (xhi - lo) * i / NPT;
-    y = r.lamGap * Math.exp(-r.lamGap * v);
+    y = r.lamGap * Math.exp(-r.lamGap * v) * scale;
     if (y > ymax) ymax = y;
     curve.push([v, y]);
   }
   if (!(ymax > 0)) ymax = 1;
+  var yhi = ymax * 1.12;
 
-  var P = Plot(400, 300, { l: 58, r: 12, t: 12, b: 46 }).domain(lo, xhi, 0, ymax * 1.12);
-  var xt = tickPair(lo, xhi, 6), yt = tickPair(0, ymax * 1.12, 5);
-  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  var P = Plot(440, 320, { l: 44, r: 60, t: 12, b: 46 }).domain(lo, xhi, 0, yhi);
+  var xt = tickPair(lo, xhi, 6), yt = niceCountTicks(yhi, 5);
+  P.frame().axes(xt.ticks, yt, xt.fmt, function (t) { return String(Math.round(t)); });
   for (i = 0; i < bins.k; i++) {
     if (bins.counts[i] === 0) continue;
-    P.rect(bins.edges[i], 0, bins.edges[i + 1], dens[i], 'var(--obs-fill)', 'var(--obs)');
+    P.rect(bins.edges[i], 0, bins.edges[i + 1], bins.counts[i], 'var(--obs-fill)', 'var(--obs)');
   }
   P.line(curve, 'var(--fit)', 2.2);
-  P.labels('Gap between arrivals', 'Relative frequency per unit');
-  P.legend(P.mL + 12, P.mT + 14, [
+  P.rightTicks(yt, function (t) { return fmt(t / scale, 3); });
+  P.rightLabel('Probability density');
+  P.labels('Gap between arrivals', 'Frequency (count)');
+  var lc = legendCorner(P, bins.counts, yhi, 176);
+  P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your ' + s.n + ' gaps' },
     { mark: 'line', color: 'var(--fit)', label: 'Exponential(mean ' + fmt(r.meanGap, 4) + ')' }
   ]);
   host.innerHTML = P.svg('Histogram of the interarrival gaps with the fitted exponential density',
-    'Histogram of the gaps between arrivals, with the fitted exponential density over it') +
-    '<div class="plot-cap">' + s.n + ' gaps · ' + bins.k + ' bins · Sturges’ rule</div>';
+    'Histogram of the gaps between arrivals in counts, with the fitted exponential density over it') +
+    '<div class="plot-cap">' + s.n + ' gaps · ' + bins.k + ' bins of width ' + fmt(bins.width, 3) +
+    ' · counts on the left, density on the right</div>';
 
   if (note) {
     var st = IA.stationarityTest(AST.prof);
@@ -6807,26 +7193,30 @@ function drawCounts() {
   var obs = new Array(top + 1).fill(0);
   for (i = 0; i < k; i++) obs[counts[i]]++;
 
-  /* The Poisson the counts should follow if the rate is constant: mean
-     lambda-hat times the interval width, which is just the mean count. */
+  /* The Poisson these counts should follow if the rate is constant: its
+     mean is lambda-hat times the interval width, which is just the mean
+     count. Drawn as EXPECTED NUMBER OF INTERVALS, k x P(X = j), so it is
+     on the same axis as the bars; the right-hand axis reads the same
+     heights back as proportions. */
   var pois = new Array(top + 1);
   var ymax = 0;
   for (i = 0; i <= top; i++) {
-    pois[i] = mean > 0 ? IA.DISTS.poisson.pdf(i, [mean]) : (i === 0 ? 1 : 0);
-    ymax = Math.max(ymax, pois[i], obs[i] / k);
+    pois[i] = (mean > 0 ? IA.DISTS.poisson.pdf(i, [mean]) : (i === 0 ? 1 : 0)) * k;
+    ymax = Math.max(ymax, pois[i], obs[i]);
   }
   if (!(ymax > 0)) ymax = 1;
+  var yhi = ymax * 1.14;
 
-  var P = Plot(400, 300, { l: 56, r: 12, t: 12, b: 46 })
-    .domain(-0.7, top + 0.7, 0, ymax * 1.14);
+  var P = Plot(430, 310, { l: 42, r: 60, t: 12, b: 46 })
+    .domain(-0.7, top + 0.7, 0, yhi);
   var xt = { ticks: [], fmt: function (v) { return String(Math.round(v)); } };
   var stepx = Math.max(1, Math.ceil((top + 1) / 10));
   for (i = 0; i <= top; i += stepx) xt.ticks.push(i);
-  var yt = tickPair(0, ymax * 1.14, 5);
-  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  var yt = niceCountTicks(yhi, 5);
+  P.frame().axes(xt.ticks, yt, xt.fmt, function (t) { return String(Math.round(t)); });
   for (i = 0; i <= top; i++) {
     if (obs[i] === 0) continue;
-    P.rect(i - 0.42, 0, i + 0.42, obs[i] / k, 'var(--obs-fill)', 'var(--obs)');
+    P.rect(i - 0.42, 0, i + 0.42, obs[i], 'var(--obs-fill)', 'var(--obs)');
   }
   /* Spikes, not a curve: a Poisson puts probability on whole numbers and
      nothing in between, and a smooth line would imply otherwise. */
@@ -6836,15 +7226,20 @@ function drawCounts() {
     pts.push([i, pois[i]]);
   }
   P.dots(pts, 'var(--fit)', 3);
-  P.labels('Arrivals in an interval', 'Proportion of intervals');
-  P.legend(P.mL + 12, P.mT + 14, [
+  P.rightTicks(yt, function (t) { return fmt(t / k, 3); });
+  P.rightLabel('Proportion of intervals');
+  P.labels('Arrivals in an interval', 'Number of intervals');
+  var lc = legendCorner(P, obs, yhi, 172);
+  P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your ' + k + ' intervals' },
-    { mark: 'dot', color: 'var(--fit)', label: 'Poisson(' + fmt(mean, 4) + ')' }
+    { mark: 'dot', color: 'var(--fit)', label: 'Poisson(' + fmt(mean, 4) + '), expected' }
   ]);
   host.innerHTML = P.svg('Counts per interval against a fitted Poisson',
-    'Histogram of the number of arrivals per interval with the fitted Poisson probabilities') +
-    '<div class="plot-cap">' + k + ' intervals of width ' + fmt(prof.width, 4) +
-    ', averaging ' + fmt(mean, 3) + ' arrivals each</div>';
+    'Histogram of the number of arrivals per interval, in intervals, with the expected numbers ' +
+    'under the fitted Poisson') +
+    '<div class="plot-cap" style="text-align:left">' + k + ' intervals of width ' +
+    fmt(prof.width, 4) + ', averaging ' + fmt(mean, 3) + ' arrivals each. Bars count intervals, ' +
+    'on the left; the right axis reads the same heights as proportions of the ' + k + '.</div>';
 
   /* Variance against mean is the Poisson's one testable fingerprint. */
   var v = 0;
@@ -6932,17 +7327,17 @@ function csvRates() {
   var prof = AST.prof;
   if (!prof) return;
   var rows = [
-    ['# Input Analyzer—arrival rate table',
-     'https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
-    ['# arrivals', prof.n],
-    ['# window', IA.num(prof.t0, 10), IA.num(prof.t1, 10)],
-    ['# interval width', IA.num(prof.width, 10)],
-    ['# overall rate', IA.num(prof.overall, 10)],
+    ['# Input Analyzer, arrival rate table - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# arrivals: ' + prof.n],
+    ['# window: ' + IA.num(prof.t0, 10) + ' to ' + IA.num(prof.t1, 10)],
+    ['# interval width: ' + IA.num(prof.width, 10)],
+    ['# overall rate: ' + IA.num(prof.overall, 10)],
     []
   ];
   var st = IA.stationarityTest(prof);
   if (st && st.ok) {
-    rows.push(['# Poisson dispersion test', 'X2', IA.num(st.X2, 8), 'df', st.df, 'p', IA.num(st.p, 8)]);
+    rows.push(['# Poisson dispersion test: X2 = ' + IA.num(st.X2, 8) + ' on ' + st.df +
+               ' df; p = ' + IA.num(st.p, 8)]);
     rows.push([]);
   }
   rows.push(['interval', 'from', 'to', 'arrivals', 'width', 'rate', 'std_error']);
@@ -7041,10 +7436,9 @@ function runArrivalGenerator() {
   AST.unit = null;
   AST.mode = 'times';          /* the generator always produces timestamps */
   $('a-mode').value = 'times';
-  AST.widthIdx = 22;
-  $('a-width').value = '22';
+  AST.ladderSpan = null;       /* let the ladder re-centre on the new span */
   A_LOADER.loadText(g.times.map(function (v) { return IA.num(v, 8); }).join('\n'),
-                    'Generated ' + spec.name.toLowerCase());
+                    'Generated ' + spec.name);
   /* Kept so the rate plot can draw the truth over the estimate. */
   AST.truth = { key: key, p: p.slice(), T: T, rate: g.rate, max: g.lambdaMax };
   renderArrivals();
@@ -7088,6 +7482,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ── Tab ① ────────────────────────────────────────────────────── */
   LOADER.wire();
+  $('clock-conv').addEventListener('change', function () {
+    ST.clockConv = this.value;
+    LOADER.useColumn(ST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
+  });
   $('fam-pick').addEventListener('change', function () {
     ST.family = this.value; ST.userPicked = false; refitAll();
   });
@@ -7159,6 +7557,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ── Tab ② ────────────────────────────────────────────────────── */
   A_LOADER.wire();
+  buildArrivalClockOptions();
   initArrivalGenerator();
   $('a-gen-proc').addEventListener('change', buildArrivalParams);
   $('a-gen-T').addEventListener('input', renderLambdaFormula);
@@ -7182,15 +7581,61 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   /* Changing the mode reinterprets what is already in the box rather than
      asking the reader to paste it again. */
+  /* The two readings on offer depend on what the column is meant to hold.
+     "HH:MM to a time of day" is meaningless for an interarrival duration,
+     so gaps mode offers the duration readings instead. */
+  function buildArrivalClockOptions() {
+    var sel = $('a-clock-conv'), gaps = AST.mode === 'gaps';
+    var opts = gaps
+      ? [['ms', 'MM:SS (and HH:MM:SS) → minutes'], ['hm', 'HH:MM (and HH:MM:SS) → hours']]
+      : [['hm', 'HH:MM (and HH:MM:SS) → time of day'], ['ms', 'MM:SS (and HH:MM:SS) → minutes elapsed']];
+    sel.innerHTML = '';
+    for (var i = 0; i < opts.length; i++) {
+      var o = document.createElement('option');
+      o.value = opts[i][0]; o.textContent = opts[i][1];
+      sel.appendChild(o);
+    }
+    /* Each mode has its own sensible default, and switching mode adopts it. */
+    AST.clockConv = opts[0][0];
+    sel.value = AST.clockConv;
+  }
+
+  $('a-clock-conv').addEventListener('change', function () {
+    AST.clockConv = this.value;
+    AST.truth = null; aGenSay('');
+    A_LOADER.useColumn(AST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
+  });
   $('a-mode').addEventListener('change', function () {
     AST.mode = this.value;
     AST.truth = null; aGenSay('');
     AST.unit = null;
+    buildArrivalClockOptions();
     A_LOADER.useColumn(AST.col, this.value === 'gaps'
       ? 'Read as interarrival durations' : 'Read as arrival times');
   });
   $('a-width').addEventListener('input', function () {
     AST.widthIdx = Number(this.value);
+    AST.customWidth = null;     /* dragging returns control to the ladder */
+    aWidthSay('');
+    renderArrivals();
+  });
+  /* A typed width is taken as given, within the bounds that keep the rate
+     table and the plots drawable. */
+  $('a-width-val').addEventListener('change', function () {
+    var span = AST.times.length > 1 ? AST.times[AST.times.length - 1] - AST.times[0] : 0;
+    var v = Number(this.value);
+    if (!(v > 0) || !(span > 0)) { AST.customWidth = null; renderArrivals(); return; }
+    var MAX_INTERVALS = 500;
+    if (span / v > MAX_INTERVALS) {
+      v = span / MAX_INTERVALS;
+      aWidthSay('That width would make more than ' + MAX_INTERVALS + ' intervals, which is more ' +
+                'than the table or the test can use. Widened to ' + IA.num(v, 6) + '.');
+    } else if (v >= span) {
+      v = span / 2;
+      aWidthSay('A width at or above the whole window leaves nothing to compare. Set to half of it.');
+    } else aWidthSay('');
+    AST.customWidth = v;
+    this.value = IA.num(v, 8);   /* show what was actually used */
     renderArrivals();
   });
   $('a-send').addEventListener('click', sendGapsToFit);

@@ -325,6 +325,71 @@ section('7. parseTable / columnValues');
   ok(r.v.join(',') === '1000,-2.5,4', 'scientific, signed, and plus-prefixed numbers');
   ok(IA.parseTable('').cols.length === 0, 'empty input yields no columns');
 
+  /* ── Files that defeated the old delimiter rule ────────────────── */
+  {
+    /* A preamble of notes above a real table. Every one of those lines
+       lacks a comma, and under the old rule each voted against the comma
+       being the delimiter until the table lost. */
+    const junk = 'asdf\n'.repeat(7) +
+      '\ngroup_lower,group_upper,bins_pooled,observed\n' +
+      '-0.5,1.5,1,17\n1.5,3.5,1,79\n3.5,5.5,1,63\n5.5,7.5,1,33\n7.5,11.5,2,8\n';
+    const pj = IA.parseTable(junk);
+    ok(pj.delim === ',' && pj.cols.length === 4,
+       `7 lines of preamble: delimiter ${JSON.stringify(pj.delim)}, ${pj.cols.length} columns`);
+    ok(pj.header === true && pj.names[0] === 'group_lower',
+       'and the real header is found, not the preamble', pj.names.join('|'));
+    ok(pj.dropped === 7, `with all 7 preamble lines dropped (got ${pj.dropped})`);
+    ok(IA.columnValues(pj.cols[3]).values.join(',') === '17,79,63,33,8',
+       'and the data reads correctly');
+    /* The preamble filter has to run BEFORE the modal column count, or the
+       preamble outvotes the table and the file is read as one column. */
+    const many = 'a note about the study\n'.repeat(30) + 'a,b\n1,2\n3,4\n5,6\n7,8\n';
+    const pm = IA.parseTable(many);
+    ok(pm.cols.length === 2 && pm.names.join(',') === 'a,b',
+       `30 preamble lines against 5 data rows still yields ${pm.cols.length} columns`);
+
+    /* Ragged rows, which is what a spreadsheet emits when trailing cells
+       are empty. Under the old rule enough of them also sank the file. */
+    const ragged = '-0.5,1.5,1,17\n1.5,3.5,1,79\n3.5,5.5,1,63\n5.5,7.5,1,33\n7.5,11.5,2,8\n' +
+      '2,\n3,\n2,3,4,5\n2,3,4,\n3,3,3\n2,2,\n1,2\n3,3,4,3,\n';
+    const pr = IA.parseTable(ragged);
+    ok(pr.delim === ',' && pr.cols.length >= 4,
+       `ragged rows: delimiter ${JSON.stringify(pr.delim)}, ${pr.cols.length} columns`);
+    ok(pr.ragged > 0, `and the raggedness is reported (${pr.ragged} lines)`);
+    ok(IA.columnValues(pr.cols[0]).values.length === 13,
+       'with every row contributing its first cell');
+
+    /* "#" is a comment by convention, and by this page's own CSV output. */
+    const hashed = '# Input Analyzer\n# observations: 120\n# seed: 42\n\nvalue\n4.2\n6.7\n2.1\n';
+    const ph = IA.parseTable(hashed);
+    ok(ph.dropped === 3 && ph.names[0] === 'value',
+       `comment lines dropped (${ph.dropped}), header found`);
+    ok(IA.columnValues(ph.cols[0]).values.join(',') === '4.2,6.7,2.1', 'and the data survives');
+
+    /* A file where every row ends in a separator is not one column wider. */
+    const trail = 'a,b,\n1,2,\n3,4,\n5,6,\n';
+    const pt = IA.parseTable(trail);
+    ok(pt.cols.length === 2, `a uniform trailing separator does not add a column (${pt.cols.length})`);
+
+    /* The cases the old rule got right must still work. */
+    ok(IA.parseTable('1,\n2,\n3,\n').cols.length === 1,
+       'a one-column file of trailing commas is still one column');
+    ok(IA.parseTable('1 2\n3 4\n5 6\n').cols.length === 2, 'whitespace columns still work');
+    ok(IA.parseTable('4.2\n6.7\n2.1\n').cols.length === 1, 'a plain column still works');
+  }
+
+  /* CSV comments go out as lines, not as a row whose first cell starts
+     with a hash. */
+  {
+    const csv = IA.toCsv([['# a comment, with a comma in it'], ['a', 'b'], [1, 2]]);
+    const lines = csv.split('\n');
+    ok(lines[0] === '# a comment, with a comma in it',
+       'a comment row is emitted verbatim, unquoted and unsplit', JSON.stringify(lines[0]));
+    ok(lines[1] === 'a,b' && lines[2] === '1,2', 'and ordinary rows are unaffected');
+    ok(IA.toCsv([['#hash', 'second cell']]).split('\n')[0] === '#hash,second cell',
+       'a multi-cell row starting with a hash is still a row');
+  }
+
   /* A single line of space-separated values, which is what a student who
      pasted a row instead of a column produces. */
   p = IA.parseTable('3.1 4.1 5.9 2.6');
@@ -1522,6 +1587,36 @@ section('17. arrival-process analysis');
        'and nothing about the rate profile either');
     const tied = IA.interarrivals([1, 2, 2, 3, 5, 5, 5]);
     ok(tied.ties === 3, `simultaneous arrivals are counted (${tied.ties} of them)`);
+  }
+
+  /* ── Durations written as clock time (tab 1) ───────────────────── */
+  {
+    /* Two parts carry the same arithmetic under either convention; what
+       differs is the unit the answer is in. Three parts genuinely differ. */
+    close(IA.toClockDuration('2:45', 'ms'), 2.75, 1e-12, 'MM:SS 2:45 = 2.75 minutes');
+    close(IA.toClockDuration('2:45', 'hm'), 2.75, 1e-12, 'HH:MM 2:45 = 2.75 hours');
+    close(IA.toClockDuration('1:30:00', 'ms'), 90, 1e-12, 'MM:SS convention: 1:30:00 = 90 minutes');
+    close(IA.toClockDuration('1:30:00', 'hm'), 1.5, 1e-12, 'HH:MM convention: 1:30:00 = 1.5 hours');
+    close(IA.toClockDuration('1:30:00', 'ms') / IA.toClockDuration('1:30:00', 'hm'), 60, 1e-12,
+      'and the two differ by exactly the factor 60');
+    close(IA.toClockDuration('0:45.5', 'ms'), 45.5 / 60, 1e-12, 'a fractional second is allowed');
+    close(IA.toClockDuration('90:00', 'ms'), 90, 1e-12, 'a value past 59 minutes is allowed');
+    ok(Number.isNaN(IA.toClockDuration('4.2', 'ms')), 'a plain number is not a clock duration');
+    ok(Number.isNaN(IA.toClockDuration('2:75', 'ms')), 'an impossible second is rejected');
+    ok(Number.isNaN(IA.toClockDuration('', 'ms')), 'an empty cell is not a duration');
+    /* A column converts only when every cell is clock-shaped, or one
+       series would silently mix minutes with bare numbers. */
+    const all = IA.columnDurations(['2:45', '0:30', '1:15'], 'ms');
+    ok(all.clock === true && all.unit === 'minutes' &&
+       all.values.join(',') === '2.75,0.5,1.25', 'an all-clock column converts');
+    const mixed = IA.columnDurations(['2:45', '4.2'], 'ms');
+    ok(mixed.clock === false && mixed.values.join(',') === '4.2',
+       'a column mixing clock and plain values stays numeric');
+    const plain = IA.columnDurations(['1.5', '2.5'], 'ms');
+    ok(plain.clock === false && plain.values.join(',') === '1.5,2.5',
+       'a plain numeric column is untouched');
+    ok(IA.columnDurations(['2:45', '0:30'], 'hm').unit === 'hours',
+       'and the reported unit follows the convention');
   }
 
   /* Clock times. */
