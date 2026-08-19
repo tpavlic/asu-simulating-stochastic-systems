@@ -28,6 +28,12 @@ below.
 | --- | --- |
 | [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, area from a walking robot's crossing trails, and Monte Carlo integration, with accumulating 95% confidence intervals |
 
+### Input Modeling
+
+| Directory | Description |
+| --- | --- |
+| [`input_modeling/`](input_modeling/) | Fit a distribution to sample data and read off the expression for a simulation model: maximum-likelihood fits of fourteen candidates ranked by AIC and BIC beside Arena's square-error criterion, chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values, Q–Q and P–P diagnostics, a nonhomogeneous-Poisson arrival mode, and export to Arena, Simio, AnyLogic, R, MATLAB, and SciPy |
+
 ---
 
 ## Adding a new visualization

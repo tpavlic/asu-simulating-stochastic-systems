@@ -386,6 +386,31 @@ check all of the following.
   accumulating 95% confidence intervals and a 100-run sweep; the robot tab is an animated extension
   with no controls. Expected to gain further tabs tailored to this course)*
 
+### Input Modeling
+
+- `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
+  two tabs, one fitting fourteen candidate distributions to a pasted sample and one estimating a
+  piecewise-constant arrival rate from timestamps. Two conventions in this file are relied on by
+  code outside it, and any later edit has to preserve them:*
+  1. *Everything between the `IA-CORE-BEGIN` / `IA-CORE-END` sentinels is pure numerics with no DOM
+     access. `input_modeling/verify_input_analyzer.mjs` slices that block out of the HTML and runs
+     it in Node, and the bootstrap Web Worker is built from the same `<script id="ia-core">`
+     element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
+  2. *`verify_input_analyzer.mjs` is not shipped with the widget and is not linked from the site. Run
+     it (`node input_modeling/verify_input_analyzer.mjs`, about seven minutes) after touching
+     anything in the core; it checks the special functions against exact identities, recovers known
+     parameters for every distribution, and measures the bootstrap's rejection rate under a true
+     null, confirms that the classical K-S and A-D p-values are correctly calibrated when the
+     parameters are fixed and far too permissive when they are estimated, and measures the
+     chi-square rejection rate under both degrees-of-freedom conventions. `IA_CALIB_REPS` and
+     `IA_CALIB_B` shorten the slow calibration sections.*
+  3. *Two parameter counts are deliberate and must not be collapsed into one. `fit.k` counts every
+     quantity estimated from the data and drives AIC and BIC; `regularCount(fit)` excludes
+     parameters that are extreme order statistics -- a uniform's endpoints, a beta's interval, a
+     shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
+     subtract. The verification measures both: on uniform data the order-statistic count rejects at
+     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.)*
+
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.
 
