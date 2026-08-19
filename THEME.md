@@ -3,6 +3,12 @@
 Build this widget to be embedded in an ASU Canvas LMS page: white background, ASU maroon headings
 and links, thin rules, no heavy chrome. Match that.
 
+The theme is course-flavored; the content must not be. Do not name the course, its catalog number,
+the university, the instructor, or a semester anywhere in the widget — not in the title, headings,
+body text, or `<head>` metadata. These widgets are general topic tools that any instructor can
+find on the web and embed in their own class, so frame everything by topic (the method, the
+distribution, the algorithm), never by course.
+
 ## Chrome palette
 
 Declare these in `:root` and route every chrome color through them – headings, section labels,

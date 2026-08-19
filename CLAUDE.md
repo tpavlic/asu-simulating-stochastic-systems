@@ -6,6 +6,27 @@ Arizona State University, taught by Theodore P. Pavlic. The live site is at
 
 ---
 
+## Widgets are course-neutral
+
+**Never reference the course inside a widget.** Each widget is a general-purpose teaching tool
+that any instructor anywhere should be able to find on the web and embed in their own class, so a
+widget must not name this course, its catalog number, the university, the instructor, or a
+semester — not in its visible text, its `<title>`, its `<head>` description or OG/Twitter card
+text, or its preview image. Frame everything by topic ("Monte Carlo integration", "input
+modeling"), never by course ("in this course", "for Simulating Stochastic Systems").
+
+The course framing lives only in the site chrome around the widgets: `index.html`, `README.md`,
+this file, and the shared back-link footer. The footer's "All course visualizations" label names
+no particular course and stays as is; its iframe-hiding script removes it when the widget is
+embedded in an LMS page, so it appears only on direct visits, where a link back to the index is
+intentional. URLs are exempt — `og:url`, `og:image`, and the GitHub Pages
+base necessarily contain the repository name, and that is fine; the rule is about human-readable
+text. When importing or reviewing a widget whose body already contains a course reference, treat
+it like any other interior issue under the setup-edit rule below: flag it rather than silently
+editing it.
+
+---
+
 ## Registering an existing visualization
 
 **Confine setup edits to the file's outer edges (the `<head>` and the back-link footer); leave the
