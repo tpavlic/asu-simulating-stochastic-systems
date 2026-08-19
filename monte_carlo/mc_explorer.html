@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monte Carlo Explorer — interactive explainer</title>
-<meta name="description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+<meta name="description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Monte Carlo Explorer — interactive explainer">
-<meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+<meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
 <meta property="og:image:width" content="2000">
 <meta property="og:image:height" content="832">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Monte Carlo Explorer — interactive explainer">
-<meta name="twitter:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and integrate a function by averaging random draws, watching 95% confidence intervals accumulate across repeated experiments.">
+<meta name="twitter:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
 
 <!-- Google Analytics -->
@@ -83,6 +83,11 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-run { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-run:hover { background: var(--accent-dark); }
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
+/* Secondary run button (the 100-run sweep): same weight as Run Experiment, but
+   outlined, so the single run stays the obvious first thing to click. */
+.btn-run2 { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run2:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.btn-run2:disabled { color: #aaa; border-color: #d6d0d2; cursor: not-allowed; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
 /* Holds the seed label, field and checkbox together so the row does not split
@@ -102,7 +107,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
             font-size: .75rem; line-height: 1.35; color: var(--muted); }
 .seed-msg.bad { color: var(--accent); font-weight: 600; }
 .seed-inp:focus-visible, select:focus-visible, .tab-select:focus-visible,
-.btn-run:focus-visible, .btn-clear:focus-visible, .tab:focus-visible,
+.btn-run:focus-visible, .btn-run2:focus-visible, .btn-clear:focus-visible, .tab:focus-visible,
 .ctrl-chk input:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
@@ -125,15 +130,21 @@ canvas { display: block; max-width: 100%; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 .hist-empty { font-size: .85rem; color: var(--muted); font-style: italic; text-align: center; padding: 18px 0; }
+/* Capture tally under a history chart -- what the 100-run sweep is for. The height
+   is reserved so the section does not jump when the first run fills it in. */
+.hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; min-height: 1.2em; }
+.hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
 svg.hsv { display: block; width: 100%; height: auto; }
 .exp-cv  { display: block; border-radius: 4px; }
 .exp-cap { font-size: .75rem; color: var(--muted); text-align: center; margin-top: 5px; }
 .exp-svg { display: block; width: 100%; }
-.pi-exp-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
-.pi-exp-dart { flex: 0 0 auto; width: 172px; height: auto; display: block; }
-.pi-exp-math { flex: 1 1 380px; min-width: 0; display: block; }
-/* Shared equation vocabulary — used by the Tab 1 explainer and the Tab 2 formula
-   block. Neutral names on purpose: further tabs are expected to reuse these. */
+/* Explainer layout: a fixed-width figure beside the equations. Shared by the
+   dartboard explainer on Tab ① and the needle explainer on Tab ②. */
+.exp-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.exp-fig  { flex: 0 0 auto; width: 172px; height: auto; display: block; }
+.exp-math { flex: 1 1 380px; min-width: 0; display: block; }
+/* Shared equation vocabulary — used by the Tab ① and ② explainers and the Tab ③
+   formula block. Neutral names on purpose: further tabs are expected to reuse these. */
 .eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
 .eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
           color: var(--accent); flex-shrink: 0; min-width: 148px; }
@@ -148,7 +159,10 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .eq-note-eq { font-family: 'IBM Plex Mono',monospace; font-size: .83rem;
               color: var(--est); }
 .eq-fine { font-size: .76rem; color: var(--muted); line-height: 1.4; }
-/* Compact scope for the Tab 2 block, which lives in the narrow stats column */
+/* Inline symbols inside prose. The script small l (U+2113) has no glyph in Outfit
+   and falls back to a mismatched face, so any prose carrying it switches to mono. */
+.eq-m { font-family: 'IBM Plex Mono',monospace; font-size: .95em; color: inherit; }
+/* Compact scope for the Tab ③ block, which lives in the narrow stats column */
 .mc-eq { margin-bottom: 10px; }
 .mc-eq .eq-row  { padding: 2px 0; }
 .mc-eq .eq-lbl  { min-width: 104px; font-size: .8rem; }
@@ -156,17 +170,17 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .mc-eq .eq-note { margin-top: 6px; padding: 7px 10px; }
 .mc-eq .eq-note-eq { font-size: .82rem; }
 .mc-eq .eq-fine    { font-size: .74rem; color: var(--truth); }
-/* The font bump below is scoped to the Tab 1 explainer, which goes full-width here.
-   Tab 2's block is still a narrow sibling of the canvas card between 620 and 680px,
-   so it must not inherit the enlargement. */
+/* The font bump below is scoped to the Tab ① and ② explainers, which go full-width
+   here. Tab ③'s block is still a narrow sibling of the canvas card between 620 and
+   680px, so it must not inherit the enlargement. */
 @media (max-width: 680px) {
-  .pi-exp-wrap { flex-direction: column; gap: 10px; }
-  .pi-exp-dart { width: 100%; max-width: 310px; height: auto; margin: 0 auto; }
-  .pi-exp-math { width: 100%; }
-  .pi-exp-math .eq-lbl     { font-size: 1rem; }
-  .pi-exp-math .eq-val     { font-size: .92rem; }
-  .pi-exp-math .eq-note-eq { font-size: .9rem; }
-  .pi-exp-math .eq-fine    { font-size: .82rem; }
+  .exp-wrap { flex-direction: column; gap: 10px; }
+  .exp-fig  { width: 100%; max-width: 310px; height: auto; margin: 0 auto; }
+  .exp-math { width: 100%; }
+  .exp-math .eq-lbl     { font-size: 1rem; }
+  .exp-math .eq-val     { font-size: .92rem; }
+  .exp-math .eq-note-eq { font-size: .9rem; }
+  .exp-math .eq-fine    { font-size: .82rem; }
 }
 .exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
 footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
@@ -182,11 +196,11 @@ footer a:hover { text-decoration: underline; }
   background: var(--card); color: var(--accent); cursor: pointer;
   margin-bottom: 14px; appearance: auto;
 }
-/* The two tab labels need ~357px of viewport side by side, so swap to the
+/* The three tab labels need ~600px of viewport side by side, so swap to the
    dropdown before they would wrap. Expressed in em rather than px so the
    switch also happens sooner for a reader whose default font size is larger:
    in a media query, em tracks the browser's default font size. */
-@media (max-width: 24em) {
+@media (max-width: 38em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -202,12 +216,14 @@ footer a:hover { text-decoration: underline; }
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
   <nav class="tabs">
-    <button class="tab active" data-tab="pi" onclick="showTab('pi',this)">① Estimating π</button>
-    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">② MC Integration</button>
+    <button class="tab active" data-tab="pi" onclick="showTab('pi',this)">① Est. π: Dartboard</button>
+    <button class="tab" data-tab="bn" onclick="showTab('bn',this)">② Est. π: Buffon’s Needle</button>
+    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">③ MC Integration</button>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTabFromSelect(this)">
-    <option value="pi">① Estimating π</option>
-    <option value="mc">② MC Integration</option>
+    <option value="pi">① Est. π: Dartboard</option>
+    <option value="bn">② Est. π: Buffon’s Needle</option>
+    <option value="mc">③ MC Integration</option>
   </select>
 
   <!-- TAB 1 -->
@@ -224,7 +240,7 @@ footer a:hover { text-decoration: underline; }
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="pi-seed">Seed</label>
         <input class="seed-inp" id="pi-seed" type="text" inputmode="numeric"
-               value="12345" maxlength="10" autocomplete="off" spellcheck="false"
+               value="54321" maxlength="10" autocomplete="off" spellcheck="false"
                aria-describedby="pi-seed-msg"
                title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('pi')"
@@ -234,6 +250,7 @@ footer a:hover { text-decoration: underline; }
         </label>
       </span>
       <button class="btn-run" id="pi-run" onclick="runPi()"><span aria-hidden="true">▶</span> Run Experiment</button>
+      <button class="btn-run2" id="pi-run100" onclick="runPiBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
       <button class="btn-clear" onclick="clearPi()">Clear history</button>
       <span class="seed-msg" id="pi-seed-msg" role="status" aria-live="polite"></span>
     </div>
@@ -254,20 +271,21 @@ footer a:hover { text-decoration: underline; }
           <div class="sc"><div class="sc-lbl">True π/4</div><div class="sc-val dim">0.78539816339744…</div></div>
           <div class="sc"><div class="sc-lbl">True π</div><div class="sc-val dim">3.14159265358979…</div></div>
         </div>
-        <div class="hint">Each "dart" lands at a uniform random point in the square. The fraction landing inside the inscribed circle estimates π/4. Run many experiments to watch 95% confidence intervals accumulate — nearly all should capture the dashed true value.</div>
+        <div class="hint">Each "dart" lands at a uniform random point in the square. The fraction landing inside the inscribed circle estimates π/4, so four times that fraction estimates π. Run many experiments to watch 95% confidence intervals for π accumulate — nearly all should capture the dashed true value.</div>
       </div>
     </div>
     <div class="sec">
-      <div class="sec-hd">Experiment History — 95% Confidence Intervals for π/4</div>
+      <div class="sec-hd">Experiment History — 95% Confidence Intervals for π</div>
       <div id="pi-hw">
         <svg class="hsv" id="pi-hs"></svg>
       </div>
+      <div class="hist-cap" id="pi-hits"></div>
     </div>
     <div class="sec">
       <div class="sec-hd">Why does dartboard sampling estimate π?</div>
-      <div class="pi-exp-wrap">
-        <svg id="pi-exp-dart" class="pi-exp-dart" xmlns="http://www.w3.org/2000/svg"></svg>
-        <div id="pi-exp-math" class="pi-exp-math">
+      <div class="exp-wrap">
+        <svg id="pi-exp-dart" class="exp-fig" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="pi-exp-math" class="exp-math">
           <div class="eq-row"><span class="eq-lbl">Area of square:</span><span class="eq-val" style="color:var(--sq-stroke)">(2r)² = 4r²</span></div>
           <div class="eq-row"><span class="eq-lbl">Area of circle:</span><span class="eq-val" style="color:var(--circ-stroke)">πr²</span></div>
           <div class="eq-hr"></div>
@@ -279,6 +297,7 @@ footer a:hover { text-decoration: underline; }
               <span class="eq-note-eq">π ≈ 4 × (# inside circle) / (# total samples)</span>
             </div>
             <div class="eq-fine">Borel’s Law of Large Numbers guarantees convergence — the 95% CI will capture π ≈ 95% of the time.</div>
+            <div class="eq-fine">π is four times π/4, and nothing else changes: the chart above plots the estimate of π/4 and both of its interval endpoints multiplied by 4.</div>
           </div>
         </div>
       </div>
@@ -286,6 +305,91 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <!-- TAB 2 -->
+  <section id="tab-bn" class="tp">
+    <div class="ctrl-row">
+      <label class="ctrl-lbl" for="bn-n">Needles per run</label>
+      <!-- Defaults lower than the dartboard's 500: a needle is a segment, and 100 of
+           them fill the sheet about as much as 500 darts fill the square. -->
+      <select id="bn-n">
+        <option value="50">50</option><option value="100" selected>100</option>
+        <option value="500">500</option><option value="1000">1,000</option>
+        <option value="5000">5,000</option><option value="10000">10,000</option>
+      </select>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="bn-seed">Seed</label>
+        <input class="seed-inp" id="bn-seed" type="text" inputmode="numeric"
+               value="43215" maxlength="10" autocomplete="off" spellcheck="false"
+               aria-describedby="bn-seed-msg"
+               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
+               onchange="normalizeSeed('bn')"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();runBn();}">
+        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
+          <input type="checkbox" id="bn-newseed" checked> New seed after each run
+        </label>
+      </span>
+      <button class="btn-run" id="bn-run" onclick="runBn()"><span aria-hidden="true">▶</span> Run Experiment</button>
+      <button class="btn-run2" id="bn-run100" onclick="runBnBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
+      <button class="btn-clear" onclick="clearBn()">Clear history</button>
+      <span class="seed-msg" id="bn-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <canvas id="bn-cv"></canvas>
+        <div class="cv-leg">
+          <svg width="30" height="10" viewBox="0 0 30 10" aria-hidden="true" style="vertical-align:-1px"><line x1="2" y1="8.5" x2="28" y2="1.5" stroke="var(--accept)" stroke-width="2"/><circle cx="15" cy="5" r="2.6" fill="var(--accept)"/></svg>
+          <span style="color:var(--accept)">crosses a line</span>&nbsp;&nbsp;
+          <svg width="30" height="10" viewBox="0 0 30 10" aria-hidden="true" style="vertical-align:-1px"><line x1="2" y1="8.5" x2="28" y2="1.5" stroke="var(--reject)" stroke-width="1.7" stroke-dasharray="3,2.5"/></svg>
+          <span style="color:var(--reject)">no crossing</span>
+        </div>
+        <div class="cv-leg" id="bn-shown" style="min-height:1.1em;margin-top:2px"></div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Total needles</div><div class="sc-val" id="bn-sn">—</div></div>
+          <div class="sc"><div class="sc-lbl">Crossing a line</div><div class="sc-val" id="bn-sk">—</div></div>
+          <div class="sc"><div class="sc-lbl">Estimate of 2/π</div><div class="sc-val acc" id="bn-sq">—</div></div>
+          <div class="sc"><div class="sc-lbl">Estimate of π</div><div class="sc-val acc" id="bn-sp">—</div></div>
+          <div class="sc"><div class="sc-lbl">True 2/π</div><div class="sc-val dim">0.63661977236758…</div></div>
+          <div class="sc"><div class="sc-lbl">True π</div><div class="sc-val dim">3.14159265358979…</div></div>
+        </div>
+        <div class="hint">Each needle lands at a uniform random position and angle on paper ruled with lines exactly one needle-length apart. The fraction crossing a line estimates 2/π, so dividing 2 by that fraction estimates π. Run many experiments to watch 95% confidence intervals for π accumulate — nearly all should capture the dashed true value.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Experiment History — 95% Confidence Intervals for π</div>
+      <div id="bn-hw">
+        <svg class="hsv" id="bn-hs"></svg>
+      </div>
+      <div class="hist-cap" id="bn-hits"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why does dropping needles estimate π?</div>
+      <div class="exp-wrap">
+        <svg id="bn-exp-fig" class="exp-fig" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="bn-exp-math" class="exp-math">
+          <div class="eq-row"><span class="eq-lbl">Needle angle:</span><span class="eq-val" style="color:var(--circ-stroke)">θ ~ U[0, π)</span></div>
+          <div class="eq-row"><span class="eq-lbl">Center to nearest line:</span><span class="eq-val" style="color:var(--circ-stroke)">d ~ U[0, t/2]</span></div>
+          <div class="eq-hr"></div>
+          <div class="eq-row"><span class="eq-lbl">Needle crosses when:</span><span class="eq-val">d ≤ (ℓ/2)·sin θ</span></div>
+          <div class="eq-row"><span class="eq-lbl">Mean half-span:</span><span class="eq-val">avg of (ℓ/2)·sin θ = ℓ/π</span></div>
+          <div class="eq-row"><span class="eq-lbl">Pr(needle crosses):</span><span class="eq-val">(ℓ/π) ÷ (t/2) = 2ℓ/(tπ)</span></div>
+          <div class="eq-row"><span class="eq-lbl">By LLN as N → ∞:</span><span class="eq-val" style="color:var(--est)">(# crossings) / N  →  2ℓ/(tπ)</span></div>
+          <div class="eq-note">
+            <div class="eq-note-row">
+              <strong>Therefore:</strong>
+              <span class="eq-note-eq">π ≈ 2 × (# needles dropped) / (# crossing a line)</span>
+            </div>
+            <div class="eq-fine">Two averages do all the work: sin θ averages 2/π over [0, π), and d is uniform on [0, t/2], so a needle crosses with probability <span class="eq-m">2ℓ/(tπ)</span>. This tab always uses <span class="eq-m">ℓ = t</span> — needles as long as the line spacing, as matchsticks are on ruled paper — which reduces that probability to 2/π.</div>
+            <div class="eq-fine">π sits in the <em>denominator</em> here, unlike the dartboard on Tab ①. The estimate is therefore a ratio, slightly biased at finite N, and its interval comes from inverting the interval for the crossing probability, which swaps the two endpoints.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 3 -->
   <section id="tab-mc" class="tp">
     <div class="ctrl-row">
       <label class="ctrl-lbl" for="mc-fn">Function</label>
@@ -308,7 +412,7 @@ footer a:hover { text-decoration: underline; }
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="mc-seed">Seed</label>
         <input class="seed-inp" id="mc-seed" type="text" inputmode="numeric"
-               value="54321" maxlength="10" autocomplete="off" spellcheck="false"
+               value="12345" maxlength="10" autocomplete="off" spellcheck="false"
                aria-describedby="mc-seed-msg"
                title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('mc')"
@@ -318,6 +422,7 @@ footer a:hover { text-decoration: underline; }
         </label>
       </span>
       <button class="btn-run" id="mc-run" onclick="runMC()"><span aria-hidden="true">▶</span> Run Experiment</button>
+      <button class="btn-run2" id="mc-run100" onclick="runMCBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
       <button class="btn-clear" onclick="clearMC()">Clear history</button>
       <span class="seed-msg" id="mc-seed-msg" role="status" aria-live="polite"></span>
     </div>
@@ -366,6 +471,7 @@ footer a:hover { text-decoration: underline; }
       <div id="mc-hw">
         <svg class="hsv" id="mc-hs"></svg>
       </div>
+      <div class="hist-cap" id="mc-hits"></div>
     </div>
     <div class="sec">
       <div class="sec-hd">Random Riemann Rectangles — as M grows, width L/M shrinks</div>
@@ -425,7 +531,7 @@ function parseSeed(raw) {
 
 // The last completed run per tab. Kept so that editing the seed can update the
 // "Next run" figure while preserving the record of what the last run actually did.
-const lastRun = { pi: null, mc: null };
+const lastRun = { pi: null, bn: null, mc: null };
 
 function seedMsg(tab, text, bad) {
   const inp = document.getElementById(tab + '-seed');
@@ -489,6 +595,61 @@ function noteRun(tab, seed, runIdx, repeat) {
     : 'Run ' + runIdx + ' used seed ' + seed + '.', false);
 }
 
+// ── 100-run sweeps ─────────────────────────────────────
+const BATCH_RUNS=100;
+// The sweep walks consecutive seeds from the one in the box, rather than 100 random
+// ones, so the whole sweep is reproducible from a single number. Adjacent seeds are
+// safe here: mulberry32 avalanche-mixes them into well-separated streams (see the
+// note on the generator).
+function batchSeed(s0,i){ return (s0+i)%(SEED_MAX+1); }
+
+// Disable both run buttons, yield one turn so that state actually paints, then do
+// the work. A sweep is fast enough to be synchronous -- 100 x 10,000 darts is a few
+// tens of milliseconds -- but not so fast that a frozen-looking button is honest.
+function batchRun(tab,work){
+  const one=document.getElementById(tab+'-run'), many=document.getElementById(tab+'-run100');
+  one.disabled=true; many.disabled=true;
+  seedMsg(tab,'Running '+BATCH_RUNS+' experiments…',false);
+  setTimeout(()=>{
+    try { work(); }
+    finally { one.disabled=false; many.disabled=false; }
+  },0);
+}
+
+// Counterpart to noteRun for a sweep: names the seed range instead of one seed.
+function noteBatch(tab,s0,first,last){
+  const sLast=batchSeed(s0,BATCH_RUNS-1);
+  lastRun[tab]={idx:last,seed:sLast};
+  const range='Runs '+first+'–'+last+' used seeds '+s0+'–'+sLast+'.';
+  if(document.getElementById(tab+'-newseed').checked){
+    const next=randomSeed();
+    document.getElementById(tab+'-seed').value=String(next);
+    seedMsg(tab,range+' Next run: '+next+'.',false);
+    return;
+  }
+  seedMsg(tab,range+' Click again to repeat the whole sweep exactly.',false);
+}
+
+// Share of the intervals that covered the true value, over exactly the runs the
+// chart is showing -- so the tally and the picture can always be counted against
+// each other. timeSeriesPlot returns the count; older runs it dropped are named.
+function histCaption(id,res,what){
+  const el=document.getElementById(id);
+  if(!res||!res.shown){ el.textContent=''; return; }
+  el.innerHTML='95% intervals covering '+what+': <strong>'+res.hits+' of '+res.shown
+              +'</strong> ('+(100*res.hits/res.shown).toFixed(1)+'%)'
+              +(res.dropped?' &middot; latest '+res.shown+' of '+(res.shown+res.dropped)+' runs':'');
+}
+
+// Student-t 97.5th percentile, by the Cornish-Fisher expansion in 1/df. Within 0.001
+// of the exact value for df ≥ 5, far inside the precision anything here is drawn at.
+// Only Tab ③ needs it; the two proportion tabs use the normal quantile (see piTrial).
+function tQuantile975(df){
+  if(df<2)return 12.706;
+  const z=1.959963985, z2=z*z, z3=z2*z, z5=z3*z2, z7=z5*z2, d=df;
+  return z + (z3+z)/(4*d) + (5*z5+16*z3+3*z)/(96*d*d) + (3*z7+19*z5+17*z3-15*z)/(384*d*d*d);
+}
+
 // ── HiDPI ──────────────────────────────────────────────
 const DPR = window.devicePixelRatio || 1;
 
@@ -527,7 +688,7 @@ const FUNCS = {
 };
 
 // ── State ───────────────────────────────────────────────
-let piExps = [], mcExps = {}, piAnimId = null, mcAnimId = null, mcExpTimer = null, mcExpStep = 0;
+let piExps = [], bnExps = [], mcExps = {}, piAnimId = null, bnAnimId = null, mcAnimId = null, mcExpTimer = null, mcExpStep = 0;
 let expInitialized = false;
 const MC_EXP_STEPS = [4, 8, 16, 32, 64, 128];
 let curFn = 'sin';
@@ -544,6 +705,9 @@ function showTab(name, btn) {
   // shrinking the window below 345px does not reveal the wrong option.
   const tabSel = document.getElementById('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  // A history chart lays itself out from its container, which is zero-width while
+  // its tab is hidden, so re-render on the way in.
+  renderActiveHist();
   if (name === 'mc') {
     if (!expInitialized) {
       expInitialized = true;
@@ -584,13 +748,73 @@ function showTab(name, btn) {
       drawMCExpFrame();
       mcExpTimer = setInterval(drawMCExpFrame, 2200);
     }
-    renderMCHist();
   }
 }
 
 function showTabFromSelect(sel){ showTab(sel.value, null); }
 
-// ── Tab 1: π estimation ─────────────────────────────────
+// Redraw whichever history chart is on screen. The SVG scales with its viewBox, so
+// without this a resized window stretches the old layout instead of re-fitting it.
+function renderActiveHist(){
+  const pane=document.querySelector('.tp.active');
+  if(!pane)return;
+  if(pane.id==='tab-pi')renderPiHist();
+  else if(pane.id==='tab-bn')renderBnHist();
+  else if(pane.id==='tab-mc')renderMCHist();
+}
+let histResizeTimer=null, histLastW=0;
+function watchHistWidth(){
+  const widget=document.querySelector('.widget');
+  const onWidth=w=>{
+    // Width only: re-rendering changes the chart's height, and reacting to that
+    // would feed straight back into the observer.
+    if(w===histLastW)return;
+    histLastW=w;
+    clearTimeout(histResizeTimer);
+    histResizeTimer=setTimeout(renderActiveHist,120);
+  };
+  if(typeof ResizeObserver!=='undefined'&&widget){
+    new ResizeObserver(es=>onWidth(Math.round(es[0].contentRect.width))).observe(widget);
+  } else {
+    window.addEventListener('resize',()=>onWidth(Math.round(window.innerWidth)));
+  }
+}
+
+// ── Tab ①: π estimation by dartboard ─────────────────────
+// One dartboard experiment: seed in, interval out. keep=true also returns the dart
+// coordinates, which only a run that is going to be drawn needs to hold on to.
+function piTrial(seed,N,keep){
+  // A fresh stream per experiment, so the same seed always reproduces the run.
+  const rand=mulberry32(seed);
+  const xs=keep?[]:null, ys=keep?[]:null, ins=keep?[]:null;
+  let k=0;
+  for(let i=0;i<N;i++){
+    // Relies on left-to-right evaluation of the declarator list; do not reorder.
+    const x=rand()*2-1, y=rand()*2-1, inside=x*x+y*y<=1;
+    if(keep){xs.push(x);ys.push(y);ins.push(inside);}
+    if(inside)k++;
+  }
+  // The estimator is a proportion, so its variance is fixed by its own mean,
+  // p(1-p)/N, with no separately estimated sigma -- which is exactly the case the
+  // normal (Wald) interval is for, and why there is no t quantile here. Tab ③,
+  // which averages a continuous f and must estimate sigma, does use one.
+  const phat=k/N, se=Math.sqrt(phat*(1-phat)/N);
+  return {rec:{n:N,k,seed,estQ:phat,ciLowQ:Math.max(0,phat-1.96*se),ciHighQ:Math.min(1,phat+1.96*se)},
+          xs:xs,ys:ys,ins:ins};
+}
+function piShow(rec){
+  setText('pi-sn',rec.n.toLocaleString()); setText('pi-sk',rec.k.toLocaleString());
+  setText('pi-sq',rec.estQ.toFixed(6));    setText('pi-sp',(4*rec.estQ).toFixed(6));
+}
+function piDots(ctx,W,H,xs,ys,ins,from,to){
+  for(let i=from;i<to;i++){
+    const px=(xs[i]+1)/2*W, py=(ys[i]+1)/2*H;
+    if(ins[i]){ctx.beginPath();ctx.fillStyle=C.accept;ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
+    else{const s=2.5;ctx.strokeStyle=C.reject;ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(px-s,py-s);ctx.lineTo(px+s,py+s);
+      ctx.moveTo(px+s,py-s);ctx.lineTo(px-s,py+s);ctx.stroke();}
+  }
+}
 function runPi() {
   // Validate BEFORE disabling: the button is only re-enabled inside the animation's
   // completion branch, so an early return after disabling would lock it for good.
@@ -599,21 +823,12 @@ function runPi() {
   const N = +document.getElementById('pi-n').value;
   const btn = document.getElementById('pi-run');
   btn.disabled = true;
-  // A fresh stream on every click, so the same seed always reproduces the run.
-  const rand = mulberry32(seed);
-  const xs=[],ys=[],ins=[]; let k=0;
-  for(let i=0;i<N;i++){
-    // Relies on left-to-right evaluation of the declarator list; do not reorder.
-    const x=rand()*2-1, y=rand()*2-1, inside=x*x+y*y<=1;
-    xs.push(x);ys.push(y);ins.push(inside); if(inside)k++;
-  }
-  const phat=k/N, se=Math.sqrt(phat*(1-phat)/N);
+  const {rec,xs,ys,ins}=piTrial(seed,N,true);
   const prevPi=piExps[piExps.length-1];
   const repeatPi=!!prevPi && prevPi.seed===seed && prevPi.n===N;
-  piExps.push({n:N,k,seed,estQ:phat,ciLowQ:Math.max(0,phat-1.96*se),ciHighQ:Math.min(1,phat+1.96*se)});
+  piExps.push(rec);
   noteRun('pi',seed,piExps.length,repeatPi);
-  setText('pi-sn',N.toLocaleString()); setText('pi-sk',k.toLocaleString());
-  setText('pi-sq',phat.toFixed(6));    setText('pi-sp',(4*phat).toFixed(6));
+  piShow(rec);
 
   const cv=document.getElementById('pi-cv');
   const {ctx,W,H}=getCtx(cv);
@@ -622,19 +837,37 @@ function runPi() {
   let drawn=0; const batch=Math.max(1,Math.ceil(N/45));
   function frame(){
     const end=Math.min(drawn+batch,N);
-    for(let i=drawn;i<end;i++){
-      const px=(xs[i]+1)/2*W, py=(ys[i]+1)/2*H;
-      if(ins[i]){ctx.beginPath();ctx.fillStyle=C.accept;ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
-      else{const s=2.5;ctx.strokeStyle=C.reject;ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.moveTo(px-s,py-s);ctx.lineTo(px+s,py+s);
-        ctx.moveTo(px+s,py-s);ctx.lineTo(px-s,py+s);ctx.stroke();}
-    }
+    piDots(ctx,W,H,xs,ys,ins,drawn,end);
     drawn=end;
     if(drawn<N){piAnimId=requestAnimationFrame(frame);}
-    else{piOverlay(ctx,W,H);btn.disabled=false;}
+    else{piAnimId=null;piOverlay(ctx,W,H);btn.disabled=false;}
   }
   piAnimId=requestAnimationFrame(frame);
   renderPiHist();
+}
+// 100 experiments back to back. Only the last is drawn: 100 animations would take a
+// minute and show nothing the history chart does not show better.
+function runPiBatch(){
+  const seed=readSeed('pi');
+  if(seed===null)return;
+  const N=+document.getElementById('pi-n').value;
+  batchRun('pi',()=>{
+    if(piAnimId){cancelAnimationFrame(piAnimId);piAnimId=null;}
+    const first=piExps.length+1;
+    let last=null;
+    for(let i=0;i<BATCH_RUNS;i++){
+      const tr=piTrial(batchSeed(seed,i),N,i===BATCH_RUNS-1);
+      piExps.push(tr.rec); last=tr;
+    }
+    const cv=document.getElementById('pi-cv');
+    const {ctx,W,H}=getCtx(cv);
+    piBase(ctx,W,H);
+    piDots(ctx,W,H,last.xs,last.ys,last.ins,0,N);
+    piOverlay(ctx,W,H);
+    piShow(last.rec);
+    renderPiHist();
+    noteBatch('pi',seed,first,piExps.length);
+  });
 }
 function piBase(ctx,W,H){ctx.fillStyle=C.sqFill;ctx.fillRect(0,0,W,H);}
 function piOverlay(ctx,W,H){
@@ -656,8 +889,12 @@ function clearPi(){
 }
 function renderPiHist(){
   const hw=document.getElementById('pi-hw'), hs=document.getElementById('pi-hs');
-  timeSeriesPlot(hs,hw,piExps,e=>({est:e.estQ,ciLow:e.ciLowQ,ciHigh:e.ciHighQ,n:e.n}),
-    Math.PI/4,'π/4 = 0.7854','Estimated π/4');
+  // Plotted on the π scale, not the π/4 scale the sampling actually works on:
+  // π = 4 × π/4 is a linear rescaling, so the estimate and both interval endpoints
+  // are simply multiplied by 4. Tabs ① and ② then share one y axis and one true line.
+  histCaption('pi-hits',
+    timeSeriesPlot(hs,hw,piExps,e=>({est:4*e.estQ,ciLow:4*e.ciLowQ,ciHigh:4*e.ciHighQ,n:e.n}),
+      Math.PI,'π = 3.1416','Estimated π'), 'π');
 }
 
 // ── Pi SVG explainer ────────────────────────────────────
@@ -684,7 +921,249 @@ function drawPiExp(){
   dartSvg.setAttribute('viewBox','12 22 148 174');
 }
 
-// ── Tab 2: MC integration ───────────────────────────────
+// ── Tab ②: π estimation by Buffon's needle ─────
+// The sheet is ruled the same way for every run: five lines, and needles exactly
+// as long as the spacing between them (ℓ = t), so Pr(crossing) = 2/π throughout.
+const BN_BANDS=5;
+// A needle is a segment, not a point, so ink grows with N far faster than it does
+// on the dartboard: 5,000 of them would cover the sheet several times over. Past
+// this many, the drawing shows a representative prefix of the run and says so --
+// every needle is still counted, and the shrinking intervals carry the rest.
+const BN_DRAW=300;
+// Keyed on how many needles are actually drawn, so the sheet fills in as N grows
+// to the cap and then holds. dotAl stays high at every size: the needles are the
+// experiment, but the dots strung along the lines are the count, and they must
+// stay the loudest mark on the sheet -- the needle answer to the blue dots inside
+// the circle on Tab ①.
+function bnInk(D){
+  return D<=50  ? {lw:1.6, al:1,   dot:2.9, dotAl:1}
+       : D<=100 ? {lw:1.5, al:.8,  dot:2.6, dotAl:1}
+                : {lw:1.2, al:.5,  dot:2.3, dotAl:.95};
+}
+// Bands are numbered so that the ruled lines fall at t/2, 3t/2, ... -- every line
+// is drawn fully inside the canvas rather than half-clipped at the edges.
+function bnBand(y,t){ return Math.floor((y-t/2)/t); }
+function bnRules(ctx,W,H,t,lw){
+  ctx.strokeStyle=C.sqStroke;ctx.lineWidth=lw;ctx.setLineDash([]);
+  for(let y=t/2;y<H;y+=t){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+function bnBase(ctx,W,H,t){
+  ctx.fillStyle=C.sqFill;ctx.fillRect(0,0,W,H);
+  // Alternating strips, as on ruled paper: they keep the bands legible once the
+  // sheet fills with needles, and they cost the eye nothing when it is empty.
+  ctx.fillStyle='#f4f5fa';
+  for(let k=0;k<=Math.ceil(H/t);k+=2){
+    const yA=Math.max(0,(k-.5)*t), yB=Math.min(H,(k+.5)*t);
+    if(yB>yA)ctx.fillRect(0,yA,W,yB-yA);
+  }
+  bnRules(ctx,W,H,t,1.4);
+}
+// Run after the needles: the ruling and the crossing marks both belong on top of
+// the tangle, so that a full sheet still reads as "dots strung along the lines".
+// No border, deliberately, and no counterpart to the square on Tab ①: there the
+// square is half the estimator, since the darts are uniform inside it and π/4 is
+// the ratio of the two outlined areas. Here nothing bounds the experiment. Crossing
+// depends on a needle's height and angle alone, so needles hanging over the left and
+// right edges are drawn clipped and counted in full, and the ruling runs off both
+// sides to say what is true: the sheet carries on past the view.
+function bnOverlay(ctx,W,H,t,sn,ink){
+  bnRules(ctx,W,H,t,1.4);
+  if(sn){
+    ctx.globalAlpha=ink.dotAl;ctx.fillStyle=C.accept;
+    sn.forEach(s=>{if(s.cr){ctx.beginPath();ctx.arc(s.hx,s.hy,ink.dot,0,Math.PI*2);ctx.fill();}});
+    ctx.globalAlpha=1;
+  }
+}
+function bnDrawNeedle(ctx,s,ink){
+  // Crossing vs not must not rest on hue alone: a crossing needle is also solid
+  // and carries a dot, and a needle that misses is dashed, thinner and fainter.
+  ctx.globalAlpha=s.cr?ink.al:ink.al*.72;
+  ctx.strokeStyle=s.cr?C.accept:C.reject;
+  ctx.lineWidth=s.cr?ink.lw:ink.lw*.8;
+  ctx.setLineDash(s.cr?[]:[3,2.5]);
+  ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();
+  if(s.cr){
+    ctx.setLineDash([]);
+    ctx.globalAlpha=ink.dotAl;
+    ctx.fillStyle=C.accept;
+    ctx.beginPath();ctx.arc(s.hx,s.hy,ink.dot,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;ctx.setLineDash([]);
+}
+// Three times π, just inside the y-axis cap that timeSeriesPlot applies: an interval
+// this wide is off the chart anyway, and a finite number keeps the auto-scale sane.
+const BN_CAP=3*Math.PI;
+
+// One needle experiment: seed in, interval out. keepTo caps how many needles keep
+// their geometry -- only the drawn prefix of a drawn run needs it.
+function bnTrial(seed,N,W,H,t,keepTo){
+  const len=t;
+  // A fresh stream per experiment, so the same seed always reproduces the run.
+  const rand=mulberry32(seed);
+  const sn=[]; let h=0;
+  for(let i=0;i<N;i++){
+    const cx=rand()*W, cy=rand()*H, th=rand()*Math.PI;
+    const dx=Math.cos(th)*len/2, dy=Math.sin(th)*len/2;
+    const y1=cy-dy, y2=cy+dy;
+    // Simulated rather than assumed: does the needle actually reach across a ruled
+    // line? With ℓ = t its vertical span is at most t, so it crosses at most one.
+    // Needles poking past the left or right edge are drawn clipped but counted in
+    // full, which biases nothing: crossing depends on cy and θ alone.
+    const cr=bnBand(y1,t)!==bnBand(y2,t);
+    if(cr)h++;
+    if(i<keepTo){
+      const nd={x1:cx-dx,y1:y1,x2:cx+dx,y2:y2,cr:cr,hx:0,hy:0};
+      if(cr){
+        // Where it crosses: the first ruled line past the upper end, back-solved
+        // along the needle.
+        const yL=t/2+Math.ceil((y1-t/2)/t)*t;
+        nd.hy=yL; nd.hx=cx+(yL-cy)/dy*dx;
+      }
+      sn.push(nd);
+    }
+  }
+  // p̂ estimates 2/π, and its interval is the same Wald interval as the dartboard's.
+  // π = 2/p is decreasing in p, so inverting that interval swaps its endpoints; the
+  // cap keeps a pathological run from wrecking the y axis.
+  const phat=h/N, se=Math.sqrt(phat*(1-phat)/N);
+  const pLo=Math.max(0,phat-1.96*se), pHi=Math.min(1,phat+1.96*se);
+  const est=h>0?2/phat:NaN;
+  // No crossings means no estimate at all -- vanishingly unlikely at N ≥ 50, but it
+  // is a division by zero rather than a rounding problem, so it stays out of history.
+  const rec=h>0?{n:N,h:h,seed:seed,est:est,
+                 ciLow:pHi>0?2/pHi:BN_CAP,
+                 ciHigh:pLo>0?Math.min(2/pLo,BN_CAP):BN_CAP}:null;
+  return {rec:rec,n:N,h:h,phat:phat,est:est,sn:sn};
+}
+function bnShow(tr,drawn){
+  setText('bn-sn',tr.n.toLocaleString()); setText('bn-sk',tr.h.toLocaleString());
+  setText('bn-sq',tr.h>0?tr.phat.toFixed(6):'0.000000');
+  setText('bn-sp',tr.h>0?tr.est.toFixed(6):'undefined (0 crossings)');
+  setText('bn-shown', drawn<tr.n
+    ? 'Drawing the first ' + drawn + ' needles of ' + tr.n.toLocaleString()
+      + '; all ' + tr.n.toLocaleString() + ' are counted.'
+    : '');
+}
+function runBn(){
+  // Validate BEFORE disabling -- see the note in runPi.
+  const seed=readSeed('bn');
+  if(seed===null)return;
+  const N=+document.getElementById('bn-n').value;
+  const btn=document.getElementById('bn-run');
+  btn.disabled=true;
+  const cv=document.getElementById('bn-cv');
+  const {ctx,W,H}=getCtx(cv);
+  const t=H/BN_BANDS, D=Math.min(N,BN_DRAW), ink=bnInk(D);
+  const tr=bnTrial(seed,N,W,H,t,D);
+  const prevBn=bnExps[bnExps.length-1];
+  const repeatBn=!!prevBn && prevBn.seed===seed && prevBn.n===N;
+  if(tr.rec)bnExps.push(tr.rec);
+  noteRun('bn',seed,bnExps.length,repeatBn);
+  bnShow(tr,D);
+
+  bnBase(ctx,W,H,t);
+  if(bnAnimId)cancelAnimationFrame(bnAnimId);
+  let drawn=0; const batch=Math.max(1,Math.ceil(D/45));
+  function frame(){
+    const end=Math.min(drawn+batch,D);
+    for(let i=drawn;i<end;i++)bnDrawNeedle(ctx,tr.sn[i],ink);
+    drawn=end;
+    if(drawn<D){bnAnimId=requestAnimationFrame(frame);}
+    else{bnAnimId=null;bnOverlay(ctx,W,H,t,tr.sn,ink);btn.disabled=false;}
+  }
+  bnAnimId=requestAnimationFrame(frame);
+  renderBnHist();
+}
+// 100 experiments back to back, drawing only the last -- see runPiBatch.
+function runBnBatch(){
+  const seed=readSeed('bn');
+  if(seed===null)return;
+  const N=+document.getElementById('bn-n').value;
+  batchRun('bn',()=>{
+    if(bnAnimId){cancelAnimationFrame(bnAnimId);bnAnimId=null;}
+    const cv=document.getElementById('bn-cv');
+    const {ctx,W,H}=getCtx(cv);
+    const t=H/BN_BANDS, D=Math.min(N,BN_DRAW), ink=bnInk(D);
+    const first=bnExps.length+1;
+    let last=null;
+    for(let i=0;i<BATCH_RUNS;i++){
+      const tr=bnTrial(batchSeed(seed,i),N,W,H,t,i===BATCH_RUNS-1?D:0);
+      if(tr.rec)bnExps.push(tr.rec);
+      last=tr;
+    }
+    bnBase(ctx,W,H,t);
+    last.sn.forEach(nd=>bnDrawNeedle(ctx,nd,ink));
+    bnOverlay(ctx,W,H,t,last.sn,ink);
+    bnShow(last,D);
+    renderBnHist();
+    noteBatch('bn',seed,first,bnExps.length);
+  });
+}
+function clearBn(){
+  bnExps=[];
+  if(bnAnimId){cancelAnimationFrame(bnAnimId);bnAnimId=null;}
+  document.getElementById('bn-run').disabled=false;
+  const cv=document.getElementById('bn-cv');
+  const {ctx,W,H}=getCtx(cv);
+  const t=H/BN_BANDS;
+  bnBase(ctx,W,H,t);bnOverlay(ctx,W,H,t,null,null);
+  ['bn-sn','bn-sk','bn-sq','bn-sp'].forEach(id=>setText(id,'—'));
+  setText('bn-shown','');
+  lastRun.bn=null; seedMsg('bn','',false);
+  renderBnHist();
+}
+function renderBnHist(){
+  const hw=document.getElementById('bn-hw'), hs=document.getElementById('bn-hs');
+  histCaption('bn-hits',
+    timeSeriesPlot(hs,hw,bnExps,e=>({est:e.est,ciLow:e.ciLow,ciHigh:e.ciHigh,n:e.n}),
+      Math.PI,'π = 3.1416','Estimated π'), 'π');
+}
+
+// ── Buffon SVG explainer ────────────────────────────────
+// Cartoon of the ruled sheet: one needle crossing a line, with its distance d to
+// that line and its angle θ marked, and one needle that lands clear of them all.
+function drawBnExp(){
+  const fig=document.getElementById('bn-exp-fig');
+  const xa=10,xb=166,t=68,y0=40,half=t/2;   // ℓ = t, so the half-length is t/2
+  let g='';
+  g+=svgRect(xa-4,y0-half,xb-xa+8,t*3,C.sqFill,'none',0);
+  g+=svgRect(xa-4,y0,xb-xa+8,t,'#f4f5fa','none',0);
+  for(let i=0;i<3;i++)g+=svgLine(xa,y0+i*t,xb,y0+i*t,C.sqStroke,1.8);
+
+  // Line spacing t, dimensioned in the clear margin at the left
+  const dx0=26;
+  g+=svgLine(dx0,y0,dx0,y0+t,C.sqStroke,1.2);
+  g+=svgLine(dx0-4,y0,dx0+4,y0,C.sqStroke,1.2);
+  g+=svgLine(dx0-4,y0+t,dx0+4,y0+t,C.sqStroke,1.2);
+  g+=svgTxt(dx0+6,y0+half+5,'t',C.sqStroke,14,FF_MONO,'start','600');
+
+  // A needle that reaches over a line, with its center distance d and its angle θ
+  const cx=104,cy=126,ang=60*Math.PI/180,yL=y0+t;
+  const dx=half*Math.cos(ang), dy=half*Math.sin(ang);
+  const hx=cx+(yL-cy)/dy*dx;
+  g+=svgLine(cx-dx,cy-dy,cx+dx,cy+dy,C.accept,3.2);
+  g+=`<circle cx="${hx.toFixed(1)}" cy="${yL}" r="4.6" fill="${C.accept}"/>`;
+  g+=svgTxt(cx+dx+5,cy+dy+5,'ℓ',C.accept,14,FF_MONO,'start','600');
+  // θ where the needle meets the line, opened to the left where nothing else sits
+  const ar=22;
+  g+=`<path d="M ${(hx-ar).toFixed(1)} ${yL} A ${ar} ${ar} 0 0 1 ${(hx-ar*Math.cos(ang)).toFixed(1)} ${(yL-ar*Math.sin(ang)).toFixed(1)}" fill="none" stroke="${C.circStroke}" stroke-width="1.5"/>`;
+  g+=svgTxt(hx-ar-3,yL-7,'θ',C.circStroke,14,FF_MONO,'end','600');
+  // d: center of the needle up to the nearest line
+  g+=svgLine(cx,cy,cx,yL,C.circStroke,1.4,'3,2');
+  g+=svgLine(cx-4,yL,cx+4,yL,C.circStroke,1.4);
+  g+=`<circle cx="${cx}" cy="${cy}" r="2.6" fill="${C.circStroke}"/>`;
+  g+=svgTxt(cx+7,cy-6,'d',C.circStroke,14,FF_MONO,'start','600');
+
+  // A needle that lands clear of every line
+  const bx=110,by=70,bang=20*Math.PI/180;
+  const bdx=half*Math.cos(bang), bdy=half*Math.sin(bang);
+  g+=`<line x1="${(bx-bdx).toFixed(1)}" y1="${(by-bdy).toFixed(1)}" x2="${(bx+bdx).toFixed(1)}" y2="${(by+bdy).toFixed(1)}" stroke="${C.reject}" stroke-width="2.8" stroke-dasharray="4,3"/>`;
+
+  fig.innerHTML=g;
+  fig.setAttribute('viewBox','4 4 168 208');
+}
+
+// ── Tab ③: MC integration ──────────────────────────────
 function mcFnChange(){
   curFn=document.getElementById('mc-fn').value;
   document.getElementById('mc-bridge').style.display=curFn==='semi'?'block':'none';
@@ -789,6 +1268,34 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
   }
 }
 
+// One integration experiment: seed in, interval out. keep=true also returns the
+// sampled points, which only a run that is going to be drawn needs to hold on to.
+function mcTrial(seed,M,fn,keep){
+  const {a,b,f,trueVal}=fn, L=b-a;
+  // A fresh stream per experiment, so the same seed always reproduces the run.
+  const rand=mulberry32(seed);
+  const samples=keep?[]:null; let sum=0,sumSq=0;
+  for(let i=0;i<M;i++){const x=a+rand()*L,y=f(x);if(keep)samples.push({x,y});sum+=y;sumSq+=y*y;}
+  const mean=sum/M;
+  // Unlike the two proportion tabs, sigma is estimated here from the same M draws,
+  // which is what Student's t is for -- so the sample variance takes the M-1 divisor
+  // and the quantile comes from t, not the normal. At M = 10 the pair of corrections
+  // widens the interval by about 13%, and without them a 95% interval covers rather
+  // less than 95% of the time -- which the 100-run sweep would show as a shortfall.
+  const varS=M>1?Math.max(0,(sumSq-M*mean*mean)/(M-1)):0;
+  const se=Math.sqrt(varS/M), tq=tQuantile975(M-1), est=L*mean;
+  return {rec:{M:M,seed:seed,est:est,ciLow:L*(mean-tq*se),ciHigh:L*(mean+tq*se)},
+          M:M,L:L,sum:sum,est:est,relErr:Math.abs(est-trueVal)/trueVal,samples:samples};
+}
+function mcShow(tr,fn){
+  setText('mc-sm',tr.M.toLocaleString());
+  setText('mc-sl',tr.L===Math.PI?`π ≈ ${tr.L.toFixed(4)}`:tr.L===Math.PI/2?`π/2 ≈ ${tr.L.toFixed(4)}`:tr.L.toFixed(4));
+  setText('mc-sw',(tr.L/tr.M).toFixed(6));setText('mc-se',tr.est.toFixed(6));setText('mc-st',fn.trueStr);
+  const errEl=document.getElementById('mc-serr');
+  errEl.textContent=(tr.relErr*100).toFixed(3)+'%';
+  errEl.style.color=tr.relErr<.05?C.hit:tr.relErr<.2?C.warn:C.miss;
+  updateMCFormula({M:tr.M,L:tr.L,sum:tr.sum,est:tr.est});
+}
 function runMC(){
   // Validate BEFORE disabling — see the note in runPi.
   const seed=readSeed('mc');
@@ -798,31 +1305,19 @@ function runMC(){
   const fn=FUNCS[fkey], btn=document.getElementById('mc-run');
   btn.disabled=true;
   if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
-  const {a,b,f,trueVal}=fn, L=b-a;
 
   // Generate all samples upfront — stats are exact from the start.
-  // A fresh stream on every click, so the same seed always reproduces the run.
-  const rand=mulberry32(seed);
-  const samples=[]; let sum=0,sumSq=0;
-  for(let i=0;i<M;i++){const x=a+rand()*L,y=f(x);samples.push({x,y});sum+=y;sumSq+=y*y;}
-  const mean=sum/M, variance=Math.max(0,sumSq/M-mean*mean), se=Math.sqrt(variance/M);
-  const est=L*mean, relErr=Math.abs(est-trueVal)/trueVal;
+  const tr=mcTrial(seed,M,fn,true);
   if(!mcExps[fkey])mcExps[fkey]=[];
   const mcHist=mcExps[fkey], prevMC=mcHist[mcHist.length-1];
   const repeatMC=!!prevMC && prevMC.seed===seed && prevMC.M===M;
-  mcHist.push({M,seed,est,ciLow:L*(mean-1.96*se),ciHigh:L*(mean+1.96*se)});
+  mcHist.push(tr.rec);
   curFn=fkey;
   noteRun('mc',seed,mcHist.length,repeatMC);
 
   // Update stat cards and history immediately (before animation finishes)
-  setText('mc-sm',M.toLocaleString());
-  setText('mc-sl',L===Math.PI?`π ≈ ${L.toFixed(4)}`:L===Math.PI/2?`π/2 ≈ ${L.toFixed(4)}`:L.toFixed(4));
-  setText('mc-sw',(L/M).toFixed(6));setText('mc-se',est.toFixed(6));setText('mc-st',fn.trueStr);
-  const errEl=document.getElementById('mc-serr');
-  errEl.textContent=(relErr*100).toFixed(3)+'%';
-  errEl.style.color=relErr<.05?C.hit:relErr<.2?C.warn:C.miss;
+  mcShow(tr,fn);
   renderMCHist();
-  updateMCFormula({M,L,sum,est});
 
   // Animate rectangles one-by-one (batched so total frames ≈ 45)
   const cv=document.getElementById('mc-cv');
@@ -834,7 +1329,7 @@ function runMC(){
     // Full redraw each frame: clear → rects so far → curve+axes on top
     // Canvas is fast enough; this keeps the curve always above the rects.
     const {ctx,W,H}=getCtx(cv);
-    drawMCPlot(ctx,W,H,fn,samples.slice(0,end),M);
+    drawMCPlot(ctx,W,H,fn,tr.samples.slice(0,end),M);
     drawn=end;
     if(drawn<M){
       mcAnimId=requestAnimationFrame(frame);
@@ -844,6 +1339,31 @@ function runMC(){
     }
   }
   mcAnimId=requestAnimationFrame(frame);
+}
+// 100 experiments back to back, drawing only the last -- see runPiBatch. The sweep
+// stays on the function currently selected, which is also the history it appends to.
+function runMCBatch(){
+  const seed=readSeed('mc');
+  if(seed===null)return;
+  const M=+document.getElementById('mc-n').value;
+  const fkey=document.getElementById('mc-fn').value, fn=FUNCS[fkey];
+  batchRun('mc',()=>{
+    if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
+    if(!mcExps[fkey])mcExps[fkey]=[];
+    const mcHist=mcExps[fkey], first=mcHist.length+1;
+    let last=null;
+    for(let i=0;i<BATCH_RUNS;i++){
+      const tr=mcTrial(batchSeed(seed,i),M,fn,i===BATCH_RUNS-1);
+      mcHist.push(tr.rec); last=tr;
+    }
+    curFn=fkey;
+    const cv=document.getElementById('mc-cv');
+    const {ctx,W,H}=getCtx(cv);
+    drawMCPlot(ctx,W,H,fn,last.samples,M);
+    mcShow(last,fn);
+    renderMCHist();
+    noteBatch('mc',seed,first,mcHist.length);
+  });
 }
 function clearMC(){
   if(mcAnimId){cancelAnimationFrame(mcAnimId);mcAnimId=null;}
@@ -855,22 +1375,39 @@ function renderMCHist(){
   const hw=document.getElementById('mc-hw'), hs=document.getElementById('mc-hs');
   const fkey=document.getElementById('mc-fn').value;
   const exps=mcExps[fkey]||[], fn=FUNCS[fkey];
-  timeSeriesPlot(hs,hw,exps,e=>({est:e.est,ciLow:e.ciLow,ciHigh:e.ciHigh,n:e.M}),
-    fn.trueVal,'True = '+fn.trueStr.split(' ')[0],'∫f(x)dx  estimate');
+  histCaption('mc-hits',
+    timeSeriesPlot(hs,hw,exps,e=>({est:e.est,ciLow:e.ciLow,ciHigh:e.ciHigh,n:e.M}),
+      fn.trueVal,'True = '+fn.trueStr.split(' ')[0],'∫f(x)dx  estimate'), 'the true integral');
 }
 
 // ── Time-series history plot ────────────────────────────────────────
-// Left→right time axis; old runs pushed off left (circular buffer).
+// Left→right time axis; old runs pushed off left (circular buffer, 100 runs deep).
 // Blank axes shown on init. Fixed SVG height; viewBox scales responsively.
-// SH=260  pL=56 pR=12 pT=30 pB=52  cH=178  colW=56
+// pL=56 pR=12 pT=30 pB=52  cH=178  colW=56 at rest, narrowing to fit a long history
 function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLabel){
   // Use container width; fall back to widget when container is hidden (e.g., inactive tab)
   const widget=document.querySelector('.widget');
   const W=Math.max(300, containerEl.offsetWidth||(widget?widget.clientWidth:600));
-  const SH=260, pL=56,pR=12,pT=30,pB=52;
-  const cW=W-pL-pR, cH=SH-pT-pB;
-  const colW=56, maxVis=Math.max(1,Math.floor(cW/colW));
+  const pL=56,pR=12,pT=30,pB=52, cH=178;
+  const cW=W-pL-pR;
+  // Two legend entries side by side need about 330px. Narrower than that they stack
+  // and the plot grows by a line, rather than the second entry running off the edge.
+  const legRows=cW<330?2:1;
+  const SH=pT+cH+pB+(legRows-1)*14;
+  // Columns narrow to fit the run count before the buffer starts dropping runs, so a
+  // 100-run sweep is shown whole wherever there is room for it at all. The window
+  // stops at 100 even where more would fit: with a round hundred on screen the miss
+  // count is the percentage, and about five of them is the 5% the interval promises.
+  const COL_MAX=56, COL_MIN=7, HIST_MAX=100;
+  const want=Math.min(allExps.length,HIST_MAX);
+  let colW=COL_MAX;
+  if(want>Math.floor(cW/colW)) colW=Math.max(COL_MIN,cW/want);
+  const maxVis=Math.min(HIST_MAX,Math.max(1,Math.floor(cW/colW)));
   const shown=allExps.slice(-maxVis);
+  // Below this the per-run labels cannot fit, and the marks are drawn slimmer.
+  const dense=colW<30;
+  const barW=Math.min(6,colW*.5), capW=Math.min(5,colW*.42);
+  const dotR=Math.min(4,Math.max(1.4,colW*.34)), lwBar=colW<12?1.1:1.8;
   const firstRunIdx=allExps.length-shown.length+1;
   const pts=shown.map(accessor);
 
@@ -901,6 +1438,11 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
   h+=`<line x1="${pL}" y1="${tvy}" x2="${pL+cW}" y2="${tvy}" stroke="${C.truth}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".75"/>`;
 
   // Label drawn LAST (after CI bars) so it always sits on top
+  // The label rides on the dashed line, in the same spot however many runs are up.
+  // Its opaque patch does cover a few intervals once the columns are packed, and that
+  // is the trade taken on purpose: naming the dashed line as the true value is what
+  // makes the whole chart readable, and a label that moved around would say it less
+  // clearly. Drawn last, below, so it stays on top of the bars rather than under them.
   const lblY=tvy<pT+18?tvy+14:tvy-5;
   const lblBgW=trueLabel.length*6.8+8;
   const lblH=`<rect x="${pL+3}" y="${lblY-12}" width="${lblBgW}" height="16" fill="white" opacity=".92" rx="2"/>`
@@ -908,7 +1450,10 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
 
   // Y axis
   h+=`<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT+cH}" stroke="#ccc" stroke-width="1"/>`;
-  const prec=Math.abs(trueVal)<2?3:2;
+  // Precision from the visible window rather than the magnitude: a tight window
+  // around a large true value (π at N = 10,000) needs more decimals, not fewer.
+  const yWin=yMax-yMin;
+  const prec=yWin<0.02?5:yWin<0.2?4:yWin<2?3:2;
   for(let i=0;i<=4;i++){
     const v=yMin+i*(yMax-yMin)/4, ty=yP(v);
     h+=`<line x1="${pL-4}" y1="${ty}" x2="${pL}" y2="${ty}" stroke="#bbb" stroke-width="1"/>`;
@@ -920,6 +1465,7 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
   // X axis baseline
   h+=`<line x1="${pL}" y1="${pT+cH}" x2="${pL+cW}" y2="${pT+cH}" stroke="#ccc" stroke-width="1"/>`;
 
+  let hits=0;
   if(allExps.length===0){
     // Empty state: axes + message; true-value line already drawn above
     // Message placed in upper quarter of chart, well above the true-value line
@@ -930,27 +1476,37 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
       const yTop=yP(Math.min(yMax,p.ciHigh)), yBot=yP(Math.max(yMin,p.ciLow));
       const ym=yP(Math.min(yMax,Math.max(yMin,p.est)));
       const hit=p.ciLow<=trueVal&&trueVal<=p.ciHigh;
+      if(hit)hits++;
       const col=hit?C.hit:C.miss;
       // Capture vs miss must not rest on hue alone: a miss also gets a dashed bar and a hollow dot.
       const dash=hit?'':' stroke-dasharray="3,2.5"';
-      h+=`<rect x="${cx-3}" y="${yTop}" width="6" height="${Math.max(1,yBot-yTop)}" fill="${col}" opacity=".15" rx="1"/>`;
-      h+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="1.8"${dash}/>`;
-      h+=`<line x1="${cx-5}" y1="${yTop}" x2="${cx+5}" y2="${yTop}" stroke="${col}" stroke-width="1.8"/>`;
-      h+=`<line x1="${cx-5}" y1="${yBot}" x2="${cx+5}" y2="${yBot}" stroke="${col}" stroke-width="1.8"/>`;
-      h+=hit?`<circle cx="${cx}" cy="${ym}" r="4" fill="${col}"/>`
-             :`<circle cx="${cx}" cy="${ym}" r="3.6" fill="#fff" stroke="${col}" stroke-width="2"/>`;
-      h+=`<line x1="${cx}" y1="${pT+cH}" x2="${cx}" y2="${pT+cH+4}" stroke="#bbb" stroke-width="1"/>`;
-      h+=`<text x="${cx}" y="${pT+cH+17}" text-anchor="middle" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`;
-      h+=`<text x="${cx}" y="${pT+cH+29}" text-anchor="middle" fill="#aaa" font-size="9" font-family="${FF_MONO}">N=${p.n.toLocaleString()}</text>`;
+      h+=`<rect x="${cx-barW/2}" y="${yTop}" width="${barW}" height="${Math.max(1,yBot-yTop)}" fill="${col}" opacity=".15" rx="1"/>`;
+      h+=`<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"${dash}/>`;
+      h+=`<line x1="${cx-capW}" y1="${yTop}" x2="${cx+capW}" y2="${yTop}" stroke="${col}" stroke-width="${lwBar}"/>`;
+      h+=`<line x1="${cx-capW}" y1="${yBot}" x2="${cx+capW}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"/>`;
+      h+=hit?`<circle cx="${cx}" cy="${ym}" r="${dotR}" fill="${col}"/>`
+             :`<circle cx="${cx}" cy="${ym}" r="${dotR*.9}" fill="#fff" stroke="${col}" stroke-width="${Math.min(2,dotR/2)}"/>`;
+      if(!dense){
+        h+=`<line x1="${cx}" y1="${pT+cH}" x2="${cx}" y2="${pT+cH+4}" stroke="#bbb" stroke-width="1"/>`;
+        h+=`<text x="${cx}" y="${pT+cH+17}" text-anchor="middle" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`;
+        h+=`<text x="${cx}" y="${pT+cH+29}" text-anchor="middle" fill="#aaa" font-size="9" font-family="${FF_MONO}">N=${p.n.toLocaleString()}</text>`;
+      } else if(i===0||i===shown.length-1){
+        // Too tight for a label per column, so only the ends are named -- anchored
+        // outward so neither runs off its side of the plot.
+        const at=i===0?'start':'end', ax=i===0?pL:pL+cW;
+        h+=`<text x="${ax}" y="${pT+cH+17}" text-anchor="${at}" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`;
+        h+=`<text x="${ax}" y="${pT+cH+29}" text-anchor="${at}" fill="#aaa" font-size="9" font-family="${FF_MONO}">N=${p.n.toLocaleString()}</text>`;
+      }
     });
   }
 
-  // Legend
-  const ly=SH-14;
+  // Legend: side by side when it fits, otherwise stacked and left-aligned
+  const ly=SH-14-(legRows-1)*14;
+  const mx=legRows===1?pL+165:pL+7, my=legRows===1?ly:SH-14;
   h+=`<circle cx="${pL+7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
   h+=`<text x="${pL+15}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI captures true value</text>`;
-  h+=`<circle cx="${pL+165}" cy="${ly}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
-  h+=`<text x="${pL+173}" y="${ly+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI misses  (≈5% expected)</text>`;
+  h+=`<circle cx="${mx}" cy="${my}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
+  h+=`<text x="${mx+8}" y="${my+4}" fill="#666" font-size="10" font-family="${FF_SANS}">CI misses  (≈5% expected)</text>`;
 
   // Append label last so it renders on top of CI bars
   h+=lblH;
@@ -960,6 +1516,7 @@ function timeSeriesPlot(svgEl,containerEl,allExps,accessor,trueVal,trueLabel,yLa
   svgEl.style.width='100%';
   svgEl.style.height='auto';
   svgEl.style.display='block';
+  return {shown:shown.length, hits:hits, dropped:allExps.length-shown.length};
 }
 
 // ── MC animated explainer ────────────────────────────────
@@ -1042,16 +1599,24 @@ window.addEventListener('load',()=>{
   {const {ctx,W,H}=getCtx(piCv);piBase(ctx,W,H);piOverlay(ctx,W,H);}
   drawPiExp();
 
+  // Buffon canvas — 304×304, the same square as the dartboard so the two tabs
+  // read as the same experiment run two ways.
+  const bnCv=document.getElementById('bn-cv');
+  initHiDPI(bnCv,304,304);
+  clearBn();        // rules the empty sheet and draws the blank history chart
+  drawBnExp();
+
   // MC main canvas — 408×302  (pT=16 cH=216 pB=70)
   const mcCv=document.getElementById('mc-cv');
   initHiDPI(mcCv,408,302);
   curFn='sin'; mcDrawBase([]); resetMCStats();   // also primes the formula block
 
-  // MC animated explainer: lazy-init on first Tab 2 visit (see showTab)
-  // Tab 2 is hidden at load so clientWidth === 0; defer until it's visible.
+  // MC animated explainer: lazy-init on first Tab ③ visit (see showTab)
+  // Tab ③ is hidden at load so clientWidth === 0; defer until it's visible.
 
-  // Draw blank history chart for Tab 1 immediately (blank axes on init)
+  // Draw blank history chart for Tab ① immediately (blank axes on init)
   renderPiHist();
+  watchHistWidth();
 });
 </script>
 <footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">

@@ -26,7 +26,7 @@ below.
 
 | Directory | Description |
 | --- | --- |
-| [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π and Monte Carlo integration, with accumulating 95% confidence intervals |
+| [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, and Monte Carlo integration, with accumulating 95% confidence intervals |
 
 ---
 
