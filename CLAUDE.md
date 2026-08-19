@@ -347,9 +347,10 @@ When adding or reviewing a demo with canvas graphics, check that this dpr scalin
 
 ### Monte Carlo Methods
 
-- `monte_carlo/mc_explorer.html` *(three tabs: dartboard estimation of π, Buffon's needle, and
-  Monte Carlo integration, all with accumulating 95% confidence intervals; expected to gain further
-  tabs tailored to this course)*
+- `monte_carlo/mc_explorer.html` *(four tabs: dartboard estimation of π, Buffon's needle, area
+  estimation by a walking robot, and Monte Carlo integration. The three experiment tabs carry
+  accumulating 95% confidence intervals and a 100-run sweep; the robot tab is an animated extension
+  with no controls. Expected to gain further tabs tailored to this course)*
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.

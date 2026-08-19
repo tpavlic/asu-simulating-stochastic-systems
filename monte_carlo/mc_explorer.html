@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monte Carlo Explorer — interactive explainer</title>
-<meta name="description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
+<meta name="description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, measure a floor area from the crossings of a robot’s own trails, and integrate a function by averaging random draws, with accumulating 95% confidence intervals.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Monte Carlo Explorer — interactive explainer">
-<meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
+<meta property="og:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, measure a floor area from the crossings of a robot’s own trails, and integrate a function by averaging random draws, with accumulating 95% confidence intervals.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
-<meta property="og:image:width" content="2260">
+<meta property="og:image:width" content="2170">
 <meta property="og:image:height" content="1072">
 <meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html">
 <meta property="fb:app_id" content="2385695445236853">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Monte Carlo Explorer — interactive explainer">
-<meta name="twitter:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, integrate a function by averaging random draws, and watch 95% confidence intervals accumulate across repeated experiments.">
+<meta name="twitter:description" content="Interactive explorer for Monte Carlo estimation: estimate π by dartboard sampling and by dropping Buffon’s needles, measure a floor area from the crossings of a robot’s own trails, and integrate a function by averaging random draws, with accumulating 95% confidence intervals.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer-preview.png">
 
 <!-- Google Analytics -->
@@ -132,6 +132,15 @@ canvas { display: block; max-width: 100%; }
 .hist-empty { font-size: .85rem; color: var(--muted); font-style: italic; text-align: center; padding: 18px 0; }
 /* Capture tally under a history chart -- what the 100-run sweep is for. The height
    is reserved so the section does not jump when the first run fills it in. */
+/* Key for the estimate strip. Each mark means one thing: a dot is a walk, an open
+   circle is the walk on screen, and the capped line is the interval. */
+/* The cavity's two labels sit above the canvas rather than inside it: drawn on the
+   canvas they landed on the cavity wall, and no margin makes that reliably safe. */
+.ra-cv-hd { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: .72rem; color: var(--muted); margin-bottom: 7px; }
+#ra-plan { color: var(--accent); font-weight: 700; }
+.ra-key { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; font-size: .74rem; color: var(--muted); margin: 10px 0 12px; }
+.ra-key span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ra-rug-hd { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
 .hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; min-height: 1.2em; }
 .hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
 svg.hsv { display: block; width: 100%; height: auto; }
@@ -143,7 +152,7 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .exp-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
 .exp-fig  { flex: 0 0 auto; width: 172px; height: auto; display: block; }
 .exp-math { flex: 1 1 380px; min-width: 0; display: block; }
-/* Shared equation vocabulary — used by the Tab ① and ② explainers and the Tab ③
+/* Shared equation vocabulary — used by the Tab ① and ② explainers and the Tab ④
    formula block. Neutral names on purpose: further tabs are expected to reuse these. */
 .eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
 .eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
@@ -162,7 +171,7 @@ svg.hsv { display: block; width: 100%; height: auto; }
 /* Inline symbols inside prose. The script small l (U+2113) has no glyph in Outfit
    and falls back to a mismatched face, so any prose carrying it switches to mono. */
 .eq-m { font-family: 'IBM Plex Mono',monospace; font-size: .95em; color: inherit; }
-/* Compact scope for the Tab ③ block, which lives in the narrow stats column */
+/* Compact scope for the Tab ④ block, which lives in the narrow stats column */
 .mc-eq { margin-bottom: 10px; }
 .mc-eq .eq-row  { padding: 2px 0; }
 .mc-eq .eq-lbl  { min-width: 104px; font-size: .8rem; }
@@ -171,7 +180,7 @@ svg.hsv { display: block; width: 100%; height: auto; }
 .mc-eq .eq-note-eq { font-size: .82rem; }
 .mc-eq .eq-fine    { font-size: .74rem; color: var(--truth); }
 /* The font bump below is scoped to the Tab ① and ② explainers, which go full-width
-   here. Tab ③'s block is still a narrow sibling of the canvas card between 620 and
+   here. Tab ④'s block is still a narrow sibling of the canvas card between 620 and
    680px, so it must not inherit the enlargement. */
 @media (max-width: 680px) {
   .exp-wrap { flex-direction: column; gap: 10px; }
@@ -201,11 +210,11 @@ footer a:hover { text-decoration: underline; }
   background: var(--card); color: var(--accent); cursor: pointer;
   margin-bottom: 14px; appearance: auto;
 }
-/* The three tab labels need ~600px of viewport side by side, so swap to the
+/* The four tab labels need ~791px of viewport side by side, so swap to the
    dropdown before they would wrap. Expressed in em rather than px so the
    switch also happens sooner for a reader whose default font size is larger:
    in a media query, em tracks the browser's default font size. */
-@media (max-width: 38em) {
+@media (max-width: 50em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -223,12 +232,14 @@ footer a:hover { text-decoration: underline; }
   <nav class="tabs">
     <button class="tab active" data-tab="pi" onclick="showTab('pi',this)">① Est. π: Dartboard</button>
     <button class="tab" data-tab="bn" onclick="showTab('bn',this)">② Est. π: Buffon’s Needle</button>
-    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">③ MC Integration</button>
+    <button class="tab" data-tab="ra" onclick="showTab('ra',this)">③ Est. Area by Robot</button>
+    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">④ MC Integration</button>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTabFromSelect(this)">
     <option value="pi">① Est. π: Dartboard</option>
     <option value="bn">② Est. π: Buffon’s Needle</option>
-    <option value="mc">③ MC Integration</option>
+    <option value="ra">③ Est. Area by Robot</option>
+    <option value="mc">④ MC Integration</option>
   </select>
 
   <!-- TAB 1 -->
@@ -392,8 +403,12 @@ footer a:hover { text-decoration: underline; }
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- TAB 3 -->
+  <section id="tab-ra" class="tp">
     <div class="sec">
-      <div class="sec-hd">The same count, read backwards: measuring area</div>
+      <div class="sec-hd">Buffon’s needle extension: the same count, read backwards, measures area</div>
       <div class="exp-note">Two sets of randomly scattered lines of total lengths S and L that are thrown across a region of area A cross each other about <span class="eq-m">2SL/(πA)</span> times. The ruled sheet above is the case where one of the two sets is the ruling itself. Inside a region of area A, lines spaced t apart have a total length of A/t, and the general count then collapses back to the <span class="eq-m">2ℓ/(tπ)</span> per needle that this tab counts.</div>
       <div class="eq-row"><span class="eq-lbl">Crossings expected:</span><span class="eq-val">N ≈ 2SL/(πA)</span></div>
       <div class="eq-row"><span class="eq-lbl">Solve it for π:</span><span class="eq-val">π ≈ 2SL/(AN)&nbsp;– the area is known, and so counting crossings measures π</span></div>
@@ -402,9 +417,36 @@ footer a:hover { text-decoration: underline; }
         <div class="eq-fine"><a href="https://doi.org/10.1098/rspb.2000.1069" target="_blank" rel="noopener">Mallon and Franks (2000)</a> showed that crevice-dwelling <em>Temnothorax albipennis</em> ants may be sizing up new nest candidates using a method that works because of the relationship above. Scout ants enter the nest and lay down a random trail on its floor, acting like the first set of randomly scattered lines. The next time the scout enters the nest, she can count how often she crosses her previous trail. By the expression above, that count can be used to estimate the area of the cavity. A robot with an odometer and no map can do the same thing, which allows for estimating area without energetically and computationally costly sensing systems like LIDAR.</div>
       </div>
     </div>
+    <div class="sec">
+      <div class="sec-hd">A robot pacing a cavity it cannot see</div>
+      <div class="exp-note">The robot fixes how far it will walk before it sets out. It paces the cavity for that distance with its pen down, leaves, and paces it again in a second color. Every crossing between the two trails is marked, and the count alone gives the floor area: the robot never measures a wall and never sees the room. The animation works through four prescribed distances in turn, and each finished pair drops one estimate into that distance&rsquo;s own row on the right, where the rows show what distance buys. The cavity&rsquo;s floor is 875 mm², the same as the standard nest in the ant study, where a scout&rsquo;s median first visit covered 486 mm.</div>
+      <div class="viz-row">
+        <div class="cv-card">
+          <div class="ra-cv-hd">
+            <span>cavity floor: 875 mm², unknown to the robot</span>
+            <span id="ra-plan">planned distance: 100 mm each pass</span>
+          </div>
+          <canvas class="exp-cv" id="ra-cv"></canvas>
+          <div class="cv-leg" id="ra-cap">Loading…</div>
+        </div>
+        <div class="stats-panel">
+          <div class="ra-rug-hd">Estimates by prescribed path length</div>
+          <div id="ra-rugwrap"><svg class="hsv" id="ra-rug"></svg></div>
+          <div class="ra-key">
+            <span><svg width="13" height="11" viewBox="0 0 13 11" aria-hidden="true"><circle cx="6.5" cy="5.5" r="2.6" fill="var(--accent)" opacity=".55"/></svg>one pair of walks</span>
+            <span><svg width="13" height="11" viewBox="0 0 13 11" aria-hidden="true"><circle cx="6.5" cy="5.5" r="3.2" fill="#fff" stroke="var(--est)" stroke-width="1.8"/></svg>the pair just shown</span>
+            <span><svg width="36" height="11" viewBox="0 0 36 11" aria-hidden="true"><line x1="2" y1="5.5" x2="34" y2="5.5" stroke="var(--accent)" stroke-width="1.3"/><line x1="2" y1="1.5" x2="2" y2="9.5" stroke="var(--accent)" stroke-width="1.3"/><line x1="34" y1="1.5" x2="34" y2="9.5" stroke="var(--accent)" stroke-width="1.3"/><circle cx="18" cy="5.5" r="2.8" fill="var(--accent)"/></svg>mean and its 95% interval</span>
+            <span><svg width="11" height="13" viewBox="0 0 11 13" aria-hidden="true"><line x1="5.5" y1="0" x2="5.5" y2="13" stroke="var(--truth)" stroke-width="1.6" stroke-dasharray="4,2.5"/></svg>true area, 875 mm²</span>
+          </div>
+          <div class="eq-fine" id="ra-rug-note">Because the robot picks its distance before it sets out, every walk in a row is exactly that long and their estimates pool. The rows differ in nothing else.</div>
+        </div>
+      </div>
+      <div class="eq-hr"></div>
+      <div class="eq-fine">Tab ④ reaches an area a different way. Monte Carlo integration samples points across a domain that is already known and averages the height of a function there, which measures the area under a curve. The robot has no map to sample from, and so it counts crossings instead. Both recover an area from nothing but random samples.</div>
+    </div>
   </section>
 
-  <!-- TAB 3 -->
+  <!-- TAB 4 -->
   <section id="tab-mc" class="tp">
     <div class="ctrl-row">
       <label class="ctrl-lbl" for="mc-fn">Function</label>
@@ -723,6 +765,8 @@ function showTab(name, btn) {
   // A history chart lays itself out from its container, which is zero-width while
   // its tab is hidden, so re-render on the way in.
   renderActiveHist();
+  if (name === 'ra') raStart(); else raStop();
+  if (name !== 'mc' && mcExpTimer !== null) { clearInterval(mcExpTimer); mcExpTimer = null; }
   if (name === 'mc') {
     if (!expInitialized) {
       expInitialized = true;
@@ -761,8 +805,10 @@ function showTab(name, btn) {
       }
 
       drawMCExpFrame();
-      mcExpTimer = setInterval(drawMCExpFrame, 2200);
     }
+    // Restarted on the way in and cleared on the way out, so that nothing animates
+    // to a hidden canvas.
+    if (mcExpTimer === null) mcExpTimer = setInterval(drawMCExpFrame, 2200);
   }
 }
 
@@ -1178,7 +1224,287 @@ function drawBnExp(){
   fig.setAttribute('viewBox','4 4 168 208');
 }
 
-// ── Tab ③: MC integration ──────────────────────────────
+// ── Tab ③: area by a walking robot ─────────────────────
+// An animation, not an experiment: no seed, no history, nothing to run. The cavity
+// is a convex polygon, and both trails are correlated random walks that reflect off
+// its walls, and so the trails are the only thing that ever touches the geometry.
+//
+// Over 300 replications of this exact walk, the estimate came out at 119%, 104%,
+// 101% and 100.3% of the true area at the four lengths below, with run-to-run
+// spreads of 48%, 23%, 10% and 7%. That progression is what the stacked rows are
+// for. A walk that scribbles rather than sweeps fails outright as well (140% of true
+// at a turn jitter of 1.5 rad/step), which is why RA_TURN is small: the walk has to
+// cover the floor, not mill about in one corner of it.
+const RA_POLY=[[0.03,0.24],[0.12,0.08],[0.34,0.02],[0.62,0.04],[0.85,0.11],
+               [0.97,0.26],[0.90,0.42],[0.66,0.49],[0.36,0.48],[0.12,0.40]];
+// Because the robot decides how far it will walk before it sets out, these are round
+// numbers rather than whatever a multiple of √A works out to, and the animation
+// takes them in order. They stay separate rows in the panel: each length has its own
+// sampling distribution, and pooling across them would average four different things.
+const RA_LENS=[100,200,350,500];  // prescribed path length, mm, walked in this order
+// Step and heading jitter set the walk's persistence length, which is what the
+// identity is sensitive to; the pair below keeps that length and draws a smoother
+// curve than a longer step with a sharper turn would.
+const RA_STEP=0.04, RA_TURN=0.247; // step length (also in √A) and heading jitter, rad
+const RA_MM2=875;                 // the cavity is drawn as the ant study's 875 mm² nest
+const RA_PHASE=[1100,1900,1500];  // lay the first trail, lay the second, hold the result
+let raIdx=0, raRun=null, raAnimId=null, raT0=0, raReady=false;
+
+// Math.random on purpose: this illustration free-runs and must never draw from a
+// seeded experiment stream. See the mulberry32 use in runPi/runBn/runMC.
+function raGauss(){ return Math.sqrt(-2*Math.log(1-Math.random()))*Math.cos(2*Math.PI*Math.random()); }
+function raShoelace(P){let a=0;for(let i=0;i<P.length;i++){const q=P[i],r=P[(i+1)%P.length];a+=q[0]*r[1]-r[0]*q[1];}return Math.abs(a)/2;}
+function raInside(P,x,y){
+  let sgn=0;
+  for(let i=0;i<P.length;i++){
+    const a=P[i], b=P[(i+1)%P.length];
+    const z=(b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);
+    if(z!==0){ if(sgn===0)sgn=Math.sign(z); else if(Math.sign(z)!==sgn)return false; }
+  }
+  return true;
+}
+// First wall the step runs into, as a fraction t along it, with that wall's direction.
+function raHit(P,x,y,dx,dy){
+  let best=null;
+  for(let i=0;i<P.length;i++){
+    const a=P[i], b=P[(i+1)%P.length], ex=b[0]-a[0], ey=b[1]-a[1];
+    const den=dx*ey-dy*ex; if(Math.abs(den)<1e-12)continue;
+    const t=((a[0]-x)*ey-(a[1]-y)*ex)/den, u=((a[0]-x)*dy-(a[1]-y)*dx)/den;
+    if(t>1e-9&&t<=1+1e-9&&u>=-1e-9&&u<=1+1e-9&&(!best||t<best.t))best={t:t,ex:ex,ey:ey};
+  }
+  return best;
+}
+// A walk of exactly `len`, reflecting off the walls, staying inside the cavity.
+function raWalk(P,len,step,turn){
+  let x,y,guard=0;
+  const xs=P.map(p=>p[0]), ys=P.map(p=>p[1]);
+  const x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  const y0=Math.min.apply(null,ys), y1=Math.max.apply(null,ys);
+  do{ x=x0+Math.random()*(x1-x0); y=y0+Math.random()*(y1-y0); }while(!raInside(P,x,y)&&guard++<500);
+  let th=Math.random()*2*Math.PI, left=len;
+  const pts=[[x,y]];
+  guard=0;
+  while(left>1e-9&&guard++<40000){
+    th+=turn*raGauss();
+    let d=Math.min(step,left);
+    while(d>1e-9&&guard++<40000){
+      const dx=Math.cos(th)*d, dy=Math.sin(th)*d, h=raHit(P,x,y,dx,dy);
+      if(!h||h.t>1){ x+=dx; y+=dy; pts.push([x,y]); left-=d; d=0; }
+      else{
+        x+=dx*h.t; y+=dy*h.t; pts.push([x,y]);
+        const used=d*h.t; left-=used; d-=used;
+        const el=Math.hypot(h.ex,h.ey), nx=-h.ey/el, ny=h.ex/el;   // wall normal
+        const ux=Math.cos(th), uy=Math.sin(th), dot=ux*nx+uy*ny;
+        th=Math.atan2(uy-2*dot*ny, ux-2*dot*nx);
+        x+=Math.cos(th)*1e-4; y+=Math.sin(th)*1e-4;                // nudge off the wall
+      }
+    }
+  }
+  return pts;
+}
+// Proper crossings between the two trails, each tagged with the second trail's
+// segment index so a dot can appear at the moment the robot walks through it.
+function raCrossings(A,B){
+  const o=(ax,ay,bx,by,cx,cy)=>Math.sign((bx-ax)*(cy-ay)-(by-ay)*(cx-ax));
+  const out=[];
+  for(let j=0;j<B.length-1;j++){
+    const c=B[j], d=B[j+1];
+    for(let i=0;i<A.length-1;i++){
+      const a=A[i], b=A[i+1];
+      if(Math.min(a[0],b[0])>Math.max(c[0],d[0])||Math.max(a[0],b[0])<Math.min(c[0],d[0]))continue;
+      if(Math.min(a[1],b[1])>Math.max(c[1],d[1])||Math.max(a[1],b[1])<Math.min(c[1],d[1]))continue;
+      if(o(a[0],a[1],b[0],b[1],c[0],c[1])*o(a[0],a[1],b[0],b[1],d[0],d[1])<0 &&
+         o(c[0],c[1],d[0],d[1],a[0],a[1])*o(c[0],c[1],d[0],d[1],b[0],b[1])<0){
+        const r1=(b[0]-a[0])*(d[1]-c[1])-(b[1]-a[1])*(d[0]-c[0]);
+        const t=((c[0]-a[0])*(d[1]-c[1])-(c[1]-a[1])*(d[0]-c[0]))/r1;
+        out.push({x:a[0]+t*(b[0]-a[0]), y:a[1]+t*(b[1]-a[1]), j:j});
+      }
+    }
+  }
+  return out;
+}
+// Every estimate the animation has produced, filed by prescribed length. Nothing is
+// pre-computed: each mark is a pair of walks the viewer watched, which is the only
+// way an interval narrowing in front of them means anything.
+let raEst=RA_LENS.map(()=>[]), raNewest=null;
+const RA_RUG_MAX=2000;            // mm², the axis stops here and overflow is flagged
+function raRug(){
+  const wrap=document.getElementById('ra-rugwrap'), svg=document.getElementById('ra-rug');
+  if(!wrap||!svg)return;
+  const W=Math.max(250, wrap.offsetWidth||360);
+  const pL=54,pR=16,pT=8,pB=30, rowH=36, rows=RA_LENS.length;
+  const H=pT+rows*rowH+pB, cW=W-pL-pR;
+  const xp=v=>pL+Math.min(v,RA_RUG_MAX)/RA_RUG_MAX*cW;
+  let h='';
+  h+=`<rect x="${pL}" y="${pT}" width="${cW}" height="${rows*rowH}" fill="${C.bg}" rx="3"/>`;
+  const tx=xp(RA_MM2);
+  RA_LENS.forEach((L,i)=>{
+    const y0=pT+i*rowH, mid=y0+rowH/2, es=raEst[i], live=(i===raIdx);
+    // The length being walked right now is marked, so that the animation and the row
+    // it is filling read as one thing.
+    if(live)h+=`<rect x="${pL}" y="${y0}" width="${cW}" height="${rowH}" fill="${C.accent}" opacity=".045"/>`;
+    if(i)h+=`<line x1="${pL}" y1="${y0}" x2="${pL+cW}" y2="${y0}" stroke="#e8e4e5" stroke-width="1"/>`;
+    h+=`<text x="${pL-6}" y="${mid-1}" text-anchor="end" fill="${live?C.accent:C.muted}" font-size="10" font-weight="${live?700:400}" font-family="${FF_MONO}">${L} mm</text>`;
+    h+=`<text x="${pL-6}" y="${mid+10}" text-anchor="end" fill="#aaa" font-size="8.5" font-family="${FF_MONO}">n=${es.length}</text>`;
+    // Two bands per row, so that no mark is told apart from another by size alone:
+    // the walks themselves sit on the upper line, and the summary of them sits below.
+    const yDot=mid-7, yBar=mid+9;
+    // The walk just animated is an open circle in the trail color, the one mark the
+    // eye should be able to find while it is still on the canvas.
+    const fresh=raNewest===i;
+    es.forEach((e,j)=>{
+      const hot=fresh&&j===es.length-1;
+      if(e>RA_RUG_MAX)
+        h+=`<path d="M ${pL+cW-2} ${yDot-4.5} l 6 4.5 l -6 4.5 z" fill="${hot?C.est:C.accent}" opacity="${hot?1:.55}"/>`;
+      else if(hot)
+        h+=`<circle cx="${xp(e)}" cy="${yDot}" r="3.6" fill="#fff" stroke="${C.est}" stroke-width="2"/>`;
+      else
+        h+=`<circle cx="${xp(e)}" cy="${yDot}" r="2.6" fill="${C.accent}" opacity=".5"/>`;
+    });
+    // A 95% interval for this row's mean, on the same t quantile Tab ④ uses. It needs
+    // two walks before it exists at all, and it narrows as they accumulate.
+    if(es.length>1){
+      const m=es.reduce((x,y)=>x+y,0)/es.length;
+      const sd=Math.sqrt(es.reduce((x,y)=>x+(y-m)*(y-m),0)/(es.length-1));
+      const half=tQuantile975(es.length-1)*sd/Math.sqrt(es.length);
+      const lo=xp(Math.max(0,m-half)), hi=xp(m+half);
+      h+=`<line x1="${lo}" y1="${yBar}" x2="${hi}" y2="${yBar}" stroke="${C.accent}" stroke-width="1.3"/>`;
+      h+=`<line x1="${lo}" y1="${yBar-4}" x2="${lo}" y2="${yBar+4}" stroke="${C.accent}" stroke-width="1.3"/>`;
+      h+=`<line x1="${hi}" y1="${yBar-4}" x2="${hi}" y2="${yBar+4}" stroke="${C.accent}" stroke-width="1.3"/>`;
+      h+=`<circle cx="${xp(m)}" cy="${yBar}" r="2.8" fill="${C.accent}"/>`;
+    }
+  });
+  h+=`<line x1="${tx}" y1="${pT}" x2="${tx}" y2="${pT+rows*rowH}" stroke="${C.truth}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".85"/>`;
+  const ay=pT+rows*rowH;
+  h+=`<text x="${pL}" y="${ay+13}" text-anchor="start" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">0</text>`;
+  h+=`<text x="${tx}" y="${ay+13}" text-anchor="middle" fill="${C.truth}" font-size="9" font-weight="700" font-family="${FF_MONO}">${RA_MM2}</text>`;
+  h+=`<text x="${pL+cW}" y="${ay+13}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${RA_RUG_MAX}+</text>`;
+  h+=`<text x="${pL+cW/2}" y="${ay+25}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">estimated floor area (mm²)</text>`;
+  svg.innerHTML=h;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.style.width='100%'; svg.style.height='auto'; svg.style.display='block';
+}
+const RA_M=14;   // margin between the cavity and the edge of the canvas
+// Cavity polygon in canvas pixels, plus its true area
+function raGeom(W,H){
+  const xs=RA_POLY.map(p=>p[0]), ys=RA_POLY.map(p=>p[1]);
+  const x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  const y0=Math.min.apply(null,ys), y1=Math.max.apply(null,ys);
+  const sc=Math.min((W-2*RA_M)/(x1-x0), (H-2*RA_M)/(y1-y0));
+  const ox=(W-(x1-x0)*sc)/2-x0*sc, oy=(H-(y1-y0)*sc)/2-y0*sc;
+  const P=RA_POLY.map(p=>[p[0]*sc+ox, p[1]*sc+oy]);
+  return {P:P, A:raShoelace(P)};
+}
+function raBuild(){
+  const cv=document.getElementById('ra-cv');
+  const W=+cv.dataset.logW, H=+cv.dataset.logH;
+  const g=raGeom(W,H), P=g.P, A=g.A, R=Math.sqrt(A);
+  // Report in millimetres by scaling the drawn cavity to the study's 875 mm² nest,
+  // then read the prescribed path length back into canvas pixels.
+  const mm2=RA_MM2/A, mm=Math.sqrt(mm2);
+  const len=RA_LENS[raIdx]/mm;
+  const pa=raWalk(P,len,RA_STEP*R,RA_TURN), pb=raWalk(P,len,RA_STEP*R,RA_TURN);
+  const xr=raCrossings(pa,pb);
+  setText('ra-plan','planned distance: '+RA_LENS[raIdx]+' mm each pass');
+  raRun={P:P,A:A,len:len,pa:pa,pb:pb,xr:xr,mm:mm,mm2:mm2,
+         est:xr.length?2*len*len/(Math.PI*xr.length)*mm2:null};
+}
+function raTrail(ctx,pts,upto,color,lw){
+  if(upto<1)return;
+  ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<=upto&&i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.stroke();
+}
+function raDraw(na,nb,showEst){
+  const cv=document.getElementById('ra-cv');
+  const {ctx,W,H}=getCtx(cv);
+  const r=raRun;
+  ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+  ctx.beginPath();
+  r.P.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.fillStyle=C.sqFill;ctx.fill();
+  ctx.strokeStyle=C.sqStroke;ctx.lineWidth=2.2;ctx.stroke();
+  raTrail(ctx,r.pa,na,C.truth,1.5);
+  raTrail(ctx,r.pb,nb,C.est,1.5);
+  const shown=r.xr.filter(c=>c.j<nb);
+  ctx.fillStyle=C.accent;
+  shown.forEach(c=>{ctx.beginPath();ctx.arc(c.x,c.y,2.6,0,Math.PI*2);ctx.fill();});
+  // The robot itself, at the head of whichever trail it is still laying
+  const head=nb>0?(r.pb[Math.min(nb,r.pb.length-1)]):(na>0&&na<r.pa.length?r.pa[na]:null);
+  if(head&&!showEst){
+    ctx.fillStyle=nb>0?C.est:C.truth;
+    ctx.beginPath();ctx.arc(head[0],head[1],4,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1.4;ctx.stroke();
+  }
+  const L=Math.round(r.len*r.mm);
+  const cap=document.getElementById('ra-cap');
+  if(!showEst){
+    cap.textContent=nb>0
+      ? 'Second trail, '+L+' mm long: '+shown.length+' crossing'+(shown.length===1?'':'s')+' so far.'
+      : 'First trail, '+L+' mm long, laid down and left behind.';
+  } else {
+    cap.textContent=r.est===null
+      ? 'S = L = '+L+' mm with no crossings at all, and so no estimate from this walk.'
+      : 'S = L = '+L+' mm,  N = '+r.xr.length+' crossings,  2SL/(πN) = '+Math.round(r.est)
+        +' mm²  (true area '+RA_MM2+' mm²)';
+  }
+}
+function raFrame(ts){
+  if(!raT0)raT0=ts;
+  const el=ts-raT0, p0=RA_PHASE[0], p1=p0+RA_PHASE[1], p2=p1+RA_PHASE[2];
+  const na=raRun.pa.length-1, nb=raRun.pb.length-1;
+  if(el<p0)       raDraw(Math.round(na*el/p0), 0, false);
+  else if(el<p1)  raDraw(na, Math.round(nb*(el-p0)/RA_PHASE[1]), false);
+  else            raDraw(na, nb, true);
+  if(el>=p2){
+    if(raRun.est!==null){raEst[raIdx].push(raRun.est);raNewest=raIdx;}   // joins its row
+    raIdx=(raIdx+1)%RA_LENS.length; raBuild(); raRug(); raT0=0;
+  }
+  raAnimId=requestAnimationFrame(raFrame);
+}
+// Sized to the cavity's own proportions rather than to the column: this is a floor
+// plan, and so the canvas is cut to fit it snugly and centered, and it stops at a
+// height that keeps the whole tab shorter than its siblings.
+const RA_AR=(function(){
+  const xs=RA_POLY.map(p=>p[0]), ys=RA_POLY.map(p=>p[1]);
+  return (Math.max.apply(null,xs)-Math.min.apply(null,xs))/
+         (Math.max.apply(null,ys)-Math.min.apply(null,ys));
+})();
+function raSize(){
+  const cv=document.getElementById('ra-cv'), sec=cv.closest('.sec');
+  if(!sec)return false;
+  const H_MAX=290;
+  let W=Math.max(240,Math.min(500,sec.clientWidth-26));
+  let H=Math.round((W-2*RA_M)/RA_AR)+2*RA_M;
+  if(H>H_MAX){ H=H_MAX; W=Math.round((H-2*RA_M)*RA_AR)+2*RA_M; }
+  if(Math.abs(W-(+cv.dataset.logW||0))<=2)return false;
+  cv.dataset.logW=W; cv.dataset.logH=H;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px'; cv.style.height=H+'px'; cv.style.margin='0 auto';
+  return true;
+}
+function raStart(){
+  if(!raReady){
+    raReady=true;
+    raSize();
+    if(typeof ResizeObserver!=='undefined'){
+      let t=null;
+      new ResizeObserver(()=>{clearTimeout(t);t=setTimeout(()=>{if(raSize()){raBuild();raT0=0;}raRug();},80);})
+        .observe(document.getElementById('ra-cv').closest('.sec'));
+    }
+    raBuild(); raRug();
+  }
+  if(raAnimId===null){ raT0=0; raAnimId=requestAnimationFrame(raFrame); }
+}
+// Stopped on the way out, unlike the Tab ④ explainer's interval: this one runs a
+// frame at a time and would otherwise keep drawing to a hidden canvas.
+function raStop(){
+  if(raAnimId!==null){ cancelAnimationFrame(raAnimId); raAnimId=null; }
+}
+
+// ── Tab ④: MC integration ──────────────────────────────
 function mcFnChange(){
   curFn=document.getElementById('mc-fn').value;
   document.getElementById('mc-bridge').style.display=curFn==='semi'?'block':'none';
@@ -1626,8 +1952,8 @@ window.addEventListener('load',()=>{
   initHiDPI(mcCv,408,302);
   curFn='sin'; mcDrawBase([]); resetMCStats();   // also primes the formula block
 
-  // MC animated explainer: lazy-init on first Tab ③ visit (see showTab)
-  // Tab ③ is hidden at load so clientWidth === 0; defer until it's visible.
+  // MC animated explainer: lazy-init on first Tab ④ visit (see showTab)
+  // Tab ④ is hidden at load so clientWidth === 0; defer until it's visible.
 
   // Draw blank history chart for Tab ① immediately (blank axes on init)
   renderPiHist();
