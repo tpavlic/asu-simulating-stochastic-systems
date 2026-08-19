@@ -331,6 +331,40 @@ ctx.setTransform(dpr, 0, 0, dpr, 0, 0);                        // all drawing be
 
 When adding or reviewing a demo with canvas graphics, check that this dpr scaling is present.
 
+**Plain SVG sidesteps all of this and is usually the better choice.** A `<svg>` with a `viewBox`
+and no `width`/`height` attributes is resolution-independent: it is sharp at any zoom on any
+display, it needs no `devicePixelRatio` bookkeeping, and it needs no redraw when its container
+resizes. Reach for `<canvas>` when a plot is redrawn every frame (an animation, a live simulation)
+or when it carries so many marks that one DOM node each would be slow — a few thousand is the rough
+threshold. For a plot that changes only when the reader changes something, use SVG.
+
+## Mobile and touch
+
+Every widget gets opened on a phone, both directly and inside the Canvas app, so treat a 390px
+touch screen as a first-class target rather than a degraded one. When adding or reviewing a demo,
+check all of the following.
+
+- **No horizontal scroll at 390px, on every tab.** Measure it (`document.documentElement.scrollWidth`
+  against `clientWidth`) rather than eyeballing it, and check each tab separately, since one tab
+  overflowing is easy to miss. The usual culprits are a `white-space: nowrap` label sitting beside a
+  control and a wide table that is not inside an `overflow-x: auto` wrapper.
+- **Touch targets at 24×24 CSS pixels or more** (WCAG 2.5.8). Grow the *hit area* with padding and
+  `min-height`, not the drawn control — a checkbox scaled to 24px square dominates the row it sits
+  in. A 17px checkbox inside a `<label>` that clears 24px is fine, because the label is what a
+  finger actually hits.
+- **Range inputs need an explicit height.** A default one is about 16px tall, which is both under
+  the minimum and genuinely hard to hit; `height: 26px` grows the strip a finger lands on without
+  changing how the thumb looks.
+- **`-webkit-text-size-adjust: 100%` on `body`.** iOS Safari inflates text when the phone is turned
+  to landscape, which breaks every width the layout depends on.
+- **A hover-only affordance is invisible on a touch screen.** Anything revealed on `:hover` needs an
+  `@media (hover: none)` rule that keeps it visible, plus a sentence somewhere on the page saying
+  the feature exists — a hover reveal is undiscoverable even with a mouse if nothing hints at it.
+- **Drag-and-drop does not exist on a phone.** Anything droppable needs a file input or a paste box
+  beside it.
+- **Test in a real touch context, not a narrow desktop window.** Touch emulation is what catches a
+  control that a mouse can drive and a finger cannot; a resized desktop window will not.
+
 ## Site structure
 
 - `index.html` — the root landing page; self-contained HTML (no Jekyll/build step)
