@@ -336,6 +336,12 @@ details.why .why-body code { background: var(--accent-wash); padding: 1px 4px; b
         border-radius: 0 6px 6px 0; padding: 8px 11px; font-size: .81rem;
         line-height: 1.55; margin-top: 10px; }
 .note.quiet { background: var(--chart-bg); border-left-color: var(--muted); }
+/* A caution that is neither a problem nor an aside. Dark ochre rather than
+   ASU gold: gold is 1.57:1 on white and unusable for a rule this thin (see
+   THEME.md), whereas the ochre reads at 5.09:1 and the wash behind it stays
+   pale enough for body text to sit on. */
+.note.warn { background: rgba(139,105,20,.10); border-left-color: var(--warn); }
+.note.warn strong { color: var(--warn); }
 .hint { background: var(--chart-bg); border-radius: 6px; padding: 9px 11px; font-size: .81rem;
         color: var(--muted); line-height: 1.55; }
 
@@ -967,7 +973,7 @@ footer a:hover { text-decoration: underline; }
 <section id="tab-arr" class="tp">
 
   <section class="sec">
-    <div class="sec-hd">1 &middot; Arrival times <span class="sec-note">the clock time of each arrival, not the gaps between them</span></div>
+    <div class="sec-hd">1 &middot; Arrival times <span class="sec-note">when each arrival happened, or the interarrival gaps between them</span></div>
     <div class="data-grid">
       <div>
         <div class="drop" id="a-drop">
@@ -981,6 +987,7 @@ footer a:hover { text-decoration: underline; }
           <button class="btn2" data-asample="steady" type="button">Steady arrivals</button>
           <button class="btn2" data-asample="rush" type="button">Lunch rush</button>
           <button class="btn2" data-asample="clock" type="button">Clock times</button>
+          <button class="btn2" data-asample="gaps" type="button">Clinic gaps (durations)</button>
         </div>
         <div class="samples" style="margin-top:6px">
           <label class="btn2" for="a-file-in" style="display:inline-block">Choose a file&hellip;</label>
@@ -991,6 +998,15 @@ footer a:hover { text-decoration: underline; }
         <div class="parse-msg" id="a-parse-msg" role="status" aria-live="polite"></div>
       </div>
       <div>
+        <div class="ctrl-row">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="a-mode">These numbers are</label>
+            <select id="a-mode">
+              <option value="times">arrival times</option>
+              <option value="gaps">interarrival gaps (durations)</option>
+            </select>
+          </span>
+        </div>
         <div class="ctrl-row" id="a-col-row" style="display:none">
           <label class="ctrl-lbl" for="a-col-pick">Column</label>
           <select id="a-col-pick"></select>
@@ -1004,8 +1020,10 @@ footer a:hover { text-decoration: underline; }
           <div class="sc"><div class="sc-lbl">Gap <span class="lit">cv</span></div><div class="sc-val small" id="a-st-cv">&mdash;</div></div>
         </div>
         <div class="hint" style="margin-top:10px" id="a-kind">
-          Load some arrival times to begin. This tab expects the moment each customer arrived;
-          it works out the gaps between them for you.
+          Load some arrival times to begin. Paste the moment each customer arrived and the
+          <strong>gaps</strong> between them—the interarrival times, one duration per pair of
+          consecutive arrivals—are worked out for you. If what you have is those durations
+          already, set the dropdown above to say so and they will be added up into arrival times.
         </div>
       </div>
     </div>
@@ -1059,19 +1077,31 @@ footer a:hover { text-decoration: underline; }
     </details>
 
     <details class="why">
-      <summary>Timestamps or gaps—why the difference matters</summary>
+      <summary>Why fitting a distribution to the gaps can hide a changing rate</summary>
       <div class="why-body">
         <p>Tab ① fits a distribution to a set of numbers it assumes are independent draws from one
-        unchanging distribution. Interarrival times from a real arrival process often are not:
+        unchanging distribution. Interarrival gaps from a real arrival process often are not:
         arrivals come faster at lunchtime than at 3 p.m., and so the gaps early in the data and the
         gaps in the middle are drawn from different distributions. Fitting a single exponential to
-        all of them gives you the right average rate and the wrong process—a simulation built on
+        all of them gives you the right average rate and the wrong process. A simulation built on
         it will never produce the lunch queue that the real system produces every day.</p>
-        <p>The timestamps carry that information and the gaps alone do not, which is why this tab
-        asks for them. It divides your observation window into intervals, estimates a separate
-        rate in each, and tests whether the rate is really constant. If it is, take the gaps over
-        to tab ① and fit an exponential with a clear conscience. If it is not, the rate table
-        below is what you should be typing into your model.</p>
+        <p><strong>The gaps are not missing the information; tab ① is throwing it away.</strong>
+        Timestamps and gaps hold the same thing: add the gaps up and you have the arrival times
+        back, give or take where you put the zero. Losing the origin costs you the ability to say
+        <em>the peak was at noon</em>, and costs you nothing at all when the question is whether
+        there was a peak: the spacing between arrivals is untouched by sliding the whole record
+        sideways.</p>
+        <p>What does the damage is fitting a distribution to them. A distribution is a statement
+        about a bag of numbers with no order, and so the moment the gaps go into tab ① their
+        sequence is discarded, and with it every trace of the rate having changed. A morning of long gaps
+        followed by a lunchtime of short ones and the same gaps shuffled at random give an
+        identical fit, an identical histogram, and identical p-values. This tab keeps them in
+        order instead: it divides the window into intervals, estimates a separate rate in each,
+        and tests whether the rate is really constant. If it is, take the gaps to tab ① and fit an
+        exponential with a clear conscience. If it is not, the rate table below is what belongs in
+        your model.</p>
+        <p>Either kind of data is welcome here. If what you collected is gaps rather than
+        timestamps, say so beside the box above and they will be added up for you.</p>
       </div>
     </details>
   </section>
@@ -4354,6 +4384,9 @@ var ARRIVAL_SAMPLES = {
     "11:48:52","11:49:08","11:50:10","11:55:42","12:00:34","12:07:05","12:11:00","12:12:53",
     "12:18:52","12:22:49","12:23:45","12:30:05","12:36:12","12:40:43","12:46:34","12:55:54"
   ] },
+  gaps: { name: "Clinic gaps", mode: "gaps",
+    unit: "minutes between consecutive walk-in arrivals, as durations rather than clock times",
+    v: SAMPLES.iat.v },
 };
 
 /* ── Small helpers ─────────────────────────────────────────────────── */
@@ -4560,6 +4593,7 @@ var ST = {
 var AST = {          /* tab 2 */
   table: null, col: 0, times: [], gaps: [], clock: false, unit: null,
   widthIdx: 22, prof: null,
+  mode: 'times',    /* whether the pasted column is times or durations */
   flags: null,      /* the sanity checks from interarrivals()          */
   truth: null       /* the process the generator last produced, if any */
 };
@@ -6249,11 +6283,29 @@ var A_LOADER = makeLoader({
   state: function () { return AST; },
   extract: function (col) { return IA.columnTimes(col); },
   accept: function (cv) {
-    var ia = IA.interarrivals(cv.values);
+    /* Gaps and timestamps hold the same thing apart from where the zero
+       sits, so a column of durations is turned into arrival times by
+       adding it up: the window is taken to open at 0 and the i-th arrival
+       lands at the sum of the first i gaps. Everything downstream then
+       works on timestamps and needs no special case. */
+    var vals = cv.values, negGaps = 0, i;
+    if (AST.mode === 'gaps') {
+      var t = 0, times = [];
+      for (i = 0; i < vals.length; i++) {
+        if (vals[i] < 0) { negGaps++; continue; }   /* a duration cannot run backwards */
+        t += vals[i];
+        times.push(t);
+      }
+      vals = times;
+    }
+    var ia = IA.interarrivals(vals);
     AST.times = ia.sorted;
     AST.gaps = ia.gaps;
-    AST.clock = cv.clock;
+    /* A duration is not a clock reading, whatever it looks like. */
+    AST.clock = AST.mode === 'gaps' ? false : cv.clock;
     AST.flags = ia;
+    AST.flags.negGaps = negGaps;
+    AST.flags.fromGaps = AST.mode === 'gaps';
     renderArrivals();
   },
   clear: function () {
@@ -6319,16 +6371,26 @@ function renderArrivals() {
   /* Anything odd about the timestamps themselves, said before any
      conclusion is drawn from them. */
   var fl = AST.flags, warn = '';
-  if (fl && !fl.wasAscending) {
-    warn += '<div class="note"><strong>These were not in time order when you pasted them.</strong> ' +
-      'Timestamps normally are, and so this often means the column is a list of interarrival ' +
-      '<em>gaps</em> rather than arrival times—in which case every number here has been read as ' +
-      'a clock reading and nothing below means what it says. If they really are timestamps ' +
-      'recorded out of order, they have been sorted and all is well. If they are gaps, take them ' +
-      'to tab ① instead.</div>';
+  if (fl && fl.negGaps) {
+    warn += '<div class="note warn"><strong>' + fl.negGaps + ' of these durations ' +
+      (fl.negGaps === 1 ? 'was' : 'were') + ' negative, and ' +
+      (fl.negGaps === 1 ? 'it has' : 'they have') + ' been dropped.</strong> A gap between two ' +
+      'arrivals is an elapsed time and cannot run backwards. If the column really is arrival ' +
+      'times rather than durations, switch the dropdown above: a negative arrival time is ' +
+      'perfectly legal, and nothing would be discarded.</div>';
   }
-  if (fl && fl.negatives) {
-    warn += '<div class="note quiet"><strong>' + fl.negatives + ' of these times ' +
+  /* Out of order is expected of durations and surprising of timestamps,
+     so the warning belongs to one mode only. */
+  if (fl && !fl.wasAscending && !fl.fromGaps) {
+    warn += '<div class="note warn"><strong>These were not in time order when you pasted them.</strong> ' +
+      'Timestamps normally are, and so this often means the column is a list of interarrival ' +
+      '<em>gaps</em> rather than arrival times, in which case every number here has been read as ' +
+      'a moment on the clock and nothing below means what it says. Set <em>These numbers are</em> ' +
+      'to <em>interarrival gaps</em> and they will be added up into arrival times instead. If they ' +
+      'really are timestamps that were recorded out of order, they have been sorted and all is well.</div>';
+  }
+  if (fl && fl.negatives && !fl.fromGaps) {
+    warn += '<div class="note warn"><strong>' + fl.negatives + ' of these times ' +
       (fl.negatives === 1 ? 'is' : 'are') + ' negative.</strong> That is not necessarily wrong: ' +
       'where you put the zero is arbitrary, and arrivals recorded relative to noon or to the start ' +
       'of a shift legitimately run negative. Everything on this tab uses differences between times, ' +
@@ -6977,6 +7039,8 @@ function runArrivalGenerator() {
   if (!g.ok) { aGenSay(esc(g.msg), true); return; }
 
   AST.unit = null;
+  AST.mode = 'times';          /* the generator always produces timestamps */
+  $('a-mode').value = 'times';
   AST.widthIdx = 22;
   $('a-width').value = '22';
   A_LOADER.loadText(g.times.map(function (v) { return IA.num(v, 8); }).join('\n'),
@@ -7108,10 +7172,23 @@ document.addEventListener('DOMContentLoaded', function () {
     abtn[a].addEventListener('click', function () {
       var d = ARRIVAL_SAMPLES[this.getAttribute('data-asample')];
       AST.truth = null; aGenSay('');
+      /* Each sample knows whether it is a column of times or of durations,
+         and sets the dropdown accordingly. */
+      AST.mode = d.mode || 'times';
+      $('a-mode').value = AST.mode;
       AST.unit = d.unit;
       A_LOADER.loadText(d.v.join('\n'), d.name);
     });
   }
+  /* Changing the mode reinterprets what is already in the box rather than
+     asking the reader to paste it again. */
+  $('a-mode').addEventListener('change', function () {
+    AST.mode = this.value;
+    AST.truth = null; aGenSay('');
+    AST.unit = null;
+    A_LOADER.useColumn(AST.col, this.value === 'gaps'
+      ? 'Read as interarrival durations' : 'Read as arrival times');
+  });
   $('a-width').addEventListener('input', function () {
     AST.widthIdx = Number(this.value);
     renderArrivals();
