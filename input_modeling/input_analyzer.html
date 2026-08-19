@@ -543,8 +543,11 @@ footer a:hover { text-decoration: underline; }
         <p>The <strong>recorded to</strong> setting rounds the values on the way out, which is what
         a stopwatch or a spreadsheet does to a real measurement. Generate at full precision and at
         one decimal place and compare the K–S statistic: rounding creates ties, and ties inflate
-        both K–S and Anderson–Darling. The bootstrap p-values beside them are unaffected because
-        the resamples carry the same ties.</p>
+        both K–S and Anderson–Darling. The bootstrap p-values beside them hold up anyway: the
+        resamples are drawn at full precision, without the rounding, and a calibration check shows
+        that realistic recording granularity barely moves them. Rounding coarse enough to matter
+        tends to break the fit itself first—rounding small positive values to whole numbers creates
+        zeros that no gamma, lognormal, or Weibull can absorb.</p>
         <p>The two <strong>Johnson</strong> entries sit under their own heading in the menu because
         they are the only ones that cannot also be fitted. That is what they are for. Every other
         choice here rewards the ranking table for recovering a distribution that is genuinely on
@@ -944,6 +947,7 @@ footer a:hover { text-decoration: underline; }
       <button class="btn2" id="csv-rank" type="button">Download the ranking table (CSV)</button>
       <button class="btn2" id="csv-gof" type="button">Download the goodness-of-fit results (CSV)</button>
       <button class="btn2" id="csv-data" type="button">Download the data as parsed (CSV)</button>
+      <button class="btn2" id="csv-plots" type="button">Download plot data for a spreadsheet (CSV)</button>
     </div>
     <details class="why">
       <summary>Reading the expressions, and the traps in each tool's parameterization</summary>
@@ -4219,9 +4223,13 @@ var FIT_NAMES = {
   weibull:         { r: 'weibull',     rp: 'pweibull', scipy: 'weibull_min', ml: 'Weibull' },
   lognormal:       { r: 'lognormal',   rp: 'plnorm',   scipy: 'lognorm',     ml: 'Lognormal' },
   normal:          { r: 'normal',      rp: 'pnorm',    scipy: 'norm',        ml: 'Normal' },
-  uniform:         { r: null,          rp: 'punif',    scipy: 'uniform',     ml: 'Uniform' },
-  triangular:      { r: null,          rp: null,       scipy: 'triang',      ml: 'Triangular' },
-  beta:            { r: 'beta',        rp: 'pbeta',    scipy: 'beta',        ml: 'Beta' },
+  /* MATLAB's fitdist cannot fit these three: the uniform is declared "not
+     fittable", the triangular is makedist-only, and the Beta insists on
+     data inside [0,1] whereas this page's fit lives on [L, U]. Each gets a
+     hand-written MATLAB branch below instead of the fitdist template. */
+  uniform:         { r: null,          rp: 'punif',    scipy: 'uniform',     ml: null },
+  triangular:      { r: null,          rp: null,       scipy: 'triang',      ml: null },
+  beta:            { r: 'beta',        rp: 'pbeta',    scipy: 'beta',        ml: null },
   poisson:         { r: 'poisson',     rp: 'ppois',    scipy: 'poisson',     ml: 'Poisson' },
   geometric:       { r: 'geometric',   rp: 'pgeom',    scipy: 'geom',        ml: null },
   discreteUniform: { r: null,          rp: null,       scipy: 'randint',     ml: null },
@@ -4240,6 +4248,12 @@ var FIT_NAMES = {
    too large because the parameters were estimated, and each tool's random
    number generator is not MRG32k3a, so the bootstrap p-value will agree
    with this page to within bootstrap noise, not exactly.
+
+   Each full snippet also prints AIC and BIC for its refit (model selection
+   by hand: swap the family name, rerun, compare) and redraws the page's
+   two main figures, and so a student who wants a report-quality plot gets
+   one in a tool whose axes and labels they can edit.  The stub branches for
+   families a tool cannot refit stay minimal on purpose.
    ───────────────────────────────────────────────────────────────────── */
 
 /* Per-distribution glue for the R snippet.  MASS::fitdistr covers most of
@@ -4265,6 +4279,29 @@ var R_FIT = {
                r: 'rgeom',    ra: 'prob = f$estimate[["prob"]]', discrete: true }
 };
 
+/* Per-distribution glue for the Python snippet's discrete families. SciPy's
+   discrete distributions have no .fit method (that is a continuous-only
+   feature), and so each gets its closed-form maximum-likelihood estimate as
+   a frozen distribution. kk counts the quantities estimated for AIC and
+   BIC. */
+var PY_DISCRETE = {
+  poisson: {
+    fit: 'lambda v: stats.poisson(v.mean())', kk: 1,
+    show: '"lambda =", x.mean()', note: null
+  },
+  geometric: {
+    fit: 'lambda v: stats.geom(1.0 / (1.0 + v.mean()), loc=-1)', kk: 1,
+    show: '"p =", 1.0 / (1.0 + x.mean())',
+    note: "# SciPy's geom counts trials (support 1, 2, ...); this page counts failures\n" +
+          '# before the first success (support 0, 1, ...), which is loc=-1 in SciPy.'
+  },
+  discreteUniform: {
+    fit: 'lambda v: stats.randint(int(v.min()), int(v.max()) + 1)', kk: 2,
+    show: '"a =", int(x.min()), "  b =", int(x.max())',
+    note: '# stats.randint(a, b + 1): SciPy excludes the upper endpoint.'
+  }
+};
+
 var MAX_INLINE = 250;   /* observations written into a snippet before it switches to a file read */
 
 function dataLiteral(x, style) {
@@ -4281,43 +4318,95 @@ function dataLiteral(x, style) {
     cur += piece;
   }
   if (cur) lines.push(cur);
-  return open + '\n  ' + lines.join('\n  ') + close;
+  /* Inside MATLAB's [ ] a bare newline separates ROWS, and so each wrap
+     needs an explicit ... continuation to stay one vector. */
+  var join = style === 'matlab' ? ' ...\n  ' : '\n  ';
+  return open + (style === 'matlab' ? ' ...' : '') + '\n  ' + lines.join(join) + close;
 }
 
-function reproScripts(fit, x, seed, B) {
+function reproScripts(fit, x, seed, B, src) {
   var k = fit.dist.key, names = FIT_NAMES[k], g = fit.shift || 0;
   var out = {};
   var n = x.length;
+  var isDisc = fit.dist.kind === 'discrete';
+  var MLC = '[0.549 0.114 0.251]';   /* #8C1D40, the page accent, as an RGB triple */
+  /* The data-source line rides just above the data in every language, and so
+     a script pasted into a report says where its numbers came from. */
+  var srcR = src ? '# data source: ' + src + '\n' : '';
+  var srcM = src ? '% data source: ' + src + '\n' : '';
+  /* Tied values in continuous data (rounded measurements) make R's ks.test
+     warn; the annotation below tells the reader the warning is expected. */
+  var hasTies = new Set(x).size < n;
   var shiftNote = g ? '\n# This page fitted a location shift of ' + num(g) +
     '. The snippets below refit WITHOUT one,\n# so the parameters will differ; subtract the shift from x first to compare directly.' : '';
 
   /* ── R ─────────────────────────────────────────────────────────── */
   var rf = R_FIT[k];
   var xlit = dataLiteral(x, 'r');
-  var rdata = xlit ? 'x <- ' + xlit : 'x <- read.csv("input-analyzer-data.csv")$value   # use the CSV download button';
+  var rdata = srcR + (xlit ? 'x <- ' + xlit : 'x <- read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button');
   if (rf) {
+    var dR = 'd' + rf.p.slice(1);   /* pgamma -> dgamma, and so on */
     out.r =
       '# Refit and re-test in R. Needs the MASS package.' + shiftNote + '\n' +
       (rf.note ? rf.note + '\n' : '') +
       rdata + '\n\n' +
-      'fit_one <- function(v) MASS::fitdistr(v, "' + rf.name + '")\n' +
+      '# fitdistr\'s optimizer probes invalid parameter values on its way to the\n' +
+      '# maximum and warns each time; the warnings are noise, not a failed fit.\n' +
+      'fit_one <- function(v) suppressWarnings(MASS::fitdistr(v, "' + rf.name + '"))\n' +
       'f <- fit_one(x); print(f)\n\n' +
+      '# Model selection by hand: refit with another family name and compare.\n' +
+      '# The smaller AIC (or BIC) wins.\n' +
+      'cat("logLik =", logLik(f), "  AIC =", AIC(f), "  BIC =", BIC(f), "\\n")\n\n' +
       '# The p-value ks.test prints here is TOO LARGE: it assumes the parameters\n' +
       '# were fixed in advance, and they were estimated from x.\n' +
-      'Dstat <- function(v, f) as.numeric(ks.test(v, "' + rf.p + '", ' + rf.a + ')$statistic)\n' +
+      (!rf.discrete && hasTies
+        ? '# Your data contain tied values (rounded measurements), and so ks.test will\n' +
+          '# warn that ties should not be present. The warning is about the classical\n' +
+          '# p-value, which assumes continuous data with fixed parameters; D itself is\n' +
+          '# computed correctly, and the bootstrap comparison below stands.\n'
+        : '') +
+      (rf.discrete
+        ? '# ks.test also computes D as though the data were continuous (hence the\n' +
+          '# ties warning it would print), and so D runs larger than the atom-aware D\n' +
+          '# on this page. The bootstrap p-value is still calibrated because every\n' +
+          '# resample is scored the same way.\n'
+        : '') +
+      'Dstat <- function(v, f) ' + (rf.discrete ? 'suppressWarnings(' : '') +
+      'as.numeric(ks.test(v, "' + rf.p + '", ' + rf.a + ')$statistic)' +
+      (rf.discrete ? ')' : '') + '\n' +
       'Dobs <- Dstat(x, f); print(Dobs)\n\n' +
       '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
       'set.seed(' + seed + '); B <- ' + B + '\n' +
       'Db <- replicate(B, { y <- ' + rf.r + '(length(x), ' + rf.ra + '); Dstat(y, fit_one(y)) })\n' +
       'cat("D =", Dobs, "  bootstrap p =", (1 + sum(Db >= Dobs)) / (B + 1), "\\n")\n' +
       '# R\'s generator is not this page\'s MRG32k3a, and so expect agreement to\n' +
-      '# bootstrap noise (a few thousandths), not to the last digit.';
+      '# bootstrap noise (a few thousandths), not to the last digit.\n\n' +
+      (rf.discrete
+        ? '# The page\'s two main figures, in editable form. The data are counts, and\n' +
+          '# so the model is a pmf drawn at the whole numbers, not a smooth curve.\n' +
+          'k <- min(x):max(x)\n' +
+          'hist(x, breaks = seq(min(x), max(x) + 1) - 0.5, freq = FALSE,\n' +
+          '     main = "Histogram with the fitted pmf", xlab = "value", col = "grey92")\n' +
+          'points(k, ' + dR + '(k, ' + rf.a + '), pch = 16, type = "b", col = "#8C1D40")\n' +
+          'plot(ecdf(x), main = "Empirical and fitted CDFs", xlab = "value",\n' +
+          '     ylab = "cumulative probability")\n' +
+          'points(k, ' + rf.p + '(k, ' + rf.a + '), pch = 16, col = "#8C1D40")'
+        : '# The page\'s two main figures, in editable form.\n' +
+          'hist(x, freq = FALSE, main = "Histogram with the fitted density",\n' +
+          '     xlab = "value", col = "grey92")\n' +
+          'curve(' + dR + '(v, ' + rf.a + '), add = TRUE, col = "#8C1D40", lwd = 2,\n' +
+          '      n = 400, xname = "v")\n' +
+          'plot(ecdf(x), main = "Empirical and fitted CDFs", xlab = "value",\n' +
+          '     ylab = "cumulative probability")\n' +
+          'curve(' + rf.p + '(v, ' + rf.a + '), add = TRUE, col = "#8C1D40", lwd = 2,\n' +
+          '      n = 400, xname = "v")');
   } else {
     out.r = '# R has no MASS::fitdistr entry for the ' + distLower(fit.dist) + '.' + shiftNote + '\n' +
       rdata + '\n' +
       (k === 'uniform' ? 'a <- min(x); b <- max(x)          # the maximum-likelihood estimates\n' +
                          'ks.test(x, "punif", a, b)          # p-value still too large; parameters were estimated\n'
        : k === 'triangular' ? '# The triangle package supplies ptriangle(q, a, b, c) with b the MAXIMUM.\n' +
+                              'library(triangle)   # install.packages("triangle") the first time\n' +
                               'ks.test(x, "ptriangle", a = ' + num(fit.p[0]) + ', b = ' + num(fit.p[2]) +
                               ', c = ' + num(fit.p[1]) + ')\n'
        : k === 'beta' ? 'L <- ' + num(fit.p[2]) + '; U <- ' + num(fit.p[3]) + '; y <- (x - L) / (U - L)\n' +
@@ -4329,22 +4418,79 @@ function reproScripts(fit, x, seed, B) {
 
   /* ── MATLAB ────────────────────────────────────────────────────── */
   var mlit = dataLiteral(x, 'matlab');
-  var mdata = mlit ? 'x = ' + mlit + "';" : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button';
+  var mdata = srcM + (mlit ? 'x = ' + mlit + "';"
+                   : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button\n' +
+                     'x = x(:, 2);                                 % column 1 is the row index');
   if (names && names.ml) {
     out.matlab =
       '% Refit and re-test in MATLAB. Needs the Statistics and Machine Learning Toolbox.' +
       (g ? '\n% This page fitted a location shift of ' + num(g) + '; fitdist has no shift, and so subtract it first.' : '') + '\n' +
       mdata + '\n\n' +
       "pd = fitdist(x(:), '" + names.ml + "');\ndisp(pd)\n\n" +
+      '% Model selection by hand: refit with another family name and compare.\n' +
+      '% The smaller AIC (or BIC) wins.\n' +
+      'nll = negloglik(pd); K = pd.NumParameters;\n' +
+      "fprintf('logL = %.4f   AIC = %.4f   BIC = %.4f\\n', -nll, 2*nll + 2*K, 2*nll + K*log(numel(x)));\n\n" +
       '% kstest\'s own p-value assumes the parameters were NOT estimated from x,\n' +
       '% so it is too large. The bootstrap below is the honest version.\n' +
+      (isDisc
+        ? '% kstest also computes D as though the data were continuous, and so D runs\n' +
+          '% larger than the atom-aware D on this page. The bootstrap p-value is still\n' +
+          '% calibrated because every resample is scored the same way.\n'
+        : '') +
       "[~, ~, D] = kstest(x, 'CDF', pd);\n\n" +
       'rng(' + seed + '); B = ' + B + '; Db = zeros(B, 1);\n' +
       'for b = 1:B\n' +
       '    y = random(pd, numel(x), 1);\n' +
       "    [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'));\n" +
       'end\n' +
-      "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));";
+      "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));\n\n" +
+      (isDisc
+        ? '% The page\'s two main figures, in editable form. The data are counts, and\n' +
+          '% so the model is a pmf drawn at the whole numbers, not a smooth curve.\n' +
+          'kk = min(x):max(x);\n' +
+          "figure; histogram(x, 'BinMethod', 'integers', 'Normalization', 'pdf'); hold on\n" +
+          "stem(kk, pdf(pd, kk), 'filled', 'Color', " + MLC + '); hold off\n' +
+          "xlabel('value'); ylabel('probability'); legend('data', 'fitted model')\n" +
+          'figure; [Fe, xe] = ecdf(x); stairs(xe, Fe); hold on\n' +
+          "plot(kk, cdf(pd, kk), 'o', 'MarkerFaceColor', " + MLC + ', ' +
+          "'MarkerEdgeColor', " + MLC + '); hold off\n' +
+          "xlabel('value'); ylabel('cumulative probability'); legend('data', 'fitted model', 'Location', 'southeast')"
+        : '% The page\'s two main figures, in editable form.\n' +
+          'xg = linspace(min(x), max(x), 400);\n' +
+          "figure; histogram(x, 'Normalization', 'pdf'); hold on\n" +
+          "plot(xg, pdf(pd, xg), 'LineWidth', 2, 'Color', " + MLC + '); hold off\n' +
+          "xlabel('value'); ylabel('probability density'); legend('data', 'fitted model')\n" +
+          'figure; [Fe, xe] = ecdf(x); stairs(xe, Fe); hold on\n' +
+          "plot(xg, cdf(pd, xg), 'LineWidth', 2, 'Color', " + MLC + '); hold off\n' +
+          "xlabel('value'); ylabel('cumulative probability'); legend('data', 'fitted model', 'Location', 'southeast')");
+  } else if (k === 'uniform') {
+    out.matlab =
+      '% fitdist declares the uniform "not fittable"; its maximum-likelihood\n' +
+      '% estimates are the sample extremes, and makedist holds them.\n' +
+      mdata + '\n' +
+      'a = min(x); b = max(x);\n' +
+      "pd = makedist('Uniform', 'lower', a, 'upper', b); disp(pd)\n" +
+      '% The p-value is still too large; a and b were estimated from x.\n' +
+      "[~, p, D] = kstest(x, 'CDF', pd);\n" +
+      "fprintf('D = %.5f   p = %.4f (too large)\\n', D, p);";
+  } else if (k === 'triangular') {
+    out.matlab =
+      '% fitdist cannot fit a triangular; makedist can hold this page\'s estimates\n' +
+      '% (MATLAB\'s b is the PEAK, not the maximum).\n' +
+      mdata + '\n' +
+      "pd = makedist('Triangular', 'a', " + num(fit.p[0]) + ", 'b', " + num(fit.p[1]) +
+      ", 'c', " + num(fit.p[2]) + '); disp(pd)\n' +
+      '% The p-value is still too large; the corners were estimated from x.\n' +
+      "[~, p, D] = kstest(x, 'CDF', pd);\n" +
+      "fprintf('D = %.5f   p = %.4f (too large)\\n', D, p);";
+  } else if (k === 'beta') {
+    out.matlab =
+      '% fitdist\'s Beta needs values inside [0,1]; this page\'s fit lives on [L, U],\n' +
+      '% and so rescale first with the page\'s endpoints.\n' +
+      mdata + '\n' +
+      'L = ' + num(fit.p[2]) + '; U = ' + num(fit.p[3]) + ';\n' +
+      "pd = fitdist((x(:) - L) / (U - L), 'Beta'); disp(pd)";
   } else {
     out.matlab = '% MATLAB\'s fitdist has no entry for the ' + distLower(fit.dist) + '.\n' +
       mdata + '\n% Estimate it directly, or use one of the named distributions above.';
@@ -4352,16 +4498,29 @@ function reproScripts(fit, x, seed, B) {
 
   /* ── Python ────────────────────────────────────────────────────── */
   var plit = dataLiteral(x, 'python');
-  var pdata = plit ? 'x = ' + plit
-                   : 'x = np.loadtxt("input-analyzer-data.csv", delimiter=",", skiprows=1, usecols=1)';
-  if (names && names.scipy) {
+  var pdata = srcR + (plit ? 'x = ' + plit
+                   : 'with open("input-analyzer-data.csv") as fh:   # use the CSV download button\n' +
+                     '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])');
+  if (names && names.scipy && !isDisc) {
     /* floc pins the location where this page pinned it, so scipy is
        solving the same optimization rather than a wider one. */
     var flocArg = fit.dist.shiftable ? ', floc=' + num(g) : '';
+    /* AIC and BIC count what was ESTIMATED. A shiftable family's loc is
+       pinned by floc, and so it counts only when this page itself
+       estimated the shift being pinned. */
+    var kPy = !fit.dist.shiftable ? 'K = len(D_ARGS)'
+      : (g !== 0 && !fit.shiftHeld
+          ? 'K = len(D_ARGS)       # the pinned loc was itself estimated by this page, and so it counts'
+          : 'K = len(D_ARGS) - 1   # loc was pinned in advance, not estimated');
     out.python =
       '# Refit and re-test with SciPy.\n' +
       'import numpy as np\nfrom scipy import stats\n\n' + pdata + '\n\n' +
       'D_ARGS = stats.' + names.scipy + '.fit(x' + flocArg + ')\nprint(D_ARGS)\n\n' +
+      '# Model selection by hand: swap in another family (weibull_min, lognorm, ...)\n' +
+      '# and compare. The smaller AIC (or BIC) wins.\n' +
+      'logL = stats.' + names.scipy + '.logpdf(x, *D_ARGS).sum()\n' +
+      kPy + '\n' +
+      'print(f"logL = {logL:.4f}   AIC = {2*K - 2*logL:.4f}   BIC = {K*np.log(x.size) - 2*logL:.4f}")\n\n' +
       '# kstest\'s p-value here assumes fixed parameters and is too large.\n' +
       "D = stats.kstest(x, '" + names.scipy + "', args=D_ARGS).statistic\n\n" +
       '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
@@ -4372,7 +4531,60 @@ function reproScripts(fit, x, seed, B) {
       "    Db[b] = stats.kstest(y, '" + names.scipy + "', args=ab).statistic\n" +
       'print(f"D = {D:.5f}   bootstrap p = {(1 + (Db >= D).sum()) / (B + 1):.4f}")\n' +
       "# NumPy's generator is not this page's MRG32k3a, and so expect agreement to\n" +
-      '# bootstrap noise, not to the last digit.';
+      '# bootstrap noise, not to the last digit.\n\n' +
+      '# The page\'s two main figures, in editable form.\n' +
+      'import matplotlib.pyplot as plt\n' +
+      'xg = np.linspace(x.min(), x.max(), 400)\n' +
+      'fig, ax = plt.subplots()\n' +
+      'ax.hist(x, density=True, color="0.9", edgecolor="0.5")\n' +
+      'ax.plot(xg, stats.' + names.scipy + '.pdf(xg, *D_ARGS), color="#8C1D40", lw=2)\n' +
+      'ax.set(xlabel="value", ylabel="probability density", title="Histogram with the fitted density")\n' +
+      'fig, ax = plt.subplots()\n' +
+      'ax.step(np.sort(x), np.arange(1, x.size + 1) / x.size, where="post", color="0.35")\n' +
+      'ax.plot(xg, stats.' + names.scipy + '.cdf(xg, *D_ARGS), color="#8C1D40", lw=2)\n' +
+      'ax.set(xlabel="value", ylabel="cumulative probability", title="Empirical and fitted CDFs")\n' +
+      'plt.show()';
+  } else if (names && names.scipy && PY_DISCRETE[k]) {
+    var pyd = PY_DISCRETE[k];
+    out.python =
+      "# Refit and re-test with SciPy. SciPy's discrete distributions have no .fit\n" +
+      '# method; the maximum-likelihood estimate is closed form.\n' +
+      (pyd.note ? pyd.note + '\n' : '') +
+      'import numpy as np\nfrom scipy import stats\n\n' + pdata + '\n\n' +
+      'fit_one = ' + pyd.fit + '\n' +
+      'f = fit_one(x)\n' +
+      'print(' + pyd.show + ')\n\n' +
+      '# Model selection by hand: swap in another family and compare.\n' +
+      '# The smaller AIC (or BIC) wins.\n' +
+      'logL = f.logpmf(x).sum()\n' +
+      'K = ' + pyd.kk + '\n' +
+      'print(f"logL = {logL:.4f}   AIC = {2*K - 2*logL:.4f}   BIC = {K*np.log(x.size) - 2*logL:.4f}")\n\n' +
+      "# kstest's p-value here assumes fixed parameters and is too large. It also\n" +
+      '# computes D as though the data were continuous, and so D runs larger than\n' +
+      '# the atom-aware D on this page. The bootstrap p-value is still calibrated\n' +
+      '# because every resample is scored the same way.\n' +
+      'D = stats.kstest(x, f.cdf).statistic\n\n' +
+      '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
+      'rng = np.random.default_rng(' + seed + ')\nB = ' + B + '\nDb = np.empty(B)\n' +
+      'for b in range(B):\n' +
+      '    y = f.rvs(size=x.size, random_state=rng)\n' +
+      '    Db[b] = stats.kstest(y, fit_one(y).cdf).statistic\n' +
+      'print(f"D = {D:.5f}   bootstrap p = {(1 + (Db >= D).sum()) / (B + 1):.4f}")\n' +
+      "# NumPy's generator is not this page's MRG32k3a, and so expect agreement to\n" +
+      '# bootstrap noise, not to the last digit.\n\n' +
+      '# The page\'s two main figures, in editable form. The data are counts, and so\n' +
+      '# the model is a pmf drawn at the whole numbers, not a smooth curve.\n' +
+      'import matplotlib.pyplot as plt\n' +
+      'kk = np.arange(x.min(), x.max() + 1)\n' +
+      'fig, ax = plt.subplots()\n' +
+      'ax.hist(x, bins=np.arange(x.min(), x.max() + 2) - 0.5, density=True, color="0.9", edgecolor="0.5")\n' +
+      'ax.plot(kk, f.pmf(kk), "o-", color="#8C1D40")\n' +
+      'ax.set(xlabel="value", ylabel="probability", title="Histogram with the fitted pmf")\n' +
+      'fig, ax = plt.subplots()\n' +
+      'ax.step(np.sort(x), np.arange(1, x.size + 1) / x.size, where="post", color="0.35")\n' +
+      'ax.plot(kk, f.cdf(kk), "o", color="#8C1D40")\n' +
+      'ax.set(xlabel="value", ylabel="cumulative probability", title="Empirical and fitted CDFs")\n' +
+      'plt.show()';
   } else {
     out.python = '# SciPy has no direct fit for the ' + distLower(fit.dist) + '.\n' +
       'import numpy as np\n' + pdata + '\n# Estimate it directly, or use one of the named distributions above.';
@@ -4808,8 +5020,14 @@ var AST = {          /* tab 2 */
 /* ── Data loading, shared by both tabs ─────────────────────────────── */
 function makeLoader(cfg) {
   var api = {};
-  api.loadText = function (text, sourceLabel) {
+  api.loadText = function (text, sourceLabel, srcLine) {
     if (!sourceLabel) cfg.state().unit = null;
+    /* Every export carries a "# data source:" line, and this is where it
+       is recorded -- BEFORE useColumn renders anything downstream, and so the
+       exports and snippets built during this call already see it. srcLine
+       is the richer description (a built-in sample's name, a generator's
+       full recipe); sourceLabel doubles as the fallback. */
+    cfg.state().src = srcLine || sourceLabel || 'pasted or typed by the user';
     $(cfg.ta).value = text;
     cfg.state().table = IA.parseTable(text);
     api.buildPicker();
@@ -4883,13 +5101,16 @@ function makeLoader(cfg) {
   api.readFile = function (file) {
     if (!file) return;
     var fr = new FileReader();
-    fr.onload = function () { api.loadText(String(fr.result), file.name); };
+    fr.onload = function () { api.loadText(String(fr.result), 'uploaded file "' + file.name + '"'); };
     fr.onerror = function () { api.say('Could not read that file.', true); };
     fr.readAsText(file);
   };
   api.wire = function () {
     $(cfg.ta).addEventListener('input', function () {
       cfg.state().unit = null;
+      /* Hand-editing breaks any provenance chain: whatever the box held
+         before, its contents are now the user's. */
+      cfg.state().src = 'pasted or typed by the user';
       if (cfg.state() === ST) { ST.genTruth = null; genSay(''); }
       if (cfg.state() === AST) { AST.truth = null; aGenSay(''); }
       cfg.state().table = IA.parseTable(this.value);
@@ -5119,8 +5340,14 @@ function runGenerator() {
   ST.unit = null;
   ST.binAuto = true;
   ST.genTruth = { key: key, p: p.slice(), shift: shift, n: n, seed: seed, dp: dp };
+  /* The full recipe, and so an export can say how to regenerate the data. */
+  var recipe = 'generated from ' + d.name + ' (' + truth +
+    (shift ? ', shift γ = ' + IA.num(shift, 6) : '') + '), n = ' + n +
+    (dp === null ? ', full precision' : ', rounded to ' +
+      (dp === 0 ? 'whole numbers' : dp + ' decimal place' + (dp === 1 ? '' : 's'))) +
+    ', MRG32k3a seed ' + seed;
   LOADER.loadText(g.values.map(function (v) { return IA.num(v, 10); }).join('\n'),
-                  'Generated ' + d.name);
+                  'Generated ' + d.name, recipe);
 
   var neg = 0;
   for (i = 0; i < g.values.length; i++) if (g.values[i] < 0) neg++;
@@ -6044,8 +6271,13 @@ function renderGof() {
         : 'Your data has many repeated values (' + ST.s.nUnique + ' distinct out of ' + ST.s.n +
           '), and it was almost certainly rounded when it was recorded.') +
       '</strong> Both statistics are built for continuous data with no ties, and ties push them up; ' +
-      'neither the usual rules of thumb nor the table column applies here. The bootstrap column ' +
-      'is unaffected because every resample carries the same ties—read that one.</div>'
+      'neither the usual rules of thumb nor the table column applies here. ' +
+      (f.dist.kind === 'discrete'
+        ? 'The bootstrap column is unaffected: every resample is drawn from the discrete fit and ' +
+          'is just as tied—read that one.'
+        : 'The bootstrap column is still the one to read. Its resamples are drawn at full ' +
+          'precision, and so they do not reproduce the ties, but a calibration check shows that ' +
+          'a realistic recording granularity barely moves the bootstrap p-value.') + '</div>'
     : '';
 
   var explain =
@@ -6268,11 +6500,13 @@ function renderExport() {
       '</div>';
   }
 
-  var scripts = IA.reproScripts(r.fit, ST.x, ST.seed, ST.B);
+  var scripts = IA.reproScripts(r.fit, ST.x, ST.seed, ST.B, ST.src);
   h += '<div class="plot-hd" style="margin-top:14px">Refit and re-test from the raw data</div>' +
        '<div class="plot-cap" style="text-align:left;margin-bottom:7px">These run the whole ' +
        'analysis again in another tool, including the parametric bootstrap. Running one is an ' +
-       'independent check of this page, not a restatement of it.</div>';
+       'independent check of this page, not a restatement of it. Each also prints AIC and BIC ' +
+       'for its refit (swap the family name and rerun to compare candidates) and ends by ' +
+       'redrawing the histogram and CDF figures with axes and labels you can edit.</div>';
   var sTools = [['r', 'R'], ['matlab', 'MATLAB'], ['python', 'Python']];
   for (var j = 0; j < sTools.length; j++) {
     var sk = sTools[j][0];
@@ -6446,19 +6680,27 @@ function download(name, text) {
   setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
 }
 /* Provenance lines that head every export, so a number in a report can be
-   traced back to the run that produced it. */
-function provenance() {
-  return [
+   traced back to the run that produced it. The data-source line says where
+   the numbers came from; for generated data it is the full recipe, seed
+   included, that regenerates them. The bootstrap lines describe how the
+   bootstrap p-values were computed, and so they appear only in the export
+   that contains bootstrap results (withBoot). */
+function provenance(withBoot) {
+  var rows = [
     ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# data source: ' + (ST.src || 'pasted or typed by the user')],
     ['# observations: ' + (ST.s ? ST.s.n : 0)],
     ['# family: ' + (ST.family === 'auto' ? 'chosen automatically' : ST.family)],
     ['# location shift: ' + (ST.shift ? 'estimated' : 'off')],
-    ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')],
-    ['# bootstrap seed: ' + ST.seed],
-    ['# bootstrap replications: ' + ST.B],
-    ['# generator: MRG32k3a (L\'Ecuyer 1999)'],
-    []
+    ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')]
   ];
+  if (withBoot) {
+    rows.push(['# bootstrap seed: ' + ST.seed]);
+    rows.push(['# bootstrap replications: ' + ST.B]);
+    rows.push(['# bootstrap generator: MRG32k3a (L\'Ecuyer 1999)']);
+  }
+  rows.push([]);
+  return rows;
 }
 
 function csvRanking() {
@@ -6488,7 +6730,7 @@ function csvRanking() {
 function csvGof() {
   var r = pickedRow();
   if (!r) return;
-  var rows = provenance();
+  var rows = provenance(true);
   rows.push(['distribution', r.dist.name]);
   rows.push([]);
   var chi = r.noCriteria ? null : IA.chiSquareGOF(ST.x, r.fit, ST.bins);
@@ -6564,6 +6806,41 @@ function csvData() {
   rows.push(['index', 'value']);
   for (var i = 0; i < ST.x.length; i++) rows.push([i + 1, IA.num(ST.x[i], 12)]);
   download('input-analyzer-data.csv', IA.toCsv(rows));
+}
+
+/* The histogram and the CDF plot as columns a spreadsheet can chart. The
+   histogram section reuses the bins on screen, and its model column is the
+   same expected count the chi-square test compares against, and so a chart
+   built from this file reproduces the page's figure rather than
+   approximating it. */
+function csvPlotData() {
+  var r = pickedRow();
+  if (!r || !ST.bins || !ST.s) return;
+  var rows = provenance();
+  rows.push(['distribution', r.dist.name]);
+  rows.push([]);
+  var b = ST.bins, n = b.n, i;
+  var bp = r.noCriteria ? null : IA.binProbabilities(r.fit, b.edges);
+  rows.push(['# histogram (the ' + b.k + ' bins on screen): chart observed_count and ' +
+             'expected_count against bin_midpoint']);
+  rows.push(['bin_lower', 'bin_upper', 'bin_midpoint', 'observed_count',
+             'observed_relative_frequency', 'model_bin_probability', 'expected_count']);
+  for (i = 0; i < b.k; i++) {
+    rows.push([IA.num(b.edges[i], 8), IA.num(b.edges[i + 1], 8),
+               IA.num(0.5 * (b.edges[i] + b.edges[i + 1]), 8),
+               b.counts[i], IA.num(b.counts[i] / n, 8),
+               bp ? IA.num(bp[i], 8) : '', bp ? IA.num(n * bp[i], 8) : '']);
+  }
+  rows.push([]);
+  rows.push(['# CDFs: chart empirical_cdf and fitted_cdf against value. A spreadsheet ' +
+             'draws the empirical line with slanted risers rather than true steps.']);
+  rows.push(['value', 'empirical_cdf', 'fitted_cdf']);
+  var F = IA.fitCdf(r.fit);
+  for (i = 0; i < n; i++) {
+    rows.push([IA.num(ST.s.sorted[i], 10), IA.num((i + 1) / n, 8),
+               IA.num(F(ST.s.sorted[i]), 8)]);
+  }
+  download('input-analyzer-plot-data.csv', IA.toCsv(rows));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -7303,7 +7580,9 @@ function sendCountsToFit() {
             IA.num(prof.width, 5) + ', from tab ②';
   ST.binAuto = true;
   LOADER.loadText(full.map(function (r) { return String(r.n); }).join('\n'),
-                  'Interval counts from tab ②');
+                  'Interval counts from tab ②',
+                  'interval counts computed on the arrival tab; its data source: ' +
+                  (AST.src || 'pasted or typed by the user'));
   /* Select the Poisson rather than whatever happens to win: the button
      exists to set up that specific comparison, and with only a handful of
      counts the ranking has little to go on. */
@@ -7328,6 +7607,7 @@ function csvRates() {
   if (!prof) return;
   var rows = [
     ['# Input Analyzer, arrival rate table - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# data source: ' + (AST.src || 'pasted or typed by the user')],
     ['# arrivals: ' + prof.n],
     ['# window: ' + IA.num(prof.t0, 10) + ' to ' + IA.num(prof.t1, 10)],
     ['# interval width: ' + IA.num(prof.width, 10)],
@@ -7357,7 +7637,9 @@ function sendGapsToFit() {
   ST.unit = 'the gaps between the arrival times from tab ②';
   ST.binAuto = true;
   LOADER.loadText(AST.gaps.map(function (v) { return IA.num(v, 10); }).join('\n'),
-                  'Interarrival gaps from tab ②');
+                  'Interarrival gaps from tab ②',
+                  'interarrival gaps computed on the arrival tab; its data source: ' +
+                  (AST.src || 'pasted or typed by the user'));
   $('tab-fit').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -7437,8 +7719,11 @@ function runArrivalGenerator() {
   AST.mode = 'times';          /* the generator always produces timestamps */
   $('a-mode').value = 'times';
   AST.ladderSpan = null;       /* let the ladder re-centre on the new span */
+  /* The full recipe, and so an export can say how to regenerate the data. */
   A_LOADER.loadText(g.times.map(function (v) { return IA.num(v, 8); }).join('\n'),
-                    'Generated ' + spec.name);
+                    'Generated ' + spec.name,
+                    'generated ' + spec.name + ' arrivals (' + spec.describe(p) +
+                    ') over T = ' + IA.num(T, 5) + ', MRG32k3a seed ' + seed);
   /* Kept so the rate plot can draw the truth over the estimate. */
   AST.truth = { key: key, p: p.slice(), T: T, rate: g.rate, max: g.lambdaMax };
   renderArrivals();
@@ -7503,7 +7788,7 @@ document.addEventListener('DOMContentLoaded', function () {
       ST.genTruth = null; genSay('');
       ST.unit = d.unit;          /* loadText keeps this when given a label */
       ST.binAuto = true;
-      LOADER.loadText(d.v.join('\n'), d.name);
+      LOADER.loadText(d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"');
     });
   }
 
@@ -7554,6 +7839,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('csv-rank').addEventListener('click', csvRanking);
   $('csv-gof').addEventListener('click', csvGof);
   $('csv-data').addEventListener('click', csvData);
+  $('csv-plots').addEventListener('click', csvPlotData);
 
   /* ── Tab ② ────────────────────────────────────────────────────── */
   A_LOADER.wire();
@@ -7576,7 +7862,7 @@ document.addEventListener('DOMContentLoaded', function () {
       AST.mode = d.mode || 'times';
       $('a-mode').value = AST.mode;
       AST.unit = d.unit;
-      A_LOADER.loadText(d.v.join('\n'), d.name);
+      A_LOADER.loadText(d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"');
     });
   }
   /* Changing the mode reinterprets what is already in the box rather than
@@ -7645,11 +7931,11 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ── Open on something, rather than on a blank form ───────────── */
   var s0 = SAMPLES.iat;
   ST.unit = s0.unit;
-  LOADER.loadText(s0.v.join('\n'), s0.name);
+  LOADER.loadText(s0.v.join('\n'), s0.name, 'built-in sample "' + s0.name + '"');
 
   var a0 = ARRIVAL_SAMPLES.rush;
   AST.unit = a0.unit;
-  A_LOADER.loadText(a0.v.join('\n'), a0.name);
+  A_LOADER.loadText(a0.v.join('\n'), a0.name, 'built-in sample "' + a0.name + '"');
 });
 </script>
 

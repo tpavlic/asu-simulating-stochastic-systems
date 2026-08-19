@@ -1667,6 +1667,74 @@ section('18. export expressions');
     ok(!!(s2.r && s2.matlab && s2.python), `${key}: all three refit scripts are produced`);
   }
 
+  /* The refit snippets carry model selection and the page's two figures,
+     and what they emit has to be RUNNABLE: no scipy .fit on a discrete
+     family (it does not exist), no fitdist on a family MATLAB cannot fit,
+     and MATLAB's inline data must wrap with ... continuations, because a
+     bare newline inside [ ] starts a new matrix row. All of these were
+     confirmed against live R 4.6, MATLAB R2026a, and SciPy 1.17. */
+  {
+    const f = IA.fitDist(IA.DISTS.gamma, x, false, false);
+    const s = IA.reproScripts(f, x.slice(0, 200), 20260819, 2000);
+    ok(s.r.includes('AIC(f)') && s.matlab.includes('AIC') && s.python.includes('AIC'),
+       'full snippets print AIC in all three languages');
+    ok(s.r.includes('hist(x') && s.matlab.includes('histogram(x') && s.python.includes('plt.subplots'),
+       'full snippets redraw the histogram figure');
+    ok(s.r.includes('ecdf(x)') && s.matlab.includes('ecdf(x)') && s.python.includes('where="post"'),
+       'full snippets redraw the CDF figure');
+    ok(s.matlab.includes(' ...\n'), 'MATLAB inline data wraps with ... continuations',
+       s.matlab.slice(0, 160));
+    ok(s.r.includes('suppressWarnings(MASS::fitdistr'),
+       "R's fit_one suppresses the optimizer's probing warnings");
+
+    const fp = IA.fitDist(IA.DISTS.poisson, xi, false, false);
+    const sp = IA.reproScripts(fp, xi, 20260819, 2000);
+    ok(!sp.python.includes('.fit('), "discrete Python snippet avoids scipy's nonexistent .fit");
+    ok(sp.python.includes('stats.poisson(v.mean())'), 'the Poisson MLE is closed form in Python');
+    ok(sp.python.includes('atom-aware') && sp.r.includes('atom-aware'),
+       'discrete snippets explain why their D exceeds the atom-aware D');
+
+    const fg = IA.fitDist(IA.DISTS.geometric, xi, false, false);
+    const sg = IA.reproScripts(fg, xi, 20260819, 2000);
+    ok(sg.python.includes('loc=-1'), "the geometric Python refit shifts scipy's geom to start at 0");
+
+    const fu = IA.fitDist(IA.DISTS.uniform, x, false, false);
+    const su = IA.reproScripts(fu, x, 20260819, 2000);
+    ok(su.matlab.includes("makedist('Uniform'") && !su.matlab.includes("fitdist(x(:)"),
+       'the MATLAB uniform snippet uses makedist, not the unfittable fitdist');
+
+    const ft = IA.fitDist(IA.DISTS.triangular, x, false, false);
+    const st = IA.reproScripts(ft, x, 20260819, 2000);
+    ok(st.matlab.includes("makedist('Triangular'"), 'the MATLAB triangular snippet uses makedist');
+    ok(st.r.includes('library(triangle)'), 'the R triangular snippet attaches the triangle package');
+
+    const fb = IA.fitDist(IA.DISTS.beta, x, false, false);
+    const sb = IA.reproScripts(fb, x, 20260819, 2000);
+    ok(sb.matlab.includes("fitdist((x(:) - L) / (U - L), 'Beta')"),
+       'the MATLAB beta snippet rescales into [0,1] first');
+
+    /* Data-source provenance rides above the data literal in every
+       language, and only when a source is known. */
+    const src = 'built-in sample "Clinic interarrivals"';
+    const s5 = IA.reproScripts(f, x.slice(0, 100), 20260819, 2000, src);
+    ok(s5.r.includes('# data source: ' + src) && s5.python.includes('# data source: ' + src) &&
+       s5.matlab.includes('% data source: ' + src),
+       'a known data source is stated in all three refit scripts');
+    ok(!s.r.includes('data source:') && !s.matlab.includes('data source:'),
+       'no data-source line is invented when the source is unknown');
+
+    /* R's ks.test warns on tied continuous data, and the snippet explains
+       the warning -- but only when the data actually contain ties. */
+    const xt = x.slice(0, 150).map(v => Math.round(v * 100) / 100);
+    const ftie = IA.fitDist(IA.DISTS.gamma, xt, false, false);
+    const stie = IA.reproScripts(ftie, xt, 20260819, 2000);
+    ok(new Set(xt).size < xt.length, 'the rounded test sample really has ties');
+    ok(stie.r.includes('warn that ties should not be present'),
+       'tied continuous data gets the ks.test ties annotation in R');
+    ok(!s.r.includes('warn that ties'),
+       'untied data gets no ties annotation');
+  }
+
   /* AnyLogic takes the RATE where Arena takes the mean; the page says so,
      and the expression has to actually do it. */
   {
