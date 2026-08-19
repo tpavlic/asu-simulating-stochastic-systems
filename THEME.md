@@ -72,6 +72,33 @@ Size every canvas backing store at `logical x devicePixelRatio` and call
 `ctx.setTransform(dpr,0,0,dpr,0,0)` once, then draw in logical units – otherwise plots are blurry
 on a retina display.
 
+**Prefer plain SVG for a plot that only changes when the reader does something.** An `<svg>` with a
+`viewBox` and no `width`/`height` attributes is resolution-independent: sharp at any zoom on any
+display, with no `devicePixelRatio` bookkeeping and no redraw when its container resizes. Keep
+`<canvas>` for the cases that earn it – a plot redrawn every frame, or one carrying more marks than
+the DOM wants to hold, a few thousand being the rough threshold. If a plot is offered as a download,
+render it at `devicePixelRatio` rather than at a fixed 2x, so a phone gets a file as sharp as its
+own screen.
+
+## Touch and small screens
+
+These widgets are opened on phones, so a 390px touch screen is a target rather than a fallback. The
+full checklist is in `CLAUDE.md`; the parts that are presentation are here.
+
+- **Touch targets at 24x24 CSS pixels or more** (WCAG 2.5.8). Grow the hit area with padding and
+  `min-height`, never by enlarging the drawn control – a checkbox scaled to 24px square dominates
+  its row, and a 17px one inside a `<label>` that clears 24px is already fine, because the label is
+  what a finger lands on. Range inputs are the common miss: the default is about 16px tall, so give
+  them `height: 26px`.
+- **Nothing may depend on hover.** An affordance revealed on `:hover` is invisible on a touch screen,
+  so pair it with `@media (hover: none)` that keeps it showing, and say in the page text that the
+  feature is there – a hover reveal is undiscoverable with a mouse too if nothing hints at it.
+- **No horizontal scroll at 390px, on any tab.** The two habitual causes are a `white-space: nowrap`
+  label beside a control and a wide table outside an `overflow-x: auto` wrapper. Measure it rather
+  than eyeballing it.
+- Set `-webkit-text-size-adjust: 100%` on `body`, or iOS Safari inflates the text in landscape and
+  every width in the layout stops meaning what it says.
+
 ## Links
 
 One underline behavior per page: no resting underline, underline on hover. Color links
