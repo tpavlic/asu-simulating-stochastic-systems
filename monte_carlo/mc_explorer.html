@@ -183,6 +183,11 @@ svg.hsv { display: block; width: 100%; height: auto; }
   .exp-math .eq-fine    { font-size: .82rem; }
 }
 .exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
+/* Body links share the footer links' behavior: accent color, underline on hover
+   only, per the link-decoration convention in CLAUDE.md. The back-link footer sets
+   color:inherit inline, which outranks this rule, so it keeps following its footer. */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
 footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
 footer a { color: var(--accent); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
@@ -385,6 +390,17 @@ footer a:hover { text-decoration: underline; }
             <div class="eq-fine">π sits in the <em>denominator</em> here, unlike the dartboard on Tab ①. The estimate is therefore a ratio, slightly biased at finite N, and its interval comes from inverting the interval for the crossing probability, which swaps the two endpoints.</div>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">The same count, read backwards: measuring area</div>
+      <div class="exp-note">Two sets of randomly scattered lines, of total lengths S and L, thrown across a region of area A, cross each other about <span class="eq-m">2SL/(πA)</span> times. The ruled sheet above is the case where one of the two sets is the ruling itself: inside a region of area A, lines spaced t apart have total length A/t, and the general count collapses straight back to the <span class="eq-m">2ℓ/(tπ)</span> per needle that this tab has been counting all along.</div>
+      <div class="eq-row"><span class="eq-lbl">Crossings expected:</span><span class="eq-val">N ≈ 2SL/(πA)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Solve it for π:</span><span class="eq-val">π ≈ 2SL/(AN)&nbsp;&nbsp;— the area is known, so counting crossings measures π</span></div>
+      <div class="eq-row"><span class="eq-lbl">Solve it for A:</span><span class="eq-val" style="color:var(--est)">A ≈ 2SL/(πN)&nbsp;&nbsp;— π is known, so counting crossings measures the area</span></div>
+      <div class="eq-note">
+        <div class="eq-fine">Ants read it the second way. A scout of <em>Leptothorax albipennis</em>, sizing up a candidate nest crevice, lays an individual-specific pheromone trail on a first visit, returns, and registers how often her second path crosses the first. She walks about the same distance whichever nest she is in, so the crossing rate alone carries the area. Against real nests of 875 and 1750 mm², the areas implied by the ants' own paths came out in a 1.96:1 ratio, against a true 2:1 — see <a href="https://academic.oup.com/beheco/article/12/6/655/462588" target="_blank" rel="noopener">Mugford, Mallon and Franks (2001)</a>, <em>Behavioral Ecology</em> 12(6):655–658.</div>
+        <div class="eq-fine">A robot with an odometer and no map can do the same thing. Tabs ① and ③ measure an area by sampling a region they already know — the square, the interval [a, b]. This one measures a floor it can only walk on, from crossings alone.</div>
       </div>
     </div>
   </section>
