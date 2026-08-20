@@ -34,6 +34,12 @@ below.
 | --- | --- |
 | [`input_modeling/`](input_modeling/) | Fit a distribution to sample data and read off the expression for a simulation model: maximum-likelihood fits of fourteen candidates ranked by AIC and BIC beside Arena's square-error criterion, chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values, Q–Q and P–P diagnostics, a nonhomogeneous-Poisson arrival mode, and export to Arena, Simio, AnyLogic, R, MATLAB, and SciPy |
 
+### Output Analysis
+
+| Directory | Description |
+| --- | --- |
+| [`power_analysis/`](power_analysis/) | Statistical power by simulation and by formula: eight tests (t, z, two-sample t, variance, proportion, chi-square GOF, ANOVA, regression slope) drawn as null-vs-alternative sampling distributions with α, β, and the tabled critical values on the plot, a Monte Carlo engine whose rejection counting converges onto the exact noncentral-distribution answer, solve-for-power and solve-for-n in both directions, a live OC chart, a paired-comparison panel connecting correlation to common random numbers and antithetic variates, pilot-data planning, and verified MATLAB/R/Python export |
+
 ---
 
 ## Adding a new visualization

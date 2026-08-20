@@ -432,6 +432,35 @@ check all of the following.
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
      4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.)*
 
+### Output Analysis
+
+- `power_analysis/power_explorer.html` *(statistical power taught by simulation: five tabs — a
+  null-vs-alternative explorer over a registry of eight tests (z, t, two-sample t, variance,
+  proportion, chi-square GOF, one-way ANOVA, regression slope) with a Monte Carlo engine and
+  solve-for-power/solve-for-n in both directions, power curves, a live OC chart, a
+  paired-comparison/pilot-data tab, and an advanced tab whose gamma-regression demo runs the
+  same engine with no analytic overlay. Conventions relied on by code outside the file, which any
+  later edit has to preserve:*
+  1. *Everything between the `PA-CORE-BEGIN` / `PA-CORE-END` sentinels is pure numerics with no DOM
+     access. `power_analysis/verify_power_explorer.mjs` slices that block out of the HTML and runs
+     it in Node, and the Monte Carlo Web Worker is built from the same `<script id="pa-core">`
+     element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
+  2. *`verify_power_explorer.mjs` is not shipped with the widget and is not linked from the site.
+     Run it (`node power_analysis/verify_power_explorer.mjs`, about a minute; `PA_MC_M` shortens
+     the Monte Carlo sections) after touching anything in the core. It checks the special functions
+     against exact identities, the noncentral t/chi-square/F CDFs against R-derived references
+     (noncentral F against Poisson mixtures of central beta CDFs, because R's own `pf(ncp)` is only
+     accurate to ~1e-9), power-at-zero-effect = α for every test and sidedness, Monte Carlo vs
+     analytic power across a grid, solve-for-n round trips, and — when `Rscript` is on the PATH —
+     re-runs the export panel's R formulas in R and compares.*
+  3. *Three statistical conventions are deliberate. Two-sided t and z power is the exact
+     both-rejection-tails quantity, so R's `power.t.test` matches only with `strict = TRUE`, which
+     the export snippets therefore carry. The proportion test is the equal-tail exact binomial,
+     whose power is genuinely non-monotone in n; the sawtooth and the two solve-for-n answers
+     ("first n" and "stable n") are the point, not a bug. And the chi-square GOF analytic curve is
+     the large-n noncentral-χ² approximation on purpose, with the gap against the simulated
+     histogram surfaced in the UI as a teaching point.)*
+
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.
 
