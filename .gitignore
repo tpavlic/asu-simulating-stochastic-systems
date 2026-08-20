@@ -22,6 +22,9 @@ tags
 # Claude Code local settings (machine-specific, not shared)
 .claude/settings.local.json
 
+# Browser-automation artifacts from local testing (screenshots, snapshots)
+.playwright-mcp/
+
 # General
 .DS_Store
 __MACOSX/
