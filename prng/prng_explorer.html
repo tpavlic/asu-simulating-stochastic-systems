@@ -393,14 +393,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <details class="why">
       <summary>Which parameter choices guarantee a full period?</summary>
       <div class="why-body">
-        <p>For c ≠ 0, the Hull–Dobell theorem (1962) gives an exact answer: the cycle visits
-        all m states, from every seed, precisely when three conditions hold. (1) c and m share
-        no common factor. (2) Every prime that divides m also divides a − 1. (3) If 4 divides
-        m, then 4 also divides a − 1. The toy preset and the C-standard-style preset both
-        satisfy all three, which is how the toy earns its period of exactly 16.</p>
+        <p>For c ≠ 0, the Hull–Dobell theorem (1962) says that the cycle visits all m states
+        from every seed precisely when three conditions hold: (1) c and m share no common
+        factor; (2) every prime that divides m also divides a − 1; and (3) if 4 divides m,
+        then 4 also divides a − 1. The toy preset and the C-standard-style preset both satisfy
+        all three, which is why the toy has a full period of 16.</p>
         <p>For c = 0, the state 0 is stuck, and so a full period is impossible; what is
         attainable depends on m. With m prime, the period is m − 1 from any nonzero seed
-        exactly when a is a primitive root mod m, which is the minimal standard's design. With
+        exactly when a is a primitive root mod m (a special condition from number theory),
+        which is the minimal standard's design. With
         m a power of two, the best possible is m/4, attained when a ≡ ±3 (mod 8) and the seed
         is odd; RANDU sits exactly there, with period 2²⁹ = m/4.</p>
         <p id="g-hd-check" style="background:var(--accent-wash); border-radius:6px; padding:7px 10px;"></p>
@@ -635,7 +636,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <details class="why">
-      <summary>Why does more memory lengthen the period, and what exactly is MRG32k3a?</summary>
+      <summary>Why does more memory lengthen the period, what exactly is MRG32k3a, and what are substreams?</summary>
       <div class="why-body">
         <p>A generator that remembers only its last value must repeat as soon as any single
         value recurs. A generator that remembers its last k values only repeats when a whole
@@ -646,18 +647,24 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         168 = 13² − 1 with just one extra word of memory.</p>
         <p>MRG32k3a (L'Ecuyer 1999) is where this tab and tab ② meet: two order-3 MRGs over
         different moduli, combined by subtraction exactly as the CLCG combines two LCGs, with
-        period about 2¹⁹¹. It is the generator inside many production simulation tools, and it
-        is the generator behind the other widgets in this repository, which is why this page
-        treats its arithmetic as subject matter rather than as a black box.</p>
-        <p>One cycle of length 2¹⁹¹ is far more than any single experiment needs, and
-        production packages spend the surplus on organization: they cut the cycle into
-        billions of guaranteed-disjoint <em>streams</em>, and each stream into
-        <em>substreams</em>, and hand a separate one to each input process of a simulation.
-        Comparing design alternatives with common random numbers then never risks accidental
-        overlap between processes. The slicing uses jump-ahead arithmetic, documented in
-        <a href="https://doi.org/10.1287/opre.50.6.1073.358" target="_blank" rel="noopener">L'Ecuyer,
-        Simard, Chen, and Kelton (2002), “An Object-Oriented Random-Number Package with Many
-        Long Streams and Substreams”</a> (Operations Research 50(6):1073–1075).</p>
+        period about 2¹⁹¹. It is the generator inside many production simulation tools.</p>
+        <p>MRG32k3a's cycle is not just enormous; it also comes with a jump-ahead operator.
+        Because the recurrence is linear, two applications of it collapse into a single rule
+        of the same small size, and doubling again gives the four-step rule, the eight-step
+        rule, and so on. What gets squared is the step rule itself, never a state, and so 127
+        doublings build a rule that leaps 2¹²⁷ steps in one application, without producing
+        any of the states in between. Size and jump-ahead together make it possible to divide
+        the one cycle into
+        <em>streams</em> (blocks 2¹²⁷ long) and each stream into <em>substreams</em> (blocks
+        2⁷⁶ long), each entered by jumping straight to its starting state; only the very
+        first position is ever seeded by hand. In practice, each source of randomness in a
+        simulation gets its own stream, and each replication advances to the next substream
+        within it, which keeps common-random-number comparisons aligned across replications.
+        Every block behaves as an independent generator, with no need to invent a new seed
+        for any of them, and with none of the risk that hand-picked seeds land on overlapping
+        stretches of the same cycle. This stream–substream scheme is from
+        <a href="https://doi.org/10.1287/opre.50.6.1073.358" target="_blank" rel="noopener">L'Ecuyer
+        et al. (2002, <em>Operations Research</em> 50(6):1073–1075)</a>.</p>
       </div>
     </details>
   </section>
