@@ -182,9 +182,6 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
             padding: 9px 11px; margin-bottom: 10px; overflow-wrap: break-word; }
 .rec-line b { color: var(--accent); font-weight: 600; }
 .rec-line .dim { color: var(--muted); }
-.state-big { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; margin-bottom: 8px; }
-.state-big .sb-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.state-big .sb-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.02rem; font-weight: 600; color: var(--stream); word-break: break-all; }
 /* The state card is a flex column, and so the table wrapper stretches to
    the exact height the parameter card sets for the row; whitespace under
    the table becomes visible rows instead. The max-height caps it in the
@@ -282,12 +279,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
 
       <div class="cv-card st-card" style="flex:1 1 auto;">
-        <div class="sec-hd">Current state – step it by hand</div>
-        <div class="state-big">
-          <span><span class="sb-lbl">n</span> <span class="sb-val" id="g-n">0</span></span>
-          <span><span class="sb-lbl">state x<sub>n</sub></span> <span class="sb-val" id="g-x">—</span></span>
-          <span><span class="sb-lbl">output u<sub>n</sub> = x<sub>n</sub>/m</span> <span class="sb-val" id="g-u" style="color:var(--est)">—</span></span>
-        </div>
+        <div class="sec-hd">Walk through an LCG output step by step</div>
         <div class="ctrl-row" style="margin-bottom:8px;">
           <button class="btn-run" onclick="stepN(1)">Step <span aria-hidden="true">▸</span></button>
           <button class="btn-run2" onclick="stepN(10)">Step ×10</button>
@@ -781,12 +773,6 @@ function resetState() {
   tb.closest('.steptbl-wrap').scrollTop = 0;
 }
 
-function updateStateCards() {
-  document.getElementById('g-n').textContent = G.n;
-  document.getElementById('g-x').textContent = fmtBig(G.state());
-  document.getElementById('g-u').textContent = G.n === 0 ? '—' : fmtU(Number(G.state()) / Number(cfg.m));
-}
-
 function stepN(k) {
   var tb = document.getElementById('g-steps'), frag = document.createDocumentFragment();
   for (var i = 0; i < k; i++) {
@@ -797,7 +783,6 @@ function stepN(k) {
   }
   tb.appendChild(frag);
   while (tb.children.length > STEP_ROWS_MAX) tb.removeChild(tb.firstChild);
-  updateStateCards();
   var wrap = tb.closest('.steptbl-wrap');
   wrap.scrollTop = wrap.scrollHeight;
 }
