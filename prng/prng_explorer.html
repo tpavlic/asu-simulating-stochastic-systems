@@ -753,17 +753,17 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
         <div class="sec-hd">Re-seeding from the visible history</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The first four draws
-          pass through from MRG32k3a; every later value is one MINSTD step from a seed
-          rebuilt out of the four values just emitted. The shape should feel familiar from
-          tab ③: an MRG also computes each new value from a combination of the last few it
-          produced. The differences are that this combination is keyed rather than public
-          and that it reads the emitted outputs rather than hidden state, which is exactly
-          what makes it checkable from the stream alone. Generate a stream, and test keys
-          against it: for each draw, the plot places what the tested key predicts
-          horizontally and what was observed vertically – the same reading as tab ④, except
-          that the right key now collapses <em>any</em> such stream onto the diagonal, no
-          visible state required.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Whereas a CLCG's next
+          output depends on several hidden states at once, an MRG guides its next output
+          with a saved history of one generator's prior values. Build that history from
+          prior <em>outputs</em> instead, and deliberate watermarking becomes possible:
+          every variable that generation needs is observable. Below, the past four outputs
+          are mixed with a secret key to generate each new output (the first four pass
+          through from MRG32k3a), and so whoever holds the key can check whether a stream's
+          recent history is consistent with generation by their PRNG – effectively a
+          cryptographic signature applied on top of the generated numbers. The plot compares
+          what a tested key predicts for each draw (horizontal) with what was observed
+          (vertical); the right key puts every point on the diagonal.</div>
         <div class="rec-line" style="line-height:1.8;"><span class="dim" style="font-style:italic;">// u<sub>n</sub> is the n-th value the stream emits</span><br>
           <span class="dim" style="font-style:italic;">// ⊕ is a bitwise, binary XOR operator</span><br>
           h = key<br>
