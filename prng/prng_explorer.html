@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<!-- Recommended iframe height: 900px or taller. The page is a normal
+     flowing document; inside a fixed-height LMS iframe, it simply scrolls
+     vertically within the frame, like the other widgets in this
+     repository. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pseudorandom Number Explorer — interactive explainer</title>
+<meta name="description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+
+<!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pseudorandom Number Explorer — interactive explainer">
+<meta property="og:description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+<meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer-preview.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1200">
+<meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer.html">
+<meta property="fb:app_id" content="2385695445236853">
+
+<!-- Twitter/X card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pseudorandom Number Explorer — interactive explainer">
+<meta name="twitter:description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+<meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer-preview.png">
+
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Y66V2TS0R6"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Y66V2TS0R6');</script>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* ── Chrome: course palette (see ../THEME.md) ─────────────────────── */
+  --accent:      #8C1D40;  /* ASU maroon */
+  --accent-dark: #6b1631;
+  --bg:          #ffffff;  /* matches a white Canvas LMS page when embedded */
+  --card:        #ffffff;
+  --border:      #e3dadd;
+  --text:        #191919;
+  --muted:       #6e6e6e;
+  --accent-wash: rgba(140,29,64,.06);
+  --accent-tint: rgba(140,29,64,.10);
+  --chart-bg:    #fbfafa;
+
+  /* ── Data: widget-owned, these encode meaning and are NOT themed ───
+     Teal is "the theoretical thing" (the uniform density, the uniform CDF);
+     orange is "the sampled thing" (histogram bars, the empirical CDF);
+     indigo is the raw stream itself (lattice points, state values in the
+     step table). Teal/orange stays separable under red-green color
+     deficiency, and the theoretical marks are dashed lines on top of that,
+     so hue is never the only cue. */
+  --truth:  #0F6E8C;
+  --est:    #C2570A;
+  --stream: #3F4C8C;
+  --warn:   #8b6914;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text);
+       font-size: 14px; line-height: 1.5; -webkit-text-size-adjust: 100%; }
+.widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
+.wh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-bottom: 8px; }
+.wh-left { flex: 1 1 420px; min-width: 0; }
+.wh-title { font-size: 1.32rem; font-weight: 700; color: var(--accent); }
+.wh-sub   { font-size: .85rem; color: var(--muted); margin-top: 1px; }
+.wh-copy  { margin-left: auto; font-size: .72rem; color: var(--muted); white-space: nowrap; }
+.wh-copy a { color: var(--accent); text-decoration: none; }
+.wh-copy a:hover { text-decoration: underline; }
+.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 4px 0 14px; }
+.tab {
+  font-family: 'Outfit', sans-serif; font-size: .88rem; font-weight: 500;
+  padding: 7px 18px; border: 2px solid transparent; border-bottom: none;
+  border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
+  cursor: pointer; margin-bottom: -2px; transition: .15s;
+  white-space: nowrap; flex-shrink: 0; min-height: 24px;
+}
+.tab.active { background: var(--card); color: var(--accent); font-weight: 700; border-color: var(--accent); border-bottom-color: var(--card); }
+.tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
+.tab-select {
+  display: none; width: 100%; font-family: 'Outfit', sans-serif;
+  font-size: .95rem; font-weight: 700; padding: 8px 14px;
+  border: 2px solid var(--accent); border-radius: 7px;
+  background: var(--card); color: var(--accent); cursor: pointer;
+  margin: 2px 0 14px; appearance: auto;
+}
+/* Swap the tab strip for the dropdown before the labels would wrap.
+   em rather than px so a larger default font size flips the switch
+   sooner, because media-query em tracks the browser default. */
+@media (max-width: 34em) {
+  .tabs { display: none; }
+  .tab-select { display: block; }
+}
+.tp { display: none; }
+.tp.active { display: block; }
+
+.ctrl-row { display: flex; align-items: center; gap: 8px 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; min-height: 30px;
+         border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
+.btn-run { font-family: 'Outfit', sans-serif; font-size: .88rem; font-weight: 700; padding: 6px 18px; min-height: 30px;
+           background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run:hover { background: var(--accent-dark); }
+.btn-run2 { font-family: 'Outfit', sans-serif; font-size: .85rem; font-weight: 700; padding: 5px 13px; min-height: 30px;
+            background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run2:hover { background: var(--accent); color: #fff; }
+.btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 5px 12px; min-height: 30px;
+             background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-clear:hover { color: var(--accent); border-color: var(--accent); }
+
+.mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .95em; }
+/* Dotted underline marks the word that carries a hover/tap tooltip; the
+   "What does the recurrence say" collapsible repeats the explanation for
+   anyone the tooltip does not reach. */
+.modtip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+/* Segmented 2D/3D toggle for the lattice panel */
+.seg { display: inline-flex; border: 1.5px solid var(--accent); border-radius: 6px; overflow: hidden; }
+.seg-btn { font-family: 'Outfit', sans-serif; font-size: .8rem; font-weight: 600; padding: 4px 14px;
+           min-height: 26px; background: #fff; color: var(--accent); border: none; cursor: pointer; }
+.seg-btn.active { background: var(--accent); color: #fff; }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The two property panels sit side by side and wrap to a column when tight */
+.props-row { flex-wrap: wrap; }
+.stat-line { font-size: .8rem; color: var(--muted); }
+.stat-line b { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--est); }
+.stat-line span { font-size: .72rem; }
+.par-inp { font-family: 'IBM Plex Mono', monospace; font-size: .86rem; width: 100%;
+           padding: 5px 8px; min-height: 30px; border: 1.5px solid var(--border); border-radius: 6px;
+           background: #fff; color: var(--text); }
+.par-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.par-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px 10px; }
+.par-cell label { display: block; font-size: .74rem; font-weight: 600; color: var(--muted); margin-bottom: 3px; white-space: nowrap; }
+.par-cell label b { font-family: 'IBM Plex Mono', monospace; font-size: .84rem; font-weight: 600; color: var(--text); }
+/* Reserved height so validation text never shifts the layout below it */
+.par-msg { min-height: 1.2em; margin-top: 6px; font-size: .76rem; line-height: 1.35; color: var(--muted); }
+.par-msg.bad { color: var(--accent); font-weight: 600; }
+
+.par-inp:focus-visible, select:focus-visible, .tab-select:focus-visible, .tab:focus-visible,
+.btn-run:focus-visible, .btn-run2:focus-visible, .btn-clear:focus-visible,
+input[type=range]:focus-visible, details.why summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+.viz-row { display: flex; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+.cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 11px; min-width: 0; }
+.cv-leg { font-size: .72rem; color: var(--muted); text-align: center; margin-top: 5px; }
+canvas { display: block; max-width: 100%; }
+svg.plot { display: block; width: 100%; height: auto; }
+.sec-hd { font-size: .73rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 7px; }
+.sg { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 11px; min-width: 0; }
+.sc-lbl { font-size: .68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: .98rem; font-weight: 600; color: var(--accent);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sc-val.est { color: var(--est); }
+.sc-sub { font-size: .68rem; color: var(--muted); margin-top: 1px; }
+
+.note { background: var(--accent-wash); border-left: 3px solid var(--accent);
+        border-radius: 0 6px 6px 0; padding: 8px 11px; font-size: .81rem;
+        line-height: 1.55; margin-bottom: 10px; }
+.note strong { color: var(--accent); }
+.hint { background: #f5f2f3; border-radius: 6px; padding: 8px 11px; font-size: .8rem; color: var(--muted); line-height: 1.55; }
+
+/* ── Collapsible pedagogy notes (closed by default) ──────────────────── */
+details.why { border: 1.5px solid var(--border); border-radius: 7px; background: var(--chart-bg); margin-top: 10px; }
+details.why > summary { cursor: pointer; padding: 7px 11px; font-size: .8rem; font-weight: 600;
+                        color: var(--accent); list-style: none; display: flex; align-items: center; gap: 7px; min-height: 24px; }
+details.why > summary::-webkit-details-marker { display: none; }
+details.why > summary::before { content: '?'; flex: 0 0 auto; width: 15px; height: 15px;
+  border-radius: 50%; background: var(--accent); color: #fff; font-size: .68rem;
+  font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+details.why[open] > summary { border-bottom: 1px solid var(--border); }
+details.why .why-body { padding: 9px 11px 10px 33px; font-size: .81rem; color: var(--text); line-height: 1.6; }
+details.why .why-body p + p { margin-top: 7px; }
+details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size: .95em;
+                             background: var(--accent-wash); padding: 1px 4px; border-radius: 3px; }
+
+/* ── Tab ①: recurrence, parameters, and the step table ───────────────── */
+.rec-line { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; color: var(--text);
+            background: var(--chart-bg); border: 1.5px solid var(--border); border-radius: 7px;
+            padding: 9px 11px; margin-bottom: 10px; overflow-wrap: break-word; }
+.rec-line b { color: var(--accent); font-weight: 600; }
+.rec-line .dim { color: var(--muted); }
+.state-big { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; margin-bottom: 8px; }
+.state-big .sb-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.state-big .sb-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.02rem; font-weight: 600; color: var(--stream); word-break: break-all; }
+/* The state card is a flex column, and so the table wrapper stretches to
+   the exact height the parameter card sets for the row; whitespace under
+   the table becomes visible rows instead. The max-height caps it in the
+   stacked (narrow) layout, where nothing else constrains the card. */
+.st-card { display: flex; flex-direction: column; }
+.steptbl-wrap { flex: 1 1 auto; min-height: 0; max-height: 380px; overflow: auto; border: 1.5px solid var(--border); border-radius: 7px; }
+@media (max-width: 680px) { .steptbl-wrap { max-height: 290px; } }
+table.steptbl { border-collapse: collapse; width: 100%; font-size: .8rem; }
+table.steptbl th { position: sticky; top: 0; background: var(--chart-bg); color: var(--muted);
+                   font-weight: 700; font-size: .7rem; text-transform: none; text-align: right;
+                   padding: 6px 10px; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+table.steptbl td { font-family: 'IBM Plex Mono', monospace; text-align: right; padding: 4px 10px;
+                   border-bottom: 1px solid #f0ecee; white-space: nowrap; }
+table.steptbl td.cx { color: var(--stream); font-weight: 600; }
+table.steptbl td.cu { color: var(--est); }
+table.steptbl tr.seedrow td { color: var(--muted); }
+table.steptbl tr.seedrow td.cx { color: var(--stream); font-weight: 400; }
+
+input[type=range] { accent-color: var(--accent); height: 26px; cursor: pointer; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
+.cr-sep { display: inline; }
+.cr-br { display: none; }
+@media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
+
+@media (max-width: 680px) { .viz-row { flex-direction: column; } .g-left { flex: 1 1 auto !important; } }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="wh">
+    <div class="wh-left">
+      <div class="wh-title">Pseudorandom Number Explorer</div>
+      <div class="wh-sub">How simulation software makes “random” numbers – inspectable arithmetic, judged on uniformity and independence</div>
+    </div>
+    <div class="wh-copy">&copy; 2026 Theodore P. Pavlic &middot; <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="gen" onclick="showTab('gen',this)">① Generator</button>
+  </nav>
+  <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
+    <option value="gen">① Generator</option>
+  </select>
+
+  <!-- ── TAB ①: the generator itself ─────────────────────────────────── -->
+  <section id="tab-gen" class="tp active">
+    <div class="note"><strong>A pseudorandom number generator (PRNG) is a short arithmetic
+      recipe whose outputs are judged on two separate properties:</strong> <em>uniformity</em>
+      (the values fill [0, 1] evenly) and <em>independence</em> (knowing one value tells you
+      nothing about the ones that follow). For one <em>stream</em> (i.e., the sequence u₁,
+      u₂, … that one choice of parameters and seed produces), the panels below judge
+      uniformity and independence separately, and the verdicts can disagree. From the preset
+      list below, the Toy example amplifies the effect: its 16 possible outputs appear equally
+      often, and yet a conspicuous pattern relates past values to future values. The Toy pattern
+      is effectively embedded in every stream below, but most are dense enough to hide it;
+      RANDU, also in the preset list, appears independent until you look across the triples it
+      produces. Despite these inevitable patterns in PRNGs, their repeatability can be
+      leveraged to reduce extra sources of variance in experiments and to increase
+      reproducibility when sharing experimental results.</div>
+
+    <div class="viz-row">
+      <div class="cv-card g-left" style="flex:0 0 375px;">
+        <div class="sec-hd">Linear congruential generator (LCG)</div>
+        <div class="rec-line" id="g-rec"></div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <label class="ctrl-lbl" for="g-preset">Preset</label>
+          <select id="g-preset" style="flex:1 1 auto; min-width:0;" onchange="applyPreset(this.value)"></select>
+        </div>
+        <div class="hint" id="g-preset-desc" style="margin-bottom:10px;"></div>
+        <div class="par-grid">
+          <div class="par-cell">
+            <label for="g-a" title="a scales the current state at every step"><b>a</b> = multiplier</label>
+            <input class="par-inp" id="g-a" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
+          </div>
+          <div class="par-cell">
+            <label for="g-c" title="c is added at every step; c = 0 gives a purely multiplicative generator"><b>c</b> = increment</label>
+            <input class="par-inp" id="g-c" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
+          </div>
+          <div class="par-cell">
+            <label for="g-m" title="the mod-m wrap-around keeps the state in 0 … m−1, the way a clock wraps at 12; m also sets how many states exist"><b>m</b> = <span class="modtip">modulus</span></label>
+            <input class="par-inp" id="g-m" type="text" autocomplete="off" spellcheck="false" onchange="applyParams()">
+          </div>
+          <div class="par-cell">
+            <label for="g-seed" title="the starting state x₀; the whole stream follows from it"><b>x₀</b> = seed</label>
+            <input class="par-inp" id="g-seed" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
+          </div>
+        </div>
+        <div class="par-msg" id="g-msg" role="status" aria-live="polite">m also accepts 2^31 and 2^31-1 style input.</div>
+        <div class="cv-leg" style="text-align:left; margin-top:6px;">These four numbers pin down
+          the whole stream: anyone who uses the same a, c, m, and x₀ gets exactly the same
+          sequence.</div>
+      </div>
+
+      <div class="cv-card st-card" style="flex:1 1 auto;">
+        <div class="sec-hd">Current state – step it by hand</div>
+        <div class="state-big">
+          <span><span class="sb-lbl">n</span> <span class="sb-val" id="g-n">0</span></span>
+          <span><span class="sb-lbl">state x<sub>n</sub></span> <span class="sb-val" id="g-x">—</span></span>
+          <span><span class="sb-lbl">output u<sub>n</sub> = x<sub>n</sub>/m</span> <span class="sb-val" id="g-u" style="color:var(--est)">—</span></span>
+        </div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <button class="btn-run" onclick="stepN(1)">Step <span aria-hidden="true">▸</span></button>
+          <button class="btn-run2" onclick="stepN(10)">Step ×10</button>
+        </div>
+        <div class="steptbl-wrap">
+          <table class="steptbl" aria-label="Generator steps">
+            <thead><tr><th>n</th><th>a·x<sub>n−1</sub> + c</th><th>x<sub>n</sub> = (…) mod m</th><th>u<sub>n</sub> = x<sub>n</sub>/m</th></tr></thead>
+            <tbody id="g-steps"></tbody>
+          </table>
+        </div>
+        <div class="cv-leg">The panels below read u₁, u₂, … from this same recurrence; the
+          seed x₀ is not emitted.</div>
+      </div>
+    </div>
+
+    <div class="ctrl-row" style="margin: 2px 0 10px;">
+      <span class="ctrl-lbl">Stream for both panels – u₁ … u<sub>n</sub>, n = <b class="mono" id="stream-n" style="color:var(--accent); font-size:.92rem;">500</b></span>
+      <button class="btn-run" onclick="growStream(1000)">+1,000</button>
+      <button class="btn-run2" onclick="growStream(100)">+100</button>
+      <button class="btn-run2" onclick="growStream(10000)">+10,000</button>
+      <button class="btn-clear" onclick="resetStream()">Reset to 500</button>
+    </div>
+
+    <div class="viz-row props-row">
+      <div class="cv-card" style="flex:1 1 400px; min-width:0;">
+        <div class="sec-hd">Property 1: Uniformity – do the values fill [0, 1] evenly?</div>
+        <svg class="plot" id="uni-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of generated values"></svg>
+        <div class="cv-leg"><span style="color:var(--est)">▮ observed density</span>&nbsp;&nbsp;
+          <span style="color:var(--truth)">┄ uniform density = 1</span>&nbsp;&middot;&nbsp;grow the stream and watch the bars flatten</div>
+        <div class="ctrl-row" style="margin:8px 0 0; row-gap:2px;">
+          <label class="ctrl-lbl" for="uni-bins">Bins</label>
+          <select id="uni-bins" onchange="renderPanels()">
+            <option value="10" selected>10</option><option value="20">20</option><option value="40">40</option>
+          </select>
+          <span class="stat-line">χ² statistic = <b id="uni-chi">—</b> <span id="uni-chidf"></span></span>
+          <span class="stat-line">χ² p-value = <b id="uni-chip">—</b></span>
+        </div>
+        <div style="border-top:1px solid var(--border); margin:10px 0 8px;"></div>
+        <div style="max-width:430px; margin:0 auto;">
+          <svg class="plot" id="uni-ecdf" viewBox="0 0 260 260" role="img" aria-label="Empirical CDF against the uniform CDF, with the largest gap marked and a legend in the lower right"></svg>
+        </div>
+        <div class="ctrl-row" style="margin:6px 0 0; row-gap:2px; justify-content:center;">
+          <span class="stat-line">K–S statistic D<sub>n</sub> = <b id="uni-ks">—</b></span>
+          <span class="stat-line">K–S p-value = <b id="uni-ksp">—</b></span>
+        </div>
+      </div>
+      <div class="cv-card" style="flex:0 1 482px; min-width:0;">
+        <div class="sec-hd">Property 2: Independence – does one value predict a later one?</div>
+        <div class="cv-leg" id="ind-desc-2d" style="text-align:left; margin:0 0 6px;">Each dot pairs one output
+          with the output k steps later: horizontal position u<sub>i</sub>, vertical position
+          u<sub>i+k</sub>. Lag k = 1 pairs each value with the very next one; a larger lag asks
+          whether a value predicts further ahead. LCGs show a characteristic pattern of parallel
+          stripes when plotted this way, which reflects that they are deterministic processes
+          and not sources of true randomness. The stripe pattern is called the generator's
+          <em>lattice</em>, and this scatter of pairs is a lattice plot.</div>
+        <div class="cv-leg" id="ind-desc-3d" style="text-align:left; margin:0 0 6px; display:none;">Each
+          dot is three consecutive outputs (u<sub>i</sub>, u<sub>i+1</sub>, u<sub>i+2</sub>),
+          one point in the unit cube; drag the cube to rotate it. Most angles look like fog.
+          In three dimensions, the lattice becomes parallel planes, and for RANDU, there is a
+          special angle where every triple falls onto one of just 15 of them: huge slabs of
+          the cube that its “random” values can never enter. Loading the RANDU preset adds a
+          button that flies straight to that angle.</div>
+        <div class="ctrl-row" style="margin-bottom:6px; justify-content:center;">
+          <span class="seg" role="group" aria-label="Lattice view">
+            <button type="button" class="seg-btn active" id="ind-2d" aria-pressed="true" onclick="setIndMode('2d')">2D pairs</button>
+            <button type="button" class="seg-btn" id="ind-3d" aria-pressed="false" onclick="setIndMode('3d')">3D triples</button>
+          </span>
+        </div>
+        <div class="ctrl-row" id="ind-lag-row" style="margin-bottom:6px; justify-content:center;">
+          <label class="ctrl-lbl" for="ind-lag">Lag k</label>
+          <input type="range" id="ind-lag" min="1" max="20" value="1" step="1"
+                 style="flex:0 1 170px; min-width:110px;" oninput="renderInd()" aria-describedby="ind-lagval">
+          <span class="mono" id="ind-lagval" style="font-size:.85rem; min-width:2.2em;">1</span>
+        </div>
+        <div class="ctrl-row" id="ind-flaw-row" style="margin-bottom:6px; justify-content:center; display:none;">
+          <button type="button" class="btn-run2" onclick="showFlaw()">Show me RANDU’s planes</button>
+        </div>
+        <canvas id="ind-cv" aria-label="Scatter of value pairs at the chosen lag" style="margin:0 auto;"></canvas>
+        <div class="cv-leg" id="ind-cap"></div>
+        <div class="cv-leg" style="margin-top:2px;">independent values would fill the square with
+          structureless noise; any visible pattern is dependence</div>
+      </div>
+    </div>
+
+    <div class="note" id="uni-verdict"></div>
+
+    <details class="why">
+      <summary>Why would a simulation want fake randomness?</summary>
+      <div class="why-body">
+        <p>Determinism is the feature, not the flaw. A simulation whose randomness comes from a
+        seeded recurrence can be <em>reproduced exactly</em>: rerun with the same parameters and
+        seed and every draw, every queue, and every estimate comes back identical, which is what
+        makes a surprising result checkable and a bug findable. Write down the four numbers on
+        this tab and any classmate can regenerate your entire stream.</p>
+        <p>Reproducibility also buys sharper comparisons. To compare two system designs fairly, feed
+        both the <em>same</em> random inputs (the same arrival times, the same service demands) so
+        that any difference in the results is caused by the designs and not by luck. That technique,
+        common random numbers, only exists because the “random” numbers are deterministic.</p>
+        <p>The price is that the stream is not random at all, and so it has to behave,
+        statistically, like randomness. The two panels above are exactly that audit: the values
+        must fill [0, 1] evenly, and no value may carry usable information about the ones that
+        follow.</p>
+      </div>
+    </details>
+    <details class="why">
+      <summary>What does the recurrence say, and why do all deterministic sequences eventually repeat?</summary>
+      <div class="why-body">
+        <p>The state is a whole number x<sub>n</sub> between 0 and m − 1. Each step multiplies by
+        <code>a</code>, adds <code>c</code>, and keeps only the remainder after dividing by
+        <code>m</code>: the “mod” operation, the same wrap-around as a clock face. Dividing the
+        state by m rescales it into [0, 1), which is the u<sub>n</sub> a simulation actually
+        consumes.</p>
+        <p>Because the next state depends only on the current state, and there are just m possible
+        states, the sequence must eventually revisit a state and from then on repeat exactly. The
+        length of that loop is the generator's <em>period</em>, and it is one reason m is chosen
+        enormous. Try the toy preset (m = 16) and step through the table until it repeats; then
+        consider how far apart the same two states are under the minimal standard.</p>
+      </div>
+    </details>
+    <details class="why">
+      <summary>What do the two uniformity tests check, and what is the big thing they cannot see?</summary>
+      <div class="why-body">
+        <p>The chi-square test cuts [0, 1] into k equal bins and compares each observed count
+        with the n/k a uniform distribution would put there; the statistic totals the squared
+        mismatches. The Kolmogorov–Smirnov statistic D<sub>n</sub> pushes the same idea to its
+        limit. Sort the values so that the r-th smallest one “should” sit near r/n. Chi-square
+        counts crowding in a few wide bins; K–S in effect cuts a bin so fine that each holds a
+        single point and reports the farthest any point strays from where its rank says it
+        should sit. That farthest stray is exactly the biggest vertical gap between the
+        empirical CDF and the diagonal, marked on the small plot. Both p-values answer the same
+        question: could a mismatch this large plausibly come from truly uniform draws?</p>
+        <p>Both tests treat the sample as a bag of values – they are not sensitive to the order
+        of the values. Judging whether the order is consistent with independent draws is the job
+        of separate tools: autocorrelation tests, runs tests, and the lattice panel beside the
+        uniformity tests.</p>
+      </div>
+    </details>
+    <details class="why">
+      <summary>What is the lattice in the independence plot, and why does every LCG have one?</summary>
+      <div class="why-body">
+        <p>Consecutive states of an LCG satisfy x<sub>i+1</sub> = (a·x<sub>i</sub> + c) mod m.
+        Without the mod, every pair (x<sub>i</sub>, x<sub>i+1</sub>) would sit on the single
+        straight line y = a·x + c; the mod subtracts some whole multiple of m from y, and so the
+        pair sits on one of the parallel lines y = a·x + c − j·m instead. Dividing by m to get
+        the u values only rescales that picture into the unit square. Pairs of consecutive
+        outputs therefore cannot land just anywhere: they are confined to a family of parallel
+        lines, a <em>lattice</em>. The same argument confines triples of consecutive outputs to
+        parallel planes in three dimensions, and so on in every dimension.</p>
+        <p>Every LCG has such a lattice; there is no parameter choice that escapes it. The design
+        question is how <em>fine</em> it is. A good multiplier packs the lines so closely that the
+        grain is far below anything a simulation could resolve; a bad one (RANDU is the canonical
+        case) leaves gaps you can see by eye, meaning huge regions of the square, or of the cube,
+        that pairs of “random” values can never visit. George Marsaglia made this pointed
+        observation in a famously titled 1968 paper,
+        <a href="https://doi.org/10.1073/pnas.61.1.25" target="_blank" rel="noopener">“Random
+        numbers fall mainly in the planes”</a> (PNAS 61(1):25–28).</p>
+        <p>Raising the lag k probes a different slice of the dependence structure: the pairs
+        (u<sub>i</sub>, u<sub>i+k</sub>) obey the k-steps-ahead recurrence, which is itself an
+        LCG whose multiplier is a<sup>k</sup> mod m, and so a generator can look fine at lag 1
+        and still show its grain at another.</p>
+      </div>
+    </details>
+  </section>
+</div>
+
+<script id="prng-core">
+/* ===== PRNG-CORE-BEGIN ===== */
+'use strict';
+/* Everything between the PRNG-CORE sentinels is pure numerics with no DOM
+   access. prng/verify_prng_explorer.mjs slices this block out of the HTML
+   and runs it in Node against reference vectors computed with exact
+   big-integer arithmetic outside JavaScript, and so the code tested is
+   byte-for-byte the code the page runs.
+
+   Modular arithmetic is done in BigInt throughout. The student can type any
+   modulus up to 2^62 and any multiplier below it, and so the product a·x + c can
+   far exceed 2^53, where double arithmetic silently rounds to the nearest
+   representable value and the recurrence quietly becomes a different
+   recurrence. BigInt is exact at every size. Speed does not matter at this
+   scale: the longest stream this page draws is a few tens of thousands of
+   values, which BigInt covers in milliseconds. A cheaper split or Schrage
+   technique would also work for any single fixed generator, but not for
+   arbitrary student-typed parameters, and the whole point of this widget is
+   that the arithmetic shown is the arithmetic done. */
+
+/* Reduce any integer into [0, m), correctly for negative values too. */
+function modNorm(v, m) { v %= m; if (v < 0n) v += m; return v; }
+
+/* One LCG instance: x_{n+1} = (a·x_n + c) mod m, outputs u_n = x_n / m for
+   n ≥ 1 (the seed x_0 is not emitted). All of a, c, m, and seed are BigInt. */
+function makeLCG(a, c, m, seed) {
+  var x = modNorm(seed, m);
+  var g = {
+    n: 0,
+    state: function () { return x; },
+    /* Advance one step and return the output u in [0, 1). */
+    next: function () {
+      x = (a * x + c) % m;
+      g.n++;
+      return Number(x) / Number(m);
+    },
+    /* Advance one step and return every intermediate quantity so that the UI
+       can lay the arithmetic out for hand-checking. */
+    detail: function () {
+      var raw = a * x + c, nx = raw % m;
+      x = nx; g.n++;
+      return { n: g.n, raw: raw, x: nx, u: Number(nx) / Number(m) };
+    },
+    reset: function () { x = modNorm(seed, m); g.n = 0; }
+  };
+  return g;
+}
+
+/* First n outputs as doubles, for the statistical tabs. */
+function lcgStream(a, c, m, seed, n) {
+  var g = makeLCG(a, c, m, seed), out = new Float64Array(n);
+  for (var i = 0; i < n; i++) out[i] = g.next();
+  return out;
+}
+
+/* ── Special functions for the two uniformity tests ─────────────────────
+   log Gamma via the Lanczos approximation (g = 7, 9 coefficients, the
+   widely published set); relative accuracy about 1e-15 on the positive
+   real axis. The verification script checks it against exact identities. */
+var LANCZOS_G7 = [
+  0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+  771.32342877765313, -176.61502916214059, 12.507343278686905,
+  -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7
+];
+function logGamma(x) {
+  if (x < 0.5) {   /* reflection, so that small arguments stay accurate */
+    return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+  }
+  x -= 1;
+  var s = LANCZOS_G7[0];
+  for (var i = 1; i < 9; i++) s += LANCZOS_G7[i] / (x + i);
+  var t = x + 7.5;
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(s);
+}
+
+/* Regularized lower incomplete gamma P(a, x): series for x < a + 1, and the
+   Lentz continued fraction for the complement otherwise. */
+function gammaP(a, x) {
+  if (x <= 0) return 0;
+  if (x < a + 1) {
+    var ap = a, sum = 1 / a, del = sum;
+    for (var i = 0; i < 500; i++) {
+      ap += 1; del *= x / ap; sum += del;
+      if (Math.abs(del) < Math.abs(sum) * 1e-15) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+  }
+  return 1 - gammaQcf(a, x);
+}
+function gammaQcf(a, x) {
+  var tiny = 1e-300, b = x + 1 - a, c = 1 / tiny, d = 1 / b, h = d;
+  for (var i = 1; i < 500; i++) {
+    var an = -i * (i - a);
+    b += 2; d = an * d + b; if (Math.abs(d) < tiny) d = tiny;
+    c = b + an / c;         if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    var del = d * c; h *= del;
+    if (Math.abs(del - 1) < 1e-15) break;
+  }
+  return Math.exp(-x + a * Math.log(x) - logGamma(a)) * h;
+}
+/* Upper tail of the chi-square CDF with df degrees of freedom. */
+function chiSqUpperP(stat, df) { return 1 - gammaP(df / 2, stat / 2); }
+
+/* Bin counts for k equal bins over [0, 1). */
+function histCounts(us, k) {
+  var counts = new Array(k).fill(0);
+  for (var i = 0; i < us.length; i++) {
+    var j = Math.floor(us[i] * k);
+    if (j >= k) j = k - 1;   /* u exactly 1 cannot occur, but guard the edge */
+    counts[j]++;
+  }
+  return counts;
+}
+
+/* Chi-square goodness of fit against Uniform(0,1) on k equal bins. No
+   parameters are estimated from the data, and so df = k − 1 with no further
+   subtraction. */
+function chiSqUniform(us, k) {
+  var counts = histCounts(us, k), e = us.length / k, stat = 0;
+  for (var i = 0; i < k; i++) { var d = counts[i] - e; stat += d * d / e; }
+  return { stat: stat, df: k - 1, p: chiSqUpperP(stat, k - 1) };
+}
+
+/* Kolmogorov's limiting distribution Q(t) = 2 Σ (−1)^{j−1} e^{−2 j² t²}. */
+function kolmogorovQ(t) {
+  if (t < 1e-3) return 1;
+  var sum = 0;
+  for (var j = 1; j <= 100; j++) {
+    var term = 2 * Math.exp(-2 * j * j * t * t);
+    sum += (j % 2 === 1) ? term : -term;
+    if (term < 1e-12) break;
+  }
+  return Math.min(1, Math.max(0, sum));
+}
+
+/* One-sample K-S test against Uniform(0,1). The finite-n p-value uses
+   Stephens's adjusted statistic (√n + 0.12 + 0.11/√n)·D_n in the limiting
+   distribution, accurate to a few units in the third decimal for n ≥ 5;
+   the verification script measures the resulting test size empirically.
+   Besides d and p, the result carries where the largest gap occurs (at,
+   with the gap spanning y0 to y1 vertically) so that the ECDF plot can mark
+   the point that sets the statistic. */
+function ksUniform(us) {
+  var n = us.length, s = Array.prototype.slice.call(us).sort(function (a, b) { return a - b; });
+  var d = 0, at = 0, y0 = 0, y1 = 0;
+  for (var i = 0; i < n; i++) {
+    var hi = (i + 1) / n - s[i], lo = s[i] - i / n;
+    if (hi > d) { d = hi; at = s[i]; y0 = s[i]; y1 = (i + 1) / n; }
+    if (lo > d) { d = lo; at = s[i]; y0 = i / n; y1 = s[i]; }
+  }
+  var sn = Math.sqrt(n);
+  return { d: d, p: kolmogorovQ((sn + 0.12 + 0.11 / sn) * d), at: at, y0: y0, y1: y1 };
+}
+/* ===== PRNG-CORE-END ===== */
+</script>
+
+<script>
+'use strict';
+/* ── Theme tokens, read once so plots and chrome cannot drift apart ──── */
+var css = getComputedStyle(document.documentElement);
+var tok = function (n) { return css.getPropertyValue(n).trim(); };
+var C = { accent: tok('--accent'), muted: tok('--muted'), border: tok('--border'),
+          chartBg: tok('--chart-bg'), truth: tok('--truth'), est: tok('--est'),
+          stream: tok('--stream') };
+
+/* ── Presets. Every constant here is published and verified:
+   - Minimal standard: Park & Miller 1988, a = 7^5 = 16807, m = 2^31 − 1
+     (a Mersenne prime); full period m − 1 from any nonzero seed.
+   - RANDU: IBM, a = 65539, m = 2^31, odd seed; consecutive triples fall on
+     15 planes in the unit cube.
+   - The power-of-two example uses the constants popularized by the C
+     standard's sample rand() (a = 1103515245, c = 12345), with m = 2^31;
+     full period by Hull–Dobell, but the low k bits cycle with period 2^k. */
+var PRESETS = {
+  toy:    { a: '5', c: '3', m: '16', seed: '1',
+            label: 'Toy – m = 16, watch the cycle repeat',
+            desc: 'Small enough to trace in full: all 16 states appear once each, in a fixed loop, before the sequence repeats exactly. Step 17 times in the table and find the repeat. Every generator on this page is this, only with a period too long to watch.' },
+  minstd: { a: '16807', c: '0', m: '2147483647', seed: '1',
+            label: 'Lehmer “minimal standard” – a = 16807, m = 2³¹−1',
+            desc: 'Park & Miller (1988): a = 7⁵ = 16807, m = 2³¹ − 1 (a prime). From any nonzero seed, it walks through all m − 1 = 2,147,483,646 nonzero states before repeating. Decades old and small by modern standards, but honest: a workable baseline generator.' },
+  randu:  { a: '65539', c: '0', m: '2147483648', seed: '1',
+            label: 'RANDU – historically shipped, badly flawed',
+            desc: 'IBM’s RANDU (a = 65539, m = 2³¹, odd seed), distributed widely in the 1960s–70s and used in published research. Its outputs pass the uniformity panel below; the flaw is a dependence structure among triples of consecutive values. Switch the independence panel to 3D triples and press “Show me RANDU’s planes.”' },
+  ansi:   { a: '1103515245', c: '12345', m: '2147483648', seed: '12345',
+            label: 'Power-of-two modulus – C-standard-style constants',
+            desc: 'The multiplier and increment popularized by the C standard’s sample rand() (a = 1103515245, c = 12345), with m = 2³¹. Full period 2³¹, but with a power-of-two modulus, the low-order bits cycle far faster than the high-order bits: the k lowest bits of x repeat every 2ᵏ steps.' },
+  custom: { label: 'Custom', desc: 'Your own parameters. Bad choices are allowed on purpose: try a small a, an even a with even m, or anything else, and watch what breaks.' }
+};
+
+/* Central config; all four values are BigInt. */
+var cfg = { a: 16807n, c: 0n, m: 2147483647n, seed: 1n };
+var M_MAX = 1n << 62n;
+
+/* Parse an integer, allowing 2^31 and 2^31-1 / 2^31+5 forms for the
+   modulus field. Negative integers are accepted; applyParams wraps them
+   into [0, m) the same way it wraps values at or above m. Returns
+   { ok, v } with v BigInt, or { ok:false, msg }. */
+function parseBig(str) {
+  var s = String(str).replace(/[\s,]/g, '');
+  var m1 = /^(-?\d{1,19})$/.exec(s);
+  if (m1) return { ok: true, v: BigInt(m1[1]) };
+  var m2 = /^2\^(\d{1,2})(?:([+-])(\d{1,10}))?$/.exec(s);
+  if (m2) {
+    var e = Number(m2[1]);
+    if (e > 62) return { ok: false, msg: 'exponent above 62' };
+    var v = 1n << BigInt(e);
+    if (m2[2]) v = m2[2] === '-' ? v - BigInt(m2[3]) : v + BigInt(m2[3]);
+    if (v < 0n) return { ok: false, msg: 'negative value' };
+    return { ok: true, v: v };
+  }
+  return { ok: false, msg: 'not a whole number' };
+}
+
+function fmtBig(v) {   /* thousands separators, own regex so BigInt size never matters */
+  var s = v.toString(), out = '', c = 0;
+  for (var i = s.length - 1; i >= 0; i--) {
+    out = s[i] + out;
+    if (++c % 3 === 0 && i > 0) out = ',' + out;
+  }
+  return out;
+}
+function fmtU(u) { return u.toFixed(6); }
+function fmtP(p) {
+  if (p < 1e-4) return '< 0.0001';
+  return p.toFixed(4);
+}
+
+/* ── Generator state for tab ① (the hand-stepped instance) ──────────── */
+var G = null;
+
+/* ── The shared stream consumed by tabs ② and ③ ─────────────────────── */
+var S = { key: '', gen: null, us: [] };
+function cfgKey() { return cfg.a + ',' + cfg.c + ',' + cfg.m + ',' + cfg.seed; }
+var STREAM_CAP = 200000;
+function ensureStream(n) {
+  if (S.key !== cfgKey()) { S.key = cfgKey(); S.gen = makeLCG(cfg.a, cfg.c, cfg.m, cfg.seed); S.us = []; }
+  n = Math.min(n, STREAM_CAP);
+  while (S.us.length < n) S.us.push(S.gen.next());
+  return S.us;
+}
+
+/* ── Parameter handling ─────────────────────────────────────────────── */
+function setFields(p) {
+  document.getElementById('g-a').value = p.a;
+  document.getElementById('g-c').value = p.c;
+  document.getElementById('g-m').value = p.m;
+  document.getElementById('g-seed').value = p.seed;
+}
+
+function applyPreset(key) {
+  var p = PRESETS[key];
+  document.getElementById('g-preset').value = key;   /* callers other than the select itself */
+  document.getElementById('g-preset-desc').innerHTML = p.desc;
+  if (key !== 'custom') { setFields(p); applyParams(); }
+}
+
+/* Validate the four fields, normalize them (reduce a, c, and the seed mod m),
+   rebuild the generator and stream, and re-render whatever is visible. */
+function applyParams() {
+  var ids = ['g-a', 'g-c', 'g-m', 'g-seed'], names = ['a', 'c', 'm', 'seed x₀'];
+  var vals = {}, msgs = [], bad = false;
+  for (var i = 0; i < 4; i++) {
+    var el = document.getElementById(ids[i]), r = parseBig(el.value);
+    el.setAttribute('aria-invalid', r.ok ? 'false' : 'true');
+    if (!r.ok) { msgs.push('⚠ ' + names[i] + ': ' + r.msg + '.'); bad = true; }
+    else vals[ids[i]] = r.v;
+  }
+  var msgEl = document.getElementById('g-msg');
+  if (bad) { msgEl.textContent = msgs.join(' ') + ' Whole numbers only; m also accepts 2^31-1 style input.'; msgEl.classList.add('bad'); return; }
+  var m = vals['g-m'];
+  if (m < 2n || m > M_MAX) {
+    msgEl.textContent = '⚠ m must be between 2 and 2^62.'; msgEl.classList.add('bad');
+    document.getElementById('g-m').setAttribute('aria-invalid', 'true'); return;
+  }
+  var a = modNorm(vals['g-a'], m), c = modNorm(vals['g-c'], m), seed = modNorm(vals['g-seed'], m);
+  if (a !== vals['g-a']) msgs.push('a wrapped mod m to ' + a + '.');
+  if (c !== vals['g-c']) msgs.push('c wrapped mod m to ' + c + '.');
+  if (seed !== vals['g-seed']) msgs.push('seed wrapped mod m to ' + seed + '.');
+  if (c === 0n && seed === 0n) msgs.push('⚠ With c = 0, the state 0 is stuck: every output will be 0.');
+  else if (c === 0n && m % 2n === 0n && seed % 2n === 0n && document.getElementById('g-preset').value === 'randu')
+    msgs.push('RANDU needs an odd seed; an even one falls into a shorter cycle.');
+  cfg = { a: a, c: c, m: m, seed: seed };
+  document.getElementById('g-a').value = a.toString();
+  document.getElementById('g-c').value = c.toString();
+  document.getElementById('g-m').value = m.toString();
+  document.getElementById('g-seed').value = seed.toString();
+
+  /* If the fields no longer match the selected preset, flip to Custom. */
+  var sel = document.getElementById('g-preset'), pk = sel.value, p = PRESETS[pk];
+  if (pk !== 'custom' && !(p.a === a.toString() && p.c === c.toString() && p.m === m.toString() && p.seed === seed.toString())) {
+    sel.value = 'custom';
+    document.getElementById('g-preset-desc').innerHTML = PRESETS.custom.desc;
+  }
+  msgEl.textContent = msgs.join(' ') || 'm also accepts 2^31 and 2^31-1 style input.';
+  msgEl.classList.remove('bad');
+
+  renderRecurrence();
+  resetState();
+  streamN = STREAM_START;   /* a different generator is a different experiment */
+  renderPanels();
+}
+
+function renderRecurrence() {
+  document.getElementById('g-rec').innerHTML =
+    'x<sub>n+1</sub> = ( <b>' + fmtBig(cfg.a) + '</b> · x<sub>n</sub> + <b>' + fmtBig(cfg.c) +
+    '</b> ) <span class="modtip" title="mod m keeps only the remainder after dividing by m, wrapping around at m the way a clock wraps at 12">mod</span> <b>' +
+    fmtBig(cfg.m) + '</b><br>' +
+    '<span class="dim">u<sub>n</sub> = x<sub>n</sub> / ' + fmtBig(cfg.m) + '</span>';
+}
+
+/* ── Tab ①: stepping ────────────────────────────────────────────────── */
+var STEP_ROWS_MAX = 400;   /* the table trims its oldest rows past this */
+var STEP_PREFILL = 12;     /* rows generated up front; Step continues past them */
+
+/* Rebuild the step table for the current parameters: the seed row plus
+   enough steps to fill the visible box, scrolled back to the top so the
+   seed row is what the reader meets first. The Step buttons continue the
+   same instance from wherever the prefill left it. */
+function resetState() {
+  G = makeLCG(cfg.a, cfg.c, cfg.m, cfg.seed);
+  var tb = document.getElementById('g-steps');
+  tb.innerHTML = '<tr class="seedrow"><td>0</td><td>— (seed)</td><td class="cx">' + fmtBig(G.state()) +
+                 '</td><td>' + fmtU(Number(G.state()) / Number(cfg.m)) + ' (not emitted)</td></tr>';
+  stepN(STEP_PREFILL);
+  tb.closest('.steptbl-wrap').scrollTop = 0;
+}
+
+function updateStateCards() {
+  document.getElementById('g-n').textContent = G.n;
+  document.getElementById('g-x').textContent = fmtBig(G.state());
+  document.getElementById('g-u').textContent = G.n === 0 ? '—' : fmtU(Number(G.state()) / Number(cfg.m));
+}
+
+function stepN(k) {
+  var tb = document.getElementById('g-steps'), frag = document.createDocumentFragment();
+  for (var i = 0; i < k; i++) {
+    var r = G.detail(), tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + r.n + '</td><td>' + fmtBig(r.raw) + '</td><td class="cx">' +
+                   fmtBig(r.x) + '</td><td class="cu">' + fmtU(r.u) + '</td>';
+    frag.appendChild(tr);
+  }
+  tb.appendChild(frag);
+  while (tb.children.length > STEP_ROWS_MAX) tb.removeChild(tb.firstChild);
+  updateStateCards();
+  var wrap = tb.closest('.steptbl-wrap');
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+/* ── The two property panels (one shared stream) ────────────────────── */
+var STREAM_START = 500;
+var streamN = STREAM_START;
+
+function growStream(k) {
+  streamN = Math.min(streamN + k, STREAM_CAP);
+  renderPanels();
+}
+function resetStream() { streamN = STREAM_START; renderPanels(); }
+
+/* Redraws both property panels from the same u_1 ... u_n, which is what
+   lets the page say "same stream, two verdicts" honestly. */
+function renderPanels() {
+  var us = ensureStream(streamN).slice(0, streamN);
+  var k = Number(document.getElementById('uni-bins').value);
+  document.getElementById('stream-n').textContent = us.length.toLocaleString('en-US');
+  var n = us.length;
+  var chi = chiSqUniform(us, k), ks = ksUniform(us);
+  drawHist(us, k);
+  drawEcdf(us, ks);
+  document.getElementById('uni-chi').textContent = chi.stat.toFixed(2);
+  document.getElementById('uni-chidf').textContent = '(df = ' + chi.df + ')' + (n / k < 5 ? ' – expected count/bin < 5; approximation is rough' : '');
+  document.getElementById('uni-chip').textContent = fmtP(chi.p);
+  document.getElementById('uni-ks').textContent = ks.d.toFixed(4);
+  document.getElementById('uni-ksp').textContent = fmtP(ks.p);
+
+  var passes = chi.p >= 0.05 && ks.p >= 0.05;
+  document.getElementById('uni-verdict').innerHTML =
+    (passes
+      ? '<strong>Both uniformity tests pass at the 5% level'
+      : '<strong>At least one uniformity test rejects at the 5% level')
+    + ' – and either way, that verdict says nothing about independence.</strong> The tests on ' +
+    'the left only ask whether the values pile up evenly; they are blind to the order in which ' +
+    'the values arrived, whereas the lattice on the right is <em>only</em> about order. Try the ' +
+    'toy preset (each value fixes the next completely: 16 dots, not noise), the minimal ' +
+    'standard, and finally RANDU, whose flaw sits in triples of consecutive values: switch ' +
+    'the lattice panel to 3D triples and press “Show me RANDU’s planes.”';
+
+  renderInd();
+}
+
+/* Histogram as SVG: bars are the sampled thing (orange), the uniform
+   density is the theoretical thing (dashed teal). Redrawn only on user
+   action, and so SVG's resolution independence beats a canvas here. */
+function drawHist(us, k) {
+  var W = 440, H = 190, L = 34, R = 8, T = 8, B = 20;
+  var counts = histCounts(us, k), n = us.length;
+  var pw = W - L - R, ph = H - T - B;
+  var maxD = 0;
+  for (var i = 0; i < k; i++) maxD = Math.max(maxD, counts[i] / n * k);
+  var yMax = Math.max(2, maxD * 1.08);
+  var y = function (d) { return T + ph * (1 - d / yMax); };
+  var x = function (u) { return L + pw * u; };
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
+  for (i = 0; i < k; i++) {
+    var d = counts[i] / n * k;
+    p.push('<rect x="' + (x(i / k) + 0.5) + '" y="' + y(d) + '" width="' + (pw / k - 1) +
+           '" height="' + (T + ph - y(d)) + '" fill="' + C.est + '" opacity="0.82"/>');
+  }
+  p.push('<line x1="' + L + '" y1="' + y(1) + '" x2="' + (W - R) + '" y2="' + y(1) +
+         '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="6,4"/>');
+  /* axes and ticks */
+  p.push('<line x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (T + ph) + '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) + '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  var yt = [0, 1, 2];
+  if (yMax > 3.5) yt = [0, 2, 4];
+  if (yMax > 7) yt = [0, Math.round(yMax / 2), Math.round(yMax)];
+  for (i = 0; i < yt.length; i++) {
+    if (yt[i] > yMax) continue;
+    p.push('<text x="' + (L - 5) + '" y="' + (y(yt[i]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' + yt[i] + '</text>');
+    p.push('<line x1="' + (L - 3) + '" y1="' + y(yt[i]) + '" x2="' + L + '" y2="' + y(yt[i]) + '" stroke="' + C.muted + '" stroke-width="1"/>');
+  }
+  var xt = [0, 0.5, 1];
+  for (i = 0; i < 3; i++) {
+    p.push('<text x="' + x(xt[i]) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + xt[i] + '</text>');
+  }
+  p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
+         '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">density</text>');
+  document.getElementById('uni-hist').innerHTML = p.join('');
+}
+
+function drawEcdf(us, ks) {
+  var W = 260, H = 260, L = 26, R = 8, T = 8, B = 20;
+  var pw = W - L - R, ph = H - T - B;
+  var s = Array.prototype.slice.call(us).sort(function (a, b) { return a - b; });
+  var n = s.length;
+  var x = function (u) { return L + pw * u; };
+  var y = function (f) { return T + ph * (1 - f); };
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
+  p.push('<line x1="' + x(0) + '" y1="' + y(0) + '" x2="' + x(1) + '" y2="' + y(1) +
+         '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="6,4"/>');
+  /* Subsample the path for large n: visually identical, far fewer nodes. */
+  var stride = Math.max(1, Math.floor(n / 900)), d = 'M' + x(0) + ' ' + y(0);
+  for (var i = 0; i < n; i += stride) d += 'L' + x(s[i]) + ' ' + y(i / n) + 'L' + x(s[i]) + ' ' + y(Math.min(1, (i + stride) / n));
+  d += 'L' + x(1) + ' ' + y(1);
+  p.push('<path d="' + d + '" fill="none" stroke="' + C.est + '" stroke-width="1.8"/>');
+  /* The point that sets D_n: a vertical tick spanning the largest gap,
+     with a floor on its drawn length so it stays visible when the fit is
+     good and the true gap is a fraction of a pixel. */
+  if (ks) {
+    var gy0 = y(ks.y0), gy1 = y(ks.y1), mid = (gy0 + gy1) / 2;
+    var half = Math.max(Math.abs(gy0 - gy1) / 2, 3);
+    p.push('<line x1="' + x(ks.at) + '" y1="' + (mid - half) + '" x2="' + x(ks.at) + '" y2="' + (mid + half) +
+           '" stroke="' + C.stream + '" stroke-width="3" stroke-linecap="round"/>');
+    var lx = x(ks.at), anchor = 'start', dx = 5;
+    if (lx > L + pw - 26) { anchor = 'end'; dx = -5; }
+    p.push('<text x="' + (lx + dx) + '" y="' + (mid + 3.5) + '" text-anchor="' + anchor +
+           '" font-size="11" font-weight="600" fill="' + C.stream + '">D&#8345;</text>');
+  }
+  p.push('<line x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (T + ph) + '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) + '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  var t = [0, 0.5, 1];
+  for (i = 0; i < 3; i++) {
+    p.push('<text x="' + x(t[i]) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + t[i] + '</text>');
+    p.push('<text x="' + (L - 4) + '" y="' + (y(t[i]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' + t[i] + '</text>');
+  }
+  /* Legend inside the plot, in the lower-right corner, which an ECDF
+     leaves empty (the curve runs from lower left to upper right). */
+  var lgW = 122, lgH = 46, lgX = W - R - lgW - 5, lgY = T + ph - lgH - 5;
+  p.push('<rect x="' + lgX + '" y="' + lgY + '" width="' + lgW + '" height="' + lgH +
+         '" rx="4" fill="#fff" opacity="0.85"/>');
+  var rows = [
+    ['<line x1="X0" y1="Y" x2="X1" y2="Y" stroke="' + C.est + '" stroke-width="2"/>', 'empirical CDF'],
+    ['<line x1="X0" y1="Y" x2="X1" y2="Y" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>', 'uniform CDF'],
+    ['<line x1="XM" y1="YA" x2="XM" y2="YB" stroke="' + C.stream + '" stroke-width="3" stroke-linecap="round"/>', 'D&#8345;, the largest gap']
+  ];
+  for (i = 0; i < 3; i++) {
+    var ry = lgY + 12 + 14 * i;
+    p.push(rows[i][0].replace(/X0/g, lgX + 6).replace(/X1/g, lgX + 22).replace(/XM/g, lgX + 14)
+                     .replace(/YA/g, ry - 4.5).replace(/YB/g, ry + 1.5).replace(/Y/g, ry - 1.5));
+    p.push('<text x="' + (lgX + 27) + '" y="' + (ry + 1.5) + '" font-size="9.5" fill="' + C.muted + '">' + rows[i][1] + '</text>');
+  }
+  document.getElementById('uni-ecdf').innerHTML = p.join('');
+}
+
+/* ── The lattice plot ───────────────────────────────────────────────── */
+var DPR = window.devicePixelRatio || 1;
+/* Square plot area of side IND_P, plus margins for the axis labels; the
+   canvas earns its keep at large point counts. */
+var IND_P = 400, IND_L = 28, IND_R = 8, IND_T = 6, IND_B = 24;
+var IND_W = IND_L + IND_P + IND_R, IND_H = IND_T + IND_P + IND_B;
+
+function initIndCanvas() {
+  var cv = document.getElementById('ind-cv');
+  cv.width = Math.round(IND_W * DPR); cv.height = Math.round(IND_H * DPR);
+  cv.style.width = IND_W + 'px'; cv.style.maxWidth = '100%'; cv.style.height = 'auto';
+}
+
+var indMode = '2d';
+function renderInd() {
+  updateFlawRow();
+  if (indMode === '3d') drawInd3(); else drawInd2();
+}
+
+/* The plane-revealing camera angle is derived from RANDU's own recurrence,
+   and so the button only appears when the current parameters ARE RANDU's
+   (matched on the values, not on the preset dropdown, so hand-typing the
+   constants counts too). At any other parameters, it would fly to an angle
+   that means nothing for the loaded generator. */
+function isRandu() { return cfg.a === 65539n && cfg.c === 0n && cfg.m === 2147483648n; }
+function updateFlawRow() {
+  document.getElementById('ind-flaw-row').style.display =
+    (indMode === '3d' && isRandu()) ? '' : 'none';
+}
+
+function setIndMode(m) {
+  indMode = m;
+  var b2 = document.getElementById('ind-2d'), b3 = document.getElementById('ind-3d');
+  b2.classList.toggle('active', m === '2d'); b2.setAttribute('aria-pressed', m === '2d');
+  b3.classList.toggle('active', m === '3d'); b3.setAttribute('aria-pressed', m === '3d');
+  document.getElementById('ind-lag-row').style.display = m === '2d' ? '' : 'none';
+  updateFlawRow();
+  document.getElementById('ind-desc-2d').style.display = m === '2d' ? '' : 'none';
+  document.getElementById('ind-desc-3d').style.display = m === '3d' ? '' : 'none';
+  var cv = document.getElementById('ind-cv');
+  /* In 3D, a finger drag rotates the cube, and so it must not scroll the
+     page; in 2D, the canvas is inert and scrolling should pass through. */
+  cv.style.touchAction = m === '3d' ? 'none' : '';
+  cv.style.cursor = m === '3d' ? 'grab' : '';
+  renderInd();
+}
+
+function drawInd2() {
+  var n = streamN;
+  var lag = Number(document.getElementById('ind-lag').value);
+  document.getElementById('ind-lagval').textContent = lag;
+  var us = ensureStream(n);
+  var cv = document.getElementById('ind-cv'), ctx = cv.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, IND_W, IND_H);
+  ctx.fillStyle = C.chartBg; ctx.fillRect(IND_L, IND_T, IND_P, IND_P);
+  ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
+  ctx.strokeRect(IND_L + 0.75, IND_T + 0.75, IND_P - 1.5, IND_P - 1.5);
+  ctx.fillStyle = C.stream; ctx.globalAlpha = 0.55;
+  /* A small modulus has few distinct outputs, and so thousands of pairs pile
+     onto a handful of spots; draw those spots big enough to read as a
+     deliberate grid rather than as stray specks. */
+  var sz = cfg.m <= 256n ? 7 : cfg.m <= 65536n ? 4 : 2;
+  var pts = n - lag;
+  for (var i = 0; i < pts; i++) {
+    /* y grows downward on a canvas, and so u_{i+lag} is flipped */
+    ctx.fillRect(IND_L + us[i] * (IND_P - 4) + 1 - sz / 2,
+                 IND_T + (1 - us[i + lag]) * (IND_P - 4) + 1 - sz / 2, sz, sz);
+  }
+  ctx.globalAlpha = 1;
+  /* Axis labels and 0/1 ticks, so that the two coordinates are named on
+     the plot itself rather than only in the caption. */
+  ctx.fillStyle = C.muted;
+  ctx.font = '11px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('0', IND_L, IND_T + IND_P + 12);
+  ctx.fillText('1', IND_L + IND_P, IND_T + IND_P + 12);
+  ctx.font = '600 12px Outfit, sans-serif';
+  ctx.fillText('uᵢ  (one output)', IND_L + IND_P / 2, IND_T + IND_P + 22);
+  ctx.textAlign = 'right';
+  ctx.font = '11px Outfit, sans-serif';
+  ctx.fillText('1', IND_L - 5, IND_T + 9);
+  ctx.fillText('0', IND_L - 5, IND_T + IND_P);
+  ctx.save();
+  ctx.translate(IND_L - 8, IND_T + IND_P / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.font = '600 12px Outfit, sans-serif';
+  ctx.fillText('uᵢ₊ₖ  (k steps later)', 0, 0);
+  ctx.restore();
+  document.getElementById('ind-cap').textContent =
+    pts.toLocaleString('en-US') + ' pairs (uᵢ, uᵢ₊ₖ) from the stream of n = ' +
+    n.toLocaleString('en-US') + ', at lag k = ' + lag;
+}
+
+/* ── 3D triples view ────────────────────────────────────────────────── */
+var IND3_MAX = 20000;              /* triples drawn per frame while rotating */
+var cam = { yaw: 0.65, pitch: 0.42 };
+
+/* The camera angle at which RANDU's planes line up. Its states satisfy
+   x_{n+2} = 6 x_{n+1} - 9 x_n (mod 2^31), and so its triples lie on the
+   planes 9u - 6v + w = integer. The target below turns the plane normal
+   (9, -6, 1) parallel to the screen's vertical axis, which shows the
+   planes edge-on, as horizontal stripes. */
+function flawTarget() {
+  var nx = 9, ny = -6, nz = 1;
+  var yaw = Math.atan2(-nx, nz);
+  var nz2 = -nx * Math.sin(yaw) + nz * Math.cos(yaw);
+  return { yaw: yaw, pitch: Math.atan(-nz2 / ny) };
+}
+
+function drawInd3() {
+  var n = streamN, us = ensureStream(n);
+  var cv = document.getElementById('ind-cv'), ctx = cv.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, IND_W, IND_H);
+  var cx = IND_L + IND_P / 2, cyc = IND_T + IND_P / 2, S = IND_P / 1.8;
+  var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  var cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  /* Orthographic projection of the yaw-then-pitch rotated unit cube */
+  function proj(x, y, z) {
+    x -= 0.5; y -= 0.5; z -= 0.5;
+    var px = x * cy + z * sy;
+    var py = x * sy * sp + y * cp - z * cy * sp;
+    return [cx + S * px, cyc - S * py];
+  }
+  /* cube edges: corner pairs that differ in exactly one coordinate */
+  var corners = [], i, j;
+  for (i = 0; i < 8; i++) corners.push([i & 1, (i >> 1) & 1, (i >> 2) & 1]);
+  ctx.strokeStyle = C.border; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (i = 0; i < 8; i++) for (j = i + 1; j < 8; j++) {
+    var d = (corners[i][0] !== corners[j][0]) + (corners[i][1] !== corners[j][1]) + (corners[i][2] !== corners[j][2]);
+    if (d === 1) {
+      var qa = proj(corners[i][0], corners[i][1], corners[i][2]);
+      var qb = proj(corners[j][0], corners[j][1], corners[j][2]);
+      ctx.moveTo(qa[0], qa[1]); ctx.lineTo(qb[0], qb[1]);
+    }
+  }
+  ctx.stroke();
+  var pts = Math.min(n - 2, IND3_MAX);
+  var sz = cfg.m <= 256n ? 7 : cfg.m <= 65536n ? 4 : 2;
+  ctx.fillStyle = C.stream; ctx.globalAlpha = 0.5;
+  for (i = 0; i < pts; i++) {
+    var q = proj(us[i], us[i + 1], us[i + 2]);
+    ctx.fillRect(q[0] - sz / 2, q[1] - sz / 2, sz, sz);
+  }
+  ctx.globalAlpha = 1;
+  /* axis labels just past the far ends of the three edges leaving (0,0,0) */
+  ctx.fillStyle = C.muted; ctx.font = '600 12px Outfit, sans-serif'; ctx.textAlign = 'center';
+  var ax = [[1.14, 0, 0, 'uᵢ'], [0, 1.14, 0, 'uᵢ₊₁'], [0, 0, 1.14, 'uᵢ₊₂']];
+  for (i = 0; i < 3; i++) {
+    var ql = proj(ax[i][0], ax[i][1], ax[i][2]);
+    ctx.fillText(ax[i][3], ql[0], ql[1] + 4);
+  }
+  document.getElementById('ind-cap').textContent =
+    (n - 2 > pts ? pts.toLocaleString('en-US') + ' of ' + (n - 2).toLocaleString('en-US')
+                 : pts.toLocaleString('en-US')) +
+    ' triples (uᵢ, uᵢ₊₁, uᵢ₊₂) from the stream · drag the cube to rotate';
+}
+
+/* Drag-to-rotate, via pointer events so mouse and touch share one path */
+var ind3RafPending = false;
+function ind3Draw() {
+  if (ind3RafPending) return;
+  ind3RafPending = true;
+  requestAnimationFrame(function () { ind3RafPending = false; drawInd3(); });
+}
+var flawAnimId = null;
+(function () {
+  var cv = document.getElementById('ind-cv'), dragging = false, lx = 0, ly = 0;
+  cv.addEventListener('pointerdown', function (e) {
+    if (indMode !== '3d') return;
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    cv.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    cam.yaw += (e.clientX - lx) * 0.008;
+    cam.pitch += (e.clientY - ly) * 0.008;
+    if (cam.pitch > 1.55) cam.pitch = 1.55;
+    if (cam.pitch < -1.55) cam.pitch = -1.55;
+    lx = e.clientX; ly = e.clientY;
+    if (flawAnimId) { cancelAnimationFrame(flawAnimId); flawAnimId = null; }
+    ind3Draw();
+  });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    cv.addEventListener(ev, function () { dragging = false; });
+  });
+})();
+
+/* Fly the camera to the plane-revealing angle over ~a second. */
+function showFlaw() {
+  var from = { yaw: cam.yaw, pitch: cam.pitch }, to = flawTarget();
+  var t0 = performance.now(), DUR = 900;
+  if (flawAnimId) cancelAnimationFrame(flawAnimId);
+  (function tick(now) {
+    var t = Math.min(1, (now - t0) / DUR);
+    var e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;   /* ease in-out */
+    cam.yaw = from.yaw + (to.yaw - from.yaw) * e;
+    cam.pitch = from.pitch + (to.pitch - from.pitch) * e;
+    drawInd3();
+    flawAnimId = t < 1 ? requestAnimationFrame(tick) : null;
+  })(t0);
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+function showTab(name, btn) {
+  document.querySelectorAll('.tp').forEach(function (el) { el.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function (el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  var tabBtn = btn || document.querySelector('.tab[data-tab="' + name + '"]');
+  if (tabBtn) tabBtn.classList.add('active');
+  var tabSel = document.getElementById('tab-select');
+  if (tabSel && tabSel.value !== name) tabSel.value = name;
+  renderActive();
+}
+function renderActive() {
+  var active = document.querySelector('.tp.active').id;
+  if (active === 'tab-gen') renderPanels();
+}
+
+/* ── Init ───────────────────────────────────────────────────────────── */
+(function () {
+  var sel = document.getElementById('g-preset');
+  for (var k in PRESETS) {
+    var o = document.createElement('option');
+    o.value = k; o.textContent = PRESETS[k].label;
+    sel.appendChild(o);
+  }
+  sel.value = 'minstd';
+  initIndCanvas();
+  applyPreset('minstd');
+})();
+</script>
+
+<footer>&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></footer>
+<footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">
+  <div style="max-width:1020px;margin:0 auto;padding:2px 18px 10px;">
+    <a href="../" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"><span style="font-family:sans-serif">&larr;</span> All course visualizations</a>
+  </div>
+</footer>
+<script>
+if (window.self !== window.top) { var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; } }
+</script>
+</body>
+</html>
