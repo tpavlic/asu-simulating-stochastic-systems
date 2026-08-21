@@ -430,6 +430,92 @@ section('CMRG: MRG32k3a against its published implementation');
   check('genStream and detail() agree for MRG, CLCG, and CMRG', ok);
 }
 
+/* ── 8. Number theory behind the full-period checks ────────────────── */
+section('Primality and factorization');
+{
+  /* Reference verdicts from an independent randomized Miller-Rabin run
+     in Python (40 rounds, 2026-08-21). */
+  const PRIMES = [2147483647n, 2305843009213693951n, 4294967087n, 4294944443n];
+  const COMPOSITES = [2147483648n, 2147483646n, 4611686014132420609n];
+  check('known primes are declared prime (2^31-1, 2^61-1, MRG32k3a m1 and m2)',
+        PRIMES.every(p => P.isPrimeBig(p)));
+  check('known composites are declared composite', COMPOSITES.every(n => !P.isPrimeBig(n)));
+  const f1 = P.factorBig(2147483646n);
+  check('factorBig(2147483646) = 2 * 3^2 * 7 * 11 * 31 * 151 * 331',
+        JSON.stringify(f1.map(x => [x[0].toString(), x[1]])) ===
+        JSON.stringify([['2',1],['3',2],['7',1],['11',1],['31',1],['151',1],['331',1]]));
+  const f2 = P.factorBig(1n << 62n);
+  check('factorBig(2^62) = 2^62', f2.length === 1 && f2[0][0] === 2n && f2[0][1] === 62);
+  const f3 = P.factorBig(4611686014132420609n);   /* (2^31-1)^2, a hard split for trial division */
+  check('factorBig((2^31-1)^2) = 2147483647^2', f3.length === 1 && f3[0][0] === 2147483647n && f3[0][1] === 2);
+  /* Reconstruction property on assorted values */
+  let ok = true;
+  for (const n of [2n, 16n, 12345n, 2147483648n, 4294967086n, 999999999999n]) {
+    let prod = 1n;
+    for (const [p, e] of P.factorBig(n)) {
+      if (!P.isPrimeBig(p)) ok = false;
+      prod *= p ** BigInt(e);
+    }
+    if (prod !== n) ok = false;
+  }
+  check('factorizations multiply back and use prime factors only', ok);
+}
+
+section('Hull-Dobell verdicts');
+{
+  /* Hand-worked cases.  Statement of the theorem checked against the
+     Wikipedia article "Linear congruential generator" on 2026-08-21. */
+  const CASES = [
+    [5n, 3n, 16n, true],            /* the toy preset */
+    [13n, 3n, 16n, true],
+    [1103515245n, 12345n, 2147483648n, true],   /* the C-standard-style preset */
+    [6n, 3n, 16n, false],           /* a-1 = 5 misses the prime 2 */
+    [5n, 2n, 16n, false],           /* c shares the factor 2 with m */
+    [5n, 3n, 12n, false],           /* a-1 = 4 misses the prime 3 */
+    [3n, 5n, 8n, false],            /* a-1 = 2 divisible by 2 but not by 4 */
+  ];
+  let ok = true;
+  for (const [a, c, m, want] of CASES) if (P.hullDobell(a, c, m).full !== want) ok = false;
+  check('hand-worked Hull-Dobell cases accept and reject correctly', ok);
+  /* Exhaustive equivalence at toy scale: for every m up to 40 and every
+     (a, c) with c != 0, the verdict must match a brute-forced period
+     (full period m <=> the walk from seed 0 returns to 0 in exactly m
+     steps). */
+  ok = true;
+  outer:
+  for (let m = 2; m <= 40; m++) {
+    for (let a = 0; a < m; a++) for (let c = 1; c < m; c++) {
+      const full = P.hullDobell(BigInt(a), BigInt(c), BigInt(m)).full;
+      let x = 0, steps = 0;
+      do { x = (a * x + c) % m; steps++; } while (x !== 0 && steps <= m + 1);
+      if (full !== (steps === m)) { ok = false; break outer; }
+    }
+  }
+  check('Hull-Dobell agrees with brute-forced periods for every (a, c, m) with m <= 40', ok);
+}
+
+section('c = 0 period classification');
+{
+  check('16807 is a primitive root mod 2^31-1 (minimal standard)',
+        P.mulPeriodClass(16807n, 2147483647n).primitive === true);
+  check('2 is a primitive root mod 13; 3 is not',
+        P.mulPeriodClass(2n, 13n).primitive === true &&
+        P.mulPeriodClass(3n, 13n).primitive === false);
+  check('RANDU attains the power-of-two maximum (65539 = 3 mod 8)',
+        P.mulPeriodClass(65539n, 2147483648n).attains === true);
+  check('a = 1 mod 8 does not attain the power-of-two maximum',
+        P.mulPeriodClass(65537n, 2147483648n).attains === false);
+  /* Brute confirmation at toy scale: m = 32 gives max period m/4 = 8 for
+     a = 3 (odd seed), and less for a = 9. */
+  function mulPeriod(a, m, s) {
+    let x = s, steps = 0;
+    do { x = (a * x) % m; steps++; } while (x !== s && steps <= m);
+    return steps;
+  }
+  check('m = 32: a = 3 gives period 8 = m/4 from seed 1; a = 9 gives less',
+        mulPeriod(3, 32, 1) === 8 && mulPeriod(9, 32, 1) < 8);
+}
+
 /* ── Summary ───────────────────────────────────────────────────────── */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

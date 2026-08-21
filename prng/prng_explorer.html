@@ -391,6 +391,22 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
     </details>
     <details class="why">
+      <summary>Which parameter choices guarantee a full period?</summary>
+      <div class="why-body">
+        <p>For c ≠ 0, the Hull–Dobell theorem (1962) gives an exact answer: the cycle visits
+        all m states, from every seed, precisely when three conditions hold. (1) c and m share
+        no common factor. (2) Every prime that divides m also divides a − 1. (3) If 4 divides
+        m, then 4 also divides a − 1. The toy preset and the C-standard-style preset both
+        satisfy all three, which is how the toy earns its period of exactly 16.</p>
+        <p>For c = 0, the state 0 is stuck, and so a full period is impossible; what is
+        attainable depends on m. With m prime, the period is m − 1 from any nonzero seed
+        exactly when a is a primitive root mod m, which is the minimal standard's design. With
+        m a power of two, the best possible is m/4, attained when a ≡ ±3 (mod 8) and the seed
+        is odd; RANDU sits exactly there, with period 2²⁹ = m/4.</p>
+        <p id="g-hd-check" style="background:var(--accent-wash); border-radius:6px; padding:7px 10px;"></p>
+      </div>
+    </details>
+    <details class="why">
       <summary>What do the two uniformity tests check, and what is the big thing they cannot see?</summary>
       <div class="why-body">
         <p>The chi-square test cuts [0, 1] into k equal bins and compares each observed count
@@ -633,6 +649,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         period about 2¹⁹¹. It is the generator inside many production simulation tools, and it
         is the generator behind the other widgets in this repository, which is why this page
         treats its arithmetic as subject matter rather than as a black box.</p>
+        <p>One cycle of length 2¹⁹¹ is far more than any single experiment needs, and
+        production packages spend the surplus on organization: they cut the cycle into
+        billions of guaranteed-disjoint <em>streams</em>, and each stream into
+        <em>substreams</em>, and hand a separate one to each input process of a simulation.
+        Comparing design alternatives with common random numbers then never risks accidental
+        overlap between processes. The slicing uses jump-ahead arithmetic, documented in
+        <a href="https://doi.org/10.1287/opre.50.6.1073.358" target="_blank" rel="noopener">L'Ecuyer,
+        Simard, Chen, and Kelton (2002), “An Object-Oriented Random-Number Package with Many
+        Long Streams and Substreams”</a> (Operations Research 50(6):1073–1075).</p>
       </div>
     </details>
   </section>
@@ -698,6 +723,107 @@ function genStream(g, n) {
   var out = new Float64Array(n);
   for (var i = 0; i < n; i++) out[i] = g.next();
   return out;
+}
+
+/* ── Number theory for the full-period checks ────────────────────────
+   The Hull-Dobell conditions need the prime factors of m, and the c = 0
+   criteria need the factors of m − 1, and so the page carries exact
+   integer factorization: deterministic Miller-Rabin (the 12-prime base
+   set is a proven witness set below 2^64, comfortably covering the
+   page's m ≤ 2^62) plus Pollard's rho for splitting composites. The
+   verification script checks the primality tests, the factorizations,
+   and the Hull-Dobell verdicts against brute-forced periods. */
+function gcdBig(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; }
+function powmodBig(b, e, m) {
+  var r = 1n; b %= m;
+  while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; }
+  return r;
+}
+var MR_BASES = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+function isPrimeBig(n) {
+  if (n < 2n) return false;
+  for (var i = 0; i < MR_BASES.length; i++) {
+    if (n === MR_BASES[i]) return true;
+    if (n % MR_BASES[i] === 0n) return false;
+  }
+  var d = n - 1n, r = 0n;
+  while (d % 2n === 0n) { d /= 2n; r++; }
+  for (i = 0; i < MR_BASES.length; i++) {
+    var x = powmodBig(MR_BASES[i], d, n);
+    if (x === 1n || x === n - 1n) continue;
+    var witness = true;
+    for (var j = 1n; j < r; j++) {
+      x = x * x % n;
+      if (x === n - 1n) { witness = false; break; }
+    }
+    if (witness) return false;
+  }
+  return true;
+}
+/* A nontrivial factor of an odd composite n, by Pollard's rho. */
+function rhoFactor(n) {
+  if (n % 2n === 0n) return 2n;
+  for (var c = 1n; ; c++) {
+    var x = 2n, y = 2n, d = 1n;
+    while (d === 1n) {
+      x = (x * x + c) % n;
+      y = (y * y + c) % n; y = (y * y + c) % n;
+      d = gcdBig(x > y ? x - y : y - x, n);
+    }
+    if (d !== n) return d;
+  }
+}
+/* Full factorization as [[prime, exponent], ...], primes ascending. */
+function factorBig(n) {
+  var counts = new Map(), stack = [n];
+  while (stack.length) {
+    var v = stack.pop();
+    if (v === 1n) continue;
+    if (isPrimeBig(v)) { counts.set(v, (counts.get(v) || 0) + 1); continue; }
+    var d = rhoFactor(v);
+    stack.push(d, v / d);
+  }
+  return Array.from(counts.keys()).sort(function (a, b) { return a < b ? -1 : 1; })
+              .map(function (p) { return [p, counts.get(p)]; });
+}
+
+/* The Hull-Dobell theorem (Hull and Dobell 1962; statement checked
+   against the Wikipedia article "Linear congruential generator",
+   2026-08-21): with c != 0, the LCG has full period m, from every seed,
+   exactly when (1) c and m are coprime, (2) every prime dividing m also
+   divides a − 1, and (3) if 4 divides m then 4 divides a − 1. */
+function hullDobell(a, c, m) {
+  var primes = factorBig(m).map(function (f) { return f[0]; });
+  var c1 = gcdBig(c, m) === 1n;
+  var badPrime = null;
+  for (var i = 0; i < primes.length; i++) {
+    if (modNorm(a - 1n, primes[i]) !== 0n) { badPrime = primes[i]; break; }
+  }
+  var c2 = badPrime === null;
+  var c3 = m % 4n !== 0n || modNorm(a - 1n, 4n) === 0n;
+  return { c1: c1, c2: c2, c3: c3, badPrime: badPrime, full: c1 && c2 && c3 };
+}
+
+/* The c = 0 counterparts (same source, same date): prime m reaches
+   period m − 1 exactly when a is a primitive root mod m; m a power of
+   two (at least 8) reaches at most m/4, attained exactly when
+   a ≡ ±3 (mod 8) with an odd seed. */
+function mulPeriodClass(a, m) {
+  a = modNorm(a, m);
+  if (isPrimeBig(m)) {
+    var primitive = a !== 0n;
+    if (primitive) {
+      var qs = factorBig(m - 1n);
+      for (var i = 0; i < qs.length; i++) {
+        if (powmodBig(a, (m - 1n) / qs[i][0], m) === 1n) { primitive = false; break; }
+      }
+    }
+    return { kind: 'prime', primitive: primitive };
+  }
+  if ((m & (m - 1n)) === 0n) {
+    return { kind: 'pow2', attains: m >= 8n && (a % 8n === 3n || a % 8n === 5n) };
+  }
+  return { kind: 'other' };
 }
 
 /* ── MRG: x_n = (a_1·x_{n-1} + ... + a_k·x_{n-k}) mod m ──────────────
@@ -1290,6 +1416,43 @@ function Editor(name, presets, defKey, onChange) {
   return ed;
 }
 
+/* ── Tab ①: the live full-period verdict in the Hull-Dobell infobox ── */
+function updateFullPeriod() {
+  var c = EDITORS.g.cfg, el = document.getElementById('g-hd-check'), html;
+  if (c.c !== 0n) {
+    var h = hullDobell(c.a, c.c, c.m);
+    if (h.full) {
+      html = 'Current parameters: full period ✓. All three conditions hold, and so the cycle ' +
+             'visits all ' + fmtBig(c.m) + ' states.';
+    } else {
+      var fails = [];
+      if (!h.c1) fails.push('condition 1 (c shares the factor ' + fmtBig(gcdBig(c.c, c.m)) + ' with m)');
+      if (!h.c2) fails.push('condition 2 (the prime ' + fmtBig(h.badPrime) + ' divides m but not a − 1)');
+      if (!h.c3) fails.push('condition 3 (4 divides m but not a − 1)');
+      html = 'Current parameters: not full period. Failing: ' + fails.join('; ') + '.';
+    }
+  } else {
+    var pc = mulPeriodClass(c.a, c.m);
+    if (pc.kind === 'prime') {
+      html = pc.primitive
+        ? 'Current parameters (c = 0, prime m): a is a primitive root mod m ✓, and so the ' +
+          'period is m − 1 = ' + fmtBig(c.m - 1n) + ' from any nonzero seed.'
+        : 'Current parameters (c = 0, prime m): a is not a primitive root mod m, and so the ' +
+          'period from a nonzero seed is a proper divisor of m − 1.';
+    } else if (pc.kind === 'pow2' && c.m >= 8n) {
+      html = pc.attains
+        ? 'Current parameters (c = 0, m a power of two): a ≡ ±3 (mod 8) ✓, and so odd seeds ' +
+          'attain the maximum possible period m/4 = ' + fmtBig(c.m / 4n) + '.'
+        : 'Current parameters (c = 0, m a power of two): a ≢ ±3 (mod 8), and so odd-seed ' +
+          'cycles fall short of the m/4 maximum.';
+    } else {
+      html = 'Current parameters (c = 0, composite m): no simple criterion applies here, and ' +
+             'the period depends on the seed.';
+    }
+  }
+  el.innerHTML = html;
+}
+
 /* ── Tab ①: the two property panels (one shared stream) ─────────────── */
 var STREAM_START = 500;
 var streamN = STREAM_START;
@@ -1853,7 +2016,11 @@ function renderActive() {
   initIndCanvas();
   initInd3Drag();
   ['c-lat1', 'c-lat2', 'm-lat'].forEach(initMini);
-  Editor('g', LCG_PRESETS, 'minstd', function () { streamN = STREAM_START; renderPanels(); });
+  Editor('g', LCG_PRESETS, 'minstd', function () {
+    streamN = STREAM_START;
+    updateFullPeriod();
+    renderPanels();
+  });
   Editor('c', CLCG_PRESETS, 'toyc', renderClcgExtras);
   Editor('m', MRG_PRESETS, 'toy2', renderMrgExtras);
 })();
