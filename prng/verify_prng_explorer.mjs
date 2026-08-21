@@ -534,7 +534,9 @@ section('Watermark: prediction as identification (stage 1)');
 
 section('Watermark: keyed tournament detection');
 {
-  const KEY = 271828182, R = 5, N = 4000;
+  /* R = 3 mirrors the widget: the eight-candidate bracket demo and the
+     embedder run the same tournament. */
+  const KEY = 271828182, R = 3, N = 4000;
   const mkBase = () => P.makeCMRG([111n, 222n, 333n, 444n, 555n, 666n]);
   const marked = P.genStream(P.makeTournament(mkBase(), KEY, R), N);
   const plain = P.genStream(mkBase(), N);
@@ -575,7 +577,7 @@ section('Watermark: keyed tournament detection');
   for (let r = 0; r < reps; r++) {
     const key = (Math.imul(r + 1, 2246822519) ^ 0x0F0F0F0F) >>> 0;
     const base = P.makeCMRG([BigInt(10 + r), 22n, 33n, 44n, 55n, BigInt(66 + r)]);
-    const us = P.genStream(P.makeTournament(base, key, 5), 500);
+    const us = P.genStream(P.makeTournament(base, key, 3), 500);
     if (P.chiSqUniform(us, 10).p < 0.05) rejChi++;
     if (P.ksUniform(us).p < 0.05) rejKS++;
   }
@@ -584,6 +586,70 @@ section('Watermark: keyed tournament detection');
   check('chi-square rejects marked streams at ~5% (got ' + (100 * rChi).toFixed(1) + '%)',
         rChi >= 0 && rChi < 0.12);
   check('K-S rejects marked streams at ~5% (got ' + (100 * rKS).toFixed(1) + '%)',
+        rKS >= 0 && rKS < 0.12);
+}
+
+section('Watermark: keyed re-seeding');
+{
+  const KEY = 314159265, N = 4000;
+  const mk = () => P.makeReseed(P.makeCMRG([111n, 222n, 333n, 444n, 555n, 666n]), KEY);
+  const us = P.genStream(mk(), N);
+  const again = P.genStream(mk(), N);
+  let same = true;
+  for (let i = 0; i < N; i++) if (again[i] !== us[i]) same = false;
+  check('the re-seeded stream is reproducible from seeds and key', same);
+  const d = P.reseedDetect(us, KEY);
+  check('the true key predicts every draw after the pass-through (' + d.hits + ' of ' + d.n + ')',
+        d.hits === d.n && d.n === N - 4);
+  let wrongHits = 0;
+  for (let i = 0; i < 50; i++) {
+    wrongHits += P.reseedDetect(us, (Math.imul(i + 3, 2654435761) ^ 0x33CC33CC) >>> 0).hits;
+  }
+  check('50 wrong keys predict zero draws in total', wrongHits === 0);
+  /* The base generator is irrelevant after the four pass-through draws:
+     two different "generators" that agree on their first four outputs
+     produce identical re-seeded streams. */
+  const fixed4 = [0.11, 0.42, 0.68, 0.95];
+  const mkFake = (tail) => {
+    let i = 0;
+    return { next: () => (i < 4 ? fixed4[i++] : tail) };
+  };
+  const sA = P.genStream(P.makeReseed(mkFake(0.123), KEY), 200);
+  const sB = P.genStream(P.makeReseed(mkFake(0.987), KEY), 200);
+  let sameBase = true;
+  for (let i = 0; i < 200; i++) if (sA[i] !== sB[i]) sameBase = false;
+  check('the base generator contributes nothing after the first four draws', sameBase);
+  const big = P.genStream(mk(), 20000);
+  const chi = P.chiSqUniform(big, 20);
+  check('re-seeded stream passes chi-square at n = 20,000 (p = ' + chi.p.toFixed(3) + ')', chi.p > 1e-3);
+  const ks = P.ksUniform(big);
+  check('re-seeded stream passes K-S at n = 20,000 (p = ' + ks.p.toFixed(3) + ')', ks.p > 1e-3);
+  /* The deliberately small mix must not leave serial structure: the
+     lag-1 correlation, scaled by sqrt(n), is standard normal under
+     independence. */
+  const nB = big.length, mB = big.reduce((a, b) => a + b) / nB;
+  const vB = big.reduce((a, b) => a + (b - mB) * (b - mB), 0) / nB;
+  let cov = 0;
+  for (let i = 0; i + 1 < nB; i++) cov += (big[i] - mB) * (big[i + 1] - mB);
+  const zLag = cov / (nB - 1) / vB * Math.sqrt(nB);
+  check('re-seeded stream shows no lag-1 serial correlation (z = ' + zLag.toFixed(1) + ')',
+        Math.abs(zLag) < 4.5);
+}
+{
+  /* Calibration of the uniformity tests on re-seeded streams. */
+  const reps = Math.max(60, Math.floor(CALIB_REPS / 10));
+  let rejChi = 0, rejKS = 0;
+  for (let r = 0; r < reps; r++) {
+    const key = (Math.imul(r + 1, 2654435761) ^ 0x77EE77EE) >>> 0;
+    const base = P.makeCMRG([BigInt(10 + r), 22n, 33n, 44n, 55n, BigInt(66 + r)]);
+    const us = P.genStream(P.makeReseed(base, key), 500);
+    if (P.chiSqUniform(us, 10).p < 0.05) rejChi++;
+    if (P.ksUniform(us).p < 0.05) rejKS++;
+  }
+  const rChi = rejChi / reps, rKS = rejKS / reps;
+  check('chi-square rejects re-seeded streams at ~5% (got ' + (100 * rChi).toFixed(1) + '%)',
+        rChi >= 0 && rChi < 0.12);
+  check('K-S rejects re-seeded streams at ~5% (got ' + (100 * rKS).toFixed(1) + '%)',
         rKS >= 0 && rKS < 0.12);
 }
 

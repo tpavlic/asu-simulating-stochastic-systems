@@ -70,8 +70,8 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .wh-copy a:hover { text-decoration: underline; }
 .tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 4px 0 14px; }
 .tab {
-  font-family: 'Outfit', sans-serif; font-size: .88rem; font-weight: 500;
-  padding: 7px 18px; border: 2px solid transparent; border-bottom: none;
+  font-family: 'Outfit', sans-serif; font-size: .85rem; font-weight: 500;
+  padding: 7px 11px; border: 2px solid transparent; border-bottom: none;
   border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
   cursor: pointer; margin-bottom: -2px; transition: .15s;
   white-space: nowrap; flex-shrink: 0; min-height: 24px;
@@ -88,7 +88,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
    sooner, because media-query em tracks the browser default. */
-@media (max-width: 60em) {
+@media (max-width: 64em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -232,14 +232,16 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
     <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
     <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameter Watermarks</button>
-    <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑤ Tournament Watermarks</button>
+    <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Re-seeding Watermarks</button>
+    <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournament Watermarks</button>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
     <option value="gen">① The LCG</option>
     <option value="clcg">② Combining LCGs</option>
     <option value="mrg">③ MRG &amp; MRG32k3a</option>
     <option value="wm">④ Parameter Watermarks</option>
-    <option value="wt">⑤ Tournament Watermarks</option>
+    <option value="rw">⑤ Re-seeding Watermarks</option>
+    <option value="wt">⑥ Tournament Watermarks</option>
   </select>
 
   <!-- ── TAB ①: the generator itself ─────────────────────────────────── -->
@@ -325,14 +327,14 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:0 1 482px; min-width:0;">
         <div class="sec-hd">Property 2: Independence – does one value predict a later one?</div>
         <div class="cv-leg" id="ind-desc-2d" style="text-align:left; margin:0 0 6px;">Each dot pairs one output
-          with the output k steps later: horizontal position u<sub>i</sub>, vertical position
-          u<sub>i+k</sub>. Lag k = 1 pairs each value with the very next one; a larger lag asks
+          with the output k steps later: horizontal position u<sub>n</sub>, vertical position
+          u<sub>n+k</sub>. Lag k = 1 pairs each value with the very next one; a larger lag asks
           whether a value predicts further ahead. LCGs show a characteristic pattern of parallel
           stripes when plotted this way, which reflects that they are deterministic processes
           and not sources of true randomness. The stripe pattern is called the generator's
           <em>lattice</em>, and this scatter of pairs is a lattice plot.</div>
         <div class="cv-leg" id="ind-desc-3d" style="text-align:left; margin:0 0 6px; display:none;">Each
-          dot is three consecutive outputs (u<sub>i</sub>, u<sub>i+1</sub>, u<sub>i+2</sub>),
+          dot is three consecutive outputs (u<sub>n</sub>, u<sub>n+1</sub>, u<sub>n+2</sub>),
           one point in the unit cube; drag the cube to rotate it. Most angles look like fog.
           In three dimensions, the lattice becomes parallel planes, and for RANDU, there is a
           special angle where every triple falls onto one of just 15 of them: huge slabs of
@@ -354,7 +356,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <button type="button" class="btn-run2" onclick="showFlaw()">Show me RANDU’s planes</button>
         </div>
         <canvas id="ind-cv" aria-label="Scatter of value pairs at the chosen lag" style="margin:0 auto;"></canvas>
-        <div class="cv-leg" id="ind-cap"></div>
+        <div class="cv-leg" id="ind-cap" style="margin-top:8px;"></div>
         <div class="cv-leg" style="margin-top:2px;">independent values would fill the square with
           structureless noise; any visible pattern is dependence</div>
       </div>
@@ -450,7 +452,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <a href="https://doi.org/10.1073/pnas.61.1.25" target="_blank" rel="noopener">“Random
         numbers fall mainly in the planes”</a> (PNAS 61(1):25–28).</p>
         <p>Raising the lag k probes a different slice of the dependence structure: the pairs
-        (u<sub>i</sub>, u<sub>i+k</sub>) obey the k-steps-ahead recurrence, which is itself an
+        (u<sub>n</sub>, u<sub>n+k</sub>) obey the k-steps-ahead recurrence, which is itself an
         LCG whose multiplier is a<sup>k</sup> mod m, and so a generator can look fine at lag 1
         and still show its grain at another.</p>
       </div>
@@ -521,7 +523,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:0 1 480px; min-width:0;">
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
-          plots of consecutive pairs (u<sub>i</sub>, u<sub>i+1</sub>), the same view as the
+          plots of consecutive pairs (u<sub>n</sub>, u<sub>n+1</sub>), the same view as the
           independence panel on tab ①.</div>
         <div class="mini-row">
           <div class="mini-cell">
@@ -731,24 +733,100 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       MRG32k3a has more internal state than it shows: MRG32k3a carries six words behind every
       single output, and so enormously many internal states produce the same visible value.
       Even knowing every parameter, you cannot predict the next output from the stream alone,
-      and the implicit watermark becomes unreadable. Worse, the approach confounds two
-      decisions that ought to be independent: choosing a distinctive signature and choosing a
-      good generator are separate engineering problems, and welding the signature to the
-      parameters means company X cannot upgrade its generator without abandoning its
-      signature. Practical watermarking therefore wants a mark that can be layered on top of
-      any well-performing generator – whatever it is, and however often it changes – without
-      modifying the generator at all. The next tab builds one.</div>
+      and the implicit watermark becomes unreadable. Every naked generator carries such a
+      mark in its structure and parameters, but how readable the mark is depends on an
+      accident of the design. A deliberate watermark should not rest on an accident – the
+      next tab builds the readability in on purpose.</div>
   </section>
 
-  <!-- ── TAB ⑤: tournament watermarks ────────────────────────────────── -->
+  <!-- ── TAB ⑤: re-seeding watermarks ────────────────────────────────── -->
+  <section id="tab-rw" class="tp">
+    <div class="note"><strong>If you mean to watermark, force the state to be
+      readable.</strong> Tab ④'s mark could be read only because an LCG happens to show its
+      state; a deliberate watermarker does not have to rely on that accident. Instead of
+      letting the generator carry its state forward, throw the state away before every draw
+      and re-seed it with a <em>keyed mix</em> of the last four outputs – a short scramble of
+      the same multiply-and-mix arithmetic as everything else on this page, steered by a
+      secret key (just a whole number). The seed, and so the next value, becomes computable
+      from the visible history by anyone who holds the key and by no one else.</div>
+
+    <div class="viz-row">
+      <div class="cv-card" style="flex:1 1 430px; min-width:0;">
+        <div class="sec-hd">Re-seeding from the visible history</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The first four draws
+          pass through from MRG32k3a; every later value is one MINSTD step from a seed
+          rebuilt out of the four values just emitted. The shape should feel familiar from
+          tab ③: an MRG also computes each new value from a combination of the last few it
+          produced. The differences are that this combination is keyed rather than public
+          and that it reads the emitted outputs rather than hidden state, which is exactly
+          what makes it checkable from the stream alone. Generate a stream, and test keys
+          against it: for each draw, the plot places what the tested key predicts
+          horizontally and what was observed vertically – the same reading as tab ④, except
+          that the right key now collapses <em>any</em> such stream onto the diagonal, no
+          visible state required.</div>
+        <div class="rec-line" style="line-height:1.8;"><span class="dim" style="font-style:italic;">// u<sub>n</sub> is the n-th value the stream emits</span><br>
+          <span class="dim" style="font-style:italic;">// ⊕ is a bitwise, binary XOR operator</span><br>
+          h = key<br>
+          for each q of u<sub>n−4</sub>, u<sub>n−3</sub>, u<sub>n−2</sub>, u<sub>n−1</sub> (each as ⌊u·2<sup>32</sup>⌋):<br>
+          &nbsp;&nbsp;h = (h ⊕ q) · 2654435761 mod 2<sup>32</sup><br>
+          s<sub>n</sub> = (h ⊕ ⌊h/2<sup>16</sup>⌋) mod (2<sup>31</sup>−1)<br>
+          x<sub>n</sub> = 16807 · s<sub>n</sub> mod (2<sup>31</sup>−1)<br>
+          u<sub>n</sub> = x<sub>n</sub> / (2<sup>31</sup>−1)</div>
+        <div class="ctrl-row" style="margin-bottom:6px;">
+          <label class="ctrl-lbl" for="rw-key">Secret key</label>
+          <input class="par-inp" id="rw-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+          <button class="btn-run" onclick="rwGenerate()">Generate re-seeded stream</button>
+        </div>
+        <div class="ctrl-row" style="margin-bottom:6px;">
+          <label class="ctrl-lbl" for="rw-cand">Key to test</label>
+          <input class="par-inp" id="rw-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+          <button class="btn-run2" onclick="rwTest()">Test key</button>
+          <button class="btn-run2" onclick="rwWrong()">Test 20 wrong keys</button>
+        </div>
+        <canvas id="rw-cv" aria-label="Predicted next value under the tested key against observed next value" style="display:block; margin:0 auto;"></canvas>
+        <div class="cv-leg" id="rw-result" style="min-height:2.6em;"></div>
+      </div>
+      <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
+        <div class="sec-hd">Uniform and grainless to everyone else</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Without the key, the
+          re-seeded stream is unremarkable: the uniformity tests stay clean (up to the 5% of
+          streams any test falsely flags), and consecutive pairs show no grain. Nothing
+          visible separates it from the streams of tabs ①–③.</div>
+        <div style="margin:auto 0;">
+          <svg class="plot" id="rw-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of the re-seeded stream with uniformity test p-values"></svg>
+          <div class="cv-leg">histogram of the 2,000 re-seeded values</div>
+        </div>
+        <div>
+          <canvas id="rw-lat" aria-label="Lag plot of consecutive re-seeded values" style="display:block; margin:0 auto;"></canvas>
+          <div class="cv-leg" style="min-height:2.6em;">2,000 consecutive pairs from the re-seeded stream</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note"><strong>The cost: you have replaced the generator.</strong> After the
+      four pass-through draws, MRG32k3a contributes nothing – every later value is fixed by
+      the key and the history, whatever generator sits underneath. The period guarantees,
+      the equidistribution, and the streams and substreams of tabs ①–③ are gone, and the
+      stream's quality now rests entirely on the homemade mix. The watermark and the
+      generator have become a single decision again, only more so: the signature <em>is</em>
+      the generator. What a practical watermark wants is the opposite – keep a well-studied
+      generator intact and lay the mark on top of its outputs. The next tab does exactly
+      that.</div>
+  </section>
+
+  <!-- ── TAB ⑥: tournament watermarks ────────────────────────────────── -->
   <section id="tab-wt" class="tp">
-    <div class="note"><strong>A deliberate watermark sits on top of the generator, not inside
-      it.</strong> The tool is a <em>keyed scoring function</em>: a short arithmetic recipe,
-      built from the same multiply-and-mix steps as the generators on this page, that turns a
-      secret key (just a whole number), a round number, and a few recent outputs into a score
-      between 0 and 1. Whoever holds the key can recompute any score; to everyone else, the
-      scores might as well not exist. Below, such functions steer which outputs of MRG32k3a
-      get emitted, without changing the generator or its distribution.</div>
+    <div class="note"><strong>A watermark can sit on top of the generator instead of inside
+      it.</strong> Re-seeding bought readability by replacing the generator; this tab keeps
+      the generator intact and instead steers which of its outputs get emitted. Any
+      generator could sit underneath – the tournament only ever asks it for draws, never
+      looks inside it, and MRG32k3a plays the part here. The tool is a <em>keyed scoring
+      function</em> – the same kind of keyed mix as the last tab, now turning the key, a
+      round number, the recent history, and a candidate value into a score between 0 and 1.
+      Whoever holds the key can recompute any score; to everyone else, the scores might as
+      well not exist.</div>
 
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
@@ -758,8 +836,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           bracket, a small sample of the distribution itself. Each round is played by its own
           keyed rule: under each value sits its score for the round it is about to play, and
           the higher score of each pairing advances until one survivor is emitted. Edit the
-          key, and the same eight candidates crown a different winner. The full embedder at
-          the bottom of this tab drafts 32 candidates over five rounds.</div>
+          key, and the same eight candidates crown a different winner. The embedder at the
+          bottom of this tab runs exactly this tournament for every value it emits, reading
+          its own last four outputs as the history.</div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wb-key">Key</label>
           <input class="par-inp" id="wb-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
@@ -769,20 +848,20 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <svg class="plot" id="wb-bracket" viewBox="0 0 520 250" role="img" aria-label="Tournament bracket from the source distribution through three keyed rounds to one emitted value"></svg>
         <div class="cv-leg" id="wb-note" style="min-height:1.2em;"></div>
       </div>
-      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
+      <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">Selection from diversity, not distortion</div>
         <div class="cv-leg" style="text-align:left;">The tournament never invents a value
-          and never vetoes one: every candidate is a draw the generator was willing to emit,
-          and the winner is simply one of them. The watermark lives entirely in which
-          legitimate choice gets made, and so the tournament bolts onto any source
-          distribution – any pdf, or a pmf over words – without touching it. The room for a
-          mark comes from the spread of the candidates: a distribution so concentrated that
-          the candidates all agree leaves every key making the same choice and nothing to
-          mark, which is what a language model runs into when the next word is essentially
-          forced. The price is a faint dependence of each emitted value on its recent
-          predecessors – and tabs ①–③ showed that pseudorandom streams already carry hidden
-          structure of exactly this kind, and so one more invisible-until-filtered pattern
-          disappears into the noise.</div>
+          and never vetoes one: every winner is a draw the generator underneath (here
+          MRG32k3a) was willing to make, and so the emitted stream keeps the source
+          distribution – run the tournament for 2,000 draws, and the winners fill [0, 1] as
+          evenly as the generator itself would. The
+          same bolting-on works for any source distribution, a pmf over words included, as
+          long as the candidates have spread: a distribution so concentrated that they all
+          agree leaves every key making the same choice and nothing to mark.</div>
+        <div style="margin:auto 0;">
+          <svg class="plot" id="wq-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of 2,000 tournament winners with uniformity test p-values"></svg>
+          <div class="cv-leg" id="wq-cap"></div>
+        </div>
       </div>
     </div>
 
@@ -853,13 +932,12 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row props-row">
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
         <div class="sec-hd">Adding a watermark on purpose: the keyed tournament</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here MRG32k3a runs
-          with a tournament wrapped around it. Whenever one value is needed, 32 candidates
-          are drawn instead, and five elimination rounds cut them down: each round, a keyed
-          scoring function of the key, the round, the last four outputs, and the candidate
-          ranks the contestants, and higher scores advance. The survivor is emitted. Emitted
-          values therefore tend to score high under all five keyed rules, and a detector that
-          knows the key averages those scores: near 0.66 instead of the 0.50 of chance.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here the tournament
+          from the top of this tab runs for real: whenever a value is needed, eight
+          candidates are drawn from MRG32k3a, the three keyed rules eliminate them pairwise,
+          and the winner is emitted. Emitted values therefore tend to score high under all three rules, and
+          a detector that knows the key averages those scores over the stream: near 0.66
+          instead of the 0.50 of chance.</div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wt-key">Secret key</label>
           <input class="par-inp" id="wt-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
@@ -874,7 +952,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <button class="btn-run2" onclick="wtWrong()">Test 20 wrong keys</button>
         </div>
         <svg class="plot" id="wt-hist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-value keyed scores under the tested key"></svg>
-        <div class="cv-leg">per-value mean of the five keyed scores under the tested key</div>
+        <div class="cv-leg">per-value mean of the three keyed scores under the tested key</div>
         <div class="stat-line" id="wt-result" style="min-height:2.6em; margin-top:6px;"></div>
       </div>
       <div class="cv-card" style="flex:1 1 280px; min-width:0;">
@@ -1189,6 +1267,54 @@ function twDetect(us, key, rounds) {
   var n = scores.length, mean = n ? sum / n : 0.5;
   var seNull = n ? Math.sqrt(1 / (12 * rounds * n)) : 1;
   return { n: n, mean: mean, z: (mean - 0.5) / seNull, scores: scores };
+}
+
+/* ── Keyed re-seeding (tab 5) ────────────────────────────────────────
+   The intermediate construction between reading an implicit watermark
+   and the tournament: before every draw, the generator's own state is
+   discarded and the seed is rebuilt as a keyed mix of the last four
+   emitted outputs, and one MINSTD step turns the seed into the output.
+   The mix here is deliberately smaller than twScore (no round, no
+   candidate, one fold per input) so the page can display it whole; it
+   is what the tab's algorithm box shows, line for line. From the fifth
+   draw on, the base generator contributes nothing: the stream is a
+   function of the key and its own history, which is exactly what makes
+   it predictable to the key-holder and no one else. A seed of 0 (odds about
+   2^-31 per draw) maps to u = 0 for that draw and is harmless. */
+function reseedMix(key, h4) {
+  var h = key >>> 0;
+  for (var i = 0; i < 4; i++) {
+    h = Math.imul((h ^ wmQ(h4[i])) >>> 0, 0x9E3779B1) >>> 0;
+  }
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h % 2147483647;
+}
+function reseedNext(key, h4) {
+  var x = Number(16807n * BigInt(reseedMix(key, h4)) % 2147483647n);
+  return x / 2147483647;
+}
+function makeReseed(base, key) {
+  var h4 = [];
+  return {
+    next: function () {
+      var u = h4.length < 4 ? base.next() : reseedNext(key, h4);
+      h4.push(u);
+      if (h4.length > 4) h4.shift();
+      return u;
+    }
+  };
+}
+/* Detection: rebuild each seed from the four visible predecessors with
+   the candidate key and compare the predicted output exactly. The true
+   key predicts every draw after the pass-through; a wrong key agrees
+   with a given draw with probability about 2^-31. */
+function reseedDetect(us, key) {
+  var hits = 0, n = 0;
+  for (var i = 4; i < us.length; i++) {
+    n++;
+    if (reseedNext(key, [us[i - 4], us[i - 3], us[i - 2], us[i - 1]]) === us[i]) hits++;
+  }
+  return { n: n, hits: hits };
 }
 
 /* ── MRG: x_n = (a_1·x_{n-1} + ... + a_k·x_{n-k}) mod m ──────────────
@@ -2035,7 +2161,7 @@ function drawInd2() {
   ctx.fillText('0', IND_L, IND_T + IND_P + 12);
   ctx.fillText('1', IND_L + IND_P, IND_T + IND_P + 12);
   ctx.font = '600 12px Outfit, sans-serif';
-  ctx.fillText('uᵢ  (one output)', IND_L + IND_P / 2, IND_T + IND_P + 22);
+  ctx.fillText('uₙ  (one output)', IND_L + IND_P / 2, IND_T + IND_P + 22);
   ctx.textAlign = 'right';
   ctx.font = '11px Outfit, sans-serif';
   ctx.fillText('1', IND_L - 5, IND_T + 9);
@@ -2045,11 +2171,11 @@ function drawInd2() {
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = 'center';
   ctx.font = '600 12px Outfit, sans-serif';
-  ctx.fillText('uᵢ₊ₖ  (k steps later)', 0, 0);
+  ctx.fillText('uₙ₊ₖ  (k steps later)', 0, 0);
   ctx.restore();
-  document.getElementById('ind-cap').textContent =
-    pts.toLocaleString('en-US') + ' pairs (uᵢ, uᵢ₊ₖ) from the stream of n = ' +
-    n.toLocaleString('en-US') + ', at lag k = ' + lag;
+  document.getElementById('ind-cap').innerHTML =
+    pts.toLocaleString('en-US') + ' pairs (u<sub>n</sub>, u<sub>n+k</sub>) from the ' +
+    n.toLocaleString('en-US') + '-value stream, at lag k = ' + lag;
 }
 
 /* ── Tab ①: 3D triples view ──────────────────────────────────────────── */
@@ -2107,15 +2233,15 @@ function drawInd3() {
   ctx.globalAlpha = 1;
   /* axis labels just past the far ends of the three edges leaving (0,0,0) */
   ctx.fillStyle = C.muted; ctx.font = '600 12px Outfit, sans-serif'; ctx.textAlign = 'center';
-  var ax = [[1.14, 0, 0, 'uᵢ'], [0, 1.14, 0, 'uᵢ₊₁'], [0, 0, 1.14, 'uᵢ₊₂']];
+  var ax = [[1.14, 0, 0, 'uₙ'], [0, 1.14, 0, 'uₙ₊₁'], [0, 0, 1.14, 'uₙ₊₂']];
   for (i = 0; i < 3; i++) {
     var ql = proj(ax[i][0], ax[i][1], ax[i][2]);
     ctx.fillText(ax[i][3], ql[0], ql[1] + 4);
   }
-  document.getElementById('ind-cap').textContent =
+  document.getElementById('ind-cap').innerHTML =
     (n - 2 > pts ? pts.toLocaleString('en-US') + ' of ' + (n - 2).toLocaleString('en-US')
                  : pts.toLocaleString('en-US')) +
-    ' triples (uᵢ, uᵢ₊₁, uᵢ₊₂) from the stream · drag the cube to rotate';
+    ' triples (u<sub>n</sub>, u<sub>n+1</sub>, u<sub>n+2</sub>) from the stream · drag the cube to rotate';
 }
 
 /* Drag-to-rotate, via pointer events so mouse and touch share one path */
@@ -2344,9 +2470,9 @@ function renderMrgExtras() {
   }
   el.innerHTML = html;
   drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c));
-  document.getElementById('m-lat-cap').textContent =
-    c.fam === 'cmrg' ? '2,000 pairs (uᵢ, uᵢ₊₁) from MRG32k3a: no visible grain'
-                     : '2,000 pairs (uᵢ, uᵢ₊₁) from the current MRG';
+  document.getElementById('m-lat-cap').innerHTML =
+    c.fam === 'cmrg' ? '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from MRG32k3a: no visible grain'
+                     : '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from the current MRG';
 }
 
 /* ── Tab ④: parameter watermarks ─────────────────────────────────────── */
@@ -2371,20 +2497,24 @@ function waNew() {
   waPlot();
 }
 
-/* The right-hand card: the mystery stream put through tab 1's judgments. */
-function waMinis() {
-  drawHist(wa.us, 10, 'wa-hist');
-  /* Overlay the test verdicts inside the histogram. The flat data pin
-     drawHist's yMax at 2, and so density 1.5 sits at a fixed height,
-     safely above every bar. */
-  var chi = chiSqUniform(wa.us, 10), ks = ksUniform(wa.us);
+/* A histogram with the uniformity verdicts overlaid inside it. The
+   flat data pin drawHist's yMax at 2, and so density 1.5 sits at a
+   fixed height, safely above every bar. */
+function histWithTests(id, us) {
+  drawHist(us, 10, id);
+  var chi = chiSqUniform(us, 10), ks = ksUniform(us);
   var pv = function (p) {
     return '<tspan style="font-family:var(--mono)" font-weight="600" fill="' + C.est + '">' + fmtP(p) + '</tspan>';
   };
-  document.getElementById('wa-hist').innerHTML +=
+  document.getElementById(id).innerHTML +=
     '<text x="233" y="52" text-anchor="middle" font-size="12" fill="' + C.muted +
     '">Uniformity tests: χ² p = ' + pv(chi.p) + ', K–S p = ' + pv(ks.p) + '</text>';
-  drawMini('wa-lat', wa.us, WA_M, { xlab: 'uᵢ  (one output)', ylab: 'uᵢ₊₁  (the next output)' });
+}
+
+/* The right-hand card: the mystery stream put through tab 1's judgments. */
+function waMinis() {
+  histWithTests('wa-hist', wa.us);
+  drawMini('wa-lat', wa.us, WA_M, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
 }
 
 function waPlot() {
@@ -2446,12 +2576,77 @@ function drawPredObs(id, pts, opts) {
   ctx.restore();
 }
 
-/* ── Tab ⑤: tournament watermarks ────────────────────────────────────── */
+/* ── Tab ⑤: re-seeding watermarks ────────────────────────────────────── */
+var RW_N = 2000;
+var rw = { key: 0, us: null };
+
+function rwGenerate() {
+  var key = wtParseKey('rw-key');
+  if (key === null) {
+    document.getElementById('rw-result').innerHTML = 'A key is a whole number: digits only.';
+    return;
+  }
+  rw.key = key;
+  rw.us = genStream(makeReseed(makeCMRG(wtSeeds()), key), RW_N);
+  rwStats();
+  rwTest();
+}
+
+function rwTest() {
+  if (!rw.us) return;
+  var k = wtParseKey('rw-cand');
+  if (k === null) {
+    document.getElementById('rw-result').innerHTML = 'A key is a whole number: digits only.';
+    return;
+  }
+  rwPlot(k);
+  var r = reseedDetect(rw.us, k);
+  var fh = r.hits.toLocaleString('en-US'), fn = r.n.toLocaleString('en-US');
+  document.getElementById('rw-result').innerHTML = r.hits === r.n
+    ? 'Key ' + k.toLocaleString('en-US') + ' predicts <b>' + fh + ' of ' + fn +
+      '</b> draws exactly: the stream carries this key.'
+    : 'Key ' + k.toLocaleString('en-US') + ' predicts <b>' + fh + ' of ' + fn +
+      '</b> draws: not this key. A wrong key agrees with a given draw with probability ' +
+      'about 1 in 2.1 × 10⁹.';
+}
+
+function rwWrong() {
+  if (!rw.us) return;
+  var maxHits = 0, last = 0;
+  for (var i = 0; i < 20; i++) {
+    do { last = Math.floor(Math.random() * 4294967296); } while (last === rw.key);
+    maxHits = Math.max(maxHits, reseedDetect(rw.us, last).hits);
+  }
+  rwPlot(last);
+  document.getElementById('rw-result').innerHTML =
+    '20 random wrong keys: the best predicted <b>' + maxHits + '</b> of ' +
+    (RW_N - 4).toLocaleString('en-US') + ' draws (the last one is plotted).';
+}
+
+function rwPlot(k) {
+  var pts = [];
+  for (var i = 4; i < rw.us.length; i++) {
+    pts.push([reseedNext(k, [rw.us[i - 4], rw.us[i - 3], rw.us[i - 2], rw.us[i - 1]]), rw.us[i]]);
+  }
+  drawPredObs('rw-cv', pts, { xlab: 'tested key’s predicted next u', ylab: 'observed next u' });
+}
+
+function rwStats() {
+  if (!rw.us) return;
+  histWithTests('rw-hist', rw.us);
+  /* The lag plot shares the prediction plot's geometry so the two sit
+     at the same size and baseline across the row. */
+  var pairs = [];
+  for (var i = 0; i + 1 < rw.us.length; i++) pairs.push([rw.us[i], rw.us[i + 1]]);
+  drawPredObs('rw-lat', pairs, { diag: false, xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+}
+
+/* ── Tab ⑥: tournament watermarks ────────────────────────────────────── */
 /* The keyed tournament over MRG32k3a, with one marked and one unmarked
    stream from the same seeds, so that the what-changed comparison is
    honest. Keys are whole numbers, reduced into the 32-bit range that
    the scoring functions mix. */
-var WT_ROUNDS = 5, WT_N = 600;
+var WT_ROUNDS = 3, WT_N = 600;
 var wt = { key: 0, seeds: null, us: null, plain: null };
 
 function wtParseKey(id) {
@@ -2508,12 +2703,14 @@ function wkDraw() {
 }
 
 /* The demo bracket: a pdf on the left seeds eight candidates, and three
-   keyed rounds reduce them to one emitted value (the embedder proper
-   uses 32 and five). */
-var wb = { cands: [] };
+   keyed rounds reduce them to one emitted value. The embedder at the
+   bottom of the tab runs this same tournament (WT_ROUNDS) with the
+   last four emitted values as its history. */
+var wb = { cands: [], histSeeds: null };
 function wbNew() {
   wb.cands = [];
   for (var i = 0; i < 8; i++) wb.cands.push(wbGen.next());
+  wb.histSeeds = wtSeeds();
   wbDraw();
 }
 function wbDraw() {
@@ -2602,6 +2799,15 @@ function wbDraw() {
   p.push('<text x="' + X[3] + '" y="' + ys[3][0] + '" font-size="12" font-weight="700" style="font-family:var(--mono)" fill="' +
          C.accent + '">' + cols[3][0].toFixed(3) + '</text>');
   document.getElementById('wb-bracket').innerHTML = p.join('');
+  /* The companion card's evidence: the same tournament run for 2,000
+     emitted values keeps the uniform distribution, whatever the key.
+     The seeds refresh with each "New candidates" click so the
+     histogram visibly re-rolls. */
+  if (!wb.histSeeds) wb.histSeeds = wtSeeds();
+  histWithTests('wq-hist',
+    genStream(makeTournament(makeCMRG(wb.histSeeds), key, 3), 2000));
+  document.getElementById('wq-cap').textContent =
+    '2,000 emitted winners under key ' + key.toLocaleString('en-US');
 }
 
 function wtSeeds() {
@@ -2764,6 +2970,8 @@ function renderActive() {
   ['c-lat1', 'c-lat2', 'm-lat'].forEach(function (id) { initMini(id); });
   initMini('wa-lat', true);
   initPredObs('wa-cv');
+  initPredObs('rw-cv');
+  initPredObs('rw-lat');
   initPredObs('wk-cv');
   var waSel = document.getElementById('wa-cand');
   WA_AS.forEach(function (a) {
@@ -2772,6 +2980,7 @@ function renderActive() {
     waSel.appendChild(o);
   });
   waNew();
+  rwGenerate();
   wsDraw();
   wkDraw();
   wbNew();
