@@ -307,6 +307,129 @@ section('Chi-square and K-S hold their nominal size (reps=' + CALIB_REPS + ')');
         Math.abs((k1.y1 - k1.y0) - k1.d) < 1e-12 && k1.at >= 0 && k1.at <= 1);
 }
 
+/* ── 7. MRG, CLCG, and CMRG (MRG32k3a) ─────────────────────────────── */
+section('MRG family');
+{
+  /* Toy MRG (a1=2, a2=6, m=13): the verification brute-forces the claim
+     the preset text makes, a state-pair period of exactly 168 = 13^2 - 1
+     from every nonzero seed pair. */
+  let ok = true;
+  outer:
+  for (let s0 = 0n; s0 < 13n; s0++) for (let s1 = 0n; s1 < 13n; s1++) {
+    if (s0 === 0n && s1 === 0n) continue;
+    const g = P.makeMRG([2n, 6n], 13n, [s0, s1]);
+    let count = 0;
+    do {
+      g.next(); count++;
+      const st = g.state();
+      if (st[0] === s0 && st[1] === s1) break;
+    } while (count <= 169);
+    if (count !== 168) { ok = false; break outer; }
+  }
+  check('toy MRG (2, 6 mod 13) has state period exactly 168 from every nonzero seed pair', ok);
+}
+{
+  /* An order-1 MRG must reproduce the c = 0 LCG exactly. */
+  const g1 = P.makeMRG([16807n], 2147483647n, [1n]);
+  const g2 = P.makeLCG(16807n, 0n, 2147483647n, 1n);
+  let ok = true;
+  for (let i = 0; i < 1000; i++) if (g1.next() !== g2.next()) ok = false;
+  check('order-1 MRG matches the multiplicative LCG for 1,000 steps', ok);
+}
+
+section('CLCG (combination rule of L\'Ecuyer 1988)');
+{
+  /* Reference (y1, y2, z) triples computed 2026-08-21 with Python big
+     ints, from seeds (12345, 12345) and from seeds (1, 1). */
+  const REF12345 = [
+    [493972830n, 502342740n, 2139113653n], [390105768n, 1583784398n, 953804933n],
+    [1781664868n, 1377919426n, 403745442n], [1526187241n, 1653218301n, 2020452503n],
+    [866180343n, 694147218n, 172033125n]];
+  const REF11 = [
+    [40014n, 40692n, 2147482885n], [1601120196n, 1655838864n, 2092764895n],
+    [1346387765n, 2103410263n, 1390461065n], [439883729n, 1872071452n, 715295840n],
+    [732249858n, 652912057n, 79337801n]];
+  for (const [seeds, ref, name] of [[[12345n, 12345n], REF12345, '(12345, 12345)'],
+                                    [[1n, 1n], REF11, '(1, 1)']]) {
+    const g = P.makeCLCG(40014n, 2147483563n, 40692n, 2147483399n, seeds[0], seeds[1]);
+    let ok = true;
+    for (let i = 0; i < 5; i++) {
+      const r = g.detail();
+      if (r.x1 !== ref[i][0] || r.x2 !== ref[i][1] || r.z !== ref[i][2]) ok = false;
+    }
+    check('L\'Ecuyer 1988 CLCG matches the reference vector from seeds ' + name, ok);
+  }
+  /* The z = 0 output rule: u must be (m1-1)/m1, never 0.  Seeds (1, 1)
+     under equal multipliers force z = 0 immediately. */
+  const g0 = P.makeCLCG(7n, 13n, 7n, 11n, 1n, 1n);
+  const u0 = g0.next();   /* x1 = x2 = 7 -> z = 0 */
+  check('CLCG z = 0 maps to (m1-1)/m1', u0 === Number(12n) / Number(13n));
+}
+{
+  /* Toy CLCG (2 mod 13, 7 mod 11): combined state period lcm(12, 10). */
+  const g = P.makeCLCG(2n, 13n, 7n, 11n, 1n, 1n);
+  let count = 0, ok = false;
+  do {
+    g.next(); count++;
+    const st = g.state();
+    if (st[0] === 1n && st[1] === 1n) { ok = (count === 60); break; }
+  } while (count <= 61);
+  check('toy CLCG state pair returns to (1, 1) after exactly lcm(12, 10) = 60 steps', ok);
+}
+
+section('CMRG: MRG32k3a against its published implementation');
+{
+  /* Reference combined values z (with the z = 0 -> m1 mapping) from the
+     all-12345 seed, computed 2026-08-21 with Python big ints in an
+     independent implementation of the published recurrences. */
+  const REFZ = [545508589n, 1368065410n, 1327943761n, 3546985096n, 951893194n];
+  const g = P.makeCMRG([12345n, 12345n, 12345n, 12345n, 12345n, 12345n]);
+  let ok = true, uok = true;
+  const REFU = [0.12701112204657714, 0.3185275653967945, 0.3091860155832701,
+                0.8258468629271136, 0.2216299157820229];
+  for (let i = 0; i < 5; i++) {
+    const r = g.detail();
+    if (r.z !== REFZ[i]) ok = false;
+    if (r.u !== REFU[i]) uok = false;   /* bit-exact: same z, same norm constant */
+  }
+  check('MRG32k3a z values match the reference vector (seeds all 12345)', ok);
+  check('MRG32k3a u values are bit-identical to the reference doubles', uok);
+  let last = null;
+  for (let i = 5; i < 10000; i++) last = g.detail();
+  check('MRG32k3a 10,000th combined value is 878310219 (Python reference)',
+        last.z === 878310219n, 'got ' + last.z);
+}
+{
+  /* The sum of the first 10^7 outputs from the all-12345 seed:
+     5001090.947189088 by the independent Python big-int run (2026-08-21),
+     agreeing with the ~5001090.95 check figure that L'Ecuyer's example
+     programs print.  Also confirm every output stays inside (0, 1). */
+  const g = P.makeCMRG([12345n, 12345n, 12345n, 12345n, 12345n, 12345n]);
+  let sum = 0, inRange = true;
+  for (let i = 0; i < 10000000; i++) {
+    const u = g.next();
+    if (u <= 0 || u >= 1) inRange = false;
+    sum += u;
+  }
+  check('MRG32k3a sum of first 10^7 outputs = 5001090.947189088 (tol 1e-3)',
+        Math.abs(sum - 5001090.947189088) < 1e-3, 'got ' + sum);
+  check('all 10^7 outputs lie strictly inside (0, 1)', inRange);
+}
+{
+  /* genStream must agree with stepping via detail() for every family. */
+  const mk = () => [
+    P.makeMRG([2n, 6n], 13n, [1n, 1n]),
+    P.makeCLCG(40014n, 2147483563n, 40692n, 2147483399n, 12345n, 12345n),
+    P.makeCMRG([12345n, 12345n, 12345n, 12345n, 12345n, 12345n])];
+  const a = mk(), b = mk();
+  let ok = true;
+  for (let j = 0; j < 3; j++) {
+    const us = P.genStream(a[j], 200);
+    for (let i = 0; i < 200; i++) if (us[i] !== b[j].detail().u) ok = false;
+  }
+  check('genStream and detail() agree for MRG, CLCG, and CMRG', ok);
+}
+
 /* ── Summary ───────────────────────────────────────────────────────── */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

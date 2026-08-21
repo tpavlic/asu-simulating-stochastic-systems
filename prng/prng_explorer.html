@@ -88,7 +88,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
    sooner, because media-query em tracks the browser default. */
-@media (max-width: 34em) {
+@media (max-width: 40em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -122,6 +122,10 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* The two property panels sit side by side and wrap to a column when tight */
 .props-row { flex-wrap: wrap; }
+/* Small companion lattices on tabs 2 and 3 */
+.mini-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.mini-cell { flex: 0 1 200px; min-width: 0; }
+.mini-cell canvas { margin: 0 auto; }
 .stat-line { font-size: .8rem; color: var(--muted); }
 .stat-line b { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--est); }
 .stat-line span { font-size: .72rem; }
@@ -223,10 +227,14 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
   </div>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="gen" onclick="showTab('gen',this)">① Generator</button>
+    <button class="tab active" data-tab="gen" onclick="showTab('gen',this)">① The LCG</button>
+    <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
+    <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
-    <option value="gen">① Generator</option>
+    <option value="gen">① The LCG</option>
+    <option value="clcg">② Combining LCGs</option>
+    <option value="mrg">③ MRG &amp; MRG32k3a</option>
   </select>
 
   <!-- ── TAB ①: the generator itself ─────────────────────────────────── -->
@@ -251,47 +259,30 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="rec-line" id="g-rec"></div>
         <div class="ctrl-row" style="margin-bottom:8px;">
           <label class="ctrl-lbl" for="g-preset">Preset</label>
-          <select id="g-preset" style="flex:1 1 auto; min-width:0;" onchange="applyPreset(this.value)"></select>
+          <select id="g-preset" style="flex:1 1 auto; min-width:0;" onchange="EDITORS.g.applyPreset(this.value)"></select>
         </div>
         <div class="hint" id="g-preset-desc" style="margin-bottom:10px;"></div>
-        <div class="par-grid">
-          <div class="par-cell">
-            <label for="g-a" title="a scales the current state at every step"><b>a</b> = multiplier</label>
-            <input class="par-inp" id="g-a" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
-          </div>
-          <div class="par-cell">
-            <label for="g-c" title="c is added at every step; c = 0 gives a purely multiplicative generator"><b>c</b> = increment</label>
-            <input class="par-inp" id="g-c" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
-          </div>
-          <div class="par-cell">
-            <label for="g-m" title="the mod-m wrap-around keeps the state in 0 … m−1, the way a clock wraps at 12; m also sets how many states exist"><b>m</b> = <span class="modtip">modulus</span></label>
-            <input class="par-inp" id="g-m" type="text" autocomplete="off" spellcheck="false" onchange="applyParams()">
-          </div>
-          <div class="par-cell">
-            <label for="g-seed" title="the starting state x₀; the whole stream follows from it"><b>x₀</b> = seed</label>
-            <input class="par-inp" id="g-seed" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" onchange="applyParams()">
-          </div>
-        </div>
-        <div class="par-msg" id="g-msg" role="status" aria-live="polite">m also accepts 2^31 and 2^31-1 style input.</div>
-        <div class="cv-leg" style="text-align:left; margin-top:6px;">These four numbers pin down
-          the whole stream: anyone who uses the same a, c, m, and x₀ gets exactly the same
+        <div class="par-grid" id="g-par"></div>
+        <div class="par-msg" id="g-msg" role="status" aria-live="polite"></div>
+        <div class="cv-leg" style="text-align:left; margin-top:6px;">These numbers pin down the
+          whole stream: anyone who uses the same parameters and seeds gets exactly the same
           sequence.</div>
       </div>
 
       <div class="cv-card st-card" style="flex:1 1 auto;">
         <div class="sec-hd">Walk through an LCG output step by step</div>
         <div class="ctrl-row" style="margin-bottom:8px;">
-          <button class="btn-run" onclick="stepN(1)">Step <span aria-hidden="true">▸</span></button>
-          <button class="btn-run2" onclick="stepN(10)">Step ×10</button>
+          <button class="btn-run" onclick="EDITORS.g.stepN(1)">Step <span aria-hidden="true">▸</span></button>
+          <button class="btn-run2" onclick="EDITORS.g.stepN(10)">Step ×10</button>
         </div>
         <div class="steptbl-wrap">
           <table class="steptbl" aria-label="Generator steps">
-            <thead><tr><th>n</th><th>a·x<sub>n−1</sub> + c</th><th>x<sub>n</sub> = (…) mod m</th><th>u<sub>n</sub> = x<sub>n</sub>/m</th></tr></thead>
+            <thead id="g-thead"></thead>
             <tbody id="g-steps"></tbody>
           </table>
         </div>
-        <div class="cv-leg">The panels below read u₁, u₂, … from this same recurrence; the
-          seed x₀ is not emitted.</div>
+        <div class="cv-leg">The panels below read the outputs u in table order; seed rows are
+          not emitted.</div>
       </div>
     </div>
 
@@ -371,9 +362,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="why-body">
         <p>Determinism is the feature, not the flaw. A simulation whose randomness comes from a
         seeded recurrence can be <em>reproduced exactly</em>: rerun with the same parameters and
-        seed and every draw, every queue, and every estimate comes back identical, which is what
+        seed, and every draw, every queue, and every estimate comes back identical, which is what
         makes a surprising result checkable and a bug findable. Write down the four numbers on
-        this tab and any classmate can regenerate your entire stream.</p>
+        this tab, and any classmate can regenerate your entire stream.</p>
         <p>Reproducibility also buys sharper comparisons. To compare two system designs fairly, feed
         both the <em>same</em> random inputs (the same arrival times, the same service demands) so
         that any difference in the results is caused by the designs and not by luck. That technique,
@@ -443,6 +434,208 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
     </details>
   </section>
+
+  <!-- ── TAB ②: combining LCGs ───────────────────────────────────────── -->
+  <section id="tab-clcg" class="tp">
+    <div class="note"><strong>Combining two LCGs extends the period far beyond either
+      modulus.</strong> Although many LCG parameter choices provide good uniformity and
+      independence, an LCG's period can never exceed its modulus, and that is limiting in
+      practice: a modern computational experiment, simulation, or chat session with your
+      favorite LLM draws thousands or even millions of random numbers, and the sequence must
+      not repeat itself along the way. One remedy is to combine two LCGs by taking their sum
+      or difference. Both generators being combined here are plain c = 0 LCGs from tab ①, each
+      with its own modulus; the output is their difference, wrapped mod m₁. The combined stream repeats only after the least common
+      multiple (lcm) of the component periods, the first moment both cycles come back into
+      alignment at once. A CLCG also solves a subtler problem: its output hides its internal
+      state. In an LCG, the output is determined entirely by the current state, and so each
+      output value is always followed by the same pattern, because each state is always
+      followed by the same pattern. In a CLCG, the same output value can result from different
+      states of the two LCGs being combined, and so repeated outputs of the same value need
+      not be followed by the same pattern each time.</div>
+
+    <div class="viz-row">
+      <div class="cv-card g-left" style="flex:0 0 375px;">
+        <div class="sec-hd">Combined LCG (CLCG)</div>
+        <div class="rec-line" id="c-rec"></div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <label class="ctrl-lbl" for="c-preset">Preset</label>
+          <select id="c-preset" style="flex:1 1 auto; min-width:0;" onchange="EDITORS.c.applyPreset(this.value)"></select>
+        </div>
+        <div class="hint" id="c-preset-desc" style="margin-bottom:10px;"></div>
+        <div class="par-grid" id="c-par"></div>
+        <div class="par-msg" id="c-msg" role="status" aria-live="polite"></div>
+        <div class="cv-leg" style="text-align:left; margin-top:6px;">These numbers pin down the
+          whole stream: anyone who uses the same parameters and seeds gets exactly the same
+          sequence.</div>
+      </div>
+      <div class="cv-card st-card" style="flex:1 1 auto;">
+        <div class="sec-hd">Walk through a CLCG output step by step</div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <button class="btn-run" onclick="EDITORS.c.stepN(1)">Step <span aria-hidden="true">▸</span></button>
+          <button class="btn-run2" onclick="EDITORS.c.stepN(10)">Step ×10</button>
+        </div>
+        <div class="steptbl-wrap">
+          <table class="steptbl" aria-label="CLCG steps">
+            <thead id="c-thead"></thead>
+            <tbody id="c-steps"></tbody>
+          </table>
+        </div>
+        <div class="cv-leg">Both component streams and the combined stream, side by side; the
+          seed row is not emitted.</div>
+      </div>
+    </div>
+
+    <div class="viz-row props-row">
+      <div class="cv-card" style="flex:1 1 260px; min-width:0;">
+        <div class="sec-hd">Combining LCGs extends the period</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The combined state repeats
+          only when both components line up again at the same moment, like two turn signals
+          blinking at different rates, or two sustained tones at slightly different pitches
+          making a slow, audible beat: each cycle on its own is short, but the pair realigns
+          only rarely. When the two periods share few factors, the wait is nearly their
+          product.</div>
+        <div class="stat-line" id="c-periods" style="line-height:1.8;"></div>
+      </div>
+      <div class="cv-card" style="flex:0 1 480px; min-width:0;">
+        <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
+          plots of consecutive pairs (u<sub>i</sub>, u<sub>i+1</sub>), the same view as the
+          independence panel on tab ①.</div>
+        <div class="mini-row">
+          <div class="mini-cell">
+            <canvas id="c-lat1" aria-label="Pairs of consecutive outputs of component 1 alone"></canvas>
+            <div class="cv-leg">component 1 alone: one dot per column – each value fixes its
+              successor</div>
+          </div>
+          <div class="mini-cell">
+            <canvas id="c-lat2" aria-label="Pairs of consecutive outputs of the combined generator"></canvas>
+            <div class="cv-leg">combined: columns hold several dots – the output no longer
+              fixes the future</div>
+          </div>
+        </div>
+        <div class="cv-leg" id="c-succ" style="text-align:left; margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <details class="why">
+      <summary>What is a lead-in, and why is a seed sometimes never revisited?</summary>
+      <div class="why-body">
+        <p>The next state in an LCG is computed from the current state, and so once any state
+        repeats, everything after it repeats too. Nothing guarantees the repeat reaches all
+        the way back to the <em>seed</em>, though. If the update rule is many-to-one, meaning two different
+        states map to the same next state, then some states have no way of being reached a
+        second time: once the orbit leaves them, they are gone for good. States the cycle keeps
+        returning to are called <em>recurrent</em>; states visited at most once on the way in
+        are called <em>transient</em>; and the steps spent among transient states before the
+        orbit settles onto its cycle are the <em>lead-in</em> the period card reports. Drawn on
+        paper, such an orbit looks like the letter ρ: a short tail flowing into a loop.</p>
+        <p>A multiplicative component x → a·x mod m is reversible exactly when a shares no
+        factor with m; every state then has a unique predecessor, and every orbit is a pure
+        loop with no lead-in. When a and m share a factor, information is destroyed at each
+        step. With a = 2 and m = 26, for example, the states x and x + 13 collide into the
+        same next state, and after one step every reachable state is even, and so an odd seed
+        such as 1 can never come back. Well-designed generators choose parameters that keep
+        the update reversible, and so no state is wasted on a tail; RANDU's even seeds falling
+        into shorter cycles (tab ①) are this same phenomenon in another costume.</p>
+      </div>
+    </details>
+    <details class="why">
+      <summary>Does a CLCG's determinism still give it a lattice?</summary>
+      <div class="why-body">
+        <p>Yes. A CLCG is a deterministic recurrence like any other, and so its pairs of
+        consecutive outputs still cannot land just anywhere. Each component keeps the lattice
+        that every LCG has (tab ①), but the other component's cycle drifts across it,
+        smearing the stripes. Combining does not remove structure so much as fold two
+        structures against each other until neither is visible at any usable scale.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ── TAB ③: MRG and MRG32k3a ─────────────────────────────────────── -->
+  <section id="tab-mrg" class="tp">
+    <div class="note"><strong>An MRG gets the power of two parallel generators from one
+      generator's own history.</strong> The CLCG of tab ② gets its long period by holding two
+      independent states in memory at once: it is, in effect, a generator with two words of
+      memory that happen to live in separate machines. The multiple recursive generator (MRG)
+      reorganizes that memory. Instead of two recurrences that each remember one value, one
+      recurrence remembers its last k values (k is called the <em>order</em> of the recurrence) and
+      combines them to produce the next – a generator bootstrapped on its own recent past. A snapshot of two parallel states and a
+      window of one sequence's recent history hold the same kind of extra information, but the
+      extra information from the recent history can generate an even longer period. With k
+      words of memory, there are mᵏ possible states, and a well-chosen recurrence visits
+      mᵏ − 1 of them before repeating. The last preset below, MRG32k3a, stacks the two ideas (two order-3 MRGs, combined
+      exactly as tab ② combines two LCGs) and is the generator many production simulation
+      tools actually run.</div>
+
+    <div class="viz-row">
+      <div class="cv-card g-left" style="flex:0 0 375px;">
+        <div class="sec-hd" id="m-fam-hd">Multiple recursive generator (MRG)</div>
+        <div class="rec-line" id="m-rec"></div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <label class="ctrl-lbl" for="m-preset">Preset</label>
+          <select id="m-preset" style="flex:1 1 auto; min-width:0;" onchange="EDITORS.m.applyPreset(this.value)"></select>
+        </div>
+        <div class="hint" id="m-preset-desc" style="margin-bottom:10px;"></div>
+        <div class="par-grid" id="m-par"></div>
+        <div class="par-msg" id="m-msg" role="status" aria-live="polite"></div>
+        <div class="cv-leg" style="text-align:left; margin-top:6px;">These numbers pin down the
+          whole stream: anyone who uses the same parameters and seeds gets exactly the same
+          sequence.</div>
+      </div>
+      <div class="cv-card st-card" style="flex:1 1 auto;">
+        <div class="sec-hd" id="m-walk-hd">Walk through an MRG output step by step</div>
+        <div class="ctrl-row" style="margin-bottom:8px;">
+          <button class="btn-run" onclick="EDITORS.m.stepN(1)">Step <span aria-hidden="true">▸</span></button>
+          <button class="btn-run2" onclick="EDITORS.m.stepN(10)">Step ×10</button>
+        </div>
+        <div class="steptbl-wrap">
+          <table class="steptbl" aria-label="MRG steps">
+            <thead id="m-thead"></thead>
+            <tbody id="m-steps"></tbody>
+          </table>
+        </div>
+        <div class="cv-leg">The first k rows are the seeds; outputs begin once the recurrence
+          has enough history to reach back to.</div>
+      </div>
+    </div>
+
+    <div class="viz-row props-row">
+      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
+        <div class="sec-hd">How the period grows</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">One word of state: period
+          up to m − 1. k words: up to mᵏ − 1. Two combined MRGs (MRG32k3a): about 2¹⁹¹ ≈
+          3.1 × 10⁵⁷.</div>
+        <div class="stat-line" id="m-periods" style="line-height:1.8;"></div>
+      </div>
+      <div class="cv-card" style="flex:0 1 280px; min-width:0;">
+        <div class="sec-hd">Pairs of consecutive outputs</div>
+        <div class="mini-row">
+          <div class="mini-cell">
+            <canvas id="m-lat" aria-label="Pairs of consecutive outputs of the current generator"></canvas>
+            <div class="cv-leg" id="m-lat-cap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <details class="why">
+      <summary>Why does more memory lengthen the period, and what exactly is MRG32k3a?</summary>
+      <div class="why-body">
+        <p>A generator that remembers only its last value must repeat as soon as any single
+        value recurs. A generator that remembers its last k values only repeats when a whole
+        <em>run</em> of k values recurs together, and there are m<sup>k</sup> possible runs. A
+        well-chosen order-k recurrence visits every state except the all-zero one before
+        repeating, for a period of m<sup>k</sup> − 1. The toy preset shows the jump at a human
+        scale: the same modulus 13 that caps a c = 0 LCG at period 12 supports period
+        168 = 13² − 1 with just one extra word of memory.</p>
+        <p>MRG32k3a (L'Ecuyer 1999) is where this tab and tab ② meet: two order-3 MRGs over
+        different moduli, combined by subtraction exactly as the CLCG combines two LCGs, with
+        period about 2¹⁹¹. It is the generator inside many production simulation tools, and it
+        is the generator behind the other widgets in this repository, which is why this page
+        treats its arithmetic as subject matter rather than as a black box.</p>
+      </div>
+    </details>
+  </section>
 </div>
 
 <script id="prng-core">
@@ -498,6 +691,108 @@ function lcgStream(a, c, m, seed, n) {
   var g = makeLCG(a, c, m, seed), out = new Float64Array(n);
   for (var i = 0; i < n; i++) out[i] = g.next();
   return out;
+}
+
+/* First n outputs of any generator object with a next() method. */
+function genStream(g, n) {
+  var out = new Float64Array(n);
+  for (var i = 0; i < n; i++) out[i] = g.next();
+  return out;
+}
+
+/* ── MRG: x_n = (a_1·x_{n-1} + ... + a_k·x_{n-k}) mod m ──────────────
+   The natural generalization of the LCG: k words of state instead of
+   one. Coefficients arrive already reduced into [0, m), and so the raw
+   combination is nonnegative, and BigInt keeps it exact at any size.
+   The seeds are the first k states x_0 ... x_{k-1}; outputs start at
+   n = k. */
+function makeMRG(as, m, seeds) {
+  var k = as.length;
+  var init = seeds.map(function (s) { return modNorm(s, m); });
+  var xs = init.slice();   /* xs[i] = x_{n-k+1+i}; xs[k-1] is the newest */
+  var g = {
+    n: k - 1,
+    next: function () { return g.detail().u; },
+    detail: function () {
+      var raw = 0n;
+      for (var j = 0; j < k; j++) raw += as[j] * xs[k - 1 - j];
+      var x = raw % m;
+      xs.shift(); xs.push(x);
+      g.n++;
+      return { n: g.n, raw: raw, x: x, u: Number(x) / Number(m) };
+    },
+    state: function () { return xs.slice(); },
+    reset: function () { xs = init.slice(); g.n = k - 1; }
+  };
+  return g;
+}
+
+/* ── CLCG: two multiplicative LCGs combined by subtraction ───────────
+   z_n = (x1_n - x2_n) mod m1 and u_n = z_n / m1, with z = 0 mapped to
+   (m1 - 1)/m1, and so the output stays inside (0, 1). This is the
+   combination rule of L'Ecuyer (1988), as documented in the Wikipedia
+   article "Combined linear congruential generator" (checked
+   2026-08-21); the classic parameter preset comes from the same
+   source. */
+function makeCLCG(a1, m1, a2, m2, s1, s2) {
+  var i1 = modNorm(s1, m1), i2 = modNorm(s2, m2);
+  var x1 = i1, x2 = i2;
+  var g = {
+    n: 0,
+    next: function () { return g.detail().u; },
+    detail: function () {
+      x1 = a1 * x1 % m1;
+      x2 = a2 * x2 % m2;
+      var z = modNorm(x1 - x2, m1);
+      g.n++;
+      return { n: g.n, x1: x1, x2: x2, z: z,
+               u: z === 0n ? Number(m1 - 1n) / Number(m1) : Number(z) / Number(m1) };
+    },
+    state: function () { return [x1, x2]; },
+    reset: function () { x1 = i1; x2 = i2; g.n = 0; }
+  };
+  return g;
+}
+
+/* ── CMRG: MRG32k3a, exactly as published ────────────────────────────
+   Constants, lag structure, and combination from P. L'Ecuyer, "Good
+   parameters and implementations for combined multiple recursive random
+   number generators", Operations Research 47(1):159-164, 1999, checked
+   on 2026-08-21 against the author's reference C implementation
+   (mrg32k3a-original.c). States are BigInt here, and so every
+   intermediate is exact; the output multiplies by the reference code's
+   own norm constant, which makes the u stream match the published
+   double implementation bit for bit. The seeds are the first three
+   states of each component; outputs start at n = 3. */
+var CMRG_M1 = 4294967087n, CMRG_M2 = 4294944443n;
+var CMRG_A12 = 1403580n, CMRG_A13N = 810728n;
+var CMRG_A21 = 527612n, CMRG_A23N = 1370589n;
+var CMRG_NORM = 2.328306549295728e-10;
+function makeCMRG(seeds) {   /* [s10, s11, s12, s20, s21, s22] */
+  var init = seeds.map(function (s, i) { return modNorm(s, i < 3 ? CMRG_M1 : CMRG_M2); });
+  var s10 = init[0], s11 = init[1], s12 = init[2];
+  var s20 = init[3], s21 = init[4], s22 = init[5];
+  var g = {
+    n: 2,
+    next: function () { return g.detail().u; },
+    detail: function () {
+      var p1 = modNorm(CMRG_A12 * s11 - CMRG_A13N * s10, CMRG_M1);
+      s10 = s11; s11 = s12; s12 = p1;
+      var p2 = modNorm(CMRG_A21 * s22 - CMRG_A23N * s20, CMRG_M2);
+      s20 = s21; s21 = s22; s22 = p2;
+      var z = modNorm(p1 - p2, CMRG_M1);
+      if (z === 0n) z = CMRG_M1;
+      g.n++;
+      return { n: g.n, x1: p1, x2: p2, z: z, u: Number(z) * CMRG_NORM };
+    },
+    state: function () { return [s10, s11, s12, s20, s21, s22]; },
+    reset: function () {
+      s10 = init[0]; s11 = init[1]; s12 = init[2];
+      s20 = init[3]; s21 = init[4]; s22 = init[5];
+      g.n = 2;
+    }
+  };
+  return g;
 }
 
 /* ── Special functions for the two uniformity tests ─────────────────────
@@ -610,39 +905,12 @@ var tok = function (n) { return css.getPropertyValue(n).trim(); };
 var C = { accent: tok('--accent'), muted: tok('--muted'), border: tok('--border'),
           chartBg: tok('--chart-bg'), truth: tok('--truth'), est: tok('--est'),
           stream: tok('--stream') };
+var DPR = window.devicePixelRatio || 1;
 
-/* ── Presets. Every constant here is published and verified:
-   - Minimal standard: Park & Miller 1988, a = 7^5 = 16807, m = 2^31 − 1
-     (a Mersenne prime); full period m − 1 from any nonzero seed.
-   - RANDU: IBM, a = 65539, m = 2^31, odd seed; consecutive triples fall on
-     15 planes in the unit cube.
-   - The power-of-two example uses the constants popularized by the C
-     standard's sample rand() (a = 1103515245, c = 12345), with m = 2^31;
-     full period by Hull–Dobell, but the low k bits cycle with period 2^k. */
-var PRESETS = {
-  toy:    { a: '5', c: '3', m: '16', seed: '1',
-            label: 'Toy – m = 16, watch the cycle repeat',
-            desc: 'Small enough to trace in full: all 16 states appear once each, in a fixed loop, before the sequence repeats exactly. Step 17 times in the table and find the repeat. Every generator on this page is this, only with a period too long to watch.' },
-  minstd: { a: '16807', c: '0', m: '2147483647', seed: '1',
-            label: 'Lehmer “minimal standard” – a = 16807, m = 2³¹−1',
-            desc: 'Park & Miller (1988): a = 7⁵ = 16807, m = 2³¹ − 1 (a prime). From any nonzero seed, it walks through all m − 1 = 2,147,483,646 nonzero states before repeating. Decades old and small by modern standards, but honest: a workable baseline generator.' },
-  randu:  { a: '65539', c: '0', m: '2147483648', seed: '1',
-            label: 'RANDU – historically shipped, badly flawed',
-            desc: 'IBM’s RANDU (a = 65539, m = 2³¹, odd seed), distributed widely in the 1960s–70s and used in published research. Its outputs pass the uniformity panel below; the flaw is a dependence structure among triples of consecutive values. Switch the independence panel to 3D triples and press “Show me RANDU’s planes.”' },
-  ansi:   { a: '1103515245', c: '12345', m: '2147483648', seed: '12345',
-            label: 'Power-of-two modulus – C-standard-style constants',
-            desc: 'The multiplier and increment popularized by the C standard’s sample rand() (a = 1103515245, c = 12345), with m = 2³¹. Full period 2³¹, but with a power-of-two modulus, the low-order bits cycle far faster than the high-order bits: the k lowest bits of x repeat every 2ᵏ steps.' },
-  custom: { label: 'Custom', desc: 'Your own parameters. Bad choices are allowed on purpose: try a small a, an even a with even m, or anything else, and watch what breaks.' }
-};
-
-/* Central config; all four values are BigInt. */
-var cfg = { a: 16807n, c: 0n, m: 2147483647n, seed: 1n };
-var M_MAX = 1n << 62n;
-
-/* Parse an integer, allowing 2^31 and 2^31-1 / 2^31+5 forms for the
-   modulus field. Negative integers are accepted; applyParams wraps them
-   into [0, m) the same way it wraps values at or above m. Returns
-   { ok, v } with v BigInt, or { ok:false, msg }. */
+/* ── Small shared helpers ────────────────────────────────────────────── */
+/* Parse an integer, allowing 2^31 and 2^31-1 / 2^31+5 forms. Negative
+   integers are accepted; the parameter readers wrap them into [0, m) the
+   same way they wrap values at or above m. */
 function parseBig(str) {
   var s = String(str).replace(/[\s,]/g, '');
   var m1 = /^(-?\d{1,19})$/.exec(s);
@@ -672,122 +940,357 @@ function fmtP(p) {
   if (p < 1e-4) return '< 0.0001';
   return p.toFixed(4);
 }
+var SUB = ['₀', '₁', '₂', '₃', '₄', '₅'];
+var M_MAX = 1n << 62n;
 
-/* ── Generator state for tab ① (the hand-stepped instance) ──────────── */
-var G = null;
+/* ── Presets, one table per tab. Every published constant is verified
+   against the sources named in the core block and in the verification
+   script; the toy parameters are this page's own, and the verification
+   script brute-forces their stated periods. ─────────────────────────── */
+var LCG_PRESETS = {
+  toy:    { fam: 'lcg', a: '5', c: '3', m: '16', seeds: ['1'],
+            label: 'Toy – m = 16, watch the cycle repeat',
+            desc: 'This toy is small enough to trace in full: all 16 states appear once each, in a fixed loop, before the sequence repeats exactly. Step 17 times in the table and find the repeat. Every generator on this page behaves the same way, only with a period too long to watch.' },
+  minstd: { fam: 'lcg', a: '16807', c: '0', m: '2147483647', seeds: ['1'],
+            label: 'Lehmer “minimal standard” – a = 16807, m = 2³¹−1',
+            desc: 'Park & Miller (1988): a = 7⁵ = 16807, m = 2³¹ − 1 (a prime). Despite being relatively small, it walks from any nonzero seed through all m − 1 = 2,147,483,646 nonzero states before repeating. Decades old, it remains an honest, workable baseline generator.' },
+  randu:  { fam: 'lcg', a: '65539', c: '0', m: '2147483648', seeds: ['1'],
+            label: 'RANDU – historically shipped, badly flawed',
+            desc: 'IBM’s RANDU (a = 65539, m = 2³¹, odd seed) was distributed widely in the 1960s–70s and used in published research. Its outputs pass the uniformity panel below; the flaw is a dependence structure among triples of consecutive values. Switch the independence panel to 3D triples and press “Show me RANDU’s planes.”' },
+  ansi:   { fam: 'lcg', a: '1103515245', c: '12345', m: '2147483648', seeds: ['12345'],
+            label: 'Power-of-two modulus – C-standard-style constants',
+            desc: 'This preset uses the multiplier and increment popularized by the C standard’s sample rand() (a = 1103515245, c = 12345), with m = 2³¹. The period is the full 2³¹, but with a power-of-two modulus, the low-order bits cycle far faster than the high-order bits: the k lowest bits of x repeat every 2ᵏ steps.' },
+  custom: { fam: 'lcg', label: 'Custom',
+            desc: 'Your own parameters. Bad choices are allowed on purpose: try a small a, an even a with even m, or anything else, and watch what breaks.' }
+};
+var CLCG_PRESETS = {
+  toyc:  { fam: 'clcg', a1: '2', m1: '13', s1: '1', a2: '7', m2: '11', s2: '1',
+           label: 'Toy CLCG – periods 12 and 10 make 60',
+           desc: 'This preset combines two tiny multiplicative LCGs: x1 with a = 2, m = 13 (period 12) and x2 with a = 7, m = 11 (period 10). Their difference mod 13 repeats only when both components do, after lcm(12, 10) = 60 steps: watch the two columns drift against each other in the table.' },
+  lec88: { fam: 'clcg', a1: '40014', m1: '2147483563', s1: '12345', a2: '40692', m2: '2147483399', s2: '12345',
+           label: 'L’Ecuyer (1988) – two 31-bit LCGs',
+           desc: 'L’Ecuyer (1988) combined two 31-bit multiplicative LCGs (a₁ = 40014, m₁ = 2147483563 and a₂ = 40692, m₂ = 2147483399) by subtraction mod m₁. Each component alone has period below 2³¹; the combination reaches (m₁−1)(m₂−1)/2 ≈ 2.3 × 10¹⁸.' },
+  custom: { fam: 'clcg', label: 'Custom',
+           desc: 'Your own pair. Each component is a c = 0 LCG, and the output is their difference mod m₁; a seed of 0 strands that component at 0. Distinct moduli are the point: the two cycles drift against each other.' }
+};
+var MRG_PRESETS = {
+  toy2:  { fam: 'mrg', as: ['2', '6'], m: '13', seeds: ['1', '1'],
+           label: 'Toy MRG – k = 2, m = 13, period 168',
+           desc: 'This toy MRG keeps the modulus of a toy LCG but holds two words of state: xₙ = (2·xₙ₋₁ + 6·xₙ₋₂) mod 13. A c = 0 LCG with m = 13 has period at most 12; this recurrence reaches 168 = 13² − 1, the maximum for k = 2. More state buys a longer period, with the same arithmetic per step.' },
+  comp1: { fam: 'mrg', as: ['0', '1403580', '4294156359'], m: '4294967087', seeds: ['12345', '12345', '12345'],
+           label: 'MRG32k3a component 1 – k = 3, m ≈ 2³²',
+           desc: 'This is one of the two order-3 recurrences inside MRG32k3a (L’Ecuyer 1999): xₙ = (1403580·xₙ₋₂ − 810728·xₙ₋₃) mod 4294967087. The negative coefficient is stored wrapped, as m − 810728 = 4294156359. On its own, this is already a serious generator with period m³ − 1 ≈ 8 × 10²⁸; the MRG32k3a preset pairs it with a partner.' },
+  mrg32k3a: { fam: 'cmrg', seeds: ['12345', '12345', '12345', '12345', '12345', '12345'],
+           label: 'MRG32k3a – the production generator',
+           desc: 'P. L’Ecuyer’s MRG32k3a (1999) combines two order-3 recurrences over different moduli by subtraction mod m₁, exactly as tab ② combines two LCGs; the period is about 2¹⁹¹. This is the generator inside many production simulation tools, and it is the generator behind the other widgets in this repository. The constants are fixed; the six state words are yours to seed.' },
+  custom: { fam: 'mrg', label: 'Custom (MRG)',
+           desc: 'Your own order-k recurrence xₙ = (a₁·xₙ₋₁ + … + aₖ·xₙ₋ₖ) mod m. Negative coefficients are allowed and wrap mod m. Seeds are the first k states; an all-zero seed stays at zero forever.' }
+};
 
-/* ── The shared stream consumed by tabs ② and ③ ─────────────────────── */
-var S = { key: '', gen: null, us: [] };
-function cfgKey() { return cfg.a + ',' + cfg.c + ',' + cfg.m + ',' + cfg.seed; }
-var STREAM_CAP = 200000;
-function ensureStream(n) {
-  if (S.key !== cfgKey()) { S.key = cfgKey(); S.gen = makeLCG(cfg.a, cfg.c, cfg.m, cfg.seed); S.us = []; }
-  n = Math.min(n, STREAM_CAP);
-  while (S.us.length < n) S.us.push(S.gen.next());
-  return S.us;
+/* ── Family-generic pure helpers ─────────────────────────────────────── */
+function cfgFromPreset(f, p) {
+  if (f === 'lcg') return { fam: 'lcg', a: BigInt(p.a), c: BigInt(p.c), m: BigInt(p.m), seed: BigInt(p.seeds[0]) };
+  if (f === 'mrg') return { fam: 'mrg', as: p.as.map(BigInt), m: BigInt(p.m), seeds: p.seeds.map(BigInt) };
+  if (f === 'clcg') return { fam: 'clcg', a1: BigInt(p.a1), m1: BigInt(p.m1), a2: BigInt(p.a2), m2: BigInt(p.m2), s1: BigInt(p.s1), s2: BigInt(p.s2) };
+  return { fam: 'cmrg', seeds: p.seeds.map(BigInt) };
+}
+function makeGen(c) {
+  if (c.fam === 'lcg') return makeLCG(c.a, c.c, c.m, c.seed);
+  if (c.fam === 'mrg') return makeMRG(c.as, c.m, c.seeds);
+  if (c.fam === 'clcg') return makeCLCG(c.a1, c.m1, c.a2, c.m2, c.s1, c.s2);
+  return makeCMRG(c.seeds);
+}
+function cfgKeyOf(c) {
+  if (c.fam === 'lcg') return 'lcg:' + c.a + ',' + c.c + ',' + c.m + ',' + c.seed;
+  if (c.fam === 'mrg') return 'mrg:' + c.as.join(',') + ';' + c.m + ';' + c.seeds.join(',');
+  if (c.fam === 'clcg') return 'clcg:' + [c.a1, c.m1, c.s1, c.a2, c.m2, c.s2].join(',');
+  return 'cmrg:' + c.seeds.join(',');
+}
+/* How many distinct output values the generator can produce; the lattice
+   plots draw bigger dots when there are only a few. */
+function distinctOf(c) {
+  if (c.fam === 'lcg' || c.fam === 'mrg') return c.m;
+  if (c.fam === 'clcg') return c.m1;
+  return CMRG_M1;
 }
 
-/* ── Parameter handling ─────────────────────────────────────────────── */
-function setFields(p) {
-  document.getElementById('g-a').value = p.a;
-  document.getElementById('g-c').value = p.c;
-  document.getElementById('g-m').value = p.m;
-  document.getElementById('g-seed').value = p.seed;
+/* ── Parameter grids, recurrence cards, and step tables per family ──── */
+function parCell(pre, fname, sym, word, title, value) {
+  var id = pre + '-f-' + fname;
+  return '<div class="par-cell"><label for="' + id + '" title="' + title + '"><b>' + sym +
+         '</b> = ' + word + '</label><input class="par-inp" id="' + id +
+         '" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="' +
+         value + '" onchange="EDITORS.' + pre + '.applyParams()"></div>';
+}
+var MOD_TIP = 'the mod wrap-around keeps the state below the modulus, the way a clock wraps at 12';
+
+function paramUIHTML(c, pre) {
+  var h = '', i;
+  if (c.fam === 'lcg') {
+    h += parCell(pre, 'a', 'a', 'multiplier', 'a scales the current state at every step', c.a);
+    h += parCell(pre, 'c', 'c', 'increment', 'c is added at every step; c = 0 gives a purely multiplicative generator', c.c);
+    h += parCell(pre, 'm', 'm', '<span class="modtip">modulus</span>', MOD_TIP, c.m);
+    h += parCell(pre, 's0', 'x<sub>0</sub>', 'seed', 'the starting state; the whole stream follows from it', c.seed);
+  } else if (c.fam === 'mrg') {
+    h += '<div class="par-cell"><label for="' + pre + '-f-k" title="how many past states the recurrence reaches back to"><b>k</b> = order</label>' +
+         '<select id="' + pre + '-f-k" class="par-inp" onchange="EDITORS.' + pre + '.setK(this.value)">';
+    for (var kk = 2; kk <= 5; kk++) h += '<option value="' + kk + '"' + (c.as.length === kk ? ' selected' : '') + '>' + kk + '</option>';
+    h += '</select></div>';
+    h += parCell(pre, 'm', 'm', '<span class="modtip">modulus</span>', MOD_TIP, c.m);
+    for (i = 0; i < c.as.length; i++)
+      h += parCell(pre, 'a' + i, 'a<sub>' + (i + 1) + '</sub>', 'coefficient of x<sub>n−' + (i + 1) + '</sub>',
+                   'negative values are allowed and wrap mod m', c.as[i]);
+    for (i = 0; i < c.seeds.length; i++)
+      h += parCell(pre, 's' + i, 'x<sub>' + i + '</sub>', 'seed', 'the first k states are the seeds', c.seeds[i]);
+  } else if (c.fam === 'clcg') {
+    h += parCell(pre, 'a1', 'a<sub>1</sub>', 'multiplier 1', 'multiplier of the first component', c.a1);
+    h += parCell(pre, 'm1', 'm<sub>1</sub>', '<span class="modtip">modulus 1</span>', MOD_TIP + '; the combined output is also taken mod m1', c.m1);
+    h += parCell(pre, 'a2', 'a<sub>2</sub>', 'multiplier 2', 'multiplier of the second component', c.a2);
+    h += parCell(pre, 'm2', 'm<sub>2</sub>', '<span class="modtip">modulus 2</span>', MOD_TIP, c.m2);
+    h += parCell(pre, 's1', 'x1<sub>0</sub>', 'seed 1', 'starting state of the first component', c.s1);
+    h += parCell(pre, 's2', 'x2<sub>0</sub>', 'seed 2', 'starting state of the second component', c.s2);
+  } else {
+    for (i = 0; i < 3; i++)
+      h += parCell(pre, 's' + i, 'x1<sub>' + i + '</sub>', 'seed', 'component 1 state; below m1, not all three zero', c.seeds[i]);
+    for (i = 3; i < 6; i++)
+      h += parCell(pre, 's' + i, 'x2<sub>' + (i - 3) + '</sub>', 'seed', 'component 2 state; below m2, not all three zero', c.seeds[i]);
+  }
+  return h;
 }
 
-function applyPreset(key) {
-  var p = PRESETS[key];
-  document.getElementById('g-preset').value = key;   /* callers other than the select itself */
-  document.getElementById('g-preset-desc').innerHTML = p.desc;
-  if (key !== 'custom') { setFields(p); applyParams(); }
+var MODTIP_HTML = '<span class="modtip" title="mod keeps only the remainder after dividing, wrapping around the way a clock wraps at 12">mod</span>';
+function recurrenceHTML(c) {
+  if (c.fam === 'lcg') {
+    return 'x<sub>n+1</sub> = ( <b>' + fmtBig(c.a) + '</b> · x<sub>n</sub> + <b>' + fmtBig(c.c) +
+           '</b> ) ' + MODTIP_HTML + ' <b>' + fmtBig(c.m) + '</b><br>' +
+           '<span class="dim">u<sub>n</sub> = x<sub>n</sub> / ' + fmtBig(c.m) + '</span>';
+  }
+  if (c.fam === 'mrg') {
+    var terms = c.as.map(function (a, j) {
+      return '<b>' + fmtBig(a) + '</b>·x<sub>n−' + (j + 1) + '</sub>';
+    });
+    return 'x<sub>n</sub> = ( ' + terms.join(' + ') + ' ) ' + MODTIP_HTML + ' <b>' + fmtBig(c.m) + '</b><br>' +
+           '<span class="dim">u<sub>n</sub> = x<sub>n</sub> / ' + fmtBig(c.m) + '</span>';
+  }
+  if (c.fam === 'clcg') {
+    return 'x1<sub>n</sub> = ( <b>' + fmtBig(c.a1) + '</b> · x1<sub>n−1</sub> ) ' + MODTIP_HTML + ' <b>' + fmtBig(c.m1) + '</b><br>' +
+           'x2<sub>n</sub> = ( <b>' + fmtBig(c.a2) + '</b> · x2<sub>n−1</sub> ) ' + MODTIP_HTML + ' <b>' + fmtBig(c.m2) + '</b><br>' +
+           '<span class="dim">z<sub>n</sub> = (x1<sub>n</sub> − x2<sub>n</sub>) mod m₁<br>' +
+           'u<sub>n</sub> = z<sub>n</sub>/m₁, except u<sub>n</sub> = (m₁−1)/m₁ when z<sub>n</sub> = 0</span>';
+  }
+  return 'x1<sub>n</sub> = ( 1403580·x1<sub>n−2</sub> − 810728·x1<sub>n−3</sub> ) ' + MODTIP_HTML + ' 4294967087<br>' +
+         'x2<sub>n</sub> = ( 527612·x2<sub>n−1</sub> − 1370589·x2<sub>n−3</sub> ) ' + MODTIP_HTML + ' 4294944443<br>' +
+         '<span class="dim">z<sub>n</sub> = (x1<sub>n</sub> − x2<sub>n</sub>) mod m₁<br>' +
+         'u<sub>n</sub> = z<sub>n</sub>/(m₁+1), except u<sub>n</sub> = m₁/(m₁+1) when z<sub>n</sub> = 0</span>';
 }
 
-/* Validate the four fields, normalize them (reduce a, c, and the seed mod m),
-   rebuild the generator and stream, and re-render whatever is visible. */
-function applyParams() {
-  var ids = ['g-a', 'g-c', 'g-m', 'g-seed'], names = ['a', 'c', 'm', 'seed x₀'];
-  var vals = {}, msgs = [], bad = false;
-  for (var i = 0; i < 4; i++) {
-    var el = document.getElementById(ids[i]), r = parseBig(el.value);
+var THEADS = {
+  lcg: '<tr><th>n</th><th>a·x<sub>n−1</sub> + c</th><th>x<sub>n</sub> = (…) mod m</th><th>u<sub>n</sub> = x<sub>n</sub>/m</th></tr>',
+  mrg: '<tr><th>n</th><th>a₁·x<sub>n−1</sub> + … + a<sub>k</sub>·x<sub>n−k</sub></th><th>x<sub>n</sub> = (…) mod m</th><th>u<sub>n</sub> = x<sub>n</sub>/m</th></tr>',
+  clcg: '<tr><th>n</th><th>x1<sub>n</sub></th><th>x2<sub>n</sub></th><th>z<sub>n</sub> = (x1−x2) mod m₁</th><th>u<sub>n</sub></th></tr>',
+  cmrg: '<tr><th>n</th><th>x1<sub>n</sub></th><th>x2<sub>n</sub></th><th>z<sub>n</sub></th><th>u<sub>n</sub></th></tr>'
+};
+function seedRowsHTML(c) {
+  var rows = '', i;
+  if (c.fam === 'lcg') {
+    rows = '<tr class="seedrow"><td>0</td><td>— (seed)</td><td class="cx">' + fmtBig(c.seed) +
+           '</td><td>(not emitted)</td></tr>';
+  } else if (c.fam === 'mrg') {
+    for (i = 0; i < c.seeds.length; i++)
+      rows += '<tr class="seedrow"><td>' + i + '</td><td>— (seed)</td><td class="cx">' + fmtBig(c.seeds[i]) +
+              '</td><td>(not emitted)</td></tr>';
+  } else if (c.fam === 'clcg') {
+    rows = '<tr class="seedrow"><td>0</td><td class="cx">' + fmtBig(c.s1) + '</td><td class="cx">' + fmtBig(c.s2) +
+           '</td><td>— (seeds)</td><td>(not emitted)</td></tr>';
+  } else {
+    for (i = 0; i < 3; i++)
+      rows += '<tr class="seedrow"><td>' + i + '</td><td class="cx">' + fmtBig(c.seeds[i]) + '</td><td class="cx">' +
+              fmtBig(c.seeds[i + 3]) + '</td><td>— (seeds)</td><td>(not emitted)</td></tr>';
+  }
+  return rows;
+}
+function stepRowHTML(c, r) {
+  if (c.fam === 'lcg' || c.fam === 'mrg') {
+    return '<td>' + r.n + '</td><td>' + fmtBig(r.raw) + '</td><td class="cx">' +
+           fmtBig(r.x) + '</td><td class="cu">' + fmtU(r.u) + '</td>';
+  }
+  return '<td>' + r.n + '</td><td>' + fmtBig(r.x1) + '</td><td>' + fmtBig(r.x2) +
+         '</td><td class="cx">' + fmtBig(r.z) + '</td><td class="cu">' + fmtU(r.u) + '</td>';
+}
+
+/* ── Parameter reading (validation and normalization), per family ───── */
+function readParams(c, pre) {
+  var msgs = [], bad = false;
+  function rd(fname, name) {
+    var el = document.getElementById(pre + '-f-' + fname), r = parseBig(el.value);
     el.setAttribute('aria-invalid', r.ok ? 'false' : 'true');
-    if (!r.ok) { msgs.push('⚠ ' + names[i] + ': ' + r.msg + '.'); bad = true; }
-    else vals[ids[i]] = r.v;
+    if (!r.ok) { msgs.push('⚠ ' + name + ': ' + r.msg + '.'); bad = true; return null; }
+    return r.v;
   }
-  var msgEl = document.getElementById('g-msg');
-  if (bad) { msgEl.textContent = msgs.join(' ') + ' Whole numbers only; m also accepts 2^31-1 style input.'; msgEl.classList.add('bad'); return; }
-  var m = vals['g-m'];
-  if (m < 2n || m > M_MAX) {
-    msgEl.textContent = '⚠ m must be between 2 and 2^62.'; msgEl.classList.add('bad');
-    document.getElementById('g-m').setAttribute('aria-invalid', 'true'); return;
+  function modOk(m, name) {
+    if (m === null) return false;
+    if (m < 2n || m > M_MAX) { msgs.push('⚠ ' + name + ' must be between 2 and 2^62.'); bad = true; return false; }
+    return true;
   }
-  var a = modNorm(vals['g-a'], m), c = modNorm(vals['g-c'], m), seed = modNorm(vals['g-seed'], m);
-  if (a !== vals['g-a']) msgs.push('a wrapped mod m to ' + a + '.');
-  if (c !== vals['g-c']) msgs.push('c wrapped mod m to ' + c + '.');
-  if (seed !== vals['g-seed']) msgs.push('seed wrapped mod m to ' + seed + '.');
-  if (c === 0n && seed === 0n) msgs.push('⚠ With c = 0, the state 0 is stuck: every output will be 0.');
-  else if (c === 0n && m % 2n === 0n && seed % 2n === 0n && document.getElementById('g-preset').value === 'randu')
-    msgs.push('RANDU needs an odd seed; an even one falls into a shorter cycle.');
-  cfg = { a: a, c: c, m: m, seed: seed };
-  document.getElementById('g-a').value = a.toString();
-  document.getElementById('g-c').value = c.toString();
-  document.getElementById('g-m').value = m.toString();
-  document.getElementById('g-seed').value = seed.toString();
-
-  /* If the fields no longer match the selected preset, flip to Custom. */
-  var sel = document.getElementById('g-preset'), pk = sel.value, p = PRESETS[pk];
-  if (pk !== 'custom' && !(p.a === a.toString() && p.c === c.toString() && p.m === m.toString() && p.seed === seed.toString())) {
-    sel.value = 'custom';
-    document.getElementById('g-preset-desc').innerHTML = PRESETS.custom.desc;
+  function wrap(v, m, name) {
+    var w = modNorm(v, m);
+    if (w !== v) msgs.push(name + ' wrapped mod ' + fmtBig(m) + ' to ' + w + '.');
+    return w;
   }
-  msgEl.textContent = msgs.join(' ') || 'm also accepts 2^31 and 2^31-1 style input.';
-  msgEl.classList.remove('bad');
-
-  renderRecurrence();
-  resetState();
-  streamN = STREAM_START;   /* a different generator is a different experiment */
-  renderPanels();
+  var out = null, i;
+  if (c.fam === 'lcg') {
+    var a = rd('a', 'a'), cc = rd('c', 'c'), m = rd('m', 'm'), s0 = rd('s0', 'seed x₀');
+    if (!modOk(m, 'm') || bad) return { ok: false, msgs: msgs };
+    a = wrap(a, m, 'a'); cc = wrap(cc, m, 'c'); s0 = wrap(s0, m, 'x₀');
+    if (cc === 0n && s0 === 0n) msgs.push('⚠ With c = 0, the state 0 is stuck: every output will be 0.');
+    else if (cc === 0n && m % 2n === 0n && s0 % 2n === 0n &&
+             document.getElementById(pre + '-preset').value === 'randu')
+      msgs.push('RANDU needs an odd seed; an even one falls into a shorter cycle.');
+    out = { fam: 'lcg', a: a, c: cc, m: m, seed: s0 };
+  } else if (c.fam === 'mrg') {
+    var k = c.as.length, as = [], seeds = [];
+    m = rd('m', 'm');
+    var mok = modOk(m, 'm');
+    for (i = 0; i < k; i++) as.push(rd('a' + i, 'a' + SUB[i + 1]));
+    for (i = 0; i < k; i++) seeds.push(rd('s' + i, 'x' + SUB[i]));
+    if (!mok || bad) return { ok: false, msgs: msgs };
+    as = as.map(function (v, j) { return wrap(v, m, 'a' + SUB[j + 1]); });
+    seeds = seeds.map(function (v, j) { return wrap(v, m, 'x' + SUB[j]); });
+    if (seeds.every(function (v) { return v === 0n; }))
+      msgs.push('⚠ All-zero seeds are stuck: every output will be 0.');
+    out = { fam: 'mrg', as: as, m: m, seeds: seeds };
+  } else if (c.fam === 'clcg') {
+    var a1 = rd('a1', 'a₁'), m1 = rd('m1', 'm₁'), a2 = rd('a2', 'a₂'), m2 = rd('m2', 'm₂');
+    var s1 = rd('s1', 'x1₀'), s2 = rd('s2', 'x2₀');
+    var ok1 = modOk(m1, 'm₁'), ok2 = modOk(m2, 'm₂');
+    if (!ok1 || !ok2 || bad) return { ok: false, msgs: msgs };
+    a1 = wrap(a1, m1, 'a₁'); s1 = wrap(s1, m1, 'x1₀');
+    a2 = wrap(a2, m2, 'a₂'); s2 = wrap(s2, m2, 'x2₀');
+    if (m1 === m2) msgs.push('⚠ The two moduli are equal; the combination only helps when the cycle lengths differ.');
+    if (s1 === 0n) msgs.push('⚠ Seed 1 is 0, and so component 1 is stuck at 0.');
+    if (s2 === 0n) msgs.push('⚠ Seed 2 is 0, and so component 2 is stuck at 0.');
+    out = { fam: 'clcg', a1: a1, m1: m1, a2: a2, m2: m2, s1: s1, s2: s2 };
+  } else {
+    var sd = [];
+    for (i = 0; i < 6; i++) sd.push(rd('s' + i, i < 3 ? 'x1,' + i : 'x2,' + (i - 3)));
+    if (bad) return { ok: false, msgs: msgs };
+    sd = sd.map(function (v, j) {
+      return wrap(v, j < 3 ? CMRG_M1 : CMRG_M2, j < 3 ? 'x1,' + j : 'x2,' + (j - 3));
+    });
+    if (sd[0] + sd[1] + sd[2] === 0n) msgs.push('⚠ Component 1 seeds are all 0; it is stuck at 0.');
+    if (sd[3] + sd[4] + sd[5] === 0n) msgs.push('⚠ Component 2 seeds are all 0; it is stuck at 0.');
+    out = { fam: 'cmrg', seeds: sd };
+  }
+  return { ok: true, cfg: out, msgs: msgs };
 }
 
-function renderRecurrence() {
-  document.getElementById('g-rec').innerHTML =
-    'x<sub>n+1</sub> = ( <b>' + fmtBig(cfg.a) + '</b> · x<sub>n</sub> + <b>' + fmtBig(cfg.c) +
-    '</b> ) <span class="modtip" title="mod m keeps only the remainder after dividing by m, wrapping around at m the way a clock wraps at 12">mod</span> <b>' +
-    fmtBig(cfg.m) + '</b><br>' +
-    '<span class="dim">u<sub>n</sub> = x<sub>n</sub> / ' + fmtBig(cfg.m) + '</span>';
-}
-
-/* ── Tab ①: stepping ────────────────────────────────────────────────── */
+/* ── The editor: one generator card + step table, instanced per tab ─── */
 var STEP_ROWS_MAX = 400;   /* the table trims its oldest rows past this */
 var STEP_PREFILL = 12;     /* rows generated up front; Step continues past them */
+var STREAM_CAP = 200000;
+var EDITORS = {};
 
-/* Rebuild the step table for the current parameters: the seed row plus
-   enough steps to fill the visible box, scrolled back to the top so the
-   seed row is what the reader meets first. The Step buttons continue the
-   same instance from wherever the prefill left it. */
-function resetState() {
-  G = makeLCG(cfg.a, cfg.c, cfg.m, cfg.seed);
-  var tb = document.getElementById('g-steps');
-  tb.innerHTML = '<tr class="seedrow"><td>0</td><td>— (seed)</td><td class="cx">' + fmtBig(G.state()) +
-                 '</td><td>' + fmtU(Number(G.state()) / Number(cfg.m)) + ' (not emitted)</td></tr>';
-  stepN(STEP_PREFILL);
-  tb.closest('.steptbl-wrap').scrollTop = 0;
-}
+function Editor(name, presets, defKey, onChange) {
+  var ed = { name: name, presets: presets, cfg: null, G: null,
+             cache: { key: '', gen: null, us: [] }, onChange: onChange };
+  function el(id) { return document.getElementById(name + '-' + id); }
 
-function stepN(k) {
-  var tb = document.getElementById('g-steps'), frag = document.createDocumentFragment();
-  for (var i = 0; i < k; i++) {
-    var r = G.detail(), tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + r.n + '</td><td>' + fmtBig(r.raw) + '</td><td class="cx">' +
-                   fmtBig(r.x) + '</td><td class="cu">' + fmtU(r.u) + '</td>';
-    frag.appendChild(tr);
+  ed.ensure = function (n) {
+    var key = cfgKeyOf(ed.cfg);
+    if (ed.cache.key !== key) { ed.cache.key = key; ed.cache.gen = makeGen(ed.cfg); ed.cache.us = []; }
+    n = Math.min(n, STREAM_CAP);
+    while (ed.cache.us.length < n) ed.cache.us.push(ed.cache.gen.next());
+    return ed.cache.us;
+  };
+
+  ed.renderParams = function () { el('par').innerHTML = paramUIHTML(ed.cfg, name); };
+
+  ed.applyPreset = function (key) {
+    var p = presets[key];
+    el('preset').value = key;   /* callers other than the select itself */
+    el('preset-desc').innerHTML = p.desc;
+    if (key !== 'custom') {
+      ed.cfg = cfgFromPreset(p.fam, p);
+      ed.renderParams();
+      ed.rebuild([]);
+    }
+  };
+
+  /* Change the MRG order in place, keeping what carries over. */
+  ed.setK = function (kStr) {
+    var k = Number(kStr);
+    while (ed.cfg.as.length > k) ed.cfg.as.pop();
+    while (ed.cfg.as.length < k) ed.cfg.as.push(1n);
+    while (ed.cfg.seeds.length > k) ed.cfg.seeds.pop();
+    while (ed.cfg.seeds.length < k) ed.cfg.seeds.push(1n);
+    ed.renderParams();
+    ed.applyParams();
+  };
+
+  ed.applyParams = function () {
+    var res = readParams(ed.cfg, name), msgEl = el('msg');
+    if (!res.ok) { msgEl.textContent = res.msgs.join(' '); msgEl.classList.add('bad'); return; }
+    ed.cfg = res.cfg;
+    ed.renderParams();
+    ed.rebuild(res.msgs);
+  };
+
+  ed.rebuild = function (msgs) {
+    /* Flip the preset select to Custom when the fields no longer match.
+       MRG32k3a is identified by its constants, not its seeds, and so
+       seed edits never flip it. */
+    var sel = el('preset'), pk = sel.value, p = presets[pk];
+    if (p && pk !== 'custom' && presets.custom && !(p.fam === 'cmrg' && ed.cfg.fam === 'cmrg')) {
+      if (cfgKeyOf(cfgFromPreset(p.fam, p)) !== cfgKeyOf(ed.cfg)) {
+        sel.value = 'custom';
+        el('preset-desc').innerHTML = presets.custom.desc;
+      }
+    }
+    var msgEl = el('msg');
+    msgEl.textContent = msgs.join(' ') ||
+      'Every numeric field also accepts 2^31 and 2^31-1 style input; the ↑ and ↓ keys nudge a field by 1.';
+    msgEl.classList.remove('bad');
+    el('rec').innerHTML = recurrenceHTML(ed.cfg);
+    ed.resetSteps();
+    ed.onChange();
+  };
+
+  /* Rebuild the step table: the seed rows plus enough steps to fill the
+     visible box, scrolled back to the top so the seed rows are what the
+     reader meets first. The Step buttons continue the same instance. */
+  ed.resetSteps = function () {
+    ed.G = makeGen(ed.cfg);
+    el('thead').innerHTML = THEADS[ed.cfg.fam];
+    el('steps').innerHTML = seedRowsHTML(ed.cfg);
+    ed.stepN(STEP_PREFILL);
+    el('steps').closest('.steptbl-wrap').scrollTop = 0;
+  };
+
+  ed.stepN = function (k) {
+    var tb = el('steps'), frag = document.createDocumentFragment();
+    for (var i = 0; i < k; i++) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = stepRowHTML(ed.cfg, ed.G.detail());
+      frag.appendChild(tr);
+    }
+    tb.appendChild(frag);
+    while (tb.children.length > STEP_ROWS_MAX) tb.removeChild(tb.firstChild);
+    var wrap = tb.closest('.steptbl-wrap');
+    wrap.scrollTop = wrap.scrollHeight;
+  };
+
+  var sel = el('preset');
+  for (var key in presets) {
+    var o = document.createElement('option');
+    o.value = key; o.textContent = presets[key].label;
+    sel.appendChild(o);
   }
-  tb.appendChild(frag);
-  while (tb.children.length > STEP_ROWS_MAX) tb.removeChild(tb.firstChild);
-  var wrap = tb.closest('.steptbl-wrap');
-  wrap.scrollTop = wrap.scrollHeight;
+  EDITORS[name] = ed;
+  ed.applyPreset(defKey);
+  return ed;
 }
 
-/* ── The two property panels (one shared stream) ────────────────────── */
+/* ── Tab ①: the two property panels (one shared stream) ─────────────── */
 var STREAM_START = 500;
 var streamN = STREAM_START;
 
@@ -800,7 +1303,7 @@ function resetStream() { streamN = STREAM_START; renderPanels(); }
 /* Redraws both property panels from the same u_1 ... u_n, which is what
    lets the page say "same stream, two verdicts" honestly. */
 function renderPanels() {
-  var us = ensureStream(streamN).slice(0, streamN);
+  var us = EDITORS.g.ensure(streamN).slice(0, streamN);
   var k = Number(document.getElementById('uni-bins').value);
   document.getElementById('stream-n').textContent = us.length.toLocaleString('en-US');
   var n = us.length;
@@ -922,8 +1425,7 @@ function drawEcdf(us, ks) {
   document.getElementById('uni-ecdf').innerHTML = p.join('');
 }
 
-/* ── The lattice plot ───────────────────────────────────────────────── */
-var DPR = window.devicePixelRatio || 1;
+/* ── Tab ①: the lattice plot ─────────────────────────────────────────── */
 /* Square plot area of side IND_P, plus margins for the axis labels; the
    canvas earns its keep at large point counts. */
 var IND_P = 400, IND_L = 28, IND_R = 8, IND_T = 6, IND_B = 24;
@@ -943,10 +1445,13 @@ function renderInd() {
 
 /* The plane-revealing camera angle is derived from RANDU's own recurrence,
    and so the button only appears when the current parameters ARE RANDU's
-   (matched on the values, not on the preset dropdown, so hand-typing the
-   constants counts too). At any other parameters, it would fly to an angle
+   (matched on the values, not on the preset dropdown, and so hand-typing
+   the constants counts too). At any other parameters, it would fly to an angle
    that means nothing for the loaded generator. */
-function isRandu() { return cfg.a === 65539n && cfg.c === 0n && cfg.m === 2147483648n; }
+function isRandu() {
+  var c = EDITORS.g.cfg;
+  return c.fam === 'lcg' && c.a === 65539n && c.c === 0n && c.m === 2147483648n;
+}
 function updateFlawRow() {
   document.getElementById('ind-flaw-row').style.display =
     (indMode === '3d' && isRandu()) ? '' : 'none';
@@ -969,11 +1474,16 @@ function setIndMode(m) {
   renderInd();
 }
 
+/* Dot size for lattice plots: a small modulus has few distinct outputs,
+   and so thousands of pairs pile onto a handful of spots; draw those
+   spots big enough to read as a deliberate grid. */
+function dotSize(distinct) { return distinct <= 256n ? 7 : distinct <= 65536n ? 4 : 2; }
+
 function drawInd2() {
   var n = streamN;
   var lag = Number(document.getElementById('ind-lag').value);
   document.getElementById('ind-lagval').textContent = lag;
-  var us = ensureStream(n);
+  var us = EDITORS.g.ensure(n);
   var cv = document.getElementById('ind-cv'), ctx = cv.getContext('2d');
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, IND_W, IND_H);
@@ -981,10 +1491,7 @@ function drawInd2() {
   ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
   ctx.strokeRect(IND_L + 0.75, IND_T + 0.75, IND_P - 1.5, IND_P - 1.5);
   ctx.fillStyle = C.stream; ctx.globalAlpha = 0.55;
-  /* A small modulus has few distinct outputs, and so thousands of pairs pile
-     onto a handful of spots; draw those spots big enough to read as a
-     deliberate grid rather than as stray specks. */
-  var sz = cfg.m <= 256n ? 7 : cfg.m <= 65536n ? 4 : 2;
+  var sz = dotSize(distinctOf(EDITORS.g.cfg));
   var pts = n - lag;
   for (var i = 0; i < pts; i++) {
     /* y grows downward on a canvas, and so u_{i+lag} is flipped */
@@ -1017,7 +1524,7 @@ function drawInd2() {
     n.toLocaleString('en-US') + ', at lag k = ' + lag;
 }
 
-/* ── 3D triples view ────────────────────────────────────────────────── */
+/* ── Tab ①: 3D triples view ──────────────────────────────────────────── */
 var IND3_MAX = 20000;              /* triples drawn per frame while rotating */
 var cam = { yaw: 0.65, pitch: 0.42 };
 
@@ -1034,7 +1541,7 @@ function flawTarget() {
 }
 
 function drawInd3() {
-  var n = streamN, us = ensureStream(n);
+  var n = streamN, us = EDITORS.g.ensure(n);
   var cv = document.getElementById('ind-cv'), ctx = cv.getContext('2d');
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, IND_W, IND_H);
@@ -1063,7 +1570,7 @@ function drawInd3() {
   }
   ctx.stroke();
   var pts = Math.min(n - 2, IND3_MAX);
-  var sz = cfg.m <= 256n ? 7 : cfg.m <= 65536n ? 4 : 2;
+  var sz = dotSize(distinctOf(EDITORS.g.cfg));
   ctx.fillStyle = C.stream; ctx.globalAlpha = 0.5;
   for (i = 0; i < pts; i++) {
     var q = proj(us[i], us[i + 1], us[i + 2]);
@@ -1091,7 +1598,7 @@ function ind3Draw() {
   requestAnimationFrame(function () { ind3RafPending = false; drawInd3(); });
 }
 var flawAnimId = null;
-(function () {
+function initInd3Drag() {
   var cv = document.getElementById('ind-cv'), dragging = false, lx = 0, ly = 0;
   cv.addEventListener('pointerdown', function (e) {
     if (indMode !== '3d') return;
@@ -1112,7 +1619,7 @@ var flawAnimId = null;
   ['pointerup', 'pointercancel'].forEach(function (ev) {
     cv.addEventListener(ev, function () { dragging = false; });
   });
-})();
+}
 
 /* Fly the camera to the plane-revealing angle over ~a second. */
 function showFlaw() {
@@ -1129,6 +1636,200 @@ function showFlaw() {
   })(t0);
 }
 
+/* ── Companion mini lattices for tabs ② and ③ ────────────────────────── */
+var MINI_P = 176, MINI_PAD = 4;
+function initMini(id) {
+  var cv = document.getElementById(id), w = MINI_P + 2 * MINI_PAD;
+  cv.width = Math.round(w * DPR); cv.height = Math.round(w * DPR);
+  cv.style.width = w + 'px'; cv.style.maxWidth = '100%'; cv.style.height = 'auto';
+}
+function drawMini(id, us, distinct) {
+  var cv = document.getElementById(id), ctx = cv.getContext('2d');
+  var w = MINI_P + 2 * MINI_PAD;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, w, w);
+  ctx.fillStyle = C.chartBg; ctx.fillRect(MINI_PAD, MINI_PAD, MINI_P, MINI_P);
+  ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
+  ctx.strokeRect(MINI_PAD + 0.75, MINI_PAD + 0.75, MINI_P - 1.5, MINI_P - 1.5);
+  var sz = distinct <= 256n ? 5 : distinct <= 65536n ? 3 : 1.6;
+  ctx.fillStyle = C.stream; ctx.globalAlpha = 0.55;
+  for (var i = 0; i + 1 < us.length; i++) {
+    ctx.fillRect(MINI_PAD + us[i] * (MINI_P - 3) + 0.5 - sz / 2,
+                 MINI_PAD + (1 - us[i + 1]) * (MINI_P - 3) + 0.5 - sz / 2, sz, sz);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── Period readouts (brute force at toy scale, cited formulas above) ── */
+var ORBIT_CAP = 1 << 20;
+/* Walk x -> a x mod m from s and report the eventual cycle: its period,
+   plus the length of any lead-in tail. When the multiplier shares a
+   factor with the modulus, the map is many-to-one, and then the seed can
+   be transient: the orbit falls into a cycle that never revisits it, and
+   a detector that only watches for a return to the seed would wrongly
+   report a huge period. Returns null past the step cap. */
+function orbitMul(a, m, s) {
+  var seen = new Map(), x = s, step = 0;
+  while (!seen.has(x)) {
+    if (step > ORBIT_CAP) return null;
+    seen.set(x, step);
+    x = a * x % m; step++;
+  }
+  var first = seen.get(x);
+  return { tail: first, period: step - first };
+}
+function lcm2(p, q) {
+  var a = p, b = q;
+  while (b) { var t = a % b; a = b; b = t; }
+  return p / a * q;
+}
+/* The same walk for an MRG's state tuple; only called at toy scale, with
+   a lower cap because each visited state is stored. */
+var MRG_ORBIT_CAP = 1 << 17;
+function mrgOrbit(c) {
+  var g = makeMRG(c.as, c.m, c.seeds), seen = new Map(), step = 0;
+  var key = g.state().join(',');
+  while (!seen.has(key)) {
+    if (step > MRG_ORBIT_CAP) return null;
+    seen.set(key, step);
+    g.detail(); step++;
+    key = g.state().join(',');
+  }
+  var first = seen.get(key);
+  return { tail: first, period: step - first };
+}
+
+/* ── Tab ② extras: periods, minis, and the successor demonstration ──── */
+function successorText(c) {
+  var g = makeCLCG(c.a1, c.m1, c.a2, c.m2, c.s1, c.s2);
+  var N = 240, zs = [], us = [], i;
+  for (i = 0; i < N; i++) { var r = g.detail(); zs.push(r.z.toString()); us.push(r.u); }
+  var seen = {};
+  for (i = 0; i < N - 1; i++) (seen[zs[i]] = seen[zs[i]] || []).push(i);
+  for (var key in seen) {
+    var pos = seen[key];
+    if (pos.length < 2) continue;
+    /* keep only the first occurrence of each distinct successor, so that
+       the sentence below never repeats a follower */
+    var succ = {}, show = [];
+    for (i = 0; i < pos.length && show.length < 3; i++) {
+      var sk = zs[pos[i] + 1];
+      if (!succ[sk]) { succ[sk] = true; show.push(pos[i]); }
+    }
+    if (show.length >= 2) {
+      /* Oxford-style list: "a, b, and c" for three, "a and b" for two. */
+      var listJoin = function (parts) {
+        if (parts.length === 2) return parts[0] + ' and ' + parts[1];
+        return parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
+      };
+      return 'In this stream, the output u = <b>' + fmtU(us[pos[0]]) + '</b> appears at steps ' +
+             listJoin(show.map(function (q) { return 'n = ' + (q + 1); })) +
+             ' and is followed by ' +
+             listJoin(show.map(function (q) { return '<b>' + fmtU(us[q + 1]) + '</b>'; })) +
+             ', respectively: the same output, different futures. A single LCG can never do ' +
+             'this, because its output is its entire state.';
+    }
+  }
+  return 'No output value recurs with two different successors in the first 240 draws: with ' +
+         'a modulus this large, repeats are rare. Load the toy preset to watch the effect directly.';
+}
+
+function renderClcgExtras() {
+  var c = EDITORS.c.cfg, pk = document.getElementById('c-preset').value;
+  var el = document.getElementById('c-periods'), html;
+  if (c.m1 <= 1048576n && c.m2 <= 1048576n) {
+    var o1 = orbitMul(c.a1, c.m1, c.s1), o2 = orbitMul(c.a2, c.m2, c.s2);
+    if (o1 !== null && o2 !== null) {
+      var compLine = function (name, o) {
+        if (o.tail === 0) return name + ' repeats after <b>' + o.period.toLocaleString('en-US') + '</b> steps';
+        return name + ' falls into a <b>' + o.period.toLocaleString('en-US') + '</b>-step cycle after ' +
+               o.tail.toLocaleString('en-US') + ' lead-in step' + (o.tail === 1 ? '' : 's') +
+               ' (its seed is never revisited)';
+      };
+      var maxTail = Math.max(o1.tail, o2.tail);
+      html = compLine('component 1', o1) + '<br>' + compLine('component 2', o2) + '<br>' +
+             'combined state: eventually a cycle of lcm(' + o1.period + ', ' + o2.period + ') = <b>' +
+             lcm2(o1.period, o2.period).toLocaleString('en-US') + '</b> steps' +
+             (maxTail ? ', after ' + maxTail.toLocaleString('en-US') + ' lead-in step' + (maxTail === 1 ? '' : 's') : '');
+      if (maxTail) html += '<br><span style="font-size:.72rem;">A lead-in appears when a multiplier shares a factor with its modulus: the map is then many-to-one, and the seed can be a state the cycle never returns to. The note at the bottom of this tab says more.</span>';
+    } else {
+      html = 'no repeated state was found within the first million steps walked; the cycle is too long for this panel.';
+    }
+  } else if (pk === 'lec88') {
+    html = 'component periods m₁ − 1 and m₂ − 1, each ≈ 2.1 × 10⁹ (maximal)<br>' +
+           'combined: (m₁−1)(m₂−1)/2 ≈ <b>2.3 × 10¹⁸</b> (L’Ecuyer 1988)';
+  } else {
+    html = 'components too large to walk here; the combined period is the lcm of the component periods.';
+  }
+  el.innerHTML = html;
+  var comp1 = makeLCG(c.a1, 0n, c.m1, c.s1);
+  drawMini('c-lat1', genStream(comp1, 1500), c.m1);
+  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1);
+  document.getElementById('c-succ').innerHTML = successorText(c);
+}
+
+/* ── Tab ③ extras: headers, period growth, and a companion lattice ──── */
+function renderMrgExtras() {
+  var c = EDITORS.m.cfg, pk = document.getElementById('m-preset').value;
+  document.getElementById('m-fam-hd').textContent =
+    c.fam === 'cmrg' ? 'Combined MRG (CMRG): MRG32k3a' : 'Multiple recursive generator (MRG)';
+  document.getElementById('m-walk-hd').textContent =
+    c.fam === 'cmrg' ? 'Walk through an MRG32k3a output step by step' : 'Walk through an MRG output step by step';
+  var el = document.getElementById('m-periods'), html;
+  if (c.fam === 'cmrg') {
+    html = 'combined period ≈ <b>2¹⁹¹</b> ≈ 3.1 × 10⁵⁷ (L’Ecuyer 1999)<br>' +
+           'at ten million draws per second, that is about 10⁴³ years';
+  } else if (c.m <= 4096n && c.as.length <= 3) {
+    var o = mrgOrbit(c);
+    var max = c.m ** BigInt(c.as.length) - 1n;
+    if (o !== null && o.tail === 0) {
+      html = 'state returns to the seed after <b>' + o.period.toLocaleString('en-US') + '</b> steps';
+      if (BigInt(o.period) === max) html += '<br>= mᵏ − 1 = ' + fmtBig(max) + ', the maximum: every nonzero state occurs';
+      else html += '<br>(the maximum possible is mᵏ − 1 = ' + fmtBig(max) + ')';
+    } else if (o !== null) {
+      html = 'state falls into a <b>' + o.period.toLocaleString('en-US') + '</b>-step cycle after ' +
+             o.tail.toLocaleString('en-US') + ' lead-in step' + (o.tail === 1 ? '' : 's') +
+             ' (the seed tuple is never revisited)';
+    } else {
+      html = 'no repeated state was found within the first 131,072 steps walked; the cycle is too long for this panel.';
+    }
+  } else if (pk === 'comp1') {
+    html = 'period m³ − 1 ≈ <b>7.9 × 10²⁸</b> (maximal for k = 3; L’Ecuyer 1999)';
+  } else {
+    html = 'too large to walk here; a well-chosen order-k recurrence reaches mᵏ − 1.';
+  }
+  el.innerHTML = html;
+  drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c));
+  document.getElementById('m-lat-cap').textContent =
+    c.fam === 'cmrg' ? '2,000 pairs (uᵢ, uᵢ₊₁) from MRG32k3a: no visible grain'
+                     : '2,000 pairs (uᵢ, uᵢ₊₁) from the current MRG';
+}
+
+/* ── Arrow-key stepping on the parameter fields ──────────────────────
+   The up and down keys nudge any parameter box by 1 through the exact
+   BigInt path (so wrap-around and validation behave exactly as typing
+   would), and focus is restored after the grid re-renders. A native
+   number input cannot do this job here: it parses through floating
+   point, which corrupts values above 2^53, and it rejects the 2^31-1
+   expression syntax these fields accept. */
+document.addEventListener('keydown', function (e) {
+  var t = e.target;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  if (!t || t.tagName !== 'INPUT' || !t.classList.contains('par-inp')) return;
+  var r = parseBig(t.value);
+  if (!r.ok) return;
+  e.preventDefault();
+  t.value = (r.v + (e.key === 'ArrowUp' ? 1n : -1n)).toString();
+  var ed = EDITORS[t.id.split('-')[0]], fid = t.id;
+  if (!ed) return;
+  ed.applyParams();
+  var back = document.getElementById(fid);
+  if (back) {
+    back.focus();
+    back.setSelectionRange(back.value.length, back.value.length);
+  }
+});
+
 /* ── Tabs ───────────────────────────────────────────────────────────── */
 function showTab(name, btn) {
   document.querySelectorAll('.tp').forEach(function (el) { el.classList.remove('active'); });
@@ -1143,19 +1844,18 @@ function showTab(name, btn) {
 function renderActive() {
   var active = document.querySelector('.tp.active').id;
   if (active === 'tab-gen') renderPanels();
+  else if (active === 'tab-clcg') renderClcgExtras();
+  else if (active === 'tab-mrg') renderMrgExtras();
 }
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 (function () {
-  var sel = document.getElementById('g-preset');
-  for (var k in PRESETS) {
-    var o = document.createElement('option');
-    o.value = k; o.textContent = PRESETS[k].label;
-    sel.appendChild(o);
-  }
-  sel.value = 'minstd';
   initIndCanvas();
-  applyPreset('minstd');
+  initInd3Drag();
+  ['c-lat1', 'c-lat2', 'm-lat'].forEach(initMini);
+  Editor('g', LCG_PRESETS, 'minstd', function () { streamN = STREAM_START; renderPanels(); });
+  Editor('c', CLCG_PRESETS, 'toyc', renderClcgExtras);
+  Editor('m', MRG_PRESETS, 'toy2', renderMrgExtras);
 })();
 </script>
 
