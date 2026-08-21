@@ -516,6 +516,77 @@ section('c = 0 period classification');
         mulPeriod(3, 32, 1) === 8 && mulPeriod(9, 32, 1) < 8);
 }
 
+/* ── 9. Keyed watermarking ─────────────────────────────────────────── */
+section('Watermark: prediction as identification (stage 1)');
+{
+  /* The true recipe predicts every transition; unrelated recipes match
+     essentially never. */
+  const g = P.makeLCG(16807n, 0n, 2147483647n, 424242n);
+  const xs = [];
+  for (let i = 0; i < 5000; i++) { g.next(); xs.push(g.state()); }
+  const right = P.predictMatch(xs, 16807n, 0n, 2147483647n);
+  const wrong1 = P.predictMatch(xs, 65539n, 0n, 2147483648n);
+  const wrong2 = P.predictMatch(xs, 1103515245n, 12345n, 2147483648n);
+  check('true recipe predicts 4,999 of 4,999 transitions', right.hits === right.n && right.n === 4999);
+  check('unrelated recipes match at most a couple of transitions in 5,000',
+        wrong1.hits <= 2 && wrong2.hits <= 2);
+}
+
+section('Watermark: keyed tournament detection');
+{
+  const KEY = 271828182, R = 5, N = 4000;
+  const mkBase = () => P.makeCMRG([111n, 222n, 333n, 444n, 555n, 666n]);
+  const marked = P.genStream(P.makeTournament(mkBase(), KEY, R), N);
+  const plain = P.genStream(mkBase(), N);
+  const dRight = P.twDetect(marked, KEY, R);
+  check('correct key detects far above chance (mean ' + dRight.mean.toFixed(3) + ', z = ' +
+        dRight.z.toFixed(0) + ')', dRight.mean > 0.6 && dRight.z > 20);
+  /* Deterministic wrong keys, spread over the 32-bit range by a
+     Weyl-style stride; none equals KEY. */
+  let wrongOk = true, maxAbsZ = 0;
+  for (let i = 0; i < 50; i++) {
+    const d = P.twDetect(marked, (Math.imul(i + 1, 2654435761) ^ 0x5A5A5A5A) >>> 0, R);
+    maxAbsZ = Math.max(maxAbsZ, Math.abs(d.z));
+    if (Math.abs(d.z) > 4.5) wrongOk = false;
+  }
+  check('50 wrong keys all detect at chance level (max |z| = ' + maxAbsZ.toFixed(1) + ')', wrongOk);
+  const dPlain = P.twDetect(plain, KEY, R);
+  check('the unmarked stream detects at chance even under the correct key (|z| = ' +
+        Math.abs(dPlain.z).toFixed(1) + ')', Math.abs(dPlain.z) < 4.5);
+  /* Determinism: the marked stream is a function of seeds and key. */
+  const again = P.genStream(P.makeTournament(mkBase(), KEY, R), N);
+  let same = true;
+  for (let i = 0; i < N; i++) if (again[i] !== marked[i]) same = false;
+  check('the marked stream is reproducible from seeds and key', same);
+  /* Marginal uniformity of the marked stream, at a sharpness where any
+     systematic distortion of the histogram would be unmissable. */
+  const big = P.genStream(P.makeTournament(mkBase(), KEY, R), 20000);
+  const chi = P.chiSqUniform(big, 20);
+  check('marked stream passes chi-square at n = 20,000 (p = ' + chi.p.toFixed(3) + ')', chi.p > 1e-3);
+  const ks = P.ksUniform(big);
+  check('marked stream passes K-S at n = 20,000 (p = ' + ks.p.toFixed(3) + ')', ks.p > 1e-3);
+}
+{
+  /* Calibration: over many independent marked streams, the uniformity
+     tests must keep rejecting at about their nominal 5% rate, which is
+     the still-uniform claim made quantitative. */
+  const reps = Math.max(60, Math.floor(CALIB_REPS / 10));
+  let rejChi = 0, rejKS = 0;
+  for (let r = 0; r < reps; r++) {
+    const key = (Math.imul(r + 1, 2246822519) ^ 0x0F0F0F0F) >>> 0;
+    const base = P.makeCMRG([BigInt(10 + r), 22n, 33n, 44n, 55n, BigInt(66 + r)]);
+    const us = P.genStream(P.makeTournament(base, key, 5), 500);
+    if (P.chiSqUniform(us, 10).p < 0.05) rejChi++;
+    if (P.ksUniform(us).p < 0.05) rejKS++;
+  }
+  const rChi = rejChi / reps, rKS = rejKS / reps;
+  /* Wide bands: at 150 reps the SE of a 5% rate is about 1.8%. */
+  check('chi-square rejects marked streams at ~5% (got ' + (100 * rChi).toFixed(1) + '%)',
+        rChi >= 0 && rChi < 0.12);
+  check('K-S rejects marked streams at ~5% (got ' + (100 * rKS).toFixed(1) + '%)',
+        rKS >= 0 && rKS < 0.12);
+}
+
 /* ── Summary ───────────────────────────────────────────────────────── */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
