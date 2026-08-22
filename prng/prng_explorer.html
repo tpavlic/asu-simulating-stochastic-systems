@@ -1057,22 +1057,28 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 460px; min-width:0;">
         <div class="sec-hd">One blank, one tournament</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:2px;">A toy model has
-          reached a blank. Its distribution over the next word (the dashed teal levels)
-          puts most of the probability on a few words and a little on many others; in this
-          toy, the distribution is the same at every blank, whereas the language model at
-          the right reshapes it with every context. The last
-          four words of the context are the watermark's history, labeled below, and the
-          table beneath the chart lists every word's three round scores for exactly this
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
+          <b>A toy model has reached a blank.</b> Its distribution over the next word (the
+          dashed teal levels) puts most of the probability on a few words and a little on
+          many others, and "New context" reshapes it – a new context ranks new words
+          highly, exactly as the language model at the right does at every word. The last four
+          words of the context are the watermark's history, labeled below, and the table
+          beneath the chart lists every word's three round scores for exactly this
           history. A tournament has already been played – the winner (the highlighted
           column) fills the blank, usually a word that scores well across the rounds and
-          always a legitimate draw – and running one more draws eight fresh candidates for
-          the same blank. "Run 2,000 tournaments" repeats the experiment at this same blank:
-          with repeat masking on – the real scheme's rule – only the first run is
-          watermarked and the other 1,999 pass through unmarked, and the winners' shares
-          sit on the dashed levels; turn masking off, and the same tilt fires all 2,000
-          times, and the shares pull visibly away. The model at the right writes whole
-          passages the same way, one tournament per fresh context.</div>
+          always a legitimate draw – and running one more draws eight fresh candidates
+          for the same blank. The bracket beneath the chart plays the whole tournament
+          out.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:2px;">
+          <b>A repeated history is where the mark would show, and so the scheme masks
+          it.</b> At one fixed history the key's tilt is consistent, and "Run 2,000
+          tournaments" repeats exactly that worst case: with repeat masking on – the real
+          scheme's rule – only the first run is watermarked, the other 1,999 pass through
+          unmarked, and the winners' shares sit back on the dashed levels; turn masking
+          off, and the same tilt fires all 2,000 times, and the shares pull visibly away
+          into a greenlist-like preference. Repeats are not rare – in a few pages of the
+          passage at the right, about a third of the words land on a history already
+          used – and masking is what keeps all of that accumulation out of the text.</div>
         <div class="ctx-sent" id="txc-sent"></div>
         <div class="ctrl-row" style="margin-bottom:2px;">
           <label class="ctrl-lbl" for="tx-key">Secret key</label>
@@ -1087,11 +1093,19 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <button class="btn-run2" onclick="txcRepeat()">Run 2,000 tournaments</button>
           <label class="ctrl-lbl" style="display:flex; align-items:center; gap:6px; min-height:24px; cursor:pointer;">
             <input type="checkbox" id="txc-mask" checked style="width:16px; height:16px; accent-color:var(--accent);">
-            Enable repeat masking
+            Mask repeated contexts
           </label>
         </div>
         <svg class="plot" id="txc-chart" viewBox="0 0 440 210" role="img" aria-label="The model's distribution over the blank, with the winning word highlighted and repeated-run shares overlaid"></svg>
         <div class="cv-leg" id="txc-note" style="min-height:1.2em;"></div>
+        <div class="plot-ttl" style="margin-top:14px;">This run's tournament, played out</div>
+        <div class="cv-leg" style="text-align:left; margin:2px 0 6px;">The eight dots on
+          the pmf are this run's draws – a repeated word stacks its dots – and each word
+          carries its score for the round it is about to play; the higher score of each
+          pairing advances, and the winner's path is picked out in the accent. After "Run
+          2,000 tournaments", the bracket shows run 1, which with masking on is the only
+          run that was watermarked.</div>
+        <svg class="plot" id="txc-brk" viewBox="0 0 440 250" role="img" aria-label="This run's word tournament: the context's pmf, eight drawn candidates, three keyed rounds, one emitted word"></svg>
         <div class="plot-ttl" style="margin-top:14px;">Every word's scores at this blank</div>
         <div class="cv-leg" style="text-align:left; margin:2px 0 6px;">The whole vocabulary,
           one row per word – not a sequence of draws. The rows are sorted by model
@@ -1103,22 +1117,28 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
       <div style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column; gap:16px;">
         <div class="cv-card" style="flex:0 0 auto;">
-          <div class="sec-hd">A tiny language model writes</div>
-          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The blank at the
-            left froze one context of a toy model; here a small language model writes whole
-            passages. It is a word-level <em>Markov chain</em> of selectable order, trained
-            on the short corpus below, and it reshapes its distribution at every word: some
-            contexts offer many continuations, and some force exactly one. The same
-            tournament rides on top – eight candidates from the current context's own
-            distribution, three keyed rounds, and a repeated four-word history passing
-            through unmarked. One extra bit of state rides along – has this clause had its
-            verb yet – and so no sentence ends verbless: two words of memory cannot remember
-            that, but one more bit of state can, the same more-state cure tab ③'s
-            recurrences used. Raise the order and the text reads better, but more contexts
-            become forced and the watermark has less room; the stats under the passage keep
-            score. The conditional check compares the passage against the chain's own
-            conditional distributions – marked or not, about 5% of testable contexts should
-            be flagged at the 5% level.</div>
+          <div class="sec-hd">Watermarking a tiny language model</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
+            <b>A word-level Markov chain writes whole passages.</b> The blank at the left
+            froze one context of a toy model; here the model is trained on the corpus
+            below, and it reshapes its distribution at every word: some contexts offer
+            many continuations, and some force exactly one. Three extra bits of state –
+            has this clause had its verb, is a fronted phrase still waiting for its comma,
+            is a subordinate clause still open – keep every sentence a sentence, the same
+            more-state cure tab ③'s recurrences used.</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
+            <b>The same tournament rides on top.</b> Eight candidates drawn from the
+            current context's own distribution, three keyed rounds, one winner emitted –
+            and a repeated four-word history passes through unmarked, exactly as at the
+            left.</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
+            <b>The chain order sets how much room the watermark has.</b> Order 1 barely
+            remembers and barely constrains, and so nearly every word offers the key a
+            real choice; order 3 reproduces the corpus faithfully and forces most
+            continuations, leaving the key little to do. The stats under the passage keep
+            score, and the conditional check compares the passage against the chain's own
+            conditional distributions – marked or not, about 5% of testable contexts
+            should be flagged at the 5% level.</div>
           <div class="ctrl-row" style="margin-bottom:2px;">
             <label class="ctrl-lbl" for="mk-order">Chain order</label>
             <select id="mk-order">
@@ -1136,7 +1156,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             <button class="btn-run2" onclick="mkWrite(1500)">Write a few pages</button>
           </div>
           <details style="margin-bottom:8px;">
-            <summary style="font-size:.8rem; color:var(--muted); cursor:pointer;">Read the 2,200-word training corpus first – the chain should be judged against it, not against an LLM</summary>
+            <summary style="font-size:.8rem; color:var(--muted); cursor:pointer;">Read the training corpus first – the chain should be judged against it, not against an LLM</summary>
             <div id="mk-corpus" style="font-size:.78rem; line-height:1.55; color:var(--muted); margin-top:6px;
                  max-height:180px; overflow-y:auto; border:1.5px solid var(--border); border-radius:7px; padding:8px 10px;"></div>
           </details>
@@ -1144,33 +1164,35 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
                padding:10px 12px; font-size:.88rem; line-height:1.6; color:var(--text);
                max-height:230px; overflow-y:auto;"></div>
           <div class="cv-leg" id="mk-stats" style="text-align:left; margin-top:6px; min-height:2.6em;"></div>
-        </div>
-        <div class="cv-card" style="flex:1 0 auto; display:flex; flex-direction:column;">
-          <div class="sec-hd">Reading the watermark back</div>
-          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector reads
-            the passage above, recomputes each fresh-context word's scores from the visible
-            words alone – no access to the chain or the generator – and averages them. The
-            embedding key stands far above the 0.5 of chance. The lineup below makes the
-            comparison honest: every key's individual scores span the same wide band, the
-            wrong keys' means all sit within two standard errors of 0.5, and only the
-            embedding key's mean stands clear – and an unwatermarked passage leaves every
-            key at chance.</div>
-          <div class="ctrl-row" style="margin-bottom:2px;">
-            <label class="ctrl-lbl" for="tx-cand">Key to test</label>
-            <input class="par-inp" id="tx-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                   spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
+          <div class="plot-ttl" style="margin-top:16px;">Reading the watermark back</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
+            <b>A detector needs only the text and a candidate key.</b> It recomputes each
+            fresh-context word's three round scores from the visible words alone – no
+            access to the chain or the generator – and pools them into one mean per key.
+            The lineup tests the secret key (the top row) against twenty random wrong
+            keys, key at the left, mean at the right, whiskers two standard errors wide.
+            Wrong keys hug the dashed 0.5 of chance, the key that marked the passage
+            stands clear, and an unwatermarked passage leaves every key at chance – a
+            single score proves nothing under any key (the table at the left looks just
+            as random under the right key), and so a longer passage means tighter
+            whiskers and surer verdicts.</div>
+          <svg class="plot" id="tx-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means: the secret key in the top row against twenty random wrong keys"></svg>
+          <div class="cv-leg">one row per key, the secret key in the top row – dot and whiskers: detection
+            mean ±2 standard errors</div>
+          <div style="font-size:.78rem; line-height:1.5; color:var(--muted); margin:6px auto 0; max-width:26em;
+               display:grid; grid-template-columns:1.2em 1fr; gap:1px 8px; text-align:left;">
+            <span style="color:var(--accent); font-weight:700;">✓</span>
+            <span>mark detected: z &gt; 6, rejecting chance at α ≈ 10<sup>−9</sup></span>
+            <span style="color:var(--est); font-weight:700;">?</span>
+            <span>weak evidence: 3 &lt; z ≤ 6 (one-sided p between 0.0013 and 10<sup>−9</sup>)</span>
+            <span style="font-weight:700;">–</span>
+            <span>consistent with chance: z ≤ 3 (p above 0.0013)</span>
           </div>
-          <div class="ctrl-row" style="margin-bottom:6px;">
-            <button class="btn-run2" onclick="txTest()">Test key</button>
-          </div>
-          <div style="margin:auto 0;">
-            <svg class="plot" id="tx-shist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-word keyed scores under the tested key"></svg>
-            <div class="cv-leg">per-word mean of the three keyed scores under the tested key</div>
-            <svg class="plot" id="tx-keys" viewBox="0 0 440 170" role="img" aria-label="Mean keyed score of the tested key against twenty random wrong keys" style="margin-top:10px;"></svg>
-            <div class="cv-leg">the tested key (maroon, first) against 20 random wrong keys – boxes span the
-              middle half of each key's per-word scores; whiskers are ±2 standard errors around
-              the mean</div>
-          </div>
+          <div class="cv-leg" style="text-align:left; margin-top:8px;">The type-I error
+            rate α ≈ 10<sup>−9</sup> sits deliberately far below the usual 0.05, because a
+            false "detected" accuses an unmarked text: at α = 0.05, this lineup alone
+            would convict an innocent key about once per redraw, and a deployed detector
+            scanning millions of documents would convict thousands a day.</div>
           <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
           <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
             mechanism of Google's
@@ -1594,52 +1616,59 @@ function makeWordTournament(base, key, rounds, probs) {
     }
   };
 }
-/* Detection over a word sequence: the same score-averaging as
-   twDetect, with word identity codes in place of quantized values and
-   the same repeated-context mask the embedder used. */
+/* Detection over a word sequence: the same score-pooling as twDetect,
+   with word identity codes in place of quantized values and the same
+   repeated-context mask the embedder used. The mean pools every round
+   score of every fresh-context word, as the published detector does;
+   n counts the scored words, and each contributes the same number of
+   scores. */
 function wordDetect(ws, key, rounds, V) {
-  var scores = [], sum = 0, n = 0, seen = {};
+  var sum = 0, n = 0, seen = {};
   for (var i = 4; i < ws.length; i++) {
     var hk = ws[i - 4] + ',' + ws[i - 3] + ',' + ws[i - 2] + ',' + ws[i - 1];
     if (seen[hk]) continue;
     seen[hk] = true;
     var q1 = wordCode(ws[i - 4], V), q2 = wordCode(ws[i - 3], V);
     var q3 = wordCode(ws[i - 2], V), q4 = wordCode(ws[i - 1], V);
-    var sc = 0;
-    for (var r = 1; r <= rounds; r++) sc += twScore(key, r, q1, q2, q3, q4, wordCode(ws[i], V));
-    sc /= rounds;
-    scores.push(sc);
-    sum += sc;
+    for (var r = 1; r <= rounds; r++) sum += twScore(key, r, q1, q2, q3, q4, wordCode(ws[i], V));
     n++;
   }
-  var mean = n ? sum / n : 0.5;
+  var mean = n ? sum / (rounds * n) : 0.5;
   var seNull = n ? Math.sqrt(1 / (12 * rounds * n)) : 1;
-  return { n: n, mean: mean, z: (mean - 0.5) / seNull, scores: scores };
+  return { n: n, mean: mean, z: (mean - 0.5) / seNull };
 }
 
 /* ── A tiny Markov language model (tab 7) ────────────────────────────
    A word-level chain of selectable order (1, 2, or 3) trained on the
-   small original corpus below (238 sentences, about 2,200 tokens, a
-   228-word vocabulary; ',' and '.' are ordinary tokens, which is how
-   the chain learns where clauses and sentences end). The state also
-   carries one extra bit: whether the sentence so far contains a verb.
-   Every corpus sentence contains a verb, and so the empirical chain
-   never sees '.' at flag 0 and can never end a clause verbless (the
-   flag resets at ',' and '.') --
-   two words of memory cannot remember that, but one more bit of state
+   small original corpus below (238 sentences, 2,174 tokens, a 230-word
+   vocabulary; ',' and '.' are ordinary tokens, which is how the chain
+   learns where clauses and sentences end). The state also carries
+   three extra bits: whether the clause so far contains a verb (reset
+   at ',' and '.'), whether the sentence opened with a word that always
+   precedes a comma in the corpus (a fronted phrase or subordinate
+   clause, computed from the corpus itself), and whether a mid-sentence
+   subordinate clause is open (MK_SUBS). The corpus does the rest
+   empirically: it never ends a clause verbless, never closes a fronted
+   opener before its comma, and never ends a subordinate clause without
+   its own verb, and so the trained chain cannot either -- a few words
+   of memory cannot remember any of that, but a few more bits of state
    can, the same cure the MRGs applied with extra words. The keyed
    tournament rides on top exactly as for the fixed pmf: candidates
    from the current context's own conditional, identities as wordCode
    over the vocabulary, the watermark history the last four emitted
    tokens whatever the order, and a repeated four-token history passing
    through unmarked. */
-var MK_CORPUS = 'the storm came in over the harbor before dawn . the storm passed at noon . the storm returned over the hills at noon . the storm lingered before dawn . the storm drifted across the water by evening . the storm settled by evening . the storm rose through the streets before dawn . the storm faded at noon . the wind came in at dusk . the wind passed over the hills through the night . the wind returned in the early morning . the wind lingered across the water in the early morning . the wind drifted through the night . the wind settled through the streets at dusk . the wind rose at dusk . the wind faded along the shore through the night . the rain came in over the hills by evening . the rain passed by evening . the rain returned across the water before dawn . the rain lingered at noon . the rain drifted through the streets at noon . the rain settled before dawn . the rain rose along the shore by evening . the rain faded by evening . the fog came in through the night . the fog passed across the water at dusk . the fog returned at dusk . the fog lingered through the streets through the night . the fog drifted in the early morning . the fog settled along the shore in the early morning . the fog rose through the night . the fog faded beyond the lighthouse at dusk . the tide came in across the water at noon . the tide passed before dawn . the tide returned through the streets by evening . the tide lingered by evening . the tide drifted along the shore before dawn . the tide settled at noon . the tide rose beyond the lighthouse at noon . the tide faded before dawn . the mist came in in the early morning . the mist passed through the streets in the early morning . the mist returned through the night . the mist lingered along the shore at dusk . the mist drifted at dusk . the mist settled beyond the lighthouse through the night . the mist rose in the early morning . the mist faded over the harbor in the early morning . the snow came in through the streets before dawn . the snow passed at noon . the snow returned along the shore at noon . the snow lingered before dawn . the snow drifted beyond the lighthouse by evening . the snow settled by evening . the snow rose over the harbor before dawn . the snow faded at noon . the thunder came in at dusk . the thunder passed along the shore through the night . the thunder returned in the early morning . the thunder lingered beyond the lighthouse in the early morning . the thunder drifted through the night . the thunder settled over the harbor at dusk . the thunder rose at dusk . the thunder faded over the hills through the night . when dawn came , the harbor was still . when dawn came , the streets were empty . when dawn came , the market filled with people . when dawn came , the gulls returned to the pier . when dawn came , the town woke slowly . when dawn came , the hills caught the light . come evening , the streets were empty . come evening , the boats came home . come evening , the gulls returned to the pier . come evening , the town woke slowly . come evening , the sea turned gray . come evening , the harbor was still . toward noon , the boats came home . toward noon , the market filled with people . toward noon , the town woke slowly . toward noon , the sea turned gray . toward noon , the hills caught the light . toward noon , the streets were empty . deep in the night , the market filled with people . deep in the night , the gulls returned to the pier . deep in the night , the sea turned gray . deep in the night , the hills caught the light . deep in the night , the harbor was still . deep in the night , the boats came home . early in the day , the gulls returned to the pier . early in the day , the town woke slowly . early in the day , the hills caught the light . early in the day , the harbor was still . early in the day , the streets were empty . early in the day , the market filled with people . after the storm , the town woke slowly . after the storm , the sea turned gray . after the storm , the harbor was still . after the storm , the streets were empty . after the storm , the boats came home . after the storm , the gulls returned to the pier . before the rain , the sea turned gray . before the rain , the hills caught the light . before the rain , the streets were empty . before the rain , the boats came home . before the rain , the market filled with people . before the rain , the town woke slowly . when the fog lifted , the hills caught the light . when the fog lifted , the harbor was still . when the fog lifted , the boats came home . when the fog lifted , the market filled with people . when the fog lifted , the gulls returned to the pier . when the fog lifted , the sea turned gray . rain fell on the rooftops for three days . rain drifted in from the sea at first light . snow covered the hills before the winter came . snow fell softly on the quiet town . fog hid the lighthouse from the fishing boats . fog covered the harbor until the sun returned . thunder rolled over the hills through the night . thunder followed the lightning across the wide sky . lightning lit the harbor for a moment . lightning struck the water beyond the old lighthouse . gulls circled the harbor before the storm broke . gulls followed the boats across the water . waves broke against the pier all afternoon . waves carried the small boats to the shore . wind shook the shutters of the houses on the hill . wind carried the smell of salt through the narrow streets . morning came with a clear sky over the sea . morning brought a warm wind from the south . night settled over the harbor , and the lamps came on . night came early under the heavy clouds . children ran along the shore after the rain passed . children waited for the boats by the pier . sailors gathered at the inn to watch the storm come in . sailors read the sky before they went out . fishermen mended the nets in the quiet morning . fishermen stayed ashore when the waves rose . somewhere beyond the lighthouse a bell rang . soon the sky cleared , and the gulls returned . soon the tide turned , and the boats went out . sometimes the fog stayed for days . sometimes the storms passed far out at sea . slowly the town woke to the smell of bread . slowly the mist lifted from the water . far beyond the lighthouse the sea turned dark . far out on the water a light moved slowly . no one went out on the water that day . no one remembered a colder winter . every winter , the storms returned to the coast . every morning , the baker lit the ovens before dawn . that night , the lighthouse burned bright . as evening came , the clouds parted , and the stars came out . once the tide turned , the boats came home . once the rain stopped , the market opened . for a week , the clouds hung low over the far hills . deep into the dark , the wind sang in the rigging . the sailors watched the storm from the pier . the sailors waited for the rain near the old lighthouse . the sailors spoke of the fog from the doorway . the sailors remembered the sunshine from the pier . the fishermen watched the rain by the market stalls . the fishermen waited for the fog on the hill . the fishermen spoke of the sunshine along the shore . the fishermen remembered the clouds by the market stalls . the children watched the fog near the old lighthouse . the children waited for the sunshine from the doorway . the children spoke of the clouds from the pier . the children remembered the waves near the old lighthouse . the keeper watched the sunshine on the hill . the keeper waited for the clouds along the shore . the keeper spoke of the waves by the market stalls . the keeper remembered the storm on the hill . the baker watched the clouds from the doorway . the baker waited for the waves from the pier . the baker spoke of the storm near the old lighthouse . the baker remembered the rain from the doorway . the old women watched the waves along the shore . the old women waited for the storm by the market stalls . the old women spoke of the rain on the hill . the old women remembered the fog along the shore . the boats stayed in the harbor all day . the boats went out with the tide at dawn . the market opened late in the morning . the market closed early that evening . the streets were quiet until the rain stopped . the streets filled with children after the storm passed . the lighthouse shone through the fog all night . the lighthouse kept its light on the water . the harbor was calm when the sun returned . the harbor was gray under the heavy clouds . the hills were bright with the morning sun . the hills were hidden by the low clouds . the sky cleared at noon , and the gulls returned . the sky darkened before the storm rolled in . the sun warmed the rooftops in the early morning . the sun set behind the hills at dusk . the clouds gathered over the sea before the rain began . the clouds parted at dusk , and the stars came out . the sunshine returned to the town after the long storm . the sunshine dried the nets along the shore . a cold wind moved through the empty streets . a warm wind carried the smell of the sea . a small boat crossed the harbor before the storm arrived . a light burned in the tower all night . the old women said the storm would pass by evening . the old women said the winter would be long . the keeper climbed the tower before the storm broke . the keeper watched the sea from the tower stairs . the baker sold warm bread to the hungry fishermen . the sailors told stories of the storm at the inn . the sailors slept through the storm in the quiet harbor . when dawn came , the fishermen pushed their boats into the water . as dusk fell , the lamps came on along the shore . by morning , the storm had passed beyond the old lighthouse . after nightfall , the fog covered the whole town . after the rain passed , the streets shone in the clear light . after dark , the harbor grew quiet . long before sunrise , the baker lit the ovens . before the storm broke , the gulls flew inland . when the tide rose , the boats came home . when the wind fell , the sea grew calm . through the fog a bell rang from the pier . through the mist the tower kept its light . in the evening , the sailors gathered at the inn . in the winter , the storms came one after another . day after day , the clouds hung low over the far hills . all winter , the snow stayed on the high hills . down by the pier , the children watched the waves . down along the shore , the nets dried in the noon sun . out on the water , a small boat rocked in the swell . out beyond the harbor , the sea turned rough . over the rooftops , the gulls wheeled and cried . under the heavy clouds , the town waited for rain . near the lighthouse , the waves broke white . all along the shore , the mist drifted in ribbons . from the tower , the keeper watched the storm come in . from the hills , the town looked small and gray .';
+var MK_CORPUS = 'the storm came in over the harbor before dawn . when dawn came , the harbor was still . the storm passed at noon . when dawn came , the streets were empty . the storm returned over the hills at noon . when dawn came , the market filled with people . the storm lingered before dawn . when dawn came , the gulls returned to the pier . the storm drifted across the water by evening . when dawn came , the town woke slowly . the storm settled by evening . wind came in at dusk . the storm rose through the streets before dawn . rain came in over the hills by evening . the storm faded at noon . fog came in through the night . the tide came in across the water at noon . snow came in through the streets before dawn . the tide passed before dawn . thunder came in at dusk . the tide returned through the streets by evening . when dawn came , the hills caught the light . the tide lingered by evening . wind passed over the hills through the night . the tide drifted along the shore before dawn . rain passed by evening . the tide settled at noon . fog passed across the water at dusk . the tide rose beyond the lighthouse at noon . snow passed at noon . the tide faded before dawn . thunder passed along the shore through the night . the keeper watched the sunshine on the hill . when the fog lifted , the hills caught the light . the keeper waited for the clouds along the shore . after the storm , the town woke slowly . the keeper spoke of the waves by the market stalls . wind returned in the early morning . the keeper remembered the storm on the hill . rain returned across the water before dawn . the baker watched the clouds from the doorway . fog returned at dusk . the baker waited for the waves from the pier . mist came in in the early morning . the baker spoke of the storm near the old lighthouse . snow returned along the shore at noon . the baker remembered the rain from the doorway . thunder returned in the early morning . the old women watched the waves along the shore . when the fog lifted , the harbor was still . the old women waited for the storm by the market stalls . after the storm , the sea turned gray . the old women spoke of the rain on the hill . sailors gathered at the inn to watch the coming storm . the old women remembered the fog along the shore . wind lingered across the water in the early morning . the boats stayed in the harbor all day . rain lingered at noon . the boats went out with the tide at dawn . fog lingered through the streets through the night . the market opened late in the morning . mist passed through the streets in the early morning . the market closed early that evening . snow lingered before dawn . the streets were quiet until the rain stopped . thunder lingered beyond the lighthouse in the early morning . the streets filled with children after the storm passed . when the fog lifted , the boats came home . the lighthouse shone through the fog all night . deep in the night , the market filled with people . the lighthouse kept its light on the water . after the storm , the harbor was still . the harbor was calm when the sun returned . before the rain , the sea turned gray . the harbor was gray under the heavy clouds . sailors read the sky before they went out . the hills were bright with the morning sun . wind drifted through the night . the hills were hidden by the low clouds . rain drifted through the streets at noon . the sky cleared at noon , and the gulls returned . fog drifted in the early morning . the sky darkened before the storm rolled in . mist returned through the night . the sun warmed the rooftops in the early morning . snow drifted beyond the lighthouse by evening . the sun set behind the hills at dusk . thunder drifted through the night . the clouds gathered over the sea before the rain began . when the fog lifted , the market filled with people . the clouds parted at dusk , and the stars came out . come evening , the streets were empty . the sunshine returned to the town after the long storm . toward noon , the boats came home . the sunshine dried the nets along the shore . deep in the night , the gulls returned to the pier . early in the day , the gulls returned to the pier . after the storm , the streets were empty . before the rain , the hills caught the light . children ran along the shore after the rain stopped . sailors watched the storm from the pier . fishermen mended the nets in the quiet morning . the old women said the storm would pass by evening . wind settled through the streets at dusk . rain settled before dawn . fog settled along the shore in the early morning . mist lingered along the shore at dusk . snow settled by evening . thunder settled over the harbor at dusk . when the fog lifted , the gulls returned to the pier . come evening , the boats came home . toward noon , the market filled with people . deep in the night , the sea turned gray . early in the day , the town woke slowly . after the storm , the boats came home . before the rain , the streets were empty . children waited for the boats by the pier . sailors waited for the rain near the old lighthouse . fishermen stayed ashore when the waves rose . the old women said the winter would be long . wind rose at dusk . rain rose along the shore by evening . fog rose through the night . mist drifted at dusk . snow rose over the harbor before dawn . thunder rose at dusk . when the fog lifted , the sea turned gray . come evening , the gulls returned to the pier . toward noon , the town woke slowly . deep in the night , the hills caught the light . early in the day , the hills caught the light . after the storm , the gulls returned to the pier . before the rain , the boats came home . children watched the fog near the old lighthouse . sailors spoke of the fog from the doorway . fishermen watched the rain by the market stalls . a cold wind moved through the empty streets . the keeper climbed the tower before the storm broke . wind faded along the shore through the night . rain faded by evening . fog faded beyond the lighthouse at dusk . mist settled beyond the lighthouse through the night . snow faded at noon . thunder faded over the hills through the night . when dawn came , the fishermen pushed their boats into the water . come evening , the town woke slowly . toward noon , the sea turned gray . deep in the night , the harbor was still . early in the day , the harbor was still . after nightfall , the fog covered the whole town . before the rain , the market filled with people . children waited for the sunshine from the doorway . sailors remembered the sunshine from the pier . fishermen waited for the fog on the hill . a warm wind carried the smell of the sea . the keeper watched the sea from the tower stairs . wind shook the shutters of the houses on the hill . rain fell on the rooftops for three days . fog hid the lighthouse from the fishing boats . mist rose in the early morning . snow covered the hills before the winter came . thunder rolled over the hills through the night . when the tide rose , the boats came home . come evening , the sea turned gray . toward noon , the hills caught the light . deep in the night , the boats came home . early in the day , the streets were empty . after the rain passed , the streets shone in the clear light . before the rain , the town woke slowly . lightning lit the harbor for a moment . gulls circled the harbor before the storm broke . waves broke against the pier all afternoon . morning came with a clear sky over the sea . night settled over the harbor , and the lamps came on . children spoke of the clouds from the pier . sailors told stories of the storm at the inn . fishermen spoke of the sunshine along the shore . soon the sky cleared , and the gulls returned . sometimes the fog stayed for days . slowly the town woke to the smell of bread . far beyond the lighthouse , the sea turned dark . no one went out on the water that day . every winter , the storms returned to the coast . as evening came , the clouds parted , and the stars came out . once the tide turned , the boats came home . a small boat crossed the harbor before the storm arrived . through the haze , a bell rang from the pier . in the evening , the sailors gathered at the inn . all winter , the snow stayed on the high hills . down by the pier , the children watched the waves . out on the water , a small boat rocked in the swell . from the tower , the keeper watched the coming storm . the baker sold warm bread to the hungry fishermen . wind carried the smell of salt through the narrow streets . rain drifted in from the sea at first light . fog covered the harbor until the sun returned . mist faded over the harbor in the early morning . snow fell softly on the quiet town . thunder followed the lightning across the wide sky . when the wind fell , the sea grew calm . come evening , the harbor was still . toward noon , the streets were empty . deep into the dark , the wind sang in the rigging . early in the day , the market filled with people . after dark , the harbor grew quiet . before the storm broke , the gulls flew inland . lightning struck the water beyond the old lighthouse . gulls followed the boats across the water . waves carried the small boats to the shore . morning brought a warm wind from the south . night came early under the heavy clouds . children remembered the waves near the old lighthouse . sailors slept through the storm in the quiet harbor . fishermen remembered the clouds by the market stalls . somewhere beyond the lighthouse , a bell rang . soon the tide turned , and the boats went out . sometimes the storms passed far out at sea . slowly the mist lifted from the water . far out on the water , a light moved slowly . no one remembered a colder winter . every morning , the baker lit the ovens before dawn . that night , the lighthouse burned bright . as dusk fell , the lamps came on along the shore . once the rain stopped , the market opened . for a week , the clouds hung low over the far hills . a light burned in the tower all night . by morning , the storm had passed beyond the old lighthouse . long before sunrise , the baker lit the ovens . through the mist , the tower kept its light . in the winter , the storms came one after another . day after day , the clouds hung low over the far hills . all along the shore , the mist drifted in ribbons . down along the shore , the nets dried in the noon sun . out beyond the harbor , the sea turned rough . over the rooftops , the gulls wheeled and cried . under the heavy clouds , the town waited for rain . near the lighthouse , the waves broke white . from the hills , the town looked small and gray .';
 var MK_VERBS = ('came passed returned lingered drifted settled rose faded was were fell broke ' +
   'carried caught shook covered hid followed rolled struck lit circled waited watched spoke ' +
   'remembered stayed went opened closed filled shone kept cleared darkened warmed set gathered ' +
   'parted dried moved crossed burned said climbed sold told slept pushed grew rang read mended ' +
   'ran turned hung sang rocked wheeled cried looked brought stopped lifted flew woke arrived ' +
   'began be pass watch would had come').split(' ');
+/* mid-sentence clause introducers: a verb must follow before the
+   clause can close, and an object context must not borrow their
+   continuations */
+var MK_SUBS = 'when before after until once'.split(' ');
 var mkCache = {};
 function markovModel(order) {
   if (mkCache[order]) return mkCache[order];
@@ -1651,15 +1680,43 @@ function markovModel(order) {
   var dot = index['.'], comma = index[','];
   var verb = [];
   for (t = 0; t < vocab.length; t++) verb.push(MK_VERBS.indexOf(vocab[t]) >= 0 ? 1 : 0);
+  /* which opening words always precede a comma in the corpus: a sentence
+     that starts with one of these (a fronted phrase or subordinate
+     clause) may not end before its comma arrives */
+  var opStats = {}, op = null, sawComma = false;
+  for (t = 0; t < toks.length; t++) {
+    var tk = toks[t];
+    if (op === null) { if (tk !== '.') { op = tk; sawComma = false; } continue; }
+    if (tk === ',') sawComma = true;
+    if (tk === '.') {
+      var st = opStats[op] = opStats[op] || [0, 0];
+      st[0]++; if (sawComma) st[1]++;
+      op = null; sawComma = false;
+    }
+  }
+  var needC = [], subw = [];
+  for (t = 0; t < vocab.length; t++) {
+    var os = opStats[vocab[t]];
+    needC.push(os && os[0] === os[1] ? 1 : 0);
+    subw.push(MK_SUBS.indexOf(vocab[t]) >= 0 ? 1 : 0);
+  }
   var stream = [];
   for (t = 0; t < order; t++) stream.push(dot);
   for (t = 0; t < toks.length; t++) stream.push(index[toks[t]]);
-  /* the verb flag before each position, reset at every '.' */
-  var flags = [], flag = 0;
+  /* the two-bit flag before each position: bit 1 = this clause has had
+     its verb (reset at ',' and '.'), bit 2 = the sentence opened with a
+     comma-requiring word and the comma has not arrived yet */
+  var flags = [], fv = 0, fc = 0, fs = 0, atStart = true;
   for (t = 0; t < stream.length; t++) {
-    flags.push(flag);
-    if (stream[t] === dot || stream[t] === comma) flag = 0;
-    else if (verb[stream[t]]) flag = 1;
+    flags.push(fv + 2 * fc + 4 * fs);
+    var sv = stream[t];
+    if (sv === dot) { fv = 0; fc = 0; fs = 0; atStart = true; }
+    else if (sv === comma) { fv = 0; fc = 0; fs = 0; atStart = false; }
+    else {
+      if (atStart) { fc = needC[sv]; atStart = false; }
+      if (subw[sv]) fs = 1;
+      if (verb[sv]) fv = 1;
+    }
   }
   var lists = {}, startKeys = [];
   for (t = order; t < stream.length; t++) {
@@ -1679,7 +1736,7 @@ function markovModel(order) {
     cum[cum.length - 1] = 1;
     trans[k] = { ids: ids, cum: cum };
   }
-  var m = { order: order, vocab: vocab, index: index, dot: dot, comma: comma, verb: verb, trans: trans, startKeys: startKeys };
+  var m = { order: order, vocab: vocab, index: index, dot: dot, comma: comma, verb: verb, needC: needC, subw: subw, trans: trans, startKeys: startKeys };
   mkCache[order] = m;
   return m;
 }
@@ -1692,12 +1749,14 @@ function markovGenerate(base, key, rounds, order, n, marked) {
   var ids = [], h4 = [], seen = {}, tournaments = 0, forced = 0, masked = 0;
   var start = M.startKeys[invCdfIdx(rangeCum(M.startKeys.length), base.next())].split('|');
   var ctx = start[0].split(',').map(Number), flag = Number(start[1]);
+  var fv = 0, fc = 0, fs = 0, atStart = true;   /* start keys always sit at flag 0 */
   while (ids.length < n) {
     var entry = M.trans[ctx.join(',') + '|' + flag];
     if (!entry) {
       start = M.startKeys[invCdfIdx(rangeCum(M.startKeys.length), base.next())].split('|');
       ctx = start[0].split(',').map(Number);
       flag = Number(start[1]);
+      fv = 0; fc = 0; fs = 0; atStart = true;
       continue;
     }
     var w;
@@ -1733,8 +1792,14 @@ function markovGenerate(base, key, rounds, order, n, marked) {
     if (h4.length > 4) h4.shift();
     ctx.push(w);
     ctx.shift();
-    if (w === M.dot || w === M.comma) flag = 0;
-    else if (M.verb[w]) flag = 1;
+    if (w === M.dot) { fv = 0; fc = 0; fs = 0; atStart = true; }
+    else if (w === M.comma) { fv = 0; fc = 0; fs = 0; atStart = false; }
+    else {
+      if (atStart) { fc = M.needC[w]; atStart = false; }
+      if (M.subw[w]) fs = 1;
+      if (M.verb[w]) fv = 1;
+    }
+    flag = fv + 2 * fc + 4 * fs;
   }
   return { ids: ids, tournaments: tournaments, forced: forced, masked: masked };
 }
@@ -1752,11 +1817,17 @@ function rangeCum(k) {
    about 5% of testable states should be flagged at the 5% level. */
 function markovDeviation(ids, order, minVisits) {
   var M = markovModel(order);
-  var obs = {}, flag = 0, flags = [];
+  var obs = {}, flags = [], fv = 0, fc = 0, fs = 0, atStart = true;
   for (var t = 0; t < ids.length; t++) {
-    flags.push(flag);
-    if (ids[t] === M.dot || ids[t] === M.comma) flag = 0;
-    else if (M.verb[ids[t]]) flag = 1;
+    flags.push(fv + 2 * fc + 4 * fs);
+    var w = ids[t];
+    if (w === M.dot) { fv = 0; fc = 0; fs = 0; atStart = true; }
+    else if (w === M.comma) { fv = 0; fc = 0; fs = 0; atStart = false; }
+    else {
+      if (atStart) { fc = M.needC[w]; atStart = false; }
+      if (M.subw[w]) fs = 1;
+      if (M.verb[w]) fv = 1;
+    }
   }
   for (t = order; t < ids.length; t++) {
     var key = ids.slice(t - order, t).join(',') + '|' + flags[t];
@@ -3258,7 +3329,8 @@ function wbDraw() {
       p.push('<text x="' + X[c] + '" y="' + ys[c][i] + '" font-size="11"' + (onP ? ' font-weight="700"' : '') +
              ' style="font-family:var(--mono)" fill="' + (onP ? C.accent : C.text) + '">' + cols[c][i].toFixed(3) + '</text>');
       p.push('<text x="' + X[c] + '" y="' + (ys[c][i] + 10) + '" font-size="8.5"' + (onP ? ' font-weight="600"' : '') +
-             ' style="font-family:var(--mono)" fill="' + (onP ? C.accent : C.muted) + '">s = ' + scs[c][i].toFixed(2) + '</text>');
+             ' style="font-family:var(--mono)" fill="' + (onP ? C.accent : C.muted) + '">s<tspan font-size="6.5" dy="2">' + (c + 1) +
+             '</tspan><tspan dy="-2"> = ' + scs[c][i].toFixed(2) + '</tspan></text>');
     }
   }
   p.push('<text x="' + X[3] + '" y="' + ys[3][0] + '" font-size="12" font-weight="700" style="font-family:var(--mono)" fill="' +
@@ -3389,24 +3461,34 @@ function drawScoreHist(scores, mean, id) {
    the last four words emitted. */
 var TX_WORDS = ['sunshine', 'clouds', 'rain', 'waves', 'fog', 'light', 'stars',
                 'snow', 'lightning', 'gulls', 'rainbows', 'ships', 'nothing', 'dragons'];
-var TX_PROBS = [0.30, 0.14, 0.12, 0.10, 0.08, 0.07, 0.05, 0.04, 0.03, 0.025, 0.02, 0.01, 0.01, 0.005];
 var TX_N = 4000, TX_ROUNDS = 3;
-var TX_CUM = (function () {
+
+/* The completion card: preset contexts whose last four words are the
+   watermark history, each with its own next-word distribution over the
+   same vocabulary -- the model reshapes with every context, and a
+   word's identity code never changes. Context words get identity codes
+   from their own small dictionary, exactly as vocabulary words do from
+   theirs. Probabilities are aligned to TX_WORDS order and sum to 1. */
+var TXC_PRESETS = [
+  { pre: 'After the long storm, the', last4: ['harbor', 'town', 'finally', 'saw'],
+    probs: [0.30, 0.10, 0.04, 0.05, 0.025, 0.14, 0.03, 0.02, 0.01, 0.12, 0.08, 0.07, 0.01, 0.005] },
+  { pre: 'The sailors said that by', last4: ['morning', 'they', 'would', 'see'],
+    probs: [0.06, 0.09, 0.07, 0.16, 0.08, 0.05, 0.04, 0.03, 0.02, 0.24, 0.015, 0.13, 0.01, 0.005] },
+  { pre: 'The old keeper climbed the', last4: ['tower', 'expecting', 'to', 'find'],
+    probs: [0.008, 0.025, 0.03, 0.02, 0.40, 0.12, 0.08, 0.015, 0.01, 0.06, 0.004, 0.045, 0.18, 0.003] },
+  { pre: 'By dawn the children ran', last4: ['outside', 'hoping', 'to', 'see'],
+    probs: [0.06, 0.045, 0.05, 0.04, 0.025, 0.035, 0.13, 0.26, 0.02, 0.10, 0.15, 0.07, 0.005, 0.01] }
+];
+var TX_PROBS, TX_CUM, TX_ORD;
+function txcSetDist() {
+  TX_PROBS = TXC_PRESETS[txc.ci].probs;
   var c = [], a = 0;
   for (var j = 0; j < TX_PROBS.length; j++) { a += TX_PROBS[j]; c.push(a); }
   c[c.length - 1] = 1;
-  return c;
-})();
-
-/* The completion card: preset contexts whose last four words are the
-   watermark history. Context words get identity codes from their own
-   small dictionary, exactly as vocabulary words do from theirs. */
-var TXC_PRESETS = [
-  { pre: 'After the long storm, the', last4: ['harbor', 'town', 'finally', 'saw'] },
-  { pre: 'The sailors said that by', last4: ['morning', 'they', 'would', 'see'] },
-  { pre: 'The old keeper climbed the', last4: ['tower', 'expecting', 'to', 'find'] },
-  { pre: 'By dawn the children ran', last4: ['outside', 'hoping', 'to', 'see'] }
-];
+  TX_CUM = c;
+  TX_ORD = TX_PROBS.map(function (_, i) { return i; })
+                   .sort(function (x, y) { return TX_PROBS[y] - TX_PROBS[x]; });
+}
 var TXC_DICT = (function () {
   var d = [];
   TXC_PRESETS.forEach(function (p) {
@@ -3414,7 +3496,7 @@ var TXC_DICT = (function () {
   });
   return d;
 })();
-var txc = { ci: 0, winner: null, gen: null, obs: null, note: '' };
+var txc = { ci: 0, winner: null, gen: null, obs: null, note: '', bracket: null };
 
 function txcCodes() {
   var last4 = TXC_PRESETS[txc.ci].last4;
@@ -3441,21 +3523,96 @@ function txcRender() {
   html += '<span class="ctx-blank">' + (txc.winner === null ? '&nbsp;' : TX_WORDS[txc.winner]) + '</span>&hairsp;.';
   document.getElementById('txc-sent').innerHTML = html;
   var key = wtParseKey('tx-key');
-  drawBlankChart('txc-chart', TX_PROBS, TX_WORDS, txc.winner, txc.obs);
+  var perm = function (a) { return a && TX_ORD.map(function (i) { return a[i]; }); };
+  drawBlankChart('txc-chart', perm(TX_PROBS), perm(TX_WORDS),
+                 txc.winner === null ? null : TX_ORD.indexOf(txc.winner), perm(txc.obs));
+  if (txc.bracket) drawTxcBracket();
   document.getElementById('txc-note').innerHTML = txc.note || '';
   /* the per-word score table for this context, winner row highlighted */
-  var rows = ['<tr><th>word</th><th>s<sub>1</sub></th><th>s<sub>2</sub></th><th>s<sub>3</sub></th><th>mean</th></tr>'];
+  var rows = ['<tr><th>word</th><th>s<sub>1</sub></th><th>s<sub>2</sub></th><th>s<sub>3</sub></th></tr>'];
   if (key !== null) {
     var sr = txcScoreRows(key);
-    for (var j = 0; j < TX_WORDS.length; j++) {
-      var on = j === txc.winner;
+    for (var t = 0; t < TX_ORD.length; t++) {
+      var j = TX_ORD[t], on = j === txc.winner;
       var style = on ? ' style="color:' + C.est + '; font-weight:700;"' : '';
       rows.push('<tr><td class="wrd"' + style + '>' + TX_WORDS[j] + '</td>' +
-                sr[j].map(function (s) { return '<td class="num"' + style + '>' + s.toFixed(2).slice(1) + '</td>'; }).join('') +
-                '<td class="num"' + style + '>' + ((sr[j][0] + sr[j][1] + sr[j][2]) / 3).toFixed(2).slice(1) + '</td></tr>');
+                sr[j].map(function (s) { return '<td class="num"' + style + '>' + s.toFixed(2).replace(/^0/, '') + '</td>'; }).join('') +
+                '</tr>');
     }
   }
   document.getElementById('txc-tbl').innerHTML = rows.join('');
+}
+
+/* The bracket sketch: this run's eight drawn words, the three keyed
+   rounds that reduced them, and the champion's path in the accent --
+   the word-vocabulary twin of tab 6's value bracket. */
+function drawTxcBracket() {
+  var b = txc.bracket, V = TX_WORDS.length;
+  var X = [98, 192, 286, 374], T = 34, ROW = 27;
+  var ys = [[]], i, c;
+  for (i = 0; i < 8; i++) ys[0].push(T + i * ROW);
+  for (c = 1; c < 4; c++) {
+    ys.push([]);
+    for (i = 0; i < ys[c - 1].length; i += 2) ys[c].push((ys[c - 1][i] + ys[c - 1][i + 1]) / 2);
+  }
+  var p = ['<defs><marker id="txb-arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">' +
+           '<path d="M0,0 L6,3 L0,6 z" fill="' + C.border + '"/></marker></defs>'];
+  /* the source pmf -- this context's own, in chart order */
+  p.push('<text x="46" y="86" text-anchor="middle" font-size="10" font-weight="600" fill="' + C.muted + '">this context\'s pmf</text>');
+  var PX = 12, PW = 68, PB = 136, PH = 34;
+  var slot = PW / V;
+  var pmax = Math.max.apply(null, TX_PROBS);
+  for (i = 0; i < V; i++) {
+    var h = TX_PROBS[TX_ORD[i]] / pmax * PH;
+    p.push('<line x1="' + (PX + i * slot + 0.5).toFixed(1) + '" y1="' + (PB - h).toFixed(1) + '" x2="' + (PX + (i + 1) * slot - 0.5).toFixed(1) +
+           '" y2="' + (PB - h).toFixed(1) + '" stroke="' + C.truth + '" stroke-width="1.5" stroke-dasharray="2,1.5"/>');
+  }
+  p.push('<line x1="10" y1="' + PB + '" x2="82" y2="' + PB + '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  /* the eight draws as dots at their word's slot, stacked on repeats */
+  var stack = {};
+  for (i = 0; i < 8; i++) {
+    var w0 = b.cols[0][i], champ0 = i === b.path[0];
+    var si = TX_ORD.indexOf(w0);
+    var lvl = stack[w0] = (stack[w0] || 0) + 1;
+    p.push('<circle cx="' + (PX + (si + 0.5) * slot).toFixed(1) + '" cy="' + (PB + 5 + (lvl - 1) * 5).toFixed(1) +
+           '" r="' + (champ0 ? 2.6 : 2.1) + '" fill="' + (champ0 ? C.accent : C.stream) + '" opacity="0.85"/>');
+    p.push('<line x1="84" y1="' + (PB - 10) + '" x2="' + (X[0] - 7) + '" y2="' + (ys[0][i] - 4) +
+           '" stroke="' + (champ0 ? C.accent : C.border) + '" stroke-width="' + (champ0 ? 1.5 : 1) +
+           '" marker-end="url(#txb-arr)"/>');
+  }
+  /* game connectors: pair winners emphasized, the champion's whole
+     path picked out in the accent */
+  for (c = 0; c < 3; c++) {
+    for (i = 0; i < b.cols[c].length; i++) {
+      var i0 = i - (i % 2);
+      var isWin = (b.scs[c][i0] >= b.scs[c][i0 + 1]) === (i === i0);
+      var onPath = i === b.path[c];
+      p.push('<line x1="' + (X[c] + 58) + '" y1="' + (ys[c][i] - 4) + '" x2="' + (X[c + 1] - 5) +
+             '" y2="' + (ys[c + 1][i >> 1] - 4) + '" stroke="' + (onPath ? C.accent : isWin ? C.stream : C.border) +
+             '" stroke-width="' + (onPath ? 2.5 : isWin ? 2 : 1.25) + '"/>');
+    }
+  }
+  /* headers: one keyed rule per round, matching tab 6's bracket */
+  p.push('<text x="' + X[0] + '" y="14" font-size="10" font-weight="600" fill="' + C.muted + '">candidates</text>');
+  for (c = 0; c < 3; c++) {
+    p.push('<text x="' + ((X[c] + 58 + X[c + 1] - 5) / 2) + '" y="14" text-anchor="middle" font-size="9.5" font-weight="600" fill="' +
+           C.truth + '">rule ' + (c + 1) + '</text>');
+  }
+  p.push('<text x="' + X[3] + '" y="14" font-size="10" font-weight="600" fill="' + C.muted + '">emitted</text>');
+  /* contestants, each with its score for the round it is about to play */
+  for (c = 0; c < 3; c++) {
+    for (i = 0; i < b.cols[c].length; i++) {
+      var onP = i === b.path[c];
+      p.push('<text x="' + X[c] + '" y="' + ys[c][i] + '" font-size="10.5"' + (onP ? ' font-weight="700"' : '') +
+             ' fill="' + (onP ? C.accent : C.text) + '">' + TX_WORDS[b.cols[c][i]] + '</text>');
+      p.push('<text x="' + X[c] + '" y="' + (ys[c][i] + 10) + '" font-size="8.5"' + (onP ? ' font-weight="600"' : '') +
+             ' style="font-family:var(--mono)" fill="' + (onP ? C.accent : C.muted) + '">s<tspan font-size="6.5" dy="2">' + (c + 1) +
+             '</tspan><tspan dy="-2"> = ' + b.scs[c][i].toFixed(2).replace(/^0/, '') + '</tspan></text>');
+    }
+  }
+  p.push('<text x="' + X[3] + '" y="' + ys[3][0] + '" font-size="11.5" font-weight="700" fill="' +
+         C.accent + '">' + TX_WORDS[b.cols[3][0]] + '</text>');
+  document.getElementById('txc-brk').innerHTML = p.join('');
 }
 
 /* The repeat demo: 2,000 runs at this same blank. With repeat masking
@@ -3474,18 +3631,9 @@ function txcRepeat() {
     if (masked && t > 0) {
       w = invCdfIdx(TX_CUM, txc.gen.next());
     } else {
-      var cand = [];
-      for (var i = 0; i < (1 << TX_ROUNDS); i++) cand.push(invCdfIdx(TX_CUM, txc.gen.next()));
-      for (var r = 1; r <= TX_ROUNDS; r++) {
-        var nxt = [];
-        for (i = 0; i < cand.length; i += 2) {
-          var sa = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i], V));
-          var sb = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i + 1], V));
-          nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
-        }
-        cand = nxt;
-      }
-      w = cand[0];
+      var b = txcPlay(key, q);
+      if (t === 0) txc.bracket = b;
+      w = b.cols[TX_ROUNDS][0];
     }
     counts[w]++;
   }
@@ -3504,21 +3652,41 @@ function txcRepeat() {
   txcRender();
 }
 
+/* Play one full tournament at the current context, recording every
+   round for the bracket sketch: cols = the surviving word ids per
+   column, scs = each contestant's score for the round it is about to
+   play, path = the champion's row in each column. */
+function txcPlay(key, q) {
+  var V = TX_WORDS.length, cur = [], i, r;
+  for (i = 0; i < (1 << TX_ROUNDS); i++) cur.push(invCdfIdx(TX_CUM, txc.gen.next()));
+  var cols = [cur.slice()], scs = [], widx = [];
+  for (r = 1; r <= TX_ROUNDS; r++) {
+    var sc = [];
+    for (i = 0; i < cur.length; i++) sc.push(twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cur[i], V)));
+    scs.push(sc);
+    var nxt = [], wj = [];
+    for (i = 0; i < cur.length; i += 2) {
+      var w = sc[i] >= sc[i + 1] ? i : i + 1;
+      nxt.push(cur[w]);
+      wj.push(w);
+    }
+    cur = nxt;
+    cols.push(cur.slice());
+    widx.push(wj);
+  }
+  var path = [0, 0, 0, 0];
+  path[2] = widx[2][0];
+  path[1] = widx[1][path[2]];
+  path[0] = widx[0][path[1]];
+  return { cols: cols, scs: scs, path: path };
+}
+
 function txcRun() {
   var key = wtParseKey('tx-key');
   if (key === null) { txcRender(); return; }
-  var q = txcCodes(), V = TX_WORDS.length, cand = [];
-  for (var i = 0; i < (1 << TX_ROUNDS); i++) cand.push(invCdfIdx(TX_CUM, txc.gen.next()));
-  for (var r = 1; r <= TX_ROUNDS; r++) {
-    var nxt = [];
-    for (i = 0; i < cand.length; i += 2) {
-      var sa = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i], V));
-      var sb = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i + 1], V));
-      nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
-    }
-    cand = nxt;
-  }
-  txc.winner = cand[0];
+  var b = txcPlay(key, txcCodes());
+  txc.bracket = b;
+  txc.winner = b.cols[TX_ROUNDS][0];
   txc.obs = null;
   txc.note = '';
   txcRender();
@@ -3526,6 +3694,7 @@ function txcRun() {
 
 function txcNext() {
   txc.ci = (txc.ci + 1) % TXC_PRESETS.length;
+  txcSetDist();
   txc.winner = null;
   txc.obs = null;
   txc.note = '';
@@ -3610,7 +3779,8 @@ function mkWrite(n) {
   document.getElementById('mk-stats').innerHTML =
     n.toLocaleString('en-US') + ' words · ' +
     (marked
-      ? 'tournament at <b>' + res.tournaments + '</b> of them (' + res.forced +
+      ? 'marked with secret key <b>' + key.toLocaleString('en-US') + '</b> · tournament at <b>' +
+        res.tournaments + '</b> of them (' + res.forced +
         ' forced, nothing to choose) · ' + res.masked + ' repeated contexts masked'
       : 'watermark off: every word a plain draw') +
     '<br>conditional check: ' + (dev.tested === 0
@@ -3636,68 +3806,86 @@ function mkRender(ids) {
   return out.join(' ');
 }
 
+/* one-sided normal tail through the chi-square upper tail:
+   P(Z > z) = P(chi-square_1 > z^2) / 2 for z >= 0 */
+function txOneSidedP(z) {
+  var half = chiSqUpperP(z * z, 1) / 2;
+  return z >= 0 ? half : 1 - half;
+}
+function txFmtP(pv) {
+  if (pv < 1e-15) return 'p < 10<sup>\u221215</sup>';
+  if (pv >= 0.001) return 'p = ' + pv.toFixed(3);
+  var e = Math.floor(Math.log10(pv));
+  return 'p \u2248 ' + (pv / Math.pow(10, e)).toFixed(1) +
+         '\u00d710<sup>\u2212' + (-e) + '</sup>';
+}
 function txTest() {
   if (!mk.ids) return;
-  var k = wtParseKey('tx-cand');
-  if (k === null) {
-    document.getElementById('tx-result').innerHTML = 'A key is a whole number: digits only.';
-    return;
-  }
+  var k = mk.key;
   var r = wordDetect(mk.ids, k, MK_ROUNDS, MK_V);
-  drawScoreHist(r.scores, r.mean, 'tx-shist');
   drawKeyLineup(k, r);
   var verdict = r.z > 6 ? 'far above chance: the text carries this key.'
               : r.z > 3 ? 'above chance: evidence this key marked the text.'
               : 'indistinguishable from chance: no evidence this key marked the text.';
   document.getElementById('tx-result').innerHTML =
-    'Key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
-    '</b> over ' + r.n.toLocaleString('en-US') + ' scored words. Chance is 0.500. z = ' +
-    r.z.toFixed(1) + ' \u2013 ' + verdict;
+    'Secret key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
+    '</b> across the ' + (MK_ROUNDS * r.n).toLocaleString('en-US') + ' scores of ' +
+    r.n.toLocaleString('en-US') + ' fresh-context words. Chance is 0.500. z = ' +
+    r.z.toFixed(1) + ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ') \u2013 ' + verdict;
 }
 
-/* The key lineup: the tested key against twenty random wrong keys,
-   one column each. The light box spans the middle half of that key's
-   per-word scores (every key's box straddles 0.5, because individual
-   scores prove nothing); the heavy dot and whiskers are the mean with
-   two null standard errors, which is where the keys separate. */
+/* The key lineup: one row per key, the secret key that wrote the
+   passage in the top row, twenty random wrong keys below. Each row is
+   the pooled detection mean with two null standard errors; the key is
+   printed at the left and the mean at the right, and the verdict
+   symbol uses the same z thresholds as the verdict text (z > 6 and
+   z > 3, one-sided p below 1e-9 and 0.002). The thresholds sit far
+   below 0.05 because twenty-one keys are on trial at once. */
 function drawKeyLineup(entKey, entDet) {
-  var rows = [{ det: entDet, mine: true }];
+  var rows = [{ key: entKey, det: entDet, mine: true }];
   for (var i = 0; i < 20; i++) {
     var wk;
-    do { wk = Math.floor(Math.random() * 4294967296); } while (wk === entKey);
-    rows.push({ det: wordDetect(mk.ids, wk, MK_ROUNDS, MK_V), mine: false });
+    do { wk = 100000 + Math.floor(Math.random() * 900000); } while (wk === entKey);
+    rows.push({ key: wk, det: wordDetect(mk.ids, wk, MK_ROUNDS, MK_V), mine: false });
   }
-  var W = 440, H = 170, L = 34, R = 8, T = 8, B = 22;
-  var pw = W - L - R, ph = H - T - B;
-  var yMin = 0.28, yMax = 0.74;
-  var y = function (d) { return T + ph * (1 - (Math.min(yMax, Math.max(yMin, d)) - yMin) / (yMax - yMin)); };
+  var W = 440, rowH = 14, T = 18, n = rows.length, H = 338;
+  var L = 78, Rb = 336;
+  var xMin = 0.38, xMax = 0.66;
+  var x = function (d) { return L + (Rb - L) * (Math.min(xMax, Math.max(xMin, d)) - xMin) / (xMax - xMin); };
   var se = entDet.n ? Math.sqrt(1 / (12 * MK_ROUNDS * entDet.n)) : 0;
-  var cw = pw / rows.length;
-  var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
-  p.push('<line x1="' + L + '" y1="' + y(0.5) + '" x2="' + (W - R) + '" y2="' + y(0.5) +
-         '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="5,4"/>');
-  for (i = 0; i < rows.length; i++) {
-    var det = rows[i].det, col = rows[i].mine ? C.accent : C.muted;
-    var cx = L + (i + 0.5) * cw;
-    var sorted = det.scores.slice().sort(function (a, b) { return a - b; });
-    var q1 = sorted[Math.floor(sorted.length * 0.25)] || 0.5;
-    var q3 = sorted[Math.floor(sorted.length * 0.75)] || 0.5;
-    p.push('<rect x="' + (cx - cw * 0.32) + '" y="' + y(q3) + '" width="' + (cw * 0.64) +
-           '" height="' + Math.max(1, y(q1) - y(q3)) + '" fill="' + col + '" opacity="0.15"/>');
-    p.push('<line x1="' + cx + '" y1="' + y(det.mean - 2 * se) + '" x2="' + cx + '" y2="' + y(det.mean + 2 * se) +
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + (Rb - L) + '" height="' + (n * rowH) + '" fill="' + C.chartBg + '"/>'];
+  p.push('<text x="' + (L - 8) + '" y="' + (T - 6) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">key</text>');
+  p.push('<text x="' + (Rb + 10) + '" y="' + (T - 6) + '" font-size="9" fill="' + C.muted + '">mean</text>');
+  for (i = 0; i < n; i++) {
+    var det = rows[i].det, mine = rows[i].mine, col = mine ? C.accent : C.muted;
+    var cy = T + (i + 0.5) * rowH;
+    if (mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
+                     '" fill="' + C.accent + '" opacity="0.07"/>');
+    p.push('<line x1="' + x(det.mean - 2 * se) + '" y1="' + cy + '" x2="' + x(det.mean + 2 * se) + '" y2="' + cy +
            '" stroke="' + col + '" stroke-width="2"/>');
-    p.push('<circle cx="' + cx + '" cy="' + y(det.mean) + '" r="2.6" fill="' + col + '"/>');
+    p.push('<circle cx="' + x(det.mean) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>');
+    p.push('<text x="' + (L - 8) + '" y="' + (cy + 3) + '" text-anchor="end" font-size="9.5"' +
+           (mine ? ' font-weight="700"' : '') + ' fill="' + col + '">' +
+           rows[i].key.toLocaleString('en-US') + '</text>');
+    p.push('<text x="' + (Rb + 10) + '" y="' + (cy + 3) + '" font-size="9.5" fill="' + col + '">' +
+           det.mean.toFixed(3) + '</text>');
+    var sym = det.z > 6 ? '\u2713' : det.z > 3 ? '?' : '\u2013';
+    var symCol = det.z > 6 ? C.accent : det.z > 3 ? C.est : C.muted;
+    p.push('<text x="' + (Rb + 52) + '" y="' + (cy + 3.5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' +
+           symCol + '">' + sym + '</text>');
   }
-  p.push('<text x="' + (L + 0.5 * cw) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="9" font-weight="600" fill="' +
-         C.accent + '">tested</text>');
-  var yt = [0.3, 0.5, 0.7];
-  for (i = 0; i < yt.length; i++) {
-    p.push('<text x="' + (L - 5) + '" y="' + (y(yt[i]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' +
-           yt[i].toFixed(1) + '</text>');
-    p.push('<line x1="' + (L - 3) + '" y1="' + y(yt[i]) + '" x2="' + L + '" y2="' + y(yt[i]) + '" stroke="' + C.muted + '" stroke-width="1"/>');
+  var yBot = T + n * rowH;
+  p.push('<line x1="' + x(0.5) + '" y1="' + T + '" x2="' + x(0.5) + '" y2="' + yBot +
+         '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="5,4"/>');
+  var xt = [0.4, 0.5, 0.6];
+  for (i = 0; i < xt.length; i++) {
+    p.push('<line x1="' + x(xt[i]) + '" y1="' + yBot + '" x2="' + x(xt[i]) + '" y2="' + (yBot + 3) +
+           '" stroke="' + C.muted + '" stroke-width="1"/>');
+    p.push('<text x="' + x(xt[i]) + '" y="' + (yBot + 13) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' +
+           xt[i].toFixed(1) + '</text>');
   }
-  p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
-         '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">mean score</text>');
+  p.push('<text x="' + ((L + Rb) / 2) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="10" fill="' + C.muted +
+         '">mean keyed score</text>');
   document.getElementById('tx-keys').innerHTML = p.join('');
 }
 
@@ -3844,6 +4032,7 @@ function renderActive() {
   wbNew();
   wtGenerate();
   txc.gen = makeCMRG(wtSeeds());
+  txcSetDist();
   txcRun();
   var corpEl = document.getElementById('mk-corpus');
   if (corpEl) corpEl.textContent = MK_CORPUS;

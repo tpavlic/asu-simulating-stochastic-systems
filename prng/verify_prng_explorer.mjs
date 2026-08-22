@@ -751,8 +751,8 @@ section('Watermark: Markov-chain text');
 {
   /* The corpus is pinned exactly: any edit to it shows up here. */
   const M1 = P.markovModel(1), M2 = P.markovModel(2), M3 = P.markovModel(3);
-  check('the corpus parses to 2,233 tokens over a 228-word vocabulary',
-        MK_TOKENS(P) === 2233 && M1.vocab.length === 228);
+  check('the corpus parses to 2,174 tokens over a 230-word vocabulary',
+        MK_TOKENS(P) === 2174 && M1.vocab.length === 230);
   const KEY = 271828, R3 = 3;
   const gen = (order, n, marked, seedA) =>
     P.markovGenerate(P.makeCMRG([BigInt(seedA), 22n, 33n, 44n, 55n, 66n]), KEY, R3, order, n, marked);
@@ -782,6 +782,35 @@ section('Watermark: Markov-chain text');
   check('the forced fraction rises with the chain order (' +
         (100 * ff(g1)).toFixed(0) + '% < ' + (100 * ff(a)).toFixed(0) + '% < ' +
         (100 * ff(g3)).toFixed(0) + '%)', ff(g1) < ff(a) && ff(a) < ff(g3));
+  /* The grammar guards: with the verb bit, the comma bit, and the
+     subordinate bit in the state, a long generation at any order must
+     contain no verbless sentence and no comma-requiring opener (a
+     fronted phrase or subordinate clause) whose sentence ends before
+     its comma. */
+  {
+    const verbs = new Set(P.MK_VERBS);
+    let verbless = 0, fragments = 0, sentences = 0;
+    for (const order of [1, 2, 3]) {
+      const M = P.markovModel(order);
+      const needCW = new Set(M.vocab.filter((w, i) => M.needC[i]));
+      const gg = gen(order, 12000, true, 17);
+      let sent = [];
+      for (const id of gg.ids) {
+        const w = M.vocab[id];
+        if (w === '.') {
+          if (sent.length) {
+            sentences++;
+            if (!sent.some((x) => verbs.has(x))) verbless++;
+            if (needCW.has(sent[0]) && !sent.includes(',')) fragments++;
+          }
+          sent = [];
+        } else sent.push(w);
+      }
+    }
+    check('no verbless sentences and no unresolved fronted openers across ' +
+          sentences.toLocaleString('en-US') + ' generated sentences at orders 1-3',
+          verbless === 0 && fragments === 0);
+  }
   /* Preservation against the chain's own conditionals: marked or not,
      about 5% of the passage's testable contexts should be flagged. */
   const long = gen(2, 20000, true, 7);
