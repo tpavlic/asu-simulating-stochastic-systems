@@ -202,7 +202,7 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
 .plot-ttl { font-weight: 700; font-size: .95rem; color: var(--text); margin: 12px 0 0; text-align: left; }
 /* Tab 7: the completion sentence, with the last four words labeled as
    the watermark's history, and the scrollable scores table. */
-.ctx-sent { font-size: 1rem; line-height: 2.1; margin: 14px 0 6px; }
+.ctx-sent { font-size: 1rem; line-height: 2.1; margin: 14px 0 12px; }
 .ctx-w { display: inline-block; position: relative; margin: 0 1px; }
 .ctx-lbl { position: absolute; top: -0.95em; left: 50%; transform: translateX(-50%);
            font-family: 'IBM Plex Mono', monospace; font-size: .6rem; color: var(--muted); white-space: nowrap; }
@@ -887,13 +887,18 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">Selection from diversity, not distortion</div>
         <div class="cv-leg" style="text-align:left;">The tournament never invents a value
-          and never vetoes one: every winner is a draw the generator underneath (here
-          MRG32k3a) was willing to make, and so the emitted stream keeps the source
-          distribution – run the tournament for 2,000 draws, and the winners fill [0, 1] as
-          evenly as the generator itself would. The
-          same bolting-on works for any source distribution, a pmf over words included, as
-          long as the candidates have spread: a distribution so concentrated that they all
-          agree leaves every key making the same choice and nothing to mark.</div>
+          and never vetoes one: it only chooses among draws the generator underneath (here
+          MRG32k3a) was already willing to make, working inside the diversity the stream
+          already offers. At any one history the choice is genuinely tilted toward the
+          values the keyed rules score highly – that tilt is the watermark – but a history
+          of four real numbers essentially never recurs, and so each tilt fires exactly
+          once, and across histories the tilts point in unrelated directions and cancel:
+          run the tournament for 2,000 draws, and the winners fill [0, 1] as evenly as the
+          generator itself would. Only along the key's own score axis do the tilts all
+          point the same way. The same bolting-on works for any source distribution, a pmf
+          over words included, as long as the candidates have spread: a distribution so
+          concentrated that they all agree leaves every key making the same choice and
+          nothing to mark.</div>
         <div style="margin:auto 0;">
           <svg class="plot" id="wq-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of 2,000 tournament winners with uniformity test p-values"></svg>
           <div class="cv-leg" id="wq-cap"></div>
@@ -1011,12 +1016,18 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <summary>Why does the tournament change neither the distribution nor the visible independence?</summary>
       <div class="why-body">
         <p>Only candidates drawn from the true distribution ever compete, and so the emitted
-        value is always a legitimate draw. For one fixed history, the selection does prefer
-        the regions of [0, 1] that the keyed rules happen to score highly there – but the
-        scoring functions move those regions from step to step, and so averaged over a
-        stream, every region wins equally often, and the histogram, the chi-square test, and
-        the K–S test stay clean. The verification script confirms it: uniformity tests on
-        marked streams keep rejecting at their nominal 5% rate.</p>
+        value is always a legitimate draw. For one fixed history, the selection genuinely
+        prefers the values the keyed rules score highly there, and a detector that
+        recomputes those scores reads precisely that preference. What keeps the preference
+        out of the histogram is that no tilt ever fires twice: a history of four real
+        numbers essentially never recurs, each tilted conditional contributes one draw, and
+        one draw with unchanged support reveals nothing. Across histories the tilts point in
+        unrelated directions in value space and cancel; along the score axis, which only the
+        key exposes, they all point the same way – that is the detector's axis. Tab ⑦ meets
+        the same rule with a fourteen-word vocabulary, where histories do recur and the rule
+        is enforced as repeated-context masking. The verification script confirms the
+        result: uniformity tests on marked streams keep rejecting at their nominal 5%
+        rate.</p>
         <p>The watermark does add dependence: each emitted value relates to its four
         predecessors through the scoring rules. But the relation is routed entirely through
         the keyed scores. Without the key, the scores cannot be recomputed, and lag plots and
@@ -1047,32 +1058,47 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:1 1 460px; min-width:0;">
         <div class="sec-hd">One blank, one tournament</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:2px;">A toy model has
-          reached a blank. Its distribution over the next word (teal bars) puts most of the
-          probability on a few words and a little on many others. The last four words of the
-          context are the watermark's history, labeled below; under each candidate word sits
-          its mean keyed score for <em>this</em> context. Run the tournament, and the winner
-          (orange) fills the blank – usually a well-scoring word, and always a legitimate
-          draw.</div>
+          reached a blank. Its distribution over the next word (the dashed teal levels)
+          puts most of the probability on a few words and a little on many others; in this
+          toy, the distribution is the same at every blank, whereas a real model reshapes
+          it with every context. The last
+          four words of the context are the watermark's history, labeled below, and the
+          table beneath the chart lists every word's three round scores for exactly this
+          history. A tournament has already been played – the winner (the highlighted
+          column) fills the blank, usually a word that scores well across the rounds and
+          always a legitimate draw – and running one more draws eight fresh candidates for
+          the same blank. "Run 2,000 tournaments" repeats the experiment at this same blank:
+          with repeat masking on – the real scheme's rule – only the first run is
+          watermarked and the other 1,999 pass through unmarked, and the winners' shares
+          sit on the dashed levels; turn masking off, and the same tilt fires all 2,000
+          times, and the shares pull visibly away. The frequency card at the right draws
+          the same picture for a whole passage.</div>
         <div class="ctx-sent" id="txc-sent"></div>
         <div class="ctrl-row" style="margin-bottom:2px;">
           <label class="ctrl-lbl" for="tx-key">Secret key</label>
           <input class="par-inp" id="tx-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;" oninput="txcRender()">
-          <button class="btn-run" onclick="txcRun()">Run the tournament</button>
+        </div>
+        <div class="ctrl-row" style="margin-bottom:2px;">
+          <button class="btn-run" onclick="txcRun()">Run 1 tournament</button>
           <button class="btn-clear" onclick="txcNext()">New context</button>
         </div>
-        <svg class="plot" id="txc-chart" viewBox="0 0 440 230" role="img" aria-label="The model's distribution over the blank, with each word's keyed score, and the winning word highlighted"></svg>
-        <div class="plot-ttl" style="margin-top:16px;">The model writes on, and every word carries scores</div>
-        <div class="cv-leg" style="text-align:left; margin:4px 0 8px;">Two hundred draws
-          from the same process, one row per emitted word, with the three round scores that
-          word earns from its own four-word history. The first four words have no history
-          yet and pass through unscored. Any single row proves nothing; the evidence is the
-          average of the mean column, which the detector at the right reads.</div>
-        <div class="ctrl-row" style="margin-bottom:6px;">
-          <button class="btn-run" onclick="txGenerate()">Generate 200 marked words</button>
+        <div class="ctrl-row" style="margin-bottom:2px;">
+          <button class="btn-run2" onclick="txcRepeat()">Run 2,000 tournaments</button>
+          <label class="ctrl-lbl" style="display:flex; align-items:center; gap:6px; min-height:24px; cursor:pointer;">
+            <input type="checkbox" id="txc-mask" checked style="width:16px; height:16px; accent-color:var(--accent);">
+            Enable repeat masking
+          </label>
         </div>
-        <div class="tx-tbl-wrap">
-          <table class="tx-tbl" id="tx-tbl"></table>
+        <svg class="plot" id="txc-chart" viewBox="0 0 440 210" role="img" aria-label="The model's distribution over the blank, with the winning word highlighted and repeated-run shares overlaid"></svg>
+        <div class="cv-leg" id="txc-note" style="min-height:1.2em;"></div>
+        <div class="plot-ttl" style="margin-top:14px;">Every word's scores at this blank</div>
+        <div class="cv-leg" style="text-align:left; margin:2px 0 6px;">The whole vocabulary,
+          one row per word – not a sequence of draws. The rows are sorted by model
+          probability only to match the chart above; a word's scores come from the keyed
+          rules and have nothing to do with its probability.</div>
+        <div class="tx-tbl-wrap" style="max-height:none;">
+          <table class="tx-tbl" id="txc-tbl"></table>
         </div>
       </div>
       <div style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column; gap:16px;">
@@ -1080,10 +1106,20 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="sec-hd">The word distribution survives</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Let the model write
             on for 4,000 words (each new word is a fresh blank whose history is the last four
-            words emitted), and count what it chose. The dashed levels are the same model
-            probabilities drawn beside the blank at the left; the tournament only ever
-            chooses among legitimate draws, and so the frequencies track them, and a
-            chi-square goodness-of-fit test against the distribution stays clean.</div>
+            words emitted), and count what it chose. This toy is a <em>unigram</em> model –
+            it offers the same distribution at every blank – and that is what lets one
+            pooled histogram audit all 4,000 draws at once; a real model's distribution
+            shifts with every context, and preservation there is a blank-by-blank statement,
+            with the machinery unchanged. Unlike the masked repeat at the left, where only
+            one run carried the mark, <em>most of these words are marked</em> – each behind
+            its own history, with a history that recurs passing through unmarked
+            (<em>repeated-context masking</em>, computed by embedder and detector alike from
+            the visible words). Thousands of one-shot tilts in ever-new directions cancel,
+            and so the frequencies track the targets, and a chi-square goodness-of-fit test
+            stays clean.</div>
+          <div class="ctrl-row" style="margin-bottom:6px;">
+            <button class="btn-run" onclick="txGenerate()">Write 4,000 marked words</button>
+          </div>
           <svg class="plot" id="tx-pmf" viewBox="0 0 440 210" role="img" aria-label="Observed word frequencies against target probabilities"></svg>
           <div class="cv-leg" id="tx-gof"></div>
           <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
@@ -1099,14 +1135,17 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         </div>
         <div class="cv-card" style="flex:1 0 auto; display:flex; flex-direction:column;">
           <div class="sec-hd">Reading the watermark back</div>
-          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector recomputes
-            every row's scores from the visible words alone – no access to the model or the
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector reads
+            the 4,000-word passage from the card above, recomputes each emitted word's
+            scores from the visible words alone – no access to the model or the
             generator – and averages them. The embedding key stands far above the 0.5 of
             chance; any other key sees noise.</div>
-          <div class="ctrl-row" style="margin-bottom:6px;">
+          <div class="ctrl-row" style="margin-bottom:2px;">
             <label class="ctrl-lbl" for="tx-cand">Key to test</label>
             <input class="par-inp" id="tx-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
                    spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
+          </div>
+          <div class="ctrl-row" style="margin-bottom:6px;">
             <button class="btn-run2" onclick="txTest()">Test key</button>
             <button class="btn-run2" onclick="txWrong()">Test 20 wrong keys</button>
           </div>
@@ -1134,6 +1173,28 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <svg class="plot" id="tx-trellis" viewBox="0 0 660 212" role="img" aria-label="Routes through five blanks, with the model's conditional probabilities and the marked route highlighted; the last blank is nearly forced" style="display:block; margin:0 auto; min-width:600px; max-width:660px;"></svg>
       </div>
     </div>
+
+    <details class="why">
+      <summary>Why does a repeated context go unmarked?</summary>
+      <div class="why-body">
+        <p>At one key and one four-word history, the scoring functions are fixed, and so the
+        tournament prefers the same words every time that history returns – turn off repeat
+        masking above and run 2,000 tournaments to watch how far those repeated strikes pull
+        the winners from the model. A tilt that fires once is invisible: the winner is still a word the model
+        offered, and a single draw cannot reveal which conditional produced it. Masking
+        turns that safety into a rule – a history that has already had its tournament passes
+        through unmarked, and so no tilt ever fires twice within a text. In ordinary prose
+        the rule costs little and changes little, because exact four-word repeats are
+        uncommon; it exists so that repetitive text cannot pile one tilt into a visible
+        pattern, and the detector, computing the same mask from the same visible words,
+        always skips the same positions.</p>
+        <p>Tab ⑥ never needed the rule spelled out: its histories are four real numbers,
+        which essentially never recur, and so every tilt fires once by itself. The principle
+        on both tabs is the same – work inside the diversity the source already offers,
+        spend each history's tilt at most once, and let the tilts cancel everywhere except
+        along the key's own score axis, where they all point the same way.</p>
+      </div>
+    </details>
   </section>
 </div>
 
@@ -1459,10 +1520,12 @@ function invCdfIdx(cum, u) {
 function wordCode(j, V) { return wmQ((j + 0.5) / V); }
 /* Repeated-context masking: whenever the four-word history has been
    seen before in the same text, both the embedder and the detector
-   step aside (a plain draw goes out, and no score is counted). A
-   repeated history would replay the same keyed rankings and push the
-   same words again, and with a concentrated pmf those pushes stop
-   averaging out; masking is SynthID-Text's own remedy. Both sides
+   step aside (a plain draw goes out, and no score is counted). At a
+   fixed key and history the tournament's tilt is fixed, and so a
+   recurring history would replay the identical tilt. One firing per
+   history is invisible (a single draw cannot reveal its conditional),
+   and the mask makes the one-firing rule a guarantee rather than a
+   statistical tendency; this is SynthID-Text's own rule. Both sides
    compute the mask from the visible words alone, and so they always
    agree on which positions carry the mark. */
 function makeWordTournament(base, key, rounds, probs) {
@@ -3129,7 +3192,7 @@ function drawScoreHist(scores, mean, id) {
 var TX_WORDS = ['sunshine', 'clouds', 'rain', 'waves', 'fog', 'light', 'stars',
                 'snow', 'lightning', 'gulls', 'rainbows', 'ships', 'nothing', 'dragons'];
 var TX_PROBS = [0.30, 0.14, 0.12, 0.10, 0.08, 0.07, 0.05, 0.04, 0.03, 0.025, 0.02, 0.01, 0.01, 0.005];
-var TX_N = 200, TX_ROUNDS = 3, TX_GOF_N = 4000;
+var TX_N = 4000, TX_ROUNDS = 3;
 var TX_CUM = (function () {
   var c = [], a = 0;
   for (var j = 0; j < TX_PROBS.length; j++) { a += TX_PROBS[j]; c.push(a); }
@@ -3153,19 +3216,20 @@ var TXC_DICT = (function () {
   });
   return d;
 })();
-var txc = { ci: 0, winner: null, gen: null };
+var txc = { ci: 0, winner: null, gen: null, obs: null, note: '' };
 
 function txcCodes() {
   var last4 = TXC_PRESETS[txc.ci].last4;
   return last4.map(function (w) { return wordCode(TXC_DICT.indexOf(w), TXC_DICT.length); });
 }
 
-function txcScores(key) {
+/* Every vocabulary word's three round scores for the current context. */
+function txcScoreRows(key) {
   var q = txcCodes(), V = TX_WORDS.length, out = [];
   for (var j = 0; j < V; j++) {
-    var sc = 0;
-    for (var r = 1; r <= TX_ROUNDS; r++) sc += twScore(key, r, q[0], q[1], q[2], q[3], wordCode(j, V));
-    out.push(sc / TX_ROUNDS);
+    var row = [];
+    for (var r = 1; r <= TX_ROUNDS; r++) row.push(twScore(key, r, q[0], q[1], q[2], q[3], wordCode(j, V)));
+    out.push(row);
   }
   return out;
 }
@@ -3179,12 +3243,72 @@ function txcRender() {
   html += '<span class="ctx-blank">' + (txc.winner === null ? '&nbsp;' : TX_WORDS[txc.winner]) + '</span>&hairsp;.';
   document.getElementById('txc-sent').innerHTML = html;
   var key = wtParseKey('tx-key');
-  drawBlankChart('txc-chart', TX_PROBS, TX_WORDS, key === null ? null : txcScores(key), txc.winner);
+  drawBlankChart('txc-chart', TX_PROBS, TX_WORDS, txc.winner, txc.obs);
+  document.getElementById('txc-note').innerHTML = txc.note || '';
+  /* the per-word score table for this context, winner row highlighted */
+  var rows = ['<tr><th>word</th><th>s<sub>1</sub></th><th>s<sub>2</sub></th><th>s<sub>3</sub></th><th>mean</th></tr>'];
+  if (key !== null) {
+    var sr = txcScoreRows(key);
+    for (var j = 0; j < TX_WORDS.length; j++) {
+      var on = j === txc.winner;
+      var style = on ? ' style="color:' + C.est + '; font-weight:700;"' : '';
+      rows.push('<tr><td class="wrd"' + style + '>' + TX_WORDS[j] + '</td>' +
+                sr[j].map(function (s) { return '<td class="num"' + style + '>' + s.toFixed(2).slice(1) + '</td>'; }).join('') +
+                '<td class="num"' + style + '>' + ((sr[j][0] + sr[j][1] + sr[j][2]) / 3).toFixed(2).slice(1) + '</td></tr>');
+    }
+  }
+  document.getElementById('txc-tbl').innerHTML = rows.join('');
+}
+
+/* The repeat demo: 2,000 runs at this same blank. With repeat masking
+   on (the real scheme's rule), only the first run gets the tournament
+   and the rest are plain draws, and so the shares match the model;
+   with masking off, the identical tilt fires all 2,000 times, and the
+   distortion becomes visible. */
+function txcRepeat() {
+  var key = wtParseKey('tx-key');
+  if (key === null) { txcRender(); return; }
+  var masked = document.getElementById('txc-mask').checked;
+  var V = TX_WORDS.length, N = 2000, counts = new Array(V).fill(0);
+  var q = txcCodes();
+  for (var t = 0; t < N; t++) {
+    var w;
+    if (masked && t > 0) {
+      w = invCdfIdx(TX_CUM, txc.gen.next());
+    } else {
+      var cand = [];
+      for (var i = 0; i < (1 << TX_ROUNDS); i++) cand.push(invCdfIdx(TX_CUM, txc.gen.next()));
+      for (var r = 1; r <= TX_ROUNDS; r++) {
+        var nxt = [];
+        for (i = 0; i < cand.length; i += 2) {
+          var sa = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i], V));
+          var sb = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i + 1], V));
+          nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
+        }
+        cand = nxt;
+      }
+      w = cand[0];
+    }
+    counts[w]++;
+  }
+  var chi = 0;
+  for (var j = 0; j < V; j++) {
+    var e = N * TX_PROBS[j];
+    chi += (counts[j] - e) * (counts[j] - e) / e;
+  }
+  var pv = chiSqUpperP(chi, V - 1);
+  var ptxt = pv < 1e-4 ? 'χ² p < 0.0001' : 'χ² p = ' + pv.toFixed(4);
+  txc.winner = null;
+  txc.obs = counts.map(function (c) { return c / N; });
+  txc.note = masked
+    ? 'Repeat masking on: the watermark fired once, and runs 2–2,000 passed through unmarked – ' + ptxt + '.'
+    : 'Repeat masking off: the same tilt fired all 2,000 times – ' + ptxt + '.';
+  txcRender();
 }
 
 function txcRun() {
   var key = wtParseKey('tx-key');
-  if (key === null) return;
+  if (key === null) { txcRender(); return; }
   var q = txcCodes(), V = TX_WORDS.length, cand = [];
   for (var i = 0; i < (1 << TX_ROUNDS); i++) cand.push(invCdfIdx(TX_CUM, txc.gen.next()));
   for (var r = 1; r <= TX_ROUNDS; r++) {
@@ -3197,48 +3321,51 @@ function txcRun() {
     cand = nxt;
   }
   txc.winner = cand[0];
+  txc.obs = null;
+  txc.note = '';
   txcRender();
 }
 
 function txcNext() {
   txc.ci = (txc.ci + 1) % TXC_PRESETS.length;
   txc.winner = null;
-  txcRender();
+  txc.obs = null;
+  txc.note = '';
+  txcRun();   /* a new context arrives already played, like the first one */
 }
 
-/* The blank\'s chart: the model\'s pmf as teal bars (rank-ordered), each
-   word\'s mean keyed score for this context printed above its bar, and
-   the winning word, once drawn, refilled in the sampled orange. */
-function drawBlankChart(id, probs, words, scores, winnerIdx) {
-  var W = 440, H = 230, L = 34, R = 8, T = 8, B = 64;
+/* The blank's chart: the model's pmf as dashed teal levels
+   (rank-ordered), a soft orange wash over the single run's winner, and
+   orange bars for the winners' shares when the repeat demo has run.
+   The word-by-word scores live in the table beneath the chart. */
+function drawBlankChart(id, probs, words, winnerIdx, obs) {
+  var W = 440, H = 210, L = 34, R = 8, T = 8, B = 52;
   var pw = W - L - R, ph = H - T - B, V = probs.length;
-  var yMax = Math.max.apply(null, probs) * 1.22;
+  var top = Math.max.apply(null, obs ? probs.concat(obs) : probs);
+  var yMax = top * 1.22;
   var y = function (d) { return T + ph * (1 - d / yMax); };
   var bw = pw / V;
   var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
   for (var j = 0; j < V; j++) {
     var win = j === winnerIdx;
-    p.push('<rect x="' + (L + j * bw + 1) + '" y="' + y(probs[j]) + '" width="' + (bw - 2) +
-           '" height="' + (T + ph - y(probs[j])) + '" fill="' + (win ? C.est : C.truth) + '" opacity="' + (win ? 0.95 : 0.55) + '"/>');
+    if (obs) {
+      p.push('<rect x="' + (L + j * bw + 1) + '" y="' + y(obs[j]) + '" width="' + (bw - 2) +
+             '" height="' + (T + ph - y(obs[j])) + '" fill="' + C.est + '" opacity="0.82"/>');
+    } else if (win) {
+      /* a full-height wash, not a bar: one run selects a word, and a
+         single draw has no share for a bar to measure */
+      p.push('<rect x="' + (L + j * bw + 1) + '" y="' + T + '" width="' + (bw - 2) +
+             '" height="' + ph + '" fill="' + C.est + '" opacity="0.16"/>');
+    }
+    p.push('<line x1="' + (L + j * bw + 0.5) + '" y1="' + y(probs[j]) + '" x2="' + (L + (j + 1) * bw - 0.5) +
+           '" y2="' + y(probs[j]) + '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
     p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (T + ph + 10) + '" text-anchor="end" font-size="9.5" fill="' +
            (win ? C.est : C.muted) + '"' + (win ? ' font-weight="700"' : '') +
            ' transform="rotate(-40 ' + (L + (j + 0.5) * bw) + ' ' + (T + ph + 10) + ')">' + words[j] + '</text>');
-    /* the word's mean keyed score, upright in its own row beneath the
-       angled label so it reads as a property of the word, not a
-       probability */
-    if (scores) {
-      p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="8.5" ' +
-             'style="font-family:var(--mono)" fill="' + (win ? C.est : C.muted) + '">' +
-             scores[j].toFixed(2).slice(1) + '</text>');
-    }
-  }
-  if (scores) {
-    p.push('<text x="' + (L - 5) + '" y="' + (H - 6) + '" text-anchor="end" font-size="8.5" font-style="italic" fill="' +
-           C.muted + '">score</text>');
   }
   p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) +
          '" stroke="' + C.border + '" stroke-width="1.5"/>');
-  var yt = [0, 0.1, 0.2, 0.3];
+  var yt = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
   for (j = 0; j < yt.length; j++) {
     if (yt[j] > yMax) continue;
     p.push('<text x="' + (L - 5) + '" y="' + (y(yt[j]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' +
@@ -3247,17 +3374,19 @@ function drawBlankChart(id, probs, words, scores, winnerIdx) {
   }
   p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
          '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">probability</text>');
-  /* legend, upper right */
-  p.push('<rect x="' + (W - 196) + '" y="16" width="9" height="9" fill="' + C.truth + '" opacity="0.55"/>');
-  p.push('<text x="' + (W - 183) + '" y="24" font-size="10" fill="' + C.muted + '">model\'s probabilities</text>');
-  p.push('<text x="' + (W - 196) + '" y="40" font-size="9" style="font-family:var(--mono)" fill="' + C.muted + '">.72</text>');
-  p.push('<text x="' + (W - 176) + '" y="40" font-size="10" fill="' + C.muted + '">mean keyed score here</text>');
+  /* legend, tucked into the upper-right corner, with only the orange
+     mark's meaning worded per mode */
+  var LS = W - 173;
+  p.push('<line x1="' + LS + '" y1="20" x2="' + (LS + 9) + '" y2="20" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
+  p.push('<text x="' + (LS + 13) + '" y="24" font-size="10" fill="' + C.muted + '">model\'s probabilities</text>');
+  p.push('<rect x="' + LS + '" y="32" width="9" height="9" fill="' + C.est + '" opacity="' + (obs ? 0.82 : 0.3) + '"/>');
+  p.push('<text x="' + (LS + 13) + '" y="40" font-size="10" fill="' + C.muted + '">' +
+         (obs ? 'share of 2,000 repeated winners' : 'this run\'s winner') + '</text>');
   document.getElementById(id).innerHTML = p.join('');
 }
 
-/* The sequential run: 200 marked words tabulated with their per-round
-   scores, a 4,000-word continuation for the frequency check, and the
-   detector\'s score histogram. */
+/* The sequential run: one 4,000-word marked passage shared by the
+   frequency check and the detector's score histogram. */
 var tx = { key: 0, ws: null };
 
 function txGenerate() {
@@ -3268,40 +3397,8 @@ function txGenerate() {
   }
   tx.key = key;
   tx.ws = genStream(makeWordTournament(makeCMRG(wtSeeds()), key, TX_ROUNDS, TX_PROBS), TX_N);
-  txTable();
-  txStats(key);
+  txStats();
   txTest();
-}
-
-function txTable() {
-  var V = TX_WORDS.length, seen = {};
-  var rows = ['<tr><th>#</th><th>word</th><th>s<sub>1</sub></th><th>s<sub>2</sub></th><th>s<sub>3</sub></th><th>mean</th></tr>'];
-  for (var i = 0; i < tx.ws.length; i++) {
-    var w = tx.ws[i];
-    if (i < 4) {
-      rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] +
-                '</td><td class="num" colspan="4">(pass-through, no history yet)</td></tr>');
-      continue;
-    }
-    var hk = tx.ws[i - 4] + ',' + tx.ws[i - 3] + ',' + tx.ws[i - 2] + ',' + tx.ws[i - 1];
-    if (seen[hk]) {
-      rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] +
-                '</td><td class="num" colspan="4">(context seen before: unmarked, unscored)</td></tr>');
-      continue;
-    }
-    seen[hk] = true;
-    var q1 = wordCode(tx.ws[i - 4], V), q2 = wordCode(tx.ws[i - 3], V);
-    var q3 = wordCode(tx.ws[i - 2], V), q4 = wordCode(tx.ws[i - 1], V);
-    var ss = [], sum = 0;
-    for (var r = 1; r <= TX_ROUNDS; r++) {
-      var s = twScore(tx.key, r, q1, q2, q3, q4, wordCode(w, V));
-      ss.push(s); sum += s;
-    }
-    rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] + '</td>' +
-              ss.map(function (s) { return '<td class="num">' + s.toFixed(2).slice(1) + '</td>'; }).join('') +
-              '<td class="num"><b>' + (sum / TX_ROUNDS).toFixed(2).slice(1) + '</b></td></tr>');
-  }
-  document.getElementById('tx-tbl').innerHTML = rows.join('');
 }
 
 function txTest() {
@@ -3318,7 +3415,8 @@ function txTest() {
               : 'indistinguishable from chance: this key did not mark the text.';
   document.getElementById('tx-result').innerHTML =
     'Key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
-    '</b> over ' + r.n + ' words. Chance is 0.500. z = ' + r.z.toFixed(1) + ' – ' + verdict;
+    '</b> over ' + r.n.toLocaleString('en-US') + ' scored words. Chance is 0.500. z = ' +
+    r.z.toFixed(1) + ' – ' + verdict;
 }
 
 function txWrong() {
@@ -3339,16 +3437,15 @@ function txWrong() {
     'of chance the way the embedding key does.';
 }
 
-/* The companion card: word frequencies of a long marked run against
-   the target pmf, with a goodness-of-fit verdict. */
-function txStats(key) {
-  var big = genStream(makeWordTournament(makeCMRG(wtSeeds()), key, TX_ROUNDS, TX_PROBS), TX_GOF_N);
+/* The companion card: word frequencies of the shared 4,000-word
+   passage against the target pmf, with a goodness-of-fit verdict. */
+function txStats() {
   var V = TX_WORDS.length, counts = new Array(V).fill(0);
-  for (var i = 0; i < big.length; i++) counts[big[i]]++;
-  drawPmf('tx-pmf', counts, TX_PROBS, TX_WORDS, TX_GOF_N);
+  for (var i = 0; i < tx.ws.length; i++) counts[tx.ws[i]]++;
+  drawPmf('tx-pmf', counts, TX_PROBS, TX_WORDS, TX_N);
   var chi = 0;
   for (var j = 0; j < V; j++) {
-    var e = TX_GOF_N * TX_PROBS[j];
+    var e = TX_N * TX_PROBS[j];
     chi += (counts[j] - e) * (counts[j] - e) / e;
   }
   document.getElementById('tx-gof').innerHTML =
@@ -3386,11 +3483,12 @@ function drawPmf(id, counts, probs, words, n) {
   }
   p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
          '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">probability</text>');
-  /* legend, upper right */
-  p.push('<rect x="' + (W - 188) + '" y="16" width="9" height="9" fill="' + C.est + '" opacity="0.82"/>');
-  p.push('<text x="' + (W - 175) + '" y="24" font-size="10" fill="' + C.muted + '">observed frequency</text>');
-  p.push('<line x1="' + (W - 188) + '" y1="36" x2="' + (W - 179) + '" y2="36" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
-  p.push('<text x="' + (W - 175) + '" y="40" font-size="10" fill="' + C.muted + '">target probability</text>');
+  /* legend, tucked into the upper-right corner */
+  var LS = W - 118;
+  p.push('<rect x="' + LS + '" y="16" width="9" height="9" fill="' + C.est + '" opacity="0.82"/>');
+  p.push('<text x="' + (LS + 13) + '" y="24" font-size="10" fill="' + C.muted + '">observed frequency</text>');
+  p.push('<line x1="' + LS + '" y1="36" x2="' + (LS + 9) + '" y2="36" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
+  p.push('<text x="' + (LS + 13) + '" y="40" font-size="10" fill="' + C.muted + '">target probability</text>');
   document.getElementById(id).innerHTML = p.join('');
 }
 
@@ -3416,7 +3514,7 @@ function txTrellis() {
                [0.93, 0.05, 0.02]];
   var X = [70, 200, 330, 460, 590], Y = [74, 116, 158], NC = COLS.length;
   var p = [];
-  /* legend above the columns, so the brackets below stand alone */
+  /* legend above the columns, so that the brackets below stand alone */
   var LY = 15;
   p.push('<line x1="120" y1="' + (LY - 3.5) + '" x2="148" y2="' + (LY - 3.5) + '" stroke="' + C.accent + '" stroke-width="2.5"/>');
   p.push('<text x="155" y="' + LY + '" font-size="10" fill="' + C.muted + '">the marked route – one walk the model offered</text>');
