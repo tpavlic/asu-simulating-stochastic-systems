@@ -1170,15 +1170,16 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             fresh-context word's three round scores from the visible words alone – no
             access to the chain or the generator – and pools them into one mean per key.
             The lineup tests the secret key (the top row) against twenty random wrong
-            keys, key at the left, mean at the right, whiskers two standard errors wide.
+            keys, key at the left, mean at the right, whiskers a 95% confidence
+            interval.
             Wrong keys hug the dashed 0.5 of chance, the key that marked the passage
             stands clear, and an unwatermarked passage leaves every key at chance – a
             single score proves nothing under any key (the table at the left looks just
             as random under the right key), and so a longer passage means tighter
             whiskers and surer verdicts.</div>
           <svg class="plot" id="tx-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means: the secret key in the top row against twenty random wrong keys"></svg>
-          <div class="cv-leg">one row per key, the secret key in the top row – dot and whiskers: detection
-            mean ±2 standard errors</div>
+          <div class="cv-leg">one row per key, the secret key in the top row – dot and whiskers: each key's
+            detection mean with its 95% confidence interval</div>
           <div style="font-size:.78rem; line-height:1.5; color:var(--muted); margin:6px auto 0; max-width:26em;
                display:grid; grid-template-columns:1.2em 1fr; gap:1px 8px; text-align:left;">
             <span style="color:var(--accent); font-weight:700;">✓</span>
@@ -1188,11 +1189,14 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             <span style="font-weight:700;">–</span>
             <span>consistent with chance: z ≤ 3 (p above 0.0013)</span>
           </div>
-          <div class="cv-leg" style="text-align:left; margin-top:8px;">The type-I error
-            rate α ≈ 10<sup>−9</sup> sits deliberately far below the usual 0.05, because a
-            false "detected" accuses an unmarked text: at α = 0.05, this lineup alone
-            would convict an innocent key about once per redraw, and a deployed detector
-            scanning millions of documents would convict thousands a day.</div>
+          <div class="cv-leg" style="text-align:left; margin-top:8px;">A 95% interval
+            misses its truth 5% of the time, and so about one innocent key per redraw
+            slips past 0.5 – watch for it. That is why the verdict does not hang on the
+            intervals: a false "detected" accuses an unmarked text, and so the detection
+            level sits at α ≈ 10<sup>−9</sup>, deliberately far below the usual 0.05, at
+            which this lineup alone would convict an innocent key about once per redraw
+            and a deployed detector scanning millions of documents would convict
+            thousands a day.</div>
           <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
           <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
             mechanism of Google's
@@ -1230,19 +1234,19 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <details class="why">
-      <summary>Why does a repeated context go unmarked?</summary>
+      <summary>Why does masking skip a repeated context?</summary>
       <div class="why-body">
-        <p>At one key and one four-word history, the scoring functions are fixed, and so the
-        tournament prefers the same words every time that history returns – turn off repeat
-        masking above and run 2,000 tournaments to watch how far those repeated strikes pull
-        the winners from the model. A tilt that fires once is invisible: the winner is still a word the model
-        offered, and a single draw cannot reveal which conditional produced it. Masking
-        turns that safety into a rule – a history that has already had its tournament passes
-        through unmarked, and so no tilt ever fires twice within a text. In ordinary prose
-        the rule costs little and changes little, because exact four-word repeats are
-        uncommon; it exists so that repetitive text cannot pile one tilt into a visible
-        pattern, and the detector, computing the same mask from the same visible words,
-        always skips the same positions.</p>
+        <p>Because a tilt that fires once is invisible, and a tilt that fires twice is the
+        same tilt twice. The winner of a single tournament is still a word the model
+        offered, and one draw cannot reveal which conditional produced it; the repeat demo
+        above shows what surrendering that safety costs. Masking turns the safety into a
+        rule – each four-word history gets its tournament at most once per text – and the
+        detector, computing the same mask from the same visible words, skips exactly the
+        same positions. How often the rule bites depends on the vocabulary: in this
+        widget's 230-word world, a third of the words in a few pages land on a used
+        history, whereas in a real model's hundred-thousand-word vocabulary exact
+        four-word repeats are rare outside genuinely repetitive text – the very text
+        where a repeated tilt would otherwise pile into a visible pattern.</p>
         <p>Tab ⑥ never needed the rule spelled out: its histories are four real numbers,
         which essentially never recur, and so every tilt fires once by itself. The principle
         on both tabs is the same – work inside the diversity the source already offers,
@@ -1623,19 +1627,28 @@ function makeWordTournament(base, key, rounds, probs) {
    n counts the scored words, and each contributes the same number of
    scores. */
 function wordDetect(ws, key, rounds, V) {
-  var sum = 0, n = 0, seen = {};
+  var sum = 0, sumsq = 0, n = 0, seen = {};
   for (var i = 4; i < ws.length; i++) {
     var hk = ws[i - 4] + ',' + ws[i - 3] + ',' + ws[i - 2] + ',' + ws[i - 1];
     if (seen[hk]) continue;
     seen[hk] = true;
     var q1 = wordCode(ws[i - 4], V), q2 = wordCode(ws[i - 3], V);
     var q3 = wordCode(ws[i - 2], V), q4 = wordCode(ws[i - 1], V);
-    for (var r = 1; r <= rounds; r++) sum += twScore(key, r, q1, q2, q3, q4, wordCode(ws[i], V));
+    for (var r = 1; r <= rounds; r++) {
+      var sc = twScore(key, r, q1, q2, q3, q4, wordCode(ws[i], V));
+      sum += sc;
+      sumsq += sc * sc;
+    }
     n++;
   }
-  var mean = n ? sum / (rounds * n) : 0.5;
-  var seNull = n ? Math.sqrt(1 / (12 * rounds * n)) : 1;
-  return { n: n, mean: mean, z: (mean - 0.5) / seNull };
+  var m = rounds * n;
+  var mean = n ? sum / m : 0.5;
+  /* the z statistic tests against the null, whose spread is known
+     (uniform scores, sd = 1/sqrt(12)); the confidence interval uses
+     the sample sd, which the marked key's tilted scores change */
+  var seNull = n ? Math.sqrt(1 / (12 * m)) : 1;
+  var se = m > 1 ? Math.sqrt((sumsq - m * mean * mean) / (m - 1) / m) : 1;
+  return { n: n, mean: mean, z: (mean - 0.5) / seNull, se: se };
 }
 
 /* ── A tiny Markov language model (tab 7) ────────────────────────────
@@ -3644,7 +3657,8 @@ function txcRepeat() {
   }
   var pv = chiSqUpperP(chi, V - 1);
   var ptxt = pv < 1e-4 ? 'χ² p < 0.0001' : 'χ² p = ' + pv.toFixed(4);
-  txc.winner = null;
+  /* run 1 is the bracket's run, and so its winner fills the blank */
+  txc.winner = txc.bracket.cols[TX_ROUNDS][0];
   txc.obs = counts.map(function (c) { return c / N; });
   txc.note = masked
     ? 'Repeat masking on: the watermark fired once, and runs 2–2,000 passed through unmarked – ' + ptxt + '.'
@@ -3852,7 +3866,6 @@ function drawKeyLineup(entKey, entDet) {
   var L = 78, Rb = 336;
   var xMin = 0.38, xMax = 0.66;
   var x = function (d) { return L + (Rb - L) * (Math.min(xMax, Math.max(xMin, d)) - xMin) / (xMax - xMin); };
-  var se = entDet.n ? Math.sqrt(1 / (12 * MK_ROUNDS * entDet.n)) : 0;
   var p = ['<rect x="' + L + '" y="' + T + '" width="' + (Rb - L) + '" height="' + (n * rowH) + '" fill="' + C.chartBg + '"/>'];
   p.push('<text x="' + (L - 8) + '" y="' + (T - 6) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">key</text>');
   p.push('<text x="' + (Rb + 10) + '" y="' + (T - 6) + '" font-size="9" fill="' + C.muted + '">mean</text>');
@@ -3861,7 +3874,7 @@ function drawKeyLineup(entKey, entDet) {
     var cy = T + (i + 0.5) * rowH;
     if (mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
                      '" fill="' + C.accent + '" opacity="0.07"/>');
-    p.push('<line x1="' + x(det.mean - 2 * se) + '" y1="' + cy + '" x2="' + x(det.mean + 2 * se) + '" y2="' + cy +
+    p.push('<line x1="' + x(det.mean - 1.96 * det.se) + '" y1="' + cy + '" x2="' + x(det.mean + 1.96 * det.se) + '" y2="' + cy +
            '" stroke="' + col + '" stroke-width="2"/>');
     p.push('<circle cx="' + x(det.mean) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>');
     p.push('<text x="' + (L - 8) + '" y="' + (cy + 3) + '" text-anchor="end" font-size="9.5"' +

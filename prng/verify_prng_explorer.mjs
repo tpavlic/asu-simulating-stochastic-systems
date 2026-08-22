@@ -775,6 +775,14 @@ section('Watermark: Markov-chain text');
   const dp = P.wordDetect(plain.ids, KEY, R3, V);
   check('unwatermarked text detects at chance (|z| = ' + Math.abs(dp.z).toFixed(1) + ')',
         Math.abs(dp.z) < 4.5);
+  /* the lineup's confidence interval uses the sample sd; on unmarked
+     text the scores are uniform, and so it must agree with the known
+     null width to within a few percent */
+  {
+    const seNull = Math.sqrt(1 / (12 * R3 * dp.n));
+    check('the sample-sd interval width matches the null width on unmarked text (ratio ' +
+          (dp.se / seNull).toFixed(3) + ')', Math.abs(dp.se / seNull - 1) < 0.05);
+  }
   /* The entropy lesson: a higher-order chain leaves less room for the
      key, because more of its contexts force a single continuation. */
   const g1 = gen(1, 1500, true, 11), g3 = gen(3, 1500, true, 11);
