@@ -692,6 +692,47 @@ section('Watermark: word-level tournament');
   const chiBig = gof(big, 20000);
   check('marked text keeps the word distribution at n = 20,000 (chi = ' + chiBig.toFixed(1) +
         ', df = 13)', chiBig < 34.528);
+  /* The tilt at one frozen history is real and large: repeat the same
+     blank many times under one key and the winner distribution leaves
+     the pmf by orders of magnitude, whereas a fresh history per run
+     cancels the tilts. This is the fact behind repeated-context
+     masking, and the widget's frozen-vs-fresh repeat demo shows it. */
+  {
+    const cum = []; let a = 0;
+    for (const p of PROBS) { a += p; cum.push(a); }
+    cum[V - 1] = 1;
+    const inv = u => { for (let j = 0; j < V; j++) if (u < cum[j]) return j; return V - 1; };
+    const rng = mulberry32(20260822);
+    const runOnce = (q) => {
+      let cand = [];
+      for (let i = 0; i < 8; i++) cand.push(inv(rng()));
+      for (let r = 1; r <= R3; r++) {
+        const nxt = [];
+        for (let i = 0; i < cand.length; i += 2) {
+          const sa = P.twScore(KEY, r, q[0], q[1], q[2], q[3], P.wordCode(cand[i], V));
+          const sb = P.twScore(KEY, r, q[0], q[1], q[2], q[3], P.wordCode(cand[i + 1], V));
+          nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
+        }
+        cand = nxt;
+      }
+      return cand[0];
+    };
+    const NREP = 20000, qFix = [1234567, 7654321, 2222222, 9999999];
+    const frozen = [];
+    for (let t = 0; t < NREP; t++) frozen.push(runOnce(qFix));
+    const chiFrozen = gof(frozen, NREP);
+    check('a frozen history repeated ' + NREP.toLocaleString('en-US') +
+          ' times visibly distorts the pmf (chi = ' + chiFrozen.toFixed(0) + ')', chiFrozen > 300);
+    const fresh = [];
+    for (let t = 0; t < NREP; t++) {
+      const q = [Math.floor(rng() * 2 ** 32) >>> 0, Math.floor(rng() * 2 ** 32) >>> 0,
+                 Math.floor(rng() * 2 ** 32) >>> 0, Math.floor(rng() * 2 ** 32) >>> 0];
+      fresh.push(runOnce(q));
+    }
+    const chiFresh = gof(fresh, NREP);
+    check('a fresh history each run keeps the pmf (chi = ' + chiFresh.toFixed(1) + ')',
+          chiFresh < 34.528);
+  }
   /* Calibration: the GOF test on marked text must keep rejecting at
      about its nominal 5% rate across keys and seeds. */
   const reps = Math.max(60, Math.floor(CALIB_REPS / 10));
@@ -705,6 +746,51 @@ section('Watermark: word-level tournament');
   check('word-distribution GOF rejects marked text at ~5% (got ' + (100 * rGof).toFixed(1) + '%)',
         rGof >= 0 && rGof < 0.12);
 }
+
+section('Watermark: Markov-chain text');
+{
+  /* The corpus is pinned exactly: any edit to it shows up here. */
+  const M1 = P.markovModel(1), M2 = P.markovModel(2), M3 = P.markovModel(3);
+  check('the corpus parses to 2,233 tokens over a 228-word vocabulary',
+        MK_TOKENS(P) === 2233 && M1.vocab.length === 228);
+  const KEY = 271828, R3 = 3;
+  const gen = (order, n, marked, seedA) =>
+    P.markovGenerate(P.makeCMRG([BigInt(seedA), 22n, 33n, 44n, 55n, 66n]), KEY, R3, order, n, marked);
+  const a = gen(2, 1500, true, 11), b = gen(2, 1500, true, 11);
+  check('generation is reproducible from seeds, key, and order',
+        a.ids.length === b.ids.length && a.ids.every((v, i) => v === b.ids[i]));
+  const V = M1.vocab.length;
+  const d = P.wordDetect(a.ids, KEY, R3, V);
+  check('the detector scores exactly the embedder\'s tournament positions (' +
+        d.n + ' of ' + a.ids.length + ' tokens)', d.n === a.tournaments);
+  check('correct key detects far above chance at order 2 (z = ' + d.z.toFixed(1) + ')', d.z > 6);
+  let wrongOk = true, maxAbsZ = 0;
+  for (let i = 0; i < 50; i++) {
+    const dz = P.wordDetect(a.ids, (Math.imul(i + 9, 2654435761) ^ 0x66AA66AA) >>> 0, R3, V);
+    maxAbsZ = Math.max(maxAbsZ, Math.abs(dz.z));
+    if (Math.abs(dz.z) > 4.5) wrongOk = false;
+  }
+  check('50 wrong keys all detect at chance level (max |z| = ' + maxAbsZ.toFixed(1) + ')', wrongOk);
+  const plain = gen(2, 1500, false, 11);
+  const dp = P.wordDetect(plain.ids, KEY, R3, V);
+  check('unwatermarked text detects at chance (|z| = ' + Math.abs(dp.z).toFixed(1) + ')',
+        Math.abs(dp.z) < 4.5);
+  /* The entropy lesson: a higher-order chain leaves less room for the
+     key, because more of its contexts force a single continuation. */
+  const g1 = gen(1, 1500, true, 11), g3 = gen(3, 1500, true, 11);
+  const ff = (g) => g.forced / g.tournaments;
+  check('the forced fraction rises with the chain order (' +
+        (100 * ff(g1)).toFixed(0) + '% < ' + (100 * ff(a)).toFixed(0) + '% < ' +
+        (100 * ff(g3)).toFixed(0) + '%)', ff(g1) < ff(a) && ff(a) < ff(g3));
+  /* Preservation against the chain's own conditionals: marked or not,
+     about 5% of the passage's testable contexts should be flagged. */
+  const long = gen(2, 20000, true, 7);
+  const dev = P.markovDeviation(long.ids, 2, 40);
+  check('marked text deviates from the chain\'s conditionals at ~5% of testable contexts (' +
+        dev.flagged + ' of ' + dev.tested + ')',
+        dev.tested >= 30 && dev.flagged / dev.tested < 0.15);
+}
+function MK_TOKENS(P) { return P.MK_CORPUS.trim().split(/\s+/).length; }
 
 /* ── Summary ───────────────────────────────────────────────────────── */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
