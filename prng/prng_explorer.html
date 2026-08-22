@@ -8,22 +8,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pseudorandom Number Explorer — interactive explainer</title>
-<meta name="description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+<meta name="description" content="Interactive explorer for pseudorandom number generation: step through LCGs, combined generators, and MRG32k3a, and test the streams for uniformity and independence. Four further tabs build up watermarking – from parameter fingerprints and keyed re-seeding to SynthID-style tournament sampling, ending with a tiny in-page language model whose marked prose a keyed detector reads back.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Pseudorandom Number Explorer — interactive explainer">
-<meta property="og:description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+<meta property="og:description" content="Interactive explorer for pseudorandom number generation: step through LCGs, combined generators, and MRG32k3a, and test the streams for uniformity and independence. Four further tabs build up watermarking – from parameter fingerprints and keyed re-seeding to SynthID-style tournament sampling, ending with a tiny in-page language model whose marked prose a keyed detector reads back.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer-preview.png">
-<meta property="og:image:width" content="2400">
-<meta property="og:image:height" content="1200">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="600">
 <meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer.html">
 <meta property="fb:app_id" content="2385695445236853">
 
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Pseudorandom Number Explorer — interactive explainer">
-<meta name="twitter:description" content="Interactive explorer for pseudorandom number generation: step through the arithmetic of a linear congruential generator by hand, and then test the same stream for uniformity with chi-square and Kolmogorov-Smirnov and for independence with lattice plots at any lag. The two properties can fail separately, and a famous generator in the presets fails only one.">
+<meta name="twitter:description" content="Interactive explorer for pseudorandom number generation: step through LCGs, combined generators, and MRG32k3a, and test the streams for uniformity and independence. Four further tabs build up watermarking – from parameter fingerprints and keyed re-seeding to SynthID-style tournament sampling, ending with a tiny in-page language model whose marked prose a keyed detector reads back.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/prng/prng_explorer-preview.png">
 
 <!-- Google Analytics -->
@@ -550,7 +550,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="sec-hd">Combining LCGs extends the period</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The combined state repeats
           only when both components line up again at the same moment, like two turn signals
-          blinking at different rates, or two sustained tones at slightly different pitches
+          blinking at different rates or two sustained tones at slightly different pitches
           making a slow, audible beat: each cycle on its own is short, but the pair realigns
           only rarely. When the two periods share few factors, the wait is nearly their
           product.</div>
@@ -593,7 +593,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         factor with m; every state then has a unique predecessor, and every orbit is a pure
         loop with no lead-in. When a and m share a factor, information is destroyed at each
         step. With a = 2 and m = 26, for example, the states x and x + 13 collide into the
-        same next state, and after one step every reachable state is even, and so an odd seed
+        same next state, and after one step, every reachable state is even, and so an odd seed
         such as 1 can never come back. Well-designed generators choose parameters that keep
         the update reversible, and so no state is wasted on a tail; RANDU's even seeds falling
         into shorter cycles (tab ①) are this same phenomenon in another costume.</p>
@@ -889,7 +889,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" style="text-align:left;">The tournament never invents a value
           and never vetoes one: it only chooses among draws the generator underneath (here
           MRG32k3a) was already willing to make, working inside the diversity the stream
-          already offers. At any one history the choice is genuinely tilted toward the
+          already offers. At any one history, the choice is genuinely tilted toward the
           values the keyed rules score highly – that tilt is the watermark – but a history
           of four real numbers essentially never recurs, and so each tilt fires exactly
           once, and across histories the tilts point in unrelated directions and cancel:
@@ -1021,7 +1021,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         recomputes those scores reads precisely that preference. What keeps the preference
         out of the histogram is that no tilt ever fires twice: a history of four real
         numbers essentially never recurs, each tilted conditional contributes one draw, and
-        one draw with unchanged support reveals nothing. Across histories the tilts point in
+        one draw with unchanged support reveals nothing. Across histories, the tilts point in
         unrelated directions in value space and cancel; along the score axis, which only the
         key exposes, they all point the same way – that is the detector's axis. Tab ⑦ meets
         the same rule with a fourteen-word vocabulary, where histories do recur and the rule
@@ -1051,7 +1051,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       number: line up the words' probabilities along [0, 1], and the draw picks the word
       whose slice it lands in (the inverse-transform method). A keyed scoring function is
       just as indifferent: it scores a word's identity the way it scored a candidate
-      number. So the tournament runs unchanged – draw eight candidate words from the
+      number. The tournament therefore runs unchanged – draw eight candidate words from the
       model's distribution, play three keyed rounds, and emit the winner.</div>
 
     <div class="viz-row">
@@ -1071,7 +1071,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           out.</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:2px;">
           <b>A repeated history is where the mark would show, and so the scheme masks
-          it.</b> At one fixed history the key's tilt is consistent, and "Run 2,000
+          it.</b> At one fixed history, the key's tilt is consistent, and "Run 2,000
           tournaments" repeats exactly that worst case: with repeat masking on – the real
           scheme's rule – only the first run is watermarked, the other 1,999 pass through
           unmarked, and the winners' shares sit back on the dashed levels; turn masking
@@ -1499,7 +1499,7 @@ function makeTournament(base, key, rounds) {
 }
 /* Detection: for every position with four predecessors, average the R
    keyed round scores of the emitted value; report the overall mean.
-   Under a wrong key the scores behave as independent uniforms, and so
+   Under a wrong key, the scores behave as independent uniforms, and so
    the mean of R of them has variance 1/(12 R), which sets the null
    standard error behind z. */
 function twDetect(us, key, rounds) {
@@ -1580,7 +1580,7 @@ function wordCode(j, V) { return wmQ((j + 0.5) / V); }
 /* Repeated-context masking: whenever the four-word history has been
    seen before in the same text, both the embedder and the detector
    step aside (a plain draw goes out, and no score is counted). At a
-   fixed key and history the tournament's tilt is fixed, and so a
+   fixed key and history, the tournament's tilt is fixed, and so a
    recurring history would replay the identical tilt. One firing per
    history is invisible (a single draw cannot reveal its conditional),
    and the mask makes the one-firing rule a guarantee rather than a

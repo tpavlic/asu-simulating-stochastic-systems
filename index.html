@@ -300,6 +300,7 @@
       <ul>
         <!-- Each topic section needs a link here AND a matching one in #nav-drawer below. -->
         <li><a href="#monte-carlo">Monte Carlo</a></li>
+        <li><a href="#prng">Random Numbers</a></li>
         <li><a href="#input-modeling">Input Modeling</a></li>
         <li><a href="#output-analysis">Output Analysis</a></li>
         <li><a href="#more">More from Ted Pavlic</a></li>
@@ -346,6 +347,31 @@
       </li>
 
       <!-- Add more Monte Carlo demos here -->
+
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       Pseudorandom Number Generation
+  ═══════════════════════════════════════════════════════ -->
+  <section id="prng" class="demo-section">
+    <h2>Pseudorandom Number Generation</h2>
+    <ul class="demo-list">
+
+      <li>
+        <a class="demo-row" href="prng/prng_explorer.html">
+          <img class="demo-thumb"
+               src="prng/prng_explorer-preview.png"
+               alt="Pseudorandom Number Explorer preview"
+               width="120" height="60">
+          <div class="demo-text">
+            <h3>Pseudorandom Number Explorer — interactive explainer</h3>
+            <p>Why do simulations use deterministic “random” numbers, and how are they made? Step through LCGs, combined generators, and the MRG32k3a inside production simulation tools, testing every stream for uniformity and independence – including the special angle that exposes RANDU's planes. Four further tabs turn that determinism into watermarks: parameter fingerprints, keyed re-seeding, and the tournament sampling behind Google's SynthID for LLM text, ending with a tiny in-page language model whose marked prose a keyed detector picks out of a twenty-one-key lineup.</p>
+          </div>
+        </a>
+      </li>
+
+      <!-- Add more pseudorandom-number demos here -->
 
     </ul>
   </section>
@@ -451,6 +477,7 @@
     <ul>
       <!-- Keep this list in sync with the .side-nav list above. -->
       <li><a href="#monte-carlo">Monte Carlo</a></li>
+      <li><a href="#prng">Random Numbers</a></li>
       <li><a href="#input-modeling">Input Modeling</a></li>
       <li><a href="#output-analysis">Output Analysis</a></li>
       <li><a href="#more">More from Ted Pavlic</a></li>

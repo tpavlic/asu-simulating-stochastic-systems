@@ -28,6 +28,12 @@ below.
 | --- | --- |
 | [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, area from a walking robot's crossing trails, and Monte Carlo integration, with accumulating 95% confidence intervals |
 
+### Pseudorandom Number Generation
+
+| Directory | Description |
+| --- | --- |
+| [`prng/`](prng/) | Pseudorandom number generation and watermarking: LCG arithmetic step by step, uniformity (chi-square, K–S) and independence (lattice plots, RANDU's planes) testing, combined LCGs and MRG32k3a with streams and substreams, and then watermarks built in four stages – parameter fingerprints, keyed re-seeding, SynthID-style tournament sampling, and an embedded Markov language model whose marked text a keyed detector reads back |
+
 ### Input Modeling
 
 | Directory | Description |
