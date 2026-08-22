@@ -68,13 +68,26 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .wh-copy  { margin-left: auto; font-size: .72rem; color: var(--muted); white-space: nowrap; }
 .wh-copy a { color: var(--accent); text-decoration: none; }
 .wh-copy a:hover { text-decoration: underline; }
-.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 4px 0 14px; }
+.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 4px 0 14px; align-items: flex-end; }
 .tab {
   font-family: 'Outfit', sans-serif; font-size: .85rem; font-weight: 500;
   padding: 7px 11px; border: 2px solid transparent; border-bottom: none;
   border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
   cursor: pointer; margin-bottom: -2px; transition: .15s;
   white-space: nowrap; flex-shrink: 0; min-height: 24px;
+}
+/* The four watermark tabs sit under one bracket: a thin overline with a
+   centered small-caps label, so that the strip stays short without
+   repeating "Watermarks" in every tab title. */
+.tab-group { position: relative; display: flex; gap: 3px; padding-top: 17px; margin-left: 8px; }
+.tab-group::before {
+  content: ''; position: absolute; top: 10px; left: 6px; right: 6px;
+  border-top: 1.5px solid var(--border);
+}
+.tab-group-lbl {
+  position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+  font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); background: var(--bg); padding: 0 7px; white-space: nowrap;
 }
 .tab.active { background: var(--card); color: var(--accent); font-weight: 700; border-color: var(--accent); border-bottom-color: var(--card); }
 .tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
@@ -88,7 +101,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
    sooner, because media-query em tracks the browser default. */
-@media (max-width: 64em) {
+@media (max-width: 56em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -187,6 +200,22 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
 .rec-line b { color: var(--accent); font-weight: 600; }
 .rec-line .dim { color: var(--muted); }
 .plot-ttl { font-weight: 700; font-size: .95rem; color: var(--text); margin: 12px 0 0; text-align: left; }
+/* Tab 7: the completion sentence, with the last four words labeled as
+   the watermark's history, and the scrollable scores table. */
+.ctx-sent { font-size: 1rem; line-height: 2.1; margin: 14px 0 6px; }
+.ctx-w { display: inline-block; position: relative; margin: 0 1px; }
+.ctx-lbl { position: absolute; top: -0.95em; left: 50%; transform: translateX(-50%);
+           font-family: 'IBM Plex Mono', monospace; font-size: .6rem; color: var(--muted); white-space: nowrap; }
+.ctx-hist { border-bottom: 2px solid var(--stream); }
+.ctx-blank { display: inline-block; min-width: 5.5em; text-align: center; border-bottom: 2px solid var(--accent);
+             font-weight: 700; color: var(--accent); }
+.tx-tbl-wrap { max-height: 240px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: 7px; }
+.tx-tbl { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.tx-tbl th { position: sticky; top: 0; background: var(--card); color: var(--muted); font-weight: 600;
+             text-align: left; padding: 5px 8px; border-bottom: 1.5px solid var(--border); }
+.tx-tbl td { padding: 2.5px 8px; border-bottom: 1px solid var(--border); }
+.tx-tbl .num { font-family: 'IBM Plex Mono', monospace; font-size: .74rem; color: var(--muted); }
+.tx-tbl .wrd { color: var(--text); }
 /* The state card is a flex column, and so the table wrapper stretches to
    the exact height the parameter card sets for the row; whitespace under
    the table becomes visible rows instead. The max-height caps it in the
@@ -231,17 +260,24 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <button class="tab active" data-tab="gen" onclick="showTab('gen',this)">① The LCG</button>
     <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
     <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
-    <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameter Watermarks</button>
-    <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Re-seeding Watermarks</button>
-    <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournament Watermarks</button>
+    <div class="tab-group">
+      <span class="tab-group-lbl" aria-hidden="true">Watermarks</span>
+      <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameters</button>
+      <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Re-seeding</button>
+      <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournaments</button>
+      <button class="tab" data-tab="tx" onclick="showTab('tx',this)">⑦ Text</button>
+    </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
     <option value="gen">① The LCG</option>
     <option value="clcg">② Combining LCGs</option>
     <option value="mrg">③ MRG &amp; MRG32k3a</option>
-    <option value="wm">④ Parameter Watermarks</option>
-    <option value="rw">⑤ Re-seeding Watermarks</option>
-    <option value="wt">⑥ Tournament Watermarks</option>
+    <optgroup label="Watermarks">
+      <option value="wm">④ Parameters</option>
+      <option value="rw">⑤ Re-seeding</option>
+      <option value="wt">⑥ Tournaments</option>
+      <option value="tx">⑦ Text</option>
+    </optgroup>
   </select>
 
   <!-- ── TAB ①: the generator itself ─────────────────────────────────── -->
@@ -964,22 +1000,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           any test falsely flags). Only the keyed detector, which recomputes the scores,
           separates them.</div>
         <div class="stat-line" id="wt-stats" style="line-height:1.9;"></div>
-        <div class="cv-leg" style="text-align:left; margin-top:10px;">A language model holds
-          a probability distribution over every word it could say next and draws the next
-          word from that distribution, with pseudorandom numbers underneath the draw. The
-          tournament generalizes from uniform numbers to any distribution, including that
-          non-uniform one over words: candidate words are drawn from the model's own
-          distribution, scored by keyed functions of the recent context, and the winner is
-          emitted, with detection averaging the scores over a passage. That is the published
-          mechanism of Google's
-          <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
-          watermark for text
-          (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
-          et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme scaled down
-          to single numbers, and a deployed system differs in many engineering details. The
-          limits are the same at both scales: detection is statistical, and so it
-          needs enough output to stand clear of chance, and editing or paraphrasing the
-          output weakens the signature.</div>
+        <div class="cv-leg" style="text-align:left; margin-top:10px;">Detection is
+          statistical, and so it needs enough output to stand clear of chance; a few hundred
+          values suffice here. The next tab carries this whole scheme from numbers to
+          words.</div>
       </div>
     </div>
 
@@ -1006,6 +1030,109 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         reason – the text itself is all a detector ever gets.</p>
       </div>
     </details>
+  </section>
+
+  <!-- ── TAB ⑦: text watermarks ──────────────────────────────────────── -->
+  <section id="tab-tx" class="tp">
+    <div class="note"><strong>Everything from tab ⑥ carries over to words.</strong> A
+      language model's next word is a draw from a probability distribution over its whole
+      vocabulary, and drawing from any distribution starts from a uniform pseudorandom
+      number: line up the words' probabilities along [0, 1], and the draw picks the word
+      whose slice it lands in (the inverse-transform method). A keyed scoring function is
+      just as indifferent: it scores a word's identity the way it scored a candidate
+      number. So the tournament runs unchanged – draw eight candidate words from the
+      model's distribution, play three keyed rounds, and emit the winner.</div>
+
+    <div class="viz-row">
+      <div class="cv-card" style="flex:1 1 460px; min-width:0;">
+        <div class="sec-hd">One blank, one tournament</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:2px;">A toy model has
+          reached a blank. Its distribution over the next word (teal bars) puts most of the
+          probability on a few words and a little on many others. The last four words of the
+          context are the watermark's history, labeled below; under each candidate word sits
+          its mean keyed score for <em>this</em> context. Run the tournament, and the winner
+          (orange) fills the blank – usually a well-scoring word, and always a legitimate
+          draw.</div>
+        <div class="ctx-sent" id="txc-sent"></div>
+        <div class="ctrl-row" style="margin-bottom:2px;">
+          <label class="ctrl-lbl" for="tx-key">Secret key</label>
+          <input class="par-inp" id="tx-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
+                 spellcheck="false" style="flex:1 1 100px; min-width:90px;" oninput="txcRender()">
+          <button class="btn-run" onclick="txcRun()">Run the tournament</button>
+          <button class="btn-clear" onclick="txcNext()">New context</button>
+        </div>
+        <svg class="plot" id="txc-chart" viewBox="0 0 440 230" role="img" aria-label="The model's distribution over the blank, with each word's keyed score, and the winning word highlighted"></svg>
+      </div>
+      <div class="cv-card" style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column;">
+        <div class="sec-hd">The word distribution survives</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Let the model write
+          on for 4,000 words (each new word is a fresh blank whose history is the last four
+          words emitted), and count what it chose. The tournament only ever chooses among
+          legitimate draws, and so the frequencies track the model's targets, and a
+          chi-square goodness-of-fit test against the distribution stays clean.</div>
+        <div style="margin:auto 0;">
+          <svg class="plot" id="tx-pmf" viewBox="0 0 440 210" role="img" aria-label="Observed word frequencies against target probabilities"></svg>
+          <div class="cv-leg" id="tx-gof"></div>
+        </div>
+        <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
+          mechanism of Google's
+          <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
+          watermark for text
+          (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
+          et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme at toy
+          scale, and a deployed system differs in many engineering details. The limits are
+          the same at both scales: detection is statistical, and so it needs enough words
+          to stand clear of chance, and editing or paraphrasing the text weakens the
+          signature.</div>
+      </div>
+    </div>
+
+    <div class="viz-row">
+      <div class="cv-card" style="flex:1 1 430px; min-width:0;">
+        <div class="sec-hd">The model writes on, and every word carries scores</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Two hundred draws
+          from the same process, one row per emitted word, with the three round scores that
+          word earns from its own four-word history. The first four words have no history
+          yet and pass through unscored. Any single row proves nothing; the evidence is the
+          average of the mean column, which the next panel reads.</div>
+        <div class="ctrl-row" style="margin-bottom:6px;">
+          <button class="btn-run" onclick="txGenerate()">Generate 200 marked words</button>
+        </div>
+        <div class="tx-tbl-wrap">
+          <table class="tx-tbl" id="tx-tbl"></table>
+        </div>
+      </div>
+      <div class="cv-card" style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column;">
+        <div class="sec-hd">Reading the watermark back</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector recomputes
+          every row's scores from the visible words alone – no access to the model or the
+          generator – and averages them. The embedding key stands far above the 0.5 of
+          chance; any other key sees noise.</div>
+        <div class="ctrl-row" style="margin-bottom:6px;">
+          <label class="ctrl-lbl" for="tx-cand">Key to test</label>
+          <input class="par-inp" id="tx-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
+                 spellcheck="false" style="flex:1 1 100px; min-width:90px;">
+          <button class="btn-run2" onclick="txTest()">Test key</button>
+          <button class="btn-run2" onclick="txWrong()">Test 20 wrong keys</button>
+        </div>
+        <div style="margin:auto 0;">
+          <svg class="plot" id="tx-shist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-word keyed scores under the tested key"></svg>
+          <div class="cv-leg">per-word mean of the three keyed scores under the tested key</div>
+        </div>
+        <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
+      </div>
+    </div>
+
+    <div class="note"><strong>The watermark lives in the path, not in any word.</strong>
+      Text generation is one blank after another, and each choice becomes part of the next
+      blank's context. The sketch below shows the routes a model could take through four
+      blanks: every route is legitimate text, and the model's probabilities say how likely
+      each one is. The keyed scores only nudge <em>which</em> route gets walked – the marked
+      route (maroon) is one the model could have produced anyway. Each word still shows up
+      at its expected rate over long runs, and what the key-holder reads back is the faint,
+      accumulated dependence between each choice and the four before it.
+      <svg class="plot" id="tx-trellis" viewBox="0 0 660 150" role="img" aria-label="Routes through four blanks, with the marked route highlighted" style="display:block; margin:10px auto 0; max-width:660px;"></svg>
+    </div>
   </section>
 </div>
 
@@ -1315,6 +1442,82 @@ function reseedDetect(us, key) {
     if (reseedNext(key, [us[i - 4], us[i - 3], us[i - 2], us[i - 1]]) === us[i]) hits++;
   }
   return { n: n, hits: hits };
+}
+
+/* ── Word-level tournament (tab 7) ───────────────────────────────────
+   The numeric tournament transplanted onto a pmf over a vocabulary:
+   candidates are word indexes drawn by inverse transform from the pmf,
+   their identities enter the keyed rules as the 32-bit code of
+   (index + 1/2) / V, and elimination proceeds exactly as before. The
+   first four words pass through unmarked, and the history is the last
+   four EMITTED word indexes, so that detection reads the text alone. */
+function invCdfIdx(cum, u) {
+  for (var j = 0; j < cum.length; j++) if (u < cum[j]) return j;
+  return cum.length - 1;
+}
+function wordCode(j, V) { return wmQ((j + 0.5) / V); }
+/* Repeated-context masking: whenever the four-word history has been
+   seen before in the same text, both the embedder and the detector
+   step aside (a plain draw goes out, and no score is counted). A
+   repeated history would replay the same keyed rankings and push the
+   same words again, and with a concentrated pmf those pushes stop
+   averaging out; masking is SynthID-Text's own remedy. Both sides
+   compute the mask from the visible words alone, and so they always
+   agree on which positions carry the mark. */
+function makeWordTournament(base, key, rounds, probs) {
+  var cum = [], acc = 0, V = probs.length;
+  for (var j = 0; j < V; j++) { acc += probs[j]; cum.push(acc); }
+  cum[V - 1] = 1;
+  var h4 = [], seen = {};
+  return {
+    next: function () {
+      var w, hk = h4.join(',');
+      if (h4.length < 4 || seen[hk]) {
+        w = invCdfIdx(cum, base.next());
+      } else {
+        seen[hk] = true;
+        var q1 = wordCode(h4[0], V), q2 = wordCode(h4[1], V);
+        var q3 = wordCode(h4[2], V), q4 = wordCode(h4[3], V);
+        var cand = [];
+        for (var i = 0; i < (1 << rounds); i++) cand.push(invCdfIdx(cum, base.next()));
+        for (var r = 1; r <= rounds; r++) {
+          var nxt = [];
+          for (i = 0; i < cand.length; i += 2) {
+            var sa = twScore(key, r, q1, q2, q3, q4, wordCode(cand[i], V));
+            var sb = twScore(key, r, q1, q2, q3, q4, wordCode(cand[i + 1], V));
+            nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
+          }
+          cand = nxt;
+        }
+        w = cand[0];
+      }
+      h4.push(w);
+      if (h4.length > 4) h4.shift();
+      return w;
+    }
+  };
+}
+/* Detection over a word sequence: the same score-averaging as
+   twDetect, with word identity codes in place of quantized values and
+   the same repeated-context mask the embedder used. */
+function wordDetect(ws, key, rounds, V) {
+  var scores = [], sum = 0, n = 0, seen = {};
+  for (var i = 4; i < ws.length; i++) {
+    var hk = ws[i - 4] + ',' + ws[i - 3] + ',' + ws[i - 2] + ',' + ws[i - 1];
+    if (seen[hk]) continue;
+    seen[hk] = true;
+    var q1 = wordCode(ws[i - 4], V), q2 = wordCode(ws[i - 3], V);
+    var q3 = wordCode(ws[i - 2], V), q4 = wordCode(ws[i - 1], V);
+    var sc = 0;
+    for (var r = 1; r <= rounds; r++) sc += twScore(key, r, q1, q2, q3, q4, wordCode(ws[i], V));
+    sc /= rounds;
+    scores.push(sc);
+    sum += sc;
+    n++;
+  }
+  var mean = n ? sum / n : 0.5;
+  var seNull = n ? Math.sqrt(1 / (12 * rounds * n)) : 1;
+  return { n: n, mean: mean, z: (mean - 0.5) / seNull, scores: scores };
 }
 
 /* ── MRG: x_n = (a_1·x_{n-1} + ... + a_k·x_{n-k}) mod m ──────────────
@@ -2883,7 +3086,7 @@ function wtStats() {
 
 /* Histogram of the per-value keyed scores under the tested key, with the
    0.5 chance level and the observed mean marked. */
-function drawScoreHist(scores, mean) {
+function drawScoreHist(scores, mean, id) {
   var W = 420, H = 150, L = 30, R = 8, T = 8, B = 22;
   var pw = W - L - R, ph = H - T - B, K = 24;
   var counts = new Array(K).fill(0);
@@ -2911,7 +3114,311 @@ function drawScoreHist(scores, mean) {
          '" stroke="' + C.border + '" stroke-width="1.5"/>');
   p.push('<text x="' + x(0) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">0</text>');
   p.push('<text x="' + x(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">1</text>');
-  document.getElementById('wt-hist').innerHTML = p.join('');
+  document.getElementById(id || 'wt-hist').innerHTML = p.join('');
+}
+
+/* ── Tab ⑦: text watermarks ──────────────────────────────────────────── */
+/* A toy language model at a single blank: a fixed 14-word completion
+   vocabulary with a concentrated-plus-noise pmf, sampled by inverse
+   transform from MRG32k3a draws and marked by the same three-round
+   tournament as tab 6, with word identities in place of candidate
+   values. The completion card freezes one blank; the sequential cards
+   let the model write on, each new word a fresh blank whose history is
+   the last four words emitted. */
+var TX_WORDS = ['sunshine', 'clouds', 'rain', 'waves', 'fog', 'light', 'stars',
+                'snow', 'lightning', 'gulls', 'rainbows', 'ships', 'nothing', 'dragons'];
+var TX_PROBS = [0.30, 0.14, 0.12, 0.10, 0.08, 0.07, 0.05, 0.04, 0.03, 0.025, 0.02, 0.01, 0.01, 0.005];
+var TX_N = 200, TX_ROUNDS = 3, TX_GOF_N = 4000;
+var TX_CUM = (function () {
+  var c = [], a = 0;
+  for (var j = 0; j < TX_PROBS.length; j++) { a += TX_PROBS[j]; c.push(a); }
+  c[c.length - 1] = 1;
+  return c;
+})();
+
+/* The completion card: preset contexts whose last four words are the
+   watermark history. Context words get identity codes from their own
+   small dictionary, exactly as vocabulary words do from theirs. */
+var TXC_PRESETS = [
+  { pre: 'After the long storm, the', last4: ['harbor', 'town', 'finally', 'saw'] },
+  { pre: 'The sailors said that by', last4: ['morning', 'they', 'would', 'see'] },
+  { pre: 'The old keeper climbed the', last4: ['tower', 'expecting', 'to', 'find'] },
+  { pre: 'By dawn the children ran', last4: ['outside', 'hoping', 'to', 'see'] }
+];
+var TXC_DICT = (function () {
+  var d = [];
+  TXC_PRESETS.forEach(function (p) {
+    p.last4.forEach(function (w) { if (d.indexOf(w) < 0) d.push(w); });
+  });
+  return d;
+})();
+var txc = { ci: 0, winner: null, gen: null };
+
+function txcCodes() {
+  var last4 = TXC_PRESETS[txc.ci].last4;
+  return last4.map(function (w) { return wordCode(TXC_DICT.indexOf(w), TXC_DICT.length); });
+}
+
+function txcScores(key) {
+  var q = txcCodes(), V = TX_WORDS.length, out = [];
+  for (var j = 0; j < V; j++) {
+    var sc = 0;
+    for (var r = 1; r <= TX_ROUNDS; r++) sc += twScore(key, r, q[0], q[1], q[2], q[3], wordCode(j, V));
+    out.push(sc / TX_ROUNDS);
+  }
+  return out;
+}
+
+function txcRender() {
+  var p = TXC_PRESETS[txc.ci], LBL = ['u<sub>n−4</sub>', 'u<sub>n−3</sub>', 'u<sub>n−2</sub>', 'u<sub>n−1</sub>'];
+  var html = p.pre + ' ';
+  for (var i = 0; i < 4; i++) {
+    html += '<span class="ctx-w ctx-hist"><span class="ctx-lbl">' + LBL[i] + '</span>' + p.last4[i] + '</span> ';
+  }
+  html += '<span class="ctx-blank">' + (txc.winner === null ? '&nbsp;' : TX_WORDS[txc.winner]) + '</span>&hairsp;.';
+  document.getElementById('txc-sent').innerHTML = html;
+  var key = wtParseKey('tx-key');
+  drawBlankChart('txc-chart', TX_PROBS, TX_WORDS, key === null ? null : txcScores(key), txc.winner);
+}
+
+function txcRun() {
+  var key = wtParseKey('tx-key');
+  if (key === null) return;
+  var q = txcCodes(), V = TX_WORDS.length, cand = [];
+  for (var i = 0; i < (1 << TX_ROUNDS); i++) cand.push(invCdfIdx(TX_CUM, txc.gen.next()));
+  for (var r = 1; r <= TX_ROUNDS; r++) {
+    var nxt = [];
+    for (i = 0; i < cand.length; i += 2) {
+      var sa = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i], V));
+      var sb = twScore(key, r, q[0], q[1], q[2], q[3], wordCode(cand[i + 1], V));
+      nxt.push(sa >= sb ? cand[i] : cand[i + 1]);
+    }
+    cand = nxt;
+  }
+  txc.winner = cand[0];
+  txcRender();
+}
+
+function txcNext() {
+  txc.ci = (txc.ci + 1) % TXC_PRESETS.length;
+  txc.winner = null;
+  txcRender();
+}
+
+/* The blank\'s chart: the model\'s pmf as teal bars (rank-ordered), each
+   word\'s mean keyed score for this context printed above its bar, and
+   the winning word, once drawn, refilled in the sampled orange. */
+function drawBlankChart(id, probs, words, scores, winnerIdx) {
+  var W = 440, H = 230, L = 34, R = 8, T = 8, B = 52;
+  var pw = W - L - R, ph = H - T - B, V = probs.length;
+  var yMax = Math.max.apply(null, probs) * 1.22;
+  var y = function (d) { return T + ph * (1 - d / yMax); };
+  var bw = pw / V;
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
+  for (var j = 0; j < V; j++) {
+    var win = j === winnerIdx;
+    p.push('<rect x="' + (L + j * bw + 1) + '" y="' + y(probs[j]) + '" width="' + (bw - 2) +
+           '" height="' + (T + ph - y(probs[j])) + '" fill="' + (win ? C.est : C.truth) + '" opacity="' + (win ? 0.95 : 0.55) + '"/>');
+    if (scores) {
+      p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (y(probs[j]) - 4) + '" text-anchor="middle" font-size="8.5" ' +
+             'style="font-family:var(--mono)" fill="' + C.muted + '">' + scores[j].toFixed(2).slice(1) + '</text>');
+    }
+    p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (T + ph + 10) + '" text-anchor="end" font-size="9.5" fill="' +
+           (win ? C.est : C.muted) + '"' + (win ? ' font-weight="700"' : '') +
+           ' transform="rotate(-40 ' + (L + (j + 0.5) * bw) + ' ' + (T + ph + 10) + ')">' + words[j] + '</text>');
+  }
+  p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) +
+         '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  var yt = [0, 0.1, 0.2, 0.3];
+  for (j = 0; j < yt.length; j++) {
+    if (yt[j] > yMax) continue;
+    p.push('<text x="' + (L - 5) + '" y="' + (y(yt[j]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' +
+           yt[j].toFixed(1) + '</text>');
+    p.push('<line x1="' + (L - 3) + '" y1="' + y(yt[j]) + '" x2="' + L + '" y2="' + y(yt[j]) + '" stroke="' + C.muted + '" stroke-width="1"/>');
+  }
+  p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
+         '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">probability</text>');
+  /* legend, upper right */
+  p.push('<rect x="' + (W - 196) + '" y="16" width="9" height="9" fill="' + C.truth + '" opacity="0.55"/>');
+  p.push('<text x="' + (W - 183) + '" y="24" font-size="10" fill="' + C.muted + '">model\'s probabilities</text>');
+  p.push('<text x="' + (W - 196) + '" y="40" font-size="9" style="font-family:var(--mono)" fill="' + C.muted + '">.72</text>');
+  p.push('<text x="' + (W - 176) + '" y="40" font-size="10" fill="' + C.muted + '">mean keyed score here</text>');
+  document.getElementById(id).innerHTML = p.join('');
+}
+
+/* The sequential run: 200 marked words tabulated with their per-round
+   scores, a 4,000-word continuation for the frequency check, and the
+   detector\'s score histogram. */
+var tx = { key: 0, ws: null };
+
+function txGenerate() {
+  var key = wtParseKey('tx-key');
+  if (key === null) {
+    document.getElementById('tx-result').innerHTML = 'A key is a whole number: digits only.';
+    return;
+  }
+  tx.key = key;
+  tx.ws = genStream(makeWordTournament(makeCMRG(wtSeeds()), key, TX_ROUNDS, TX_PROBS), TX_N);
+  txTable();
+  txStats(key);
+  txTest();
+}
+
+function txTable() {
+  var V = TX_WORDS.length, seen = {};
+  var rows = ['<tr><th>#</th><th>word</th><th>s<sub>1</sub></th><th>s<sub>2</sub></th><th>s<sub>3</sub></th><th>mean</th></tr>'];
+  for (var i = 0; i < tx.ws.length; i++) {
+    var w = tx.ws[i];
+    if (i < 4) {
+      rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] +
+                '</td><td class="num" colspan="4">(pass-through, no history yet)</td></tr>');
+      continue;
+    }
+    var hk = tx.ws[i - 4] + ',' + tx.ws[i - 3] + ',' + tx.ws[i - 2] + ',' + tx.ws[i - 1];
+    if (seen[hk]) {
+      rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] +
+                '</td><td class="num" colspan="4">(context seen before: unmarked, unscored)</td></tr>');
+      continue;
+    }
+    seen[hk] = true;
+    var q1 = wordCode(tx.ws[i - 4], V), q2 = wordCode(tx.ws[i - 3], V);
+    var q3 = wordCode(tx.ws[i - 2], V), q4 = wordCode(tx.ws[i - 1], V);
+    var ss = [], sum = 0;
+    for (var r = 1; r <= TX_ROUNDS; r++) {
+      var s = twScore(tx.key, r, q1, q2, q3, q4, wordCode(w, V));
+      ss.push(s); sum += s;
+    }
+    rows.push('<tr><td class="num">' + (i + 1) + '</td><td class="wrd">' + TX_WORDS[w] + '</td>' +
+              ss.map(function (s) { return '<td class="num">' + s.toFixed(2).slice(1) + '</td>'; }).join('') +
+              '<td class="num"><b>' + (sum / TX_ROUNDS).toFixed(2).slice(1) + '</b></td></tr>');
+  }
+  document.getElementById('tx-tbl').innerHTML = rows.join('');
+}
+
+function txTest() {
+  if (!tx.ws) return;
+  var k = wtParseKey('tx-cand');
+  if (k === null) {
+    document.getElementById('tx-result').innerHTML = 'A key is a whole number: digits only.';
+    return;
+  }
+  var r = wordDetect(tx.ws, k, TX_ROUNDS, TX_WORDS.length);
+  drawScoreHist(r.scores, r.mean, 'tx-shist');
+  var verdict = r.z > 6 ? 'far above chance: the text carries this key.'
+              : r.z > 3 ? 'above chance: evidence this key marked the text.'
+              : 'indistinguishable from chance: this key did not mark the text.';
+  document.getElementById('tx-result').innerHTML =
+    'Key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
+    '</b> over ' + r.n + ' words. Chance is 0.500. z = ' + r.z.toFixed(1) + ' – ' + verdict;
+}
+
+function txWrong() {
+  if (!tx.ws) return;
+  var lo = 1, hi = 0, maxAbsZ = 0, last = null;
+  for (var i = 0; i < 20; i++) {
+    var wk;
+    do { wk = Math.floor(Math.random() * 4294967296); } while (wk === tx.key);
+    last = wordDetect(tx.ws, wk, TX_ROUNDS, TX_WORDS.length);
+    lo = Math.min(lo, last.mean);
+    hi = Math.max(hi, last.mean);
+    maxAbsZ = Math.max(maxAbsZ, Math.abs(last.z));
+  }
+  drawScoreHist(last.scores, last.mean, 'tx-shist');
+  document.getElementById('tx-result').innerHTML =
+    '20 random wrong keys: mean scores ' + lo.toFixed(3) + '–' + hi.toFixed(3) +
+    ', largest |z| = ' + maxAbsZ.toFixed(1) + ' (the last one is plotted). None stands clear ' +
+    'of chance the way the embedding key does.';
+}
+
+/* The companion card: word frequencies of a long marked run against
+   the target pmf, with a goodness-of-fit verdict. */
+function txStats(key) {
+  var big = genStream(makeWordTournament(makeCMRG(wtSeeds()), key, TX_ROUNDS, TX_PROBS), TX_GOF_N);
+  var V = TX_WORDS.length, counts = new Array(V).fill(0);
+  for (var i = 0; i < big.length; i++) counts[big[i]]++;
+  drawPmf('tx-pmf', counts, TX_PROBS, TX_WORDS, TX_GOF_N);
+  var chi = 0;
+  for (var j = 0; j < V; j++) {
+    var e = TX_GOF_N * TX_PROBS[j];
+    chi += (counts[j] - e) * (counts[j] - e) / e;
+  }
+  document.getElementById('tx-gof').innerHTML =
+    'goodness-of-fit against the target distribution: χ² p = <b>' +
+    fmtP(chiSqUpperP(chi, V - 1)) + '</b>';
+}
+
+/* Observed frequencies as bars, the target pmf as dashed per-bar
+   levels, word labels angled beneath, and a legend in the empty
+   upper-right corner the rank ordering leaves free. */
+function drawPmf(id, counts, probs, words, n) {
+  var W = 440, H = 210, L = 34, R = 8, T = 8, B = 52;
+  var pw = W - L - R, ph = H - T - B, V = probs.length;
+  var yMax = Math.max.apply(null, probs) * 1.25;
+  var y = function (d) { return T + ph * (1 - d / yMax); };
+  var bw = pw / V;
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
+  for (var j = 0; j < V; j++) {
+    var f = counts[j] / n;
+    p.push('<rect x="' + (L + j * bw + 1) + '" y="' + y(f) + '" width="' + (bw - 2) +
+           '" height="' + (T + ph - y(f)) + '" fill="' + C.est + '" opacity="0.82"/>');
+    p.push('<line x1="' + (L + j * bw + 0.5) + '" y1="' + y(probs[j]) + '" x2="' + (L + (j + 1) * bw - 0.5) +
+           '" y2="' + y(probs[j]) + '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
+    p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (T + ph + 10) + '" text-anchor="end" font-size="9.5" fill="' +
+           C.muted + '" transform="rotate(-40 ' + (L + (j + 0.5) * bw) + ' ' + (T + ph + 10) + ')">' + words[j] + '</text>');
+  }
+  p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) +
+         '" stroke="' + C.border + '" stroke-width="1.5"/>');
+  var yt = [0, 0.1, 0.2, 0.3];
+  for (j = 0; j < yt.length; j++) {
+    if (yt[j] > yMax) continue;
+    p.push('<text x="' + (L - 5) + '" y="' + (y(yt[j]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' +
+           yt[j].toFixed(1) + '</text>');
+    p.push('<line x1="' + (L - 3) + '" y1="' + y(yt[j]) + '" x2="' + L + '" y2="' + y(yt[j]) + '" stroke="' + C.muted + '" stroke-width="1"/>');
+  }
+  p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
+         '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">probability</text>');
+  /* legend, upper right */
+  p.push('<rect x="' + (W - 188) + '" y="16" width="9" height="9" fill="' + C.est + '" opacity="0.82"/>');
+  p.push('<text x="' + (W - 175) + '" y="24" font-size="10" fill="' + C.muted + '">observed frequency</text>');
+  p.push('<line x1="' + (W - 188) + '" y1="36" x2="' + (W - 179) + '" y2="36" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="4,3"/>');
+  p.push('<text x="' + (W - 175) + '" y="40" font-size="10" fill="' + C.muted + '">target probability</text>');
+  document.getElementById(id).innerHTML = p.join('');
+}
+
+/* The path sketch: four blanks, three options each, every route lightly
+   drawn and the marked route picked out in the accent. Static on
+   purpose; the live demos above carry the numbers. */
+function txTrellis() {
+  var COLS = [['the storm', 'a shower', 'the fog'],
+              ['passed', 'lingered', 'returned'],
+              ['slowly', 'at last', 'overnight'],
+              ['before dawn', 'over the hills', 'without warning']];
+  var PATH = [0, 1, 1, 0];   /* "the storm lingered at last before dawn" */
+  var X = [90, 250, 410, 570], Y = [48, 88, 128];
+  var p = [];
+  for (var c = 0; c < 4; c++) {
+    p.push('<text x="' + X[c] + '" y="16" text-anchor="middle" font-size="9.5" font-weight="600" fill="' +
+           C.muted + '">blank ' + (c + 1) + '</text>');
+  }
+  for (c = 0; c < 3; c++) {
+    for (var i = 0; i < 3; i++) {
+      for (var j = 0; j < 3; j++) {
+        var onPath = i === PATH[c] && j === PATH[c + 1];
+        p.push('<line x1="' + (X[c] + 58) + '" y1="' + (Y[i] - 4) + '" x2="' + (X[c + 1] - 58) +
+               '" y2="' + (Y[j] - 4) + '" stroke="' + (onPath ? C.accent : C.border) +
+               '" stroke-width="' + (onPath ? 2.5 : 1) + '"/>');
+      }
+    }
+  }
+  for (c = 0; c < 4; c++) {
+    for (i = 0; i < 3; i++) {
+      var on = i === PATH[c];
+      p.push('<text x="' + X[c] + '" y="' + Y[i] + '" text-anchor="middle" font-size="11.5"' +
+             (on ? ' font-weight="700"' : '') + ' fill="' + (on ? C.accent : C.muted) + '">' +
+             COLS[c][i] + '</text>');
+    }
+  }
+  document.getElementById('tx-trellis').innerHTML = p.join('');
 }
 
 /* ── Arrow-key stepping on the parameter fields ──────────────────────
@@ -2985,6 +3492,10 @@ function renderActive() {
   wkDraw();
   wbNew();
   wtGenerate();
+  txc.gen = makeCMRG(wtSeeds());
+  txcRun();
+  txGenerate();
+  txTrellis();
   Editor('g', LCG_PRESETS, 'minstd', function () {
     streamN = STREAM_START;
     updateFullPeriod();

@@ -653,6 +653,59 @@ section('Watermark: keyed re-seeding');
         rKS >= 0 && rKS < 0.12);
 }
 
+section('Watermark: word-level tournament');
+{
+  /* The widget's vocabulary distribution (tab 7). Goodness-of-fit
+     verdicts use chi-square critical values for df = 13:
+     chi2inv(0.95) = 22.362 and chi2inv(0.999) = 34.528. */
+  const PROBS = [0.30, 0.14, 0.12, 0.10, 0.08, 0.07, 0.05, 0.04, 0.03, 0.025, 0.02, 0.01, 0.01, 0.005];
+  const V = PROBS.length, KEY = 271828, R3 = 3;
+  const gof = (ws, N) => {
+    const c = new Array(V).fill(0);
+    ws.forEach(w => c[w]++);
+    let chi = 0;
+    for (let j = 0; j < V; j++) chi += (c[j] - N * PROBS[j]) ** 2 / (N * PROBS[j]);
+    return chi;
+  };
+  const mk = (key) => P.makeWordTournament(P.makeCMRG([111n, 222n, 333n, 444n, 555n, 666n]), key, R3, PROBS);
+  const ws = P.genStream(mk(KEY), 4000);
+  const again = P.genStream(mk(KEY), 4000);
+  let same = true;
+  for (let i = 0; i < 4000; i++) if (ws[i] !== again[i]) same = false;
+  check('the marked text is reproducible from seeds and key', same);
+  const d = P.wordDetect(ws, KEY, R3, V);
+  check('correct key detects far above chance (mean ' + d.mean.toFixed(3) + ', z = ' +
+        d.z.toFixed(0) + ')', d.mean > 0.6 && d.z > 20);
+  let wrongOk = true, maxAbsZ = 0;
+  for (let i = 0; i < 50; i++) {
+    const dz = P.wordDetect(ws, (Math.imul(i + 5, 2654435761) ^ 0x11BB11BB) >>> 0, R3, V);
+    maxAbsZ = Math.max(maxAbsZ, Math.abs(dz.z));
+    if (Math.abs(dz.z) > 4.5) wrongOk = false;
+  }
+  check('50 wrong keys all detect at chance level (max |z| = ' + maxAbsZ.toFixed(1) + ')', wrongOk);
+  /* rounds = 0 degenerates to plain inverse-transform sampling. */
+  const plain = P.genStream(P.makeWordTournament(P.makeCMRG([111n, 222n, 333n, 444n, 555n, 666n]), KEY, 0, PROBS), 4000);
+  const dp = P.wordDetect(plain, KEY, R3, V);
+  check('unmarked text detects at chance even under the correct key (|z| = ' +
+        Math.abs(dp.z).toFixed(1) + ')', Math.abs(dp.z) < 4.5);
+  const big = P.genStream(mk(KEY), 20000);
+  const chiBig = gof(big, 20000);
+  check('marked text keeps the word distribution at n = 20,000 (chi = ' + chiBig.toFixed(1) +
+        ', df = 13)', chiBig < 34.528);
+  /* Calibration: the GOF test on marked text must keep rejecting at
+     about its nominal 5% rate across keys and seeds. */
+  const reps = Math.max(60, Math.floor(CALIB_REPS / 10));
+  let rej = 0;
+  for (let r = 0; r < reps; r++) {
+    const key = (Math.imul(r + 1, 2654435761) ^ 0x44DD44DD) >>> 0;
+    const base = P.makeCMRG([BigInt(10 + r), 22n, 33n, 44n, 55n, BigInt(66 + r)]);
+    if (gof(P.genStream(P.makeWordTournament(base, key, R3, PROBS), 1000), 1000) > 22.362) rej++;
+  }
+  const rGof = rej / reps;
+  check('word-distribution GOF rejects marked text at ~5% (got ' + (100 * rGof).toFixed(1) + '%)',
+        rGof >= 0 && rGof < 0.12);
+}
+
 /* ── Summary ───────────────────────────────────────────────────────── */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
