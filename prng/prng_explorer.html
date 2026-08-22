@@ -811,13 +811,13 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="rw-key">Secret key</label>
           <input class="par-inp" id="rw-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run" onclick="rwGenerate()">Generate re-seeded stream</button>
         </div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="rw-cand">Key to test</label>
           <input class="par-inp" id="rw-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run2" onclick="rwTest()">Test key</button>
           <button class="btn-run2" onclick="rwWrong()">Test 20 wrong keys</button>
         </div>
@@ -878,7 +878,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wb-key">Key</label>
           <input class="par-inp" id="wb-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;" oninput="wbDraw()">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;" oninput="wbDraw()">
           <button class="btn-clear" onclick="wbNew()">New candidates</button>
         </div>
         <svg class="plot" id="wb-bracket" viewBox="0 0 520 250" role="img" aria-label="Tournament bracket from the source distribution through three keyed rounds to one emitted value"></svg>
@@ -923,7 +923,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="ws-key">Key</label>
           <input class="par-inp" id="ws-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;" oninput="wsDraw()">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;" oninput="wsDraw()">
         </div>
         <div class="rec-line" id="ws-expr"></div>
         <div class="plot-ttl">Scores for one candidate across keys</div>
@@ -945,10 +945,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="ctrl-row" style="margin-bottom:6px;">
             <label class="ctrl-lbl" for="wk-a">Key A</label>
             <input class="par-inp" id="wk-a" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                   spellcheck="false" style="flex:1 1 90px; min-width:80px;" oninput="wkDraw()">
+                   spellcheck="false" style="flex:1 1 90px; min-width:80px; max-width:180px;" oninput="wkDraw()">
             <label class="ctrl-lbl" for="wk-b">Key B</label>
             <input class="par-inp" id="wk-b" type="text" inputmode="numeric" value="314159" autocomplete="off"
-                   spellcheck="false" style="flex:1 1 90px; min-width:80px;" oninput="wkDraw()">
+                   spellcheck="false" style="flex:1 1 90px; min-width:80px; max-width:180px;" oninput="wkDraw()">
           </div>
           <canvas id="wk-cv" aria-label="Scores under key A against scores under key B" style="display:block; margin:0 auto;"></canvas>
           <div class="cv-leg">set key B equal to key A to collapse the cloud onto the diagonal</div>
@@ -977,13 +977,13 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wt-key">Secret key</label>
           <input class="par-inp" id="wt-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run" onclick="wtGenerate()">Generate marked stream</button>
         </div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wt-cand">Key to test</label>
           <input class="par-inp" id="wt-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 110px; min-width:90px;">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run2" onclick="wtTest()">Test key</button>
           <button class="btn-run2" onclick="wtWrong()">Test 20 wrong keys</button>
         </div>
@@ -1057,44 +1057,17 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="ctrl-row" style="margin-bottom:2px;">
           <label class="ctrl-lbl" for="tx-key">Secret key</label>
           <input class="par-inp" id="tx-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 100px; min-width:90px;" oninput="txcRender()">
+                 spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;" oninput="txcRender()">
           <button class="btn-run" onclick="txcRun()">Run the tournament</button>
           <button class="btn-clear" onclick="txcNext()">New context</button>
         </div>
         <svg class="plot" id="txc-chart" viewBox="0 0 440 230" role="img" aria-label="The model's distribution over the blank, with each word's keyed score, and the winning word highlighted"></svg>
-      </div>
-      <div class="cv-card" style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column;">
-        <div class="sec-hd">The word distribution survives</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Let the model write
-          on for 4,000 words (each new word is a fresh blank whose history is the last four
-          words emitted), and count what it chose. The tournament only ever chooses among
-          legitimate draws, and so the frequencies track the model's targets, and a
-          chi-square goodness-of-fit test against the distribution stays clean.</div>
-        <div style="margin:auto 0;">
-          <svg class="plot" id="tx-pmf" viewBox="0 0 440 210" role="img" aria-label="Observed word frequencies against target probabilities"></svg>
-          <div class="cv-leg" id="tx-gof"></div>
-        </div>
-        <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
-          mechanism of Google's
-          <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
-          watermark for text
-          (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
-          et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme at toy
-          scale, and a deployed system differs in many engineering details. The limits are
-          the same at both scales: detection is statistical, and so it needs enough words
-          to stand clear of chance, and editing or paraphrasing the text weakens the
-          signature.</div>
-      </div>
-    </div>
-
-    <div class="viz-row">
-      <div class="cv-card" style="flex:1 1 430px; min-width:0;">
-        <div class="sec-hd">The model writes on, and every word carries scores</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Two hundred draws
+        <div class="plot-ttl" style="margin-top:16px;">The model writes on, and every word carries scores</div>
+        <div class="cv-leg" style="text-align:left; margin:4px 0 8px;">Two hundred draws
           from the same process, one row per emitted word, with the three round scores that
           word earns from its own four-word history. The first four words have no history
           yet and pass through unscored. Any single row proves nothing; the evidence is the
-          average of the mean column, which the next panel reads.</div>
+          average of the mean column, which the detector at the right reads.</div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <button class="btn-run" onclick="txGenerate()">Generate 200 marked words</button>
         </div>
@@ -1102,36 +1075,64 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <table class="tx-tbl" id="tx-tbl"></table>
         </div>
       </div>
-      <div class="cv-card" style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column;">
-        <div class="sec-hd">Reading the watermark back</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector recomputes
-          every row's scores from the visible words alone – no access to the model or the
-          generator – and averages them. The embedding key stands far above the 0.5 of
-          chance; any other key sees noise.</div>
-        <div class="ctrl-row" style="margin-bottom:6px;">
-          <label class="ctrl-lbl" for="tx-cand">Key to test</label>
-          <input class="par-inp" id="tx-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
-                 spellcheck="false" style="flex:1 1 100px; min-width:90px;">
-          <button class="btn-run2" onclick="txTest()">Test key</button>
-          <button class="btn-run2" onclick="txWrong()">Test 20 wrong keys</button>
+      <div style="flex:1 1 330px; min-width:0; display:flex; flex-direction:column; gap:16px;">
+        <div class="cv-card" style="flex:0 0 auto;">
+          <div class="sec-hd">The word distribution survives</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Let the model write
+            on for 4,000 words (each new word is a fresh blank whose history is the last four
+            words emitted), and count what it chose. The dashed levels are the same model
+            probabilities drawn beside the blank at the left; the tournament only ever
+            chooses among legitimate draws, and so the frequencies track them, and a
+            chi-square goodness-of-fit test against the distribution stays clean.</div>
+          <svg class="plot" id="tx-pmf" viewBox="0 0 440 210" role="img" aria-label="Observed word frequencies against target probabilities"></svg>
+          <div class="cv-leg" id="tx-gof"></div>
+          <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
+            mechanism of Google's
+            <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
+            watermark for text
+            (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
+            et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme at toy
+            scale, and a deployed system differs in many engineering details. The limits are
+            the same at both scales: detection is statistical, and so it needs enough words
+            to stand clear of chance, and editing or paraphrasing the text weakens the
+            signature.</div>
         </div>
-        <div style="margin:auto 0;">
-          <svg class="plot" id="tx-shist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-word keyed scores under the tested key"></svg>
-          <div class="cv-leg">per-word mean of the three keyed scores under the tested key</div>
+        <div class="cv-card" style="flex:1 0 auto; display:flex; flex-direction:column;">
+          <div class="sec-hd">Reading the watermark back</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A detector recomputes
+            every row's scores from the visible words alone – no access to the model or the
+            generator – and averages them. The embedding key stands far above the 0.5 of
+            chance; any other key sees noise.</div>
+          <div class="ctrl-row" style="margin-bottom:6px;">
+            <label class="ctrl-lbl" for="tx-cand">Key to test</label>
+            <input class="par-inp" id="tx-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
+                   spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
+            <button class="btn-run2" onclick="txTest()">Test key</button>
+            <button class="btn-run2" onclick="txWrong()">Test 20 wrong keys</button>
+          </div>
+          <div style="margin:auto 0;">
+            <svg class="plot" id="tx-shist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-word keyed scores under the tested key"></svg>
+            <div class="cv-leg">per-word mean of the three keyed scores under the tested key</div>
+          </div>
+          <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
         </div>
-        <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
       </div>
     </div>
 
-    <div class="note"><strong>The watermark lives in the path, not in any word.</strong>
-      Text generation is one blank after another, and each choice becomes part of the next
-      blank's context. The sketch below shows the routes a model could take through four
-      blanks: every route is legitimate text, and the model's probabilities say how likely
-      each one is. The keyed scores only nudge <em>which</em> route gets walked – the marked
-      route (maroon) is one the model could have produced anyway. Each word still shows up
-      at its expected rate over long runs, and what the key-holder reads back is the faint,
-      accumulated dependence between each choice and the four before it.
-      <svg class="plot" id="tx-trellis" viewBox="0 0 660 150" role="img" aria-label="Routes through four blanks, with the marked route highlighted" style="display:block; margin:10px auto 0; max-width:660px;"></svg>
+    <div class="note"><strong>The watermark lives in predictability, not in preferred
+      phrases.</strong> Text generation is one blank after another, and each choice reshapes
+      the model's distribution for the next blank. Every emitted word is drawn from that
+      reshaped distribution, and so the forward pass stays consistent, and a low-probability
+      word almost never even reaches the bracket. The key does not prefer “at last” after
+      “lingered”: its scores change with every context, and so no phrase is favored overall,
+      and every word keeps its long-run rate. What the key adds is a slight predictability –
+      the emitted word tends to score highly among the <em>likely</em> options at its blank.
+      Where one word dominates, as at the last blank below, every key crowns that same word,
+      and so the mark accumulates only where the model leaves real alternatives: forced text
+      such as a quotation or a formula carries almost no signature, however long it runs.
+      <div style="overflow-x:auto; margin-top:10px;">
+        <svg class="plot" id="tx-trellis" viewBox="0 0 660 212" role="img" aria-label="Routes through five blanks, with the model's conditional probabilities and the marked route highlighted; the last blank is nearly forced" style="display:block; margin:0 auto; min-width:600px; max-width:660px;"></svg>
+      </div>
     </div>
   </section>
 </div>
@@ -3209,7 +3210,7 @@ function txcNext() {
    word\'s mean keyed score for this context printed above its bar, and
    the winning word, once drawn, refilled in the sampled orange. */
 function drawBlankChart(id, probs, words, scores, winnerIdx) {
-  var W = 440, H = 230, L = 34, R = 8, T = 8, B = 52;
+  var W = 440, H = 230, L = 34, R = 8, T = 8, B = 64;
   var pw = W - L - R, ph = H - T - B, V = probs.length;
   var yMax = Math.max.apply(null, probs) * 1.22;
   var y = function (d) { return T + ph * (1 - d / yMax); };
@@ -3219,13 +3220,21 @@ function drawBlankChart(id, probs, words, scores, winnerIdx) {
     var win = j === winnerIdx;
     p.push('<rect x="' + (L + j * bw + 1) + '" y="' + y(probs[j]) + '" width="' + (bw - 2) +
            '" height="' + (T + ph - y(probs[j])) + '" fill="' + (win ? C.est : C.truth) + '" opacity="' + (win ? 0.95 : 0.55) + '"/>');
-    if (scores) {
-      p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (y(probs[j]) - 4) + '" text-anchor="middle" font-size="8.5" ' +
-             'style="font-family:var(--mono)" fill="' + C.muted + '">' + scores[j].toFixed(2).slice(1) + '</text>');
-    }
     p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (T + ph + 10) + '" text-anchor="end" font-size="9.5" fill="' +
            (win ? C.est : C.muted) + '"' + (win ? ' font-weight="700"' : '') +
            ' transform="rotate(-40 ' + (L + (j + 0.5) * bw) + ' ' + (T + ph + 10) + ')">' + words[j] + '</text>');
+    /* the word's mean keyed score, upright in its own row beneath the
+       angled label so it reads as a property of the word, not a
+       probability */
+    if (scores) {
+      p.push('<text x="' + (L + (j + 0.5) * bw) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="8.5" ' +
+             'style="font-family:var(--mono)" fill="' + (win ? C.est : C.muted) + '">' +
+             scores[j].toFixed(2).slice(1) + '</text>');
+    }
+  }
+  if (scores) {
+    p.push('<text x="' + (L - 5) + '" y="' + (H - 6) + '" text-anchor="end" font-size="8.5" font-style="italic" fill="' +
+           C.muted + '">score</text>');
   }
   p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) +
          '" stroke="' + C.border + '" stroke-width="1.5"/>');
@@ -3392,32 +3401,67 @@ function txTrellis() {
   var COLS = [['the storm', 'a shower', 'the fog'],
               ['passed', 'lingered', 'returned'],
               ['slowly', 'at last', 'overnight'],
-              ['before dawn', 'over the hills', 'without warning']];
-  var PATH = [0, 1, 1, 0];   /* "the storm lingered at last before dawn" */
-  var X = [90, 250, 410, 570], Y = [48, 88, 128];
+              ['before', 'after', 'near'],
+              ['dawn', 'noon', 'dusk']];
+  var PATH = [0, 1, 1, 0, 0];   /* "the storm lingered at last before dawn" */
+  /* The model's conditional probabilities for each column, given the
+     marked path so far; the bars stay teal even under the chosen word,
+     because the distribution belongs to the model, not the key. The
+     last column is nearly forced: one word takes almost all of the
+     probability, and so every key crowns it and no mark can land. */
+  var CPROB = [[0.40, 0.35, 0.25],
+               [0.50, 0.30, 0.20],
+               [0.35, 0.40, 0.25],
+               [0.45, 0.30, 0.25],
+               [0.93, 0.05, 0.02]];
+  var X = [70, 200, 330, 460, 590], Y = [74, 116, 158], NC = COLS.length;
   var p = [];
-  for (var c = 0; c < 4; c++) {
-    p.push('<text x="' + X[c] + '" y="16" text-anchor="middle" font-size="9.5" font-weight="600" fill="' +
+  /* legend above the columns, so the brackets below stand alone */
+  var LY = 15;
+  p.push('<line x1="120" y1="' + (LY - 3.5) + '" x2="148" y2="' + (LY - 3.5) + '" stroke="' + C.accent + '" stroke-width="2.5"/>');
+  p.push('<text x="155" y="' + LY + '" font-size="10" fill="' + C.muted + '">the marked route – one walk the model offered</text>');
+  p.push('<rect x="408" y="' + (LY - 7) + '" width="26" height="3.5" rx="1.5" fill="' + C.truth + '" opacity="0.55"/>');
+  p.push('<text x="441" y="' + LY + '" font-size="10" fill="' + C.muted + '">model’s probabilities, given the route so far</text>');
+  for (var c = 0; c < NC; c++) {
+    p.push('<text x="' + X[c] + '" y="40" text-anchor="middle" font-size="9.5" font-weight="600" fill="' +
            C.muted + '">blank ' + (c + 1) + '</text>');
   }
-  for (c = 0; c < 3; c++) {
+  /* Each edge's weight is its destination's probability, and so the
+     routes visibly funnel into the one word the last blank allows. */
+  for (c = 0; c < NC - 1; c++) {
     for (var i = 0; i < 3; i++) {
       for (var j = 0; j < 3; j++) {
         var onPath = i === PATH[c] && j === PATH[c + 1];
-        p.push('<line x1="' + (X[c] + 58) + '" y1="' + (Y[i] - 4) + '" x2="' + (X[c + 1] - 58) +
+        p.push('<line x1="' + (X[c] + 40) + '" y1="' + (Y[i] - 4) + '" x2="' + (X[c + 1] - 40) +
                '" y2="' + (Y[j] - 4) + '" stroke="' + (onPath ? C.accent : C.border) +
-               '" stroke-width="' + (onPath ? 2.5 : 1) + '"/>');
+               '" stroke-width="' + (onPath ? 2.5 : (0.5 + 2 * CPROB[c + 1][j]).toFixed(2)) + '"/>');
       }
     }
   }
-  for (c = 0; c < 4; c++) {
+  for (c = 0; c < NC; c++) {
     for (i = 0; i < 3; i++) {
-      var on = i === PATH[c];
+      var on = i === PATH[c], faint = CPROB[c][i] < 0.1;
       p.push('<text x="' + X[c] + '" y="' + Y[i] + '" text-anchor="middle" font-size="11.5"' +
-             (on ? ' font-weight="700"' : '') + ' fill="' + (on ? C.accent : C.muted) + '">' +
-             COLS[c][i] + '</text>');
+             (on ? ' font-weight="700"' : '') + (faint ? ' opacity="0.45"' : '') +
+             ' fill="' + (on ? C.accent : C.muted) + '">' + COLS[c][i] + '</text>');
+      var bwd = 64 * CPROB[c][i];
+      p.push('<rect x="' + (X[c] - bwd / 2) + '" y="' + (Y[i] + 5) + '" width="' + bwd +
+             '" height="3.5" rx="1.5" fill="' + C.truth + '" opacity="0.55"/>');
     }
   }
+  /* The two regimes, bracketed the way the tab strip brackets its
+     watermark tabs. */
+  var BY = 178;
+  p.push('<path d="M28 ' + (BY + 5) + ' L28 ' + BY + ' L505 ' + BY + ' L505 ' + (BY + 5) +
+         '" fill="none" stroke="' + C.border + '" stroke-width="1.5"/>');
+  p.push('<text x="266" y="' + (BY + 16) + '" text-anchor="middle" font-size="9" fill="' + C.muted +
+         '">several plausible words: room for the key to tip the choice</text>');
+  p.push('<path d="M545 ' + (BY + 5) + ' L545 ' + BY + ' L635 ' + BY + ' L635 ' + (BY + 5) +
+         '" fill="none" stroke="' + C.border + '" stroke-width="1.5"/>');
+  p.push('<text x="590" y="' + (BY + 16) + '" text-anchor="middle" font-size="9" fill="' + C.muted +
+         '">one word dominates:</text>');
+  p.push('<text x="590" y="' + (BY + 26) + '" text-anchor="middle" font-size="9" fill="' + C.muted +
+         '">every key picks it</text>');
   document.getElementById('tx-trellis').innerHTML = p.join('');
 }
 
