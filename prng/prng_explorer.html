@@ -787,7 +787,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       from the visible history by anyone who holds the key and by no one else.</div>
 
     <div class="viz-row">
-      <div class="cv-card" style="flex:1 1 430px; min-width:0;">
+      <div class="cv-card" style="flex:1 1 430px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">Re-seeding from the visible history</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Whereas a CLCG's next
           output depends on several hidden states at once, an MRG guides its next output
@@ -819,37 +819,48 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <input class="par-inp" id="rw-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run2" onclick="rwTest()">Test key</button>
-          <button class="btn-run2" onclick="rwWrong()">Test 20 wrong keys</button>
         </div>
-        <canvas id="rw-cv" aria-label="Predicted next value under the tested key against observed next value" style="display:block; margin:0 auto;"></canvas>
-        <div class="cv-leg" id="rw-result" style="min-height:2.6em;"></div>
+        <div style="margin:auto 0; padding:8px 0;">
+          <canvas id="rw-cv" aria-label="Predicted next value under the tested key against observed next value" style="display:block; margin:0 auto;"></canvas>
+          <div class="cv-leg" id="rw-result" style="min-height:2.6em;"></div>
+        </div>
+        <div class="plot-ttl">The cost: you have replaced the generator</div>
+        <div class="cv-leg" style="text-align:left;">After the four pass-through draws,
+          MRG32k3a contributes nothing – every later value is fixed by the key and the
+          history, whatever generator sits underneath. The period guarantees, the
+          equidistribution, and the streams and substreams of tabs ①–③ are gone, and the
+          stream's quality now rests entirely on the homemade mix. The watermark and the
+          generator have become a single decision again, only more so: the signature
+          <em>is</em> the generator. What a practical watermark wants is the opposite –
+          keep a well-studied generator intact and lay the mark on top of its outputs.
+          The next tab does exactly that.</div>
       </div>
-      <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
-        <div class="sec-hd">Uniform and grainless to everyone else</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Without the key, the
-          re-seeded stream is unremarkable: the uniformity tests stay clean (up to the 5% of
-          streams any test falsely flags), and consecutive pairs show no grain. Nothing
-          visible separates it from the streams of tabs ①–③.</div>
-        <div style="margin:auto 0;">
+      <div style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column; gap:16px;">
+        <div class="cv-card" style="flex:0 0 auto;">
+          <div class="sec-hd">Uniform and grainless to everyone else</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Without the key, the
+            re-seeded stream is unremarkable: the uniformity tests stay clean (up to the 5% of
+            streams any test falsely flags), and consecutive pairs show no grain. Nothing
+            visible separates it from the streams of tabs ①–③.</div>
           <svg class="plot" id="rw-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of the re-seeded stream with uniformity test p-values"></svg>
           <div class="cv-leg">histogram of the 2,000 re-seeded values</div>
-        </div>
-        <div>
           <canvas id="rw-lat" aria-label="Lag plot of consecutive re-seeded values" style="display:block; margin:0 auto;"></canvas>
           <div class="cv-leg" style="min-height:2.6em;">2,000 consecutive pairs from the re-seeded stream</div>
+        </div>
+        <div class="cv-card" style="flex:1 0 auto;">
+          <div class="sec-hd">Detection is all-or-nothing</div>
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A re-seeded stream
+            is not merely tilted toward its key – it is a deterministic function of it, and
+            so detection is a certificate rather than a statistic. The secret key (top row)
+            predicts every draw; twenty random wrong keys predict none.</div>
+          <svg class="plot" id="rw-keys" viewBox="0 0 440 336" role="img" aria-label="Exact-prediction lineup: the secret key in the top row against twenty random wrong keys"></svg>
+          <div class="cv-leg">bar: the share of draws that key predicts exactly – a wrong key
+            matches a given draw with probability about 1 in 2.1 × 10⁹, and so probing any
+            single key, as at the left, is already a complete test</div>
         </div>
       </div>
     </div>
 
-    <div class="note"><strong>The cost: you have replaced the generator.</strong> After the
-      four pass-through draws, MRG32k3a contributes nothing – every later value is fixed by
-      the key and the history, whatever generator sits underneath. The period guarantees,
-      the equidistribution, and the streams and substreams of tabs ①–③ are gone, and the
-      stream's quality now rests entirely on the homemade mix. The watermark and the
-      generator have become a single decision again, only more so: the signature <em>is</em>
-      the generator. What a practical watermark wants is the opposite – keep a well-studied
-      generator intact and lay the mark on top of its outputs. The next tab does exactly
-      that.</div>
   </section>
 
   <!-- ── TAB ⑥: tournament watermarks ────────────────────────────────── -->
@@ -971,7 +982,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <div class="viz-row props-row">
-      <div class="cv-card" style="flex:1 1 430px; min-width:0;">
+      <div class="cv-card" style="flex:1 1 100%; min-width:0;">
         <div class="sec-hd">Adding a watermark on purpose: the keyed tournament</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here the tournament
           from the top of this tab runs for real: whenever a value is needed, eight
@@ -984,19 +995,19 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <input class="par-inp" id="wt-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run" onclick="wtGenerate()">Generate marked stream</button>
-        </div>
-        <div class="ctrl-row" style="margin-bottom:6px;">
-          <label class="ctrl-lbl" for="wt-cand">Key to test</label>
+          <label class="ctrl-lbl" for="wt-cand" style="margin-left:12px;">Key to test</label>
           <input class="par-inp" id="wt-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run2" onclick="wtTest()">Test key</button>
-          <button class="btn-run2" onclick="wtWrong()">Test 20 wrong keys</button>
         </div>
-        <svg class="plot" id="wt-hist" viewBox="0 0 420 150" role="img" aria-label="Histogram of per-value keyed scores under the tested key"></svg>
-        <div class="cv-leg">per-value mean of the three keyed scores under the tested key</div>
+        <svg class="plot" id="wt-hist" viewBox="0 0 900 150" role="img" aria-label="Histogram of the keyed round scores under the tested key"></svg>
+        <div class="cv-leg">the three round scores of every emitted value under the tested key</div>
         <div class="stat-line" id="wt-result" style="min-height:2.6em; margin-top:6px;"></div>
       </div>
-      <div class="cv-card" style="flex:1 1 280px; min-width:0;">
+    </div>
+
+    <div class="viz-row">
+      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
         <div class="sec-hd">Uniform to everyone, marked only to the key</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The marked stream and
           an unmarked stream from the same seeds. The χ² and K–S rows are uniformity tests,
@@ -1005,10 +1016,17 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           any test falsely flags). Only the keyed detector, which recomputes the scores,
           separates them.</div>
         <div class="stat-line" id="wt-stats" style="line-height:1.9;"></div>
-        <div class="cv-leg" style="text-align:left; margin-top:10px;">Detection is
-          statistical, and so it needs enough output to stand clear of chance; a few hundred
-          values suffice here. The next tab carries this whole scheme from numbers to
-          words.</div>
+      </div>
+      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
+        <div class="sec-hd">Detection is statistical: one key stands clear</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The lineup breaks the
+          detector out key by key: the secret key in the top row against twenty random
+          wrong keys, each row a mean score with its 95% confidence interval. Detection
+          needs enough output to stand clear of chance – a few hundred values suffice
+          here – and the next tab carries this whole scheme from numbers to words.</div>
+        <svg class="plot" id="wt-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means for the marked stream: the secret key in the top row against twenty random wrong keys"></svg>
+        <div class="cv-leg">✓ z &gt; 6 (mark detected) · ? 3 &lt; z ≤ 6 (weak evidence) ·
+          – consistent with chance</div>
       </div>
     </div>
 
@@ -1204,17 +1222,25 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             watermark for text
             (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
             et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme at toy
-            scale, and a deployed system differs in many engineering details. An earlier
-            family of schemes
-            (<a href="https://proceedings.mlr.press/v202/kirchenbauer23a.html" target="_blank" rel="noopener">Kirchenbauer
-            et al. 2023, <em>ICML</em></a>) instead nudges the distribution itself, boosting
-            a keyed “green list” of words before the draw – a mark that keeps pushing even
-            where the model is nearly certain, whereas the tournament only ever chooses
-            among draws and steps aside there. The limits are the same at every scale:
-            detection is statistical, and so it needs enough words to stand clear of
-            chance, and editing or paraphrasing the text weakens the signature.</div>
+            scale, and a deployed system differs in many engineering details. The limits
+            are the same at every scale: detection is statistical, and so it needs enough
+            words to stand clear of chance, and editing or paraphrasing the text weakens
+            the signature.</div>
         </div>
       </div>
+    </div>
+
+    <div class="note"><strong>There is no green list: no word is favored, and no word is
+      shunned.</strong> An earlier family of watermarks
+      (<a href="https://proceedings.mlr.press/v202/kirchenbauer23a.html" target="_blank" rel="noopener">Kirchenbauer
+      et al. 2023, <em>ICML</em></a>) really does keep a keyed “green list” of words,
+      boosted before every draw – a push that continues even where the model is nearly
+      certain. The tournament keeps no list, and none could exist: scored by rule 1 across
+      2,000 synthetic four-word contexts each, three words from the toy vocabulary come
+      out flat on [0, 1] – dragons, the vocabulary's long shot, included – and rules 2 and
+      3, and every other key, behave identically. The preference at any one blank is real,
+      but it carries no per-word component that could accumulate across a text.
+      <div id="tx-greens" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px;"></div>
     </div>
 
     <div class="note"><strong>The watermark lives in predictability, not in preferred
@@ -1234,7 +1260,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <details class="why">
-      <summary>Why does masking skip a repeated context?</summary>
+      <summary>Why mask repeated contexts at all?</summary>
       <div class="why-body">
         <p>Because a tilt that fires once is invisible, and a tilt that fires twice is the
         same tilt twice. The winner of a single tournament is still a word the model
@@ -1497,24 +1523,27 @@ function makeTournament(base, key, rounds) {
     }
   };
 }
-/* Detection: for every position with four predecessors, average the R
-   keyed round scores of the emitted value; report the overall mean.
-   Under a wrong key, the scores behave as independent uniforms, and so
-   the mean of R of them has variance 1/(12 R), which sets the null
-   standard error behind z. */
+/* Detection: pool every keyed round score of every value with four
+   predecessors; report the overall mean. Under a wrong key, the
+   scores behave as independent uniforms, which sets the null standard
+   error behind z; the sample standard deviation sets the confidence
+   interval, exactly as in the text tab's detector. */
 function twDetect(us, key, rounds) {
-  var scores = [], sum = 0;
+  var scores = [], sum = 0, sumsq = 0;
   for (var i = 4; i < us.length; i++) {
     var q1 = wmQ(us[i - 4]), q2 = wmQ(us[i - 3]), q3 = wmQ(us[i - 2]), q4 = wmQ(us[i - 1]);
-    var qu = wmQ(us[i]), sc = 0;
-    for (var r = 1; r <= rounds; r++) sc += twScore(key, r, q1, q2, q3, q4, qu);
-    sc /= rounds;
-    scores.push(sc);
-    sum += sc;
+    var qu = wmQ(us[i]);
+    for (var r = 1; r <= rounds; r++) {
+      var sc = twScore(key, r, q1, q2, q3, q4, qu);
+      scores.push(sc);
+      sum += sc;
+      sumsq += sc * sc;
+    }
   }
-  var n = scores.length, mean = n ? sum / n : 0.5;
-  var seNull = n ? Math.sqrt(1 / (12 * rounds * n)) : 1;
-  return { n: n, mean: mean, z: (mean - 0.5) / seNull, scores: scores };
+  var m = scores.length, n = m / rounds, mean = m ? sum / m : 0.5;
+  var seNull = m ? Math.sqrt(1 / (12 * m)) : 1;
+  var se = m > 1 ? Math.sqrt((sumsq - m * mean * mean) / (m - 1) / m) : 1;
+  return { n: n, mean: mean, z: (mean - 0.5) / seNull, se: se, scores: scores };
 }
 
 /* ── Keyed re-seeding (tab 5) ────────────────────────────────────────
@@ -3139,6 +3168,7 @@ function rwGenerate() {
   rw.us = genStream(makeReseed(makeCMRG(wtSeeds()), key), RW_N);
   rwStats();
   rwTest();
+  drawRwLineup();
 }
 
 function rwTest() {
@@ -3159,17 +3189,52 @@ function rwTest() {
       'about 1 in 2.1 × 10⁹.';
 }
 
-function rwWrong() {
+/* The exact-match lineup: the secret key against twenty random wrong
+   keys, one row each, bar = the share of draws that key predicts
+   exactly. Detection here is a certificate, not a statistic: the
+   right key predicts every draw and a wrong key essentially none, and
+   so the rows are all-or-nothing by design. */
+function drawRwLineup() {
   if (!rw.us) return;
-  var maxHits = 0, last = 0;
+  var rows = [{ key: rw.key, det: reseedDetect(rw.us, rw.key), mine: true }];
   for (var i = 0; i < 20; i++) {
-    do { last = Math.floor(Math.random() * 4294967296); } while (last === rw.key);
-    maxHits = Math.max(maxHits, reseedDetect(rw.us, last).hits);
+    var wk;
+    do { wk = 100000 + Math.floor(Math.random() * 900000); } while (wk === rw.key);
+    rows.push({ key: wk, det: reseedDetect(rw.us, wk), mine: false });
   }
-  rwPlot(last);
-  document.getElementById('rw-result').innerHTML =
-    '20 random wrong keys: the best predicted <b>' + maxHits + '</b> of ' +
-    (RW_N - 4).toLocaleString('en-US') + ' draws (the last one is plotted).';
+  var W = 440, rowH = 14, T = 18, n = rows.length, H = 336;
+  var L = 78, Rb = 300;
+  var p = ['<rect x="' + L + '" y="' + T + '" width="' + (Rb - L) + '" height="' + (n * rowH) + '" fill="' + C.chartBg + '"/>'];
+  p.push('<text x="' + (L - 8) + '" y="' + (T - 6) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">key</text>');
+  p.push('<text x="' + (Rb + 10) + '" y="' + (T - 6) + '" font-size="9" fill="' + C.muted + '">predicted</text>');
+  for (i = 0; i < n; i++) {
+    var det = rows[i].det, mine = rows[i].mine, col = mine ? C.accent : C.muted;
+    var cy = T + (i + 0.5) * rowH;
+    if (mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
+                     '" fill="' + C.accent + '" opacity="0.07"/>');
+    var frac = det.n ? det.hits / det.n : 0;
+    if (frac > 0) p.push('<rect x="' + L + '" y="' + (cy - 4.5) + '" width="' + Math.max(1.5, (Rb - L) * frac) +
+                         '" height="9" fill="' + col + '" opacity="0.75"/>');
+    p.push('<text x="' + (L - 8) + '" y="' + (cy + 3) + '" text-anchor="end" font-size="9.5"' +
+           (mine ? ' font-weight="700"' : '') + ' fill="' + col + '">' +
+           rows[i].key.toLocaleString('en-US') + '</text>');
+    p.push('<text x="' + (Rb + 10) + '" y="' + (cy + 3) + '" font-size="9.5" fill="' + col + '">' +
+           det.hits.toLocaleString('en-US') + ' of ' + det.n.toLocaleString('en-US') + '</text>');
+    var sym = det.hits === det.n ? '\u2713' : '\u2013';
+    p.push('<text x="' + (W - 14) + '" y="' + (cy + 3.5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' +
+           (det.hits === det.n ? C.accent : C.muted) + '">' + sym + '</text>');
+  }
+  var yBot = T + n * rowH;
+  var xt = [0, 0.5, 1];
+  for (i = 0; i < xt.length; i++) {
+    p.push('<line x1="' + (L + (Rb - L) * xt[i]) + '" y1="' + yBot + '" x2="' + (L + (Rb - L) * xt[i]) + '" y2="' + (yBot + 3) +
+           '" stroke="' + C.muted + '" stroke-width="1"/>');
+    p.push('<text x="' + (L + (Rb - L) * xt[i]) + '" y="' + (yBot + 13) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' +
+           (100 * xt[i]) + '%</text>');
+  }
+  p.push('<text x="' + ((L + Rb) / 2) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="10" fill="' + C.muted +
+         '">share of draws predicted exactly</text>');
+  document.getElementById('rw-keys').innerHTML = p.join('');
 }
 
 function rwPlot(k) {
@@ -3381,6 +3446,7 @@ function wtGenerate() {
   wt.plain = genStream(makeCMRG(wt.seeds), WT_N);
   wtStats();
   wtTest();
+  drawWtLineup();
 }
 
 function wtTest() {
@@ -3391,31 +3457,28 @@ function wtTest() {
     return;
   }
   var r = twDetect(wt.us, k, WT_ROUNDS);
-  drawScoreHist(r.scores, r.mean);
+  drawScoreHist(r.scores, r.mean, 'wt-hist', 900);
   var verdict = r.z > 6 ? 'far above chance: the stream carries this key.'
               : r.z > 3 ? 'above chance: evidence this key marked the stream.'
               : 'indistinguishable from chance: no evidence this key marked the stream.';
   document.getElementById('wt-result').innerHTML =
     'Key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
-    '</b> over ' + r.n + ' values. Chance is 0.500. z = ' + r.z.toFixed(1) + ' \u2013 ' + verdict;
+    '</b> across the ' + (WT_ROUNDS * r.n).toLocaleString('en-US') + ' scores of ' +
+    r.n.toLocaleString('en-US') + ' values. Chance is 0.500. z = ' + r.z.toFixed(1) +
+    ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ') \u2013 ' + verdict;
 }
 
-function wtWrong() {
+/* The tab-6 lineup: the secret key against twenty random wrong keys,
+   rendered by the shared drawLineup. */
+function drawWtLineup() {
   if (!wt.us) return;
-  var lo = 1, hi = 0, maxAbsZ = 0, last = null;
+  var rows = [Object.assign({ key: wt.key, mine: true }, twDetect(wt.us, wt.key, WT_ROUNDS))];
   for (var i = 0; i < 20; i++) {
     var wk;
-    do { wk = Math.floor(Math.random() * 4294967296); } while (wk === wt.key);
-    last = twDetect(wt.us, wk, WT_ROUNDS);
-    lo = Math.min(lo, last.mean);
-    hi = Math.max(hi, last.mean);
-    maxAbsZ = Math.max(maxAbsZ, Math.abs(last.z));
+    do { wk = 100000 + Math.floor(Math.random() * 900000); } while (wk === wt.key);
+    rows.push(Object.assign({ key: wk, mine: false }, twDetect(wt.us, wk, WT_ROUNDS)));
   }
-  drawScoreHist(last.scores, last.mean);
-  document.getElementById('wt-result').innerHTML =
-    '20 random wrong keys: mean scores ' + lo.toFixed(3) + '\u2013' + hi.toFixed(3) +
-    ', largest |z| = ' + maxAbsZ.toFixed(1) + ' (the last one is plotted). None stands clear ' +
-    'of chance the way the embedding key does.';
+  drawLineup('wt-keys', rows, 338, 0.4, 0.72, [0.4, 0.5, 0.6, 0.7]);
 }
 
 function wtStats() {
@@ -3433,9 +3496,9 @@ function wtStats() {
 
 /* Histogram of the per-value keyed scores under the tested key, with the
    0.5 chance level and the observed mean marked. */
-function drawScoreHist(scores, mean, id) {
-  var W = 420, H = 150, L = 30, R = 8, T = 8, B = 22;
-  var pw = W - L - R, ph = H - T - B, K = 24;
+function drawScoreHist(scores, mean, id, width) {
+  var W = width || 420, H = 150, L = 30, R = 8, T = 8, B = 22;
+  var pw = W - L - R, ph = H - T - B, K = W > 600 ? 48 : 24;
   var counts = new Array(K).fill(0);
   for (var i = 0; i < scores.length; i++) {
     var j = Math.min(K - 1, Math.floor(scores[i] * K));
@@ -3848,49 +3911,41 @@ function txTest() {
     r.z.toFixed(1) + ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ') \u2013 ' + verdict;
 }
 
-/* The key lineup: one row per key, the secret key that wrote the
-   passage in the top row, twenty random wrong keys below. Each row is
-   the pooled detection mean with two null standard errors; the key is
-   printed at the left and the mean at the right, and the verdict
-   symbol uses the same z thresholds as the verdict text (z > 6 and
-   z > 3, one-sided p below 1e-9 and 0.002). The thresholds sit far
-   below 0.05 because twenty-one keys are on trial at once. */
-function drawKeyLineup(entKey, entDet) {
-  var rows = [{ key: entKey, det: entDet, mine: true }];
-  for (var i = 0; i < 20; i++) {
-    var wk;
-    do { wk = 100000 + Math.floor(Math.random() * 900000); } while (wk === entKey);
-    rows.push({ key: wk, det: wordDetect(mk.ids, wk, MK_ROUNDS, MK_V), mine: false });
-  }
-  var W = 440, rowH = 14, T = 18, n = rows.length, H = 338;
+/* The shared key-lineup renderer: one row per key, the secret key in
+   the top row, twenty random wrong keys below. Each row is that key's
+   pooled detection mean with its 95% confidence interval (1.96 sample
+   standard errors); the key is printed at the left and the mean at
+   the right, and the verdict symbol uses the same z thresholds as the
+   verdict text (z > 6 and z > 3, one-sided p below 1e-9 and 0.002),
+   far below 0.05 because twenty-one keys are on trial at once. */
+function drawLineup(id, rows, H, xMin, xMax, xt) {
+  var W = 440, rowH = 14, T = 18, n = rows.length;
   var L = 78, Rb = 336;
-  var xMin = 0.38, xMax = 0.66;
   var x = function (d) { return L + (Rb - L) * (Math.min(xMax, Math.max(xMin, d)) - xMin) / (xMax - xMin); };
   var p = ['<rect x="' + L + '" y="' + T + '" width="' + (Rb - L) + '" height="' + (n * rowH) + '" fill="' + C.chartBg + '"/>'];
   p.push('<text x="' + (L - 8) + '" y="' + (T - 6) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">key</text>');
   p.push('<text x="' + (Rb + 10) + '" y="' + (T - 6) + '" font-size="9" fill="' + C.muted + '">mean</text>');
-  for (i = 0; i < n; i++) {
-    var det = rows[i].det, mine = rows[i].mine, col = mine ? C.accent : C.muted;
+  for (var i = 0; i < n; i++) {
+    var r = rows[i], col = r.mine ? C.accent : C.muted;
     var cy = T + (i + 0.5) * rowH;
-    if (mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
-                     '" fill="' + C.accent + '" opacity="0.07"/>');
-    p.push('<line x1="' + x(det.mean - 1.96 * det.se) + '" y1="' + cy + '" x2="' + x(det.mean + 1.96 * det.se) + '" y2="' + cy +
+    if (r.mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
+                       '" fill="' + C.accent + '" opacity="0.07"/>');
+    p.push('<line x1="' + x(r.mean - 1.96 * r.se) + '" y1="' + cy + '" x2="' + x(r.mean + 1.96 * r.se) + '" y2="' + cy +
            '" stroke="' + col + '" stroke-width="2"/>');
-    p.push('<circle cx="' + x(det.mean) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>');
+    p.push('<circle cx="' + x(r.mean) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>');
     p.push('<text x="' + (L - 8) + '" y="' + (cy + 3) + '" text-anchor="end" font-size="9.5"' +
-           (mine ? ' font-weight="700"' : '') + ' fill="' + col + '">' +
-           rows[i].key.toLocaleString('en-US') + '</text>');
+           (r.mine ? ' font-weight="700"' : '') + ' fill="' + col + '">' +
+           r.key.toLocaleString('en-US') + '</text>');
     p.push('<text x="' + (Rb + 10) + '" y="' + (cy + 3) + '" font-size="9.5" fill="' + col + '">' +
-           det.mean.toFixed(3) + '</text>');
-    var sym = det.z > 6 ? '\u2713' : det.z > 3 ? '?' : '\u2013';
-    var symCol = det.z > 6 ? C.accent : det.z > 3 ? C.est : C.muted;
+           r.mean.toFixed(3) + '</text>');
+    var sym = r.z > 6 ? '\u2713' : r.z > 3 ? '?' : '\u2013';
+    var symCol = r.z > 6 ? C.accent : r.z > 3 ? C.est : C.muted;
     p.push('<text x="' + (Rb + 52) + '" y="' + (cy + 3.5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' +
            symCol + '">' + sym + '</text>');
   }
   var yBot = T + n * rowH;
   p.push('<line x1="' + x(0.5) + '" y1="' + T + '" x2="' + x(0.5) + '" y2="' + yBot +
          '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="5,4"/>');
-  var xt = [0.4, 0.5, 0.6];
   for (i = 0; i < xt.length; i++) {
     p.push('<line x1="' + x(xt[i]) + '" y1="' + yBot + '" x2="' + x(xt[i]) + '" y2="' + (yBot + 3) +
            '" stroke="' + C.muted + '" stroke-width="1"/>');
@@ -3899,7 +3954,67 @@ function drawKeyLineup(entKey, entDet) {
   }
   p.push('<text x="' + ((L + Rb) / 2) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="10" fill="' + C.muted +
          '">mean keyed score</text>');
-  document.getElementById('tx-keys').innerHTML = p.join('');
+  document.getElementById(id).innerHTML = p.join('');
+}
+
+/* The text tab's lineup: the passage's secret key against twenty
+   random wrong keys, scored by wordDetect. */
+function drawKeyLineup(entKey, entDet) {
+  var rows = [Object.assign({ key: entKey, mine: true }, entDet)];
+  for (var i = 0; i < 20; i++) {
+    var wk;
+    do { wk = 100000 + Math.floor(Math.random() * 900000); } while (wk === entKey);
+    rows.push(Object.assign({ key: wk, mine: false }, wordDetect(mk.ids, wk, MK_ROUNDS, MK_V)));
+  }
+  drawLineup('tx-keys', rows, 338, 0.38, 0.66, [0.4, 0.5, 0.6]);
+}
+
+/* The no-list demo: three words' rule-1 scores across 2,000 synthetic
+   four-word contexts each, one mini histogram per word, all flat. A
+   tiny deterministic xorshift drives the contexts so the page draws
+   the same picture every load. */
+function txGreens() {
+  var el = document.getElementById('tx-greens');
+  if (!el) return;
+  var words = ['sunshine', 'fog', 'dragons'];
+  var V = TX_WORDS.length, K = 12, N = 2000;
+  var st = 88172645;
+  var rnd = function () {
+    st ^= st << 13; st ^= st >>> 17; st ^= st << 5; st |= 0;
+    return (st >>> 0) / 4294967296;
+  };
+  var html = [];
+  for (var w = 0; w < words.length; w++) {
+    var wi = TX_WORDS.indexOf(words[w]);
+    var counts = new Array(K).fill(0);
+    for (var t = 0; t < N; t++) {
+      var q = [];
+      for (var j = 0; j < 4; j++) q.push(wordCode(Math.floor(rnd() * V), V));
+      var sc = twScore(271828, 1, q[0], q[1], q[2], q[3], wordCode(wi, V));
+      counts[Math.min(K - 1, Math.floor(sc * K))]++;
+    }
+    var W = 210, H = 140, L = 8, R = 8, T = 26, B = 18;
+    var pw = W - L - R, ph = H - T - B;
+    var exp = N / K, top = Math.max.apply(null, counts.concat([exp])) * 1.25;
+    var y = function (c) { return T + ph * (1 - c / top); };
+    var bw = pw / K;
+    var pp = ['<rect x="' + L + '" y="' + T + '" width="' + pw + '" height="' + ph + '" fill="' + C.chartBg + '"/>'];
+    for (var b = 0; b < K; b++) {
+      pp.push('<rect x="' + (L + b * bw + 1) + '" y="' + y(counts[b]) + '" width="' + (bw - 2) +
+              '" height="' + (T + ph - y(counts[b])) + '" fill="' + C.est + '" opacity="0.82"/>');
+    }
+    pp.push('<line x1="' + L + '" y1="' + y(exp) + '" x2="' + (W - R) + '" y2="' + y(exp) +
+            '" stroke="' + C.truth + '" stroke-width="2" stroke-dasharray="5,4"/>');
+    pp.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) +
+            '" stroke="' + C.border + '" stroke-width="1.5"/>');
+    pp.push('<text x="' + L + '" y="' + (T + ph + 13) + '" font-size="9" fill="' + C.muted + '">0</text>');
+    pp.push('<text x="' + (W - R) + '" y="' + (T + ph + 13) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">1</text>');
+    pp.push('<text x="' + (W / 2) + '" y="14" text-anchor="middle" font-size="11" font-weight="600" fill="' + C.text + '">' +
+            words[w] + '</text>');
+    html.push('<svg viewBox="0 0 ' + W + ' ' + H + '" style="flex:0 1 210px; min-width:150px;" role="img" aria-label="Rule-1 scores of ' +
+              words[w] + ' across 2,000 synthetic contexts">' + pp.join('') + '</svg>');
+  }
+  el.innerHTML = html.join('');
 }
 
 /* The path sketch: four blanks, three options each, every route lightly
@@ -4050,6 +4165,7 @@ function renderActive() {
   var corpEl = document.getElementById('mk-corpus');
   if (corpEl) corpEl.textContent = MK_CORPUS;
   mkWrite(1500);
+  txGreens();
   txTrellis();
   Editor('g', LCG_PRESETS, 'minstd', function () {
     streamN = STREAM_START;
