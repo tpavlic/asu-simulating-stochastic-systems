@@ -126,10 +126,19 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
 
 .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .95em; }
-/* Dotted underline marks the word that carries a hover/tap tooltip; the
-   "What does the recurrence say" collapsible repeats the explanation for
-   anyone the tooltip does not reach. */
-.modtip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+/* Tooltips: a dotted underline means an explanation is here, reachable by hover, tap,
+   or keyboard focus. Never a title attribute, which shows nothing on a touch screen
+   and cannot be reached from the keyboard. See THEME.md. */
+.tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* A control that tap already operates opens its tip on a long press instead. */
+[data-tip-press] { -webkit-touch-callout: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#tipbox { position: fixed; z-index: 60; max-width: 260px; padding: 8px 11px; border-radius: 7px;
+          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
+          box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
+          transition: opacity .08s; }
 /* Segmented 2D/3D toggle for the lattice panel */
 .seg { display: inline-flex; border: 1.5px solid var(--accent); border-radius: 6px; overflow: hidden; }
 .seg-btn { font-family: 'Outfit', sans-serif; font-size: .8rem; font-weight: 600; padding: 4px 14px;
@@ -2278,8 +2287,8 @@ function distinctOf(c) {
 /* ── Parameter grids, recurrence cards, and step tables per family ──── */
 function parCell(pre, fname, sym, word, title, value) {
   var id = pre + '-f-' + fname;
-  return '<div class="par-cell"><label for="' + id + '" title="' + title + '"><b>' + sym +
-         '</b> = ' + word + '</label><input class="par-inp" id="' + id +
+  return '<div class="par-cell"><label for="' + id + '"><b>' + sym +
+         '</b> = <span class="tip" tabindex="0" data-tip="' + title + '">' + word + '</span></label><input class="par-inp" id="' + id +
          '" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="' +
          value + '" onchange="EDITORS.' + pre + '.applyParams()"></div>';
 }
@@ -2290,14 +2299,14 @@ function paramUIHTML(c, pre) {
   if (c.fam === 'lcg') {
     h += parCell(pre, 'a', 'a', 'multiplier', 'a scales the current state at every step', c.a);
     h += parCell(pre, 'c', 'c', 'increment', 'c is added at every step; c = 0 gives a purely multiplicative generator', c.c);
-    h += parCell(pre, 'm', 'm', '<span class="modtip">modulus</span>', MOD_TIP, c.m);
+    h += parCell(pre, 'm', 'm', 'modulus', MOD_TIP, c.m);
     h += parCell(pre, 's0', 'x<sub>0</sub>', 'seed', 'the starting state; the whole stream follows from it', c.seed);
   } else if (c.fam === 'mrg') {
-    h += '<div class="par-cell"><label for="' + pre + '-f-k" title="how many past states the recurrence reaches back to"><b>k</b> = order</label>' +
+    h += '<div class="par-cell"><label for="' + pre + '-f-k"><b>k</b> = <span class="tip" tabindex="0" data-tip="how many past states the recurrence reaches back to">order</span></label>' +
          '<select id="' + pre + '-f-k" class="par-inp" onchange="EDITORS.' + pre + '.setK(this.value)">';
     for (var kk = 2; kk <= 5; kk++) h += '<option value="' + kk + '"' + (c.as.length === kk ? ' selected' : '') + '>' + kk + '</option>';
     h += '</select></div>';
-    h += parCell(pre, 'm', 'm', '<span class="modtip">modulus</span>', MOD_TIP, c.m);
+    h += parCell(pre, 'm', 'm', 'modulus', MOD_TIP, c.m);
     for (i = 0; i < c.as.length; i++)
       h += parCell(pre, 'a' + i, 'a<sub>' + (i + 1) + '</sub>', 'coefficient of x<sub>n−' + (i + 1) + '</sub>',
                    'negative values are allowed and wrap mod m', c.as[i]);
@@ -2305,9 +2314,9 @@ function paramUIHTML(c, pre) {
       h += parCell(pre, 's' + i, 'x<sub>' + i + '</sub>', 'seed', 'the first k states are the seeds', c.seeds[i]);
   } else if (c.fam === 'clcg') {
     h += parCell(pre, 'a1', 'a<sub>1</sub>', 'multiplier 1', 'multiplier of the first component', c.a1);
-    h += parCell(pre, 'm1', 'm<sub>1</sub>', '<span class="modtip">modulus 1</span>', MOD_TIP + '; the combined output is also taken mod m1', c.m1);
+    h += parCell(pre, 'm1', 'm<sub>1</sub>', 'modulus 1', MOD_TIP + '; the combined output is also taken mod m1', c.m1);
     h += parCell(pre, 'a2', 'a<sub>2</sub>', 'multiplier 2', 'multiplier of the second component', c.a2);
-    h += parCell(pre, 'm2', 'm<sub>2</sub>', '<span class="modtip">modulus 2</span>', MOD_TIP, c.m2);
+    h += parCell(pre, 'm2', 'm<sub>2</sub>', 'modulus 2', MOD_TIP, c.m2);
     h += parCell(pre, 's1', 'x1<sub>0</sub>', 'seed 1', 'starting state of the first component', c.s1);
     h += parCell(pre, 's2', 'x2<sub>0</sub>', 'seed 2', 'starting state of the second component', c.s2);
   } else {
@@ -2319,7 +2328,7 @@ function paramUIHTML(c, pre) {
   return h;
 }
 
-var MODTIP_HTML = '<span class="modtip" title="mod keeps only the remainder after dividing, wrapping around the way a clock wraps at 12">mod</span>';
+var MODTIP_HTML = '<span class="tip" tabindex="0" data-tip="mod keeps only the remainder after dividing, wrapping around the way a clock wraps at 12">mod</span>';
 function recurrenceHTML(c) {
   if (c.fam === 'lcg') {
     return 'x<sub>n+1</sub> = ( <b>' + fmtBig(c.a) + '</b> · x<sub>n</sub> + <b>' + fmtBig(c.c) +
@@ -4340,6 +4349,84 @@ function renderActive() {
   });
   Editor('c', CLCG_PRESETS, 'toyc', renderClcgExtras);
   Editor('m', MRG_PRESETS, 'toy2', renderMrgExtras);
+})();
+
+// ── Tooltips ────────────────────────────────────────────
+// One floating element serves every [data-tip] on the page, so two tips can never be
+// open at once and the text can carry markup. The title attribute is deliberately not
+// used: iOS and Android show it neither on tap nor on long press, and the keyboard
+// cannot reach it at all. See THEME.md.
+(function(){
+  var tip=document.createElement('div');
+  tip.id='tipbox';
+  tip.setAttribute('role','tooltip');
+  document.body.appendChild(tip);
+
+  // Every tip is also a description in the accessibility tree. The hidden spans are
+  // parked outside their triggers on purpose: inside a button or a label they would
+  // be read as part of its name rather than as its description.
+  var host=document.createElement('div');
+  host.className='sr-only';
+  document.body.appendChild(host);
+  function describe(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tip]:not([aria-describedby])'), function(el,i){
+      var id='tipdesc-'+(host.children.length)+'-'+i, sp=document.createElement('span');
+      sp.id=id; sp.innerHTML=el.getAttribute('data-tip');
+      host.appendChild(sp);
+      el.setAttribute('aria-describedby',id);
+    });
+  }
+  describe();
+  // Panels here are rebuilt from strings, so new triggers appear after load.
+  new MutationObserver(describe).observe(document.body,{childList:true,subtree:true});
+
+  var openedBy=null;
+  function place(x,y){
+    var r=tip.getBoundingClientRect();
+    var nx=x-r.width/2, ny=y+12;
+    if(nx+r.width>window.innerWidth-8) nx=window.innerWidth-8-r.width;
+    if(ny+r.height>window.innerHeight-8) ny=y-r.height-14;
+    tip.style.left=Math.max(8,nx)+'px'; tip.style.top=Math.max(8,ny)+'px';
+  }
+  function show(t,x,y,how){ tip.innerHTML=t.getAttribute('data-tip'); tip.style.opacity='1'; openedBy=how; place(x,y); }
+  function showAt(t,how){ var r=t.getBoundingClientRect(); show(t, r.left+r.width/2, r.bottom, how); }
+  function hide(){ tip.style.opacity='0'; openedBy=null; }
+  function hideIf(how){ if(openedBy===how)hide(); }
+  function target(e){ return e.target && e.target.closest ? e.target.closest('[data-tip]') : null; }
+
+  document.addEventListener('mousemove', function(e){ var t=target(e); if(t)show(t,e.clientX,e.clientY,'hover'); else hideIf('hover'); });
+  document.addEventListener('focusin',  function(e){ var t=target(e); if(t)showAt(t,'focus'); });
+  document.addEventListener('focusout', function(){ hideIf('focus'); });
+  document.addEventListener('keydown',  function(e){ if(e.key==='Escape')hide(); });
+  window.addEventListener('scroll', hide, true);
+
+  document.addEventListener('click', function(e){
+    var t=target(e);
+    if(t&&!t.hasAttribute('data-tip-press')){
+      // A trigger can sit inside a <label>, where the default action hands focus to
+      // the field and raises the keyboard on a phone. The tip is the whole intent.
+      e.preventDefault();
+      showAt(t,'tap');
+    } else hide();
+  });
+
+  var timer=null, x0=0, y0=0, swallow=false;
+  document.addEventListener('pointerdown', function(e){
+    var t=e.target.closest?e.target.closest('[data-tip-press]'):null;
+    if(!t)return;
+    x0=e.clientX; y0=e.clientY;
+    timer=setTimeout(function(){ timer=null; swallow=true; showAt(t,'press'); }, 450);
+  });
+  document.addEventListener('pointermove', function(e){
+    if(timer&&Math.hypot(e.clientX-x0,e.clientY-y0)>10){ clearTimeout(timer); timer=null; }
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
+  });
+  // Capture phase, so a press never reaches the control's own handler.
+  document.addEventListener('click', function(e){
+    if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
 })();
 </script>
 

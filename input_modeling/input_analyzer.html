@@ -409,6 +409,19 @@ footer a:hover { text-decoration: underline; }
    sentence are exempt under WCAG 2.5.8 and are left alone. */
 #course-nav-footer a { display: inline-block; padding: 6px 0; min-height: 26px; }
 .wh-copy a, footer:not(#course-nav-footer) a { display: inline-block; padding: 4px 0; }
+/* Tooltips: a dotted underline means an explanation is here, reachable by hover, tap,
+   or keyboard focus. Never a title attribute, which shows nothing on a touch screen
+   and cannot be reached from the keyboard. See THEME.md. */
+.tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* A control that tap already operates opens its tip on a long press instead. */
+[data-tip-press] { -webkit-touch-callout: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#tipbox { position: fixed; z-index: 60; max-width: 260px; padding: 8px 11px; border-radius: 7px;
+          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
+          box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
+          transition: opacity .08s; }
 </style>
 </head>
 <body>
@@ -521,8 +534,8 @@ footer a:hover { text-decoration: underline; }
                  inputmode="numeric" maxlength="10" autocomplete="off" spellcheck="false">
         </span>
         <button class="btn" id="gen-run" type="button">Generate</button>
-        <label class="chk" title="Generate always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next press.">
-          <input type="checkbox" id="gen-newseed" checked> New seed each time
+        <label class="chk" data-tip="Generate always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next press." data-tip-press>
+          <input type="checkbox" id="gen-newseed" checked> <span class="tip">New seed each time</span>
         </label>
       </div>
       <div class="gen-msg" id="gen-msg" role="status" aria-live="polite"></div>
@@ -599,8 +612,8 @@ footer a:hover { text-decoration: underline; }
           <option value="discrete">Discrete (counts)</option>
         </select>
       </span>
-      <label class="chk" id="shift-wrap" title="Each candidate that starts at zero gets its own γ, estimated inside its own fit">
-        <input type="checkbox" id="shift-chk"> Estimate a location shift γ (each candidate gets its own)
+      <label class="chk" id="shift-wrap" data-tip="Each candidate that starts at zero gets its own γ, estimated inside its own fit" data-tip-press>
+        <input type="checkbox" id="shift-chk"> <span class="tip">Estimate a location shift γ (each candidate gets its own)</span>
       </label>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="rank-by">Sort by</label>
@@ -689,7 +702,7 @@ footer a:hover { text-decoration: underline; }
         <input type="range" id="bins" min="3" max="40" step="1" value="10">
         <span class="mono" id="bins-val" style="min-width:2.2em;display:inline-block">10</span>
       </span>
-      <button class="btn2" id="bins-auto" type="button" title="Sturges' rule: 1 + log2(n) bins">Auto</button>
+      <button class="btn2" id="bins-auto" type="button" data-tip="Sturges' rule: 1 + log2(n) bins" data-tip-press>Auto</button>
       <span class="ctrl-note" id="bins-hint"></span>
     </div>
 
@@ -732,10 +745,10 @@ footer a:hover { text-decoration: underline; }
         </select>
       </span>
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="seed">Seed</label>
+        <label class="ctrl-lbl" for="seed"><span class="tip" tabindex="0" data-tip="Whole number 0 to 2147483647. The same seed reproduces the same p-values exactly.">Seed</span></label>
         <input class="mono-in" id="seed" type="text" inputmode="numeric" value="20260818"
                maxlength="10" size="10" autocomplete="off" spellcheck="false"
-               title="Whole number 0 to 2147483647. The same seed reproduces the same p-values exactly.">
+               >
       </span>
       <button class="btn" id="boot-run" type="button">Run the bootstrap</button>
       <button class="btn2" id="boot-stop" type="button" disabled>Stop</button>
@@ -1063,8 +1076,8 @@ footer a:hover { text-decoration: underline; }
                  inputmode="numeric" maxlength="10" autocomplete="off" spellcheck="false">
         </span>
         <button class="btn" id="a-gen-run" type="button">Generate</button>
-        <label class="chk" title="Generate always uses the seed shown. With this ticked, a fresh seed is drawn afterwards.">
-          <input type="checkbox" id="a-gen-newseed" checked> New seed each time
+        <label class="chk" data-tip="Generate always uses the seed shown. With this ticked, a fresh seed is drawn afterwards." data-tip-press>
+          <input type="checkbox" id="a-gen-newseed" checked> <span class="tip">New seed each time</span>
         </label>
       </div>
       <div class="gen-lam" id="a-gen-lam"></div>
@@ -5294,7 +5307,11 @@ function buildGenParams() {
     var lab = document.createElement('label');
     lab.setAttribute('for', 'gen-p' + i);
     lab.textContent = q.sym;
-    lab.title = q.name;
+    // The symbol alone does not say what it is, so the word rides along as a tip
+    // rather than as a title, which a phone would never show.
+    lab.className = 'tip';
+    lab.tabIndex = 0;
+    lab.setAttribute('data-tip', q.name);
     var inp = document.createElement('input');
     inp.type = 'number';
     inp.id = 'gen-p' + i;
@@ -7670,7 +7687,11 @@ function buildArrivalParams() {
     var lab = document.createElement('label');
     lab.setAttribute('for', 'a-gen-p' + i);
     lab.textContent = q.sym;
-    lab.title = q.name;
+    // The symbol alone does not say what it is, so the word rides along as a tip
+    // rather than as a title, which a phone would never show.
+    lab.className = 'tip';
+    lab.tabIndex = 0;
+    lab.setAttribute('data-tip', q.name);
     var inp = document.createElement('input');
     inp.type = 'number'; inp.id = 'a-gen-p' + i; inp.value = String(q.def); inp.step = 'any';
     inp.setAttribute('aria-label', spec.name + ' ' + q.name);
@@ -7946,6 +7967,85 @@ document.addEventListener('DOMContentLoaded', function () {
 </footer>
 <script>
 if (window.self !== window.top) { var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; } }
+</script>
+<script>
+// ── Tooltips ────────────────────────────────────────────
+// One floating element serves every [data-tip] on the page, so two tips can never be
+// open at once and the text can carry markup. The title attribute is deliberately not
+// used: iOS and Android show it neither on tap nor on long press, and the keyboard
+// cannot reach it at all. See THEME.md.
+(function(){
+  var tip=document.createElement('div');
+  tip.id='tipbox';
+  tip.setAttribute('role','tooltip');
+  document.body.appendChild(tip);
+
+  // Every tip is also a description in the accessibility tree. The hidden spans are
+  // parked outside their triggers on purpose: inside a button or a label they would
+  // be read as part of its name rather than as its description.
+  var host=document.createElement('div');
+  host.className='sr-only';
+  document.body.appendChild(host);
+  function describe(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tip]:not([aria-describedby])'), function(el,i){
+      var id='tipdesc-'+(host.children.length)+'-'+i, sp=document.createElement('span');
+      sp.id=id; sp.innerHTML=el.getAttribute('data-tip');
+      host.appendChild(sp);
+      el.setAttribute('aria-describedby',id);
+    });
+  }
+  describe();
+  // Panels here are rebuilt from strings, so new triggers appear after load.
+  new MutationObserver(describe).observe(document.body,{childList:true,subtree:true});
+
+  var openedBy=null;
+  function place(x,y){
+    var r=tip.getBoundingClientRect();
+    var nx=x-r.width/2, ny=y+12;
+    if(nx+r.width>window.innerWidth-8) nx=window.innerWidth-8-r.width;
+    if(ny+r.height>window.innerHeight-8) ny=y-r.height-14;
+    tip.style.left=Math.max(8,nx)+'px'; tip.style.top=Math.max(8,ny)+'px';
+  }
+  function show(t,x,y,how){ tip.innerHTML=t.getAttribute('data-tip'); tip.style.opacity='1'; openedBy=how; place(x,y); }
+  function showAt(t,how){ var r=t.getBoundingClientRect(); show(t, r.left+r.width/2, r.bottom, how); }
+  function hide(){ tip.style.opacity='0'; openedBy=null; }
+  function hideIf(how){ if(openedBy===how)hide(); }
+  function target(e){ return e.target && e.target.closest ? e.target.closest('[data-tip]') : null; }
+
+  document.addEventListener('mousemove', function(e){ var t=target(e); if(t)show(t,e.clientX,e.clientY,'hover'); else hideIf('hover'); });
+  document.addEventListener('focusin',  function(e){ var t=target(e); if(t)showAt(t,'focus'); });
+  document.addEventListener('focusout', function(){ hideIf('focus'); });
+  document.addEventListener('keydown',  function(e){ if(e.key==='Escape')hide(); });
+  window.addEventListener('scroll', hide, true);
+
+  document.addEventListener('click', function(e){
+    var t=target(e);
+    if(t&&!t.hasAttribute('data-tip-press')){
+      // A trigger can sit inside a <label>, where the default action hands focus to
+      // the field and raises the keyboard on a phone. The tip is the whole intent.
+      e.preventDefault();
+      showAt(t,'tap');
+    } else hide();
+  });
+
+  var timer=null, x0=0, y0=0, swallow=false;
+  document.addEventListener('pointerdown', function(e){
+    var t=e.target.closest?e.target.closest('[data-tip-press]'):null;
+    if(!t)return;
+    x0=e.clientX; y0=e.clientY;
+    timer=setTimeout(function(){ timer=null; swallow=true; showAt(t,'press'); }, 450);
+  });
+  document.addEventListener('pointermove', function(e){
+    if(timer&&Math.hypot(e.clientX-x0,e.clientY-y0)>10){ clearTimeout(timer); timer=null; }
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
+  });
+  // Capture phase, so a press never reaches the control's own handler.
+  document.addEventListener('click', function(e){
+    if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
+})();
 </script>
 </body>
 </html>
