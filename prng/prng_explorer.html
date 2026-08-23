@@ -1070,7 +1070,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       whose slice it lands in (the inverse-transform method). A keyed scoring function is
       just as indifferent: it scores a word's identity the way it scored a candidate
       number. The tournament therefore runs unchanged – draw eight candidate words from the
-      model's distribution, play three keyed rounds, and emit the winner.</div>
+      model's distribution, play three keyed rounds, and emit the winner. That tournament
+      is the published mechanism of Google's
+      <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
+      watermark for text
+      (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
+      et al. 2024, <em>Nature</em> 634:818–823</a>), run here at toy scale. A deployed
+      system differs in many engineering details, but the limits are the same: detection
+      is statistical, and so it needs enough words to stand clear of chance, and editing
+      or paraphrasing the text weakens the signature.</div>
 
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 460px; min-width:0;">
@@ -1154,9 +1162,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             remembers and barely constrains, and so nearly every word offers the key a
             real choice; order 3 reproduces the corpus faithfully and forces most
             continuations, leaving the key little to do. The stats under the passage keep
-            score, and the conditional check compares the passage against the chain's own
-            conditional distributions – marked or not, about 5% of testable contexts
-            should be flagged at the 5% level.</div>
+            score, and the distribution check compares the passage against the chain's own
+            conditionals – marked or not, about 5% of testable contexts should be flagged
+            at the 5% level.</div>
           <div class="ctrl-row" style="margin-bottom:2px;">
             <label class="ctrl-lbl" for="mk-order">Chain order</label>
             <select id="mk-order">
@@ -1196,8 +1204,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             as random under the right key), and so a longer passage means tighter
             whiskers and surer verdicts.</div>
           <svg class="plot" id="tx-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means: the secret key in the top row against twenty random wrong keys"></svg>
-          <div class="cv-leg">one row per key, the secret key in the top row – dot and whiskers: each key's
-            detection mean with its 95% confidence interval</div>
+          <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying
+            its verdict – dot and whiskers: each key's detection mean with its 95%
+            confidence interval</div>
           <div style="font-size:.78rem; line-height:1.5; color:var(--muted); margin:6px auto 0; max-width:26em;
                display:grid; grid-template-columns:1.2em 1fr; gap:1px 8px; text-align:left;">
             <span style="color:var(--accent); font-weight:700;">✓</span>
@@ -1207,25 +1216,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             <span style="font-weight:700;">–</span>
             <span>consistent with chance: z ≤ 3 (p above 0.0013)</span>
           </div>
-          <div class="cv-leg" style="text-align:left; margin-top:8px;">A 95% interval
-            misses its truth 5% of the time, and so about one innocent key per redraw
-            slips past 0.5 – watch for it. That is why the verdict does not hang on the
-            intervals: a false "detected" accuses an unmarked text, and so the detection
-            level sits at α ≈ 10<sup>−9</sup>, deliberately far below the usual 0.05, at
-            which this lineup alone would convict an innocent key about once per redraw,
-            and a deployed detector scanning millions of documents would convict
-            thousands a day.</div>
-          <div class="cv-leg" id="tx-result" style="min-height:2.6em; margin-top:6px; text-align:left;"></div>
-          <div class="cv-leg" style="text-align:left; margin-top:10px;">That is the published
-            mechanism of Google's
-            <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
-            watermark for text
-            (<a href="https://doi.org/10.1038/s41586-024-08025-4" target="_blank" rel="noopener">Dathathri
-            et al. 2024, <em>Nature</em> 634:818–823</a>); this page is that scheme at toy
-            scale, and a deployed system differs in many engineering details. The limits
-            are the same at every scale: detection is statistical, and so it needs enough
-            words to stand clear of chance, and editing or paraphrasing the text weakens
-            the signature.</div>
+          <div class="cv-leg" style="text-align:left; margin-top:8px;">A 95% confidence
+            interval (the whiskers above) fails to cover the true mean in 5% of
+            experiments. Detection is one-sided, though – only a mean above 0.5 counts –
+            and so only half of those misses can read as detections: in a lineup of
+            twenty wrong keys, an interval lands entirely above 0.5 about once every
+            other redraw. Even that is far too often for a detector scanning millions of
+            documents a day, and so the bar for ✓ sits at α ≈ 10<sup>−9</sup> rather than
+            0.05, far more conservative than the plotted intervals.</div>
+          <div class="cv-leg" id="tx-result" style="margin-top:6px; text-align:left;"></div>
         </div>
       </div>
     </div>
@@ -1238,8 +1237,11 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       certain. The tournament keeps no list, and none could exist: scored by rule 1 across
       2,000 synthetic four-word contexts each, three words from the toy vocabulary come
       out flat on [0, 1] – dragons, the vocabulary's long shot, included – and rules 2 and
-      3, and every other key, behave identically. The preference at any one blank is real,
-      but it carries no per-word component that could accumulate across a text.
+      3, and every other key, behave identically. Although watermarking induces a
+      preference for words with higher scores at any one blank, a word's score varies
+      across the text, and so the overall distribution of words in the text is not
+      shifted toward any watermarking-favored words as it would be with green or red
+      lists.
       <div id="tx-greens" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px;"></div>
     </div>
 
@@ -3852,18 +3854,29 @@ function mkWrite(n) {
   mk.ids = res.ids;
   document.getElementById('mk-text').textContent = mkRender(res.ids);
   var dev = markovDeviation(res.ids, mk.order, 30);
-  var expFlag = Math.round(dev.tested * 0.05 * 10) / 10;
-  document.getElementById('mk-stats').innerHTML =
-    n.toLocaleString('en-US') + ' words · ' +
-    (marked
-      ? 'marked with secret key <b>' + key.toLocaleString('en-US') + '</b> · tournament at <b>' +
-        res.tournaments + '</b> of them (' + res.forced +
-        ' forced, nothing to choose) · ' + res.masked + ' repeated contexts masked'
-      : 'watermark off: every word a plain draw') +
-    '<br>conditional check: ' + (dev.tested === 0
-      ? 'no context visited often enough to test yet – write a few pages'
-      : '<b>' + dev.flagged + '</b> of ' + dev.tested +
-        ' busy contexts deviate at the 5% level (about ' + expFlag + ' expected either way)');
+  var parts = [];
+  if (marked) {
+    parts.push('<b>The words.</b> ' + n.toLocaleString('en-US') + ', marked with secret key <b>' +
+      key.toLocaleString('en-US') + '</b>: a tournament at <b>' + res.tournaments +
+      '</b>, and the other ' + (n - res.tournaments).toLocaleString('en-US') +
+      ' plain draws – the first 4 have no history yet, and ' + res.masked +
+      ' repeat a history already used and are masked.');
+    parts.push('<b>The detector\'s evidence.</b> 3 rounds × ' + res.tournaments +
+      ' tournaments = <b>' + (MK_ROUNDS * res.tournaments).toLocaleString('en-US') +
+      '</b> keyed scores – though at ' + res.forced + ' of the tournaments, the chain ' +
+      'offers a single word, and so the key has nothing to choose there.');
+  } else {
+    parts.push('<b>The words.</b> ' + n.toLocaleString('en-US') +
+      ' – watermark off: every word a plain draw.');
+  }
+  parts.push('<b>The distribution, preserved.</b> ' + (dev.tested === 0
+    ? 'No context is visited often enough to test yet – write a few pages.'
+    : '<b>' + dev.flagged + '</b> of ' + dev.tested + ' contexts visited 30 or more times ' +
+      'deviate from the chain\'s own conditionals at the 5% level – about 5% should, ' +
+      'marked or not.'));
+  document.getElementById('mk-stats').innerHTML = parts.map(function (t, i) {
+    return '<div' + (i ? ' style="margin-top:4px;"' : '') + '>' + t + '</div>';
+  }).join('');
   txTest();
 }
 
@@ -3901,14 +3914,7 @@ function txTest() {
   var k = mk.key;
   var r = wordDetect(mk.ids, k, MK_ROUNDS, MK_V);
   drawKeyLineup(k, r);
-  var verdict = r.z > 6 ? 'far above chance: the text carries this key.'
-              : r.z > 3 ? 'above chance: evidence this key marked the text.'
-              : 'indistinguishable from chance: no evidence this key marked the text.';
-  document.getElementById('tx-result').innerHTML =
-    'Secret key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
-    '</b> across the ' + (MK_ROUNDS * r.n).toLocaleString('en-US') + ' scores of ' +
-    r.n.toLocaleString('en-US') + ' fresh-context words. Chance is 0.500. z = ' +
-    r.z.toFixed(1) + ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ') \u2013 ' + verdict;
+  document.getElementById('tx-result').innerHTML = '';
 }
 
 /* The shared key-lineup renderer: one row per key, the secret key in
@@ -3926,10 +3932,14 @@ function drawLineup(id, rows, H, xMin, xMax, xt) {
   p.push('<text x="' + (L - 8) + '" y="' + (T - 6) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">key</text>');
   p.push('<text x="' + (Rb + 10) + '" y="' + (T - 6) + '" font-size="9" fill="' + C.muted + '">mean</text>');
   for (var i = 0; i < n; i++) {
-    var r = rows[i], col = r.mine ? C.accent : C.muted;
+    var r = rows[i];
+    /* the secret-key row is tinted by its verdict: accent when the
+       mark is detected, orange for weak evidence, gray at chance */
+    var vcol = r.z > 6 ? C.accent : r.z > 3 ? C.est : C.muted;
+    var col = r.mine ? vcol : C.muted;
     var cy = T + (i + 0.5) * rowH;
     if (r.mine) p.push('<rect x="0" y="' + (T + i * rowH) + '" width="' + W + '" height="' + rowH +
-                       '" fill="' + C.accent + '" opacity="0.07"/>');
+                       '" fill="' + vcol + '" opacity="' + (vcol === C.muted ? 0.16 : 0.08) + '"/>');
     p.push('<line x1="' + x(r.mean - 1.96 * r.se) + '" y1="' + cy + '" x2="' + x(r.mean + 1.96 * r.se) + '" y2="' + cy +
            '" stroke="' + col + '" stroke-width="2"/>');
     p.push('<circle cx="' + x(r.mean) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>');
