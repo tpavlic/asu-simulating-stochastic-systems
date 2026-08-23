@@ -149,7 +149,7 @@ copyright and license links too, so every link on the page behaves the same way.
 ## Contrast reference
 
 | Color | On white | Use for |
-|---|---|---|
+| --- | --- | --- |
 | ASU maroon `#8C1D40` | 8.88:1 | chrome: text, rules, button fills |
 | ASU gold `#FFC627` | 1.57:1 | large fills and thick rules only, never text or marks |
 | Dark ochre `#8b6914` | 5.09:1 | the readable stand-in for gold |
