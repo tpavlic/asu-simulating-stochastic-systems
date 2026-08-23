@@ -678,20 +678,22 @@ footer a:hover { text-decoration: underline; }
 
     <div class="ctrl-row">
       <span class="ctrl-lbl">Look up:</span>
-      <span class="p-item"><label for="oc-n">n =</label>
-        <input type="number" id="oc-n" class="p-in narrow" min="2" step="1" value="20"></span>
       <span class="p-item"><label for="oc-eff" id="oc-eff-lbl">d =</label>
         <input type="number" id="oc-eff" class="p-in" step="0.05" value="0.5"></span>
       <span class="p-item"><label for="oc-beta">β =</label>
         <input type="number" id="oc-beta" class="p-in" min="0.001" max="0.999" step="0.01"></span>
+      <span class="p-item"><label for="oc-n">n =</label>
+        <input type="number" id="oc-n" class="p-in narrow" min="2" step="1" value="20"></span>
       <span class="ctrl-note" id="oc-read" style="font-weight:600"></span>
     </div>
-    <div class="ctrl-note" style="margin-bottom:8px">The three boxes are one lookup: n and the
-      effect determine β, and a typed β solves for the smallest n that reaches it. On the chart
-      itself, drag the orange dot to move both at once, or drag either dashed projection line to
-      move one of them; with a mouse, hovering anywhere reads off the β, effect, and implied n at
-      that point, and with a finger, tapping anywhere moves the lookup there and reads off the
-      same three numbers.</div>
+    <div class="ctrl-note" style="margin-bottom:8px">The effect and β are the two coordinates of
+      the orange dot; n is the answer the chart gives back, the smallest sample size whose curve
+      passes at or below the dot. That curve is drawn in orange. Typing an n instead
+      runs the lookup the other way, putting the dot on that curve to read its β. On the chart
+      itself, drag the dot to move both coordinates at once, or drag either dashed projection line
+      to move one coordinate with the other held. With a mouse, hovering anywhere reads off the
+      β, effect, and implied n at that point, and with a finger, tapping anywhere moves the lookup
+      there.</div>
 
     <div class="plot-card">
       <div class="scrollwrap">
@@ -2262,7 +2264,7 @@ var ST = {
   m: 10000, seed: 20260819,
   mc: null,       /* last completed MC run, with a .fresh flag */
   solved: null,   /* analytic solve-for-n result in n mode */
-  ocN: null, ocEff: null, pnMax: 0,
+  ocN: null, ocEff: null, ocBeta: null, pnMax: 0,
   ad: null        /* last gamma-regression MC run */
 };
 
@@ -3723,6 +3725,19 @@ function ocSolveN(e, beta) {
   return hi;
 }
 
+/* Start the lookup from whatever tab ① is set to: the effect and n come
+   from there, and β follows from the pair. */
+function seedOCLookup() {
+  var t = curTest();
+  ST.ocN = curN();
+  ST.ocEff = Math.abs(curEffect());
+  ST.ocBeta = Math.min(0.995, Math.max(0.005,
+    1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, curParams(), ST.alpha, curSided())));
+  $('oc-n').value = ST.ocN;
+  $('oc-eff').value = N(ST.ocEff, 4);
+  $('oc-beta').value = N(ST.ocBeta, 4);
+}
+
 function renderOC() {
   var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided();
   /* The classic chart runs the |effect| axis from 0 (β = 1 − α) upward;
@@ -3771,6 +3786,12 @@ function renderOC() {
      dragging) and the hover crosshair with its readout box. */
   var dash = 'stroke:' + C.altc + ';stroke-width:1.2;stroke-dasharray:4 3';
   s += '<g id="oc-ov" style="display:none">' +
+       '<path id="oc-nc" d="" fill="none" stroke="' + C.altc +
+       '" stroke-width="2.4" opacity="0.45"/>' +
+       '<g id="oc-nlab" style="display:none">' +
+       '<rect id="oc-nlr" width="30" height="13" fill="' + C.bg + '" opacity="0.9"/>' +
+       '<text id="oc-nlt" style="' + MONO + ';font-size:9.5px;fill:' + C.altc +
+       '" text-anchor="middle"></text></g>' +
        '<line id="oc-vl" x1="0" y1="0" x2="0" y2="0" style="' + dash + '"/>' +
        '<line id="oc-hl" x1="0" y1="0" x2="0" y2="0" style="' + dash + '"/>' +
        '<circle id="oc-dotc" r="' + (isTouch() ? 9 : 6.5) +
@@ -3789,6 +3810,12 @@ function renderOC() {
 
   svg.innerHTML = s;
   OCV = { fr: fr, xlo: xlo, xhi: xhi, W: W, H: H, narrow: gm.narrow, bw: bw, bh: bh };
+  /* The settings may have moved under the stored lookup, and so n is solved
+     again unless the one on record still reaches the recorded β. */
+  if (Number.isFinite(ST.ocEff) && Number.isFinite(ST.ocBeta) &&
+      !(Number.isFinite(ST.ocN) && ST.ocN >= t.nMin &&
+        t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, p, a, sided) >= 1 - ST.ocBeta - 1e-12))
+    ST.ocN = ocSolveN(ocSigned(ST.ocEff), ST.ocBeta);
   updateOCOverlay();
   $('oc-cap').textContent = 'One curve per sample size, β against the effect, at α = ' + N(a, 3) +
     ' (' + (sided === 'two' ? 'two-sided' : 'one-sided') + ')—redrawn live for the ' +
@@ -3797,25 +3824,64 @@ function renderOC() {
   $('oc-eff-lbl').textContent = t.effect.sym + ' =';
 }
 
+/* The curve for the sample size the lookup lands on, drawn among the printed
+   ladder so the dot has something to be read against: it is the lowest curve
+   passing at or below the dot. */
+function drawOCSolvedCurve(n, betaDot) {
+  var el = $('oc-nc'), lab = $('oc-nlab');
+  if (!el || !lab || !OCV) return;
+  if (!Number.isFinite(n)) {
+    el.setAttribute('d', '');
+    lab.style.display = 'none';
+    OCV.ncKey = null;
+    return;
+  }
+  /* The curve is labeled like the printed ones, at a β level that falls
+     between the ladder's own label levels and clear of the dot. */
+  var lev = OCV.narrow ? 0.66 : 0.7;
+  if (Math.abs(betaDot - lev) < 0.09) lev = OCV.narrow ? 0.42 : 0.4;
+  var key = n + '@' + lev;
+  if (OCV.ncKey === key) return;
+  OCV.ncKey = key;
+  var t = curTest(), p = curParams(), fr = OCV.fr, pts = [];
+  for (var i = 0; i <= 120; i++) {
+    var e = OCV.xlo + (OCV.xhi - OCV.xlo) * i / 120;
+    pts.push([fr.X(e), fr.Y(1 - t.powerAtEffect(ocSigned(e), n, p, ST.alpha, curSided()))]);
+  }
+  el.setAttribute('d', polyPath(pts));
+  var best = 0;
+  for (var q = 0; q < pts.length; q++)
+    if (Math.abs(pts[q][1] - fr.Y(lev)) < Math.abs(pts[best][1] - fr.Y(lev))) best = q;
+  var lx = Math.min(Math.max(pts[best][0], fr.mL + 16), fr.mL + fr.iw - 16);
+  lab.style.display = '';
+  $('oc-nlr').setAttribute('x', N(lx - 15, 6));
+  $('oc-nlr').setAttribute('y', N(pts[best][1] - 8, 6));
+  var tx = $('oc-nlt');
+  tx.setAttribute('x', N(lx, 6));
+  tx.setAttribute('y', N(pts[best][1] + 3, 6));
+  tx.textContent = 'n=' + n;
+}
+
 /* Position the dot and its projections from the committed lookup (or from
    live drag values), refresh the readout, and keep the three boxes in
-   step with each other. */
+   step with each other.  The effect and β are what the dot carries; n is
+   solved from them by whoever moved it and arrives here already decided. */
 function updateOCOverlay(live, extraMsg) {
   if (!OCV) return;
   var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided();
   var fr = OCV.fr, ov = $('oc-ov');
   if (!ov) return;
-  var d, beta;
-  if (live) { d = live.d; beta = live.beta; }
+  var d, beta, n;
+  if (live) { d = live.d; beta = live.beta; n = live.n; }
   else {
-    if (!(Number.isFinite(ST.ocN) && ST.ocN >= t.nMin && Number.isFinite(ST.ocEff))) {
+    if (!(Number.isFinite(ST.ocEff) && Number.isFinite(ST.ocBeta))) {
       ov.style.display = 'none';
       $('oc-read').textContent = '';
       return;
     }
-    d = ST.ocEff;
-    beta = 1 - t.powerAtEffect(ocSigned(d), ST.ocN, p, a, sided);
+    d = ST.ocEff; beta = ST.ocBeta; n = ST.ocN;
   }
+  drawOCSolvedCurve(n === null ? NaN : n, beta);
   var bx = Math.min(Math.max(d, OCV.xlo), OCV.xhi);
   var X = fr.X(bx), Y = fr.Y(Math.min(Math.max(beta, 0), 1));
   ov.style.display = '';
@@ -3830,25 +3896,21 @@ function updateOCOverlay(live, extraMsg) {
     $('oc-read').textContent = live.msg || '';
   } else {
     if (document.activeElement !== $('oc-beta')) $('oc-beta').value = N(beta, 4);
-    if (document.activeElement !== $('oc-n')) $('oc-n').value = ST.ocN;
+    if (document.activeElement !== $('oc-n')) $('oc-n').value = Number.isFinite(n) ? n : '';
     if (document.activeElement !== $('oc-eff')) $('oc-eff').value = N(ST.ocEff, 4);
     $('oc-read').textContent = (extraMsg ? extraMsg + '  ' : '') +
-      'β = ' + N(beta, 4) + '  →  power = ' + N(1 - beta, 4);
+      'β = ' + N(beta, 4) + '  →  power = ' + N(1 - beta, 4) +
+      (Number.isFinite(n) ? '' : '  (no n reaches this β at this effect)');
   }
 }
 
-/* Mouse interaction on the chart: drag the dot to move both coordinates
-   (n solved from where it lands), drag the vertical dashed line to move
-   the effect at fixed n, drag the horizontal one to move β (n solved).
-   Hovering, or a tap on a touch screen, reads off the point under the
-   pointer.  The commit happens on release; the numeric boxes drive the
-   same state. */
 /* Pointer interaction on the chart, for a mouse and for a finger.
 
-   Mouse: drag the dot to move both coordinates (n solved from where it
-   lands), drag the vertical dashed line to move the effect at fixed n,
-   drag the horizontal one to move β (n solved), and hover anywhere to
-   read off the point under the cursor.
+   Mouse: drag the dot to move both of its coordinates, drag the vertical
+   dashed line to move the effect with β held, drag the horizontal one to
+   move β with the effect held, and hover anywhere to read off the point
+   under the cursor.  Each of those solves n again because n is the answer
+   the chart gives rather than something the dot carries.
 
    Touch: the same three handles drag, with hit areas grown to the WCAG
    24px and the page's own scrolling suppressed only for a gesture that
@@ -3955,26 +4017,30 @@ function wireOCPointer() {
     if (!OCV) return;
     var q = toVB(ev);
     if (drag) {
-      var t = curTest(), c = toData(q);
+      var t = curTest(), c = toData(q), sym = t.effect.sym;
+      var nd = function (nn) { return nn === null ? 'out of reach' : nn; };
       if (drag === 'dot') {
-        var nD = ocSolveN(ocSigned(c.d), c.beta);
-        pending = { d: c.d, n: nD };
-        updateOCOverlay({ d: c.d, beta: c.beta,
-          msg: 'β = ' + N(c.beta, 3) + ', ' + t.effect.sym + ' = ' + N(c.d, 3) +
-               '  →  smallest n = ' + (nD === null ? 'out of reach' : nD) });
+        var pD = { d: c.d, beta: c.beta, n: ocSolveN(ocSigned(c.d), c.beta) };
+        pending = pD;
+        updateOCOverlay({ d: pD.d, beta: pD.beta, n: pD.n,
+          msg: 'β = ' + N(pD.beta, 3) + ', ' + sym + ' = ' + N(pD.d, 3) +
+               '  →  smallest n = ' + nd(pD.n) });
       } else if (drag === 'v') {
-        var bV = 1 - t.powerAtEffect(ocSigned(c.d), ST.ocN, curParams(), ST.alpha, curSided());
-        pending = { d: c.d, n: ST.ocN };
-        updateOCOverlay({ d: c.d, beta: bV,
-          msg: t.effect.sym + ' = ' + N(c.d, 3) + ' at n = ' + ST.ocN + '  →  β = ' + N(bV, 4) });
+        /* The vertical line slides along the effect axis, and so β stays
+           where the reader left it and n is what changes. */
+        var pV = { d: c.d, beta: ST.ocBeta, n: ocSolveN(ocSigned(c.d), ST.ocBeta) };
+        pending = pV;
+        updateOCOverlay({ d: pV.d, beta: pV.beta, n: pV.n,
+          msg: sym + ' = ' + N(pV.d, 3) + ' at β = ' + N(pV.beta, 3) +
+               '  →  smallest n = ' + nd(pV.n) });
       } else {
-        var nH = ocSolveN(ocSigned(ST.ocEff), c.beta);
-        var bH = nH === null ? c.beta :
-          1 - t.powerAtEffect(ocSigned(ST.ocEff), nH, curParams(), ST.alpha, curSided());
-        pending = { d: ST.ocEff, n: nH };
-        updateOCOverlay({ d: ST.ocEff, beta: bH,
-          msg: 'β ≤ ' + N(c.beta, 3) + ' at ' + t.effect.sym + ' = ' + N(ST.ocEff, 3) +
-               '  →  smallest n = ' + (nH === null ? 'out of reach' : nH) });
+        /* β is continuous and the dot follows the finger exactly; the
+           printed ladder is what n steps through underneath it. */
+        var pH = { d: ST.ocEff, beta: c.beta, n: ocSolveN(ocSigned(ST.ocEff), c.beta) };
+        pending = pH;
+        updateOCOverlay({ d: pH.d, beta: pH.beta, n: pH.n,
+          msg: 'β = ' + N(pH.beta, 3) + ' at ' + sym + ' = ' + N(pH.d, 3) +
+               '  →  smallest n = ' + nd(pH.n) });
       }
       return;
     }
@@ -3994,9 +4060,9 @@ function wireOCPointer() {
     if (!drag) return;
     drag = null;
     if (pending) {
-      var t = curTest();
       if (Number.isFinite(pending.d)) ST.ocEff = pending.d;
-      if (pending.n !== null && Number.isFinite(pending.n)) ST.ocN = Math.max(t.nMin, pending.n);
+      if (Number.isFinite(pending.beta)) ST.ocBeta = pending.beta;
+      ST.ocN = pending.n;
       pending = null;
     }
     updateOCOverlay();
@@ -4005,12 +4071,11 @@ function wireOCPointer() {
      dragging the dot there, and the only way to reach a chart position
      without a hover. */
   function commitTap(q) {
-    var t = curTest(), c = toData(q);
-    var nn = ocSolveN(ocSigned(c.d), c.beta);
+    var c = toData(q);
     ST.ocEff = c.d;
-    if (nn !== null && Number.isFinite(nn)) ST.ocN = Math.max(t.nMin, nn);
-    updateOCOverlay(null, nn === null
-      ? 'No n reaches β ≤ ' + N(c.beta, 3) + ' at that effect.' : '');
+    ST.ocBeta = c.beta;
+    ST.ocN = ocSolveN(ocSigned(c.d), c.beta);
+    updateOCOverlay();
     showHover(q);
   }
   svg.addEventListener('pointerup', function (ev) {
@@ -4286,11 +4351,7 @@ function switchTest(id) {
   renderParams();
   renderNControls();
   if (ST.mode === 'n') renderSolve();
-  /* keep the OC lookup in step with the new test */
-  ST.ocN = curN();
-  ST.ocEff = Math.abs(curEffect());
-  $('oc-n').value = ST.ocN;
-  $('oc-eff').value = N(ST.ocEff, 4);
+  seedOCLookup();   /* keep the OC lookup in step with the new test */
   settingsChanged();
 }
 
@@ -4420,27 +4481,27 @@ document.addEventListener('DOMContentLoaded', function () {
     TAB_DIRTY.curves = true; renderVisibleTab();
   });
 
+  /* Typing a sample size runs the lookup the other way, dropping the dot
+     onto that curve to read its β; the other two boxes move the dot and
+     leave n to be solved, exactly as their dashed lines do. */
   $('oc-n').addEventListener('change', function () {
-    var v = Math.floor(Number(this.value));
-    if (Number.isFinite(v)) ST.ocN = Math.max(curTest().nMin, v);
-    this.value = ST.ocN;
+    var v = Math.floor(Number(this.value)), t = curTest();
+    if (Number.isFinite(v) && Number.isFinite(ST.ocEff)) {
+      ST.ocN = Math.max(t.nMin, v);
+      ST.ocBeta = Math.min(0.995, Math.max(0.005,
+        1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, curParams(), ST.alpha, curSided())));
+    }
     updateOCOverlay();
   });
   $('oc-eff').addEventListener('change', function () {
     var v = Number(this.value);
-    if (Number.isFinite(v)) ST.ocEff = v;
+    if (Number.isFinite(v)) { ST.ocEff = v; ST.ocN = ocSolveN(ocSigned(v), ST.ocBeta); }
     updateOCOverlay();
   });
   $('oc-beta').addEventListener('change', function () {
     var b = Number(this.value);
-    if (!(b > 0 && b < 1)) { updateOCOverlay(); return; }
-    var nn = ocSolveN(ocSigned(ST.ocEff), b);
-    if (nn === null) {
-      updateOCOverlay(null, 'β ≤ ' + N(b, 3) + ' is out of reach at this effect.');
-      return;
-    }
-    ST.ocN = nn;
-    updateOCOverlay(null, 'Smallest n with β ≤ ' + N(b, 3) + ' is ' + nn + '.');
+    if (b > 0 && b < 1) { ST.ocBeta = b; ST.ocN = ocSolveN(ocSigned(ST.ocEff), b); }
+    updateOCOverlay();
   });
   wireOCPointer();
 
@@ -4486,8 +4547,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   /* Open on something moving rather than a blank page */
-  ST.ocN = curN(); ST.ocEff = Math.abs(curEffect());
-  $('oc-n').value = ST.ocN; $('oc-eff').value = N(ST.ocEff, 4);
+  seedOCLookup();
   settingsChanged();
 });
 </script>
