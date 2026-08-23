@@ -205,8 +205,13 @@ svg.plot { display: block; width: 100%; height: auto; }
 /* The full-width plots keep a readable minimum width on a phone and pan
    sideways inside their own container instead of shrinking to confetti;
    the page itself never scrolls horizontally. */
+/* Below this breakpoint the wide plots switch to a narrow, taller
+   viewBox sized to the container (see plotGeom in the page script), and so
+   a phone gets the whole chart at full label size instead of a wide one
+   panned sideways.  Above it the wrapper still scrolls rather than
+   squeezing a 940-unit chart into a half-width column. */
 .scrollwrap { overflow-x: auto; }
-.scrollwrap svg.plot { min-width: 620px; }
+@media (min-width: 640px) { .scrollwrap svg.plot { min-width: 620px; } }
 .plot-cap { font-size: .75rem; color: var(--muted); text-align: center; margin-top: 6px; }
 .plot-hd { font-size: .72rem; font-weight: 700; color: var(--accent); text-transform: uppercase;
            letter-spacing: .06em; margin-bottom: 6px; }
@@ -682,10 +687,11 @@ footer a:hover { text-decoration: underline; }
       <span class="ctrl-note" id="oc-read" style="font-weight:600"></span>
     </div>
     <div class="ctrl-note" style="margin-bottom:8px">The three boxes are one lookup: n and the
-      effect determine β, and a typed β solves for the smallest n that reaches it. With a mouse, you
-      can also drag the orange dot (or either dashed projection line) around the chart, and hovering
-      anywhere reads off the β, effect, and implied n at that point; on a touch screen, tap the
-      chart for the same readout and use the boxes to move the lookup.</div>
+      effect determine β, and a typed β solves for the smallest n that reaches it. On the chart
+      itself, drag the orange dot to move both at once, or drag either dashed projection line to
+      move one of them; with a mouse, hovering anywhere reads off the β, effect, and implied n at
+      that point, and with a finger, tapping anywhere moves the lookup there and reads off the
+      same three numbers.</div>
 
     <div class="plot-card">
       <div class="scrollwrap">
@@ -2343,6 +2349,40 @@ function niceTicks(lo, hi, want) {
   return t;
 }
 
+/* ── Responsive plot geometry ──────────────────────────────────────────
+   Every plot is drawn into a viewBox as wide as the space it actually has,
+   capped at its designed width, and so one viewBox unit is one CSS pixel
+   and a 11px label is 11px on a phone as well as on a projector.  Below
+   `tallBelow` the plot also takes a taller aspect: the axes that
+   fit side by side on a laptop have to stack their information vertically
+   on a 390px screen. */
+function plotGeom(svg, wideW, wideH, tallAspect, tallBelow) {
+  var host = svg.parentNode;
+  var avail = Math.round((host && host.clientWidth) || 0) || wideW;
+  var W = Math.max(300, Math.min(avail, wideW));
+  var narrow = W < (tallBelow || 620);
+  var H = narrow ? Math.round(W * tallAspect) : wideH;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  return { W: W, H: H, narrow: narrow };
+}
+/* A plot drawn while its tab was hidden had no width to measure and fell
+   back to its designed size; this reports whether the geometry it is
+   carrying is the one it would pick now that it can see the room it has. */
+function geomStale(svg, wideW) {
+  if (!svg || !svg.parentNode) return false;
+  var avail = svg.parentNode.clientWidth;
+  if (!avail) return false;
+  var want = Math.max(300, Math.min(Math.round(avail), wideW));
+  var have = Number((svg.getAttribute('viewBox') || '').split(' ')[2]);
+  return !(Math.abs(want - have) <= 2);
+}
+
+/* A pointer that cannot hover is a finger: hit areas grow, and anything
+   that would have been a hover affordance has to be reachable by tap. */
+function isTouch() {
+  return !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+}
+
 /* Axes scaffold: returns mapping fns and the axis markup. */
 function frame(W, H, mL, mR, mT, mB, xlo, xhi, ylo, yhi) {
   var iw = W - mL - mR, ih = H - mT - mB;
@@ -2648,7 +2688,8 @@ function renderNVPlot() {
   var t = curTest(), p = curParams(), n = curN(), a = ST.alpha, sided = curSided();
   var crit = t.crit(n, p, a, sided);
   var svg = $('nv-plot');
-  var W = 940, H = 330;
+  var gm = plotGeom(svg, 940, 330, 0.82, 620);
+  var W = gm.W, H = gm.H;
 
   if (t.discrete) { renderNVDiscrete(svg, t, p, n, a, sided, crit, W, H); return; }
 
@@ -2665,8 +2706,8 @@ function renderNVPlot() {
     if (Number.isFinite(v1) && v1 > ymax) ymax = v1;
   }
   ymax *= 1.12;
-  var fr = frame(W, H, 46, 14, 30, 40, xr[0], xr[1], 0, ymax);
-  var s = drawAxes(fr, niceTicks(xr[0], xr[1], 8), [], t.statSym, '', null, null);
+  var fr = frame(W, H, 46, 14, gm.narrow ? 46 : 30, 40, xr[0], xr[1], 0, ymax);
+  var s = drawAxes(fr, niceTicks(xr[0], xr[1], gm.narrow ? 6 : 8), [], t.statSym, '', null, null);
 
   /* Region fills: alpha under the null outside the critical values, beta
      under the alternative inside them. */
@@ -2739,9 +2780,21 @@ function renderNVPlot() {
                 'stroke:' + C.text + ';stroke-width:1.3;stroke-dasharray:3 3');
     /* The label prefers the outer side of its dashed line but flips to the
        inner side when the line runs close enough to the plot edge to clip
-       it, which a small-n t does by pushing its critical values outward. */
-    var EDGE = 150;
+       it, which a small-n t does by pushing its critical values outward.
+       On a phone-width chart the two labels cannot share a line at all
+       without running into each other, and so the upper-tail one drops to
+       a second line. */
     var xpix = fr.X(v);
+    if (gm.narrow) {
+      /* Lower bound on the first line at the left edge, upper bound on the
+         second at the right: the sign in the notation says which dashed
+         line each belongs to, and neither can run off the frame. */
+      s += svTxt(pair[1] < 0 ? fr.mL + 1 : fr.mL + fr.iw - 1,
+                 fr.mT + (pair[1] < 0 ? 12 : 27), critLbl(v, pair[1]),
+                 MONO + ';font-size:11.5px;fill:' + C.text, pair[1] < 0 ? 'start' : 'end');
+      return;
+    }
+    var EDGE = Math.min(150, fr.iw * 0.42);
     var room = pair[1] < 0 ? xpix - fr.mL : fr.mL + fr.iw - xpix;
     var side = room >= EDGE ? pair[1] : -pair[1];
     s += svTxt(xpix + 5 * side, fr.mT + 12, critLbl(v, pair[1]),
@@ -2791,7 +2844,7 @@ function renderNVPlot() {
     var domCrit = Number.isFinite(crit.hi) && (!Number.isFinite(crit.lo) || Math.abs(pk - crit.hi) <= Math.abs(pk - crit.lo))
                   ? crit.hi : crit.lo;
     var nudge = (xr[1] - xr[0]) * 0.012;
-    var yL = fr.mT + Math.round(0.20 * fr.ih);
+    var yL = fr.mT + Math.round((gm.narrow ? 0.26 : 0.20) * fr.ih);
     function regionAnchor(wantAcc) {
       var tot = 0, j2;
       for (j2 = 0; j2 <= NPX; j2++) if (inAccF(xs[j2]) === wantAcc) tot += y1[j2];
@@ -3140,9 +3193,10 @@ function drawTraceInto(svg, stats, crit, ana, capId, capText) {
       next = Math.max(idx * m / NPTS, 10);
     }
   }
-  var W = 940, H = 210;
+  var gm = plotGeom(svg, 940, 210, 0.62, 620);
+  var W = gm.W, H = gm.H;
   var fr = frame(W, H, 46, 14, 12, 34, 0, m, 0, 1);
-  var s = drawAxes(fr, niceTicks(0, m, 6), [0, 0.25, 0.5, 0.75, 1],
+  var s = drawAxes(fr, niceTicks(0, m, gm.narrow ? 4 : 6), [0, 0.25, 0.5, 0.75, 1],
                    'replications so far', 'power',
                    function (v) { return v >= 1000 ? N(v / 1000, 4) + 'k' : String(v); }, null);
   /* Confidence band */
@@ -3550,10 +3604,15 @@ function renderCurves() {
   var e = curEffect();
 
   /* power vs effect */
-  var W = 460, H = 300;
+  /* These two sit side by side on a laptop and stack on a phone, where
+     the column is half as wide and the labels would otherwise shrink with
+     it; tallBelow is under the desktop column width so only a phone gets
+     the taller frame. */
+  var gm = plotGeom($('pe-plot'), 460, 300, 0.95, 380);
+  var W = gm.W, H = gm.H;
   var fr = frame(W, H, 44, 10, 12, 40, t.effect.min, t.effect.max, 0, 1);
-  var s = drawAxes(fr, niceTicks(t.effect.min, t.effect.max, 6), [0, 0.2, 0.4, 0.6, 0.8, 1],
-                   t.effect.label, 'power');
+  var s = drawAxes(fr, niceTicks(t.effect.min, t.effect.max, gm.narrow ? 4 : 6),
+                   [0, 0.2, 0.4, 0.6, 0.8, 1], t.effect.label, 'power');
   s += svLine(fr.mL, fr.Y(a), fr.mL + fr.iw, fr.Y(a), 'stroke:' + C.muted + ';stroke-width:1;stroke-dasharray:3 3');
   s += svTxt(fr.mL + fr.iw - 4, fr.Y(a) - 4, 'α', FONT + ';font-size:10.5px;fill:' + C.muted, 'end');
   if ($('pe-overlay').checked) {
@@ -3590,9 +3649,10 @@ function renderCurves() {
 
   /* power vs n */
   var pn = pnCurveData();
-  var fr2 = frame(W, H, 44, 10, 12, 40, t.nMin, pn.hi, 0, 1);
-  var s2 = drawAxes(fr2, niceTicks(t.nMin, pn.hi, 6), [0, 0.2, 0.4, 0.6, 0.8, 1],
-                    t.nLabel, 'power');
+  var gm2 = plotGeom($('pn-plot'), 460, 300, 0.95, 380);
+  var fr2 = frame(gm2.W, gm2.H, 44, 10, 12, 40, t.nMin, pn.hi, 0, 1);
+  var s2 = drawAxes(fr2, niceTicks(t.nMin, pn.hi, gm2.narrow ? 4 : 6),
+                    [0, 0.2, 0.4, 0.6, 0.8, 1], t.nLabel, 'power');
   s2 += svLine(fr2.mL, fr2.Y(a), fr2.mL + fr2.iw, fr2.Y(a), 'stroke:' + C.muted + ';stroke-width:1;stroke-dasharray:3 3');
   if (ST.mode === 'n') {
     s2 += svLine(fr2.mL, fr2.Y(ST.target), fr2.mL + fr2.iw, fr2.Y(ST.target),
@@ -3629,6 +3689,7 @@ function renderCurves() {
 
 /* ── OC-chart tab ──────────────────────────────────────────────────── */
 var OC_NS = [2, 3, 4, 5, 7, 10, 15, 20, 30, 50, 100];
+var OC_NS_NARROW = [2, 3, 5, 10, 20, 50, 100];
 /* View context for the overlay and the pointer math: the frame mapping,
    the axis range, and the dot's current viewBox position. */
 var OCV = null;
@@ -3668,16 +3729,23 @@ function renderOC() {
      for the proportion test the natural axis is p₁ itself. */
   var xlo = t.id === 'p' ? 0.01 : (t.id === 'var' ? 0.1 : 0);
   var xhi = t.id === 'p' ? 0.99 : (t.id === 'var' ? 4 : Math.max(Math.abs(t.effect.max), 0.5));
-  var W = 940, H = 430;
-  var fr = frame(W, H, 50, 40, 16, 42, xlo, xhi, 0, 1);
-  var xt = niceTicks(xlo, xhi, 10), yt = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+  var svg = $('oc-plot');
+  var gm = plotGeom(svg, 940, 430, 1.22, 620);
+  var W = gm.W, H = gm.H;
+  var fr = gm.narrow ? frame(W, H, 38, 12, 14, 42, xlo, xhi, 0, 1)
+                     : frame(W, H, 50, 40, 16, 42, xlo, xhi, 0, 1);
+  var xt = niceTicks(xlo, xhi, gm.narrow ? 5 : 10);
+  var yt = gm.narrow ? [0, 0.2, 0.4, 0.6, 0.8, 1]
+                     : [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
   var s = drawAxes(fr, xt, yt, t.effect.label + (t.id === 'p' || t.id === 'var' ? '' : '  (magnitude)'),
                    'β  =  P(fail to reject)');
   /* extra fine grid, in the manner of a printed chart */
   for (var g = 0.05; g < 1; g += 0.1)
     s += svLine(fr.mL, fr.Y(g), fr.mL + fr.iw, fr.Y(g), 'stroke:' + C.grid + ';stroke-width:0.5');
 
-  var ns = OC_NS.filter(function (nn) { return nn >= t.nMin; });
+  /* A phone-width chart cannot carry eleven labeled curves legibly, and so
+     it gets a thinned ladder rather than a crowded one. */
+  var ns = (gm.narrow ? OC_NS_NARROW : OC_NS).filter(function (nn) { return nn >= t.nMin; });
   ns.forEach(function (nn, j) {
     var pts = [];
     for (var i = 0; i <= 170; i++) {
@@ -3687,8 +3755,10 @@ function renderOC() {
     }
     s += '<path d="' + polyPath(pts) + '" fill="none" stroke="' + C.nullc +
          '" stroke-width="1.3" opacity="0.9"/>';
-    /* label each curve where it crosses a staggered β level */
-    var lev = 0.15 + (j % 4) * 0.16;
+    /* Label each curve where it crosses a staggered β level.  The narrow
+       chart gives every curve its own level: its curves crowd
+       into the left of the frame where four shared levels collide. */
+    var lev = gm.narrow ? 0.12 + (j % 7) * 0.12 : 0.15 + (j % 4) * 0.16;
     var best = 0;
     for (var q = 0; q < pts.length; q++)
       if (Math.abs(pts[q][1] - fr.Y(lev)) < Math.abs(pts[best][1] - fr.Y(lev))) best = q;
@@ -3703,19 +3773,22 @@ function renderOC() {
   s += '<g id="oc-ov" style="display:none">' +
        '<line id="oc-vl" x1="0" y1="0" x2="0" y2="0" style="' + dash + '"/>' +
        '<line id="oc-hl" x1="0" y1="0" x2="0" y2="0" style="' + dash + '"/>' +
-       '<circle id="oc-dotc" r="6.5" style="fill:' + C.altc + ';stroke:#fff;stroke-width:1.5"/>' +
+       '<circle id="oc-dotc" r="' + (isTouch() ? 9 : 6.5) +
+       '" style="fill:' + C.altc + ';stroke:#fff;stroke-width:1.5"/>' +
        '</g>';
   var dot = 'stroke:' + C.muted + ';stroke-width:1;stroke-dasharray:2 3';
+  var bw = gm.narrow ? 132 : 172, bh = 46;
   s += '<g id="oc-hov" style="display:none;pointer-events:none">' +
        '<line id="oc-hx" x1="0" y1="0" x2="0" y2="0" style="' + dot + '"/>' +
        '<line id="oc-hy" x1="0" y1="0" x2="0" y2="0" style="' + dot + '"/>' +
-       '<rect id="oc-hr" width="172" height="46" rx="5" style="fill:#fff;stroke:' +
+       '<rect id="oc-hr" width="' + bw + '" height="' + bh + '" rx="5" style="fill:#fff;stroke:' +
        C.grid + ';stroke-width:1.2;opacity:.96"/>' +
-       '<text id="oc-ht" style="' + MONO + ';font-size:10.5px;fill:' + C.text + '"></text>' +
+       '<text id="oc-ht" style="' + MONO + ';font-size:' + (gm.narrow ? 9.5 : 10.5) +
+       'px;fill:' + C.text + '"></text>' +
        '</g>';
 
-  $('oc-plot').innerHTML = s;
-  OCV = { fr: fr, xlo: xlo, xhi: xhi };
+  svg.innerHTML = s;
+  OCV = { fr: fr, xlo: xlo, xhi: xhi, W: W, H: H, narrow: gm.narrow, bw: bw, bh: bh };
   updateOCOverlay();
   $('oc-cap').textContent = 'One curve per sample size, β against the effect, at α = ' + N(a, 3) +
     ' (' + (sided === 'two' ? 'two-sided' : 'one-sided') + ')—redrawn live for the ' +
@@ -3770,15 +3843,29 @@ function updateOCOverlay(live, extraMsg) {
    Hovering, or a tap on a touch screen, reads off the point under the
    pointer.  The commit happens on release; the numeric boxes drive the
    same state. */
+/* Pointer interaction on the chart, for a mouse and for a finger.
+
+   Mouse: drag the dot to move both coordinates (n solved from where it
+   lands), drag the vertical dashed line to move the effect at fixed n,
+   drag the horizontal one to move β (n solved), and hover anywhere to
+   read off the point under the cursor.
+
+   Touch: the same three handles drag, with hit areas grown to the WCAG
+   24px and the page's own scrolling suppressed only for a gesture that
+   starts on a handle; a tap anywhere else in the plot moves the lookup
+   there, which is the finger's version of dragging the dot across.  A
+   swipe that starts on open chart still scrolls the page. */
 function wireOCPointer() {
   var svg = $('oc-plot');
-  var drag = null, pending = null, hovRaf = null, hovQ = null;
+  var drag = null, pending = null, hovRaf = null, hovQ = null, down = null;
 
-  function toVB(ev) {
+  function toVBxy(cx, cy) {
     var r = svg.getBoundingClientRect();
-    return { px: (ev.clientX - r.left) * 940 / r.width,
-             py: (ev.clientY - r.top) * 430 / r.height };
+    var W = OCV ? OCV.W : 940, H = OCV ? OCV.H : 430;
+    return { px: (cx - r.left) * W / (r.width || W),
+             py: (cy - r.top) * H / (r.height || H) };
   }
+  function toVB(ev) { return toVBxy(ev.clientX, ev.clientY); }
   function inPlot(q) {
     var fr = OCV.fr;
     return q.px >= fr.mL && q.px <= fr.mL + fr.iw && q.py >= fr.mT && q.py <= fr.mT + fr.ih;
@@ -3788,12 +3875,22 @@ function wireOCPointer() {
     return { d: OCV.xlo + (q.px - fr.mL) / fr.iw * (OCV.xhi - OCV.xlo),
              beta: Math.min(0.995, Math.max(0.005, (fr.mT + fr.ih - q.py) / fr.ih)) };
   }
+  /* Hit radius in viewBox units for a target of the given size in CSS
+     pixels: 24 for a finger (WCAG 2.5.8), less for a cursor that can be
+     placed exactly. */
+  function hitTol() {
+    var r = svg.getBoundingClientRect();
+    var W = OCV ? OCV.W : 940;
+    return (isTouch() ? 24 : 11) * (W / (r.width || W));
+  }
   function hitTest(q) {
     if (!OCV || !OCV.dot) return null;
+    var tol = hitTol();
     var dx = q.px - OCV.dot.x, dy = q.py - OCV.dot.y;
-    if (dx * dx + dy * dy <= 256) return 'dot';
-    if (Math.abs(q.px - OCV.dot.x) <= 8 && q.py > OCV.dot.y && inPlot(q)) return 'v';
-    if (Math.abs(q.py - OCV.dot.y) <= 8 && q.px < OCV.dot.x && inPlot(q)) return 'h';
+    if (dx * dx + dy * dy <= tol * tol) return 'dot';
+    var lt = tol * 0.6;
+    if (Math.abs(q.px - OCV.dot.x) <= lt && q.py > OCV.dot.y && inPlot(q)) return 'v';
+    if (Math.abs(q.py - OCV.dot.y) <= lt && q.px < OCV.dot.x && inPlot(q)) return 'h';
     return null;
   }
   function hideHover() {
@@ -3813,9 +3910,10 @@ function wireOCPointer() {
     hx.setAttribute('y1', q.py); hx.setAttribute('y2', fr.mT + fr.ih);
     hy.setAttribute('x1', fr.mL); hy.setAttribute('x2', q.px);
     hy.setAttribute('y1', q.py); hy.setAttribute('y2', q.py);
-    var bw = 172, bh = 46;
+    var bw = OCV.bw, bh = OCV.bh;
     var rx = q.px + 14 + bw > fr.mL + fr.iw ? q.px - 14 - bw : q.px + 14;
     var ry = q.py - 10 - bh < fr.mT ? q.py + 12 : q.py - 10 - bh;
+    rx = Math.max(fr.mL + 2, Math.min(rx, fr.mL + fr.iw - bw - 2));
     var hr = $('oc-hr');
     hr.setAttribute('x', rx); hr.setAttribute('y', ry);
     $('oc-ht').innerHTML =
@@ -3824,21 +3922,33 @@ function wireOCPointer() {
       '<tspan x="' + N(rx + 9, 6) + '" y="' + N(ry + 40, 6) + '">n ≈ ' + (nImp === null ? 'out of reach' : nImp) + '</tspan>';
   }
 
+  /* A finger that lands on a handle is dragging it rather than scrolling
+     the page, and only a non-passive listener can say so in time. */
+  svg.addEventListener('touchstart', function (ev) {
+    if (!OCV || ev.touches.length !== 1) return;
+    var q = toVBxy(ev.touches[0].clientX, ev.touches[0].clientY);
+    if (hitTest(q)) ev.preventDefault();
+  }, { passive: false });
+
   svg.addEventListener('pointerdown', function (ev) {
     if (!OCV) return;
     var q = toVB(ev);
-    if (ev.pointerType === 'mouse' && ev.button === 0) {
-      var h = hitTest(q);
-      if (h) {
-        drag = h;
-        pending = null;
-        hideHover();
-        try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
-        ev.preventDefault();
-        return;
-      }
+    var mouse = ev.pointerType === 'mouse';
+    if (mouse && ev.button !== 0) return;
+    down = { q: q, cx: ev.clientX, cy: ev.clientY, mouse: mouse };
+    var h = hitTest(q);
+    if (h) {
+      drag = h;
+      pending = null;
+      hideHover();
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+      ev.preventDefault();
+      return;
     }
-    showHover(q);   /* a tap or a click off the handles: probe readout */
+    /* A click off the handles probes; the touch equivalent waits for the
+       release, and so a swipe that turns into a page scroll leaves nothing
+       behind. */
+    if (mouse) showHover(q);
   });
 
   svg.addEventListener('pointermove', function (ev) {
@@ -3891,9 +4001,30 @@ function wireOCPointer() {
     }
     updateOCOverlay();
   }
-  svg.addEventListener('pointerup', endDrag);
-  svg.addEventListener('pointercancel', endDrag);
-  svg.addEventListener('pointerleave', function () {
+  /* A tap moves the lookup to the point touched: the finger's version of
+     dragging the dot there, and the only way to reach a chart position
+     without a hover. */
+  function commitTap(q) {
+    var t = curTest(), c = toData(q);
+    var nn = ocSolveN(ocSigned(c.d), c.beta);
+    ST.ocEff = c.d;
+    if (nn !== null && Number.isFinite(nn)) ST.ocN = Math.max(t.nMin, nn);
+    updateOCOverlay(null, nn === null
+      ? 'No n reaches β ≤ ' + N(c.beta, 3) + ' at that effect.' : '');
+    showHover(q);
+  }
+  svg.addEventListener('pointerup', function (ev) {
+    if (drag) { endDrag(); down = null; return; }
+    if (down && !down.mouse) {
+      var moved = Math.abs(ev.clientX - down.cx) + Math.abs(ev.clientY - down.cy);
+      if (moved < 12 && inPlot(down.q)) commitTap(down.q);
+    }
+    down = null;
+  });
+  svg.addEventListener('pointercancel', function () { endDrag(); down = null; });
+  svg.addEventListener('pointerleave', function (ev) {
+    /* A finger "leaves" on release, and its readout has to survive that. */
+    if (ev.pointerType !== 'mouse') return;
     if (!drag) { hideHover(); svg.style.cursor = ''; }
   });
 }
@@ -3934,7 +4065,8 @@ function renderPaired() {
                'the antithetic view: a SUM wants ρ < 0');
   $('pr-cards').innerHTML = html;
 
-  var W = 460, H = 280;
+  var gm = plotGeom($('pr-plot'), 460, 280, 0.92, 380);
+  var W = gm.W, H = gm.H;
   var fr = frame(W, H, 44, 10, 12, 38, -1, 1, 0, 1);
   var s = drawAxes(fr, [-1, -0.5, 0, 0.5, 1], [0, 0.25, 0.5, 0.75, 1], 'correlation ρ', 'power');
   s += svLine(fr.X(0), fr.mT, fr.X(0), fr.mT + fr.ih, 'stroke:' + C.grid + ';stroke-width:1.5');
@@ -3959,8 +4091,10 @@ function renderPaired() {
     if (Number.isFinite(nv) && nv > nmax) nmax = nv;
   }
   nmax = Math.min(nmax * 1.1 + 2, 4000);
-  var fr2 = frame(W, H, 46, 10, 12, 38, -1, 1, 0, nmax);
-  var s2 = drawAxes(fr2, [-1, -0.5, 0, 0.5, 1], niceTicks(0, nmax, 5), 'correlation ρ', 'pairs needed');
+  var gm2 = plotGeom($('pr-nplot'), 460, 280, 0.92, 380);
+  var fr2 = frame(gm2.W, gm2.H, 46, 10, 12, 38, -1, 1, 0, nmax);
+  var s2 = drawAxes(fr2, [-1, -0.5, 0, 0.5, 1], niceTicks(0, nmax, gm2.narrow ? 4 : 5),
+                    'correlation ρ', 'pairs needed');
   s2 += svLine(fr2.X(0), fr2.mT, fr2.X(0), fr2.mT + fr2.ih, 'stroke:' + C.grid + ';stroke-width:1.5');
   s2 += svTxt(fr2.X(0.5), fr2.mT + fr2.ih - 7, '→ common random numbers →',
               FONT + ';font-size:10.5px;fill:' + C.muted, 'middle');
@@ -4096,9 +4230,17 @@ function runLogit() {
                    'nominal ' + N(ST.alpha, 3) + '; asymptotic, expect drift at small n');
       $('ad-cards').innerHTML = html;
       var crit = PA.TESTS.glm.crit(n, p, ST.alpha, 'two');
-      drawTraceInto($('ad-trace'), statsAlt, crit, null, 'ad-cap',
-        'No teal line: nothing exact exists to draw. The interval is the deliverable of this analysis.');
+      /* Kept so a resize can redraw the trace into the new viewBox
+         without paying for the replications again. */
+      ST.ad = { stats: statsAlt, crit: crit };
+      redrawAdTrace();
     });
+}
+
+function redrawAdTrace() {
+  if (!ST.ad) return;
+  drawTraceInto($('ad-trace'), ST.ad.stats, ST.ad.crit, null, 'ad-cap',
+    'No teal line: nothing exact exists to draw. The interval is the deliverable of this analysis.');
 }
 
 /* ── Change plumbing ───────────────────────────────────────────────── */
@@ -4173,6 +4315,11 @@ function showTab(id) {
 }
 var adAutoRan = false;
 function renderVisibleTab() {
+  /* Re-measure first: a resize that happened while this tab was hidden
+     left its plots at the wrong geometry, and only now is there a width
+     to fit them to. */
+  if (curTab === 'explore' && geomStale($('nv-plot'), 940)) { renderNVPlot(); renderTrace(); }
+  if (curTab === 'adv' && geomStale($('ad-trace'), 940)) redrawAdTrace();
   if (curTab === 'curves' && TAB_DIRTY.curves) { renderCurves(); TAB_DIRTY.curves = false; }
   if (curTab === 'oc' && TAB_DIRTY.oc) { renderOC(); TAB_DIRTY.oc = false; }
   if (curTab === 'paired') renderPaired();
@@ -4318,6 +4465,25 @@ document.addEventListener('DOMContentLoaded', function () {
     b.addEventListener('click', function () { showTab(b.dataset.tab); });
   });
   $('tab-select').addEventListener('change', function () { showTab(this.value); });
+
+  /* Turning a phone sideways changes which plot geometry fits, and so every
+     visible plot is redrawn.  Only a width change can do that: iOS fires
+     resize when its address bar slides away, and redrawing then would throw
+     away a Monte Carlo histogram for nothing. */
+  var lastW = window.innerWidth, resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      /* Only the visible tab is redrawn; the others re-measure when they
+         are next shown. */
+      TAB_DIRTY.curves = TAB_DIRTY.oc = true;
+      if (curTab === 'explore') { renderNVPlot(); renderTrace(); }
+      if (curTab === 'adv') redrawAdTrace();
+      renderVisibleTab();
+    }, 160);
+  });
 
   /* Open on something moving rather than a blank page */
   ST.ocN = curN(); ST.ocEff = Math.abs(curEffect());
