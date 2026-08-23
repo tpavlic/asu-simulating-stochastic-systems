@@ -202,6 +202,9 @@ a:focus-visible, textarea:focus-visible {
              padding: 10px; min-width: 0; position: relative; }
 .plot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 12px; }
 svg.plot { display: block; width: 100%; height: auto; }
+/* A press and hold on the OC chart is the finger's hover, and so iOS must
+   not answer it with its own text callout and magnifier. */
+#oc-plot { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 /* The full-width plots keep a readable minimum width on a phone and pan
    sideways inside their own container instead of shrinking to confetti;
    the page itself never scrolls horizontally. */
@@ -691,9 +694,10 @@ footer a:hover { text-decoration: underline; }
       passes at or below the dot. That curve is drawn in orange. Typing an n instead
       runs the lookup the other way, putting the dot on that curve to read its β. On the chart
       itself, drag the dot to move both coordinates at once, or drag either dashed projection line
-      to move one coordinate with the other held. With a mouse, hovering anywhere reads off the
-      β, effect, and implied n at that point, and with a finger, tapping anywhere moves the lookup
-      there.</div>
+      to move one coordinate with the other held. Reading the chart never moves the lookup: with a
+      mouse, hovering anywhere reads off the β, effect, and implied n at that point, and with a
+      finger, pressing and holding does the same, sliding while held to carry the reading across
+      the chart.</div>
 
     <div class="plot-card">
       <div class="scrollwrap">
@@ -3892,16 +3896,14 @@ function updateOCOverlay(live, extraMsg) {
   hl.setAttribute('y1', Y); hl.setAttribute('y2', Y);
   dc.setAttribute('cx', X); dc.setAttribute('cy', Y);
   OCV.dot = { x: X, y: Y };
-  if (live) {
-    $('oc-read').textContent = live.msg || '';
-  } else {
-    if (document.activeElement !== $('oc-beta')) $('oc-beta').value = N(beta, 4);
-    if (document.activeElement !== $('oc-n')) $('oc-n').value = Number.isFinite(n) ? n : '';
-    if (document.activeElement !== $('oc-eff')) $('oc-eff').value = N(ST.ocEff, 4);
-    $('oc-read').textContent = (extraMsg ? extraMsg + '  ' : '') +
-      'β = ' + N(beta, 4) + '  →  power = ' + N(1 - beta, 4) +
-      (Number.isFinite(n) ? '' : '  (no n reaches this β at this effect)');
-  }
+  /* The boxes are the reading, and so they follow a drag as it happens
+     rather than waiting for it to settle. */
+  if (document.activeElement !== $('oc-beta')) $('oc-beta').value = N(beta, 4);
+  if (document.activeElement !== $('oc-n')) $('oc-n').value = Number.isFinite(n) ? n : '';
+  if (document.activeElement !== $('oc-eff')) $('oc-eff').value = N(d, 4);
+  $('oc-read').textContent = (extraMsg ? extraMsg + '  ' : '') +
+    'β = ' + N(beta, 4) + '  →  power = ' + N(1 - beta, 4) +
+    (Number.isFinite(n) ? '' : '  (no n reaches this β at this effect)');
 }
 
 /* Pointer interaction on the chart, for a mouse and for a finger.
@@ -3914,12 +3916,24 @@ function updateOCOverlay(live, extraMsg) {
 
    Touch: the same three handles drag, with hit areas grown to the WCAG
    24px and the page's own scrolling suppressed only for a gesture that
-   starts on a handle; a tap anywhere else in the plot moves the lookup
-   there, which is the finger's version of dragging the dot across.  A
-   swipe that starts on open chart still scrolls the page. */
+   starts on a handle.  A press and hold anywhere else in the plot is the
+   finger's version of hovering: it reads off the point held, and sliding
+   while held carries the reading across the chart.  Nothing but a handle
+   drag moves the lookup, on either input, and so a stray touch cannot
+   throw away a reading that took work to set.  A swipe that starts on
+   open chart still scrolls the page. */
+/* Long enough that a scroll gets moving first, short enough to beat iOS's
+   own press-and-hold. */
+var OC_HOLD_MS = 350, OC_HOLD_SLOP = 10;
+
 function wireOCPointer() {
   var svg = $('oc-plot');
   var drag = null, pending = null, hovRaf = null, hovQ = null, down = null;
+  var holdTimer = null, probing = false;
+
+  function cancelHold() {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  }
 
   function toVBxy(cx, cy) {
     var r = svg.getBoundingClientRect();
@@ -3973,8 +3987,11 @@ function wireOCPointer() {
     hy.setAttribute('x1', fr.mL); hy.setAttribute('x2', q.px);
     hy.setAttribute('y1', q.py); hy.setAttribute('y2', q.py);
     var bw = OCV.bw, bh = OCV.bh;
+    /* A fingertip covers far more of the chart than a cursor does, and so
+       the box stands further off when a finger is what put it there. */
+    var gap = isTouch() ? 30 : 10;
     var rx = q.px + 14 + bw > fr.mL + fr.iw ? q.px - 14 - bw : q.px + 14;
-    var ry = q.py - 10 - bh < fr.mT ? q.py + 12 : q.py - 10 - bh;
+    var ry = q.py - gap - bh < fr.mT ? q.py + gap + 2 : q.py - gap - bh;
     rx = Math.max(fr.mL + 2, Math.min(rx, fr.mL + fr.iw - bw - 2));
     var hr = $('oc-hr');
     hr.setAttribute('x', rx); hr.setAttribute('y', ry);
@@ -3992,12 +4009,20 @@ function wireOCPointer() {
     if (hitTest(q)) ev.preventDefault();
   }, { passive: false });
 
+  /* Once a handle is held, or a press has turned into a reading, the finger
+     is driving the chart and the page underneath it holds still. */
+  svg.addEventListener('touchmove', function (ev) {
+    if (drag || probing) ev.preventDefault();
+  }, { passive: false });
+
   svg.addEventListener('pointerdown', function (ev) {
     if (!OCV) return;
     var q = toVB(ev);
     var mouse = ev.pointerType === 'mouse';
     if (mouse && ev.button !== 0) return;
     down = { q: q, cx: ev.clientX, cy: ev.clientY, mouse: mouse };
+    cancelHold();
+    probing = false;
     var h = hitTest(q);
     if (h) {
       drag = h;
@@ -4007,43 +4032,36 @@ function wireOCPointer() {
       ev.preventDefault();
       return;
     }
-    /* A click off the handles probes; the touch equivalent waits for the
-       release, and so a swipe that turns into a page scroll leaves nothing
-       behind. */
-    if (mouse) showHover(q);
+    if (mouse) { showHover(q); return; }
+    /* A finger held still on open chart is asking to read that point.  The
+       timer is dropped the moment the finger travels, and so a swipe that
+       was going to scroll the page still does. */
+    if (inPlot(q)) holdTimer = setTimeout(function () {
+      holdTimer = null;
+      probing = true;
+      showHover(q);
+    }, OC_HOLD_MS);
   });
 
   svg.addEventListener('pointermove', function (ev) {
     if (!OCV) return;
     var q = toVB(ev);
     if (drag) {
-      var t = curTest(), c = toData(q), sym = t.effect.sym;
-      var nd = function (nn) { return nn === null ? 'out of reach' : nn; };
-      if (drag === 'dot') {
-        var pD = { d: c.d, beta: c.beta, n: ocSolveN(ocSigned(c.d), c.beta) };
-        pending = pD;
-        updateOCOverlay({ d: pD.d, beta: pD.beta, n: pD.n,
-          msg: 'β = ' + N(pD.beta, 3) + ', ' + sym + ' = ' + N(pD.d, 3) +
-               '  →  smallest n = ' + nd(pD.n) });
-      } else if (drag === 'v') {
-        /* The vertical line slides along the effect axis, and so β stays
-           where the reader left it and n is what changes. */
-        var pV = { d: c.d, beta: ST.ocBeta, n: ocSolveN(ocSigned(c.d), ST.ocBeta) };
-        pending = pV;
-        updateOCOverlay({ d: pV.d, beta: pV.beta, n: pV.n,
-          msg: sym + ' = ' + N(pV.d, 3) + ' at β = ' + N(pV.beta, 3) +
-               '  →  smallest n = ' + nd(pV.n) });
-      } else {
-        /* β is continuous and the dot follows the finger exactly; the
-           printed ladder is what n steps through underneath it. */
-        var pH = { d: ST.ocEff, beta: c.beta, n: ocSolveN(ocSigned(ST.ocEff), c.beta) };
-        pending = pH;
-        updateOCOverlay({ d: pH.d, beta: pH.beta, n: pH.n,
-          msg: 'β = ' + N(pH.beta, 3) + ' at ' + sym + ' = ' + N(pH.d, 3) +
-               '  →  smallest n = ' + nd(pH.n) });
-      }
+      var c = toData(q);
+      /* The dot carries both coordinates; the vertical line slides along the
+         effect axis with β held, and the horizontal one along β with the
+         effect held.  β is continuous and follows the pointer exactly, and
+         the printed ladder is what n steps through underneath it. */
+      var nd = drag === 'v' ? ST.ocBeta : c.beta;
+      var ne = drag === 'h' ? ST.ocEff : c.d;
+      pending = { d: ne, beta: nd, n: ocSolveN(ocSigned(ne), nd) };
+      updateOCOverlay(pending);
       return;
     }
+    if (holdTimer && down &&
+        Math.abs(ev.clientX - down.cx) + Math.abs(ev.clientY - down.cy) > OC_HOLD_SLOP)
+      cancelHold();
+    if (probing) { showHover(q); return; }
     if (ev.pointerType === 'mouse') {
       var h2 = hitTest(q);
       svg.style.cursor = h2 === 'dot' ? 'grab' : h2 === 'v' ? 'ew-resize' :
@@ -4067,26 +4085,20 @@ function wireOCPointer() {
     }
     updateOCOverlay();
   }
-  /* A tap moves the lookup to the point touched: the finger's version of
-     dragging the dot there, and the only way to reach a chart position
-     without a hover. */
-  function commitTap(q) {
-    var c = toData(q);
-    ST.ocEff = c.d;
-    ST.ocBeta = c.beta;
-    ST.ocN = ocSolveN(ocSigned(c.d), c.beta);
-    updateOCOverlay();
-    showHover(q);
-  }
-  svg.addEventListener('pointerup', function (ev) {
-    if (drag) { endDrag(); down = null; return; }
-    if (down && !down.mouse) {
-      var moved = Math.abs(ev.clientX - down.cx) + Math.abs(ev.clientY - down.cy);
-      if (moved < 12 && inPlot(down.q)) commitTap(down.q);
-    }
+  svg.addEventListener('pointerup', function () {
+    cancelHold();
+    /* A finger cannot hover back, and so its reading stays on the chart
+       after the lift rather than vanishing with the touch. */
+    probing = false;
+    if (drag) endDrag();
     down = null;
   });
-  svg.addEventListener('pointercancel', function () { endDrag(); down = null; });
+  svg.addEventListener('pointercancel', function () {
+    cancelHold();
+    probing = false;
+    endDrag();
+    down = null;
+  });
   svg.addEventListener('pointerleave', function (ev) {
     /* A finger "leaves" on release, and its readout has to survive that. */
     if (ev.pointerType !== 'mouse') return;
