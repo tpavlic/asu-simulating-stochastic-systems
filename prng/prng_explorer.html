@@ -221,6 +221,7 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
 .tx-tbl .wrd { color: var(--text); }
 .tx-tbl .ctr { text-align: center; }
 .tx-tbl .shrink { width: 1%; white-space: nowrap; }
+.tx-tbl tr.mark td { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
 /* the verdict legend under a key lineup: symbol column, meaning column */
 .mk-legend { font-size: .78rem; line-height: 1.5; color: var(--muted); margin: 6px auto 0;
              max-width: 26em; display: grid; grid-template-columns: 1.2em 1fr;
@@ -561,7 +562,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <div class="viz-row props-row">
-      <div class="cv-card" style="flex:1 1 260px; min-width:0;">
+      <div class="cv-card" style="flex:1 1 260px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">Combining LCGs extends the period</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The combined state repeats
           only when both components line up again at the same moment, like two turn signals
@@ -569,7 +570,12 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           making a slow, audible beat: each cycle on its own is short, but the pair realigns
           only rarely. When the two periods share few factors, the wait is nearly their
           product.</div>
-        <div class="stat-line" id="c-periods" style="line-height:1.8;"></div>
+        <div style="margin:auto 0;">
+          <div class="tx-tbl-wrap" style="max-height:none;">
+            <table class="tx-tbl" id="c-periods"></table>
+          </div>
+          <div class="cv-leg" id="c-periods-note" style="text-align:left; margin-top:8px;"></div>
+        </div>
       </div>
       <div class="cv-card" style="flex:0 1 480px; min-width:0;">
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
@@ -677,10 +683,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row props-row">
       <div class="cv-card" style="flex:1 1 300px; min-width:0;">
         <div class="sec-hd">How the period grows</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">One word of state: period
-          up to m − 1. k words: up to mᵏ − 1. Two combined MRGs (MRG32k3a): about 2¹⁹¹ ≈
-          3.1 × 10⁵⁷.</div>
-        <div class="stat-line" id="m-periods" style="line-height:1.8;"></div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Memory sets the ceiling.
+          A generator that remembers only its last value must repeat as soon as that value
+          recurs, and so it can run no longer than m − 1 steps; one that remembers its last
+          k values repeats only when a whole run of k recurs, and a well-chosen recurrence
+          reaches every nonzero run before that happens.</div>
+        <div class="tx-tbl-wrap" style="max-height:none;">
+          <table class="tx-tbl" id="m-ladder"></table>
+        </div>
+        <div class="cv-leg" id="m-periods" style="text-align:left; margin-top:8px;"></div>
       </div>
       <div class="cv-card" style="flex:0 1 280px; min-width:0;">
         <div class="sec-hd">Pairs of consecutive outputs</div>
@@ -3035,38 +3046,71 @@ function successorText(c) {
          'a modulus this large, repeats are rare. Load the toy preset to watch the effect directly.';
 }
 
+/* Three rows -- the two components and what they make together -- with
+   the combined row marked, because it is the card's whole point. The
+   note underneath carries whatever the table cannot: where a lead-in
+   comes from, or why a period is only known approximately. */
+function clcgRow(name, period, tail, mark) {
+  return '<tr' + (mark ? ' class="mark"' : '') + '><td class="wrd shrink">' + name +
+         '</td><td class="num ctr">' + period + '</td><td class="num ctr">' + tail + '</td></tr>';
+}
 function renderClcgExtras() {
   var c = EDITORS.c.cfg, pk = document.getElementById('c-preset').value;
-  var el = document.getElementById('c-periods'), html;
+  var el = document.getElementById('c-periods'), note = '', rows;
+  var head = '<tr><th class="shrink">stream</th><th class="ctr">period</th>' +
+             '<th class="ctr">lead-in</th></tr>';
   if (c.m1 <= 1048576n && c.m2 <= 1048576n) {
     var o1 = orbitMul(c.a1, c.m1, c.s1), o2 = orbitMul(c.a2, c.m2, c.s2);
     if (o1 !== null && o2 !== null) {
-      var compLine = function (name, o) {
-        if (o.tail === 0) return name + ' repeats after <b>' + o.period.toLocaleString('en-US') + '</b> steps';
-        return name + ' falls into a <b>' + o.period.toLocaleString('en-US') + '</b>-step cycle after ' +
-               o.tail.toLocaleString('en-US') + ' lead-in step' + (o.tail === 1 ? '' : 's') +
-               ' (its seed is never revisited)';
-      };
       var maxTail = Math.max(o1.tail, o2.tail);
-      html = compLine('component 1', o1) + '<br>' + compLine('component 2', o2) + '<br>' +
-             'combined state: eventually a cycle of lcm(' + o1.period + ', ' + o2.period + ') = <b>' +
-             lcm2(o1.period, o2.period).toLocaleString('en-US') + '</b> steps' +
-             (maxTail ? ', after ' + maxTail.toLocaleString('en-US') + ' lead-in step' + (maxTail === 1 ? '' : 's') : '');
-      if (maxTail) html += '<br><span style="font-size:.72rem;">A lead-in appears when a multiplier shares a factor with its modulus: the map is then many-to-one, and the seed can be a state the cycle never returns to. The note at the bottom of this tab says more.</span>';
+      var comb = lcm2(o1.period, o2.period);
+      rows = clcgRow('component 1', o1.period.toLocaleString('en-US'), o1.tail, false) +
+             clcgRow('component 2', o2.period.toLocaleString('en-US'), o2.tail, false) +
+             clcgRow('combined', 'lcm(' + o1.period + ', ' + o2.period + ') = ' +
+                     comb.toLocaleString('en-US'), maxTail, true);
+      if (maxTail) {
+        note = 'A lead-in appears when a multiplier shares a factor with its modulus: the ' +
+               'map is then many-to-one, and the seed can be a state the cycle never returns ' +
+               'to. The note at the bottom of this tab says more.';
+      } else {
+        note = 'Neither component wastes a step on a lead-in, and so both cycle from their ' +
+               'seeds, and the combined stream repeats only where the two cycles realign.';
+      }
     } else {
-      html = 'no repeated state was found within the first million steps walked; the cycle is too long for this panel.';
+      rows = clcgRow('component 1', '\u2014', '\u2014', false) +
+             clcgRow('component 2', '\u2014', '\u2014', false) +
+             clcgRow('combined', '\u2014', '\u2014', true);
+      note = 'No repeated state turned up in the first million steps walked here, and so ' +
+             'this cycle is too long for the panel to measure.';
     }
   } else if (pk === 'lec88') {
-    html = 'component periods m₁ − 1 and m₂ − 1, each ≈ 2.1 × 10⁹ (maximal)<br>' +
-           'combined: (m₁−1)(m₂−1)/2 ≈ <b>2.3 × 10¹⁸</b> (L’Ecuyer 1988)';
+    rows = clcgRow('component 1', 'm\u2081 \u2212 1 \u2248 2.1 \u00d7 10<sup>9</sup>', 0, false) +
+           clcgRow('component 2', 'm\u2082 \u2212 1 \u2248 2.1 \u00d7 10<sup>9</sup>', 0, false) +
+           clcgRow('combined', '\u2248 2.3 \u00d7 10<sup>18</sup>', 0, true);
+    note = 'Both component periods are even, and so their least common multiple is half ' +
+           'their product: (m\u2081\u22121)(m\u2082\u22121)/2, the figure L\u2019Ecuyer (1988) designed for.';
   } else {
-    html = 'components too large to walk here; the combined period is the lcm of the component periods.';
+    rows = clcgRow('component 1', '\u2014', '\u2014', false) +
+           clcgRow('component 2', '\u2014', '\u2014', false) +
+           clcgRow('combined', '\u2014', '\u2014', true);
+    note = 'These components are too large to walk here. The combined period is still the ' +
+           'least common multiple of the two component periods.';
   }
-  el.innerHTML = html;
+  el.innerHTML = head + rows;
+  document.getElementById('c-periods-note').innerHTML = note;
   var comp1 = makeLCG(c.a1, 0n, c.m1, c.s1);
   drawMini('c-lat1', genStream(comp1, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
   drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
   document.getElementById('c-succ').innerHTML = successorText(c);
+}
+
+/* A big integer at a glance, with the relation that fits it: exact up
+   to a trillion, and a mantissa times a power of ten above that. */
+function relBig(n) {
+  if (n < 1000000000000n) return ' = ' + n.toLocaleString('en-US');
+  var d = n.toString();
+  return ' \u2248 ' + (Number(d.slice(0, 3)) / 100).toFixed(1) +
+         ' \u00d7 10<sup>' + (d.length - 1) + '</sup>';
 }
 
 /* ── Tab ③ extras: headers, period growth, and a companion lattice ──── */
@@ -3076,28 +3120,49 @@ function renderMrgExtras() {
     c.fam === 'cmrg' ? 'Combined MRG (CMRG): MRG32k3a' : 'Multiple recursive generator (MRG)';
   document.getElementById('m-walk-hd').textContent =
     c.fam === 'cmrg' ? 'Walk through an MRG32k3a output step by step' : 'Walk through an MRG output step by step';
+  /* the ladder of ceilings, with this preset's own rung marked, and
+     then a sentence saying what this preset actually reaches */
+  var k = c.fam === 'cmrg' ? 3 : c.as.length;
+  var isC = c.fam === 'cmrg';
+  var mk = isC ? '' : relBig(c.m ** BigInt(k) - 1n);
+  var rung = function (state, ceiling, mark) {
+    return '<tr' + (mark ? ' class="mark"' : '') + '><td class="wrd shrink">' + state +
+           '</td><td class="num ctr">' + ceiling + '</td></tr>';
+  };
+  document.getElementById('m-ladder').innerHTML =
+    '<tr><th class="shrink">values remembered</th><th class="ctr">longest possible period</th></tr>' +
+    rung('1 (an LCG)', 'm \u2212 1', false) +
+    rung(isC ? 'k (an MRG)' : k + ' (this preset)',
+         isC ? 'm<sup>k</sup> \u2212 1' : 'm<sup>' + k + '</sup> \u2212 1' + mk, !isC) +
+    rung('3 + 3 (MRG32k3a)', '\u2248 2<sup>191</sup> \u2248 3.1 \u00d7 10<sup>57</sup>', isC);
   var el = document.getElementById('m-periods'), html;
-  if (c.fam === 'cmrg') {
-    html = 'combined period ≈ <b>2¹⁹¹</b> ≈ 3.1 × 10⁵⁷ (L’Ecuyer 1999)<br>' +
-           'at ten million draws per second, that is about 10⁴³ years';
+  if (isC) {
+    html = 'MRG32k3a\u2019s two order-3 recurrences combine into a cycle of about 2<sup>191</sup> ' +
+           'states (L\u2019Ecuyer 1999). At ten million draws a second, walking it would take ' +
+           'about 10<sup>43</sup> years.';
   } else if (c.m <= 4096n && c.as.length <= 3) {
     var o = mrgOrbit(c);
     var max = c.m ** BigInt(c.as.length) - 1n;
     if (o !== null && o.tail === 0) {
-      html = 'state returns to the seed after <b>' + o.period.toLocaleString('en-US') + '</b> steps';
-      if (BigInt(o.period) === max) html += '<br>= mᵏ − 1 = ' + fmtBig(max) + ', the maximum: every nonzero state occurs';
-      else html += '<br>(the maximum possible is mᵏ − 1 = ' + fmtBig(max) + ')';
+      html = 'This preset returns to its seed after <b>' + o.period.toLocaleString('en-US') + '</b> steps' +
+             (BigInt(o.period) === max
+               ? ', which is the whole ceiling: every nonzero run of ' + k + ' values occurs exactly once.'
+               : ', short of the m<sup>' + k + '</sup> \u2212 1' + relBig(max) +
+                 ' a maximal recurrence of this order would reach.');
     } else if (o !== null) {
-      html = 'state falls into a <b>' + o.period.toLocaleString('en-US') + '</b>-step cycle after ' +
+      html = 'This preset falls into a <b>' + o.period.toLocaleString('en-US') + '</b>-step cycle after ' +
              o.tail.toLocaleString('en-US') + ' lead-in step' + (o.tail === 1 ? '' : 's') +
-             ' (the seed tuple is never revisited)';
+             ', and so its seed tuple is never revisited.';
     } else {
-      html = 'no repeated state was found within the first 131,072 steps walked; the cycle is too long for this panel.';
+      html = 'No repeated state turned up in the first 131,072 steps walked here, and so this ' +
+             'cycle is too long for the panel to measure.';
     }
   } else if (pk === 'comp1') {
-    html = 'period m³ − 1 ≈ <b>7.9 × 10²⁸</b> (maximal for k = 3; L’Ecuyer 1999)';
+    html = 'This component reaches the ceiling for k = 3, a period of m\u00b3 \u2212 1 \u2248 ' +
+           '7.9 \u00d7 10<sup>28</sup> (L\u2019Ecuyer 1999), and MRG32k3a pairs it with a partner.';
   } else {
-    html = 'too large to walk here; a well-chosen order-k recurrence reaches mᵏ − 1.';
+    html = 'This preset is too large to walk here. A well-chosen order-k recurrence reaches the ' +
+           'ceiling above, visiting every nonzero run of k values before it repeats.';
   }
   el.innerHTML = html;
   drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c), { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
