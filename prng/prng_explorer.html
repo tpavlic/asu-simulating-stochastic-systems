@@ -219,6 +219,18 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
 .tx-tbl td { padding: 2.5px 8px; border-bottom: 1px solid var(--border); }
 .tx-tbl .num { font-family: 'IBM Plex Mono', monospace; font-size: .74rem; color: var(--muted); }
 .tx-tbl .wrd { color: var(--text); }
+.tx-tbl .ctr { text-align: center; }
+.tx-tbl .shrink { width: 1%; white-space: nowrap; }
+/* the verdict legend under a key lineup: symbol column, meaning column */
+.mk-legend { font-size: .78rem; line-height: 1.5; color: var(--muted); margin: 6px auto 0;
+             max-width: 26em; display: grid; grid-template-columns: 1.2em 1fr;
+             gap: 1px 8px; text-align: left; }
+.mk-legend .sym { font-weight: 700; text-align: center; }
+.tx-tbl th.blank { border-bottom: none; }
+/* a spanning group header rules only its own columns, with the cell
+   padding left clear, and so the two groups' rules do not run together */
+.tx-tbl th.grp { border-bottom: none; padding-bottom: 0; }
+.tx-tbl th.grp span { display: block; padding-bottom: 3px; border-bottom: 1.5px solid var(--border); }
 /* The state card is a flex column, and so the table wrapper stretches to
    the exact height the parameter card sets for the row; whitespace under
    the table becomes visible rows instead. The max-height caps it in the
@@ -264,7 +276,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
     <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
     <div class="tab-group">
-      <span class="tab-group-lbl" aria-hidden="true">Watermarking randomness: numbers to text</span>
+      <span class="tab-group-lbl" aria-hidden="true">Watermarking randomness: from numbers to text</span>
       <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameter Marks</button>
       <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Output Seeding</button>
       <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournaments</button>
@@ -857,9 +869,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             so detection is a certificate rather than a statistic. The secret key (top row)
             predicts every draw; twenty random wrong keys predict none.</div>
           <svg class="plot" id="rw-keys" viewBox="0 0 440 336" role="img" aria-label="Exact-prediction lineup: the secret key in the top row against twenty random wrong keys"></svg>
-          <div class="cv-leg">bar: the share of draws that key predicts exactly – a wrong key
-            matches a given draw with probability about 1 in 2.1 × 10⁹, and so probing any
-            single key, as at the left, is already a complete test</div>
+          <div class="cv-leg">bar: the share of draws that key predicts exactly</div>
+          <div class="mk-legend">
+            <span class="sym" style="color:var(--accent);">✓</span>
+            <span>key confirmed: every draw predicted, which a wrong key manages with
+              probability about 1 in 2.1 × 10⁹ per draw</span>
+            <span class="sym">–</span>
+            <span>not this key: one missed draw rules it out, and so probing any single
+              key, as at the left, is already a complete test</span>
+          </div>
         </div>
       </div>
     </div>
@@ -880,7 +898,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
-        <div class="sec-hd">From source distribution to emitted value</div>
+        <div class="sec-hd">A tournament chooses among valid realizations</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">On the left sits the
           source distribution – here uniform, from MRG32k3a – whose eight draws seed the
           bracket, a small sample of the distribution itself. Each round is played by its own
@@ -899,7 +917,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" id="wb-note" style="min-height:1.2em;"></div>
       </div>
       <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
-        <div class="sec-hd">Selection from diversity, not distortion</div>
+        <div class="sec-hd">Distortion-free on continuous distributions</div>
         <div class="cv-leg" style="text-align:left;">The tournament never invents a value
           and never vetoes one: it only chooses among draws the generator underneath (here
           MRG32k3a) was already willing to make, working inside the diversity the stream
@@ -922,7 +940,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 360px; min-width:0;">
-        <div class="sec-hd">Inside one keyed score</div>
+        <div class="sec-hd">How to assign scores in each tournament round</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A score is a function
           of four ingredients – the key, the round, the last four outputs
           h<sub>1</sub>…h<sub>4</sub>, and the candidate u – mixed by the same
@@ -953,7 +971,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" id="ws-note" style="min-height:1.2em;"></div>
       </div>
       <div class="cv-card" style="flex:1 1 360px; min-width:0; display:flex; flex-direction:column;">
-        <div class="sec-hd">A new key reshuffles the scores</div>
+        <div class="sec-hd">Each key scores the candidates differently</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The same 400
           candidates scored under two keys: horizontal under key A, vertical under key B.
           Identical keys put every point on the diagonal; keys that differ even by 1 scatter
@@ -986,80 +1004,104 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
     <div class="viz-row props-row">
       <div class="cv-card" style="flex:1 1 100%; min-width:0;">
-        <div class="sec-hd">Adding a watermark on purpose: the keyed tournament</div>
+        <div class="sec-hd">Every emitted value wins a keyed tournament</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here the tournament
           from the top of this tab runs for real: whenever a value is needed, eight
           candidates are drawn from MRG32k3a, the three keyed rules eliminate them pairwise,
           and the winner is emitted. Emitted values therefore tend to score high under all three rules, and
           a detector that knows the key averages those scores over the stream: near 0.66
-          instead of the 0.50 of chance.</div>
+          instead of the 0.50 of chance. The two panels below score the same stream twice,
+          once under the secret key and once under whatever other key you type.</div>
         <div class="ctrl-row" style="margin-bottom:6px;">
           <label class="ctrl-lbl" for="wt-key">Secret key</label>
           <input class="par-inp" id="wt-key" type="text" inputmode="numeric" value="271828" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run" onclick="wtGenerate()">Generate marked stream</button>
-          <label class="ctrl-lbl" for="wt-cand" style="margin-left:12px;">Key to test</label>
-          <input class="par-inp" id="wt-cand" type="text" inputmode="numeric" value="271828" autocomplete="off"
+          <label class="ctrl-lbl" for="wt-cand" style="margin-left:12px;">Selected key</label>
+          <input class="par-inp" id="wt-cand" type="text" inputmode="numeric" value="314159" autocomplete="off"
                  spellcheck="false" style="flex:1 1 110px; min-width:90px; max-width:200px;">
           <button class="btn-run2" onclick="wtTest()">Test key</button>
         </div>
-        <svg class="plot" id="wt-hist" viewBox="0 0 900 150" role="img" aria-label="Histogram of the keyed round scores under the tested key"></svg>
-        <div class="cv-leg">the three round scores of every emitted value under the tested key</div>
-        <div class="stat-line" id="wt-result" style="min-height:2.6em; margin-top:6px;"></div>
+        <div style="display:flex; flex-wrap:wrap; gap:16px;">
+          <div style="flex:1 1 360px; min-width:0;">
+            <div class="cv-leg" id="wt-cap-key" style="margin-top:0;"></div>
+            <svg class="plot" id="wt-hist-key" viewBox="0 0 440 150" role="img" aria-label="Histogram of the keyed round scores under the secret key"></svg>
+            <div class="stat-line" id="wt-result-key" style="text-align:center; line-height:1.7; margin-top:6px;"></div>
+          </div>
+          <div style="flex:1 1 360px; min-width:0;">
+            <div class="cv-leg" id="wt-cap-cand" style="margin-top:0;"></div>
+            <svg class="plot" id="wt-hist-cand" viewBox="0 0 440 150" role="img" aria-label="Histogram of the keyed round scores under the key being tested"></svg>
+            <div class="stat-line" id="wt-result-cand" style="text-align:center; line-height:1.7; margin-top:6px;"></div>
+          </div>
+        </div>
+        <div class="cv-leg" id="wt-note"></div>
       </div>
     </div>
 
     <div class="viz-row">
-      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
-        <div class="sec-hd">Uniform to everyone, marked only to the key</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The marked stream and
-          an unmarked stream from the same seeds. The χ² and K–S rows are uniformity tests,
-          and they are no tool for finding the watermark: the marked stream is still
-          genuinely uniform, and so they pass both streams alike (up to the 5% of streams
-          any test falsely flags). Only the keyed detector, which recomputes the scores,
-          separates them.</div>
-        <div class="stat-line" id="wt-stats" style="line-height:1.9;"></div>
+      <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
+        <div class="sec-hd">Uniformity, independence, and detectability</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Below, a PRNG without
+          tournament watermarking is compared to one with a tournament add-on to select
+          watermarked values. Neither a chi-square test nor a Kolmogorov–Smirnov test finds
+          a deviation from uniformity in either stream, up to the 5% of streams any test
+          falsely flags, and the watermarked stream shows no grain in its lag plot below.
+          However, whereas the unmarked stream emits values whose keyed scores average 0.5,
+          which is what chance would give, the watermarked stream emits values whose scores
+          average significantly more than that.</div>
+        <div class="tx-tbl-wrap" style="max-height:none;">
+          <table class="tx-tbl" id="wt-stats"></table>
+        </div>
+        <div style="margin:auto 0;">
+          <canvas id="wt-lat" aria-label="Lag plot of consecutive marked values" style="display:block; margin:0 auto;"></canvas>
+          <div class="cv-leg">2,000 consecutive pairs from the marked stream: no visible grain</div>
+        </div>
       </div>
       <div class="cv-card" style="flex:1 1 300px; min-width:0;">
-        <div class="sec-hd">Detection is statistical: one key stands clear</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The lineup breaks the
-          detector out key by key: the secret key in the top row against twenty random
-          wrong keys, each row a mean score with its 95% confidence interval. Detection
-          needs enough output to stand clear of chance – a few hundred values suffice
-          here – and the next tab carries this whole scheme from numbers to words.</div>
+        <div class="sec-hd">Strong statistical signal for only the secret key</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The confidence
+          intervals below summarize testing for 21 different watermarks across the 596
+          watermarked values generated just above. Testing for the secret key is in the top
+          row, and the remaining 20 rows are 20 randomly drawn keys. Whereas 95% confidence
+          intervals are shown, the type-I error rate α for applying the ✓ mark is far below
+          the usual 0.05 because a deployed detector would test many thousands of streams a
+          day.</div>
         <svg class="plot" id="wt-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means for the marked stream: the secret key in the top row against twenty random wrong keys"></svg>
-        <div class="cv-leg">✓ z &gt; 6 (mark detected) · ? 3 &lt; z ≤ 6 (weak evidence) ·
-          – consistent with chance</div>
+        <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying its
+          verdict – dot and whiskers: each key's detection mean with its 95% confidence
+          interval</div>
+        <div class="mk-legend">
+          <span class="sym" style="color:var(--accent);">✓</span>
+          <span>mark detected: z &gt; 6, rejecting chance at α ≈ 10<sup>−9</sup></span>
+          <span class="sym" style="color:var(--est);">?</span>
+          <span>weak evidence: 3 &lt; z ≤ 6 (one-sided p between 0.0013 and 10<sup>−9</sup>)</span>
+          <span class="sym">–</span>
+          <span>consistent with chance: z ≤ 3 (p above 0.0013)</span>
+        </div>
       </div>
     </div>
 
     <details class="why">
       <summary>Why does the tournament change neither the distribution nor the visible independence?</summary>
       <div class="why-body">
-        <p>Only candidates drawn from the true distribution ever compete, and so the emitted
-        value is always a legitimate draw. For one fixed history, the selection genuinely
-        prefers the values the keyed rules score highly there, and a detector that
-        recomputes those scores reads precisely that preference. What keeps the preference
-        out of the histogram is that no bias ever acts twice: a history of four real
-        numbers essentially never recurs, each skewed conditional contributes one draw, and
-        one draw with unchanged support reveals nothing. Across histories, the biases point in
-        unrelated directions in value space and cancel; along the score axis, which only the
-        key exposes, they all point the same way – that is the detector's axis. Tab ⑦ meets
-        the same rule with a fourteen-word vocabulary, where histories do recur and the rule
-        is enforced as repeated-context masking. The verification script confirms the
-        result: uniformity tests on marked streams keep rejecting at their nominal 5%
-        rate.</p>
-        <p>The watermark does add dependence: each emitted value relates to its four
-        predecessors through the scoring rules. But the relation is routed entirely through
-        the keyed scores. Without the key, the scores cannot be recomputed, and lag plots and
-        the other unkeyed diagnostics show nothing; with the key, the detector's average
-        score stands tens of null standard errors clear of chance in a few hundred values.
-        The pattern is there, in the same sense an LCG's lattice is there, and it is just as
-        invisible until you apply the right filter.</p>
-        <p>Reading the scoring inputs from the visible outputs, rather than from a hidden
-        counter, makes detection self-synchronizing: the stream and the key are all a
-        detector needs. The language-model version reads the recent words for the same
-        reason – the text itself is all a detector ever gets.</p>
+        <p><b>In generation with tournament-style watermarking, distortion is only a
+        problem with repeated histories.</b> A history of four real numbers essentially
+        never recurs, and so each skewed conditional contributes a single draw whose
+        support is unchanged, and nothing accumulates where a histogram could show it.
+        Tab ⑦ is the opposite case – a fourteen-word vocabulary repeats histories
+        constantly – and it enforces the same one-draw rule explicitly, as
+        repeated-context masking.</p>
+        <p><b>The watermark does add dependence, but it is routed entirely through the
+        keyed scores.</b> Each emitted value relates to its four predecessors through the
+        scoring rules. Without the key, those scores cannot be recomputed, and lag plots
+        and the other unkeyed diagnostics show nothing; with the key, the detector's
+        average score stands tens of null standard errors clear of chance in a few
+        hundred values. The pattern is there, in the same sense an LCG's lattice is
+        there, and it is just as invisible until you apply the right filter.</p>
+        <p><b>A detector needs nothing but the stream and the key.</b> Reading the scoring
+        inputs from the visible outputs, rather than from a hidden counter, makes
+        detection self-synchronizing. The language-model version reads the recent words
+        for the same reason – the text itself is all a detector ever gets.</p>
       </div>
     </details>
   </section>
@@ -1218,13 +1260,12 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying
             its verdict – dot and whiskers: each key's detection mean with its 95%
             confidence interval</div>
-          <div style="font-size:.78rem; line-height:1.5; color:var(--muted); margin:6px auto 0; max-width:26em;
-               display:grid; grid-template-columns:1.2em 1fr; gap:1px 8px; text-align:left;">
-            <span style="color:var(--accent); font-weight:700;">✓</span>
+          <div class="mk-legend">
+            <span class="sym" style="color:var(--accent);">✓</span>
             <span>mark detected: z &gt; 6, rejecting chance at α ≈ 10<sup>−9</sup></span>
-            <span style="color:var(--est); font-weight:700;">?</span>
+            <span class="sym" style="color:var(--est);">?</span>
             <span>weak evidence: 3 &lt; z ≤ 6 (one-sided p between 0.0013 and 10<sup>−9</sup>)</span>
-            <span style="font-weight:700;">–</span>
+            <span class="sym">–</span>
             <span>consistent with chance: z ≤ 3 (p above 0.0013)</span>
           </div>
           <div class="cv-leg" style="text-align:left; margin-top:8px;">A 95% confidence
@@ -1300,10 +1341,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 /* ===== PRNG-CORE-BEGIN ===== */
 'use strict';
 /* Everything between the PRNG-CORE sentinels is pure numerics with no DOM
-   access. prng/verify_prng_explorer.mjs slices this block out of the HTML
-   and runs it in Node against reference vectors computed with exact
-   big-integer arithmetic outside JavaScript, and so the code tested is
-   byte-for-byte the code the page runs.
+   access, so that this block can be lifted out of the page whole and
+   checked against reference vectors computed with exact big-integer
+   arithmetic outside JavaScript.  Anything that touches the page itself
+   belongs below the closing sentinel.
 
    Modular arithmetic is done in BigInt throughout. The student can type any
    modulus up to 2^62 and any multiplier below it, and so the product a·x + c can
@@ -1364,8 +1405,8 @@ function genStream(g, n) {
    integer factorization: deterministic Miller-Rabin (the 12-prime base
    set is a proven witness set below 2^64, comfortably covering the
    page's m ≤ 2^62) plus Pollard's rho for splitting composites. The
-   verification script checks the primality tests, the factorizations,
-   and the Hull-Dobell verdicts against brute-forced periods. */
+   primality tests, the factorizations, and the Hull-Dobell verdicts are
+   checked against brute-forced periods offline. */
 function gcdBig(a, b) { while (b) { var t = a % b; a = b; b = t; } return a; }
 function powmodBig(b, e, m) {
   var r = 1n; b %= m;
@@ -1484,10 +1525,9 @@ function predictMatch(xs, a, c, m) {
    that can recompute the scores averages them: near 2/3 per value
    against a chance level of 1/2. Only candidates drawn from the true
    distribution ever compete, and the keyed scoring regions move from
-   step to step, and so the marginal distribution stays uniform; the
-   verification script measures the detection rates, the marginal
-   uniformity, and the calibration of the uniformity tests on marked
-   streams. */
+   step to step, and so the marginal distribution stays uniform.  The
+   detection rates, the marginal uniformity, and the calibration of the
+   uniformity tests on marked streams are all measured offline. */
 function wmQ(u) { return Math.floor(u * 4294967296) >>> 0; }
 /* Keyed score in [0, 1) of candidate value qu for round `round`, given
    the four quantized previous outputs. */
@@ -2006,7 +2046,7 @@ function makeCMRG(seeds) {   /* [s10, s11, s12, s20, s21, s22] */
 /* ── Special functions for the two uniformity tests ─────────────────────
    log Gamma via the Lanczos approximation (g = 7, 9 coefficients, the
    widely published set); relative accuracy about 1e-15 on the positive
-   real axis. The verification script checks it against exact identities. */
+   real axis; checked offline against exact identities. */
 var LANCZOS_G7 = [
   0.99999999999980993, 676.5203681218851, -1259.1392167224028,
   771.32342877765313, -176.61502916214059, 12.507343278686905,
@@ -2086,8 +2126,8 @@ function kolmogorovQ(t) {
 
 /* One-sample K-S test against Uniform(0,1). The finite-n p-value uses
    Stephens's adjusted statistic (√n + 0.12 + 0.11/√n)·D_n in the limiting
-   distribution, accurate to a few units in the third decimal for n ≥ 5;
-   the verification script measures the resulting test size empirically.
+   distribution, accurate to a few units in the third decimal for n ≥ 5,
+   with the resulting test size measured empirically offline.
    Besides d and p, the result carries where the largest gap occurs (at,
    with the gap spanning y0 to y1 vertically) so that the ECDF plot can mark
    the point that sets the statistic. */
@@ -3024,8 +3064,8 @@ function renderClcgExtras() {
   }
   el.innerHTML = html;
   var comp1 = makeLCG(c.a1, 0n, c.m1, c.s1);
-  drawMini('c-lat1', genStream(comp1, 1500), c.m1);
-  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1);
+  drawMini('c-lat1', genStream(comp1, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
   document.getElementById('c-succ').innerHTML = successorText(c);
 }
 
@@ -3060,7 +3100,7 @@ function renderMrgExtras() {
     html = 'too large to walk here; a well-chosen order-k recurrence reaches mᵏ − 1.';
   }
   el.innerHTML = html;
-  drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c));
+  drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c), { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
   document.getElementById('m-lat-cap').innerHTML =
     c.fam === 'cmrg' ? '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from MRG32k3a: no visible grain'
                      : '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from the current MRG';
@@ -3127,16 +3167,21 @@ function waPlot() {
 /* The prediction-versus-observation square: the right key collapses the
    cloud onto the diagonal. */
 var WA_P = 220, WA_PAD = 26;
-function initPredObs(id) {
+/* dispW draws the same plot at another size to balance a card: the
+   backing store scales with it, and drawPredObs reads the factor back
+   off the element, and so the result is as sharp at any size. */
+function initPredObs(id, dispW) {
   var cv = document.getElementById(id), w = WA_P + 2 * WA_PAD;
-  cv.width = Math.round(w * DPR); cv.height = Math.round(w * DPR);
-  cv.style.width = w + 'px'; cv.style.maxWidth = '100%'; cv.style.height = 'auto';
+  var k = (dispW || w) / w;
+  cv.dataset.k = k;
+  cv.width = Math.round(w * k * DPR); cv.height = Math.round(w * k * DPR);
+  cv.style.width = (dispW || w) + 'px'; cv.style.maxWidth = '100%'; cv.style.height = 'auto';
 }
 function drawPredObs(id, pts, opts) {
   opts = opts || {};
   var cv = document.getElementById(id), ctx = cv.getContext('2d');
-  var w = WA_P + 2 * WA_PAD;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  var w = WA_P + 2 * WA_PAD, k = Number(cv.dataset.k) || 1;
+  ctx.setTransform(DPR * k, 0, 0, DPR * k, 0, 0);
   ctx.clearRect(0, 0, w, w);
   ctx.fillStyle = C.chartBg; ctx.fillRect(WA_PAD, WA_PAD, WA_P, WA_P);
   ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
@@ -3450,7 +3495,7 @@ function wtSeeds() {
 function wtGenerate() {
   var key = wtParseKey('wt-key');
   if (key === null) {
-    document.getElementById('wt-result').innerHTML = 'A key is a whole number: digits only.';
+    document.getElementById('wt-result-key').innerHTML = 'A key is a whole number: digits only.';
     return;
   }
   wt.key = key;
@@ -3462,23 +3507,39 @@ function wtGenerate() {
   drawWtLineup();
 }
 
+/* One detector panel: the score histogram under `key`, its caption, and
+   its verdict. The left panel always holds the embedding key and the
+   right one whatever key is being tested, and so the marked ramp and a
+   wrong key's flat histogram sit side by side. */
+function wtPanel(key, label, capId, histId, statId) {
+  var r = twDetect(wt.us, key, WT_ROUNDS), kf = key.toLocaleString('en-US');
+  drawScoreHist(r.scores, r.mean, histId, 440);
+  document.getElementById(capId).innerHTML =
+    'histogram of scores using ' + label + ' (<b>' + kf + '</b>)';
+  var verdict = r.z > 6 ? 'watermark by key ' + kf + ' detected'
+              : r.z > 3 ? 'weak evidence of a watermark by key ' + kf
+              : 'no evidence of a watermark by key ' + kf;
+  var vcol = r.z > 6 ? C.accent : r.z > 3 ? C.est : C.muted;
+  var op = r.z > 3 ? '&gt;' : r.z < -3 ? '&lt;' : '\u2248';
+  document.getElementById(statId).innerHTML =
+    '<div style="color:' + vcol + '; font-weight:700;">' + verdict + '</div>' +
+    '<div>mean keyed score <b>' + r.mean.toFixed(3) + '</b> ' + op + ' 0.5</div>' +
+    '<div>z = ' + r.z.toFixed(1) + ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ')</div>';
+  return r;
+}
+
 function wtTest() {
   if (!wt.us) return;
   var k = wtParseKey('wt-cand');
   if (k === null) {
-    document.getElementById('wt-result').innerHTML = 'A key is a whole number: digits only.';
+    document.getElementById('wt-result-cand').innerHTML = 'A key is a whole number: digits only.';
     return;
   }
-  var r = twDetect(wt.us, k, WT_ROUNDS);
-  drawScoreHist(r.scores, r.mean, 'wt-hist', 900);
-  var verdict = r.z > 6 ? 'far above chance: the stream carries this key.'
-              : r.z > 3 ? 'above chance: evidence this key marked the stream.'
-              : 'indistinguishable from chance: no evidence this key marked the stream.';
-  document.getElementById('wt-result').innerHTML =
-    'Key ' + k.toLocaleString('en-US') + ': mean keyed score <b>' + r.mean.toFixed(3) +
-    '</b> across the ' + (WT_ROUNDS * r.n).toLocaleString('en-US') + ' scores of ' +
-    r.n.toLocaleString('en-US') + ' values. Chance is 0.500. z = ' + r.z.toFixed(1) +
-    ' (one-sided ' + txFmtP(txOneSidedP(r.z)) + ') \u2013 ' + verdict;
+  var r = wtPanel(wt.key, 'secret key', 'wt-cap-key', 'wt-hist-key', 'wt-result-key');
+  wtPanel(k, 'selected key', 'wt-cap-cand', 'wt-hist-cand', 'wt-result-cand');
+  document.getElementById('wt-note').innerHTML =
+    'each histogram is taken over ' + (WT_ROUNDS * r.n).toLocaleString('en-US') +
+    ' keyed scores (' + WT_ROUNDS + ' for each of ' + r.n.toLocaleString('en-US') + ' values)';
 }
 
 /* The tab-6 lineup: the secret key against twenty random wrong keys,
@@ -3497,14 +3558,24 @@ function drawWtLineup() {
 function wtStats() {
   if (!wt.us) return;
   var kh = wt.key;
-  var line = function (name, us) {
+  var row = function (name, us) {
     var chi = chiSqUniform(us, 10), ks = ksUniform(us), det = twDetect(us, kh, WT_ROUNDS);
-    return '<b>' + name + '</b>: uniformity \u03c7\u00b2 p = <b>' + fmtP(chi.p) + '</b>, K\u2013S p = <b>' +
-           fmtP(ks.p) + '</b>,<br>keyed detector mean = <b>' + det.mean.toFixed(3) + '</b> (z = ' +
-           det.z.toFixed(1) + ')';
+    return '<tr><td class="wrd shrink">' + name + '</td><td class="num ctr">' + fmtP(chi.p) +
+           '</td><td class="num ctr">' + fmtP(ks.p) + '</td><td class="num ctr">' + det.mean.toFixed(3) +
+           '</td><td class="num ctr">' + det.z.toFixed(1) + '</td><td class="num ctr">' +
+           txFmtPval(txOneSidedP(det.z)) + '</td></tr>';
   };
   document.getElementById('wt-stats').innerHTML =
-    line('unmarked', wt.plain) + '<br>' + line('watermarked', wt.us);
+    '<tr><th class="blank shrink"></th><th class="ctr grp" colspan="2"><span>uniformity</span></th>' +
+    '<th class="ctr grp" colspan="3"><span>keyed scores</span></th></tr>' +
+    '<tr><th class="shrink">stream</th><th class="ctr">\u03c7\u00b2 p</th><th class="ctr">K\u2013S p</th>' +
+    '<th class="ctr">mean</th><th class="ctr">z</th><th class="ctr">one-sided p</th></tr>' +
+    row('unmarked', wt.plain) + row('watermarked', wt.us);
+  /* the independence half of the same claim: consecutive marked values
+     show no more grain than any other stream on this page */
+  var pairs = [];
+  for (var i = 0; i + 1 < wt.us.length; i++) pairs.push([wt.us[i], wt.us[i + 1]]);
+  drawPredObs('wt-lat', pairs, { diag: false, xlab: 'u\u2099  (one output)', ylab: 'u\u2099\u208a\u2081  (the next output)' });
 }
 
 /* Histogram of the per-value keyed scores under the tested key, with the
@@ -3537,7 +3608,7 @@ function drawScoreHist(scores, mean, id, width) {
          '" stroke="' + C.border + '" stroke-width="1.5"/>');
   p.push('<text x="' + x(0) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">0</text>');
   p.push('<text x="' + x(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">1</text>');
-  document.getElementById(id || 'wt-hist').innerHTML = p.join('');
+  document.getElementById(id).innerHTML = p.join('');
 }
 
 /* ── Tab ⑦: text watermarks ──────────────────────────────────────────── */
@@ -3916,9 +3987,15 @@ function txOneSidedP(z) {
 function txFmtP(pv) {
   if (pv < 1e-15) return 'p < 10<sup>\u221215</sup>';
   if (pv >= 0.001) return 'p = ' + pv.toFixed(3);
+  return 'p \u2248 ' + txFmtPval(pv);
+}
+/* the same number without the leading "p", for a column already headed
+   with one */
+function txFmtPval(pv) {
+  if (pv < 1e-15) return '&lt; 10<sup>\u221215</sup>';
+  if (pv >= 0.001) return pv.toFixed(3);
   var e = Math.floor(Math.log10(pv));
-  return 'p \u2248 ' + (pv / Math.pow(10, e)).toFixed(1) +
-         '\u00d710<sup>\u2212' + (-e) + '</sup>';
+  return (pv / Math.pow(10, e)).toFixed(1) + '\u00d710<sup>\u2212' + (-e) + '</sup>';
 }
 function txTest() {
   if (!mk.ids) return;
@@ -4162,11 +4239,12 @@ function renderActive() {
 (function () {
   initIndCanvas();
   initInd3Drag();
-  ['c-lat1', 'c-lat2', 'm-lat'].forEach(function (id) { initMini(id); });
+  ['c-lat1', 'c-lat2', 'm-lat'].forEach(function (id) { initMini(id, true); });
   initMini('wa-lat', true);
   initPredObs('wa-cv');
   initPredObs('rw-cv');
   initPredObs('rw-lat');
+  initPredObs('wt-lat', 310);
   initPredObs('wk-cv');
   var waSel = document.getElementById('wa-cand');
   WA_AS.forEach(function (a) {
