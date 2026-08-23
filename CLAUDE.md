@@ -389,6 +389,16 @@ check all of the following.
 - **A hover-only affordance is invisible on a touch screen.** Anything revealed on `:hover` needs an
   `@media (hover: none)` rule that keeps it visible, plus a sentence somewhere on the page saying
   the feature exists — a hover reveal is undiscoverable even with a mouse if nothing hints at it.
+- **Never let a `title` attribute be the only copy of an explanation.** It shows nothing on a touch
+  screen, cannot be reached from the keyboard, and is announced inconsistently by screen readers.
+  The HTML spec itself discourages relying on it. Use the shared tooltip described in `THEME.md`,
+  and mirror the text into the accessibility tree with `aria-describedby`. Restoring the `title`
+  alongside is not the fix: the browser would raise its own bubble next to the custom one.
+- **Reach for `aria-describedby` wherever a control carries an explanation its visible label does
+  not.** Point it at a visually hidden span holding the text, and park that span outside the control.
+  Inside a `<button>` or `<label>` it is read as part of the control's *name* rather than as its
+  description. The same applies to any hint a sighted user gets from position or color alone; if it
+  is worth saying on screen, it is worth putting where a screen reader will find it.
 - **Drag-and-drop does not exist on a phone.** Anything droppable needs a file input or a paste box
   beside it.
 - **Every interaction has to work with a finger, not only with a cursor.** A draggable handle on a
@@ -554,6 +564,9 @@ verification and validation.
 
 ## Shared conventions
 
+- **Color choices are governed by `THEME.md`**, which carries the contrast reference table, the
+  rule that color alone may never carry meaning, and the reasoning behind the data palette. Consult
+  it before picking any new color rather than matching one by eye.
 - **Accent color:** `#8C1D40` (ASU maroon) — used in links and section headings. Derived tints in
   `index.html`: `#6b1631` (dark hover), `#e0c2cc` (rules), `#f0e2e6` (light rules), `#fbf3f5` (row
   hover), `#f5e6ea` (active nav, thumbnail background)

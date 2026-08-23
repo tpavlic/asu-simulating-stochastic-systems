@@ -118,6 +118,28 @@ full checklist is in `CLAUDE.md`; the parts that are presentation are here.
   viewport *width* changes, ignoring the height-only resize iOS fires when its address bar slides
   away, and re-check a tab's geometry when it is shown.
 
+## Tooltips
+
+A dotted underline means one thing across these widgets: there is an explanation here. Never carry
+it on a `title` attribute, which is invisible on touch, unreachable from the keyboard, and read out
+unevenly by screen readers.
+
+- **One floating element serves the whole page.** Give every trigger a `data-tip` attribute and let
+  a single `#tipbox` render whichever one is active, so two tips can never be open at once and the
+  text may hold markup. The worked version is in `monte_carlo/mc_explorer.html`.
+- **Three ways in: hover, focus, tap.** Mouse, keyboard, and finger each need one. Mark the trigger
+  `.tip` (`text-decoration: underline dotted`, `cursor: help`, `tabindex="0"`).
+- **A control that tap already operates opens its tip on a long press instead**, around 450ms held
+  still, cancelled by about 10px of movement, with the click that follows swallowed in the capture
+  phase. A button or a checkbox label cannot use tap for both jobs. Such a trigger still gets the
+  dotted underline: it says a tooltip exists, not which gesture opens it. Add
+  `-webkit-touch-callout: none` so iOS does not raise its own menu over the press.
+- **A trigger inside a `<label>` must call `preventDefault()` on the tap**, or the label hands focus
+  to its field and a phone raises the keyboard behind the tip.
+- **Mirror the text with `aria-describedby`** into a visually hidden span parked outside the
+  trigger. Inside a button or label it would be read as part of the name. This is what replaces the
+  accessibility that `title` used to provide, without the doubled bubble.
+
 ## Links
 
 One underline behavior per page: no resting underline, underline on hover. Color links
