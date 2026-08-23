@@ -696,8 +696,8 @@ footer a:hover { text-decoration: underline; }
       itself, drag the dot to move both coordinates at once, or drag either dashed projection line
       to move one coordinate with the other held. Reading the chart never moves the lookup: with a
       mouse, hovering anywhere reads off the β, effect, and implied n at that point, and with a
-      finger, pressing and holding does the same, sliding while held to carry the reading across
-      the chart.</div>
+      finger, touching anywhere does the same. The reading follows the pointer across the chart,
+      and it clears when the cursor leaves or the finger lifts.</div>
 
     <div class="plot-card">
       <div class="scrollwrap">
@@ -3916,12 +3916,13 @@ function updateOCOverlay(live, extraMsg) {
 
    Touch: the same three handles drag, with hit areas grown to the WCAG
    24px and the page's own scrolling suppressed only for a gesture that
-   starts on a handle.  A press and hold anywhere else in the plot is the
-   finger's version of hovering: it reads off the point held, and sliding
-   while held carries the reading across the chart.  Nothing but a handle
-   drag moves the lookup, on either input, and so a stray touch cannot
-   throw away a reading that took work to set.  A swipe that starts on
-   open chart still scrolls the page. */
+   starts on a handle.  A touch anywhere else in the plot is the finger's
+   version of hovering: it reads off the point it lands on, follows the
+   finger across the chart, and clears on the lift.  Holding still for a
+   moment claims the gesture, after which sliding scrubs the chart rather
+   than scrolling the page.  Nothing but a handle drag moves the lookup, on
+   either input, and so a stray touch cannot throw away a reading that took
+   work to set. */
 /* Long enough that a scroll gets moving first, short enough to beat iOS's
    own press-and-hold. */
 var OC_HOLD_MS = 350, OC_HOLD_SLOP = 10;
@@ -4033,14 +4034,16 @@ function wireOCPointer() {
       return;
     }
     if (mouse) { showHover(q); return; }
-    /* A finger held still on open chart is asking to read that point.  The
-       timer is dropped the moment the finger travels, and so a swipe that
-       was going to scroll the page still does. */
-    if (inPlot(q)) holdTimer = setTimeout(function () {
-      holdTimer = null;
-      probing = true;
+    /* A finger reads the point it lands on straight away.  Holding still is
+       what claims the gesture from the page, and so the timer decides only
+       whether a slide scrubs the chart or scrolls past it. */
+    if (inPlot(q)) {
       showHover(q);
-    }, OC_HOLD_MS);
+      holdTimer = setTimeout(function () {
+        holdTimer = null;
+        probing = true;
+      }, OC_HOLD_MS);
+    }
   });
 
   svg.addEventListener('pointermove', function (ev) {
@@ -4061,7 +4064,11 @@ function wireOCPointer() {
     if (holdTimer && down &&
         Math.abs(ev.clientX - down.cx) + Math.abs(ev.clientY - down.cy) > OC_HOLD_SLOP)
       cancelHold();
-    if (probing) { showHover(q); return; }
+    /* While a finger is down it is the pointer, and so the reading follows
+       it across the chart whether or not the gesture was ever claimed.  A
+       swipe the page takes for scrolling arrives as a pointercancel, which
+       clears the reading on its way out. */
+    if (down && !down.mouse) { showHover(q); return; }
     if (ev.pointerType === 'mouse') {
       var h2 = hitTest(q);
       svg.style.cursor = h2 === 'dot' ? 'grab' : h2 === 'v' ? 'ew-resize' :
@@ -4085,18 +4092,20 @@ function wireOCPointer() {
     }
     updateOCOverlay();
   }
-  svg.addEventListener('pointerup', function () {
+  /* Lifting a finger is that pointer leaving the chart, and so the reading
+     goes with it exactly as it does when a cursor moves off. */
+  svg.addEventListener('pointerup', function (ev) {
     cancelHold();
-    /* A finger cannot hover back, and so its reading stays on the chart
-       after the lift rather than vanishing with the touch. */
     probing = false;
     if (drag) endDrag();
+    else if (ev.pointerType !== 'mouse') hideHover();
     down = null;
   });
-  svg.addEventListener('pointercancel', function () {
+  svg.addEventListener('pointercancel', function (ev) {
     cancelHold();
     probing = false;
     endDrag();
+    if (ev.pointerType !== 'mouse') hideHover();
     down = null;
   });
   svg.addEventListener('pointerleave', function (ev) {
