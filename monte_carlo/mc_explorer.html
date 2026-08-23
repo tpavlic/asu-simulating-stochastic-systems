@@ -58,7 +58,8 @@
   --circ-stroke: #8b6914;                        /* circle geometry */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+       -webkit-text-size-adjust: 100%; }
 .widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
 .wh-copy { text-align:right; font-size:.72rem; color:var(--muted); margin-top:4px; }
 .wh-copy a { color:var(--accent); text-decoration:none; }
@@ -78,16 +79,43 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
 .tp { display: none; } .tp.active { display: block; }
 .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+/* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
+   the WCAG 2.5.8 floor. The rows are already taller than this, so nothing moves. */
+.ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap;
+            display: inline-flex; align-items: center; min-height: 24px; }
 select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
-.btn-run { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-run:hover { background: var(--accent-dark); }
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
 /* Secondary run button (the 100-run sweep): same weight as Run Experiment, but
    outlined, so the single run stays the obvious first thing to click. */
-.btn-run2 { font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run2 { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-run2:hover:not(:disabled) { background: var(--accent); color: #fff; }
 .btn-run2:disabled { color: #aaa; border-color: #d6d0d2; cursor: not-allowed; }
+/* Play and fast-forward are drawn, not typed. U+25B6 carries an emoji presentation,
+   which iOS resolves to Apple Color Emoji and renders as a white triangle in a
+   blue-grey box, and two of those read as two separate glyphs rather than one
+   fast-forward. currentColor keeps them following the button's text through its
+   hover state. Sized in em so they track the label. */
+/* A dotted underline means the same thing across these widgets: there is a tooltip
+   here, reachable by hover, tap, or keyboard focus. Never carried by a title
+   attribute, which shows nothing at all on a touch screen. */
+.tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* A button cannot use tap to open a tip, because tap already runs it, so it opens on
+   a long press instead and suppresses the callout iOS would otherwise raise. */
+[data-tip-press] { -webkit-touch-callout: none; }
+/* Descriptions live here for assistive tech: visible to a screen reader, to nothing
+   else. See the note on title in the tooltip script. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#tipbox { position: fixed; z-index: 60; max-width: 260px; padding: 8px 11px; border-radius: 7px;
+          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
+          box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
+          transition: opacity .08s; }
+.btn-ico { height: .68em; width: auto; fill: currentColor; flex: 0 0 auto; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
 /* Holds the seed label, field and checkbox together so the row does not split
@@ -99,7 +127,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
             background: #fff; color: var(--text); }
 /* Invalid state is border + wash + aria-invalid + a text message, never color alone */
 .seed-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
-.ctrl-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+.ctrl-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; min-height: 24px;
             font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; }
 .ctrl-chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
 /* Own line inside the wrapping row, with the height reserved so text causes no shift */
@@ -254,19 +282,18 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="pi-seed">Seed</label>
+        <label class="ctrl-lbl" for="pi-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly, which is what makes an experiment here repeatable.">Seed</span></label>
         <input class="seed-inp" id="pi-seed" type="text" inputmode="numeric"
                value="54321" maxlength="10" autocomplete="off" spellcheck="false"
                aria-describedby="pi-seed-msg"
-               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('pi')"
                onkeydown="if(event.key==='Enter'){event.preventDefault();runPi();}">
-        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
-          <input type="checkbox" id="pi-newseed" checked> New seed after each run
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="pi-newseed" checked> <span class="tip">New seed after each run</span>
         </label>
       </span>
-      <button class="btn-run" id="pi-run" onclick="runPi()"><span aria-hidden="true">▶</span> Run Experiment</button>
-      <button class="btn-run2" id="pi-run100" onclick="runPiBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
+      <button class="btn-run" id="pi-run" onclick="runPi()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="pi-run100" onclick="runPiBatch()" data-tip="Runs 100 experiments back to back from consecutive seeds and draws only the last. The capture tally under the history chart should settle near 95%." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
       <button class="btn-clear" onclick="clearPi()">Clear history</button>
       <span class="seed-msg" id="pi-seed-msg" role="status" aria-live="polite"></span>
     </div>
@@ -334,19 +361,18 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="bn-seed">Seed</label>
+        <label class="ctrl-lbl" for="bn-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly, which is what makes an experiment here repeatable.">Seed</span></label>
         <input class="seed-inp" id="bn-seed" type="text" inputmode="numeric"
                value="43215" maxlength="10" autocomplete="off" spellcheck="false"
                aria-describedby="bn-seed-msg"
-               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('bn')"
                onkeydown="if(event.key==='Enter'){event.preventDefault();runBn();}">
-        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
-          <input type="checkbox" id="bn-newseed" checked> New seed after each run
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="bn-newseed" checked> <span class="tip">New seed after each run</span>
         </label>
       </span>
-      <button class="btn-run" id="bn-run" onclick="runBn()"><span aria-hidden="true">▶</span> Run Experiment</button>
-      <button class="btn-run2" id="bn-run100" onclick="runBnBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
+      <button class="btn-run" id="bn-run" onclick="runBn()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="bn-run100" onclick="runBnBatch()" data-tip="Runs 100 experiments back to back from consecutive seeds and draws only the last. The capture tally under the history chart should settle near 95%." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
       <button class="btn-clear" onclick="clearBn()">Clear history</button>
       <span class="seed-msg" id="bn-seed-msg" role="status" aria-live="polite"></span>
     </div>
@@ -467,19 +493,18 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="mc-seed">Seed</label>
+        <label class="ctrl-lbl" for="mc-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly, which is what makes an experiment here repeatable.">Seed</span></label>
         <input class="seed-inp" id="mc-seed" type="text" inputmode="numeric"
                value="12345" maxlength="10" autocomplete="off" spellcheck="false"
                aria-describedby="mc-seed-msg"
-               title="Whole number 0–2147483647. The same seed reproduces the same run exactly."
                onchange="normalizeSeed('mc')"
                onkeydown="if(event.key==='Enter'){event.preventDefault();runMC();}">
-        <label class="ctrl-chk" title="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run.">
-          <input type="checkbox" id="mc-newseed" checked> New seed after each run
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="mc-newseed" checked> <span class="tip">New seed after each run</span>
         </label>
       </span>
-      <button class="btn-run" id="mc-run" onclick="runMC()"><span aria-hidden="true">▶</span> Run Experiment</button>
-      <button class="btn-run2" id="mc-run100" onclick="runMCBatch()" title="Runs 100 experiments back to back from consecutive seeds, drawing only the last. The capture tally under the history chart should settle near 95%."><span aria-hidden="true">▶▶</span> Run ×100</button>
+      <button class="btn-run" id="mc-run" onclick="runMC()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="mc-run100" onclick="runMCBatch()" data-tip="Runs 100 experiments back to back from consecutive seeds and draws only the last. The capture tally under the history chart should settle near 95%." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
       <button class="btn-clear" onclick="clearMC()">Clear history</button>
       <span class="seed-msg" id="mc-seed-msg" role="status" aria-live="polite"></span>
     </div>
@@ -1931,6 +1956,88 @@ function svgTxt(x,y,content,fill,size,ff,anchor,weight){
   return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size||13}" font-family="${ff||FF_SANS}" text-anchor="${anchor||'middle'}" ${weight?`font-weight="${weight}"`:''}>${content}</text>`;
 }
 function setText(id,v){document.getElementById(id).textContent=v;}
+
+
+// ── Tooltips ────────────────────────────────────────────
+// One floating element serves every [data-tip] on the page, so two tips can never be
+// open at once and the text can carry markup. Ported from the pattern already used in
+// topic_visualizers/jacobian_linearization; the title attribute is deliberately not
+// used anywhere, because iOS and Android show it neither on tap nor on long press.
+(function(){
+  var tip=document.createElement('div');
+  tip.id='tipbox';
+  tip.setAttribute('role','tooltip');
+  document.body.appendChild(tip);
+
+  // Every tip is also a description in the accessibility tree. A title attribute
+  // would do that for free, but it would raise the browser's own tooltip alongside
+  // this one, and it reaches neither the keyboard nor a touch screen. So the text is
+  // mirrored into a visually hidden span instead, and pointed at with
+  // aria-describedby. The spans are parked outside their triggers on purpose: inside
+  // a button or a label they would be read as part of its name.
+  var host=document.createElement('div');
+  host.className='sr-only';
+  document.body.appendChild(host);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tip]'), function(el,i){
+    var id='tipdesc-'+i, sp=document.createElement('span');
+    sp.id=id; sp.innerHTML=el.getAttribute('data-tip');
+    host.appendChild(sp);
+    el.setAttribute('aria-describedby',id);
+  });
+  function place(x,y){
+    var r=tip.getBoundingClientRect();
+    var nx=x-r.width/2, ny=y+12;
+    if(nx+r.width>window.innerWidth-8) nx=window.innerWidth-8-r.width;
+    if(ny+r.height>window.innerHeight-8) ny=y-r.height-14;
+    tip.style.left=Math.max(8,nx)+'px'; tip.style.top=Math.max(8,ny)+'px';
+  }
+  // Remembering what opened the tip keeps one input from closing another's: tapping a
+  // term blurs whatever had focus, and an unconditional focusout would shut the tip
+  // in the same breath as the tap that opened it.
+  var openedBy=null;
+  function show(t,x,y,how){ tip.innerHTML=t.getAttribute('data-tip'); tip.style.opacity='1'; openedBy=how; place(x,y); }
+  function showAt(t,how){ var r=t.getBoundingClientRect(); show(t, r.left+r.width/2, r.bottom, how); }
+  function hide(){ tip.style.opacity='0'; openedBy=null; }
+  function hideIf(how){ if(openedBy===how)hide(); }
+  function target(e){ return e.target && e.target.closest ? e.target.closest('[data-tip]') : null; }
+
+  // Hover for a mouse, focus for a keyboard, tap for a finger.
+  document.addEventListener('mousemove', function(e){ var t=target(e); if(t)show(t,e.clientX,e.clientY,'hover'); else hideIf('hover'); });
+  document.addEventListener('focusin',  function(e){ var t=target(e); if(t)showAt(t,'focus'); });
+  document.addEventListener('focusout', function(){ hideIf('focus'); });
+  document.addEventListener('keydown',  function(e){ if(e.key==='Escape')hide(); });
+  window.addEventListener('scroll', hide, true);
+
+  // Tap opens a tip on anything except a control that tap already operates.
+  document.addEventListener('click', function(e){
+    var t=target(e);
+    if(t&&!t.hasAttribute('data-tip-press')){
+      // A term can sit inside a <label>, where the default action would hand focus to
+      // the field and raise the keyboard on a phone. The tip is the whole intent here.
+      e.preventDefault();
+      showAt(t,'tap');
+    } else hide();
+  });
+
+  // Long press for those: 450ms held still, and the click it would fire is swallowed.
+  var timer=null, x0=0, y0=0, swallow=false;
+  document.addEventListener('pointerdown', function(e){
+    var t=e.target.closest?e.target.closest('[data-tip-press]'):null;
+    if(!t)return;
+    x0=e.clientX; y0=e.clientY;
+    timer=setTimeout(function(){ timer=null; swallow=true; showAt(t,'press'); }, 450);
+  });
+  document.addEventListener('pointermove', function(e){
+    if(timer&&Math.hypot(e.clientX-x0,e.clientY-y0)>10){ clearTimeout(timer); timer=null; }
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
+  });
+  // Capture phase, so the press never reaches the button's own handler.
+  document.addEventListener('click', function(e){
+    if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
+})();
 
 // ── Init ────────────────────────────────────────────────
 window.addEventListener('load',()=>{
