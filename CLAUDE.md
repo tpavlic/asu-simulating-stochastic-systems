@@ -410,10 +410,10 @@ check all of the following.
 ### Pseudorandom Number Generation
 
 - `prng/prng_explorer.html` *(seven tabs: ① the LCG with step-by-step arithmetic and uniformity
-  and independence testing, ② combined LCGs, ③ MRGs & MRG32k3a, and a bracketed "Watermarks"
-  group ④–⑦ that builds from implicit parameter fingerprints through keyed re-seeding to
-  SynthID-style tournament sampling, ending in a tiny embedded Markov language model that writes
-  marked prose and reads the mark back through a twenty-one-key detector lineup. Conventions
+  and independence testing, ② combined LCGs, ③ MRGs & MRG32k3a, and a bracketed "Watermarking
+  randomness" group ④–⑦ that builds from implicit parameter fingerprints through keyed
+  re-seeding to SynthID-style tournament sampling, ending in a tiny embedded Markov model that
+  writes marked prose and reads the mark back through a twenty-one-key detector lineup. Conventions
   relied on by code outside the file, which any later edit has to preserve:*
   1. *Everything between the `PRNG-CORE-BEGIN` / `PRNG-CORE-END` sentinels is pure numerics with
      no DOM access, and the sentinel block must not even contain the words "window" or "document"

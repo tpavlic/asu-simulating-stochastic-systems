@@ -78,7 +78,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 }
 /* The four watermark tabs sit under one bracket: a thin overline with a
    centered small-caps label, so that the strip stays short without
-   repeating "Watermarks" in every tab title. */
+   repeating "watermarking" in every tab title. */
 .tab-group { position: relative; display: flex; gap: 3px; padding-top: 17px; margin-left: 8px; }
 .tab-group::before {
   content: ''; position: absolute; top: 10px; left: 6px; right: 6px;
@@ -101,7 +101,10 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
    sooner, because media-query em tracks the browser default. */
-@media (max-width: 56em) {
+/* The longer tab names need about 1,035px of viewport; below that the
+   strip gives way to the dropdown, whose optgroup carries the shorter
+   group name. */
+@media (max-width: 65em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -261,22 +264,22 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
     <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
     <div class="tab-group">
-      <span class="tab-group-lbl" aria-hidden="true">Watermarks</span>
-      <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameters</button>
-      <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Re-seeding</button>
+      <span class="tab-group-lbl" aria-hidden="true">Watermarking randomness: numbers to text</span>
+      <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameter Marks</button>
+      <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Output Seeding</button>
       <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournaments</button>
-      <button class="tab" data-tab="tx" onclick="showTab('tx',this)">⑦ Text</button>
+      <button class="tab" data-tab="tx" onclick="showTab('tx',this)">⑦ Marking Text</button>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
     <option value="gen">① The LCG</option>
     <option value="clcg">② Combining LCGs</option>
     <option value="mrg">③ MRG &amp; MRG32k3a</option>
-    <optgroup label="Watermarks">
-      <option value="wm">④ Parameters</option>
-      <option value="rw">⑤ Re-seeding</option>
+    <optgroup label="Watermarking Randomness">
+      <option value="wm">④ Parameter Marks</option>
+      <option value="rw">⑤ Output Seeding</option>
       <option value="wt">⑥ Tournaments</option>
-      <option value="tx">⑦ Text</option>
+      <option value="tx">⑦ Marking Text</option>
     </optgroup>
   </select>
 
@@ -777,8 +780,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
   <!-- ── TAB ⑤: re-seeding watermarks ────────────────────────────────── -->
   <section id="tab-rw" class="tp">
-    <div class="note"><strong>If you mean to watermark, force the state to be
-      readable.</strong> Tab ④'s mark could be read only because an LCG happens to show its
+    <div class="note"><strong>Pseudorandom number generators can be designed for flexible
+      watermarking by making seeds dependent upon outputs.</strong> Tab ④'s mark could be read only because an LCG happens to show its
       state; a deliberate watermarker does not have to rely on that accident. Instead of
       letting the generator carry its state forward, throw the state away before every draw
       and re-seed it with a <em>keyed mix</em> of the last four outputs – a short scramble of
@@ -850,7 +853,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-card" style="flex:1 0 auto;">
           <div class="sec-hd">Detection is all-or-nothing</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A re-seeded stream
-            is not merely tilted toward its key – it is a deterministic function of it, and
+            is not merely biased toward its key – it is a deterministic function of it, and
             so detection is a certificate rather than a statistic. The secret key (top row)
             predicts every draw; twenty random wrong keys predict none.</div>
           <svg class="plot" id="rw-keys" viewBox="0 0 440 336" role="img" aria-label="Exact-prediction lineup: the secret key in the top row against twenty random wrong keys"></svg>
@@ -865,8 +868,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
   <!-- ── TAB ⑥: tournament watermarks ────────────────────────────────── -->
   <section id="tab-wt" class="tp">
-    <div class="note"><strong>A watermark can sit on top of the generator instead of inside
-      it.</strong> Re-seeding bought readability by replacing the generator; this tab keeps
+    <div class="note"><strong>Watermarking modules can be added to existing PRNGs without
+      modifying them.</strong> Re-seeding bought readability by replacing the generator; this tab keeps
       the generator intact and instead steers which of its outputs get emitted. Any
       generator could sit underneath – the tournament only ever asks it for draws, never
       looks inside it, and MRG32k3a plays the part here. The tool is a <em>keyed scoring
@@ -900,12 +903,12 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" style="text-align:left;">The tournament never invents a value
           and never vetoes one: it only chooses among draws the generator underneath (here
           MRG32k3a) was already willing to make, working inside the diversity the stream
-          already offers. At any one history, the choice is genuinely tilted toward the
-          values the keyed rules score highly – that tilt is the watermark – but a history
-          of four real numbers essentially never recurs, and so each tilt fires exactly
-          once, and across histories the tilts point in unrelated directions and cancel:
+          already offers. At any one history, the choice genuinely favors the
+          values the keyed rules score highly – that bias is the watermark – but a history
+          of four real numbers essentially never recurs, and so each bias acts exactly
+          once, and across histories the biases point in unrelated directions and cancel:
           run the tournament for 2,000 draws, and the winners fill [0, 1] as evenly as the
-          generator itself would. Only along the key's own score axis do the tilts all
+          generator itself would. Only along the key's own score axis do the biases all
           point the same way. The same bolting-on works for any source distribution, a pmf
           over words included, as long as the candidates have spread: a distribution so
           concentrated that they all agree leaves every key making the same choice and
@@ -1037,9 +1040,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         value is always a legitimate draw. For one fixed history, the selection genuinely
         prefers the values the keyed rules score highly there, and a detector that
         recomputes those scores reads precisely that preference. What keeps the preference
-        out of the histogram is that no tilt ever fires twice: a history of four real
-        numbers essentially never recurs, each tilted conditional contributes one draw, and
-        one draw with unchanged support reveals nothing. Across histories, the tilts point in
+        out of the histogram is that no bias ever acts twice: a history of four real
+        numbers essentially never recurs, each skewed conditional contributes one draw, and
+        one draw with unchanged support reveals nothing. Across histories, the biases point in
         unrelated directions in value space and cancel; along the score axis, which only the
         key exposes, they all point the same way – that is the detector's axis. Tab ⑦ meets
         the same rule with a fourteen-word vocabulary, where histories do recur and the rule
@@ -1063,7 +1066,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
   <!-- ── TAB ⑦: text watermarks ──────────────────────────────────────── -->
   <section id="tab-tx" class="tp">
-    <div class="note"><strong>Everything from tab ⑥ carries over to words.</strong> A
+    <div class="note"><strong>Watermarking can be added to any random-variate generator,
+      including language models that generate text.</strong> A
       language model's next word is a draw from a probability distribution over its whole
       vocabulary, and drawing from any distribution starts from a uniform pseudorandom
       number: line up the words' probabilities along [0, 1], and the draw picks the word
@@ -1096,15 +1100,22 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           for the same blank. The bracket beneath the chart plays the whole tournament
           out.</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:2px;">
-          <b>A repeated history is where the mark would show, and so the scheme masks
-          it.</b> At one fixed history, the key's tilt is consistent, and "Run 2,000
-          tournaments" repeats exactly that worst case: with repeat masking on – the real
-          scheme's rule – only the first run is watermarked, the other 1,999 pass through
-          unmarked, and the winners' shares sit back on the dashed levels; turn masking
-          off, and the same tilt fires all 2,000 times, and the shares pull visibly away
-          into a greenlist-like preference. Repeats are not rare – in a few pages of the
-          passage at the right, about a third of the words land on a history already
-          used – and masking is what keeps all of that accumulation out of the text.</div>
+          <b>Risks and mitigation for distortion by watermarking.</b> With the same fixed
+          history, the key distorts the distribution in a consistent, key-specific way,
+          and <b>"Run 2,000 tournaments"</b> with the <b>"Mask repeated contexts"</b>
+          turned <em>off</em> reveals how severe of an impact the tournament has on the
+          distribution of emitted tokens. However, the longer the history window, the
+          rarer it will be to encounter the exact same history multiple times in a
+          generated passage, and other sequences in the history window will lead to
+          different watermarking biases across the dictionary of possible words.
+          Furthermore, in real implementations of this style of watermarking, only the
+          first encounter with a particular string of prior words triggers watermarking
+          of the next emitted token, and so when there are numerous cases of repeated
+          context windows (which can be frequent with short history windows), the
+          watermarking distortion is diluted, not reinforced. By selecting <b>"Run 2,000
+          tournaments"</b> with <b>"Mask repeated contexts"</b> turned <em>on</em>, the
+          emitted histogram matches the desired one despite the first instance being
+          watermarked and thus drawn from a distorted distribution.</div>
         <div class="ctx-sent" id="txc-sent"></div>
         <div class="ctrl-row" style="margin-bottom:2px;">
           <label class="ctrl-lbl" for="tx-key">Secret key</label>
@@ -1264,8 +1275,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <details class="why">
       <summary>Why mask repeated contexts at all?</summary>
       <div class="why-body">
-        <p>Because a tilt that fires once is invisible, and a tilt that fires twice is the
-        same tilt twice. The winner of a single tournament is still a word the model
+        <p>Because a bias that acts once is invisible, and a bias that acts twice is the
+        same bias twice. The winner of a single tournament is still a word the model
         offered, and one draw cannot reveal which conditional produced it; the repeat demo
         above shows what surrendering that safety costs. Masking turns the safety into a
         rule – each four-word history gets its tournament at most once per text – and the
@@ -1274,11 +1285,11 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         widget's 230-word world, a third of the words in a few pages land on a used
         history, whereas in a real model's hundred-thousand-word vocabulary exact
         four-word repeats are rare outside genuinely repetitive text – the very text
-        where a repeated tilt would otherwise pile into a visible pattern.</p>
+        where a repeated bias would otherwise pile into a visible pattern.</p>
         <p>Tab ⑥ never needed the rule spelled out: its histories are four real numbers,
-        which essentially never recur, and so every tilt fires once by itself. The principle
+        which essentially never recur, and so every bias acts once by itself. The principle
         on both tabs is the same – work inside the diversity the source already offers,
-        spend each history's tilt at most once, and let the tilts cancel everywhere except
+        spend each history's bias at most once, and let the biases cancel everywhere except
         along the key's own score axis, where they all point the same way.</p>
       </div>
     </details>
@@ -1611,8 +1622,8 @@ function wordCode(j, V) { return wmQ((j + 0.5) / V); }
 /* Repeated-context masking: whenever the four-word history has been
    seen before in the same text, both the embedder and the detector
    step aside (a plain draw goes out, and no score is counted). At a
-   fixed key and history, the tournament's tilt is fixed, and so a
-   recurring history would replay the identical tilt. One firing per
+   fixed key and history, the tournament's bias is fixed, and so a
+   recurring history would replay the identical bias. One firing per
    history is invisible (a single draw cannot reveal its conditional),
    and the mask makes the one-firing rule a guarantee rather than a
    statistical tendency; this is SynthID-Text's own rule. Both sides
@@ -1676,7 +1687,7 @@ function wordDetect(ws, key, rounds, V) {
   var mean = n ? sum / m : 0.5;
   /* the z statistic tests against the null, whose spread is known
      (uniform scores, sd = 1/sqrt(12)); the confidence interval uses
-     the sample sd, which the marked key's tilted scores change */
+     the sample sd, which the marked key's skewed scores change */
   var seNull = n ? Math.sqrt(1 / (12 * m)) : 1;
   var se = m > 1 ? Math.sqrt((sumsq - m * mean * mean) / (m - 1) / m) : 1;
   return { n: n, mean: mean, z: (mean - 0.5) / seNull, se: se };
@@ -3696,7 +3707,7 @@ function drawTxcBracket() {
 /* The repeat demo: 2,000 runs at this same blank. With repeat masking
    on (the real scheme's rule), only the first run gets the tournament
    and the rest are plain draws, and so the shares match the model;
-   with masking off, the identical tilt fires all 2,000 times, and the
+   with masking off, the identical bias acts all 2,000 times, and the
    distortion becomes visible. */
 function txcRepeat() {
   var key = wtParseKey('tx-key');
@@ -3726,8 +3737,8 @@ function txcRepeat() {
   txc.winner = txc.bracket.cols[TX_ROUNDS][0];
   txc.obs = counts.map(function (c) { return c / N; });
   txc.note = masked
-    ? 'Repeat masking on: the watermark fired once, and runs 2–2,000 passed through unmarked – ' + ptxt + '.'
-    : 'Repeat masking off: the same tilt fired all 2,000 times – ' + ptxt + '.';
+    ? 'Masking on: run 1 was watermarked, and runs 2–2,000 passed through plain – ' + ptxt + '.'
+    : 'Masking off: the same key-specific distortion applied to all 2,000 runs – ' + ptxt + '.';
   txcRender();
 }
 
