@@ -100,7 +100,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 }
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
-   sooner, because media-query em tracks the browser default. */
+   sooner because media-query em tracks the browser default. */
 /* The longer tab names need about 1,035px of viewport; below that the
    strip gives way to the dropdown, whose optgroup carries the shorter
    group name. */
@@ -524,7 +524,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       multiple (lcm) of the component periods, the first moment both cycles come back into
       alignment at once. A CLCG also solves a subtler problem: its output hides its internal
       state. In an LCG, the output is determined entirely by the current state, and so each
-      output value is always followed by the same pattern, because each state is always
+      output value is always followed by the same pattern because each state is always
       followed by the same pattern. In a CLCG, the same output value can result from different
       states of the two LCGs being combined, and so repeated outputs of the same value need
       not be followed by the same pattern each time.</div>
@@ -681,17 +681,19 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <div class="viz-row props-row">
-      <div class="cv-card" style="flex:1 1 300px; min-width:0;">
+      <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">How the period grows</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Memory sets the ceiling.
           A generator that remembers only its last value must repeat as soon as that value
           recurs, and so it can run no longer than m − 1 steps; one that remembers its last
           k values repeats only when a whole run of k recurs, and a well-chosen recurrence
           reaches every nonzero run before that happens.</div>
-        <div class="tx-tbl-wrap" style="max-height:none;">
-          <table class="tx-tbl" id="m-ladder"></table>
+        <div style="margin:auto 0;">
+          <div class="tx-tbl-wrap" style="max-height:none;">
+            <table class="tx-tbl" id="m-ladder"></table>
+          </div>
+          <div class="cv-leg" id="m-periods" style="text-align:left; margin-top:8px;"></div>
         </div>
-        <div class="cv-leg" id="m-periods" style="text-align:left; margin-top:8px;"></div>
       </div>
       <div class="cv-card" style="flex:0 1 280px; min-width:0;">
         <div class="sec-hd">Pairs of consecutive outputs</div>
@@ -742,7 +744,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
   <section id="tab-wm" class="tp">
     <div class="note"><strong>Every pseudorandom stream already carries a watermark: its own
       parameters.</strong> To a stranger, an LCG's outputs look uniform and independent. To
-      someone who knows the multiplier, the very same outputs are perfectly dependent, because
+      someone who knows the multiplier, the very same outputs are perfectly dependent because
       each one pins down the next exactly. Suppose company X ships simulation software whose
       streams come from an LCG configured one particular way. Checking whether a file of
       numbers matches that configuration is testing for company X's implicit signature – a
@@ -3039,7 +3041,7 @@ function successorText(c) {
              ' and is followed by ' +
              listJoin(show.map(function (q) { return '<b>' + fmtU(us[q + 1]) + '</b>'; })) +
              ', respectively: the same output, different futures. A single LCG can never do ' +
-             'this, because its output is its entire state.';
+             'this because its output is its entire state.';
     }
   }
   return 'No output value recurs with two different successors in the first 240 draws: with ' +
@@ -3047,7 +3049,7 @@ function successorText(c) {
 }
 
 /* Three rows -- the two components and what they make together -- with
-   the combined row marked, because it is the card's whole point. The
+   the combined row marked because it is the card's whole point. The
    note underneath carries whatever the table cannot: where a lead-in
    comes from, or why a period is only known approximately. */
 function clcgRow(name, period, tail, mark) {
