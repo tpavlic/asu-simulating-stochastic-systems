@@ -327,6 +327,14 @@ Add a row to the appropriate table under `## Contents`:
 | [`my_demo/`](my_demo/) | Brief description matching the index entry |
 ```
 
+### 5. A short tag for the demo's commits
+
+The commits that introduce a demo usually name it in their summaries and so need no prefix, but the
+narrow follow-up edits ("Fix the margins", "Reword tab 3's lede") do. Settle on a short tag for the
+new widget now (see "Commit messages" below) so those later commits have one to reach for. If the
+demo joins a directory that already holds one, tag at the widget level from here on: the two are
+independent tools sharing a topic, and the directory name no longer picks out either.
+
 ---
 
 ## HiDPI `<canvas>` rendering
@@ -397,6 +405,34 @@ check all of the following.
   `monte_carlo/mc_explorer-preview.png`, standing in until a landing-page image exists;
   when you replace it, update the `og:image:width`/`height` in `index.html` to the new size and keep
   the ratio near 2:1 for Twitter/X
+
+## Commit messages
+
+**A localized edit to one widget has to make that widget identifiable from the commit message, and
+preferably from the subject line itself.** Normally that takes the form of a short prefix – the
+widget's tag, a colon, and a space – so a narrow summary is not stranded in `git log --oneline`
+with no sign of where it landed:
+
+```text
+prng: Rework tab 6's cards, and label the lattice plots
+power: Fix the margins on the narrow-screen layout
+```
+
+Tags are not enumerated anywhere and are not permanent, because widgets keep arriving. While a
+directory holds a single widget its name is the natural tag (`prng`, `input`, `mc`, or a trimmed
+`power` for `power_analysis/`); once it holds several independent tools, tag the widget instead
+(`analyzer`, `tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let
+earlier commits keep the tags they were written with. Reuse whatever a widget has been tagged
+before – `git log --oneline -- prng/` shows it – and keep the tag short: the whole subject line
+should stay at 72 characters or fewer. This is not Conventional Commits, as there is no
+`feat:`/`fix:` type and the tag names a widget rather than a kind of change.
+
+**Omit the tag when the subject already says where the work is**, either because it names its target
+("Add mobile-friendliness rules to CLAUDE.md") or because it describes a sweep ("Change the color
+scheme on every widget", "Update the conventions for mobile devices"). Such a commit still owes the
+reader its scope, but carries that scope in the summary, where a tag would understate it. A commit
+spanning exactly two widgets can carry both tags (`mc, prng: …`), though splitting it is usually
+better.
 
 ## Current sections and demos
 
