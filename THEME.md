@@ -104,6 +104,19 @@ full checklist is in `CLAUDE.md`; the parts that are presentation are here.
   than eyeballing it.
 - Set `-webkit-text-size-adjust: 100%` on `body`, or iOS Safari inflates the text in landscape and
   every width in the layout stops meaning what it says.
+- **A plot must not shrink its labels to fit.** An `<svg>` with a fixed wide `viewBox` and
+  `width: 100%` scales its text down with the chart, and so a 940-unit plot in a 310px column renders
+  its 11px labels at 3.6px. Wrapping it in `overflow-x: auto` only trades that for sideways
+  panning, which on the tab a reader is meant to interact with is just as bad. Instead pick the
+  `viewBox` from the space the plot actually has: set its width to the container's width (capped at
+  the designed width) so one unit is one CSS pixel, and give it a taller aspect below the
+  breakpoint: axes that sit side by side on a laptop have to stack on a phone. The measure
+  to check is `renderedWidth / viewBoxWidth`; at 1.0 every label is its nominal size, and below
+  about 0.85 the small type is already hard to read.
+- **Re-measure on resize and on tab switch.** A plot drawn while its tab was hidden had no width to
+  measure, and so it falls back to its designed size and keeps it. Redraw the visible plots when the
+  viewport *width* changes, ignoring the height-only resize iOS fires when its address bar slides
+  away, and re-check a tab's geometry when it is shown.
 
 ## Links
 

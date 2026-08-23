@@ -391,8 +391,24 @@ check all of the following.
   the feature exists — a hover reveal is undiscoverable even with a mouse if nothing hints at it.
 - **Drag-and-drop does not exist on a phone.** Anything droppable needs a file input or a paste box
   beside it.
+- **Every interaction has to work with a finger, not only with a cursor.** A draggable handle on a
+  plot is the usual miss: it needs pointer events rather than mouse events, a hit area of at least
+  24px around the drawn mark (compute it in `viewBox` units from the rendered scale because the
+  drawn dot stays small), and a `touchstart` listener that calls `preventDefault` **only** when the
+  gesture starts on a handle, and so a swipe across the rest of the chart still scrolls the page.
+  Anything a mouse gets from hovering needs a tap path too: on the OC chart in `power_analysis/`, a
+  tap moves the lookup to the point touched, which is the finger's version of dragging the dot
+  there.
+- **Check that plots stay legible, not just that the page fits.** Measure
+  `renderedWidth / viewBoxWidth` for every `<svg>` plot at 390px: 1.0 means the labels render at
+  their nominal size, and anything below about 0.85 is shrunken type. A wide plot needs a
+  narrow-screen `viewBox` sized to its container (see `THEME.md`), and its labels then need
+  re-checking at that size because two annotations that clear each other across 940 units can
+  collide across 310.
 - **Test in a real touch context, not a narrow desktop window.** Touch emulation is what catches a
-  control that a mouse can drive and a finger cannot; a resized desktop window will not.
+  control that a mouse can drive and a finger cannot; a resized desktop window will not. Script the
+  audit rather than eyeballing it: walk every tab at 390px and report page overflow, any control
+  whose hit box is under 24px, and every plot's rendered-to-viewBox scale.
 
 ## Site structure
 
