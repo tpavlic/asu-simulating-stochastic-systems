@@ -147,6 +147,43 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* The two property panels sit side by side and wrap to a column when tight */
 .props-row { flex-wrap: wrap; }
+/* The step table has to be wide enough to read. Beside a fixed 375px panel it is
+   down to about 400px by the time the viewport reaches 820, so these rows stack
+   there rather than waiting for the 680 the others use. */
+@media (max-width: 820px) {
+  .g-row { flex-direction: column; }
+  .g-row > .g-left { flex: 1 1 auto; }
+}
+/* Side by side the two property panels are stretched to a common height, so the
+   shorter one carries slack. These springs spread it above the histogram, around the
+   rule, and under the ECDF, rather than letting it pile up at the bottom. Stacked,
+   the card is content-height and each spring collapses to its minimum. */
+.p1-card, .p2-card { display: flex; flex-direction: column; }
+/* The Bins row reads as one line or as three, never as a lopsided two. The three
+   parts need about 378px side by side, so once the card is narrower than that they
+   all stack. This asks the card its width, not the viewport, because the card is
+   narrow in the wrapped middle widths and wide again on a phone. */
+/* The query hangs on a wrapper around the row, not on the card. Putting
+   container-type on the card applied inline-size containment to the flex column and
+   left it about 50px taller than its contents, which the springs dutifully filled. */
+.stat-cq { container-type: inline-size; }
+.stat-grp { display: inline-flex; align-items: center; gap: 8px; }
+@container (max-width: 410px) {
+  .uni-stat-row { flex-direction: column; align-items: center; row-gap: 4px; }
+}
+.p1-card > .rubber, .p2-card > .rubber { flex: 1 1 0; min-height: 4px; }
+/* A panel that is alone on its line should fill it. Side by side these keep their
+   designed proportions, but once .props-row wraps, a panel whose flex-grow is 0 stops
+   at its basis and leaves a ragged edge down the column. The widest pair of bases here
+   is 400 + 482 + 12, so the wrap happens under about 930px of viewport. */
+/* Every card in a wrapping row grows. Tying this to a viewport breakpoint was wrong:
+   what decides the wrap is the row's width against the sum of the bases, and at a
+   1000px window the row is already too narrow while the viewport is not. */
+.props-row > .cv-card { flex-grow: 1; }
+/* Same fault from the other direction: a max-width that frames the card beside its
+   neighbour still caps it once .viz-row turns into a column at 680px. */
+.cap-600 { max-width: 600px; }
+@media (max-width: 680px) { .cap-600 { max-width: none; } }
 /* Small companion lattices on tabs 2 and 3 */
 .mini-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .mini-cell { flex: 0 1 200px; min-width: 0; }
@@ -268,7 +305,16 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 .cr-br { display: none; }
 @media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
 
-@media (max-width: 680px) { .viz-row { flex-direction: column; } .g-left { flex: 1 1 auto !important; } }
+@media (max-width: 680px) {
+  .viz-row { flex-direction: column; }
+  .g-left { flex: 1 1 auto !important; }
+  /* The row is a column here, so flex-basis sizes height rather than width, and a
+     card whose basis framed it beside a neighbour would stand at that height with
+     empty space under its content. The bases are written inline, which is why this
+     override needs the weight. Growing is off for the same reason: stacked, a card
+     has no neighbour to match, so it should be exactly as tall as it needs. */
+  .viz-row > * { flex-basis: auto !important; flex-grow: 0 !important; }
+}
 </style>
 </head>
 <body>
@@ -321,7 +367,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       leveraged to reduce extra sources of variance in experiments and to increase
       reproducibility when sharing experimental results.</div>
 
-    <div class="viz-row">
+    <div class="viz-row g-row">
       <div class="cv-card g-left" style="flex:0 0 375px;">
         <div class="sec-hd">Linear congruential generator (LCG)</div>
         <div class="rec-line" id="g-rec"></div>
@@ -363,29 +409,37 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <div class="viz-row props-row">
-      <div class="cv-card" style="flex:1 1 400px; min-width:0;">
+      <div class="cv-card p1-card" style="flex:1 1 480px; min-width:0;">
         <div class="sec-hd">Property 1: Uniformity – do the values fill [0, 1] evenly?</div>
-        <svg class="plot" id="uni-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of generated values"></svg>
+        <div class="rubber"></div>
+        <svg class="plot" id="uni-hist" style="max-width:440px; margin:0 auto;" viewBox="0 0 440 190" role="img" aria-label="Histogram of generated values"></svg>
         <div class="cv-leg"><span style="color:var(--est)">▮ observed density</span>&nbsp;&nbsp;
           <span style="color:var(--truth)">┄ uniform density = 1</span>&nbsp;&middot;&nbsp;grow the stream and watch the bars flatten</div>
-        <div class="ctrl-row" style="margin:8px 0 0; row-gap:2px;">
-          <label class="ctrl-lbl" for="uni-bins">Bins</label>
-          <select id="uni-bins" onchange="renderPanels()">
-            <option value="10" selected>10</option><option value="20">20</option><option value="40">40</option>
-          </select>
+        <div class="stat-cq">
+        <div class="ctrl-row uni-stat-row" style="margin:8px 0 0; row-gap:2px; justify-content:center;">
+          <span class="stat-grp">
+            <label class="ctrl-lbl" for="uni-bins">Bins</label>
+            <select id="uni-bins" onchange="renderPanels()">
+              <option value="10" selected>10</option><option value="20">20</option><option value="40">40</option>
+            </select>
+          </span>
           <span class="stat-line">χ² statistic = <b id="uni-chi">—</b> <span id="uni-chidf"></span></span>
           <span class="stat-line">χ² p-value = <b id="uni-chip">—</b></span>
         </div>
+        </div>
+        <div class="rubber"></div>
         <div style="border-top:1px solid var(--border); margin:10px 0 8px;"></div>
-        <div style="max-width:430px; margin:0 auto;">
-          <svg class="plot" id="uni-ecdf" viewBox="0 0 260 260" role="img" aria-label="Empirical CDF against the uniform CDF, with the largest gap marked and a legend in the lower right"></svg>
+        <div class="rubber"></div>
+        <div style="margin-top:14px;">
+          <svg class="plot" id="uni-ecdf" style="max-width:440px; margin:0 auto;" viewBox="0 0 440 440" role="img" aria-label="Empirical CDF against the uniform CDF, with the largest gap marked and a legend in the lower right"></svg>
         </div>
         <div class="ctrl-row" style="margin:6px 0 0; row-gap:2px; justify-content:center;">
           <span class="stat-line">K–S statistic D<sub>n</sub> = <b id="uni-ks">—</b></span>
           <span class="stat-line">K–S p-value = <b id="uni-ksp">—</b></span>
         </div>
+        <div class="rubber"></div>
       </div>
-      <div class="cv-card" style="flex:0 1 482px; min-width:0;">
+      <div class="cv-card p2-card" style="flex-basis:482px; min-width:0;">
         <div class="sec-hd">Property 2: Independence – does one value predict a later one?</div>
         <div class="cv-leg" id="ind-desc-2d" style="text-align:left; margin:0 0 6px;">Each dot pairs one output
           with the output k steps later: horizontal position u<sub>n</sub>, vertical position
@@ -401,6 +455,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           special angle where every triple falls onto one of just 15 of them: huge slabs of
           the cube that its “random” values can never enter. Loading the RANDU preset adds a
           button that flies straight to that angle.</div>
+        <div class="rubber"></div>
         <div class="ctrl-row" style="margin-bottom:6px; justify-content:center;">
           <span class="seg" role="group" aria-label="Lattice view">
             <button type="button" class="seg-btn active" id="ind-2d" aria-pressed="true" onclick="setIndMode('2d')">2D pairs</button>
@@ -420,6 +475,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" id="ind-cap" style="margin-top:8px;"></div>
         <div class="cv-leg" style="margin-top:2px;">independent values would fill the square with
           structureless noise; any visible pattern is dependence</div>
+        <div class="rubber"></div>
       </div>
     </div>
 
@@ -538,7 +594,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       states of the two LCGs being combined, and so repeated outputs of the same value need
       not be followed by the same pattern each time.</div>
 
-    <div class="viz-row">
+    <div class="viz-row g-row">
       <div class="cv-card g-left" style="flex:0 0 375px;">
         <div class="sec-hd">Combined LCG (CLCG)</div>
         <div class="rec-line" id="c-rec"></div>
@@ -586,7 +642,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="cv-leg" id="c-periods-note" style="text-align:left; margin-top:8px;"></div>
         </div>
       </div>
-      <div class="cv-card" style="flex:0 1 480px; min-width:0;">
+      <div class="cv-card" style="flex-basis:480px; min-width:0;">
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
           plots of consecutive pairs (u<sub>n</sub>, u<sub>n+1</sub>), the same view as the
@@ -657,7 +713,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       exactly as tab ② combines two LCGs) and is the generator many production simulation
       tools actually run.</div>
 
-    <div class="viz-row">
+    <div class="viz-row g-row">
       <div class="cv-card g-left" style="flex:0 0 375px;">
         <div class="sec-hd" id="m-fam-hd">Multiple recursive generator (MRG)</div>
         <div class="rec-line" id="m-rec"></div>
@@ -704,7 +760,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="cv-leg" id="m-periods" style="text-align:left; margin-top:8px;"></div>
         </div>
       </div>
-      <div class="cv-card" style="flex:0 1 280px; min-width:0;">
+      <div class="cv-card" style="flex-basis:280px; min-width:0;">
         <div class="sec-hd">Pairs of consecutive outputs</div>
         <div class="mini-row">
           <div class="mini-cell">
@@ -761,7 +817,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       tab reads such a mark; the next tab builds one deliberately.</div>
 
     <div class="viz-row">
-      <div class="cv-card" style="flex:1 1 400px; min-width:0; max-width:600px;">
+      <div class="cv-card cap-600" style="flex:1 1 400px; min-width:0;">
         <div class="sec-hd">Reading the implicit watermark of an LCG</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The mystery stream
           comes from x<sub>n+1</sub> = a·x<sub>n</sub> mod 2³¹−1 with a secret multiplier from
@@ -2679,7 +2735,9 @@ function drawHist(us, k, id) {
 }
 
 function drawEcdf(us, ks) {
-  var W = 260, H = 260, L = 26, R = 8, T = 8, B = 20;
+  /* Designed at the histogram's 440 so the two plots in this card, and the lattice
+     in the card beside it, all present the same width at every screen size. */
+  var W = 440, H = 440, L = 26, R = 8, T = 8, B = 20;
   var pw = W - L - R, ph = H - T - B;
   var s = Array.prototype.slice.call(us).sort(function (a, b) { return a - b; });
   var n = s.length;
@@ -2735,7 +2793,7 @@ function drawEcdf(us, ks) {
 /* ── Tab ①: the lattice plot ─────────────────────────────────────────── */
 /* Square plot area of side IND_P, plus margins for the axis labels; the
    canvas earns its keep at large point counts. */
-var IND_P = 400, IND_L = 28, IND_R = 8, IND_T = 6, IND_B = 24;
+var IND_P = 400, IND_L = 28, IND_R = 12, IND_T = 6, IND_B = 24;   /* IND_W = 440, the shared plot width */
 var IND_W = IND_L + IND_P + IND_R, IND_H = IND_T + IND_P + IND_B;
 
 function initIndCanvas() {
@@ -2786,6 +2844,41 @@ function setIndMode(m) {
    spots big enough to read as a deliberate grid. */
 function dotSize(distinct) { return distinct <= 256n ? 7 : distinct <= 65536n ? 4 : 2; }
 
+/* Outfit carries no subscript glyphs, so characters like U+2099 fell through to
+   whatever font on the machine did have them, at its own size and baseline. In a
+   compound subscript the effect was plain: the plus in u(n+k) sat lower and smaller
+   than the n beside it and read as a subscript of a subscript. Canvas has no markup,
+   so a label writes its subscript as u_{n+k} and this draws that as its own smaller
+   run on a shifted baseline, in the same face as the rest of the label. */
+function fillLabel(ctx, text, x, y, size, weight) {
+  var w = weight || '400';
+  var main = w + ' ' + size + 'px Outfit, sans-serif';
+  var small = w + ' ' + Math.round(size * 0.74) + 'px Outfit, sans-serif';
+  var parts = [], re = /_\{([^}]*)\}/g, last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push([text.slice(last, m.index), false]);
+    parts.push([m[1], true]);
+    last = re.lastIndex;
+  }
+  if (last < text.length) parts.push([text.slice(last), false]);
+  var total = 0, i;
+  for (i = 0; i < parts.length; i++) {
+    ctx.font = parts[i][1] ? small : main;
+    total += ctx.measureText(parts[i][0]).width;
+  }
+  var align = ctx.textAlign, cx = x;
+  if (align === 'center') cx = x - total / 2;
+  else if (align === 'right' || align === 'end') cx = x - total;
+  ctx.textAlign = 'left';
+  var dy = Math.round(size * 0.2);
+  for (i = 0; i < parts.length; i++) {
+    ctx.font = parts[i][1] ? small : main;
+    ctx.fillText(parts[i][0], cx, parts[i][1] ? y + dy : y);
+    cx += ctx.measureText(parts[i][0]).width;
+  }
+  ctx.textAlign = align;
+  ctx.font = main;
+}
 function drawInd2() {
   var n = streamN;
   var lag = Number(document.getElementById('ind-lag').value);
@@ -2814,7 +2907,7 @@ function drawInd2() {
   ctx.fillText('0', IND_L, IND_T + IND_P + 12);
   ctx.fillText('1', IND_L + IND_P, IND_T + IND_P + 12);
   ctx.font = '600 12px Outfit, sans-serif';
-  ctx.fillText('uₙ  (one output)', IND_L + IND_P / 2, IND_T + IND_P + 22);
+  fillLabel(ctx, 'u_{n}  (one output)', IND_L + IND_P / 2, IND_T + IND_P + 22, 12, '600');
   ctx.textAlign = 'right';
   ctx.font = '11px Outfit, sans-serif';
   ctx.fillText('1', IND_L - 5, IND_T + 9);
@@ -2824,7 +2917,7 @@ function drawInd2() {
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = 'center';
   ctx.font = '600 12px Outfit, sans-serif';
-  ctx.fillText('uₙ₊ₖ  (k steps later)', 0, 0);
+  fillLabel(ctx, 'u_{n+k}  (k steps later)', 0, 0, 12, '600');
   ctx.restore();
   document.getElementById('ind-cap').innerHTML =
     pts.toLocaleString('en-US') + ' pairs (u<sub>n</sub>, u<sub>n+k</sub>) from the ' +
@@ -2886,10 +2979,10 @@ function drawInd3() {
   ctx.globalAlpha = 1;
   /* axis labels just past the far ends of the three edges leaving (0,0,0) */
   ctx.fillStyle = C.muted; ctx.font = '600 12px Outfit, sans-serif'; ctx.textAlign = 'center';
-  var ax = [[1.14, 0, 0, 'uₙ'], [0, 1.14, 0, 'uₙ₊₁'], [0, 0, 1.14, 'uₙ₊₂']];
+  var ax = [[1.14, 0, 0, 'u_{n}'], [0, 1.14, 0, 'u_{n+1}'], [0, 0, 1.14, 'u_{n+2}']];
   for (i = 0; i < 3; i++) {
     var ql = proj(ax[i][0], ax[i][1], ax[i][2]);
-    ctx.fillText(ax[i][3], ql[0], ql[1] + 4);
+    fillLabel(ctx, ax[i][3], ql[0], ql[1] + 4, 12, '600');
   }
   document.getElementById('ind-cap').innerHTML =
     (n - 2 > pts ? pts.toLocaleString('en-US') + ' of ' + (n - 2).toLocaleString('en-US')
@@ -2974,11 +3067,11 @@ function drawMini(id, us, distinct, opts) {
     ctx.fillStyle = C.muted;
     ctx.font = '11px Outfit, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(opts.xlab, ox + MINI_PAD + MINI_P / 2, MINI_PAD + MINI_P + 16);
+    fillLabel(ctx, opts.xlab, ox + MINI_PAD + MINI_P / 2, MINI_PAD + MINI_P + 16, 11);
     ctx.save();
     ctx.translate(ox - 7, MINI_PAD + MINI_P / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(opts.ylab, 0, 0);
+    fillLabel(ctx, opts.ylab, 0, 0, 11);
     ctx.restore();
   }
 }
@@ -3110,8 +3203,8 @@ function renderClcgExtras() {
   el.innerHTML = head + rows;
   document.getElementById('c-periods-note').innerHTML = note;
   var comp1 = makeLCG(c.a1, 0n, c.m1, c.s1);
-  drawMini('c-lat1', genStream(comp1, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
-  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+  drawMini('c-lat1', genStream(comp1, 1500), c.m1, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
+  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
   document.getElementById('c-succ').innerHTML = successorText(c);
 }
 
@@ -3176,7 +3269,7 @@ function renderMrgExtras() {
            'ceiling above, visiting every nonzero run of k values before it repeats.';
   }
   el.innerHTML = html;
-  drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c), { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+  drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c), { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
   document.getElementById('m-lat-cap').innerHTML =
     c.fam === 'cmrg' ? '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from MRG32k3a: no visible grain'
                      : '2,000 pairs (u<sub>n</sub>, u<sub>n+1</sub>) from the current MRG';
@@ -3221,7 +3314,7 @@ function histWithTests(id, us) {
 /* The right-hand card: the mystery stream put through tab 1's judgments. */
 function waMinis() {
   histWithTests('wa-hist', wa.us);
-  drawMini('wa-lat', wa.us, WA_M, { xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+  drawMini('wa-lat', wa.us, WA_M, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
 }
 
 function waPlot() {
@@ -3280,11 +3373,11 @@ function drawPredObs(id, pts, opts) {
   ctx.fillStyle = C.muted;
   ctx.font = '11px Outfit, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(opts.xlab || 'candidate\u2019s predicted next u', WA_PAD + WA_P / 2, WA_PAD + WA_P + 16);
+  fillLabel(ctx, opts.xlab || 'candidate\u2019s predicted next u', WA_PAD + WA_P / 2, WA_PAD + WA_P + 16, 11);
   ctx.save();
   ctx.translate(WA_PAD - 8, WA_PAD + WA_P / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText(opts.ylab || 'observed next u', 0, 0);
+  fillLabel(ctx, opts.ylab || 'observed next u', 0, 0, 11);
   ctx.restore();
 }
 
@@ -3386,7 +3479,7 @@ function rwStats() {
      at the same size and baseline across the row. */
   var pairs = [];
   for (var i = 0; i + 1 < rw.us.length; i++) pairs.push([rw.us[i], rw.us[i + 1]]);
-  drawPredObs('rw-lat', pairs, { diag: false, xlab: 'uₙ  (one output)', ylab: 'uₙ₊₁  (the next output)' });
+  drawPredObs('rw-lat', pairs, { diag: false, xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
 }
 
 /* ── Tab ⑥: tournament watermarks ────────────────────────────────────── */
@@ -3651,7 +3744,7 @@ function wtStats() {
      show no more grain than any other stream on this page */
   var pairs = [];
   for (var i = 0; i + 1 < wt.us.length; i++) pairs.push([wt.us[i], wt.us[i + 1]]);
-  drawPredObs('wt-lat', pairs, { diag: false, xlab: 'u\u2099  (one output)', ylab: 'u\u2099\u208a\u2081  (the next output)' });
+  drawPredObs('wt-lat', pairs, { diag: false, xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
 }
 
 /* Histogram of the per-value keyed scores under the tested key, with the
