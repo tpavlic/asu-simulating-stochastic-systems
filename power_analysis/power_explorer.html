@@ -745,7 +745,34 @@ footer a:hover { text-decoration: underline; }
 <section id="tab-paired" class="tp">
   <section class="sec">
     <div class="sec-hd">Plan from pilot data
-      <span class="sec-note">paste a small sample; use what it says about σ (or p) as the planning value, or feed a paired pilot into the analysis below</span></div>
+      <span class="sec-note">a few real observations replace guessed planning values</span></div>
+
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
+      A power analysis is typically done to determine the number of samples that an experiment
+      will need. However, the analysis requires information about the variance in each
+      population being sampled, and those variances are often unknown before the experiment
+      has been run. Consequently, a power analysis often depends on a pilot study, a small
+      sample collected first to estimate exactly those variances.</p>
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
+      <strong>An example for parametric testing of means.</strong> Imagine that your goal is
+      to test whether a population's mean deviates significantly from a null hypothesis (a
+      one-sample t-test). For a power analysis, you may have to run a pilot study to sample
+      enough individuals from that population to estimate its standard deviation. Similarly, if you
+      <em>paired</em> individuals from two populations to estimate the mean difference in a
+      response to a shared stimulus, a power analysis would require pilot data on the
+      standard deviation of the paired differences. Pairs like these can come from: matched
+      individuals in a real experiment; a real system's outputs paired against a
+      simulation driven by the same inputs, as in validation; or—the special case explored at
+      the bottom of this page—two configurations of a simulated system sharing common
+      random numbers.</p>
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
+      The textbox below gathers data for both cases: a single column of
+      numbers or two columns (comma, tab, or space separated) of <em>paired</em> data that
+      differences will be taken over. Either summary can be sent to tab ① for the power
+      analysis of a one-sample t-test (i.e., for either raw values or the differences between
+      each pair). A two-column summary can also be sent to the bottom of this page for the
+      power analysis of a paired t-test and an investigation of how correlation within pairs
+      can be leveraged for more efficient simulation studies—fewer runs for the same power.</p>
 
     <div class="duo">
       <div>
@@ -755,7 +782,9 @@ footer a:hover { text-decoration: underline; }
         <div class="parse-msg" id="pi-msg" role="status" aria-live="polite"></div>
       </div>
       <div>
-        <div class="sg" id="pi-cards"></div>
+        <div class="sg" id="pi-cards"><div class="note quiet" style="grid-column:1/-1">Summary
+          cards appear here once a pilot is pasted, each with a button that sends its planning
+          value where it belongs.</div></div>
         <div class="ctrl-row" id="pi-apply" style="margin-top:10px"></div>
         <div class="note warn" id="pi-warn" style="display:none"></div>
       </div>
@@ -4327,6 +4356,10 @@ function renderPaired() {
 
 /* ── Pilot data ────────────────────────────────────────────────────── */
 var PILOT = { cols: null };
+var PI_PLACEHOLDER = '<div class="note quiet" style="grid-column:1/-1">Summary cards appear ' +
+  'here once a pilot is pasted, each with a button that sends its planning value where it ' +
+  'belongs.</div>';
+
 function parsePilot() {
   var res = PA.parseColumns($('pi-in').value);
   PILOT.cols = res.cols;
@@ -4335,7 +4368,8 @@ function parsePilot() {
   if (!res.cols.length || res.cols[0].length < 2) {
     msg.textContent = $('pi-in').value.trim() ? 'Need at least two numeric rows.' : '';
     if ($('pi-in').value.trim()) msg.classList.add('bad');
-    $('pi-cards').innerHTML = ''; $('pi-apply').innerHTML = ''; $('pi-warn').style.display = 'none';
+    $('pi-cards').innerHTML = PI_PLACEHOLDER;
+    $('pi-apply').innerHTML = ''; $('pi-warn').style.display = 'none';
     return;
   }
   if (res.cols.length >= 2 && res.cols[1].length >= 2) {
