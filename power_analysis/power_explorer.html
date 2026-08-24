@@ -766,9 +766,9 @@ footer a:hover { text-decoration: underline; }
       the bottom of this page—two configurations of a simulated system sharing common
       random numbers.</p>
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      The textbox below gathers data for both cases: a single column of
-      numbers or two columns (comma, tab, or space separated) of <em>paired</em> data that
-      differences will be taken over. Either summary can be sent to tab ① for the power
+      The textbox below gathers data for both cases: a single list of
+      numbers, written down a column or across one line, or two columns (comma, tab, or
+      space separated) of <em>paired</em> data that differences will be taken over. Either summary can be sent to tab ① for the power
       analysis of a one-sample t-test (i.e., for either raw values or the differences between
       each pair). A two-column summary can also be sent to the bottom of this page for the
       power analysis of a paired t-test and an investigation of how correlation within pairs
@@ -777,9 +777,10 @@ footer a:hover { text-decoration: underline; }
     <div class="duo">
       <div>
         <textarea id="pi-in" class="data-in" spellcheck="false" autocomplete="off"
-          aria-label="Pilot data: one number per line, or two columns for a paired pilot"
-          placeholder="Paste pilot observations, one per line, for example&#10;&#10;4.67&#10;3.51&#10;5.01&#10;&#10;Two columns (comma, tab, or space separated) are read as a paired pilot: X1, X2 per row. A column of 0s and 1s is read as successes for the proportion test."></textarea>
+          aria-label="Pilot data: one number per line or all on one line, or two columns for a paired pilot"
+          placeholder="Paste pilot observations, one per line, for example&#10;&#10;4.67&#10;3.51&#10;5.01&#10;&#10;A single line of values works too: 4.67, 3.51, 5.01&#10;&#10;Two columns (comma, tab, or space separated) over several lines are read as a paired pilot: X1, X2 per row. A column of 0s and 1s is read as successes for the proportion test."></textarea>
         <div class="parse-msg" id="pi-msg" role="status" aria-live="polite"></div>
+        <div class="ctrl-row" id="pi-fix" style="margin-top:8px"></div>
       </div>
       <div>
         <div class="sg" id="pi-cards"><div class="note quiet" style="grid-column:1/-1">Summary
@@ -2322,13 +2323,43 @@ function mcSweep(testId, paramsList, n, alpha, sided, m, seed) {
    One or two columns of numbers, comma/tab/semicolon/space delimited,
    header rows and blank lines skipped.  Returns column arrays; the
    caller decides what to plan with (s, or the pair). */
+/* One line of pasted input, split on every delimiter the box accepts.
+   The parser and the transpose share it, and so the two can never come to
+   disagree about where one value ends and the next begins. */
+function splitCells(line) {
+  return line.split(/[,;\t]| +/).filter(function (s) { return s !== ''; });
+}
+
+/* Rewrite a paste so its rows become its columns, carrying each value's
+   text across exactly as typed rather than reformatting the numbers. Two
+   rows of many values is a paired pilot written sideways, and this turns
+   it the right way up. */
+function transposeText(text) {
+  var lines = String(text || '').split(/\r\n|\r|\n/);
+  var rows = [], w = 0, i;
+  for (i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var cells = splitCells(line);
+    rows.push(cells);
+    if (cells.length > w) w = cells.length;
+  }
+  var out = [];
+  for (var c = 0; c < w; c++) {
+    var cell = [];
+    for (i = 0; i < rows.length; i++) if (rows[i].length > c) cell.push(rows[i][c]);
+    out.push(cell.join(', '));
+  }
+  return out.join('\n');
+}
+
 function parseColumns(text) {
   var lines = String(text || '').split(/\r\n|\r|\n/);
   var rows = [], maxCols = 0, i;
   for (i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
     if (!line) continue;
-    var parts = line.split(/[,;\t]| +/).filter(function (s) { return s !== ''; });
+    var parts = splitCells(line);
     var nums = [], allNum = parts.length > 0;
     for (var j = 0; j < parts.length; j++) {
       var v = Number(parts[j]);
@@ -2343,6 +2374,20 @@ function parseColumns(text) {
     cols.push(col);
   }
   return { cols: cols, nRows: rows.length };
+}
+/* A list of numbers is normally a column, one per line, but typing it on
+   one line is easier and means the same thing. One row carrying several
+   values is therefore read as that list: a genuine one-row table could
+   only ever be a pilot of n = 1, which no summary can use, and so nothing
+   ambiguous is being reinterpreted. Two rows are left alone, and a paired
+   pilot stays in columns. */
+function pilotColumns(text) {
+  var res = parseColumns(text);
+  if (res.nRows === 1 && res.cols.length > 1) {
+    var row = res.cols.map(function (c) { return c[0]; });
+    return { cols: [row], nRows: row.length, fromRow: true };
+  }
+  return { cols: res.cols, nRows: res.nRows, fromRow: false };
 }
 function summarizeCol(a) {
   if (!a || a.length < 2) return null;
@@ -2408,7 +2453,8 @@ var PA = {
   regDesign: regDesign, glmFit: glmFit, gammaSample: gammaSample,
   solveNAnalytic: solveNAnalytic, solveNMC: solveNMC,
   mcRun: mcRun, mcSweep: mcSweep,
-  parseColumns: parseColumns, summarizeCol: summarizeCol, pairedSummary: pairedSummary,
+  parseColumns: parseColumns, pilotColumns: pilotColumns, transposeText: transposeText,
+  summarizeCol: summarizeCol, pairedSummary: pairedSummary,
   num: num, csvEscape: csvEscape, toCsv: toCsv
 };
 /* ===== PA-CORE-END ===== */
@@ -4391,15 +4437,16 @@ var PI_PLACEHOLDER = '<div class="note quiet" style="grid-column:1/-1">Summary c
   'belongs.</div>';
 
 function parsePilot() {
-  var res = PA.parseColumns($('pi-in').value);
+  var res = PA.pilotColumns($('pi-in').value);
   PILOT.cols = res.cols;
-  var msg = $('pi-msg'), cards = '', apply = '', warn = '';
+  var msg = $('pi-msg'), cards = '', apply = '', warn = '', fix = '';
   msg.classList.remove('bad');
   if (!res.cols.length || res.cols[0].length < 2) {
     msg.textContent = $('pi-in').value.trim() ? 'Need at least two numeric rows.' : '';
     if ($('pi-in').value.trim()) msg.classList.add('bad');
     $('pi-cards').innerHTML = PI_PLACEHOLDER;
-    $('pi-apply').innerHTML = ''; $('pi-warn').style.display = 'none';
+    $('pi-apply').innerHTML = ''; $('pi-fix').innerHTML = '';
+    $('pi-warn').style.display = 'none';
     return;
   }
   if (res.cols.length >= 2 && res.cols[1].length >= 2) {
@@ -4407,7 +4454,15 @@ function parsePilot() {
     /* More than two columns is usually a transposed paste, and truncating
        it silently would leave the reader with an answer built from data
        they did not think they had given. */
-    msg.textContent = 'Read ' + ps.n + ' paired rows (two columns).';
+    if (res.cols.length > 2) {
+      msg.textContent = 'Read ' + ps.n + ' paired rows, using the first two columns only—pairs ' +
+        'are read across each row, not down the columns.';
+      fix = '<button class="btn2" id="pi-transpose" type="button">Transpose these data</button>' +
+        '<span class="ctrl-note">Turns the ' + res.cols.length + ' columns into ' +
+        res.cols.length + ' rows, for a pilot written sideways.</span>';
+    } else {
+      msg.textContent = 'Read ' + ps.n + ' paired rows (two columns).';
+    }
     /* A constant column makes the sample correlation 0/0; showing NaN
        would read as a bug, and the planning buttons would forward a
        zero σ or an undefined ρ, and so both degrade politely instead. */
@@ -4433,7 +4488,7 @@ function parsePilot() {
     var col = res.cols[0];
     var sm = PA.summarizeCol(col);
     PILOT.single = sm; PILOT.paired = null;
-    msg.textContent = 'Read ' + sm.n + ' values (one column).';
+    msg.textContent = 'Read ' + sm.n + ' values (' + (res.fromRow ? 'one row' : 'one column') + ').';
     cards += card(lit('n') + ' (pilot)', String(sm.n), '');
     cards += card('mean', N(sm.mean, 5), '');
     cards += card(lit('s') + ' (sample SD)', N(sm.sd, 5), '');
@@ -4475,7 +4530,13 @@ function parsePilot() {
   }
   $('pi-cards').innerHTML = cards;
   $('pi-apply').innerHTML = apply;
+  $('pi-fix').innerHTML = fix;
   var b;
+  if ((b = $('pi-transpose'))) b.addEventListener('click', function () {
+    $('pi-in').value = PA.transposeText($('pi-in').value);
+    parsePilot();
+    $('pi-in').focus();
+  });
   if ((b = $('pi-send-paired'))) b.addEventListener('click', function () {
     $('pr-s1').value = N(PILOT.paired.sd1, 5);
     $('pr-s2').value = N(PILOT.paired.sd2, 5);

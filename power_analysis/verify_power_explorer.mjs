@@ -412,6 +412,55 @@ close(PA.pairedSigmaD(1, 1, -1), 2, 1e-12, 'sigma_d at rho=-1, equal sigmas');
   ok(Math.abs(ps.rho - 0.6) < 0.03, `pairedSummary recovers rho = 0.6 (got ${ps.rho.toFixed(4)})`);
 }
 {
+  /* Pilot input shapes. A list may be written down a column or across one
+     line; two columns over several rows stay a paired pilot, and the
+     one-row rule must never fire on them. */
+  const cols = (t) => PA.pilotColumns(t);
+  const colWise = cols('4.67\n3.51\n5.01\n');
+  ok(colWise.cols.length === 1 && colWise.cols[0].length === 3 && !colWise.fromRow,
+     'pilotColumns: one number per line stays one column');
+  for (const [label, text] of [['commas', '4.67, 3.51, 5.01'],
+                               ['spaces', '4.67 3.51 5.01'],
+                               ['tabs', '4.67\t3.51\t5.01'],
+                               ['trailing newline', '4.67, 3.51, 5.01\n']]) {
+    const r = cols(text);
+    ok(r.fromRow && r.cols.length === 1 && r.cols[0].length === 3 &&
+       Math.abs(r.cols[0][2] - 5.01) < 1e-12,
+       `pilotColumns: one row of values reads as one column (${label})`);
+  }
+  const two = cols('4.6, 5.1\n3.2, 3.9\n5.8, 6.4');
+  ok(!two.fromRow && two.cols.length === 2 && two.cols[0].length === 3,
+     'pilotColumns: two columns over three rows stay paired');
+  const twoRows = cols('4.6, 5.1');
+  ok(twoRows.fromRow && twoRows.cols.length === 1 && twoRows.cols[0].length === 2,
+     'pilotColumns: a lone pair of values is a two-value list, not an n = 1 pilot');
+  /* Transposing a sideways paste, with each value's text carried across
+     unchanged rather than reformatted. */
+  const sideways = '12, 15, 11, 14, 13\n10, 14, 9, 13, 11';
+  const fixed = PA.transposeText(sideways);
+  ok(fixed === '12, 10\n15, 14\n11, 9\n14, 13\n13, 11',
+     'transposeText turns 2 rows of 5 into 5 rows of 2');
+  const after = cols(fixed);
+  ok(after.cols.length === 2 && after.cols[0].length === 5,
+     'the transposed paste reads as 5 paired rows');
+  ok(PA.transposeText(PA.transposeText(sideways)) === sideways,
+     'transposeText is its own inverse on a rectangular paste');
+  ok(PA.transposeText('1.10, 2.50\n3.00, 4.00') === '1.10, 3.00\n2.50, 4.00',
+     'transposeText preserves each value as typed, trailing zeros included');
+  ok(PA.transposeText('1.1, 1.2, 1.3\n1.4, 1.5') === '1.1, 1.4\n1.2, 1.5\n1.3',
+     'transposeText keeps every value of a ragged paste');
+  ok(PA.transposeText('5 6\t7\n8;9 10') === '5, 8\n6, 9\n7, 10',
+     'transposeText accepts the same delimiters as the parser');
+
+  const one = cols('4.67');
+  ok(!one.fromRow && one.cols.length === 1 && one.cols[0].length === 1,
+     'pilotColumns: a single value is left as is (too short to summarize)');
+  const rowSummary = PA.summarizeCol(cols('2, 4, 4, 4, 5, 5, 7, 9').cols[0]);
+  ok(rowSummary.n === 8 && Math.abs(rowSummary.mean - 5) < 1e-12 &&
+     Math.abs(rowSummary.sd - Math.sqrt(32 / 7)) < 1e-12,
+     'summarizeCol on a row-entered list: n = 8, mean 5, s = sqrt(32/7)');
+}
+{
   /* A runaway noncentrality must terminate. The Poisson mixtures walk
      outward from term lambda, and an uncapped walk at lambda = 1e31 hung
      the page; each CDF now substitutes its large-lambda limit. The time
