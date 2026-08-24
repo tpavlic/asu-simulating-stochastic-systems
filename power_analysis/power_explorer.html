@@ -624,6 +624,10 @@ footer a:hover { text-decoration: underline; }
     <div id="exp-rows"></div>
     <div class="ctrl-note" id="exp-note" style="margin-top:8px"></div>
     <div class="note quiet" id="gp-note" style="margin-top:8px"></div>
+    <div class="note quiet" style="margin-top:8px">Every snippet above leans on a closed form.
+      The fully empirical route—simulating both hypotheses from a model of your own and counting
+      rejections—needs no formula at all; tab ⑤ ends with
+      <a href="#" id="mct-link">that pattern as a take-home template</a>.</div>
 
     <div class="ctrl-row" style="margin-top:10px">
       <button class="btn2" id="csv-btn" type="button">Download power curves (CSV)</button>
@@ -937,8 +941,106 @@ footer a:hover { text-decoration: underline; }
     <div class="note quiet" style="margin-top:10px">
       When none of these fit—a hierarchical model, a simulation model with no likelihood, a
       custom decision rule—the method of tab ① always does: write the data generator, run the
-      test, count rejections. Past the textbook cases, that is how power analysis is done.
+      test, count rejections. Past the textbook cases, that is how power analysis is done. The
+      section below hands you that loop as a template.
     </div>
+  </section>
+
+  <!-- ── TAKE IT WITH YOU (the empirical pattern) ─────────────────── -->
+  <section class="sec" id="mct-sec">
+    <div class="sec-hd">Take it with you
+      <span class="sec-note">the simulate-and-count pattern, for a model of your own</span></div>
+
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
+      Everything on this page reduces to one pattern: a test is a classifier, and a power
+      analysis measures that classifier on labeled data. Generate datasets from the null model,
+      generate more from the alternative, run the same decision rule on both, and count—the
+      rejection rate on the null draws estimates the attained α, and the rejection rate on the
+      alternative draws estimates power. The template arrives filled in with tab ①'s default
+      t test so its output can be checked against this page (exact power 0.5645); replace the
+      two generators and the classifier with your own model—a queueing simulation, a custom
+      statistic—and nothing else changes.</p>
+
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <span class="ctrl-lbl" id="mct-lbl">Language</span>
+        <span class="seg" role="group" aria-labelledby="mct-lbl" id="mct-seg">
+          <button type="button" data-lang="matlab" class="on">MATLAB</button>
+          <button type="button" data-lang="r">R</button>
+          <button type="button" data-lang="python">Python</button>
+        </span>
+      </span>
+      <button class="copy-btn" id="mct-copy" type="button">Copy</button>
+    </div>
+    <div class="exp-code" id="mct-code" style="margin-top:8px"></div>
+    <div class="ctrl-note" style="margin-top:8px">To solve for n instead, wrap the count in a
+      loop that raises n until the power estimate clears the target—that is all any solver does.
+      Each interval is that language's own exact binomial 95% CI; quadrupling m halves its
+      width.</div>
+
+<script type="text/plain" id="mct-matlab">
+% Monte Carlo power analysis for any test: simulate both worlds, classify, count.
+% The example is a two-sided one-sample t test of mu = 0 on draws from N(0.5, 1)
+% with n = 20 at alpha = 0.05, whose exact power is 0.5645.  Replace the two
+% generators and the classifier with a model of your own; nothing else changes.
+m = 10000; n = 20; alpha = 0.05; rng(1);
+
+simulate_null = @(n) 0.0 + 1.0*randn(n, 1);    % the H0 world
+simulate_alt  = @(n) 0.5 + 1.0*randn(n, 1);    % the H1 world
+reject = @(y) ttest(y, 0, 'Alpha', alpha);     % the classifier (1 = reject)
+
+r0 = 0; r1 = 0;
+for i = 1:m
+    r0 = r0 + reject(simulate_null(n));        % false alarms under H0
+    r1 = r1 + reject(simulate_alt(n));         % detections under H1
+end
+[ah, ci0] = binofit(r0, m)    % attained alpha, with a 95% CI
+[ph, ci1] = binofit(r1, m)    % power, with a 95% CI
+% A statistic with no p-value: compute it on every null draw, calibrate
+% crit = quantile(stat0, 1 - alpha), and reject when it exceeds crit;
+% alpha is then estimated rather than set.
+</script>
+<script type="text/plain" id="mct-r">
+# Monte Carlo power analysis for any test: simulate both worlds, classify, count.
+# The example is a two-sided one-sample t test of mu = 0 on draws from N(0.5, 1)
+# with n = 20 at alpha = 0.05, whose exact power is 0.5645.  Replace the two
+# generators and the classifier with a model of your own; nothing else changes.
+m <- 10000; n <- 20; alpha <- 0.05; set.seed(1)
+
+simulate_null <- function(n) rnorm(n, mean = 0,   sd = 1)   # the H0 world
+simulate_alt  <- function(n) rnorm(n, mean = 0.5, sd = 1)   # the H1 world
+reject <- function(y) t.test(y, mu = 0)$p.value <= alpha    # the classifier
+
+r0 <- sum(replicate(m, reject(simulate_null(n))))   # false alarms under H0
+r1 <- sum(replicate(m, reject(simulate_alt(n))))    # detections under H1
+print(c(r0/m, binom.test(r0, m)$conf.int))   # attained alpha, with a 95% CI
+print(c(r1/m, binom.test(r1, m)$conf.int))   # power, with a 95% CI
+# A statistic with no p-value: compute it on every null draw, calibrate
+# crit <- quantile(stat0, 1 - alpha), and reject when it exceeds crit;
+# alpha is then estimated rather than set.
+</script>
+<script type="text/plain" id="mct-python">
+# Monte Carlo power analysis for any test: simulate both worlds, classify, count.
+# The example is a two-sided one-sample t test of mu = 0 on draws from N(0.5, 1)
+# with n = 20 at alpha = 0.05, whose exact power is 0.5645.  Replace the two
+# generators and the classifier with a model of your own; nothing else changes.
+import numpy as np
+from scipy import stats
+
+m, n, alpha = 10000, 20, 0.05
+rng = np.random.default_rng(1)
+simulate_null = lambda n: rng.normal(0.0, 1.0, n)   # the H0 world
+simulate_alt  = lambda n: rng.normal(0.5, 1.0, n)   # the H1 world
+reject = lambda y: stats.ttest_1samp(y, 0.0).pvalue <= alpha   # the classifier
+
+r0 = sum(reject(simulate_null(n)) for _ in range(m))   # false alarms under H0
+r1 = sum(reject(simulate_alt(n))  for _ in range(m))   # detections under H1
+print(r0/m, stats.binomtest(r0, m).proportion_ci())    # attained alpha + 95% CI
+print(r1/m, stats.binomtest(r1, m).proportion_ci())    # power + 95% CI
+# A statistic with no p-value: compute it on every null draw, calibrate
+# crit = np.quantile(stat0, 1 - alpha), and reject when it exceeds crit;
+# alpha is then estimated rather than set.
+</script>
   </section>
 </section>
 
@@ -3560,6 +3662,15 @@ function renderExports() {
   });
 }
 
+/* ── Tab ⑤'s Monte Carlo template ──────────────────────────────────── */
+var MCT_LANG = 'matlab';
+function renderMct() {
+  $('mct-code').textContent = $('mct-' + MCT_LANG).textContent.trim();
+  Array.prototype.forEach.call($('mct-seg').children, function (b) {
+    b.classList.toggle('on', b.dataset.lang === MCT_LANG);
+  });
+}
+
 /* ── CSV download of the plotted curves ────────────────────────────── */
 function downloadCsv() {
   var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided(), n = curN();
@@ -4515,6 +4626,29 @@ document.addEventListener('DOMContentLoaded', function () {
   $('mc-run').addEventListener('click', runMC);
   $('sn-run').addEventListener('click', runSolveMC);
   $('csv-btn').addEventListener('click', downloadCsv);
+
+  Array.prototype.forEach.call($('mct-seg').children, function (b) {
+    b.addEventListener('click', function () { MCT_LANG = b.dataset.lang; renderMct(); });
+  });
+  $('mct-copy').addEventListener('click', function () {
+    var el = $('mct-code'), b = $('mct-copy');
+    var done = function () { b.classList.add('done'); b.textContent = 'Copied';
+      setTimeout(function () { b.classList.remove('done'); b.textContent = 'Copy'; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(el.textContent).then(done, function () {});
+    else {
+      var r = document.createRange(); r.selectNodeContents(el);
+      var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      sel.removeAllRanges();
+    }
+  });
+  renderMct();
+  $('mct-link').addEventListener('click', function (ev) {
+    ev.preventDefault();
+    showTab('adv');
+    $('mct-sec').scrollIntoView();
+  });
   $('pe-overlay').addEventListener('change', function () { TAB_DIRTY.curves = true; renderVisibleTab(); });
   $('pn-max').addEventListener('change', function () {
     var v = Math.floor(Number(this.value)) || 0;

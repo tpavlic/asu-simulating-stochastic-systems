@@ -528,7 +528,8 @@ better.
   proportion, chi-square GOF, one-way ANOVA, regression slope) with a Monte Carlo engine and
   solve-for-power/solve-for-n in both directions, power curves, a live OC chart, a
   paired-comparison/pilot-data tab, and an advanced tab whose gamma-regression demo runs the
-  same engine with no analytic overlay. Conventions relied on by code outside the file, which any
+  same engine with no analytic overlay and which ends with a three-language (MATLAB/R/Python)
+  Monte Carlo power-analysis template held in inert `<script type="text/plain">` blocks. Conventions relied on by code outside the file, which any
   later edit has to preserve:*
   1. *Everything between the `PA-CORE-BEGIN` / `PA-CORE-END` sentinels is pure numerics with no DOM
      access. `power_analysis/verify_power_explorer.mjs` slices that block out of the HTML and runs
@@ -541,7 +542,10 @@ better.
      (noncentral F against Poisson mixtures of central beta CDFs, because R's own `pf(ncp)` is only
      accurate to ~1e-9), power-at-zero-effect = α for every test and sidedness, Monte Carlo vs
      analytic power across a grid, solve-for-n round trips, and — when `Rscript` is on the PATH —
-     re-runs the export panel's R formulas in R and compares.*
+     re-runs the export panel's R formulas in R and compares. Its final section slices the
+     Monte Carlo template out of those text/plain blocks verbatim and runs it in R, Python,
+     and MATLAB (each skipped when absent), and so template edits must keep the worked example's
+     α̂ near 0.05 and its power near the exact 0.5645.*
   3. *Three statistical conventions are deliberate. Two-sided t and z power is the exact
      both-rejection-tails quantity, so R's `power.t.test` matches only with `strict = TRUE`, which
      the export snippets therefore carry. The proportion test is the equal-tail exact binomial,

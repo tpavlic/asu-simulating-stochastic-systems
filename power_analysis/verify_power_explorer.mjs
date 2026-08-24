@@ -34,9 +34,15 @@
    at a small m, an occasional single miss is expected noise, and only a
    failure that survives the default m indicates a bug.
 
-   If Rscript is on the PATH, a final section re-derives a row of power
+   If Rscript is on the PATH, section 11 re-derives a row of power
    values in R with the same formulas the widget's export panel emits,
    and compares them against the core.  Without Rscript it is skipped.
+
+   Section 12 slices the Beyond Formulas tab's Monte Carlo template out
+   of the HTML verbatim and runs it in R, Python, and MATLAB (each
+   skipped when its interpreter is absent), checking that the seeded
+   attained-alpha and power estimates land near 0.05 and the exact
+   0.5645.  The MATLAB leg pays a cold-start cost of tens of seconds.
    ══════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -456,6 +462,63 @@ fmt(pnorm(-zc - theta) + pnorm(zc - theta, lower.tail = FALSE))
                  'reg (pt ncp)', 'z (pnorm formula)'];
   /* 1e-8: the t/F rows go through R's noncentral approximations */
   mine.forEach((v, i) => close(v, out[i], 1e-8, `R agrees: ${names[i]}`));
+}
+
+/* ═══ 12. The Monte Carlo template, run in each language ═══════════ */
+section('12. Monte Carlo template of tab 5 (R, Python, MATLAB; skipped if absent)');
+{
+  const os = await import('node:os');
+  const html = fs.readFileSync(HTML, 'utf8');
+  const tpl = (id) => {
+    const m = html.match(new RegExp(
+      '<script type="text/plain" id="' + id + '">\n?([\\s\\S]*?)</scr' + 'ipt>'));
+    if (!m) throw new Error('template ' + id + ' not found in the HTML');
+    return m[1];
+  };
+  /* The exact answers for the template's worked example, with 4-SE bands
+     at its m = 10000: the estimates are seeded and so deterministic, but
+     the bands keep the check honest across interpreter-version changes. */
+  const checkPair = (lang, ah, ph) => {
+    ok(Math.abs(ah - 0.05) < 0.009,
+       `${lang} template: attained alpha ${ah.toFixed(4)} near 0.05`);
+    ok(Math.abs(ph - 0.5645) < 0.020,
+       `${lang} template: power ${ph.toFixed(4)} near exact 0.5645`);
+  };
+  const marker = (out) => {
+    const line = out.split('\n').find(l => l.startsWith('PAMC'));
+    if (!line) throw new Error('no PAMC marker line in output:\n' + out);
+    return line.trim().split(/\s+/).slice(1).map(Number);
+  };
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-mct-'));
+  const runIf = (name, cmd, args, file, code, markerLine) => {
+    try { execFileSync(cmd, ['--version'], { stdio: 'pipe' }); }
+    catch { console.log('  ' + Ct.d(`SKIP  ${cmd} not found on PATH`)); return; }
+    const f = path.join(tmp, file);
+    fs.writeFileSync(f, code + '\n' + markerLine + '\n');
+    const out = execFileSync(cmd, args.concat([f]), { encoding: 'utf8', timeout: 600000 });
+    const [ah, ph] = marker(out);
+    checkPair(name, ah, ph);
+  };
+  runIf('R', 'Rscript', [], 'pamc_tpl.R', tpl('mct-r'),
+        'cat("PAMC", r0/m, r1/m, "\n")');
+  runIf('Python', 'python3', [], 'pamc_tpl.py', tpl('mct-python'),
+        'print("PAMC", r0/m, r1/m)');
+  /* matlab -batch takes a command, not a file, and the script must sit on
+     its path; -h serves as the presence probe (--version is not one). */
+  let hasMatlab = true;
+  try { execFileSync('which', ['matlab'], { stdio: 'pipe' }); } catch { hasMatlab = false; }
+  if (!hasMatlab) {
+    console.log('  ' + Ct.d('SKIP  matlab not found on PATH'));
+  } else {
+    const f = path.join(tmp, 'pamc_tpl.m');
+    fs.writeFileSync(f, tpl('mct-matlab') + "\nfprintf('PAMC %.10f %.10f\\n', r0/m, r1/m);\n");
+    const out = execFileSync('matlab',
+      ['-batch', `cd('${tmp.replace(/'/g, "''")}'); pamc_tpl`],
+      { encoding: 'utf8', timeout: 600000 });
+    const [ah, ph] = marker(out);
+    checkPair('MATLAB', ah, ph);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
 }
 
 /* ═══ Summary ══════════════════════════════════════════════════════ */
