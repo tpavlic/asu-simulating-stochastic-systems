@@ -257,11 +257,12 @@ details.why .why-body code { background: var(--accent-wash); padding: 1px 4px; b
             white-space: nowrap; }
 
 /* ── Export ──────────────────────────────────────────────────────────── */
-.exp-row { display: grid; grid-template-columns: 108px minmax(0,1fr) auto; gap: 8px;
+.exp-row { display: grid; grid-template-columns: 124px minmax(0,1fr) auto; gap: 8px;
            align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); }
 .exp-row:last-of-type { border-bottom: none; }
 .exp-tool { font-size: .78rem; font-weight: 700; color: var(--accent); }
-.exp-tool span { display: block; font-weight: 400; color: var(--muted); font-size: .68rem; }
+.exp-tool span { display: block; font-weight: 400; color: var(--muted); font-size: .68rem;
+                 overflow-wrap: anywhere; }
 .exp-code { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .8rem;
             background: var(--chart-bg); border: 1px solid var(--border); border-radius: 5px;
             padding: 6px 8px; overflow-x: auto; white-space: pre; color: var(--text); }
