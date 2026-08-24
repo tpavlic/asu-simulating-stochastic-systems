@@ -411,6 +411,60 @@ close(PA.pairedSigmaD(1, 1, -1), 2, 1e-12, 'sigma_d at rho=-1, equal sigmas');
   const ps = PA.pairedSummary(a, b);
   ok(Math.abs(ps.rho - 0.6) < 0.03, `pairedSummary recovers rho = 0.6 (got ${ps.rho.toFixed(4)})`);
 }
+{
+  /* A runaway noncentrality must terminate. The Poisson mixtures walk
+     outward from term lambda, and an uncapped walk at lambda = 1e31 hung
+     the page; each CDF now substitutes its large-lambda limit. The time
+     bound is the check that matters -- these once did not return. */
+  const timed = (label, fn, limit) => {
+    const t0 = Date.now();
+    const v = fn();
+    const ms = Date.now() - t0;
+    ok(ms < 2000, `${label} returns in ${ms}ms (was an unbounded walk)`);
+    ok(Number.isFinite(v) && v >= 0 && v <= 1, `${label} = ${v} is a probability`);
+    if (limit !== undefined)
+      ok(Math.abs(v - limit) < 1e-9, `${label} = ${v} at its large-noncentrality limit ${limit}`);
+    return v;
+  };
+  timed('nctCdf(2.09, 1, 1e16)', () => PA.nctCdf(2.09, 1, 1e16), 0);
+  timed('nctCdf(2.09, 1, -1e16)', () => PA.nctCdf(2.09, 1, -1e16), 1);
+  timed('ncx2Cdf(7.8, 3, 1e20)', () => PA.ncx2Cdf(7.8, 3, 1e20), 0);
+  timed('ncfCdf(3.1, 2, 27, 1e20)', () => PA.ncfCdf(3.1, 2, 27, 1e20), 0);
+
+  /* The Johnson-Welch form that stands in past the bound, checked against
+     the series in the range where the series is still cheap. */
+  for (const [t, nu, del] of [[3, 20, 6], [1.7, 12, 4], [5, 40, 9]]) {
+    const series = PA.nctCdf(t, nu, del);
+    const jw = PA.normCdf((t * (1 - 1 / (4 * nu)) - del) / Math.sqrt(1 + t * t / (2 * nu)));
+    ok(Math.abs(series - jw) < 0.02,
+       `Johnson-Welch within 0.02 of the nct series at t=${t}, nu=${nu}, del=${del}` +
+       ` (${series.toFixed(5)} vs ${jw.toFixed(5)})`);
+  }
+  /* The normal approximation standing in for a large-noncentrality
+     chi-square, checked the same way. */
+  for (const [x, k, l] of [[40, 3, 30], [120, 5, 100]]) {
+    const series = PA.ncx2Cdf(x, k, l);
+    const nrm = PA.normCdf((x - (k + l)) / Math.sqrt(2 * (k + 2 * l)));
+    ok(Math.abs(series - nrm) < 0.03,
+       `ncx2 normal approximation within 0.03 of the series at x=${x}, k=${k}, l=${l}` +
+       ` (${series.toFixed(5)} vs ${nrm.toFixed(5)})`);
+  }
+
+  /* A sample correlation is in [-1, 1]; only rounding takes it outside. */
+  const perfect = PA.pairedSummary([1.1, 1.4], [1.2, 1.5]);
+  ok(perfect.rho >= -1 && perfect.rho <= 1, `pairedSummary clamps rho to [-1, 1] (got ${perfect.rho})`);
+
+  /* The regression itself: differences equal in exact arithmetic leave a
+     residue of 1e-16, which must not be read as real spread. */
+  const resid = PA.pairedSummary([1.1, 1.4], [1.2, 1.5]);
+  ok(resid.sdD > 0 && resid.sdD < 1e-12,
+     `paired differences that cancel leave only rounding (s_d = ${resid.sdD.toExponential(2)})`);
+  const t1 = Date.now();
+  const nAbsurd = PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: 0.5, sigma: resid.sdD },
+                                    0.05, 'two', 0.8);
+  ok(Date.now() - t1 < 2000 && nAbsurd && nAbsurd.n === PA.TESTS.t.nMin,
+     'solveNAnalytic with a rounding-residue sigma returns nMin promptly');
+}
 
 /* ═══ 11. The exported R formulas, executed in R ═══════════════════ */
 section('11. Export-panel R formulas, run in R (skipped if Rscript is absent)');

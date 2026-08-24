@@ -1374,6 +1374,15 @@ function fQuantile(p, d1, d2) {
    directions, with the weights carried by recurrence, and so no individual
    term is ever formed from an overflowing power or factorial. */
 var PM_ITMAX = 4000;
+/* A Poisson mixture walks outward from term l, and so its cost grows like
+   sqrt(l); past this bound the series is impractical and each caller
+   substitutes the large-l limit or a normal approximation. No legitimate
+   power calculation comes close: a solve stops as soon as power reaches
+   its target, which happens at a noncentrality of single digits. What
+   does reach it is degenerate input -- a sample SD of 1e-16, left over
+   from differences that cancel only in exact arithmetic, becomes an
+   effect size of 1e16 and a noncentrality of 1e32. */
+var NC_LAM_MAX = 1e6;
 
 /* Generic Poisson(l) mixture of term(j), term in [0,1] and decreasing
    in j, which every mixture above satisfies. */
@@ -1390,7 +1399,7 @@ function poisMix(l, term) {
     sum += w * term(j);
   }
   w = w0;
-  for (j = j0; j >= 1; j--) {                          /* downward */
+  for (j = j0; j >= 1 && j > j0 - PM_ITMAX; j--) {     /* downward */
     w *= j / l;
     if (w < 1e-18) break;
     sum += w * term(j - 1);
@@ -1401,11 +1410,18 @@ function poisMix(l, term) {
 function ncx2Cdf(x, k, l) {
   if (x <= 0) return 0;
   if (!(l > 0)) return chi2Cdf(x, k);
+  /* Mean k + l, variance 2(k + 2l): the normal approximation standard for
+     a large noncentrality, and accurate exactly where the mixture is too
+     expensive to sum. */
+  if (0.5 * l > NC_LAM_MAX) return normCdf((x - (k + l)) / Math.sqrt(2 * (k + 2 * l)));
   return poisMix(0.5 * l, function (j) { return gammaP(0.5 * k + j, 0.5 * x); });
 }
 function ncfCdf(f, d1, d2, l) {
   if (f <= 0) return 0;
   if (!(l > 0)) return fCdf(f, d1, d2);
+  /* The numerator carries the noncentrality and grows without bound with
+     it, and so F runs past any fixed f. */
+  if (0.5 * l > NC_LAM_MAX) return 0;
   var x = d1 * f / (d1 * f + d2);
   return poisMix(0.5 * l, function (j) { return betaInc(0.5 * d1 + j, 0.5 * d2, x); });
 }
@@ -1425,6 +1441,11 @@ function nctCdf(t, nu, del) {
   if (t < 0) return 1 - nctCdf(-t, nu, -del);
 
   var lam = 0.5 * del * del;
+  /* Johnson and Welch's normal approximation (Biometrika 31:362, 1940),
+     which is accurate for exactly the large noncentralities that make the
+     series below impractical, and gives the right limits in both signs. */
+  if (lam > NC_LAM_MAX)
+    return normCdf((t * (1 - 1 / (4 * nu)) - del) / Math.sqrt(1 + t * t / (2 * nu)));
   var x = t * t / (t * t + nu);
   var hnu = 0.5 * nu;
   var sum = 0;
@@ -1446,7 +1467,7 @@ function nctCdf(t, nu, del) {
       sum += p * betaInc(j + 0.5, hnu, x) + q * betaInc(j + 1, hnu, x);
     }
     p = p0; q = q0;
-    for (j = j0; j >= 1; j--) {                        /* downward */
+    for (j = j0; j >= 1 && j > j0 - PM_ITMAX; j--) {   /* downward */
       p *= j / lam;
       q *= (j + 0.5) / lam;
       if (Math.abs(p) < 1e-18 && Math.abs(q) < 1e-18) break;
@@ -2342,7 +2363,7 @@ function pairedSummary(a, b) {
   return {
     n: n, meanD: mean(d), sdD: Math.sqrt(sampleVar(d)),
     sd1: Math.sqrt(sa / (n - 1)), sd2: Math.sqrt(sb / (n - 1)),
-    rho: sab / Math.sqrt(sa * sb)
+    rho: Math.max(-1, Math.min(1, sab / Math.sqrt(sa * sb)))
   };
 }
 
@@ -4356,6 +4377,15 @@ function renderPaired() {
 
 /* ── Pilot data ────────────────────────────────────────────────────── */
 var PILOT = { cols: null };
+/* Differences that cancel in exact arithmetic need not cancel in floating
+   point: 1.1 - 1.2 and 1.4 - 1.5 differ in the last bit, leaving an SD of
+   1e-16 where the answer is zero. Anything that small next to the data's
+   own scale is rounding, not spread, and treating it as real would put an
+   absurd planning value on screen. */
+function realSpread(sd, center) {
+  return sd > 1e-9 * Math.max(1, Math.abs(center || 0));
+}
+
 var PI_PLACEHOLDER = '<div class="note quiet" style="grid-column:1/-1">Summary cards appear ' +
   'here once a pilot is pasted, each with a button that sends its planning value where it ' +
   'belongs.</div>';
@@ -4374,20 +4404,27 @@ function parsePilot() {
   }
   if (res.cols.length >= 2 && res.cols[1].length >= 2) {
     var ps = PA.pairedSummary(res.cols[0], res.cols[1]);
+    /* More than two columns is usually a transposed paste, and truncating
+       it silently would leave the reader with an answer built from data
+       they did not think they had given. */
     msg.textContent = 'Read ' + ps.n + ' paired rows (two columns).';
     /* A constant column makes the sample correlation 0/0; showing NaN
        would read as a bug, and the planning buttons would forward a
        zero σ or an undefined ρ, and so both degrade politely instead. */
     var rhoOk = Number.isFinite(ps.rho);
+    var vary1 = realSpread(ps.sd1, ps.sd1), vary2 = realSpread(ps.sd2, ps.sd2);
+    var varyD = realSpread(ps.sdD, ps.meanD);
     cards += card('pairs', String(ps.n), '');
     cards += card(lit('s₁, s₂'), N(ps.sd1, 4) + ', ' + N(ps.sd2, 4), 'per-configuration SDs');
     cards += card('sample ' + lit('ρ̂'), rhoOk ? N(ps.rho, 4) : '—',
       rhoOk ? 'correlation within pairs'
             : 'undefined—a constant column leaves no variation to correlate');
-    cards += card(lit('s<sub>d</sub>') + ' of differences', N(ps.sdD, 4), 'mean difference ' + N(ps.meanD, 4));
-    if (rhoOk && ps.sd1 > 0 && ps.sd2 > 0)
+    cards += card(lit('s<sub>d</sub>') + ' of differences', varyD ? N(ps.sdD, 4) : '0',
+      varyD ? 'mean difference ' + N(ps.meanD, 4)
+            : 'every difference is ' + N(ps.meanD, 4) + '—no spread to plan from');
+    if (rhoOk && vary1 && vary2)
       apply += '<button class="btn2" id="pi-send-paired" type="button" data-tip="Δ is left alone on purpose: plan for the difference you care about, not the one the pilot happened to show." data-tip-press>Send σ₁, σ₂, ρ, and n to the paired analysis below</button>';
-    if (ps.sdD > 0)
+    if (varyD)
       apply += '<button class="btn2" id="pi-sd-sigma" type="button">Use s<sub>d</sub> as σ for the t test on tab ①</button>';
     if (!apply)
       apply = '<span class="ctrl-note">With no variation anywhere in the pilot, there is no σ or ρ to carry into a plan.</span>';
@@ -4402,17 +4439,19 @@ function parsePilot() {
     cards += card(lit('s') + ' (sample SD)', N(sm.sd, 5), '');
     if (sm.binary) cards += card(lit('p̂') + ' (share of ones)', N(sm.mean, 4), 'read as successes');
     var hasSigma = curTest().params.some(function (q) { return q.key === 'sigma'; });
-    if (hasSigma && sm.sd > 0) apply += '<button class="btn2" id="pi-s-sigma" type="button">Use s as the planning σ on tab ① (' +
+    if (hasSigma && realSpread(sm.sd, sm.mean)) apply += '<button class="btn2" id="pi-s-sigma" type="button">Use s as the planning σ on tab ① (' +
       esc(curTest().name) + ')</button>';
-    if (curTest().id === 'var' && sm.sd > 0) apply += '<button class="btn2" id="pi-s2-v1" type="button">Use s² = ' +
+    if (curTest().id === 'var' && realSpread(sm.sd, sm.mean)) apply += '<button class="btn2" id="pi-s2-v1" type="button">Use s² = ' +
       N(sm.sd * sm.sd, 5) + ' as the true variance σ₁²</button>';
     if (sm.binary && sm.mean > 0 && sm.mean < 1) apply += '<button class="btn2" id="pi-p-p1" type="button">Use p̂ as the true proportion p₁ (test of a proportion)</button>';
-    if (!apply && sm.sd === 0)
+    if (!apply && !realSpread(sm.sd, sm.mean))
       apply = '<span class="ctrl-note">Every value is identical—there is no spread to plan from.</span>';
   }
   /* The pilot warning, with the uncertainty made concrete. */
-  var sm2 = PILOT.paired ? { n: PILOT.paired.n, sd: PILOT.paired.sdD } : PILOT.single;
-  if (sm2 && sm2.sd > 0) {
+  var sm2 = PILOT.paired
+    ? { n: PILOT.paired.n, sd: PILOT.paired.sdD, mean: PILOT.paired.meanD }
+    : PILOT.single;
+  if (sm2 && realSpread(sm2.sd, sm2.mean)) {
     var nu = sm2.n - 1;
     var sLo = sm2.sd * Math.sqrt(nu / PA.chi2Quantile(0.975, nu));
     var sHi = sm2.sd * Math.sqrt(nu / PA.chi2Quantile(0.025, nu));
