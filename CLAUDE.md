@@ -427,10 +427,11 @@ check all of the following.
 - Each demo is a **self-contained, single-file HTML page** with all CSS and JS inlined
 - Preview images live alongside their HTML file in the same subdirectory
 - The site is deployed via **GitHub Pages** directly from the `main` branch (no build step)
-- `index-preview.png` is the root page's OG/Twitter card image. It is currently a copy of
-  `monte_carlo/mc_explorer-preview.png`, standing in until a landing-page image exists;
-  when you replace it, update the `og:image:width`/`height` in `index.html` to the new size and keep
-  the ratio near 2:1 for Twitter/X
+- `index-preview.png` is the root page's OG/Twitter card image: a 2×2 montage of the four
+  widget previews (rounded tiles with drop shadows on white), built by `make_index_preview.py`
+  at the repo root. Re-run that script whenever a widget preview changes or a new widget's tile
+  should join, and keep its `W`/`H` in step with the `og:image:width`/`height` in `index.html`
+  (ratio near 2:1 for Twitter/X). The script is not linked from the site
 
 ## Commit messages
 
