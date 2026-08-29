@@ -158,7 +158,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    shorter one carries slack. These springs spread it above the histogram, around the
    rule, and under the ECDF, rather than letting it pile up at the bottom. Stacked,
    the card is content-height and each spring collapses to its minimum. */
-.p1-card, .p2-card { display: flex; flex-direction: column; }
+.p1-card, .p2-card, .c2-card { display: flex; flex-direction: column; }
 /* The Bins row reads as one line or as three, never as a lopsided two. The three
    parts need about 378px side by side, so once the card is narrower than that they
    all stack. This asks the card its width, not the viewport, because the card is
@@ -171,7 +171,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 @container (max-width: 410px) {
   .uni-stat-row { flex-direction: column; align-items: center; row-gap: 4px; }
 }
-.p1-card > .rubber, .p2-card > .rubber { flex: 1 1 0; min-height: 4px; }
+.p1-card > .rubber, .p2-card > .rubber, .c2-card > .rubber { flex: 1 1 0; min-height: 4px; }
 /* A panel that is alone on its line should fill it. Side by side these keep their
    designed proportions, but once .props-row wraps, a panel whose flex-grow is 0 stops
    at its basis and leaves a ragged edge down the column. The widest pair of bases here
@@ -633,20 +633,38 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           only when both components line up again at the same moment, like two turn signals
           blinking at different rates or two sustained tones at slightly different pitches
           making a slow, audible beat: each cycle on its own is short, but the pair realigns
-          only rarely. When the two periods share few factors, the wait is nearly their
-          product.</div>
+          only rarely. The wait is the least common multiple (lcm) of the two periods, as
+          illustrated for a hypothetical case below:</div>
+        <svg class="plot" style="max-width:340px; margin:0 auto;" viewBox="0 0 340 92" role="img"
+          aria-label="Four copies of one short cycle and three copies of a longer one span the same length, and so the joint state first repeats at the least common multiple of the two periods">
+          <line x1="90" y1="4" x2="90" y2="58" stroke="#6e6e6e" stroke-width="1" stroke-dasharray="2 3"/>
+          <line x1="330" y1="4" x2="330" y2="58" stroke="#6e6e6e" stroke-width="1" stroke-dasharray="2 3"/>
+          <text x="82" y="20" text-anchor="end" font-size="10" fill="#6e6e6e">component 1</text>
+          <text x="82" y="46" text-anchor="end" font-size="10" fill="#6e6e6e">component 2</text>
+          <rect x="90" y="8" width="60" height="16" fill="#0F6E8C" fill-opacity=".12" stroke="#0F6E8C" stroke-width="1"/><rect x="150" y="8" width="60" height="16" fill="#0F6E8C" fill-opacity=".12" stroke="#0F6E8C" stroke-width="1"/><rect x="210" y="8" width="60" height="16" fill="#0F6E8C" fill-opacity=".12" stroke="#0F6E8C" stroke-width="1"/><rect x="270" y="8" width="60" height="16" fill="#0F6E8C" fill-opacity=".12" stroke="#0F6E8C" stroke-width="1"/>
+          <text x="120" y="20" text-anchor="middle" font-size="10.5" fill="#0F6E8C">L<tspan font-size="8" dy="2.5">1</tspan></text><text x="180" y="20" text-anchor="middle" font-size="10.5" fill="#0F6E8C">L<tspan font-size="8" dy="2.5">1</tspan></text><text x="240" y="20" text-anchor="middle" font-size="10.5" fill="#0F6E8C">L<tspan font-size="8" dy="2.5">1</tspan></text><text x="300" y="20" text-anchor="middle" font-size="10.5" fill="#0F6E8C">L<tspan font-size="8" dy="2.5">1</tspan></text>
+          <rect x="90" y="34" width="80" height="16" fill="#C2570A" fill-opacity=".12" stroke="#C2570A" stroke-width="1"/><rect x="170" y="34" width="80" height="16" fill="#C2570A" fill-opacity=".12" stroke="#C2570A" stroke-width="1"/><rect x="250" y="34" width="80" height="16" fill="#C2570A" fill-opacity=".12" stroke="#C2570A" stroke-width="1"/>
+          <text x="130" y="46" text-anchor="middle" font-size="10.5" fill="#C2570A">L<tspan font-size="8" dy="2.5">2</tspan></text><text x="210" y="46" text-anchor="middle" font-size="10.5" fill="#C2570A">L<tspan font-size="8" dy="2.5">2</tspan></text><text x="290" y="46" text-anchor="middle" font-size="10.5" fill="#C2570A">L<tspan font-size="8" dy="2.5">2</tspan></text>
+          <line x1="90" y1="68" x2="330" y2="68" stroke="#191919" stroke-width="1"/>
+          <line x1="90" y1="64" x2="90" y2="72" stroke="#191919" stroke-width="1"/>
+          <line x1="330" y1="64" x2="330" y2="72" stroke="#191919" stroke-width="1"/>
+          <text x="210" y="86" text-anchor="middle" font-size="11" fill="#191919">4L<tspan font-size="8" dy="2.5">1</tspan><tspan dy="-2.5"> = 3L</tspan><tspan font-size="8" dy="2.5">2</tspan><tspan dy="-2.5"> = lcm(L</tspan><tspan font-size="8" dy="2.5">1</tspan><tspan dy="-2.5">, L</tspan><tspan font-size="8" dy="2.5">2</tspan><tspan dy="-2.5">)</tspan></text>
+        </svg>
         <div style="margin:auto 0;">
+          <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The table applies
+            this lcm analysis to the specific case configured above:</div>
           <div class="tx-tbl-wrap" style="max-height:none;">
             <table class="tx-tbl" id="c-periods"></table>
           </div>
           <div class="cv-leg" id="c-periods-note" style="text-align:left; margin-top:8px;"></div>
         </div>
       </div>
-      <div class="cv-card" style="flex-basis:480px; min-width:0;">
+      <div class="cv-card c2-card" style="flex-basis:480px; min-width:0;">
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
           plots of consecutive pairs (u<sub>n</sub>, u<sub>n+1</sub>), the same view as the
           independence panel on tab ①.</div>
+        <div class="rubber"></div>
         <div class="mini-row">
           <div class="mini-cell">
             <canvas id="c-lat1" aria-label="Pairs of consecutive outputs of component 1 alone"></canvas>
@@ -659,7 +677,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
               fixes the future</div>
           </div>
         </div>
+        <div class="rubber"></div>
         <div class="cv-leg" id="c-succ" style="text-align:left; margin-top:8px;"></div>
+        <div class="rubber"></div>
       </div>
     </div>
 
