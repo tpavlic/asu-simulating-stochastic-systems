@@ -284,8 +284,11 @@ details.why .why-body code { font-family: 'IBM Plex Mono', monospace; font-size:
    the table becomes visible rows instead. The max-height caps it in the
    stacked (narrow) layout, where nothing else constrains the card. */
 .st-card { display: flex; flex-direction: column; }
-.steptbl-wrap { flex: 1 1 auto; min-height: 0; max-height: 380px; overflow: auto; border: 1.5px solid var(--border); border-radius: 7px; }
-@media (max-width: 680px) { .steptbl-wrap { max-height: 290px; } }
+/* Basis 0 + grow lets the table fill however tall the config card makes the
+   row, without ever being what makes the row taller; the floor keeps it
+   readable when the config card is the short one. */
+.steptbl-wrap { flex: 1 1 0; min-height: 300px; overflow: auto; border: 1.5px solid var(--border); border-radius: 7px; }
+@media (max-width: 680px) { .steptbl-wrap { min-height: 260px; } }
 table.steptbl { border-collapse: collapse; width: 100%; font-size: .8rem; }
 table.steptbl th { position: sticky; top: 0; background: var(--chart-bg); color: var(--muted);
                    font-weight: 700; font-size: .7rem; text-transform: none; text-align: right;
@@ -2534,7 +2537,7 @@ function readParams(c, pre) {
 
 /* ── The editor: one generator card + step table, instanced per tab ─── */
 var STEP_ROWS_MAX = 400;   /* the table trims its oldest rows past this */
-var STEP_PREFILL = 12;     /* rows generated up front; Step continues past them */
+var STEP_PREFILL = 24;     /* rows generated up front; Step continues past them */
 var STREAM_CAP = 200000;
 var EDITORS = {};
 
