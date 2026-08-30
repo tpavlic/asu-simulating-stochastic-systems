@@ -186,6 +186,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 @media (max-width: 680px) { .cap-600 { max-width: none; } }
 /* Small companion lattices on tabs 2 and 3 */
 .mini-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.mini-hd { font-size: .75rem; font-weight: 700; color: var(--text); text-align: center; margin-bottom: 4px; }
 .mini-cell { flex: 0 1 200px; min-width: 0; }
 .mini-cell canvas { margin: 0 auto; }
 .stat-line { font-size: .8rem; color: var(--muted); }
@@ -667,14 +668,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="rubber"></div>
         <div class="mini-row">
           <div class="mini-cell">
+            <div class="mini-hd">component 1 alone</div>
             <canvas id="c-lat1" aria-label="Pairs of consecutive outputs of component 1 alone"></canvas>
-            <div class="cv-leg">component 1 alone: one dot per column – each value fixes its
-              successor</div>
+            <div class="cv-leg">one dot per column: each output is always followed by the
+              same next value</div>
           </div>
           <div class="mini-cell">
+            <div class="mini-hd">the combined stream</div>
             <canvas id="c-lat2" aria-label="Pairs of consecutive outputs of the combined generator"></canvas>
-            <div class="cv-leg">combined: columns hold several dots – the output no longer
-              fixes the future</div>
+            <div class="cv-leg" id="c-lat2-cap"></div>
           </div>
         </div>
         <div class="rubber"></div>
@@ -3077,8 +3079,17 @@ function drawMini(id, us, distinct, opts) {
   ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
   ctx.strokeRect(ox + MINI_PAD + 0.75, MINI_PAD + 0.75, MINI_P - 1.5, MINI_P - 1.5);
   var sz = distinct <= 256n ? 5 : distinct <= 65536n ? 3 : 1.6;
-  ctx.fillStyle = C.stream; ctx.globalAlpha = 0.55;
+  var hl = opts && opts.hl != null ? opts.hl : null;
+  if (hl !== null) {   /* highlighter stroke down the example column */
+    var hx = ox + MINI_PAD + hl * (MINI_P - 3) + 0.5;
+    var b0 = Math.max(ox + MINI_PAD + 1.5, hx - 4.5);
+    var b1 = Math.min(ox + MINI_PAD + MINI_P - 1.5, hx + 4.5);
+    ctx.fillStyle = C.accent; ctx.globalAlpha = 0.15;
+    ctx.fillRect(b0, MINI_PAD + 1.5, b1 - b0, MINI_P - 3);
+  }
+  ctx.globalAlpha = 0.55;
   for (var i = 0; i + 1 < us.length; i++) {
+    ctx.fillStyle = hl !== null && Math.abs(us[i] - hl) < 1e-9 ? C.accent : C.stream;
     ctx.fillRect(ox + MINI_PAD + us[i] * (MINI_P - 3) + 0.5 - sz / 2,
                  MINI_PAD + (1 - us[i + 1]) * (MINI_P - 3) + 0.5 - sz / 2, sz, sz);
   }
@@ -3136,38 +3147,91 @@ function mrgOrbit(c) {
 }
 
 /* ── Tab ② extras: periods, minis, and the successor demonstration ──── */
-function successorText(c) {
-  var g = makeCLCG(c.a1, c.m1, c.a2, c.m2, c.s1, c.s2);
-  var N = 240, zs = [], us = [], i;
-  for (i = 0; i < N; i++) { var r = g.detail(); zs.push(r.z.toString()); us.push(r.u); }
-  var seen = {};
-  for (i = 0; i < N - 1; i++) (seen[zs[i]] = seen[zs[i]] || []).push(i);
-  for (var key in seen) {
-    var pos = seen[key];
-    if (pos.length < 2) continue;
-    /* keep only the first occurrence of each distinct successor, so that
-       the sentence below never repeats a follower */
-    var succ = {}, show = [];
-    for (i = 0; i < pos.length && show.length < 3; i++) {
-      var sk = zs[pos[i] + 1];
-      if (!succ[sk]) { succ[sk] = true; show.push(pos[i]); }
-    }
-    if (show.length >= 2) {
-      /* Oxford-style list: "a, b, and c" for three, "a and b" for two. */
-      var listJoin = function (parts) {
-        if (parts.length === 2) return parts[0] + ' and ' + parts[1];
-        return parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
-      };
-      return 'In this stream, the output u = <b>' + fmtU(us[pos[0]]) + '</b> appears at steps ' +
-             listJoin(show.map(function (q) { return 'n = ' + (q + 1); })) +
-             ' and is followed by ' +
-             listJoin(show.map(function (q) { return '<b>' + fmtU(us[q + 1]) + '</b>'; })) +
-             ', respectively: the same output, different futures. A single LCG can never do ' +
-             'this because its output is its entire state.';
+function successorText(c, us) {
+  /* Group the plotted draws into columns by output value, exactly as the
+     lattice plot at the right does, and pick the left-most column whose
+     set of next values is small enough to list in full.  The returned hl
+     is that column's u, which drawMini shades to match. */
+  /* Keys are the exact floats, not their printed roundings: two distinct
+     outputs of a large-modulus pair can agree to six decimals, and rounding
+     would fuse them into a column that does not exist. */
+  var cols = {}, order = [], i;
+  for (i = 0; i < us.length; i++) {
+    var k = String(us[i]);
+    var col = cols[k];
+    if (!col) { col = cols[k] = { u: us[i], occ: 0, nsucc: 0, succ: {}, futures: [] }; order.push(col); }
+    col.occ++;
+    if (i + 1 < us.length) {
+      var sk = String(us[i + 1]);
+      if (!col.succ[sk]) { col.succ[sk] = true; col.nsucc++; col.futures.push(us[i + 1]); }
     }
   }
-  return 'No output value recurs with two different successors in the first 240 draws: with ' +
-         'a modulus this large, repeats are rare. Load the toy preset to watch the effect directly.';
+  order.sort(function (a, b) { return a.u - b.u; });
+  var pick = null;
+  for (i = 0; i < order.length; i++)
+    if (order[i].nsucc >= 2 && order[i].nsucc <= 4) { pick = order[i]; break; }
+  if (!pick)
+    for (i = 0; i < order.length; i++)
+      if (order[i].nsucc >= 2) { pick = order[i]; break; }
+  if (!pick) {
+    var anyRepeat = false;
+    for (i = 0; i < order.length; i++) if (order[i].occ >= 2) { anyRepeat = true; break; }
+    if (anyRepeat) {
+      if (order.length === 1) {
+        /* The two components cancel exactly, and the "stream" is one value. */
+        var cm = c.m1 <= 1000n ? Math.round(order[0].u * Number(c.m1)) + '/' + c.m1 + ' = ' : '';
+        return { hl: null,
+                 capt: 'one dot in total: the combination collapses to a constant',
+                 html: 'These two components run in perfect lockstep, and so their difference ' +
+                       'never changes: the combined stream is the constant ' + cm + '<b>' +
+                       fmtU(order[0].u) + '</b>, far worse than either component alone. ' +
+                       'Combination only helps when the two cycles drift apart: give the ' +
+                       'components distinct moduli.' };
+      }
+      return { hl: null,
+               capt: 'one dot per column here too: each output has exactly one next output',
+               html: 'Outputs repeat here, but each one is always followed by the same next ' +
+                     'value: with these parameters, the combination still pairs every current ' +
+                     'output with exactly one next output, just as a single LCG does. The ' +
+                     'effect needs the two cycles to drift apart: give the components ' +
+                     'distinct moduli.' };
+    }
+    return { hl: null,
+             capt: 'each dot is one pair: no output value appears twice in this many draws',
+             html: 'No output value recurs with two different successors among the ' +
+             us.length.toLocaleString('en-US') + ' draws plotted here: with a modulus this ' +
+             'large, repeats are rare. Load the Toy CLCG preset to better illustrate how the ' +
+             'CLCG improves upon the LCG in terms of period and predictability.' };
+  }
+  var acc = function (u) { return '<b style="color:var(--accent)">' + fmtU(u) + '</b>'; };
+  var small = c.m1 <= 1000n;
+  var grid = small ? 'Every output here is a multiple of 1/' + c.m1 +
+             ', and so the dots land on a regular grid. ' : '';
+  var frac = small ? Math.round(pick.u * Number(c.m1)) + '/' + c.m1 + ' = ' : '';
+  var uSpan = '<span style="background:var(--accent-tint); border-radius:3px; padding:0 2px; white-space:nowrap;">u = ' +
+              frac + '<b>' + fmtU(pick.u) + '</b></span>';
+  var futs = pick.futures.slice(0, 4).map(acc);
+  var listed;
+  if (futs.length === 2) listed = 'sometimes ' + futs[0] + ' comes next and sometimes ' + futs[1];
+  else listed = 'sometimes ' + futs[0] + ' comes next, ' +
+                futs.slice(1, -1).map(function (f) { return 'sometimes ' + f + ', '; }).join('') +
+                'and sometimes ' + futs[futs.length - 1];
+  var NUMW = { 2: 'two', 3: 'three', 4: 'four' };
+  var body;
+  if (pick.nsucc <= 4) {
+    body = 'The shaded column, ' + uSpan + ', appears ' + pick.occ.toLocaleString('en-US') +
+           ' times in the plotted stream, and its ' + NUMW[pick.nsucc] + ' maroon dots are its only ' +
+           NUMW[pick.nsucc] + ' futures. ' + listed[0].toUpperCase() + listed.slice(1) +
+           ': the same output, different futures.';
+  } else {
+    body = 'The shaded column, ' + uSpan + ', appears ' + pick.occ.toLocaleString('en-US') +
+           ' times in the plotted stream with ' + pick.nsucc + ' different next values, the maroon ' +
+           'dots. ' + listed[0].toUpperCase() + listed.slice(1) +
+           ', among others: the same output, different futures.';
+  }
+  return { hl: pick.u,
+           capt: 'several dots per column: the same output leads to different next values',
+           html: grid + body + ' A single LCG can never do this because its output is its entire state.' };
 }
 
 /* Three rows -- the two components and what they make together -- with
@@ -3223,9 +3287,12 @@ function renderClcgExtras() {
   el.innerHTML = head + rows;
   document.getElementById('c-periods-note').innerHTML = note;
   var comp1 = makeLCG(c.a1, 0n, c.m1, c.s1);
+  var cus = EDITORS.c.ensure(1500).slice(0, 1500);
+  var stx = successorText(c, cus);
   drawMini('c-lat1', genStream(comp1, 1500), c.m1, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
-  drawMini('c-lat2', EDITORS.c.ensure(1500).slice(0, 1500), c.m1, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
-  document.getElementById('c-succ').innerHTML = successorText(c);
+  drawMini('c-lat2', cus, c.m1, { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)', hl: stx.hl });
+  document.getElementById('c-lat2-cap').textContent = stx.capt;
+  document.getElementById('c-succ').innerHTML = stx.html;
 }
 
 /* A big integer at a glance, with the relation that fits it: exact up
