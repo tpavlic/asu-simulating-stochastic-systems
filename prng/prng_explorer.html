@@ -451,7 +451,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           whether a value predicts further ahead. LCGs show a characteristic pattern of parallel
           stripes when plotted this way, which reflects that they are deterministic processes
           and not sources of true randomness. The stripe pattern is called the generator's
-          <em>lattice</em>, and this scatter of pairs is a lattice plot.</div>
+          <em>lattice</em>, and this scatter of pairs is a lattice plot. Because of how u is
+          calculated, it has a ceiling of (m − 1)/m, and this creates an empty band along
+          the top and right of the plot that becomes less noticeable for large values
+          of m.</div>
         <div class="cv-leg" id="ind-desc-3d" style="text-align:left; margin:0 0 6px; display:none;">Each
           dot is three consecutive outputs (u<sub>n</sub>, u<sub>n+1</sub>, u<sub>n+2</sub>),
           one point in the unit cube; drag the cube to rotate it. Most angles look like fog.
@@ -667,7 +670,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
           plots of consecutive pairs (u<sub>n</sub>, u<sub>n+1</sub>), the same view as the
-          independence panel on tab ①.</div>
+          independence panel on tab ①. Because of how u is calculated, it has a ceiling of
+          (m₁ − 1)/m₁, and this creates an empty band along the top and right of each
+          lattice plot that becomes less noticeable for large values of m₁.</div>
         <div class="rubber"></div>
         <div class="mini-row">
           <div class="mini-cell">
@@ -773,11 +778,16 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row props-row">
       <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">How the period grows</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Memory sets the ceiling.
-          A generator that remembers only its last value must repeat as soon as that value
-          recurs, and so it can run no longer than m − 1 steps; one that remembers its last
-          k values repeats only when a whole run of k recurs, and a well-chosen recurrence
-          reaches every nonzero run before that happens.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">At best, an MRG visits
+          every internal state exactly once (avoiding the all-zero state, which the recurrence
+          could never leave) before returning to its start and repeating. A memory of k past
+          values, each taking one of m possible values, gives m<sup>k</sup> − 1 states that
+          exclude the all-zero case, and so m<sup>k</sup> − 1 is the longest possible period
+          for a k-sized memory. The table below summarizes the longest possible period for
+          several MRG configurations. The bottom row pairs two order-3 MRGs: as on tab ②,
+          the combination repeats only at the least common multiple of the two cycle
+          lengths, their product divided by their greatest common divisor, and MRG32k3a's
+          moduli make that gcd exactly 2.</div>
         <div style="margin:auto 0;">
           <div class="tx-tbl-wrap" style="max-height:none;">
             <table class="tx-tbl" id="m-ladder"></table>
@@ -785,14 +795,21 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="cv-leg" id="m-periods" style="text-align:left; margin-top:8px;"></div>
         </div>
       </div>
-      <div class="cv-card" style="flex-basis:280px; min-width:0;">
+      <div class="cv-card c2-card" style="flex-basis:350px; min-width:0;">
         <div class="sec-hd">Pairs of consecutive outputs</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Each dot pairs one
+          output with the output after it, the same lattice view as the independence panel
+          on tab ①. The top and right edges show an empty band because the output u = x/m
+          has a maximum of (m − 1)/m and not 1; the gap and the related non-uniformity are
+          less noticeable with a larger modulus m.</div>
+        <div class="rubber"></div>
         <div class="mini-row">
-          <div class="mini-cell">
+          <div class="mini-cell" style="flex-basis:280px;">
             <canvas id="m-lat" aria-label="Pairs of consecutive outputs of the current generator"></canvas>
             <div class="cv-leg" id="m-lat-cap"></div>
           </div>
         </div>
+        <div class="rubber"></div>
       </div>
     </div>
 
@@ -842,7 +859,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       tab reads such a mark; the next tab builds one deliberately.</div>
 
     <div class="viz-row">
-      <div class="cv-card cap-600" style="flex:1 1 400px; min-width:0;">
+      <div class="cv-card cap-600 c2-card" style="flex:1 1 400px; min-width:0;">
         <div class="sec-hd">Reading the implicit watermark of an LCG</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The mystery stream
           comes from x<sub>n+1</sub> = a·x<sub>n</sub> mod 2³¹−1 with a secret multiplier from
@@ -855,8 +872,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <select id="wa-cand" onchange="waPlot()"></select>
           <button class="btn-clear" onclick="waNew()">New mystery stream</button>
         </div>
+        <div class="rubber"></div>
         <canvas id="wa-cv" aria-label="Predicted next value against observed next value" style="margin:0 auto;"></canvas>
         <div class="cv-leg" id="wa-result"></div>
+        <div class="rubber"></div>
       </div>
       <div class="cv-card" style="flex:1 1 330px; min-width:0;">
         <div class="sec-hd">The same stream passes the standard tests</div>
@@ -2722,8 +2741,8 @@ function renderPanels() {
 /* Histogram as SVG: bars are the sampled thing (orange), the uniform
    density is the theoretical thing (dashed teal). Redrawn only on user
    action, and so SVG's resolution independence beats a canvas here. */
-function drawHist(us, k, id) {
-  var W = 440, H = 190, L = 34, R = 8, T = 8, B = 20;
+function drawHist(us, k, id, xlab) {
+  var W = 440, H = 190, L = 34, R = 8, T = 8, B = 32;
   var counts = histCounts(us, k), n = us.length;
   var pw = W - L - R, ph = H - T - B;
   var maxD = 0;
@@ -2752,8 +2771,10 @@ function drawHist(us, k, id) {
   }
   var xt = [0, 0.5, 1];
   for (i = 0; i < 3; i++) {
-    p.push('<text x="' + x(xt[i]) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + xt[i] + '</text>');
+    p.push('<text x="' + x(xt[i]) + '" y="' + (H - 18) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + xt[i] + '</text>');
   }
+  p.push('<text x="' + (L + pw / 2) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="10" fill="' + C.muted +
+         '">' + (xlab || 'u\u2002(output value)') + '</text>');
   p.push('<text x="' + (L - 24) + '" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
          '" transform="rotate(-90 ' + (L - 24) + ' ' + (T + ph / 2) + ')" text-anchor="middle">density</text>');
   document.getElementById(id || 'uni-hist').innerHTML = p.join('');
@@ -2762,7 +2783,7 @@ function drawHist(us, k, id) {
 function drawEcdf(us, ks) {
   /* Designed at the histogram's 440 so the two plots in this card, and the lattice
      in the card beside it, all present the same width at every screen size. */
-  var W = 440, H = 440, L = 26, R = 8, T = 8, B = 20;
+  var W = 440, H = 440, L = 40, R = 8, T = 8, B = 32;
   var pw = W - L - R, ph = H - T - B;
   var s = Array.prototype.slice.call(us).sort(function (a, b) { return a - b; });
   var n = s.length;
@@ -2793,9 +2814,13 @@ function drawEcdf(us, ks) {
   p.push('<line x1="' + L + '" y1="' + (T + ph) + '" x2="' + (W - R) + '" y2="' + (T + ph) + '" stroke="' + C.border + '" stroke-width="1.5"/>');
   var t = [0, 0.5, 1];
   for (i = 0; i < 3; i++) {
-    p.push('<text x="' + x(t[i]) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + t[i] + '</text>');
+    p.push('<text x="' + x(t[i]) + '" y="' + (H - 18) + '" text-anchor="middle" font-size="10" fill="' + C.muted + '">' + t[i] + '</text>');
     p.push('<text x="' + (L - 4) + '" y="' + (y(t[i]) + 3.5) + '" text-anchor="end" font-size="10" fill="' + C.muted + '">' + t[i] + '</text>');
   }
+  p.push('<text x="' + (L + pw / 2) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="10" fill="' + C.muted +
+         '">u\u2002(output value)</text>');
+  p.push('<text x="12" y="' + (T + ph / 2) + '" font-size="10" fill="' + C.muted +
+         '" transform="rotate(-90 12 ' + (T + ph / 2) + ')" text-anchor="middle">fraction of outputs \u2264 u</text>');
   /* Legend inside the plot, in the lower-right corner, which an ECDF
      leaves empty (the curve runs from lower left to upper right). */
   var lgW = 122, lgH = 46, lgX = W - R - lgW - 5, lgY = T + ph - lgH - 5;
@@ -3065,45 +3090,56 @@ function showFlaw() {
 var MINI_P = 176, MINI_PAD = 4;
 /* `labeled` reserves margins for axis labels; drawMini then draws them
    when given opts.xlab/opts.ylab. */
-function initMini(id, labeled) {
+function initMini(id, labeled, P) {
   var cv = document.getElementById(id);
-  var w = MINI_P + 2 * MINI_PAD + (labeled ? 16 : 0);
-  var h = MINI_P + 2 * MINI_PAD + (labeled ? 26 : 0);
+  if (P) cv.dataset.p = P; else P = MINI_P;
+  var w = P + 2 * MINI_PAD + (labeled ? 26 : 0);
+  var h = P + 2 * MINI_PAD + (labeled ? 26 : 0);
   cv.width = Math.round(w * DPR); cv.height = Math.round(h * DPR);
   cv.style.width = w + 'px'; cv.style.maxWidth = '100%'; cv.style.height = 'auto';
 }
 function drawMini(id, us, distinct, opts) {
   var cv = document.getElementById(id), ctx = cv.getContext('2d');
-  var lab = opts && opts.xlab, ox = lab ? 16 : 0;
-  var w = MINI_P + 2 * MINI_PAD;
+  var lab = opts && opts.xlab, ox = lab ? 26 : 0;
+  var P = +cv.dataset.p || MINI_P;
+  var w = P + 2 * MINI_PAD;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, w + ox, w + (lab ? 26 : 0));
-  ctx.fillStyle = C.chartBg; ctx.fillRect(ox + MINI_PAD, MINI_PAD, MINI_P, MINI_P);
+  ctx.fillStyle = C.chartBg; ctx.fillRect(ox + MINI_PAD, MINI_PAD, P, P);
   ctx.strokeStyle = C.border; ctx.lineWidth = 1.5;
-  ctx.strokeRect(ox + MINI_PAD + 0.75, MINI_PAD + 0.75, MINI_P - 1.5, MINI_P - 1.5);
+  ctx.strokeRect(ox + MINI_PAD + 0.75, MINI_PAD + 0.75, P - 1.5, P - 1.5);
   var sz = distinct <= 256n ? 5 : distinct <= 65536n ? 3 : 1.6;
   var hl = opts && opts.hl != null ? opts.hl : null;
   if (hl !== null) {   /* highlighter stroke down the example column */
-    var hx = ox + MINI_PAD + hl * (MINI_P - 3) + 0.5;
+    var hx = ox + MINI_PAD + hl * (P - 3) + 0.5;
     var b0 = Math.max(ox + MINI_PAD + 1.5, hx - 4.5);
-    var b1 = Math.min(ox + MINI_PAD + MINI_P - 1.5, hx + 4.5);
+    var b1 = Math.min(ox + MINI_PAD + P - 1.5, hx + 4.5);
     ctx.fillStyle = C.accent; ctx.globalAlpha = 0.15;
-    ctx.fillRect(b0, MINI_PAD + 1.5, b1 - b0, MINI_P - 3);
+    ctx.fillRect(b0, MINI_PAD + 1.5, b1 - b0, P - 3);
   }
   ctx.globalAlpha = 0.55;
   for (var i = 0; i + 1 < us.length; i++) {
     ctx.fillStyle = hl !== null && Math.abs(us[i] - hl) < 1e-9 ? C.accent : C.stream;
-    ctx.fillRect(ox + MINI_PAD + us[i] * (MINI_P - 3) + 0.5 - sz / 2,
-                 MINI_PAD + (1 - us[i + 1]) * (MINI_P - 3) + 0.5 - sz / 2, sz, sz);
+    ctx.fillRect(ox + MINI_PAD + us[i] * (P - 3) + 0.5 - sz / 2,
+                 MINI_PAD + (1 - us[i + 1]) * (P - 3) + 0.5 - sz / 2, sz, sz);
   }
   ctx.globalAlpha = 1;
   if (lab) {
+    /* 0/1 ticks pin the axis limits: u lives in [0, 1), and so the top and
+       right edges are genuinely never reached, by 1/m. */
     ctx.fillStyle = C.muted;
+    ctx.font = '10px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('0', ox + MINI_PAD + 0.5, MINI_PAD + P + 11);
+    ctx.fillText('1', ox + MINI_PAD + P - 2.5, MINI_PAD + P + 11);
+    ctx.textAlign = 'right';
+    ctx.fillText('1', ox - 3, MINI_PAD + 8);
+    ctx.fillText('0', ox - 3, MINI_PAD + P - 1);
     ctx.font = '11px Outfit, sans-serif';
     ctx.textAlign = 'center';
-    fillLabel(ctx, opts.xlab, ox + MINI_PAD + MINI_P / 2, MINI_PAD + MINI_P + 16, 11);
+    fillLabel(ctx, opts.xlab, ox + MINI_PAD + P / 2, MINI_PAD + P + 22, 11);
     ctx.save();
-    ctx.translate(ox - 7, MINI_PAD + MINI_P / 2);
+    ctx.translate(ox - 17, MINI_PAD + P / 2);
     ctx.rotate(-Math.PI / 2);
     fillLabel(ctx, opts.ylab, 0, 0, 11);
     ctx.restore();
@@ -3225,16 +3261,18 @@ function successorText(c, us) {
     body = 'The shaded column, ' + uSpan + ', appears ' + pick.occ.toLocaleString('en-US') +
            ' times in the plotted stream, and its ' + NUMW[pick.nsucc] + ' maroon dots are its only ' +
            NUMW[pick.nsucc] + ' futures. ' + listed[0].toUpperCase() + listed.slice(1) +
-           ': the same output, different futures.';
+           ': the same output can lead to different futures because a CLCG has multiple ' +
+           'internal states that can produce the same output.';
   } else {
     body = 'The shaded column, ' + uSpan + ', appears ' + pick.occ.toLocaleString('en-US') +
            ' times in the plotted stream with ' + pick.nsucc + ' different next values, the maroon ' +
            'dots. ' + listed[0].toUpperCase() + listed.slice(1) +
-           ', among others: the same output, different futures.';
+           ', among others: the same output can lead to different futures because a CLCG ' +
+           'has multiple internal states that can produce the same output.';
   }
   return { hl: pick.u,
            capt: 'several dots per column: the same output leads to different next values',
-           html: grid + body + ' A single LCG can never do this because its output is its entire state.' };
+           html: grid + body };
 }
 
 /* Three rows -- the two components and what they make together -- with
@@ -3326,21 +3364,23 @@ function renderMrgExtras() {
   document.getElementById('m-ladder').innerHTML =
     '<tr><th class="shrink">values remembered</th><th class="ctr">longest possible period</th></tr>' +
     rung('1 (an LCG)', 'm \u2212 1', false) +
-    rung(isC ? 'k (an MRG)' : k + ' (this preset)',
-         isC ? 'm<sup>k</sup> \u2212 1' : 'm<sup>' + k + '</sup> \u2212 1' + mk, !isC) +
-    rung('3 + 3 (MRG32k3a)', '\u2248 2<sup>191</sup> \u2248 3.1 \u00d7 10<sup>57</sup>', isC);
+    rung('k (an MRG)', 'm<sup>k</sup> \u2212 1', false) +
+    (isC ? '' : rung(k + ' (this preset)', 'm<sup>' + k + '</sup> \u2212 1' + mk, true)) +
+    rung('3 + 3 (two MRGs: MRG32k3a)', '(m\u2081\u00b3 \u2212 1)(m\u2082\u00b3 \u2212 1)/2 \u2248 2<sup>191</sup>', isC);
   var el = document.getElementById('m-periods'), html;
   if (isC) {
-    html = 'MRG32k3a\u2019s two order-3 recurrences combine into a cycle of about 2<sup>191</sup> ' +
-           'states (L\u2019Ecuyer 1999). At ten million draws a second, walking it would take ' +
-           'about 10<sup>43</sup> years.';
+    html = 'MRG32k3a runs two order-3 recurrences side by side, each on its own cycle of ' +
+           'm\u00b3 \u2212 1 states, and, as on tab \u2461, the pair realigns only after the least ' +
+           'common multiple of the two cycle lengths: (m\u2081\u00b3 \u2212 1)(m\u2082\u00b3 \u2212 1)/2 ' +
+           '\u2248 2<sup>191</sup> \u2248 3.1 \u00d7 10<sup>57</sup> (L\u2019Ecuyer 1999). At ten million ' +
+           'draws a second, walking that cycle would take about 10<sup>43</sup> years.';
   } else if (c.m <= 4096n && c.as.length <= 3) {
     var o = mrgOrbit(c);
     var max = c.m ** BigInt(c.as.length) - 1n;
     if (o !== null && o.tail === 0) {
       html = 'This preset returns to its seed after <b>' + o.period.toLocaleString('en-US') + '</b> steps' +
              (BigInt(o.period) === max
-               ? ', which is the whole ceiling: every nonzero run of ' + k + ' values occurs exactly once.'
+               ? ', which is the whole ceiling: every combination of ' + k + ' values except all zeros occurs exactly once.'
                : ', short of the m<sup>' + k + '</sup> \u2212 1' + relBig(max) +
                  ' a maximal recurrence of this order would reach.');
     } else if (o !== null) {
@@ -3356,7 +3396,7 @@ function renderMrgExtras() {
            '7.9 \u00d7 10<sup>28</sup> (L\u2019Ecuyer 1999), and MRG32k3a pairs it with a partner.';
   } else {
     html = 'This preset is too large to walk here. A well-chosen order-k recurrence reaches the ' +
-           'ceiling above, visiting every nonzero run of k values before it repeats.';
+           'ceiling above, visiting every combination of k values except all zeros before it repeats.';
   }
   el.innerHTML = html;
   drawMini('m-lat', EDITORS.m.ensure(2000).slice(0, 2000), distinctOf(c), { xlab: 'u_{n}  (one output)', ylab: 'u_{n+1}  (the next output)' });
@@ -3461,11 +3501,18 @@ function drawPredObs(id, pts, opts) {
   }
   ctx.globalAlpha = 1;
   ctx.fillStyle = C.muted;
+  ctx.font = '10px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('0', WA_PAD + 0.5, WA_PAD + WA_P + 11);
+  ctx.fillText('1', WA_PAD + WA_P - 2.5, WA_PAD + WA_P + 11);
+  ctx.textAlign = 'right';
+  ctx.fillText('1', WA_PAD - 3, WA_PAD + 8);
+  ctx.fillText('0', WA_PAD - 3, WA_PAD + WA_P - 1);
   ctx.font = '11px Outfit, sans-serif';
   ctx.textAlign = 'center';
-  fillLabel(ctx, opts.xlab || 'candidate\u2019s predicted next u', WA_PAD + WA_P / 2, WA_PAD + WA_P + 16, 11);
+  fillLabel(ctx, opts.xlab || 'candidate\u2019s predicted next u', WA_PAD + WA_P / 2, WA_PAD + WA_P + 22, 11);
   ctx.save();
-  ctx.translate(WA_PAD - 8, WA_PAD + WA_P / 2);
+  ctx.translate(WA_PAD - 17, WA_PAD + WA_P / 2);
   ctx.rotate(-Math.PI / 2);
   fillLabel(ctx, opts.ylab || 'observed next u', 0, 0, 11);
   ctx.restore();
@@ -3614,7 +3661,7 @@ function wsDraw() {
     '<span class="dim">u = 0.501 instead</span> → ' + s(key, 1, q[0], 0.501).toFixed(4);
   var ks = [];
   for (var k2 = 0; k2 < WS_N; k2++) ks.push(s((key + k2) % 4294967296, 1, q[0], U0));
-  drawHist(ks, 10, 'ws-khist');
+  drawHist(ks, 10, 'ws-khist', 'keyed score');
 }
 
 function wkDraw() {
@@ -4498,9 +4545,10 @@ function renderActive() {
 (function () {
   initIndCanvas();
   initInd3Drag();
-  ['c-lat1', 'c-lat2', 'm-lat'].forEach(function (id) { initMini(id, true); });
+  ['c-lat1', 'c-lat2'].forEach(function (id) { initMini(id, true); });
+  initMini('m-lat', true, 250);
   initMini('wa-lat', true);
-  initPredObs('wa-cv');
+  initPredObs('wa-cv', 340);
   initPredObs('rw-cv');
   initPredObs('rw-lat');
   initPredObs('wt-lat', 310);
