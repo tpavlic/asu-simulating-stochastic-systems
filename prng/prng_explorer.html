@@ -2591,6 +2591,17 @@ function Editor(name, presets, defKey, onChange) {
       ed.cfg = cfgFromPreset(p.fam, p);
       ed.renderParams();
       ed.rebuild([]);
+    } else if (ed.cfg && ed.cfg.fam !== p.fam) {
+      /* Custom reached from a fixed-constant CMRG would leave only the
+         seeds editable; restart it from the first fully editable preset. */
+      for (var fk in presets) {
+        if (fk !== 'custom' && presets[fk].fam === p.fam) {
+          ed.cfg = cfgFromPreset(p.fam, presets[fk]);
+          break;
+        }
+      }
+      ed.renderParams();
+      ed.rebuild([]);
     }
   };
 
