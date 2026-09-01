@@ -783,11 +783,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           could never leave) before returning to its start and repeating. A memory of k past
           values, each taking one of m possible values, gives m<sup>k</sup> − 1 states that
           exclude the all-zero case, and so m<sup>k</sup> − 1 is the longest possible period
-          for a k-sized memory. The table below summarizes the longest possible period for
-          several MRG configurations. The bottom row pairs two order-3 MRGs: as on tab ②,
-          the combination repeats only at the least common multiple of the two cycle
-          lengths, their product divided by their greatest common divisor, and MRG32k3a's
-          moduli make that gcd exactly 2.</div>
+          for a k-sized memory.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The table below
+          summarizes this ceiling for several configurations. Its bottom row decodes
+          MRG32k3a's name: two 32-bit (m ≈ 2<sup>32</sup>) order-3 (k = 3) MRGs running
+          side by side, each on its own cycle of m<sup>3</sup> − 1 ≈ 2<sup>3·32</sup> =
+          2<sup>96</sup> states.
+          As on tab ②, the pair first repeats at the least common multiple of the two cycle
+          lengths, and lcm(a, b) is equivalent to a·b/gcd(a, b) where, in this case,
+          gcd(a, b) = 2 is the only shared factor of the two lengths.</div>
         <div style="margin:auto 0;">
           <div class="tx-tbl-wrap" style="max-height:none;">
             <table class="tx-tbl" id="m-ladder"></table>
@@ -2353,10 +2357,10 @@ var MRG_PRESETS = {
            desc: 'This toy MRG keeps the modulus of a toy LCG but holds two words of state: xₙ = (2·xₙ₋₁ + 6·xₙ₋₂) mod 13. A c = 0 LCG with m = 13 has period at most 12; this recurrence reaches 168 = 13² − 1, the maximum for k = 2. More state buys a longer period, with the same arithmetic per step.' },
   comp1: { fam: 'mrg', as: ['0', '1403580', '4294156359'], m: '4294967087', seeds: ['12345', '12345', '12345'],
            label: 'MRG32k3a component 1 – k = 3, m ≈ 2³²',
-           desc: 'This is one of the two order-3 recurrences inside MRG32k3a (L’Ecuyer 1999): xₙ = (1403580·xₙ₋₂ − 810728·xₙ₋₃) mod 4294967087. The negative coefficient is stored wrapped, as m − 810728 = 4294156359. On its own, this is already a serious generator with period m³ − 1 ≈ 8 × 10²⁸; the MRG32k3a preset pairs it with a partner.' },
+           desc: 'This is one of the two order-3 generators within the combined MRG32k3a (L’Ecuyer 1999). As shown in the full MRG32k3a preset, the a₃ coefficient is traditionally written as a negative (−810728), but here the arithmetically equivalent modulus-wrapped version is used (m − 810728 = 4294156359) so that the coefficients in the interface below are all positive. On its own, this single generator already has a very practical period long enough for many applications (m³ − 1 ≈ 8 × 10²⁸), but the MRG32k3a preset pairs it with another generator to reach a period so long that it has even broader applicability.' },
   mrg32k3a: { fam: 'cmrg', seeds: ['12345', '12345', '12345', '12345', '12345', '12345'],
            label: 'MRG32k3a – the production generator',
-           desc: 'P. L’Ecuyer’s MRG32k3a (1999) combines two order-3 recurrences over different moduli by subtraction mod m₁, exactly as tab ② combines two LCGs; the period is about 2¹⁹¹. This is the generator inside many production simulation tools, and it is the generator behind the other widgets in this repository. The constants are fixed; the six state words are yours to seed.' },
+           desc: 'P. L’Ecuyer’s MRG32k3a (1999) is named for its parts: two 32-bit (m ≈ 2³²) order-3 (k = 3) recurrences, combined by subtraction mod m₁ exactly as tab ② combines two LCGs, for a period of about 2¹⁹¹. This is the generator inside many production simulation tools. The constants are fixed; the six state words are yours to seed.' },
   custom: { fam: 'mrg', label: 'Custom (MRG)',
            desc: 'Your own order-k recurrence xₙ = (a₁·xₙ₋₁ + … + aₖ·xₙ₋ₖ) mod m. Negative coefficients are allowed and wrap mod m. Seeds are the first k states; an all-zero seed stays at zero forever.' }
 };
@@ -3370,14 +3374,15 @@ function renderMrgExtras() {
     rung('1 (an LCG)', 'm \u2212 1', false) +
     rung('k (an MRG)', 'm<sup>k</sup> \u2212 1', false) +
     (isC ? '' : rung(k + ' (this preset)', 'm<sup>' + k + '</sup> \u2212 1' + mk, true)) +
-    rung('3 + 3 (two MRGs: MRG32k3a)', '(m\u2081\u00b3 \u2212 1)(m\u2082\u00b3 \u2212 1)/2 \u2248 2<sup>191</sup>', isC);
+    rung('3 + 3 (two MRGs: MRG32k3a)', '\u2248 (2<sup>96</sup> \u2212 1)(2<sup>96</sup> \u2212 1)/2 \u2248 2<sup>191</sup>', isC);
   var el = document.getElementById('m-periods'), html;
   if (isC) {
-    html = 'MRG32k3a runs two order-3 recurrences side by side, each on its own cycle of ' +
-           'm\u00b3 \u2212 1 states, and, as on tab \u2461, the pair realigns only after the least ' +
-           'common multiple of the two cycle lengths: (m\u2081\u00b3 \u2212 1)(m\u2082\u00b3 \u2212 1)/2 ' +
-           '\u2248 2<sup>191</sup> \u2248 3.1 \u00d7 10<sup>57</sup> (L\u2019Ecuyer 1999). At ten million ' +
-           'draws a second, walking that cycle would take about 10<sup>43</sup> years.';
+    html = 'MRG32k3a runs its two 32-bit order-3 recurrences side by side, each on its own ' +
+           'cycle of m\u00b3 \u2212 1 \u2248 2<sup>96</sup> states, and, as on tab \u2461, the pair realigns ' +
+           'only after the least common multiple of the two cycle lengths: ' +
+           '2<sup>96</sup> \u00b7 2<sup>96</sup>/2 \u2248 2<sup>191</sup> \u2248 3.1 \u00d7 10<sup>57</sup> ' +
+           '(L\u2019Ecuyer 1999). At ten million draws a second, walking that cycle would take ' +
+           'about 10<sup>43</sup> years.';
   } else if (c.m <= 4096n && c.as.length <= 3) {
     var o = mrgOrbit(c);
     var max = c.m ** BigInt(c.as.length) - 1n;
