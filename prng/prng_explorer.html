@@ -668,9 +668,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
       <div class="cv-card c2-card" style="flex-basis:480px; min-width:0;">
         <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Both squares are lattice
-          plots of consecutive pairs (u<sub>n</sub>, u<sub>n+1</sub>), the same view as the
-          independence panel on tab ①. Because of how u is calculated, it has a ceiling of
+        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">As in the independence
+          panel on tab ①, both squares are lattice plots of consecutive pairs
+          (u<sub>n</sub>, u<sub>n+1</sub>). Because of how u is calculated, it has a ceiling of
           (m₁ − 1)/m₁, and this creates an empty band along the top and right of each
           lattice plot that becomes less noticeable for large values of m₁.</div>
         <div class="rubber"></div>
@@ -797,9 +797,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
       <div class="cv-card c2-card" style="flex-basis:350px; min-width:0;">
         <div class="sec-hd">Pairs of consecutive outputs</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">Each dot pairs one
-          output with the output after it, the same lattice view as the independence panel
-          on tab ①. The top and right edges show an empty band because the output u = x/m
+        <div class="cv-leg" style="text-align:left; margin-bottom:6px;">As in the lattice
+          view in the independence panel on tab ①, each dot pairs one output with the
+          output after it. The top and right edges show an empty band because the output u = x/m
           has a maximum of (m − 1)/m and not 1; the gap and the related non-uniformity are
           less noticeable with a larger modulus m.</div>
         <div class="rubber"></div>
@@ -1022,8 +1022,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
         <div class="sec-hd">A tournament chooses among valid realizations</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">On the left sits the
-          source distribution – here uniform, from MRG32k3a – whose eight draws seed the
-          bracket, a small sample of the distribution itself. Each round is played by its own
+          source distribution – here uniform, from MRG32k3a – whose eight draws (a small
+          sample of the distribution itself) seed the bracket. Each round is played by its own
           keyed rule: under each value sits its score for the round it is about to play, and
           the higher score of each pairing advances until one survivor is emitted. Edit the
           key, and the same eight candidates crown a different winner. The embedder at the
@@ -1325,13 +1325,14 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             below, and it reshapes its distribution at every word: some contexts offer
             many continuations, and some force exactly one. Three extra bits of state –
             has this clause had its verb, is a fronted phrase still waiting for its comma,
-            is a subordinate clause still open – keep every sentence a sentence, the same
-            more-state cure tab ③'s recurrences used.</div>
+            is a subordinate clause still open – keep every sentence a sentence, which is
+            the same more-state cure tab ③'s recurrences used.</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
-            <b>The same tournament rides on top.</b> Eight candidates drawn from the
-            current context's own distribution, three keyed rounds, one winner emitted –
-            and a repeated four-word history passes through unmarked, exactly as at the
-            left.</div>
+            <b>Filtering outputs through the same tournament.</b> The first time each
+            four-word history is encountered, eight candidates drawn from the current
+            context's own distribution compete through three keyed rounds that produce
+            one emitted winner. Subsequent encounters with that history emit a single
+            draw from the original distribution with no marking.</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
             <b>The chain order sets how much room the watermark has.</b> Order 1 barely
             remembers and barely constrains, and so nearly every word offers the key a
@@ -1869,7 +1870,7 @@ function wordDetect(ws, key, rounds, V) {
    opener before its comma, and never ends a subordinate clause without
    its own verb, and so the trained chain cannot either -- a few words
    of memory cannot remember any of that, but a few more bits of state
-   can, the same cure the MRGs applied with extra words. The keyed
+   can, which is the same cure the MRGs applied with extra words. The keyed
    tournament rides on top exactly as for the fixed pmf: candidates
    from the current context's own conditional, identities as wordCode
    over the vocabulary, the watermark history the last four emitted
