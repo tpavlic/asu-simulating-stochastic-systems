@@ -326,7 +326,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
   <div class="wh">
     <div class="wh-left">
       <div class="wh-title">Pseudorandom Number Explorer</div>
-      <div class="wh-sub">How simulation software makes “random” numbers – inspectable arithmetic, judged on uniformity and independence</div>
+      <div class="wh-sub">How simulation software makes “random” numbers&nbsp;– inspectable arithmetic, judged on uniformity and independence</div>
     </div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic &middot; <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
@@ -405,7 +405,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     </div>
 
     <div class="ctrl-row" style="margin: 2px 0 10px;">
-      <span class="ctrl-lbl">Stream for both panels – u₁ … u<sub>n</sub>, n = <b class="mono" id="stream-n" style="color:var(--accent); font-size:.92rem;">500</b></span>
+      <span class="ctrl-lbl">Stream for both panels&nbsp;– u₁ … u<sub>n</sub>, n = <b class="mono" id="stream-n" style="color:var(--accent); font-size:.92rem;">500</b></span>
       <button class="btn-run" onclick="growStream(1000)">+1,000</button>
       <button class="btn-run2" onclick="growStream(100)">+100</button>
       <button class="btn-run2" onclick="growStream(10000)">+10,000</button>
@@ -414,7 +414,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 
     <div class="viz-row props-row">
       <div class="cv-card p1-card" style="flex:1 1 480px; min-width:0;">
-        <div class="sec-hd">Property 1: Uniformity – do the values fill [0, 1] evenly?</div>
+        <div class="sec-hd">Property 1: Uniformity&nbsp;– do the values fill [0, 1] evenly?</div>
         <div class="rubber"></div>
         <svg class="plot" id="uni-hist" style="max-width:440px; margin:0 auto;" viewBox="0 0 440 190" role="img" aria-label="Histogram of generated values"></svg>
         <div class="cv-leg"><span style="color:var(--est)">▮ observed density</span>&nbsp;&nbsp;
@@ -444,7 +444,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="rubber"></div>
       </div>
       <div class="cv-card p2-card" style="flex-basis:482px; min-width:0;">
-        <div class="sec-hd">Property 2: Independence – does one value predict a later one?</div>
+        <div class="sec-hd">Property 2: Independence&nbsp;– does one value predict a later one?</div>
         <div class="cv-leg" id="ind-desc-2d" style="text-align:left; margin:0 0 6px;">Each dot pairs one output
           with the output k steps later: horizontal position u<sub>n</sub>, vertical position
           u<sub>n+k</sub>. Lag k = 1 pairs each value with the very next one; a larger lag asks
@@ -550,7 +550,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         should sit. That farthest stray is exactly the biggest vertical gap between the
         empirical CDF and the diagonal, marked on the small plot. Both p-values answer the same
         question: could a mismatch this large plausibly come from truly uniform draws?</p>
-        <p>Both tests treat the sample as a bag of values – they are not sensitive to the order
+        <p>Both tests treat the sample as a bag of values&nbsp;– they are not sensitive to the order
         of the values. Judging whether the order is consistent with independent draws is the job
         of separate tools: autocorrelation tests, runs tests, and the lattice panel beside the
         uniformity tests.</p>
@@ -667,7 +667,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         </div>
       </div>
       <div class="cv-card c2-card" style="flex-basis:480px; min-width:0;">
-        <div class="sec-hd">Combining LCGs adds apparent non-determinism – the same output, different futures</div>
+        <div class="sec-hd">Combining LCGs adds apparent non-determinism&nbsp;– the same output, different futures</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:6px;">As in the independence
           panel on tab ①, both squares are lattice plots of consecutive pairs
           (u<sub>n</sub>, u<sub>n+1</sub>). Because of how u is calculated, it has a ceiling of
@@ -735,7 +735,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       memory that happen to live in separate machines. The multiple recursive generator (MRG)
       reorganizes that memory. Instead of two recurrences that each remember one value, one
       recurrence remembers its last k values (k is called the <em>order</em> of the recurrence) and
-      combines them to produce the next – a generator bootstrapped on its own recent past. A snapshot of two parallel states and a
+      combines them to produce the next&nbsp;– a generator bootstrapped on its own recent past. A snapshot of two parallel states and a
       window of one sequence's recent history hold the same kind of extra information, but the
       extra information from the recent history can generate an even longer period. With k
       words of memory, there are mᵏ possible states, and a well-chosen recurrence visits
@@ -858,7 +858,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       someone who knows the multiplier, the very same outputs are perfectly dependent because
       each one pins down the next exactly. Suppose company X ships simulation software whose
       streams come from an LCG configured one particular way. Checking whether a file of
-      numbers matches that configuration is testing for company X's implicit signature – a
+      numbers matches that configuration is testing for company X's implicit signature&nbsp;– a
       watermark nobody had to add, readable only by someone who knows what to test for. This
       tab reads such a mark; the next tab builds one deliberately.</div>
 
@@ -912,7 +912,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       Even knowing every parameter, you cannot predict the next output from the stream alone,
       and the implicit watermark becomes unreadable. Every naked generator carries such a
       mark in its structure and parameters, but how readable the mark is depends on an
-      accident of the design. A deliberate watermark should not rest on an accident – the
+      accident of the design. A deliberate watermark should not rest on an accident&nbsp;– the
       next tab builds the readability in on purpose.</div>
   </section>
 
@@ -922,7 +922,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       watermarking by making seeds dependent upon outputs.</strong> Tab ④'s mark could be read only because an LCG happens to show its
       state; a deliberate watermarker does not have to rely on that accident. Instead of
       letting the generator carry its state forward, throw the state away before every draw
-      and re-seed it with a <em>keyed mix</em> of the last four outputs – a short scramble of
+      and re-seed it with a <em>keyed mix</em> of the last four outputs&nbsp;– a short scramble of
       the same multiply-and-mix arithmetic as everything else on this page, steered by a
       secret key (just a whole number). The seed, and so the next value, becomes computable
       from the visible history by anyone who holds the key and by no one else.</div>
@@ -937,7 +937,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           every variable that generation needs is observable. Below, the past four outputs
           are mixed with a secret key to generate each new output (the first four pass
           through from MRG32k3a), and so whoever holds the key can check whether a stream's
-          recent history is consistent with generation by their PRNG – effectively a
+          recent history is consistent with generation by their PRNG&nbsp;– effectively a
           cryptographic signature applied on top of the generated numbers. The plot compares
           what a tested key predicts for each draw (horizontal) with what was observed
           (vertical); the right key puts every point on the diagonal.</div>
@@ -967,7 +967,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         </div>
         <div class="plot-ttl">The cost: you have replaced the generator</div>
         <div class="cv-leg" style="text-align:left;">After the four pass-through draws,
-          MRG32k3a contributes nothing – every later value is fixed by the key and the
+          MRG32k3a contributes nothing&nbsp;– every later value is fixed by the key and the
           history, whatever generator sits underneath. The period guarantees, the
           equidistribution, and the streams and substreams of tabs ①–③ are gone, and the
           stream's quality now rests entirely on the homemade mix. The watermark and the
@@ -991,7 +991,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-card" style="flex:1 0 auto;">
           <div class="sec-hd">Detection is all-or-nothing</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A re-seeded stream
-            is not merely biased toward its key – it is a deterministic function of it, and
+            is not merely biased toward its key&nbsp;– it is a deterministic function of it, and
             so detection is a certificate rather than a statistic. The secret key (top row)
             predicts every draw; twenty random wrong keys predict none.</div>
           <svg class="plot" id="rw-keys" viewBox="0 0 440 336" role="img" aria-label="Exact-prediction lineup: the secret key in the top row against twenty random wrong keys"></svg>
@@ -1015,9 +1015,9 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="note"><strong>Watermarking modules can be added to existing PRNGs without
       modifying them.</strong> Re-seeding bought readability by replacing the generator; this tab keeps
       the generator intact and instead steers which of its outputs get emitted. Any
-      generator could sit underneath – the tournament only ever asks it for draws, never
+      generator could sit underneath&nbsp;– the tournament only ever asks it for draws, never
       looks inside it, and MRG32k3a plays the part here. The tool is a <em>keyed scoring
-      function</em> – the same kind of keyed mix as the last tab, now turning the key, a
+      function</em>&nbsp;– the same kind of keyed mix as the last tab, now turning the key, a
       round number, the recent history, and a candidate value into a score between 0 and 1.
       Whoever holds the key can recompute any score; to everyone else, the scores might as
       well not exist.</div>
@@ -1026,7 +1026,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:1 1 430px; min-width:0;">
         <div class="sec-hd">A tournament chooses among valid realizations</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">On the left sits the
-          source distribution – here uniform, from MRG32k3a – whose eight draws (a small
+          source distribution&nbsp;– here uniform, from MRG32k3a&nbsp;– whose eight draws (a small
           sample of the distribution itself) seed the bracket. Each round is played by its own
           keyed rule: under each value sits its score for the round it is about to play, and
           the higher score of each pairing advances until one survivor is emitted. Edit the
@@ -1071,8 +1071,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       <div class="cv-card" style="flex:1 1 360px; min-width:0;">
         <div class="sec-hd">How to assign scores in each tournament round</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A score is a function
-          of four ingredients – the key, the round, the last four outputs
-          h<sub>1</sub>…h<sub>4</sub>, and the candidate u – mixed by the same
+          of four ingredients&nbsp;– the key, the round, the last four outputs
+          h<sub>1</sub>…h<sub>4</sub>, and the candidate u&nbsp;– mixed by the same
           multiply-mod-2³² arithmetic as the generators on this page. Here, ⊕ is bitwise XOR
           (base-2 addition without carries), and every value in [0, 1] enters as the 32-bit
           integer ⌊value · 2³²⌋:</div>
@@ -1094,7 +1094,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="rec-line" id="ws-expr"></div>
         <div class="plot-ttl">Scores for one candidate across keys</div>
         <div class="cv-leg" style="text-align:left; margin:2px 0 2px;">u = 0.500 under 400
-          consecutive keys: flat – whatever value might be emitted, from whatever source
+          consecutive keys: flat&nbsp;– whatever value might be emitted, from whatever source
           distribution, no key is biased for or against it.</div>
         <svg class="plot" id="ws-khist" viewBox="0 0 440 190" role="img" aria-label="Histogram of scores across keys for one candidate"></svg>
         <div class="cv-leg" id="ws-note" style="min-height:1.2em;"></div>
@@ -1123,7 +1123,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="plot-ttl">Scores across candidates under key A</div>
           <div class="cv-leg" style="text-align:left; margin:2px 0 2px;">The marginal
             distribution of the scatter's horizontal coordinate: the same 400 candidates'
-            scores under key A alone. Flat, and so no stretch of [0, 1] is favored – and it
+            scores under key A alone. Flat, and so no stretch of [0, 1] is favored&nbsp;– and it
             stays flat whichever key A is.</div>
           <svg class="plot" id="wk-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of scores across candidates under key A"></svg>
           <div class="cv-leg" id="wk-note" style="min-height:1.2em;"></div>
@@ -1197,7 +1197,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           day.</div>
         <svg class="plot" id="wt-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means for the marked stream: the secret key in the top row against twenty random wrong keys"></svg>
         <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying its
-          verdict – dot and whiskers: each key's detection mean with its 95% confidence
+          verdict&nbsp;– dot and whiskers: each key's detection mean with its 95% confidence
           interval</div>
         <div class="mk-legend">
           <span class="sym" style="color:var(--accent);">✓</span>
@@ -1217,8 +1217,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         problem with repeated histories.</b> A history of four real numbers essentially
         never recurs, and so each skewed conditional contributes a single draw whose
         support is unchanged, and nothing accumulates where a histogram could show it.
-        Tab ⑦ is the opposite case – a fourteen-word vocabulary repeats histories
-        constantly – and it enforces the same one-draw rule explicitly, as
+        Tab ⑦ is the opposite case&nbsp;– a fourteen-word vocabulary repeats histories
+        constantly&nbsp;– and it enforces the same one-draw rule explicitly, as
         repeated-context masking.</p>
         <p><b>The watermark does add dependence, but it is routed entirely through the
         keyed scores.</b> Each emitted value relates to its four predecessors through the
@@ -1230,7 +1230,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <p><b>A detector needs nothing but the stream and the key.</b> Reading the scoring
         inputs from the visible outputs, rather than from a hidden counter, makes
         detection self-synchronizing. The language-model version reads the recent words
-        for the same reason – the text itself is all a detector ever gets.</p>
+        for the same reason&nbsp;– the text itself is all a detector ever gets.</p>
       </div>
     </details>
   </section>
@@ -1244,7 +1244,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       number: line up the words' probabilities along [0, 1], and the draw picks the word
       whose slice it lands in (the inverse-transform method). A keyed scoring function is
       just as indifferent: it scores a word's identity the way it scored a candidate
-      number. The tournament therefore runs unchanged – draw eight candidate words from the
+      number. The tournament therefore runs unchanged&nbsp;– draw eight candidate words from the
       model's distribution, play three keyed rounds, and emit the winner. That tournament
       is the published mechanism of Google's
       <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
@@ -1261,13 +1261,13 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
           <b>A toy model has reached a blank.</b> Its distribution over the next word (the
           dashed teal levels) puts most of the probability on a few words and a little on
-          many others, and "New context" reshapes it – a new context ranks new words
+          many others, and "New context" reshapes it&nbsp;– a new context ranks new words
           highly, exactly as the language model at the right does at every word. The last four
           words of the context are the watermark's history, labeled below, and the table
           beneath the chart lists every word's three round scores for exactly this
-          history. A tournament has already been played – the winner (the highlighted
+          history. A tournament has already been played&nbsp;– the winner (the highlighted
           column) fills the blank, usually a word that scores well across the rounds and
-          always a legitimate draw – and running one more draws eight fresh candidates
+          always a legitimate draw&nbsp;– and running one more draws eight fresh candidates
           for the same blank. The bracket beneath the chart plays the whole tournament
           out.</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:2px;">
@@ -1308,7 +1308,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" id="txc-note" style="min-height:1.2em;"></div>
         <div class="plot-ttl" style="margin-top:14px;">This run's tournament, played out</div>
         <div class="cv-leg" style="text-align:left; margin:2px 0 6px;">The eight dots on
-          the pmf are this run's draws – a repeated word stacks its dots – and each word
+          the pmf are this run's draws&nbsp;– a repeated word stacks its dots&nbsp;– and each word
           carries its score for the round it is about to play; the higher score of each
           pairing advances, and the winner's path is picked out in the accent. After "Run
           2,000 tournaments", the bracket shows run 1, which with masking on is the only
@@ -1316,7 +1316,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <svg class="plot" id="txc-brk" viewBox="0 0 440 250" role="img" aria-label="This run's word tournament: the context's pmf, eight drawn candidates, three keyed rounds, one emitted word"></svg>
         <div class="plot-ttl" style="margin-top:14px;">Every word's scores at this blank</div>
         <div class="cv-leg" style="text-align:left; margin:2px 0 6px;">The whole vocabulary,
-          one row per word – not a sequence of draws. The rows are sorted by model
+          one row per word&nbsp;– not a sequence of draws. The rows are sorted by model
           probability only to match the chart above; a word's scores come from the keyed
           rules and have nothing to do with its probability.</div>
         <div class="tx-tbl-wrap" style="max-height:none;">
@@ -1332,7 +1332,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             below, and it reshapes its distribution at every word: some contexts offer
             many continuations, and some force exactly one. Three extra bits of state –
             has this clause had its verb, is a fronted phrase still waiting for its comma,
-            is a subordinate clause still open – keep every sentence a sentence, which is
+            is a subordinate clause still open&nbsp;– keep every sentence a sentence, which is
             the same more-state cure tab ③'s recurrences used.</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
             <b>Filtering outputs through the same tournament.</b> The first time each
@@ -1349,7 +1349,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             nearly every word offers the key a real choice; order 3 reproduces the corpus
             faithfully and forces most continuations, leaving the key little to do. The stats under the passage keep
             score, and the distribution check compares the passage against the chain's own
-            conditionals – marked or not, about 5% of testable contexts should be flagged
+            conditionals&nbsp;– marked or not, about 5% of testable contexts should be flagged
             at the 5% level.</div>
           <div class="ctrl-row" style="margin-bottom:2px;">
             <label class="ctrl-lbl" for="mk-order">Chain order</label>
@@ -1368,7 +1368,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             <button class="btn-run2" onclick="mkWrite(1500)">Write a few pages</button>
           </div>
           <details style="margin-bottom:8px;">
-            <summary style="font-size:.8rem; color:var(--muted); cursor:pointer;">Read the training corpus first – the chain should be judged against it, not against an LLM</summary>
+            <summary style="font-size:.8rem; color:var(--muted); cursor:pointer;">Read the training corpus first&nbsp;– the chain should be judged against it, not against an LLM</summary>
             <div id="mk-corpus" style="font-size:.78rem; line-height:1.55; color:var(--muted); margin-top:6px;
                  max-height:180px; overflow-y:auto; border:1.5px solid var(--border); border-radius:7px; padding:8px 10px;"></div>
           </details>
@@ -1379,19 +1379,19 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="plot-ttl" style="margin-top:16px;">Reading the watermark back</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
             <b>A detector needs only the text and a candidate key.</b> It recomputes each
-            fresh-context word's three round scores from the visible words alone – no
-            access to the chain or the generator – and pools them into one mean per key.
+            fresh-context word's three round scores from the visible words alone&nbsp;– no
+            access to the chain or the generator&nbsp;– and pools them into one mean per key.
             The lineup tests the secret key (the top row) against twenty random wrong
             keys, key at the left, mean at the right, whiskers a 95% confidence
             interval.
             Wrong keys hug the dashed 0.5 of chance, the key that marked the passage
-            stands clear, and an unwatermarked passage leaves every key at chance – a
+            stands clear, and an unwatermarked passage leaves every key at chance&nbsp;– a
             single score proves nothing under any key (the table at the left looks just
             as random under the right key), and so a longer passage means tighter
             whiskers and surer verdicts.</div>
           <svg class="plot" id="tx-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means: the secret key in the top row against twenty random wrong keys"></svg>
           <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying
-            its verdict – dot and whiskers: each key's detection mean with its 95%
+            its verdict&nbsp;– dot and whiskers: each key's detection mean with its 95%
             confidence interval</div>
           <div class="mk-legend">
             <span class="sym" style="color:var(--accent);">✓</span>
@@ -1403,7 +1403,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           </div>
           <div class="cv-leg" style="text-align:left; margin-top:8px;">A 95% confidence
             interval (the whiskers above) fails to cover the true mean in 5% of
-            experiments. Detection is one-sided, though – only a mean above 0.5 counts –
+            experiments. Detection is one-sided, though&nbsp;– only a mean above 0.5 counts –
             and so only half of those misses can read as detections: in a lineup of
             twenty wrong keys, an interval lands entirely above 0.5 about once every
             other redraw. Even that is far too often for a detector scanning millions of
@@ -1418,10 +1418,10 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       shunned.</strong> An earlier family of watermarks
       (<a href="https://proceedings.mlr.press/v202/kirchenbauer23a.html" target="_blank" rel="noopener">Kirchenbauer
       et al. 2023, <em>ICML</em></a>) really does keep a keyed “green list” of words,
-      boosted before every draw – a push that continues even where the model is nearly
+      boosted before every draw&nbsp;– a push that continues even where the model is nearly
       certain. The tournament keeps no list, and none could exist: scored by rule 1 across
       2,000 synthetic four-word contexts each, three words from the toy vocabulary come
-      out flat on [0, 1] – dragons, the vocabulary's long shot, included – and rules 2 and
+      out flat on [0, 1]&nbsp;– dragons, the vocabulary's long shot, included&nbsp;– and rules 2 and
       3, and every other key, behave identically. Although watermarking induces a
       preference for words with higher scores at any one blank, a word's score varies
       across the text, and so the overall distribution of words in the text is not
@@ -1453,16 +1453,16 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         same bias twice. The winner of a single tournament is still a word the model
         offered, and one draw cannot reveal which conditional produced it; the repeat demo
         above shows what surrendering that safety costs. Masking turns the safety into a
-        rule – each four-word history gets its tournament at most once per text – and the
+        rule&nbsp;– each four-word history gets its tournament at most once per text&nbsp;– and the
         detector, computing the same mask from the same visible words, skips exactly the
         same positions. How often the rule bites depends on the vocabulary: in this
         widget's 230-word world, a third of the words in a few pages land on a used
         history, whereas in a real model's hundred-thousand-word vocabulary exact
-        four-word repeats are rare outside genuinely repetitive text – the very text
+        four-word repeats are rare outside genuinely repetitive text&nbsp;– the very text
         where a repeated bias would otherwise pile into a visible pattern.</p>
         <p>Tab ⑥ never needed the rule spelled out: its histories are four real numbers,
         which essentially never recur, and so every bias acts once by itself. The principle
-        on both tabs is the same – work inside the diversity the source already offers,
+        on both tabs is the same&nbsp;– work inside the diversity the source already offers,
         spend each history's bias at most once, and let the biases cancel everywhere except
         along the key's own score axis, where they all point the same way.</p>
       </div>
