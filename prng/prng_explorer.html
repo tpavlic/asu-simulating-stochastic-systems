@@ -1334,19 +1334,22 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
             one emitted winner. Subsequent encounters with that history emit a single
             draw from the original distribution with no marking.</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
-            <b>The chain order sets how much room the watermark has.</b> Order 1 barely
-            remembers and barely constrains, and so nearly every word offers the key a
-            real choice; order 3 reproduces the corpus faithfully and forces most
-            continuations, leaving the key little to do. The stats under the passage keep
+            <b>The chain order sets how much room the watermark has.</b> Like the order
+            of an MRG, the order of a Markov chain sets how much history determines the
+            next output, but the effect runs the other way: more memory makes an MRG's
+            stream look more random, whereas a chain that honors more context has fewer
+            words that can follow. Order 1 barely remembers and barely constrains, and so
+            nearly every word offers the key a real choice; order 3 reproduces the corpus
+            faithfully and forces most continuations, leaving the key little to do. The stats under the passage keep
             score, and the distribution check compares the passage against the chain's own
             conditionals – marked or not, about 5% of testable contexts should be flagged
             at the 5% level.</div>
           <div class="ctrl-row" style="margin-bottom:2px;">
             <label class="ctrl-lbl" for="mk-order">Chain order</label>
             <select id="mk-order">
-              <option value="1">1 (entropy-rich babble)</option>
-              <option value="2" selected>2 (the sweet spot)</option>
-              <option value="3">3 (faithful, little room)</option>
+              <option value="1">1 (most random: easy to mark, hard to read)</option>
+              <option value="2" selected>2 (readable, with room to mark)</option>
+              <option value="3">3 (most faithful: clear, no room to mark)</option>
             </select>
             <label class="ctrl-lbl" style="display:flex; align-items:center; gap:6px; min-height:24px; cursor:pointer;">
               <input type="checkbox" id="mk-mark" checked style="width:16px; height:16px; accent-color:var(--accent);">
