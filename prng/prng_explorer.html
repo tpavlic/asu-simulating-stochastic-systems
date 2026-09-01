@@ -1244,7 +1244,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       number: line up the words' probabilities along [0, 1], and the draw picks the word
       whose slice it lands in (the inverse-transform method). A keyed scoring function is
       just as indifferent: it scores a word's identity the way it scored a candidate
-      number. The tournament therefore runs unchanged&nbsp;– draw eight candidate words from the
+      number on tab ⑥. The tournament therefore runs unchanged&nbsp;– draw eight candidate words from the
       model's distribution, play three keyed rounds, and emit the winner. That tournament
       is the published mechanism of Google's
       <a href="https://deepmind.google/models/synthid/" target="_blank" rel="noopener">SynthID</a>
@@ -1258,18 +1258,21 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row">
       <div class="cv-card" style="flex:1 1 460px; min-width:0;">
         <div class="sec-hd">One blank, one tournament</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
-          <b>A toy model has reached a blank.</b> Its distribution over the next word (the
-          dashed teal levels) puts most of the probability on a few words and a little on
-          many others, and "New context" reshapes it&nbsp;– a new context ranks new words
-          highly, exactly as the language model at the right does at every word. The last four
-          words of the context are the watermark's history, labeled below, and the table
-          beneath the chart lists every word's three round scores for exactly this
-          history. A tournament has already been played&nbsp;– the winner (the highlighted
-          column) fills the blank, usually a word that scores well across the rounds and
-          always a legitimate draw&nbsp;– and running one more draws eight fresh candidates
-          for the same blank. The bracket beneath the chart plays the whole tournament
-          out.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">The passage below
+          shows a hypothetical output from a language model where the distribution of
+          candidate words for the last blank is described by the histogram. For each
+          context (the words before the blank), the distribution puts most of the
+          probability on a few words and a little on many others; selecting "New context"
+          will thus change the shape of the distribution. The four words of
+          context that precede the last blank (each underlined in the passage) are the
+          watermark's history, and the table below the tournament bracket lists every
+          word's three round scores for exactly this history. A tournament has already
+          been played based on these scores, and the winner (the highlighted column in
+          the histogram) is the emitted word that fills the last blank. The emitted
+          winner from the tournament is usually a word that scores well across the
+          rounds, and it is always a legitimate draw from the word distribution. Running
+          a new tournament will draw eight fresh candidates for the same blank, possibly
+          leading to a new word choice.</div>
         <div class="cv-leg" style="text-align:left; margin-bottom:2px;">
           <b>Risks and mitigation for distortion by watermarking.</b> With the same fixed
           history, the key distorts the distribution in a consistent, key-specific way,
@@ -1327,13 +1330,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-card" style="flex:0 0 auto;">
           <div class="sec-hd">Watermarking a tiny language model</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
-            <b>A word-level Markov chain writes whole passages.</b> The blank at the left
-            froze one context of a toy model; here the model is trained on the corpus
-            below, and it reshapes its distribution at every word: some contexts offer
-            many continuations, and some force exactly one. Three extra bits of state –
-            has this clause had its verb, is a fronted phrase still waiting for its comma,
-            is a subordinate clause still open&nbsp;– keep every sentence a sentence, which is
-            the same more-state cure tab ③'s recurrences used.</div>
+            Below, a simple generative language model is implemented using a Markov chain
+            whose state is the k words before the word being chosen (where k is 1, 2,
+            or 3&nbsp;– the "order" of the chain) and whose probabilities across a simple
+            dictionary are trained from a corpus that can be reviewed below. Selecting
+            <b>"Write a story"</b> (or <b>"Write a few pages"</b>) will iteratively draw
+            words from the selected order-k Markov chain, producing an output similar to
+            a large language model but with far lower quality. When <b>"Apply the
+            watermark"</b> is turned on, the tournament-marking process is used to draw
+            multiple feasible words and filter them based on their round scores.</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
             <b>Filtering outputs through the same tournament.</b> The first time each
             four-word history is encountered, eight candidates drawn from the current
@@ -1378,17 +1383,23 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
           <div class="cv-leg" id="mk-stats" style="text-align:left; margin-top:6px; min-height:2.6em;"></div>
           <div class="plot-ttl" style="margin-top:16px;">Reading the watermark back</div>
           <div class="cv-leg" style="text-align:left; margin-bottom:8px;">
-            <b>A detector needs only the text and a candidate key.</b> It recomputes each
-            fresh-context word's three round scores from the visible words alone&nbsp;– no
-            access to the chain or the generator&nbsp;– and pools them into one mean per key.
-            The lineup tests the secret key (the top row) against twenty random wrong
-            keys, key at the left, mean at the right, whiskers a 95% confidence
-            interval.
-            Wrong keys hug the dashed 0.5 of chance, the key that marked the passage
-            stands clear, and an unwatermarked passage leaves every key at chance&nbsp;– a
-            single score proves nothing under any key (the table at the left looks just
-            as random under the right key), and so a longer passage means tighter
-            whiskers and surer verdicts.</div>
+            To detect the watermark, only the text and a candidate key are needed. The
+            detector recomputes each word's three round scores from the visible words
+            alone&nbsp;– with no access to the chain or the random-number generator&nbsp;– and
+            pools them into one mean score for the passage, skipping repeated histories
+            exactly as the writer masked them. By repeating
+            this process for different keys, it is possible to assess which of any
+            candidate keys may have been used to mark the text. The lineup below tests
+            the secret key (the top row) against twenty random wrong keys, printing each
+            key at the left and its mean score at the right, with whiskers marking a 95%
+            confidence interval for the mean. Typically, wrong keys hug the dashed 0.5
+            chance line, and the key that marked the passage shows a mean and confidence
+            interval well separated from that line. So, if the correct key is not in the
+            list or if the text is not watermarked, all keys will hug the chance line.
+            With longer passages (e.g., going from a "story" to a "few pages" in the
+            generation above), the pool over which the mean is calculated grows, and the
+            confidence-interval whiskers tighten, allowing sharper discrimination among
+            keys.</div>
           <svg class="plot" id="tx-keys" viewBox="0 0 440 338" role="img" aria-label="Per-key detection means: the secret key in the top row against twenty random wrong keys"></svg>
           <div class="cv-leg">one row per key, the secret key in the top row, its tint and symbol carrying
             its verdict&nbsp;– dot and whiskers: each key's detection mean with its 95%
@@ -1418,8 +1429,8 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       shunned.</strong> An earlier family of watermarks
       (<a href="https://proceedings.mlr.press/v202/kirchenbauer23a.html" target="_blank" rel="noopener">Kirchenbauer
       et al. 2023, <em>ICML</em></a>) really does keep a keyed “green list” of words,
-      boosted before every draw&nbsp;– a push that continues even where the model is nearly
-      certain. The tournament keeps no list, and none could exist: scored by rule 1 across
+      boosted before every draw&nbsp;– a distortionary bias that is detectable even when the
+      distribution of possible words is very narrow. The tournament keeps no list, and none could exist: scored by rule 1 across
       2,000 synthetic four-word contexts each, three words from the toy vocabulary come
       out flat on [0, 1]&nbsp;– dragons, the vocabulary's long shot, included&nbsp;– and rules 2 and
       3, and every other key, behave identically. Although watermarking induces a
