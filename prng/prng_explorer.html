@@ -148,19 +148,19 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* The two property panels sit side by side and wrap to a column when tight */
 .props-row { flex-wrap: wrap; }
 /* The step table has to be wide enough to read. Beside a fixed 375px panel it is
-   down to about 400px by the time the viewport reaches 820, so these rows stack
+   down to about 400px by the time the viewport reaches 820, and so these rows stack
    there rather than waiting for the 680 the others use. */
 @media (max-width: 820px) {
   .g-row { flex-direction: column; }
   .g-row > .g-left { flex: 1 1 auto; }
 }
-/* Side by side the two property panels are stretched to a common height, so the
+/* Side by side the two property panels are stretched to a common height, and so the
    shorter one carries slack. These springs spread it above the histogram, around the
    rule, and under the ECDF, rather than letting it pile up at the bottom. Stacked,
    the card is content-height and each spring collapses to its minimum. */
 .p1-card, .p2-card, .c2-card { display: flex; flex-direction: column; }
 /* The Bins row reads as one line or as three, never as a lopsided two. The three
-   parts need about 378px side by side, so once the card is narrower than that they
+   parts need about 378px side by side, and so once the card is narrower than that they
    all stack. This asks the card its width, not the viewport, because the card is
    narrow in the wrapped middle widths and wide again on a phone. */
 /* The query hangs on a wrapper around the row, not on the card. Putting
@@ -175,13 +175,13 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* A panel that is alone on its line should fill it. Side by side these keep their
    designed proportions, but once .props-row wraps, a panel whose flex-grow is 0 stops
    at its basis and leaves a ragged edge down the column. The widest pair of bases here
-   is 400 + 482 + 12, so the wrap happens under about 930px of viewport. */
+   is 400 + 482 + 12, and so the wrap happens under about 930px of viewport. */
 /* Every card in a wrapping row grows. Tying this to a viewport breakpoint was wrong:
    what decides the wrap is the row's width against the sum of the bases, and at a
-   1000px window the row is already too narrow while the viewport is not. */
+   1000px window the row is already too narrow whereas the viewport is not. */
 .props-row > .cv-card { flex-grow: 1; }
 /* Same fault from the other direction: a max-width that frames the card beside its
-   neighbour still caps it once .viz-row turns into a column at 680px. */
+   neighbor still caps it once .viz-row turns into a column at 680px. */
 .cap-600 { max-width: 600px; }
 @media (max-width: 680px) { .cap-600 { max-width: none; } }
 /* Small companion lattices on tabs 2 and 3 */
@@ -312,11 +312,11 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 @media (max-width: 680px) {
   .viz-row { flex-direction: column; }
   .g-left { flex: 1 1 auto !important; }
-  /* The row is a column here, so flex-basis sizes height rather than width, and a
-     card whose basis framed it beside a neighbour would stand at that height with
+  /* The row is a column here, and so flex-basis sizes height rather than width, and a
+     card whose basis framed it beside a neighbor would stand at that height with
      empty space under its content. The bases are written inline, which is why this
      override needs the weight. Growing is off for the same reason: stacked, a card
-     has no neighbour to match, so it should be exactly as tall as it needs. */
+     has no neighbor to match, and so it should be exactly as tall as it needs. */
   .viz-row > * { flex-basis: auto !important; flex-grow: 0 !important; }
 }
 </style>
@@ -1044,19 +1044,22 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
       </div>
       <div class="cv-card" style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column;">
         <div class="sec-hd">Distortion-free on continuous distributions</div>
-        <div class="cv-leg" style="text-align:left;">The tournament never invents a value
-          and never vetoes one: it only chooses among draws the generator underneath (here
-          MRG32k3a) was already willing to make, working inside the diversity the stream
-          already offers. At any one history, the choice genuinely favors the
-          values the keyed rules score highly – that bias is the watermark – but a history
-          of four real numbers essentially never recurs, and so each bias acts exactly
-          once, and across histories the biases point in unrelated directions and cancel:
-          run the tournament for 2,000 draws, and the winners fill [0, 1] as evenly as the
-          generator itself would. Only along the key's own score axis do the biases all
-          point the same way. The same bolting-on works for any source distribution, a pmf
-          over words included, as long as the candidates have spread: a distribution so
-          concentrated that they all agree leaves every key making the same choice and
-          nothing to mark.</div>
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Every emitted value
+          is one of eight draws that the generator underneath (here MRG32k3a) was already
+          willing to make: the tournament filters candidates, but it never invents a value
+          of its own. At any one history, the filter genuinely favors the values the keyed
+          rules score highly, and that bias is the watermark. Because a history of four
+          real numbers essentially never recurs, each bias acts only once. So across
+          histories, the biases point in unrelated directions and cancel, yielding a
+          marked distribution that matches the desired uniform distribution (contrast
+          this with the masking approach necessary on tab ⑦).</div>
+        <div class="cv-leg" style="text-align:left;">Run the tournament for 2,000 draws,
+          and the histogram below keeps score: the winners fill [0, 1] as evenly as the
+          generator itself would. This tournament-marking apparatus can be added on to any
+          source distribution, including a discrete pmf over words (see tab ⑦). However,
+          marking is most detectable when applied to a distribution with high entropy;
+          distributions that are already highly predictable do not leave enough
+          statistical room for applying marks.</div>
         <div style="margin:auto 0;">
           <svg class="plot" id="wq-hist" viewBox="0 0 440 190" role="img" aria-label="Histogram of 2,000 tournament winners with uniformity test p-values"></svg>
           <div class="cv-leg" id="wq-cap"></div>
@@ -1070,7 +1073,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
         <div class="cv-leg" style="text-align:left; margin-bottom:8px;">A score is a function
           of four ingredients – the key, the round, the last four outputs
           h<sub>1</sub>…h<sub>4</sub>, and the candidate u – mixed by the same
-          multiply-mod-2³² arithmetic as the generators on this page. Here ⊕ is bitwise XOR
+          multiply-mod-2³² arithmetic as the generators on this page. Here, ⊕ is bitwise XOR
           (base-2 addition without carries), and every value in [0, 1] enters as the 32-bit
           integer ⌊value · 2³²⌋:</div>
         <div class="rec-line" style="line-height:1.8;"><span class="dim" style="font-style:italic;">// ⊕ is a bitwise, binary XOR operator</span><br>
@@ -1131,7 +1134,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
     <div class="viz-row props-row">
       <div class="cv-card" style="flex:1 1 100%; min-width:0;">
         <div class="sec-hd">Every emitted value wins a keyed tournament</div>
-        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here the tournament
+        <div class="cv-leg" style="text-align:left; margin-bottom:8px;">Here, the tournament
           from the top of this tab runs for real: whenever a value is needed, eight
           candidates are drawn from MRG32k3a, the three keyed rules eliminate them pairwise,
           and the winner is emitted. Emitted values therefore tend to score high under all three rules, and
@@ -1473,7 +1476,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 /* Everything between the PRNG-CORE sentinels is pure numerics with no DOM
    access, so that this block can be lifted out of the page whole and
    checked against reference vectors computed with exact big-integer
-   arithmetic outside JavaScript.  Anything that touches the page itself
+   arithmetic outside JavaScript. Anything that touches the page itself
    belongs below the closing sentinel.
 
    Modular arithmetic is done in BigInt throughout. The student can type any
@@ -1655,7 +1658,7 @@ function predictMatch(xs, a, c, m) {
    that can recompute the scores averages them: near 2/3 per value
    against a chance level of 1/2. Only candidates drawn from the true
    distribution ever compete, and the keyed scoring regions move from
-   step to step, and so the marginal distribution stays uniform.  The
+   step to step, and so the marginal distribution stays uniform. The
    detection rates, the marginal uniformity, and the calibration of the
    uniformity tests on marked streams are all measured offline. */
 function wmQ(u) { return Math.floor(u * 4294967296) >>> 0; }
@@ -2913,7 +2916,7 @@ function setIndMode(m) {
    spots big enough to read as a deliberate grid. */
 function dotSize(distinct) { return distinct <= 256n ? 7 : distinct <= 65536n ? 4 : 2; }
 
-/* Outfit carries no subscript glyphs, so characters like U+2099 fell through to
+/* Outfit carries no subscript glyphs, and so characters like U+2099 fell through to
    whatever font on the machine did have them, at its own size and baseline. In a
    compound subscript the effect was plain: the plus in u(n+k) sat lower and smaller
    than the n beside it and read as a subscript of a subscript. Canvas has no markup,
@@ -3208,7 +3211,7 @@ function mrgOrbit(c) {
 function successorText(c, us) {
   /* Group the plotted draws into columns by output value, exactly as the
      lattice plot at the right does, and pick the left-most column whose
-     set of next values is small enough to list in full.  The returned hl
+     set of next values is small enough to list in full. The returned hl
      is that column's u, which drawMini shades to match. */
   /* Keys are the exact floats, not their printed roundings: two distinct
      outputs of a large-modulus pair can agree to six decimals, and rounding
@@ -4603,7 +4606,7 @@ function renderActive() {
 })();
 
 // ── Tooltips ────────────────────────────────────────────
-// One floating element serves every [data-tip] on the page, so two tips can never be
+// One floating element serves every [data-tip] on the page, and so two tips can never be
 // open at once and the text can carry markup. The title attribute is deliberately not
 // used: iOS and Android show it neither on tap nor on long press, and the keyboard
 // cannot reach it at all. See THEME.md.
@@ -4628,7 +4631,7 @@ function renderActive() {
     });
   }
   describe();
-  // Panels here are rebuilt from strings, so new triggers appear after load.
+  // Panels here are rebuilt from strings, and so new triggers appear after load.
   new MutationObserver(describe).observe(document.body,{childList:true,subtree:true});
 
   var openedBy=null;
@@ -4674,7 +4677,7 @@ function renderActive() {
   ['pointerup','pointercancel'].forEach(function(ev){
     document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
   });
-  // Capture phase, so a press never reaches the control's own handler.
+  // Capture phase, so that a press never reaches the control's own handler.
   document.addEventListener('click', function(e){
     if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
   }, true);
