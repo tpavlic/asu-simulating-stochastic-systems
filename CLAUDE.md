@@ -138,13 +138,16 @@ if (window.self !== window.top) {
   // never sent on a direct visit, and it never leaves the browser.
   (function () {
     var last = 0;
-    function report() {
+    function report(force) {
       var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
-      if (h > 0 && h !== last) { last = h; window.parent.postMessage({ subject: 'lti.frameResize', height: h }, '*'); }
+      if (h > 0 && (force || h !== last)) { last = h; window.parent.postMessage({ subject: 'lti.frameResize', height: h }, '*'); }
     }
-    if (window.ResizeObserver) { new ResizeObserver(report).observe(document.documentElement); }
-    window.addEventListener('load', report);
-    report();
+    if (window.ResizeObserver) { new ResizeObserver(function () { report(false); }).observe(document.documentElement); }
+    window.addEventListener('load', function () { report(true); });
+    // The host's listener may attach after this page has loaded (Canvas boots a large
+    // bundle after its HTML arrives), so repeat the current height a few times.
+    [500, 1500, 3000, 6000, 12000].forEach(function (ms) { setTimeout(function () { report(true); }, ms); });
+    report(true);
   })();
 }
 </script>
@@ -198,7 +201,11 @@ that working:
 - **Let the `ResizeObserver` do the tracking.** It fires on tab switches, on results panels that
   appear after a run, on late-loading web fonts, and on reflow after the host's column changes
   width, so no per-widget hook into the tab code is needed. The `last` check keeps it from
-  re-sending an unchanged height.
+  re-sending an unchanged height. The timed re-sends exist because Canvas attaches its listener
+  only once its own bundle has booted, which on a wiki page can be well after a small static
+  widget has finished loading; a height posted before that point is lost, and the observer will
+  not repeat it unless the content moves. Test the resize against a host page whose listener
+  attaches a few seconds late, not only against one that is listening from the start.
 
 The message carries only a subject string and one integer, is delivered in-browser to the parent
 window only, and makes no network request, so the `'*'` target origin is fine: the embedding site is
