@@ -17,7 +17,7 @@ modeling"), never by course ("in this course", "for Simulating Stochastic System
 
 The course framing lives only in the site chrome around the widgets: `index.html`, `README.md`,
 this file, and the shared back-link footer. The footer's "All course visualizations" label names
-no particular course and stays as is; its iframe-hiding script removes it when the widget is
+no particular course and stays as is; its embed script removes it when the widget is
 embedded in an LMS page, so it appears only on direct visits, where a link back to the index is
 intentional. URLs are exempt — `og:url`, `og:image`, and the GitHub Pages
 base necessarily contain the repository name, and that is fine; the rule is about human-readable
@@ -33,7 +33,7 @@ editing it.
 body interior untouched.** These apps are often authored or edited in a separate tool (such as Claude
 Desktop) and then re-imported, so the body between the head and the footer is owned by that tool.
 When you register, add, or set up a demo here, restrict your changes to the head metadata (title,
-description, OG/Twitter/GA tags) and the back-link footer with its iframe-hiding script, and do not
+description, OG/Twitter/GA tags) and the back-link footer with its embed script, and do not
 restructure or restyle anything in between, so a later re-import of the app body does not have to
 re-apply your interior edits. This applies to the setup/import path; when the user explicitly asks
 you to change the body (for example a footer or layout review pass), that is fine. Otherwise, if the
@@ -45,8 +45,8 @@ the demo's HTML file itself** before finishing:
 1. Check that `<head>` has a `<meta name="description">`, the full OG block, and the Twitter/X
    card block. If any are missing, add them (use the preview image dimensions from the actual
    file; aspect ratio should be close to 2:1 for Twitter).
-2. Check that the bottom of `<body>` has the standard back-link `<footer>` and the
-   iframe-hiding `<script>`. If missing, add them.
+2. Check that the bottom of `<body>` has the standard back-link `<footer>` and the embed
+   `<script>` (footer hiding plus the host-resize message). If missing, add them.
 
 Do this proactively — the user should not have to ask separately.
 
@@ -119,7 +119,7 @@ likewise use literal `—`, `<`, `>`, `'`, etc. (This applies only to the social
 `content` attributes; the human-visible `<title>` element and page body still follow normal
 HTML escaping rules.)
 
-### 2. Footer with back-link and iframe-hiding script
+### 2. Footer with back-link and embed script
 
 At the very bottom of `<body>`, before `</body>`, add:
 
@@ -130,7 +130,23 @@ At the very bottom of `<body>`, before `</body>`, add:
   </div>
 </footer>
 <script>
-if (window.self !== window.top) { var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; } }
+if (window.self !== window.top) {
+  var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; }
+  // Embedded in another page: report the content height to the host so the iframe can
+  // grow and shrink with the active tab instead of scrolling inside itself. Canvas LMS
+  // listens for this message on every page and resizes whichever iframe sent it. It is
+  // never sent on a direct visit, and it never leaves the browser.
+  (function () {
+    var last = 0;
+    function report() {
+      var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+      if (h > 0 && h !== last) { last = h; window.parent.postMessage({ subject: 'lti.frameResize', height: h }, '*'); }
+    }
+    if (window.ResizeObserver) { new ResizeObserver(report).observe(document.documentElement); }
+    window.addEventListener('load', report);
+    report();
+  })();
+}
 </script>
 ```
 
@@ -162,10 +178,32 @@ light, use the nearest readable accent instead. Keep `text-decoration:none` plus
 hover-underline, and match the underline behavior of the page's other footer links — see the
 link-decoration rule below.
 
-The `<script>` hides the footer when the page is embedded in a Canvas LMS iframe. Use
-`getElementById('course-nav-footer')` rather than `querySelector('footer')` — some demos
-have their own internal `<footer>` elements, and `querySelector` would match the first one
-it finds instead of the back-link footer.
+The `<script>` does two things when the page is embedded in an iframe, and nothing at all on a
+direct visit, because everything sits behind the `window.self !== window.top` guard. First, it hides
+the back-link footer. Use `getElementById('course-nav-footer')` rather than `querySelector('footer')`,
+because some demos have their own internal `<footer>` elements and `querySelector` would match the
+first one it finds. Second, it reports the page's content height to the host with the
+`lti.frameResize` message, which Canvas LMS listens for on every page (the listener matches the
+sender against every iframe on the page, not only LTI launches, and applies no maximum), so the
+iframe grows and shrinks with the active tab instead of scrolling inside itself. Three details keep
+that working:
+
+- **Measure the `<html>` element's box, not `scrollHeight`.** `scrollHeight` is floored at the
+  viewport height, so once the host has grown the iframe for a tall tab it would never report a
+  shorter one, and the iframe could never shrink back. The bounding rect of
+  `document.documentElement` is content-driven and includes the body margins.
+- **Keep `html` and `body` free of viewport-tied heights** (`min-height: 100vh` and the like). A
+  height that follows the iframe's height would feed back into the message and pin the iframe at
+  its tallest. Fixed-position overlays such as the shared tooltip are out of flow and do not matter.
+- **Let the `ResizeObserver` do the tracking.** It fires on tab switches, on results panels that
+  appear after a run, on late-loading web fonts, and on reflow after the host's column changes
+  width, so no per-widget hook into the tab code is needed. The `last` check keeps it from
+  re-sending an unchanged height.
+
+The message carries only a subject string and one integer, is delivered in-browser to the parent
+window only, and makes no network request, so the `'*'` target origin is fine: the embedding site is
+not known in advance, and nothing in the payload needs protecting. See "Embedding in Canvas LMS"
+below for the matching iframe code and how to test the resize.
 
 **Watch for body padding:** if the demo's `body` CSS has no `padding-bottom`, the footer will
 sit flush against the viewport edge. Add `padding-bottom` to the body or `margin-bottom` to
@@ -336,6 +374,39 @@ demo joins a directory that already holds one, tag at the widget level from here
 independent tools sharing a topic, and the directory name no longer picks out either.
 
 ---
+
+## Embedding in Canvas LMS
+
+Widgets are embedded in Canvas pages as plain iframes pasted through the Rich Content Editor's HTML
+view. Canvas's sanitizer keeps `src`, `width`, `height`, `loading`, `allowfullscreen`, `frameborder`,
+`scrolling`, `allow`, and `sandbox` on an iframe, plus the global `style`, `title`, `class`, and
+`id`, and the `src` must be http or https. Do not add `sandbox` (it blocks the widget's scripts) or
+`scrolling="no"` (it clips content wherever the resize message is not honored).
+
+- **Page title:** `Interactive: <Widget Name>`, with the widget's own name verbatim, as in
+  `Interactive: Monte Carlo Explorer`. The one-word prefix groups the interactive pages in the
+  Modules list and the Pages index and survives truncation on a phone; the tool names already say
+  "Explorer" or "Analyzer", so a longer prefix such as "Interactive Widget" only repeats that.
+- **Embed code**, with the URL, title, and fallback height changed per widget:
+
+  ```html
+  <iframe src="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html"
+          title="Monte Carlo Explorer"
+          width="100%" height="1560"
+          style="width:100%;border:0;display:block;"
+          loading="lazy" allowfullscreen></iframe>
+  <p><a href="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html" target="_blank" rel="noopener">Open the Monte Carlo Explorer in a new tab</a></p>
+  ```
+
+- **The `height` attribute is the fallback** for any host that ignores the resize message. Set it to
+  the tallest tab, measured with the footer hidden at about 780px (the narrow end of Canvas's
+  desktop content column) and rounded up a little to absorb results that appear after a run. Where
+  the message is honored, the attribute is overwritten within a frame of load and never seen.
+- **Test the resize with a local host page**, not by eye: serve the repository over HTTP (Playwright
+  refuses `file:` URLs), embed the widget in a page whose `message` listener applies
+  `lti.frameResize` to the sending iframe, and check on every tab that the iframe's height equals
+  the widget's content height and that the widget's `scrollHeight` does not exceed the iframe's
+  `clientHeight`. Walk the tabs in both directions so a failure to shrink shows up.
 
 ## HiDPI `<canvas>` rendering
 
