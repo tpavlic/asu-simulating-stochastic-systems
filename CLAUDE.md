@@ -132,6 +132,19 @@ At the very bottom of `<body>`, before `</body>`, add:
 <script>
 if (window.self !== window.top) {
   var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; }
+  // A min-height tied to the viewport (the "fill the window" idiom) would track the frame's
+  // own height and keep the frame from ever shrinking, so neutralize such rules here, where
+  // the frame is sized to the content. Cross-origin sheets (web fonts) throw and are skipped.
+  (function () {
+    function drop(rules) {
+      for (var i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (r.style && /vh\b/.test(r.style.minHeight)) { r.style.minHeight = '0'; }
+        if (r.cssRules) { drop(r.cssRules); }
+      }
+    }
+    for (var s = 0; s < document.styleSheets.length; s++) { try { drop(document.styleSheets[s].cssRules); } catch (e) {} }
+  })();
   // Embedded in another page: report the content height to the host so the iframe can
   // grow and shrink with the active tab instead of scrolling inside itself. Canvas LMS
   // listens for this message on every page and resizes whichever iframe sent it. It is
@@ -195,9 +208,11 @@ that working:
   viewport height, so once the host has grown the iframe for a tall tab it would never report a
   shorter one, and the iframe could never shrink back. The bounding rect of
   `document.documentElement` is content-driven and includes the body margins.
-- **Keep `html` and `body` free of viewport-tied heights** (`min-height: 100vh` and the like). A
-  height that follows the iframe's height would feed back into the message and pin the iframe at
-  its tallest. Fixed-position overlays such as the shared tooltip are out of flow and do not matter.
+- **Viewport-tied `min-height` rules are neutralized when embedded.** The `min-height: 100vh`
+  idiom that fills a window would track the frame's own height and keep it from ever shrinking, so
+  the script walks the page's stylesheets and zeroes any `min-height` given in `vh` units, whether
+  on `body` or on an inner wrapper. It touches only `min-height`, so a fixed-position overlay sized
+  with `height: 100vh` keeps working, and fixed-position elements are out of flow anyway.
 - **Let the `ResizeObserver` do the tracking.** It fires on tab switches, on results panels that
   appear after a run, on late-loading web fonts, and on reflow after the host's column changes
   width, so no per-widget hook into the tab code is needed. The `last` check keeps it from
@@ -390,10 +405,10 @@ view. Canvas's sanitizer keeps `src`, `width`, `height`, `loading`, `allowfullsc
 `id`, and the `src` must be http or https. Do not add `sandbox` (it blocks the widget's scripts) or
 `scrolling="no"` (it clips content wherever the resize message is not honored).
 
-- **Page title:** `Interactive: <Widget Name>`, with the widget's own name verbatim, as in
-  `Interactive: Monte Carlo Explorer`. The one-word prefix groups the interactive pages in the
-  Modules list and the Pages index and survives truncation on a phone; the tool names already say
-  "Explorer" or "Analyzer", so a longer prefix such as "Interactive Widget" only repeats that.
+- **Titles stay the widget's own.** The `<title>` element and the iframe's `title` attribute both
+  carry the widget's name exactly as it appears on the page. The Canvas page that hosts the
+  iframe is titled in Canvas, and whatever prefix that page uses is a Canvas-side choice that
+  never enters the widget or the embed code.
 - **Embed code**, with the URL, title, and fallback height changed per widget:
 
   ```html

@@ -4887,6 +4887,19 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
 if (window.self !== window.top) {
   var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; }
+  // A min-height tied to the viewport (the "fill the window" idiom) would track the frame's
+  // own height and keep the frame from ever shrinking, so neutralize such rules here, where
+  // the frame is sized to the content. Cross-origin sheets (web fonts) throw and are skipped.
+  (function () {
+    function drop(rules) {
+      for (var i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (r.style && /vh\b/.test(r.style.minHeight)) { r.style.minHeight = '0'; }
+        if (r.cssRules) { drop(r.cssRules); }
+      }
+    }
+    for (var s = 0; s < document.styleSheets.length; s++) { try { drop(document.styleSheets[s].cssRules); } catch (e) {} }
+  })();
   // Embedded in another page: report the content height to the host so the iframe can
   // grow and shrink with the active tab instead of scrolling inside itself. Canvas LMS
   // listens for this message on every page and resizes whichever iframe sent it. It is
