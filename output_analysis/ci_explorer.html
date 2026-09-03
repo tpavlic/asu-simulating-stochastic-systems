@@ -1,0 +1,2519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confidence Interval and Variance Reduction Techniques Explorer — interactive explainer</title>
+<meta name="description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+
+<!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Confidence Interval and Variance Reduction Techniques Explorer — interactive explainer">
+<meta property="og:description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+<meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer-preview.png">
+<meta property="og:image:width" content="1020">
+<meta property="og:image:height" content="510">
+<meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer.html">
+<meta property="fb:app_id" content="2385695445236853">
+
+<!-- Twitter/X card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Confidence Interval and Variance Reduction Techniques Explorer — interactive explainer">
+<meta name="twitter:description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+<meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer-preview.png">
+
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-Y66V2TS0R6"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Y66V2TS0R6');</script>
+
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* ── Chrome: course palette (see ../THEME.md) ─────────────────────── */
+  --accent:      #8C1D40;  /* ASU maroon */
+  --accent-dark: #6b1631;
+  --bg:          #ffffff;  /* matches a white Canvas LMS page when embedded */
+  --card:        #ffffff;
+  --border:      #e3dadd;
+  --text:        #191919;
+  --muted:       #6e6e6e;
+  --accent-wash: rgba(140,29,64,.06);
+  --accent-tint: rgba(140,29,64,.10);
+  --chart-bg:    #fbfafa;
+
+  /* ── Data: widget-owned, these encode meaning and are NOT themed ───
+     Teal reads as "the exact thing" (true curve, and a captured interval);
+     orange reads as "the sampled thing" (histogram, rug, estimates); red
+     marks an interval that missed. Hue never carries the miss alone: it is
+     also dashed with a hollow dot, so it still reads under red-green color
+     deficiency. */
+  --truth:       #0F6E8C;
+  --est:         #C2570A;
+  --est-pale:    rgba(194,87,10,.13);
+  --hit:         #0F6E8C;
+  --miss:        #D62828;
+  --warn:        #8b6914;
+  --pair:        #b9b3b6;  /* connecting lines between paired marks: neutral, carries no meaning */
+  --band:        rgba(15,110,140,.12);  /* shaded regions under the true density */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+       -webkit-text-size-adjust: 100%; }
+.widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
+.wh-copy { text-align:right; font-size:.72rem; color:var(--muted); margin-top:4px; }
+.wh-copy a { color:var(--accent); text-decoration:none; }
+.wh-copy a:hover { text-decoration:underline; }
+.wh-title { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+.wh-sub   { font-size: 0.875rem; color: var(--muted); margin-top: 3px; }
+.tabs { display: flex; gap: 3px; border-bottom: 2px solid var(--accent); margin: 4px 0 14px; align-items: flex-end; }
+.tab {
+  font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 500;
+  padding: 7px 12px; border: 2px solid transparent; border-bottom: none;
+  border-radius: 7px 7px 0 0; background: transparent; color: var(--muted);
+  cursor: pointer; margin-bottom: -2px; transition: .15s;
+  /* Never break a tab label across two lines; the dropdown takes over first. */
+  white-space: nowrap; flex-shrink: 0;
+}
+.tab.active { background: var(--card); color: var(--accent); font-weight: 700; border-color: var(--accent); border-bottom-color: var(--card); }
+.tab:hover:not(.active) { color: var(--accent); background: var(--accent-wash); }
+.tp { display: none; } .tp.active { display: block; }
+.ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+/* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
+   the WCAG 2.5.8 floor. The rows are already taller than this, so nothing moves. */
+.ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap;
+            display: inline-flex; align-items: center; min-height: 24px; }
+select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
+.btn-run { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 22px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run:hover { background: var(--accent-dark); }
+.btn-run:disabled { background: #aaa; cursor: not-allowed; }
+/* Secondary run button (the 100-run sweep): same weight as Run Experiment, but
+   outlined, so the single run stays the obvious first thing to click. */
+.btn-run2 { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-run2:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.btn-run2:disabled { color: #aaa; border-color: #d6d0d2; cursor: not-allowed; }
+/* A dotted underline means the same thing across these widgets: there is a tooltip
+   here, reachable by hover, tap, or keyboard focus. Never carried by a title
+   attribute, which shows nothing at all on a touch screen. */
+.tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+/* A button cannot use tap to open a tip, because tap already runs it, so it opens on
+   a long press instead and suppresses the callout iOS would otherwise raise. */
+[data-tip-press] { -webkit-touch-callout: none; }
+/* Descriptions live here for assistive tech: visible to a screen reader, to nothing
+   else. See the note on title in the tooltip script. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+           overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#tipbox { position: fixed; z-index: 60; max-width: 260px; padding: 8px 11px; border-radius: 7px;
+          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
+          box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
+          transition: opacity .08s; }
+/* Play and fast-forward are drawn, not typed. U+25B6 carries an emoji presentation,
+   which iOS resolves to Apple Color Emoji and renders as a white triangle in a
+   blue-grey box, and two of those read as two separate glyphs rather than one
+   fast-forward. currentColor keeps them following the button's text through its
+   hover state. Sized in em so they track the label. */
+.btn-ico { height: .68em; width: auto; fill: currentColor; flex: 0 0 auto; }
+.btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
+.btn-clear:hover { color: var(--accent); border-color: var(--accent); }
+/* Holds the seed label, field and checkbox together so the row does not split
+   them at ordinary widths; wraps internally only when it genuinely cannot fit. */
+.ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+.ctrl-row + .ctrl-row { margin-top: -4px; }
+/* A label never ends one line while its field starts the next. */
+.ctrl-pair { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* Below the width where the four parameter pairs fit on one line, they form a 2×2 grid
+   instead of wrapping ragged. Measured at implementation: the row wraps at 804px and
+   stays on one line at 805px and above. The grid kicks in at 51em (816px), just above
+   that threshold; the em unit tracks the browser's default font size like the
+   tab-strip breakpoint does. */
+@media (max-width: 51em) {
+  .ctrl-row.par-row { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 8px 22px; }
+  /* At the very narrow end (~390px), the two columns' natural widths no longer both fit;
+     letting the label text wrap keeps the control beside it instead of overflowing. */
+  .par-row .ctrl-pair, .par-row .ctrl-lbl { white-space: normal; }
+  .par-row .seed-msg { grid-column: 1 / -1; }
+  /* The rho pair's label ("Input share of variance ρ") plus its slider and value
+     reading need more room than a two-column half-width cell gives them at this
+     width; span the full row so the label wraps to two lines, as tab ①'s labels do,
+     instead of collapsing to one narrow word per line beside a squeezed slider. */
+  .par-row .ctrl-pair-wide { grid-column: 1 / -1; }
+}
+.seed-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 108px;
+            padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+            background: #fff; color: var(--text); }
+/* Invalid state is border + wash + aria-invalid + a text message, never color alone */
+.seed-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.ctrl-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; min-height: 24px;
+            font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; }
+.ctrl-chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
+/* Own line inside the wrapping row, with the height reserved so text causes no shift */
+.seed-msg { flex: 0 0 100%; min-height: 1.15em; margin-top: -2px;
+            font-size: .75rem; line-height: 1.35; color: var(--muted); }
+.seed-msg.bad { color: var(--accent); font-weight: 600; }
+/* Tab ①/②'s par-row reserves this line's height even when empty, which sits those
+   tabs' seed row visibly farther from the parameter row than tab ③, whose par-row
+   carries no such span at all. Collapse the reservation when there is no message,
+   so the gap above the seed row matches across tabs regardless of whether the row
+   happens to have a validation-message span. */
+.par-row .seed-msg:empty { display: none; }
+.seed-inp:focus-visible, select:focus-visible, .tab-select:focus-visible,
+.btn-run:focus-visible, .btn-run2:focus-visible, .btn-clear:focus-visible, .tab:focus-visible,
+.ctrl-chk input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+/* Shrinkable, so a narrow viewport scales the plot down instead of overflowing */
+.cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px;
+           flex: 0 0 407px; max-width: 100%; min-width: 0; }
+.cv-leg { font-size: .7rem; color: var(--muted); text-align: center; margin-top: 6px; }
+.stats-panel { flex: 1; min-width: 0; }
+/* minmax(0,1fr), not 1fr: the stat values are nowrap, so an auto minimum would
+   give the columns a large min-content width and push the page into h-scroll. */
+.sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
+/* Stacked layout, still wide: eight cards read better as two rows of four than four of two. */
+@media (max-width: 760px) and (min-width: 560px) { .sg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+.sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+/* Greek letters and x-bar inside the uppercase stat labels keep their case and spacing. */
+.sym { text-transform: none; letter-spacing: 0; }
+.sym sub { font-size: .8em; }
+.ov { position: relative; display: inline-block; text-transform: none; letter-spacing: 0; }
+.ov::before { content: ''; position: absolute; left: .06em; right: .06em; top: .17em; border-top: .09em solid currentColor; }
+.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sc-val.acc { color: var(--est); }
+.sc-val.dim { color: var(--truth); font-size: .9rem; }
+.hint { background: #f5f2f3; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+.hint.wide { margin-bottom: 13px; }
+.sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
+.sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
+/* Capture tally under a history chart -- what the 100-run sweep is for. The height
+   is reserved so the section does not jump when the first run fills it in. */
+.hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; min-height: 1.2em; }
+.hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
+svg.hsv { display: block; width: 100%; height: auto; }
+.hist-handle { cursor: ns-resize; touch-action: none; }
+svg.hsv.hot .hist-truth { stroke-width: 3; }
+/* Shared equation vocabulary – used by the explainer section on every tab.
+   Neutral names on purpose: further tabs are expected to reuse these. */
+.eq-row { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; padding: 3px 0; }
+.eq-lbl { font-family: 'Outfit',sans-serif; font-size: .88rem; font-weight: 600;
+          color: var(--accent); flex-shrink: 0; min-width: 148px; }
+.eq-val { font-family: 'IBM Plex Mono',monospace; font-size: .83rem; color: var(--accent); }
+.eq-hr  { border: none; border-top: 1px solid var(--border); margin: 5px 0; }
+.eq-fine { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+.exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
+/* Body links share the footer links' behavior: accent color, underline on hover
+   only, per the link-decoration convention in CLAUDE.md. The back-link footer sets
+   color:inherit inline, which outranks this rule, so it keeps following its footer. */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+.tab-group { position: relative; display: flex; gap: 3px; padding-top: 17px; margin-left: 8px; }
+.tab-group::before {
+  content: ''; position: absolute; top: 10px; left: 6px; right: 6px;
+  border-top: 1.5px solid var(--border);
+}
+.tab-group-lbl {
+  position: absolute; top: 2px; left: 50%; transform: translateX(-50%);
+  font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); background: var(--bg); padding: 0 7px; white-space: nowrap;
+}
+.tab-select {
+  display: none; width: 100%; font-family: 'Outfit', sans-serif;
+  font-size: .95rem; font-weight: 700; padding: 8px 14px;
+  border: 2px solid var(--accent); border-radius: 7px;
+  background: var(--card); color: var(--accent); cursor: pointer;
+  margin: 2px 0 14px; appearance: auto;
+}
+/* Swap the tab strip for the dropdown before the labels would wrap.
+   em rather than px so a larger default font size flips the switch
+   sooner because media-query em tracks the browser default. */
+/* These shorter tab names need about 956px of viewport; below that the
+   strip gives way to the dropdown, whose optgroup carries the shorter
+   group name. */
+@media (max-width: 60em) {
+  .tabs { display: none; }
+  .tab-select { display: block; }
+}
+.cr-sep { display: inline; }
+.cr-br { display: none; }
+@media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
+/* Below this the stats panel beside a 407px figure card would be under 260px wide,
+   so the row stacks and the card takes the full width. */
+@media (max-width: 760px) { .viz-row { flex-direction: column; } .cv-card { flex-basis: auto; } }
+/* Numeric parameter fields (μ, σ, ...): same look as the seed field, narrower. */
+.par-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 76px;
+           padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+           background: #fff; color: var(--text); }
+.par-inp[aria-invalid="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.par-inp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Spinner: a numeric field with an up/down pair that appears on hover or focus and
+   drives the same stepper as the arrow keys. With no hover (a touch screen) the pair
+   sits beside the field at full size, since a hidden control is no control. */
+.spin { position: relative; display: inline-flex; align-items: center; }
+.spin-btns { position: absolute; right: 3px; top: 3px; bottom: 3px; display: none; flex-direction: column; gap: 1px; }
+.spin:hover .spin-btns, .spin:focus-within .spin-btns { display: flex; }
+.spin-btn { flex: 1 1 0; width: 18px; padding: 0; border: 1px solid var(--border); border-radius: 3px;
+            background: #fff; color: var(--muted); font-size: 8px; line-height: 1; cursor: pointer; }
+.spin-btn:hover { color: var(--accent); border-color: var(--accent); }
+.spin-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.spin .par-inp, .spin .seed-inp { padding-right: 24px; }
+@media (hover: none) {
+  /* The 28px pair beside a field can outgrow a narrow grid column (e.g. the
+     paired μ₁/μ₂ fields on tab ②'s two-column layout at 390px); letting the
+     group wrap drops the buttons to their own line under the field instead
+     of pushing the page into horizontal scroll. */
+  .spin { flex-wrap: wrap; }
+  .spin-btns { position: static; display: flex; flex-direction: row; gap: 4px; margin-left: 4px; }
+  .spin-btn { width: 28px; height: 28px; font-size: 11px; }
+  .spin .par-inp, .spin .seed-inp { padding-right: 8px; }
+}
+/* Range inputs: 26px tall so a finger lands on the strip, per CLAUDE.md. */
+input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+.rng-val { font-family: 'IBM Plex Mono', monospace; font-size: .85rem; color: var(--text); min-width: 3.2em; display: inline-block; }
+#crn-rho { width: 140px; max-width: 45vw; }  /* the max-width applies at every size, so the pair can never overflow */
+#is-theta { width: 140px; max-width: 45vw; }  /* narrow screens: keeps the pair off the widget's right edge */
+/* Figures are SVG with a viewBox; the card shrinks them rather than overflowing. */
+svg.fig { display: block; width: 100%; height: auto; }
+/* Drag handles on the tab ① figure. touch-action:none on the handle alone lets a
+   drag that starts on it move μ or σ while a swipe anywhere else still scrolls. */
+.ci-handle { cursor: ew-resize; touch-action: none; }
+#ci-fig.hot-mu #ci-muline, #ci-fig.hot-sigma #ci-curve { stroke-width: 3.5; }
+/* Two stacked history charts: a small heading over each, sharing one section. */
+.hist-hd { font-size: .78rem; font-weight: 700; color: var(--muted); margin: 6px 0 2px; }
+.hist-hd + svg.hsv { margin-top: 2px; }
+/* Lesson cards under an explanation: three short columns that stack when narrow. */
+.cards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.card { flex: 1 1 200px; min-width: 0; background: var(--accent-wash); border-radius: 7px; padding: 9px 11px; font-size: .8rem; color: var(--text); line-height: 1.5; }
+.card strong { display: block; color: var(--accent); font-size: .82rem; margin-bottom: 3px; }
+@media (prefers-reduced-motion: reduce) { .tab, .btn-run, .btn-run2, .btn-clear { transition: none; } }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div style="margin-bottom:14px">
+    <div class="wh-title">Confidence Interval and Variance Reduction Techniques Explorer</div>
+    <div class="wh-sub">Sample a known population, build interval estimates, and watch them capture the truth; then narrow them with variance reduction</div>
+    <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="ci" onclick="showTab('ci',this)">① Confidence Intervals</button>
+    <div class="tab-group">
+      <span class="tab-group-lbl" aria-hidden="true">Variance reduction: narrowing the interval</span>
+      <button class="tab" data-tab="crn" onclick="showTab('crn',this)">② Common Random Numbers</button>
+      <button class="tab" data-tab="av" onclick="showTab('av',this)">③ Antithetic Variates</button>
+      <button class="tab" data-tab="cv" onclick="showTab('cv',this)">④ Control Variates</button>
+      <button class="tab" data-tab="is" onclick="showTab('is',this)">⑤ Importance Sampling</button>
+    </div>
+  </nav>
+  <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
+    <option value="ci">① Confidence Intervals</option>
+    <optgroup label="Variance Reduction">
+      <option value="crn">② Common Random Numbers</option>
+      <option value="av">③ Antithetic Variates</option>
+      <option value="cv">④ Control Variates</option>
+      <option value="is">⑤ Importance Sampling</option>
+    </optgroup>
+  </select>
+
+  <!-- ── TAB ①: confidence intervals ─────────────────────────────────── -->
+  <section id="tab-ci" class="tp active">
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="ci-mu"><span class="tip" tabindex="0" data-tip="The population mean, the number every interval is trying to capture. Changing it mid-history moves the dashed line in the chart below rather than clearing the chart. Arrow keys move it by 0.1; hold Shift for 1. You can also drag the dashed line in the figure.">Population mean μ</span></label>
+        <input class="par-inp" id="ci-mu" type="text" inputmode="decimal" value="5" autocomplete="off" spellcheck="false" aria-describedby="ci-par-msg" onchange="ciParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="ci-sigma"><span class="tip" tabindex="0" data-tip="The population standard deviation σ. The half-width grows in proportion to it; σ² is shown in the stats for readers who think in variances. Arrow keys or the buttons move it by 0.01; hold Shift for 0.1. You can also drag the curve in the figure.">Std. dev. σ</span></label>
+        <input class="par-inp" id="ci-sigma" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="ci-par-msg" onchange="ciParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="ci-n">Samples per run n</label>
+        <select id="ci-n" onchange="ciParamsChanged()">
+          <option value="5">5</option><option value="10">10</option><option value="15">15</option>
+          <option value="20" selected>20</option><option value="30">30</option><option value="50">50</option>
+          <option value="100">100</option><option value="200">200</option><option value="1000">1,000</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="ci-conf"><span class="tip" tabindex="0" data-tip="The confidence level 100(1 − α)%. Lower confidence gives a narrower interval that misses more often, and this is the only control that changes the miss rate.">Confidence</span></label>
+        <select id="ci-conf" onchange="ciParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option><option value="0.6">60%</option><option value="0.4">40%</option>
+        </select>
+      </span>
+      <span class="seed-msg" id="ci-par-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="ci-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly, which is what makes an experiment here repeatable. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+        <input class="seed-inp" id="ci-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="ci-seed-msg" onchange="normalizeSeed('ci')" onkeydown="if(event.key==='Enter'){event.preventDefault();runCi();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="ci-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="ci-run" onclick="runCi()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="ci-run100" onclick="runCiBatch()" data-tip="Runs 100 experiments back to back from consecutive seeds and draws only the last. The miss tally under the history chart should settle near α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearCi()">Clear history</button>
+      <span class="seed-msg" id="ci-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="ci-fig" role="img" aria-label="The population density with the run's sample as a rug and histogram, the sample mean, and the confidence interval"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--truth)">— true density and μ</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">▮ sample histogram and rug</span>&nbsp;&nbsp;
+          <span>⊢●⊣ interval and its mean (solid teal captures μ; dashed red, hollow dot, misses)</span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Sample mean <span class="ov">x</span></div><div class="sc-val acc" id="ci-s-mean">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">μ</span></div><div class="sc-val dim" id="ci-s-mu">5</div></div>
+          <div class="sc"><div class="sc-lbl">Sample std. dev. S</div><div class="sc-val acc" id="ci-s-sd">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">σ</span> (<span class="sym">σ²</span>)</div><div class="sc-val dim" id="ci-s-sigma">0.1 (0.01)</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="sym">t<sub>α/2,n−1</sub></span> at <span id="ci-s-conf">95%</span></div><div class="sc-val" id="ci-s-t">—</div></div>
+          <div class="sc"><div class="sc-lbl">Half-width H = <span class="sym">t·S/√n</span></div><div class="sc-val" id="ci-s-h">—</div></div>
+          <div class="sc"><div class="sc-lbl">Captures <span class="sym">μ</span>?</div><div class="sc-val" id="ci-s-hit">—</div></div>
+          <div class="sc"><div class="sc-lbl">Interval <span class="ov">x</span> ± H, <span id="ci-s-conf2">95%</span></div><div class="sc-val" id="ci-s-int">—</div></div>
+        </div>
+        <div class="sr-only" id="ci-live" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="hint wide">Each run draws n values from the normal population by inverse-transform sampling, computes <span class="ov">x</span> and S, and forms the interval <span class="ov">x</span> ± t·S/√n. The population is known here on purpose: it is the only way to check whether an interval did its job. Run many experiments, and watch the tally settle near α, the fraction that the confidence level promises will miss. Drag the dashed μ line to move the mean, or drag the curve itself to change σ; the fields above follow as you drag, and the last sample stays put so you can see the population move beneath it. The x-axis stays fixed so a change of σ shows as a change of width; μ can move only within it, and Clear history re-centers the axes on the current population.</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history — confidence intervals for μ</div>
+      <div id="ci-hw"><svg class="hsv" id="ci-hist"></svg></div>
+      <div class="hist-cap" id="ci-cap"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Where the interval comes from and what changes its width</div>
+      <div class="exp-note">A one-sample t test at level α fails to reject the hypothesized mean μ whenever |<span class="ov">x</span> − μ| ≤ t<sub>α/2,n−1</sub>·S/√n. Solving that inequality for μ gives the set of means the data cannot rule out, which is the confidence interval. An interval that excludes a hypothesized value is the same thing as a rejection at level α.</div>
+      <div class="eq-row"><span class="eq-lbl">Half-width:</span><span class="eq-val">H = t<sub>α/2,n−1</sub> · S / √n</span></div>
+      <div class="eq-row"><span class="eq-lbl">Interval:</span><span class="eq-val">[ <span class="ov">x</span> − H , <span class="ov">x</span> + H ]</span></div>
+      <div class="eq-row"><span class="eq-lbl">Guarantee:</span><span class="eq-val">Pr( μ ∈ [<span class="ov">x</span> − H, <span class="ov">x</span> + H] ) = 1 − α</span></div>
+      <div class="eq-hr"></div>
+      <div class="cards">
+        <div class="card"><strong>Lower α: wider, misses less</strong>Raising the confidence level raises t. The interval widens, and fewer of them miss. At 99.9% almost none miss; at 40% most do. This is the only control that changes the miss rate.</div>
+        <div class="card"><strong>Larger n: narrower, same miss rate</strong>H shrinks like 1/√n, and t itself falls toward 1.96 as the degrees of freedom grow. Four times the samples halves the width. The fraction that miss stays at α.</div>
+        <div class="card"><strong>Larger σ: wider, same miss rate</strong>H grows in proportion to the spread of the population because S estimates σ. Doubling σ doubles the width, and again the fraction that miss stays at α.</div>
+      </div>
+      <div class="eq-fine" style="margin-top:8px">Change μ, σ, n, or the confidence level between runs, and the history keeps going: the dashed true-mean line steps to the new μ, a faint divider marks the change, and the widths on either side of it can be compared directly.</div>
+    </div>
+  </section>
+
+  <!-- ── TAB ②: common random numbers ────────────────────────────────── -->
+  <section id="tab-crn" class="tp">
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="crn-mu1">Mean of system 1, μ₁</label>
+        <input class="par-inp" id="crn-mu1" type="text" inputmode="decimal" value="10" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="crn-mu2">Mean of system 2, μ₂</label>
+        <input class="par-inp" id="crn-mu2" type="text" inputmode="decimal" value="10.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="crn-sigma">Output std. dev. σ</label>
+        <input class="par-inp" id="crn-sigma" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
+      </span>
+      <span class="seed-msg" id="crn-par-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="crn-rho"><span class="tip" tabindex="0" data-tip="The share of each output's variance that comes from the random input the two systems can share, as opposed to noise of their own. It equals the correlation between paired outputs under common random numbers. In a real simulation the input is the whole random-number stream, and sharing it means reusing the seed.">Input share of variance ρ</span></label>
+        <input type="range" id="crn-rho" min="0" max="0.95" step="0.05" value="0.8" oninput="crnRhoShow()" onchange="crnParamsChanged()" aria-describedby="crn-rho-val">
+        <span class="rng-val" id="crn-rho-val">0.80</span>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="crn-n">Pairs per run n</label>
+        <select id="crn-n" onchange="crnParamsChanged()">
+          <option value="5">5</option><option value="10" selected>10</option><option value="20">20</option>
+          <option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="crn-conf">Confidence</label>
+        <select id="crn-conf" onchange="crnParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option>
+        </select>
+      </span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="crn-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly.">Seed</span></label>
+        <input class="seed-inp" id="crn-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="crn-seed-msg" onchange="normalizeSeed('crn')" onkeydown="if(event.key==='Enter'){event.preventDefault();runCrn();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="crn-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="crn-run" onclick="runCrn()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="crn-run100" onclick="runCrnBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. Both tallies should settle near α; the paired intervals should exclude zero far more often." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearCrn()">Clear history</button>
+      <span class="seed-msg" id="crn-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="crn-fig" role="img" aria-label="Outputs of the two systems as dot columns, once with independent inputs and once with pairs joined by lines under common random numbers, plus a strip of the paired differences beside a zero line"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--est)">● system 1&nbsp; ○ system 2</span>&nbsp;&nbsp;
+          <span style="color:var(--pair)">— joins a pair that shared an input</span>&nbsp;&nbsp;
+          <span style="color:var(--truth)">┄ true means</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">● dᵢ = y₁ᵢ − y₂ᵢ</span>&nbsp;&nbsp;
+          <span style="color:var(--muted)">— zero</span>
+          <span id="crn-fig-note"></span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl"><span class="ov">y</span>₁ − <span class="ov">y</span>₂ (independent)</div><div class="sc-val acc" id="crn-s-di">—</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="ov">d</span> (paired)</div><div class="sc-val acc" id="crn-s-dc">—</div></div>
+          <div class="sc"><div class="sc-lbl">Welch half-width (df)</div><div class="sc-val" id="crn-s-hi">—</div></div>
+          <div class="sc"><div class="sc-lbl">Paired half-width (df)</div><div class="sc-val" id="crn-s-hc">—</div></div>
+          <div class="sc"><div class="sc-lbl">Width ratio, paired ÷ Welch</div><div class="sc-val" id="crn-s-ratio">—</div></div>
+          <div class="sc"><div class="sc-lbl">Theory: <span class="sym">√(1 − ρ)</span></div><div class="sc-val dim" id="crn-s-theory">0.447</div></div>
+          <div class="sc"><div class="sc-lbl">Sample correlation r of pairs</div><div class="sc-val" id="crn-s-r">—</div></div>
+          <div class="sc"><div class="sc-lbl">True difference <span class="sym">δ = μ₁ − μ₂</span></div><div class="sc-val dim" id="crn-s-delta">−0.5</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint wide">Both arms cost the same 2n simulation runs. In the independent arm each system draws its own input; in the common-random-numbers arm pair i feeds both systems the same input and the analysis moves to the n differences d<sub>i</sub> = y<sub>1i</sub> − y<sub>2i</sub>. Input variance that both outputs share cancels in the difference, and so the paired interval is narrower by about √(1 − ρ) and more often excludes zero, which is the evidence that the systems differ.</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history — confidence intervals for δ = μ₁ − μ₂</div>
+      <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
+      <div id="crn-hw1"><svg class="hsv" id="crn-hist1"></svg></div>
+      <div class="hist-cap" id="crn-cap1"></div>
+      <div class="hist-hd">Common random numbers (paired-difference interval)</div>
+      <div id="crn-hw2"><svg class="hsv" id="crn-hist2"></svg></div>
+      <div class="hist-cap" id="crn-cap2"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why sharing inputs narrows the interval and why the analysis must then be paired</div>
+      <div class="eq-row"><span class="eq-lbl">Variance of the difference:</span><span class="eq-val">Var(ȳ₁ − ȳ₂) = (σ₁² + σ₂² − 2ρσ₁σ₂) / n</span></div>
+      <div class="eq-row"><span class="eq-lbl">With σ₁ = σ₂ = σ:</span><span class="eq-val">= 2σ²(1 − ρ) / n</span></div>
+      <div class="eq-hr"></div>
+      <div class="exp-note">Independent inputs make ρ zero. Feeding both systems the same input makes their outputs move together, ρ &gt; 0, and the shared part of the variance cancels in the difference. What remains reflects how the systems differ, not how the inputs happened to fall. The price is that the two samples are no longer independent, and the two-sample (Welch or pooled) interval no longer applies: the n differences are independent of each other, and the one-sample interval on them is the right tool. That is the paired-difference t test in its interval form.</div>
+      <div class="cards">
+        <div class="card"><strong>Two-sample rule</strong>An interval for μ₁ − μ₂ that excludes zero is a rejection of "no difference" at level α. Comparing two separate one-sample intervals for overlap is a weaker and less reliable test.</div>
+        <div class="card"><strong>Set ρ to zero</strong>With nothing shared, the paired interval is slightly wider than Welch's: it spends n − 1 degrees of freedom where Welch has about 2(n − 1). Pairing only pays when the inputs matter.</div>
+        <div class="card"><strong>Set ρ near one</strong>Almost all of the variance is input, and the paired interval collapses onto the true difference. This is why a seed shared across designs is the first variance-reduction tool to reach for when comparing systems.</div>
+      </div>
+      <div class="eq-fine" style="margin-top:8px">The sample-size side of the same fact, how many paired runs a given correlation saves, is on the <a href="../power_analysis/power_explorer.html" target="_blank" rel="noopener">Power Explorer</a>'s paired-runs tab.</div>
+    </div>
+  </section>
+
+  <!-- ── TAB ③: antithetic variates ──────────────────────────────────── -->
+  <section id="tab-av" class="tp">
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="av-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one uniform random number u. The first three rise or fall steadily in u; the last one does not, and on it antithetic pairing does nothing.">Model h(u)</span></label>
+        <select id="av-fn" onchange="avParamsChanged()"></select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="av-n">Pairs per run n</label>
+        <select id="av-n" onchange="avParamsChanged()">
+          <option value="5">5</option><option value="10">10</option><option value="25" selected>25</option>
+          <option value="50">50</option><option value="100">100</option><option value="250">250</option><option value="500">500</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="av-conf">Confidence</label>
+        <select id="av-conf" onchange="avParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option>
+        </select>
+      </span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="av-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly.">Seed</span></label>
+        <input class="seed-inp" id="av-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="av-seed-msg" onchange="normalizeSeed('av')" onkeydown="if(event.key==='Enter'){event.preventDefault();runAv();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="av-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="av-run" onclick="runAv()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="av-run100" onclick="runAvBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. Both tallies should settle near α; the antithetic intervals should be visibly narrower on a monotone model." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearAv()">Clear history</button>
+      <span class="seed-msg" id="av-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="av-fig" role="img" aria-label="The model h(u) over the unit interval with each antithetic pair drawn as two linked points mirrored about one half and each pair mean ticked on the value axis"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--truth)">— h(u) and its mean</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">● h(u)&nbsp; ○ h(1 − u)</span>&nbsp;&nbsp;
+          <span style="color:var(--truth)">▸ pair means</span>
+          <span id="av-fig-note"></span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Independent mean (2n)</div><div class="sc-val acc" id="av-s-mi">—</div></div>
+          <div class="sc"><div class="sc-lbl">Antithetic mean (n pairs)</div><div class="sc-val acc" id="av-s-ma">—</div></div>
+          <div class="sc"><div class="sc-lbl">Independent half-width (df)</div><div class="sc-val" id="av-s-hi">—</div></div>
+          <div class="sc"><div class="sc-lbl">Antithetic half-width (df)</div><div class="sc-val" id="av-s-ha">—</div></div>
+          <div class="sc"><div class="sc-lbl">Sample corr. of <span class="sym">h(u)</span>, <span class="sym">h(1 − u)</span></div><div class="sc-val" id="av-s-r">—</div></div>
+          <div class="sc"><div class="sc-lbl">Exact corr. (from moments)</div><div class="sc-val dim" id="av-s-rx">—</div></div>
+          <div class="sc"><div class="sc-lbl">Var of pair mean ÷ Var of one value</div><div class="sc-val" id="av-s-vr">—</div></div>
+          <div class="sc"><div class="sc-lbl">True mean <span class="sym">E[h(U)]</span></div><div class="sc-val dim" id="av-s-true">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm follows them with n fresh draws and averages all 2n values. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows.</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history — confidence intervals for E[h(U)]</div>
+      <div class="hist-hd">Independent draws (2n values)</div>
+      <div id="av-hw1"><svg class="hsv" id="av-hist1"></svg></div>
+      <div class="hist-cap" id="av-cap1"></div>
+      <div class="hist-hd">Antithetic pairs (n pair means)</div>
+      <div id="av-hw2"><svg class="hsv" id="av-hist2"></svg></div>
+      <div class="hist-cap" id="av-cap2"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why negatively correlated pairs narrow the interval</div>
+      <div class="eq-row"><span class="eq-lbl">Pair mean:</span><span class="eq-val">Z = (Y<sub>a</sub> + Y<sub>b</sub>) / 2,&nbsp; E[Z] = E[Y]</span></div>
+      <div class="eq-row"><span class="eq-lbl">Its variance:</span><span class="eq-val">Var(Z) = ( Var Y<sub>a</sub> + Var Y<sub>b</sub> + 2 Cov(Y<sub>a</sub>, Y<sub>b</sub>) ) / 4</span></div>
+      <div class="eq-row"><span class="eq-lbl">With antithetic inputs:</span><span class="eq-val">Y<sub>a</sub> = h(U),&nbsp; Y<sub>b</sub> = h(1 − U)</span></div>
+      <div class="eq-hr"></div>
+      <div class="exp-note">Averaging two values costs nothing in bias, and the variance of the average falls below half the variance of one value exactly when the two are negatively correlated. Two independent draws never are. But U and 1 − U are perfectly negatively correlated, and if h is monotone (rising or falling throughout), a large h(U) comes with a small h(1 − U), and so the outputs inherit a negative correlation from the inputs. Each pair is one independent observation, and so the n pair means go through the ordinary interval formula, and the generator is only consulted n times for 2n model evaluations.</div>
+      <div class="cards">
+        <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the mirror 1 − u gives exactly the same value, and so the "pair mean" is the value itself. The antithetic interval is built from n values, whereas the independent one has 2n, and it comes out wider. Monotonicity is the whole trick.</div>
+        <div class="card"><strong>The limiting case</strong>A model that is a linear function of a normal inverse transform, h(u) = μ + σΦ⁻¹(u), has h(1 − u) = 2μ − h(u): every pair mean is exactly μ, and the interval has zero width. Real models sit between that and the bowl.</div>
+        <div class="card"><strong>Antithetic and common random numbers</strong>Both manipulate inputs to induce correlation. Common random numbers want positive correlation between two systems' outputs so their difference is stable; antithetic variates want negative correlation within one system so an average is stable.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TAB ④: control variates ─────────────────────────────────────── -->
+  <section id="tab-cv" class="tp">
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="cv-fn"><span class="tip" tabindex="0" data-tip="The same four stand-in models as the antithetic tab. The control variate is the uniform input itself, whose mean ½ is known exactly.">Model h(u)</span></label>
+        <select id="cv-fn" onchange="cvParamsChanged()"></select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="cv-n">Draws per run n</label>
+        <select id="cv-n" onchange="cvParamsChanged()">
+          <option value="10">10</option><option value="25">25</option><option value="50" selected>50</option>
+          <option value="100">100</option><option value="250">250</option><option value="1000">1,000</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="cv-conf">Confidence</label>
+        <select id="cv-conf" onchange="cvParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option>
+        </select>
+      </span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="cv-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly.">Seed</span></label>
+        <input class="seed-inp" id="cv-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="cv-seed-msg" onchange="normalizeSeed('cv')" onkeydown="if(event.key==='Enter'){event.preventDefault();runCv();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="cv-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="cv-run" onclick="runCv()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="cv-run100" onclick="runCvBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. Both tallies should settle near α; the control-variate intervals should be much narrower on a model that co-varies with u." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearCv()">Clear history</button>
+      <span class="seed-msg" id="cv-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="cv-fig" role="img" aria-label="Scatter of the model output against its uniform input with the fitted control-variate line through the point one half, sample mean"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--est)">● (u, h(u))</span>&nbsp;&nbsp;
+          <span style="color:var(--truth)">— fitted line of slope c through (½, ȳ)</span>&nbsp;&nbsp;
+          <span style="color:var(--pair)">| residuals</span>
+          <span id="cv-fig-note"></span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Plain mean <span class="ov">y</span></div><div class="sc-val acc" id="cv-s-mp">—</div></div>
+          <div class="sc"><div class="sc-lbl">Control-variate mean <span class="ov">z</span></div><div class="sc-val acc" id="cv-s-mc">—</div></div>
+          <div class="sc"><div class="sc-lbl">Plain half-width (df)</div><div class="sc-val" id="cv-s-hp">—</div></div>
+          <div class="sc"><div class="sc-lbl">Control-variate half-width (df)</div><div class="sc-val" id="cv-s-hc">—</div></div>
+          <div class="sc"><div class="sc-lbl">Estimated <span class="sym">c</span></div><div class="sc-val" id="cv-s-c">—</div></div>
+          <div class="sc"><div class="sc-lbl">Exact <span class="sym">c*</span> = <span class="sym">Cov(U, h) / Var(U)</span></div><div class="sc-val dim" id="cv-s-cx">—</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="sym">r²</span> and variance factor 1 − <span class="sym">r²</span></div><div class="sc-val" id="cv-s-r2">—</div></div>
+          <div class="sc"><div class="sc-lbl">True mean <span class="sym">E[h(U)]</span></div><div class="sc-val dim" id="cv-s-true">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint wide">The same n draws feed both arms. The plain arm averages y = h(u). The control-variate arm notices that u itself is available, has known mean ½, and co-varies with y, and so a run whose u values happened to come out high will have a y average that is high for that reason. Subtracting c(ū − ½) corrects for it. With c chosen to minimize the variance, the interval shrinks by the factor √(1 − r²).</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history — confidence intervals for E[h(U)]</div>
+      <div class="hist-hd">Plain average of h(u)</div>
+      <div id="cv-hw1"><svg class="hsv" id="cv-hist1"></svg></div>
+      <div class="hist-cap" id="cv-cap1"></div>
+      <div class="hist-hd">Control-variate estimate z = h(u) − c(u − ½)</div>
+      <div id="cv-hw2"><svg class="hsv" id="cv-hist2"></svg></div>
+      <div class="hist-cap" id="cv-cap2"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why a correlated quantity with a known mean reduces variance</div>
+      <div class="eq-row"><span class="eq-lbl">Adjusted variable:</span><span class="eq-val">Z = Y − c (X − E[X]),&nbsp; E[Z] = E[Y] for every c</span></div>
+      <div class="eq-row"><span class="eq-lbl">Its variance:</span><span class="eq-val">Var(Z) = Var Y − 2c Cov(X, Y) + c² Var X</span></div>
+      <div class="eq-row"><span class="eq-lbl">Best c:</span><span class="eq-val">c* = Cov(X, Y) / Var X,&nbsp; Var(Z) = Var Y · (1 − ρ²<sub>XY</sub>)</span></div>
+      <div class="eq-hr"></div>
+      <div class="exp-note">Any c leaves the mean alone because the term being subtracted has mean zero. The variance is a parabola in c with its minimum at the regression slope of Y on X, and at that slope the fraction of Var Y that survives is 1 − ρ². The more strongly the control co-varies with the output, the larger the reduction. Here the control is the model's own input, but in a simulation it can be anything with a known mean that the output responds to: the average of the sampled service times, say, whose mean is a parameter of the input model.</div>
+      <div class="cards">
+        <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the output is symmetric in u, and Cov(U, h(U)) is exactly zero. The fitted slope wobbles around zero from run to run, and the interval does not shrink. A control has to co-vary with the output to help.</div>
+        <div class="card"><strong>Estimating c costs a little</strong>The slope is fitted from the same run it corrects, which makes the interval slightly optimistic. At n = 50, the capture rate is about two points under nominal; at n = 10, it runs about ten points under, near 83% for a nominal 95%. Larger runs, or a c fixed from a pilot, remove the shortfall.</div>
+        <div class="card"><strong>The same idea as regression</strong>The control-variate estimate is the fitted value of the regression of Y on X at X = E[X]. Two or more controls generalize to a multiple regression in the same way.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TAB ⑤: importance sampling ──────────────────────────────────── -->
+  <section id="tab-is" class="tp">
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="is-T"><span class="tip" tabindex="0" data-tip="The event is X ≥ T for a standard normal X. At T = 5 its probability is about 2.9 in ten million, and direct sampling almost never sees it.">Threshold T</span></label>
+        <select id="is-T" onchange="isParamsChanged()">
+          <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
+        </select>
+      </span>
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="is-theta"><span class="tip" tabindex="0" data-tip="The mean of the biased sampling distribution N(θ, 1). Setting θ = T puts about half of the draws in the tail. Too small a shift wastes draws; too large a shift makes the weights uneven and widens the interval again.">Sampling shift θ</span></label>
+        <input type="range" id="is-theta" min="0" max="6" step="0.25" value="3" oninput="isThetaShow()" onchange="isParamsChanged()" aria-describedby="is-theta-val">
+        <span class="rng-val" id="is-theta-val">3.00</span>
+        <button class="btn-clear" type="button" onclick="isMatchT()">Set θ = T</button>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="is-n">Draws per run n</label>
+        <select id="is-n" onchange="isParamsChanged()">
+          <option value="100">100</option><option value="250">250</option><option value="500">500</option>
+          <option value="1000" selected>1,000</option><option value="2500">2,500</option><option value="10000">10,000</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="is-conf">Confidence</label>
+        <select id="is-conf" onchange="isParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option>
+        </select>
+      </span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="is-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly.">Seed</span></label>
+        <input class="seed-inp" id="is-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="is-seed-msg" onchange="normalizeSeed('is')" onkeydown="if(event.key==='Enter'){event.preventDefault();runIs();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="is-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="is-run" onclick="runIs()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="is-run100" onclick="runIsBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. The weighted tally should settle near α; the direct one misses whenever a run sees no tail event at all." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearIs()">Clear history</button>
+      <span class="seed-msg" id="is-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="is-fig" role="img" aria-label="The standard normal density and the shifted sampling density with the tail beyond the threshold shaded under each, and a rug of the shifted draws"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--truth)">— target density φ(x), tail shaded</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">— sampling density φ(x − θ), rug of its draws (tall ticks are in the tail)</span>
+          <span id="is-fig-note"></span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg">
+          <div class="sc"><div class="sc-lbl">Direct: tail events in n</div><div class="sc-val acc" id="is-s-hits">—</div></div>
+          <div class="sc"><div class="sc-lbl">Weighted: draws in tail, <span class="sym">ESS</span></div><div class="sc-val acc" id="is-s-tail">—</div></div>
+          <div class="sc"><div class="sc-lbl">Direct estimate ± H</div><div class="sc-val" id="is-s-d">—</div></div>
+          <div class="sc"><div class="sc-lbl">Weighted estimate ± H</div><div class="sc-val" id="is-s-w">—</div></div>
+          <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, direct</div><div class="sc-val" id="is-s-rd">—</div></div>
+          <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, weighted</div><div class="sc-val" id="is-s-rw">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">p</span> = 1 − <span class="sym">Φ</span>(T)</div><div class="sc-val dim" id="is-s-true">—</div></div>
+          <div class="sc"><div class="sc-lbl">Weight at the threshold <span class="sym">W(T)</span></div><div class="sc-val dim" id="is-s-wt">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hint wide">Both arms spend n draws. The direct arm counts how many standard normals land beyond T; at T = 5 that count is almost always zero, and an interval built from all zeros is the single point [0, 0], which is wrong every time. The weighted arm draws from a normal centered at θ instead, and so the tail is visited often. It multiplies each tail draw by the likelihood ratio W(y) = φ(y)/φ(y − θ), which undoes the bias exactly. Push θ well past T, and the weights become so uneven that the interval is no longer trustworthy; the effective sample size in the stats says when that has happened. The weighted values are ordinary independent observations, and the usual interval applies to them.</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history — confidence intervals for p = P(X ≥ T)</div>
+      <div class="hist-hd">Direct sampling (mean of the indicator)</div>
+      <div id="is-hw1"><svg class="hsv" id="is-hist1"></svg></div>
+      <div class="hist-cap" id="is-cap1"></div>
+      <div class="hist-hd">Importance sampling (mean of the weighted indicator)</div>
+      <div id="is-hw2"><svg class="hsv" id="is-hist2"></svg></div>
+      <div class="hist-cap" id="is-cap2"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why sampling from the wrong distribution, corrected by a weight, gives the right answer</div>
+      <div class="eq-row"><span class="eq-lbl">Change of measure:</span><span class="eq-val">E<sub>X</sub>[g(X)] = ∫ g(x) f<sub>X</sub>(x) dx = ∫ g(x) · [f<sub>X</sub>(x)/f<sub>Y</sub>(x)] · f<sub>Y</sub>(x) dx = E<sub>Y</sub>[g(Y) W(Y)]</span></div>
+      <div class="eq-row"><span class="eq-lbl">Here:</span><span class="eq-val">g(x) = 1[x ≥ T],&nbsp; f<sub>X</sub> = φ(x),&nbsp; f<sub>Y</sub> = φ(x − θ),&nbsp; W(y) = exp(−θy + θ²/2)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Estimator:</span><span class="eq-val">p̂ = (1/n) Σ 1[Y<sub>i</sub> ≥ T] W(Y<sub>i</sub>),&nbsp; Y<sub>i</sub> ~ N(θ, 1)</span></div>
+      <div class="eq-hr"></div>
+      <div class="exp-note">The identity holds for any sampling density that is positive wherever the target is, and so the sampler is free to put its draws where the interesting outcomes are. The weight pays back exactly what the bias borrowed. The variance, though, depends on the choice. Weights near one across the tail give a tight interval, whereas a shift far past T makes the few draws nearest T carry weights thousands of times larger than the rest, the effective sample size collapses, and the interval widens again; pushed far enough, that same shift makes the interval unreliable, and it can even run below zero for a quantity that is a probability. Slide θ past T, and watch the effective sample size in the stats fall.</div>
+      <div class="cards">
+        <div class="card"><strong>Direct sampling at T = 5</strong>Ten million standard normals would be expected to produce about three tail events; a thousand produce none, the sample variance is zero, and the interval is [0, 0]. Its miss tally is 100 of 100, which is not a violation of the guarantee so much as a warning that the t interval needs some variation to work with.</div>
+        <div class="card"><strong>The same interval formula</strong>Nothing changes downstream: the weighted values are independent, their mean is p, and the one-sample t interval captures p about 100(1 − α)% of the time. Importance sampling is a change of what is averaged, not of how the average is analyzed.</div>
+        <div class="card"><strong>Bias on purpose</strong>The other three techniques leave the sampling distribution alone and reduce variance by correlation or by a correction term. The right distribution almost never produces the event of interest; this one deliberately samples from the wrong distribution and then corrects for it with the weight.</div>
+      </div>
+    </div>
+  </section>
+</div>
+<footer>© 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> · </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></footer>
+<script id="ci-core">
+/* ===== CI-CORE-BEGIN ===== */
+'use strict';
+var LANCZOS_G7 = [
+  0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+  771.32342877765313, -176.61502916214059, 12.507343278686905,
+  -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7
+];
+var LOG_SQRT_2PI = 0.9189385332046728;   /* 0.5 * log(2*pi) */
+
+function logGamma(x) {
+  if (!(x > -Infinity) || Number.isNaN(x)) return NaN;
+  if (x < 0.5) {
+    return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - logGamma(1 - x);
+  }
+  var z = x - 1, a = LANCZOS_G7[0];
+  for (var i = 1; i < 9; i++) a += LANCZOS_G7[i] / (z + i);
+  var t = z + 7.5;
+  return LOG_SQRT_2PI + (z + 0.5) * Math.log(t) - t + Math.log(a);
+}
+function logBeta(a, b) { return logGamma(a) + logGamma(b) - logGamma(a + b); }
+
+var GAM_EPS = 3e-16, GAM_FPMIN = 1e-300, GAM_ITMAX = 2000;
+
+function gammaP(a, x) {
+  if (x < 0 || a <= 0) return NaN;
+  if (x === 0) return 0;
+  if (x < a + 1) return gser(a, x);
+  return 1 - gcf(a, x);
+}
+function gammaQ(a, x) {
+  if (x < 0 || a <= 0) return NaN;
+  if (x === 0) return 1;
+  if (x < a + 1) return 1 - gser(a, x);
+  return gcf(a, x);
+}
+function gser(a, x) {
+  var ap = a, sum = 1 / a, del = sum;
+  for (var n = 0; n < GAM_ITMAX; n++) {
+    ap++; del *= x / ap; sum += del;
+    if (Math.abs(del) < Math.abs(sum) * GAM_EPS) break;
+  }
+  return sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+}
+function gcf(a, x) {
+  var b = x + 1 - a, c = 1 / GAM_FPMIN, d = 1 / b, h = d;
+  for (var i = 1; i <= GAM_ITMAX; i++) {
+    var an = -i * (i - a);
+    b += 2;
+    d = an * d + b; if (Math.abs(d) < GAM_FPMIN) d = GAM_FPMIN;
+    c = b + an / c;  if (Math.abs(c) < GAM_FPMIN) c = GAM_FPMIN;
+    d = 1 / d;
+    var del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) <= GAM_EPS) break;
+  }
+  return Math.exp(-x + a * Math.log(x) - logGamma(a)) * h;
+}
+
+function betaInc(a, b, x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  var lbt = -logBeta(a, b) + a * Math.log(x) + b * Math.log(1 - x);
+  if (x < (a + 1) / (a + b + 2)) return Math.exp(lbt) * betacf(a, b, x) / a;
+  return 1 - Math.exp(lbt) * betacf(b, a, 1 - x) / b;
+}
+function betacf(a, b, x) {
+  var qab = a + b, qap = a + 1, qam = a - 1;
+  var c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < GAM_FPMIN) d = GAM_FPMIN;
+  d = 1 / d;
+  var h = d;
+  for (var m = 1; m <= GAM_ITMAX; m++) {
+    var m2 = 2 * m;
+    var aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < GAM_FPMIN) d = GAM_FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < GAM_FPMIN) c = GAM_FPMIN;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < GAM_FPMIN) d = GAM_FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < GAM_FPMIN) c = GAM_FPMIN;
+    d = 1 / d;
+    var del = d * c; h *= del;
+    if (Math.abs(del - 1) <= GAM_EPS) break;
+  }
+  return h;
+}
+
+function erf(x)  { return x < 0 ? -gammaP(0.5, x * x) : gammaP(0.5, x * x); }
+function erfc(x) { return x < 0 ? 1 + gammaP(0.5, x * x) : gammaQ(0.5, x * x); }
+
+var SQRT2 = Math.SQRT2;
+function normPdf(z) { return Math.exp(-0.5 * z * z) / 2.5066282746310002; }
+function normCdf(z) { return 0.5 * erfc(-z / SQRT2); }
+
+var ACK_A = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+              1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+var ACK_B = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+              6.680131188771972e+01, -1.328068155288572e+01];
+var ACK_C = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+             -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+var ACK_D = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+             3.754408661907416e+00];
+function normInv(p) {
+  if (!(p > 0) || !(p < 1)) return p <= 0 ? -Infinity : (p >= 1 ? Infinity : NaN);
+  var pl = 0.02425, q, r, x;
+  if (p < pl) {
+    q = Math.sqrt(-2 * Math.log(p));
+    x = (((((ACK_C[0]*q+ACK_C[1])*q+ACK_C[2])*q+ACK_C[3])*q+ACK_C[4])*q+ACK_C[5]) /
+        ((((ACK_D[0]*q+ACK_D[1])*q+ACK_D[2])*q+ACK_D[3])*q+1);
+  } else if (p <= 1 - pl) {
+    q = p - 0.5; r = q * q;
+    x = (((((ACK_A[0]*r+ACK_A[1])*r+ACK_A[2])*r+ACK_A[3])*r+ACK_A[4])*r+ACK_A[5])*q /
+        (((((ACK_B[0]*r+ACK_B[1])*r+ACK_B[2])*r+ACK_B[3])*r+ACK_B[4])*r+1);
+  } else {
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    x = -(((((ACK_C[0]*q+ACK_C[1])*q+ACK_C[2])*q+ACK_C[3])*q+ACK_C[4])*q+ACK_C[5]) /
+         ((((ACK_D[0]*q+ACK_D[1])*q+ACK_D[2])*q+ACK_D[3])*q+1);
+  }
+  var e = 0.5 * erfc(-x / SQRT2) - p;
+  var u = e * 2.5066282746310002 * Math.exp(x * x / 2);
+  x = x - u / (1 + x * u / 2);
+  return x;
+}
+
+/* Bisection and bracket-widening, copied from input_analyzer.html. */
+function bisect(f, lo, hi, iters) {
+  var flo = f(lo), fhi = f(hi), mid = 0, fm;
+  if (!(flo * fhi <= 0)) return NaN;
+  for (var i = 0; i < (iters || 90); i++) {
+    mid = 0.5 * (lo + hi);
+    fm = f(mid);
+    if (fm === 0) return mid;
+    if (flo * fm < 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+    if (hi - lo < Math.abs(mid) * 1e-15 + 1e-300) break;
+  }
+  return 0.5 * (lo + hi);
+}
+function bracketRoot(f, lo, hi, grow, tries) {
+  grow = grow || 2; tries = tries || 60;
+  var flo = f(lo), fhi = f(hi);
+  for (var i = 0; i < tries && flo * fhi > 0; i++) {
+    if (Math.abs(flo) < Math.abs(fhi)) { lo -= (hi - lo) * (grow - 1); flo = f(lo); }
+    else { hi += (hi - lo) * (grow - 1); fhi = f(hi); }
+  }
+  return flo * fhi <= 0 ? [lo, hi] : null;
+}
+function tCdf(t, nu) {
+  if (!Number.isFinite(t)) return t > 0 ? 1 : 0;
+  var x = nu / (nu + t * t);
+  var half = 0.5 * betaInc(0.5 * nu, 0.5, x);
+  return t >= 0 ? 1 - half : half;
+}
+function qFromCdf(cdf, p, lo, hi) {
+  if (!(p > 0)) return lo;
+  if (!(p < 1)) return hi;
+  var f = function (x) { return cdf(x) - p; };
+  var br = bracketRoot(f, lo, hi);
+  if (!br) return NaN;
+  return bisect(f, br[0], br[1]);
+}
+// Memoized: the calibration sections below call this on the order of a quarter
+// million times over a small, repeated set of (p, nu) pairs, and each call bisects
+// tCdf to convergence. Plain object keyed by a string, not a Map, so the vm context
+// the verify script builds the core in needs nothing extra.
+var T_Q_MEMO = {};
+function tQuantile(p, nu) {
+  var k = p + '|' + nu;
+  if (k in T_Q_MEMO) return T_Q_MEMO[k];
+  return (T_Q_MEMO[k] = qFromCdf(function (x) { return tCdf(x, nu); }, p, -2, 2));
+}
+
+var SEED_MAX = 2147483647;   /* 2^31 - 1, the largest seed a reader can type */
+/* mulberry32: 32 bits of state, one integer seed, no library.  Seed 0 is legal,
+   adjacent seeds give well-separated streams (the 100-run sweep steps seeds by
+   one), and the output is avalanche-mixed.  Same generator as the Monte Carlo
+   explorer, so a seed means the same stream on both pages. */
+function mulberry32(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* A normal variate by inverse transform.  normInv(0) would be -Infinity, and
+   mulberry32 can return exactly 0, so the uniform is nudged off the endpoint. */
+function normalDraw(rand, mu, sigma) {
+  var u = rand(); if (u <= 0) u = 2.5e-10;
+  return mu + sigma * normInv(u);
+}
+
+function mean(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return s / a.length; }
+function sampleVar(a) {
+  var m = mean(a), s = 0;
+  for (var i = 0; i < a.length; i++) s += (a[i] - m) * (a[i] - m);
+  return s / (a.length - 1);
+}
+function sampleCov(a, b) {
+  var ma = mean(a), mb = mean(b), s = 0;
+  for (var i = 0; i < a.length; i++) s += (a[i] - ma) * (b[i] - mb);
+  return s / (a.length - 1);
+}
+function sampleCorr(a, b) {
+  var v = sampleVar(a) * sampleVar(b);
+  return v > 0 ? sampleCov(a, b) / Math.sqrt(v) : 0;
+}
+
+/* The one-sample t interval: mean ± t_{1-α/2, n-1} s/√n.  A sample with zero
+   spread (every value equal, as when no direct draw lands in a rare tail) gives
+   h = 0 and an interval that is a single point. */
+function ciMean(values, conf) {
+  var n = values.length, m = mean(values), s = n > 1 ? Math.sqrt(sampleVar(values)) : 0;
+  var df = n - 1, t = tQuantile(1 - (1 - conf) / 2, df), h = t * s / Math.sqrt(n);
+  return { n: n, mean: m, s: s, df: df, t: t, h: h, lo: m - h, hi: m + h };
+}
+/* Two independent samples: Welch's interval for the difference of means. */
+function ciWelch(a, b, conf) {
+  var n1 = a.length, n2 = b.length, m1 = mean(a), m2 = mean(b);
+  var v1 = sampleVar(a), v2 = sampleVar(b), q1 = v1 / n1, q2 = v2 / n2;
+  var df = (q1 + q2) * (q1 + q2) / (q1 * q1 / (n1 - 1) + q2 * q2 / (n2 - 1));
+  if (!(df > 0)) df = Math.min(n1, n2) - 1;   /* both spreads zero */
+  var t = tQuantile(1 - (1 - conf) / 2, df), h = t * Math.sqrt(q1 + q2);
+  return { n1: n1, n2: n2, mean1: m1, mean2: m2, diff: m1 - m2, s1: Math.sqrt(v1), s2: Math.sqrt(v2),
+           df: df, t: t, h: h, lo: m1 - m2 - h, hi: m1 - m2 + h };
+}
+function captured(ci, truth) { return ci.lo <= truth && truth <= ci.hi; }
+
+/* ── Tab ①: draw n normal values and build the interval ─────────────
+   p = {mu, sigma, n, conf}.  The stream is fresh per seed, so the same seed always
+   reproduces the run, and the draws are inverse-transform normals in stream order. */
+function runNormal(seed, p) {
+  var rand = mulberry32(seed), xs = new Array(p.n);
+  for (var i = 0; i < p.n; i++) xs[i] = normalDraw(rand, p.mu, p.sigma);
+  var ci = ciMean(xs, p.conf);
+  return { xs: xs, ci: ci, truth: p.mu, hit: captured(ci, p.mu) };
+}
+/* The record the history chart stores: point estimate, endpoints, the true value the
+   run is judged against, its own α, and a key naming the parameter set. */
+function histRecord(est, ci, truth, n, conf, key) {
+  return { est: est, lo: ci.lo, hi: ci.hi, truth: truth, hit: ci.lo <= truth && truth <= ci.hi,
+           n: n, alpha: 1 - conf, key: key };
+}
+/* c4(n) = sqrt(2/(n-1)) Γ(n/2) / Γ((n-1)/2): E[S] = c4 σ for a normal sample. */
+function c4(n) {
+  return Math.sqrt(2 / (n - 1)) * Math.exp(logGamma(n / 2) - logGamma((n - 1) / 2));
+}
+
+/* ── Tab ②: two systems sharing an input ───────────────────────────
+   p = {mu1, mu2, sigma, rho, n, conf}.  Output of system k in pair i:
+     Y_k = mu_k + sigma (√ρ X + √(1−ρ) E_k),
+   with X the shared "input" and E_k the system's own noise, all standard normal.
+   ρ is the share of output variance that comes from the input, and is also the
+   correlation of paired outputs.  Both arms use the same system-1 outputs and the
+   same noise; the independent arm gives system 2 its own input X′, the CRN arm gives
+   it the same X.  Both arms therefore consume 2n outputs, and the only thing that
+   differs between them is which input system 2 saw. */
+function runCRN(seed, p) {
+  var rand = mulberry32(seed), a = Math.sqrt(p.rho), b = Math.sqrt(1 - p.rho);
+  var y1 = [], y2i = [], y2c = [], d = [];
+  for (var i = 0; i < p.n; i++) {
+    var x = normalDraw(rand, 0, 1), xp = normalDraw(rand, 0, 1);
+    var e1 = normalDraw(rand, 0, 1), e2 = normalDraw(rand, 0, 1);
+    y1.push(p.mu1 + p.sigma * (a * x + b * e1));
+    y2i.push(p.mu2 + p.sigma * (a * xp + b * e2));
+    y2c.push(p.mu2 + p.sigma * (a * x + b * e2));
+    d.push(y1[i] - y2c[i]);
+  }
+  var ind = ciWelch(y1, y2i, p.conf), crn = ciMean(d, p.conf), truth = p.mu1 - p.mu2;
+  return { y1: y1, y2i: y2i, y2c: y2c, d: d, ind: ind, crn: crn, truth: truth,
+           r: sampleCorr(y1, y2c), hitInd: captured(ind, truth), hitCrn: captured(crn, truth) };
+}
+
+/* ── The function menu shared by tabs ③ and ④ ────────────────────────
+   Each h is a stand-in for a simulation model driven by one uniform.  The moments
+   are exact: mean E[h(U)], m2 E[h(U)²], cross E[h(U) h(1−U)], and covU cov(U, h(U)).
+   The first three are monotone; the bowl is the counterexample on which both
+   techniques do nothing, because h(1−u) = h(u) and cov(U, h(U)) = 0. */
+var FUNCS = {
+  exp:   { label: 'exp(u)', h: function (u) { return Math.exp(u); },
+           mean: Math.E - 1, m2: (Math.E * Math.E - 1) / 2, cross: Math.E, covU: 1 - (Math.E - 1) / 2, mono: true },
+  sqrt:  { label: '√u', h: function (u) { return Math.sqrt(u); },
+           mean: 2 / 3, m2: 0.5, cross: Math.PI / 8, covU: 1 / 15, mono: true },
+  recip: { label: '1 / (1 + u)', h: function (u) { return 1 / (1 + u); },
+           mean: Math.LN2, m2: 0.5, cross: 2 * Math.LN2 / 3, covU: 1 - 1.5 * Math.LN2, mono: true },
+  bowl:  { label: '(u − ½)²', h: function (u) { return (u - 0.5) * (u - 0.5); },
+           mean: 1 / 12, m2: 1 / 80, cross: 1 / 80, covU: 0, mono: false }
+};
+var FUNC_KEYS = ['exp', 'sqrt', 'recip', 'bowl'];
+function funcVar(f) { return f.m2 - f.mean * f.mean; }
+function funcAntiCov(f) { return f.cross - f.mean * f.mean; }
+
+/* ── Tab ③: antithetic pairs ──────────────────────────────────────────
+   p = {fn, n, conf}.  Both arms cost 2n evaluations and share the first n draws:
+   the independent arm follows them with n fresh draws, the antithetic arm with
+   their mirrors 1 − u.  The independent interval is on all 2n values; the
+   antithetic interval is on the n pair means (each an independent observation). */
+function runAV(seed, p) {
+  var f = FUNCS[p.fn], rand = mulberry32(seed), u = [], ya = [], yb = [], z = [], yInd = [];
+  for (var i = 0; i < p.n; i++) {
+    var ui = rand(); u.push(ui); ya.push(f.h(ui)); yb.push(f.h(1 - ui));
+    z.push((ya[i] + yb[i]) / 2); yInd.push(ya[i]);
+  }
+  for (var j = 0; j < p.n; j++) yInd.push(f.h(rand()));
+  var ind = ciMean(yInd, p.conf), av = ciMean(z, p.conf);
+  return { u: u, ya: ya, yb: yb, z: z, yInd: yInd, ind: ind, av: av, truth: f.mean,
+           r: sampleCorr(ya, yb), hitInd: captured(ind, f.mean), hitAv: captured(av, f.mean) };
+}
+
+/* ── Tab ④: the uniform input as a control variate ────────────────────
+   p = {fn, n, conf}.  Y = h(U) with the control X = U, whose mean ½ is known.
+   Z = Y − c (U − ½) has the same mean as Y for any c; the variance-minimizing
+   c* = Cov(U, Y)/Var(U) is estimated from the run itself, which is the usual
+   textbook treatment and makes the interval slightly optimistic at small n. */
+function runCV(seed, p) {
+  var f = FUNCS[p.fn], rand = mulberry32(seed), u = [], y = [], z = [];
+  for (var i = 0; i < p.n; i++) { var ui = rand(); u.push(ui); y.push(f.h(ui)); }
+  var vU = sampleVar(u), vY = sampleVar(y), cov = sampleCov(u, y), c = vU > 0 ? cov / vU : 0;
+  for (var j = 0; j < p.n; j++) z.push(y[j] - c * (u[j] - 0.5));
+  var plain = ciMean(y, p.conf), cv = ciMean(z, p.conf);
+  return { u: u, y: y, z: z, c: c, cStar: f.covU * 12, r2: vU > 0 && vY > 0 ? cov * cov / (vU * vY) : 0,
+           plain: plain, cv: cv, truth: f.mean, hitPlain: captured(plain, f.mean), hitCv: captured(cv, f.mean) };
+}
+
+/* ── Tab ⑤: a normal tail probability by importance sampling ──────────
+   p = {T, theta, n, conf}.  Target p = P(X ≥ T) for X ~ N(0, 1).  The direct arm
+   averages the indicator over n standard normals.  The weighted arm draws n values
+   from N(θ, 1) and averages 1[y ≥ T] W(y), with the likelihood ratio
+   W(y) = φ(y) / φ(y − θ) = exp(−θ y + θ²/2), so that E_θ[1[Y ≥ T] W(Y)] = p exactly.
+   ess is Kish's effective sample size of the in-tail weights, (ΣW)² / ΣW². */
+function isWeight(y, theta) { return Math.exp(-theta * y + theta * theta / 2); }
+function runIS(seed, p) {
+  var rand = mulberry32(seed), ind = [], w = [], ys = [], hits = 0, tail = 0, sw = 0, sw2 = 0;
+  for (var i = 0; i < p.n; i++) { var x = normalDraw(rand, 0, 1), k = x >= p.T ? 1 : 0; ind.push(k); hits += k; }
+  for (var j = 0; j < p.n; j++) {
+    var y = normalDraw(rand, p.theta, 1), wj = y >= p.T ? isWeight(y, p.theta) : 0;
+    ys.push(y); w.push(wj);
+    if (wj > 0) { tail++; sw += wj; sw2 += wj * wj; }
+  }
+  var direct = ciMean(ind, p.conf), wtd = ciMean(w, p.conf), truth = 1 - normCdf(p.T);
+  return { ys: ys, w: w, hits: hits, tail: tail, direct: direct, wtd: wtd, truth: truth,
+           ess: sw2 > 0 ? sw * sw / sw2 : 0, hitDirect: captured(direct, truth), hitWtd: captured(wtd, truth) };
+}
+
+var CI = {
+  SEED_MAX: SEED_MAX, mulberry32: mulberry32, normalDraw: normalDraw,
+  logGamma: logGamma, logBeta: logBeta, gammaP: gammaP, gammaQ: gammaQ, betaInc: betaInc,
+  erf: erf, erfc: erfc, normPdf: normPdf, normCdf: normCdf, normInv: normInv,
+  tCdf: tCdf, tQuantile: tQuantile,
+  mean: mean, sampleVar: sampleVar, sampleCov: sampleCov, sampleCorr: sampleCorr,
+  ciMean: ciMean, ciWelch: ciWelch, captured: captured
+  , runNormal: runNormal, histRecord: histRecord, c4: c4
+  , runCRN: runCRN
+  , FUNCS: FUNCS, FUNC_KEYS: FUNC_KEYS, funcVar: funcVar, funcAntiCov: funcAntiCov, runAV: runAV
+  , runCV: runCV
+  , isWeight: isWeight, runIS: runIS
+};
+/* ===== CI-CORE-END ===== */
+</script>
+
+<script>
+'use strict';
+const css = getComputedStyle(document.documentElement);
+const tok = n => css.getPropertyValue(n).trim();
+const C = {
+  accent: tok('--accent'), muted: tok('--muted'), bg: tok('--chart-bg'),
+  truth: tok('--truth'), est: tok('--est'), estPale: tok('--est-pale'),
+  hit: tok('--hit'), miss: tok('--miss'), warn: tok('--warn'),
+  pair: tok('--pair'), band: tok('--band'),
+};
+const FF_MONO = 'IBM Plex Mono,monospace';
+const FF_SANS = 'Outfit,sans-serif';
+const $ = id => document.getElementById(id);
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Registry of tabs. Each later task adds TABS[name] = { render() } where render
+// redraws that tab's history chart(s); showTab calls it on the way in because a
+// hidden tab has zero width and its chart cannot lay itself out.
+const TABS = {};
+
+function showTab(name, btn) {
+  document.querySelectorAll('.tp').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  $('tab-' + name).classList.add('active');
+  const tabBtn = btn || document.querySelector('.tab[data-tab="' + name + '"]');
+  if (tabBtn) tabBtn.classList.add('active');
+  const tabSel = $('tab-select');
+  if (tabSel && tabSel.value !== name) tabSel.value = name;
+  renderActiveHist();
+}
+function renderActiveHist() {
+  const pane = document.querySelector('.tp.active');
+  if (!pane) return;
+  const name = pane.id.replace('tab-', '');
+  if (TABS[name]) TABS[name].render();
+}
+let histResizeTimer = null, histLastW = 0;
+function watchHistWidth() {
+  const widget = document.querySelector('.widget');
+  const onWidth = w => {
+    if (w === histLastW) return;
+    histLastW = w;
+    clearTimeout(histResizeTimer);
+    histResizeTimer = setTimeout(renderActiveHist, 120);
+  };
+  if (typeof ResizeObserver !== 'undefined' && widget) {
+    new ResizeObserver(es => onWidth(Math.round(es[0].contentRect.width))).observe(widget);
+  } else {
+    window.addEventListener('resize', () => onWidth(Math.round(window.innerWidth)));
+  }
+}
+
+function parseSeed(raw) {
+  const s = String(raw).trim();
+  if (!/^[+-]?\d{1,10}$/.test(s))
+    return { ok: false, value: null, msg: '⚠ Seed must be a whole number from 0 to ' + SEED_MAX + '.' };
+  const n = Number(s), v = Math.min(Math.max(n, 0), SEED_MAX);
+  // Worded neutrally ("using") because this fires both when a seed is about to
+  // be run and when the field is merely edited, where nothing has run yet.
+  return { ok: true, value: v,
+           msg: v === n ? '' : 'Seed ' + s + ' is outside 0–' + SEED_MAX + '; using ' + v + '.' };
+}
+
+// The last completed run per tab. Kept so that editing the seed can update the
+// "Next run" figure while preserving the record of what the last run actually did.
+const lastRun = { ci: null, crn: null, av: null, cv: null, is: null };
+
+function seedMsg(tab, text, bad) {
+  const inp = document.getElementById(tab + '-seed');
+  const msg = document.getElementById(tab + '-seed-msg');
+  msg.textContent = text;
+  msg.classList.toggle('bad', !!bad);
+  inp.setAttribute('aria-invalid', bad ? 'true' : 'false');
+}
+
+// Returns an integer, or null if the field cannot be interpreted. Always writes
+// the value actually used back into the box, so what the student reads is what
+// the generator received.
+function readSeed(tab) {
+  const inp = document.getElementById(tab + '-seed');
+  const r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); inp.focus(); inp.select(); return null; }
+  inp.value = String(r.value);
+  seedMsg(tab, r.msg, false);
+  return r.value;
+}
+
+// Same normalization on change, but never steals focus. Editing the seed only
+// changes what the NEXT run will do, and so the record of the last run is kept
+// and just the "Next run" figure is re-pointed at the new value.
+function normalizeSeed(tab) {
+  const inp = document.getElementById(tab + '-seed');
+  const r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); return; }
+  inp.value = String(r.value);
+  const last = lastRun[tab], bits = [];
+  if (r.msg) bits.push(r.msg);
+  if (last) bits.push('Run ' + last.idx + ' used seed ' + last.seed + '.',
+                      'Next run: ' + r.value + '.');
+  seedMsg(tab, bits.join(' '), false);
+}
+
+function randomSeed() {
+  // Math.random here only picks WHICH seed to use next. The experiment itself
+  // never touches Math.random -- see the mulberry32 stream built in runCi/runCrn.
+  // Six digits, always: short enough to read aloud or copy into a lab notebook,
+  // and a constant width so the field never jumps. Typed seeds may still be any
+  // value up to SEED_MAX; mulberry32 mixes low seeds as well as high ones.
+  return 100000 + Math.floor(Math.random() * 900000);
+}
+
+// Called after a run has already drawn its samples, so the run always used the
+// seed the student could see. With the box ticked, queue a fresh one for next
+// time and name both, so the field changing under them is never a surprise.
+// Unticked, repeated clicks genuinely do reproduce the run -- say so, or it
+// reads as a broken button rather than as the point of the exercise.
+function noteRun(tab, seed, runIdx, repeat) {
+  lastRun[tab] = { idx: runIdx, seed: seed };
+  if (document.getElementById(tab + '-newseed').checked) {
+    const next = randomSeed();
+    document.getElementById(tab + '-seed').value = String(next);
+    seedMsg(tab, 'Run ' + runIdx + ' used seed ' + seed + '. Next run: ' + next + '.', false);
+    return;
+  }
+  seedMsg(tab, repeat
+    ? 'Run ' + runIdx + ' repeats Run ' + (runIdx - 1) + ' exactly – same seed, same sample size. Tick “New seed after each run” to vary it.'
+    : 'Run ' + runIdx + ' used seed ' + seed + '.', false);
+}
+
+// ── 100-run sweeps ─────────────────────────────────────
+const BATCH_RUNS=100;
+// The sweep walks consecutive seeds from the one in the box, rather than 100 random
+// ones, so the whole sweep is reproducible from a single number. Adjacent seeds are
+// safe here: mulberry32 avalanche-mixes them into well-separated streams (see the
+// note on the generator).
+function batchSeed(s0,i){ return (s0+i)%(SEED_MAX+1); }
+
+// Disable both run buttons, yield one turn so that state actually paints, then do
+// the work. A sweep is fast enough to be synchronous -- 100 x 10,000 darts is a few
+// tens of milliseconds -- but not so fast that a frozen-looking button is honest.
+function batchRun(tab,work){
+  const one=document.getElementById(tab+'-run'), many=document.getElementById(tab+'-run100');
+  one.disabled=true; many.disabled=true;
+  seedMsg(tab,'Running '+BATCH_RUNS+' experiments…',false);
+  setTimeout(()=>{
+    try { work(); }
+    finally { one.disabled=false; many.disabled=false; }
+  },0);
+}
+
+// Counterpart to noteRun for a sweep: names the seed range instead of one seed.
+function noteBatch(tab,s0,first,last){
+  const sLast=batchSeed(s0,BATCH_RUNS-1);
+  lastRun[tab]={idx:last,seed:sLast};
+  const range='Runs '+first+'–'+last+' used seeds '+s0+'–'+sLast+'.';
+  if(document.getElementById(tab+'-newseed').checked){
+    const next=randomSeed();
+    document.getElementById(tab+'-seed').value=String(next);
+    seedMsg(tab,range+' Next run: '+next+'.',false);
+    return;
+  }
+  seedMsg(tab,range+' Click again to repeat the whole sweep exactly.',false);
+}
+
+// ── History chart ──────────────────────────────────────
+// One function draws every history chart on the page. Each run record carries its
+// own true value, so the dashed line is a step function: changing μ mid-history makes
+// the line jump to the new value rather than wiping the chart, and a faint divider
+// marks each run whose parameter set (its `key`) differs from the one before it.
+const HIST_MAX = 100, HIST_CANT = 22;
+function histVisible(runs, cW) {
+  // Columns narrow to fit the run count before runs are dropped, so a 100-run sweep
+  // is shown whole wherever there is room; with a round hundred on screen the miss
+  // count is the percentage.
+  const COL_MAX = 56, COL_MIN = 7;
+  const want = Math.min(runs.length, HIST_MAX);
+  let colW = COL_MAX;
+  if (want > Math.floor(cW / colW)) colW = Math.max(COL_MIN, cW / want);
+  const maxVis = Math.min(HIST_MAX, Math.max(1, Math.floor(cW / colW)));
+  return { shown: runs.slice(-maxVis), colW: colW };
+}
+function histWindow(lists) {
+  let lo = Infinity, hi = -Infinity;
+  lists.forEach(runs => runs.slice(-HIST_MAX).forEach(r => {
+    lo = Math.min(lo, r.lo, r.truth); hi = Math.max(hi, r.hi, r.truth);
+  }));
+  if (!(lo <= hi)) return null;
+  const span = (hi - lo) || Math.abs(hi) * 0.1 || 1;
+  return { lo: lo - span * 0.1, hi: hi + span * 0.1 };
+}
+function fmtTick(v, win) {
+  // Tab ⑤ plots tail probabilities near 1e-7, where fixed decimals are all zeros.
+  if (win < 1e-4) return v.toExponential(1);
+  const prec = win < 0.002 ? 6 : win < 0.02 ? 5 : win < 0.2 ? 4 : win < 2 ? 3 : 2;
+  return v.toFixed(prec);
+}
+function histPlot(svgEl, containerEl, runs, opts) {
+  const widget = document.querySelector('.widget');
+  const W = Math.max(300, containerEl.offsetWidth || (widget ? widget.clientWidth : 600));
+  const pL = 62, pR = 34, pT = 22, pB = 52, cH = 178, cW = W - pL - pR;
+  const legRows = cW < 330 ? 2 : 1;
+  const SH = pT + cH + pB + (legRows - 1) * 14;
+  const { shown, colW } = histVisible(runs, cW);
+  const dense = colW < 30;
+  const barW = Math.min(6, colW * .5), capW = Math.min(5, colW * .42);
+  const dotR = Math.min(4, Math.max(1.4, colW * .34)), lwBar = colW < 12 ? 1.1 : 1.8;
+  const firstRunIdx = runs.length - shown.length + 1;
+  const win = opts.window || histWindow([runs]) || opts.emptyWindow;
+  let yMin = win.lo, yMax = win.hi;
+  if (!(yMax > yMin)) { const c = Number.isFinite(yMin) ? yMin : 0; yMin = c - 1; yMax = c + 1; }
+  const yP = v => pT + cH - (v - yMin) / (yMax - yMin) * cH;
+  const clampY = v => Math.min(Math.max(yP(v), pT + 1), pT + cH - 1);
+  const xC = i => pL + (i + 0.5) * colW;
+
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  // Y axis with five ticks, precision from the window rather than the magnitude.
+  h += `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + cH}" stroke="#ccc" stroke-width="1"/>`;
+  for (let i = 0; i <= 4; i++) {
+    const v = yMin + i * (yMax - yMin) / 4, ty = yP(v);
+    h += `<line x1="${pL - 4}" y1="${ty}" x2="${pL}" y2="${ty}" stroke="#bbb" stroke-width="1"/>`;
+    h += `<text x="${pL - 7}" y="${ty + 4}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${fmtTick(v, yMax - yMin)}</text>`;
+  }
+  const yLX = 13, yLY = pT + cH / 2;
+  h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">${opts.yLabel}</text>`;
+  h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc" stroke-width="1"/>`;
+
+  // True value: a step line, one flat segment per column showing that run's own
+  // truth. After the last column, the line steps to the current live value and
+  // holds to the plot's right edge. A later change to that value bends the line
+  // there instead of erasing the history already drawn.
+  let path = '';
+  const live = clampY(opts.liveTruth), cantEnd = pL + cW + HIST_CANT;
+  if (shown.length === 0) {
+    path = `M${pL},${live} H${cantEnd}`;
+  } else {
+    shown.forEach((r, i) => {
+      const ty = clampY(r.truth), x0 = pL + i * colW, x1 = x0 + colW;
+      path += (i === 0 ? `M${x0},${ty}` : ` L${x0},${ty}`) + ` L${x1},${ty}`;
+    });
+    path += ` L${pL + shown.length * colW},${live} L${cantEnd},${live}`;
+  }
+  h += `<path d="${path}" fill="none" stroke="${C.truth}" stroke-width="1.5" stroke-dasharray="5,3" opacity=".8" class="hist-truth"/>`;
+  // A live divider at the bend, as soon as the current value differs from the last
+  // run's: it shows up while the parameter is being dragged, before any new run
+  // exists to carry its own per-run divider.
+  if (shown.length > 0 && opts.liveTruth !== shown[shown.length - 1].truth) {
+    const x = pL + shown.length * colW;
+    h += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT + cH}" stroke="${C.muted}" stroke-width="1" stroke-dasharray="2,3" opacity=".6"/>`;
+  }
+  if (opts.grab) {
+    // The grab target rides on the true-value line's cantilever: a short tail run
+    // out past the plot's shaded background, into the right padding reserved for
+    // it, so there is always something to grab even when the columns fill cW.
+    const hx0 = shown.length ? pL + shown.length * colW : pL;
+    h += `<line class="hist-handle" x1="${hx0}" y1="${live}" x2="${cantEnd}" y2="${live}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  }
+  // Dividers where the parameter set changed.
+  shown.forEach((r, i) => {
+    if (i > 0 && r.key !== shown[i - 1].key) {
+      const x = pL + i * colW;
+      h += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT + cH}" stroke="${C.muted}" stroke-width="1" stroke-dasharray="2,3" opacity=".6"/>`;
+    }
+  });
+
+  let hits = 0, expMiss = 0, excl0 = 0, lastLabelX = -Infinity, lastChangeN = null;
+  if (shown.length === 0) {
+    h += `<text x="${pL + cW / 2}" y="${pT + 24}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment to begin collecting results.</text>`;
+  } else {
+    shown.forEach((r, i) => {
+      const runN = firstRunIdx + i, cx = xC(i);
+      const yTop = yP(Math.min(yMax, r.hi)), yBot = yP(Math.max(yMin, r.lo));
+      const ym = yP(Math.min(yMax, Math.max(yMin, r.est)));
+      if (r.hit) hits++;
+      expMiss += r.alpha;
+      if (r.lo > 0 || r.hi < 0) excl0++;
+      const col = r.hit ? C.hit : C.miss;
+      // Capture vs miss never rests on hue alone: a miss is dashed with a hollow dot.
+      const dash = r.hit ? '' : ' stroke-dasharray="3,2.5"';
+      h += `<rect x="${cx - barW / 2}" y="${yTop}" width="${barW}" height="${Math.max(1, yBot - yTop)}" fill="${col}" opacity=".15" rx="1"/>`;
+      h += `<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"${dash}/>`;
+      h += `<line x1="${cx - capW}" y1="${yTop}" x2="${cx + capW}" y2="${yTop}" stroke="${col}" stroke-width="${lwBar}"/>`;
+      h += `<line x1="${cx - capW}" y1="${yBot}" x2="${cx + capW}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"/>`;
+      h += r.hit ? `<circle cx="${cx}" cy="${ym}" r="${dotR}" fill="${col}"/>`
+                 : `<circle cx="${cx}" cy="${ym}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="${Math.min(2, dotR / 2)}"/>`;
+      const lbl = (at, ax) => `<text x="${ax}" y="${pT + cH + 17}" text-anchor="${at}" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`
+        + `<text x="${ax}" y="${pT + cH + 29}" text-anchor="${at}" fill="#aaa" font-size="9" font-family="${FF_MONO}">${opts.nLabel}=${r.n.toLocaleString()}</text>`;
+      if (!dense) {
+        h += `<line x1="${cx}" y1="${pT + cH}" x2="${cx}" y2="${pT + cH + 4}" stroke="#bbb" stroke-width="1"/>` + lbl('middle', cx);
+      } else if (i === 0) {
+        h += lbl('start', pL); lastLabelX = pL;
+      } else if (i === shown.length - 1) {
+        // The end is always labeled, unlike the change-point labels below, and so
+        // carries no 44px spacing check of its own. Its one exception: when a
+        // change-point label to its left already named this same n, a second label
+        // for the same value this close to it would only repeat that one.
+        if (r.n !== lastChangeN) h += lbl('end', pL + cW);
+      } else if (r.n !== shown[i - 1].n) {
+        // A label at the start of every run where n changed. The axis then shows
+        // where a batch of runs at a different sample size began; skipped when it
+        // would sit too close to the previous label to read.
+        const ax = pL + i * colW;
+        if (ax - lastLabelX >= 44) { h += lbl('start', ax); lastLabelX = ax; lastChangeN = r.n; }
+      }
+    });
+  }
+
+  // Legend, then the true-value label at the right end of its line, drawn last so it
+  // sits on top of the bars.
+  const ly = SH - 14 - (legRows - 1) * 14;
+  const mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14;
+  h += `<circle cx="${pL + 7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
+  h += `<text x="${pL + 15}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval captures the true value</text>`;
+  h += `<circle cx="${mx}" cy="${my}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
+  h += `<text x="${mx + 8}" y="${my + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval misses (about α of them expected)</text>`;
+  const tl = opts.truthLabel(opts.liveTruth), tvy = live;
+  // Raised one line above the usual offset (14 units, this plot's other line height)
+  // so the label clears the cantilever running out from this same y at the right edge.
+  const lblY = tvy < pT + 18 ? tvy + 14 : tvy - 19, lblW = tl.length * 6.8 + 8;
+  h += `<rect x="${pL + cW - lblW - 3}" y="${lblY - 12}" width="${lblW}" height="16" fill="white" opacity=".92" rx="2" pointer-events="none"/>`;
+  h += `<text x="${pL + cW - 5}" y="${lblY}" text-anchor="end" fill="${C.truth}" font-size="10.5" font-weight="700" font-family="${FF_MONO}" pointer-events="none">${tl}</text>`;
+
+  svgEl.innerHTML = h;
+  svgEl.setAttribute('viewBox', `0 0 ${W} ${SH}`);
+  svgEl.style.width = '100%'; svgEl.style.height = 'auto'; svgEl.style.display = 'block';
+  // The held segment's x-range, in the SVG's own coordinate space, for histBindDrag
+  // to invert a pointer position back into a data value.
+  svgEl._frame = { pT: pT, cH: cH, yMin: yMin, yMax: yMax, x0: pL + shown.length * colW, x1: cantEnd };
+  return { shown: shown.length, hits: hits, dropped: runs.length - shown.length, expMiss: expMiss, excl0: excl0 };
+}
+// The tally under a chart, counted over exactly the runs the chart shows. The expected
+// number of misses is the sum of each visible run's own α, so it stays honest when the
+// confidence level was changed part way through the history.
+function histCaption(el, res, what, zeroWhat) {
+  if (!res || !res.shown) { el.textContent = ''; return; }
+  const miss = res.shown - res.hits;
+  el.innerHTML = 'Intervals missing ' + what + ': <strong>' + miss + ' of ' + res.shown + '</strong>'
+    + ' (about ' + res.expMiss.toFixed(1) + ' expected at the confidence levels used)'
+    + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>' + res.excl0 + ' of ' + res.shown + '</strong>' : '')
+    + (res.dropped ? ' &middot; latest ' + res.shown + ' of ' + (res.shown + res.dropped) + ' runs' : '');
+}
+// Vertical drag on a history chart's held true-value segment. The value under the
+// pointer comes from the frame the last render stored on the SVG.
+function histBindDrag(svgEl, onDrag) {
+  let pid = null;
+  const valueAt = ev => {
+    const f = svgEl._frame; if (!f) return null;
+    const pt = svgEl.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const q = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+    const t = Math.min(1, Math.max(0, (f.pT + f.cH - q.y) / f.cH));
+    return f.yMin + t * (f.yMax - f.yMin);
+  };
+  svgEl.addEventListener('pointerover', ev => { if (ev.target.closest && ev.target.closest('.hist-handle')) svgEl.classList.add('hot'); });
+  svgEl.addEventListener('pointerout', ev => { if (pid === null && ev.target.closest && ev.target.closest('.hist-handle')) svgEl.classList.remove('hot'); });
+  svgEl.addEventListener('pointerdown', ev => {
+    if (pid !== null || !(ev.target.closest && ev.target.closest('.hist-handle'))) return;
+    ev.preventDefault(); pid = ev.pointerId; svgEl.classList.add('hot');
+    try { svgEl.setPointerCapture(pid); } catch (e) {}
+  });
+  // Coalesce drag updates to one render per animation frame: many pointermoves can
+  // land in the same frame, and only the latest one needs to reach onDrag.
+  let latest = null, pending = false, rafId = null;
+  const flush = () => {
+    pending = false; rafId = null;
+    if (latest === null) return;
+    const v = latest; latest = null; onDrag(v);
+  };
+  svgEl.addEventListener('pointermove', ev => {
+    if (ev.pointerId !== pid) return;
+    const v = valueAt(ev); if (v === null) return;
+    latest = v;
+    if (!pending) { pending = true; rafId = requestAnimationFrame(flush); }
+  });
+  // Mirrors ciInitDrag's end: apply any pending move synchronously on release
+  // rather than leaving it for a frame that may land after pid has been cleared.
+  const end = ev => {
+    if (ev.pointerId !== pid) return;
+    if (pending) { cancelAnimationFrame(rafId); flush(); }
+    pid = null; svgEl.classList.remove('hot');
+  };
+  svgEl.addEventListener('pointerup', end); svgEl.addEventListener('pointercancel', end);
+}
+// ── Shared figure helpers ─────────────────────────────
+function svgSet(el, w, h, inner) {
+  el.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  el.innerHTML = inner;
+}
+// A numeric parameter field: parses, clamps to [min, max], writes back what was
+// used, and reports through the row's status span. Returns null when unusable.
+function readNum(id, msgId, min, max, what) {
+  const inp = $(id), msg = $(msgId);
+  const raw = String(inp.value).trim(), v = Number(raw);
+  if (raw === '' || !Number.isFinite(v)) {
+    msg.textContent = '⚠ ' + what + ' must be a number.'; msg.classList.add('bad');
+    inp.setAttribute('aria-invalid', 'true'); return null;
+  }
+  const c = Math.min(Math.max(v, min), max);
+  inp.value = String(c); inp.setAttribute('aria-invalid', 'false');
+  msg.textContent = c === v ? '' : what + ' clamped to ' + c + '.'; msg.classList.remove('bad');
+  return c;
+}
+function fmt(v, d) { return Number.isFinite(v) ? v.toFixed(d) : '—'; }
+// Decimal places that make a value readable next to a scale of `scale`.
+function decFor(scale) { return scale < 0.002 ? 6 : scale < 0.02 ? 5 : scale < 0.2 ? 4 : scale < 2 ? 3 : 2; }
+
+// ── Spinners ─────────────────────────────────────────
+// One stepper per numeric field, shared by ArrowUp/ArrowDown and by the hover buttons.
+// Each entry moves its field by one step (dir = ±1; shift = ten steps, or one whole
+// unit for a 0.1 field) and then runs the field's own change handler.
+const SPIN = {};
+function spinField(id, dir, shift) { if (SPIN[id]) SPIN[id](dir, shift); }
+// A decimal field stepping by `step` (default 0.1; ×10 with Shift), floored at `min`,
+// then `onchange`. Rounds to `step`'s own decimal places, and so a 0.01 step never
+// drifts into binary-float noise like 0.30000000000000004.
+function decimalSpin(id, min, onchange, step) {
+  const st0 = step || 0.1, dec = Math.max(0, -Math.floor(Math.log10(st0)));
+  return (dir, shift) => {
+    const inp = $(id), v = Number(inp.value);
+    if (!Number.isFinite(v)) return;
+    const st = shift ? st0 * 10 : st0, next = Math.max(min, Number((v + dir * st).toFixed(dec)));
+    inp.value = String(next); onchange();
+  };
+}
+// The seed is an integer: ±1 (±100 with Shift), clamped to 0..SEED_MAX, then the
+// same normalization a typed edit gets.
+function seedSpin(tab) {
+  return (dir, shift) => {
+    const inp = $(tab + '-seed'), r = parseSeed(inp.value);
+    const cur = r.ok ? r.value : 0, next = Math.min(SEED_MAX, Math.max(0, cur + dir * (shift ? 100 : 1)));
+    inp.value = String(next); normalizeSeed(tab);
+  };
+}
+// Wrap every numeric text field in a .spin group with the two buttons, and route
+// ArrowUp/ArrowDown on the field to the same stepper.
+function bindSpinners() {
+  document.querySelectorAll('.par-inp, .seed-inp').forEach(inp => {
+    if (inp.parentElement.classList.contains('spin')) return;
+    const wrap = document.createElement('span'); wrap.className = 'spin';
+    inp.parentNode.insertBefore(wrap, inp); wrap.appendChild(inp);
+    const btns = document.createElement('span'); btns.className = 'spin-btns';
+    const lbl = document.querySelector('label[for="' + inp.id + '"]');
+    const fieldName = lbl ? lbl.textContent.trim() : inp.id;
+    [['▲', 1, 'Increase'], ['▼', -1, 'Decrease']].forEach(([glyph, dir, name]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'spin-btn'; b.textContent = glyph; b.tabIndex = -1;
+      b.setAttribute('aria-label', name + ' ' + fieldName);
+      b.addEventListener('click', ev => { spinField(inp.id, dir, ev.shiftKey); inp.focus(); });
+      btns.appendChild(b);
+    });
+    wrap.appendChild(btns);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+      ev.preventDefault(); spinField(inp.id, ev.key === 'ArrowUp' ? 1 : -1, ev.shiftKey);
+    });
+  });
+}
+
+// ── Tab ①: confidence intervals ───────────────────────
+const CIS = { runs: [], last: null, anim: null, lastRunObj: null, drag: null, win: null, finish: null };
+// Cancel any in-flight run animation, first letting it finish synchronously (drawing
+// the completed figure, stats, and history) so a stats panel from an interrupted run
+// is never left showing an earlier, unfinished frame.
+function ciCancelAnim() {
+  if (CIS.anim) { cancelAnimationFrame(CIS.anim); CIS.anim = null; if (CIS.lastRunObj) CIS.finish(); }
+}
+function ciParams() {
+  const bounds = ciMuBounds();
+  const mu = readNum('ci-mu', 'ci-par-msg', bounds[0], bounds[1], 'μ');
+  if (mu === null) return null;
+  // μ and σ share one status span; an unclamped σ read right after a clamped μ would
+  // otherwise blank the μ message the moment both fields are re-read together.
+  const muMsg = $('ci-par-msg').textContent;
+  const sigma = readNum('ci-sigma', 'ci-par-msg', 1e-6, 1e6, 'σ');
+  if (sigma === null) return null;
+  if (!$('ci-par-msg').textContent && muMsg) $('ci-par-msg').textContent = muMsg;
+  const p = { mu: mu, sigma: sigma, n: +$('ci-n').value, conf: +$('ci-conf').value };
+  CIS.lastGood = p;
+  return p;
+}
+// A read-only counterpart to ciParams: parses the four fields as-is, with no
+// clamping and no status-span writes, falling back to the last values ciParams
+// itself accepted wherever a field is currently unusable. Safe to call on every
+// resize and tab switch, where nothing about the parameters has actually changed.
+function ciParamsPeek() {
+  const g = CIS.lastGood || { mu: 5, sigma: 0.1, n: 20, conf: 0.95 };
+  const mu = Number($('ci-mu').value), sigma = Number($('ci-sigma').value);
+  return {
+    mu: Number.isFinite(mu) ? mu : g.mu,
+    sigma: Number.isFinite(sigma) && sigma > 0 ? sigma : g.sigma,
+    n: +$('ci-n').value || g.n, conf: +$('ci-conf').value || g.conf
+  };
+}
+function ciKey(p) { return [p.mu, p.sigma, p.n, p.conf].join('|'); }
+function ciParamsChanged(frozen) {
+  const p = ciParams(); if (!p) return;
+  $('ci-s-mu').textContent = String(p.mu);
+  $('ci-s-sigma').textContent = p.sigma + ' (' + Number((p.sigma * p.sigma).toPrecision(4)) + ')';
+  // With no run on screen, the t/interval cards describe the run about to happen, not
+  // a past one, and so the confidence select gets to drive their label live.
+  if (CIS.lastRunObj === null) {
+    const confTxt = fmtConf(p.conf);
+    $('ci-s-conf').textContent = confTxt; $('ci-s-conf2').textContent = confTxt;
+  }
+  const run = CIS.lastRunObj;
+  drawCiFig(run, run ? run.xs.length : 0, p, frozen || null);
+  // Reuse the params already read above: a second ciParams() call here would re-read
+  // the fields after a clamp has already been written back, find nothing left to
+  // clamp, and blank the clamp message this same call just set. Always re-render the
+  // history, with or without runs, so a μ change bends its held segment right away.
+  renderCiHist(p);
+}
+// ── Tab ① direct manipulation ────────────────────────
+// The figure's frame, hoisted so the drag code can map a pointer back to a value.
+// A figure's drawing width: the card's content width, clamped so type stays readable.
+function figWidth(svgEl) {
+  const card = svgEl.parentElement;
+  const w = card && card.clientWidth > 0 ? card.clientWidth - 24 : 380;    // 12px padding each side
+  return Math.max(300, Math.min(760, w || 380));
+}
+const ciFrame = W => ({ W: W, H: 250, pL: 30, pR: 14, pT: 12, pB: 66 });
+const CI_MU_LABEL_DX = 13; // clears the grab stroke's half-width
+// The axis window and height scale for a population. The x-axis is fixed: it is set
+// only at load and again by Clear history, never on an ordinary parameter change. Only
+// the y-scale yields to a new population, and a drag freezes whatever window is already
+// on screen so the curve visibly moves and reshapes without the axes jumping under it.
+function ciWindow(p) {
+  return { x0: p.mu - 4 * p.sigma, x1: p.mu + 4 * p.sigma,
+           yMax: 1.6 / (p.sigma * Math.sqrt(2 * Math.PI)), sigma0: p.sigma };
+}
+// The x-axis is fixed: it is set from the population at load and again by Clear history,
+// and never moves otherwise, so a change of σ is seen as a change of width. μ is clamped
+// to the window (5% in from each edge). The y-axis yields only when it must: it grows when
+// the peak would clip the top, and shrinks back only when the curve has become a sliver.
+function ciStickyWindow(p) {
+  const fit = ciWindow(p);
+  if (!CIS.win) return (CIS.win = fit);
+  const w = CIS.win, peak = 1 / (p.sigma * Math.sqrt(2 * Math.PI));
+  if (peak > w.yMax) w.yMax = peak * 1.15;
+  else if (peak < w.yMax / 4) w.yMax = peak * 1.6;
+  return w;
+}
+// μ may only live inside the window on screen.
+function ciMuBounds() {
+  const w = CIS.win; if (!w) return [-1e6, 1e6];
+  const m = (w.x1 - w.x0) * 0.05; return [w.x0 + m, w.x1 - m];
+}
+// Values from a drag or an arrow key land on a grid one tenth of σ's leading digit
+// (σ = 0.1 gives steps of 0.01, σ = 2.5 gives 0.1), which keeps the fields readable.
+function ciStep(sigma) { return Math.pow(10, Math.floor(Math.log10(sigma))) / 10; }
+function ciRound(v, sigma) {
+  const st = ciStep(sigma), dec = Math.max(0, -Math.floor(Math.log10(st)));
+  return Number((Math.round(v / st) * st).toFixed(dec));
+}
+SPIN['ci-mu'] = (dir, shift) => {
+  const [lo, hi] = ciMuBounds(), inp = $('ci-mu'), v = Number(inp.value);
+  if (!Number.isFinite(v)) return;
+  const st = shift ? 1 : 0.1, next = Math.min(hi, Math.max(lo, Number((v + dir * st).toFixed(1))));
+  inp.value = String(next); ciParamsChanged();
+};
+SPIN['ci-sigma'] = decimalSpin('ci-sigma', 0.01, ciParamsChanged, 0.01);
+SPIN['ci-seed'] = seedSpin('ci');
+function ciSvgPoint(svg, ev) {
+  const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function ciInitDrag() {
+  const svg = $('ci-fig');
+  // Hover feedback: thicken whichever line or curve a cursor sits over. Suppressed
+  // while a drag is live so an intervening pointerout can't clear the class the
+  // pointerdown below just set for the handle actually being dragged.
+  const hover = ev => {
+    if (CIS.drag) return;
+    const g = ev.target.closest ? ev.target.closest('.ci-handle') : null; if (!g) return;
+    svg.classList.toggle('hot-' + g.dataset.handle, ev.type === 'pointerover');
+  };
+  svg.addEventListener('pointerover', hover);
+  svg.addEventListener('pointerout', hover);
+  svg.addEventListener('pointerdown', ev => {
+    if (CIS.drag) return;
+    const g = ev.target.closest ? ev.target.closest('.ci-handle') : null; if (!g) return;
+    const p = ciParams(); if (!p) return;
+    ev.preventDefault();
+    ciCancelAnim();
+    CIS.drag = { which: g.dataset.handle, frozen: ciStickyWindow(p), pid: ev.pointerId };
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+    svg.classList.add('hot-' + g.dataset.handle);
+  });
+  // Coalesce drag updates to one render per animation frame: many pointermoves can
+  // land in the same frame, and only the latest one needs to move the figure.
+  let pendingEv = null, movePending = false, rafId = null;
+  const applyMove = () => {
+    movePending = false; rafId = null;
+    const ev = pendingEv; pendingEv = null; if (!ev) return;
+    const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
+    const p = ciParams(); if (!p) return;
+    const F = CIS.frame, q = ciSvgPoint(svg, ev), cW = F.W - F.pL - F.pR;
+    const x = d.frozen.x0 + (q.x - F.pL) / cW * (d.frozen.x1 - d.frozen.x0);
+    if (d.which === 'mu') { p.mu = ciRound(x, d.frozen.sigma0); $('ci-mu').value = String(p.mu); }
+    else { p.sigma = Math.max(ciRound(Math.abs(x - p.mu), d.frozen.sigma0), ciStep(d.frozen.sigma0)); $('ci-sigma').value = String(p.sigma); }
+    ciParamsChanged(d.frozen);
+  };
+  svg.addEventListener('pointermove', ev => {
+    const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
+    pendingEv = ev;
+    if (!movePending) { movePending = true; rafId = requestAnimationFrame(applyMove); }
+  });
+  const end = ev => {
+    const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
+    // A pointerup can beat the queued animation frame: apply any pending move
+    // synchronously, while CIS.drag is still set for applyMove to read, so the
+    // release never renders the frame before this one's stale position.
+    if (movePending) { cancelAnimationFrame(rafId); applyMove(); }
+    CIS.drag = null;
+    svg.classList.remove('hot-' + d.which);
+    ciParamsChanged();
+  };
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+}
+// The figure: density over μ ± 4σ, a rug and density-scaled histogram of the first
+// `upto` samples, and, once all are in, the mean marker, the interval bracket, and μ.
+function drawCiFig(run, upto, p, frozen) {
+  const F = ciFrame(figWidth($('ci-fig'))), { W, H, pL, pR, pT, pB } = F, cW = W - pL - pR, cH = H - pT - pB;
+  CIS.frame = F;
+  const win = frozen || ciStickyWindow(p), x0 = win.x0, x1 = win.x1, yMax = win.yMax;
+  const xP = x => pL + (x - x0) / (x1 - x0) * cW;
+  const yP = f => pT + cH - Math.min(f, yMax) / yMax * cH;
+  const N = run ? run.xs.length : p.n;
+  upto = Math.min(upto, N);
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  // Histogram of the first `upto` samples, as a density so it sits on the curve's
+  // scale. Bins span the sample's own range, not the whole axis window. A small sample
+  // sitting in the middle of the window then still gets its full k = ceil(√N) bars
+  // instead of two or three chunky ones spanning the fixed window.
+  if (run && upto > 0) {
+    let xMin = Infinity, xMax = -Infinity;
+    for (let i = 0; i < N; i++) { if (run.xs[i] < xMin) xMin = run.xs[i]; if (run.xs[i] > xMax) xMax = run.xs[i]; }
+    const k = Math.max(5, Math.ceil(Math.sqrt(N)));
+    const bw = xMax === xMin ? (x1 - x0) / 30 : (xMax - xMin) / k;
+    const cnt = new Array(k).fill(0);
+    for (let i = 0; i < upto; i++) {
+      let b = Math.floor((run.xs[i] - xMin) / bw); if (b >= k) b = k - 1;
+      if (b >= 0 && b < k) cnt[b]++;
+    }
+    for (let b = 0; b < k; b++) if (cnt[b]) {
+      const dens = cnt[b] / (upto * bw), y = yP(dens);
+      const bx0 = xP(xMin + b * bw), barW = Math.max(1, cW * bw / (x1 - x0) - 1);
+      const cx0 = Math.max(pL, bx0), cx1 = Math.min(pL + cW, bx0 + barW);
+      if (cx1 > cx0) h += `<rect x="${cx0}" y="${y}" width="${cx1 - cx0}" height="${pT + cH - y}" fill="${C.est}" opacity=".3" stroke="${C.est}" stroke-width=".6"/>`;
+    }
+  }
+  // true density
+  let d = '';
+  for (let i = 0; i <= 120; i++) { const x = x0 + (x1 - x0) * i / 120; d += (i ? 'L' : 'M') + xP(x).toFixed(1) + ',' + yP(CI.normPdf((x - p.mu) / p.sigma) / p.sigma).toFixed(1); }
+  h += `<path id="ci-curve" d="${d}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
+  // μ marker through the plot
+  h += `<line id="ci-muline" x1="${xP(p.mu)}" y1="${pT}" x2="${xP(p.mu)}" y2="${pT + cH + 30}" stroke="${C.truth}" stroke-width="1.2" stroke-dasharray="4,3"/>`;
+  h += `<text x="${xP(p.mu) + CI_MU_LABEL_DX}" y="${pT + 16}" fill="${C.truth}" font-size="11" font-weight="700" font-family="${FF_MONO}">μ</text>`;
+  // axis and ticks
+  h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc"/>`;
+  // Ticks come from the fixed window, not from μ, so they hold still while μ and σ
+  // change; precision from the window's own span, as the history chart's y-axis does.
+  const dec = decFor(x1 - x0);
+  for (let i = 0; i <= 4; i++) {
+    const x = x0 + i * (x1 - x0) / 4;
+    h += `<line x1="${xP(x)}" y1="${pT + cH}" x2="${xP(x)}" y2="${pT + cH + 4}" stroke="#bbb"/>`;
+    h += `<text x="${xP(x)}" y="${pT + cH + 15}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${x.toFixed(dec)}</text>`;
+  }
+  // rug
+  const rugY = pT + cH + 20;
+  if (run) for (let i = 0; i < upto; i++) {
+    const x = xP(Math.min(x1, Math.max(x0, run.xs[i])));
+    h += `<line x1="${x}" y1="${rugY}" x2="${x}" y2="${rugY + 9}" stroke="${C.est}" stroke-width="1" opacity=".8"/>`;
+  }
+  // mean marker and interval bracket once the sample is complete
+  if (run && upto >= N) {
+    const ci = run.ci, col = run.hit ? C.hit : C.miss, dash = run.hit ? '' : ' stroke-dasharray="4,3"';
+    const bx = xP(Math.min(x1, Math.max(x0, ci.mean))), by = rugY + 22;
+    const lo = xP(Math.min(x1, Math.max(x0, ci.lo))), hi = xP(Math.min(x1, Math.max(x0, ci.hi)));
+    h += `<rect x="${lo}" y="${by - 3}" width="${Math.max(1, hi - lo)}" height="6" fill="${col}" opacity=".15" rx="1"/>`;
+    h += `<line x1="${lo}" y1="${by}" x2="${hi}" y2="${by}" stroke="${col}" stroke-width="2"${dash}/>`;
+    h += `<line x1="${lo}" y1="${by - 5}" x2="${lo}" y2="${by + 5}" stroke="${col}" stroke-width="2"/>`;
+    h += `<line x1="${hi}" y1="${by - 5}" x2="${hi}" y2="${by + 5}" stroke="${col}" stroke-width="2"/>`;
+    h += run.hit ? `<circle cx="${bx}" cy="${by}" r="4.5" fill="${col}"/>`
+                 : `<circle cx="${bx}" cy="${by}" r="4" fill="#fff" stroke="${col}" stroke-width="2"/>`;
+    // SVG's own text-decoration="overline" draws at the ascender line, the same gap
+    // the .ov CSS rule fixes in HTML text; here the fix is a short <line> placed by
+    // the monospace font's own metrics rather than by CSS. Each character advances
+    // 0.6em, so "x ± H"'s five characters give the left edge of the leading x.
+    const xhFS = 10, xhCW = xhFS * 0.6, xhY = by + 17, xhX0 = bx - xhCW * 2.5;
+    h += `<text x="${bx}" y="${xhY}" text-anchor="middle" fill="${col}" font-size="${xhFS}" font-family="${FF_MONO}">x ± H</text>`;
+    h += `<line x1="${xhX0 + 0.06 * xhFS}" y1="${xhY - xhFS + 0.17 * xhFS}" x2="${xhX0 + xhCW - 0.06 * xhFS}" y2="${xhY - xhFS + 0.17 * xhFS}" stroke="${col}" stroke-width="${0.09 * xhFS}"/>`;
+  }
+  // Grab targets: wide invisible strokes over the whole μ line and the whole curve, so a
+  // finger or a cursor can take hold anywhere along them. pointer-events on the stroke
+  // only, so the histogram and rug beneath stay inert.
+  h += `<line class="ci-handle" data-handle="mu" x1="${xP(p.mu)}" y1="${pT}" x2="${xP(p.mu)}" y2="${pT + cH + 30}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  h += `<path class="ci-handle" data-handle="sigma" d="${d}" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  svgSet($('ci-fig'), W, H, h);
+}
+// One decimal only where 99.9% actually needs it; every other level is a round percent.
+function fmtConf(conf) {
+  const pct = conf * 100, r = Math.round(pct);
+  return (Math.abs(pct - r) < 1e-9 ? String(r) : pct.toFixed(1)) + '%';
+}
+function ciShowStats(run) {
+  const ci = run.ci, d = decFor(ci.h || run.truth || 1);
+  $('ci-s-mean').textContent = fmt(ci.mean, d);
+  $('ci-s-sd').textContent = fmt(ci.s, d);
+  $('ci-s-t').textContent = fmt(ci.t, 3) + ' (df ' + ci.df + ')';
+  $('ci-s-h').textContent = fmt(ci.h, d);
+  $('ci-s-int').textContent = '[' + fmt(ci.lo, d) + ', ' + fmt(ci.hi, d) + ']';
+  $('ci-s-hit').textContent = run.hit ? 'yes' : 'no (missed)';
+  $('ci-s-hit').style.color = run.hit ? C.hit : C.miss;
+  const confTxt = fmtConf(run.conf);
+  $('ci-s-conf').textContent = confTxt; $('ci-s-conf2').textContent = confTxt;
+  $('ci-live').textContent = 'Run complete: interval [' + fmt(ci.lo, d) + ', ' + fmt(ci.hi, d) + '] '
+    + (run.hit ? 'captures μ' : 'misses μ');
+}
+function ciRecord(run, p) { CIS.runs.push(CI.histRecord(run.ci.mean, run.ci, p.mu, p.n, p.conf, ciKey(p))); }
+function runCi() {
+  const seed = readSeed('ci'); if (seed === null) return;
+  const p = ciParams(); if (!p) return;
+  ciCancelAnim();
+  const run = CI.runNormal(seed, p); run.conf = p.conf;
+  const repeat = CIS.last && CIS.last.seed === seed && CIS.last.key === ciKey(p);
+  CIS.last = { seed: seed, key: ciKey(p) };
+  ciRecord(run, p);
+  CIS.lastRunObj = run;
+  const finish = () => { CIS.finish = null; drawCiFig(run, p.n, p); ciShowStats(run); renderCiHist(); };
+  noteRun('ci', seed, CIS.runs.length, repeat);
+  if (REDUCED || p.n > 200) { finish(); return; }
+  const t0 = performance.now(), DUR = 600;
+  const frame = now => {
+    const f = Math.min(1, (now - t0) / DUR), upto = Math.floor(f * p.n);
+    drawCiFig(run, upto, p);
+    if (f < 1) CIS.anim = requestAnimationFrame(frame); else { CIS.anim = null; finish(); }
+  };
+  // Held on CIS so a subsequent cancellation (a fresh run, a drag, a clear) can finish
+  // this run synchronously first instead of leaving the stats panel on a stale frame.
+  CIS.finish = finish;
+  CIS.anim = requestAnimationFrame(frame);
+}
+function runCiBatch() {
+  const s0 = readSeed('ci'); if (s0 === null) return;
+  const p = ciParams(); if (!p) return;
+  ciCancelAnim();
+  batchRun('ci', () => {
+    const first = CIS.runs.length + 1;
+    let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runNormal(batchSeed(s0, i), p); ciRecord(run, p); }
+    run.conf = p.conf;
+    CIS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: ciKey(p) };
+    CIS.lastRunObj = run;
+    drawCiFig(run, p.n, p); ciShowStats(run); renderCiHist();
+    noteBatch('ci', s0, first, CIS.runs.length);
+  });
+}
+function clearCi() {
+  ciCancelAnim();
+  CIS.runs = []; CIS.last = null; CIS.lastRunObj = null; CIS.drag = null; lastRun.ci = null;
+  ['ci-s-mean', 'ci-s-sd', 'ci-s-t', 'ci-s-h', 'ci-s-int', 'ci-s-hit'].forEach(id => { $(id).textContent = '—'; });
+  $('ci-s-hit').style.color = '';
+  // No run is on screen after a clear, and so the t/interval cards fall back to
+  // whatever confidence level is currently selected rather than the level the cleared
+  // run used.
+  const confTxt = fmtConf(+$('ci-conf').value);
+  $('ci-s-conf').textContent = confTxt; $('ci-s-conf2').textContent = confTxt;
+  CIS.win = null;
+  const p = ciParams(); if (p) drawCiFig(null, 0, p);
+  seedMsg('ci', '', false); renderCiHist();
+}
+function renderCiHist(p) {
+  p = p || ciParamsPeek();
+  const w = CIS.win || ciWindow(p);
+  // The history's y-axis matches the figure's fixed x-window, widened only if the
+  // runs on screen have drifted outside it (a possibility once μ has been dragged
+  // past what an old run captured).
+  const win = (() => {
+    const u = histWindow([CIS.runs]);
+    return u ? { lo: Math.min(u.lo, w.x0), hi: Math.max(u.hi, w.x1) } : { lo: w.x0, hi: w.x1 };
+  })();
+  const res = histPlot($('ci-hist'), $('ci-hw'), CIS.runs, {
+    yLabel: 'mean', truthLabel: v => 'μ = ' + v, window: win,
+    liveTruth: p.mu, grab: true, nLabel: 'n' });
+  histCaption($('ci-cap'), res, 'μ', null);
+}
+TABS.ci = {
+  init() {
+    const p = ciParams(); drawCiFig(null, 0, p); ciParamsChanged(); ciInitDrag();
+    histBindDrag($('ci-hist'), v => {
+      const [lo, hi] = ciMuBounds();
+      $('ci-mu').value = String(ciRound(Math.min(hi, Math.max(lo, v)), (ciParams() || { sigma: 0.1 }).sigma));
+      ciParamsChanged();
+    });
+  },
+  // A resize or tab switch redraws the figure and history at the container's new
+  // width; it never revisits whether the current field values are valid, so it reads
+  // them with the non-mutating ciParamsPeek rather than ciParams.
+  render() {
+    const p = ciParamsPeek();
+    drawCiFig(CIS.lastRunObj, CIS.lastRunObj ? CIS.lastRunObj.xs.length : 0, p);
+    renderCiHist(p);
+  }
+};
+// ── Tab ②: common random numbers ─────────────────────
+const CRS = { ind: [], crn: [], last: null };
+function crnRhoShow() { $('crn-rho-val').textContent = (+$('crn-rho').value).toFixed(2); }
+function crnParams() {
+  // μ₁, μ₂, and σ share one status span; each field is read only after the previous
+  // one has passed, and an unclamped later read that leaves the span empty falls back
+  // to whatever message an earlier field already set, so a clamp or error is never
+  // blanked out by a later valid read (mirrors ciParams's two-field version).
+  const mu1 = readNum('crn-mu1', 'crn-par-msg', -1e6, 1e6, 'μ₁');
+  if (mu1 === null) return null;
+  const msg1 = $('crn-par-msg').textContent;
+  const mu2 = readNum('crn-mu2', 'crn-par-msg', -1e6, 1e6, 'μ₂');
+  if (mu2 === null) return null;
+  if (!$('crn-par-msg').textContent && msg1) $('crn-par-msg').textContent = msg1;
+  const msg12 = $('crn-par-msg').textContent;
+  const sigma = readNum('crn-sigma', 'crn-par-msg', 1e-6, 1e6, 'σ');
+  if (sigma === null) return null;
+  if (!$('crn-par-msg').textContent && msg12) $('crn-par-msg').textContent = msg12;
+  return { mu1: mu1, mu2: mu2, sigma: sigma, rho: +$('crn-rho').value, n: +$('crn-n').value, conf: +$('crn-conf').value };
+}
+function crnKey(p) { return [p.mu1, p.mu2, p.sigma, p.rho, p.n, p.conf].join('|'); }
+function crnParamsChanged() {
+  const p = crnParams(); if (!p) return;
+  crnRhoShow();
+  $('crn-s-theory').textContent = Math.sqrt(1 - p.rho).toFixed(3);
+  $('crn-s-delta').textContent = fmt(p.mu1 - p.mu2, decFor(Math.abs(p.mu1 - p.mu2) || 1));
+  drawCrnFig(CRS.lastRunObj || null, p);
+  renderCrnHist();
+}
+// Two system panels plus a narrow differences strip: the same system-1 outputs in
+// both panels, system 2 fed its own input on the left and the shared input on the
+// right (each pair joined by a line), and the CRN arm's own d_i = y1_i − y2_i beside
+// a zero line in the strip at the right, so the variance reduction is visible directly
+// rather than only in the stats panel below.
+function drawCrnFig(run, p) {
+  const W = figWidth($('crn-fig')), H = 250, pT = 26, pB = 30, cH = H - pT - pB, MAXPAIRS = 40;
+  // Three gaps (left margin, between the two system panels, before the strip) plus a
+  // fixed right margin pR sized for the strip's own tick labels bound a content width
+  // cW, split 3:3:1 among the two system panels and the narrower differences strip.
+  const gap = 14, pR = 40, cW = W - gap * 3 - pR, sysW = cW * 3 / 7, diffW = cW / 7;
+  const panels = [{ x: gap, w: sysW, title: 'Independent inputs', y2: run ? run.y2i : null, join: false },
+                  { x: gap * 2 + sysW, w: sysW, title: 'Common random numbers', y2: run ? run.y2c : null, join: true }];
+  const diffX = gap * 3 + sysW * 2;
+  // "Common random numbers" is wider than its own panel column once the panels have
+  // shrunk to make room for the strip; scale every panel/strip title down toward the
+  // narrow end so the longest one never bleeds into its neighbor.
+  const titleFS = Math.max(8.5, Math.min(10.5, sysW / 12));
+  let lo = Math.min(p.mu1, p.mu2) - 2.5 * p.sigma, hi = Math.max(p.mu1, p.mu2) + 2.5 * p.sigma;
+  if (run) { const all = run.y1.concat(run.y2i, run.y2c); lo = Math.min(lo, ...all); hi = Math.max(hi, ...all); }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const yP = v => pT + cH - (v - lo) / (hi - lo) * cH;
+  const m = run ? Math.min(MAXPAIRS, p.n) : 0;
+  let h = '';
+  panels.forEach(pn => {
+    const c1 = pn.x + pn.w * 0.32, c2 = pn.x + pn.w * 0.68;
+    h += `<rect x="${pn.x}" y="${pT}" width="${pn.w}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+    h += `<text x="${pn.x + pn.w / 2}" y="${pT - 9}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS}" font-weight="700" font-family="${FF_SANS}">${pn.title}</text>`;
+    [[c1, p.mu1], [c2, p.mu2]].forEach(([cx, mu]) => {
+      h += `<line x1="${cx - 22}" y1="${yP(mu)}" x2="${cx + 22}" y2="${yP(mu)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    });
+    if (run) {
+      for (let i = 0; i < m; i++) {
+        const ya = yP(run.y1[i]), yb = yP(pn.y2[i]);
+        if (pn.join) h += `<line x1="${c1}" y1="${ya}" x2="${c2}" y2="${yb}" stroke="${C.pair}" stroke-width="1"/>`;
+      }
+      for (let i = 0; i < m; i++) {
+        h += `<circle cx="${c1}" cy="${yP(run.y1[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        h += `<circle cx="${c2}" cy="${yP(pn.y2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+      }
+    }
+    h += `<text x="${c1}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">system 1</text>`;
+    h += `<text x="${c2}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">system 2</text>`;
+  });
+  // one value axis on the far left, shared by the two system panels
+  const dec = decFor(hi - lo);
+  for (let i = 0; i <= 3; i++) {
+    const v = lo + (hi - lo) * i / 3;
+    h += `<text x="${14}" y="${yP(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(dec)}</text>`;
+  }
+  // Differences strip: the CRN arm's own d_i = y1_i − y2_i beside a zero line, on its
+  // own value scale so a tightly clustered set of differences is not flattened
+  // against the panels' much wider output scale.
+  const delta = p.mu1 - p.mu2;
+  let dLo = Math.min(0, delta), dHi = Math.max(0, delta);
+  if (run) for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
+  if (dHi === dLo) { const f = (p.sigma || 1) * 0.5; dLo -= f; dHi += f; }
+  const dPad = (dHi - dLo) * 0.06; dLo -= dPad; dHi += dPad;
+  const yD = v => pT + cH - (v - dLo) / (dHi - dLo) * cH, dCx = diffX + diffW / 2;
+  h += `<rect x="${diffX}" y="${pT}" width="${diffW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  h += `<text x="${dCx}" y="${pT - 9}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS}" font-weight="700" font-family="${FF_SANS}">Differences</text>`;
+  h += `<line x1="${diffX + 3}" y1="${yD(0)}" x2="${diffX + diffW - 3}" y2="${yD(0)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${diffX + 3}" y1="${yD(delta)}" x2="${diffX + diffW - 3}" y2="${yD(delta)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+  if (run) for (let i = 0; i < m; i++) { h += `<circle cx="${dCx}" cy="${yD(run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`; }
+  const dDec = decFor(dHi - dLo);
+  for (let i = 0; i <= 2; i++) {
+    const v = dLo + (dHi - dLo) * i / 2;
+    h += `<text x="${diffX + diffW + 5}" y="${yD(v) + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(dDec)}</text>`;
+  }
+  svgSet($('crn-fig'), W, H, h);
+  $('crn-fig-note').textContent = run && p.n > MAXPAIRS ? ' · first ' + MAXPAIRS + ' of ' + p.n + ' pairs drawn' : '';
+}
+function crnShowStats(run) {
+  const d = decFor(Math.min(run.ind.h, run.crn.h) || 1);
+  $('crn-s-di').textContent = fmt(run.ind.diff, d);
+  $('crn-s-dc').textContent = fmt(run.crn.mean, d);
+  $('crn-s-hi').textContent = fmt(run.ind.h, d) + ' (df ' + run.ind.df.toFixed(1) + ')';
+  $('crn-s-hc').textContent = fmt(run.crn.h, d) + ' (df ' + run.crn.df + ')';
+  $('crn-s-ratio').textContent = fmt(run.crn.h / run.ind.h, 3);
+  $('crn-s-r').textContent = fmt(run.r, 3);
+}
+function crnRecord(run, p) {
+  const k = crnKey(p);
+  CRS.ind.push(CI.histRecord(run.ind.diff, run.ind, run.truth, p.n, p.conf, k));
+  CRS.crn.push(CI.histRecord(run.crn.mean, run.crn, run.truth, p.n, p.conf, k));
+}
+function runCrn() {
+  const seed = readSeed('crn'); if (seed === null) return;
+  const p = crnParams(); if (!p) return;
+  const run = CI.runCRN(seed, p);
+  const repeat = CRS.last && CRS.last.seed === seed && CRS.last.key === crnKey(p);
+  CRS.last = { seed: seed, key: crnKey(p) };
+  CRS.lastRunObj = run;
+  crnRecord(run, p); drawCrnFig(run, p); crnShowStats(run); renderCrnHist();
+  noteRun('crn', seed, CRS.crn.length, repeat);
+}
+function runCrnBatch() {
+  const s0 = readSeed('crn'); if (s0 === null) return;
+  const p = crnParams(); if (!p) return;
+  batchRun('crn', () => {
+    const first = CRS.crn.length + 1; let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runCRN(batchSeed(s0, i), p); crnRecord(run, p); }
+    CRS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: crnKey(p) };
+    CRS.lastRunObj = run;
+    drawCrnFig(run, p); crnShowStats(run); renderCrnHist();
+    noteBatch('crn', s0, first, CRS.crn.length);
+  });
+}
+function clearCrn() {
+  CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; lastRun.crn = null;
+  ['crn-s-di', 'crn-s-dc', 'crn-s-hi', 'crn-s-hc', 'crn-s-ratio', 'crn-s-r'].forEach(id => { $(id).textContent = '—'; });
+  const p = crnParams(); if (p) drawCrnFig(null, p);
+  seedMsg('crn', '', false); renderCrnHist();
+}
+function renderCrnHist() {
+  const p = crnParams() || { mu1: 10, mu2: 10.5, sigma: 1 };
+  const delta = p.mu1 - p.mu2, s = p.sigma;
+  const win = histWindow([CRS.ind, CRS.crn]) || { lo: delta - 1.5 * s, hi: delta + 1.5 * s };
+  const opts = { yLabel: 'difference of means', truthLabel: v => 'δ = ' + v, window: win,
+                 liveTruth: delta, emptyWindow: win, nLabel: 'n' };
+  histCaption($('crn-cap1'), histPlot($('crn-hist1'), $('crn-hw1'), CRS.ind, opts), 'δ', 'zero');
+  histCaption($('crn-cap2'), histPlot($('crn-hist2'), $('crn-hw2'), CRS.crn, opts), 'δ', 'zero');
+}
+TABS.crn = {
+  init() { const p = crnParams(); if (p) drawCrnFig(null, p); crnParamsChanged(); },
+  render() { const p = crnParams(); if (p) drawCrnFig(CRS.lastRunObj || null, p); renderCrnHist(); }
+};
+SPIN['crn-mu1'] = decimalSpin('crn-mu1', -1e6, crnParamsChanged);
+SPIN['crn-mu2'] = decimalSpin('crn-mu2', -1e6, crnParamsChanged);
+SPIN['crn-sigma'] = decimalSpin('crn-sigma', 0.01, crnParamsChanged, 0.01);
+SPIN['crn-seed'] = seedSpin('crn');
+// ── Tab ③: antithetic variates ───────────────────────
+function fnOptions(sel) {
+  sel.innerHTML = CI.FUNC_KEYS.map(k => `<option value="${k}">${CI.FUNCS[k].label}</option>`).join('');
+}
+// The curve of h over [0, 1] and its value range, sampled once per model.
+function fnCurve(f) {
+  const pts = []; let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i <= 100; i++) { const u = i / 100, y = f.h(u); pts.push([u, y]); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+  const pad = (hi - lo) * 0.08 || 0.1;
+  return { pts: pts, lo: lo - pad, hi: hi + pad };
+}
+const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null };
+function avParams() { return { fn: $('av-fn').value, n: +$('av-n').value, conf: +$('av-conf').value }; }
+function avKey(p) { return [p.fn, p.n, p.conf].join('|'); }
+function avParamsChanged() {
+  const p = avParams(), f = CI.FUNCS[p.fn];
+  const v = CI.funcVar(f), cov = CI.funcAntiCov(f);
+  $('av-s-true').textContent = f.mean.toFixed(5);
+  $('av-s-rx').textContent = (cov / v).toFixed(3);
+  drawAvFig(AVS.lastRunObj, AVS.lastRunP || p);
+  renderAvHist();
+}
+function drawAvFig(run, p) {
+  const W = figWidth($('av-fig')), H = 250, pL = 44, pR = 22, pT = 14, pB = 34, cW = W - pL - pR, cH = H - pT - pB;
+  const f = CI.FUNCS[p.fn], cv = fnCurve(f), MAXP = 40;
+  const xP = u => pL + u * cW, yP = y => pT + cH - (y - cv.lo) / (cv.hi - cv.lo) * cH;
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  h += `<line x1="${xP(0.5)}" y1="${pT}" x2="${xP(0.5)}" y2="${pT + cH}" stroke="${C.pair}" stroke-width="1" stroke-dasharray="2,3"/>`;
+  h += `<line x1="${pL}" y1="${yP(f.mean)}" x2="${pL + cW}" y2="${yP(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+  h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
+  h += `<path d="${cv.pts.map((q, i) => (i ? 'L' : 'M') + xP(q[0]).toFixed(1) + ',' + yP(q[1]).toFixed(1)).join('')}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
+  const m = run ? Math.min(MAXP, p.n) : 0;
+  for (let i = 0; i < m; i++) {
+    const xa = xP(run.u[i]), ya = yP(run.ya[i]), xb = xP(1 - run.u[i]), yb = yP(run.yb[i]);
+    h += `<line x1="${xa}" y1="${ya}" x2="${xb}" y2="${yb}" stroke="${C.pair}" stroke-width="1"/>`;
+  }
+  for (let i = 0; i < m; i++) {
+    h += `<circle cx="${xP(run.u[i])}" cy="${yP(run.ya[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+    h += `<circle cx="${xP(1 - run.u[i])}" cy="${yP(run.yb[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+    h += `<path d="M${pL + cW + 3},${yP(run.z[i])} l7,-3.5 v7 z" fill="${C.truth}" opacity=".8"/>`;
+  }
+  const dec = decFor(cv.hi - cv.lo);
+  for (let i = 0; i <= 3; i++) { const y = cv.lo + (cv.hi - cv.lo) * i / 3; h += `<text x="${pL - 5}" y="${yP(y) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${y.toFixed(dec)}</text>`; }
+  [0, 0.5, 1].forEach(u => { h += `<text x="${xP(u)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${u}</text>`; });
+  h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">u (the uniform input)</text>`;
+  svgSet($('av-fig'), W, H, h);
+  $('av-fig-note').textContent = run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : '';
+}
+function avShowStats(run) {
+  const d = decFor(Math.min(run.ind.h, run.av.h) || 1);
+  $('av-s-mi').textContent = fmt(run.ind.mean, d);
+  $('av-s-ma').textContent = fmt(run.av.mean, d);
+  $('av-s-hi').textContent = fmt(run.ind.h, d) + ' (df ' + run.ind.df + ')';
+  $('av-s-ha').textContent = fmt(run.av.h, d) + ' (df ' + run.av.df + ')';
+  $('av-s-r').textContent = fmt(run.r, 3);
+  const vY = run.ind.s * run.ind.s, vZ = run.av.s * run.av.s;
+  $('av-s-vr').textContent = vY > 0 ? fmt(vZ / vY, 3) : '—';
+}
+function avRecord(run, p) {
+  const k = avKey(p);
+  AVS.ind.push(CI.histRecord(run.ind.mean, run.ind, run.truth, 2 * p.n, p.conf, k));
+  AVS.av.push(CI.histRecord(run.av.mean, run.av, run.truth, p.n, p.conf, k));
+}
+function runAv() {
+  const seed = readSeed('av'); if (seed === null) return;
+  const p = avParams(), run = CI.runAV(seed, p);
+  const repeat = AVS.last && AVS.last.seed === seed && AVS.last.key === avKey(p);
+  AVS.last = { seed: seed, key: avKey(p) };
+  AVS.lastRunObj = run; AVS.lastRunP = p;
+  avRecord(run, p); drawAvFig(run, p); avShowStats(run); renderAvHist();
+  noteRun('av', seed, AVS.av.length, repeat);
+}
+function runAvBatch() {
+  const s0 = readSeed('av'); if (s0 === null) return;
+  const p = avParams();
+  batchRun('av', () => {
+    const first = AVS.av.length + 1; let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runAV(batchSeed(s0, i), p); avRecord(run, p); }
+    AVS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: avKey(p) };
+    AVS.lastRunObj = run; AVS.lastRunP = p;
+    drawAvFig(run, p); avShowStats(run); renderAvHist();
+    noteBatch('av', s0, first, AVS.av.length);
+  });
+}
+function clearAv() {
+  AVS.ind = []; AVS.av = []; AVS.last = null; AVS.lastRunObj = null; AVS.lastRunP = null; lastRun.av = null;
+  ['av-s-mi', 'av-s-ma', 'av-s-hi', 'av-s-ha', 'av-s-r', 'av-s-vr'].forEach(id => { $(id).textContent = '—'; });
+  drawAvFig(null, avParams()); seedMsg('av', '', false); renderAvHist();
+}
+function renderAvHist() {
+  const p = avParams(), f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
+  const win = histWindow([AVS.ind, AVS.av]) || { lo: f.mean - 1.5 * sd, hi: f.mean + 1.5 * sd };
+  const opts = { yLabel: 'mean of h', truthLabel: v => 'E[h] = ' + v.toFixed(4), window: win,
+                 liveTruth: f.mean, emptyWindow: win, nLabel: 'evals' };
+  histCaption($('av-cap1'), histPlot($('av-hist1'), $('av-hw1'), AVS.ind, opts), 'E[h]', null);
+  histCaption($('av-cap2'), histPlot($('av-hist2'), $('av-hw2'), AVS.av, { ...opts, nLabel: 'pairs' }), 'E[h]', null);
+}
+TABS.av = {
+  init() { fnOptions($('av-fn')); avParamsChanged(); drawAvFig(null, avParams()); },
+  render() { drawAvFig(AVS.lastRunObj, AVS.lastRunP || avParams()); renderAvHist(); }
+};
+SPIN['av-seed'] = seedSpin('av');
+// ── Tab ④: control variates ──────────────────────────
+const CVS = { plain: [], cv: [], last: null, lastRunObj: null, lastRunP: null };
+function cvParams() { return { fn: $('cv-fn').value, n: +$('cv-n').value, conf: +$('cv-conf').value }; }
+function cvKey(p) { return [p.fn, p.n, p.conf].join('|'); }
+function cvParamsChanged() {
+  const p = cvParams(), f = CI.FUNCS[p.fn];
+  $('cv-s-true').textContent = f.mean.toFixed(5);
+  $('cv-s-cx').textContent = (f.covU * 12).toFixed(4);
+  drawCvFig(CVS.lastRunObj, CVS.lastRunP || p);
+  renderCvHist();
+}
+function drawCvFig(run, p) {
+  const W = figWidth($('cv-fig')), H = 250, pL = 44, pR = 14, pT = 14, pB = 34, cW = W - pL - pR, cH = H - pT - pB;
+  const f = CI.FUNCS[p.fn], cv = fnCurve(f), MAXD = 200, MAXR = 40;
+  const xP = u => pL + u * cW, yP = y => pT + cH - (y - cv.lo) / (cv.hi - cv.lo) * cH;
+  let h = `<clipPath id="cv-clip"><rect x="${pL}" y="${pT}" width="${cW}" height="${cH}"/></clipPath>`;
+  h += `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  h += `<line x1="${xP(0.5)}" y1="${pT}" x2="${xP(0.5)}" y2="${pT + cH}" stroke="${C.pair}" stroke-width="1" stroke-dasharray="2,3"/>`;
+  h += `<line x1="${pL}" y1="${yP(f.mean)}" x2="${pL + cW}" y2="${yP(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+  h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
+  let note = '';
+  if (run) {
+    const m = Math.min(MAXD, p.n), ybar = run.plain.mean, line = u => ybar + run.c * (u - 0.5);
+    const rN = Math.min(MAXR, p.n);
+    h += `<g clip-path="url(#cv-clip)">`;
+    for (let i = 0; i < rN; i++) {
+      h += `<line x1="${xP(run.u[i])}" y1="${yP(run.y[i])}" x2="${xP(run.u[i])}" y2="${yP(line(run.u[i]))}" stroke="${C.pair}" stroke-width="1"/>`;
+    }
+    h += `</g>`;
+    for (let i = 0; i < m; i++) h += `<circle cx="${xP(run.u[i])}" cy="${yP(run.y[i])}" r="${m > 100 ? 2 : 3}" fill="${C.est}" opacity=".8"/>`;
+    h += `<g clip-path="url(#cv-clip)"><line x1="${xP(0)}" y1="${yP(line(0))}" x2="${xP(1)}" y2="${yP(line(1))}" stroke="${C.truth}" stroke-width="2"/></g>`;
+    h += `<circle cx="${xP(0.5)}" cy="${yP(ybar)}" r="3.5" fill="#fff" stroke="${C.truth}" stroke-width="2"/>`;
+    note = p.n > MAXD ? ' · first ' + MAXD + ' of ' + p.n + ' draws drawn, residuals for the first ' + MAXR
+         : rN < p.n ? ' · residuals drawn for the first ' + MAXR + ' of ' + p.n + ' draws' : '';
+  }
+  const dec = decFor(cv.hi - cv.lo);
+  for (let i = 0; i <= 3; i++) { const y = cv.lo + (cv.hi - cv.lo) * i / 3; h += `<text x="${pL - 5}" y="${yP(y) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${y.toFixed(dec)}</text>`; }
+  [0, 0.5, 1].forEach(u => { h += `<text x="${xP(u)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${u}</text>`; });
+  h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">u (the uniform input, mean ½ known)</text>`;
+  svgSet($('cv-fig'), W, H, h);
+  $('cv-fig-note').textContent = note;
+}
+function cvShowStats(run) {
+  const d = decFor(Math.min(run.plain.h, run.cv.h) || 1);
+  $('cv-s-mp').textContent = fmt(run.plain.mean, d);
+  $('cv-s-mc').textContent = fmt(run.cv.mean, d);
+  $('cv-s-hp').textContent = fmt(run.plain.h, d) + ' (df ' + run.plain.df + ')';
+  $('cv-s-hc').textContent = fmt(run.cv.h, d) + ' (df ' + run.cv.df + ')';
+  $('cv-s-c').textContent = fmt(run.c, 4);
+  $('cv-s-r2').textContent = fmt(run.r2, 3) + ' → ' + fmt(1 - run.r2, 3);
+}
+function cvRecord(run, p) {
+  const k = cvKey(p);
+  CVS.plain.push(CI.histRecord(run.plain.mean, run.plain, run.truth, p.n, p.conf, k));
+  CVS.cv.push(CI.histRecord(run.cv.mean, run.cv, run.truth, p.n, p.conf, k));
+}
+function runCv() {
+  const seed = readSeed('cv'); if (seed === null) return;
+  const p = cvParams(), run = CI.runCV(seed, p);
+  const repeat = CVS.last && CVS.last.seed === seed && CVS.last.key === cvKey(p);
+  CVS.last = { seed: seed, key: cvKey(p) };
+  CVS.lastRunObj = run; CVS.lastRunP = p;
+  cvRecord(run, p); drawCvFig(run, p); cvShowStats(run); renderCvHist();
+  noteRun('cv', seed, CVS.cv.length, repeat);
+}
+function runCvBatch() {
+  const s0 = readSeed('cv'); if (s0 === null) return;
+  const p = cvParams();
+  batchRun('cv', () => {
+    const first = CVS.cv.length + 1; let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runCV(batchSeed(s0, i), p); cvRecord(run, p); }
+    CVS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: cvKey(p) };
+    CVS.lastRunObj = run; CVS.lastRunP = p;
+    drawCvFig(run, p); cvShowStats(run); renderCvHist();
+    noteBatch('cv', s0, first, CVS.cv.length);
+  });
+}
+function clearCv() {
+  CVS.plain = []; CVS.cv = []; CVS.last = null; CVS.lastRunObj = null; CVS.lastRunP = null; lastRun.cv = null;
+  ['cv-s-mp', 'cv-s-mc', 'cv-s-hp', 'cv-s-hc', 'cv-s-c', 'cv-s-r2'].forEach(id => { $(id).textContent = '—'; });
+  drawCvFig(null, cvParams()); seedMsg('cv', '', false); renderCvHist();
+}
+function renderCvHist() {
+  const p = cvParams(), f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
+  const win = histWindow([CVS.plain, CVS.cv]) || { lo: f.mean - 1.5 * sd, hi: f.mean + 1.5 * sd };
+  const opts = { yLabel: 'mean of h', truthLabel: v => 'E[h] = ' + v.toFixed(4), window: win,
+                 liveTruth: f.mean, emptyWindow: win, nLabel: 'n' };
+  histCaption($('cv-cap1'), histPlot($('cv-hist1'), $('cv-hw1'), CVS.plain, opts), 'E[h]', null);
+  histCaption($('cv-cap2'), histPlot($('cv-hist2'), $('cv-hw2'), CVS.cv, opts), 'E[h]', null);
+}
+TABS.cv = {
+  init() { fnOptions($('cv-fn')); cvParamsChanged(); drawCvFig(null, cvParams()); },
+  render() { drawCvFig(CVS.lastRunObj, CVS.lastRunP || cvParams()); renderCvHist(); }
+};
+SPIN['cv-seed'] = seedSpin('cv');
+// ── Tab ⑤: importance sampling ───────────────────────
+const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null };
+function isThetaShow() { $('is-theta-val').textContent = (+$('is-theta').value).toFixed(2); }
+function isMatchT() { $('is-theta').value = $('is-T').value; isThetaShow(); isParamsChanged(); }
+function isParams() { return { T: +$('is-T').value, theta: +$('is-theta').value, n: +$('is-n').value, conf: +$('is-conf').value }; }
+function isKey(p) { return [p.T, p.theta, p.n, p.conf].join('|'); }
+function isParamsChanged() {
+  const p = isParams();
+  isThetaShow();
+  $('is-s-true').textContent = (1 - CI.normCdf(p.T)).toExponential(4);
+  $('is-s-wt').textContent = CI.isWeight(p.T, p.theta).toExponential(3);
+  drawIsFig(ISS.lastRunObj, ISS.lastRunP || p);
+  renderIsHist();
+}
+function drawIsFig(run, p) {
+  const W = figWidth($('is-fig')), H = 250, pL = 14, pR = 14, pT = 14, pB = 48, cW = W - pL - pR, cH = H - pT - pB, MAXR = 300;
+  const x0 = -4, x1 = Math.max(p.T, p.theta) + 4;
+  const xP = x => pL + (x - x0) / (x1 - x0) * cW, yP = f => pT + cH - f / 0.45 * cH;
+  const curve = (mu, from, to) => { let d = ''; for (let i = 0; i <= 160; i++) { const x = from + (to - from) * i / 160; d += (i ? 'L' : 'M') + xP(x).toFixed(1) + ',' + yP(CI.normPdf(x - mu)).toFixed(1); } return d; };
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  // shaded tails under each density
+  h += `<path d="${curve(0, p.T, x1)} L${xP(x1)},${yP(0)} L${xP(p.T)},${yP(0)} Z" fill="${C.band}"/>`;
+  h += `<path d="${curve(p.theta, p.T, x1)} L${xP(x1)},${yP(0)} L${xP(p.T)},${yP(0)} Z" fill="${C.estPale}"/>`;
+  h += `<path d="${curve(0, x0, x1)}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
+  h += `<path d="${curve(p.theta, x0, x1)}" fill="none" stroke="${C.est}" stroke-width="2" stroke-dasharray="6,3"/>`;
+  h += `<line x1="${xP(p.T)}" y1="${pT}" x2="${xP(p.T)}" y2="${pT + cH + 22}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+  h += `<text x="${xP(p.T) + 4}" y="${pT + 12}" fill="${C.muted}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">T = ${p.T}</text>`;
+  h += `<text x="${xP(p.theta)}" y="${yP(0.4) - 4}" text-anchor="middle" fill="${C.est}" font-size="10" font-family="${FF_MONO}">θ = ${p.theta}</text>`;
+  h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc"/>`;
+  for (let x = Math.ceil(x0); x <= Math.floor(x1); x++) {
+    h += `<text x="${xP(x)}" y="${pT + cH + 13}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${x}</text>`;
+  }
+  if (run) {
+    const rugY = pT + cH + 18, m = Math.min(MAXR, p.n);
+    for (let i = 0; i < m; i++) {
+      const inTail = run.w[i] > 0, x = xP(Math.min(x1, Math.max(x0, run.ys[i])));
+      h += `<line x1="${x}" y1="${rugY}" x2="${x}" y2="${rugY + (inTail ? 12 : 6)}" stroke="${C.est}" stroke-width="1" opacity="${inTail ? .9 : .45}"/>`;
+    }
+  }
+  h += `<text x="${pL + cW / 2}" y="${H - 3}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">x</text>`;
+  svgSet($('is-fig'), W, H, h);
+  $('is-fig-note').textContent = run && p.n > MAXR ? ' · first ' + MAXR + ' of ' + p.n + ' draws in the rug' : '';
+}
+function isShowStats(run) {
+  const e = v => Number.isFinite(v) ? v.toExponential(3) : '—';
+  $('is-s-hits').textContent = run.hits + ' of ' + run.direct.n;
+  const lowEss = run.ess < 30 || run.ess < 0.05 * run.tail;
+  $('is-s-tail').textContent = run.tail + ' of ' + run.wtd.n + ', ESS ' + run.ess.toFixed(1) + (lowEss ? ' – low; interval unreliable' : '');
+  $('is-s-d').textContent = e(run.direct.mean) + ' ± ' + e(run.direct.h);
+  $('is-s-w').textContent = e(run.wtd.mean) + ' ± ' + e(run.wtd.h);
+  $('is-s-rd').textContent = fmt(run.direct.h / run.truth, 2);
+  $('is-s-rw').textContent = fmt(run.wtd.h / run.truth, 3);
+  $('is-s-tail').style.color = lowEss ? C.warn : '';
+  $('is-s-w').style.color = lowEss ? C.warn : '';
+}
+function isRecord(run, p) {
+  const k = isKey(p);
+  ISS.direct.push(CI.histRecord(run.direct.mean, run.direct, run.truth, p.n, p.conf, k));
+  ISS.wtd.push(CI.histRecord(run.wtd.mean, run.wtd, run.truth, p.n, p.conf, k));
+}
+function runIs() {
+  const seed = readSeed('is'); if (seed === null) return;
+  const p = isParams(), run = CI.runIS(seed, p);
+  const repeat = ISS.last && ISS.last.seed === seed && ISS.last.key === isKey(p);
+  ISS.last = { seed: seed, key: isKey(p) };
+  ISS.lastRunObj = run; ISS.lastRunP = p;
+  isRecord(run, p); drawIsFig(run, p); isShowStats(run); renderIsHist();
+  noteRun('is', seed, ISS.wtd.length, repeat);
+}
+function runIsBatch() {
+  const s0 = readSeed('is'); if (s0 === null) return;
+  const p = isParams();
+  batchRun('is', () => {
+    const first = ISS.wtd.length + 1; let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runIS(batchSeed(s0, i), p); isRecord(run, p); }
+    ISS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: isKey(p) };
+    ISS.lastRunObj = run; ISS.lastRunP = p;
+    drawIsFig(run, p); isShowStats(run); renderIsHist();
+    noteBatch('is', s0, first, ISS.wtd.length);
+  });
+}
+function clearIs() {
+  ISS.direct = []; ISS.wtd = []; ISS.last = null; ISS.lastRunObj = null; ISS.lastRunP = null; lastRun.is = null;
+  ['is-s-hits', 'is-s-tail', 'is-s-d', 'is-s-w', 'is-s-rd', 'is-s-rw'].forEach(id => { $(id).textContent = '—'; });
+  $('is-s-tail').style.color = ''; $('is-s-w').style.color = '';
+  drawIsFig(null, isParams()); seedMsg('is', '', false); renderIsHist();
+}
+function renderIsHist() {
+  const p = isParams(), truth = 1 - CI.normCdf(p.T);
+  const win = histWindow([ISS.direct, ISS.wtd]) || { lo: 0, hi: truth * 2.5 };
+  const opts = { yLabel: 'tail probability', truthLabel: v => 'p = ' + v.toExponential(2), window: win,
+                 liveTruth: truth, emptyWindow: win, nLabel: 'n' };
+  histCaption($('is-cap1'), histPlot($('is-hist1'), $('is-hw1'), ISS.direct, opts), 'p', null);
+  histCaption($('is-cap2'), histPlot($('is-hist2'), $('is-hw2'), ISS.wtd, opts), 'p', null);
+}
+TABS.is = {
+  init() { isParamsChanged(); drawIsFig(null, isParams()); },
+  render() { drawIsFig(ISS.lastRunObj, ISS.lastRunP || isParams()); renderIsHist(); }
+};
+SPIN['is-seed'] = seedSpin('is');
+
+// ── Tooltips ────────────────────────────────────────────
+// One floating element serves every [data-tip] on the page, so two tips can never be
+// open at once and the text can carry markup. Same pattern as the other widgets in
+// this repository; the title attribute is deliberately not used anywhere, because
+// iOS and Android show it neither on tap nor on long press.
+(function(){
+  var tip=document.createElement('div');
+  tip.id='tipbox';
+  tip.setAttribute('role','tooltip');
+  document.body.appendChild(tip);
+
+  // Every tip is also a description in the accessibility tree. A title attribute
+  // would do that for free, but it would raise the browser's own tooltip alongside
+  // this one, and it reaches neither the keyboard nor a touch screen. So the text is
+  // mirrored into a visually hidden span instead, and pointed at with
+  // aria-describedby. The spans are parked outside their triggers on purpose: inside
+  // a button or a label they would be read as part of its name.
+  var host=document.createElement('div');
+  host.className='sr-only';
+  document.body.appendChild(host);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tip]'), function(el,i){
+    var id='tipdesc-'+i, sp=document.createElement('span');
+    sp.id=id; sp.innerHTML=el.getAttribute('data-tip');
+    host.appendChild(sp);
+    el.setAttribute('aria-describedby',id);
+  });
+  function place(x,y){
+    var r=tip.getBoundingClientRect();
+    var nx=x-r.width/2, ny=y+12;
+    if(nx+r.width>window.innerWidth-8) nx=window.innerWidth-8-r.width;
+    if(ny+r.height>window.innerHeight-8) ny=y-r.height-14;
+    tip.style.left=Math.max(8,nx)+'px'; tip.style.top=Math.max(8,ny)+'px';
+  }
+  // Remembering what opened the tip keeps one input from closing another's: tapping a
+  // term blurs whatever had focus, and an unconditional focusout would shut the tip
+  // in the same breath as the tap that opened it.
+  var openedBy=null;
+  function show(t,x,y,how){ tip.innerHTML=t.getAttribute('data-tip'); tip.style.opacity='1'; openedBy=how; place(x,y); }
+  function showAt(t,how){ var r=t.getBoundingClientRect(); show(t, r.left+r.width/2, r.bottom, how); }
+  function hide(){ tip.style.opacity='0'; openedBy=null; }
+  function hideIf(how){ if(openedBy===how)hide(); }
+  function target(e){ return e.target && e.target.closest ? e.target.closest('[data-tip]') : null; }
+
+  // Hover for a mouse, focus for a keyboard, tap for a finger.
+  document.addEventListener('mousemove', function(e){ var t=target(e); if(t)show(t,e.clientX,e.clientY,'hover'); else hideIf('hover'); });
+  document.addEventListener('focusin',  function(e){ var t=target(e); if(t)showAt(t,'focus'); });
+  document.addEventListener('focusout', function(){ hideIf('focus'); });
+  document.addEventListener('keydown',  function(e){ if(e.key==='Escape')hide(); });
+  window.addEventListener('scroll', hide, true);
+
+  // Tap opens a tip on anything except a control that tap already operates.
+  document.addEventListener('click', function(e){
+    var t=target(e);
+    if(t&&!t.hasAttribute('data-tip-press')){
+      // A term can sit inside a <label>, where the default action would hand focus to
+      // the field and raise the keyboard on a phone. The tip is the whole intent here.
+      e.preventDefault();
+      showAt(t,'tap');
+    } else hide();
+  });
+
+  // Long press for those: 450ms held still, and the click it would fire is swallowed.
+  var timer=null, x0=0, y0=0, swallow=false;
+  document.addEventListener('pointerdown', function(e){
+    var t=e.target.closest?e.target.closest('[data-tip-press]'):null;
+    if(!t)return;
+    x0=e.clientX; y0=e.clientY;
+    timer=setTimeout(function(){ timer=null; swallow=true; showAt(t,'press'); }, 450);
+  });
+  document.addEventListener('pointermove', function(e){
+    if(timer&&Math.hypot(e.clientX-x0,e.clientY-y0)>10){ clearTimeout(timer); timer=null; }
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
+  });
+  // Capture phase, so the press never reaches the button's own handler.
+  document.addEventListener('click', function(e){
+    if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
+})();
+
+window.addEventListener('DOMContentLoaded', () => {
+  bindSpinners();
+  Object.keys(TABS).forEach(k => { if (TABS[k].init) TABS[k].init(); });
+  renderActiveHist();
+  watchHistWidth();
+});
+</script>
+<footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">
+  <div style="max-width:1020px;margin:0 auto;padding:2px 18px 10px;">
+    <a href="../" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'"><span style="font-family:sans-serif">&larr;</span> All course visualizations</a>
+  </div>
+</footer>
+<script>
+if (window.self !== window.top) {
+  var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; }
+  // A min-height tied to the viewport (the "fill the window" idiom) would track the frame's
+  // own height and keep the frame from ever shrinking, so neutralize such rules here, where
+  // the frame is sized to the content. Cross-origin sheets (web fonts) throw and are skipped.
+  (function () {
+    function drop(rules) {
+      for (var i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (r.style && /vh\b/.test(r.style.minHeight)) { r.style.minHeight = '0'; }
+        if (r.cssRules) { drop(r.cssRules); }
+      }
+    }
+    for (var s = 0; s < document.styleSheets.length; s++) { try { drop(document.styleSheets[s].cssRules); } catch (e) {} }
+  })();
+  // Embedded in another page: report the content height to the host so the iframe can
+  // grow and shrink with the active tab instead of scrolling inside itself. Canvas LMS
+  // listens for this message on every page and resizes whichever iframe sent it. It is
+  // never sent on a direct visit, and it never leaves the browser.
+  (function () {
+    var last = 0;
+    function report(force) {
+      var h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+      if (h > 0 && (force || h !== last)) { last = h; window.parent.postMessage({ subject: 'lti.frameResize', height: h }, '*'); }
+    }
+    if (window.ResizeObserver) { new ResizeObserver(function () { report(false); }).observe(document.documentElement); }
+    window.addEventListener('load', function () { report(true); });
+    // The host's listener may attach after this page has loaded (Canvas boots a large
+    // bundle after its HTML arrives), so repeat the current height a few times.
+    [500, 1500, 3000, 6000, 12000].forEach(function (ms) { setTimeout(function () { report(true); }, ms); });
+    report(true);
+  })();
+}
+</script>
+</body>
+</html>

@@ -58,7 +58,10 @@ comment saying what each one means. Three constraints:
 
 Prefer one visual language reused across the whole widget over a fresh pair per chart. For example,
 teal `#0F6E8C` for the exact thing (true curve, CI hit) and orange `#C2570A` for the sampled thing
-(estimate, CI miss), with maroon reserved for chrome.
+(estimate), with maroon reserved for chrome. A third data color, red `#D62828` (5.0:1 on
+white), marks an interval that missed the true value in the Confidence Interval and Variance
+Reduction Techniques Explorer, so a miss is not the same orange as the sample it came from; the
+miss is also dashed with a hollow dot.
 
 ## Canvas and SVG
 
@@ -156,6 +159,7 @@ copyright and license links too, so every link on the page behaves the same way.
 | Teal `#0F6E8C` | 5.79:1 | data |
 | Orange `#C2570A` | 4.50:1 | data |
 | Indigo `#3F4C8C` | 8.00:1 | data |
+| Red `#D62828` | 5.01:1 | data: the missed-interval color in the Confidence Interval and Variance Reduction Techniques Explorer |
 
 Maroon against orange is 2.08:1 and against crimson `#c0392b` is 1.63:1 – the reason maroon stays
 out of the data palette.

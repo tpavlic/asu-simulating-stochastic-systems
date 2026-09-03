@@ -45,6 +45,7 @@ below.
 | Directory | Description |
 | --- | --- |
 | [`power_analysis/`](power_analysis/) | Statistical power by simulation and by formula: eight tests (t, z, two-sample t, variance, proportion, chi-square GOF, ANOVA, regression slope) drawn as null-vs-alternative sampling distributions with α, β, and the tabled critical values on the plot, a Monte Carlo engine whose rejection counting converges onto the exact noncentral-distribution answer, solve-for-power and solve-for-n in both directions, a live OC chart, a paired-comparison panel connecting correlation to common random numbers and antithetic variates, pilot-data planning, and verified MATLAB/R/Python export |
+| [`output_analysis/`](output_analysis/) | Confidence Interval and Variance Reduction Techniques Explorer: sample a known normal population, form t intervals, and watch about α of them miss the true mean over a hundred runs, with μ, σ, n, and the confidence level adjustable mid-history; then narrow the interval with common random numbers (two-sample and paired intervals), antithetic variates, control variates, and importance sampling, each shown as a plain history over an improved one |
 
 ---
 
