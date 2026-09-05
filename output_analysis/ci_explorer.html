@@ -172,16 +172,22 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* minmax(0,1fr), not 1fr: the stat values are nowrap, so an auto minimum would
    give the columns a large min-content width and push the page into h-scroll. */
 .sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
-/* Stacked layout, still wide: eight cards read better as two rows of four than four of two. */
-@media (max-width: 760px) and (min-width: 560px) { .sg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Stacked layout, still wide: eight cards read better as two rows of four than four of two.
+   This four-across layout was sized for tab ①'s eight short cards; tab ②'s own .sg carries
+   thirteen cards with longer values ("1.9481 (0.5958)", a bracketed interval) that would
+   ellipsize in a quarter-width column, and so it opts out via sg-two and stays two-column here. */
+@media (max-width: 760px) and (min-width: 560px) { .sg:not(.sg-two) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 /* A card whose value is a bracketed interval (e.g. "[-1.1243, -0.2265]") can outgrow half a
    narrow phone's stats column; give it the full row there rather than ellipsizing it. */
 @media (max-width: 480px) { .sc-wide { grid-column: 1 / -1; } }
+/* A verdict reads as a sentence and sits better spanning the whole row than sharing it
+   with another card, at any width, and so this one is unconditional rather than media-gated. */
+.sc-full { grid-column: 1 / -1; }
 .sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 /* Greek letters and x-bar inside the uppercase stat labels keep their case and spacing. */
 .sym { text-transform: none; letter-spacing: 0; }
-.sym sub { font-size: .8em; }
+.sym sub, sub.sym { font-size: .8em; }
 .ov { position: relative; display: inline-block; text-transform: none; letter-spacing: 0; }
 .ov::before { content: ''; position: absolute; left: .06em; right: .06em; top: .17em; border-top: .09em solid currentColor; }
 .sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -414,7 +420,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-shift"><span class="tip" tabindex="0" data-tip="Added to every output of system 2 so that two systems built from the same model can still differ by a known amount. The true difference δ = E[h₂] + shift − E[h₁] is what the intervals try to capture.">Shift added to system 2</span></label><input class="par-inp" id="crn-shift" type="text" inputmode="decimal" value="0.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
-      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-sige"><span class="tip" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied.">Own noise σₑ</span></label><input class="par-inp" id="crn-sige" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-sige"><span class="tip" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied.">Own noise σ<sub>e</sub></span></label><input class="par-inp" id="crn-sige" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
       <span class="seed-msg" id="crn-par-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="ctrl-row">
@@ -440,6 +446,10 @@ svg.fig { display: block; width: 100%; height: auto; }
       <button class="btn-clear" onclick="clearCrn()">Clear history</button>
       <span class="seed-msg" id="crn-seed-msg" role="status" aria-live="polite"></span>
     </div>
+    <div class="cv-card" style="margin-bottom:14px">
+      <svg class="fig" id="crn-flow" role="img" aria-label="Two block diagrams. Independent inputs: uniform u1 feeds model h1, uniform u2 feeds model h2 plus the shift, each output picks up its own normal noise, and the two sample means are differenced. Common random numbers: one uniform u fans out to both models, everything else is the same, and the outputs are differenced replication by replication."></svg>
+      <div class="cv-leg" id="crn-flow-cap"></div>
+    </div>
     <div class="viz-row">
       <div class="cv-card">
         <svg class="fig" id="crn-fig" role="img" aria-label="Two stacked rows of panels. The top row, independent inputs, shows unlinked input and output columns and the Welch interval for the difference of means. The bottom row, common random numbers, joins each replication's input and output dots with a line and shows the n paired differences plus the paired interval, all against a zero line and the true difference"></svg>
@@ -449,12 +459,13 @@ svg.fig { display: block; width: 100%; height: auto; }
           <span style="color:var(--est)">● paired differences dᵢ = y₂ᵢ − y₁ᵢ</span>&nbsp;&nbsp;
           <span style="color:var(--truth)">┄ true means</span>&nbsp;&nbsp;
           <span style="color:var(--muted)">— zero</span>&nbsp;&nbsp;
-          <span><span style="color:var(--hit)">⊢●⊣</span> interval for δ (teal captures, red dashed misses)</span>
+          <span><span style="color:var(--hit)">⊢●⊣</span> interval for δ (teal captures, red dashed misses)</span>&nbsp;&nbsp;
+          <span style="color:var(--muted)">* excludes zero</span>
           <span id="crn-fig-note"></span>
         </div>
       </div>
       <div class="stats-panel">
-        <div class="sg">
+        <div class="sg sg-two">
           <div class="sc"><div class="sc-lbl">System 1: <span class="ov">y</span>₁ (S₁)</div><div class="sc-val acc" id="crn-s-y1">—</div></div>
           <div class="sc"><div class="sc-lbl">True <span class="sym">δ</span> = E[h₂] + shift − E[h₁]</div><div class="sc-val dim" id="crn-s-delta">—</div></div>
           <div class="sc"><div class="sc-lbl">System 2, independent inputs: <span class="ov">y</span>₂ (S₂)</div><div class="sc-val acc" id="crn-s-y2i">—</div></div>
@@ -463,12 +474,15 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc sc-wide"><div class="sc-lbl">Paired interval for <span class="sym">δ</span>, <span class="ov">d</span> (<span id="crn-s-paired-df">df —</span>)</div><div class="sc-val" id="crn-s-paired">—</div></div>
           <div class="sc"><div class="sc-lbl">Correlation of paired outputs r (predicted <span class="sym">ρ</span>)</div><div class="sc-val" id="crn-s-r">—</div></div>
           <div class="sc"><div class="sc-lbl">Paired half-width ÷ Welch half-width (predicted)</div><div class="sc-val" id="crn-s-ratio">—</div></div>
-          <div class="sc"><div class="sc-lbl">Pilot test: S<span class="sym">d</span>² vs S₁² + S₂²</div><div class="sc-val" id="crn-s-pilot">—</div></div>
-          <div class="sc"><div class="sc-lbl">Pairs n, confidence</div><div class="sc-val dim" id="crn-s-n">—</div></div>
+          <div class="sc"><div class="sc-lbl">CRN variance S<sub class="sym">d</sub>²</div><div class="sc-val" id="crn-s-sd2">—</div></div>
+          <div class="sc"><div class="sc-lbl">Indep. input variance S₁² + S₂²</div><div class="sc-val" id="crn-s-ssum">—</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Two-sided p-value for the hypothesis that the systems do not differ, from the Welch interval's own t statistic and degrees of freedom. It falls below α exactly when that interval leaves out zero, which the star marks.">Welch p-value against <span class="sym">δ</span> = 0</span></div><div class="sc-val" id="crn-s-pind">—</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Two-sided p-value for the hypothesis that the systems do not differ, from the paired interval's own t statistic and degrees of freedom. It falls below α exactly when that interval leaves out zero, which the star marks.">Paired p-value against <span class="sym">δ</span> = 0</span></div><div class="sc-val" id="crn-s-pcrn">—</div></div>
+          <div class="sc sc-full"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether pairing pays. With common inputs, the variance of the n paired differences S_d² is compared with S₁² + S₂², the variance those differences would have if the inputs were independent. A smaller S_d² means the pairing is removing variance.">Does CRN reduce variance?</span></div><div class="sc-val" id="crn-s-help">—</div></div>
         </div>
       </div>
     </div>
-    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms cost the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire.</div>
+    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms cost the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire. A star above an interval marks one that leaves out zero, which is the same claim as a p-value below α: the systems differ.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ</span></div>
       <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
@@ -489,6 +503,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="eq-row"><span class="eq-lbl">Variance of the difference of means:</span><span class="eq-val">Var(ȳ<sub>2</sub> − ȳ<sub>1</sub>) = (S<sub>1</sub>² + S<sub>2</sub>² − 2 r S<sub>1</sub> S<sub>2</sub>) / n&nbsp; (r = 0 for independent inputs)</span></div>
       <div class="eq-row"><span class="eq-lbl">Paired:</span><span class="eq-val">Var(<span class="ov">d</span>) = S<sub>d</sub>² / n</span></div>
       <div class="eq-row"><span class="eq-lbl">And identically:</span><span class="eq-val">S<sub>d</sub>² = S<sub>1</sub>² + S<sub>2</sub>² − 2 r S<sub>1</sub> S<sub>2</sub></span></div>
+      <div class="eq-fine">The color of an interval answers "did it capture the true δ?"; the star answers "does it rule out δ = 0?". The two are different questions, and a red interval can carry a star. With the shift set to 0, the systems do not differ, and about α of the runs still earn a star: those are the false positives.</div>
       <div class="eq-hr"></div>
       <div class="exp-note">Positive correlation shrinks the difference's variance: two systems reading the same input tend to rise and fall together, and so their difference is more stable than two systems reading independent inputs. Once the arms share inputs, the paired analysis is mandatory because the two samples are no longer independent; the right tool is the one-sample interval on the n independent differences, which is the paired t test in its interval form. A pilot run can check whether pairing is worth it. Run both systems on common inputs and compare S<sub>d</sub>² against S<sub>1</sub>² + S<sub>2</sub>²: if S<sub>d</sub>² comes out smaller, pairing is reducing variance, and the ratio of the two says by how much.</div>
       <div class="cards">
@@ -985,6 +1000,14 @@ function ciWelch(a, b, conf) {
 }
 function captured(ci, truth) { return ci.lo <= truth && truth <= ci.hi; }
 
+/* Two-sided p-value against a zero difference for an interval built from a mean `est`,
+   its standard error `se`, and `df` degrees of freedom: p = 2 (1 − F_t(|est|/se, df)).
+   With the same t and df as the interval, p < α exactly when the interval excludes 0. */
+function pValueZero(est, se, df) {
+  if (!(se > 0)) return est === 0 ? 1 : 0;
+  return 2 * (1 - tCdf(Math.abs(est) / se, df));
+}
+
 /* ── Tab ①: draw n normal values and build the interval ─────────────
    p = {mu, sigma, n, conf}.  The stream is fresh per seed, so the same seed always
    reproduces the run, and the draws are inverse-transform normals in stream order. */
@@ -1046,7 +1069,8 @@ function runCRN(seed, p) {
   var ind = ciWelch(y2i, y1, p.conf), crn = ciMean(d, p.conf), truth = f2.mean + p.shift2 - f1.mean;
   return { u: u, u2: u2, y1: y1, y2i: y2i, y2c: y2c, d: d, ind: ind, crn: crn, truth: truth,
            r: sampleCorr(y1, y2c), s1: Math.sqrt(sampleVar(y1)), s2i: Math.sqrt(sampleVar(y2i)),
-           s2c: Math.sqrt(sampleVar(y2c)), sd: crn.s, hitInd: captured(ind, truth), hitCrn: captured(crn, truth) };
+           s2c: Math.sqrt(sampleVar(y2c)), sd: crn.s, hitInd: captured(ind, truth), hitCrn: captured(crn, truth),
+           pInd: pValueZero(ind.diff, ind.h / ind.t, ind.df), pCrn: pValueZero(crn.mean, crn.h / crn.t, crn.df) };
 }
 /* E[h1(U) h2(U)] by composite Simpson's rule on [0, 1], for the predicted correlation
    of paired outputs; every menu function is smooth on the closed interval. */
@@ -1122,7 +1146,7 @@ var CI = {
   erf: erf, erfc: erfc, normPdf: normPdf, normCdf: normCdf, normInv: normInv,
   tCdf: tCdf, tQuantile: tQuantile,
   mean: mean, sampleVar: sampleVar, sampleCov: sampleCov, sampleCorr: sampleCorr,
-  ciMean: ciMean, ciWelch: ciWelch, captured: captured
+  ciMean: ciMean, ciWelch: ciWelch, captured: captured, pValueZero: pValueZero
   , runNormal: runNormal, histRecord: histRecord, c4: c4
   , runCRN: runCRN, funcCross: funcCross, crnPredicted: crnPredicted
   , FUNCS: FUNCS, FUNC_KEYS: FUNC_KEYS, funcVar: funcVar, funcAntiCov: funcAntiCov, runAV: runAV
@@ -1332,7 +1356,31 @@ function histPlot(svgEl, containerEl, runs, opts) {
   const widget = document.querySelector('.widget');
   const W = Math.max(300, containerEl.offsetWidth || (widget ? widget.clientWidth : 600));
   const pL = 62, pR = 34, pT = 22, pB = 52, cH = 178, cW = W - pL - pR;
-  const legRows = cW < 330 ? 2 : 1;
+  // Legend items, each carrying an estimated pixel width from its own label (the same
+  // length-based estimate the true-value label uses below, at this legend's own 10px
+  // font: about 5.4 units per character, plus 18 for the marker and its gap). starZero
+  // adds a third item; without it the legend keeps its original two-item, one-or-two-row
+  // layout.
+  const legItems = [
+    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="4" fill="${C.hit}"/>`, label: 'interval captures the true value' },
+    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`, label: 'interval misses (about α of them expected)' },
+  ];
+  if (opts.starZero) legItems.push({ icon: null, label: '* interval excludes zero' });
+  legItems.forEach(it => { it.block = it.label.length * 5.4 + 18; });
+  let legRows;
+  if (!opts.starZero) {
+    legRows = cW < 330 ? 2 : 1;
+  } else {
+    // Greedy left-to-right wrap: an item starts a new row when it would run past the
+    // panel's own width at its current position.
+    const GAP = 20; let ax = 7, row = 0;
+    legItems.forEach((it, idx) => {
+      if (idx > 0 && ax + it.block > cW - 4) { row++; ax = it.icon ? 7 : 0; }
+      it.row = row; it.ax = ax;
+      ax += it.block + GAP;
+    });
+    legRows = row + 1;
+  }
   const SH = pT + cH + pB + (legRows - 1) * 14;
   const { shown, colW } = histVisible(runs, cW);
   const dense = colW < 30;
@@ -1424,6 +1472,9 @@ function histPlot(svgEl, containerEl, runs, opts) {
       h += `<line x1="${cx - capW}" y1="${yBot}" x2="${cx + capW}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"/>`;
       h += r.hit ? `<circle cx="${cx}" cy="${ym}" r="${dotR}" fill="${col}"/>`
                  : `<circle cx="${cx}" cy="${ym}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="${Math.min(2, dotR / 2)}"/>`;
+      if (opts.starZero && (r.lo > 0 || r.hi < 0)) {
+        h += `<text x="${cx}" y="${pT + 9}" text-anchor="middle" fill="${C.muted}" font-size="${dense ? 9 : 11}" font-weight="700" font-family="${FF_SANS}">*</text>`;
+      }
       const lbl = (at, ax) => `<text x="${ax}" y="${pT + cH + 17}" text-anchor="${at}" fill="#666" font-size="10" font-family="${FF_MONO}">Run ${runN}</text>`
         + `<text x="${ax}" y="${pT + cH + 29}" text-anchor="${at}" fill="#aaa" font-size="9" font-family="${FF_MONO}">${opts.nLabel}=${r.n.toLocaleString()}</text>`;
       if (!dense) {
@@ -1448,12 +1499,20 @@ function histPlot(svgEl, containerEl, runs, opts) {
 
   // Legend, then the true-value label at the right end of its line, drawn last so it
   // sits on top of the bars.
-  const ly = SH - 14 - (legRows - 1) * 14;
-  const mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14;
-  h += `<circle cx="${pL + 7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
-  h += `<text x="${pL + 15}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval captures the true value</text>`;
-  h += `<circle cx="${mx}" cy="${my}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
-  h += `<text x="${mx + 8}" y="${my + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval misses (about α of them expected)</text>`;
+  if (!opts.starZero) {
+    const ly = SH - 14 - (legRows - 1) * 14;
+    const mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14;
+    h += `<circle cx="${pL + 7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
+    h += `<text x="${pL + 15}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval captures the true value</text>`;
+    h += `<circle cx="${mx}" cy="${my}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`;
+    h += `<text x="${mx + 8}" y="${my + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">interval misses (about α of them expected)</text>`;
+  } else {
+    legItems.forEach(it => {
+      const ly = SH - 14 - (legRows - 1 - it.row) * 14, x = pL + it.ax;
+      if (it.icon) { h += it.icon(x, ly); h += `<text x="${x + 8}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">${it.label}</text>`; }
+      else { h += `<text x="${x}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">${it.label}</text>`; }
+    });
+  }
   const tl = opts.truthLabel(opts.liveTruth), tvy = live;
   // Raised one line above the usual offset (14 units, this plot's other line height)
   // so the label clears the cantilever running out from this same y at the right edge.
@@ -1547,6 +1606,14 @@ function readNum(id, msgId, min, max, what) {
   return c;
 }
 function fmt(v, d) { return Number.isFinite(v) ? v.toFixed(d) : '—'; }
+function fmtP(p) { return p < 0.001 ? 'p < 0.001' : 'p = ' + p.toFixed(3); }
+// A compact form for a strip too narrow for fmtP's spaced-out "p = 0.031": two
+// decimals, no spaces, and no leading zero, and so it fits a strip under 80 units wide.
+function fmtPShort(p) {
+  if (p < 0.001) return 'p<.001';
+  const s = p.toFixed(2);
+  return 'p=' + (s.startsWith('0.') ? s.slice(1) : s);
+}
 // Decimal places that make a value readable next to a scale of `scale`.
 function decFor(scale) { return scale < 0.002 ? 6 : scale < 0.02 ? 5 : scale < 0.2 ? 4 : scale < 2 ? 3 : 2; }
 
@@ -1960,19 +2027,178 @@ function crnParams() {
   const shift2 = readNum('crn-shift', 'crn-par-msg', -1e6, 1e6, 'shift');
   if (shift2 === null) return null;
   const msg1 = $('crn-par-msg').textContent;
-  const sigE = readNum('crn-sige', 'crn-par-msg', 0, 1e6, 'σₑ');
+  const sigE = readNum('crn-sige', 'crn-par-msg', 0, 1e6, 'the noise scale σ');
   if (sigE === null) return null;
   if (!$('crn-par-msg').textContent && msg1) $('crn-par-msg').textContent = msg1;
   return { fn1: $('crn-fn1').value, fn2: $('crn-fn2').value, shift2: shift2, sigE: sigE,
            n: +$('crn-n').value, conf: +$('crn-conf').value };
 }
 function crnKey(p) { return [p.fn1, p.fn2, p.shift2, p.sigE, p.n, p.conf].join('|'); }
+// A rough character-width estimate in SVG units, in the same spirit as the gutter and
+// column-label sizing above: no text is ever measured in the DOM here, only counted
+// and multiplied by a per-font constant tuned against the labels this diagram draws.
+// The mono constant (0.6em/char) matches the fixed-pitch layout crnFlowMono relies on.
+function crnFlowTextW(text, fs, mono) { return text.length * fs * (mono ? 0.6 : 0.447); }
+// One system's model block: "h_k(u) = label" when it fits the block, the bare label
+// alone otherwise. usableW is the block's own width in already-scaled SVG units.
+function crnFlowModelLabel(sub, f, usableW) {
+  const full = `h${sub}(u) = ${f.label}`;
+  return crnFlowTextW(full, 8.5, true) <= usableW ? full : f.label;
+}
+// A run of monospace glyphs laid out as fixed-width slots (fs*0.6 each) so a subscript
+// glyph -- shrunk to font-size 6.5 and dropped 2.5 units -- never inherits the full
+// cell that IBM Plex Mono gives an unscaled Unicode subscript digit, which is what left
+// a visible gap in "y1" when that character was written directly. Every glyph gets its
+// own x, and so nothing here depends on tspan flow or the font's own advance widths.
+// tokens is an array of { ch, sub?, bar? }; bar draws a short overline above that glyph's cell,
+// in the same spirit as the existing x-bar pattern drawn for the run history's mean
+// marker. anchor 'start' | 'middle' places the whole run's left edge or center at x0.
+function crnFlowMono(x0, yBase, fs, tokens, anchor) {
+  const adv = fs * 0.6, n = tokens.length;
+  const left = anchor === 'middle' ? x0 - (adv * n) / 2 : x0;
+  let tspans = '', bars = '';
+  tokens.forEach((t, i) => {
+    const cellL = left + adv * i, cx = cellL + adv / 2;
+    const sub = !!t.sub, tfs = sub ? 6.5 : fs, ty = yBase + (sub ? 2.5 : 0);
+    tspans += `<tspan x="${cx}" y="${ty}" font-size="${tfs}">${t.ch}</tspan>`;
+    if (t.bar) {
+      const by = yBase - fs + 0.17 * fs;
+      bars += `<line x1="${cellL + 0.06 * fs}" y1="${by}" x2="${cellL + adv - 0.06 * fs}" y2="${by}" stroke="${C.muted}" stroke-width="${0.09 * fs}"/>`;
+    }
+  });
+  return `<text text-anchor="middle" font-family="${FF_MONO}" fill="${C.muted}">${tspans}</text>${bars}`;
+}
+const crnFlowSub = ch => ({ ch, sub: true });
+const crnFlowChars = str => Array.from(str).map(ch => ({ ch }));
+// One diagram (Independent inputs or Common random numbers), drawn into local
+// coordinates 0-380 wide by 0-142 tall and then offset by (offX, offY) with every
+// horizontal position scaled by s = Dw / 380; vertical positions are never scaled,
+// because only the diagram's width shrinks on a narrow screen, never its 142-unit
+// height. X and Y below are exactly that mapping.
+function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
+  const X = xu => offX + xu * s, Y = yu => offY + yu;
+  const y1 = 48, y2 = 96, yMid = 72, srcR = 11, noiseR = 8, diffR = 9;
+  const title = isCRN ? 'Common random numbers' : 'Independent inputs';
+  const arrow = ' marker-end="url(#crn-flow-arrow)"';
+  let h = `<text x="${X(4)}" y="${Y(11)}" font-size="10" font-weight="700" fill="${C.muted}" font-family="${FF_SANS}">${title}</text>`;
+
+  // Sources: one shared u fanning out under CRN (the fan-out lines are C.pair, echoing
+  // the pairing lines in the figure below), two independent draws otherwise.
+  if (isCRN) {
+    h += `<circle cx="${X(18)}" cy="${Y(yMid)}" r="${srcR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<text x="${X(18)}" y="${Y(yMid) + 3.3}" text-anchor="middle" font-size="9.5" font-family="${FF_MONO}" fill="${C.muted}">u</text>`;
+    const xStem = X(18) + srcR, xSplit = X(34), xBlk = X(44);
+    h += `<line x1="${xStem}" y1="${Y(yMid)}" x2="${xSplit}" y2="${Y(yMid)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${xSplit}" y1="${Y(y1)}" x2="${xSplit}" y2="${Y(y2)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${xSplit}" y1="${Y(y1)}" x2="${xBlk}" y2="${Y(y1)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${xSplit}" y1="${Y(y2)}" x2="${xBlk}" y2="${Y(y2)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+  } else {
+    [[y1, '1'], [y2, '2']].forEach(([ly, sub]) => {
+      h += `<circle cx="${X(18)}" cy="${Y(ly)}" r="${srcR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+      h += crnFlowMono(X(18), Y(ly) + 3.3, 9.5, [{ ch: 'u' }, crnFlowSub(sub)], 'middle');
+      h += `<line x1="${X(18) + srcR}" y1="${Y(ly)}" x2="${X(44)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    });
+  }
+
+  // Model blocks: 80 units wide before scaling, 22 tall, centered on each lane.
+  const usableW = (80 - 6) * s;
+  const lbl1 = crnFlowModelLabel('1', f1, usableW), lbl2 = crnFlowModelLabel('2', f2, usableW);
+  [[y1, lbl1], [y2, lbl2]].forEach(([ly, txt]) => {
+    h += `<rect x="${X(44)}" y="${Y(ly - 11)}" width="${X(124) - X(44)}" height="22" rx="3" fill="${C.bg}" stroke="var(--border)" stroke-width="1.2"/>`;
+    h += `<text x="${(X(44) + X(124)) / 2}" y="${Y(ly) + 3}" text-anchor="middle" font-size="8.5" font-family="${FF_MONO}" fill="${C.muted}">${txt}</text>`;
+  });
+
+  // Shift block on system 2's lane only; system 1's line runs straight through the
+  // same x-range.
+  h += `<line x1="${X(124)}" y1="${Y(y1)}" x2="${X(190)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(124)}" y1="${Y(y2)}" x2="${X(134)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<rect x="${X(134)}" y="${Y(y2 - 10)}" width="${X(172) - X(134)}" height="20" rx="3" fill="${C.bg}" stroke="var(--border)" stroke-width="1.2"/>`;
+  h += `<text x="${(X(134) + X(172)) / 2}" y="${Y(y2) + 3}" text-anchor="middle" font-size="9" font-family="${FF_MONO}" fill="${C.muted}">${fmtShift}</text>`;
+  h += `<line x1="${X(172)}" y1="${Y(y2)}" x2="${X(190)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+
+  // Noise junctions: each system's own N(0, sigE^2) enters from outside the lane pair.
+  // The label sits fully clear of its own arrow rather than just past the tail: for
+  // system 1's downward arrow the baseline sits well above the tail so the glyphs'
+  // (near-zero) descent never reaches it, and for system 2's upward arrow the baseline
+  // sits low enough that the glyphs' ascent clears the tail by a few units instead of
+  // reading through the shaft.
+  [[y1, 22, 40, -1, '1'], [y2, 122, 104, 1, '2']].forEach(([ly, yFar, yNear, dir, sub]) => {
+    h += `<line x1="${X(190)}" y1="${Y(yFar)}" x2="${X(190)}" y2="${Y(yNear)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    const zTok = crnFlowChars(String(p.sigE) + ' z').concat([crnFlowSub(sub)]);
+    h += crnFlowMono(X(190), Y(dir < 0 ? 14 : 135), 9, zTok, 'middle');
+    h += `<circle cx="${X(190)}" cy="${Y(ly)}" r="${noiseR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<text x="${X(190)}" y="${Y(ly) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+  });
+
+  // Outputs: arrow out of the junction, then the value's name (CRN adds the per-
+  // replication subscript i because the pairing is what makes CRN a paired comparison).
+  [[y1, '1'], [y2, '2']].forEach(([ly, sub]) => {
+    h += `<line x1="${X(190) + noiseR}" y1="${Y(ly)}" x2="${X(208)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    const yTok = [{ ch: 'y' }, crnFlowSub(sub)].concat(isCRN ? [crnFlowSub('i')] : []);
+    h += crnFlowMono(X(212), Y(ly) + 3.5, 10, yTok, 'start');
+  });
+
+  // Difference: system 2's branch marked +, system 1's marked -, meeting in a circle.
+  h += `<line x1="${X(244)}" y1="${Y(y1)}" x2="${X(258)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(244)}" y1="${Y(y2)}" x2="${X(258)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(258)}" y1="${Y(y1)}" x2="${X(258)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(258)}" y1="${Y(yMid)}" x2="${X(272) - diffR}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<circle cx="${X(272)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<text x="${X(272)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
+  h += `<text x="${X(272) + diffR + 3}" y="${Y(y2 - 6)}" text-anchor="start" font-size="8" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+  h += `<text x="${X(272) + diffR + 3}" y="${Y(y1 + 10)}" text-anchor="start" font-size="8" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
+  h += `<line x1="${X(272) + diffR}" y1="${Y(yMid)}" x2="${X(290)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+
+  // The final label: the expression above, what it feeds below, both flush left of the
+  // arrow that lands here (nothing may sit under the circle -- the lower lane runs
+  // there). The expression is dropped first if the diagram is too narrow to hold both
+  // lines, and the surviving interval name shrinks a point further if even that would
+  // run past the diagram's own right edge.
+  const exprTok = isCRN
+    ? crnFlowChars('d').concat([crnFlowSub('i')], crnFlowChars(' = y'), [crnFlowSub('2'), crnFlowSub('i')], crnFlowChars(' − y'), [crnFlowSub('1'), crnFlowSub('i')])
+    : [{ ch: 'y', bar: true }, crnFlowSub('2')].concat(crnFlowChars(' - '), [{ ch: 'y', bar: true }, crnFlowSub('1')]);
+  const name = isCRN ? 'paired interval' : 'Welch interval';
+  const labelX = X(294), remain = 380 * s - 294 * s; // = 86 * s: room to the diagram's right edge
+  const exprW = exprTok.length * (8.5 * 0.6);
+  if (exprW <= remain) {
+    h += crnFlowMono(labelX, Y(69), 8.5, exprTok, 'start');
+    h += `<text x="${labelX}" y="${Y(85)}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+  } else {
+    const nameFS = crnFlowTextW(name, 9, false) <= remain ? 9 : 8;
+    h += `<text x="${labelX}" y="${Y(yMid) + 3}" text-anchor="start" font-size="${nameFS}" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+  }
+  return h;
+}
+// Two block diagrams stating outright what the figure below leaves the reader to
+// infer: side by side once the card is wide enough, stacked otherwise. The diagram
+// depends only on the parameters (which models, the shift, sigma_e), never on a run,
+// and so nothing here reads CRS.lastRunObj.
+function drawCrnFlow(p) {
+  const svg = $('crn-flow'), W = figWidth(svg), H = 142, gap = 14;
+  const side = W >= 640;
+  const Dw = side ? Math.min(380, Math.floor((W - 20) / 2)) : Math.min(380, W);
+  const s = Dw / 380;
+  const totalW = side ? Dw * 2 + 20 : Dw, totalH = side ? H : H * 2 + gap;
+  const offX = (W - totalW) / 2;
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2];
+  const fmtShift = (p.shift2 < 0 ? '−' : '+') + ' ' + Math.abs(p.shift2);
+  let h = `<defs><marker id="crn-flow-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="${C.muted}"/></marker></defs>`;
+  if (side) {
+    h += crnFlowDiagram(offX, 0, s, false, p, f1, f2, fmtShift);
+    h += crnFlowDiagram(offX + Dw + 20, 0, s, true, p, f1, f2, fmtShift);
+  } else {
+    h += crnFlowDiagram(offX, 0, s, false, p, f1, f2, fmtShift);
+    h += crnFlowDiagram(offX, H + gap, s, true, p, f1, f2, fmtShift);
+  }
+  svgSet(svg, W, totalH, h);
+  $('crn-flow-cap').innerHTML = "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above.";
+}
 function crnParamsChanged() {
   const p = crnParams(); if (!p) return;
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   $('crn-s-delta').textContent = fmt(delta, decFor(Math.abs(delta) || 1));
-  $('crn-s-n').textContent = p.n + ', ' + fmtConf(p.conf);
   drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p);
+  drawCrnFlow(p);
   renderCrnHist();
 }
 // Two stacked rows, "Independent inputs" then "Common random numbers", each with an
@@ -1984,17 +2210,29 @@ function drawCrnFig(run, p) {
   const svg = $('crn-fig'), W = figWidth(svg), H = 410;
   // pL is a left margin for each row's own rotated title, read top-to-bottom along the
   // card's left edge; pT only has to clear the panel-title row above the top panels
-  // (the row titles moved off it), and rowGap only has to separate the two panel rows.
-  const pL = 22, pT = 18, pB = 30, rowGap = 18, gap = 14, pR = 40, MAXPAIRS = 40;
+  // (the row titles moved off it), rowGap only has to separate the two panel rows, and
+  // pR is a bare margin now that every panel's ticks live in its own left gutter and
+  // nothing is drawn to the right of the strip.
+  const pL = 22, pT = 18, pB = 30, rowGap = 18, gap = 14, pR = 8, MAXPAIRS = 40;
   const rowH = (H - pT - pB - rowGap) / 2;
-  const cW = W - pL - gap * 4 - pR;
-  const inW = cW * 2 / 7, outW = cW * 3 / 7, dW = cW * 2 / 7 - gap;
-  const xIn = pL + gap, xOut = xIn + inW + gap, xDiff = xOut + outW + gap;
   // Each panel column's title shrinks toward the narrow end so the longest one never
   // bleeds into its neighbor. The row titles are fixed in the 10-10.5 range instead
   // because rotating them onto the left margin frees them from the panels' own widths.
   const titleFS = w => Math.max(8.5, Math.min(10.5, w / 12));
   const rowTitleFS = Math.max(10, Math.min(10.5, rowH / 16));
+  // The category labels under the bottom row ("input 1" / "system 2" and so on) sit
+  // below dot columns spaced 0.44 of the panel's own width apart; at the card's actual
+  // rendered size that spacing ranges from comfortable (a wide desktop card) down to
+  // barely 55 units (a 390px phone), where fixed-size text would run the two labels
+  // into each other regardless of the 0.28/0.72 split chosen for the dots themselves.
+  // Shrink the label toward a legible floor first and, only once even the floor no
+  // longer fits, fall back to just the digit -- the legend already keys the digit to
+  // the dot's own fill (filled = 1, hollow = 2), and so the digit alone still reads.
+  const colLabel = (text, panelW) => {
+    const gap = panelW * 0.44, floor = 7, max = 9.5, wpu = text.length * 0.46;
+    const fFull = gap * 0.85 / wpu;
+    return fFull >= floor ? { text: text, fs: Math.min(max, fFull) } : { text: text.slice(-1), fs: max };
+  };
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   const m = run ? Math.min(MAXPAIRS, p.n) : 0;
 
@@ -2027,8 +2265,38 @@ function drawCrnFig(run, p) {
     dLo = Math.min(dLo, run.ind.lo, run.crn.lo); dHi = Math.max(dHi, run.ind.hi, run.crn.hi);
     for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
   }
-  const dPad = (dHi - dLo) * 0.06; dLo -= dPad; dHi += dPad;
-  const yD = (top, v) => top + rowH - (v - dLo) / (dHi - dLo) * rowH;
+  // [dLo, dHi] maps onto fixed pixel margins inside the rect rather than a 6% share of
+  // it, and so the headroom above the highest cap and below the lowest one is a guaranteed
+  // number of units instead of a fraction of a range that can itself be tiny (e.g. δ = 0's
+  // noise-only span). 24 units of headroom above clears a star or a straddling p-value
+  // drawn 6 above the top cap and clears the "Difference of means" title sitting just
+  // above the top row; 18 below clears a star drawn 15 below the bottom cap.
+  const yD = (top, v) => top + 24 + (rowH - 42) * (dHi - v) / (dHi - dLo);
+
+  // Every panel now draws as [gutter][rect]: a left gutter holding that panel's own
+  // right-aligned tick labels, sized from the longest label it will actually carry, and
+  // then the colored rect. Compute the three gutters before laying out the rects, and so
+  // an Outputs panel with wide numbers does not crowd the Inputs and Difference panels
+  // next to it. The min/0/max labels in the Difference panel drop the min or max whenever
+  // it would land within 12 units of 0's own label, exactly as the per-row drawing below
+  // does, and so the gutter is sized for what is actually drawn rather than the worst case.
+  const oDec = decFor(oHi - oLo), oMid = oLo + (oHi - oLo) / 2;
+  const dDec = decFor(dHi - dLo);
+  const d0y = yD(0, 0), dMinY = yD(0, dLo), dMaxY = yD(0, dHi);
+  const dShowMin = Math.abs(dMinY - d0y) >= 12, dShowMax = Math.abs(dMaxY - d0y) >= 12;
+  const maxLen = labels => Math.max(...labels.map(s => s.length));
+  const gutterFor = maxChars => maxChars * 5.3 + 8;
+  const gIn = gutterFor(maxLen(['0', '0.5', '1']));
+  const gOut = gutterFor(maxLen([oLo.toFixed(oDec), oMid.toFixed(oDec), oHi.toFixed(oDec)]));
+  const gDiff = gutterFor(maxLen(['0'].concat(dShowMin ? [dLo.toFixed(dDec)] : [], dShowMax ? [dHi.toFixed(dDec)] : [])));
+
+  // Inputs and Outputs split the row evenly (3 : 3 : 2 against Difference) once the three
+  // gutters are set aside, and so the two dot columns in Inputs sit exactly as far apart as
+  // the two in Outputs.
+  const cW = W - pL - pR - gap * 3;
+  const rectsTotal = cW - (gIn + gOut + gDiff);
+  const inW = rectsTotal * 3 / 8, outW = rectsTotal * 3 / 8, dW = rectsTotal * 2 / 8;
+  const xIn = pL + gap + gIn, xOut = xIn + inW + gap + gOut, xDiff = xOut + outW + gap + gDiff;
 
   // A capped interval bar with an end dot, colored and dashed by capture, exactly like
   // the history chart's own marks: teal C.hit (solid, filled dot) when the interval
@@ -2043,6 +2311,42 @@ function drawCrnFig(run, p) {
     s += hit ? `<circle cx="${cx}" cy="${ym}" r="${dotR}" fill="${col}"/>`
              : `<circle cx="${cx}" cy="${ym}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
     return s;
+  };
+  // A quiet second layer on top of the capture coloring: a star when the interval rules
+  // out zero, regardless of whether it captures δ. It always sits on the interval's
+  // outer edge -- the tip pointing away from zero -- so a positive interval's star reads
+  // above it, and a negative interval's star reads below: 6 above the top cap when the
+  // whole interval is above zero, 15 below the bottom cap when it is entirely below.
+  // The strip's fixed top/bottom margins (see yD above) guarantee that room exists.
+  const starMark = (cx, lo, hi, yFn) => {
+    if (!(lo > 0 || hi < 0)) return '';
+    const y = lo > 0 ? yFn(hi) - 6 : yFn(lo) + 15;
+    return `<text x="${cx}" y="${y}" text-anchor="middle" fill="${C.muted}" font-size="13" font-weight="700" font-family="${FF_SANS}">*</text>`;
+  };
+  // The interval's own two-sided p-value against δ = 0, drawn inside the strip with a
+  // white halo so it stays legible over the dashed δ line or a stray dᵢ dot. It sits on
+  // the strip's own horizontal center rather than at the bar's x -- the paired row's bar
+  // sits at 72% of the strip, and centering keeps the text off the cramped side of that
+  // off-center bar. Vertically: when the interval excludes zero, the text sits near the
+  // zero line, on the side opposite the interval -- the same side the star's own outer-
+  // edge placement leaves empty; when it straddles zero (no star drawn), the text takes
+  // the star's own slot, 6 above the top cap. The star and the p-value are therefore
+  // always on opposite sides of zero whenever both exist, with no extra push-apart
+  // needed. Below 80 units wide the strip gets the compact form, and below 44 no text is
+  // drawn at all (the stats card still carries both p-values); the centered x is still
+  // clamped inward by the text's own estimated half-width (a monospace character at this
+  // font size runs about 5.4 units wide) so a compact form in a very narrow strip cannot
+  // poke past the rect's own edges. The strip's own center can sit close enough to the
+  // paired row's dᵢ dot column (28% of the strip) to graze a dot when the compact form is
+  // in use; the white halo above is what keeps the text legible when that happens, rather
+  // than a dedicated search for a dot-free slot.
+  const pValueMark = (lo, hi, pv, yFn) => {
+    if (dW < 44) return '';
+    const txt = dW < 80 ? fmtPShort(pv) : fmtP(pv);
+    const halfW = txt.length * 2.9 + 2;
+    const tx = Math.max(xDiff + halfW, Math.min(xDiff + dW - halfW, xDiff + dW / 2));
+    const y = (lo > 0) ? yFn(0) + 12 : (hi < 0) ? yFn(0) - 5 : yFn(hi) - 6;
+    return `<text x="${tx}" y="${y}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_MONO}" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${txt}</text>`;
   };
 
   const rows = [
@@ -2061,7 +2365,7 @@ function drawCrnFig(run, p) {
     // card width, and so it stays legible at any card width, including 390px.
     h += `<text x="${titleX}" y="${midY}" text-anchor="middle" fill="${C.muted}" font-size="${rowTitleFS}" font-weight="700" font-family="${FF_SANS}" transform="rotate(-90 ${titleX} ${midY})">${row.title}</text>`;
 
-    // Inputs panel: system 1's input at 32%, system 2's at 68%. Welch's method never
+    // Inputs panel: system 1's input at 28%, system 2's at 72%. Welch's method never
     // forms a difference, and so the top row's dots stand as two unrelated columns
     // with no joining line; the bottom row still joins each replication's pair (level
     // under common inputs because both columns read u). Category labels below the
@@ -2070,7 +2374,7 @@ function drawCrnFig(run, p) {
     // rotated labels on the left margin.
     h += `<rect x="${xIn}" y="${top}" width="${inW}" height="${rowH}" fill="${C.bg}" rx="3"/>`;
     if (row.ticks) h += `<text x="${xIn + inW / 2}" y="${top - 4}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS(inW)}" font-weight="700" font-family="${FF_SANS}">Inputs</text>`;
-    const ic1 = xIn + inW * 0.32, ic2 = xIn + inW * 0.68;
+    const ic1 = xIn + inW * 0.28, ic2 = xIn + inW * 0.72;
     if (run) {
       if (row.paired) for (let i = 0; i < m; i++) h += `<line x1="${ic1}" y1="${yI(top, run.u[i])}" x2="${ic2}" y2="${yI(top, row.in2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
       for (let i = 0; i < m; i++) {
@@ -2079,21 +2383,25 @@ function drawCrnFig(run, p) {
       }
     }
     if (row.bottom) {
-      h += `<text x="${ic1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">input 1</text>`;
-      h += `<text x="${ic2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">input 2</text>`;
+      const l1 = colLabel('input 1', inW), l2 = colLabel('input 2', inW);
+      h += `<text x="${ic1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="${l1.fs}" font-family="${FF_SANS}">${l1.text}</text>`;
+      h += `<text x="${ic2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="${l2.fs}" font-family="${FF_SANS}">${l2.text}</text>`;
     }
-    // The [0, 0.5, 1] scale ticks now sit inside the panel's own left edge rather than
-    // in the card's left margin, which the rotated row title now occupies.
-    if (row.ticks) [0, 0.5, 1].forEach(v => { h += `<text x="${xIn + 3}" y="${yI(top, v) + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v}</text>`; });
+    // The [0, 0.5, 1] scale ticks sit in the panel's own left gutter, right-aligned
+    // against the rect's edge, and are drawn in both rows now that the row titles read
+    // from the rotated left margin instead of sharing space with these labels.
+    [0, 0.5, 1].forEach(v => { h += `<text x="${xIn - 4}" y="${yI(top, v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v}</text>`; });
 
     // Outputs panel: system 1 filled, system 2 hollow, with dashed teal ticks at the
-    // true means. The top row again draws no joining line (see the inputs panel note
+    // true means, clamped inside the rect so a narrow panel never pushes them past its
+    // own edges. The top row again draws no joining line (see the inputs panel note
     // above). No grab targets: this figure is read-only.
     h += `<rect x="${xOut}" y="${top}" width="${outW}" height="${rowH}" fill="${C.bg}" rx="3"/>`;
     if (row.ticks) h += `<text x="${xOut + outW / 2}" y="${top - 4}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS(outW)}" font-weight="700" font-family="${FF_SANS}">Outputs</text>`;
-    const oc1 = xOut + outW * 0.32, oc2 = xOut + outW * 0.68;
-    h += `<line x1="${oc1 - 22}" y1="${yO(top, f1.mean)}" x2="${oc1 + 22}" y2="${yO(top, f1.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-    h += `<line x1="${oc2 - 22}" y1="${yO(top, f2.mean + p.shift2)}" x2="${oc2 + 22}" y2="${yO(top, f2.mean + p.shift2)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    const oc1 = xOut + outW * 0.28, oc2 = xOut + outW * 0.72;
+    const clampX = v => Math.max(xOut, Math.min(xOut + outW, v));
+    h += `<line x1="${clampX(oc1 - 22)}" y1="${yO(top, f1.mean)}" x2="${clampX(oc1 + 22)}" y2="${yO(top, f1.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    h += `<line x1="${clampX(oc2 - 22)}" y1="${yO(top, f2.mean + p.shift2)}" x2="${clampX(oc2 + 22)}" y2="${yO(top, f2.mean + p.shift2)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
     if (run) {
       if (row.paired) for (let i = 0; i < m; i++) h += `<line x1="${oc1}" y1="${yO(top, run.y1[i])}" x2="${oc2}" y2="${yO(top, row.out2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
       for (let i = 0; i < m; i++) {
@@ -2102,13 +2410,11 @@ function drawCrnFig(run, p) {
       }
     }
     if (row.bottom) {
-      h += `<text x="${oc1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">system 1</text>`;
-      h += `<text x="${oc2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">system 2</text>`;
+      const m1 = colLabel('system 1', outW), m2 = colLabel('system 2', outW);
+      h += `<text x="${oc1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="${m1.fs}" font-family="${FF_SANS}">${m1.text}</text>`;
+      h += `<text x="${oc2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="${m2.fs}" font-family="${FF_SANS}">${m2.text}</text>`;
     }
-    if (row.ticks) {
-      const oDec = decFor(oHi - oLo);
-      for (let i = 0; i <= 2; i++) { const v = oLo + (oHi - oLo) * i / 2; h += `<text x="${xOut - 5}" y="${yO(top, v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(oDec)}</text>`; }
-    }
+    for (let i = 0; i <= 2; i++) { const v = oLo + (oHi - oLo) * i / 2; h += `<text x="${xOut - 4}" y="${yO(top, v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(oDec)}</text>`; }
 
     // Third panel: the top row shows the Welch interval for the difference of means
     // (one dot at ȳ1 − ȳ2 with a capped bar); the bottom row keeps the n paired dᵢ
@@ -2124,20 +2430,27 @@ function drawCrnFig(run, p) {
         const dotX = xDiff + dW * 0.28, barX = xDiff + dW * 0.72;
         for (let i = 0; i < m; i++) h += `<circle cx="${dotX}" cy="${yD(top, run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
         h += intervalMark(barX, run.crn.lo, run.crn.hi, run.crn.mean, run.hitCrn, v => yD(top, v));
+        h += starMark(barX, run.crn.lo, run.crn.hi, v => yD(top, v));
+        h += pValueMark(run.crn.lo, run.crn.hi, run.pCrn, v => yD(top, v));
       } else {
         h += intervalMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, run.ind.diff, run.hitInd, v => yD(top, v));
+        h += starMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, v => yD(top, v));
+        h += pValueMark(run.ind.lo, run.ind.hi, run.pInd, v => yD(top, v));
       }
     }
-    // Both strips get their own min/0/max ticks (not just the top row), because the
-    // zero line otherwise carries no label of its own; a min or max label this close
-    // to 0's is dropped rather than drawn on top of it.
+    // Both strips get their own min/0/max ticks (not just the top row) in the panel's
+    // left gutter, matching the other two panels, because the zero line otherwise
+    // carries no label of its own; a min or max label this close to 0's is dropped
+    // rather than drawn on top of it (dShowMin/dShowMax, computed once above, because the
+    // decision does not depend on which row's own top a label happens to be drawn at).
+    // The max label now sits 24 units below the rect's own top edge (see yD above), well
+    // clear of the "Difference of means" title above the top row, and so both rows show it.
     {
-      const dDec = decFor(dHi - dLo);
       const y0 = yD(top, 0), yMin = yD(top, dLo), yMax = yD(top, dHi);
       const items = [[0, y0]];
-      if (Math.abs(yMin - y0) >= 12) items.push([dLo, yMin]);
-      if (Math.abs(yMax - y0) >= 12) items.push([dHi, yMax]);
-      items.forEach(([v, y]) => { const lbl = v === 0 ? '0' : v.toFixed(dDec); h += `<text x="${xDiff + dW + 5}" y="${y + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${lbl}</text>`; });
+      if (dShowMin) items.push([dLo, yMin]);
+      if (dShowMax) items.push([dHi, yMax]);
+      items.forEach(([v, y]) => { const lbl = v === 0 ? '0' : v.toFixed(dDec); h += `<text x="${xDiff - 4}" y="${y + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${lbl}</text>`; });
     }
   });
 
@@ -2146,9 +2459,13 @@ function drawCrnFig(run, p) {
 }
 function crnShowStats(run, p) {
   const d = decFor(Math.min(run.ind.h, run.crn.h) || 1);
-  $('crn-s-y1').textContent = fmt(CI.mean(run.y1), d) + ' (' + fmt(run.s1, d) + ')';
-  $('crn-s-y2i').textContent = fmt(CI.mean(run.y2i), d) + ' (' + fmt(run.s2i, d) + ')';
-  $('crn-s-y2c').textContent = fmt(CI.mean(run.y2c), d) + ' (' + fmt(run.s2c, d) + ')';
+  // One fewer decimal than the intervals: at the widest defaults (n = 1000, 99.9%
+  // confidence) the interval's own extra precision made these three mean-and-spread
+  // cards overflow their column before the interval cards themselves did.
+  const d1 = Math.max(2, d - 1);
+  $('crn-s-y1').textContent = fmt(CI.mean(run.y1), d1) + ' (' + fmt(run.s1, d1) + ')';
+  $('crn-s-y2i').textContent = fmt(CI.mean(run.y2i), d1) + ' (' + fmt(run.s2i, d1) + ')';
+  $('crn-s-y2c').textContent = fmt(CI.mean(run.y2c), d1) + ' (' + fmt(run.s2c, d1) + ')';
   $('crn-s-welch').textContent = '[' + fmt(run.ind.lo, d) + ', ' + fmt(run.ind.hi, d) + ']';
   $('crn-s-welch-df').textContent = 'df ' + run.ind.df.toFixed(1);
   $('crn-s-paired').textContent = '[' + fmt(run.crn.lo, d) + ', ' + fmt(run.crn.hi, d) + ']';
@@ -2158,8 +2475,21 @@ function crnShowStats(run, p) {
   $('crn-s-ratio').textContent = fmt(run.crn.h / run.ind.h, 3) + ' (' + fmt(pred.ratio, 3) + ')';
   const sd2 = run.sd * run.sd, s1sq = run.s1 * run.s1, s2csq = run.s2c * run.s2c, rhs = s1sq + s2csq;
   const pd = decFor(Math.max(sd2, rhs) || 1);
-  $('crn-s-pilot').textContent = (sd2 < rhs ? 'helps: ' : 'hurts: ') + fmt(sd2, pd) + (sd2 < rhs ? ' < ' : ' > ') + fmt(rhs, pd);
-  $('crn-s-n').textContent = p.n + ', ' + fmtConf(p.conf);
+  $('crn-s-sd2').textContent = fmt(sd2, pd);
+  $('crn-s-ssum').textContent = fmt(rhs, pd);
+  // "= 0.312" rather than fmtP's spaced "p = 0.312": the label already says "p-value",
+  // and the floor keeps its own operator ("< 0.001") because there is no bare number for it.
+  const pVal = pv => pv < 0.001 ? '< 0.001' : pv.toFixed(3);
+  $('crn-s-pind').textContent = pVal(run.pInd);
+  $('crn-s-pcrn').textContent = pVal(run.pCrn);
+  // The pilot test is a comparison, not a ratio: the relation the two variances stand
+  // in, not the factor between them. "&lt;" is escaped because it sits in text content
+  // written through innerHTML, where a literal "<" would otherwise start a tag.
+  const helps = sd2 < rhs;
+  $('crn-s-help').innerHTML = helps
+    ? 'yes: S<sub class="sym">d</sub>² &lt; S₁² + S₂²'
+    : 'no: S<sub class="sym">d</sub>² > S₁² + S₂²';
+  $('crn-s-help').style.color = helps ? C.hit : C.miss;
 }
 function crnRecord(run, p) {
   const k = crnKey(p);
@@ -2190,8 +2520,8 @@ function runCrnBatch() {
 }
 function clearCrn() {
   CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; CRS.lastRunP = null; lastRun.crn = null;
-  ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-ratio', 'crn-s-pilot'].forEach(id => { $(id).textContent = '—'; });
-  $('crn-s-welch-df').textContent = 'df —'; $('crn-s-paired-df').textContent = 'df —';
+  ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-ratio', 'crn-s-sd2', 'crn-s-ssum', 'crn-s-pind', 'crn-s-pcrn', 'crn-s-help'].forEach(id => { $(id).textContent = '—'; });
+  $('crn-s-welch-df').textContent = 'df —'; $('crn-s-paired-df').textContent = 'df —'; $('crn-s-help').style.color = '';
   const p = crnParams(); if (p) drawCrnFig(null, p);
   seedMsg('crn', '', false); renderCrnHist();
 }
@@ -2200,13 +2530,13 @@ function renderCrnHist() {
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   const win = histWindow([CRS.ind, CRS.crn]) || { lo: delta - 1, hi: delta + 1 };
   const opts = { yLabel: 'difference of means', truthLabel: v => 'δ = ' + v, window: win,
-                 liveTruth: delta, emptyWindow: win, nLabel: 'n' };
+                 liveTruth: delta, emptyWindow: win, nLabel: 'n', starZero: true };
   histCaption($('crn-cap1'), histPlot($('crn-hist1'), $('crn-hw1'), CRS.ind, opts), 'δ', 'zero');
   histCaption($('crn-cap2'), histPlot($('crn-hist2'), $('crn-hw2'), CRS.crn, opts), 'δ', 'zero');
 }
 TABS.crn = {
   init() { fnOptions($('crn-fn1')); fnOptions($('crn-fn2')); crnParamsChanged(); },
-  render() { const p = crnParams(); if (p) drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); renderCrnHist(); }
+  render() { const p = crnParams(); if (p) { drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); drawCrnFlow(p); } renderCrnHist(); }
 };
 SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
 SPIN['crn-sige'] = decimalSpin('crn-sige', 0, crnParamsChanged, 0.01);

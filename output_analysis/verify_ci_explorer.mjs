@@ -165,6 +165,24 @@ close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.recip), 1.1253860830832698, 1e-8, 'fun
   close(run.truth, 2 / 3 + 0.5 - (Math.E - 1), 1e-15, 'truth is E[h2] + shift − E[h1]');
   close(run.d[3], run.y2c[3] - run.y1[3], 1e-15, 'differences are y2 − y1 under common inputs');
   ok(run.u.length === 10 && run.u2.length === 10, 'both input streams returned');
+  /* The p-value and the interval agree by construction: p < α exactly when 0 lies
+     outside the interval. */
+  {
+    let agree = 0, N = 400;
+    for (let r = 0; r < N; r++) {
+      const run = CI.runCRN(12000 + r, { fn1: 'exp', fn2: 'sqrt', shift2: 0.3, sigE: 0.1, n: 10, conf: 0.95 });
+      const exclInd = run.ind.lo > 0 || run.ind.hi < 0, exclCrn = run.crn.lo > 0 || run.crn.hi < 0;
+      agree += ((run.pInd < 0.05) === exclInd && (run.pCrn < 0.05) === exclCrn) ? 1 : 0;
+    }
+    ok(agree === N, `p < α exactly when the interval excludes 0 (${agree} of ${N} runs, both arms)`);
+  }
+  /* With no true difference, the star rate is the false-positive rate α. */
+  {
+    const R = Math.max(500, Math.floor(CALIB_REPS / 4)); let fp = 0;
+    for (let r = 0; r < R; r++) fp += CI.runCRN(13000 + r, { fn1: 'exp', fn2: 'exp', shift2: 0, sigE: 0.1, n: 10, conf: 0.95 }).pCrn < 0.05 ? 1 : 0;
+    rateNear(fp / R, 0.05, R, 6, 'exp/exp, shift 0: paired p < 0.05 rate is about α');
+  }
+  close(CI.pValueZero(2.262, 1, 9), 0.05, 2e-3, 'pValueZero(t_{.975,9}, 1, 9) = 0.05');
 }
 
 /* ═══ 4. Tab ③: function moments, antithetic variance, capture ════ */
