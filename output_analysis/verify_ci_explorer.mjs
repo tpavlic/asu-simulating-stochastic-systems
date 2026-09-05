@@ -251,6 +251,30 @@ CI.FUNC_KEYS.forEach(k => {
     close(run.w[3], (f2.h(us[3]) + f2.h(fresh[3])) / 2, 1e-15, 'runAV: independent pair mean averages the shared draw with a fresh one');
   }
   close(run.z[2], (run.ya[2] + run.yb[2]) / 2, 1e-15, 'runAV: antithetic pair mean');
+  close(run.w[2], (run.ya[2] + run.yw[2]) / 2, 1e-15, 'runAV: independent pair mean from the returned yw field');
+  /* Own noise sigE added to every output: Cov(Ya, Yb) = Cov(h(U), h(1 - U)) is unchanged
+     because the noise is independent of h and of the other arm's noise, but each variance
+     grows by sigE^2, and so the pair correlation shrinks to rho * Var h / (Var h + sigE^2).
+     Both arms should still capture E[h] near their nominal rate, and the S_z^2/S_w^2 ratio
+     should track 1 plus that shrunken correlation, exactly as the noiseless check above
+     tracks 1 plus the unshrunken one. */
+  {
+    const sigE = 0.3, varH = CI.funcVar(f), wantRhoN = rho * varH / (varH + sigE * sigE);
+    const R4 = Math.max(500, Math.floor(CALIB_REPS / 4));
+    let hitsAv = 0, hitsInd = 0, sumR = 0, sumRatioN = 0;
+    for (let r = 0; r < R4; r++) {
+      const run4 = CI.runAV(30000 + r, { fn: 'exp', n: 50, conf: 0.95, sigE: sigE });
+      hitsAv += run4.hitAv ? 1 : 0; hitsInd += run4.hitInd ? 1 : 0;
+      sumR += run4.r; sumRatioN += (run4.av.s * run4.av.s) / (run4.ind.s * run4.ind.s);
+    }
+    rateNear(hitsAv / R4, 0.95, R4, 6, 'exp, 50 pairs, sigE = 0.3: antithetic interval captures E[h]');
+    rateNear(hitsInd / R4, 0.95, R4, 6, 'exp, 50 pairs, sigE = 0.3: independent interval captures E[h]');
+    const gotR = sumR / R4;
+    ok(Math.abs(gotR - wantRhoN) <= 0.03,
+       `exp, sigE = 0.3: mean sample pair correlation ${gotR.toFixed(3)} within ±0.03 of rho_h * Var h / (Var h + sigE²) = ${wantRhoN.toFixed(3)}`);
+    close(sumRatioN / R4, 1 + wantRhoN, 0.05,
+      `exp, 50 pairs, sigE = 0.3: mean S_z^2/S_w^2 (${(sumRatioN / R4).toFixed(3)}) is near 1 + rho = ${(1 + wantRhoN).toFixed(3)}`);
+  }
 }
 
 /* ═══ 5. Tab ④: control variates ═════════════════════════════════ */
@@ -279,6 +303,29 @@ close(CI.FUNCS.exp.covU * 12, 1.6903, 1e-3, 'exp: c* = 1.690 (a 1000-draw estima
   ok(c10 >= 0.78 && c10 <= 0.90, `exp, n = 10: control-variate capture ${c10.toFixed(3)} within [0.78, 0.90] (estimating c from the same ten draws costs about ten points of coverage)`);
   ok(narrower / R > 0.99, `exp, n = 50: control-variate interval narrower in ${narrower} of ${R} runs`);
   close(sumRatioBowl / R, 1, 0.05, 'bowl, n = 50: mean half-width ratio ≈ 1 (no reduction without covariance)');
+}
+/* With its own noise sigE added to every output: c* is unchanged (Cov(U, Y) =
+   Cov(U, h(U)) regardless of sigE) but r² falls by the factor
+   Var h / (Var h + sigE^2), and both arms should still capture E[h] near their
+   nominal rate. */
+{
+  const f = CI.FUNCS.exp, varH = CI.funcVar(f), varU = 1 / 12, sigE = 0.3;
+  const rhoUh2 = (f.covU * f.covU) / (varU * varH);
+  const wantR2 = rhoUh2 * varH / (varH + sigE * sigE);
+  const R = Math.max(500, Math.floor(CALIB_REPS / 4));
+  let hp = 0, hc = 0, sumC = 0, sumR2 = 0;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runCV(20000 + r, { fn: 'exp', n: 50, conf: 0.95, sigE: sigE });
+    hp += run.hitPlain ? 1 : 0; hc += run.hitCv ? 1 : 0;
+    sumC += run.c; sumR2 += run.r2;
+  }
+  rateNear(hp / R, 0.95, R, 6, 'exp, n = 50, sigE = 0.3: plain interval captures E[h]');
+  const c50n = hc / R;
+  ok(c50n >= 0.90 && c50n <= 0.965, `exp, n = 50, sigE = 0.3: control-variate capture ${c50n.toFixed(3)} within [0.90, 0.965]`);
+  close(sumC / R, f.covU * 12, 0.04, 'exp, sigE = 0.3: mean estimated c ≈ c* = 1.690 (noise does not move c*)');
+  const gotR2 = sumR2 / R;
+  ok(Math.abs(gotR2 - wantR2) <= 0.02,
+     `exp, sigE = 0.3: mean r² ${gotR2.toFixed(4)} within ±0.02 of ρ²_Uh · Var h / (Var h + σₑ²) = ${wantR2.toFixed(4)}`);
 }
 /* ═══ 6. Tab ⑤: importance sampling ═══════════════════════════════ */
 section('6. Tab ⑤: weighted estimator unbiased, capture at n = 1000, direct sampling fails at T = 5');
