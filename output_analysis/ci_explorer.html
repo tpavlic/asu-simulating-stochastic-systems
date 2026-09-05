@@ -190,7 +190,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 /* Capture tally under a history chart -- what the 100-run sweep is for. The height
    is reserved so the section does not jump when the first run fills it in. */
-.hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; min-height: 1.2em; }
+.hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; }
 .hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
 svg.hsv { display: block; width: 100%; height: auto; }
 .hist-handle { cursor: ns-resize; touch-action: none; }
@@ -386,7 +386,8 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">Each run draws n values from the normal population by inverse-transform sampling, computes <span class="ov">x</span> and S, and forms the interval <span class="ov">x</span> ± t·S/√n. The population is known here on purpose: it is the only way to check whether an interval did its job. Run many experiments, and watch the tally settle near α, the fraction that the confidence level promises will miss. Drag the dashed μ line to move the mean, or drag the curve itself to change σ; the fields above follow as you drag, and the last sample stays put so you can see the population move beneath it. The x-axis stays fixed so a change of σ shows as a change of width; μ can move only within it, and Clear history re-centers the axes on the current population.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for μ</div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">μ</span></div>
+      <div class="exp-note">Change a parameter between runs to compare interval widths across the divider, or drag the dashed line to move μ.</div>
       <div id="ci-hw"><svg class="hsv" id="ci-hist"></svg></div>
       <div class="hist-cap" id="ci-cap"></div>
     </div>
@@ -402,7 +403,6 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="card"><strong>Larger n: narrower, same miss rate</strong>H shrinks like 1/√n, and t itself falls toward 1.96 as the degrees of freedom grow. Four times the samples halves the width. The fraction that miss stays at α.</div>
         <div class="card"><strong>Larger σ: wider, same miss rate</strong>H grows in proportion to the spread of the population because S estimates σ. Doubling σ doubles the width, and again the fraction that miss stays at α.</div>
       </div>
-      <div class="eq-fine" style="margin-top:8px">Change μ, σ, n, or the confidence level between runs, and the history keeps going: the dashed true-mean line steps to the new μ, a faint divider marks the change, and the widths on either side of it can be compared directly.</div>
     </div>
   </section>
 
@@ -484,7 +484,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">Both arms cost the same 2n simulation runs. In the independent arm each system draws its own input; in the common-random-numbers arm pair i feeds both systems the same input and the analysis moves to the n differences d<sub>i</sub> = y<sub>1i</sub> − y<sub>2i</sub>. Input variance that both outputs share cancels in the difference, and so the paired interval is narrower by about √(1 − ρ) and more often excludes zero, which is the evidence that the systems differ.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for δ = μ₁ − μ₂</div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ = μ₁ − μ₂</span></div>
       <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
       <div id="crn-hw1"><svg class="hsv" id="crn-hist1"></svg></div>
       <div class="hist-cap" id="crn-cap1"></div>
@@ -567,7 +567,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm follows them with n fresh draws and averages all 2n values. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for E[h(U)]</div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Independent draws (2n values)</div>
       <div id="av-hw1"><svg class="hsv" id="av-hist1"></svg></div>
       <div class="hist-cap" id="av-cap1"></div>
@@ -650,7 +650,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">The same n draws feed both arms. The plain arm averages y = h(u). The control-variate arm notices that u itself is available, has known mean ½, and co-varies with y, and so a run whose u values happened to come out high will have a y average that is high for that reason. Subtracting c(ū − ½) corrects for it. With c chosen to minimize the variance, the interval shrinks by the factor √(1 − r²).</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for E[h(U)]</div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Plain average of h(u)</div>
       <div id="cv-hw1"><svg class="hsv" id="cv-hist1"></svg></div>
       <div class="hist-cap" id="cv-cap1"></div>
@@ -740,7 +740,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">Both arms spend n draws. The direct arm counts how many standard normals land beyond T; at T = 5 that count is almost always zero, and an interval built from all zeros is the single point [0, 0], which is wrong every time. The weighted arm draws from a normal centered at θ instead, and so the tail is visited often. It multiplies each tail draw by the likelihood ratio W(y) = φ(y)/φ(y − θ), which undoes the bias exactly. Push θ well past T, and the weights become so uneven that the interval is no longer trustworthy; the effective sample size in the stats says when that has happened. The weighted values are ordinary independent observations, and the usual interval applies to them.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for p = P(X ≥ T)</div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">p = P(X ≥ T)</span></div>
       <div class="hist-hd">Direct sampling (mean of the indicator)</div>
       <div id="is-hw1"><svg class="hsv" id="is-hist1"></svg></div>
       <div class="hist-cap" id="is-cap1"></div>
@@ -1391,7 +1391,13 @@ function histPlot(svgEl, containerEl, runs, opts) {
 
   let hits = 0, expMiss = 0, excl0 = 0, lastLabelX = -Infinity, lastChangeN = null;
   if (shown.length === 0) {
-    h += `<text x="${pL + cW / 2}" y="${pT + 24}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment to begin collecting results.</text>`;
+    // The prompt splits onto two lines where one would run past the plot's edges.
+    if (cW < 400) {
+      h += `<text x="${pL + cW / 2}" y="${pT + 24}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment</text>`;
+      h += `<text x="${pL + cW / 2}" y="${pT + 40}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">to begin collecting results.</text>`;
+    } else {
+      h += `<text x="${pL + cW / 2}" y="${pT + 24}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment to begin collecting results.</text>`;
+    }
   } else {
     shown.forEach((r, i) => {
       const runN = firstRunIdx + i, cx = xC(i);
@@ -1458,7 +1464,13 @@ function histPlot(svgEl, containerEl, runs, opts) {
 // number of misses is the sum of each visible run's own α, so it stays honest when the
 // confidence level was changed part way through the history.
 function histCaption(el, res, what, zeroWhat) {
-  if (!res || !res.shown) { el.textContent = ''; return; }
+  // Before the first run the tally shows its zeros, in the same shape it will keep, so the
+  // card is laid out at its final height from the start.
+  if (!res || !res.shown) {
+    el.innerHTML = 'Intervals missing ' + what + ': <strong>0 of 0</strong>'
+      + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>0 of 0</strong>' : '');
+    return;
+  }
   const miss = res.shown - res.hits;
   el.innerHTML = 'Intervals missing ' + what + ': <strong>' + miss + ' of ' + res.shown + '</strong>'
     + ' (about ' + res.expMiss.toFixed(1) + ' expected at the confidence levels used)'
