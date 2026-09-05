@@ -133,33 +133,38 @@ section('2. Tab ①: capture rate = confidence level (' + CALIB_REPS + ' reps pe
      && rec.n === 18 && Math.abs(rec.alpha - 0.05) < 1e-12 && rec.key === 'k', 'histRecord shape');
 }
 
-/* ═══ 3. Tab ②: common random numbers ═════════════════════════════ */
-section('3. Tab ②: CRN capture, paired/Welch half-width ratio, detection rises with ρ');
+/* ═══ 3. Tab ②: systems fed the same or different random numbers ═════ */
+section('3. Tab ②: cross moments, capture in both arms, paired/Welch width ratio, detection');
+close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.exp), CI.FUNCS.exp.m2, 1e-9, 'funcCross(exp, exp) = E[exp(U)²]');
+close(CI.funcCross(CI.FUNCS.sqrt, CI.FUNCS.sqrt), 0.5, 1e-9, 'funcCross(sqrt, sqrt) = 1/2');
+close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.bowl), 1.25 * Math.E - 3.25, 1e-9, 'funcCross(exp, bowl) = 5e/4 − 13/4');
+close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.recip), 1.1253860830832698, 1e-8, 'funcCross(exp, recip) = (Ei(2) − Ei(1))/e');
 {
   const R3 = Math.max(500, Math.floor(CALIB_REPS / 4));
-  let lastDet = -1;
-  [0, 0.5, 0.8, 0.95].forEach(rho => {
+  const cases = [['exp', 'exp', 'same model: strong positive correlation'], ['exp', 'recip', 'opposite responses: pairing widens the interval'], ['bowl', 'bowl', 'no monotone response']];
+  let detSame = 0, detOpp = 0;
+  cases.forEach(([fn1, fn2, label]) => {
+    const p = { fn1: fn1, fn2: fn2, shift2: 0.5, sigE: 0.1, n: 10, conf: 0.95 };
     let hi = 0, hc = 0, sumHi = 0, sumHc = 0, det = 0;
     for (let r = 0; r < R3; r++) {
-      const run = CI.runCRN(2000 + r, { mu1: 10, mu2: 10.5, sigma: 1, rho: rho, n: 10, conf: 0.95 });
-      hi += run.hitInd ? 1 : 0; hc += run.hitCrn ? 1 : 0;
-      sumHi += run.ind.h; sumHc += run.crn.h;
+      const run = CI.runCRN(2000 + r, p);
+      hi += run.hitInd ? 1 : 0; hc += run.hitCrn ? 1 : 0; sumHi += run.ind.h; sumHc += run.crn.h;
       det += (run.crn.lo > 0 || run.crn.hi < 0) ? 1 : 0;
     }
-    rateNear(hi / R3, 0.95, R3, 4, `ρ=${rho}: Welch interval captures δ`);
-    rateNear(hc / R3, 0.95, R3, 4, `ρ=${rho}: paired interval captures δ`);
-    /* E[paired h] / E[Welch h] = sqrt(1-ρ) × (t_{.975,9} / t_{.975,18}) × (c4(10) / c4(19)):
-       the paired interval spends 9 df where Welch has about 18, and S over 10
-       differences is biased low by c4(10) against roughly c4(19) for the pooled spread. */
-    const want = Math.sqrt(1 - rho) * CI.tQuantile(0.975, 9) / CI.tQuantile(0.975, 18) * CI.c4(10) / CI.c4(19);
-    close(sumHc / sumHi, want, 0.06, `ρ=${rho}: mean paired/Welch half-width ratio ≈ ${want.toFixed(3)}`);
-    ok(det / R3 >= lastDet, `ρ=${rho}: detection rate ${(det / R3).toFixed(3)} not below the previous ρ`);
-    lastDet = det / R3;
+    rateNear(hi / R3, 0.95, R3, 6, `${fn1}/${fn2}: Welch interval captures δ`);
+    rateNear(hc / R3, 0.95, R3, 6, `${fn1}/${fn2}: paired interval captures δ`);
+    const pred = CI.crnPredicted(p);
+    const want = pred.ratio * CI.tQuantile(0.975, 9) / CI.tQuantile(0.975, 18) * CI.c4(10) / CI.c4(19);
+    close(sumHc / sumHi, want, 0.08, `${fn1}/${fn2} (${label}): mean paired/Welch half-width ratio ≈ ${want.toFixed(3)}`);
+    if (fn1 === 'exp' && fn2 === 'exp') detSame = det / R3;
+    if (fn2 === 'recip') detOpp = det / R3;
   });
-  const run = CI.runCRN(1, { mu1: 10, mu2: 10.5, sigma: 1, rho: 0.8, n: 10, conf: 0.95 });
-  ok(run.y1.length === 10 && run.y2i.length === 10 && run.y2c.length === 10 && run.d.length === 10, 'runCRN returns 10 of each series');
-  close(run.d[3], run.y1[3] - run.y2c[3], 1e-15, 'differences are y1 - y2 under CRN');
-  close(run.truth, -0.5, 1e-15, 'truth is μ1 - μ2');
+  ok(CI.crnPredicted({ fn1: 'exp', fn2: 'recip', shift2: 0.5, sigE: 0.1 }).rho < 0, 'exp/recip: predicted correlation is negative');
+  ok(detSame > detOpp, `detection with common inputs is higher for exp/exp (${detSame.toFixed(3)}) than exp/recip (${detOpp.toFixed(3)})`);
+  const run = CI.runCRN(1, { fn1: 'exp', fn2: 'sqrt', shift2: 0.5, sigE: 0.1, n: 10, conf: 0.95 });
+  close(run.truth, 2 / 3 + 0.5 - (Math.E - 1), 1e-15, 'truth is E[h2] + shift − E[h1]');
+  close(run.d[3], run.y2c[3] - run.y1[3], 1e-15, 'differences are y2 − y1 under common inputs');
+  ok(run.u.length === 10 && run.u2.length === 10, 'both input streams returned');
 }
 
 /* ═══ 4. Tab ③: function moments, antithetic variance, capture ════ */

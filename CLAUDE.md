@@ -15,6 +15,13 @@ semester — not in its visible text, its `<title>`, its `<head>` description or
 text, or its preview image. Frame everything by topic ("Monte Carlo integration", "input
 modeling"), never by course ("in this course", "for Simulating Stochastic Systems").
 
+**Widgets also stand alone: never link to, embed, or name another widget from inside a widget.**
+Another instructor embeds one widget in their own page and may have no wish to hand their students
+the rest of this site, so a cross-link would send readers somewhere that instructor did not choose.
+Where a related idea lives in a sibling widget, say the idea in a sentence or leave it out; do not
+point at the sibling. The back-link footer is the one exception, and its embed script already hides
+it inside an iframe.
+
 The course framing lives only in the site chrome around the widgets: `index.html`, `README.md`,
 this file, and the shared back-link footer. The footer's "All course visualizations" label names
 no particular course and stays as is; its embed script removes it when the widget is

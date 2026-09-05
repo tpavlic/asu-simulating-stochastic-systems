@@ -174,6 +174,9 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
 /* Stacked layout, still wide: eight cards read better as two rows of four than four of two. */
 @media (max-width: 760px) and (min-width: 560px) { .sg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* A card whose value is a bracketed interval (e.g. "[-1.1243, -0.2265]") can outgrow half a
+   narrow phone's stats column; give it the full row there rather than ellipsizing it. */
+@media (max-width: 480px) { .sc-wide { grid-column: 1 / -1; } }
 .sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 /* Greek letters and x-bar inside the uppercase stat labels keep their case and spacing. */
@@ -275,7 +278,6 @@ footer a:hover { text-decoration: underline; }
 /* Range inputs: 26px tall so a finger lands on the strip, per CLAUDE.md. */
 input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
 .rng-val { font-family: 'IBM Plex Mono', monospace; font-size: .85rem; color: var(--text); min-width: 3.2em; display: inline-block; }
-#crn-rho { width: 140px; max-width: 45vw; }  /* the max-width applies at every size, so the pair can never overflow */
 #is-theta { width: 140px; max-width: 45vw; }  /* narrow screens: keeps the pair off the widget's right edge */
 /* Figures are SVG with a viewBox; the card shrinks them rather than overflowing. */
 svg.fig { display: block; width: 100%; height: auto; }
@@ -379,7 +381,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl"><span class="sym">t<sub>α/2,n−1</sub></span> at <span id="ci-s-conf">95%</span></div><div class="sc-val" id="ci-s-t">—</div></div>
           <div class="sc"><div class="sc-lbl">Half-width H = <span class="sym">t·S/√n</span></div><div class="sc-val" id="ci-s-h">—</div></div>
           <div class="sc"><div class="sc-lbl">Captures <span class="sym">μ</span>?</div><div class="sc-val" id="ci-s-hit">—</div></div>
-          <div class="sc"><div class="sc-lbl">Interval <span class="ov">x</span> ± H, <span id="ci-s-conf2">95%</span></div><div class="sc-val" id="ci-s-int">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Interval <span class="ov">x</span> ± H, <span id="ci-s-conf2">95%</span></div><div class="sc-val" id="ci-s-int">—</div></div>
         </div>
         <div class="sr-only" id="ci-live" aria-live="polite"></div>
       </div>
@@ -409,40 +411,21 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ②: common random numbers ────────────────────────────────── -->
   <section id="tab-crn" class="tp">
     <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="crn-mu1">Mean of system 1, μ₁</label>
-        <input class="par-inp" id="crn-mu1" type="text" inputmode="decimal" value="10" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="crn-mu2">Mean of system 2, μ₂</label>
-        <input class="par-inp" id="crn-mu2" type="text" inputmode="decimal" value="10.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="crn-sigma">Output std. dev. σ</label>
-        <input class="par-inp" id="crn-sigma" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
-      </span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-shift"><span class="tip" tabindex="0" data-tip="Added to every output of system 2 so that two systems built from the same model can still differ by a known amount. The true difference δ = E[h₂] + shift − E[h₁] is what the intervals try to capture.">Shift added to system 2</span></label><input class="par-inp" id="crn-shift" type="text" inputmode="decimal" value="0.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-sige"><span class="tip" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied.">Own noise σₑ</span></label><input class="par-inp" id="crn-sige" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
       <span class="seed-msg" id="crn-par-msg" role="status" aria-live="polite"></span>
     </div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="crn-rho"><span class="tip" tabindex="0" data-tip="The share of each output's variance that comes from the random input the two systems can share, as opposed to noise of their own. It equals the correlation between paired outputs under common random numbers. In a real simulation the input is the whole random-number stream, and sharing it means reusing the seed.">Input share of variance ρ</span></label>
-        <input type="range" id="crn-rho" min="0" max="0.95" step="0.05" value="0.8" oninput="crnRhoShow()" onchange="crnParamsChanged()" aria-describedby="crn-rho-val">
-        <span class="rng-val" id="crn-rho-val">0.80</span>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="crn-n">Pairs per run n</label>
-        <select id="crn-n" onchange="crnParamsChanged()">
+    <div class="ctrl-row">
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-n">Pairs per run n</label><select id="crn-n" onchange="crnParamsChanged()">
           <option value="5">5</option><option value="10" selected>10</option><option value="20">20</option>
           <option value="30">30</option><option value="50">50</option><option value="100">100</option><option value="200">200</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="crn-conf">Confidence</label>
-        <select id="crn-conf" onchange="crnParamsChanged()">
+        </select></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-conf">Confidence</label><select id="crn-conf" onchange="crnParamsChanged()">
           <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
           <option value="0.9">90%</option><option value="0.8">80%</option>
-        </select>
-      </span>
+        </select></span>
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
@@ -459,32 +442,35 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="viz-row">
       <div class="cv-card">
-        <svg class="fig" id="crn-fig" role="img" aria-label="Outputs of the two systems as dot columns, once with independent inputs and once with pairs joined by lines under common random numbers, plus a strip of the paired differences beside a zero line"></svg>
+        <svg class="fig" id="crn-fig" role="img" aria-label="Two stacked rows of panels. The top row, independent inputs, shows unlinked input and output columns and the Welch interval for the difference of means. The bottom row, common random numbers, joins each replication's input and output dots with a line and shows the n paired differences plus the paired interval, all against a zero line and the true difference"></svg>
         <div class="cv-leg">
-          <span style="color:var(--est)">● system 1&nbsp; ○ system 2</span>&nbsp;&nbsp;
-          <span style="color:var(--pair)">— joins a pair that shared an input</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">● system 1 / input 1&nbsp; ○ system 2 / input 2</span>&nbsp;&nbsp;
+          <span style="color:var(--pair)">— joins a pair (same replication, bottom row only)</span>&nbsp;&nbsp;
+          <span style="color:var(--est)">● paired differences dᵢ = y₂ᵢ − y₁ᵢ</span>&nbsp;&nbsp;
           <span style="color:var(--truth)">┄ true means</span>&nbsp;&nbsp;
-          <span style="color:var(--est)">● dᵢ = y₁ᵢ − y₂ᵢ</span>&nbsp;&nbsp;
-          <span style="color:var(--muted)">— zero</span>
+          <span style="color:var(--muted)">— zero</span>&nbsp;&nbsp;
+          <span><span style="color:var(--hit)">⊢●⊣</span> interval for δ (teal captures, red dashed misses)</span>
           <span id="crn-fig-note"></span>
         </div>
       </div>
       <div class="stats-panel">
         <div class="sg">
-          <div class="sc"><div class="sc-lbl"><span class="ov">y</span>₁ − <span class="ov">y</span>₂ (independent)</div><div class="sc-val acc" id="crn-s-di">—</div></div>
-          <div class="sc"><div class="sc-lbl"><span class="ov">d</span> (paired)</div><div class="sc-val acc" id="crn-s-dc">—</div></div>
-          <div class="sc"><div class="sc-lbl">Welch half-width (df)</div><div class="sc-val" id="crn-s-hi">—</div></div>
-          <div class="sc"><div class="sc-lbl">Paired half-width (df)</div><div class="sc-val" id="crn-s-hc">—</div></div>
-          <div class="sc"><div class="sc-lbl">Width ratio, paired ÷ Welch</div><div class="sc-val" id="crn-s-ratio">—</div></div>
-          <div class="sc"><div class="sc-lbl">Theory: <span class="sym">√(1 − ρ)</span></div><div class="sc-val dim" id="crn-s-theory">0.447</div></div>
-          <div class="sc"><div class="sc-lbl">Sample correlation r of pairs</div><div class="sc-val" id="crn-s-r">—</div></div>
-          <div class="sc"><div class="sc-lbl">True difference <span class="sym">δ = μ₁ − μ₂</span></div><div class="sc-val dim" id="crn-s-delta">−0.5</div></div>
+          <div class="sc"><div class="sc-lbl">System 1: <span class="ov">y</span>₁ (S₁)</div><div class="sc-val acc" id="crn-s-y1">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">δ</span> = E[h₂] + shift − E[h₁]</div><div class="sc-val dim" id="crn-s-delta">—</div></div>
+          <div class="sc"><div class="sc-lbl">System 2, independent inputs: <span class="ov">y</span>₂ (S₂)</div><div class="sc-val acc" id="crn-s-y2i">—</div></div>
+          <div class="sc"><div class="sc-lbl">System 2, common inputs: <span class="ov">y</span>₂ (S₂)</div><div class="sc-val acc" id="crn-s-y2c">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Welch's interval does not assume the two systems have the same spread. Its degrees of freedom come from the Welch–Satterthwaite approximation, which weighs the two sample variances and so lands on a non-integer between n − 1 and 2(n − 1): near 2(n − 1) when the spreads match, near n − 1 when one system is far noisier.">Welch interval for <span class="sym">δ</span>, <span class="ov">y</span>₂ − <span class="ov">y</span>₁ (<span id="crn-s-welch-df">df —</span>)</span></div><div class="sc-val" id="crn-s-welch">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Paired interval for <span class="sym">δ</span>, <span class="ov">d</span> (<span id="crn-s-paired-df">df —</span>)</div><div class="sc-val" id="crn-s-paired">—</div></div>
+          <div class="sc"><div class="sc-lbl">Correlation of paired outputs r (predicted <span class="sym">ρ</span>)</div><div class="sc-val" id="crn-s-r">—</div></div>
+          <div class="sc"><div class="sc-lbl">Paired half-width ÷ Welch half-width (predicted)</div><div class="sc-val" id="crn-s-ratio">—</div></div>
+          <div class="sc"><div class="sc-lbl">Pilot test: S<span class="sym">d</span>² vs S₁² + S₂²</div><div class="sc-val" id="crn-s-pilot">—</div></div>
+          <div class="sc"><div class="sc-lbl">Pairs n, confidence</div><div class="sc-val dim" id="crn-s-n">—</div></div>
         </div>
       </div>
     </div>
-    <div class="hint wide">Both arms cost the same 2n simulation runs. In the independent arm each system draws its own input; in the common-random-numbers arm pair i feeds both systems the same input and the analysis moves to the n differences d<sub>i</sub> = y<sub>1i</sub> − y<sub>2i</sub>. Input variance that both outputs share cancels in the difference, and so the paired interval is narrower by about √(1 − ρ) and more often excludes zero, which is the evidence that the systems differ.</div>
+    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms cost the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ = μ₁ − μ₂</span></div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ</span></div>
       <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
       <div id="crn-hw1"><svg class="hsv" id="crn-hist1"></svg></div>
       <div class="hist-cap" id="crn-cap1"></div>
@@ -493,17 +479,23 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="hist-cap" id="crn-cap2"></div>
     </div>
     <div class="sec">
-      <div class="sec-hd">Why sharing inputs narrows the interval and why the analysis must then be paired</div>
-      <div class="eq-row"><span class="eq-lbl">Variance of the difference:</span><span class="eq-val">Var(ȳ₁ − ȳ₂) = (σ₁² + σ₂² − 2ρσ₁σ₂) / n</span></div>
-      <div class="eq-row"><span class="eq-lbl">With σ₁ = σ₂ = σ:</span><span class="eq-val">= 2σ²(1 − ρ) / n</span></div>
+      <div class="sec-hd">The two intervals for <span class="sym">δ</span></div>
+      <div class="eq-row"><span class="eq-lbl">Independent inputs (Welch):</span><span class="eq-val">ȳ<sub>2</sub> − ȳ<sub>1</sub> ± t<sub>α/2,df</sub> · √(S<sub>1</sub>²/n + S<sub>2</sub>²/n)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Common random numbers (paired):</span><span class="eq-val"><span class="ov">d</span> ± t<sub>α/2,n−1</sub> · S<sub>d</sub>/√n&nbsp; (dᵢ = y₂ᵢ − y₁ᵢ)</span></div>
+      <div class="eq-fine" style="margin-top:8px">Both intervals are for the same δ; they differ in what they treat as the sample: two independent sets of outputs or one set of n differences.</div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Why sharing inputs narrows the interval and when it widens it</div>
+      <div class="eq-row"><span class="eq-lbl">Variance of the difference of means:</span><span class="eq-val">Var(ȳ<sub>2</sub> − ȳ<sub>1</sub>) = (S<sub>1</sub>² + S<sub>2</sub>² − 2 r S<sub>1</sub> S<sub>2</sub>) / n&nbsp; (r = 0 for independent inputs)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Paired:</span><span class="eq-val">Var(<span class="ov">d</span>) = S<sub>d</sub>² / n</span></div>
+      <div class="eq-row"><span class="eq-lbl">And identically:</span><span class="eq-val">S<sub>d</sub>² = S<sub>1</sub>² + S<sub>2</sub>² − 2 r S<sub>1</sub> S<sub>2</sub></span></div>
       <div class="eq-hr"></div>
-      <div class="exp-note">Independent inputs make ρ zero. Feeding both systems the same input makes their outputs move together, ρ &gt; 0, and the shared part of the variance cancels in the difference. What remains reflects how the systems differ, not how the inputs happened to fall. The price is that the two samples are no longer independent, and the two-sample (Welch or pooled) interval no longer applies: the n differences are independent of each other, and the one-sample interval on them is the right tool. That is the paired-difference t test in its interval form.</div>
+      <div class="exp-note">Positive correlation shrinks the difference's variance: two systems reading the same input tend to rise and fall together, and so their difference is more stable than two systems reading independent inputs. Once the arms share inputs, the paired analysis is mandatory because the two samples are no longer independent; the right tool is the one-sample interval on the n independent differences, which is the paired t test in its interval form. A pilot run can check whether pairing is worth it. Run both systems on common inputs and compare S<sub>d</sub>² against S<sub>1</sub>² + S<sub>2</sub>²: if S<sub>d</sub>² comes out smaller, pairing is reducing variance, and the ratio of the two says by how much.</div>
       <div class="cards">
-        <div class="card"><strong>Two-sample rule</strong>An interval for μ₁ − μ₂ that excludes zero is a rejection of "no difference" at level α. Comparing two separate one-sample intervals for overlap is a weaker and less reliable test.</div>
-        <div class="card"><strong>Set ρ to zero</strong>With nothing shared, the paired interval is slightly wider than Welch's: it spends n − 1 degrees of freedom where Welch has about 2(n − 1). Pairing only pays when the inputs matter.</div>
-        <div class="card"><strong>Set ρ near one</strong>Almost all of the variance is input, and the paired interval collapses onto the true difference. This is why a seed shared across designs is the first variance-reduction tool to reach for when comparing systems.</div>
+        <div class="card"><strong>Same model, shifted</strong>With both systems built from the same model, sharing the input drives the correlation of paired outputs close to one: the outputs rise and fall together almost perfectly. Nearly all of the variance cancels in the difference, and the paired interval collapses toward the shift itself.</div>
+        <div class="card"><strong>Opposite responses</strong>exp(u) rises with u, whereas 1 / (1 + u) falls. Sharing u pairs one system's high outputs with the other's low ones, the correlation of paired outputs turns negative, and the paired interval comes out wider than Welch's. Common random numbers assume the two systems respond to their input in the same direction; pick models that disagree, and pairing backfires.</div>
+        <div class="card"><strong>The bowl</strong>The bowl model, (u − ½)², has no consistent direction: it falls for u below one half and rises above it. Paired with a monotone system, the bowl's own response has no matching direction to correlate with, and so the correlation of paired outputs stays near zero and pairing saves almost nothing over independent inputs.</div>
       </div>
-      <div class="eq-fine" style="margin-top:8px">The sample-size side of the same fact, how many paired runs a given correlation saves, is on the <a href="../power_analysis/power_explorer.html" target="_blank" rel="noopener">Power Explorer</a>'s paired-runs tab.</div>
     </div>
   </section>
 
@@ -1013,32 +1005,7 @@ function c4(n) {
   return Math.sqrt(2 / (n - 1)) * Math.exp(logGamma(n / 2) - logGamma((n - 1) / 2));
 }
 
-/* ── Tab ②: two systems sharing an input ───────────────────────────
-   p = {mu1, mu2, sigma, rho, n, conf}.  Output of system k in pair i:
-     Y_k = mu_k + sigma (√ρ X + √(1−ρ) E_k),
-   with X the shared "input" and E_k the system's own noise, all standard normal.
-   ρ is the share of output variance that comes from the input, and is also the
-   correlation of paired outputs.  Both arms use the same system-1 outputs and the
-   same noise; the independent arm gives system 2 its own input X′, the CRN arm gives
-   it the same X.  Both arms therefore consume 2n outputs, and the only thing that
-   differs between them is which input system 2 saw. */
-function runCRN(seed, p) {
-  var rand = mulberry32(seed), a = Math.sqrt(p.rho), b = Math.sqrt(1 - p.rho);
-  var y1 = [], y2i = [], y2c = [], d = [];
-  for (var i = 0; i < p.n; i++) {
-    var x = normalDraw(rand, 0, 1), xp = normalDraw(rand, 0, 1);
-    var e1 = normalDraw(rand, 0, 1), e2 = normalDraw(rand, 0, 1);
-    y1.push(p.mu1 + p.sigma * (a * x + b * e1));
-    y2i.push(p.mu2 + p.sigma * (a * xp + b * e2));
-    y2c.push(p.mu2 + p.sigma * (a * x + b * e2));
-    d.push(y1[i] - y2c[i]);
-  }
-  var ind = ciWelch(y1, y2i, p.conf), crn = ciMean(d, p.conf), truth = p.mu1 - p.mu2;
-  return { y1: y1, y2i: y2i, y2c: y2c, d: d, ind: ind, crn: crn, truth: truth,
-           r: sampleCorr(y1, y2c), hitInd: captured(ind, truth), hitCrn: captured(crn, truth) };
-}
-
-/* ── The function menu shared by tabs ③ and ④ ────────────────────────
+/* ── The function menu shared by tabs ②, ③, and ④ ─────────────────────
    Each h is a stand-in for a simulation model driven by one uniform.  The moments
    are exact: mean E[h(U)], m2 E[h(U)²], cross E[h(U) h(1−U)], and covU cov(U, h(U)).
    The first three are monotone; the bowl is the counterexample on which both
@@ -1056,6 +1023,46 @@ var FUNCS = {
 var FUNC_KEYS = ['exp', 'sqrt', 'recip', 'bowl'];
 function funcVar(f) { return f.m2 - f.mean * f.mean; }
 function funcAntiCov(f) { return f.cross - f.mean * f.mean; }
+
+/* ── Tab ②: two systems fed the same or different random numbers ────────
+   p = {fn1, fn2, shift2, sigE, n, conf}.  A system turns a uniform input into an
+   output: Y_k = h_k(U) + shift_k + sigE·Z_k, with shift_1 = 0, shift_2 = p.shift2, and
+   Z_k the system's own standard-normal noise.  Under independent inputs system 2 reads
+   its own uniform U′; under common random numbers both systems read U.  System 1 and
+   both noises are identical in the two arms, and so the only thing that differs is the
+   input system 2 saw, and both arms cost 2n outputs.  With system 2 plotted to the
+   right of system 1 in the figure, every difference reads system 2 − system 1. */
+function runCRN(seed, p) {
+  var f1 = FUNCS[p.fn1], f2 = FUNCS[p.fn2], rand = mulberry32(seed);
+  var u = [], u2 = [], y1 = [], y2i = [], y2c = [], d = [];
+  for (var i = 0; i < p.n; i++) {
+    var ui = rand(), vi = rand(), z1 = normalDraw(rand, 0, 1), z2 = normalDraw(rand, 0, 1);
+    u.push(ui); u2.push(vi);
+    y1.push(f1.h(ui) + p.sigE * z1);
+    y2i.push(f2.h(vi) + p.shift2 + p.sigE * z2);
+    y2c.push(f2.h(ui) + p.shift2 + p.sigE * z2);
+    d.push(y2c[i] - y1[i]);
+  }
+  var ind = ciWelch(y2i, y1, p.conf), crn = ciMean(d, p.conf), truth = f2.mean + p.shift2 - f1.mean;
+  return { u: u, u2: u2, y1: y1, y2i: y2i, y2c: y2c, d: d, ind: ind, crn: crn, truth: truth,
+           r: sampleCorr(y1, y2c), s1: Math.sqrt(sampleVar(y1)), s2i: Math.sqrt(sampleVar(y2i)),
+           s2c: Math.sqrt(sampleVar(y2c)), sd: crn.s, hitInd: captured(ind, truth), hitCrn: captured(crn, truth) };
+}
+/* E[h1(U) h2(U)] by composite Simpson's rule on [0, 1], for the predicted correlation
+   of paired outputs; every menu function is smooth on the closed interval. */
+function funcCross(f1, f2, m) {
+  m = m || 2000;
+  var w = 1 / m, s = f1.h(0) * f2.h(0) + f1.h(1) * f2.h(1);
+  for (var i = 1; i < m; i++) { var x = i * w; s += (i % 2 ? 4 : 2) * f1.h(x) * f2.h(x); }
+  return s * w / 3;
+}
+/* What the models predict for a run: the correlation of paired outputs and the ratio
+   of the paired standard error to the two-sample one, sqrt((v1 + v2 − 2 cov)/(v1 + v2)). */
+function crnPredicted(p) {
+  var f1 = FUNCS[p.fn1], f2 = FUNCS[p.fn2], ve = p.sigE * p.sigE;
+  var v1 = funcVar(f1) + ve, v2 = funcVar(f2) + ve, cov = funcCross(f1, f2) - f1.mean * f2.mean;
+  return { rho: cov / Math.sqrt(v1 * v2), ratio: Math.sqrt(Math.max(0, (v1 + v2 - 2 * cov) / (v1 + v2))), v1: v1, v2: v2, cov: cov };
+}
 
 /* ── Tab ③: antithetic pairs ──────────────────────────────────────────
    p = {fn, n, conf}.  Both arms cost 2n evaluations and share the first n draws:
@@ -1117,7 +1124,7 @@ var CI = {
   mean: mean, sampleVar: sampleVar, sampleCov: sampleCov, sampleCorr: sampleCorr,
   ciMean: ciMean, ciWelch: ciWelch, captured: captured
   , runNormal: runNormal, histRecord: histRecord, c4: c4
-  , runCRN: runCRN
+  , runCRN: runCRN, funcCross: funcCross, crnPredicted: crnPredicted
   , FUNCS: FUNCS, FUNC_KEYS: FUNC_KEYS, funcVar: funcVar, funcAntiCov: funcAntiCov, runAV: runAV
   , runCV: runCV
   , isWeight: isWeight, runIS: runIS
@@ -1356,7 +1363,9 @@ function histPlot(svgEl, containerEl, runs, opts) {
   // holds to the plot's right edge. A later change to that value bends the line
   // there instead of erasing the history already drawn.
   let path = '';
-  const live = clampY(opts.liveTruth), cantEnd = pL + cW + HIST_CANT;
+  // The held line overhangs the plot only where it is draggable (opts.grab); elsewhere an
+  // overhang would read as a handle that does nothing.
+  const live = clampY(opts.liveTruth), cantEnd = pL + cW + (opts.grab ? HIST_CANT : 0);
   if (shown.length === 0) {
     path = `M${pL},${live} H${cantEnd}`;
   } else {
@@ -1941,115 +1950,216 @@ TABS.ci = {
     renderCiHist(p);
   }
 };
-// ── Tab ②: common random numbers ─────────────────────
-const CRS = { ind: [], crn: [], last: null };
-function crnRhoShow() { $('crn-rho-val').textContent = (+$('crn-rho').value).toFixed(2); }
+// ── Tab ②: systems fed the same or different random numbers ─────────
+const CRS = { ind: [], crn: [], last: null, lastRunObj: null, lastRunP: null };
 function crnParams() {
-  // μ₁, μ₂, and σ share one status span; each field is read only after the previous
+  // shift2 and sigE share one status span; each field is read only after the previous
   // one has passed, and an unclamped later read that leaves the span empty falls back
   // to whatever message an earlier field already set, so a clamp or error is never
   // blanked out by a later valid read (mirrors ciParams's two-field version).
-  const mu1 = readNum('crn-mu1', 'crn-par-msg', -1e6, 1e6, 'μ₁');
-  if (mu1 === null) return null;
+  const shift2 = readNum('crn-shift', 'crn-par-msg', -1e6, 1e6, 'shift');
+  if (shift2 === null) return null;
   const msg1 = $('crn-par-msg').textContent;
-  const mu2 = readNum('crn-mu2', 'crn-par-msg', -1e6, 1e6, 'μ₂');
-  if (mu2 === null) return null;
+  const sigE = readNum('crn-sige', 'crn-par-msg', 0, 1e6, 'σₑ');
+  if (sigE === null) return null;
   if (!$('crn-par-msg').textContent && msg1) $('crn-par-msg').textContent = msg1;
-  const msg12 = $('crn-par-msg').textContent;
-  const sigma = readNum('crn-sigma', 'crn-par-msg', 1e-6, 1e6, 'σ');
-  if (sigma === null) return null;
-  if (!$('crn-par-msg').textContent && msg12) $('crn-par-msg').textContent = msg12;
-  return { mu1: mu1, mu2: mu2, sigma: sigma, rho: +$('crn-rho').value, n: +$('crn-n').value, conf: +$('crn-conf').value };
+  return { fn1: $('crn-fn1').value, fn2: $('crn-fn2').value, shift2: shift2, sigE: sigE,
+           n: +$('crn-n').value, conf: +$('crn-conf').value };
 }
-function crnKey(p) { return [p.mu1, p.mu2, p.sigma, p.rho, p.n, p.conf].join('|'); }
+function crnKey(p) { return [p.fn1, p.fn2, p.shift2, p.sigE, p.n, p.conf].join('|'); }
 function crnParamsChanged() {
   const p = crnParams(); if (!p) return;
-  crnRhoShow();
-  $('crn-s-theory').textContent = Math.sqrt(1 - p.rho).toFixed(3);
-  $('crn-s-delta').textContent = fmt(p.mu1 - p.mu2, decFor(Math.abs(p.mu1 - p.mu2) || 1));
-  drawCrnFig(CRS.lastRunObj || null, p);
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
+  $('crn-s-delta').textContent = fmt(delta, decFor(Math.abs(delta) || 1));
+  $('crn-s-n').textContent = p.n + ', ' + fmtConf(p.conf);
+  drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p);
   renderCrnHist();
 }
-// Two system panels plus a narrow differences strip: the same system-1 outputs in
-// both panels, system 2 fed its own input on the left and the shared input on the
-// right (each pair joined by a line), and the CRN arm's own d_i = y1_i − y2_i beside
-// a zero line in the strip at the right, so the variance reduction is visible directly
+// Two stacked rows, "Independent inputs" then "Common random numbers", each with an
+// inputs panel, an outputs panel, and a differences strip: system 1 always reads u,
+// and system 2 reads its own u2 in the top row or the same u in the bottom row, and so
+// the bottom row's input lines are level and the variance reduction is visible directly
 // rather than only in the stats panel below.
 function drawCrnFig(run, p) {
-  const W = figWidth($('crn-fig')), H = 250, pT = 26, pB = 30, cH = H - pT - pB, MAXPAIRS = 40;
-  // Three gaps (left margin, between the two system panels, before the strip) plus a
-  // fixed right margin pR sized for the strip's own tick labels bound a content width
-  // cW, split 3:3:1 among the two system panels and the narrower differences strip.
-  const gap = 14, pR = 40, cW = W - gap * 3 - pR, sysW = cW * 3 / 7, diffW = cW / 7;
-  const panels = [{ x: gap, w: sysW, title: 'Independent inputs', y2: run ? run.y2i : null, join: false },
-                  { x: gap * 2 + sysW, w: sysW, title: 'Common random numbers', y2: run ? run.y2c : null, join: true }];
-  const diffX = gap * 3 + sysW * 2;
-  // "Common random numbers" is wider than its own panel column once the panels have
-  // shrunk to make room for the strip; scale every panel/strip title down toward the
-  // narrow end so the longest one never bleeds into its neighbor.
-  const titleFS = Math.max(8.5, Math.min(10.5, sysW / 12));
-  let lo = Math.min(p.mu1, p.mu2) - 2.5 * p.sigma, hi = Math.max(p.mu1, p.mu2) + 2.5 * p.sigma;
-  if (run) { const all = run.y1.concat(run.y2i, run.y2c); lo = Math.min(lo, ...all); hi = Math.max(hi, ...all); }
-  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
-  const yP = v => pT + cH - (v - lo) / (hi - lo) * cH;
+  const svg = $('crn-fig'), W = figWidth(svg), H = 410;
+  // pL is a left margin for each row's own rotated title, read top-to-bottom along the
+  // card's left edge; pT only has to clear the panel-title row above the top panels
+  // (the row titles moved off it), and rowGap only has to separate the two panel rows.
+  const pL = 22, pT = 18, pB = 30, rowGap = 18, gap = 14, pR = 40, MAXPAIRS = 40;
+  const rowH = (H - pT - pB - rowGap) / 2;
+  const cW = W - pL - gap * 4 - pR;
+  const inW = cW * 2 / 7, outW = cW * 3 / 7, dW = cW * 2 / 7 - gap;
+  const xIn = pL + gap, xOut = xIn + inW + gap, xDiff = xOut + outW + gap;
+  // Each panel column's title shrinks toward the narrow end so the longest one never
+  // bleeds into its neighbor. The row titles are fixed in the 10-10.5 range instead
+  // because rotating them onto the left margin frees them from the panels' own widths.
+  const titleFS = w => Math.max(8.5, Math.min(10.5, w / 12));
+  const rowTitleFS = Math.max(10, Math.min(10.5, rowH / 16));
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   const m = run ? Math.min(MAXPAIRS, p.n) : 0;
+
+  // Outputs panel: one value scale shared by both rows, fit to the actual run when one
+  // exists and to the two models' own ranges otherwise.
+  let oLo, oHi;
+  if (run) {
+    const all = run.y1.concat(run.y2i, run.y2c, [f1.mean, f2.mean + p.shift2]);
+    oLo = Math.min(...all); oHi = Math.max(...all);
+  } else {
+    const c1 = fnCurve(f1), c2 = fnCurve(f2);
+    oLo = Math.min(c1.lo, c2.lo + p.shift2, f1.mean, f2.mean + p.shift2);
+    oHi = Math.max(c1.hi, c2.hi + p.shift2, f1.mean, f2.mean + p.shift2);
+  }
+  const oPad = (oHi - oLo) * 0.06 || 0.1; oLo -= oPad; oHi += oPad;
+  const yO = (top, v) => top + rowH - (v - oLo) / (oHi - oLo) * rowH;
+
+  // Inputs panel: a fixed [0, 1] scale padded 6% because the input is always uniform.
+  const iLo = -0.06, iHi = 1.06;
+  const yI = (top, v) => top + rowH - (v - iLo) / (iHi - iLo) * rowH;
+
+  // Differences strip: one scale shared by both rows, including 0, δ, every dᵢ, and
+  // both intervals' endpoints (Welch's on top, the paired one on the bottom). The base
+  // range extends a full |δ| beyond both ends of [0, δ] so the zero and δ lines sit
+  // away from the panel's own top/bottom edges even before any run exists; when δ = 0
+  // there is no such width to draw on, so the noise scale stands in for it instead.
+  const dBase = Math.abs(delta) || (p.sigE || 0.1) * 3;
+  let dLo = Math.min(0, delta) - dBase, dHi = Math.max(0, delta) + dBase;
+  if (run) {
+    dLo = Math.min(dLo, run.ind.lo, run.crn.lo); dHi = Math.max(dHi, run.ind.hi, run.crn.hi);
+    for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
+  }
+  const dPad = (dHi - dLo) * 0.06; dLo -= dPad; dHi += dPad;
+  const yD = (top, v) => top + rowH - (v - dLo) / (dHi - dLo) * rowH;
+
+  // A capped interval bar with an end dot, colored and dashed by capture, exactly like
+  // the history chart's own marks: teal C.hit (solid, filled dot) when the interval
+  // captures δ, red C.miss (dashed, hollow dot) when it misses.
+  const capW = 6, lwBar = 2, dotR = 3.5;
+  const intervalMark = (cx, lo, hi, est, hit, yFn) => {
+    const col = hit ? C.hit : C.miss, dash = hit ? '' : ' stroke-dasharray="3,2.5"';
+    const yTop = yFn(hi), yBot = yFn(lo), ym = yFn(est);
+    let s = `<line x1="${cx}" y1="${yTop}" x2="${cx}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"${dash}/>`;
+    s += `<line x1="${cx - capW}" y1="${yTop}" x2="${cx + capW}" y2="${yTop}" stroke="${col}" stroke-width="${lwBar}"/>`;
+    s += `<line x1="${cx - capW}" y1="${yBot}" x2="${cx + capW}" y2="${yBot}" stroke="${col}" stroke-width="${lwBar}"/>`;
+    s += hit ? `<circle cx="${cx}" cy="${ym}" r="${dotR}" fill="${col}"/>`
+             : `<circle cx="${cx}" cy="${ym}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
+    return s;
+  };
+
+  const rows = [
+    { top: pT, title: 'Independent inputs', in2: run ? run.u2 : null, out2: run ? run.y2i : null,
+      ticks: true, bottom: false, paired: false },
+    { top: pT + rowH + rowGap, title: 'Common random numbers', in2: run ? run.u : null, out2: run ? run.y2c : null,
+      ticks: false, bottom: true, paired: true },
+  ];
+
   let h = '';
-  panels.forEach(pn => {
-    const c1 = pn.x + pn.w * 0.32, c2 = pn.x + pn.w * 0.68;
-    h += `<rect x="${pn.x}" y="${pT}" width="${pn.w}" height="${cH}" fill="${C.bg}" rx="3"/>`;
-    h += `<text x="${pn.x + pn.w / 2}" y="${pT - 9}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS}" font-weight="700" font-family="${FF_SANS}">${pn.title}</text>`;
-    [[c1, p.mu1], [c2, p.mu2]].forEach(([cx, mu]) => {
-      h += `<line x1="${cx - 22}" y1="${yP(mu)}" x2="${cx + 22}" y2="${yP(mu)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-    });
+  rows.forEach(row => {
+    const top = row.top, midY = top + rowH / 2, titleX = pL / 2 + 1;
+    // The row title reads top-to-bottom along the card's own left edge, rotated -90°
+    // about its own center so it never competes with the panel titles above the top
+    // row or crowds the row below it; its available length is the row height, not the
+    // card width, and so it stays legible at any card width, including 390px.
+    h += `<text x="${titleX}" y="${midY}" text-anchor="middle" fill="${C.muted}" font-size="${rowTitleFS}" font-weight="700" font-family="${FF_SANS}" transform="rotate(-90 ${titleX} ${midY})">${row.title}</text>`;
+
+    // Inputs panel: system 1's input at 32%, system 2's at 68%. Welch's method never
+    // forms a difference, and so the top row's dots stand as two unrelated columns
+    // with no joining line; the bottom row still joins each replication's pair (level
+    // under common inputs because both columns read u). Category labels below the
+    // panels are drawn once, under the bottom row only; the row gap between the two
+    // panel rows only has to separate them now because the row titles moved to the
+    // rotated labels on the left margin.
+    h += `<rect x="${xIn}" y="${top}" width="${inW}" height="${rowH}" fill="${C.bg}" rx="3"/>`;
+    if (row.ticks) h += `<text x="${xIn + inW / 2}" y="${top - 4}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS(inW)}" font-weight="700" font-family="${FF_SANS}">Inputs</text>`;
+    const ic1 = xIn + inW * 0.32, ic2 = xIn + inW * 0.68;
     if (run) {
+      if (row.paired) for (let i = 0; i < m; i++) h += `<line x1="${ic1}" y1="${yI(top, run.u[i])}" x2="${ic2}" y2="${yI(top, row.in2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
       for (let i = 0; i < m; i++) {
-        const ya = yP(run.y1[i]), yb = yP(pn.y2[i]);
-        if (pn.join) h += `<line x1="${c1}" y1="${ya}" x2="${c2}" y2="${yb}" stroke="${C.pair}" stroke-width="1"/>`;
-      }
-      for (let i = 0; i < m; i++) {
-        h += `<circle cx="${c1}" cy="${yP(run.y1[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
-        h += `<circle cx="${c2}" cy="${yP(pn.y2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+        h += `<circle cx="${ic1}" cy="${yI(top, run.u[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        h += `<circle cx="${ic2}" cy="${yI(top, row.in2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
       }
     }
-    h += `<text x="${c1}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">system 1</text>`;
-    h += `<text x="${c2}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">system 2</text>`;
+    if (row.bottom) {
+      h += `<text x="${ic1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">input 1</text>`;
+      h += `<text x="${ic2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">input 2</text>`;
+    }
+    // The [0, 0.5, 1] scale ticks now sit inside the panel's own left edge rather than
+    // in the card's left margin, which the rotated row title now occupies.
+    if (row.ticks) [0, 0.5, 1].forEach(v => { h += `<text x="${xIn + 3}" y="${yI(top, v) + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v}</text>`; });
+
+    // Outputs panel: system 1 filled, system 2 hollow, with dashed teal ticks at the
+    // true means. The top row again draws no joining line (see the inputs panel note
+    // above). No grab targets: this figure is read-only.
+    h += `<rect x="${xOut}" y="${top}" width="${outW}" height="${rowH}" fill="${C.bg}" rx="3"/>`;
+    if (row.ticks) h += `<text x="${xOut + outW / 2}" y="${top - 4}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS(outW)}" font-weight="700" font-family="${FF_SANS}">Outputs</text>`;
+    const oc1 = xOut + outW * 0.32, oc2 = xOut + outW * 0.68;
+    h += `<line x1="${oc1 - 22}" y1="${yO(top, f1.mean)}" x2="${oc1 + 22}" y2="${yO(top, f1.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    h += `<line x1="${oc2 - 22}" y1="${yO(top, f2.mean + p.shift2)}" x2="${oc2 + 22}" y2="${yO(top, f2.mean + p.shift2)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    if (run) {
+      if (row.paired) for (let i = 0; i < m; i++) h += `<line x1="${oc1}" y1="${yO(top, run.y1[i])}" x2="${oc2}" y2="${yO(top, row.out2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
+      for (let i = 0; i < m; i++) {
+        h += `<circle cx="${oc1}" cy="${yO(top, run.y1[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        h += `<circle cx="${oc2}" cy="${yO(top, row.out2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+      }
+    }
+    if (row.bottom) {
+      h += `<text x="${oc1}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">system 1</text>`;
+      h += `<text x="${oc2}" y="${top + rowH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_SANS}">system 2</text>`;
+    }
+    if (row.ticks) {
+      const oDec = decFor(oHi - oLo);
+      for (let i = 0; i <= 2; i++) { const v = oLo + (oHi - oLo) * i / 2; h += `<text x="${xOut - 5}" y="${yO(top, v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(oDec)}</text>`; }
+    }
+
+    // Third panel: the top row shows the Welch interval for the difference of means
+    // (one dot at ȳ1 − ȳ2 with a capped bar); the bottom row keeps the n paired dᵢ
+    // dots at the left quarter and adds the paired interval's own dot and bar at the
+    // right quarter, offset clear of the dots. Both share one scale with 0 and a
+    // dashed teal δ line.
+    h += `<rect x="${xDiff}" y="${top}" width="${dW}" height="${rowH}" fill="${C.bg}" rx="3"/>`;
+    if (row.ticks) h += `<text x="${xDiff + dW / 2}" y="${top - 4}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS(dW)}" font-weight="700" font-family="${FF_SANS}">Difference of means</text>`;
+    h += `<line x1="${xDiff + 3}" y1="${yD(top, 0)}" x2="${xDiff + dW - 3}" y2="${yD(top, 0)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<line x1="${xDiff + 3}" y1="${yD(top, delta)}" x2="${xDiff + dW - 3}" y2="${yD(top, delta)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    if (run) {
+      if (row.paired) {
+        const dotX = xDiff + dW * 0.28, barX = xDiff + dW * 0.72;
+        for (let i = 0; i < m; i++) h += `<circle cx="${dotX}" cy="${yD(top, run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        h += intervalMark(barX, run.crn.lo, run.crn.hi, run.crn.mean, run.hitCrn, v => yD(top, v));
+      } else {
+        h += intervalMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, run.ind.diff, run.hitInd, v => yD(top, v));
+      }
+    }
+    // Both strips get their own min/0/max ticks (not just the top row), because the
+    // zero line otherwise carries no label of its own; a min or max label this close
+    // to 0's is dropped rather than drawn on top of it.
+    {
+      const dDec = decFor(dHi - dLo);
+      const y0 = yD(top, 0), yMin = yD(top, dLo), yMax = yD(top, dHi);
+      const items = [[0, y0]];
+      if (Math.abs(yMin - y0) >= 12) items.push([dLo, yMin]);
+      if (Math.abs(yMax - y0) >= 12) items.push([dHi, yMax]);
+      items.forEach(([v, y]) => { const lbl = v === 0 ? '0' : v.toFixed(dDec); h += `<text x="${xDiff + dW + 5}" y="${y + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${lbl}</text>`; });
+    }
   });
-  // one value axis on the far left, shared by the two system panels
-  const dec = decFor(hi - lo);
-  for (let i = 0; i <= 3; i++) {
-    const v = lo + (hi - lo) * i / 3;
-    h += `<text x="${14}" y="${yP(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(dec)}</text>`;
-  }
-  // Differences strip: the CRN arm's own d_i = y1_i − y2_i beside a zero line, on its
-  // own value scale so a tightly clustered set of differences is not flattened
-  // against the panels' much wider output scale.
-  const delta = p.mu1 - p.mu2;
-  let dLo = Math.min(0, delta), dHi = Math.max(0, delta);
-  if (run) for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
-  if (dHi === dLo) { const f = (p.sigma || 1) * 0.5; dLo -= f; dHi += f; }
-  const dPad = (dHi - dLo) * 0.06; dLo -= dPad; dHi += dPad;
-  const yD = v => pT + cH - (v - dLo) / (dHi - dLo) * cH, dCx = diffX + diffW / 2;
-  h += `<rect x="${diffX}" y="${pT}" width="${diffW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
-  h += `<text x="${dCx}" y="${pT - 9}" text-anchor="middle" fill="${C.muted}" font-size="${titleFS}" font-weight="700" font-family="${FF_SANS}">Differences</text>`;
-  h += `<line x1="${diffX + 3}" y1="${yD(0)}" x2="${diffX + diffW - 3}" y2="${yD(0)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${diffX + 3}" y1="${yD(delta)}" x2="${diffX + diffW - 3}" y2="${yD(delta)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  if (run) for (let i = 0; i < m; i++) { h += `<circle cx="${dCx}" cy="${yD(run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`; }
-  const dDec = decFor(dHi - dLo);
-  for (let i = 0; i <= 2; i++) {
-    const v = dLo + (dHi - dLo) * i / 2;
-    h += `<text x="${diffX + diffW + 5}" y="${yD(v) + 3.5}" text-anchor="start" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${v.toFixed(dDec)}</text>`;
-  }
-  svgSet($('crn-fig'), W, H, h);
+
+  svgSet(svg, W, H, h);
   $('crn-fig-note').textContent = run && p.n > MAXPAIRS ? ' · first ' + MAXPAIRS + ' of ' + p.n + ' pairs drawn' : '';
 }
-function crnShowStats(run) {
+function crnShowStats(run, p) {
   const d = decFor(Math.min(run.ind.h, run.crn.h) || 1);
-  $('crn-s-di').textContent = fmt(run.ind.diff, d);
-  $('crn-s-dc').textContent = fmt(run.crn.mean, d);
-  $('crn-s-hi').textContent = fmt(run.ind.h, d) + ' (df ' + run.ind.df.toFixed(1) + ')';
-  $('crn-s-hc').textContent = fmt(run.crn.h, d) + ' (df ' + run.crn.df + ')';
-  $('crn-s-ratio').textContent = fmt(run.crn.h / run.ind.h, 3);
-  $('crn-s-r').textContent = fmt(run.r, 3);
+  $('crn-s-y1').textContent = fmt(CI.mean(run.y1), d) + ' (' + fmt(run.s1, d) + ')';
+  $('crn-s-y2i').textContent = fmt(CI.mean(run.y2i), d) + ' (' + fmt(run.s2i, d) + ')';
+  $('crn-s-y2c').textContent = fmt(CI.mean(run.y2c), d) + ' (' + fmt(run.s2c, d) + ')';
+  $('crn-s-welch').textContent = '[' + fmt(run.ind.lo, d) + ', ' + fmt(run.ind.hi, d) + ']';
+  $('crn-s-welch-df').textContent = 'df ' + run.ind.df.toFixed(1);
+  $('crn-s-paired').textContent = '[' + fmt(run.crn.lo, d) + ', ' + fmt(run.crn.hi, d) + ']';
+  $('crn-s-paired-df').textContent = 'df ' + run.crn.df;
+  const pred = CI.crnPredicted(p);
+  $('crn-s-r').textContent = fmt(run.r, 3) + ' (' + fmt(pred.rho, 3) + ')';
+  $('crn-s-ratio').textContent = fmt(run.crn.h / run.ind.h, 3) + ' (' + fmt(pred.ratio, 3) + ')';
+  const sd2 = run.sd * run.sd, s1sq = run.s1 * run.s1, s2csq = run.s2c * run.s2c, rhs = s1sq + s2csq;
+  const pd = decFor(Math.max(sd2, rhs) || 1);
+  $('crn-s-pilot').textContent = (sd2 < rhs ? 'helps: ' : 'hurts: ') + fmt(sd2, pd) + (sd2 < rhs ? ' < ' : ' > ') + fmt(rhs, pd);
+  $('crn-s-n').textContent = p.n + ', ' + fmtConf(p.conf);
 }
 function crnRecord(run, p) {
   const k = crnKey(p);
@@ -2062,8 +2172,8 @@ function runCrn() {
   const run = CI.runCRN(seed, p);
   const repeat = CRS.last && CRS.last.seed === seed && CRS.last.key === crnKey(p);
   CRS.last = { seed: seed, key: crnKey(p) };
-  CRS.lastRunObj = run;
-  crnRecord(run, p); drawCrnFig(run, p); crnShowStats(run); renderCrnHist();
+  CRS.lastRunObj = run; CRS.lastRunP = p;
+  crnRecord(run, p); drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist();
   noteRun('crn', seed, CRS.crn.length, repeat);
 }
 function runCrnBatch() {
@@ -2073,33 +2183,33 @@ function runCrnBatch() {
     const first = CRS.crn.length + 1; let run = null;
     for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runCRN(batchSeed(s0, i), p); crnRecord(run, p); }
     CRS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: crnKey(p) };
-    CRS.lastRunObj = run;
-    drawCrnFig(run, p); crnShowStats(run); renderCrnHist();
+    CRS.lastRunObj = run; CRS.lastRunP = p;
+    drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist();
     noteBatch('crn', s0, first, CRS.crn.length);
   });
 }
 function clearCrn() {
-  CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; lastRun.crn = null;
-  ['crn-s-di', 'crn-s-dc', 'crn-s-hi', 'crn-s-hc', 'crn-s-ratio', 'crn-s-r'].forEach(id => { $(id).textContent = '—'; });
+  CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; CRS.lastRunP = null; lastRun.crn = null;
+  ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-ratio', 'crn-s-pilot'].forEach(id => { $(id).textContent = '—'; });
+  $('crn-s-welch-df').textContent = 'df —'; $('crn-s-paired-df').textContent = 'df —';
   const p = crnParams(); if (p) drawCrnFig(null, p);
   seedMsg('crn', '', false); renderCrnHist();
 }
 function renderCrnHist() {
-  const p = crnParams() || { mu1: 10, mu2: 10.5, sigma: 1 };
-  const delta = p.mu1 - p.mu2, s = p.sigma;
-  const win = histWindow([CRS.ind, CRS.crn]) || { lo: delta - 1.5 * s, hi: delta + 1.5 * s };
+  const p = crnParams() || { fn1: 'exp', fn2: 'exp', shift2: 0.5, sigE: 0.1 };
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
+  const win = histWindow([CRS.ind, CRS.crn]) || { lo: delta - 1, hi: delta + 1 };
   const opts = { yLabel: 'difference of means', truthLabel: v => 'δ = ' + v, window: win,
                  liveTruth: delta, emptyWindow: win, nLabel: 'n' };
   histCaption($('crn-cap1'), histPlot($('crn-hist1'), $('crn-hw1'), CRS.ind, opts), 'δ', 'zero');
   histCaption($('crn-cap2'), histPlot($('crn-hist2'), $('crn-hw2'), CRS.crn, opts), 'δ', 'zero');
 }
 TABS.crn = {
-  init() { const p = crnParams(); if (p) drawCrnFig(null, p); crnParamsChanged(); },
-  render() { const p = crnParams(); if (p) drawCrnFig(CRS.lastRunObj || null, p); renderCrnHist(); }
+  init() { fnOptions($('crn-fn1')); fnOptions($('crn-fn2')); crnParamsChanged(); },
+  render() { const p = crnParams(); if (p) drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); renderCrnHist(); }
 };
-SPIN['crn-mu1'] = decimalSpin('crn-mu1', -1e6, crnParamsChanged);
-SPIN['crn-mu2'] = decimalSpin('crn-mu2', -1e6, crnParamsChanged);
-SPIN['crn-sigma'] = decimalSpin('crn-sigma', 0.01, crnParamsChanged, 0.01);
+SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
+SPIN['crn-sige'] = decimalSpin('crn-sige', 0, crnParamsChanged, 0.01);
 SPIN['crn-seed'] = seedSpin('crn');
 // ── Tab ③: antithetic variates ───────────────────────
 function fnOptions(sel) {
