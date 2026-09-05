@@ -472,13 +472,12 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl">System 2, common inputs: <span class="ov">y</span>₂ (S₂)</div><div class="sc-val acc" id="crn-s-y2c">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Welch's interval does not assume the two systems have the same spread. Its degrees of freedom come from the Welch–Satterthwaite approximation, which weighs the two sample variances and so lands on a non-integer between n − 1 and 2(n − 1): near 2(n − 1) when the spreads match, near n − 1 when one system is far noisier.">Welch interval for <span class="sym">δ</span>, <span class="ov">y</span>₂ − <span class="ov">y</span>₁ (<span id="crn-s-welch-df">df —</span>)</span></div><div class="sc-val" id="crn-s-welch">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl">Paired interval for <span class="sym">δ</span>, <span class="ov">d</span> (<span id="crn-s-paired-df">df —</span>)</div><div class="sc-val" id="crn-s-paired">—</div></div>
-          <div class="sc"><div class="sc-lbl">Correlation of paired outputs r (predicted <span class="sym">ρ</span>)</div><div class="sc-val" id="crn-s-r">—</div></div>
-          <div class="sc"><div class="sc-lbl">Paired half-width ÷ Welch half-width (predicted)</div><div class="sc-val" id="crn-s-ratio">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Correlation of paired outputs r</div><div class="sc-val" id="crn-s-r">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether pairing pays. With common inputs, the variance of the n paired differences S_d² is compared with S₁² + S₂², the variance those differences would have if the inputs were independent. A smaller S_d² means the pairing is removing variance.">Does CRN reduce variance?</span></div><div class="sc-val" id="crn-s-help">—</div></div>
           <div class="sc"><div class="sc-lbl">CRN variance S<sub class="sym">d</sub>²</div><div class="sc-val" id="crn-s-sd2">—</div></div>
           <div class="sc"><div class="sc-lbl">Indep. input variance S₁² + S₂²</div><div class="sc-val" id="crn-s-ssum">—</div></div>
           <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Two-sided p-value for the hypothesis that the systems do not differ, from the Welch interval's own t statistic and degrees of freedom. It falls below α exactly when that interval leaves out zero, which the star marks.">Welch p-value against <span class="sym">δ</span> = 0</span></div><div class="sc-val" id="crn-s-pind">—</div></div>
           <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Two-sided p-value for the hypothesis that the systems do not differ, from the paired interval's own t statistic and degrees of freedom. It falls below α exactly when that interval leaves out zero, which the star marks.">Paired p-value against <span class="sym">δ</span> = 0</span></div><div class="sc-val" id="crn-s-pcrn">—</div></div>
-          <div class="sc sc-full"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether pairing pays. With common inputs, the variance of the n paired differences S_d² is compared with S₁² + S₂², the variance those differences would have if the inputs were independent. A smaller S_d² means the pairing is removing variance.">Does CRN reduce variance?</span></div><div class="sc-val" id="crn-s-help">—</div></div>
         </div>
       </div>
     </div>
@@ -549,6 +548,10 @@ svg.fig { display: block; width: 100%; height: auto; }
       <button class="btn-clear" onclick="clearAv()">Clear history</button>
       <span class="seed-msg" id="av-seed-msg" role="status" aria-live="polite"></span>
     </div>
+    <div class="cv-card" style="margin-bottom:14px">
+      <svg class="fig" id="av-flow" role="img" aria-label="Two block diagrams. Independent draws: a pseudorandom number stream feeds the model h on the upper lane, a fresh stream feeds a second copy of h on the lower lane, and each pair of outputs is averaged before the n pair means are averaged. Antithetic pairs: one stream's draw u feeds h directly and, through a 1 minus u block, feeds the second copy of h, and each pair of outputs is averaged before the n pair means are averaged."></svg>
+      <div class="cv-leg" id="av-flow-cap"></div>
+    </div>
     <div class="viz-row">
       <div class="cv-card">
         <svg class="fig" id="av-fig" role="img" aria-label="The model h(u) over the unit interval with each antithetic pair drawn as two linked points mirrored about one half and each pair mean ticked on the value axis"></svg>
@@ -560,22 +563,23 @@ svg.fig { display: block; width: 100%; height: auto; }
         </div>
       </div>
       <div class="stats-panel">
-        <div class="sg">
-          <div class="sc"><div class="sc-lbl">Independent mean (2n)</div><div class="sc-val acc" id="av-s-mi">—</div></div>
-          <div class="sc"><div class="sc-lbl">Antithetic mean (n pairs)</div><div class="sc-val acc" id="av-s-ma">—</div></div>
-          <div class="sc"><div class="sc-lbl">Independent half-width (df)</div><div class="sc-val" id="av-s-hi">—</div></div>
-          <div class="sc"><div class="sc-lbl">Antithetic half-width (df)</div><div class="sc-val" id="av-s-ha">—</div></div>
-          <div class="sc"><div class="sc-lbl">Sample corr. of <span class="sym">h(u)</span>, <span class="sym">h(1 − u)</span></div><div class="sc-val" id="av-s-r">—</div></div>
-          <div class="sc"><div class="sc-lbl">Exact corr. (from moments)</div><div class="sc-val dim" id="av-s-rx">—</div></div>
-          <div class="sc"><div class="sc-lbl">Var of pair mean ÷ Var of one value</div><div class="sc-val" id="av-s-vr">—</div></div>
-          <div class="sc"><div class="sc-lbl">True mean <span class="sym">E[h(U)]</span></div><div class="sc-val dim" id="av-s-true">—</div></div>
+        <div class="sg sg-two">
+          <div class="sc sc-full"><div class="sc-lbl">True mean <span class="sym">E[h(U)]</span></div><div class="sc-val dim" id="av-s-true">—</div></div>
+          <div class="sc"><div class="sc-lbl">Independent mean (n pair means)</div><div class="sc-val acc" id="av-s-mi">—</div></div>
+          <div class="sc"><div class="sc-lbl">Antithetic mean (n pair means)</div><div class="sc-val acc" id="av-s-ma">—</div></div>
+          <div class="sc"><div class="sc-lbl">Independent half-width (<span id="av-s-hi-df">df —</span>)</div><div class="sc-val" id="av-s-hi">—</div></div>
+          <div class="sc"><div class="sc-lbl">Antithetic half-width (<span id="av-s-ha-df">df —</span>)</div><div class="sc-val" id="av-s-ha">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Sample corr. of <span class="sym">h(u)</span>, <span class="sym">h(1 − u)</span></div><div class="sc-val" id="av-s-r">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether the complement pays. Both arms average n pairs, and so their pair-mean variances compare directly: S_z² for the antithetic pairs against S_w² for the independent pairs. A smaller S_z² means the negative correlation is removing variance.">Does AV reduce variance?</span></div><div class="sc-val" id="av-s-help">—</div></div>
+          <div class="sc"><div class="sc-lbl">AV variance S<sub class="sym">z</sub>²</div><div class="sc-val" id="av-s-sz2">—</div></div>
+          <div class="sc"><div class="sc-lbl">Indep. pair variance S<sub class="sym">w</sub>²</div><div class="sc-val" id="av-s-sw2">—</div></div>
         </div>
       </div>
     </div>
-    <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm follows them with n fresh draws and averages all 2n values. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows.</div>
+    <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm pairs each of them with a fresh draw and averages the pair, exactly as the antithetic arm does with the complement, so that the two arms differ only in where the second draw comes from. In practice, you would use all 2n values with 2n − 1 degrees of freedom; the pairing here exists only to make the comparison one-for-one. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
-      <div class="hist-hd">Independent draws (2n values)</div>
+      <div class="hist-hd">Independent draws (n pair means)</div>
       <div id="av-hw1"><svg class="hsv" id="av-hist1"></svg></div>
       <div class="hist-cap" id="av-cap1"></div>
       <div class="hist-hd">Antithetic pairs (n pair means)</div>
@@ -590,7 +594,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="eq-hr"></div>
       <div class="exp-note">Averaging two values costs nothing in bias, and the variance of the average falls below half the variance of one value exactly when the two are negatively correlated. Two independent draws never are. But U and 1 − U are perfectly negatively correlated, and if h is monotone (rising or falling throughout), a large h(U) comes with a small h(1 − U), and so the outputs inherit a negative correlation from the inputs. Each pair is one independent observation, and so the n pair means go through the ordinary interval formula, and the generator is only consulted n times for 2n model evaluations.</div>
       <div class="cards">
-        <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the mirror 1 − u gives exactly the same value, and so the "pair mean" is the value itself. The antithetic interval is built from n values, whereas the independent one has 2n, and it comes out wider. Monotonicity is the whole trick.</div>
+        <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the mirror 1 − u gives exactly the same value, and so the antithetic pair mean is the value itself, with none of the variance-canceling that a true mirror provides. The independent arm still gets the ordinary variance-halving of averaging two unrelated draws, and so its interval comes out narrower here. Monotonicity is the whole trick.</div>
         <div class="card"><strong>The limiting case</strong>A model that is a linear function of a normal inverse transform, h(u) = μ + σΦ⁻¹(u), has h(1 − u) = 2μ − h(u): every pair mean is exactly μ, and the interval has zero width. Real models sit between that and the bowl.</div>
         <div class="card"><strong>Antithetic and common random numbers</strong>Both manipulate inputs to induce correlation. Common random numbers want positive correlation between two systems' outputs so their difference is stable; antithetic variates want negative correlation within one system so an average is stable.</div>
       </div>
@@ -1089,19 +1093,21 @@ function crnPredicted(p) {
 }
 
 /* ── Tab ③: antithetic pairs ──────────────────────────────────────────
-   p = {fn, n, conf}.  Both arms cost 2n evaluations and share the first n draws:
-   the independent arm follows them with n fresh draws, the antithetic arm with
-   their mirrors 1 − u.  The independent interval is on all 2n values; the
-   antithetic interval is on the n pair means (each an independent observation). */
+   p = {fn, n, conf}.  Both arms cost 2n evaluations and share the first n draws
+   u_i.  The independent arm pairs each u_i with a fresh draw v_i and averages
+   the pair, w_i = (h(u_i) + h(v_i)) / 2; the antithetic arm pairs it with its
+   mirror instead, z_i = (h(u_i) + h(1 − u_i)) / 2.  The two arms then differ
+   only in where the second draw comes from, and both intervals are built from
+   n pair means with n − 1 degrees of freedom. */
 function runAV(seed, p) {
-  var f = FUNCS[p.fn], rand = mulberry32(seed), u = [], ya = [], yb = [], z = [], yInd = [];
+  var f = FUNCS[p.fn], rand = mulberry32(seed), u = [], ya = [], yb = [], z = [], w = [];
   for (var i = 0; i < p.n; i++) {
     var ui = rand(); u.push(ui); ya.push(f.h(ui)); yb.push(f.h(1 - ui));
-    z.push((ya[i] + yb[i]) / 2); yInd.push(ya[i]);
+    z.push((ya[i] + yb[i]) / 2);
   }
-  for (var j = 0; j < p.n; j++) yInd.push(f.h(rand()));
-  var ind = ciMean(yInd, p.conf), av = ciMean(z, p.conf);
-  return { u: u, ya: ya, yb: yb, z: z, yInd: yInd, ind: ind, av: av, truth: f.mean,
+  for (var j = 0; j < p.n; j++) w.push((ya[j] + f.h(rand())) / 2);
+  var ind = ciMean(w, p.conf), av = ciMean(z, p.conf);
+  return { u: u, ya: ya, yb: yb, z: z, w: w, ind: ind, av: av, truth: f.mean,
            r: sampleCorr(ya, yb), hitInd: captured(ind, f.mean), hitAv: captured(av, f.mean) };
 }
 
@@ -2039,10 +2045,12 @@ function crnKey(p) { return [p.fn1, p.fn2, p.shift2, p.sigE, p.n, p.conf].join('
 // and multiplied by a per-font constant tuned against the labels this diagram draws.
 // The mono constant (0.6em/char) matches the fixed-pitch layout crnFlowMono relies on.
 function crnFlowTextW(text, fs, mono) { return text.length * fs * (mono ? 0.6 : 0.447); }
-// One system's model block: "h_k(u) = label" when it fits the block, the bare label
+// One model block's label: "prefix + label" when it fits the block, the bare label
 // alone otherwise. usableW is the block's own width in already-scaled SVG units.
-function crnFlowModelLabel(sub, f, usableW) {
-  const full = `h${sub}(u) = ${f.label}`;
+// prefix is typically "h1(u) = " or "h2(u) = " (tab 2, two systems) or "h(u) = "
+// (tab 3, one model shared by both arms).
+function crnFlowModelLabel(prefix, f, usableW) {
+  const full = `${prefix}${f.label}`;
   return crnFlowTextW(full, 8.5, true) <= usableW ? full : f.label;
 }
 // A run of monospace glyphs laid out as fixed-width slots (fs*0.6 each) so a subscript
@@ -2102,7 +2110,7 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
 
   // Model blocks: 80 units wide before scaling, 22 tall, centered on each lane.
   const usableW = (80 - 6) * s;
-  const lbl1 = crnFlowModelLabel('1', f1, usableW), lbl2 = crnFlowModelLabel('2', f2, usableW);
+  const lbl1 = crnFlowModelLabel('h1(u) = ', f1, usableW), lbl2 = crnFlowModelLabel('h2(u) = ', f2, usableW);
   [[y1, lbl1], [y2, lbl2]].forEach(([ly, txt]) => {
     h += `<rect x="${X(44)}" y="${Y(ly - 11)}" width="${X(124) - X(44)}" height="22" rx="3" fill="${C.bg}" stroke="var(--border)" stroke-width="1.2"/>`;
     h += `<text x="${(X(44) + X(124)) / 2}" y="${Y(ly) + 3}" text-anchor="middle" font-size="8.5" font-family="${FF_MONO}" fill="${C.muted}">${txt}</text>`;
@@ -2132,22 +2140,41 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
 
   // Outputs: arrow out of the junction, then the value's name (CRN adds the per-
   // replication subscript i because the pairing is what makes CRN a paired comparison).
-  [[y1, '1'], [y2, '2']].forEach(([ly, sub]) => {
+  const yTok1 = [{ ch: 'y' }, crnFlowSub('1')].concat(isCRN ? [crnFlowSub('i')] : []);
+  const yTok2 = [{ ch: 'y' }, crnFlowSub('2')].concat(isCRN ? [crnFlowSub('i')] : []);
+  [[y1, yTok1], [y2, yTok2]].forEach(([ly, yTok]) => {
     h += `<line x1="${X(190) + noiseR}" y1="${Y(ly)}" x2="${X(208)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-    const yTok = [{ ch: 'y' }, crnFlowSub(sub)].concat(isCRN ? [crnFlowSub('i')] : []);
     h += crnFlowMono(X(212), Y(ly) + 3.5, 10, yTok, 'start');
   });
 
-  // Difference: system 2's branch marked +, system 1's marked -, meeting in a circle.
-  h += `<line x1="${X(244)}" y1="${Y(y1)}" x2="${X(258)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${X(244)}" y1="${Y(y2)}" x2="${X(258)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${X(258)}" y1="${Y(y1)}" x2="${X(258)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${X(258)}" y1="${Y(yMid)}" x2="${X(272) - diffR}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-  h += `<circle cx="${X(272)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<text x="${X(272)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
-  h += `<text x="${X(272) + diffR + 3}" y="${Y(y2 - 6)}" text-anchor="start" font-size="8" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
-  h += `<text x="${X(272) + diffR + 3}" y="${Y(y1 + 10)}" text-anchor="start" font-size="8" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
-  h += `<line x1="${X(272) + diffR}" y1="${Y(yMid)}" x2="${X(290)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  // Junction: each lane runs on from its own y label, turns at a shared xJ -- derived
+  // from whichever lane's label is longer, and so both turn at the same x even though
+  // CRN's extra per-replication subscript makes both labels longer than the
+  // independent diagram's -- and enters the circle separately with its own
+  // arrowhead, rather than the two lanes merging into one bracketed stub. The circle
+  // itself is a generic sum (+); which input is negated is now carried by the signs
+  // beside the segments instead, and the final expression below is unchanged.
+  // crnFlowMono lays out each cell at a fixed real width (fs*0.6) added directly onto
+  // the already-scaled x0 it is given and not scaled again, and so the label's own
+  // true right edge in real pixels is X(212) + yCells*0.6*10, which equals X(212 +
+  // yCells*0.6*10) only when s = 1. Dividing that extra width by s first converts it
+  // back into local-coordinate units, and so xJ -- itself passed through X() below --
+  // lands on the label's real edge at every scale, not only the widest one.
+  const yCells = Math.max(yTok1.length, yTok2.length);
+  // The +1 is a small real-unit safety margin: without it, X(labelEnd) lands exactly
+  // on the label's own true right edge with no slack, and font-hinting rounding can
+  // then tip a glyph's measured edge a hair past the line on some renders.
+  const labelEnd = 212 + (yCells * 0.6 * 10 + 1) / s, xJ = labelEnd + 10;
+  h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(xJ)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(yMid) + diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<circle cx="${X(xJ)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<text x="${X(xJ)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+  h += `<text x="${X(xJ) + 5}" y="${Y((y1 + yMid - diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
+  h += `<text x="${X(xJ) + 5}" y="${Y((y2 + yMid + diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+  const arrowEnd = xJ + diffR + 30;
+  h += `<line x1="${X(xJ) + diffR}" y1="${Y(yMid)}" x2="${X(arrowEnd)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
 
   // The final label: the expression above, what it feeds below, both flush left of the
   // arrow that lands here (nothing may sit under the circle -- the lower lane runs
@@ -2158,7 +2185,10 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
     ? crnFlowChars('d').concat([crnFlowSub('i')], crnFlowChars(' = y'), [crnFlowSub('2'), crnFlowSub('i')], crnFlowChars(' − y'), [crnFlowSub('1'), crnFlowSub('i')])
     : [{ ch: 'y', bar: true }, crnFlowSub('2')].concat(crnFlowChars(' - '), [{ ch: 'y', bar: true }, crnFlowSub('1')]);
   const name = isCRN ? 'paired interval' : 'Welch interval';
-  const labelX = X(294), remain = 380 * s - 294 * s; // = 86 * s: room to the diagram's right edge
+  // The junction moved left of its old fixed x = 272, and so the label's own start
+  // and the room left for it are both measured from the new, dynamic arrow end
+  // rather than the old fixed 294.
+  const labelX = X(arrowEnd + 4), remain = 380 * s - (arrowEnd + 4) * s;
   const exprW = exprTok.length * (8.5 * 0.6);
   if (exprW <= remain) {
     h += crnFlowMono(labelX, Y(69), 8.5, exprTok, 'start');
@@ -2169,29 +2199,40 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
   }
   return h;
 }
-// Two block diagrams stating outright what the figure below leaves the reader to
-// infer: side by side once the card is wide enough, stacked otherwise. The diagram
-// depends only on the parameters (which models, the shift, sigma_e), never on a run,
-// and so nothing here reads CRS.lastRunObj.
-function drawCrnFlow(p) {
-  const svg = $('crn-flow'), W = figWidth(svg), H = 142, gap = 14;
+// Lays out a pair of block diagrams -- side by side once the card is wide enough,
+// stacked otherwise -- and hands each one its own origin and horizontal scale.
+// drawOne(offX, offY, s, second) returns the SVG text for one diagram (second false
+// for the left/top diagram, true for the right/bottom one). Shared by drawCrnFlow
+// (tab 2) and drawAvFlow (tab 3): the geometry, the arrow marker, and the caption
+// write are identical between them, and only the diagrams themselves differ.
+function drawFlowPair(svgId, capId, H, markerId, drawOne, caption) {
+  const svg = $(svgId), W = figWidth(svg), gap = 14;
   const side = W >= 640;
   const Dw = side ? Math.min(380, Math.floor((W - 20) / 2)) : Math.min(380, W);
   const s = Dw / 380;
   const totalW = side ? Dw * 2 + 20 : Dw, totalH = side ? H : H * 2 + gap;
   const offX = (W - totalW) / 2;
-  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2];
-  const fmtShift = (p.shift2 < 0 ? '−' : '+') + ' ' + Math.abs(p.shift2);
-  let h = `<defs><marker id="crn-flow-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="${C.muted}"/></marker></defs>`;
+  let h = `<defs><marker id="${markerId}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="${C.muted}"/></marker></defs>`;
   if (side) {
-    h += crnFlowDiagram(offX, 0, s, false, p, f1, f2, fmtShift);
-    h += crnFlowDiagram(offX + Dw + 20, 0, s, true, p, f1, f2, fmtShift);
+    h += drawOne(offX, 0, s, false);
+    h += drawOne(offX + Dw + 20, 0, s, true);
   } else {
-    h += crnFlowDiagram(offX, 0, s, false, p, f1, f2, fmtShift);
-    h += crnFlowDiagram(offX, H + gap, s, true, p, f1, f2, fmtShift);
+    h += drawOne(offX, 0, s, false);
+    h += drawOne(offX, H + gap, s, true);
   }
   svgSet(svg, W, totalH, h);
-  $('crn-flow-cap').innerHTML = "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above.";
+  $(capId).innerHTML = caption;
+}
+// Two block diagrams stating outright what the figure below leaves the reader to
+// infer: side by side once the card is wide enough, stacked otherwise. The diagram
+// depends only on the parameters (which models, the shift, sigma_e), never on a run,
+// and so nothing here reads CRS.lastRunObj.
+function drawCrnFlow(p) {
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2];
+  const fmtShift = (p.shift2 < 0 ? '−' : '+') + ' ' + Math.abs(p.shift2);
+  drawFlowPair('crn-flow', 'crn-flow-cap', 142, 'crn-flow-arrow',
+    (ox, oy, s, second) => crnFlowDiagram(ox, oy, s, second, p, f1, f2, fmtShift),
+    "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above.");
 }
 function crnParamsChanged() {
   const p = crnParams(); if (!p) return;
@@ -2470,9 +2511,7 @@ function crnShowStats(run, p) {
   $('crn-s-welch-df').textContent = 'df ' + run.ind.df.toFixed(1);
   $('crn-s-paired').textContent = '[' + fmt(run.crn.lo, d) + ', ' + fmt(run.crn.hi, d) + ']';
   $('crn-s-paired-df').textContent = 'df ' + run.crn.df;
-  const pred = CI.crnPredicted(p);
-  $('crn-s-r').textContent = fmt(run.r, 3) + ' (' + fmt(pred.rho, 3) + ')';
-  $('crn-s-ratio').textContent = fmt(run.crn.h / run.ind.h, 3) + ' (' + fmt(pred.ratio, 3) + ')';
+  $('crn-s-r').textContent = fmt(run.r, 3);
   const sd2 = run.sd * run.sd, s1sq = run.s1 * run.s1, s2csq = run.s2c * run.s2c, rhs = s1sq + s2csq;
   const pd = decFor(Math.max(sd2, rhs) || 1);
   $('crn-s-sd2').textContent = fmt(sd2, pd);
@@ -2520,7 +2559,7 @@ function runCrnBatch() {
 }
 function clearCrn() {
   CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; CRS.lastRunP = null; lastRun.crn = null;
-  ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-ratio', 'crn-s-sd2', 'crn-s-ssum', 'crn-s-pind', 'crn-s-pcrn', 'crn-s-help'].forEach(id => { $(id).textContent = '—'; });
+  ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-sd2', 'crn-s-ssum', 'crn-s-pind', 'crn-s-pcrn', 'crn-s-help'].forEach(id => { $(id).textContent = '—'; });
   $('crn-s-welch-df').textContent = 'df —'; $('crn-s-paired-df').textContent = 'df —'; $('crn-s-help').style.color = '';
   const p = crnParams(); if (p) drawCrnFig(null, p);
   seedMsg('crn', '', false); renderCrnHist();
@@ -2542,6 +2581,135 @@ SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
 SPIN['crn-sige'] = decimalSpin('crn-sige', 0, crnParamsChanged, 0.01);
 SPIN['crn-seed'] = seedSpin('crn');
 // ── Tab ③: antithetic variates ───────────────────────
+// One diagram (Independent draws or Antithetic pairs), drawn into local coordinates
+// 0-380 wide by 0-124 tall and offset/scaled exactly like crnFlowDiagram. Both arms
+// share one model h; the one visual difference is the "1 − u" block that feeds the
+// antithetic arm's second lane.
+function avFlowDiagram(offX, offY, s, isAV, f) {
+  const X = xu => offX + xu * s, Y = yu => offY + yu;
+  const y1 = 40, y2 = 84, yMid = 62, diffR = 9;
+  const title = isAV ? 'Antithetic pairs' : 'Independent draws';
+  const arrow = ' marker-end="url(#av-flow-arrow)"';
+  let h = `<text x="${X(4)}" y="${Y(11)}" font-size="10" font-weight="700" fill="${C.muted}" font-family="${FF_SANS}">${title}</text>`;
+  const block = (x0, x1, ly, ht, stroke) =>
+    `<rect x="${X(x0)}" y="${Y(ly - ht / 2)}" width="${X(x1) - X(x0)}" height="${ht}" rx="3" fill="${C.bg}" stroke="${stroke}" stroke-width="1.2"/>`;
+
+  // Sources: one shared u feeding both lanes under antithetic pairing (the fan-out
+  // lines are C.pair, echoing the pairing lines in the figure below), two independent
+  // PRNG draws otherwise.
+  if (isAV) {
+    h += block(4, 40, yMid, 22, 'var(--border)');
+    h += `<text x="${(X(4) + X(40)) / 2}" y="${Y(yMid) + 3}" text-anchor="middle" font-size="8.5" font-family="${FF_SANS}" fill="${C.muted}">PRNG</text>`;
+    h += `<line x1="${X(40)}" y1="${Y(yMid)}" x2="${X(52)}" y2="${Y(yMid)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${X(52)}" y1="${Y(y1)}" x2="${X(52)}" y2="${Y(y2)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${X(52)}" y1="${Y(y1)}" x2="${X(96)}" y2="${Y(y1)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+    h += `<line x1="${X(52)}" y1="${Y(y2)}" x2="${X(58)}" y2="${Y(y2)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+  } else {
+    [y1, y2].forEach(ly => {
+      h += block(6, 46, ly, 22, 'var(--border)');
+      h += `<text x="${(X(6) + X(46)) / 2}" y="${Y(ly) + 3}" text-anchor="middle" font-size="8.5" font-family="${FF_SANS}" fill="${C.muted}">PRNG</text>`;
+      h += `<line x1="${X(46)}" y1="${Y(ly)}" x2="${X(96)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    });
+    h += `<text x="${X(26)}" y="${Y(y2 + 22)}" text-anchor="middle" font-size="8" font-family="${FF_SANS}" fill="${C.muted}">fresh draws</text>`;
+  }
+
+  // Draw labels: uᵢ feeds lane 1 in both diagrams; the independent arm's lane 2 draws
+  // its own uₙ₊ᵢ, whereas the antithetic arm's lane 2 is fed by the complement below.
+  // The baseline sits 6 units clear of the lane line rather than 5, and so the
+  // subscript's own descent never reaches the line's stroke halo.
+  h += crnFlowMono(X(74), Y(y1 - 6), 9, [{ ch: 'u' }, crnFlowSub('i')], 'middle');
+  if (!isAV) {
+    h += crnFlowMono(X(74), Y(y2 - 6), 9, [{ ch: 'u' }, crnFlowSub('n'), crnFlowSub('+'), crnFlowSub('i')], 'middle');
+  }
+
+  // The complement block: the only shape that differs between the two diagrams. Its
+  // label is fixed text with no shorter fallback, and so the font shrinks from the
+  // spec's 8.5 only as far as the block's own (scaled) width demands, leaving a 1-unit margin;
+  // at the diagram's own full scale the block is wide enough to keep it at 8.5.
+  if (isAV) {
+    h += block(58, 86, y2, 18, 'var(--border)');
+    const compW = X(86) - X(58), compFS = Math.min(8.5, (compW - 1) / 3);
+    h += crnFlowMono((X(58) + X(86)) / 2, Y(y2) + 3, compFS, crnFlowChars('1 − u'), 'middle');
+    h += `<line x1="${X(86)}" y1="${Y(y2)}" x2="${X(96)}" y2="${Y(y2)}" stroke="${C.pair}" stroke-width="1.6"/>`;
+  }
+
+  // Model blocks: the same h on both lanes, in both diagrams.
+  const usableW = (80 - 6) * s, lbl = crnFlowModelLabel('h(u) = ', f, usableW);
+  [y1, y2].forEach(ly => {
+    h += block(96, 176, ly, 22, 'var(--border)');
+    h += `<text x="${(X(96) + X(176)) / 2}" y="${Y(ly) + 3}" text-anchor="middle" font-size="8.5" font-family="${FF_MONO}" fill="${C.muted}">${lbl}</text>`;
+  });
+
+  // Outputs: yᵢ on lane 1 always; lane 2 is yₙ₊ᵢ (independent, a fresh evaluation) or
+  // yᵢ′ (antithetic, the complemented pair partner).
+  const yTok1 = [{ ch: 'y' }, crnFlowSub('i') ];
+  const yTok2 = isAV ? [{ ch: 'y' }, crnFlowSub('i'), { ch: '′' }] : [{ ch: 'y' }, crnFlowSub('n'), crnFlowSub('+'), crnFlowSub('i')];
+  [[y1, yTok1], [y2, yTok2]].forEach(([ly, yTok]) => {
+    h += `<line x1="${X(176)}" y1="${Y(ly)}" x2="${X(208)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += crnFlowMono(X(212), Y(ly) + 3.5, 10, yTok, 'start');
+  });
+
+  // Mean junction: both lanes' outputs meet and are averaged. Each lane runs on from
+  // its own y label, turns at a shared xJ -- derived from whichever lane's label is
+  // longer, and so both turn at the same x even though the two lanes' labels are
+  // different lengths here (yₙ₊ᵢ outruns yᵢ′, and both outrun yᵢ) -- and enters the
+  // circle separately with its own arrowhead, rather than merging into one bracketed
+  // stub. Both arms average one pair, and so both get the ½ gain on their output arrow.
+  // crnFlowMono lays out each cell at a fixed real width (fs*0.6) added directly onto
+  // the already-scaled x0 it is given and not scaled again, and so the label's own
+  // true right edge in real pixels is X(212) + yCells*0.6*10, which equals X(212 +
+  // yCells*0.6*10) only when s = 1. Dividing that extra width by s first converts it
+  // back into local-coordinate units, and so xJ -- itself passed through X() below --
+  // lands on the label's real edge at every scale, not only the widest one.
+  const yCells = Math.max(yTok1.length, yTok2.length);
+  // The +1 is a small real-unit safety margin: without it, X(labelEnd) lands exactly
+  // on the label's own true right edge with no slack, and font-hinting rounding can
+  // then tip a glyph's measured edge a hair past the line on some renders.
+  const labelEnd = 212 + (yCells * 0.6 * 10 + 1) / s, xJ = labelEnd + 10;
+  h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<line x1="${X(xJ)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(yMid) + diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<circle cx="${X(xJ)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<text x="${X(xJ)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+  const arrowEnd = xJ + diffR + 30;
+  h += `<line x1="${X(xJ) + diffR}" y1="${Y(yMid)}" x2="${X(arrowEnd)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += `<text x="${(X(xJ) + diffR + X(arrowEnd)) / 2}" y="${Y(yMid - 5)}" text-anchor="middle" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">½</text>`;
+
+  // The final label: the expression above, the interval it feeds below, both flush
+  // left of the arrow that lands here, dropping the expression line first and then
+  // shrinking the surviving name if the diagram is too narrow to hold either.
+  const exprTok = isAV
+    ? [{ ch: 'z' }, crnFlowSub('i'), { ch: '=' }, { ch: '(' }, { ch: 'y' }, crnFlowSub('i'), { ch: '+' }, { ch: 'y' }, crnFlowSub('i'), { ch: '′' }, { ch: ')' }, { ch: '/' }, { ch: '2' }]
+    : [{ ch: 'w' }, crnFlowSub('i'), { ch: '=' }, { ch: '(' }, { ch: 'y' }, crnFlowSub('i'), { ch: '+' }, { ch: 'y' }, crnFlowSub('n'), crnFlowSub('+'), crnFlowSub('i'), { ch: ')' }, { ch: '/' }, { ch: '2' }];
+  // Shorter than crnFlowDiagram's "Welch interval" / "paired interval" -- the same
+  // fit-or-drop logic below has no further shrink tier past font-size 8, and so the
+  // name has to clear the diagram's own right edge at that size on the narrowest
+  // tested width, which "independent interval" does not.
+  const name = isAV ? 'antithetic' : 'independent';
+  // The junction moved left of its old fixed x = 272, and so the label's own start
+  // and the room left for it are both measured from the new, dynamic arrow end
+  // rather than the old fixed 294.
+  const labelX = X(arrowEnd + 4), remain = 380 * s - (arrowEnd + 4) * s;
+  const exprW = exprTok.length * (8.5 * 0.6);
+  if (exprW <= remain) {
+    h += crnFlowMono(labelX, Y(yMid - 3), 8.5, exprTok, 'start');
+    h += `<text x="${labelX}" y="${Y(yMid + 13)}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+  } else {
+    const nameFS = crnFlowTextW(name, 9, false) <= remain ? 9 : 8;
+    h += `<text x="${labelX}" y="${Y(yMid) + 3}" text-anchor="start" font-size="${nameFS}" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+  }
+  return h;
+}
+// Two block diagrams stating outright what the figure below leaves the reader to
+// infer, mirroring drawCrnFlow: side by side once the card is wide enough, stacked
+// otherwise. The diagram depends only on the model choice, never on a run.
+function drawAvFlow(p) {
+  const f = CI.FUNCS[p.fn];
+  drawFlowPair('av-flow', 'av-flow-cap', 124, 'av-flow-arrow',
+    (ox, oy, s, second) => avFlowDiagram(ox, oy, s, second, f),
+    "u₁, u₂, … are the PRNG's uniform draws on (0, 1); the independent arm spends 2n of them on n pairs of runs of h and averages each pair, whereas the antithetic arm spends n of them twice, once as drawn and once complemented (y<sub>i</sub>′ = h(1 − u<sub>i</sub>)), and averages each pair. A simulation package does the complementing for you by re-seeding the stream and returning 1 − u for every draw.");
+}
 function fnOptions(sel) {
   sel.innerHTML = CI.FUNC_KEYS.map(k => `<option value="${k}">${CI.FUNCS[k].label}</option>`).join('');
 }
@@ -2557,9 +2725,8 @@ function avParams() { return { fn: $('av-fn').value, n: +$('av-n').value, conf: 
 function avKey(p) { return [p.fn, p.n, p.conf].join('|'); }
 function avParamsChanged() {
   const p = avParams(), f = CI.FUNCS[p.fn];
-  const v = CI.funcVar(f), cov = CI.funcAntiCov(f);
   $('av-s-true').textContent = f.mean.toFixed(5);
-  $('av-s-rx').textContent = (cov / v).toFixed(3);
+  drawAvFlow(p);
   drawAvFig(AVS.lastRunObj, AVS.lastRunP || p);
   renderAvHist();
 }
@@ -2593,15 +2760,26 @@ function avShowStats(run) {
   const d = decFor(Math.min(run.ind.h, run.av.h) || 1);
   $('av-s-mi').textContent = fmt(run.ind.mean, d);
   $('av-s-ma').textContent = fmt(run.av.mean, d);
-  $('av-s-hi').textContent = fmt(run.ind.h, d) + ' (df ' + run.ind.df + ')';
-  $('av-s-ha').textContent = fmt(run.av.h, d) + ' (df ' + run.av.df + ')';
+  $('av-s-hi').textContent = fmt(run.ind.h, d);
+  $('av-s-hi-df').textContent = 'df ' + run.ind.df;
+  $('av-s-ha').textContent = fmt(run.av.h, d);
+  $('av-s-ha-df').textContent = 'df ' + run.av.df;
   $('av-s-r').textContent = fmt(run.r, 3);
-  const vY = run.ind.s * run.ind.s, vZ = run.av.s * run.av.s;
-  $('av-s-vr').textContent = vY > 0 ? fmt(vZ / vY, 3) : '—';
+  const sw2 = run.ind.s * run.ind.s, sz2 = run.av.s * run.av.s;
+  const pd = decFor(Math.max(sw2, sz2) || 1);
+  $('av-s-sw2').textContent = fmt(sw2, pd);
+  $('av-s-sz2').textContent = fmt(sz2, pd);
+  // The pilot test is a comparison, not a ratio: whether the antithetic pairs' own
+  // variance comes in under the independent pairs', mirroring crnShowStats's S_d² check.
+  const helps = sz2 < sw2;
+  $('av-s-help').innerHTML = helps
+    ? 'yes: S<sub class="sym">z</sub>² &lt; S<sub class="sym">w</sub>²'
+    : 'no: S<sub class="sym">z</sub>² > S<sub class="sym">w</sub>²';
+  $('av-s-help').style.color = helps ? C.hit : C.miss;
 }
 function avRecord(run, p) {
   const k = avKey(p);
-  AVS.ind.push(CI.histRecord(run.ind.mean, run.ind, run.truth, 2 * p.n, p.conf, k));
+  AVS.ind.push(CI.histRecord(run.ind.mean, run.ind, run.truth, p.n, p.conf, k));
   AVS.av.push(CI.histRecord(run.av.mean, run.av, run.truth, p.n, p.conf, k));
 }
 function runAv() {
@@ -2627,20 +2805,21 @@ function runAvBatch() {
 }
 function clearAv() {
   AVS.ind = []; AVS.av = []; AVS.last = null; AVS.lastRunObj = null; AVS.lastRunP = null; lastRun.av = null;
-  ['av-s-mi', 'av-s-ma', 'av-s-hi', 'av-s-ha', 'av-s-r', 'av-s-vr'].forEach(id => { $(id).textContent = '—'; });
+  ['av-s-mi', 'av-s-ma', 'av-s-hi', 'av-s-ha', 'av-s-r', 'av-s-sw2', 'av-s-sz2', 'av-s-help'].forEach(id => { $(id).textContent = '—'; });
+  $('av-s-hi-df').textContent = 'df —'; $('av-s-ha-df').textContent = 'df —'; $('av-s-help').style.color = '';
   drawAvFig(null, avParams()); seedMsg('av', '', false); renderAvHist();
 }
 function renderAvHist() {
   const p = avParams(), f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
   const win = histWindow([AVS.ind, AVS.av]) || { lo: f.mean - 1.5 * sd, hi: f.mean + 1.5 * sd };
   const opts = { yLabel: 'mean of h', truthLabel: v => 'E[h] = ' + v.toFixed(4), window: win,
-                 liveTruth: f.mean, emptyWindow: win, nLabel: 'evals' };
+                 liveTruth: f.mean, emptyWindow: win, nLabel: 'pairs' };
   histCaption($('av-cap1'), histPlot($('av-hist1'), $('av-hw1'), AVS.ind, opts), 'E[h]', null);
-  histCaption($('av-cap2'), histPlot($('av-hist2'), $('av-hw2'), AVS.av, { ...opts, nLabel: 'pairs' }), 'E[h]', null);
+  histCaption($('av-cap2'), histPlot($('av-hist2'), $('av-hw2'), AVS.av, opts), 'E[h]', null);
 }
 TABS.av = {
   init() { fnOptions($('av-fn')); avParamsChanged(); drawAvFig(null, avParams()); },
-  render() { drawAvFig(AVS.lastRunObj, AVS.lastRunP || avParams()); renderAvHist(); }
+  render() { const p = AVS.lastRunP || avParams(); drawAvFlow(p); drawAvFig(AVS.lastRunObj, p); renderAvHist(); }
 };
 SPIN['av-seed'] = seedSpin('av');
 // ── Tab ④: control variates ──────────────────────────

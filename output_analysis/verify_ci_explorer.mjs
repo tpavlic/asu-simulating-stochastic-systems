@@ -5,7 +5,7 @@
      node output_analysis/verify_ci_explorer.mjs
 
    Slices the block between the CI-CORE sentinels out of ci_explorer.html
-   and runs it in a Node vm context, so the code under test is byte-for-
+   and runs it in a Node vm context, and so the code under test is byte-for-
    byte the code the page ships.  Reference values are exact identities,
    textbook t tables (to 1e-3), and closed-form moments of the function
    menu; the calibration sections count interval captures over
@@ -200,28 +200,57 @@ CI.FUNC_KEYS.forEach(k => {
   close(su / N, f.covU, k === 'bowl' ? 1e-3 : 0.05, `${k}: cov(U, h(U)) = ${f.covU.toFixed(5)}`);
 });
 {
-  const f = CI.FUNCS.exp, R = 2000; let sumSe = 0;
-  for (let r = 0; r < R; r++) sumSe += CI.runAV(3000 + r, { fn: 'exp', n: 500, conf: 0.95 }).av.s / Math.sqrt(500);
+  const f = CI.FUNCS.exp, R = 2000; let sumSe = 0, sumSeInd = 0;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runAV(3000 + r, { fn: 'exp', n: 500, conf: 0.95 });
+    sumSe += run.av.s / Math.sqrt(500);
+    sumSeInd += run.ind.s / Math.sqrt(500);
+  }
   const wantSe = Math.sqrt((CI.funcVar(f) + CI.funcAntiCov(f)) / 2 / 500);
-  close(wantSe, 0.0028, 0.02, 'exp, 500 pairs: closed-form SE of the pair-mean average is 0.0028');
-  close(sumSe / R, wantSe, 0.03, 'exp, 500 pairs: mean sample SE matches the closed form');
+  close(wantSe, 0.0028, 0.02, 'exp, 500 pairs: closed-form SE of the antithetic pair-mean average is 0.0028');
+  close(sumSe / R, wantSe, 0.03, 'exp, 500 pairs: mean antithetic sample SE matches the closed form');
+  /* The independent arm's pair mean averages two uncorrelated evaluations, and so its
+     variance is simply half of a single draw's: Var(W) = funcVar(f) / 2, and the SE
+     of the mean of 500 such pairs is sigma / sqrt(2 * 500) with sigma^2 = funcVar(f). */
+  const wantSeInd = Math.sqrt(CI.funcVar(f) / 2 / 500);
+  close(wantSeInd, 0.01556, 0.005, 'exp, 500 pairs: closed-form SE of the independent pair-mean average is 0.0156');
+  close(sumSeInd / R, wantSeInd, 0.03, 'exp, 500 pairs: mean independent sample SE matches the closed form');
   const R2 = Math.max(500, Math.floor(CALIB_REPS / 4));
-  let hits = 0, hitsInd = 0;
+  let hits = 0, hitsInd = 0, sumRatio = 0;
   for (let r = 0; r < R2; r++) {
     const run = CI.runAV(4000 + r, { fn: 'exp', n: 25, conf: 0.95 });
     hits += run.hitAv ? 1 : 0; hitsInd += run.hitInd ? 1 : 0;
   }
-  /* Pair means of exp(U) are bounded and skewed, so the t interval on 25 of them
+  /* Pair means of exp(U) are bounded and skewed, and so the t interval on 25 of them
      runs a little under nominal; 6 SE allows for that without hiding a real bug. */
   rateNear(hits / R2, 0.95, R2, 6, 'exp, 25 pairs: antithetic interval captures E[h]');
-  rateNear(hitsInd / R2, 0.95, R2, 6, 'exp, 50 independent draws: interval captures E[h]');
+  rateNear(hitsInd / R2, 0.95, R2, 6, 'exp, 25 pairs: independent interval captures E[h]');
+  /* Both arms now average n pairs, and so their pair-mean variances S_z^2 and S_w^2
+     compare directly: Var(Z)/Var(W) = 1 + rho, where rho is the exact correlation of
+     h(U) and h(1 − U) from the function's own moments. */
+  const R3 = Math.max(500, Math.floor(CALIB_REPS / 8));
+  for (let r = 0; r < R3; r++) {
+    const run = CI.runAV(4500 + r, { fn: 'exp', n: 50, conf: 0.95 });
+    sumRatio += (run.av.s * run.av.s) / (run.ind.s * run.ind.s);
+  }
+  const rho = CI.funcAntiCov(f) / CI.funcVar(f);
+  close(sumRatio / R3, 1 + rho, 0.05, `exp, 50 pairs: mean S_z^2/S_w^2 (${(sumRatio / R3).toFixed(3)}) is near 1 + rho = ${(1 + rho).toFixed(3)}`);
   let wider = 0;
   for (let r = 0; r < 500; r++) { const run = CI.runAV(5000 + r, { fn: 'bowl', n: 25, conf: 0.95 }); wider += run.av.h > run.ind.h ? 1 : 0; }
   ok(wider / 500 > 0.9, `bowl: antithetic interval wider than the independent one in ${wider} of 500 runs`);
   const run = CI.runAV(1, { fn: 'sqrt', n: 10, conf: 0.95 });
-  ok(run.yInd.length === 20 && run.z.length === 10, 'runAV: 2n independent values, n pair means');
-  close(run.yInd[3], run.ya[3], 1e-15, 'runAV: the independent arm reuses the first n draws');
-  close(run.z[2], (run.ya[2] + run.yb[2]) / 2, 1e-15, 'runAV: pair mean');
+  ok(run.w.length === 10 && run.z.length === 10, 'runAV: n independent pair means, n antithetic pair means');
+  /* Replay the same stream directly: the first n draws feed ya/yb/z, and only then does
+     the independent arm draw its n fresh partners, and so run.w[3] should equal
+     (h(u_3) + h(v_3)) / 2 for the fourth of those fresh draws. */
+  {
+    const f2 = CI.FUNCS.sqrt, rr = CI.mulberry32(1), us = [], fresh = [];
+    for (let i = 0; i < 10; i++) us.push(rr());
+    for (let i = 0; i < 10; i++) fresh.push(rr());
+    close(run.u[3], us[3], 1e-15, 'runAV: shared draws come first in the stream');
+    close(run.w[3], (f2.h(us[3]) + f2.h(fresh[3])) / 2, 1e-15, 'runAV: independent pair mean averages the shared draw with a fresh one');
+  }
+  close(run.z[2], (run.ya[2] + run.yb[2]) / 2, 1e-15, 'runAV: antithetic pair mean');
 }
 
 /* ═══ 5. Tab ④: control variates ═════════════════════════════════ */
