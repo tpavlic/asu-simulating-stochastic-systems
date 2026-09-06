@@ -178,9 +178,17 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    auto-fit with a 210px minimum gives phones one column and wide cards two or three. */
 .cv-leg { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 3px 16px; margin-top: 8px; font-size: .74rem; color: var(--muted); text-align: left; }
 .cv-leg > span { display: flex; gap: 6px; align-items: baseline; }
-/* The trailing note item (e.g. "first 40 of 500 pairs drawn") collapses to nothing
-   when there is no note, rather than leaving an empty grid cell. */
-.cv-leg > span:empty { display: none; }
+/* A figure's draw-cap note (e.g. "first 40 of 500 pairs drawn") sits below its
+   legend grid, in its own element, rather than as a grid item -- a note that came
+   and went as a grid item changed the grid's row count between the empty and
+   filled states, growing the card by a row once a run filled it in. Reserving the
+   note's own row here, whether or not it has text, keeps the card's height fixed
+   across a run and a clear. line-height is pinned to the same 1.35 as min-height,
+   because the browser's own "normal" line-height (what an empty div with only a
+   min-height never triggers, and what one line of real text does) is taller than
+   1.35em here, and the mismatch would still grow the row by a pixel or two once
+   the note gained text. */
+.fig-note { min-height: 1.35em; line-height: 1.35; font-size: .74rem; color: var(--muted); text-align: center; margin-top: 4px; }
 /* Symbols share one fixed-width column so they align regardless of glyph count;
    the three-glyph interval symbol (⊢●⊣) is the one exception, given lg-wide so it
    can overflow that width rather than being visually squeezed into it. */
@@ -206,20 +214,55 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    thirteen cards with longer values ("1.9481 (0.5958)", a bracketed interval) that would
    ellipsize in a quarter-width column, and so it opts out via sg-two and stays two-column here. */
 @media (max-width: 760px) and (min-width: 560px) { .sg:not(.sg-two) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Tab 4's own stats grid, side by side with the figure card (viewport wider than
+   760px, where .viz-row is a row rather than a column): a single column balances
+   the figure's own three-panel height better than two narrow columns do, and the
+   cards are reordered to read True mean, Plain mean, Plain half-width, CV mean,
+   CV half-width, Estimated c*, r² -- grouping each estimate with its own
+   half-width -- rather than the DOM order the two-column layout wants (both
+   means, then both half-widths, so paired cards land in the same row). */
+@media (min-width: 761px) {
+  .sg-cv { grid-template-columns: minmax(0, 1fr); }
+  .sg-cv .sc:has(#cv-s-true) { order: 1; }
+  .sg-cv .sc:has(#cv-s-mp) { order: 2; }
+  .sg-cv .sc:has(#cv-s-hp) { order: 3; }
+  .sg-cv .sc:has(#cv-s-mc) { order: 4; }
+  .sg-cv .sc:has(#cv-s-hc) { order: 5; }
+  .sg-cv .sc:has(#cv-s-c) { order: 6; }
+  .sg-cv .sc:has(#cv-s-r2) { order: 7; }
+  /* A single stats column still claimed the old two-column width, leaving the
+     cards wide with empty space and the figure no wider than before. Narrowed
+     to one ordinary card's own width and let the figure card -- ordinarily a
+     fixed flex-basis, shrinkable only down to its own content -- grow to fill
+     what the column gave up, so the three pin panels actually spread out.
+     Scoped to tab 4's own viz-row (the one holding .sg-cv) so tabs 1-3 and 5,
+     which share the same .cv-card/.stats-panel classes, are unaffected. */
+  .viz-row:has(.sg-cv) > .cv-card { flex: 1 1 auto; }
+  .viz-row:has(.sg-cv) > .stats-panel { flex: 0 0 230px; min-width: 0; }
+}
 /* A card whose value is a bracketed interval (e.g. "[-1.1243, -0.2265]") can outgrow half a
    narrow phone's stats column; give it the full row there rather than ellipsizing it. */
 @media (max-width: 480px) { .sc-wide { grid-column: 1 / -1; } }
 /* A verdict reads as a sentence and sits better spanning the whole row than sharing it
    with another card, at any width, and so this one is unconditional rather than media-gated. */
 .sc-full { grid-column: 1 / -1; }
-.sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+/* A column flex container so the value sits on the card's own last line: the grid's
+   default stretch already equalizes every card's height across a row, and a label
+   that wraps to two lines (pushing a neighboring card's single-line label down)
+   would otherwise leave that neighbor's value a line higher, reading as misaligned. */
+.sc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; display: flex; flex-direction: column; }
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 /* Greek letters and x-bar inside the uppercase stat labels keep their case and spacing. */
 .sym { text-transform: none; letter-spacing: 0; }
 .sym sub, sub.sym { font-size: .8em; }
 .ov { position: relative; display: inline-block; text-transform: none; letter-spacing: 0; }
 .ov::before { content: ''; position: absolute; left: .06em; right: .06em; top: .17em; border-top: .09em solid currentColor; }
-.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; margin-top: auto; }
+/* A verdict written after a run (e.g. "yes: S_d^2 < S_1^2 + S_2^2") can carry a
+   <sub>, whose default vertical-align lowers the line box and makes the card
+   taller than its "--" placeholder; zero the subscript's own line-height so it
+   does not add to the row while its vertical-align still drops the glyph. */
+.sc-val sub { line-height: 0; }
 .sc-val.acc { color: var(--est); }
 .sc-val.dim { color: var(--truth); font-size: .9rem; }
 .sc-aside { font-size: .72em; font-weight: 500; color: var(--muted); }
@@ -314,6 +357,56 @@ footer a:hover { text-decoration: underline; }
 /* Range inputs: 26px tall so a finger lands on the strip, per CLAUDE.md. */
 input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
 .rng-val { font-family: 'IBM Plex Mono', monospace; font-size: .85rem; color: var(--text); min-width: 3.2em; display: inline-block; }
+/* Tab 4's c slider carries two values that are only placeholders before a run --
+   "c = --" beside it and an empty "(c* = ...)" aside -- and both grow past the
+   shared .rng-val floor once a real, signed, two-decimal number (e.g. "c =
+   -0.47") fills them in. In the narrow-screen layout, where the figure card's
+   width tracks its own content rather than a fixed flex-basis, that growth
+   nudges the card's width and so its aspect-locked SVG's height by a sub-pixel
+   amount on every run. Reserving enough width here for the values this slider
+   actually shows keeps the row's own min-content width -- and so the card's
+   and the SVG's height -- constant across a run and a clear. */
+#cv-c-val { min-width: 6em; }
+#cv-c-star { min-width: 8em; }
+/* Tab 4's own c-slider row wraps rather than overflowing on a narrow card: the
+   label stays put, the slider (.cv-slider-wrap) is the one flexible child and
+   may shrink all the way to min-width:0, and the readout is a single
+   never-wrapping unit that drops to its own line under the track once the row
+   runs out of width for it, rather than running off the card's own edge. This
+   overrides .ctrl-pair's own nowrap for this one row only. */
+/* flex: 1 1 auto (as a flex item of .seq-hd, itself a flex row) gives this row
+   its parent's own available width to grow into; without it, .ctrl-pair's
+   inline-flex sizing is shrink-to-fit, which leaves .cv-slider-wrap's own
+   flex-grow nothing to grow into and wraps the readout even at a wide card. */
+.cv-c-row { flex: 1 1 auto; flex-wrap: wrap; white-space: normal; }
+.cv-c-readout { white-space: nowrap; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
+/* The wrapper, not the bare <input>, is the flex item that grows: the tick
+   overlay lives beside the input inside this same wrapper, and needs to track
+   the input's own rendered width exactly, which #cv-c's own width:100% below
+   guarantees regardless of how much space the row actually gives this child. */
+.cv-slider-wrap { position: relative; vertical-align: middle; flex: 1 1 160px; min-width: 0; }
+.cv-slider-wrap input[type=range] { display: block; width: 100%; }
+/* Thumb pinned to 26px in both engines so the tick overlay's own calc((100% -
+   26px) * f + 13px) -- accounting for the thumb's own half-width at the track's
+   ends -- matches the thumb actually drawn, in every browser, not just whichever
+   one happens to default near 26px already. Also clears the 24px touch target
+   floor with room to spare. */
+#cv-c::-webkit-slider-thumb { width: 26px; height: 26px; }
+#cv-c::-moz-range-thumb { width: 26px; height: 26px; border: none; }
+/* The tick row sits directly under the track, in the same positioned wrapper as
+   the input so each tick's left offset is relative to the track's own rendered
+   width rather than the page or the row. Ticks carry pointer-events:none so
+   they never intercept a drag meant for the input underneath. */
+.cv-slider-ticks { position: relative; height: 16px; pointer-events: none; }
+.cv-slider-tick { position: absolute; top: 0; width: 2px; height: 8px; background: var(--muted); transform: translateX(-1px); }
+.cv-slider-tick.cv-tick-c { background: var(--accent); width: 2px; height: 8px; }
+.cv-slider-tick-lbl { position: absolute; top: 8px; font-size: .66rem; font-family: 'IBM Plex Mono', monospace; color: var(--accent); transform: translateX(-50%); white-space: nowrap; }
+.cv-slider-tick-lbl.cv-tick-lbl-muted { color: var(--muted); }
+/* A superscript asterisk (c-sup-*) must not inflate the line box it sits in --
+   the card row and the slider row are both height-sensitive (see the note above
+   on #cv-c-val/#cv-c-star) -- so its own line-height is zeroed the same way
+   .sc-val sub already is for a verdict's subscript. */
+sup { font-size: .72em; line-height: 0; }
 #is-theta { width: 140px; max-width: 45vw; }  /* narrow screens: keeps the pair off the widget's right edge */
 /* Figures are SVG with a viewBox; the card shrinks them rather than overflowing. */
 svg.fig { display: block; width: 100%; height: auto; }
@@ -492,8 +585,8 @@ svg.fig { display: block; width: 100%; height: auto; }
           <span style="color:var(--muted)"><span class="lg-s">—</span>zero</span>
           <span><span class="lg-s lg-wide" style="color:var(--hit)">⊢●⊣</span>interval for δ (teal captures, red dashed misses)</span>
           <span style="color:var(--muted)"><span class="lg-s">*</span>excludes zero</span>
-          <span id="crn-fig-note"></span>
         </div>
+        <div class="fig-note" id="crn-fig-note"></div>
       </div>
       <div class="stats-panel">
         <div class="sg sg-two">
@@ -596,6 +689,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         </div>
         <svg class="fig" id="av-fig" role="img" aria-label="The model h(u) over the unit interval with the current arm's pairs drawn as two linked points, and a strip at the right showing that arm's pair means as a rug beside its own confidence interval for E[h]; a toggle switches between the independent and the antithetic arm on one fixed scale"></svg>
         <div class="cv-leg" id="av-fig-leg"></div>
+        <div class="fig-note" id="av-fig-note"></div>
       </div>
       <div class="stats-panel">
         <div class="sg sg-two">
@@ -615,6 +709,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="sec-hd" id="av-seq-title" style="margin:0 0 9px">One run, in draw order: the 2n outputs and their pair means</div>
       <svg class="fig" id="av-seq" role="img" aria-label="The 2n outputs of one run plotted in the order drawn, pairs joined, with the pair means, the true mean, and a strip at the right showing the shown arm's own rug of pair means beside its confidence interval for E[h]; the current arm (independent or antithetic) follows the figure above's own toggle, on one fixed scale"></svg>
       <div class="cv-leg" id="av-seq-leg"></div>
+      <div class="fig-note" id="av-seq-note"></div>
     </div>
     <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm pairs each of them with a fresh draw and averages the pair, exactly as the antithetic arm does with the complement, so that the two arms differ only in where the second draw comes from. In practice, you would use all 2n values with 2n − 1 degrees of freedom; the pairing here exists only to make the comparison one-for-one. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows. Each output can also carry its own noise, zero by default, which the complement cannot cancel, and so the antithetic interval narrows only by the share of the variance that comes through u; turn the noise up, and the two arms converge.</div>
     <div class="sec">
@@ -685,29 +780,35 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="viz-row">
       <div class="cv-card">
         <div class="seq-hd" style="margin-bottom:9px">
-          <span class="ctrl-pair">
-            <label class="ctrl-lbl" for="cv-c"><span class="tip" tabindex="0" data-tip="The coefficient on the input's deviation. Each run snaps it to the estimated c*, the slope of y on u; drag it to see too little or too much correction. Every c leaves the mean alone, and so the interval stays valid at any setting.">c</span></label>
-            <input type="range" id="cv-c" min="-1" max="1" step="0.01" value="0" oninput="cvCDrag()" disabled aria-describedby="cv-c-val">
-            <span class="rng-val" id="cv-c-val">c = —</span>
-            <span class="rng-val" style="color:var(--muted)" id="cv-c-star"></span>
+          <span class="ctrl-pair cv-c-row">
+            <label class="ctrl-lbl" for="cv-c"><span class="tip" tabindex="0" data-tip="The coefficient on the input's deviation. Each run snaps it to the estimated c*, the slope of y on u; drag it to see too little or too much correction. Every c leaves the mean alone, and so the interval stays valid at any setting. At c = 0 and at c = 2c*, the adjusted values have exactly the plain variance; between them the interval is narrower, and beyond them it is wider.">c</span></label>
+            <span class="cv-slider-wrap">
+              <input type="range" id="cv-c" min="-1" max="1" step="0.01" value="0" oninput="cvCDrag()" disabled aria-describedby="cv-c-val">
+              <div class="cv-slider-ticks" id="cv-slider-ticks" aria-hidden="true"></div>
+            </span>
+            <span class="cv-c-readout">
+              <span class="rng-val" id="cv-c-val">c = —</span>
+              <span class="rng-val" style="color:var(--muted)" id="cv-c-star"></span>
+            </span>
           </span>
         </div>
-        <svg class="fig" id="cv-fig" role="img" aria-label="Three stacked panels sharing one draw-order x-axis: inputs' deviation from the known mean 0.5, outputs with the part blamed on the input marked on each pin, and the adjusted values with the same mean and less spread; a strip beside the output and adjusted panels shows that arm's own confidence interval for E[h], and a slider lets c move away from its estimated value"></svg>
+        <svg class="fig" id="cv-fig" role="img" aria-label="Three stacked panels sharing one draw-order x-axis: inputs' deviation from the known mean 0.5, outputs with the part that tracks the input's deviation marked on each pin, and the adjusted values with the same mean and less spread; a strip beside the output and adjusted panels shows that arm's own confidence interval for E[h], and a slider lets c move away from its estimated value"></svg>
         <div class="cv-leg" id="cv-fig-leg"></div>
+        <div class="fig-note" id="cv-fig-note"></div>
       </div>
       <div class="stats-panel">
-        <div class="sg sg-two">
+        <div class="sg sg-two sg-cv">
           <div class="sc sc-full"><div class="sc-lbl">True mean <span class="sym">E[h(U)]</span></div><div class="sc-val dim" id="cv-s-true">—</div></div>
           <div class="sc"><div class="sc-lbl">Plain mean <span class="ov">y</span></div><div class="sc-val acc" id="cv-s-mp">—</div></div>
           <div class="sc"><div class="sc-lbl">Control-variate mean <span class="ov">z</span></div><div class="sc-val acc" id="cv-s-mc">—</div></div>
           <div class="sc"><div class="sc-lbl">Plain half-width (<span id="cv-s-hp-df">df —</span>)</div><div class="sc-val" id="cv-s-hp">—</div></div>
           <div class="sc"><div class="sc-lbl">Control-variate half-width (<span id="cv-s-hc-df">df —</span>)</div><div class="sc-val" id="cv-s-hc">—</div></div>
-          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The slope of y on u, fitted from the same run it corrects. Its target is Cov(U, Y) / Var(U), which the noise does not change.">Estimated <span class="sym">c*</span> = <span class="sym">S<sub class="sym">uy</sub> / S<sub class="sym">u</sub>²</span></span></div><div class="sc-val" id="cv-s-c">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The slope of y on u, fitted from the same run it corrects. Its target is Cov(U, Y) / Var(U), which the noise does not change.">Estimated <span class="sym">c<sup>*</sup></span> = <span class="sym">S<sub class="sym">uy</sub> / S<sub class="sym">u</sub>²</span></span></div><div class="sc-val" id="cv-s-c">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The squared sample correlation between u and y. A line in u explains this share of the output's variance, and the control-variate interval's variance is the remaining 1 − r² share. Noise lowers it.">r²: share of y var explained by u</span></div><div class="sc-val" id="cv-s-r2">—</div></div>
         </div>
       </div>
     </div>
-    <div class="hint wide">The figure above shows one run of n draws as three panels in draw order. The top panel shows how far each input landed from its known mean 0.5. The middle panel shows each output, with the part blamed on its input marked on the pin, in proportion to that distance. The bottom panel shows what is left after subtracting that part, which keeps the same mean as the output and has less spread because the part of the spread that u predicts is gone. What remains is the part u cannot predict, including any noise added to the output; a run whose u values happened to come out high still has a y average that is high for that reason, but the adjusted values do not. Drag the slider to move c away from its estimated value, and watch the bottom panel and its interval respond; every c leaves the mean alone, and so the interval stays valid at any setting.</div>
+    <div class="hint wide">The figure above shows one run of n draws as three panels in draw order. The top panel shows how far each input landed from its known mean 0.5. The middle panel shows each output, with the part that tracks the input's deviation marked on the pin, in proportion to that distance. The bottom panel shows what is left after subtracting that part, which keeps the same mean as the output and has less spread because the part of the spread that u predicts is gone. What remains is the part u cannot predict, including any noise added to the output; a run whose u values happened to come out high still has a y average that is high for that reason, but the adjusted values do not. Drag the slider to move c away from its estimated value, and watch the bottom panel and its interval respond; every c leaves the mean alone, and so the interval stays valid at any setting.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Plain average of h(u)</div>
@@ -719,16 +820,16 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="sec">
       <div class="sec-hd">Why a correlated quantity with a known mean reduces variance</div>
-      <div class="eq-row"><span class="eq-lbl">Adjusted variable:</span><span class="eq-val">Z = Y − c (X − E[X]),&nbsp; E[Z] = E[Y] for every c</span></div>
-      <div class="eq-row"><span class="eq-lbl">Its variance:</span><span class="eq-val">Var(Z) = Var Y − 2c Cov(X, Y) + c² Var X</span></div>
-      <div class="eq-row"><span class="eq-lbl">Best c:</span><span class="eq-val">c* = Cov(X, Y) / Var X,&nbsp; Var(Z) = Var Y · (1 − ρ²<sub>XY</sub>)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Adjusted variable:</span><span class="eq-val">Z = Y − c·(X − E[X]),&nbsp; E[Z] = E[Y] for every c</span></div>
+      <div class="eq-row"><span class="eq-lbl">Its variance:</span><span class="eq-val">Var(Z) = Var Y − 2c·Cov(X, Y) + c²·Var X</span></div>
+      <div class="eq-row"><span class="eq-lbl">Best c:</span><span class="eq-val">c<sup>*</sup> = Cov(X, Y) / Var X,&nbsp; Var(Z) = Var Y · (1 − ρ²<sub>XY</sub>)</span></div>
       <div class="eq-hr"></div>
       <div class="exp-note">Any c leaves the mean alone because the term being subtracted has mean zero. The variance is a parabola in c with its minimum at the regression slope of Y on X, and at that slope the fraction of Var Y that survives is 1 − ρ². The more strongly the control co-varies with the output, the larger the reduction. Here the control is the model's own input, but in a simulation it can be anything with a known mean that the output responds to: the average of the sampled service times, say, whose mean is a parameter of the input model.</div>
       <div class="cards">
         <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the output is symmetric in u, and Cov(U, h(U)) is exactly zero. The fitted slope wobbles around zero from run to run, and the interval does not shrink. A control has to co-vary with the output to help.</div>
         <div class="card"><strong>Estimating c costs a little</strong>The slope is fitted from the same run it corrects, which makes the interval slightly optimistic. At n = 50, the capture rate is about two points under nominal; at n = 10, it runs about ten points under, near 83% for a nominal 95%. Larger runs, or a c fixed from a pilot, remove the shortfall.</div>
         <div class="card"><strong>The same idea as regression</strong>The control-variate estimate is the fitted value of the regression of Y on X at X = E[X]. Two or more controls generalize to a multiple regression in the same way.</div>
-        <div class="card"><strong>Turn up the noise</strong>Raising σ<sub>e</sub> adds variance that no control based on u can remove, and so r² falls, and the two intervals converge. The control still costs nothing, and it still helps whenever u and y co-vary, but a noisier output leaves it less to work with.</div>
+        <div class="card"><strong>What the control cannot remove</strong>The control subtracts only the part of y that a straight line in u predicts. With no noise, that line explains about 98% of exp(u), 97% of 1/(1 + u), and 96% of √u, and none of the bowl; what remains is the curvature of h. Noise adds a second part no function of u can predict, and so r² falls as σ<sub>e</sub> rises and the two intervals converge. A model closer to linear, or a quieter one, gives the control more to remove.</div>
       </div>
     </div>
   </section>
@@ -782,8 +883,8 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="cv-leg">
           <span style="color:var(--truth)"><span class="lg-s">—</span>target density φ(x), tail shaded</span>
           <span style="color:var(--est)"><span class="lg-s">—</span>sampling density φ(x − θ), rug of its draws (tall ticks are in the tail)</span>
-          <span id="is-fig-note"></span>
         </div>
+        <div class="fig-note" id="is-fig-note"></div>
       </div>
       <div class="stats-panel">
         <div class="sg">
@@ -1613,10 +1714,12 @@ function histPlot(svgEl, containerEl, runs, opts) {
 // number of misses is the sum of each visible run's own α, so it stays honest when the
 // confidence level was changed part way through the history.
 function histCaption(el, res, what, zeroWhat) {
-  // Before the first run the tally shows its zeros, in the same shape it will keep, so the
-  // card is laid out at its final height from the start.
+  // Before the first run the tally shows its zeros in the same shape it will keep,
+  // including the expected-miss parenthetical, so the caption wraps to the same number
+  // of lines from the start and the first run does not move the page.
   if (!res || !res.shown) {
     el.innerHTML = 'Intervals missing ' + what + ': <strong>0 of 0</strong>'
+      + ' (about 0.0 expected at the confidence levels used)'
       + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>0 of 0</strong>' : '');
     return;
   }
@@ -2128,26 +2231,33 @@ function crnFlowModelLabel(prefix, f, usableW) {
   const full = `${prefix}${f.label}`;
   return crnFlowTextW(full, 8.5, true) <= usableW ? full : f.label;
 }
-// A run of monospace glyphs laid out as fixed-width slots (fs*0.6 each) so a subscript
-// glyph -- shrunk to font-size 6.5 and dropped 2.5 units -- never inherits the full
-// cell that IBM Plex Mono gives an unscaled Unicode subscript digit, which is what left
-// a visible gap in "y1" when that character was written directly. Every glyph gets its
-// own x, and so nothing here depends on tspan flow or the font's own advance widths.
-// tokens is an array of { ch, sub?, bar? }; bar draws a short overline above that glyph's cell,
-// in the same spirit as the existing x-bar pattern drawn for the run history's mean
+// A run of monospace glyphs laid out as fixed-width slots -- each token's own font
+// size * 0.6, not the run's nominal fs * 0.6 for every token regardless of size --
+// so a subscript glyph -- shrunk to font-size 6.5 and dropped 2.5 units -- gets a
+// cell sized to its own 6.5px (3.9 wide), never the full fs-sized cell a 10px run
+// would otherwise give it (which read as a visible gap around "y1"'s subscript,
+// since the cell was sized for a glyph twice as wide as the one actually drawn).
+// x accumulates from each token's own cell width in turn, and the whole run
+// centers on the sum of those widths when anchor is 'middle', rather than on
+// adv * n at a single adv. Every glyph gets its own x, and so nothing here depends
+// on tspan flow or the font's own advance widths. tokens is an array of
+// { ch, sub?, bar? }; bar draws a short overline above that glyph's cell, in the
+// same spirit as the existing x-bar pattern drawn for the run history's mean
 // marker. anchor 'start' | 'middle' places the whole run's left edge or center at x0.
 function crnFlowMono(x0, yBase, fs, tokens, anchor) {
-  const adv = fs * 0.6, n = tokens.length;
-  const left = anchor === 'middle' ? x0 - (adv * n) / 2 : x0;
-  let tspans = '', bars = '';
+  const widths = tokens.map(t => (t.sub ? 6.5 : fs) * 0.6);
+  const total = widths.reduce((a, w) => a + w, 0);
+  const left = anchor === 'middle' ? x0 - total / 2 : x0;
+  let tspans = '', bars = '', cellL = left;
   tokens.forEach((t, i) => {
-    const cellL = left + adv * i, cx = cellL + adv / 2;
+    const adv = widths[i], cx = cellL + adv / 2;
     const sub = !!t.sub, tfs = sub ? 6.5 : fs, ty = yBase + (sub ? 2.5 : 0);
     tspans += `<tspan x="${cx}" y="${ty}" font-size="${tfs}">${t.ch}</tspan>`;
     if (t.bar) {
       const by = yBase - fs + 0.17 * fs;
-      bars += `<line x1="${cellL + 0.06 * fs}" y1="${by}" x2="${cellL + adv - 0.06 * fs}" y2="${by}" stroke="${C.muted}" stroke-width="${0.09 * fs}"/>`;
+      bars += `<line x1="${cellL + 0.06 * adv}" y1="${by}" x2="${cellL + adv - 0.06 * adv}" y2="${by}" stroke="${C.muted}" stroke-width="${0.09 * fs}"/>`;
     }
+    cellL += adv;
   });
   return `<text text-anchor="middle" font-family="${FF_MONO}" fill="${C.muted}">${tspans}</text>${bars}`;
 }
@@ -2157,6 +2267,20 @@ const crnFlowChars = str => Array.from(str).map(ch => ({ ch }));
 // field's own 0.01 step (0.10, not 0.1; 0.00, not 0), but show a typed value with
 // more decimals (0.125) as typed rather than rounding it away.
 const sigELabel = v => Number.isInteger(v * 100) ? v.toFixed(2) : String(v);
+// Shared by crnFlowDiagram, avFlowDiagram, and cvFlowDiagram wherever two (or
+// more) lanes' labels, of possibly different widths, share one downstream
+// junction turn point: each lane gets its own resume x (labelStart, plus its
+// own label's real width from crnFlowMono's per-token cells, plus one more gap)
+// so a lane with a short label does not wait on a neighbor's longer one before
+// its own line may continue, and the shared turn point is whichever lane's own
+// resume point ends up furthest right. labelStart is the local-unit x every
+// lane's label begins at; gap is the real-pixel clearance required on both
+// sides of a label; tokensPerLane is one crnFlowMono token array per lane.
+function crnFlowLaneResume(labelStart, gap, s, tokensPerLane) {
+  const tokW = tok => tok.reduce((a, t) => a + (t.sub ? 6.5 : 10) * 0.6, 0);
+  const resumes = tokensPerLane.map(tok => labelStart + (tokW(tok) + gap) / s);
+  return { resumes, labelEnd: Math.max(...resumes) };
+}
 // One diagram (Independent inputs or Common random numbers), drawn into local
 // coordinates 0-380 wide by 0-142 tall and then offset by (offX, offY) with every
 // horizontal position scaled by s = Dw / 380; vertical positions are never scaled,
@@ -2221,59 +2345,150 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
   // replication subscript i because the pairing is what makes CRN a paired comparison).
   const yTok1 = [{ ch: 'y' }, crnFlowSub('1')].concat(isCRN ? [crnFlowSub('i')] : []);
   const yTok2 = [{ ch: 'y' }, crnFlowSub('2')].concat(isCRN ? [crnFlowSub('i')] : []);
-  [[y1, yTok1], [y2, yTok2]].forEach(([ly, yTok]) => {
-    h += `<line x1="${X(190) + noiseR}" y1="${Y(ly)}" x2="${X(208)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-    h += crnFlowMono(X(212), Y(ly) + 3.5, 10, yTok, 'start');
+  // crnFlowMono lays out each token at its own real width (10*0.6 for a full-size
+  // glyph, 6.5*0.6 for a subscript) added directly onto the already-scaled x0 it
+  // is given and not scaled again, and so a label's own true right edge in real
+  // pixels is X(labelStart) + tokW. Each lane's arrow ends, and each lane's own
+  // label ends, with an equal 4-real-pixel clearance either side -- computed
+  // from the label's own measured width and converted back to local units via
+  // /s (so the real gap stays 4px at every scale, not just s = 1) -- rather
+  // than a fixed local-unit offset, which the label sat too close to on one
+  // side of and too far on the other once s dropped below 1. A lane whose own
+  // label is shorter resumes sooner than the other and gets a plain connecting
+  // line out to the shared turn point labelEnd, set by whichever lane's own
+  // resume point is furthest right, and so both lanes still turn together even
+  // though CRN's extra per-replication subscript can make one run longer than
+  // the other.
+  // 4 required, +1 safety margin (the same margin the file's own labelEnd
+  // calculations already use elsewhere, against font-hinting rounding tipping
+  // a glyph's measured edge a hair short of 4 on some renders).
+  const gap = 5;
+  const arrowTip = 208;
+  const labelStart = arrowTip + gap / s;
+  const { resumes: [resume1, resume2], labelEnd } = crnFlowLaneResume(labelStart, gap, s, [yTok1, yTok2]);
+  [[y1, yTok1, resume1], [y2, yTok2, resume2]].forEach(([ly, yTok, resumeX]) => {
+    h += `<line x1="${X(190) + noiseR}" y1="${Y(ly)}" x2="${X(arrowTip)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += crnFlowMono(X(labelStart), Y(ly) + 3.5, 10, yTok, 'start');
+    if (resumeX < labelEnd) { h += `<line x1="${X(resumeX)}" y1="${Y(ly)}" x2="${X(labelEnd)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"/>`; }
   });
 
-  // Junction: each lane runs on from its own y label, turns at a shared xJ -- derived
-  // from whichever lane's label is longer, and so both turn at the same x even though
-  // CRN's extra per-replication subscript makes both labels longer than the
-  // independent diagram's -- and enters the circle separately with its own
-  // arrowhead, rather than the two lanes merging into one bracketed stub. The circle
-  // itself is a generic sum (+); which input is negated is now carried by the signs
-  // beside the segments instead, and the final expression below is unchanged.
-  // crnFlowMono lays out each cell at a fixed real width (fs*0.6) added directly onto
-  // the already-scaled x0 it is given and not scaled again, and so the label's own
-  // true right edge in real pixels is X(212) + yCells*0.6*10, which equals X(212 +
-  // yCells*0.6*10) only when s = 1. Dividing that extra width by s first converts it
-  // back into local-coordinate units, and so xJ -- itself passed through X() below --
-  // lands on the label's real edge at every scale, not only the widest one.
-  const yCells = Math.max(yTok1.length, yTok2.length);
-  // The +1 is a small real-unit safety margin: without it, X(labelEnd) lands exactly
-  // on the label's own true right edge with no slack, and font-hinting rounding can
-  // then tip a glyph's measured edge a hair past the line on some renders.
-  const labelEnd = 212 + (yCells * 0.6 * 10 + 1) / s, xJ = labelEnd + 10;
-  h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-  h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
-  h += `<line x1="${X(xJ)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(yMid) + diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  // Junction: each lane turns at the shared labelEnd computed above, and enters
+  // the circle separately with its own arrowhead, rather than the two lanes
+  // merging into one bracketed stub. The circle itself is a generic sum (+);
+  // which input is negated is carried by the signs beside the segments instead,
+  // and the final expression below is unchanged.
+
+  if (isCRN) {
+    const xJ = labelEnd + 10;
+    h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<line x1="${X(xJ)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(yMid) + diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += `<circle cx="${X(xJ)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
+    h += `<text x="${X(xJ)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+    h += `<text x="${X(xJ) + 5}" y="${Y((y1 + yMid - diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
+    h += `<text x="${X(xJ) + 5}" y="${Y((y2 + yMid + diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
+    const arrowEnd = xJ + diffR + 30;
+    h += `<line x1="${X(xJ) + diffR}" y1="${Y(yMid)}" x2="${X(arrowEnd)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+
+    // The final label: the expression above, what it feeds below, both flush left of
+    // the arrow that lands here (nothing may sit under the circle -- the lower lane
+    // runs there). The expression is dropped first if the diagram is too narrow to
+    // hold both lines, and the surviving interval name shrinks a point further if
+    // even that would run past the diagram's own right edge.
+    const exprTok = crnFlowChars('d').concat([crnFlowSub('i')], crnFlowChars(' = y'), [crnFlowSub('2'), crnFlowSub('i')], crnFlowChars(' − y'), [crnFlowSub('1'), crnFlowSub('i')]);
+    const name = 'paired interval';
+    const labelX = X(arrowEnd + 4), remain = 380 * s - (arrowEnd + 4) * s;
+    const exprW = exprTok.length * (8.5 * 0.6);
+    if (exprW <= remain) {
+      h += crnFlowMono(labelX, Y(69), 8.5, exprTok, 'start');
+      h += `<text x="${labelX}" y="${Y(85)}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+    } else {
+      const nameFS = crnFlowTextW(name, 9, false) <= remain ? 9 : 8;
+      h += `<text x="${labelX}" y="${Y(yMid) + 3}" text-anchor="start" font-size="${nameFS}" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+    }
+    return h;
+  }
+
+  // Independent inputs only (Task 6p): a small Sigma/n block sits on each lane
+  // between the y label and the junction, and so the junction visibly differences two
+  // already-averaged lanes (ȳ2 − ȳ1) instead of two raw outputs. This branch gets
+  // its own arrow marker, refX = 8 rather than the shared marker's refX = 7, and so an
+  // arrowhead's own tip -- not the 1-unit-short-of-tip point the shared marker was
+  // built around -- lands exactly on the box or circle edge the line's own x2/y2
+  // already names; the shared "crn-flow-arrow" marker (used above, by the CRN
+  // branch above, and unchanged here) keeps its own pre-existing tip-past-edge
+  // overshoot rather than being touched by this box's fit.
+  h += `<defs><marker id="crn-mean-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="${C.muted}"/></marker></defs>`;
+  const meanArrow = ' marker-end="url(#crn-mean-arrow)"';
+  // 20 units wide rather than the 34 first sketched for this box: "Σ/n" is much
+  // shorter than "mean" was, and the diagram needs the room back for the label
+  // after the junction (see the fit-or-drop note below).
+  const meanW = 20, meanH = 18;
+  const meanBlock = (x0, ly) => {
+    const w = X(x0 + meanW) - X(x0), cx = (X(x0) + X(x0 + meanW)) / 2, topY = Y(ly - meanH / 2);
+    const label = crnFlowChars('Σ/n');
+    const fs = label.length * 8.5 * 0.6 <= w - 4 ? 8.5 : Math.max(5, (w - 4) / (label.length * 0.6));
+    let hh = `<text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="7.5" font-family="${FF_SANS}" fill="${C.muted}">mean</text>`;
+    hh += `<rect x="${X(x0)}" y="${topY}" width="${w}" height="${meanH}" rx="3" fill="${C.bg}" stroke="var(--border)" stroke-width="1.2"/>`;
+    hh += crnFlowMono(cx, Y(ly) + 3, fs, label, 'middle');
+    return hh;
+  };
+  // Each side of the box gets exactly the required 10 units of connecting line
+  // in, and its arrow-out line runs directly to the turn point xJ: the ȳ labels
+  // no longer sit on this line (see below), and so it carries no text of its own.
+  const meanX0 = labelEnd + 10, meanX1 = meanX0 + meanW, xJ = meanX1 + 14;
+  const barTok1 = [{ ch: 'y', bar: true }, crnFlowSub('1')], barTok2 = [{ ch: 'y', bar: true }, crnFlowSub('2')];
+  // From the box's own output to the junction circle is one continuous right-
+  // angle polyline per lane -- the horizontal run, then the turn, then the
+  // vertical run into the circle -- with a single arrowhead where it actually
+  // enters the circle, matching how every other lane in these diagrams enters a
+  // junction; it does not get a second arrowhead at the corner partway there.
+  [[y1, barTok1, -diffR], [y2, barTok2, diffR]].forEach(([ly, barTok, d]) => {
+    h += `<line x1="${X(labelEnd)}" y1="${Y(ly)}" x2="${X(meanX0)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${meanArrow}/>`;
+    h += meanBlock(meanX0, ly);
+    h += `<polyline points="${X(meanX1)},${Y(ly)} ${X(xJ)},${Y(ly)} ${X(xJ)},${Y(yMid + d)}" fill="none" stroke="${C.muted}" stroke-width="1.2"${meanArrow}/>`;
+  });
+  // ȳ1 floats above the upper corner and ȳ2 below the lower corner, each
+  // centered on the vertical segment's own x (the junction's centerline). Both
+  // sit far enough out that even the overbar (ȳ1, which reaches furthest up) or
+  // the y's own descender (ȳ2, which reaches furthest down) clears the lane
+  // line and the vertical segment by several units, not just touching them.
+  h += crnFlowMono(X(xJ), Y(y1) - 14, 10, barTok1, 'middle');
+  h += crnFlowMono(X(xJ), Y(y2) + 20, 10, barTok2, 'middle');
+
+  // The junction itself is otherwise identical to the CRN branch above, just fed
+  // the new xJ instead of labelEnd.
   h += `<circle cx="${X(xJ)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
   h += `<text x="${X(xJ)}" y="${Y(yMid) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
   h += `<text x="${X(xJ) + 5}" y="${Y((y1 + yMid - diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
   h += `<text x="${X(xJ) + 5}" y="${Y((y2 + yMid + diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
-  const arrowEnd = xJ + diffR + 30;
-  h += `<line x1="${X(xJ) + diffR}" y1="${Y(yMid)}" x2="${X(arrowEnd)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  // The CRN branch gives this same output arrow 30 units because it has nothing
+  // else to fit; this branch already spent its horizontal budget on two boxes and
+  // needs the room back, so 10 units (matching the analogous short arrow on
+  // cvFlowDiagram's control-variate arm) is enough to read as a clear arrow
+  // without starving the fit-or-drop label that follows.
+  const arrowEnd = xJ + diffR + 10;
+  h += `<line x1="${X(xJ) + diffR}" y1="${Y(yMid)}" x2="${X(arrowEnd)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${meanArrow}/>`;
 
-  // The final label: the expression above, what it feeds below, both flush left of the
-  // arrow that lands here (nothing may sit under the circle -- the lower lane runs
-  // there). The expression is dropped first if the diagram is too narrow to hold both
-  // lines, and the surviving interval name shrinks a point further if even that would
-  // run past the diagram's own right edge.
-  const exprTok = isCRN
-    ? crnFlowChars('d').concat([crnFlowSub('i')], crnFlowChars(' = y'), [crnFlowSub('2'), crnFlowSub('i')], crnFlowChars(' − y'), [crnFlowSub('1'), crnFlowSub('i')])
-    : [{ ch: 'y', bar: true }, crnFlowSub('2')].concat(crnFlowChars(' - '), [{ ch: 'y', bar: true }, crnFlowSub('1')]);
-  const name = isCRN ? 'paired interval' : 'Welch interval';
-  // The junction moved left of its old fixed x = 272, and so the label's own start
-  // and the room left for it are both measured from the new, dynamic arrow end
-  // rather than the old fixed 294.
+  // The final label: unchanged text from before Task 6p -- it already read as the
+  // two means' difference once the boxes above made "mean first" explicit -- with
+  // the same fit-or-drop behavior as the CRN branch above, except the two boxes
+  // this branch adds leave less room here than the CRN branch ever has to budget
+  // for, and so "Welch interval" (longer than "paired interval") gets a
+  // continuously solved font size in both branches below, rather than the CRN
+  // branch's bare fixed font-9, so it always lands inside remain instead of
+  // relying on remain already being generous.
+  const exprTok = [{ ch: 'y', bar: true }, crnFlowSub('2')].concat(crnFlowChars(' − '), [{ ch: 'y', bar: true }, crnFlowSub('1')]);
+  const name = 'Welch interval';
   const labelX = X(arrowEnd + 4), remain = 380 * s - (arrowEnd + 4) * s;
   const exprW = exprTok.length * (8.5 * 0.6);
   if (exprW <= remain) {
+    const nameFS = Math.min(9, Math.max(5, remain / (name.length * 0.447)));
     h += crnFlowMono(labelX, Y(69), 8.5, exprTok, 'start');
-    h += `<text x="${labelX}" y="${Y(85)}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
+    h += `<text x="${labelX}" y="${Y(85)}" text-anchor="start" font-size="${nameFS}" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
   } else {
-    const nameFS = crnFlowTextW(name, 9, false) <= remain ? 9 : 8;
+    const nameFS = Math.min(9, Math.max(5, remain / (name.length * 0.447)));
     h += `<text x="${labelX}" y="${Y(yMid) + 3}" text-anchor="start" font-size="${nameFS}" font-family="${FF_SANS}" fill="${C.muted}">${name}</text>`;
   }
   return h;
@@ -2322,7 +2537,7 @@ function drawCrnFlow(p) {
   // took a computed height, so this diagram's own output is unaffected.
   drawFlowPair('crn-flow', 'crn-flow-cap', 'crn-flow-arrow',
     (ox, oy, s, second) => ({ h: crnFlowDiagram(ox, oy, s, second, p, f1, f2, fmtShift), height: 142 }),
-    "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above.");
+    "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above; the independent arm averages each system first and then differences the two means, whereas the common-random-numbers arm differences each pair first and then averages.");
 }
 function crnParamsChanged() {
   const p = crnParams(); if (!p) return;
@@ -2746,31 +2961,36 @@ function avFlowDiagram(offX, offY, s, isAV, p, f) {
   });
 
   // Outputs: yᵢ on lane 1 always; lane 2 is yₙ₊ᵢ (independent, a fresh evaluation) or
-  // yᵢ′ (antithetic, the complemented pair partner).
+  // yᵢ′ (antithetic, the complemented pair partner). crnFlowMono lays out each
+  // token at its own real width (10*0.6 for a full-size glyph, 6.5*0.6 for a
+  // subscript), so each lane's arrow ends, and each lane's own label ends, with
+  // an equal 4-real-pixel clearance either side -- computed from the label's own
+  // measured width and converted back to local units via /s so the real gap
+  // stays 4px at every scale -- rather than a fixed local-unit offset. Lane 1's
+  // yᵢ is always shorter than lane 2's yₙ₊ᵢ or yᵢ′, and so lane 1 resumes sooner
+  // and gets a plain connecting line out to the shared turn point labelEnd, set
+  // by whichever lane's own resume point is furthest right (lane 2's, always,
+  // here), rather than both lanes waiting on the wider one from the label's own
+  // start.
   const yTok1 = [{ ch: 'y' }, crnFlowSub('i') ];
   const yTok2 = isAV ? [{ ch: 'y' }, crnFlowSub('i'), { ch: '′' }] : [{ ch: 'y' }, crnFlowSub('n'), crnFlowSub('+'), crnFlowSub('i')];
-  [[y1, yTok1], [y2, yTok2]].forEach(([ly, yTok]) => {
-    h += `<line x1="${X(jX) + noiseR}" y1="${Y(ly)}" x2="${X(jX + 28)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-    h += crnFlowMono(X(jX + 32), Y(ly) + 3.5, 10, yTok, 'start');
+  // 4 required, +1 safety margin (the same margin the file's own labelEnd
+  // calculations already use elsewhere).
+  const gap = 5;
+  const arrowTip = jX + 28;
+  const labelStart = arrowTip + gap / s;
+  const { resumes: [resume1, resume2], labelEnd } = crnFlowLaneResume(labelStart, gap, s, [yTok1, yTok2]);
+  [[y1, yTok1, resume1], [y2, yTok2, resume2]].forEach(([ly, yTok, resumeX]) => {
+    h += `<line x1="${X(jX) + noiseR}" y1="${Y(ly)}" x2="${X(arrowTip)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += crnFlowMono(X(labelStart), Y(ly) + 3.5, 10, yTok, 'start');
+    if (resumeX < labelEnd) { h += `<line x1="${X(resumeX)}" y1="${Y(ly)}" x2="${X(labelEnd)}" y2="${Y(ly)}" stroke="${C.muted}" stroke-width="1.2"/>`; }
   });
 
-  // Mean junction: both lanes' outputs meet and are averaged. Each lane runs on from
-  // its own y label, turns at a shared xJ -- derived from whichever lane's label is
-  // longer, and so both turn at the same x even though the two lanes' labels are
-  // different lengths here (yₙ₊ᵢ outruns yᵢ′, and both outrun yᵢ) -- and enters the
-  // circle separately with its own arrowhead, rather than merging into one bracketed
-  // stub. Both arms average one pair, and so both get the ½ gain on their output arrow.
-  // crnFlowMono lays out each cell at a fixed real width (fs*0.6) added directly onto
-  // the already-scaled x0 it is given and not scaled again, and so the label's own
-  // true right edge in real pixels is X(jX+32) + yCells*0.6*10, which equals
-  // X(jX+32 + yCells*0.6*10) only when s = 1. Dividing that extra width by s first
-  // converts it back into local-coordinate units, and so xJ -- itself passed through
-  // X() below -- lands on the label's real edge at every scale, not only the widest one.
-  const yCells = Math.max(yTok1.length, yTok2.length);
-  // The +1 is a small real-unit safety margin: without it, X(labelEnd) lands exactly
-  // on the label's own true right edge with no slack, and font-hinting rounding can
-  // then tip a glyph's measured edge a hair past the line on some renders.
-  const labelEnd = (jX + 32) + (yCells * 0.6 * 10 + 1) / s, xJ = labelEnd + 10;
+  // Mean junction: both lanes' outputs meet and are averaged, turning at the
+  // shared labelEnd computed above and entering the circle separately with its
+  // own arrowhead, rather than merging into one bracketed stub. Both arms
+  // average one pair, and so both get the ½ gain on their output arrow.
+  const xJ = labelEnd + 10;
   h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
   h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
   h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
@@ -2817,7 +3037,7 @@ function drawAvFlow(p) {
   const f = CI.FUNCS[p.fn];
   drawFlowPair('av-flow', 'av-flow-cap', 'av-flow-arrow',
     (ox, oy, s, second) => avFlowDiagram(ox, oy, s, second, p, f),
-    "u₁, u₂, … are the PRNG's uniform draws on (0, 1); z's are independent standard normals scaled by σₑ; the independent arm spends 2n of them on n pairs of runs of h and averages each pair, whereas the antithetic arm spends n of them twice, once as drawn and once complemented (y<sub>i</sub>′ = h(1 − u<sub>i</sub>)), and averages each pair. A simulation package does the complementing for you by re-seeding the stream and returning 1 − u for every draw.");
+    "u₁, u₂, … are the PRNG's uniform draws on (0, 1); z's are independent standard normals scaled by σₑ; the independent arm spends 2n of them on n pairs of runs of h and averages each pair, whereas the antithetic arm spends n of them twice, once as drawn and once complemented (y<sub>i</sub>′ = h(1 − u<sub>i</sub>)), and averages each pair. A simulation package does the complementing for you by re-seeding the stream and returning 1 − u for every draw. Each arm's n pair means are then averaged, and the cards' interval is on that average.");
 }
 function fnOptions(sel) {
   sel.innerHTML = CI.FUNC_KEYS.map(k => `<option value="${k}">${CI.FUNCS[k].label}</option>`).join('');
@@ -2862,10 +3082,13 @@ function avParamsChanged() {
 // changes; only the rug/interval column's own label (w or z) names the arm.
 function avFigLegendHtml(mode) {
   const rugLabel = mode === 'av' ? 'z (antithetic)' : 'w (independent)';
+  // The rug glyph is a short horizontal mark (‒, a figure dash) rather than a
+  // vertical bar, matching the orientation of the rug ticks it stands for in
+  // drawPairStrip's own strip.
   return `<span style="color:var(--truth)"><span class="lg-s">—</span>h(u) and its mean</span>`
     + `<span style="color:var(--est)"><span class="lg-s">●</span>first of the pair</span>`
     + `<span style="color:var(--est)"><span class="lg-s">○</span>second</span>`
-    + `<span style="color:var(--est)"><span class="lg-s">|</span>pair means ${rugLabel}</span>`
+    + `<span style="color:var(--est)"><span class="lg-s">‒</span>pair means ${rugLabel}</span>`
     + `<span><span class="lg-s lg-wide" style="color:var(--hit)">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`;
 }
 // The rug-and-interval strip shared by drawAvFig and drawAvSeq: one column for the
@@ -2922,9 +3145,16 @@ function drawAvFig(run, p) {
   for (let i = 0; i < m; i++) {
     h += `<line x1="${xP(run.u[i])}" y1="${yP(run.ya[i])}" x2="${secondX(i)}" y2="${secondY(i)}" stroke="${C.pair}" stroke-width="1"/>`;
   }
+  // Painted in two passes -- every hollow dot, then every filled dot -- rather
+  // than pair by pair, so a later pair's hollow dot can never land on top of and
+  // hide an earlier pair's filled one: a coincidence that happens at, e.g., seed
+  // 54321 with sigE = 0, where every dot lies exactly on the h(u) curve, and
+  // switching modes would otherwise appear to turn a hollow dot into a filled one.
+  for (let i = 0; i < m; i++) {
+    h += `<circle cx="${secondX(i)}" cy="${secondY(i)}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+  }
   for (let i = 0; i < m; i++) {
     h += `<circle cx="${xP(run.u[i])}" cy="${yP(run.ya[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
-    h += `<circle cx="${secondX(i)}" cy="${secondY(i)}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
   }
 
   h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
@@ -2936,8 +3166,8 @@ function drawAvFig(run, p) {
   const yLX = 13, yLY = pT + cH / 2;
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
   svgSet($('av-fig'), W, H, h);
-  $('av-fig-leg').innerHTML = avFigLegendHtml(mode)
-    + `<span id="av-fig-note">${run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : ''}</span>`;
+  $('av-fig-leg').innerHTML = avFigLegendHtml(mode);
+  $('av-fig-note').textContent = run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : '';
 }
 // Tab ③'s draw-order panel: the same run's 2n outputs, in the order the stream
 // produced them. It carries no toggle of its own -- it reads AVS.mode, the same
@@ -2945,14 +3175,18 @@ function drawAvFig(run, p) {
 function avSeqTitle(mode) {
   return 'One run, in draw order: the 2n outputs and their pair means – ' + (mode === 'av' ? 'antithetic' : 'independent');
 }
-function avSeqLegendHtml(note) {
+// mode picks the rug/interval strip's own label (z / w), matching avFigLegendHtml's
+// identical item -- this panel draws that same strip via drawPairStrip, and had no
+// legend entry for it until now.
+function avSeqLegendHtml(mode) {
+  const rugLabel = mode === 'av' ? 'z (antithetic)' : 'w (independent)';
   return `<span style="color:${C.est}"><span class="lg-s">●</span>first of a pair</span>`
     + `<span style="color:${C.est}"><span class="lg-s">○</span>second</span>`
     + `<span style="color:${C.pair}"><span class="lg-s">|</span>joins a pair</span>`
-    + `<span style="color:${C.pair}"><span class="lg-s">┄</span>pair means</span>`
+    + `<span style="color:${C.est}"><span class="lg-s">‒</span>pair means ${rugLabel} (strip rug)</span>`
+    + `<span style="color:${C.pair}"><span class="lg-s">┄</span>pair means (path)</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">┄</span>E[h]</span>`
-    + `<span><span class="lg-s lg-wide" style="color:${C.hit}">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`
-    + `<span>${note || ''}</span>`;
+    + `<span><span class="lg-s lg-wide" style="color:${C.hit}">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`;
 }
 function drawAvSeq(run, p) {
   const mode = AVS.mode;
@@ -2989,7 +3223,8 @@ function drawAvSeq(run, p) {
   if (!run) {
     h += `<text x="${pL + cW / 2}" y="${pT + cH / 2}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's outputs in draw order</text>`;
     svgSet($('av-seq'), W, H, h);
-    $('av-seq-leg').innerHTML = avSeqLegendHtml('');
+    $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
+    $('av-seq-note').textContent = '';
     return;
   }
 
@@ -3007,14 +3242,16 @@ function drawAvSeq(run, p) {
     pmPts += (j ? 'L' : 'M') + xm.toFixed(1) + ',' + yP(pairMeans[j]).toFixed(1);
   }
   h += `<path d="${pmPts}" fill="none" stroke="${C.pair}" stroke-width="1.3" stroke-dasharray="3,2.5"/>`;
-  for (let i = 0; i < drawCount; i++) {
-    if (i % 2 === 0) h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`;
-    else h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
-  }
+  // Two passes -- every hollow dot, then every filled dot -- matching drawAvFig's
+  // own fix: no coincidence is possible along one draw-order axis the way it is
+  // between two different x positions in the scatter above, but the same paint
+  // order keeps both panels consistent.
+  for (let i = 1; i < drawCount; i += 2) { h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`; }
+  for (let i = 0; i < drawCount; i += 2) { h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`; }
   [1, n, count].forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
   svgSet($('av-seq'), W, H, h);
-  const note = count > 400 ? ' · first 400 of ' + count + ' dots drawn' : '';
-  $('av-seq-leg').innerHTML = avSeqLegendHtml(note);
+  $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
+  $('av-seq-note').textContent = count > 400 ? ' · first 400 of ' + count + ' dots drawn' : '';
 }
 function avShowStats(run) {
   const d = decFor(Math.min(run.ind.h, run.av.h) || 1);
@@ -3201,30 +3438,42 @@ function cvFlowDiagram(offX, offY, s, isCV, p, f) {
   h += `<text x="${X(180)}" y="${Y(mainLy) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
 
   // Outputs: arrow out of the noise junction, and (control variate only) a second
-  // arrow straight out of the c·(u − 0.5) block, each followed by its value's name.
-  h += `<line x1="${X(180) + noiseR}" y1="${Y(mainLy)}" x2="${X(200)}" y2="${Y(mainLy)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-  h += crnFlowMono(X(204), Y(mainLy) + 3.5, 10, [{ ch: 'y' }], 'start');
+  // arrow straight out of the c·(u − 0.5) block, each followed by its value's
+  // name with an equal 4-real-pixel clearance either side (see the matching
+  // note in avFlowDiagram): both labels still start at the same shared column,
+  // but "y" is short and "c·(u−0.5)" is long, and so each lane's own label ends,
+  // and its own connecting line resumes, at a different point -- not both
+  // waiting on the wider label's own end before either may continue.
+  // 4 required, +1 safety margin (the same margin the file's own labelEnd
+  // calculations already use elsewhere).
+  const gap = 5;
+  const arrowTip = 200;
+  const labelStart = arrowTip + gap / s;
+  h += `<line x1="${X(180) + noiseR}" y1="${Y(mainLy)}" x2="${X(arrowTip)}" y2="${Y(mainLy)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  h += crnFlowMono(X(labelStart), Y(mainLy) + 3.5, 10, [{ ch: 'y' }], 'start');
   if (isCV) {
-    h += `<line x1="${X(164)}" y1="${Y(y2)}" x2="${X(200)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
-    h += crnFlowMono(X(204), Y(y2) + 3.5, 10, crnFlowChars('c·(u−0.5)'), 'start');
+    h += `<line x1="${X(164)}" y1="${Y(y2)}" x2="${X(arrowTip)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    h += crnFlowMono(X(labelStart), Y(y2) + 3.5, 10, crnFlowChars('c·(u−0.5)'), 'start');
   }
 
   if (!isCV) {
-    h += `<line x1="${X(210)}" y1="${Y(yMid)}" x2="${X(240)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+    const resumeY = crnFlowLaneResume(labelStart, gap, s, [[{ ch: 'y' }]]).labelEnd;
+    h += `<line x1="${X(resumeY)}" y1="${Y(yMid)}" x2="${X(240)}" y2="${Y(yMid)}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
     finalLabel(X(244), yMid, crnFlowChars('ȳ = mean of y'), 'plain interval', 380 * s - 244 * s);
     return { h, height };
   }
 
   // Sum junction: the noise-bearing lane's y enters from above with a '+' sign,
   // the c·(u − 0.5) lane's value enters from below with a '−' sign, mirroring the
-  // labeled-input pattern tab ②'s own sum junction uses. Both lanes' labels start
-  // at the same column (X(204)), and so the turn point xJ is derived from
-  // whichever label is longer, exactly as in crnFlowDiagram and avFlowDiagram.
-  const yTok1 = [{ ch: 'y' }], yTok2 = crnFlowChars('c·(u−0.5)');
-  const yCells = Math.max(yTok1.length, yTok2.length);
-  const labelEnd = 204 + (yCells * 0.6 * 10 + 1) / s, xJ = labelEnd + 10;
+  // labeled-input pattern tab ②'s own sum junction uses. Each lane resumes right
+  // after its own label (see above), and the turn point xJ is set by whichever
+  // lane's own resume point is furthest right -- the c·(u−0.5) lane's, always.
+  const { resumes: [resume1, resume2], labelEnd } = crnFlowLaneResume(labelStart, gap, s, [[{ ch: 'y' }], crnFlowChars('c·(u−0.5)')]);
+  const xJ = labelEnd + 10;
+  if (resume1 < labelEnd) { h += `<line x1="${X(resume1)}" y1="${Y(y1)}" x2="${X(labelEnd)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`; }
   h += `<line x1="${X(labelEnd)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(y1)}" stroke="${C.muted}" stroke-width="1.2"/>`;
   h += `<line x1="${X(xJ)}" y1="${Y(y1)}" x2="${X(xJ)}" y2="${Y(yMid) - diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
+  if (resume2 < labelEnd) { h += `<line x1="${X(resume2)}" y1="${Y(y2)}" x2="${X(labelEnd)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`; }
   h += `<line x1="${X(labelEnd)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(y2)}" stroke="${C.muted}" stroke-width="1.2"/>`;
   h += `<line x1="${X(xJ)}" y1="${Y(y2)}" x2="${X(xJ)}" y2="${Y(yMid) + diffR}" stroke="${C.muted}" stroke-width="1.2"${arrow}/>`;
   h += `<circle cx="${X(xJ)}" cy="${Y(yMid)}" r="${diffR}" fill="${C.bg}" stroke="${C.muted}" stroke-width="1.2"/>`;
@@ -3246,7 +3495,7 @@ function drawCvFlow(p) {
   const f = CI.FUNCS[p.fn];
   drawFlowPair('cv-flow', 'cv-flow-cap', 'cv-flow-arrow',
     (ox, oy, s, second) => cvFlowDiagram(ox, oy, s, second, p, f),
-    "u is the PRNG's uniform draw with known mean 0.5; z is a standard normal; both arms use the same n draws, and the control-variate arm subtracts the part of y that u predicts, c·(u − 0.5), whose mean is zero, and so the estimate keeps its mean and loses the variance u accounts for.");
+    "u is the PRNG's uniform draw with known mean 0.5; z is a standard normal; both arms use the same n draws, and the control-variate arm subtracts the part of y that u predicts, c·(u − 0.5), whose mean is zero, and so the estimate keeps its mean and loses the variance u accounts for. Each arm's n values are then averaged, and the cards' interval is on that average.");
 }
 // The control-variate arm recomputed at an arbitrary c (the slider's own value,
 // not necessarily the estimated ĉ): z stays y - c(u - 0.5), and ciMean is the same
@@ -3272,14 +3521,22 @@ function svgIntervalMark(cx, yTop, yBot, yMean, hit) {
            : `<circle cx="${cx}" cy="${yMean}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
   return s;
 }
-function cvFigLegendHtml(note) {
+// Just svgIntervalMark's own mean dot, matching its exact style, for drawCvFig to
+// redraw outside its panels' clip-paths (Task 6r) -- the interval bar clips at
+// the panel edge when the slider pushes it out of the fixed scale, but the dot
+// marking the interval's own mean must stay visible regardless.
+function cvIntervalDot(cx, yMean, hit) {
+  const dotR = 3.5, col = hit ? C.hit : C.miss;
+  return hit ? `<circle cx="${cx}" cy="${yMean}" r="${dotR}" fill="${col}"/>`
+             : `<circle cx="${cx}" cy="${yMean}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
+}
+function cvFigLegendHtml() {
   return `<span style="color:${C.est}"><span class="lg-s">●</span>output y (and input u − 0.5)</span>`
-    + `<span style="color:${C.pair}"><span class="lg-s">▬</span>part of y blamed on its input, c·(u − 0.5)</span>`
+    + `<span style="color:${C.pair}"><span class="lg-s">▬</span>scaled input deviation from its mean, c·(u − 0.5)</span>`
     + `<span style="color:${C.est}"><span class="lg-s">○</span>adjusted value z = y − c·(u − 0.5)</span>`
     + `<span style="color:${C.est}"><span class="lg-s">—</span>ȳ, z̄</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">┄</span>E[h]</span>`
-    + `<span><span class="lg-s lg-wide" style="color:${C.hit}">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`
-    + `<span>${note || ''}</span>`;
+    + `<span><span class="lg-s lg-wide" style="color:${C.hit}">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`;
 }
 // Three stacked panels sharing one draw-order x-axis (pins at xP(i), i = 1..n, the
 // same position in every panel so a reader can follow one draw down the figure):
@@ -3306,14 +3563,26 @@ function drawCvFig(run, p) {
   const lo1 = -0.5 - 0.06, hi1 = 0.5 + 0.06;
   const yP1 = v => y0[0] + panelH - (v - lo1) / (hi1 - lo1) * panelH;
 
+  // Panels 2 and 3 share a y-scale computed once per run, from the run's plain
+  // values, the adjusted values AT THE ESTIMATED ĉ (run.c, not the slider's
+  // current CVS.c), ȳ, z̄(ĉ), E[h], and both intervals -- padded by 35% of that
+  // span on each side, well clear of the "no better than plain" bowl the slider
+  // now reaches. Cached on the run object itself: a slider drag calls this
+  // function again with the same run and must not recompute (let alone rescale
+  // the panel) as c moves away from ĉ; only a fresh run (a new object, with no
+  // cached scale yet) resets it.
   let lo23, hi23, eff;
   if (run) {
+    if (!run._scale23) {
+      const effHat = cvEffective(run, run.c, p.conf);
+      const vals = run.y.concat(effHat.z, [run.plain.mean, effHat.cv.mean, f.mean,
+        run.plain.lo, run.plain.hi, effHat.cv.lo, effHat.cv.hi]);
+      const dMin = Math.min(...vals), dMax = Math.max(...vals);
+      const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.35;
+      run._scale23 = { lo: dMin - pad, hi: dMax + pad };
+    }
+    lo23 = run._scale23.lo; hi23 = run._scale23.hi;
     eff = cvEffective(run, CVS.c, p.conf);
-    const vals = run.y.concat(eff.z, [run.plain.mean, eff.cv.mean, f.mean,
-      run.plain.lo, run.plain.hi, eff.cv.lo, eff.cv.hi]);
-    const dMin = Math.min(...vals), dMax = Math.max(...vals);
-    const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.06;
-    lo23 = dMin - pad; hi23 = dMax + pad;
   } else {
     const cv = fnCurve(f); lo23 = cv.lo; hi23 = cv.hi;
   }
@@ -3322,33 +3591,42 @@ function drawCvFig(run, p) {
 
   let h = '';
   [0, 1, 2].forEach(k => { h += `<rect x="${pL}" y="${y0[k]}" width="${cW}" height="${panelH}" fill="${C.bg}" rx="3"/>`; });
+  // Panels 2 and 3 each get a clip-path spanning their own row, main plot plus
+  // strip, so a pin, a blamed-bar segment, or an interval bar that the slider
+  // has pushed outside the fixed scale is clipped at the panel's own edge --
+  // reading as being cut off, not as the whole panel silently rescaling -- while
+  // everything already inside (which is everything not tied to the slider) is
+  // unaffected. The interval mark's own mean dot is drawn a second time, after
+  // and outside both clips, so it always stays visible even when its bar clips.
+  h += `<defs><clipPath id="cv-panel2-clip"><rect x="${pL}" y="${y0[1]}" width="${cW + pR}" height="${panelH}"/></clipPath>` +
+    `<clipPath id="cv-panel3-clip"><rect x="${pL}" y="${y0[2]}" width="${cW + pR}" height="${panelH}"/></clipPath></defs>`;
 
-  // Panel 1: inputs. The zero line is u = 0.5, the known mean, labeled as such.
+  // Panel 1: inputs. The zero line is u = 0.5, the known mean; its own label
+  // sits in panel 1's strip column (the one panels 2 and 3 use for their
+  // intervals, empty here) rather than crowding the plot area, where it read
+  // poorly against the dense pins. Nothing else is drawn in this strip.
   h += `<line x1="${pL}" y1="${yP1(0)}" x2="${pL + cW}" y2="${yP1(0)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  h += `<text x="${pL + cW - 3}" y="${yP1(0) - 4}" text-anchor="end" fill="${C.truth}" font-size="9" font-family="${FF_SANS}">known mean 0.5</text>`;
+  h += `<text x="${stripX0}" y="${yP1(0) + 3}" text-anchor="start" fill="${C.truth}" font-size="9" font-family="${FF_SANS}">known mean 0.5</text>`;
   [-0.5, 0, 0.5].forEach(v => { h += `<text x="${pL - 5}" y="${yP1(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${v.toFixed(1)}</text>`; });
-  h += `<text x="${pL + cW / 2}" y="${y0[0] - 2}" text-anchor="middle" fill="${C.accent}" font-size="9" font-weight="700" font-family="${FF_SANS}" text-transform="uppercase">Inputs</text>`;
+  // Falls back to the shorter title when the long one would not fit the panel's
+  // own width (checked at 390px), keeping the y-axis label "u - 0.5" as is.
+  const panelTitle = 'Inputs relative to the known mean'.length * 9 * 0.447 <= cW - 8
+    ? 'Inputs relative to the known mean' : 'Input deviations from 0.5';
+  h += `<text x="${pL + cW / 2}" y="${y0[0] - 2}" text-anchor="middle" fill="${C.accent}" font-size="9" font-weight="700" font-family="${FF_SANS}" text-transform="uppercase">${panelTitle}</text>`;
 
-  // Panel 2: outputs. ȳ is drawn only once a run exists; E[h] always spans both
+  // Panel 2: outputs. ȳ's own solid line is drawn only once a run exists (its
+  // value is already in the "Plain mean" card beside the figure, and the dense
+  // pins drew over its own text label, since removed); E[h] always spans both
   // the panel and its strip, exactly as drawAvFig's own E[h] line does.
   if (run) {
-    h += `<line x1="${pL}" y1="${yP2(run.plain.mean)}" x2="${pL + cW}" y2="${yP2(run.plain.mean)}" stroke="${C.est}" stroke-width="1.6"/>`;
-    h += `<text x="${pL + cW - 3}" y="${yP2(run.plain.mean) - 4}" text-anchor="end" fill="${C.est}" font-size="9" font-weight="700" font-family="${FF_MONO}">ȳ = ${run.plain.mean.toFixed(4)}</text>`;
+    h += `<line x1="${pL}" y1="${yP2(run.plain.mean)}" x2="${stripX0 + stripW}" y2="${yP2(run.plain.mean)}" stroke="${C.est}" stroke-width="1.6"/>`;
   }
   h += `<line x1="${pL}" y1="${yP2(f.mean)}" x2="${stripX0 + stripW}" y2="${yP2(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  h += `<text x="${pL + 3}" y="${yP2(f.mean) + (Math.abs(run ? yP2(f.mean) - yP2(run.plain.mean) : 99) < 12 ? 13 : -4)}" text-anchor="start" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
   const decY = decFor(hi23 - lo23);
   for (let i = 0; i <= 2; i++) { const v = lo23 + (hi23 - lo23) * i / 2; h += `<text x="${pL - 5}" y="${yP2(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${v.toFixed(decY)}</text>`; }
   h += `<text x="${pL + cW / 2}" y="${y0[1] - 2}" text-anchor="middle" fill="${C.accent}" font-size="9" font-weight="700" font-family="${FF_SANS}" text-transform="uppercase">Outputs</text>`;
   h += `<text x="${stripX0 + stripW / 2}" y="${y0[1] - 2}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">plain</text>`;
 
-  // Panel 3: adjusted. z̄ tracks the slider's current c, not just the estimated ĉ.
-  if (run) {
-    h += `<line x1="${pL}" y1="${yP3(eff.cv.mean)}" x2="${pL + cW}" y2="${yP3(eff.cv.mean)}" stroke="${C.est}" stroke-width="1.6"/>`;
-    h += `<text x="${pL + cW - 3}" y="${yP3(eff.cv.mean) - 4}" text-anchor="end" fill="${C.est}" font-size="9" font-weight="700" font-family="${FF_MONO}">z̄ = ${eff.cv.mean.toFixed(4)}</text>`;
-  }
-  h += `<line x1="${pL}" y1="${yP3(f.mean)}" x2="${stripX0 + stripW}" y2="${yP3(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  for (let i = 0; i <= 2; i++) { const v = lo23 + (hi23 - lo23) * i / 2; h += `<text x="${pL - 5}" y="${yP3(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${v.toFixed(decY)}</text>`; }
   h += `<text x="${pL + cW / 2}" y="${y0[2] - 2}" text-anchor="middle" fill="${C.accent}" font-size="9" font-weight="700" font-family="${FF_SANS}" text-transform="uppercase">Adjusted</text>`;
   const cvLabelFS = Math.min(9, stripW / ('control-variate'.length * 0.6));
   h += `<text x="${stripX0 + stripW / 2}" y="${y0[2] - 2}" text-anchor="middle" fill="${C.muted}" font-size="${cvLabelFS}" font-family="${FF_MONO}">control-variate</text>`;
@@ -3356,19 +3634,35 @@ function drawCvFig(run, p) {
   let note = '';
   if (run) {
     const m = Math.min(n, 200), r = n > 100 ? 2 : 3;
+    // Panel 3's own z̄ line tracks the slider's current c, not just ĉ, and so --
+    // unlike panel 2's ȳ, which never depends on c -- it belongs inside panel 3's
+    // own clip along with its pins and interval. Its own text label was removed
+    // for the same reason as panel 2's ȳ (the value is already in the
+    // "Control-variate mean" card, and the pins drew over the text).
+    let h3 = `<line x1="${pL}" y1="${yP3(eff.cv.mean)}" x2="${stripX0 + stripW}" y2="${yP3(eff.cv.mean)}" stroke="${C.est}" stroke-width="1.6"/>`;
+    h += `<line x1="${pL}" y1="${yP3(f.mean)}" x2="${stripX0 + stripW}" y2="${yP3(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
+    for (let i = 0; i <= 2; i++) { const v = lo23 + (hi23 - lo23) * i / 2; h += `<text x="${pL - 5}" y="${yP3(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${v.toFixed(decY)}</text>`; }
+
+    let h2 = '';
     for (let i = 0; i < m; i++) {
       const x = xP(i + 1), uy = run.u[i] - 0.5, blamed = CVS.c * uy;
-      h += `<line x1="${x}" y1="${yP1(0)}" x2="${x}" y2="${yP1(uy)}" stroke="${C.muted}" stroke-width="1"/>`;
+      h += `<line x1="${x}" y1="${yP1(0)}" x2="${x}" y2="${yP1(uy)}" stroke="${C.muted}" stroke-width="1.5"/>`;
       h += `<circle cx="${x}" cy="${yP1(uy)}" r="${r}" fill="${C.est}"/>`;
-      h += `<line x1="${x}" y1="${yP2(run.plain.mean)}" x2="${x}" y2="${yP2(run.y[i])}" stroke="${C.muted}" stroke-width="1"/>`;
-      h += `<line x1="${x}" y1="${yP2(run.plain.mean)}" x2="${x}" y2="${yP2(run.plain.mean + blamed)}" stroke="${C.pair}" stroke-width="2.5"/>`;
-      h += `<circle cx="${x}" cy="${yP2(run.y[i])}" r="${r}" fill="${C.est}"/>`;
-      h += `<line x1="${x}" y1="${yP3(eff.cv.mean)}" x2="${x}" y2="${yP3(eff.z[i])}" stroke="${C.muted}" stroke-width="1"/>`;
-      h += `<circle cx="${x}" cy="${yP3(eff.z[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+      h2 += `<line x1="${x}" y1="${yP2(run.plain.mean)}" x2="${x}" y2="${yP2(run.y[i])}" stroke="${C.muted}" stroke-width="1"/>`;
+      // The blamed portion is a 3px bar offset 2.5px right of the stem (same
+      // y-extent, from the ȳ baseline) rather than drawn on top of it, and so the
+      // input's own share and the output's full height are both visible at once.
+      h2 += `<line x1="${x + 2.5}" y1="${yP2(run.plain.mean)}" x2="${x + 2.5}" y2="${yP2(run.plain.mean + blamed)}" stroke="${C.pair}" stroke-width="3"/>`;
+      h2 += `<circle cx="${x}" cy="${yP2(run.y[i])}" r="${r}" fill="${C.est}"/>`;
+      h3 += `<line x1="${x}" y1="${yP3(eff.cv.mean)}" x2="${x}" y2="${yP3(eff.z[i])}" stroke="${C.muted}" stroke-width="1"/>`;
+      h3 += `<circle cx="${x}" cy="${yP3(eff.z[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
     }
     note = n > 200 ? ' · first 200 of ' + n + ' draws drawn' : '';
-    h += svgIntervalMark(barX, yP2(run.plain.hi), yP2(run.plain.lo), yP2(run.plain.mean), run.hitPlain);
-    h += svgIntervalMark(barX, yP3(eff.cv.hi), yP3(eff.cv.lo), yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
+    h2 += svgIntervalMark(barX, yP2(run.plain.hi), yP2(run.plain.lo), yP2(run.plain.mean), run.hitPlain);
+    h3 += svgIntervalMark(barX, yP3(eff.cv.hi), yP3(eff.cv.lo), yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
+    h += `<g clip-path="url(#cv-panel2-clip)">${h2}</g><g clip-path="url(#cv-panel3-clip)">${h3}</g>`;
+    h += cvIntervalDot(barX, yP2(run.plain.mean), run.hitPlain);
+    h += cvIntervalDot(barX, yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
   } else {
     h += `<text x="${pL + cW / 2}" y="${y0[1] + panelH - 10}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's draws</text>`;
   }
@@ -3381,7 +3675,8 @@ function drawCvFig(run, p) {
     h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">${lbl}</text>`;
   });
   svgSet($('cv-fig'), W, H, h);
-  $('cv-fig-leg').innerHTML = cvFigLegendHtml(note);
+  $('cv-fig-leg').innerHTML = cvFigLegendHtml();
+  $('cv-fig-note').textContent = note;
 }
 function cvShowStats(run) {
   const eff = cvEffective(run, CVS.c, CVS.lastRunP.conf);
@@ -3400,22 +3695,61 @@ function cvShowStats(run) {
 // estimated c* card (cv-s-c stays run.c always).
 function cvCDrag() {
   const run = CVS.lastRunObj; if (!run) return;
-  CVS.c = +$('cv-c').value;
+  const inp = $('cv-c');
+  let c = +inp.value;
+  // Soft snap: within 3.5% of the slider's own range of ĉ, or of 0, jump to that
+  // value exactly, and so landing on either by feel does not require hitting one
+  // exact step. ĉ is checked first and wins when both bands overlap (ĉ itself
+  // close to 0), because the slider exists to explore away from the estimate.
+  const range = +inp.max - +inp.min, band = 0.035 * range;
+  if (Math.abs(c - run.c) <= band) { c = run.c; inp.value = String(c); }
+  else if (Math.abs(c) <= band) { c = 0; inp.value = String(c); }
+  CVS.c = c;
   $('cv-c-val').textContent = 'c = ' + fmt(CVS.c, 2);
   cvShowStats(run);
   drawCvFig(run, CVS.lastRunP);
 }
-// The slider's own range depends on the run's estimated ĉ, widened asymmetrically
-// (-0.5ĉ to 2.5ĉ, applied to the signed estimate and then sorted -- for a negative
-// ĉ this still puts the wrong-sign, over-corrected end at -0.5ĉ, now the larger of
-// the two) so both under- and over-correcting are reachable either side of ĉ
-// regardless of its sign, and a small fixed range when ĉ is essentially zero (the
-// bowl model, say, whose true slope is exactly zero).
+// Var(z) = Var(y) - 2c*Cov(u,y) + c^2*Var(u) is a parabola in c, opening upward
+// (Var(u) > 0), with its minimum at c* and returning to Var(y) -- the plain
+// estimate's own variance -- at c = 0 and c = 2c*: the "no better than plain"
+// bowl the task asks the slider to cover. [-2c*, 4c*] is symmetric about c*
+// (radius 3c* on each side) and so comfortably contains [0, 2c*] with room past
+// both ends to explore the worse-than-plain zone beyond it; sorting the two
+// computed endpoints handles a negative ĉ, and a small fixed range covers ĉ
+// essentially zero (the bowl model, say, whose true slope is exactly zero).
 function cvSetSliderRange(c) {
   const inp = $('cv-c');
   if (Math.abs(c) < 1e-6) { inp.min = '-1'; inp.max = '1'; return; }
-  const a = -0.5 * c, b = 2.5 * c;
+  const a = -2 * c, b = 4 * c;
   inp.min = String(Math.min(a, b)); inp.max = String(Math.max(a, b));
+}
+// Ticks at 0, ĉ, and 2ĉ -- the bowl's own zero-crossings plus its vertex -- drawn
+// as our own absolutely-positioned marks under the track rather than a
+// <datalist> (whose native tick rendering, and whether the thumb even snaps to
+// it, differs across browsers). Position is the track fraction (v - min) /
+// (max - min), mapped through calc((100% - 26px) * f + 13px) to account for the
+// 26px thumb's own half-width at each end of the track (see the #cv-c thumb
+// rule), so a mark lines up with the thumb's actual center at that value rather
+// than with the track's raw edge-to-edge fraction.
+function cvRenderSliderTicks(c) {
+  const inp = $('cv-c'), min = +inp.min, max = +inp.max, span = max - min || 1;
+  const at = v => `calc((100% - 26px) * ${((v - min) / span).toFixed(4)} + 13px)`;
+  let h = `<div class="cv-slider-tick" style="left:${at(0)}"></div>`;
+  h += `<div class="cv-slider-tick" style="left:${at(2 * c)}"></div>`;
+  h += `<div class="cv-slider-tick cv-tick-c" style="left:${at(c)}"></div>`;
+  h += `<div class="cv-slider-tick-lbl cv-tick-lbl-muted" id="cv-tick-lbl-0" style="left:${at(0)}">0</div>`;
+  h += `<div class="cv-slider-tick-lbl" id="cv-tick-lbl-c" style="left:${at(c)}">c<sup>*</sup></div>`;
+  h += `<div class="cv-slider-tick-lbl cv-tick-lbl-muted" id="cv-tick-lbl-2c" style="left:${at(2 * c)}">2c<sup>*</sup></div>`;
+  $('cv-slider-ticks').innerHTML = h;
+  // ĉ close to 0 (only the |ĉ| < 1e-6 fallback range can actually produce this,
+  // since 0/ĉ/2ĉ sit at fixed 1/3, 1/2, 2/3 track fractions otherwise, regardless
+  // of ĉ's own magnitude) crowds the "0" and "c*" labels into the same space;
+  // measuring the two rendered boxes directly, rather than estimating their
+  // width, catches that regardless of exactly how narrow it gets. The "0" tick
+  // mark itself stays -- only its label is dropped.
+  const lbl0 = $('cv-tick-lbl-0'), lblC = $('cv-tick-lbl-c');
+  const r0 = lbl0.getBoundingClientRect(), rC = lblC.getBoundingClientRect();
+  if (r0.left < rC.right && rC.left < r0.right) { lbl0.remove(); }
 }
 function cvRecord(run, p) {
   const k = cvKey(p);
@@ -3430,8 +3764,9 @@ function cvSnapSlider(run) {
   cvSetSliderRange(run.c);
   $('cv-c').value = String(run.c);
   $('cv-c').disabled = false;
+  cvRenderSliderTicks(run.c);
   $('cv-c-val').textContent = 'c = ' + fmt(run.c, 2);
-  $('cv-c-star').textContent = '(c* = ' + fmt(run.c, 2) + ')';
+  $('cv-c-star').innerHTML = '(c<sup>*</sup> = ' + fmt(run.c, 2) + ')';
 }
 function runCv() {
   const seed = readSeed('cv'); if (seed === null) return;
@@ -3461,7 +3796,7 @@ function clearCv() {
   CVS.plain = []; CVS.cv = []; CVS.last = null; CVS.lastRunObj = null; CVS.lastRunP = null; lastRun.cv = null; CVS.c = 0;
   ['cv-s-mp', 'cv-s-mc', 'cv-s-hp', 'cv-s-hc', 'cv-s-c', 'cv-s-r2'].forEach(id => { $(id).textContent = '—'; });
   $('cv-s-hp-df').textContent = 'df —'; $('cv-s-hc-df').textContent = 'df —';
-  $('cv-c').disabled = true; $('cv-c-val').textContent = 'c = —'; $('cv-c-star').textContent = '';
+  $('cv-c').disabled = true; $('cv-c-val').textContent = 'c = —'; $('cv-c-star').textContent = ''; $('cv-slider-ticks').innerHTML = '';
   const p = cvParams(); if (p) drawCvFig(null, p);
   seedMsg('cv', '', false); renderCvHist();
 }
