@@ -124,11 +124,21 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* A label never ends one line while its field starts the next. */
 .ctrl-pair { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 /* Below the width where the four parameter pairs fit on one line, they form a 2×2 grid
-   instead of wrapping ragged. Measured at implementation: the row wraps at 804px and
-   stays on one line at 805px and above. The grid kicks in at 51em (816px), just above
-   that threshold; the em unit tracks the browser's default font size like the
-   tab-strip breakpoint does. */
-@media (max-width: 51em) {
+   instead of wrapping ragged. Measured at implementation (before the Task 6s σₑ
+   sliders): the row wraps at 804px and stays on one line at 805px and above.
+   Task 6s widened tab ③'s and tab ④'s own σₑ pair into a slider-carrying
+   ctrl-pair-wide, which needs more room: tab ③'s row (model, σₑ, n, confidence)
+   wraps at 870px and stays on one line at 871px; tab ④'s row (model, n,
+   confidence, σₑ) wraps at 889px and stays on one line at 890px. Tab ②'s own row
+   (two models, shift, σₑ) never reaches one line at all, even at the widget's own
+   984px content-width ceiling (it would need roughly 1040px): above this
+   breakpoint it falls back to a clean two-line split instead (the three narrow
+   pairs on one line, the wide σₑ pair dropping to its own full-width line below
+   them), which is why tab ③'s and tab ④'s one-line thresholds, not tab ②'s, set
+   this shared value. The grid kicks in at 57em (912px), just above the larger of
+   the two reachable thresholds (tab ④'s 890px); the em unit tracks the browser's
+   default font size like the tab-strip breakpoint does. */
+@media (max-width: 57em) {
   .ctrl-row.par-row { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 8px 22px; }
   /* At the very narrow end (~390px), the two columns' natural widths no longer both fit;
      letting the label text wrap keeps the control beside it instead of overflowing. */
@@ -369,39 +379,59 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 #cv-c-val { min-width: 6em; }
 #cv-c-star { min-width: 8em; }
 /* Tab 4's own c-slider row wraps rather than overflowing on a narrow card: the
-   label stays put, the slider (.cv-slider-wrap) is the one flexible child and
-   may shrink all the way to min-width:0, and the readout is a single
-   never-wrapping unit that drops to its own line under the track once the row
-   runs out of width for it, rather than running off the card's own edge. This
-   overrides .ctrl-pair's own nowrap for this one row only. */
+   label stays put, the slider (.rs-wrap) is the one flexible child and may
+   shrink all the way to min-width:0, and the readout is a single never-wrapping
+   unit that drops to its own line under the track once the row runs out of
+   width for it, rather than running off the card's own edge. This overrides
+   .ctrl-pair's own nowrap for this one row only. */
 /* flex: 1 1 auto (as a flex item of .seq-hd, itself a flex row) gives this row
    its parent's own available width to grow into; without it, .ctrl-pair's
-   inline-flex sizing is shrink-to-fit, which leaves .cv-slider-wrap's own
-   flex-grow nothing to grow into and wraps the readout even at a wide card. */
+   inline-flex sizing is shrink-to-fit, which leaves .rs-wrap's own flex-grow
+   nothing to grow into and wraps the readout even at a wide card. */
 .cv-c-row { flex: 1 1 auto; flex-wrap: wrap; white-space: normal; }
 .cv-c-readout { white-space: nowrap; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
-/* The wrapper, not the bare <input>, is the flex item that grows: the tick
-   overlay lives beside the input inside this same wrapper, and needs to track
-   the input's own rendered width exactly, which #cv-c's own width:100% below
-   guarantees regardless of how much space the row actually gives this child. */
-.cv-slider-wrap { position: relative; vertical-align: middle; flex: 1 1 160px; min-width: 0; }
-.cv-slider-wrap input[type=range] { display: block; width: 100%; }
+/* ── Shared range-slider pieces (Task 6s) ──────────────────────────────────
+   Originally the c slider alone (Task 6r, then named .cv-slider-*); generalized
+   so the three "own noise σₑ" sliders on tabs ②–④ reuse the same wrapper and
+   thumb CSS rather than each carrying a copy. The tick overlay itself
+   (.rs-ticks, .rs-tick, .rs-tick-lbl, and the renderSliderTicks JS renderer
+   below) stays the c slider's own: Ted's ruling in fix round 3 removed the
+   tick and the soft snap from the three σₑ sliders, which now carry no visible
+   mark of any kind and just track the pointer from 0. .rs-wrap is the
+   positioned wrapper an input sits in; it carries no width of its own because
+   the two kinds of slider that use it size differently (the c slider grows to
+   fill its row, the σₑ sliders are a fixed width), and each gets its own
+   sizing via a modifier class below. */
+.rs-wrap { position: relative; vertical-align: middle; }
+/* The wrapper, not the bare <input>, is the flex item that grows or is given a
+   fixed width (see the two modifier classes below); the input's own
+   width:100% keeps it filling whatever width the wrapper ends up with,
+   including the c slider's own tick overlay, which lives beside the input in
+   this same wrapper and needs to track the input's own rendered width
+   exactly. */
+.rs-wrap input[type=range] { display: block; width: 100%; }
+/* The c slider grows to fill its row (Task 6r's own sizing, unchanged). */
+.rs-wrap-grow { flex: 1 1 160px; min-width: 0; }
+/* The three σₑ sliders instead take a fixed width, like #is-theta on tab ⑤:
+   140px, capped at 45vw so a narrow phone's own edge is never reached. */
+.rs-wrap-fixed { width: 140px; max-width: 45vw; }
 /* Thumb pinned to 26px in both engines so the tick overlay's own calc((100% -
    26px) * f + 13px) -- accounting for the thumb's own half-width at the track's
    ends -- matches the thumb actually drawn, in every browser, not just whichever
    one happens to default near 26px already. Also clears the 24px touch target
-   floor with room to spare. */
-#cv-c::-webkit-slider-thumb { width: 26px; height: 26px; }
-#cv-c::-moz-range-thumb { width: 26px; height: 26px; border: none; }
+   floor with room to spare. Applied by class, not by #cv-c alone, and so the
+   σₑ sliders get the identical thumb. */
+.rs-input::-webkit-slider-thumb { width: 26px; height: 26px; }
+.rs-input::-moz-range-thumb { width: 26px; height: 26px; border: none; }
 /* The tick row sits directly under the track, in the same positioned wrapper as
    the input so each tick's left offset is relative to the track's own rendered
    width rather than the page or the row. Ticks carry pointer-events:none so
    they never intercept a drag meant for the input underneath. */
-.cv-slider-ticks { position: relative; height: 16px; pointer-events: none; }
-.cv-slider-tick { position: absolute; top: 0; width: 2px; height: 8px; background: var(--muted); transform: translateX(-1px); }
-.cv-slider-tick.cv-tick-c { background: var(--accent); width: 2px; height: 8px; }
-.cv-slider-tick-lbl { position: absolute; top: 8px; font-size: .66rem; font-family: 'IBM Plex Mono', monospace; color: var(--accent); transform: translateX(-50%); white-space: nowrap; }
-.cv-slider-tick-lbl.cv-tick-lbl-muted { color: var(--muted); }
+.rs-ticks { position: relative; height: 16px; pointer-events: none; }
+.rs-tick { position: absolute; top: 0; width: 2px; height: 8px; background: var(--muted); transform: translateX(-1px); }
+.rs-tick.rs-tick-acc { background: var(--accent); width: 2px; height: 8px; }
+.rs-tick-lbl { position: absolute; top: 8px; font-size: .66rem; font-family: 'IBM Plex Mono', monospace; color: var(--accent); transform: translateX(-50%); white-space: nowrap; }
+.rs-tick-lbl.rs-tick-lbl-muted { color: var(--muted); }
 /* A superscript asterisk (c-sup-*) must not inflate the line box it sits in --
    the card row and the slider row are both height-sensitive (see the note above
    on #cv-c-val/#cv-c-star) -- so its own line-height is zeroed the same way
@@ -543,7 +573,13 @@ svg.fig { display: block; width: 100%; height: auto; }
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-shift"><span class="tip" tabindex="0" data-tip="Added to every output of system 2 so that two systems built from the same model can still differ by a known amount. The true difference δ = E[h₂] + shift − E[h₁] is what the intervals try to capture.">Shift added to system 2</span></label><input class="par-inp" id="crn-shift" type="text" inputmode="decimal" value="0.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
-      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-sige"><span class="tip" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied.">Own noise σ<sub>e</sub></span></label><input class="par-inp" id="crn-sige" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="crn-sige"><span class="tip" id="crn-sige-lbl" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <span class="rs-wrap rs-wrap-fixed">
+          <input type="range" id="crn-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0.1" aria-labelledby="crn-sige-lbl" oninput="crnSigeDrag()">
+        </span>
+        <input class="par-inp" id="crn-sige" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()">
+      </span>
       <span class="seed-msg" id="crn-par-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="ctrl-row">
@@ -644,7 +680,13 @@ svg.fig { display: block; width: 100%; height: auto; }
         <label class="ctrl-lbl" for="av-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one uniform random number u. The first three rise or fall steadily in u; the last one does not, and on it antithetic pairing does nothing.">Model h(u)</span></label>
         <select id="av-fn" onchange="avParamsChanged()"></select>
       </span>
-      <span class="ctrl-pair"><label class="ctrl-lbl" for="av-sige"><span class="tip" tabindex="0" data-tip="Noise added to every output, independent of the input and of its pair partner. Pairing cancels only the part of the variance that comes through u; raise the noise, and the antithetic advantage fades.">Own noise σ<sub>e</sub></span></label><input class="par-inp" id="av-sige" type="text" inputmode="decimal" value="0" autocomplete="off" spellcheck="false" aria-describedby="av-par-msg" onchange="avParamsChanged()"></span>
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="av-sige"><span class="tip" id="av-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input and of its pair partner. Pairing cancels only the part of the variance that comes through u; raise the noise, and the antithetic advantage fades. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <span class="rs-wrap rs-wrap-fixed">
+          <input type="range" id="av-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0" aria-labelledby="av-sige-lbl" oninput="avSigeDrag()">
+        </span>
+        <input class="par-inp" id="av-sige" type="text" inputmode="decimal" value="0" autocomplete="off" spellcheck="false" aria-describedby="av-par-msg" onchange="avParamsChanged()">
+      </span>
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="av-n">Pairs per run n</label>
         <select id="av-n" onchange="avParamsChanged()">
@@ -757,7 +799,13 @@ svg.fig { display: block; width: 100%; height: auto; }
           <option value="0.9">90%</option><option value="0.8">80%</option>
         </select>
       </span>
-      <span class="ctrl-pair"><label class="ctrl-lbl" for="cv-sige"><span class="tip" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and r² falls.">Own noise σ<sub>e</sub></span></label><input class="par-inp" id="cv-sige" type="text" inputmode="decimal" value="0" autocomplete="off" spellcheck="false" aria-describedby="cv-par-msg" onchange="cvParamsChanged()"></span>
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="cv-sige"><span class="tip" id="cv-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and r² falls. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; c snaps to the new estimate; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <span class="rs-wrap rs-wrap-fixed">
+          <input type="range" id="cv-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0" aria-labelledby="cv-sige-lbl" oninput="cvSigeDrag()">
+        </span>
+        <input class="par-inp" id="cv-sige" type="text" inputmode="decimal" value="0" autocomplete="off" spellcheck="false" aria-describedby="cv-par-msg" onchange="cvParamsChanged()">
+      </span>
       <span class="seed-msg" id="cv-par-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="ctrl-row">
@@ -782,9 +830,9 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="seq-hd" style="margin-bottom:9px">
           <span class="ctrl-pair cv-c-row">
             <label class="ctrl-lbl" for="cv-c"><span class="tip" tabindex="0" data-tip="The coefficient on the input's deviation. Each run snaps it to the estimated c*, the slope of y on u; drag it to see too little or too much correction. Every c leaves the mean alone, and so the interval stays valid at any setting. At c = 0 and at c = 2c*, the adjusted values have exactly the plain variance; between them the interval is narrower, and beyond them it is wider.">c</span></label>
-            <span class="cv-slider-wrap">
-              <input type="range" id="cv-c" min="-1" max="1" step="0.01" value="0" oninput="cvCDrag()" disabled aria-describedby="cv-c-val">
-              <div class="cv-slider-ticks" id="cv-slider-ticks" aria-hidden="true"></div>
+            <span class="rs-wrap rs-wrap-grow">
+              <input type="range" id="cv-c" class="rs-input" min="-1" max="1" step="0.01" value="0" oninput="cvCDrag()" disabled aria-describedby="cv-c-val">
+              <div class="rs-ticks" id="cv-slider-ticks" aria-hidden="true"></div>
             </span>
             <span class="cv-c-readout">
               <span class="rng-val" id="cv-c-val">c = —</span>
@@ -1775,6 +1823,20 @@ function svgSet(el, w, h, inner) {
   el.setAttribute('viewBox', `0 0 ${w} ${h}`);
   el.innerHTML = inner;
 }
+// Sets a .fig-note's text, substituting a non-breaking space for an empty
+// string (fix round 1). .fig-note's reserved-height comment already explains
+// why min-height is pinned to the same 1.35 line-height as real text: an
+// *empty* element renders that min-height as a bare box with no line box at
+// all, while any real inline content (even a single character) renders an
+// actual line box built from the font's own metrics, and the two round to a
+// different sub-pixel height (measured: 0.0078125px, 1/128 CSS px, regardless
+// of which characters the text holds). A non-breaking space is real inline
+// content too, and so using it in place of '' puts the "no note" state through
+// the same line-box path as every other state, and the two round identically.
+// The note keeps growing normally when real text wraps to a second line
+// (confirmed: tab ③'s longest combined note, truncation text plus a clip
+// count, does wrap at 390px, and must keep doing so).
+function setFigNote(id, text) { $(id).textContent = text || ' '; }
 // A numeric parameter field: parses, clamps to [min, max], writes back what was
 // used, and reports through the row's status span. Returns null when unusable.
 function readNum(id, msgId, min, max, what) {
@@ -1819,6 +1881,65 @@ function decimalSpin(id, min, onchange, step) {
     inp.value = String(next); onchange();
   };
 }
+
+// ── Shared range-slider ticks (Task 6s, generalized from Task 6r's c slider) ──
+// Ticks at arbitrary marked values, drawn as our own absolutely-positioned marks
+// under the track rather than a <datalist> (whose native tick rendering, and
+// whether the thumb even snaps to it, differs across browsers). Position is the
+// track fraction (v - min) / (max - min), mapped through calc((100% - 26px) * f
+// + 13px) to account for the 26px thumb's own half-width at each end of the
+// track, and so a mark lines up with the thumb's actual center at that value
+// rather than with the track's raw edge-to-edge fraction. `ticks` is an array of
+// { v, label, accent }; a muted (non-accent) label is dropped when it overlaps
+// an accent label, but its mark stays. Only the c slider (tab ④) uses this now
+// (fix round 3, Ted's ruling): the three σₑ sliders lost their own ticks and
+// snap, and so this is no longer "shared" in the plural sense the name still
+// implies, but the name stays because nothing else calls it and a rename would
+// touch every c-slider call site for no functional reason.
+function renderSliderTicks(inputId, ticksId, ticks) {
+  const inp = $(inputId), min = +inp.min, max = +inp.max, span = max - min || 1;
+  const at = v => `calc((100% - 26px) * ${((v - min) / span).toFixed(4)} + 13px)`;
+  let h = '';
+  ticks.forEach(t => { h += `<div class="rs-tick${t.accent ? ' rs-tick-acc' : ''}" style="left:${at(t.v)}"></div>`; });
+  ticks.forEach((t, i) => {
+    h += `<div class="rs-tick-lbl${t.accent ? '' : ' rs-tick-lbl-muted'}" id="${ticksId}-lbl-${i}" style="left:${at(t.v)}">${t.label}</div>`;
+  });
+  $(ticksId).innerHTML = h;
+  const items = ticks.map((t, i) => ({ t: t, el: $(ticksId + '-lbl-' + i) }));
+  items.forEach(it => { if (it.el) it.rect = it.el.getBoundingClientRect(); });
+  items.forEach(it => {
+    if (!it.el || it.t.accent) return;
+    const collides = items.some(o => o !== it && o.el && o.t.accent && o.rect.left < it.rect.right && it.rect.left < o.rect.right);
+    if (collides) it.el.remove();
+  });
+}
+// The "own noise σₑ" slider's own range and step, internal only (fix round 3:
+// the slider itself carries no tick and no label naming this quantity to the
+// reader): 0 to twice the model's own standard deviation (the larger of the
+// two models' on tab ②), computed from the exact moments in funcVar. The step
+// coarsens as the range widens so a single step is never imperceptible on a
+// quiet model like the bowl (own standard deviation ≈ 0.0745: max ≈ 0.149,
+// step 0.001) nor needlessly fine on a noisy one (exp(u), max ≈ 3.44, step 0.01).
+function sigESliderRange(sigmaHs) {
+  const sh = Math.max.apply(null, sigmaHs), max = 2 * sh;
+  const step = max >= 0.5 ? 0.01 : max >= 0.2 ? 0.005 : 0.001;
+  return { max: max, step: step };
+}
+// The drag path for the three σₑ sliders (fix round 3: no tick, no soft snap
+// — the left edge is 0 and the slider otherwise just tracks the pointer). Writes
+// the slider's own current value into the paired numeric field and hands off
+// to the tab's own ParamsChanged function, which re-syncs the slider from the
+// field and re-evaluates the last run at the same seed if σₑ actually changed.
+// The `true` argument tells …ParamsChanged that this call came from a drag:
+// the history chart never depends on σₑ, and so a drag skips re-rendering it
+// (measured at each tab's own largest n; see the Task 6s report for the
+// numbers). A frame this cheap needs no requestAnimationFrame coalescing on
+// top of that.
+function sigeDrag(tab, changedFn) {
+  $(tab + '-sige').value = $(tab + '-sige-rng').value;
+  changedFn(true);
+}
+
 // The seed is an integer: ±1 (±100 with Shift), clamped to 0..SEED_MAX, then the
 // same normalization a typed edit gets.
 function seedSpin(tab) {
@@ -2202,7 +2323,7 @@ TABS.ci = {
   }
 };
 // ── Tab ②: systems fed the same or different random numbers ─────────
-const CRS = { ind: [], crn: [], last: null, lastRunObj: null, lastRunP: null };
+const CRS = { ind: [], crn: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null };
 function crnParams() {
   // shift2 and sigE share one status span; each field is read only after the previous
   // one has passed, and an unclamped later read that leaves the span empty falls back
@@ -2218,6 +2339,50 @@ function crnParams() {
            n: +$('crn-n').value, conf: +$('crn-conf').value };
 }
 function crnKey(p) { return [p.fn1, p.fn2, p.shift2, p.sigE, p.n, p.conf].join('|'); }
+// The σₑ slider's range, step, and ticks follow the current model menu (the
+// larger of the two systems' own σ_h), never the last run's models; only the
+// live re-evaluation itself (in crnParamsChanged) is pinned to the run.
+function crnSyncSigeSlider(p, f1, f2) {
+  const sh1 = Math.sqrt(CI.funcVar(f1)), sh2 = Math.sqrt(CI.funcVar(f2));
+  const range = sigESliderRange([sh1, sh2]), rng = $('crn-sige-rng');
+  rng.min = '0'; rng.max = String(range.max); rng.step = String(range.step);
+  rng.value = String(Math.min(p.sigE, range.max));
+}
+function crnSigeDrag() { sigeDrag('crn', crnParamsChanged); }
+// Locks the outputs panel and the differences strip's y-scales at run time
+// (Task 6s): each is today's own extent, widened to at least one
+// noise-equivalent standard deviation of padding on each side so the panel has
+// room for a drag to a larger σₑ without itself rescaling (the "fixed scales
+// during a drag" rule, generalized from tab ④'s c slider). The differences
+// strip's own pad uses √2·σ_h because d = y₂ − y₁ carries both systems' noise.
+// A flat pad is not always enough, though: the paired and Welch interval
+// half-widths both grow with σₑ, and so the run's own interval endpoints (sized
+// for the run's own, usually much smaller, σₑ) can be narrower than the
+// endpoints a drag to σₑ = the model's own standard deviation would produce
+// (fix round 1; nothing in the UI names this quantity as of fix round 3, but
+// the internal choice of where to test the padding is unchanged). Re-evaluating
+// the run once at that noise scale and folding both arms' own endpoints from
+// that re-evaluation into dLo/dHi covers the case directly, on top of the
+// existing pad, rather than trying to find a single closed-form pad that would
+// always be enough on its own. The outputs panel needs no such fold: its own
+// max(6% pad, σ_h) rule already has enough headroom (confirmed in the
+// fix-round review), and stays as built.
+function crnLockScale(run, p, seed) {
+  const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
+  const shMax = Math.max(Math.sqrt(CI.funcVar(f1)), Math.sqrt(CI.funcVar(f2)));
+  const oAll = run.y1.concat(run.y2i, run.y2c, [f1.mean, f2.mean + p.shift2]);
+  let oLo = Math.min.apply(null, oAll), oHi = Math.max.apply(null, oAll);
+  const oPad = Math.max((oHi - oLo) * 0.06 || 0.1, shMax);
+  oLo -= oPad; oHi += oPad;
+  const dBase = Math.max(Math.abs(delta) || (p.sigE || 0.1) * 3, Math.SQRT2 * shMax);
+  let dLo = Math.min(0, delta) - dBase, dHi = Math.max(0, delta) + dBase;
+  dLo = Math.min(dLo, run.ind.lo, run.crn.lo); dHi = Math.max(dHi, run.ind.hi, run.crn.hi);
+  for (let i = 0; i < run.d.length; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
+  const atShMax = CI.runCRN(seed, Object.assign({}, p, { sigE: shMax }));
+  dLo = Math.min(dLo, atShMax.ind.lo, atShMax.crn.lo);
+  dHi = Math.max(dHi, atShMax.ind.hi, atShMax.crn.hi);
+  return { oLo: oLo, oHi: oHi, dLo: dLo, dHi: dHi };
+}
 // A rough character-width estimate in SVG units, in the same spirit as the gutter and
 // column-label sizing above: no text is ever measured in the DOM here, only counted
 // and multiplied by a per-font constant tuned against the labels this diagram draws.
@@ -2539,13 +2704,27 @@ function drawCrnFlow(p) {
     (ox, oy, s, second) => ({ h: crnFlowDiagram(ox, oy, s, second, p, f1, f2, fmtShift), height: 142 }),
     "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above; the independent arm averages each system first and then differences the two means, whereas the common-random-numbers arm differences each pair first and then averages.");
 }
-function crnParamsChanged() {
+function crnParamsChanged(fromSigeDrag) {
   const p = crnParams(); if (!p) return;
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   $('crn-s-delta').textContent = fmt(delta, decFor(Math.abs(delta) || 1));
+  crnSyncSigeSlider(p, f1, f2);
+  // Live re-evaluation (Task 6s): a σₑ that differs from the last run's own
+  // re-runs the core at that run's stored seed with every other parameter
+  // pinned to the run (Object.assign only ever overwrites sigE), and so a model
+  // changed after the run keeps showing the run's own models even though the
+  // slider's own range now follows the new menu. Never touches the history or
+  // the repeat-detection key CRS.last.
+  if (CRS.lastRunObj && CRS.lastRunP && p.sigE !== CRS.lastRunP.sigE) {
+    const np = Object.assign({}, CRS.lastRunP, { sigE: p.sigE });
+    CRS.lastRunObj = CI.runCRN(CRS.lastSeed, np);
+    CRS.lastRunP = np;
+    crnShowStats(CRS.lastRunObj, np);
+  }
   drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p);
   drawCrnFlow(p);
-  renderCrnHist();
+  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
+  if (!fromSigeDrag) renderCrnHist(p);
 }
 // Two stacked rows, "Independent inputs" then "Common random numbers", each with an
 // inputs panel, an outputs panel, and a differences strip: system 1 always reads u,
@@ -2582,34 +2761,45 @@ function drawCrnFig(run, p) {
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   const m = run ? Math.min(MAXPAIRS, p.n) : 0;
 
-  // Outputs panel: one value scale shared by both rows, fit to the actual run when one
-  // exists and to the two models' own ranges otherwise.
+  // Outputs panel: one value scale shared by both rows, locked at run time
+  // (CRS.scale, Task 6s) so a σₑ drag re-evaluating the last run never rescales
+  // this panel; fit to the two models' own ranges when no run exists yet.
   let oLo, oHi;
-  if (run) {
+  if (run && CRS.scale) {
+    oLo = CRS.scale.oLo; oHi = CRS.scale.oHi;
+  } else if (run) {
     const all = run.y1.concat(run.y2i, run.y2c, [f1.mean, f2.mean + p.shift2]);
     oLo = Math.min(...all); oHi = Math.max(...all);
+    const oPad = (oHi - oLo) * 0.06 || 0.1; oLo -= oPad; oHi += oPad;
   } else {
     const c1 = fnCurve(f1), c2 = fnCurve(f2);
     oLo = Math.min(c1.lo, c2.lo + p.shift2, f1.mean, f2.mean + p.shift2);
     oHi = Math.max(c1.hi, c2.hi + p.shift2, f1.mean, f2.mean + p.shift2);
+    const oPad = (oHi - oLo) * 0.06 || 0.1; oLo -= oPad; oHi += oPad;
   }
-  const oPad = (oHi - oLo) * 0.06 || 0.1; oLo -= oPad; oHi += oPad;
   const yO = (top, v) => top + rowH - (v - oLo) / (oHi - oLo) * rowH;
 
   // Inputs panel: a fixed [0, 1] scale padded 6% because the input is always uniform.
+  // Never depends on σₑ, and so it carries no lock of its own.
   const iLo = -0.06, iHi = 1.06;
   const yI = (top, v) => top + rowH - (v - iLo) / (iHi - iLo) * rowH;
 
   // Differences strip: one scale shared by both rows, including 0, δ, every dᵢ, and
-  // both intervals' endpoints (Welch's on top, the paired one on the bottom). The base
+  // both intervals' endpoints (Welch's on top, the paired one on the bottom), locked
+  // at run time (CRS.scale) for the same reason as the outputs panel above. The base
   // range extends a full |δ| beyond both ends of [0, δ] so the zero and δ lines sit
   // away from the panel's own top/bottom edges even before any run exists; when δ = 0
   // there is no such width to draw on, so the noise scale stands in for it instead.
-  const dBase = Math.abs(delta) || (p.sigE || 0.1) * 3;
-  let dLo = Math.min(0, delta) - dBase, dHi = Math.max(0, delta) + dBase;
-  if (run) {
-    dLo = Math.min(dLo, run.ind.lo, run.crn.lo); dHi = Math.max(dHi, run.ind.hi, run.crn.hi);
-    for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
+  let dLo, dHi;
+  if (run && CRS.scale) {
+    dLo = CRS.scale.dLo; dHi = CRS.scale.dHi;
+  } else {
+    const dBase = Math.abs(delta) || (p.sigE || 0.1) * 3;
+    dLo = Math.min(0, delta) - dBase; dHi = Math.max(0, delta) + dBase;
+    if (run) {
+      dLo = Math.min(dLo, run.ind.lo, run.crn.lo); dHi = Math.max(dHi, run.ind.hi, run.crn.hi);
+      for (let i = 0; i < m; i++) { const v = run.d[i]; if (v < dLo) dLo = v; if (v > dHi) dHi = v; }
+    }
   }
   // [dLo, dHi] maps onto fixed pixel margins inside the rect rather than a 6% share of
   // it, and so the headroom above the highest cap and below the lowest one is a guaranteed
@@ -2695,8 +2885,16 @@ function drawCrnFig(run, p) {
   ];
 
   let h = '';
-  rows.forEach(row => {
+  rows.forEach((row, ri) => {
     const top = row.top, midY = top + rowH / 2, titleX = pL / 2 + 1;
+    // Outputs panel and differences strip both depend on σₑ (Task 6s): their
+    // scale is locked at run time (CRS.scale), and a re-evaluation at a larger
+    // σₑ than the run that set the lock can therefore push a dot or an interval
+    // bar past the panel's own edge. Clip each to its own row's rect rather
+    // than letting it bleed into a neighboring panel; the inputs panel never
+    // depends on σₑ and stays unclipped.
+    h += `<defs><clipPath id="crn-out-clip-${ri}"><rect x="${xOut}" y="${top}" width="${outW}" height="${rowH}"/></clipPath>` +
+      `<clipPath id="crn-diff-clip-${ri}"><rect x="${xDiff}" y="${top}" width="${dW}" height="${rowH}"/></clipPath></defs>`;
     // The row title reads top-to-bottom along the card's own left edge, rotated -90°
     // about its own center so it never competes with the panel titles above the top
     // row or crowds the row below it; its available length is the row height, not the
@@ -2741,11 +2939,17 @@ function drawCrnFig(run, p) {
     h += `<line x1="${clampX(oc1 - 22)}" y1="${yO(top, f1.mean)}" x2="${clampX(oc1 + 22)}" y2="${yO(top, f1.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
     h += `<line x1="${clampX(oc2 - 22)}" y1="${yO(top, f2.mean + p.shift2)}" x2="${clampX(oc2 + 22)}" y2="${yO(top, f2.mean + p.shift2)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
     if (run) {
-      if (row.paired) for (let i = 0; i < m; i++) h += `<line x1="${oc1}" y1="${yO(top, run.y1[i])}" x2="${oc2}" y2="${yO(top, row.out2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
+      // A σₑ re-evaluation locks this panel's scale to the run that set it
+      // (see oLo/oHi above), and so a larger drag can push a dot past the
+      // rect's own edge; the clip cuts it off there instead of letting it
+      // bleed into a neighboring panel, matching tab ④'s own c-slider rule.
+      let hOut = '';
+      if (row.paired) for (let i = 0; i < m; i++) hOut += `<line x1="${oc1}" y1="${yO(top, run.y1[i])}" x2="${oc2}" y2="${yO(top, row.out2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
       for (let i = 0; i < m; i++) {
-        h += `<circle cx="${oc1}" cy="${yO(top, run.y1[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
-        h += `<circle cx="${oc2}" cy="${yO(top, row.out2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+        hOut += `<circle cx="${oc1}" cy="${yO(top, run.y1[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        hOut += `<circle cx="${oc2}" cy="${yO(top, row.out2[i])}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
       }
+      h += `<g clip-path="url(#crn-out-clip-${ri})">${hOut}</g>`;
     }
     if (row.bottom) {
       const m1 = colLabel('system 1', outW), m2 = colLabel('system 2', outW);
@@ -2764,16 +2968,26 @@ function drawCrnFig(run, p) {
     h += `<line x1="${xDiff + 3}" y1="${yD(top, 0)}" x2="${xDiff + dW - 3}" y2="${yD(top, 0)}" stroke="${C.muted}" stroke-width="1.2"/>`;
     h += `<line x1="${xDiff + 3}" y1="${yD(top, delta)}" x2="${xDiff + dW - 3}" y2="${yD(top, delta)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
     if (run) {
+      // Same clip rule as the outputs panel above: a σₑ re-evaluation can push
+      // a dᵢ dot or an interval bar past the strip's own locked scale. The
+      // interval's own mean dot is redrawn a second time, outside the clip, so
+      // it stays visible even when its bar clips (mirroring tab ④'s
+      // intervalMeanDot).
+      let hDiff = '';
       if (row.paired) {
         const dotX = xDiff + dW * 0.28, barX = xDiff + dW * 0.72;
-        for (let i = 0; i < m; i++) h += `<circle cx="${dotX}" cy="${yD(top, run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
-        h += intervalMark(barX, run.crn.lo, run.crn.hi, run.crn.mean, run.hitCrn, v => yD(top, v));
-        h += starMark(barX, run.crn.lo, run.crn.hi, v => yD(top, v));
-        h += pValueMark(run.crn.lo, run.crn.hi, run.pCrn, v => yD(top, v));
+        for (let i = 0; i < m; i++) hDiff += `<circle cx="${dotX}" cy="${yD(top, run.d[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+        hDiff += intervalMark(barX, run.crn.lo, run.crn.hi, run.crn.mean, run.hitCrn, v => yD(top, v));
+        hDiff += starMark(barX, run.crn.lo, run.crn.hi, v => yD(top, v));
+        hDiff += pValueMark(run.crn.lo, run.crn.hi, run.pCrn, v => yD(top, v));
+        h += `<g clip-path="url(#crn-diff-clip-${ri})">${hDiff}</g>`;
+        h += intervalMeanDot(barX, yD(top, run.crn.mean), run.hitCrn);
       } else {
-        h += intervalMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, run.ind.diff, run.hitInd, v => yD(top, v));
-        h += starMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, v => yD(top, v));
-        h += pValueMark(run.ind.lo, run.ind.hi, run.pInd, v => yD(top, v));
+        hDiff += intervalMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, run.ind.diff, run.hitInd, v => yD(top, v));
+        hDiff += starMark(xDiff + dW / 2, run.ind.lo, run.ind.hi, v => yD(top, v));
+        hDiff += pValueMark(run.ind.lo, run.ind.hi, run.pInd, v => yD(top, v));
+        h += `<g clip-path="url(#crn-diff-clip-${ri})">${hDiff}</g>`;
+        h += intervalMeanDot(xDiff + dW / 2, yD(top, run.ind.diff), run.hitInd);
       }
     }
     // Both strips get their own min/0/max ticks (not just the top row) in the panel's
@@ -2793,7 +3007,7 @@ function drawCrnFig(run, p) {
   });
 
   svgSet(svg, W, H, h);
-  $('crn-fig-note').textContent = run && p.n > MAXPAIRS ? ' · first ' + MAXPAIRS + ' of ' + p.n + ' pairs drawn' : '';
+  setFigNote('crn-fig-note', run && p.n > MAXPAIRS ? ' · first ' + MAXPAIRS + ' of ' + p.n + ' pairs drawn' : '');
 }
 function crnShowStats(run, p) {
   const d = decFor(Math.min(run.ind.h, run.crn.h) || 1);
@@ -2838,8 +3052,8 @@ function runCrn() {
   const run = CI.runCRN(seed, p);
   const repeat = CRS.last && CRS.last.seed === seed && CRS.last.key === crnKey(p);
   CRS.last = { seed: seed, key: crnKey(p) };
-  CRS.lastRunObj = run; CRS.lastRunP = p;
-  crnRecord(run, p); drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist();
+  CRS.lastRunObj = run; CRS.lastRunP = p; CRS.lastSeed = seed; CRS.scale = crnLockScale(run, p, seed);
+  crnRecord(run, p); drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist(p);
   noteRun('crn', seed, CRS.crn.length, repeat);
 }
 function runCrnBatch() {
@@ -2849,20 +3063,28 @@ function runCrnBatch() {
     const first = CRS.crn.length + 1; let run = null;
     for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runCRN(batchSeed(s0, i), p); crnRecord(run, p); }
     CRS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: crnKey(p) };
-    CRS.lastRunObj = run; CRS.lastRunP = p;
-    drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist();
+    // The batch's own last seed (the one whose run is drawn) is what a σₑ
+    // re-evaluation replays, and so it is stored the same as a single run's.
+    CRS.lastRunObj = run; CRS.lastRunP = p; CRS.lastSeed = batchSeed(s0, BATCH_RUNS - 1); CRS.scale = crnLockScale(run, p, CRS.lastSeed);
+    drawCrnFig(run, p); crnShowStats(run, p); renderCrnHist(p);
     noteBatch('crn', s0, first, CRS.crn.length);
   });
 }
 function clearCrn() {
-  CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; CRS.lastRunP = null; lastRun.crn = null;
+  CRS.ind = []; CRS.crn = []; CRS.last = null; CRS.lastRunObj = null; CRS.lastRunP = null; CRS.lastSeed = null; CRS.scale = null; lastRun.crn = null;
   ['crn-s-y1', 'crn-s-y2i', 'crn-s-y2c', 'crn-s-welch', 'crn-s-paired', 'crn-s-r', 'crn-s-sd2', 'crn-s-ssum', 'crn-s-pind', 'crn-s-pcrn', 'crn-s-help'].forEach(id => { $(id).textContent = '—'; });
   $('crn-s-welch-df').textContent = 'df —'; $('crn-s-paired-df').textContent = 'df —'; $('crn-s-help').style.color = '';
   const p = crnParams(); if (p) drawCrnFig(null, p);
-  seedMsg('crn', '', false); renderCrnHist();
+  seedMsg('crn', '', false); renderCrnHist(p);
 }
-function renderCrnHist() {
-  const p = crnParams() || { fn1: 'exp', fn2: 'exp', shift2: 0.5, sigE: 0.1 };
+// Fix round 1: takes p from the caller rather than reading the fields again
+// through the mutating crnParams(); a second, unguarded crnParams() call here
+// (fed no clamp-message fallback of its own) was blanking whatever message the
+// caller's own crnParams() call had just set, on every params change. Falls
+// back to the same empty-state defaults only when a caller has no p to give
+// (e.g. an initial render with every field still unread).
+function renderCrnHist(p) {
+  p = p || { fn1: 'exp', fn2: 'exp', shift2: 0.5, sigE: 0.1 };
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   const win = histWindow([CRS.ind, CRS.crn]) || { lo: delta - 1, hi: delta + 1 };
   const opts = { yLabel: 'difference of means', truthLabel: v => 'δ = ' + v, window: win,
@@ -2872,7 +3094,7 @@ function renderCrnHist() {
 }
 TABS.crn = {
   init() { fnOptions($('crn-fn1')); fnOptions($('crn-fn2')); crnParamsChanged(); },
-  render() { const p = crnParams(); if (p) { drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); drawCrnFlow(p); } renderCrnHist(); }
+  render() { const p = crnParams(); if (p) { drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); drawCrnFlow(p); } renderCrnHist(p); }
 };
 SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
 SPIN['crn-sige'] = decimalSpin('crn-sige', 0, crnParamsChanged, 0.01);
@@ -3049,7 +3271,7 @@ function fnCurve(f) {
   const pad = (hi - lo) * 0.08 || 0.1;
   return { pts: pts, lo: lo - pad, hi: hi + pad };
 }
-const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null, mode: 'ind' };
+const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null, mode: 'ind', lastSeed: null, scale: null };
 // The one toggle for tab ③'s whole single-run region (the figure, its rug-and-
 // interval strip, and the draw-order panel below it): which arm's pairs they show.
 // Redraws from the last run if there is one, or the empty state otherwise.
@@ -3067,14 +3289,50 @@ function avParams() {
   return { fn: $('av-fn').value, n: +$('av-n').value, conf: +$('av-conf').value, sigE: sigE };
 }
 function avKey(p) { return [p.fn, p.n, p.conf, p.sigE].join('|'); }
-function avParamsChanged() {
+function avSyncSigeSlider(p, f) {
+  const sh = Math.sqrt(CI.funcVar(f)), range = sigESliderRange([sh]), rng = $('av-sige-rng');
+  rng.min = '0'; rng.max = String(range.max); rng.step = String(range.step);
+  rng.value = String(Math.min(p.sigE, range.max));
+}
+function avSigeDrag() { sigeDrag('av', avParamsChanged); }
+// Locks the figure's and the draw-order panel's own y-scales at run time
+// (Task 6s): each is today's own extent, widened to at least one
+// noise-equivalent standard deviation of padding on each side. The two panels
+// compute their base extents slightly differently (drawAvFig also clamps to
+// the curve's own fixed range; drawAvSeq does not), and so each keeps its own
+// lock, both derived from the same run.
+function avScaleFor(run, f, alsoCurve) {
+  const vals = run.ya.concat(run.yb, run.yw, run.z, run.w, [run.ind.lo, run.ind.hi, run.av.lo, run.av.hi]);
+  const dMin = Math.min.apply(null, vals), dMax = Math.max.apply(null, vals);
+  const sh = Math.sqrt(CI.funcVar(f));
+  const pad = Math.max(Math.max(dMax - dMin, 1e-9) * 0.06, sh);
+  let lo = dMin - pad, hi = dMax + pad;
+  if (alsoCurve) { const cv = fnCurve(f); lo = Math.min(lo, cv.lo); hi = Math.max(hi, cv.hi); }
+  return { lo: lo, hi: hi };
+}
+function avLockScale(run, p) {
+  const f = CI.FUNCS[p.fn];
+  return { fig: avScaleFor(run, f, true), seq: avScaleFor(run, f, false) };
+}
+function avParamsChanged(fromSigeDrag) {
   const p = avParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('av-s-true').textContent = f.mean.toFixed(5);
+  avSyncSigeSlider(p, f);
+  // Live re-evaluation (Task 6s): see crnParamsChanged's own comment. n and fn
+  // stay pinned to the last run even if the menu changed since then; only sigE
+  // moves.
+  if (AVS.lastRunObj && AVS.lastRunP && p.sigE !== AVS.lastRunP.sigE) {
+    const np = Object.assign({}, AVS.lastRunP, { sigE: p.sigE });
+    AVS.lastRunObj = CI.runAV(AVS.lastSeed, np);
+    AVS.lastRunP = np;
+    avShowStats(AVS.lastRunObj);
+  }
   drawAvFlow(p);
   drawAvFig(AVS.lastRunObj, AVS.lastRunP || p);
   if (typeof drawAvSeq === 'function') drawAvSeq(AVS.lastRunObj, AVS.lastRunP || p);
-  renderAvHist();
+  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
+  if (!fromSigeDrag) renderAvHist(p);
 }
 // The dot-and-pair legend text is deliberately mode-neutral ("first of the pair" /
 // "second") because what the second point actually is -- h(1 - u) + noise in
@@ -3121,13 +3379,18 @@ function drawAvFig(run, p) {
   const f = CI.FUNCS[p.fn], cv = fnCurve(f), MAXP = 40;
   let lo = cv.lo, hi = cv.hi;
   if (run) {
-    // Fixed across both toggle states: every value either arm can show, plus both
-    // intervals' own endpoints, so flipping the toggle never rescales the plot.
-    const vals = run.ya.concat(run.yb, run.yw, run.z, run.w, [run.ind.lo, run.ind.hi, run.av.lo, run.av.hi]);
-    const dMin = Math.min(...vals), dMax = Math.max(...vals);
-    if (dMin < lo || dMax > hi) {
-      const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.06;
-      lo = Math.min(lo, dMin - pad); hi = Math.max(hi, dMax + pad);
+    // Locked at run time (AVS.scale.fig, Task 6s) so a σₑ re-evaluation of the
+    // last run never rescales this panel; fixed across both toggle states
+    // regardless because every value either arm can show, plus both intervals'
+    // own endpoints, went into the lock.
+    if (AVS.scale) { lo = AVS.scale.fig.lo; hi = AVS.scale.fig.hi; }
+    else {
+      const vals = run.ya.concat(run.yb, run.yw, run.z, run.w, [run.ind.lo, run.ind.hi, run.av.lo, run.av.hi]);
+      const dMin = Math.min(...vals), dMax = Math.max(...vals);
+      if (dMin < lo || dMax > hi) {
+        const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.06;
+        lo = Math.min(lo, dMin - pad); hi = Math.max(hi, dMax + pad);
+      }
     }
   }
   const xP = u => pL + u * cW, yP = y => pT + cH - (y - lo) / (hi - lo) * cH;
@@ -3137,13 +3400,19 @@ function drawAvFig(run, p) {
   h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
   h += `<path d="${cv.pts.map((q, i) => (i ? 'L' : 'M') + xP(q[0]).toFixed(1) + ',' + yP(q[1]).toFixed(1)).join('')}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
   const m = run ? Math.min(MAXP, p.n) : 0;
+  // A σₑ re-evaluation can push a pair's dot, or the strip's own rug and
+  // interval, past this locked scale; clip everything reactive to the plot's
+  // own rect (which spans the strip too) rather than letting it bleed past the
+  // card's edge, and redraw the interval's own mean dot outside the clip so it
+  // stays visible even when its bar clips (Task 6r's rule, generalized).
+  let hClip = '';
   // Pairs: antithetic mode mirrors u to 1 - u; independent mode instead pairs u with
   // a fresh draw v -- the whole point being that its second point has no structural
   // relationship to the first, unlike the mirror.
   const secondX = i => mode === 'av' ? xP(1 - run.u[i]) : xP(run.v[i]);
   const secondY = i => mode === 'av' ? yP(run.yb[i]) : yP(run.yw[i]);
   for (let i = 0; i < m; i++) {
-    h += `<line x1="${xP(run.u[i])}" y1="${yP(run.ya[i])}" x2="${secondX(i)}" y2="${secondY(i)}" stroke="${C.pair}" stroke-width="1"/>`;
+    hClip += `<line x1="${xP(run.u[i])}" y1="${yP(run.ya[i])}" x2="${secondX(i)}" y2="${secondY(i)}" stroke="${C.pair}" stroke-width="1"/>`;
   }
   // Painted in two passes -- every hollow dot, then every filled dot -- rather
   // than pair by pair, so a later pair's hollow dot can never land on top of and
@@ -3151,13 +3420,18 @@ function drawAvFig(run, p) {
   // 54321 with sigE = 0, where every dot lies exactly on the h(u) curve, and
   // switching modes would otherwise appear to turn a hollow dot into a filled one.
   for (let i = 0; i < m; i++) {
-    h += `<circle cx="${secondX(i)}" cy="${secondY(i)}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+    hClip += `<circle cx="${secondX(i)}" cy="${secondY(i)}" r="2.6" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
   }
   for (let i = 0; i < m; i++) {
-    h += `<circle cx="${xP(run.u[i])}" cy="${yP(run.ya[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
+    hClip += `<circle cx="${xP(run.u[i])}" cy="${yP(run.ya[i])}" r="3" fill="${C.est}" opacity=".85"/>`;
   }
-
-  h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
+  hClip += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
+  h += `<defs><clipPath id="av-fig-clip"><rect x="${pL}" y="${pT}" width="${cW + stripGap + stripW}" height="${cH}"/></clipPath></defs>`;
+  h += `<g clip-path="url(#av-fig-clip)">${hClip}</g>`;
+  if (run) {
+    const ivMode = mode === 'av' ? run.av : run.ind, ivHit = mode === 'av' ? run.hitAv : run.hitInd;
+    h += intervalMeanDot(pL + cW + stripGap + stripW * 0.75, yP(ivMode.mean), ivHit);
+  }
 
   const dec = decFor(hi - lo);
   for (let i = 0; i <= 3; i++) { const y = lo + (hi - lo) * i / 3; h += `<text x="${pL - 5}" y="${yP(y) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${y.toFixed(dec)}</text>`; }
@@ -3167,7 +3441,7 @@ function drawAvFig(run, p) {
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
   svgSet($('av-fig'), W, H, h);
   $('av-fig-leg').innerHTML = avFigLegendHtml(mode);
-  $('av-fig-note').textContent = run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : '';
+  setFigNote('av-fig-note', run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : '');
 }
 // Tab ③'s draw-order panel: the same run's 2n outputs, in the order the stream
 // produced them. It carries no toggle of its own -- it reads AVS.mode, the same
@@ -3199,13 +3473,18 @@ function drawAvSeq(run, p) {
   const xP = k => pL + (k - 1) / (count - 1) * cW; // k is the 1-indexed draw order
   let lo, hi;
   if (run) {
-    // Fixed across both toggle states, same as drawAvFig: both sequences (ya/yb
-    // and ya/yw), both pair-mean arrays, and both intervals go into the range, not
-    // just whichever the current mode shows.
-    const vals = run.ya.concat(run.yb, run.yw, run.z, run.w, [run.ind.lo, run.ind.hi, run.av.lo, run.av.hi]);
-    const dMin = Math.min(...vals), dMax = Math.max(...vals);
-    const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.06;
-    lo = dMin - pad; hi = dMax + pad;
+    // Locked at run time (AVS.scale.seq, Task 6s), separately from drawAvFig's
+    // own lock, and so a σₑ re-evaluation never rescales this panel either.
+    // Fixed across both toggle states regardless: both sequences (ya/yb and ya/yw),
+    // both pair-mean arrays, and both intervals went into the lock, not just
+    // whichever the current mode shows.
+    if (AVS.scale) { lo = AVS.scale.seq.lo; hi = AVS.scale.seq.hi; }
+    else {
+      const vals = run.ya.concat(run.yb, run.yw, run.z, run.w, [run.ind.lo, run.ind.hi, run.av.lo, run.av.hi]);
+      const dMin = Math.min(...vals), dMax = Math.max(...vals);
+      const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.06;
+      lo = dMin - pad; hi = dMax + pad;
+    }
   } else {
     const cv = fnCurve(f); lo = cv.lo; hi = cv.hi;
   }
@@ -3218,13 +3497,13 @@ function drawAvSeq(run, p) {
   h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">draw order (pairs adjacent)</text>`;
   const yLX = 13, yLY = pT + cH / 2;
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
-  h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
 
   if (!run) {
+    h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
     h += `<text x="${pL + cW / 2}" y="${pT + cH / 2}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's outputs in draw order</text>`;
     svgSet($('av-seq'), W, H, h);
     $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
-    $('av-seq-note').textContent = '';
+    setFigNote('av-seq-note', '');
     return;
   }
 
@@ -3233,25 +3512,41 @@ function drawAvSeq(run, p) {
   const pairMeans = mode === 'av' ? run.z : run.w;
   const drawCount = Math.min(count, 400), r = count > 200 ? 2 : 3;
 
+  // A σₑ re-evaluation can push a sequence dot, the pair-mean path, or the
+  // strip's own rug and interval past this locked scale; clip everything
+  // reactive to the plot's own rect (which spans the strip too), and redraw
+  // the interval's own mean dot outside the clip so it stays visible even when
+  // its bar clips (Task 6r's rule, generalized). N of the drawn dots beyond the
+  // scale is also reported in this panel's own note, unlike drawAvFig's.
+  let hClip = '';
   for (let j = 0; j < drawCount / 2; j++) {
-    h += `<line x1="${xP(2 * j + 1)}" y1="${yP(seq[2 * j])}" x2="${xP(2 * j + 2)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1"/>`;
+    hClip += `<line x1="${xP(2 * j + 1)}" y1="${yP(seq[2 * j])}" x2="${xP(2 * j + 2)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1"/>`;
   }
   let pmPts = '';
   for (let j = 0; j < n; j++) {
     const xm = xP(2 * j + 1.5);
     pmPts += (j ? 'L' : 'M') + xm.toFixed(1) + ',' + yP(pairMeans[j]).toFixed(1);
   }
-  h += `<path d="${pmPts}" fill="none" stroke="${C.pair}" stroke-width="1.3" stroke-dasharray="3,2.5"/>`;
+  hClip += `<path d="${pmPts}" fill="none" stroke="${C.pair}" stroke-width="1.3" stroke-dasharray="3,2.5"/>`;
   // Two passes -- every hollow dot, then every filled dot -- matching drawAvFig's
   // own fix: no coincidence is possible along one draw-order axis the way it is
   // between two different x positions in the scatter above, but the same paint
   // order keeps both panels consistent.
-  for (let i = 1; i < drawCount; i += 2) { h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`; }
-  for (let i = 0; i < drawCount; i += 2) { h += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`; }
+  let clipped = 0;
+  for (let i = 0; i < drawCount; i++) { if (seq[i] < lo || seq[i] > hi) clipped++; }
+  for (let i = 1; i < drawCount; i += 2) { hClip += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`; }
+  for (let i = 0; i < drawCount; i += 2) { hClip += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`; }
+  hClip += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
+  h += `<defs><clipPath id="av-seq-clip"><rect x="${pL}" y="${pT}" width="${cW + stripGap + stripW}" height="${cH}"/></clipPath></defs>`;
+  h += `<g clip-path="url(#av-seq-clip)">${hClip}</g>`;
+  const ivMode = mode === 'av' ? run.av : run.ind, ivHit = mode === 'av' ? run.hitAv : run.hitInd;
+  h += intervalMeanDot(pL + cW + stripGap + stripW * 0.75, yP(ivMode.mean), ivHit);
   [1, n, count].forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
   svgSet($('av-seq'), W, H, h);
   $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
-  $('av-seq-note').textContent = count > 400 ? ' · first 400 of ' + count + ' dots drawn' : '';
+  let note = count > 400 ? ' · first 400 of ' + count + ' dots drawn' : '';
+  if (clipped > 0) note += ' · ' + clipped + ' of ' + drawCount + ' dots beyond the panel\'s fixed scale';
+  setFigNote('av-seq-note', note);
 }
 function avShowStats(run) {
   const d = decFor(Math.min(run.ind.h, run.av.h) || 1);
@@ -3285,8 +3580,8 @@ function runAv() {
   const run = CI.runAV(seed, p);
   const repeat = AVS.last && AVS.last.seed === seed && AVS.last.key === avKey(p);
   AVS.last = { seed: seed, key: avKey(p) };
-  AVS.lastRunObj = run; AVS.lastRunP = p;
-  avRecord(run, p); drawAvFig(run, p); if (typeof drawAvSeq === 'function') drawAvSeq(run, p); avShowStats(run); renderAvHist();
+  AVS.lastRunObj = run; AVS.lastRunP = p; AVS.lastSeed = seed; AVS.scale = avLockScale(run, p);
+  avRecord(run, p); drawAvFig(run, p); if (typeof drawAvSeq === 'function') drawAvSeq(run, p); avShowStats(run); renderAvHist(p);
   noteRun('av', seed, AVS.av.length, repeat);
 }
 function runAvBatch() {
@@ -3296,20 +3591,24 @@ function runAvBatch() {
     const first = AVS.av.length + 1; let run = null;
     for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runAV(batchSeed(s0, i), p); avRecord(run, p); }
     AVS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: avKey(p) };
-    AVS.lastRunObj = run; AVS.lastRunP = p;
-    drawAvFig(run, p); if (typeof drawAvSeq === 'function') drawAvSeq(run, p); avShowStats(run); renderAvHist();
+    AVS.lastRunObj = run; AVS.lastRunP = p; AVS.lastSeed = batchSeed(s0, BATCH_RUNS - 1); AVS.scale = avLockScale(run, p);
+    drawAvFig(run, p); if (typeof drawAvSeq === 'function') drawAvSeq(run, p); avShowStats(run); renderAvHist(p);
     noteBatch('av', s0, first, AVS.av.length);
   });
 }
 function clearAv() {
-  AVS.ind = []; AVS.av = []; AVS.last = null; AVS.lastRunObj = null; AVS.lastRunP = null; lastRun.av = null;
+  AVS.ind = []; AVS.av = []; AVS.last = null; AVS.lastRunObj = null; AVS.lastRunP = null; AVS.lastSeed = null; AVS.scale = null; lastRun.av = null;
   ['av-s-mi', 'av-s-ma', 'av-s-hi', 'av-s-ha', 'av-s-r', 'av-s-sw2', 'av-s-sz2', 'av-s-help'].forEach(id => { $(id).textContent = '—'; });
   $('av-s-hi-df').textContent = 'df —'; $('av-s-ha-df').textContent = 'df —'; $('av-s-help').style.color = '';
   const p = avParams(); if (p) { drawAvFig(null, p); if (typeof drawAvSeq === 'function') drawAvSeq(null, p); }
-  seedMsg('av', '', false); renderAvHist();
+  seedMsg('av', '', false); renderAvHist(p);
 }
-function renderAvHist() {
-  const p = avParams() || { fn: 'exp', n: 25, conf: 0.95, sigE: 0 }, f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
+// Fix round 1: see renderCrnHist's own comment — takes p from the caller
+// rather than reading the fields again through the mutating avParams(), which
+// was blanking whatever clamp message the caller's own read had just set.
+function renderAvHist(p) {
+  p = p || { fn: 'exp', n: 25, conf: 0.95, sigE: 0 };
+  const f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
   const win = histWindow([AVS.ind, AVS.av]) || { lo: f.mean - 1.5 * sd, hi: f.mean + 1.5 * sd };
   const opts = { yLabel: 'mean of h', truthLabel: v => 'E[h] = ' + v.toFixed(4), window: win,
                  liveTruth: f.mean, emptyWindow: win, nLabel: 'pairs' };
@@ -3321,26 +3620,64 @@ TABS.av = {
   render() {
     const p = AVS.lastRunP || avParams();
     if (p) { drawAvFlow(p); drawAvFig(AVS.lastRunObj, p); if (typeof drawAvSeq === 'function') drawAvSeq(AVS.lastRunObj, p); }
-    renderAvHist();
+    renderAvHist(p);
   }
 };
 SPIN['av-seed'] = seedSpin('av');
 SPIN['av-sige'] = decimalSpin('av-sige', 0, avParamsChanged, 0.01);
 // ── Tab ④: control variates ──────────────────────────
-const CVS = { plain: [], cv: [], last: null, lastRunObj: null, lastRunP: null, c: 0 };
+const CVS = { plain: [], cv: [], last: null, lastRunObj: null, lastRunP: null, c: 0, lastSeed: null, scale: null };
 function cvParams() {
   const sigE = readNum('cv-sige', 'cv-par-msg', 0, 1e6, 'the noise scale σ');
   if (sigE === null) return null;
   return { fn: $('cv-fn').value, n: +$('cv-n').value, conf: +$('cv-conf').value, sigE: sigE };
 }
 function cvKey(p) { return [p.fn, p.n, p.conf, p.sigE].join('|'); }
-function cvParamsChanged() {
+function cvSyncSigeSlider(p, f) {
+  const sh = Math.sqrt(CI.funcVar(f)), range = sigESliderRange([sh]), rng = $('cv-sige-rng');
+  rng.min = '0'; rng.max = String(range.max); rng.step = String(range.step);
+  rng.value = String(Math.min(p.sigE, range.max));
+}
+function cvSigeDrag() { sigeDrag('cv', cvParamsChanged); }
+// Locks panels 2-3's shared y-scale at run time (Task 6s), migrating the cache
+// that used to live on the run object itself (run._scale23, Task 6r) onto CVS
+// so the c slider and the σₑ slider share one locking mechanism: today's own
+// extent (at the estimated ĉ, not the slider's current position) widened to at
+// least one noise-equivalent standard deviation of padding on each side -- the
+// existing 35% padding already exceeds that for the default model, and so this
+// only widens the scale further on a quiet model with a large σₑ.
+function cvLockScale(run, p) {
+  const f = CI.FUNCS[p.fn], sh = Math.sqrt(CI.funcVar(f));
+  const effHat = cvEffective(run, run.c, p.conf);
+  const vals = run.y.concat(effHat.z, [run.plain.mean, effHat.cv.mean, f.mean,
+    run.plain.lo, run.plain.hi, effHat.cv.lo, effHat.cv.hi]);
+  const dMin = Math.min.apply(null, vals), dMax = Math.max.apply(null, vals);
+  const span = Math.max(dMax - dMin, 1e-9), pad = Math.max(span * 0.35, sh);
+  return { lo: dMin - pad, hi: dMax + pad };
+}
+function cvParamsChanged(fromSigeDrag) {
   const p = cvParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('cv-s-true').textContent = f.mean.toFixed(5);
+  cvSyncSigeSlider(p, f);
+  // Live re-evaluation (Task 6s): see crnParamsChanged's own comment. c then
+  // snaps to the new run's own estimated ĉ (Ted's approved recommendation),
+  // which also relocks the c slider's own range and ticks.
+  if (CVS.lastRunObj && CVS.lastRunP && p.sigE !== CVS.lastRunP.sigE) {
+    const np = Object.assign({}, CVS.lastRunP, { sigE: p.sigE });
+    CVS.lastRunObj = CI.runCV(CVS.lastSeed, np);
+    CVS.lastRunP = np;
+    // CVS.scale (panels 2-3's own y-scale) is NOT recomputed here: a
+    // re-evaluation reuses the lock from the run that set it, unchanged.
+    // cvSnapSlider's own cvSetSliderRange call below is a different lock (the
+    // c slider's own -2ĉ..4ĉ range), which is meant to move on every run.
+    cvSnapSlider(CVS.lastRunObj);
+    cvShowStats(CVS.lastRunObj);
+  }
   drawCvFig(CVS.lastRunObj, CVS.lastRunP || p);
   drawCvFlow(p);
-  renderCvHist();
+  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
+  if (!fromSigeDrag) renderCvHist(p);
 }
 // One diagram (Plain estimate or Control-variate estimate), drawn into local
 // coordinates 0-380 wide and offset/scaled exactly like crnFlowDiagram and
@@ -3521,11 +3858,13 @@ function svgIntervalMark(cx, yTop, yBot, yMean, hit) {
            : `<circle cx="${cx}" cy="${yMean}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
   return s;
 }
-// Just svgIntervalMark's own mean dot, matching its exact style, for drawCvFig to
-// redraw outside its panels' clip-paths (Task 6r) -- the interval bar clips at
-// the panel edge when the slider pushes it out of the fixed scale, but the dot
-// marking the interval's own mean must stay visible regardless.
-function cvIntervalDot(cx, yMean, hit) {
+// Just svgIntervalMark's own mean dot, matching its exact style, for a caller to
+// redraw outside a panel's own clip-path (Task 6r, generalized in Task 6s) --
+// the interval bar clips at the panel edge when a slider or a σₑ re-evaluation
+// pushes it out of the panel's fixed scale, but the dot marking the interval's
+// own mean must stay visible regardless. Shared by drawCvFig (tab ④) and
+// drawCrnFig's differences strip (tab ②).
+function intervalMeanDot(cx, yMean, hit) {
   const dotR = 3.5, col = hit ? C.hit : C.miss;
   return hit ? `<circle cx="${cx}" cy="${yMean}" r="${dotR}" fill="${col}"/>`
              : `<circle cx="${cx}" cy="${yMean}" r="${dotR * .9}" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
@@ -3563,25 +3902,25 @@ function drawCvFig(run, p) {
   const lo1 = -0.5 - 0.06, hi1 = 0.5 + 0.06;
   const yP1 = v => y0[0] + panelH - (v - lo1) / (hi1 - lo1) * panelH;
 
-  // Panels 2 and 3 share a y-scale computed once per run, from the run's plain
-  // values, the adjusted values AT THE ESTIMATED ĉ (run.c, not the slider's
-  // current CVS.c), ȳ, z̄(ĉ), E[h], and both intervals -- padded by 35% of that
-  // span on each side, well clear of the "no better than plain" bowl the slider
-  // now reaches. Cached on the run object itself: a slider drag calls this
-  // function again with the same run and must not recompute (let alone rescale
-  // the panel) as c moves away from ĉ; only a fresh run (a new object, with no
-  // cached scale yet) resets it.
+  // Panels 2 and 3 share a y-scale locked at run time (CVS.scale, Task 6s;
+  // migrated here from the run object's own run._scale23 cache of Task 6r) from
+  // the run's plain values, the adjusted values AT THE ESTIMATED ĉ (run.c, not
+  // the slider's current CVS.c), ȳ, z̄(ĉ), E[h], and both intervals -- padded by
+  // the larger of 35% of that span and one noise-equivalent σ_h on each side,
+  // well clear of the "no better than plain" bowl the c slider now reaches. One
+  // lock, shared by a c-slider drag and a σₑ re-evaluation alike: neither
+  // recomputes it (let alone rescales the panel); only a fresh run does.
   let lo23, hi23, eff;
-  if (run) {
-    if (!run._scale23) {
-      const effHat = cvEffective(run, run.c, p.conf);
-      const vals = run.y.concat(effHat.z, [run.plain.mean, effHat.cv.mean, f.mean,
-        run.plain.lo, run.plain.hi, effHat.cv.lo, effHat.cv.hi]);
-      const dMin = Math.min(...vals), dMax = Math.max(...vals);
-      const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.35;
-      run._scale23 = { lo: dMin - pad, hi: dMax + pad };
-    }
-    lo23 = run._scale23.lo; hi23 = run._scale23.hi;
+  if (run && CVS.scale) {
+    lo23 = CVS.scale.lo; hi23 = CVS.scale.hi;
+    eff = cvEffective(run, CVS.c, p.conf);
+  } else if (run) {
+    const effHat = cvEffective(run, run.c, p.conf);
+    const vals = run.y.concat(effHat.z, [run.plain.mean, effHat.cv.mean, f.mean,
+      run.plain.lo, run.plain.hi, effHat.cv.lo, effHat.cv.hi]);
+    const dMin = Math.min(...vals), dMax = Math.max(...vals);
+    const span = Math.max(dMax - dMin, 1e-9), pad = span * 0.35;
+    lo23 = dMin - pad; hi23 = dMax + pad;
     eff = cvEffective(run, CVS.c, p.conf);
   } else {
     const cv = fnCurve(f); lo23 = cv.lo; hi23 = cv.hi;
@@ -3643,7 +3982,7 @@ function drawCvFig(run, p) {
     h += `<line x1="${pL}" y1="${yP3(f.mean)}" x2="${stripX0 + stripW}" y2="${yP3(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
     for (let i = 0; i <= 2; i++) { const v = lo23 + (hi23 - lo23) * i / 2; h += `<text x="${pL - 5}" y="${yP3(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${v.toFixed(decY)}</text>`; }
 
-    let h2 = '';
+    let h2 = '', clipped = 0;
     for (let i = 0; i < m; i++) {
       const x = xP(i + 1), uy = run.u[i] - 0.5, blamed = CVS.c * uy;
       h += `<line x1="${x}" y1="${yP1(0)}" x2="${x}" y2="${yP1(uy)}" stroke="${C.muted}" stroke-width="1.5"/>`;
@@ -3656,13 +3995,19 @@ function drawCvFig(run, p) {
       h2 += `<circle cx="${x}" cy="${yP2(run.y[i])}" r="${r}" fill="${C.est}"/>`;
       h3 += `<line x1="${x}" y1="${yP3(eff.cv.mean)}" x2="${x}" y2="${yP3(eff.z[i])}" stroke="${C.muted}" stroke-width="1"/>`;
       h3 += `<circle cx="${x}" cy="${yP3(eff.z[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`;
+      // A σₑ re-evaluation, or the c slider dragged far from ĉ, can push a
+      // panel-2 or panel-3 pin past this locked scale; counted here (over both
+      // panels' m pins each: M = 2m) for the note appended below.
+      if (run.y[i] < lo23 || run.y[i] > hi23) clipped++;
+      if (eff.z[i] < lo23 || eff.z[i] > hi23) clipped++;
     }
     note = n > 200 ? ' · first 200 of ' + n + ' draws drawn' : '';
+    if (clipped > 0) note += ' · ' + clipped + ' of ' + (2 * m) + ' dots beyond the panel\'s fixed scale';
     h2 += svgIntervalMark(barX, yP2(run.plain.hi), yP2(run.plain.lo), yP2(run.plain.mean), run.hitPlain);
     h3 += svgIntervalMark(barX, yP3(eff.cv.hi), yP3(eff.cv.lo), yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
     h += `<g clip-path="url(#cv-panel2-clip)">${h2}</g><g clip-path="url(#cv-panel3-clip)">${h3}</g>`;
-    h += cvIntervalDot(barX, yP2(run.plain.mean), run.hitPlain);
-    h += cvIntervalDot(barX, yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
+    h += intervalMeanDot(barX, yP2(run.plain.mean), run.hitPlain);
+    h += intervalMeanDot(barX, yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
   } else {
     h += `<text x="${pL + cW / 2}" y="${y0[1] + panelH - 10}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's draws</text>`;
   }
@@ -3676,7 +4021,7 @@ function drawCvFig(run, p) {
   });
   svgSet($('cv-fig'), W, H, h);
   $('cv-fig-leg').innerHTML = cvFigLegendHtml();
-  $('cv-fig-note').textContent = note;
+  setFigNote('cv-fig-note', note);
 }
 function cvShowStats(run) {
   const eff = cvEffective(run, CVS.c, CVS.lastRunP.conf);
@@ -3723,33 +4068,15 @@ function cvSetSliderRange(c) {
   const a = -2 * c, b = 4 * c;
   inp.min = String(Math.min(a, b)); inp.max = String(Math.max(a, b));
 }
-// Ticks at 0, ĉ, and 2ĉ -- the bowl's own zero-crossings plus its vertex -- drawn
-// as our own absolutely-positioned marks under the track rather than a
-// <datalist> (whose native tick rendering, and whether the thumb even snaps to
-// it, differs across browsers). Position is the track fraction (v - min) /
-// (max - min), mapped through calc((100% - 26px) * f + 13px) to account for the
-// 26px thumb's own half-width at each end of the track (see the #cv-c thumb
-// rule), so a mark lines up with the thumb's actual center at that value rather
-// than with the track's raw edge-to-edge fraction.
-function cvRenderSliderTicks(c) {
-  const inp = $('cv-c'), min = +inp.min, max = +inp.max, span = max - min || 1;
-  const at = v => `calc((100% - 26px) * ${((v - min) / span).toFixed(4)} + 13px)`;
-  let h = `<div class="cv-slider-tick" style="left:${at(0)}"></div>`;
-  h += `<div class="cv-slider-tick" style="left:${at(2 * c)}"></div>`;
-  h += `<div class="cv-slider-tick cv-tick-c" style="left:${at(c)}"></div>`;
-  h += `<div class="cv-slider-tick-lbl cv-tick-lbl-muted" id="cv-tick-lbl-0" style="left:${at(0)}">0</div>`;
-  h += `<div class="cv-slider-tick-lbl" id="cv-tick-lbl-c" style="left:${at(c)}">c<sup>*</sup></div>`;
-  h += `<div class="cv-slider-tick-lbl cv-tick-lbl-muted" id="cv-tick-lbl-2c" style="left:${at(2 * c)}">2c<sup>*</sup></div>`;
-  $('cv-slider-ticks').innerHTML = h;
-  // ĉ close to 0 (only the |ĉ| < 1e-6 fallback range can actually produce this,
-  // since 0/ĉ/2ĉ sit at fixed 1/3, 1/2, 2/3 track fractions otherwise, regardless
-  // of ĉ's own magnitude) crowds the "0" and "c*" labels into the same space;
-  // measuring the two rendered boxes directly, rather than estimating their
-  // width, catches that regardless of exactly how narrow it gets. The "0" tick
-  // mark itself stays -- only its label is dropped.
-  const lbl0 = $('cv-tick-lbl-0'), lblC = $('cv-tick-lbl-c');
-  const r0 = lbl0.getBoundingClientRect(), rC = lblC.getBoundingClientRect();
-  if (r0.left < rC.right && rC.left < r0.right) { lbl0.remove(); }
+// Ticks at 0, ĉ, and 2ĉ -- the bowl's own zero-crossings plus its vertex --
+// drawn by the shared renderSliderTicks (Task 6s; drew its own copy of this
+// logic before then). The muted-vs-accent collision rule that used to be
+// special-cased here (ĉ close to 0 crowds the "0" and "c*" labels into the
+// same space; only the "0" tick's label was dropped, never its mark) is now
+// the shared renderer's own general rule.
+function cvTicks(c) {
+  return [{ v: 0, label: '0', accent: false }, { v: c, label: 'c<sup>*</sup>', accent: true },
+          { v: 2 * c, label: '2c<sup>*</sup>', accent: false }];
 }
 function cvRecord(run, p) {
   const k = cvKey(p);
@@ -3764,7 +4091,7 @@ function cvSnapSlider(run) {
   cvSetSliderRange(run.c);
   $('cv-c').value = String(run.c);
   $('cv-c').disabled = false;
-  cvRenderSliderTicks(run.c);
+  renderSliderTicks('cv-c', 'cv-slider-ticks', cvTicks(run.c));
   $('cv-c-val').textContent = 'c = ' + fmt(run.c, 2);
   $('cv-c-star').innerHTML = '(c<sup>*</sup> = ' + fmt(run.c, 2) + ')';
 }
@@ -3774,9 +4101,9 @@ function runCv() {
   const run = CI.runCV(seed, p);
   const repeat = CVS.last && CVS.last.seed === seed && CVS.last.key === cvKey(p);
   CVS.last = { seed: seed, key: cvKey(p) };
-  CVS.lastRunObj = run; CVS.lastRunP = p;
+  CVS.lastRunObj = run; CVS.lastRunP = p; CVS.lastSeed = seed; CVS.scale = cvLockScale(run, p);
   cvSnapSlider(run);
-  cvRecord(run, p); drawCvFig(run, p); cvShowStats(run); renderCvHist();
+  cvRecord(run, p); drawCvFig(run, p); cvShowStats(run); renderCvHist(p);
   noteRun('cv', seed, CVS.cv.length, repeat);
 }
 function runCvBatch() {
@@ -3786,22 +4113,27 @@ function runCvBatch() {
     const first = CVS.cv.length + 1; let run = null;
     for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runCV(batchSeed(s0, i), p); cvRecord(run, p); }
     CVS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: cvKey(p) };
-    CVS.lastRunObj = run; CVS.lastRunP = p;
+    CVS.lastRunObj = run; CVS.lastRunP = p; CVS.lastSeed = batchSeed(s0, BATCH_RUNS - 1); CVS.scale = cvLockScale(run, p);
     cvSnapSlider(run);
-    drawCvFig(run, p); cvShowStats(run); renderCvHist();
+    drawCvFig(run, p); cvShowStats(run); renderCvHist(p);
     noteBatch('cv', s0, first, CVS.cv.length);
   });
 }
 function clearCv() {
   CVS.plain = []; CVS.cv = []; CVS.last = null; CVS.lastRunObj = null; CVS.lastRunP = null; lastRun.cv = null; CVS.c = 0;
+  CVS.lastSeed = null; CVS.scale = null;
   ['cv-s-mp', 'cv-s-mc', 'cv-s-hp', 'cv-s-hc', 'cv-s-c', 'cv-s-r2'].forEach(id => { $(id).textContent = '—'; });
   $('cv-s-hp-df').textContent = 'df —'; $('cv-s-hc-df').textContent = 'df —';
   $('cv-c').disabled = true; $('cv-c-val').textContent = 'c = —'; $('cv-c-star').textContent = ''; $('cv-slider-ticks').innerHTML = '';
   const p = cvParams(); if (p) drawCvFig(null, p);
-  seedMsg('cv', '', false); renderCvHist();
+  seedMsg('cv', '', false); renderCvHist(p);
 }
-function renderCvHist() {
-  const p = cvParams() || { fn: 'exp', n: 50, conf: 0.95, sigE: 0 }, f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
+// Fix round 1: see renderCrnHist's own comment — takes p from the caller
+// rather than reading the fields again through the mutating cvParams(), which
+// was blanking whatever clamp message the caller's own read had just set.
+function renderCvHist(p) {
+  p = p || { fn: 'exp', n: 50, conf: 0.95, sigE: 0 };
+  const f = CI.FUNCS[p.fn], sd = Math.sqrt(CI.funcVar(f));
   const win = histWindow([CVS.plain, CVS.cv]) || { lo: f.mean - 1.5 * sd, hi: f.mean + 1.5 * sd };
   const opts = { yLabel: 'mean of h', truthLabel: v => 'E[h] = ' + v.toFixed(4), window: win,
                  liveTruth: f.mean, emptyWindow: win, nLabel: 'n' };
@@ -3810,7 +4142,7 @@ function renderCvHist() {
 }
 TABS.cv = {
   init() { fnOptions($('cv-fn')); cvParamsChanged(); const p = cvParams(); if (p) drawCvFig(null, p); },
-  render() { const p = cvParams(); if (p) { drawCvFig(CVS.lastRunObj, CVS.lastRunP || p); drawCvFlow(p); } renderCvHist(); }
+  render() { const p = cvParams(); if (p) { drawCvFig(CVS.lastRunObj, CVS.lastRunP || p); drawCvFlow(p); } renderCvHist(p); }
 };
 SPIN['cv-seed'] = seedSpin('cv');
 SPIN['cv-sige'] = decimalSpin('cv-sige', 0, cvParamsChanged, 0.01);
