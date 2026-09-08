@@ -660,7 +660,7 @@ better.
   shared five-model menu (the identity, exp(u), √u, 1/(1 + u), and the bowl) whose exact moments the
   verify script pins, each as a plain history over an improved one on a shared scale; tab ⑤ applies
   importance sampling to a normal input through its own three-model menu (x, exp(x), and x²), with
-  the threshold on the output scale, the shift aimed at the way in, and closed-form tail
+  the threshold on the output scale, the shift aimed at the input threshold, and closed-form tail
   probabilities. Conventions relied on by code outside the file, which any later edit has to
   preserve:*
   1. *Everything between the `CI-CORE-BEGIN` / `CI-CORE-END` sentinels is pure numerics with no DOM

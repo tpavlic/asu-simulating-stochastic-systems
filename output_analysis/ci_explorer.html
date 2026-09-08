@@ -240,154 +240,13 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    rather than only reading as "a line" or "a dot" in a generic sense. */
 .lg-sv { display: inline-block; width: 24px; height: 12px; flex: 0 0 auto; }
 #is-fig-leg > span { align-items: center; }
-/* is-fig-cap has a constant, three-sentence shape now (Task 7o): "All n
-   draws are shown" at or under IS_MAXR ("short"), "The first 300 of the n
-   draws are shown" above it ("long"); then the past-threshold sentence (Task
-   7j); then the beyond-window sentence (Task 7n) -- both counts are em dashes
-   before a run and either a number or "None"/"none" after one, but the
-   sentence carrying each is never added or removed, and so a caption's own
-   wrapped height depends only on n's own shape and its digit width, not on
-   whether a run has happened or what it found. setIsFigCap writes which
-   shape is showing into data-shape (reading the live n selector before a
-   run, run.wtd.n after one), and so the empty state already reserves for
-   whichever shape the next run will produce, and a first run never grows the
-   card. The two shapes need separate tiers below because "All 250 draws are
-   shown. ..." wraps at noticeably narrower cards than "The first 300 of the
-   10,000 draws are shown. ..." does, and reserving the longer shape's height
-   for the shorter one everywhere would leave a permanent gap under the
-   shorter one instead of closing it.
-   min-height is in em, not rem: at this element's own font-size (.7rem from
-   .cv-cap) with line-height: 1.35, 1em of min-height is exactly one wrapped
-   line; each tier below names its line count directly instead of a rem
-   figure that has to be recomputed by hand if the font size ever moves.
-   Thresholds were measured with a detached, invisible clone of this element
-   (so it inherits the same font/box CSS) swept pixel by pixel across content
-   widths, and then converted through the card's own measured viewport-to-
-   content-width mapping (full width below 760px, beside the stats panel's
-   fixed 230px column at 760px and up), against the one worst-case text each
-   shape can ever produce -- short: "All 250 proposal draws are shown. 250 of
-   the 250 landed past the threshold. Of the 250 draws, 250 lie beyond the
-   panel's fixed scale."; long: the same shape at "The first 300 of the
-   10,000 ..." with every count pushed to its own five-digit worst case. A
-   shorter number, "None"/"none", or an em dash in either count's place can
-   only shrink the text, never grow it, and so these two exact texts already
-   cover both states at every width without slack:
-     Short (n <= 300): <=247px 5 lines, 248-301px 4 lines, 302-407px 3 lines,
-     408-733px 2 lines, 734-760px 1 line, 761-977px 2 lines, >=978px 1 line.
-     Long (n > 300): <=257px 6 lines, 258-290px 5 lines, 291-353px 4 lines,
-     354-491px 3 lines, >=492px 2 lines.
-   Short still shows a brief return to 1 line just past the 760px regime
-   switch (the panel eats into the card's own width once the row goes side by
-   side, briefly undoing a line the narrower, full-width card already shed);
-   long's own third sentence keeps it at 2 lines everywhere past 491px and it
-   never reaches 1 at any width the card can take. The unconditional rule
-   below is 2 lines, the value shared by both shapes over most of their
-   range, and only the widths where a shape needs more or fewer lines get an
-   explicit, shape-scoped override. Confirmed live (gap = rendered box height
-   minus rendered text height): at most 1.5px at 390/605/760/900/1100/1200,
-   both before and after a run, in both toggle states, for both shapes. */
-#is-fig-cap { min-height: 2.7em; line-height: 1.35; }
-@media (max-width: 257px) { #is-fig-cap[data-shape="long"] { min-height: 8.1em; } }
-@media (min-width: 258px) and (max-width: 290px) { #is-fig-cap[data-shape="long"] { min-height: 6.75em; } }
-@media (min-width: 291px) and (max-width: 353px) { #is-fig-cap[data-shape="long"] { min-height: 5.4em; } }
-@media (min-width: 354px) and (max-width: 491px) { #is-fig-cap[data-shape="long"] { min-height: 4.05em; } }
-@media (max-width: 247px) { #is-fig-cap[data-shape="short"] { min-height: 6.75em; } }
-@media (min-width: 248px) and (max-width: 301px) { #is-fig-cap[data-shape="short"] { min-height: 5.4em; } }
-@media (min-width: 302px) and (max-width: 407px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
-@media (min-width: 734px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-@media (min-width: 978px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-/* #is-pair-cap (Task 7m, given a constant shape by Task 7o, extended by a
-   fourth, always-present sentence in Task 7q) always carries the weighted-
-   mass sentence, the beyond-window sentence, the "each bar ..." sentence,
-   and the empty-bin/one-draw sentence, in that order -- the mean, tail, and
-   beyond counts are em dashes before a run and either a number or "none"
-   after one, but as with is-fig-cap the sentence carrying each is never
-   added or removed. Only the sq model's own branch sentence still comes and
-   goes because it names a fact (the proposal's own draws favoring one
-   branch) that simply is not true for the other two models, not a count
-   that is merely unknown yet; `data-model` stamps which model is showing
-   (the mirror of is-fig-cap's own data-shape) so its own line can be
-   reserved only where it is ever going to be used. The two model groups
-   need separate tiers below, the same reason is-fig-cap's two n-shapes do:
-   reserving the sq group's own height for ident/exp everywhere would leave
-   those two models sitting under a permanent gap sized for a sentence they
-   can never show.
-   Thresholds were measured the same way is-fig-cap's are: a detached,
-   invisible clone of this element swept pixel by pixel across content
-   widths, converted through the card's own measured viewport-to-content-
-   width mapping, against the one worst-case text each group can ever
-   produce (n = 10,000, a five-digit draw count, and the weighted estimate
-   pushed to a 2-digit exponent) -- ident/exp: "Weighting each output by
-   W(y) turns the proposal's histogram into the target's; the weighted mass
-   past T is the weighted estimate, 4.530e-23, and it comes from the 10,000
-   draws the proposal placed there. Of those, 10,000 lie beyond the plots'
-   fixed scale. Each bar on the left times the ratio in the middle gives the
-   bar on the right. A bin with no draw stays empty however large W is
-   there, and a bin with one draw carries that draw's whole weight."; sq:
-   the same text with its own branch sentence appended. This card never sits
-   beside the stats panel the way the figure card does, and so its own width
-   tops out at 957px regardless of how wide the viewport grows; within that
-   reachable range the fourth sentence pushes both groups' own floor to 3
-   lines, one more than either had before it existed -- ident/exp's own text
-   never wraps down past 3 lines any more, and sq's never past 3 either
-   (its own extra branch sentence no longer gives it a floor a line taller
-   than ident/exp's because both floors now land on the same value):
-     ident/exp: <=229px 17 lines, 230-237px 16 lines, 238-249px 15 lines,
-     250-254px 14 lines, 255-270px 13 lines, 271-290px 12 lines, 291-313px
-     11 lines, 314-330px 10 lines, 331-362px 9 lines, 363-402px 8 lines,
-     403-454px 7 lines, 455-531px 6 lines, 532-629px 5 lines, 630-808px 4
-     lines, >=809px 3 lines.
-     sq: <=229px 19 lines, 230-237px 18 lines, 238-249px 17 lines, 250-254px
-     16 lines, 255-270px 15 lines, 271-282px 14 lines, 283-297px 13 lines,
-     298-318px 12 lines, 319-340px 11 lines, 341-373px 10 lines, 374-402px 9
-     lines, 403-450px 8 lines, 451-511px 7 lines, 512-585px 6 lines,
-     586-717px 5 lines, 718-923px 4 lines, >=924px 3 lines.
-   The unconditional rules below are each group's own widest-reach line
-   count (3 for both selectors now; the `[data-model="sq"]` one still
-   outranks the plain one by specificity wherever both would otherwise
-   apply, and still carries its own narrower-width tiers, which is why it
-   stays a separate rule rather than folding into the plain default), and
-   only the narrower widths get an explicit, tier-scoped override. Confirmed
-   live (gap = rendered box height minus rendered text height) at
-   390/605/760/900/1100/1200, both before and after a run, in both toggle
-   states, for both model groups: 0px everywhere except two widths where the
-   default run's own small numbers wrap a line shorter than the worst case
-   this tier reserves for -- 15.1px at 390px before a run (ident/exp) and
-   15.1px at 900px after a run (sq) -- both expected, not a sizing mistake:
-   see task-7q-report.md for the full table and why each one happens where
-   it does. */
-#is-pair-cap { min-height: 4.05em; line-height: 1.35; }
-@media (max-width: 229px) { #is-pair-cap { min-height: 22.95em; } }
-@media (min-width: 230px) and (max-width: 237px) { #is-pair-cap { min-height: 21.6em; } }
-@media (min-width: 238px) and (max-width: 249px) { #is-pair-cap { min-height: 20.25em; } }
-@media (min-width: 250px) and (max-width: 254px) { #is-pair-cap { min-height: 18.9em; } }
-@media (min-width: 255px) and (max-width: 270px) { #is-pair-cap { min-height: 17.55em; } }
-@media (min-width: 271px) and (max-width: 290px) { #is-pair-cap { min-height: 16.2em; } }
-@media (min-width: 291px) and (max-width: 313px) { #is-pair-cap { min-height: 14.85em; } }
-@media (min-width: 314px) and (max-width: 330px) { #is-pair-cap { min-height: 13.5em; } }
-@media (min-width: 331px) and (max-width: 362px) { #is-pair-cap { min-height: 12.15em; } }
-@media (min-width: 363px) and (max-width: 402px) { #is-pair-cap { min-height: 10.8em; } }
-@media (min-width: 403px) and (max-width: 454px) { #is-pair-cap { min-height: 9.45em; } }
-@media (min-width: 455px) and (max-width: 531px) { #is-pair-cap { min-height: 8.1em; } }
-@media (min-width: 532px) and (max-width: 629px) { #is-pair-cap { min-height: 6.75em; } }
-@media (min-width: 630px) and (max-width: 808px) { #is-pair-cap { min-height: 5.4em; } }
-#is-pair-cap[data-model="sq"] { min-height: 4.05em; }
-@media (max-width: 229px) { #is-pair-cap[data-model="sq"] { min-height: 25.65em; } }
-@media (min-width: 230px) and (max-width: 237px) { #is-pair-cap[data-model="sq"] { min-height: 24.3em; } }
-@media (min-width: 238px) and (max-width: 249px) { #is-pair-cap[data-model="sq"] { min-height: 22.95em; } }
-@media (min-width: 250px) and (max-width: 254px) { #is-pair-cap[data-model="sq"] { min-height: 21.6em; } }
-@media (min-width: 255px) and (max-width: 270px) { #is-pair-cap[data-model="sq"] { min-height: 20.25em; } }
-@media (min-width: 271px) and (max-width: 282px) { #is-pair-cap[data-model="sq"] { min-height: 18.9em; } }
-@media (min-width: 283px) and (max-width: 297px) { #is-pair-cap[data-model="sq"] { min-height: 17.55em; } }
-@media (min-width: 298px) and (max-width: 318px) { #is-pair-cap[data-model="sq"] { min-height: 16.2em; } }
-@media (min-width: 319px) and (max-width: 340px) { #is-pair-cap[data-model="sq"] { min-height: 14.85em; } }
-@media (min-width: 341px) and (max-width: 373px) { #is-pair-cap[data-model="sq"] { min-height: 13.5em; } }
-@media (min-width: 374px) and (max-width: 402px) { #is-pair-cap[data-model="sq"] { min-height: 12.15em; } }
-@media (min-width: 403px) and (max-width: 450px) { #is-pair-cap[data-model="sq"] { min-height: 10.8em; } }
-@media (min-width: 451px) and (max-width: 511px) { #is-pair-cap[data-model="sq"] { min-height: 9.45em; } }
-@media (min-width: 512px) and (max-width: 585px) { #is-pair-cap[data-model="sq"] { min-height: 8.1em; } }
-@media (min-width: 586px) and (max-width: 717px) { #is-pair-cap[data-model="sq"] { min-height: 6.75em; } }
-@media (min-width: 718px) and (max-width: 923px) { #is-pair-cap[data-model="sq"] { min-height: 5.4em; } }
+/* The two tab ⑤ captions and every history tally reserve their height at run
+   time (reserveCapHeight in the page script) from the tallest text their current
+   shape can hold, measured in place at the current width, so that a run, a drag,
+   an edit, Run ×100, or the sample toggle never moves the page at any width.
+   Tables of width tiers did this job before and kept drifting at widths no one
+   had measured. */
+#is-fig-cap, #is-pair-cap { line-height: 1.35; }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
    filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
    panel's own copy of the same control. */
@@ -474,19 +333,12 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    it wraps to the same number of lines up to the point where the "latest N of M
    runs" clause first appears (once the run count exceeds the 30-row display
    window). */
+/* Digits of equal width wherever a number is written into text that reserves its
+   height or width: a "0.0" placeholder then takes exactly the room a "0.1" will, and
+   a run cannot move a wrap point by changing one digit for another. */
+.hist-cap, .sc-lbl, .sc-val, .cv-cap, .fig-note { font-variant-numeric: tabular-nums; }
 .hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; }
 .hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
-/* Tab ②'s two history captions alone carry a further "excluding zero" clause, and
-   so they wrap one line further than the zero-state text anticipated once "latest
-   N of M runs" also appears (Task 7a). Reserve that line by width tier instead of
-   measuring it in JS, and so the page never grows at the 30-run boundary. Heights
-   are exact multiples of the caption's own line height (0.8rem font-size x 1.5
-   line height = 1.2rem), rounded up past the tallest wrapped state measured at
-   each tier (390: 3 lines; 481–800: 2 lines; above 800 the caption never wraps
-   past one line even at its longest, and so no reservation is needed there). */
-#crn-cap1, #crn-cap2 { min-height: 1.2rem; }
-@media (max-width: 800px) { #crn-cap1, #crn-cap2 { min-height: 2.4rem; } }
-@media (max-width: 480px) { #crn-cap1, #crn-cap2 { min-height: 3.6rem; } }
 svg.hsv { display: block; width: 100%; height: auto; }
 .hist-handle { cursor: ns-resize; touch-action: none; }
 svg.hsv.hot .hist-truth { stroke-width: 3; }
@@ -1760,6 +1612,40 @@ function renderActiveHist() {
   const name = pane.id.replace('tab-', '');
   if (TABS[name]) TABS[name].render();
 }
+// A stats-card label that ends in "(df N)" has to wrap to the same number of
+// lines before a run, when it reads "df —", as after one, or the card grows
+// on the first run at whatever widths the two forms straddle a wrap point
+// (found at 550 and 780 px on tab ③ and at 540 and 550 px on tab ②). Each
+// df span is therefore given the pixel width of its widest possible text,
+// measured in its own font by a hidden clone: the exact df where n fixes it,
+// and the Welch–Satterthwaite ceiling 2(n − 1) with its decimal for the one
+// df the data decides. The placeholder and the filled form then occupy the
+// same width, whatever either says.
+function reserveDfWidth(id, candidates) {
+  const el = $(id); if (!el) return;
+  const c = el.cloneNode(false);
+  c.removeAttribute('id');
+  const cs = getComputedStyle(el);
+  c.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;display:inline;min-width:0;left:-9999px;top:0;font:' + cs.font
+    + ';letter-spacing:' + cs.letterSpacing + ';text-transform:' + cs.textTransform + ';font-variant-numeric:' + cs.fontVariantNumeric + ';word-spacing:' + cs.wordSpacing;
+  // Measured on the body, not beside the span: a span inside a tab that is
+  // not showing has no layout, and a clone beside it would measure zero.
+  document.body.appendChild(c);
+  let w = 0;
+  candidates.forEach(t => { c.textContent = t; w = Math.max(w, c.getBoundingClientRect().width); });
+  c.remove();
+  el.style.display = 'inline-block';
+  el.style.minWidth = Math.ceil(w) + 'px';
+}
+function reserveAllDf() {
+  const nC = Number($('crn-n').value), nA = Number($('av-n').value), nV = Number($('cv-n').value);
+  reserveDfWidth('crn-s-welch-df', ['df ' + (2 * (nC - 1)).toFixed(1), 'df ' + (nC - 1).toFixed(1)]);
+  reserveDfWidth('crn-s-paired-df', ['df ' + (nC - 1)]);
+  reserveDfWidth('av-s-hi-df', ['df ' + (nA - 1)]);
+  reserveDfWidth('av-s-ha-df', ['df ' + (nA - 1)]);
+  reserveDfWidth('cv-s-hp-df', ['df ' + (nV - 1)]);
+  reserveDfWidth('cv-s-hc-df', ['df ' + (nV - 1), 'df ' + (nV - 2)]);
+}
 let histResizeTimer = null, histLastW = 0;
 function watchHistWidth() {
   const widget = document.querySelector('.widget');
@@ -1767,7 +1653,7 @@ function watchHistWidth() {
     if (w === histLastW) return;
     histLastW = w;
     clearTimeout(histResizeTimer);
-    histResizeTimer = setTimeout(renderActiveHist, 120);
+    histResizeTimer = setTimeout(() => { reserveAllDf(); renderActiveHist(); }, 120);
   };
   if (typeof ResizeObserver !== 'undefined' && widget) {
     new ResizeObserver(es => onWidth(Math.round(es[0].contentRect.width))).observe(widget);
@@ -2102,18 +1988,28 @@ function histPlot(svgEl, containerEl, runs, opts) {
 function histCaption(el, res, what, zeroWhat) {
   // Before the first run the tally shows its zeros in the same shape it will keep,
   // including the expected-miss parenthetical, and so the caption wraps to the same number
-  // of lines from the start and the first run does not move the page.
+  // of lines from the start and the first run does not move the page. The "latest N of M
+  // runs" clause appears only once the chart has dropped runs, and so the caption's height
+  // is reserved (reserveCapHeight) for the longest tally it can show, three-digit counts
+  // and that clause included, at whatever width the chart is rendered.
   if (!res || !res.shown) {
     el.innerHTML = 'Intervals missing ' + what + ': <strong>0 of 0</strong>'
       + ' (about 0.0 expected at the confidence levels used)'
       + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>0 of 0</strong>' : '');
-    return;
+  } else {
+    const miss = res.shown - res.hits;
+    el.innerHTML = 'Intervals missing ' + what + ': <strong>' + miss + ' of ' + res.shown + '</strong>'
+      + ' (about ' + res.expMiss.toFixed(1) + ' expected at the confidence levels used)'
+      + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>' + res.excl0 + ' of ' + res.shown + '</strong>' : '')
+      + (res.dropped ? ' &middot; latest ' + res.shown + ' of ' + (res.shown + res.dropped) + ' runs' : '');
   }
-  const miss = res.shown - res.hits;
-  el.innerHTML = 'Intervals missing ' + what + ': <strong>' + miss + ' of ' + res.shown + '</strong>'
-    + ' (about ' + res.expMiss.toFixed(1) + ' expected at the confidence levels used)'
-    + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>' + res.excl0 + ' of ' + res.shown + '</strong>' : '')
-    + (res.dropped ? ' &middot; latest ' + res.shown + ' of ' + (res.shown + res.dropped) + ' runs' : '');
+  // HIST_MAX caps what a chart shows at 100 runs, and so the widest tally the
+  // caption can carry is three digits per count; a history past 999 runs is the
+  // one case left that could wrap a line further.
+  reserveCapHeight(el, 'Intervals missing ' + what + ': <strong>100 of 100</strong>'
+    + ' (about 99.9 expected at the confidence levels used)'
+    + (zeroWhat ? ' &middot; excluding ' + zeroWhat + ': <strong>100 of 100</strong>' : '')
+    + ' &middot; latest 100 of 999 runs', true);
 }
 // Vertical drag on a history chart's held true-value segment. The value under the
 // pointer comes from the frame the last render stored on the SVG.
@@ -3100,6 +2996,7 @@ function drawCrnFlow(p) {
     "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above; the independent arm averages each system first and then differences the two means, whereas the common-random-numbers arm differences each pair first and then averages.");
 }
 function crnParamsChanged() {
+  reserveAllDf();
   const p = crnParams(); if (!p) return;
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   $('crn-s-delta').textContent = fmt(delta, decFor(Math.abs(delta) || 1));
@@ -3739,6 +3636,7 @@ function avLockScale(run, p) {
   return { fig: avScaleFor(run, f, true), seq: avScaleFor(run, f, false) };
 }
 function avParamsChanged() {
+  reserveAllDf();
   const p = avParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('av-s-true').textContent = f.mean.toFixed(5);
@@ -4098,6 +3996,7 @@ function cvLockScale(run, p) {
   return { lo: dMin - pad, hi: dMax + pad };
 }
 function cvParamsChanged() {
+  reserveAllDf();
   const p = cvParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('cv-s-true').textContent = f.mean.toFixed(5);
@@ -5256,7 +5155,7 @@ function isInitDrag() {
       const fr = { x0: d.frozen.x0, x1: d.frozen.x1, yLo: d.frozen.yLo, yHi: d.frozen.yHi, yMargin: d.frozen.yMargin,
                    mainLeft: F.mainLeft, mainW: F.mainW, mainTop: F.mainTop, mainH: F.mainH };
       if (d.which === 'theta') {
-        const theta = isRoundTheta(isXInv(fr, q.x));
+        const theta = isRoundTheta(isXInv(fr, q.x) + d.offset);
         $('is-theta-val').value = String(theta); $('is-theta').value = String(theta);
       } else {
         const T = d.which === 'T' ? isYInv(fr, q.y) : fn.h(isXInv(fr, q.x));
@@ -5284,8 +5183,16 @@ function isInitDrag() {
       const frozen = which === 'pairT'
         ? { yLo: ISS.pairFrame.yLo, yHi: ISS.pairFrame.yHi }
         : { x0: ISS.frame.x0, x1: ISS.frame.x1, yLo: ISS.frame.yLo, yHi: ISS.frame.yHi, yMargin: ISS.frame.yMargin };
+      // The proposal curve is grabbed wherever the pointer lands on it, not
+      // at its peak, and so the drag carries the offset between θ and the
+      // pointer's own input value at pointerdown; without it, the curve
+      // jumped so that its center sat under the pointer the moment a drag
+      // began (Ted, 2026-09-08).
+      const offset = which === 'theta'
+        ? Number($('is-theta-val').value) - isXInv({ x0: ISS.frame.x0, x1: ISS.frame.x1, mainLeft: ISS.frame.mainLeft, mainW: ISS.frame.mainW }, ciSvgPoint(svg, ev).x)
+        : 0;
       ISS.drag = { which: which, svgId: svg.id, panelIdx: g.dataset.panelIdx !== undefined ? Number(g.dataset.panelIdx) : null,
-                   frozen: frozen, pid: ev.pointerId };
+                   frozen: frozen, offset: offset, pid: ev.pointerId };
       try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
       setHot(which, true);
     });
@@ -5374,26 +5281,55 @@ function isInitDrag() {
 // and the weighted mass equals the weighted estimate is the pair card's own
 // caption below, not this one. n is shared by both arms, and so the
 // data-shape tiers stay keyed on it regardless of which view is showing.
-function setIsFigCap(run, beyond) {
-  const mode = ISS.mode, parts = [];
-  const n = run ? run.wtd.n : Number($('is-n').value);
-  const word = mode === 'direct' ? 'direct' : 'proposal';
+// Builds the transfer plot's caption from its parts, so that the live text
+// and the worst-case text reserveCapHeight measures come from one place and
+// cannot drift apart in shape.
+function isFigCapText(n, word, landed, beyond) {
+  const parts = [];
   parts.push(n > IS_MAXR
     ? 'The first ' + IS_MAXR.toLocaleString() + ' of the ' + n.toLocaleString() + ' ' + word + ' draws are shown.'
     : 'All ' + n.toLocaleString() + ' ' + word + ' draws are shown.');
+  parts.push(landed + ' of the ' + n.toLocaleString() + ' landed past the threshold.');
+  parts.push('Of the ' + n.toLocaleString() + ' draws, ' + beyond + " lie beyond the panel's fixed scale.");
+  return parts.join(' ');
+}
+// Reserves a caption's height from a measurement rather than a table of
+// width tiers: a hidden clone of the element, at the element's own width and
+// in its own font, is filled with the tallest text the current shape can
+// hold (every count at its widest, the longer sample word), and the
+// element's min-height is set to what that clone needs. Called from every
+// draw, and so it follows a resize, an n change, and a model change, and the
+// page height stays where it is on a run, a drag, an edit, or the toggle.
+function reserveCapHeight(el, worst, asHtml) {
+  const c = el.cloneNode(false);
+  c.removeAttribute('id');
+  const cs = getComputedStyle(el);
+  // The clone carries the element's classes but not its id, and so the
+  // typography that id selectors set is copied across by hand.
+  c.style.cssText = 'position:absolute;visibility:hidden;min-height:0;height:auto;left:-9999px;top:0;width:' + cs.width
+    + ';font:' + cs.font + ';line-height:' + cs.lineHeight + ';padding:' + cs.padding + ';box-sizing:' + cs.boxSizing
+    + ';letter-spacing:' + cs.letterSpacing + ';text-transform:' + cs.textTransform + ';font-variant-numeric:' + cs.fontVariantNumeric + ';word-spacing:' + cs.wordSpacing;
+  if (asHtml) c.innerHTML = worst; else c.textContent = worst;
+  el.parentNode.appendChild(c);
+  const h = c.getBoundingClientRect().height;
+  c.remove();
+  el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
+}
+function setIsFigCap(run, beyond) {
+  const mode = ISS.mode;
+  const n = run ? run.wtd.n : Number($('is-n').value);
+  const word = mode === 'direct' ? 'direct' : 'proposal';
+  let landed = '—', beyondText = '—';
   if (run) {
     const count = mode === 'direct' ? run.hits : run.tail;
-    const landed = count === 0 ? 'None' : count.toLocaleString();
-    parts.push(landed + ' of the ' + n.toLocaleString() + ' landed past the threshold.');
-    const beyondText = beyond === 0 ? 'none' : beyond.toLocaleString();
-    parts.push('Of the ' + n.toLocaleString() + ' draws, ' + beyondText + " lie beyond the panel's fixed scale.");
-  } else {
-    parts.push('— of the ' + n.toLocaleString() + ' landed past the threshold.');
-    parts.push('Of the ' + n.toLocaleString() + " draws, — lie beyond the panel's fixed scale.");
+    landed = count === 0 ? 'None' : count.toLocaleString();
+    beyondText = beyond === 0 ? 'none' : beyond.toLocaleString();
   }
-  $('is-fig-cap').dataset.shape = n > IS_MAXR ? 'long' : 'short';
-  $('is-fig-cap').dataset.mode = mode;
-  $('is-fig-cap').textContent = parts.join(' ');
+  const el = $('is-fig-cap');
+  el.dataset.shape = n > IS_MAXR ? 'long' : 'short';
+  el.dataset.mode = mode;
+  el.textContent = isFigCapText(n, word, landed, beyondText);
+  reserveCapHeight(el, isFigCapText(n, 'proposal', n.toLocaleString(), n.toLocaleString()));
 }
 // The likelihood ratio W at output value y (Task 7m addendum), inverting h
 // analytically for each of tab ⑤'s three models -- a page-script-only
@@ -5851,18 +5787,24 @@ function isPairLegendHtml(fnKey) {
 // draw's whole weight -- and is always present, the same rule every other
 // sentence here already follows because it names a fact about the method
 // rather than a count tied to a run.
-function setIsPairCap(run, fnKey, beyond) {
-  const mean = run ? run.wtd.mean.toExponential(3) : '—';
-  const tail = run ? run.tail.toLocaleString() : '—';
+function isPairCapText(mean, tail, beyondText, fnKey) {
   let s = "Weighting each output by W(y) turns the proposal's histogram into the target's; the weighted mass past T is the weighted estimate, "
     + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.';
-  const beyondText = !run ? '—' : (beyond === 0 ? 'none' : beyond.toLocaleString());
   s += ' Of those, ' + beyondText + " lie beyond the plots' fixed scale.";
   s += ' Each draw carries its own weight, and so a bin on the right is its count times the mean weight over its draws, not the weight at any one point in the bin.';
   s += ' A bin with no draw stays empty however large W is there, and a bin with one draw carries that draw\'s whole weight.';
   if (fnKey === 'sq') s += " The proposal's draws come almost entirely from the +√y branch.";
-  $('is-pair-cap').dataset.model = fnKey;
-  $('is-pair-cap').textContent = s;
+  return s;
+}
+function setIsPairCap(run, fnKey, beyond) {
+  const mean = run ? run.wtd.mean.toExponential(3) : '—';
+  const tail = run ? run.tail.toLocaleString() : '—';
+  const beyondText = !run ? '—' : (beyond === 0 ? 'none' : beyond.toLocaleString());
+  const n = run ? run.wtd.n : Number($('is-n').value);
+  const el = $('is-pair-cap');
+  el.dataset.model = fnKey;
+  el.textContent = isPairCapText(mean, tail, beyondText, fnKey);
+  reserveCapHeight(el, isPairCapText('9.999e-10', n.toLocaleString(), n.toLocaleString(), fnKey));
 }
 function isShowStats(run) {
   const e = v => Number.isFinite(v) ? v.toExponential(3) : '—';
@@ -6063,6 +6005,10 @@ window.addEventListener('DOMContentLoaded', () => {
   Object.keys(TABS).forEach(k => { if (TABS[k].init) TABS[k].init(); });
   renderActiveHist();
   watchHistWidth();
+  // The df spans and the tab ⑤ captions are measured in their own font, and
+  // so they are measured again once the web fonts have arrived.
+  reserveAllDf();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { reserveAllDf(); renderActiveHist(); });
 });
 </script>
 <footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">
