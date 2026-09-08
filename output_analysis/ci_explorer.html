@@ -45,7 +45,7 @@
      Teal reads as "the exact thing" (true curve, and a captured interval);
      orange reads as "the sampled thing" (histogram, rug, estimates); red
      marks an interval that missed. Hue never carries the miss alone: it is
-     also dashed with a hollow dot, so it still reads under red-green color
+     also dashed with a hollow dot, and so it still reads under red-green color
      deficiency. */
   --truth:       #0F6E8C;
   --est:         #C2570A;
@@ -99,7 +99,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .tp { display: none; } .tp.active { display: block; }
 .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 /* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
-   the WCAG 2.5.8 floor. The rows are already taller than this, so nothing moves. */
+   the WCAG 2.5.8 floor. The rows are already taller than this, and so nothing moves. */
 .ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap;
             display: inline-flex; align-items: center; min-height: 24px; }
 select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px; border: 1.5px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
@@ -108,7 +108,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-run:hover { background: var(--accent-dark); }
 .btn-run:disabled { background: #aaa; cursor: not-allowed; }
 /* Secondary run button (the 100-run sweep): same weight as Run Experiment, but
-   outlined, so the single run stays the obvious first thing to click. */
+   outlined, and so the single run stays the obvious first thing to click. */
 .btn-run2 { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
             font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px; background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-run2:hover:not(:disabled) { background: var(--accent); color: #fff; }
@@ -118,7 +118,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    attribute, which shows nothing at all on a touch screen. */
 .tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .tip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-/* A button cannot use tap to open a tip, because tap already runs it, so it opens on
+/* A button cannot use tap to open a tip because tap already runs it, and so it opens on
    a long press instead and suppresses the callout iOS would otherwise raise. */
 [data-tip-press] { -webkit-touch-callout: none; }
 /* Descriptions live here for assistive tech: visible to a screen reader, to nothing
@@ -199,7 +199,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* Tab ①/②'s par-row reserves this line's height even when empty, which sits those
    tabs' seed row visibly farther from the parameter row than tab ③, whose par-row
    carries no such span at all. Collapse the reservation when there is no message,
-   so the gap above the seed row matches across tabs regardless of whether the row
+   and so the gap above the seed row matches across tabs regardless of whether the row
    happens to have a validation-message span. */
 .par-row .seed-msg:empty { display: none; }
 .seed-inp:focus-visible, select:focus-visible, .tab-select:focus-visible,
@@ -208,14 +208,14 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 .viz-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
-/* Shrinkable, so a narrow viewport scales the plot down instead of overflowing */
+/* Shrinkable, and so a narrow viewport scales the plot down instead of overflowing */
 .cv-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 12px;
            flex: 0 0 407px; max-width: 100%; min-width: 0; }
 /* The diagram captions (crn-flow-cap, av-flow-cap, cv-flow-cap) are prose sentences,
    not itemized legends, and keep this centered single-block look. */
 .cv-cap { font-size: .7rem; color: var(--muted); text-align: center; margin-top: 6px; }
 /* Figure legends: one item per grid cell instead of a wrapped, nbsp-separated run,
-   so items never break mid-phrase and every symbol lines up down its own column.
+   and so items never break mid-phrase and every symbol lines up down its own column.
    auto-fit with a 210px minimum gives phones one column and wide cards two or three. */
 .cv-leg { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 3px 16px; margin-top: 8px; font-size: .74rem; color: var(--muted); text-align: left; }
 .cv-leg > span { display: flex; gap: 6px; align-items: baseline; }
@@ -224,7 +224,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    and went as a grid item changed the grid's row count between the empty and
    filled states, growing the card by a row once a run filled it in. Reserving the
    note's own row here, whether or not it has text, keeps the card's height fixed
-   across a run and a clear. line-height is pinned to the same 1.35 as min-height,
+   across a run and a clear. line-height is pinned to the same 1.35 as min-height
    because the browser's own "normal" line-height (what an empty div with only a
    min-height never triggers, and what one line of real text does) is taller than
    1.35em here, and the mismatch would still grow the row by a pixel or two once
@@ -242,8 +242,8 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 #is-fig-leg > span { align-items: center; }
 /* is-fig-cap has a constant, three-sentence shape now (Task 7o): "All n
    draws are shown" at or under IS_MAXR ("short"), "The first 300 of the n
-   draws are shown" above it ("long"), then the past-threshold sentence (Task
-   7j), then the beyond-window sentence (Task 7n) -- both counts are em dashes
+   draws are shown" above it ("long"); then the past-threshold sentence (Task
+   7j); then the beyond-window sentence (Task 7n) -- both counts are em dashes
    before a run and either a number or "None"/"none" after one, but the
    sentence carrying each is never added or removed, and so a caption's own
    wrapped height depends only on n's own shape and its digit width, not on
@@ -262,7 +262,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    figure that has to be recomputed by hand if the font size ever moves.
    Thresholds were measured with a detached, invisible clone of this element
    (so it inherits the same font/box CSS) swept pixel by pixel across content
-   widths, then converted through the card's own measured viewport-to-
+   widths, and then converted through the card's own measured viewport-to-
    content-width mapping (full width below 760px, beside the stats panel's
    fixed 230px column at 760px and up), against the one worst-case text each
    shape can ever produce -- short: "All 250 proposal draws are shown. 250 of
@@ -296,20 +296,22 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 @media (min-width: 302px) and (max-width: 407px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
 @media (min-width: 734px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
 @media (min-width: 978px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-/* #is-pair-cap (Task 7m, given a constant shape by Task 7o) always carries
-   the weighted-mass sentence, the beyond-window sentence, and the "each bar
-   ..." sentence, in that order -- the mean, tail, and beyond counts are em
-   dashes before a run and either a number or "none" after one, but as with
-   is-fig-cap the sentence carrying each is never added or removed. Only the
-   sq model's own branch sentence still comes and goes because it names a
-   fact (the proposal's own draws favoring one branch) that simply is not
-   true for the other two models, not a count that is merely unknown yet;
-   `data-model` stamps which model is showing (the mirror of is-fig-cap's own
-   data-shape) so its own line can be reserved only where it is ever going to
-   be used. The two model groups need separate tiers below, the same reason
-   is-fig-cap's two n-shapes do: reserving the sq group's own height for
-   ident/exp everywhere would leave those two models sitting under a
-   permanent gap sized for a sentence they can never show.
+/* #is-pair-cap (Task 7m, given a constant shape by Task 7o, extended by a
+   fourth, always-present sentence in Task 7q) always carries the weighted-
+   mass sentence, the beyond-window sentence, the "each bar ..." sentence,
+   and the empty-bin/one-draw sentence, in that order -- the mean, tail, and
+   beyond counts are em dashes before a run and either a number or "none"
+   after one, but as with is-fig-cap the sentence carrying each is never
+   added or removed. Only the sq model's own branch sentence still comes and
+   goes because it names a fact (the proposal's own draws favoring one
+   branch) that simply is not true for the other two models, not a count
+   that is merely unknown yet; `data-model` stamps which model is showing
+   (the mirror of is-fig-cap's own data-shape) so its own line can be
+   reserved only where it is ever going to be used. The two model groups
+   need separate tiers below, the same reason is-fig-cap's two n-shapes do:
+   reserving the sq group's own height for ident/exp everywhere would leave
+   those two models sitting under a permanent gap sized for a sentence they
+   can never show.
    Thresholds were measured the same way is-fig-cap's are: a detached,
    invisible clone of this element swept pixel by pixel across content
    widths, converted through the card's own measured viewport-to-content-
@@ -320,52 +322,72 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    past T is the weighted estimate, 4.530e-23, and it comes from the 10,000
    draws the proposal placed there. Of those, 10,000 lie beyond the plots'
    fixed scale. Each bar on the left times the ratio in the middle gives the
-   bar on the right."; sq: the same text with its own branch sentence
-   appended. This card never sits beside the stats panel the way the figure
-   card does, and so its own width tops out at 957px regardless of how wide
-   the viewport grows; within that reachable range, ident/exp's own text
-   never wraps down past 2 lines and sq's never past 3:
-     ident/exp: <=229px 13 lines, 230-240px 12 lines, 241-249px 11 lines,
-     250-270px 10 lines, 271-291px 9 lines, 292-328px 8 lines, 329-362px 7
-     lines, 363-414px 6 lines, 415-492px 5 lines, 493-629px 4 lines,
-     630-890px 3 lines, >=891px 2 lines.
-     sq: <=229px 15 lines, 230-242px 14 lines, 243-249px 13 lines, 250-259px
-     12 lines, 260-281px 11 lines, 282-311px 10 lines, 312-328px 9 lines,
-     329-373px 8 lines, 374-414px 7 lines, 415-476px 6 lines, 477-572px 5
-     lines, 573-734px 4 lines, >=735px 3 lines.
+   bar on the right. A bin with no draw stays empty however large W is
+   there, and a bin with one draw carries that draw's whole weight."; sq:
+   the same text with its own branch sentence appended. This card never sits
+   beside the stats panel the way the figure card does, and so its own width
+   tops out at 957px regardless of how wide the viewport grows; within that
+   reachable range the fourth sentence pushes both groups' own floor to 3
+   lines, one more than either had before it existed -- ident/exp's own text
+   never wraps down past 3 lines any more, and sq's never past 3 either
+   (its own extra branch sentence no longer gives it a floor a line taller
+   than ident/exp's because both floors now land on the same value):
+     ident/exp: <=229px 17 lines, 230-237px 16 lines, 238-249px 15 lines,
+     250-254px 14 lines, 255-270px 13 lines, 271-290px 12 lines, 291-313px
+     11 lines, 314-330px 10 lines, 331-362px 9 lines, 363-402px 8 lines,
+     403-454px 7 lines, 455-531px 6 lines, 532-629px 5 lines, 630-808px 4
+     lines, >=809px 3 lines.
+     sq: <=229px 19 lines, 230-237px 18 lines, 238-249px 17 lines, 250-254px
+     16 lines, 255-270px 15 lines, 271-282px 14 lines, 283-297px 13 lines,
+     298-318px 12 lines, 319-340px 11 lines, 341-373px 10 lines, 374-402px 9
+     lines, 403-450px 8 lines, 451-511px 7 lines, 512-585px 6 lines,
+     586-717px 5 lines, 718-923px 4 lines, >=924px 3 lines.
    The unconditional rules below are each group's own widest-reach line
-   count (2 for the plain selector, which every model matches; 3 for the
-   `[data-model="sq"]` selector, which outranks the plain one by specificity
-   wherever both would otherwise apply), and only the narrower widths get an
-   explicit, tier-scoped override. Confirmed live (gap = rendered box height
-   minus rendered text height): at most 1.5px at 390/605/760/900/1100/1200,
-   both before and after a run, in both toggle states, for both model
-   groups. */
-#is-pair-cap { min-height: 2.7em; line-height: 1.35; }
-@media (max-width: 229px) { #is-pair-cap { min-height: 17.55em; } }
-@media (min-width: 230px) and (max-width: 240px) { #is-pair-cap { min-height: 16.2em; } }
-@media (min-width: 241px) and (max-width: 249px) { #is-pair-cap { min-height: 14.85em; } }
-@media (min-width: 250px) and (max-width: 270px) { #is-pair-cap { min-height: 13.5em; } }
-@media (min-width: 271px) and (max-width: 291px) { #is-pair-cap { min-height: 12.15em; } }
-@media (min-width: 292px) and (max-width: 328px) { #is-pair-cap { min-height: 10.8em; } }
-@media (min-width: 329px) and (max-width: 362px) { #is-pair-cap { min-height: 9.45em; } }
-@media (min-width: 363px) and (max-width: 414px) { #is-pair-cap { min-height: 8.1em; } }
-@media (min-width: 415px) and (max-width: 492px) { #is-pair-cap { min-height: 6.75em; } }
-@media (min-width: 493px) and (max-width: 629px) { #is-pair-cap { min-height: 5.4em; } }
-@media (min-width: 630px) and (max-width: 890px) { #is-pair-cap { min-height: 4.05em; } }
+   count (3 for both selectors now; the `[data-model="sq"]` one still
+   outranks the plain one by specificity wherever both would otherwise
+   apply, and still carries its own narrower-width tiers, which is why it
+   stays a separate rule rather than folding into the plain default), and
+   only the narrower widths get an explicit, tier-scoped override. Confirmed
+   live (gap = rendered box height minus rendered text height) at
+   390/605/760/900/1100/1200, both before and after a run, in both toggle
+   states, for both model groups: 0px everywhere except two widths where the
+   default run's own small numbers wrap a line shorter than the worst case
+   this tier reserves for -- 15.1px at 390px before a run (ident/exp) and
+   15.1px at 900px after a run (sq) -- both expected, not a sizing mistake:
+   see task-7q-report.md for the full table and why each one happens where
+   it does. */
+#is-pair-cap { min-height: 4.05em; line-height: 1.35; }
+@media (max-width: 229px) { #is-pair-cap { min-height: 22.95em; } }
+@media (min-width: 230px) and (max-width: 237px) { #is-pair-cap { min-height: 21.6em; } }
+@media (min-width: 238px) and (max-width: 249px) { #is-pair-cap { min-height: 20.25em; } }
+@media (min-width: 250px) and (max-width: 254px) { #is-pair-cap { min-height: 18.9em; } }
+@media (min-width: 255px) and (max-width: 270px) { #is-pair-cap { min-height: 17.55em; } }
+@media (min-width: 271px) and (max-width: 290px) { #is-pair-cap { min-height: 16.2em; } }
+@media (min-width: 291px) and (max-width: 313px) { #is-pair-cap { min-height: 14.85em; } }
+@media (min-width: 314px) and (max-width: 330px) { #is-pair-cap { min-height: 13.5em; } }
+@media (min-width: 331px) and (max-width: 362px) { #is-pair-cap { min-height: 12.15em; } }
+@media (min-width: 363px) and (max-width: 402px) { #is-pair-cap { min-height: 10.8em; } }
+@media (min-width: 403px) and (max-width: 454px) { #is-pair-cap { min-height: 9.45em; } }
+@media (min-width: 455px) and (max-width: 531px) { #is-pair-cap { min-height: 8.1em; } }
+@media (min-width: 532px) and (max-width: 629px) { #is-pair-cap { min-height: 6.75em; } }
+@media (min-width: 630px) and (max-width: 808px) { #is-pair-cap { min-height: 5.4em; } }
 #is-pair-cap[data-model="sq"] { min-height: 4.05em; }
-@media (max-width: 229px) { #is-pair-cap[data-model="sq"] { min-height: 20.25em; } }
-@media (min-width: 230px) and (max-width: 242px) { #is-pair-cap[data-model="sq"] { min-height: 18.9em; } }
-@media (min-width: 243px) and (max-width: 249px) { #is-pair-cap[data-model="sq"] { min-height: 17.55em; } }
-@media (min-width: 250px) and (max-width: 259px) { #is-pair-cap[data-model="sq"] { min-height: 16.2em; } }
-@media (min-width: 260px) and (max-width: 281px) { #is-pair-cap[data-model="sq"] { min-height: 14.85em; } }
-@media (min-width: 282px) and (max-width: 311px) { #is-pair-cap[data-model="sq"] { min-height: 13.5em; } }
-@media (min-width: 312px) and (max-width: 328px) { #is-pair-cap[data-model="sq"] { min-height: 12.15em; } }
-@media (min-width: 329px) and (max-width: 373px) { #is-pair-cap[data-model="sq"] { min-height: 10.8em; } }
-@media (min-width: 374px) and (max-width: 414px) { #is-pair-cap[data-model="sq"] { min-height: 9.45em; } }
-@media (min-width: 415px) and (max-width: 476px) { #is-pair-cap[data-model="sq"] { min-height: 8.1em; } }
-@media (min-width: 477px) and (max-width: 572px) { #is-pair-cap[data-model="sq"] { min-height: 6.75em; } }
-@media (min-width: 573px) and (max-width: 734px) { #is-pair-cap[data-model="sq"] { min-height: 5.4em; } }
+@media (max-width: 229px) { #is-pair-cap[data-model="sq"] { min-height: 25.65em; } }
+@media (min-width: 230px) and (max-width: 237px) { #is-pair-cap[data-model="sq"] { min-height: 24.3em; } }
+@media (min-width: 238px) and (max-width: 249px) { #is-pair-cap[data-model="sq"] { min-height: 22.95em; } }
+@media (min-width: 250px) and (max-width: 254px) { #is-pair-cap[data-model="sq"] { min-height: 21.6em; } }
+@media (min-width: 255px) and (max-width: 270px) { #is-pair-cap[data-model="sq"] { min-height: 20.25em; } }
+@media (min-width: 271px) and (max-width: 282px) { #is-pair-cap[data-model="sq"] { min-height: 18.9em; } }
+@media (min-width: 283px) and (max-width: 297px) { #is-pair-cap[data-model="sq"] { min-height: 17.55em; } }
+@media (min-width: 298px) and (max-width: 318px) { #is-pair-cap[data-model="sq"] { min-height: 16.2em; } }
+@media (min-width: 319px) and (max-width: 340px) { #is-pair-cap[data-model="sq"] { min-height: 14.85em; } }
+@media (min-width: 341px) and (max-width: 373px) { #is-pair-cap[data-model="sq"] { min-height: 13.5em; } }
+@media (min-width: 374px) and (max-width: 402px) { #is-pair-cap[data-model="sq"] { min-height: 12.15em; } }
+@media (min-width: 403px) and (max-width: 450px) { #is-pair-cap[data-model="sq"] { min-height: 10.8em; } }
+@media (min-width: 451px) and (max-width: 511px) { #is-pair-cap[data-model="sq"] { min-height: 9.45em; } }
+@media (min-width: 512px) and (max-width: 585px) { #is-pair-cap[data-model="sq"] { min-height: 8.1em; } }
+@media (min-width: 586px) and (max-width: 717px) { #is-pair-cap[data-model="sq"] { min-height: 6.75em; } }
+@media (min-width: 718px) and (max-width: 923px) { #is-pair-cap[data-model="sq"] { min-height: 5.4em; } }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
    filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
    panel's own copy of the same control. */
@@ -378,7 +400,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .seg-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stats-panel { flex: 1; min-width: 0; }
-/* minmax(0,1fr), not 1fr: the stat values are nowrap, so an auto minimum would
+/* minmax(0,1fr), not 1fr: the stat values are nowrap, and so an auto minimum would
    give the columns a large min-content width and push the page into h-scroll. */
 .sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
 /* Stacked layout, still wide: eight cards read better as two rows of four than four of two.
@@ -392,7 +414,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    cards are reordered to read True mean, Plain mean, Plain half-width, CV mean,
    CV half-width, Estimated c*, r² -- grouping each estimate with its own
    half-width -- rather than the DOM order the two-column layout wants (both
-   means, then both half-widths, so paired cards land in the same row). */
+   means, and then both half-widths, and so paired cards land in the same row). */
 @media (min-width: 761px) {
   .sg-cv { grid-template-columns: minmax(0, 1fr); }
   .sg-cv .sc:has(#cv-s-true) { order: 1; }
@@ -403,14 +425,14 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
   .sg-cv .sc:has(#cv-s-c) { order: 6; }
   .sg-cv .sc:has(#cv-s-r2) { order: 7; }
   /* Tab 5's own single-column stats grid: unlike .sg-cv it needs no :has()
-     reordering because its DOM order (True p full width, then the direct/
+     reordering because its DOM order (True p full width, and then the direct/
      weighted pairs top to bottom) already reads correctly as one column. */
   .sg-is { grid-template-columns: minmax(0, 1fr); }
   /* A single stats column still claimed the old two-column width, leaving the
      cards wide with empty space and the figure no wider than before. Narrowed
      to one ordinary card's own width and let the figure card -- ordinarily a
      fixed flex-basis, shrinkable only down to its own content -- grow to fill
-     what the column gave up, so the three pin panels actually spread out.
+     what the column gave up, and so the three pin panels actually spread out.
      Scoped to the viz-row holding .sg-cv or .sg-is so tabs 1-3, which share
      the same .cv-card/.stats-panel classes, are unaffected. */
   .viz-row:has(.sg-cv) > .cv-card, .viz-row:has(.sg-is) > .cv-card { flex: 1 1 auto; }
@@ -479,7 +501,7 @@ svg.hsv.hot .hist-truth { stroke-width: 3; }
 .exp-note { font-size: .82rem; color: var(--muted); line-height: 1.55; margin-bottom: 9px; }
 /* Body links share the footer links' behavior: accent color, underline on hover
    only, per the link-decoration convention in CLAUDE.md. The back-link footer sets
-   color:inherit inline, which outranks this rule, so it keeps following its footer. */
+   color:inherit inline, which outranks this rule, and so it keeps following its footer. */
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-width: 1020px; margin: 0 auto; font-size: .72rem; color: var(--muted); }
@@ -517,7 +539,7 @@ footer a:hover { text-decoration: underline; }
 @media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
 /* Below this the stats panel beside a 407px figure card would be under 260px wide,
    and so the row stacks and the card takes the full width. flex-basis: auto alone does
-   not do that: .viz-row's align-items is flex-start, not stretch, so a stacked
+   not do that: .viz-row's align-items is flex-start, not stretch, and so a stacked
    .cv-card only shrink-to-fits its own children's content width -- explicit
    width: 100% is what actually pins it to the row's own width regardless of
    content (fix round 2, Task 7d/7e), matching this comment's own intent. Without
@@ -526,11 +548,11 @@ footer a:hover { text-decoration: underline; }
    card itself, which the figure's own SVG (sized to the card's clientWidth) then
    also resizes to fit, even though nothing about the figure's own geometry moved.
    The stats panel needs the same explicit width: 100% for the same reason -- its
-   content (the stat cards' own values) sizes it, not the row, so under align-items:
+   content (the stat cards' own values) sizes it, not the row, and so under align-items:
    flex-start it would otherwise settle a few pixels short of the card beside it
    and leave the monitor cards' right edge ragged against the figure card above
    them (Task 7j). The >= 761px column-width overrides below (.sg-cv's and
-   .sg-is's flex: 0 0 230px) live in their own min-width: 761px query, so this
+   .sg-is's flex: 0 0 230px) live in their own min-width: 761px query, and so this
    rule never reaches them. */
 @media (max-width: 760px) { .viz-row { flex-direction: column; } .cv-card, .stats-panel { flex-basis: auto; width: 100%; } }
 /* Numeric parameter fields (μ, σ, ...): same look as the seed field, narrower. */
@@ -541,7 +563,7 @@ footer a:hover { text-decoration: underline; }
 .par-inp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Spinner: a numeric field with an up/down pair that appears on hover or focus and
    drives the same stepper as the arrow keys. With no hover (a touch screen) the pair
-   sits beside the field at full size, since a hidden control is no control. */
+   sits beside the field at full size because a hidden control is no control. */
 .spin { position: relative; display: inline-flex; align-items: center; }
 .spin-btns { position: absolute; right: 3px; top: 3px; bottom: 3px; display: none; flex-direction: column; gap: 1px; }
 .spin:hover .spin-btns, .spin:focus-within .spin-btns { display: flex; }
@@ -587,7 +609,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .cv-c-row { flex: 1 1 auto; flex-wrap: wrap; white-space: normal; }
 .cv-c-readout { white-space: nowrap; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
 /* ── Shared range-slider pieces (Task 6s) ──────────────────────────────────
-   Originally the c slider alone (Task 6r, then named .cv-slider-*); generalized
+   Originally the c slider alone (Task 6r, and then named .cv-slider-*); generalized
    so the three "own noise σₑ" sliders on tabs ②–④ reuse the same wrapper and
    thumb CSS rather than each carrying a copy. The tick overlay itself
    (.rs-ticks, .rs-tick, .rs-tick-lbl, and the renderSliderTicks JS renderer
@@ -636,7 +658,7 @@ sup { font-size: .72em; line-height: 0; }
 /* Figures are SVG with a viewBox; the card shrinks them rather than overflowing. */
 svg.fig { display: block; width: 100%; height: auto; }
 /* Drag handles on the tab ① figure. touch-action:none on the handle alone lets a
-   drag that starts on it move μ or σ while a swipe anywhere else still scrolls. */
+   drag that starts on it move μ or σ, whereas a swipe anywhere else still scrolls. */
 .ci-handle { cursor: ew-resize; touch-action: none; }
 #ci-fig.hot-mu #ci-muline, #ci-fig.hot-sigma #ci-curve { stroke-width: 3.5; }
 /* Drag handles on the tab ⑤ transfer plot (Task 7h): the T line (vertical
@@ -768,7 +790,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="hint wide">Each run draws n values from the normal population by inverse-transform sampling, computes <span class="ov">x</span> and S, and forms the interval <span class="ov">x</span> ± t·S/√n. The population is known here on purpose: it is the only way to check whether an interval did its job. Run many experiments, and watch the tally settle near α, the fraction that the confidence level promises will miss. Drag the dashed μ line to move the mean, or drag the curve itself to change σ; the fields above follow as you drag, and the last sample stays put so you can see the population move beneath it. The x-axis stays fixed so a change of σ shows as a change of width; μ can move only within it, and Clear history re-centers the axes on the current population.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">μ</span></div>
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">μ</span></div>
       <div class="exp-note">Change a parameter between runs to compare interval widths across the divider, or drag the dashed line to move μ.</div>
       <div id="ci-hw"><svg class="hsv" id="ci-hist"></svg></div>
       <div class="hist-cap" id="ci-cap"></div>
@@ -862,9 +884,9 @@ svg.fig { display: block; width: 100%; height: auto; }
         </div>
       </div>
     </div>
-    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms use the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire. A star above an interval marks one that leaves out zero, which is the same claim as a p-value below α: the systems differ.</div>
+    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms use the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. A star above an interval marks one that leaves out zero, which is the same claim as a p-value below α: the systems differ.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ</span></div>
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">δ</span></div>
       <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
       <div id="crn-hw1"><svg class="hsv" id="crn-hist1"></svg></div>
       <div class="hist-cap" id="crn-cap1"></div>
@@ -889,7 +911,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="cards">
         <div class="card"><strong>Same model, shifted</strong>With both systems built from the same model, sharing the input drives the correlation of paired outputs close to one: the outputs rise and fall together almost perfectly. Nearly all of the variance cancels in the difference, and the paired interval collapses toward the shift itself.</div>
         <div class="card"><strong>Opposite responses</strong>exp(u) rises with u, whereas 1 / (1 + u) falls. Sharing u pairs one system's high outputs with the other's low ones, the correlation of paired outputs turns negative, and the paired interval comes out wider than Welch's. Common random numbers assume the two systems respond to their input in the same direction; pick models that disagree, and pairing backfires.</div>
-        <div class="card"><strong>The bowl</strong>The bowl model, (u − ½)², has no consistent direction: it falls for u below one half and rises above it. Paired with a monotone system, the bowl's own response has no matching direction to correlate with, and so the correlation of paired outputs stays near zero and pairing saves almost nothing over independent inputs.</div>
+        <div class="card"><strong>The bowl</strong>The bowl model, (u − ½)², has no consistent direction: it falls for u below one half and rises above it. Paired with a monotone system, the bowl's own response has no matching direction to correlate with, and so the correlation of paired outputs stays near zero and pairing does almost nothing beyond independent inputs.</div>
       </div>
     </div>
   </section>
@@ -974,9 +996,9 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="cv-leg" id="av-seq-leg"></div>
       <div class="fig-note" id="av-seq-note"></div>
     </div>
-    <div class="hint wide">Both arms evaluate the model 2n times and share the first n draws. The independent arm pairs each of them with a fresh draw and averages the pair, exactly as the antithetic arm does with the complement, so that the two arms differ only in where the second draw comes from. In practice, you would use all 2n values with 2n − 1 degrees of freedom; the pairing here exists only to make the comparison one-for-one. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows. Each output can also carry its own noise, zero by default, which the complement cannot cancel, and so the antithetic interval narrows only by the share of the variance that comes through u; turn the noise up, and the two arms converge.</div>
+    <div class="hint wide">Both arms evaluate the model 2n times and share the first n draws, each pairing them with a second draw and averaging the pair: the independent arm's second draw is fresh, the antithetic arm's is the mirror 1 − u, and so the two differ only in where that second draw comes from. In practice, all 2n values would be used, with 2n − 1 degrees of freedom; the pairing only makes the comparison one-for-one, and the antithetic arm's sample is its n pair means. When h is monotone, a high draw pairs with a low one, the pair means cluster around the true mean, and the interval narrows. Each output can also carry noise, zero by default, which the complement cannot cancel, and so the antithetic interval narrows only by the share of variance that comes through u; turn the noise up, and the two arms converge.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Independent draws (n pair means)</div>
       <div id="av-hw1"><svg class="hsv" id="av-hist1"></svg></div>
       <div class="hist-cap" id="av-cap1"></div>
@@ -1077,9 +1099,9 @@ svg.fig { display: block; width: 100%; height: auto; }
         </div>
       </div>
     </div>
-    <div class="hint wide">The figure above shows one run of n draws as three panels in draw order. The top panel shows how far each input landed from its known mean 0.5. The middle panel shows each output, with the part that tracks the input's deviation marked on the pin, in proportion to that distance. The bottom panel shows what is left after subtracting that part, which keeps the same mean as the output and has less spread because the part of the spread that u predicts is gone. What remains is the part u cannot predict, including any noise added to the output; a run whose u values happened to come out high still has a y average that is high for that reason, but the adjusted values do not. Drag the slider to move c away from its estimated value, and watch the bottom panel and its interval respond; every c leaves the mean alone, and so the interval stays valid at any setting.</div>
+    <div class="hint wide">The figure above shows one run of n draws as three panels in draw order: how far each input lands from its known mean 0.5, each output with the part that tracks that deviation marked on the pin, and what is left after subtracting that part, which keeps the same mean as the output but has less spread because the part u predicts is gone. What remains is the part u cannot predict, including any output noise; a run whose u values come out high still has a high y average for that reason, but the adjusted values do not. Drag the slider to move c away from its estimated value and watch the bottom panel and its interval respond; every c leaves the mean alone, and so the interval stays valid at any setting.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Plain average of h(u)</div>
       <div id="cv-hw1"><svg class="hsv" id="cv-hist1"></svg></div>
       <div class="hist-cap" id="cv-cap1"></div>
@@ -1178,13 +1200,13 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="cv-card" style="margin-bottom:14px">
       <div class="sec-hd" style="margin:0 0 9px"><span class="tip" tabindex="0" data-tip="Always the proposal sample, regardless of the toggle above: the direct sample carries no weights to redistribute.">Likelihood weighting</span></div>
       <div class="eq-row" style="margin:-4px 0 9px"><span class="eq-val"><span class="sym" style="color:var(--est)">hist[h(<span class="sym">X̃</span>)]</span> · <span class="sym" style="color:var(--ratio)">W(<span class="sym">X̃</span>)</span> → <span class="sym" style="color:var(--truth)">hist[h(X)]</span></span></div>
-      <svg class="fig" id="is-pair-fig" role="img" aria-label="Three plots on the same output-value axis. The left histogram counts each of the proposal's outputs once against the proposal's own output density; the middle plots the likelihood ratio W on a logarithmic axis, with a reference line at W = 1; the right histogram counts each output W times against the target's output density. A threshold line at T appears on all three, and the bars past it are darker."></svg>
+      <svg class="fig" id="is-pair-fig" role="img" aria-label="Three plots on the same output-value axis. The left histogram counts each of the proposal's outputs once against the proposal's own output density; the middle plots the likelihood ratio W on a logarithmic axis, with a reference line at W = 1; the right histogram counts each output W times against the target's output density. A threshold line at T appears on all three, and the bars past it are darker. A rug along the axis of all three plots marks each of the proposal's own draws."></svg>
       <div class="cv-leg" id="is-pair-leg"></div>
       <div class="cv-cap" id="is-pair-cap"></div>
     </div>
-    <div class="hint wide">Both sampling approaches draw n samples. The direct-sampling approach runs the model on standard normals and counts the outputs that land beyond T. The importance-sampling approach draws its inputs from a proposal distribution, N(θ, 1), instead of the target (the rare-event literature also calls it the biasing or importance distribution), runs the same model, and multiplies each output beyond T by the input likelihood ratio W(y) = φ(y)/φ(y − θ). The pair of plots below shows the proposal's outputs counted once and counted W(y) times; weighting turns the proposal's histogram into the target's, and the tail past T is estimated from the many draws the proposal put there. For a monotone model, the output event is the input event x ≥ h⁻¹(T), and so the shift aims at that edge. x² has two input thresholds: a one-sided shift covers one and never visits the other, and so the weighted estimate settles at half the truth, with a narrow interval that misses every time while ESS looks healthy because the uncovered side is simply absent, not represented by a few huge weights. ESS warns only about uneven weights among the draws the sampler does make, which is the failure that shows up when θ is pushed too far past the input threshold. The threshold line, its pre-image, and the proposal curve in the figure above can all be dragged directly: the T line vertically, the others horizontally.</div>
+    <div class="hint wide">Both approaches draw n samples; direct sampling runs the model on standard normals and counts the outputs beyond T. Importance sampling draws inputs from a proposal distribution N(θ, 1) (also called the biasing or importance distribution), runs the same model, and multiplies each output beyond T by the likelihood ratio W(y) = φ(y)/φ(y − θ). The pair of plots below counts the proposal's outputs once and by W(y), turning its histogram into the target's; the tail past T comes from the draws the proposal put there. Move the pointer across the three plots below to read a bin's count, its weight, and its weighted count together. For a monotone model, the output event is the input event x ≥ h⁻¹(T), and so the shift aims there. The threshold line, its pre-image, and the proposal curve above can all be dragged: the T line vertically, the others horizontally.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">p = P(h(X) ≥ T)</span></div>
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">p = P(h(X) ≥ T)</span></div>
       <div class="hist-hd">Direct sampling (mean of the indicator)</div>
       <div id="is-hw1"><svg class="hsv" id="is-hist1"></svg></div>
       <div class="hist-cap" id="is-cap1"></div>
@@ -1374,7 +1396,7 @@ function qFromCdf(cdf, p, lo, hi) {
 }
 // Memoized: the calibration sections below call this on the order of a quarter
 // million times over a small, repeated set of (p, nu) pairs, and each call bisects
-// tCdf to convergence. Plain object keyed by a string, not a Map, so the vm context
+// tCdf to convergence. Plain object keyed by a string, not a Map, and so the vm context
 // the verify script builds the core in needs nothing extra.
 var T_Q_MEMO = {};
 function tQuantile(p, nu) {
@@ -1387,7 +1409,7 @@ var SEED_MAX = 2147483647;   /* 2^31 - 1, the largest seed a reader can type */
 /* mulberry32: 32 bits of state, one integer seed, no library.  Seed 0 is legal,
    adjacent seeds give well-separated streams (the 100-run sweep steps seeds by
    one), and the output is avalanche-mixed.  Same generator as the Monte Carlo
-   explorer, so a seed means the same stream on both pages. */
+   explorer, and so a seed means the same stream on both pages. */
 function mulberry32(seed) {
   var a = seed >>> 0;
   return function () {
@@ -1398,7 +1420,7 @@ function mulberry32(seed) {
   };
 }
 /* A normal variate by inverse transform.  normInv(0) would be -Infinity, and
-   mulberry32 can return exactly 0, so the uniform is nudged off the endpoint. */
+   mulberry32 can return exactly 0, and so the uniform is nudged off the endpoint. */
 function normalDraw(rand, mu, sigma) {
   var u = rand(); if (u <= 0) u = 2.5e-10;
   return mu + sigma * normInv(u);
@@ -1461,7 +1483,7 @@ function pValueZero(est, se, df) {
 }
 
 /* ── Tab ①: draw n normal values and build the interval ─────────────
-   p = {mu, sigma, n, conf}.  The stream is fresh per seed, so the same seed always
+   p = {mu, sigma, n, conf}.  The stream is fresh per seed, and so the same seed always
    reproduces the run, and the draws are inverse-transform normals in stream order. */
 function runNormal(seed, p) {
   var rand = mulberry32(seed), xs = new Array(p.n);
@@ -1484,7 +1506,7 @@ function c4(n) {
    Each h is a stand-in for a simulation model driven by one uniform.  The moments
    are exact: mean E[h(U)], m2 E[h(U)²], cross E[h(U) h(1−U)], and covU cov(U, h(U)).
    Four of the five are monotone; the bowl is the counterexample on which both
-   techniques do nothing, because h(1−u) = h(u) and cov(U, h(U)) = 0.  The identity
+   techniques do nothing because h(1−u) = h(u) and cov(U, h(U)) = 0.  The identity
    is the linear limit of a monotone model: antithetic pairing and the control
    variate both remove all of its variance, and its cards are the exact zero-
    variance case the other three only approach. */
@@ -1605,7 +1627,7 @@ function runCV(seed, p) {
            plain: plain, cv: cv, truth: f.mean, hitPlain: captured(plain, f.mean), hitCv: captured(cv, f.mean) };
 }
 
-/* ── Tab ⑤: the model menu — a transfer function h from an input to an output,
+/* ── Tab ⑤: the model menu, a transfer function h from an input to an output,
    with the rare event on the output side ────────────────────────────────
    Each entry turns a standard-normal input X into an output h(X), and the event
    is h(X) ≥ T for a threshold T on the output scale. Fields:
@@ -1659,7 +1681,7 @@ function isTruth(fn, T) { return IS_FUNCS[fn].truth(T); }
    averages 1[h(Y) ≥ T] W(Y), with the likelihood ratio on the input
    W(y) = φ(y) / φ(y − θ) = exp(−θ y + θ²/2), so that E_θ[1[h(Y) ≥ T] W(Y)] = p
    exactly regardless of h. Both arms draw in the same order as before the model
-   menu was added — all n direct draws, then all n biased draws — so that the
+   menu was added (all n direct draws, and then all n biased draws) so that the
    identity model reproduces every existing run byte for byte. ess is Kish's
    effective sample size of the in-tail weights, (ΣW)² / ΣW². xs and hxs are the
    direct arm's own inputs and outputs (hxs[i] = h(xs[i]) for every i), returned
@@ -1778,7 +1800,7 @@ function seedMsg(tab, text, bad) {
 }
 
 // Returns an integer, or null if the field cannot be interpreted. Always writes
-// the value actually used back into the box, so what the student reads is what
+// the value actually used back into the box, and so what the student reads is what
 // the generator received.
 function readSeed(tab) {
   const inp = document.getElementById(tab + '-seed');
@@ -1813,9 +1835,9 @@ function randomSeed() {
   return 100000 + Math.floor(Math.random() * 900000);
 }
 
-// Called after a run has already drawn its samples, so the run always used the
+// Called after a run has already drawn its samples, and so the run always used the
 // seed the student could see. With the box ticked, queue a fresh one for next
-// time and name both, so the field changing under them is never a surprise.
+// time and name both, and so the field changing under them is never a surprise.
 // Unticked, repeated clicks genuinely do reproduce the run -- say so, or it
 // reads as a broken button rather than as the point of the exercise.
 function noteRun(tab, seed, runIdx, repeat) {
@@ -1834,12 +1856,12 @@ function noteRun(tab, seed, runIdx, repeat) {
 // ── 100-run sweeps ─────────────────────────────────────
 const BATCH_RUNS=100;
 // The sweep walks consecutive seeds from the one in the box, rather than 100 random
-// ones, so the whole sweep is reproducible from a single number. Adjacent seeds are
+// ones, and so the whole sweep is reproducible from a single number. Adjacent seeds are
 // safe here: mulberry32 avalanche-mixes them into well-separated streams (see the
 // note on the generator).
 function batchSeed(s0,i){ return (s0+i)%(SEED_MAX+1); }
 
-// Disable both run buttons, yield one turn so that state actually paints, then do
+// Disable both run buttons, yield one turn so that state actually paints, and then do
 // the work. A sweep is fast enough to be synchronous -- 100 x 10,000 darts is a few
 // tens of milliseconds -- but not so fast that a frozen-looking button is honest.
 function batchRun(tab,work){
@@ -1868,12 +1890,12 @@ function noteBatch(tab,s0,first,last){
 
 // ── History chart ──────────────────────────────────────
 // One function draws every history chart on the page. Each run record carries its
-// own true value, so the dashed line is a step function: changing μ mid-history makes
+// own true value, and so the dashed line is a step function: changing μ mid-history makes
 // the line jump to the new value rather than wiping the chart, and a faint divider
 // marks each run whose parameter set (its `key`) differs from the one before it.
 const HIST_MAX = 100, HIST_CANT = 22;
 function histVisible(runs, cW) {
-  // Columns narrow to fit the run count before runs are dropped, so a 100-run sweep
+  // Columns narrow to fit the run count before runs are dropped, and so a 100-run sweep
   // is shown whole wherever there is room; with a round hundred on screen the miss
   // count is the percentage.
   const COL_MAX = 56, COL_MIN = 7;
@@ -1980,7 +2002,7 @@ function histPlot(svgEl, containerEl, runs, opts) {
   if (opts.grab) {
     // The grab target rides on the true-value line's cantilever: a short tail run
     // out past the plot's shaded background, into the right padding reserved for
-    // it, so there is always something to grab even when the columns fill cW.
+    // it, and so there is always something to grab even when the columns fill cW.
     const hx0 = shown.length ? pL + shown.length * colW : pL;
     h += `<line class="hist-handle" x1="${hx0}" y1="${live}" x2="${cantEnd}" y2="${live}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
   }
@@ -2043,7 +2065,7 @@ function histPlot(svgEl, containerEl, runs, opts) {
     });
   }
 
-  // Legend, then the true-value label at the right end of its line, drawn last so it
+  // Legend, and then the true-value label at the right end of its line, drawn last so it
   // sits on top of the bars.
   if (!opts.starZero) {
     const ly = SH - 14 - (legRows - 1) * 14;
@@ -2075,11 +2097,11 @@ function histPlot(svgEl, containerEl, runs, opts) {
   return { shown: shown.length, hits: hits, dropped: runs.length - shown.length, expMiss: expMiss, excl0: excl0 };
 }
 // The tally under a chart, counted over exactly the runs the chart shows. The expected
-// number of misses is the sum of each visible run's own α, so it stays honest when the
+// number of misses is the sum of each visible run's own α, and so it stays honest when the
 // confidence level was changed part way through the history.
 function histCaption(el, res, what, zeroWhat) {
   // Before the first run the tally shows its zeros in the same shape it will keep,
-  // including the expected-miss parenthetical, so the caption wraps to the same number
+  // including the expected-miss parenthetical, and so the caption wraps to the same number
   // of lines from the start and the first run does not move the page.
   if (!res || !res.shown) {
     el.innerHTML = 'Intervals missing ' + what + ': <strong>0 of 0</strong>'
@@ -2143,7 +2165,7 @@ function svgSet(el, w, h, inner) {
 // string (fix round 1). .fig-note's reserved-height comment already explains
 // why min-height is pinned to the same 1.35 line-height as real text: an
 // *empty* element renders that min-height as a bare box with no line box at
-// all, while any real inline content (even a single character) renders an
+// all, whereas any real inline content (even a single character) renders an
 // actual line box built from the font's own metrics, and the two round to a
 // different sub-pixel height (measured: 0.0078125px, 1/128 CSS px, regardless
 // of which characters the text holds). A non-breaking space is real inline
@@ -2277,8 +2299,8 @@ function sigESliderRange(sigmaHs) {
   const step = max >= 0.5 ? 0.01 : max >= 0.2 ? 0.005 : 0.001;
   return { max: max, step: step };
 }
-// The drag path for the three σₑ sliders (fix round 3: no tick, no soft snap
-// — the left edge is 0 and the slider otherwise just tracks the pointer). Writes
+// The drag path for the three σₑ sliders (fix round 3: no tick, no soft snap;
+// the left edge is 0 and the slider otherwise just tracks the pointer). Writes
 // the slider's own current value into the paired numeric field and hands off
 // to the tab's own ParamsChanged function, which re-syncs the slider from the
 // field and re-evaluates the last run at the same seed if σₑ actually changed.
@@ -2292,7 +2314,7 @@ function sigeDrag(tab, changedFn) {
   changedFn();
 }
 
-// The seed is an integer: ±1 (±100 with Shift), clamped to 0..SEED_MAX, then the
+// The seed is an integer: ±1 (±100 with Shift), clamped to 0..SEED_MAX, and then the
 // same normalization a typed edit gets.
 function seedSpin(tab) {
   return (dir, shift) => {
@@ -2377,7 +2399,7 @@ function ciParamsChanged(frozen) {
   // Reuse the params already read above: a second ciParams() call here would re-read
   // the fields after a clamp has already been written back, find nothing left to
   // clamp, and blank the clamp message this same call just set. Always re-render the
-  // history, with or without runs, so a μ change bends its held segment right away.
+  // history, with or without runs, and so a μ change bends its held segment right away.
   renderCiHist(p);
 }
 // ── Tab ① direct manipulation ────────────────────────
@@ -2408,7 +2430,7 @@ function ciWindow(p) {
            yMax: 1.6 / (p.sigma * Math.sqrt(2 * Math.PI)), sigma0: p.sigma };
 }
 // The x-axis is fixed: it is set from the population at load and again by Clear history,
-// and never moves otherwise, so a change of σ is seen as a change of width. μ is clamped
+// and never moves otherwise, and so a change of σ is seen as a change of width. μ is clamped
 // to the window (5% in from each edge). The y-axis yields only when it must: it grows when
 // the peak would clip the top, and shrinks back only when the curve has become a sliver.
 function ciStickyWindow(p) {
@@ -2550,7 +2572,7 @@ function drawCiFig(run, upto, p, frozen) {
   h += `<text x="${xP(p.mu) + CI_MU_LABEL_DX}" y="${pT + 16}" fill="${C.truth}" font-size="11" font-weight="700" font-family="${FF_MONO}">μ</text>`;
   // axis and ticks
   h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc"/>`;
-  // Ticks come from the fixed window, not from μ, so they hold still while μ and σ
+  // Ticks come from the fixed window, not from μ, and so they hold still while μ and σ
   // change; precision from the window's own span, as the history chart's y-axis does.
   const dec = decFor(x1 - x0);
   for (let i = 0; i <= 4; i++) {
@@ -2578,14 +2600,14 @@ function drawCiFig(run, upto, p, frozen) {
     // SVG's own text-decoration="overline" draws at the ascender line, the same gap
     // the .ov CSS rule fixes in HTML text; here the fix is a short <line> placed by
     // the monospace font's own metrics rather than by CSS. Each character advances
-    // 0.6em, so "x ± H"'s five characters give the left edge of the leading x.
+    // 0.6em, and so "x ± H"'s five characters give the left edge of the leading x.
     const xhFS = 10, xhCW = xhFS * 0.6, xhY = by + 17, xhX0 = bx - xhCW * 2.5;
     h += `<text x="${bx}" y="${xhY}" text-anchor="middle" fill="${col}" font-size="${xhFS}" font-family="${FF_MONO}">x ± H</text>`;
     h += `<line x1="${xhX0 + 0.06 * xhFS}" y1="${xhY - xhFS + 0.17 * xhFS}" x2="${xhX0 + xhCW - 0.06 * xhFS}" y2="${xhY - xhFS + 0.17 * xhFS}" stroke="${col}" stroke-width="${0.09 * xhFS}"/>`;
   }
-  // Grab targets: wide invisible strokes over the whole μ line and the whole curve, so a
+  // Grab targets: wide invisible strokes over the whole μ line and the whole curve, and so a
   // finger or a cursor can take hold anywhere along them. pointer-events on the stroke
-  // only, so the histogram and rug beneath stay inert.
+  // only, and so the histogram and rug beneath stay inert.
   h += `<line class="ci-handle" data-handle="mu" x1="${xP(p.mu)}" y1="${pT}" x2="${xP(p.mu)}" y2="${pT + cH + 30}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
   h += `<path class="ci-handle" data-handle="sigma" d="${d}" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
   svgSet($('ci-fig'), W, H, h);
@@ -2687,7 +2709,7 @@ TABS.ci = {
     });
   },
   // A resize or tab switch redraws the figure and history at the container's new
-  // width; it never revisits whether the current field values are valid, so it reads
+  // width; it never revisits whether the current field values are valid, and so it reads
   // them with the non-mutating ciParamsPeek rather than ciParams.
   render() {
     const p = ciParamsPeek();
@@ -2700,7 +2722,7 @@ const CRS = { ind: [], crn: [], last: null, lastRunObj: null, lastRunP: null, la
 function crnParams() {
   // shift2 and sigE share one status span; each field is read only after the previous
   // one has passed, and an unclamped later read that leaves the span empty falls back
-  // to whatever message an earlier field already set, so a clamp or error is never
+  // to whatever message an earlier field already set, and so a clamp or error is never
   // blanked out by a later valid read (mirrors ciParams's two-field version).
   const shift2 = readNum('crn-shift', 'crn-par-msg', -1e6, 1e6, 'shift');
   if (shift2 === null) return null;
@@ -2774,7 +2796,7 @@ function crnFlowModelLabel(prefix, f, usableW) {
 // so a subscript glyph -- shrunk to font-size 6.5 and dropped 2.5 units -- gets a
 // cell sized to its own 6.5px (3.9 wide), never the full fs-sized cell a 10px run
 // would otherwise give it (which read as a visible gap around "y1"'s subscript,
-// since the cell was sized for a glyph twice as wide as the one actually drawn).
+// because the cell was sized for a glyph twice as wide as the one actually drawn).
 // x accumulates from each token's own cell width in turn, and the whole run
 // centers on the sum of those widths when anchor is 'middle', rather than on
 // adv * n at a single adv. Every glyph gets its own x, and so nothing here depends
@@ -2879,7 +2901,7 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
     h += `<text x="${X(190)}" y="${Y(ly) + 4}" text-anchor="middle" font-size="12" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
   });
 
-  // Outputs: arrow out of the junction, then the value's name (CRN adds the per-
+  // Outputs: arrow out of the junction, and then the value's name (CRN adds the per-
   // replication subscript i because the pairing is what makes CRN a paired comparison).
   const yTok1 = [{ ch: 'y' }, crnFlowSub('1')].concat(isCRN ? [crnFlowSub('i')] : []);
   const yTok2 = [{ ch: 'y' }, crnFlowSub('2')].concat(isCRN ? [crnFlowSub('i')] : []);
@@ -2978,7 +3000,7 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
   const meanX0 = labelEnd + 10, meanX1 = meanX0 + meanW, xJ = meanX1 + 14;
   const barTok1 = [{ ch: 'y', bar: true }, crnFlowSub('1')], barTok2 = [{ ch: 'y', bar: true }, crnFlowSub('2')];
   // From the box's own output to the junction circle is one continuous right-
-  // angle polyline per lane -- the horizontal run, then the turn, then the
+  // angle polyline per lane -- the horizontal run, and then the turn, and then the
   // vertical run into the circle -- with a single arrowhead where it actually
   // enters the circle, matching how every other lane in these diagrams enters a
   // junction; it does not get a second arrowhead at the corner partway there.
@@ -3002,8 +3024,8 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
   h += `<text x="${X(xJ) + 5}" y="${Y((y1 + yMid - diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">−</text>`;
   h += `<text x="${X(xJ) + 5}" y="${Y((y2 + yMid + diffR) / 2) + 3}" text-anchor="start" font-size="9" font-family="${FF_SANS}" fill="${C.muted}">+</text>`;
   // The CRN branch gives this same output arrow 30 units because it has nothing
-  // else to fit; this branch already spent its horizontal budget on two boxes and
-  // needs the room back, so 10 units (matching the analogous short arrow on
+  // else to fit; this branch already used its horizontal budget on two boxes and
+  // needs the room back, and so 10 units (matching the analogous short arrow on
   // cvFlowDiagram's control-variate arm) is enough to read as a clear arrow
   // without starving the fit-or-drop label that follows.
   const arrowEnd = xJ + diffR + 10;
@@ -3015,7 +3037,7 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
   // this branch adds leave less room here than the CRN branch ever has to budget
   // for, and so "Welch interval" (longer than "paired interval") gets a
   // continuously solved font size in both branches below, rather than the CRN
-  // branch's bare fixed font-9, so it always lands inside remain instead of
+  // branch's bare fixed font-9, and so it always lands inside remain instead of
   // relying on remain already being generous.
   const exprTok = [{ ch: 'y', bar: true }, crnFlowSub('2')].concat(crnFlowChars(' − '), [{ ch: 'y', bar: true }, crnFlowSub('1')]);
   const name = 'Welch interval';
@@ -3072,7 +3094,7 @@ function drawCrnFlow(p) {
   const fmtShift = (p.shift2 < 0 ? '−' : '+') + ' ' + Math.abs(p.shift2);
   // Both diagrams always carry noise on both lanes, and so the height is the same
   // fixed 142 crnFlowDiagram has always used -- unchanged from before drawFlowPair
-  // took a computed height, so this diagram's own output is unaffected.
+  // took a computed height, and so this diagram's own output is unaffected.
   drawFlowPair('crn-flow', 'crn-flow-cap', 'crn-flow-arrow',
     (ox, oy, s, second) => ({ h: crnFlowDiagram(ox, oy, s, second, p, f1, f2, fmtShift), height: 142 }),
     "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above; the independent arm averages each system first and then differences the two means, whereas the common-random-numbers arm differences each pair first and then averages.");
@@ -3174,7 +3196,7 @@ function drawCrnFig(run, p) {
   // at run time (CRS.scale) for the same reason as the outputs panel above. The base
   // range extends a full |δ| beyond both ends of [0, δ] so the zero and δ lines sit
   // away from the panel's own top/bottom edges even before any run exists; when δ = 0
-  // there is no such width to draw on, so the noise scale stands in for it instead.
+  // there is no such width to draw on, and so the noise scale stands in for it instead.
   let dLo, dHi;
   if (run && CRS.scale) {
     dLo = CRS.scale.dLo; dHi = CRS.scale.dHi;
@@ -3355,7 +3377,7 @@ function drawCrnFig(run, p) {
     if (run) {
       // Same clip rule as the outputs panel above: a σₑ re-evaluation can push
       // a dᵢ dot or an interval bar past the strip's own locked scale. The
-      // interval's own mean dot is redrawn a second time, outside the clip, so
+      // interval's own mean dot is redrawn a second time, outside the clip, and so
       // it stays visible even when its bar clips (mirroring tab ④'s
       // intervalMeanDot).
       let hDiff = '';
@@ -3376,9 +3398,9 @@ function drawCrnFig(run, p) {
       }
     }
     // Both strips get their own min/0/max ticks (not just the top row) in the panel's
-    // left gutter, matching the other two panels, because the zero line otherwise
+    // left gutter, matching the other two panels because the zero line otherwise
     // carries no label of its own; a min or max label this close to 0's is dropped
-    // rather than drawn on top of it (dShowMin/dShowMax, computed once above, because the
+    // rather than drawn on top of it (dShowMin/dShowMax, computed once above because the
     // decision does not depend on which row's own top a label happens to be drawn at).
     // The max label now sits 24 units below the rect's own top edge (see yD above), well
     // clear of the "Difference of means" title above the top row, and so both rows show it.
@@ -3583,7 +3605,7 @@ function avFlowDiagram(offX, offY, s, isAV, p, f) {
   // Outputs: yᵢ on lane 1 always; lane 2 is yₙ₊ᵢ (independent, a fresh evaluation) or
   // yᵢ′ (antithetic, the complemented pair partner). crnFlowMono lays out each
   // token at its own real width (10*0.6 for a full-size glyph, 6.5*0.6 for a
-  // subscript), so each lane's arrow ends, and each lane's own label ends, with
+  // subscript), and so each lane's arrow ends, and each lane's own label ends, with
   // an equal 4-real-pixel clearance either side -- computed from the label's own
   // measured width and converted back to local units via /s so the real gap
   // stays 4px at every scale -- rather than a fixed local-unit offset. Lane 1's
@@ -3825,8 +3847,8 @@ function drawAvFig(run, p) {
   for (let i = 0; i < m; i++) {
     hClip += `<line x1="${xP(run.u[i])}" y1="${yP(run.ya[i])}" x2="${secondX(i)}" y2="${secondY(i)}" stroke="${C.pair}" stroke-width="1"/>`;
   }
-  // Painted in two passes -- every hollow dot, then every filled dot -- rather
-  // than pair by pair, so a later pair's hollow dot can never land on top of and
+  // Painted in two passes -- every hollow dot, and then every filled dot -- rather
+  // than pair by pair, and so a later pair's hollow dot can never land on top of and
   // hide an earlier pair's filled one: a coincidence that happens at, e.g., seed
   // 54321 with sigE = 0, where every dot lies exactly on the h(u) curve, and
   // switching modes would otherwise appear to turn a hollow dot into a filled one.
@@ -3939,7 +3961,7 @@ function drawAvSeq(run, p) {
     pmPts += (j ? 'L' : 'M') + xm.toFixed(1) + ',' + yP(pairMeans[j]).toFixed(1);
   }
   hClip += `<path d="${pmPts}" fill="none" stroke="${C.pair}" stroke-width="1.3" stroke-dasharray="3,2.5"/>`;
-  // Two passes -- every hollow dot, then every filled dot -- matching drawAvFig's
+  // Two passes -- every hollow dot, and then every filled dot -- matching drawAvFig's
   // own fix: no coincidence is possible along one draw-order axis the way it is
   // between two different x positions in the scatter above, but the same paint
   // order keeps both panels consistent.
@@ -4023,7 +4045,7 @@ function clearAv() {
   const p = avParams(); if (p) { drawAvFig(null, p); if (typeof drawAvSeq === 'function') drawAvSeq(null, p); }
   seedMsg('av', '', false); renderAvHist(p);
 }
-// Fix round 1: see renderCrnHist's own comment — takes p from the caller
+// Fix round 1: see renderCrnHist's own comment: takes p from the caller
 // rather than reading the fields again through the mutating avParams(), which
 // was blanking whatever clamp message the caller's own read had just set.
 function renderAvHist(p) {
@@ -4125,7 +4147,7 @@ function cvFlowDiagram(offX, offY, s, isCV, p, f) {
   // constant: the control-variate branch's own c(u - 1/2) block on lane 2 is deeper
   // than anything else it draws (a block's own edge is exact, unlike a text row's
   // baseline), and the plain branch's own two-line final label -- drawn whenever the
-  // diagram is wide enough to show it, so its depth is used even where the diagram
+  // diagram is wide enough to show it, and so its depth is used even where the diagram
   // collapses to one line at a narrow width -- is deeper than anything above it. The
   // +4 covers a text row's own visual descent below its baseline; the outer +6 is
   // the same margin crnFlowDiagram and avFlowDiagram's own fixed 142 leaves below
@@ -4140,7 +4162,7 @@ function cvFlowDiagram(offX, offY, s, isCV, p, f) {
   // formula fits at mono 8.5 and the interval's name below it at sans 9, dropping
   // to a smaller size or to the name alone when the diagram is too narrow to hold
   // both -- the same fit-or-drop logic as crnFlowDiagram and avFlowDiagram, with
-  // an added font shrink for the name in the two-line case, because this diagram's
+  // an added font shrink for the name in the two-line case because this diagram's
   // longer names ("control-variate interval") can outrun the shorter ones those
   // two diagrams ever draw.
   function finalLabel(labelX, midY, exprTok, name, remain) {
@@ -4359,12 +4381,12 @@ function drawCvFig(run, p) {
   let h = '';
   [0, 1, 2].forEach(k => { h += `<rect x="${pL}" y="${y0[k]}" width="${cW}" height="${panelH}" fill="${C.bg}" rx="3"/>`; });
   // Panels 2 and 3 each get a clip-path spanning their own row, main plot plus
-  // strip, so a pin, a blamed-bar segment, or an interval bar that the slider
+  // strip, and so a pin, a blamed-bar segment, or an interval bar that the slider
   // has pushed outside the fixed scale is clipped at the panel's own edge --
   // reading as being cut off, not as the whole panel silently rescaling -- while
   // everything already inside (which is everything not tied to the slider) is
   // unaffected. The interval mark's own mean dot is drawn a second time, after
-  // and outside both clips, so it always stays visible even when its bar clips.
+  // and outside both clips, and so it always stays visible even when its bar clips.
   h += `<defs><clipPath id="cv-panel2-clip"><rect x="${pL}" y="${y0[1]}" width="${cW + pR}" height="${panelH}"/></clipPath>` +
     `<clipPath id="cv-panel3-clip"><rect x="${pL}" y="${y0[2]}" width="${cW + pR}" height="${panelH}"/></clipPath></defs>`;
 
@@ -4383,7 +4405,7 @@ function drawCvFig(run, p) {
 
   // Panel 2: outputs. ȳ's own solid line is drawn only once a run exists (its
   // value is already in the "Plain mean" card beside the figure, and the dense
-  // pins drew over its own text label, since removed); E[h] always spans both
+  // pins drew over its own text label, which was removed for that reason); E[h] always spans both
   // the panel and its strip, exactly as drawAvFig's own E[h] line does.
   if (run) {
     h += `<line x1="${pL}" y1="${yP2(run.plain.mean)}" x2="${stripX0 + stripW}" y2="${yP2(run.plain.mean)}" stroke="${C.est}" stroke-width="1.6"/>`;
@@ -4473,7 +4495,7 @@ function cvCDrag() {
   // Soft snap: within 3.5% of the slider's own range of ĉ, or of 0, jump to that
   // value exactly, and so landing on either by feel does not require hitting one
   // exact step. ĉ is checked first and wins when both bands overlap (ĉ itself
-  // close to 0), because the slider exists to explore away from the estimate.
+  // close to 0) because the slider exists to explore away from the estimate.
   const range = +inp.max - +inp.min, band = 0.035 * range;
   if (Math.abs(c - run.c) <= band) { c = run.c; inp.value = String(c); }
   else if (Math.abs(c) <= band) { c = 0; inp.value = String(c); }
@@ -4565,7 +4587,7 @@ function clearCv() {
   const p = cvParams(); if (p) drawCvFig(null, p);
   seedMsg('cv', '', false); renderCvHist(p);
 }
-// Fix round 1: see renderCrnHist's own comment — takes p from the caller
+// Fix round 1: see renderCrnHist's own comment: takes p from the caller
 // rather than reading the fields again through the mutating cvParams(), which
 // was blanking whatever clamp message the caller's own read had just set.
 function renderCvHist(p) {
@@ -4584,11 +4606,16 @@ TABS.cv = {
 SPIN['cv-seed'] = seedSpin('cv');
 SPIN['cv-sige'] = decimalSpin('cv-sige', 0, cvParamsChanged, 0.01);
 // ── Tab ⑤: importance sampling ───────────────────────
-const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null, drag: null, frame: null, pairFrame: null, mode: 'prop' };
+// hoverY (Task 7q): the one hovered output value shared by the likelihood-
+// weighting card's three plots, null when the pointer is not over any of
+// them. Set from a pointer's x within whichever panel it sits in (isInitDrag),
+// read back on every drawIsPairFig call so a live redraw (a run, a drag, a
+// field edit) re-applies whatever hover was already showing.
+const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null, drag: null, frame: null, pairFrame: null, mode: 'prop', hoverY: null };
 // The one toggle for tab ⑤'s whole transfer-plot figure (Task 7l): which arm's
 // sample it draws, direct or proposal. Mirrors avMode's own pattern -- it
 // redraws from the last run if there is one, or the empty state otherwise, and
-// never re-evaluates or touches the history, because both arms already ride
+// never re-evaluates or touches the history because both arms already ride
 // on every run.
 function isMode(m) {
   ISS.mode = m;
@@ -4749,93 +4776,75 @@ function isComputeScale(p) {
   if (!(densScale > 0)) densScale = 1;
   return { x0: x0, x1: x1, yLo: yLo, yHi: yHi, densScale: densScale };
 }
-// About 2√n bins (clamped to [10, 80], not the √n drawCiFig itself uses --
-// this histogram sits in a strip only a third as tall) over the figure's own
-// locked [yLo, yHi], not the sample's range, and so the bars stay inside the
-// same window the curves and the rug already draw against, with one bin edge
-// forced to sit exactly at T (clipped into [yLo, yHi]): every bin then falls
-// entirely on one side of the event, and so summing the weighted bars at or
-// past that edge reproduces the weighted estimate exactly, not just
-// approximately. This histogram is a window onto a larger one, not a
-// heap-at-the-edge display (Task 7n): a draw below yLo, or at or above yHi,
-// is not folded into the nearest edge bin. It falls in no drawn bin at all,
-// and is counted only in `beyond` (and, for its likelihood ratio, `beyondW`);
-// the visible bars therefore sum to (n - beyond)/n rather than to 1, and the
-// weighted bars past T sum to the weighted estimate minus beyondW rather than
-// to the estimate itself. Bar heights still divide by the full n, not by
-// n - beyond, and so a bin whose draws all land inside the window keeps
-// exactly the height it would have in the full histogram.
+// About 2√n bins (clamped to [10, 80], not the √n drawCiFig itself uses:
+// this histogram sits in a strip only a third as tall), equal in width over
+// the figure's own locked [yLo, yHi] rather than the sample's range, so that
+// the bars stay inside the same window the curves and the rug already draw
+// against. The grid is set by the window alone (Ted, 2026-09-07): the
+// threshold T is not a bin edge, and so dragging T slides the line over a
+// histogram that does not move; only a new sample, a new n, or a new window
+// changes the bars. A bar that straddles T is painted in two tones, split at
+// T by isSplitAt below, and the estimate itself always comes from the run,
+// never from summing bars. This histogram is a window onto a larger one,
+// not a heap-at-the-edge display (Task 7n): a draw below yLo, or at or above
+// yHi, is not folded into the nearest edge bin. It falls in no drawn bin at
+// all and is counted only in `beyond` (and, for its likelihood ratio, in
+// `beyondW`); the visible bars therefore sum to (n - beyond)/n rather than
+// to 1. Bar heights still divide by the full n, not by n - beyond, and so a
+// bin whose draws all land inside the window keeps exactly the height it
+// would have in the full histogram.
 // hs is whichever arm's outputs are being binned (the proposal's run.hs or the
 // direct arm's run.hxs, Task 7l); lr is the matching likelihood ratios, or
 // null for the direct arm, which carries no weight at all -- sumW then just
-// stays zero and the caller skips the weighted outline entirely.
-function isHistBins(hs, lr, T, yLo, yHi) {
+// stays zero and the caller draws no weighted bars.
+function isHistBins(hs, lr, yLo, yHi) {
   const n = hs.length;
   const k = Math.min(80, Math.max(10, Math.ceil(2 * Math.sqrt(n))));
-  const bw0 = (yHi - yLo) / k;
-  const Tc = Math.min(Math.max(T, yLo), yHi);
-  const kb = Tc > yLo ? Math.max(1, Math.round((Tc - yLo) / bw0)) : 0;
-  const ka = yHi > Tc ? Math.max(1, Math.round((yHi - Tc) / bw0)) : 0;
-  const bwB = kb > 0 ? (Tc - yLo) / kb : 0, bwA = ka > 0 ? (yHi - Tc) / ka : 0;
-  const kk = kb + ka, lo = new Array(kk), hi = new Array(kk), cntU = new Array(kk).fill(0), sumW = new Array(kk).fill(0);
-  for (let b = 0; b < kb; b++) { lo[b] = yLo + b * bwB; hi[b] = yLo + (b + 1) * bwB; }
-  for (let b = 0; b < ka; b++) { lo[kb + b] = Tc + b * bwA; hi[kb + b] = Tc + (b + 1) * bwA; }
+  const bw = (yHi - yLo) / k;
+  const lo = new Array(k), hi = new Array(k), cntU = new Array(k).fill(0), sumW = new Array(k).fill(0);
+  for (let b = 0; b < k; b++) { lo[b] = yLo + b * bw; hi[b] = b === k - 1 ? yHi : yLo + (b + 1) * bw; }
   let beyond = 0, beyondW = 0;
   for (let i = 0; i < n; i++) {
     const v = hs[i];
     if (v < yLo || v >= yHi) { beyond++; if (lr) beyondW += lr[i]; continue; }
-    let b;
-    if (v < Tc && kb > 0) b = Math.min(kb - 1, Math.max(0, Math.floor((v - yLo) / bwB)));
-    else if (ka > 0) b = kb + Math.min(ka - 1, Math.max(0, Math.floor((v - Tc) / bwA)));
-    else b = kb - 1;
+    const b = Math.min(k - 1, Math.max(0, Math.floor((v - yLo) / bw)));
     cntU[b]++; if (lr) sumW[b] += lr[i];
   }
-  return { lo: lo, hi: hi, cntU: cntU, sumW: sumW, kb: kb, n: n, beyond: beyond, beyondW: beyondW };
+  return { lo: lo, hi: hi, cntU: cntU, sumW: sumW, n: n, beyond: beyond, beyondW: beyondW };
 }
 // Companion to isHistBins for the input strip's own histogram (Task 7m): the
-// same k = clamp(ceil(2√n), 10, 80) bin count, but over the model's input
-// domain [x0, x1] with an edge at the input threshold wayIn, and a second
-// edge at leftWayIn for a two-sided model (x²) -- pass null for leftWayIn
-// otherwise. Bins are allocated to each of the (two or three) resulting
-// segments in proportion to that segment's own width, with a floor of one
-// bin per non-empty segment (isHistBins's own kb/ka rounding, generalized to
-// any number of segments), and so summing the whole bins flagged `pre` (at
-// or beyond an edge) reproduces the pre-image's own mass exactly, the same
-// reasoning isHistBins's own edge at T carries for the output side. Like
-// isHistBins, this is a window onto a larger histogram (Task 7n): a draw
+// same k = clamp(ceil(2√n), 10, 80) equal bins, over the model's input domain
+// [x0, x1]. The input threshold is not a bin edge either; a bar that straddles
+// it is split by isSplitAt at draw time, exactly as the output bars are at T.
+// Like isHistBins, this is a window onto a larger histogram (Task 7n): a draw
 // below x0, or at or above x1, falls in no drawn bin and is counted only in
-// `beyond`; the pre-image bars plus `beyond` therefore reproduce the
-// pre-image's own count exactly, rather than the pre-image bars alone
-// reproducing it.
-function isHistBinsX(xs, wayIn, leftWayIn, x0, x1) {
+// `beyond`.
+function isHistBinsX(xs, x0, x1) {
   const n = xs.length;
   const k = Math.min(80, Math.max(10, Math.ceil(2 * Math.sqrt(n))));
-  const bw0 = (x1 - x0) / k;
-  const hasLeft = leftWayIn !== null && leftWayIn > x0 && leftWayIn < x1;
-  const wc = Math.min(Math.max(wayIn, x0), x1);
-  const lc = hasLeft ? Math.min(Math.max(leftWayIn, x0), x1) : x0;
-  // Two segments without a left edge ([x0, wc), [wc, x1]), three with one
-  // ([x0, lc), [lc, wc), [wc, x1]) -- the first and last are the pre-image
-  // when there is a left edge, only the last one otherwise.
-  const bounds = hasLeft ? [x0, lc, wc, x1] : [x0, wc, x1];
-  const lo = [], hi = [], pre = [];
-  for (let s = 0; s < bounds.length - 1; s++) {
-    const w = bounds[s + 1] - bounds[s];
-    const kk = w > 0 ? Math.max(1, Math.round(w / bw0)) : 0;
-    const bw = kk > 0 ? w / kk : 0;
-    const isPre = hasLeft ? (s === 0 || s === bounds.length - 2) : (s === bounds.length - 2);
-    for (let b = 0; b < kk; b++) { lo.push(bounds[s] + b * bw); hi.push(bounds[s] + (b + 1) * bw); pre.push(isPre); }
-  }
-  const kk2 = lo.length, cnt = new Array(kk2).fill(0);
+  const bw = (x1 - x0) / k;
+  const lo = new Array(k), hi = new Array(k), cnt = new Array(k).fill(0);
+  for (let b = 0; b < k; b++) { lo[b] = x0 + b * bw; hi[b] = b === k - 1 ? x1 : x0 + (b + 1) * bw; }
   let beyond = 0;
   for (let i = 0; i < n; i++) {
     const v = xs[i];
     if (v < x0 || v >= x1) { beyond++; continue; }
-    let b = kk2 - 1;
-    for (let j = 0; j < kk2; j++) { if (v < hi[j] || j === kk2 - 1) { b = j; break; } }
-    cnt[b]++;
+    cnt[Math.min(k - 1, Math.max(0, Math.floor((v - x0) / bw)))]++;
   }
-  return { lo: lo, hi: hi, cnt: cnt, pre: pre, n: n, beyond: beyond };
+  return { lo: lo, hi: hi, cnt: cnt, n: n, beyond: beyond };
+}
+// Cuts one bin [v0, v1) at every threshold in `edges` that falls strictly
+// inside it and returns the pieces in order, each flagged by inEvent at its
+// own midpoint, so that a bar can be painted in two tones with the darker
+// part exactly on the event's side of the line. A bin no threshold crosses
+// comes back as a single piece.
+function isSplitAt(v0, v1, edges, inEvent) {
+  const cuts = [v0];
+  edges.slice().sort((a, b) => a - b).forEach(e => { if (e > v0 && e < v1) cuts.push(e); });
+  cuts.push(v1);
+  const out = [];
+  for (let i = 0; i + 1 < cuts.length; i++) out.push({ v0: cuts[i], v1: cuts[i + 1], in: inEvent((cuts[i] + cuts[i + 1]) / 2) });
+  return out;
 }
 // Three linked regions sharing two axes: a main panel (input horizontal,
 // output vertical) with the model's curve and the biased draws on it, an
@@ -4960,11 +4969,13 @@ function drawIsFig(run, p) {
     return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.abs(bx1 - bx0).toFixed(1)}" height="${Math.abs(base - by).toFixed(1)}" fill="${fill}" opacity=".55"/>`;
   };
   if (run) {
-    const bins = isHistBinsX(sample.xs, wayIn, fn.twoSided ? leftWayIn : null, x0, x1);
+    const bins = isHistBinsX(sample.xs, x0, x1);
+    const inEdges = fn.twoSided ? [leftWayIn, wayIn] : [wayIn];
+    const inPre = x => fn.twoSided ? (x <= leftWayIn || x >= wayIn) : x >= wayIn;
     for (let b = 0; b < bins.lo.length; b++) {
       const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
       const dens = bins.cnt[b] / (bins.n * bw); if (!(dens > 0)) continue;
-      inputG += inBar(bins.lo[b], bins.hi[b], dens, bins.pre[b] ? sampleColorDark : sampleColor);
+      isSplitAt(bins.lo[b], bins.hi[b], inEdges, inPre).forEach(sg => { inputG += inBar(sg.v0, sg.v1, dens, sg.in ? sampleColorDark : sampleColor); });
     }
   }
   inputG += `<path d="${inCurve(0, x0, x1)}" fill="none" stroke="${C.truth}" stroke-width="1.3"/>`;
@@ -5028,19 +5039,19 @@ function drawIsFig(run, p) {
   // ---- output strip/band: a filled-bar histogram of the current sample's
   // outputs (Task 7m: replaces the step-outline pair and the weighted
   // histogram, both gone -- weighting now lives in its own pair of plots
-  // below), one bin edge forced to sit at T so the bars at or past it (the
-  // event) sum to exactly the shown sample's own hit count, colored darker
-  // there in the sample's own color. `outBeyond` (Task 7n) survives past this
+  // below) on a fixed grid that T does not move, with the bar that straddles
+  // T split at it and the part on the event's side colored darker in the
+  // sample's own color. `outBeyond` (Task 7n) survives past this
   // block so setIsFigCap can report how many of the shown sample's draws fell
   // outside the window this histogram draws. -----------------------------
   let outBeyond = 0;
   if (run) {
-    const bins = isHistBins(sample.hs, null, p.T, yLo, yHi);
+    const bins = isHistBins(sample.hs, null, yLo, yHi);
     outBeyond = bins.beyond;
     for (let b = 0; b < bins.lo.length; b++) {
       const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
       const dens = bins.cntU[b] / (bins.n * bw); if (!(dens > 0)) continue;
-      outputG += outBar(bins.lo[b], bins.hi[b], dens, b >= bins.kb ? sampleColorDark : sampleColor);
+      isSplitAt(bins.lo[b], bins.hi[b], [p.T], y => y >= p.T).forEach(sg => { outputG += outBar(sg.v0, sg.v1, dens, sg.in ? sampleColorDark : sampleColor); });
     }
   }
 
@@ -5133,7 +5144,7 @@ function drawIsFig(run, p) {
     lbl += `<text x="${xMain(x)}" y="${xTickY}" text-anchor="middle" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${x}</text>`;
   }
   // Round-number ticks (niceTicks, fix round 1) rather than the endpoints and
-  // their midpoint: formatted to the chosen step's own precision, so a step of
+  // their midpoint: formatted to the chosen step's own precision, and so a step of
   // 2.5 shows one decimal and a step of 20 shows none, regardless of yLo/yHi's
   // own magnitude.
   const yTicks = niceTicks(yLo, yHi, 4), yTickX = mainLeft - 6;
@@ -5194,13 +5205,13 @@ function isRoundTheta(v) {
 // second copy of it, following ciInitDrag's own pattern: an invisible 24px
 // stroke per handle, a hover class that thickens the visible line/curve and
 // its label -- T (transfer plot) and pairT (the pair's own three) share one
-// highlight group, hot-T, applied to BOTH SVGs at once by setHot below, so
+// highlight group, hot-T, applied to BOTH SVGs at once by setHot below, and so
 // hovering or dragging any one of the four T lines thickens all four
 // together (coordinator's third addendum); way and theta keep their own
 // separate, single-SVG classes -- and pointer events with capture,
 // coalesced to one redraw
 // per animation frame via the shared coalesceToFrame helper. `svg` is
-// resolved from the event's own currentTarget rather than closed over, so
+// resolved from the event's own currentTarget rather than closed over, and so
 // the same code path serves whichever of the two SVGs the drag started on.
 // Only the drag's own value-window (x0/x1/yLo/yHi/yMargin, fixed for the
 // drag because T/θ never relock ISS.scale) is captured at pointerdown,
@@ -5209,7 +5220,7 @@ function isRoundTheta(v) {
 // pair) is read live from ISS.frame/ISS.pairFrame on every move instead,
 // the way ciInitDrag reads CIS.frame live -- a mid-drag resize (the
 // widget's own ResizeObserver reacts to one), or the pair's own stacked/
-// side-by-side flip, then maps the pointer's position with the figure's
+// side-by-side flip, and then maps the pointer's position with the figure's
 // current geometry, not a stale one (fix round 1's own reasoning, carried
 // over here rather than freezing a panel's pixel position at pointerdown).
 // The theta handle needs no y-geometry at all (isXInv ignores it), and so
@@ -5219,7 +5230,7 @@ function isRoundTheta(v) {
 function isInitDrag() {
   const svgs = [$('is-fig'), $('is-pair-fig')];
   // T (transfer plot) and pairT (the pair's own three) share one highlight
-  // group -- hovering or dragging either adds hot-T to both SVGs at once, so
+  // group -- hovering or dragging either adds hot-T to both SVGs at once, and so
   // all four T lines/labels thicken together (coordinator's third addendum);
   // way and theta stay single-SVG, each with its own class, unaffected.
   const setHot = (which, on) => {
@@ -5285,8 +5296,58 @@ function isInitDrag() {
     svg.addEventListener('pointerup', end);
     svg.addEventListener('pointercancel', end);
   });
+  // One hovered output value drives all three of the pair's own plots (Task
+  // 7q): set from a bare pointer move or tap that lands inside one of the
+  // three panel rects (not a handle grab, which the pointerdown listener
+  // above already owns, and not while a T handle is being dragged), null the
+  // moment the pointer leaves the SVG. No preventDefault here, unlike the
+  // handle-drag path above, and so a swipe across the card still scrolls
+  // the page; a tap sets the same hover a mouse move would because pointer
+  // events cover both without any touch-specific branch on the way in --
+  // the one branch that does exist is on the way out: lifting a finger
+  // fires its own pointerleave (a touch pointer stops existing the instant
+  // it lifts, unlike a mouse pointer that keeps hovering), and a tap is
+  // only useful if its readout stays up after the finger lifts, and so a
+  // touch pointerleave is left alone rather than clearing the hover a mouse
+  // pointerleave would. The coalescer keeps a fast mouse move to one redraw
+  // per animation frame, the same pattern the T drag above already uses. A
+  // live redraw from any other cause (a run, a field edit, isParamsChanged's
+  // own drag path) reads ISS.hoverY fresh on its own, and so it never needs
+  // to call back here.
+  const pairSvg = svgs[1];
+  const isPairHoverAt = ev => {
+    const pf = ISS.pairFrame; if (!pf) return null;
+    const q = ciSvgPoint(pairSvg, ev);
+    for (let idx = 0; idx < pf.panelX.length; idx++) {
+      const ox = pf.panelX[idx], oy = pf.panelY[idx];
+      if (q.x >= ox && q.x < ox + pf.plotW && q.y >= oy && q.y < oy + pf.subH) {
+        return pf.yLo + (q.x - (ox + pf.pL2)) / pf.innerW * (pf.yHi - pf.yLo);
+      }
+    }
+    return null;
+  };
+  const hoverRedraw = () => {
+    const p = ISS.lastRunP || isParams(); if (!p) return;
+    drawIsPairFig(ISS.lastRunObj, p);
+  };
+  const hoverCoalescer = coalesceToFrame(ev => {
+    if (ISS.drag) return;
+    ISS.hoverY = isPairHoverAt(ev);
+    hoverRedraw();
+  });
+  pairSvg.addEventListener('pointermove', ev => { if (ISS.drag) return; hoverCoalescer.schedule(ev); });
+  pairSvg.addEventListener('pointerdown', ev => {
+    if (ISS.drag || (ev.target.closest && ev.target.closest('.is-handle'))) return;
+    ISS.hoverY = isPairHoverAt(ev);
+    hoverRedraw();
+  });
+  pairSvg.addEventListener('pointerleave', ev => {
+    if (ev.pointerType === 'touch' || ISS.hoverY === null) return;
+    ISS.hoverY = null;
+    if (!ISS.drag) hoverRedraw();
+  });
 }
-// The one place that writes is-fig-cap's text, empty or filled, so the two
+// The one place that writes is-fig-cap's text, empty or filled, and so the two
 // states cannot drift apart (histCaption's own zero-state pattern). Task 7o
 // gives the caption a constant shape: all three sentences are always present,
 // in both states, and so the reserved height can be measured exactly rather
@@ -5363,6 +5424,43 @@ const SUP_DIGITS = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4
 // exact powers, unlike fmtPow10's old mantissa case, which is why this is
 // its own small helper rather than a revival of that one).
 function fmtPow10Tick(w) { return '10' + String(Math.round(Math.log10(w))).split('').map(c => SUP_DIGITS[c] || c).join(''); }
+// N significant figures, the same convention the middle plot's own log axis
+// reads at a glance: plain decimal notation between 1e-3 and 1e3, exponent
+// notation outside it, a bare "e" with no plus sign or leading zero on the
+// exponent (Task 7q's hover readouts). A trailing zero rounds away (3.10
+// shows as "3.1") because the last digit is only ever exact by coincidence.
+// fmtSig3 is the page's usual three-figure form; fmtMeanWeight (Task 7r)
+// reaches for more digits only where three would not be enough to make its
+// own arithmetic close.
+function fmtSigN(v, n) {
+  if (!(v > 0)) return v === 0 ? '0' : '—';
+  const trim = s => s.indexOf('.') < 0 ? s : s.replace(/0+$/, '').replace(/\.$/, '');
+  if (v >= 1000 || v < 0.001) {
+    const e = Math.floor(Math.log10(v));
+    return trim((v / Math.pow(10, e)).toPrecision(n)) + 'e' + e;
+  }
+  return trim(v.toPrecision(n));
+}
+function fmtSig3(v) { return fmtSigN(v, 3); }
+// The hover readouts (Task 7r) print a bin's mean weight (sumW/cntU) beside
+// its weighted count (fmtSig3(sumW)) and claim the two multiply back
+// together; three figures on the mean is not always enough for that to hold
+// once printed because W can vary sharply across a bin's own width, and a
+// mean rounded to three figures can multiply by the count to a value that
+// rounds to a different three-figure weighted count than the one already on
+// screen. This grows the mean's own precision, one digit at a time, only
+// until count times the printed mean rounds (at three figures, fmtSig3's own
+// precision) to the same weighted count already shown -- most bins settle at
+// three or four digits; the loop's cap is far past where a double's own
+// precision could still matter, and so it always finds one.
+function fmtMeanWeight(cnt, wsum) {
+  const target = fmtSig3(wsum);
+  for (let sig = 3; sig <= 12; sig++) {
+    const s = fmtSigN(wsum / cnt, sig);
+    if (fmtSig3(parseFloat(s) * cnt) === target) return s;
+  }
+  return fmtSigN(wsum / cnt, 12);
+}
 // The likelihood-weighting trio (Task 7m, extended by the coordinator's same-
 // day addendum to a third, middle plot): the proposal's own outputs counted
 // once (left) and counted W(y) times (right), on one shared output-value
@@ -5381,21 +5479,46 @@ function drawIsPairFig(run, p) {
   const yEps = isOutYEps(yLo, yHi);
   const W = fullCardWidth($('is-pair-fig'));
   const stacked = !window.matchMedia('(min-width: 761px)').matches;
-  // pT2 carries two title lines now (the factor and its one-word/-phrase
-  // role) rather than one, per the coordinator's naming addendum.
-  const gap = 16, subH = 190, pT2 = 34, pB2 = 30, pL2 = 8, pR2 = 8;
+  // pT2 carries four lines now (Task 7q added the hover readout's own row
+  // below the factor and its one-word/-phrase role; Task 7r added a second,
+  // smaller readout line under that, on the middle plot only, so that the mean
+  // weight over a hovered bin's draws and the crosshair's own point value
+  // both fit without crowding the plot body), and subH grew by the same 9
+  // units so innerH -- the plot body itself -- keeps the exact size it had
+  // before that second line existed. The left and right panels still draw
+  // only one readout line, at the same y they always have, and so the extra
+  // 9px is unused headroom there rather than a second line of their own.
+  const gap = 16, subH = 209, pT2 = 53, pB2 = 30, pL2 = 8, pR2 = 8;
   const plotW = stacked ? W : (W - 2 * gap) / 3;
   const innerW = plotW - pL2 - pR2, innerH = subH - pT2 - pB2;
   const H = stacked ? subH * 3 + 2 * gap : subH;
-  const bins = run ? isHistBins(run.hs, run.lr, p.T, yLo, yHi) : null;
+  const bins = run ? isHistBins(run.hs, run.lr, yLo, yHi) : null;
   const cols = stacked ? [[0, 0], [0, subH + gap], [0, 2 * (subH + gap)]] : [[0, 0], [plotW + gap, 0], [2 * (plotW + gap), 0]];
   // The pair's own drag frame (coordinator's second addendum): every panel
   // shares this one output-value mapping, and so a T handle on any of the
   // three inverts through the same pL2/innerW regardless of which panel it
   // sits in -- only its own panel's ox differs, read live by index on every
   // move (isInitDrag), not frozen at pointerdown, and so a mid-drag resize
-  // (or a stacked/side-by-side flip) still maps correctly.
-  ISS.pairFrame = { yLo: yLo, yHi: yHi, pL2: pL2, innerW: innerW, panelX: cols.map(c => c[0]) };
+  // (or a stacked/side-by-side flip) still maps correctly. plotW/subH/panelY
+  // (Task 7q) let isInitDrag's own hover handler hit-test which panel a bare
+  // pointer move (not a handle grab) landed in, the same way panelX already
+  // lets a pairT drag find its own panel's ox.
+  ISS.pairFrame = { yLo: yLo, yHi: yHi, pL2: pL2, innerW: innerW, panelX: cols.map(c => c[0]), panelY: cols.map(c => c[1]), plotW: plotW, subH: subH };
+  // One hovered output value drives all three panels at once (Task 7q):
+  // null, or suppressed during a T drag (restored the moment it ends because
+  // ISS.hoverY itself is never touched by a drag), leaves hoverBin at -1 and
+  // every panel draws exactly as it did before this task. Otherwise hoverBin
+  // is the bin ISS.hoverY falls in, or -1 when it lies outside the window
+  // (below yLo, or at or above yHi) -- the histograms then draw nothing new
+  // and only the middle plot's crosshair and W readout appear.
+  const hoverActive = !!(run && bins && !ISS.drag && ISS.hoverY !== null);
+  let hoverBin = -1;
+  if (hoverActive) {
+    const hy = ISS.hoverY;
+    if (hy >= bins.lo[0] && hy < bins.hi[bins.hi.length - 1]) {
+      for (let b = 0; b < bins.lo.length; b++) { if (hy < bins.hi[b]) { hoverBin = b; break; } }
+    }
+  }
 
   // Every panel maps the same output-value axis; only where a panel sits (ox,
   // oy) and how it maps its own vertical quantity differ.
@@ -5422,17 +5545,89 @@ function drawIsPairFig(run, p) {
     g += `<text class="is-pair-t-lbl" x="${(tx + 3).toFixed(1)}" y="${oy + pT2 + 9}" fill="${C.muted}" font-size="9" font-weight="700" font-family="${FF_MONO}" paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round">T</text>`;
     handles += `<line class="is-handle" data-handle="pairT" data-panel-idx="${idx}" x1="${tx}" y1="${oy + pT2}" x2="${tx}" y2="${base}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
   };
-  const drawHistPanel = (ox, oy, main, sub, curveTheta, densOf, color, colorDark) => {
+  // Rug of the proposal's draws (Task 7q, extended to the right plot by
+  // Task 7r's own addendum), the transfer plot's own convention reused here
+  // (first IS_MAXR draws in draw order, tall and opaque past T, short and
+  // faint otherwise): the histogram bars alone cannot tell a real gap (no
+  // draw landed there) from a lone, heavily weighted draw sitting beside
+  // bars that dwarf it, and the rug lets a reader match every spike and gap
+  // to an individual draw instead of guessing from the bars. All three
+  // plots now carry it, at identical tick positions because the weighted
+  // histogram is built from the same draws the other two show -- a reader
+  // dragging the pointer over the weighted side can see where those draws
+  // actually sit inside a bin, not only how tall the bar landed.
+  const drawRug = (ox, oy) => {
+    if (!run) return '';
+    const X = xMapOf(ox), base = oy + pT2 + innerH, m = Math.min(IS_MAXR, run.hs.length);
+    let s = '';
+    for (let i = 0; i < m; i++) {
+      const inTail = run.hs[i] >= p.T, len = inTail ? 12 : 6, op = inTail ? .9 : .45;
+      const xx = X(Math.min(yHi, Math.max(yLo, run.hs[i])));
+      s += `<line x1="${xx.toFixed(1)}" y1="${base}" x2="${xx.toFixed(1)}" y2="${(base - len).toFixed(1)}" stroke="${C.est}" stroke-width="1" opacity="${op}"/>`;
+    }
+    return s;
+  };
+  // Readout row (Task 7q): one reserved line below the title/subtitle, above
+  // where the plot body itself begins, shared by all three panels so a
+  // hover's own text never has to compete with a bar, the T label (which
+  // sits inside the plot body, well below this row), or the axis (at the
+  // panel's own bottom edge) for the same space. drawReadout2 (Task 7r) adds
+  // a second, smaller line under the first, for the middle plot's own mean-
+  // weight reading; pT2's own growth above is what leaves it room.
+  const drawReadout = (ox, oy, txt, color) => {
+    g += `<text x="${(ox + plotW / 2).toFixed(1)}" y="${oy + 37}" text-anchor="middle" fill="${color}" font-size="8" font-weight="700" font-family="${FF_MONO}" paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round">${txt}</text>`;
+  };
+  const drawReadout2 = (ox, oy, mainTxt, subTxt, color) => {
+    drawReadout(ox, oy, mainTxt, color);
+    g += `<text x="${(ox + plotW / 2).toFixed(1)}" y="${oy + 46}" text-anchor="middle" fill="${color}" font-size="7" font-weight="700" font-family="${FF_MONO}" paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round">${subTxt}</text>`;
+  };
+  // Hover band (Task 7r): a low-opacity, full-height column over the hovered
+  // bin's own [lo, hi) range, the same neutral muted color and the same
+  // range on all three panels so the highlighted bin reads as one column
+  // across the whole card, not three separate marks a reader has to line up
+  // by eye. Drawn first, under a panel's own bars, curve, and rug.
+  const drawHoverBand = (ox, oy) => {
+    if (hoverBin < 0) return;
+    const X = xMapOf(ox), x0b = X(bins.lo[hoverBin]), x1b = X(bins.hi[hoverBin]);
+    g += `<rect x="${Math.min(x0b, x1b).toFixed(1)}" y="${(oy + pT2).toFixed(1)}" width="${Math.abs(x1b - x0b).toFixed(1)}" height="${innerH.toFixed(1)}" fill="${C.muted}" opacity=".15"/>`;
+  };
+  // The hovered bin's own mean weight (Task 7r), shared by the middle plot's
+  // main readout line and the right panel's product line so the same number
+  // appears in both places -- fmtMeanWeight's own growing precision is what
+  // makes count times this printed mean read back to the printed weighted
+  // count.
+  const hoverMean = hoverBin >= 0 && bins.cntU[hoverBin] > 0 ? fmtMeanWeight(bins.cntU[hoverBin], bins.sumW[hoverBin]) : null;
+  const drawHistPanel = (ox, oy, main, sub, curveTheta, densOf, color, colorDark, readoutSide) => {
     const X = xMapOf(ox);
     const Y = d => oy + pT2 + innerH - Math.min(1, d / densScale) * innerH;
     const base = oy + pT2 + innerH;
     g += panelChrome(ox, oy, main, sub, color, X);
+    drawHoverBand(ox, oy);
     if (bins) {
       for (let b = 0; b < bins.lo.length; b++) {
         const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
-        const dens = densOf(b); if (!(dens > 0)) continue;
-        const past = b >= bins.kb, x0b = X(bins.lo[b]), x1b = X(bins.hi[b]), yb = Y(dens);
-        g += `<rect x="${Math.min(x0b, x1b).toFixed(1)}" y="${yb.toFixed(1)}" width="${Math.abs(x1b - x0b).toFixed(1)}" height="${Math.max(0, base - yb).toFixed(1)}" fill="${past ? colorDark : color}" opacity=".55"/>`;
+        const dens = densOf(b);
+        const x0b = X(bins.lo[b]), x1b = X(bins.hi[b]);
+        if (dens > 0) {
+          const yb = Y(dens);
+          // Two tones split at T when the bar straddles it (the grid itself
+          // never moves with T).
+          isSplitAt(bins.lo[b], bins.hi[b], [p.T], y => y >= p.T).forEach(sg => {
+            const sx0 = X(sg.v0), sx1 = X(sg.v1);
+            g += `<rect x="${Math.min(sx0, sx1).toFixed(1)}" y="${yb.toFixed(1)}" width="${Math.abs(sx1 - sx0).toFixed(1)}" height="${Math.max(0, base - yb).toFixed(1)}" fill="${sg.in ? colorDark : color}" opacity=".55"/>`;
+          });
+        }
+        // Highlight (Task 7q): the same bar index on both histograms, a 1.2
+        // stroke in the panel-neutral muted color rather than either bar's
+        // own data color because the color itself never carries the link --
+        // the matching readouts, naming the same interval on both sides, do.
+        // An empty bin (dens <= 0, no bar drawn above) still gets a thin
+        // 2px nub at the baseline, and so "hovering an empty bin" reads as
+        // this bin, empty rather than as nothing responding to the pointer.
+        if (b === hoverBin) {
+          const yb2 = dens > 0 ? Y(dens) : base - 2;
+          g += `<rect x="${Math.min(x0b, x1b).toFixed(1)}" y="${yb2.toFixed(1)}" width="${Math.abs(x1b - x0b).toFixed(1)}" height="${Math.max(2, base - yb2).toFixed(1)}" fill="none" stroke="${C.muted}" stroke-width="1.2"/>`;
+        }
       }
     }
     let d = '';
@@ -5441,6 +5636,27 @@ function drawIsPairFig(run, p) {
       d += (i ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1);
     }
     g += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.3"${curveTheta !== 0 ? ' stroke-dasharray="6,3"' : ''}/>`;
+    // The rug goes on the right histogram too now (coordinator's addendum to
+    // Task 7r): the same first-IS_MAXR draws, in the same draw order, as the
+    // left and middle plots carry, so that a reader dragging the pointer over the
+    // weighted side sees where those draws actually sit inside a bin, not
+    // only how tall the bar landed.
+    g += drawRug(ox, oy);
+    if (hoverBin >= 0) {
+      const bLo = bins.lo[hoverBin], bHi = bins.hi[hoverBin], cnt = bins.cntU[hoverBin], wsum = bins.sumW[hoverBin];
+      const iv = '[' + bLo.toFixed(2) + ', ' + bHi.toFixed(2) + ')';
+      const draws = cnt === 1 ? 'draw' : 'draws';
+      // The right panel's own line (Task 7r) writes the product itself, and
+      // so a reader can check "count times mean weight" against the printed
+      // weighted count directly, instead of taking the match on faith --
+      // hoverMean already carries whatever precision fmtMeanWeight found
+      // was needed for the two sides to agree at fmtSig3's own three figures.
+      const txt = cnt === 0 ? ('no draws in ' + iv)
+        : readoutSide === 'left' ? (cnt.toLocaleString() + ' ' + draws + ' in ' + iv)
+        : (cnt.toLocaleString() + ' ' + draws + (cnt === 1 ? ' weighs ' : ' weigh ') + fmtSig3(wsum)
+           + ' = ' + cnt.toLocaleString() + ' × ' + hoverMean);
+      drawReadout(ox, oy, txt, color);
+    }
   };
   // The middle plot (coordinator's first addendum): W(y) itself, log axis --
   // the curve's own min/max over the visible range sets the log scale (the
@@ -5462,6 +5678,7 @@ function drawIsPairFig(run, p) {
     const logLo = Math.log10(wMin), logHi = Math.log10(wMax);
     const Y = w => oy + pT2 + innerH - (Math.log10(Math.max(w, wMin)) - logLo) / (logHi - logLo) * innerH;
     g += panelChrome(ox, oy, main, sub, C.ratio, X, C.ratio, 'is-pair-w-formula');
+    drawHoverBand(ox, oy);
     if (wMin <= 1 && 1 <= wMax) {
       const y1 = Y(1);
       g += `<line x1="${ox + pL2}" y1="${y1.toFixed(1)}" x2="${ox + pL2 + innerW}" y2="${y1.toFixed(1)}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
@@ -5489,17 +5706,92 @@ function drawIsPairFig(run, p) {
       const pMinus = branch(w => w.minus, true);
       if (pMinus) g += `<text x="${(pMinus[0] - 3).toFixed(1)}" y="${(pMinus[1] + 11).toFixed(1)}" text-anchor="end" fill="${C.ratio}" font-size="8" font-family="${FF_MONO}">x = -√y</text>`;
     }
+    // Thickened curve segment (Task 7r): the same branch(es), redrawn only
+    // over the hovered bin's own [lo, hi) width at a heavier stroke, the
+    // same 2.4 weight the T-handle hover state already uses elsewhere on
+    // this page -- so a reader sees W sliding across the bin, not just its
+    // value at the pointer's own single x.
+    if (hoverBin >= 0) {
+      const bLo = bins.lo[hoverBin], bHi = bins.hi[hoverBin];
+      const thickBranch = (getX, dashed) => {
+        let d = '', open = false;
+        for (let i = 0; i <= 40; i++) {
+          const v = bLo + (bHi - bLo) * i / 40, w = isWOfY(p.fn, p.theta, v);
+          const val = w ? getX(w) : undefined;
+          if (val === undefined) { open = false; continue; }
+          d += (open ? 'L' : 'M') + X(v).toFixed(1) + ',' + Y(val).toFixed(1);
+          open = true;
+        }
+        if (d) g += `<path d="${d}" fill="none" stroke="${C.ratio}" stroke-width="2.4"${dashed ? ' stroke-dasharray="6,3"' : ''}/>`;
+      };
+      thickBranch(w => w.plus, false);
+      if (fn.twoSided) thickBranch(w => w.minus, true);
+      // Each hovered bin's own draws, marked where they actually sit on the
+      // curve (coordinator's addendum): a dot at (yᵢ, weight of draw i), the
+      // draw's own weight from lr rather than the curve re-evaluated at yᵢ,
+      // and so a one-draw bin's dot lands at exactly the height the right
+      // panel's own weighted count prints, even on x²'s uncovered branch,
+      // where the curve's own plus-branch value at that y would not match.
+      // Capped at 60 draws so a heavily populated bin does not paint over
+      // itself; the band alone still marks the bin past that cap.
+      if (run) {
+        let dotCount = 0;
+        for (let i = 0; i < run.hs.length && dotCount < 60; i++) {
+          const yi = run.hs[i];
+          if (yi < bLo || yi >= bHi) continue;
+          g += `<circle cx="${X(yi).toFixed(1)}" cy="${Y(run.lr[i]).toFixed(1)}" r="2.2" fill="${C.est}"/>`;
+          dotCount++;
+        }
+      }
+    }
+    g += drawRug(ox, oy);
+    // Crosshair (Task 7q): a vertical line at the hovered output value and a
+    // horizontal line at W there (two, for x²'s own two branches), muted and
+    // dashed like the T lines, 1 unit wide -- Ted's own clarification that
+    // the count, the weight, and the weighted count read as one linked
+    // triple, and so this crosshair marks the same point drawHistPanel's
+    // own readouts describe in words. Skipped where W itself is undefined at
+    // that y (never on this widget's own locked windows, but isWOfY can
+    // still return null right at a domain edge).
+    if (hoverActive) {
+      const hy = ISS.hoverY, w = isWOfY(p.fn, p.theta, hy);
+      if (w) {
+        const hx = X(hy);
+        g += `<line x1="${hx.toFixed(1)}" y1="${oy + pT2}" x2="${hx.toFixed(1)}" y2="${base}" stroke="${C.muted}" stroke-width="1" stroke-dasharray="3,3"/>`;
+        const hLine = val => { const hy2 = Y(val); g += `<line x1="${ox + pL2}" y1="${hy2.toFixed(1)}" x2="${ox + pL2 + innerW}" y2="${hy2.toFixed(1)}" stroke="${C.muted}" stroke-width="1" stroke-dasharray="3,3"/>`; };
+        hLine(w.plus);
+        if (fn.twoSided && w.minus !== undefined) hLine(w.minus);
+        // The pointer's own point value, for x²'s two branches (Task 7r's
+        // clarification: the lr array already carries each draw's own full
+        // ratio, whichever branch it truly came from, and so the bin's mean
+        // needs no branch split of its own -- only this point line does).
+        const pointTxt = fn.twoSided
+          ? ('+√y: ' + fmtSig3(w.plus) + ' · −√y: ' + fmtSig3(w.minus))
+          : ('W(' + hy.toFixed(2) + ') = ' + fmtSig3(w.plus));
+        // The bin's own mean weight (Task 7r): the main line whenever the
+        // hovered bin holds at least one draw, with the pointer's own point
+        // value as a second, smaller line underneath; an empty bin has no
+        // mean to report, and so the point value alone is the whole readout,
+        // the same shape drawHistPanel's own empty-bin text already takes.
+        if (hoverMean !== null) {
+          const cnt = bins.cntU[hoverBin], draws = cnt === 1 ? 'draw' : 'draws';
+          drawReadout2(ox, oy, 'mean W over the ' + cnt.toLocaleString() + ' ' + draws + ' = ' + hoverMean, pointTxt, C.ratio);
+        } else {
+          drawReadout(ox, oy, pointTxt, C.ratio);
+        }
+      }
+    }
   };
 
   drawHistPanel(cols[0][0], cols[0][1], 'hist[h(X̃)]', 'counted once', p.theta,
-    b => bins.cntU[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.est, C.estDark);
+    b => bins.cntU[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.est, C.estDark, 'left');
   // The middle plot's own subtitle carries W's definition rather than a plain
   // label (coordinator's third addendum): the full form with its worked-out
   // exponential, or -- checked below, once the SVG is live -- the bare
   // ratio alone where the full form would not fit on one line.
   drawWPanel(cols[1][0], cols[1][1], 'W(X̃)', 'W(x) = φ(x) / q(x) = exp(−θx + θ²/2)');
   drawHistPanel(cols[2][0], cols[2][1], 'hist[h(X)]', 'counted W(X̃) times, on the target\'s density', 0,
-    b => bins.sumW[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.truth, C.truthDark);
+    b => bins.sumW[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.truth, C.truthDark, 'right');
   cols.forEach((c, idx) => drawPanelT(c[0], c[1], idx));
 
   svgSet($('is-pair-fig'), W, H, g + handles);
@@ -5518,7 +5810,8 @@ function isPairLegendHtml(fnKey) {
     + '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--truth)" stroke-width="1.3"/></svg>target output density</span>'
     + '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="22" height="9" fill="var(--est)" opacity=".55"/></svg>bars counted once</span>'
     + '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="22" height="9" fill="var(--truth)" opacity=".55"/></svg>bars counted W(y) times</span>'
-    + '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="10" height="9" fill="var(--est)" opacity=".55"/><rect x="13" y="2" width="10" height="9" fill="var(--est-dark)" opacity=".55"/></svg>past the threshold (darker)</span>';
+    + '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="10" height="9" fill="var(--est)" opacity=".55"/><rect x="13" y="2" width="10" height="9" fill="var(--est-dark)" opacity=".55"/></svg>past the threshold (darker)</span>'
+    + '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="8" y1="11" x2="8" y2="0" stroke="var(--est)" stroke-width="1" opacity=".9"/><line x1="16" y1="11" x2="16" y2="6" stroke="var(--est)" stroke-width="1" opacity=".45"/></svg>rug of the proposal draws</span>';
   if (fnKey === 'sq') {
     h += '<span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--ratio)" stroke-width="1.6"/></svg>likelihood ratio W(y), x = +√y branch</span>'
       + '<span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--ratio)" stroke-width="1.6" stroke-dasharray="6,3"/></svg>likelihood ratio W(y), x = -√y branch</span>';
@@ -5532,12 +5825,16 @@ function isPairLegendHtml(fnKey) {
 // and given a constant shape by Task 7o): always naming the weighted mass
 // and the proposal's own event-draw count -- both read straight off the
 // run's existing wtd/tail fields regardless of the "Sample shown" toggle
-// because the pair itself always shows the proposal sample -- then how many
+// because the pair itself always shows the proposal sample -- and then how many
 // of those event draws fall outside the histograms' own fixed window (the
 // same `beyond` count the left and right panels' bins carry because both
-// always bin run.hs/run.lr), then the middle plot's own one-line arithmetic,
-// and, for x², the note that the proposal's own draws come from only one of
-// its two branches. The beyond-window sentence is always present, an em dash
+// always bin run.hs/run.lr), and then the per-draw weighting rule (Task 7r:
+// a bin on the right is its own count times the mean weight over its draws,
+// not the weight at any single point in the bin, which is why the hover's
+// own printed arithmetic on the right panel does not match the crosshair's
+// point value), and, for x², the note that the proposal's own draws come
+// from only one of its two branches. The beyond-window sentence is always
+// present, an em dash
 // before a run and "none" for an actual zero afterward, the same rule
 // setIsFigCap's own third sentence follows; the statement that the weighted
 // mass past T equals the weighted estimate stays unqualified because it is
@@ -5548,7 +5845,12 @@ function isPairLegendHtml(fnKey) {
 // run, Run ×100, a live drag, a field edit, an n edit, or the sample toggle
 // -- leaves it unchanged. `data-model` stamps which shape is showing (mirror
 // of is-fig-cap's own data-shape) so the CSS tiers below can reserve the
-// branch note's own line only for sq.
+// branch note's own line only for sq. A further sentence (Task 7q) names the
+// two extremes the hover lets a reader find directly -- a bin with no draw
+// stays empty at any weight, and a bin with exactly one draw carries that
+// draw's whole weight -- and is always present, the same rule every other
+// sentence here already follows because it names a fact about the method
+// rather than a count tied to a run.
 function setIsPairCap(run, fnKey, beyond) {
   const mean = run ? run.wtd.mean.toExponential(3) : '—';
   const tail = run ? run.tail.toLocaleString() : '—';
@@ -5556,7 +5858,8 @@ function setIsPairCap(run, fnKey, beyond) {
     + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.';
   const beyondText = !run ? '—' : (beyond === 0 ? 'none' : beyond.toLocaleString());
   s += ' Of those, ' + beyondText + " lie beyond the plots' fixed scale.";
-  s += ' Each bar on the left times the ratio in the middle gives the bar on the right.';
+  s += ' Each draw carries its own weight, and so a bin on the right is its count times the mean weight over its draws, not the weight at any one point in the bin.';
+  s += ' A bin with no draw stays empty however large W is there, and a bin with one draw carries that draw\'s whole weight.';
   if (fnKey === 'sq') s += " The proposal's draws come almost entirely from the +√y branch.";
   $('is-pair-cap').dataset.model = fnKey;
   $('is-pair-cap').textContent = s;
@@ -5600,7 +5903,7 @@ function isEssTipText(run) {
 // aside, rather than a reserved line of its own -- a reserved line above the
 // value left visible blank space in the unflagged state and put the value one
 // line lower than its row neighbor's (Task 7j, fix round 2 of the ESS-card
-// alignment). Nothing is added when the flag is off, so the card's height
+// alignment). Nothing is added when the flag is off, and so the card's height
 // matches its neighbor's and does not move when the flag flips. The wording
 // is "low, unreliable" rather than the longer "low; interval unreliable"
 // because this card is only 230px wide beside the figure at 760px and up,
@@ -5675,9 +5978,9 @@ SPIN['is-T'] = isTSpin;
 SPIN['is-theta-val'] = decimalSpin('is-theta-val', 0, isParamsChanged, 0.05);
 
 // ── Tooltips ────────────────────────────────────────────
-// One floating element serves every [data-tip] on the page, so two tips can never be
+// One floating element serves every [data-tip] on the page, and so two tips can never be
 // open at once and the text can carry markup. Same pattern as the other widgets in
-// this repository; the title attribute is deliberately not used anywhere, because
+// this repository; the title attribute is deliberately not used anywhere because
 // iOS and Android show it neither on tap nor on long press.
 (function(){
   var tip=document.createElement('div');
@@ -5749,7 +6052,7 @@ SPIN['is-theta-val'] = decimalSpin('is-theta-val', 0, isParamsChanged, 0.05);
   ['pointerup','pointercancel'].forEach(function(ev){
     document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
   });
-  // Capture phase, so the press never reaches the button's own handler.
+  // Capture phase, and so the press never reaches the button's own handler.
   document.addEventListener('click', function(e){
     if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
   }, true);
@@ -5771,7 +6074,7 @@ window.addEventListener('DOMContentLoaded', () => {
 if (window.self !== window.top) {
   var f = document.getElementById('course-nav-footer'); if (f) { f.style.display = 'none'; }
   // A min-height tied to the viewport (the "fill the window" idiom) would track the frame's
-  // own height and keep the frame from ever shrinking, so neutralize such rules here, where
+  // own height and keep the frame from ever shrinking, and so neutralize such rules here, where
   // the frame is sized to the content. Cross-origin sheets (web fonts) throw and are skipped.
   (function () {
     function drop(rules) {
@@ -5796,7 +6099,7 @@ if (window.self !== window.top) {
     if (window.ResizeObserver) { new ResizeObserver(function () { report(false); }).observe(document.documentElement); }
     window.addEventListener('load', function () { report(true); });
     // The host's listener may attach after this page has loaded (Canvas boots a large
-    // bundle after its HTML arrives), so repeat the current height a few times.
+    // bundle after its HTML arrives), and so repeat the current height a few times.
     [500, 1500, 3000, 6000, 12000].forEach(function (ms) { setTimeout(function () { report(true); }, ms); });
     report(true);
   })();
