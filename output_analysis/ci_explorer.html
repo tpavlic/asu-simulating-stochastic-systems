@@ -240,48 +240,52 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    rather than only reading as "a line" or "a dot" in a generic sense. */
 .lg-sv { display: inline-block; width: 24px; height: 12px; flex: 0 0 auto; }
 #is-fig-leg > span { align-items: center; }
-/* is-fig-cap always carries two sentences once a run exists -- "All n draws
-   are shown" at or under IS_MAXR ("short"), "The first 300 of the n draws are
-   shown" above it ("long") -- then the past-threshold sentence (Task 7j), and
-   a further sentence (Task 7n) naming how many of the shown sample's own
-   draws lie beyond the output histogram's fixed window, appended only when
-   that count is positive. setIsFigCap writes which shape is showing into
-   data-shape (reading the live n selector before a run, run.wtd.n after one),
-   and so the empty state already reserves for whichever shape the next run
-   will produce, and a first run never grows the card. The two shapes need
-   separate tiers below because "All 250 draws are shown. ..." wraps at
-   noticeably narrower cards than "The first 300 of the 10,000 draws are
-   shown. ..." does, and reserving the longer shape's height for the shorter
-   one everywhere would just move the blank-line bug from "n is absent from
-   the sentence" to "n's sentence is short".
+/* is-fig-cap has a constant, three-sentence shape now (Task 7o): "All n
+   draws are shown" at or under IS_MAXR ("short"), "The first 300 of the n
+   draws are shown" above it ("long"), then the past-threshold sentence (Task
+   7j), then the beyond-window sentence (Task 7n) -- both counts are em dashes
+   before a run and either a number or "None"/"none" after one, but the
+   sentence carrying each is never added or removed, and so a caption's own
+   wrapped height depends only on n's own shape and its digit width, not on
+   whether a run has happened or what it found. setIsFigCap writes which
+   shape is showing into data-shape (reading the live n selector before a
+   run, run.wtd.n after one), and so the empty state already reserves for
+   whichever shape the next run will produce, and a first run never grows the
+   card. The two shapes need separate tiers below because "All 250 draws are
+   shown. ..." wraps at noticeably narrower cards than "The first 300 of the
+   10,000 draws are shown. ..." does, and reserving the longer shape's height
+   for the shorter one everywhere would leave a permanent gap under the
+   shorter one instead of closing it.
    min-height is in em, not rem: at this element's own font-size (.7rem from
    .cv-cap) with line-height: 1.35, 1em of min-height is exactly one wrapped
    line; each tier below names its line count directly instead of a rem
    figure that has to be recomputed by hand if the font size ever moves.
-   Thresholds were measured inside the actual figure card at each width, in
-   both of the card's layout regimes (full width below 760px, beside the
-   stats panel's fixed 230px column at 760px and up), against the longest text
-   each shape can carry with its third sentence included -- short: "All 250
-   proposal draws are shown. 250 of the 250 landed past the threshold. Of the
-   250 draws, 250 lie beyond the panel's fixed scale."; long: the same shape
-   at "The first 300 of the 10,000 ..." with every count pushed to its own
-   five-digit worst case. Appending a sentence to an otherwise unchanged
-   opening can only add lines, never remove them, and so the two-sentence
-   text (no beyond-window draws to report) never needs more room than these,
-   already-widened, three-sentence tiers reserve:
+   Thresholds were measured with a detached, invisible clone of this element
+   (so it inherits the same font/box CSS) swept pixel by pixel across content
+   widths, then converted through the card's own measured viewport-to-
+   content-width mapping (full width below 760px, beside the stats panel's
+   fixed 230px column at 760px and up), against the one worst-case text each
+   shape can ever produce -- short: "All 250 proposal draws are shown. 250 of
+   the 250 landed past the threshold. Of the 250 draws, 250 lie beyond the
+   panel's fixed scale."; long: the same shape at "The first 300 of the
+   10,000 ..." with every count pushed to its own five-digit worst case. A
+   shorter number, "None"/"none", or an em dash in either count's place can
+   only shrink the text, never grow it, and so these two exact texts already
+   cover both states at every width without slack:
      Short (n <= 300): <=247px 5 lines, 248-301px 4 lines, 302-407px 3 lines,
      408-733px 2 lines, 734-760px 1 line, 761-977px 2 lines, >=978px 1 line.
      Long (n > 300): <=257px 6 lines, 258-290px 5 lines, 291-353px 4 lines,
      354-491px 3 lines, >=492px 2 lines.
-   Short still shows the brief return to 1 line just past the 760px regime
-   switch that an earlier task found (the panel eats into the card's own
-   width once the row goes side by side, briefly undoing a line the narrower,
-   full-width card already shed); long's own third sentence keeps it at 2
-   lines everywhere past 491px and it never reaches 1 at any width the card
-   can take, unlike its own pre-Task-7n shape. The unconditional rule below is
-   2 lines, the value shared by both shapes over most of their range, and only
-   the widths where a shape needs more or fewer lines get an explicit,
-   shape-scoped override. */
+   Short still shows a brief return to 1 line just past the 760px regime
+   switch (the panel eats into the card's own width once the row goes side by
+   side, briefly undoing a line the narrower, full-width card already shed);
+   long's own third sentence keeps it at 2 lines everywhere past 491px and it
+   never reaches 1 at any width the card can take. The unconditional rule
+   below is 2 lines, the value shared by both shapes over most of their
+   range, and only the widths where a shape needs more or fewer lines get an
+   explicit, shape-scoped override. Confirmed live (gap = rendered box height
+   minus rendered text height): at most 1.5px at 390/605/760/900/1100/1200,
+   both before and after a run, in both toggle states, for both shapes. */
 #is-fig-cap { min-height: 2.7em; line-height: 1.35; }
 @media (max-width: 257px) { #is-fig-cap[data-shape="long"] { min-height: 8.1em; } }
 @media (min-width: 258px) and (max-width: 290px) { #is-fig-cap[data-shape="long"] { min-height: 6.75em; } }
@@ -292,45 +296,76 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 @media (min-width: 302px) and (max-width: 407px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
 @media (min-width: 734px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
 @media (min-width: 978px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-/* #is-pair-cap (Task 7m, extended by Task 7n) carries the same sentence
-   shape whether empty (em-dash placeholders) or filled (real numbers), but
-   the em dashes are shorter than the numbers they stand in for, and so the
-   empty state can wrap to fewer lines than a filled one at the same width
-   and grow the card the moment a run fills it in. Two further sentences can
-   each add a clause on top of the base two: the beyond-window sentence
-   (Task 7n), present whenever the proposal placed a draw outside the
-   histograms' own window, and the sq model's own branch sentence -- either,
-   both, or neither can be present in a given run. Reserve for whichever
-   combination wraps tallest at a given width -- measured directly against
-   each combination's own worst case (n = 10,000, a five-digit draw count,
-   and the weighted estimate pushed to a 2-digit exponent) -- because the
-   combinations are not simply one always taller than another: an earlier
-   task already found one extra clause shifting word-wrap points enough that
-   a longer text sometimes wraps to fewer lines than a shorter one at the
-   very same width, and so every tier below is the pointwise max measured
-   across all four combinations of the two optional sentences, not a fixed
-   one of them. This card never sits beside the stats panel the way the
-   figure card does, and so its own width tops out at 957px regardless of how
-   wide the viewport grows; the tallest combination's own text never wraps
-   down past 3 lines within that reachable range, and so 3 lines, not 2, is
-   this rule's own unconditional default now:
-     <=229px 15 lines, 230-242px 14 lines, 243-249px 13 lines, 250-259px 12
-     lines, 260-281px 11 lines, 282-311px 10 lines, 312-328px 9 lines,
+/* #is-pair-cap (Task 7m, given a constant shape by Task 7o) always carries
+   the weighted-mass sentence, the beyond-window sentence, and the "each bar
+   ..." sentence, in that order -- the mean, tail, and beyond counts are em
+   dashes before a run and either a number or "none" after one, but as with
+   is-fig-cap the sentence carrying each is never added or removed. Only the
+   sq model's own branch sentence still comes and goes because it names a
+   fact (the proposal's own draws favoring one branch) that simply is not
+   true for the other two models, not a count that is merely unknown yet;
+   `data-model` stamps which model is showing (the mirror of is-fig-cap's own
+   data-shape) so its own line can be reserved only where it is ever going to
+   be used. The two model groups need separate tiers below, the same reason
+   is-fig-cap's two n-shapes do: reserving the sq group's own height for
+   ident/exp everywhere would leave those two models sitting under a
+   permanent gap sized for a sentence they can never show.
+   Thresholds were measured the same way is-fig-cap's are: a detached,
+   invisible clone of this element swept pixel by pixel across content
+   widths, converted through the card's own measured viewport-to-content-
+   width mapping, against the one worst-case text each group can ever
+   produce (n = 10,000, a five-digit draw count, and the weighted estimate
+   pushed to a 2-digit exponent) -- ident/exp: "Weighting each output by
+   W(y) turns the proposal's histogram into the target's; the weighted mass
+   past T is the weighted estimate, 4.530e-23, and it comes from the 10,000
+   draws the proposal placed there. Of those, 10,000 lie beyond the plots'
+   fixed scale. Each bar on the left times the ratio in the middle gives the
+   bar on the right."; sq: the same text with its own branch sentence
+   appended. This card never sits beside the stats panel the way the figure
+   card does, and so its own width tops out at 957px regardless of how wide
+   the viewport grows; within that reachable range, ident/exp's own text
+   never wraps down past 2 lines and sq's never past 3:
+     ident/exp: <=229px 13 lines, 230-240px 12 lines, 241-249px 11 lines,
+     250-270px 10 lines, 271-291px 9 lines, 292-328px 8 lines, 329-362px 7
+     lines, 363-414px 6 lines, 415-492px 5 lines, 493-629px 4 lines,
+     630-890px 3 lines, >=891px 2 lines.
+     sq: <=229px 15 lines, 230-242px 14 lines, 243-249px 13 lines, 250-259px
+     12 lines, 260-281px 11 lines, 282-311px 10 lines, 312-328px 9 lines,
      329-373px 8 lines, 374-414px 7 lines, 415-476px 6 lines, 477-572px 5
-     lines, 573-734px 4 lines, >=735px 3 lines. */
-#is-pair-cap { min-height: 4.05em; line-height: 1.35; }
-@media (max-width: 229px) { #is-pair-cap { min-height: 20.25em; } }
-@media (min-width: 230px) and (max-width: 242px) { #is-pair-cap { min-height: 18.9em; } }
-@media (min-width: 243px) and (max-width: 249px) { #is-pair-cap { min-height: 17.55em; } }
-@media (min-width: 250px) and (max-width: 259px) { #is-pair-cap { min-height: 16.2em; } }
-@media (min-width: 260px) and (max-width: 281px) { #is-pair-cap { min-height: 14.85em; } }
-@media (min-width: 282px) and (max-width: 311px) { #is-pair-cap { min-height: 13.5em; } }
-@media (min-width: 312px) and (max-width: 328px) { #is-pair-cap { min-height: 12.15em; } }
-@media (min-width: 329px) and (max-width: 373px) { #is-pair-cap { min-height: 10.8em; } }
-@media (min-width: 374px) and (max-width: 414px) { #is-pair-cap { min-height: 9.45em; } }
-@media (min-width: 415px) and (max-width: 476px) { #is-pair-cap { min-height: 8.1em; } }
-@media (min-width: 477px) and (max-width: 572px) { #is-pair-cap { min-height: 6.75em; } }
-@media (min-width: 573px) and (max-width: 734px) { #is-pair-cap { min-height: 5.4em; } }
+     lines, 573-734px 4 lines, >=735px 3 lines.
+   The unconditional rules below are each group's own widest-reach line
+   count (2 for the plain selector, which every model matches; 3 for the
+   `[data-model="sq"]` selector, which outranks the plain one by specificity
+   wherever both would otherwise apply), and only the narrower widths get an
+   explicit, tier-scoped override. Confirmed live (gap = rendered box height
+   minus rendered text height): at most 1.5px at 390/605/760/900/1100/1200,
+   both before and after a run, in both toggle states, for both model
+   groups. */
+#is-pair-cap { min-height: 2.7em; line-height: 1.35; }
+@media (max-width: 229px) { #is-pair-cap { min-height: 17.55em; } }
+@media (min-width: 230px) and (max-width: 240px) { #is-pair-cap { min-height: 16.2em; } }
+@media (min-width: 241px) and (max-width: 249px) { #is-pair-cap { min-height: 14.85em; } }
+@media (min-width: 250px) and (max-width: 270px) { #is-pair-cap { min-height: 13.5em; } }
+@media (min-width: 271px) and (max-width: 291px) { #is-pair-cap { min-height: 12.15em; } }
+@media (min-width: 292px) and (max-width: 328px) { #is-pair-cap { min-height: 10.8em; } }
+@media (min-width: 329px) and (max-width: 362px) { #is-pair-cap { min-height: 9.45em; } }
+@media (min-width: 363px) and (max-width: 414px) { #is-pair-cap { min-height: 8.1em; } }
+@media (min-width: 415px) and (max-width: 492px) { #is-pair-cap { min-height: 6.75em; } }
+@media (min-width: 493px) and (max-width: 629px) { #is-pair-cap { min-height: 5.4em; } }
+@media (min-width: 630px) and (max-width: 890px) { #is-pair-cap { min-height: 4.05em; } }
+#is-pair-cap[data-model="sq"] { min-height: 4.05em; }
+@media (max-width: 229px) { #is-pair-cap[data-model="sq"] { min-height: 20.25em; } }
+@media (min-width: 230px) and (max-width: 242px) { #is-pair-cap[data-model="sq"] { min-height: 18.9em; } }
+@media (min-width: 243px) and (max-width: 249px) { #is-pair-cap[data-model="sq"] { min-height: 17.55em; } }
+@media (min-width: 250px) and (max-width: 259px) { #is-pair-cap[data-model="sq"] { min-height: 16.2em; } }
+@media (min-width: 260px) and (max-width: 281px) { #is-pair-cap[data-model="sq"] { min-height: 14.85em; } }
+@media (min-width: 282px) and (max-width: 311px) { #is-pair-cap[data-model="sq"] { min-height: 13.5em; } }
+@media (min-width: 312px) and (max-width: 328px) { #is-pair-cap[data-model="sq"] { min-height: 12.15em; } }
+@media (min-width: 329px) and (max-width: 373px) { #is-pair-cap[data-model="sq"] { min-height: 10.8em; } }
+@media (min-width: 374px) and (max-width: 414px) { #is-pair-cap[data-model="sq"] { min-height: 9.45em; } }
+@media (min-width: 415px) and (max-width: 476px) { #is-pair-cap[data-model="sq"] { min-height: 8.1em; } }
+@media (min-width: 477px) and (max-width: 572px) { #is-pair-cap[data-model="sq"] { min-height: 6.75em; } }
+@media (min-width: 573px) and (max-width: 734px) { #is-pair-cap[data-model="sq"] { min-height: 5.4em; } }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
    filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
    panel's own copy of the same control. */
@@ -1136,8 +1171,6 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl">Weighted: draws in the event</div><div class="sc-val acc" id="is-s-tail">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl">Direct estimate ± H</div><div class="sc-val" id="is-s-d">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl">Weighted estimate ± H</div><div class="sc-val" id="is-s-w">—</div></div>
-          <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, direct</div><div class="sc-val" id="is-s-rd">—</div></div>
-          <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, weighted</div><div class="sc-val" id="is-s-rw">—</div></div>
           <div class="sc sc-full"><div class="sc-lbl"><span class="tip" id="is-ess-tip" tabindex="0" data-tip="Effective sample size (Kish): the number of equally weighted event draws that would give the weighted estimate the same sampling variance. The gap between the event count and the ESS is what the uneven weights have discarded. Below 30, or below 5% of the event count, the weighted interval is as unreliable as one built from that few draws.">Effective sample size <span class="sym">ESS</span></span></div><div class="sc-val" id="is-s-ess">—</div></div>
         </div>
       </div>
@@ -5254,51 +5287,48 @@ function isInitDrag() {
   });
 }
 // The one place that writes is-fig-cap's text, empty or filled, so the two
-// states cannot drift apart (histCaption's own zero-state pattern): the
-// em dash keeps the sentence's own clause shape before a run, wrapping to the
-// same number of lines at every width as the filled sentence does, rather than
-// collapsing to a blank line that grows the card the moment a run fills it in
-// (fix round 2, the A = B = C page-height rule). The draw-count sentence
-// (Task 7f) is this caption's own first sentence rather than a separate
-// #is-fig-note element, and it appears for every run regardless of n -- "All n
-// draws are shown" once n is at or under IS_MAXR, the original "first IS_MAXR
-// of n" phrasing above that cap -- so a filled caption always carries the same
-// two sentences and never leaves the second sentence to wrap alone under the
-// height the CSS reserved for both. n's own two phrasings wrap at different
-// card widths, so this also stamps the element's own data-shape ("short" or
-// "long") for the CSS tiers above to key on; before a run there is no run.wtd.n
-// yet, and so the live n selector's own value stands in, keeping the empty
-// state's reservation the same as whatever the next run will need (Task 7j).
-// The two sentences follow whichever sample the figure currently draws
-// (Task 7m): the first names the shown sample (direct or proposal draws),
-// and the second reports how many of them landed past the threshold, with no
+// states cannot drift apart (histCaption's own zero-state pattern). Task 7o
+// gives the caption a constant shape: all three sentences are always present,
+// in both states, and so the reserved height can be measured exactly rather
+// than padded for a sentence that might or might not show. The first sentence (the
+// draw-count sentence, Task 7f) already carried a live n before any run ("All
+// n draws are shown" once n is at or under IS_MAXR, the original "first
+// IS_MAXR of n" phrasing above that cap) and needs no placeholder. The second
+// and third sentences report counts that do not exist yet before a run, and
+// so an em dash stands in for each ("— of the 1,000 landed past the
+// threshold.", "Of the 1,000 draws, — lie beyond the panel's fixed scale.");
+// after a run, a zero count is spelled out as "None"/"none" rather than
+// omitting the sentence, following the site's own clip-sentence wording for
+// the third one ("Of the 80 dots drawn, 3 lie beyond the panel's fixed
+// scale.", tabs ②-④, Task 7n). n's own two phrasings ("All n ..." vs "The
+// first 300 of n ...") wrap at different card widths, and so this stamps the
+// element's own data-shape ("short" or "long") for the CSS tiers above to key
+// on; before a run there is no run.wtd.n yet, and so the live n selector's
+// own value stands in, keeping the empty state's reservation the same as
+// whatever the next run will need (Task 7j). The second sentence follows
+// whichever sample the figure currently draws (Task 7m: direct or proposal
+// draws); the third names how many of that same sample's own draws fall
+// outside the output histogram's fixed window (Task 7n). Neither carries a
 // trailing estimate clause -- the estimate itself lives in the stat cards,
-// and the weighted mass equals the weighted estimate is now the new pair
-// card's own caption below, not this one. n is shared by both arms, and so
-// the data-shape tiers stay keyed on it regardless of which view is showing.
-// A third sentence (Task 7n) names how many of the shown sample's own draws
-// fall outside the output histogram's fixed window, following the site's own
-// clip-sentence wording ("Of the 80 dots drawn, 3 lie beyond the panel's
-// fixed scale.", tabs ②-④), and is appended only when that count is positive
-// -- omitted rather than shown as "None" because the run already carries no
-// beyond-window draws to report. The empty state never guesses at this third
-// sentence: it stays at its own two-sentence shape, which the CSS tiers below
-// always reserve enough height for regardless because appending a sentence
-// to otherwise-identical text can only add lines, never remove them.
+// and the weighted mass equals the weighted estimate is the pair card's own
+// caption below, not this one. n is shared by both arms, and so the
+// data-shape tiers stay keyed on it regardless of which view is showing.
 function setIsFigCap(run, beyond) {
   const mode = ISS.mode, parts = [];
   const n = run ? run.wtd.n : Number($('is-n').value);
   const word = mode === 'direct' ? 'direct' : 'proposal';
+  parts.push(n > IS_MAXR
+    ? 'The first ' + IS_MAXR.toLocaleString() + ' of the ' + n.toLocaleString() + ' ' + word + ' draws are shown.'
+    : 'All ' + n.toLocaleString() + ' ' + word + ' draws are shown.');
   if (run) {
-    parts.push(n > IS_MAXR
-      ? 'The first ' + IS_MAXR.toLocaleString() + ' of the ' + n.toLocaleString() + ' ' + word + ' draws are shown.'
-      : 'All ' + n.toLocaleString() + ' ' + word + ' draws are shown.');
     const count = mode === 'direct' ? run.hits : run.tail;
     const landed = count === 0 ? 'None' : count.toLocaleString();
     parts.push(landed + ' of the ' + n.toLocaleString() + ' landed past the threshold.');
-    if (beyond > 0) parts.push('Of the ' + n.toLocaleString() + ' draws, ' + beyond.toLocaleString() + " lie beyond the panel's fixed scale.");
+    const beyondText = beyond === 0 ? 'none' : beyond.toLocaleString();
+    parts.push('Of the ' + n.toLocaleString() + ' draws, ' + beyondText + " lie beyond the panel's fixed scale.");
   } else {
-    parts.push('— of the — landed past the threshold.');
+    parts.push('— of the ' + n.toLocaleString() + ' landed past the threshold.');
+    parts.push('Of the ' + n.toLocaleString() + " draws, — lie beyond the panel's fixed scale.");
   }
   $('is-fig-cap').dataset.shape = n > IS_MAXR ? 'long' : 'short';
   $('is-fig-cap').dataset.mode = mode;
@@ -5498,30 +5528,37 @@ function isPairLegendHtml(fnKey) {
   h += '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3,3"/></svg>threshold T, draggable on each plot</span>';
   return h;
 }
-// The pair's own caption (Task 7m, extended by the coordinator's addendum):
-// always naming the weighted mass and the proposal's own event-draw count --
-// both read straight off the run's existing wtd/tail fields regardless of
-// the "Sample shown" toggle because the pair itself always shows the
-// proposal sample -- plus the middle plot's own one-line arithmetic, and, for
-// x², the note that the proposal's own draws come from only one of its two
-// branches. A further sentence (Task 7n) names how many of those event draws
-// fall outside the histograms' own fixed window (the same `beyond` count the
-// left and right panels' bins carry, because both always bin run.hs/run.lr),
-// appended only when it is positive; the statement that the weighted mass
-// past T equals the weighted estimate stays unqualified because it is true
-// of the full histogram regardless of which bins are drawn. The empty state
-// never guesses at this sentence, or at the sq-only branch note after it --
-// both are purely appended, and so the CSS tiers below, reserved for the
-// worst real combination, already cover the shorter empty and no-beyond
-// shapes.
+// The pair's own caption (Task 7m, extended by the coordinator's addendum,
+// and given a constant shape by Task 7o): always naming the weighted mass
+// and the proposal's own event-draw count -- both read straight off the
+// run's existing wtd/tail fields regardless of the "Sample shown" toggle
+// because the pair itself always shows the proposal sample -- then how many
+// of those event draws fall outside the histograms' own fixed window (the
+// same `beyond` count the left and right panels' bins carry because both
+// always bin run.hs/run.lr), then the middle plot's own one-line arithmetic,
+// and, for x², the note that the proposal's own draws come from only one of
+// its two branches. The beyond-window sentence is always present, an em dash
+// before a run and "none" for an actual zero afterward, the same rule
+// setIsFigCap's own third sentence follows; the statement that the weighted
+// mass past T equals the weighted estimate stays unqualified because it is
+// true of the full histogram regardless of which bins are drawn. Only the
+// sq-only branch note still comes and goes with the model, and so this is
+// the one place on tab ⑤ where a parameter change (switching to or from x²)
+// is allowed to change the card's own height; every other combination -- a
+// run, Run ×100, a live drag, a field edit, an n edit, or the sample toggle
+// -- leaves it unchanged. `data-model` stamps which shape is showing (mirror
+// of is-fig-cap's own data-shape) so the CSS tiers below can reserve the
+// branch note's own line only for sq.
 function setIsPairCap(run, fnKey, beyond) {
   const mean = run ? run.wtd.mean.toExponential(3) : '—';
   const tail = run ? run.tail.toLocaleString() : '—';
   let s = "Weighting each output by W(y) turns the proposal's histogram into the target's; the weighted mass past T is the weighted estimate, "
     + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.';
-  if (run && beyond > 0) s += ' Of those, ' + beyond.toLocaleString() + " lie beyond the plots' fixed scale.";
+  const beyondText = !run ? '—' : (beyond === 0 ? 'none' : beyond.toLocaleString());
+  s += ' Of those, ' + beyondText + " lie beyond the plots' fixed scale.";
   s += ' Each bar on the left times the ratio in the middle gives the bar on the right.';
   if (fnKey === 'sq') s += " The proposal's draws come almost entirely from the +√y branch.";
+  $('is-pair-cap').dataset.model = fnKey;
   $('is-pair-cap').textContent = s;
 }
 function isShowStats(run) {
@@ -5531,8 +5568,6 @@ function isShowStats(run) {
   $('is-s-tail').textContent = run.tail + ' of ' + run.wtd.n;
   $('is-s-d').textContent = e(run.direct.mean) + ' ± ' + e(run.direct.h);
   $('is-s-w').textContent = e(run.wtd.mean) + ' ± ' + e(run.wtd.h);
-  $('is-s-rd').textContent = fmt(run.direct.h / run.truth, 2);
-  $('is-s-rw').textContent = fmt(run.wtd.h / run.truth, 3);
   setIsEss(run.ess.toFixed(1), lowEss);
   $('is-s-w').style.color = lowEss ? C.warn : '';
   setTip($('is-ess-tip'), isEssTipText(run));
@@ -5615,7 +5650,7 @@ function runIsBatch() {
 function clearIs() {
   ISS.direct = []; ISS.wtd = []; ISS.last = null; ISS.lastRunObj = null; ISS.lastRunP = null; lastRun.is = null;
   ISS.lastSeed = null; ISS.scale = null; ISS.drag = null;
-  ['is-s-hits', 'is-s-tail', 'is-s-d', 'is-s-w', 'is-s-rd', 'is-s-rw'].forEach(id => { $(id).textContent = '—'; });
+  ['is-s-hits', 'is-s-tail', 'is-s-d', 'is-s-w'].forEach(id => { $(id).textContent = '—'; });
   $('is-s-w').style.color = '';
   setIsEss('—', false); // keeps the aside's own line reserved, same shape as a populated run
   setTip($('is-ess-tip'), isEssTipText(null));
