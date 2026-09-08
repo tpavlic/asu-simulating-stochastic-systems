@@ -242,64 +242,95 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 #is-fig-leg > span { align-items: center; }
 /* is-fig-cap always carries two sentences once a run exists -- "All n draws
    are shown" at or under IS_MAXR ("short"), "The first 300 of the n draws are
-   shown" above it ("long") -- then the weighted-mass sentence (Task 7j).
-   setIsFigCap writes which shape is showing into data-shape (reading the live
-   n selector before a run, run.wtd.n after one, so the empty state already
-   reserves for whichever shape the next run will produce and a first run
-   never grows the card). The two shapes need separate tiers below because
-   "All 250 draws are shown." wraps at noticeably narrower cards than "The
-   first 300 of the 10,000 draws are shown." does, and reserving the longer
-   shape's height for the shorter one everywhere would just move the blank-
-   line bug from "n is absent from the sentence" to "n's sentence is short".
+   shown" above it ("long") -- then the past-threshold sentence (Task 7j), and
+   a further sentence (Task 7n) naming how many of the shown sample's own
+   draws lie beyond the output histogram's fixed window, appended only when
+   that count is positive. setIsFigCap writes which shape is showing into
+   data-shape (reading the live n selector before a run, run.wtd.n after one),
+   and so the empty state already reserves for whichever shape the next run
+   will produce, and a first run never grows the card. The two shapes need
+   separate tiers below because "All 250 draws are shown. ..." wraps at
+   noticeably narrower cards than "The first 300 of the 10,000 draws are
+   shown. ..." does, and reserving the longer shape's height for the shorter
+   one everywhere would just move the blank-line bug from "n is absent from
+   the sentence" to "n's sentence is short".
    min-height is in em, not rem: at this element's own font-size (.7rem from
    .cv-cap) with line-height: 1.35, 1em of min-height is exactly one wrapped
-   line, so each tier below names its line count directly instead of a rem
+   line; each tier below names its line count directly instead of a rem
    figure that has to be recomputed by hand if the font size ever moves.
    Thresholds were measured inside the actual figure card at each width, in
    both of the card's layout regimes (full width below 760px, beside the
    stats panel's fixed 230px column at 760px and up), against the longest text
-   each shape can carry -- short: "All 250 draws are shown. ..."; long: "The
-   first 300 of the 10,000 draws are shown. ..." -- both with the weighted-
-   mass sentence pushed to a 2-digit exponent ("4.530e-23"), since T and theta
-   can be pushed far enough for either shape to reach one. The two regimes
-   wrap at different viewport widths because the panel eats into the card's
-   own width once the row goes side by side, and that switch briefly needs an
-   extra line again just past 760px even though the narrower count already fit
-   just below it:
-     Short (n <= 300): <=358px 3 lines, 359-613px 2 lines, 614-760px 1 line,
-     761-857px 2 lines, >=858px 1 line.
-     Long (n > 300): <=418px 3 lines, 419-712px 2 lines, 713-760px 1 line,
-     761-956px 2 lines, >=957px 1 line.
-   The unconditional rule below is 2 lines, the value shared by both shapes
-   over most of their range, and only the widths where a shape needs 1 or 3
-   lines get an explicit, shape-scoped override. */
+   each shape can carry with its third sentence included -- short: "All 250
+   proposal draws are shown. 250 of the 250 landed past the threshold. Of the
+   250 draws, 250 lie beyond the panel's fixed scale."; long: the same shape
+   at "The first 300 of the 10,000 ..." with every count pushed to its own
+   five-digit worst case. Appending a sentence to an otherwise unchanged
+   opening can only add lines, never remove them, and so the two-sentence
+   text (no beyond-window draws to report) never needs more room than these,
+   already-widened, three-sentence tiers reserve:
+     Short (n <= 300): <=247px 5 lines, 248-301px 4 lines, 302-407px 3 lines,
+     408-733px 2 lines, 734-760px 1 line, 761-977px 2 lines, >=978px 1 line.
+     Long (n > 300): <=257px 6 lines, 258-290px 5 lines, 291-353px 4 lines,
+     354-491px 3 lines, >=492px 2 lines.
+   Short still shows the brief return to 1 line just past the 760px regime
+   switch that an earlier task found (the panel eats into the card's own
+   width once the row goes side by side, briefly undoing a line the narrower,
+   full-width card already shed); long's own third sentence keeps it at 2
+   lines everywhere past 491px and it never reaches 1 at any width the card
+   can take, unlike its own pre-Task-7n shape. The unconditional rule below is
+   2 lines, the value shared by both shapes over most of their range, and only
+   the widths where a shape needs more or fewer lines get an explicit,
+   shape-scoped override. */
 #is-fig-cap { min-height: 2.7em; line-height: 1.35; }
-@media (max-width: 418px) { #is-fig-cap[data-shape="long"] { min-height: 4.05em; } }
-@media (min-width: 713px) and (max-width: 760px) { #is-fig-cap[data-shape="long"] { min-height: 1.35em; } }
-@media (min-width: 957px) { #is-fig-cap[data-shape="long"] { min-height: 1.35em; } }
-@media (max-width: 358px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
-@media (min-width: 614px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-@media (min-width: 858px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
-/* #is-pair-cap (Task 7m) carries the same sentence shape whether empty
-   (em-dash placeholders) or filled (real numbers), but the em dashes are
-   shorter than the numbers they stand in for, and so the empty state can
-   wrap to fewer lines than a filled one at the same width and grow the card
-   the moment a run fills it in; the sq model's extra branch sentence adds a
-   third clause on top of that. Reserve for whichever of the two shapes (the
-   plain two-clause text, or sq's three-clause one) wraps tallest at a given
-   width -- measured directly against each one's own worst case (n = 10,000,
-   a five-digit draw count) -- because the two are not simply one always
-   taller than the other: the extra clause shifts word-wrap points enough
-   that sq's own longer text sometimes wraps to *fewer* lines than the
-   plain one at the very same width (e.g. 700px: plain 3 lines, sq 2).
-   Breakpoints are the pointwise max of both texts' own measured heights:
-   <=425px 6 lines, 426-511px 5 lines, 512-662px 4 lines, 663-926px 3 lines,
-   >=927px 2 lines. */
-#is-pair-cap { min-height: 2.7em; line-height: 1.35; }
-@media (max-width: 425px) { #is-pair-cap { min-height: 8.1em; } }
-@media (min-width: 426px) and (max-width: 511px) { #is-pair-cap { min-height: 6.75em; } }
-@media (min-width: 512px) and (max-width: 662px) { #is-pair-cap { min-height: 5.4em; } }
-@media (min-width: 663px) and (max-width: 926px) { #is-pair-cap { min-height: 4.05em; } }
+@media (max-width: 257px) { #is-fig-cap[data-shape="long"] { min-height: 8.1em; } }
+@media (min-width: 258px) and (max-width: 290px) { #is-fig-cap[data-shape="long"] { min-height: 6.75em; } }
+@media (min-width: 291px) and (max-width: 353px) { #is-fig-cap[data-shape="long"] { min-height: 5.4em; } }
+@media (min-width: 354px) and (max-width: 491px) { #is-fig-cap[data-shape="long"] { min-height: 4.05em; } }
+@media (max-width: 247px) { #is-fig-cap[data-shape="short"] { min-height: 6.75em; } }
+@media (min-width: 248px) and (max-width: 301px) { #is-fig-cap[data-shape="short"] { min-height: 5.4em; } }
+@media (min-width: 302px) and (max-width: 407px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
+@media (min-width: 734px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
+@media (min-width: 978px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
+/* #is-pair-cap (Task 7m, extended by Task 7n) carries the same sentence
+   shape whether empty (em-dash placeholders) or filled (real numbers), but
+   the em dashes are shorter than the numbers they stand in for, and so the
+   empty state can wrap to fewer lines than a filled one at the same width
+   and grow the card the moment a run fills it in. Two further sentences can
+   each add a clause on top of the base two: the beyond-window sentence
+   (Task 7n), present whenever the proposal placed a draw outside the
+   histograms' own window, and the sq model's own branch sentence -- either,
+   both, or neither can be present in a given run. Reserve for whichever
+   combination wraps tallest at a given width -- measured directly against
+   each combination's own worst case (n = 10,000, a five-digit draw count,
+   and the weighted estimate pushed to a 2-digit exponent) -- because the
+   combinations are not simply one always taller than another: an earlier
+   task already found one extra clause shifting word-wrap points enough that
+   a longer text sometimes wraps to fewer lines than a shorter one at the
+   very same width, and so every tier below is the pointwise max measured
+   across all four combinations of the two optional sentences, not a fixed
+   one of them. This card never sits beside the stats panel the way the
+   figure card does, and so its own width tops out at 957px regardless of how
+   wide the viewport grows; the tallest combination's own text never wraps
+   down past 3 lines within that reachable range, and so 3 lines, not 2, is
+   this rule's own unconditional default now:
+     <=229px 15 lines, 230-242px 14 lines, 243-249px 13 lines, 250-259px 12
+     lines, 260-281px 11 lines, 282-311px 10 lines, 312-328px 9 lines,
+     329-373px 8 lines, 374-414px 7 lines, 415-476px 6 lines, 477-572px 5
+     lines, 573-734px 4 lines, >=735px 3 lines. */
+#is-pair-cap { min-height: 4.05em; line-height: 1.35; }
+@media (max-width: 229px) { #is-pair-cap { min-height: 20.25em; } }
+@media (min-width: 230px) and (max-width: 242px) { #is-pair-cap { min-height: 18.9em; } }
+@media (min-width: 243px) and (max-width: 249px) { #is-pair-cap { min-height: 17.55em; } }
+@media (min-width: 250px) and (max-width: 259px) { #is-pair-cap { min-height: 16.2em; } }
+@media (min-width: 260px) and (max-width: 281px) { #is-pair-cap { min-height: 14.85em; } }
+@media (min-width: 282px) and (max-width: 311px) { #is-pair-cap { min-height: 13.5em; } }
+@media (min-width: 312px) and (max-width: 328px) { #is-pair-cap { min-height: 12.15em; } }
+@media (min-width: 329px) and (max-width: 373px) { #is-pair-cap { min-height: 10.8em; } }
+@media (min-width: 374px) and (max-width: 414px) { #is-pair-cap { min-height: 9.45em; } }
+@media (min-width: 415px) and (max-width: 476px) { #is-pair-cap { min-height: 8.1em; } }
+@media (min-width: 477px) and (max-width: 572px) { #is-pair-cap { min-height: 6.75em; } }
+@media (min-width: 573px) and (max-width: 734px) { #is-pair-cap { min-height: 5.4em; } }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
    filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
    panel's own copy of the same control. */
@@ -4687,20 +4718,20 @@ function isComputeScale(p) {
 }
 // About 2√n bins (clamped to [10, 80], not the √n drawCiFig itself uses --
 // this histogram sits in a strip only a third as tall) over the figure's own
-// locked [yLo, yHi], not the sample's range, and so the bars stay inside the same
-// window the curves and the rug already draw against, with one bin edge
+// locked [yLo, yHi], not the sample's range, and so the bars stay inside the
+// same window the curves and the rug already draw against, with one bin edge
 // forced to sit exactly at T (clipped into [yLo, yHi]): every bin then falls
 // entirely on one side of the event, and so summing the weighted bars at or
 // past that edge reproduces the weighted estimate exactly, not just
-// approximately. A draw outside [yLo, yHi] is not dropped -- it clamps into
-// the bin at that edge (the bottom bin for anything below yLo, the top bin
-// for anything at or above its own lower edge, yHi included) -- and so the
-// unweighted counts still sum to n and the unweighted density still
-// integrates to 1 over the visible bins alone. Alongside the count-based
-// unweighted rule, this histogram also carries each bin's Σ of the biased
-// draws' full likelihood ratios, gated by nothing but which bin a draw landed
-// in, and so the weighted bars trace the target's own output density
-// everywhere, not only past the threshold.
+// approximately. This histogram is a window onto a larger one, not a
+// heap-at-the-edge display (Task 7n): a draw below yLo, or at or above yHi,
+// is not folded into the nearest edge bin. It falls in no drawn bin at all,
+// and is counted only in `beyond` (and, for its likelihood ratio, `beyondW`);
+// the visible bars therefore sum to (n - beyond)/n rather than to 1, and the
+// weighted bars past T sum to the weighted estimate minus beyondW rather than
+// to the estimate itself. Bar heights still divide by the full n, not by
+// n - beyond, and so a bin whose draws all land inside the window keeps
+// exactly the height it would have in the full histogram.
 // hs is whichever arm's outputs are being binned (the proposal's run.hs or the
 // direct arm's run.hxs, Task 7l); lr is the matching likelihood ratios, or
 // null for the direct arm, which carries no weight at all -- sumW then just
@@ -4716,15 +4747,17 @@ function isHistBins(hs, lr, T, yLo, yHi) {
   const kk = kb + ka, lo = new Array(kk), hi = new Array(kk), cntU = new Array(kk).fill(0), sumW = new Array(kk).fill(0);
   for (let b = 0; b < kb; b++) { lo[b] = yLo + b * bwB; hi[b] = yLo + (b + 1) * bwB; }
   for (let b = 0; b < ka; b++) { lo[kb + b] = Tc + b * bwA; hi[kb + b] = Tc + (b + 1) * bwA; }
+  let beyond = 0, beyondW = 0;
   for (let i = 0; i < n; i++) {
     const v = hs[i];
+    if (v < yLo || v >= yHi) { beyond++; if (lr) beyondW += lr[i]; continue; }
     let b;
     if (v < Tc && kb > 0) b = Math.min(kb - 1, Math.max(0, Math.floor((v - yLo) / bwB)));
     else if (ka > 0) b = kb + Math.min(ka - 1, Math.max(0, Math.floor((v - Tc) / bwA)));
     else b = kb - 1;
     cntU[b]++; if (lr) sumW[b] += lr[i];
   }
-  return { lo: lo, hi: hi, cntU: cntU, sumW: sumW, kb: kb, n: n };
+  return { lo: lo, hi: hi, cntU: cntU, sumW: sumW, kb: kb, n: n, beyond: beyond, beyondW: beyondW };
 }
 // Companion to isHistBins for the input strip's own histogram (Task 7m): the
 // same k = clamp(ceil(2√n), 10, 80) bin count, but over the model's input
@@ -4735,7 +4768,12 @@ function isHistBins(hs, lr, T, yLo, yHi) {
 // bin per non-empty segment (isHistBins's own kb/ka rounding, generalized to
 // any number of segments), and so summing the whole bins flagged `pre` (at
 // or beyond an edge) reproduces the pre-image's own mass exactly, the same
-// reasoning isHistBins's own edge at T carries for the output side.
+// reasoning isHistBins's own edge at T carries for the output side. Like
+// isHistBins, this is a window onto a larger histogram (Task 7n): a draw
+// below x0, or at or above x1, falls in no drawn bin and is counted only in
+// `beyond`; the pre-image bars plus `beyond` therefore reproduce the
+// pre-image's own count exactly, rather than the pre-image bars alone
+// reproducing it.
 function isHistBinsX(xs, wayIn, leftWayIn, x0, x1) {
   const n = xs.length;
   const k = Math.min(80, Math.max(10, Math.ceil(2 * Math.sqrt(n))));
@@ -4756,13 +4794,15 @@ function isHistBinsX(xs, wayIn, leftWayIn, x0, x1) {
     for (let b = 0; b < kk; b++) { lo.push(bounds[s] + b * bw); hi.push(bounds[s] + (b + 1) * bw); pre.push(isPre); }
   }
   const kk2 = lo.length, cnt = new Array(kk2).fill(0);
+  let beyond = 0;
   for (let i = 0; i < n; i++) {
-    let v = xs[i]; if (v < x0) v = x0; else if (v > x1) v = x1;
+    const v = xs[i];
+    if (v < x0 || v >= x1) { beyond++; continue; }
     let b = kk2 - 1;
     for (let j = 0; j < kk2; j++) { if (v < hi[j] || j === kk2 - 1) { b = j; break; } }
     cnt[b]++;
   }
-  return { lo: lo, hi: hi, cnt: cnt, pre: pre, n: n };
+  return { lo: lo, hi: hi, cnt: cnt, pre: pre, n: n, beyond: beyond };
 }
 // Three linked regions sharing two axes: a main panel (input horizontal,
 // output vertical) with the model's curve and the biased draws on it, an
@@ -4957,9 +4997,13 @@ function drawIsFig(run, p) {
   // histogram, both gone -- weighting now lives in its own pair of plots
   // below), one bin edge forced to sit at T so the bars at or past it (the
   // event) sum to exactly the shown sample's own hit count, colored darker
-  // there in the sample's own color. -------------------------------------
+  // there in the sample's own color. `outBeyond` (Task 7n) survives past this
+  // block so setIsFigCap can report how many of the shown sample's draws fell
+  // outside the window this histogram draws. -----------------------------
+  let outBeyond = 0;
   if (run) {
     const bins = isHistBins(sample.hs, null, p.T, yLo, yHi);
+    outBeyond = bins.beyond;
     for (let b = 0; b < bins.lo.length; b++) {
       const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
       const dens = bins.cntU[b] / (bins.n * bw); if (!(dens > 0)) continue;
@@ -5085,7 +5129,7 @@ function drawIsFig(run, p) {
     + handles;
   svgSet($('is-fig'), W, H, h);
   $('is-fig-leg').innerHTML = isLegendHtml(mode);
-  setIsFigCap(run);
+  setIsFigCap(run, outBeyond);
 }
 // Inverts a pointer's SVG-space position back to a model value, undoing the
 // same linear maps xMain/yMain use inside drawIsFig. `fr` merges the drag's
@@ -5232,7 +5276,16 @@ function isInitDrag() {
 // and the weighted mass equals the weighted estimate is now the new pair
 // card's own caption below, not this one. n is shared by both arms, and so
 // the data-shape tiers stay keyed on it regardless of which view is showing.
-function setIsFigCap(run) {
+// A third sentence (Task 7n) names how many of the shown sample's own draws
+// fall outside the output histogram's fixed window, following the site's own
+// clip-sentence wording ("Of the 80 dots drawn, 3 lie beyond the panel's
+// fixed scale.", tabs ②-④), and is appended only when that count is positive
+// -- omitted rather than shown as "None" because the run already carries no
+// beyond-window draws to report. The empty state never guesses at this third
+// sentence: it stays at its own two-sentence shape, which the CSS tiers below
+// always reserve enough height for regardless because appending a sentence
+// to otherwise-identical text can only add lines, never remove them.
+function setIsFigCap(run, beyond) {
   const mode = ISS.mode, parts = [];
   const n = run ? run.wtd.n : Number($('is-n').value);
   const word = mode === 'direct' ? 'direct' : 'proposal';
@@ -5243,6 +5296,7 @@ function setIsFigCap(run) {
     const count = mode === 'direct' ? run.hits : run.tail;
     const landed = count === 0 ? 'None' : count.toLocaleString();
     parts.push(landed + ' of the ' + n.toLocaleString() + ' landed past the threshold.');
+    if (beyond > 0) parts.push('Of the ' + n.toLocaleString() + ' draws, ' + beyond.toLocaleString() + " lie beyond the panel's fixed scale.");
   } else {
     parts.push('— of the — landed past the threshold.');
   }
@@ -5427,7 +5481,7 @@ function drawIsPairFig(run, p) {
   const wFormula = $('is-pair-fig').querySelector('.is-pair-w-formula');
   if (wFormula && wFormula.getComputedTextLength() > innerW - 4) wFormula.textContent = 'W(x) = φ(x) / q(x)';
   $('is-pair-leg').innerHTML = isPairLegendHtml(p.fn);
-  setIsPairCap(run, p.fn);
+  setIsPairCap(run, p.fn, bins ? bins.beyond : 0);
 }
 function isPairLegendHtml(fnKey) {
   let h = '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--est)" stroke-width="1.3" stroke-dasharray="6,3"/></svg>proposal output density</span>'
@@ -5450,13 +5504,23 @@ function isPairLegendHtml(fnKey) {
 // the "Sample shown" toggle because the pair itself always shows the
 // proposal sample -- plus the middle plot's own one-line arithmetic, and, for
 // x², the note that the proposal's own draws come from only one of its two
-// branches.
-function setIsPairCap(run, fnKey) {
+// branches. A further sentence (Task 7n) names how many of those event draws
+// fall outside the histograms' own fixed window (the same `beyond` count the
+// left and right panels' bins carry, because both always bin run.hs/run.lr),
+// appended only when it is positive; the statement that the weighted mass
+// past T equals the weighted estimate stays unqualified because it is true
+// of the full histogram regardless of which bins are drawn. The empty state
+// never guesses at this sentence, or at the sq-only branch note after it --
+// both are purely appended, and so the CSS tiers below, reserved for the
+// worst real combination, already cover the shorter empty and no-beyond
+// shapes.
+function setIsPairCap(run, fnKey, beyond) {
   const mean = run ? run.wtd.mean.toExponential(3) : '—';
   const tail = run ? run.tail.toLocaleString() : '—';
   let s = "Weighting each output by W(y) turns the proposal's histogram into the target's; the weighted mass past T is the weighted estimate, "
-    + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.'
-    + ' Each bar on the left times the ratio in the middle gives the bar on the right.';
+    + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.';
+  if (run && beyond > 0) s += ' Of those, ' + beyond.toLocaleString() + " lie beyond the plots' fixed scale.";
+  s += ' Each bar on the left times the ratio in the middle gives the bar on the right.';
   if (fnKey === 'sq') s += " The proposal's draws come almost entirely from the +√y branch.";
   $('is-pair-cap').textContent = s;
 }
