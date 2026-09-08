@@ -183,6 +183,24 @@ close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.recip), 1.1253860830832698, 1e-8, 'fun
     rateNear(fp / R, 0.05, R, 6, 'exp/exp, shift 0: paired p < 0.05 rate is about α');
   }
   close(CI.pValueZero(2.262, 1, 9), 0.05, 2e-3, 'pValueZero(t_{.975,9}, 1, 9) = 0.05');
+  /* The identity on both systems, with no noise: system 2's output under common inputs
+     is exactly system 1's output plus the shift, and so every paired difference equals
+     the shift exactly, and the paired interval is a single point sitting on the truth.
+     The independent arm draws its own fresh input for system 2, and so it keeps
+     ordinary sampling variability and should still capture at the nominal rate. */
+  {
+    const R = 200, p = { fn1: 'ident', fn2: 'ident', shift2: 0.5, sigE: 0, n: 10, conf: 0.95 };
+    let allZeroH = true, allHitCrn = true, hitsInd = 0;
+    for (let r = 0; r < R; r++) {
+      const run = CI.runCRN(70000 + r, p);
+      if (run.crn.h !== 0) allZeroH = false;
+      if (!run.hitCrn) allHitCrn = false;
+      hitsInd += run.hitInd ? 1 : 0;
+    }
+    ok(allZeroH, 'ident/ident, shift 0.5, σₑ = 0, 200 seeds: run.crn.h === 0 in every run');
+    ok(allHitCrn, 'ident/ident, shift 0.5, σₑ = 0, 200 seeds: paired interval captures δ = 0.5 in every run');
+    rateNear(hitsInd / R, 0.95, R, 4, 'ident/ident, shift 0.5, σₑ = 0, 200 seeds: Welch interval captures δ at about 95%');
+  }
 }
 
 /* ═══ 4. Tab ③: function moments, antithetic variance, capture ════ */
@@ -199,6 +217,16 @@ CI.FUNC_KEYS.forEach(k => {
   close(sc / N, f.cross, 0.01, `${k}: E[h(U) h(1−U)] = ${f.cross.toFixed(5)}`);
   close(su / N, f.covU, k === 'bowl' ? 1e-3 : 0.05, `${k}: cov(U, h(U)) = ${f.covU.toFixed(5)}`);
 });
+/* The identity's moments are exact rationals, and funcCross against a second model
+   has a closed form too. funcCross(f1, f2) evaluates both functions at the same
+   argument (E[h1(U) h2(U)], confirmed above by funcCross(exp, bowl) against
+   1.25e - 3.25), and so funcCross(exp, ident) = integral of u e^u du over [0, 1] =
+   [u e^u - e^u] from 0 to 1 = (e - e) - (0 - 1) = 1, not integral of e^u (1 - u)
+   du = e - 2, which is the antithetic-pair cross moment E[h1(U) h2(1 - U)]
+   instead (the field FUNCS carries, not what this function computes). */
+close(CI.funcVar(CI.FUNCS.ident), 1 / 12, 1e-15, 'ident: Var(U) = m2 - mean^2 = 1/3 - 1/4 = 1/12');
+close(CI.funcAntiCov(CI.FUNCS.ident), -1 / 12, 1e-15, 'ident: cov(U, 1-U) = cross - mean^2 = 1/6 - 1/4 = -1/12');
+close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.ident), 1, 1e-9, 'funcCross(exp, ident) = integral of u e^u du over [0, 1] = 1');
 {
   const f = CI.FUNCS.exp, R = 2000; let sumSe = 0, sumSeInd = 0;
   for (let r = 0; r < R; r++) {
@@ -276,6 +304,23 @@ CI.FUNC_KEYS.forEach(k => {
       `exp, 50 pairs, sigE = 0.3: mean S_z^2/S_w^2 (${(sumRatioN / R4).toFixed(3)}) is near 1 + rho = ${(1 + wantRhoN).toFixed(3)}`);
   }
 }
+/* The identity is the linear limit: every antithetic pair mean is exactly 0.5, and
+   so the pair sample has zero spread (guarded to exactly s = 0, h = 0 in ciMean), and
+   its interval sits on the truth in every run. ya = u and yb = 1 - u are an exact
+   linear pair, and so their sample correlation is -1 to floating-point precision on
+   every run, not only on average. */
+{
+  const R = 200; let allZero = true, allHit = true, allNegOne = true;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runAV(50000 + r, { fn: 'ident', n: 25, conf: 0.95 });
+    if (run.av.s !== 0 || run.av.h !== 0) allZero = false;
+    if (!run.hitAv) allHit = false;
+    if (Math.abs(run.r - (-1)) > 1e-9) allNegOne = false;
+  }
+  ok(allZero, 'ident, 25 pairs, 200 seeds: run.av.s === 0 and run.av.h === 0 in every run');
+  ok(allHit, 'ident, 25 pairs, 200 seeds: antithetic interval captures E[h] in every run');
+  ok(allNegOne, 'ident, 25 pairs, 200 seeds: sample pair correlation r within 1e-9 of -1 in every run');
+}
 
 /* ═══ 5. Tab ④: control variates ═════════════════════════════════ */
 section('5. Tab ④: c* against closed form, capture at n = 50, shortfall at n = 10');
@@ -327,34 +372,179 @@ close(CI.FUNCS.exp.covU * 12, 1.6903, 1e-3, 'exp: c* = 1.690 (a 1000-draw estima
   ok(Math.abs(gotR2 - wantR2) <= 0.02,
      `exp, sigE = 0.3: mean r² ${gotR2.toFixed(4)} within ±0.02 of ρ²_Uh · Var h / (Var h + σₑ²) = ${wantR2.toFixed(4)}`);
 }
-/* ═══ 6. Tab ⑤: importance sampling ═══════════════════════════════ */
+/* The identity is the linear limit: Y = U exactly, and so the fitted slope c is 1,
+   and the control removes all of Y's variance, r² = 1, and z = Y - 1·(U - 0.5) = 0.5
+   in every draw (guarded to exactly s = 0, h = 0 in ciMean), and so the interval
+   sits on the truth in every run. */
+{
+  const R = 200; let allC = true, allR2 = true, allHit = true;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runCV(60000 + r, { fn: 'ident', n: 50, conf: 0.95 });
+    if (Math.abs(run.c - 1) > 1e-9) allC = false;
+    if (Math.abs(run.r2 - 1) > 1e-9) allR2 = false;
+    if (!run.hitCv) allHit = false;
+  }
+  ok(allC, 'ident, n = 50, 200 seeds: estimated c within 1e-9 of 1 in every run');
+  ok(allR2, 'ident, n = 50, 200 seeds: r² within 1e-9 of 1 in every run');
+  ok(allHit, 'ident, n = 50, 200 seeds: control-variate interval captures E[h] in every run');
+}
+/* ═══ 6. Tab ⑤: importance sampling on the three-model menu ══════════ */
 section('6. Tab ⑤: weighted estimator unbiased, capture at n = 1000, direct sampling fails at T = 5');
+/* A fine composite trapezoid rule; the model integrand is Schwartz-class (a
+   Gaussian density times at most a polynomial change-of-variable factor), and
+   so this converges far faster than the textbook O(h²) bound suggests—every
+   quadrature check below lands at 1e-9 or tighter against a 1e-6 tolerance. */
+function trapz(f, lo, hi, m) {
+  var h = (hi - lo) / m, s = 0.5 * (f(lo) + f(hi));
+  for (var i = 1; i < m; i++) s += f(lo + i * h);
+  return s * h;
+}
 close(1 - CI.normCdf(5), 2.8665e-7, 1e-3, 'P(X ≥ 5) = 2.8665e-7');
 close(CI.isWeight(5, 5), Math.exp(-12.5), 1e-12, 'W(5) at θ = 5 is exp(−25 + 12.5)');
 [3, 5].forEach(T => {
   const R = 2000; let s = 0;
-  for (let r = 0; r < R; r++) s += CI.runIS(8000 + r, { T: T, theta: T, n: 1000, conf: 0.95 }).wtd.mean;
+  for (let r = 0; r < R; r++) s += CI.runIS(8000 + r, { fn: 'ident', T: T, theta: T, n: 1000, conf: 0.95 }).wtd.mean;
   const want = 1 - CI.normCdf(T);
-  close(s / R, want, 0.02, `T=${T}, θ=${T}: mean weighted estimate over ${R} runs ≈ ${want.toExponential(4)}`);
+  close(s / R, want, 0.02, `ident, T=${T}, θ=${T}: mean weighted estimate over ${R} runs ≈ ${want.toExponential(4)}`);
 });
 {
   const R = Math.max(500, Math.floor(CALIB_REPS / 8)); let h = 0;
-  for (let r = 0; r < R; r++) h += CI.runIS(9000 + r, { T: 3, theta: 3, n: 1000, conf: 0.95 }).hitWtd ? 1 : 0;
+  for (let r = 0; r < R; r++) h += CI.runIS(9000 + r, { fn: 'ident', T: 3, theta: 3, n: 1000, conf: 0.95 }).hitWtd ? 1 : 0;
   const c = h / R;
-  ok(c >= 0.92 && c <= 0.97, `T=3, θ=3, n=1000: weighted interval capture ${c.toFixed(3)} within [0.92, 0.97]`);
+  ok(c >= 0.92 && c <= 0.97, `ident, T=3, θ=3, n=1000: weighted interval capture ${c.toFixed(3)} within [0.92, 0.97]`);
   let miss = 0;
-  for (let r = 0; r < 2000; r++) miss += CI.runIS(10000 + r, { T: 5, theta: 5, n: 1000, conf: 0.95 }).hitDirect ? 0 : 1;
+  for (let r = 0; r < 2000; r++) miss += CI.runIS(10000 + r, { fn: 'ident', T: 5, theta: 5, n: 1000, conf: 0.95 }).hitDirect ? 0 : 1;
   /* About 0.6 of the 2000 runs are expected to see one tail event; allow up to ten. */
-  ok(miss / 2000 >= 0.995, `T=5, n=1000: direct interval misses in ${miss} of 2000 runs (its interval is [0, 0])`);
+  ok(miss / 2000 >= 0.995, `ident, T=5, n=1000: direct interval misses in ${miss} of 2000 runs (its interval is [0, 0])`);
   let h3 = 0, h6 = 0;
   for (let r = 0; r < 300; r++) {
-    h3 += CI.runIS(11000 + r, { T: 3, theta: 3, n: 1000, conf: 0.95 }).wtd.h;
-    h6 += CI.runIS(11000 + r, { T: 3, theta: 6, n: 1000, conf: 0.95 }).wtd.h;
+    h3 += CI.runIS(11000 + r, { fn: 'ident', T: 3, theta: 3, n: 1000, conf: 0.95 }).wtd.h;
+    h6 += CI.runIS(11000 + r, { fn: 'ident', T: 3, theta: 6, n: 1000, conf: 0.95 }).wtd.h;
   }
-  ok(h6 > h3, `T=3: shifting too far (θ=6) widens the interval again (mean h ${(h6 / 300).toExponential(2)} > ${(h3 / 300).toExponential(2)})`);
-  const run = CI.runIS(1, { T: 3, theta: 3, n: 100, conf: 0.95 });
+  ok(h6 > h3, `ident, T=3: shifting too far (θ=6) widens the interval again (mean h ${(h6 / 300).toExponential(2)} > ${(h3 / 300).toExponential(2)})`);
+  const run = CI.runIS(1, { fn: 'ident', T: 3, theta: 3, n: 100, conf: 0.95 });
   ok(run.ys.length === 100 && run.w.length === 100 && run.tail === run.w.filter(v => v > 0).length, 'runIS: series lengths and tail count');
   ok(run.ess > 0 && run.ess <= run.tail, 'runIS: effective sample size between 0 and the tail count');
+  /* hs and lr are new fields: hs the biased draws' model outputs, lr their full
+     likelihood ratios (every draw, not only the ones in the event). Checked
+     against a non-identity model, so that hs[i] === h(ys[i]) is a real test of
+     applying the model rather than a pass-through. */
+  const runSq = CI.runIS(1, { fn: 'sq', T: 9, theta: 3, n: 100, conf: 0.95 });
+  ok(runSq.lr.length === 100, 'runIS: lr has one entry per draw (lr.length === n)');
+  ok(runSq.hs.every((v, i) => v === CI.IS_FUNCS.sq.h(runSq.ys[i])), 'runIS: hs[i] === h(ys[i])');
+  ok(runSq.w.every((v, i) => v === (runSq.hs[i] >= 9 ? runSq.lr[i] : 0)), 'runIS: w[i] === (hs[i] >= T ? lr[i] : 0)');
+  /* xs and hxs are new fields too (Task 7l): the direct arm's own inputs and
+     their outputs, added for the transfer plot's direct-sample view. Checked
+     against the same non-identity model, so that hxs[i] === h(xs[i]) is a
+     real test of applying the model rather than a pass-through, and hits,
+     already checked above as a raw count, is cross-checked here against the
+     count of hxs at or beyond T. */
+  ok(runSq.xs.length === 100 && runSq.hxs.length === 100, 'runIS: xs and hxs have one entry per draw');
+  ok(runSq.hxs.every((v, i) => v === CI.IS_FUNCS.sq.h(runSq.xs[i])), 'runIS: hxs[i] === h(xs[i])');
+  ok(runSq.hits === runSq.hxs.filter(v => v >= 9).length, 'runIS: hits === count(hxs >= T)');
+}
+
+/* ── The three-model menu's output densities: each integrates to 1, and the
+   mass beyond the default T matches the closed-form truth(T) to 1e-6.
+   ident has no singularity and integrates directly. exp and sq have a 1/y (or
+   1/√y) factor that blows up as y → 0, and so each uses the change of variable
+   that its own derivation is built on (y = e^x for exp, y = t² for sq) to turn
+   the integrand into a smooth, bounded one before handing it to trapz—exactly
+   the substitution named in the outDensity comment above IS_FUNCS. sq's t = 0
+   endpoint is still a removable singularity of the un-substituted density (finite
+   in the limit, but 0/0 as coded), and so its grid starts a hair above 0 rather
+   than at it; the sliver this discards is under 1e-8, far inside the 1e-6
+   tolerance. */
+section('6a. output densities integrate to 1, and the tail beyond T matches truth(T), to 1e-6');
+{
+  const M = 100000;
+  const id = CI.IS_FUNCS.ident, idT = id.defaultT;
+  close(trapz(y => id.outDensity(y, 0), -60, 60, M), 1, 1e-6, 'ident: outDensity(y, 0) integrates to 1');
+  close(trapz(y => id.outDensity(y, 3), -60, 60, M), 1, 1e-6, 'ident: outDensity(y, 3) integrates to 1');
+  close(trapz(y => id.outDensity(y, 0), idT, 60, M), CI.isTruth('ident', idT), 1e-6, `ident: mass beyond T = ${idT} equals truth(T)`);
+
+  const ex = CI.IS_FUNCS.exp, exT = ex.defaultT, exWay = ex.wayIn(exT);
+  const expMass = (theta, xLo, xHi) => trapz(x => ex.outDensity(Math.exp(x), theta) * Math.exp(x), xLo, xHi, M);
+  close(expMass(0, -40, 40), 1, 1e-6, 'exp: outDensity(y, 0) integrates to 1 (y = e^x change of variable)');
+  close(expMass(3, -40, 40), 1, 1e-6, 'exp: outDensity(y, 3) integrates to 1');
+  close(expMass(0, exWay, 40), CI.isTruth('exp', exT), 1e-6, `exp: mass beyond T = ${exT} equals truth(T)`);
+
+  const sq = CI.IS_FUNCS.sq, sqT = sq.defaultT, sqWay = sq.wayIn(sqT);
+  const sqMass = (theta, tLo, tHi) => trapz(t => sq.outDensity(t * t, theta) * 2 * t, tLo, tHi, M);
+  close(sqMass(0, 1e-8, 40), 1, 1e-6, 'sq: outDensity(y, 0) integrates to 1 (y = t² change of variable)');
+  close(sqMass(3, 1e-8, 40), 1, 1e-6, 'sq: outDensity(y, 3) integrates to 1');
+  close(sqMass(0, sqWay, 40), CI.isTruth('sq', sqT), 1e-6, `sq: mass beyond T = ${sqT} equals truth(T)`);
+}
+
+/* ── Each model at its default T with θ aimed at the (right) way in ────
+   n = 1000, 200 seeds: the weighted estimator is unbiased against the sample's
+   own spread, and the weighted interval captures near the nominal rate. This
+   holds for ident and exp, whose one way in is fully covered by θ. sq is
+   deliberately excluded here—see the dedicated block below, which is where
+   its very different behavior at this same configuration belongs. */
+section('6b. ident and exp at defaultT, θ = wayIn(T), n = 1000, 200 seeds: unbiased and calibrated');
+{
+  const R = 200;
+  ['ident', 'exp'].forEach(key => {
+    const f = CI.IS_FUNCS[key], T = f.defaultT, theta = f.wayIn(T), truth = f.truth(T);
+    const ests = []; let hits = 0;
+    for (let r = 0; r < R; r++) {
+      const run = CI.runIS(80000 + r, { fn: key, T: T, theta: theta, n: 1000, conf: 0.95 });
+      ests.push(run.wtd.mean); if (run.hitWtd) hits++;
+    }
+    const m = CI.mean(ests), se = Math.sqrt(CI.sampleVar(ests) / R);
+    ok(Math.abs(m - truth) <= 4 * se,
+       `${key}, T=${T}, θ=${theta.toFixed(4)}: mean weighted estimate ${m.toExponential(4)} within 4 SE (${(4 * se).toExponential(2)}) of truth ${truth.toExponential(4)}`);
+    rateNear(hits / R, 0.95, R, 4, `${key}, T=${T}, θ=${theta.toFixed(4)}: weighted capture rate`);
+  });
+}
+
+/* ── sq at its default T = 9, θ = 3 = wayIn(9): the "two ways in" silent
+   failure ──
+   A one-sided shift covers the right way in (x ≥ 3) and never visits the left
+   (x ≤ −3), and so the weighted estimate settles at half the truth with a
+   narrow interval that misses every time, and nothing in the sample warns:
+   ESS looks as healthy as it does on the identity because the uncovered side
+   is simply absent from the sample rather than represented by a few huge
+   weights. The estimator is unbiased only in the sense that an astronomically
+   rare left-side draw would carry an astronomically large weight—a fact this
+   section's 200 × 1000 = 200,000 draws never realize.
+   A "4 standard errors" band built from that draw's theoretical variance
+   would span roughly ±0.57 around a target of 0.0027, wide enough to pass for
+   almost any weighted mean a plausible implementation could produce, and so
+   it tests nothing. The three checks below compare the sample instead against
+   what it actually settles on: the mean weighted estimate against the right
+   way in's own tail probability, 1 − Φ(θ) (half of truth(9)), within 4
+   empirical standard errors of these 200 seeds; the capture rate against a
+   near-zero rate, not the nominal 0.95; and the ESS-to-event-count ratio
+   against ident's own ratio at its default T, computed here rather than
+   hardcoded. A low ratio alone would not show that ESS fails to warn here—
+   only the comparison to ident's equally moderate ratio does. */
+section('6c. sq at T = 9, θ = 3: the two-ways-in silent failure—right-way-in mass, capture, and ESS vs ident');
+{
+  const R = 200, T = 9, theta = 3;
+  const rightMass = 1 - CI.normCdf(theta);   // the right way in's own tail probability, half of truth(9)
+  const ests = [], ratios = []; let hits = 0;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runIS(85000 + r, { fn: 'sq', T: T, theta: theta, n: 1000, conf: 0.95 });
+    ests.push(run.wtd.mean); ratios.push(run.ess / run.tail); if (run.hitWtd) hits++;
+  }
+  const m = CI.mean(ests), se = Math.sqrt(CI.sampleVar(ests) / R);
+  ok(Math.abs(m - rightMass) <= 4 * se,
+     `sq, T=9, θ=3: mean weighted estimate ${m.toExponential(4)} settles within 4 empirical SE (${(4 * se).toExponential(2)}) of the right way in's mass alone, 1 − Φ(θ) = ${rightMass.toExponential(4)}, half of truth(9)`);
+  const capRate = hits / R;
+  ok(capRate <= 0.02, `sq, T=9, θ=3: weighted interval capture ${capRate.toFixed(3)} is at most 0.02 (${hits} of ${R} runs)—the narrow interval misses almost every time`);
+
+  const meanRatioSq = CI.mean(ratios);
+  const idF = CI.IS_FUNCS.ident, idT = idF.defaultT, idTheta = idF.wayIn(idT);
+  const idRatios = [];
+  for (let r = 0; r < R; r++) {
+    const run = CI.runIS(86000 + r, { fn: 'ident', T: idT, theta: idTheta, n: 1000, conf: 0.95 });
+    idRatios.push(run.ess / run.tail);
+  }
+  const meanRatioIdent = CI.mean(idRatios);
+  ok(Math.abs(meanRatioSq - meanRatioIdent) <= 0.05,
+     `sq, T=9, θ=3: mean ESS/event-count ratio ${meanRatioSq.toFixed(4)} is within 0.05 of ident's own ratio at its default (T=${idT}, θ=${idTheta}), ${meanRatioIdent.toFixed(4)}—ESS looks as healthy here as on the fully-covered identity, which is exactly why it does not warn`);
 }
 
 console.log('\n' + (fail ? Ct.r(`${fail} failed`) : Ct.g('all passed')) + `, ${pass} passed`);

@@ -55,6 +55,26 @@
   --warn:        #8b6914;
   --pair:        #b9b3b6;  /* connecting lines between paired marks: neutral, carries no meaning */
   --band:        rgba(15,110,140,.12);  /* shaded regions under the true density */
+  /* Tab 5's own histogram bars (Task 7m) need a darker shade of each sample
+     color for the bars past the threshold (output) and in its pre-image
+     (input) -- each is its own hue mixed 35% toward black, and so it reads
+     as "the same color, emphasized" rather than a third, unrelated color.
+     Contrast on white: truth-dark 10.04:1, est-dark 8.48:1 (both used only
+     as low-opacity fills, never as text, but comfortably clear THEME.md's
+     bar for a data color regardless). */
+  --truth-dark:  #0A485B;
+  --est-dark:    #7E3907;
+  /* The likelihood-weighting pair's middle plot (Task 7m, coordinator's
+     addendum) needs a third data color of its own -- W(y) is neither the
+     est/proposal quantity nor the truth/target one. The coordinator's own
+     suggestion, --pair, measures only 1.98:1 against --chart-bg (its own
+     comment already flags it as a neutral, meaningless connector, not a
+     data color, and this task's own bar for a data color is nothing under
+     4.5:1 for text/thin lines) -- checked and rejected. THEME.md's own
+     contrast table lists indigo #3F4C8C at 8.00:1 as an available data
+     color with no assigned meaning yet in this widget, and so it is used
+     here instead. */
+  --ratio:       #3F4C8C;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
@@ -150,6 +170,17 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
      instead of collapsing to one narrow word per line beside a squeezed slider. */
   .par-row .ctrl-pair-wide { grid-column: 1 / -1; }
 }
+/* Tab ⑤'s row (fix round 1) carries five pairs, not four: Model joined T on top
+   of the θ pair the other three sliders already widened. Above 912px, θ is
+   ordered last (Model, T, n, Confidence, θ) and given flex-basis:100% so it is
+   never a candidate for sharing a line with its neighbors -- it always starts
+   its own row and, unlike the other three tabs' σₑ pair (which merely wraps at
+   its own intrinsic width, with no flex-basis rule forcing it wider), stretches
+   to the row's own full width, giving the "Aim θ at T" button room without
+   depending on whichever narrow pairs happened to precede it. This is scoped to
+   #tab-is because the other three tabs' rows still read cleanly under the plain
+   wrap the shared comment above describes. */
+#tab-is .par-row .ctrl-pair-wide { flex-basis: 100%; }
 .seed-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 108px;
             padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
             background: #fff; color: var(--text); }
@@ -204,6 +235,71 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    can overflow that width rather than being visually squeezed into it. */
 .lg-s { display: inline-block; width: 1.4em; text-align: center; white-space: nowrap; flex: 0 0 auto; }
 .lg-s.lg-wide { width: auto; min-width: 1.4em; }
+/* Tab ⑤'s legend swatches are tiny SVGs, not text glyphs, and so a stroke width, a
+   dash pattern, a fill, and a radius can each match the drawn mark exactly
+   rather than only reading as "a line" or "a dot" in a generic sense. */
+.lg-sv { display: inline-block; width: 24px; height: 12px; flex: 0 0 auto; }
+#is-fig-leg > span { align-items: center; }
+/* is-fig-cap always carries two sentences once a run exists -- "All n draws
+   are shown" at or under IS_MAXR ("short"), "The first 300 of the n draws are
+   shown" above it ("long") -- then the weighted-mass sentence (Task 7j).
+   setIsFigCap writes which shape is showing into data-shape (reading the live
+   n selector before a run, run.wtd.n after one, so the empty state already
+   reserves for whichever shape the next run will produce and a first run
+   never grows the card). The two shapes need separate tiers below because
+   "All 250 draws are shown." wraps at noticeably narrower cards than "The
+   first 300 of the 10,000 draws are shown." does, and reserving the longer
+   shape's height for the shorter one everywhere would just move the blank-
+   line bug from "n is absent from the sentence" to "n's sentence is short".
+   min-height is in em, not rem: at this element's own font-size (.7rem from
+   .cv-cap) with line-height: 1.35, 1em of min-height is exactly one wrapped
+   line, so each tier below names its line count directly instead of a rem
+   figure that has to be recomputed by hand if the font size ever moves.
+   Thresholds were measured inside the actual figure card at each width, in
+   both of the card's layout regimes (full width below 760px, beside the
+   stats panel's fixed 230px column at 760px and up), against the longest text
+   each shape can carry -- short: "All 250 draws are shown. ..."; long: "The
+   first 300 of the 10,000 draws are shown. ..." -- both with the weighted-
+   mass sentence pushed to a 2-digit exponent ("4.530e-23"), since T and theta
+   can be pushed far enough for either shape to reach one. The two regimes
+   wrap at different viewport widths because the panel eats into the card's
+   own width once the row goes side by side, and that switch briefly needs an
+   extra line again just past 760px even though the narrower count already fit
+   just below it:
+     Short (n <= 300): <=358px 3 lines, 359-613px 2 lines, 614-760px 1 line,
+     761-857px 2 lines, >=858px 1 line.
+     Long (n > 300): <=418px 3 lines, 419-712px 2 lines, 713-760px 1 line,
+     761-956px 2 lines, >=957px 1 line.
+   The unconditional rule below is 2 lines, the value shared by both shapes
+   over most of their range, and only the widths where a shape needs 1 or 3
+   lines get an explicit, shape-scoped override. */
+#is-fig-cap { min-height: 2.7em; line-height: 1.35; }
+@media (max-width: 418px) { #is-fig-cap[data-shape="long"] { min-height: 4.05em; } }
+@media (min-width: 713px) and (max-width: 760px) { #is-fig-cap[data-shape="long"] { min-height: 1.35em; } }
+@media (min-width: 957px) { #is-fig-cap[data-shape="long"] { min-height: 1.35em; } }
+@media (max-width: 358px) { #is-fig-cap[data-shape="short"] { min-height: 4.05em; } }
+@media (min-width: 614px) and (max-width: 760px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
+@media (min-width: 858px) { #is-fig-cap[data-shape="short"] { min-height: 1.35em; } }
+/* #is-pair-cap (Task 7m) carries the same sentence shape whether empty
+   (em-dash placeholders) or filled (real numbers), but the em dashes are
+   shorter than the numbers they stand in for, and so the empty state can
+   wrap to fewer lines than a filled one at the same width and grow the card
+   the moment a run fills it in; the sq model's extra branch sentence adds a
+   third clause on top of that. Reserve for whichever of the two shapes (the
+   plain two-clause text, or sq's three-clause one) wraps tallest at a given
+   width -- measured directly against each one's own worst case (n = 10,000,
+   a five-digit draw count) -- because the two are not simply one always
+   taller than the other: the extra clause shifts word-wrap points enough
+   that sq's own longer text sometimes wraps to *fewer* lines than the
+   plain one at the very same width (e.g. 700px: plain 3 lines, sq 2).
+   Breakpoints are the pointwise max of both texts' own measured heights:
+   <=425px 6 lines, 426-511px 5 lines, 512-662px 4 lines, 663-926px 3 lines,
+   >=927px 2 lines. */
+#is-pair-cap { min-height: 2.7em; line-height: 1.35; }
+@media (max-width: 425px) { #is-pair-cap { min-height: 8.1em; } }
+@media (min-width: 426px) and (max-width: 511px) { #is-pair-cap { min-height: 6.75em; } }
+@media (min-width: 512px) and (max-width: 662px) { #is-pair-cap { min-height: 5.4em; } }
+@media (min-width: 663px) and (max-width: 926px) { #is-pair-cap { min-height: 4.05em; } }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
    filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
    panel's own copy of the same control. */
@@ -240,15 +336,19 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
   .sg-cv .sc:has(#cv-s-hc) { order: 5; }
   .sg-cv .sc:has(#cv-s-c) { order: 6; }
   .sg-cv .sc:has(#cv-s-r2) { order: 7; }
+  /* Tab 5's own single-column stats grid: unlike .sg-cv it needs no :has()
+     reordering because its DOM order (True p full width, then the direct/
+     weighted pairs top to bottom) already reads correctly as one column. */
+  .sg-is { grid-template-columns: minmax(0, 1fr); }
   /* A single stats column still claimed the old two-column width, leaving the
      cards wide with empty space and the figure no wider than before. Narrowed
      to one ordinary card's own width and let the figure card -- ordinarily a
      fixed flex-basis, shrinkable only down to its own content -- grow to fill
      what the column gave up, so the three pin panels actually spread out.
-     Scoped to tab 4's own viz-row (the one holding .sg-cv) so tabs 1-3 and 5,
-     which share the same .cv-card/.stats-panel classes, are unaffected. */
-  .viz-row:has(.sg-cv) > .cv-card { flex: 1 1 auto; }
-  .viz-row:has(.sg-cv) > .stats-panel { flex: 0 0 230px; min-width: 0; }
+     Scoped to the viz-row holding .sg-cv or .sg-is so tabs 1-3, which share
+     the same .cv-card/.stats-panel classes, are unaffected. */
+  .viz-row:has(.sg-cv) > .cv-card, .viz-row:has(.sg-is) > .cv-card { flex: 1 1 auto; }
+  .viz-row:has(.sg-cv) > .stats-panel, .viz-row:has(.sg-is) > .stats-panel { flex: 0 0 230px; min-width: 0; }
 }
 /* A card whose value is a bracketed interval (e.g. "[-1.1243, -0.2265]") can outgrow half a
    narrow phone's stats column; give it the full row there rather than ellipsizing it. */
@@ -281,9 +381,24 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 /* Capture tally under a history chart -- what the 100-run sweep is for. The height
-   is reserved so the section does not jump when the first run fills it in. */
+   is reserved so the section does not jump when the first run fills it in: the
+   zero-state text in histCaption keeps the same clause shape as a real run, and so
+   it wraps to the same number of lines up to the point where the "latest N of M
+   runs" clause first appears (once the run count exceeds the 30-row display
+   window). */
 .hist-cap { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 7px; }
 .hist-cap strong { font-family: 'IBM Plex Mono',monospace; font-weight: 700; color: var(--accent); }
+/* Tab ②'s two history captions alone carry a further "excluding zero" clause, and
+   so they wrap one line further than the zero-state text anticipated once "latest
+   N of M runs" also appears (Task 7a). Reserve that line by width tier instead of
+   measuring it in JS, and so the page never grows at the 30-run boundary. Heights
+   are exact multiples of the caption's own line height (0.8rem font-size x 1.5
+   line height = 1.2rem), rounded up past the tallest wrapped state measured at
+   each tier (390: 3 lines; 481–800: 2 lines; above 800 the caption never wraps
+   past one line even at its longest, and so no reservation is needed there). */
+#crn-cap1, #crn-cap2 { min-height: 1.2rem; }
+@media (max-width: 800px) { #crn-cap1, #crn-cap2 { min-height: 2.4rem; } }
+@media (max-width: 480px) { #crn-cap1, #crn-cap2 { min-height: 3.6rem; } }
 svg.hsv { display: block; width: 100%; height: auto; }
 .hist-handle { cursor: ns-resize; touch-action: none; }
 svg.hsv.hot .hist-truth { stroke-width: 3; }
@@ -335,8 +450,23 @@ footer a:hover { text-decoration: underline; }
 .cr-br { display: none; }
 @media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
 /* Below this the stats panel beside a 407px figure card would be under 260px wide,
-   so the row stacks and the card takes the full width. */
-@media (max-width: 760px) { .viz-row { flex-direction: column; } .cv-card { flex-basis: auto; } }
+   and so the row stacks and the card takes the full width. flex-basis: auto alone does
+   not do that: .viz-row's align-items is flex-start, not stretch, so a stacked
+   .cv-card only shrink-to-fits its own children's content width -- explicit
+   width: 100% is what actually pins it to the row's own width regardless of
+   content (fix round 2, Task 7d/7e), matching this comment's own intent. Without
+   it, a card whose content changes width between draws (e.g. tab ⑤'s figure
+   caption going from empty to a full sentence after a run) silently resizes the
+   card itself, which the figure's own SVG (sized to the card's clientWidth) then
+   also resizes to fit, even though nothing about the figure's own geometry moved.
+   The stats panel needs the same explicit width: 100% for the same reason -- its
+   content (the stat cards' own values) sizes it, not the row, so under align-items:
+   flex-start it would otherwise settle a few pixels short of the card beside it
+   and leave the monitor cards' right edge ragged against the figure card above
+   them (Task 7j). The >= 761px column-width overrides below (.sg-cv's and
+   .sg-is's flex: 0 0 230px) live in their own min-width: 761px query, so this
+   rule never reaches them. */
+@media (max-width: 760px) { .viz-row { flex-direction: column; } .cv-card, .stats-panel { flex-basis: auto; width: 100%; } }
 /* Numeric parameter fields (μ, σ, ...): same look as the seed field, narrower. */
 .par-inp { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 76px;
            padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px;
@@ -412,7 +542,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .rs-wrap input[type=range] { display: block; width: 100%; }
 /* The c slider grows to fill its row (Task 6r's own sizing, unchanged). */
 .rs-wrap-grow { flex: 1 1 160px; min-width: 0; }
-/* The three σₑ sliders instead take a fixed width, like #is-theta on tab ⑤:
+/* The three σₑ sliders, and tab ⑤'s θ slider, instead take a fixed width:
    140px, capped at 45vw so a narrow phone's own edge is never reached. */
 .rs-wrap-fixed { width: 140px; max-width: 45vw; }
 /* Thumb pinned to 26px in both engines so the tick overlay's own calc((100% -
@@ -437,13 +567,38 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    on #cv-c-val/#cv-c-star) -- so its own line-height is zeroed the same way
    .sc-val sub already is for a verdict's subscript. */
 sup { font-size: .72em; line-height: 0; }
-#is-theta { width: 140px; max-width: 45vw; }  /* narrow screens: keeps the pair off the widget's right edge */
 /* Figures are SVG with a viewBox; the card shrinks them rather than overflowing. */
 svg.fig { display: block; width: 100%; height: auto; }
 /* Drag handles on the tab ① figure. touch-action:none on the handle alone lets a
    drag that starts on it move μ or σ while a swipe anywhere else still scrolls. */
 .ci-handle { cursor: ew-resize; touch-action: none; }
 #ci-fig.hot-mu #ci-muline, #ci-fig.hot-sigma #ci-curve { stroke-width: 3.5; }
+/* Drag handles on the tab ⑤ transfer plot (Task 7h): the T line (vertical
+   drag, ns-resize) and the way-in line(s) (horizontal drag, ew-resize), the
+   same touch-action:none-on-the-handle-alone pattern as tab ①'s own handles. */
+.is-handle { touch-action: none; }
+.is-handle[data-handle="T"] { cursor: ns-resize; }
+.is-handle[data-handle="way"], .is-handle[data-handle="theta"] { cursor: ew-resize; }
+#is-fig.hot-T .is-t-vis { stroke-width: 2.4; }
+#is-fig.hot-T .is-t-lbl { font-weight: 900; }
+#is-fig.hot-way .is-way-vis { stroke-width: 2.4; }
+#is-fig.hot-way .is-way-lbl { font-weight: 900; }
+/* The proposal-density curve's own drag handle (Task 7k): same hover-thicken
+   pattern as the T line and the input-threshold line(s) above. */
+#is-fig.hot-theta .is-theta-vis { stroke-width: 2.4; }
+#is-fig.hot-theta .is-theta-txt { font-weight: 900; }
+/* The likelihood-weighting pair's own three T handles (coordinator's second
+   addendum on Task 7m): one handle per plot, each an ew-resize drag (the
+   output value runs horizontally there, unlike the transfer plot's own
+   vertical T line) that sets the same T. Hovering or dragging any T handle
+   anywhere -- the transfer plot's own, or any of the pair's three -- adds
+   the shared hot-T class to BOTH SVGs at once (coordinator's third addendum
+   on this point), and so all four T lines and labels thicken together; the
+   input-threshold (way) and theta handles keep their own separate,
+   single-SVG hover classes below, unaffected. */
+.is-handle[data-handle="pairT"] { cursor: ew-resize; }
+#is-pair-fig.hot-T .is-pair-t-vis { stroke-width: 2.4; }
+#is-pair-fig.hot-T .is-pair-t-lbl { font-weight: 900; }
 /* Two stacked history charts: a small heading over each, sharing one section. */
 .hist-hd { font-size: .78rem; font-weight: 700; color: var(--muted); margin: 6px 0 2px; }
 .hist-hd + svg.hsv { margin-top: 2px; }
@@ -574,7 +729,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-shift"><span class="tip" tabindex="0" data-tip="Added to every output of system 2 so that two systems built from the same model can still differ by a known amount. The true difference δ = E[h₂] + shift − E[h₁] is what the intervals try to capture.">Shift added to system 2</span></label><input class="par-inp" id="crn-shift" type="text" inputmode="decimal" value="0.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
       <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="crn-sige"><span class="tip" id="crn-sige-lbl" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <label class="ctrl-lbl" for="crn-sige"><span class="tip" id="crn-sige-lbl" tabindex="0" data-tip="Each system's own noise, independent of the input and of the other system. At zero the outputs are pure functions of their inputs, and two systems reading the same u are perfectly tied. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
         <span class="rs-wrap rs-wrap-fixed">
           <input type="range" id="crn-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0.1" aria-labelledby="crn-sige-lbl" oninput="crnSigeDrag()">
         </span>
@@ -633,7 +788,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Welch's interval does not assume the two systems have the same spread. Its degrees of freedom come from the Welch–Satterthwaite approximation, which weighs the two sample variances and so lands on a non-integer between n − 1 and 2(n − 1): near 2(n − 1) when the spreads match, near n − 1 when one system is far noisier. The interval's endpoints are drawn in the figure's strip.">Welch half-width for <span class="sym">δ</span> (<span id="crn-s-welch-df">df —</span>)</span></div><div class="sc-val" id="crn-s-welch">—</div></div>
           <div class="sc"><div class="sc-lbl">Paired half-width for <span class="sym">δ</span> (<span id="crn-s-paired-df">df —</span>)</div><div class="sc-val" id="crn-s-paired">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl">Correlation of paired outputs r</div><div class="sc-val" id="crn-s-r">—</div></div>
-          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether pairing pays. With common inputs, the variance of the n paired differences S_d² is compared with S₁² + S₂², the variance those differences would have if the inputs were independent. A smaller S_d² means the pairing is removing variance.">Does CRN reduce variance?</span></div><div class="sc-val" id="crn-s-help">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether pairing helps. With common inputs, the variance of the n paired differences S_d² is compared with S₁² + S₂², the variance those differences would have if the inputs were independent. A smaller S_d² means the pairing is removing variance.">Does CRN reduce variance?</span></div><div class="sc-val" id="crn-s-help">—</div></div>
           <div class="sc"><div class="sc-lbl">CRN variance S<sub class="sym">d</sub>²</div><div class="sc-val" id="crn-s-sd2">—</div></div>
           <div class="sc"><div class="sc-lbl">Indep. input variance S₁² + S₂²</div><div class="sc-val" id="crn-s-ssum">—</div></div>
           <div class="sc"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Two-sided p-value for the hypothesis that the systems do not differ, from the Welch interval's own t statistic and degrees of freedom. It falls below α exactly when that interval leaves out zero, which the star marks.">Welch p-value against <span class="sym">δ</span> = 0</span></div><div class="sc-val" id="crn-s-pind">—</div></div>
@@ -641,7 +796,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         </div>
       </div>
     </div>
-    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms cost the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire. A star above an interval marks one that leaves out zero, which is the same claim as a p-value below α: the systems differ.</div>
+    <div class="hint wide">Each replication draws a uniform random number for system 1 and one for system 2; the two arms differ only in whether system 2's number is its own (independent inputs) or the same one system 1 got (common random numbers). Both arms use the same 2n runs. When the two systems respond to their input in the same direction, sharing it makes their outputs rise and fall together, the shared part cancels in the difference, and the paired interval is narrower and more often excludes zero, which is the evidence that the systems differ. Choose two models that respond in opposite directions to see pairing backfire. A star above an interval marks one that leaves out zero, which is the same claim as a p-value below α: the systems differ.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">δ</span></div>
       <div class="hist-hd">Independent replications (Welch two-sample interval)</div>
@@ -664,7 +819,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="eq-row"><span class="eq-lbl">And identically:</span><span class="eq-val">S<sub>d</sub>² = S<sub>1</sub>² + S<sub>2</sub>² − 2 r S<sub>1</sub> S<sub>2</sub></span></div>
       <div class="eq-fine">The color of an interval answers "did it capture the true δ?"; the star answers "does it rule out δ = 0?". The two are different questions, and a red interval can carry a star. With the shift set to 0, the systems do not differ, and about α of the runs still earn a star: those are the false positives.</div>
       <div class="eq-hr"></div>
-      <div class="exp-note">Positive correlation shrinks the difference's variance: two systems reading the same input tend to rise and fall together, and so their difference is more stable than two systems reading independent inputs. Once the arms share inputs, the paired analysis is mandatory because the two samples are no longer independent; the right tool is the one-sample interval on the n independent differences, which is the paired t test in its interval form. A pilot run can check whether pairing is worth it. Run both systems on common inputs and compare S<sub>d</sub>² against S<sub>1</sub>² + S<sub>2</sub>²: if S<sub>d</sub>² comes out smaller, pairing is reducing variance, and the ratio of the two says by how much.</div>
+      <div class="exp-note">Positive correlation shrinks the difference's variance: two systems reading the same input tend to rise and fall together, and so their difference is more stable than two systems reading independent inputs. Once the arms share inputs, the paired analysis is mandatory because the two samples are no longer independent; the right tool is the one-sample interval on the n independent differences, which is the paired t test in its interval form. A pilot run can check whether pairing helps. Run both systems on common inputs and compare S<sub>d</sub>² against S<sub>1</sub>² + S<sub>2</sub>²: if S<sub>d</sub>² comes out smaller, pairing is reducing variance, and the ratio of the two says by how much.</div>
       <div class="cards">
         <div class="card"><strong>Same model, shifted</strong>With both systems built from the same model, sharing the input drives the correlation of paired outputs close to one: the outputs rise and fall together almost perfectly. Nearly all of the variance cancels in the difference, and the paired interval collapses toward the shift itself.</div>
         <div class="card"><strong>Opposite responses</strong>exp(u) rises with u, whereas 1 / (1 + u) falls. Sharing u pairs one system's high outputs with the other's low ones, the correlation of paired outputs turns negative, and the paired interval comes out wider than Welch's. Common random numbers assume the two systems respond to their input in the same direction; pick models that disagree, and pairing backfires.</div>
@@ -681,7 +836,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <select id="av-fn" onchange="avParamsChanged()"></select>
       </span>
       <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="av-sige"><span class="tip" id="av-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input and of its pair partner. Pairing cancels only the part of the variance that comes through u; raise the noise, and the antithetic advantage fades. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <label class="ctrl-lbl" for="av-sige"><span class="tip" id="av-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input and of its pair partner. Pairing cancels only the part of the variance that comes through u; raise the noise, and the antithetic advantage fades. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
         <span class="rs-wrap rs-wrap-fixed">
           <input type="range" id="av-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0" aria-labelledby="av-sige-lbl" oninput="avSigeDrag()">
         </span>
@@ -741,7 +896,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl">Independent half-width (<span id="av-s-hi-df">df —</span>)</div><div class="sc-val" id="av-s-hi">—</div></div>
           <div class="sc"><div class="sc-lbl">Antithetic half-width (<span id="av-s-ha-df">df —</span>)</div><div class="sc-val" id="av-s-ha">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl">Sample corr. of the pair outputs <span class="sym">y</span>, <span class="sym">y′</span></div><div class="sc-val" id="av-s-r">—</div></div>
-          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether the complement pays. Both arms average n pairs, and so their pair-mean variances compare directly: S_z² for the antithetic pairs against S_w² for the independent pairs. A smaller S_z² means the negative correlation is removing variance.">Does AV reduce variance?</span></div><div class="sc-val" id="av-s-help">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="A pilot check for whether the complement helps. Both arms average n pairs, and so their pair-mean variances compare directly: S_z² for the antithetic pairs against S_w² for the independent pairs. A smaller S_z² means the negative correlation is removing variance.">Does AV reduce variance?</span></div><div class="sc-val" id="av-s-help">—</div></div>
           <div class="sc"><div class="sc-lbl">AV variance S<sub class="sym">z</sub>²</div><div class="sc-val" id="av-s-sz2">—</div></div>
           <div class="sc"><div class="sc-lbl">Indep. pair variance S<sub class="sym">w</sub>²</div><div class="sc-val" id="av-s-sw2">—</div></div>
         </div>
@@ -753,7 +908,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="cv-leg" id="av-seq-leg"></div>
       <div class="fig-note" id="av-seq-note"></div>
     </div>
-    <div class="hint wide">Both arms cost 2n evaluations of the model and share the first n draws. The independent arm pairs each of them with a fresh draw and averages the pair, exactly as the antithetic arm does with the complement, so that the two arms differ only in where the second draw comes from. In practice, you would use all 2n values with 2n − 1 degrees of freedom; the pairing here exists only to make the comparison one-for-one. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows. Each output can also carry its own noise, zero by default, which the complement cannot cancel, and so the antithetic interval narrows only by the share of the variance that comes through u; turn the noise up, and the two arms converge.</div>
+    <div class="hint wide">Both arms evaluate the model 2n times and share the first n draws. The independent arm pairs each of them with a fresh draw and averages the pair, exactly as the antithetic arm does with the complement, so that the two arms differ only in where the second draw comes from. In practice, you would use all 2n values with 2n − 1 degrees of freedom; the pairing here exists only to make the comparison one-for-one. The antithetic arm follows them with their mirrors 1 − u, averages each pair, and treats the n pair means as the sample. When h rises or falls steadily, a high draw is paired with a low one, the pair means cluster around the true mean, and the interval narrows. Each output can also carry its own noise, zero by default, which the complement cannot cancel, and so the antithetic interval narrows only by the share of the variance that comes through u; turn the noise up, and the two arms converge.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">E[h(U)]</span></div>
       <div class="hist-hd">Independent draws (n pair means)</div>
@@ -769,10 +924,10 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="eq-row"><span class="eq-lbl">Its variance:</span><span class="eq-val">Var(Z) = ( Var Y<sub>a</sub> + Var Y<sub>b</sub> + 2 Cov(Y<sub>a</sub>, Y<sub>b</sub>) ) / 4</span></div>
       <div class="eq-row"><span class="eq-lbl">With antithetic inputs:</span><span class="eq-val">Y<sub>a</sub> = h(U),&nbsp; Y<sub>b</sub> = h(1 − U)</span></div>
       <div class="eq-hr"></div>
-      <div class="exp-note">Averaging two values costs nothing in bias, and the variance of the average falls below half the variance of one value exactly when the two are negatively correlated. Two independent draws never are. But U and 1 − U are perfectly negatively correlated, and if h is monotone (rising or falling throughout), a large h(U) comes with a small h(1 − U), and so the outputs inherit a negative correlation from the inputs. Each pair is one independent observation, and so the n pair means go through the ordinary interval formula, and the generator is only consulted n times for 2n model evaluations.</div>
+      <div class="exp-note">Averaging two values adds no bias, and the variance of the average falls below half the variance of one value exactly when the two are negatively correlated. Two independent draws never are. But U and 1 − U are perfectly negatively correlated, and if h is monotone (rising or falling throughout), a large h(U) comes with a small h(1 − U), and so the outputs inherit a negative correlation from the inputs. Each pair is one independent observation, and so the n pair means go through the ordinary interval formula, and the generator is only consulted n times for 2n model evaluations.</div>
       <div class="cards">
         <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the mirror 1 − u gives exactly the same value, and so the antithetic pair mean is the value itself, with none of the variance-canceling that a true mirror provides. The independent arm still gets the ordinary variance-halving of averaging two unrelated draws, and so its interval comes out narrower here. Monotonicity is the whole trick.</div>
-        <div class="card"><strong>The limiting case</strong>A model that is a linear function of a normal inverse transform, h(u) = μ + σΦ⁻¹(u), has h(1 − u) = 2μ − h(u): every pair mean is exactly μ, and the interval has zero width. Real models sit between that and the bowl.</div>
+        <div class="card"><strong>The limiting case</strong>A model that is a linear function of a normal inverse transform, h(u) = μ + σΦ⁻¹(u), has h(1 − u) = 2μ − h(u): every pair mean is exactly μ, and the interval has zero width. Pick u itself: every pair mean is exactly 0.5, and the interval is a single point. Real models sit between that and the bowl.</div>
         <div class="card"><strong>Antithetic and common random numbers</strong>Both manipulate inputs to induce correlation. Common random numbers want positive correlation between two systems' outputs so their difference is stable; antithetic variates want negative correlation within one system so an average is stable.</div>
       </div>
     </div>
@@ -800,7 +955,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         </select>
       </span>
       <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="cv-sige"><span class="tip" id="cv-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and r² falls. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure and cards follow, whereas the history keeps the run as it was recorded; c snaps to the new estimate; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <label class="ctrl-lbl" for="cv-sige"><span class="tip" id="cv-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and r² falls. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; c snaps to the new estimate; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
         <span class="rs-wrap rs-wrap-fixed">
           <input type="range" id="cv-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0" aria-labelledby="cv-sige-lbl" oninput="cvSigeDrag()">
         </span>
@@ -875,9 +1030,9 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="exp-note">Any c leaves the mean alone because the term being subtracted has mean zero. The variance is a parabola in c with its minimum at the regression slope of Y on X, and at that slope the fraction of Var Y that survives is 1 − ρ². The more strongly the control co-varies with the output, the larger the reduction. Here the control is the model's own input, but in a simulation it can be anything with a known mean that the output responds to: the average of the sampled service times, say, whose mean is a parameter of the input model.</div>
       <div class="cards">
         <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the output is symmetric in u, and Cov(U, h(U)) is exactly zero. The fitted slope wobbles around zero from run to run, and the interval does not shrink. A control has to co-vary with the output to help.</div>
-        <div class="card"><strong>Estimating c costs a little</strong>The slope is fitted from the same run it corrects, which makes the interval slightly optimistic. At n = 50, the capture rate is about two points under nominal; at n = 10, it runs about ten points under, near 83% for a nominal 95%. Larger runs, or a c fixed from a pilot, remove the shortfall.</div>
+        <div class="card"><strong>Estimating c undershoots a little</strong>The slope is fitted from the same run it corrects, which makes the interval slightly optimistic. At n = 50, the capture rate is about two points under nominal; at n = 10, it runs about ten points under, near 83% for a nominal 95%. Larger runs, or a c fixed from a pilot, remove the shortfall.</div>
         <div class="card"><strong>The same idea as regression</strong>The control-variate estimate is the fitted value of the regression of Y on X at X = E[X]. Two or more controls generalize to a multiple regression in the same way.</div>
-        <div class="card"><strong>What the control cannot remove</strong>The control subtracts only the part of y that a straight line in u predicts. With no noise, that line explains about 98% of exp(u), 97% of 1/(1 + u), and 96% of √u, and none of the bowl; what remains is the curvature of h. Noise adds a second part no function of u can predict, and so r² falls as σ<sub>e</sub> rises and the two intervals converge. A model closer to linear, or a quieter one, gives the control more to remove.</div>
+        <div class="card"><strong>What the control cannot remove</strong>The control subtracts only the part of y that a straight line in u predicts. With no noise, that line explains all of u, about 98% of exp(u), 97% of 1/(1 + u), and 96% of √u, but none of the bowl; what remains is the curvature of h. Noise adds a second part no function of u can predict, and so r² falls as σ<sub>e</sub> rises and the two intervals converge. A model closer to linear, or a quieter one, gives the control more to remove.</div>
       </div>
     </div>
   </section>
@@ -886,16 +1041,12 @@ svg.fig { display: block; width: 100%; height: auto; }
   <section id="tab-is" class="tp">
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="is-T"><span class="tip" tabindex="0" data-tip="The event is X ≥ T for a standard normal X. At T = 5 its probability is about 2.9 in ten million, and direct sampling almost never sees it.">Threshold T</span></label>
-        <select id="is-T" onchange="isParamsChanged()">
-          <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
-        </select>
+        <label class="ctrl-lbl" for="is-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one standard normal input x. The identity is the bare tail probability; exp(x) is a monotone curve, and so the output event is an input event; x² reaches the threshold from both sides.">Model h(x)</span></label>
+        <select id="is-fn" onchange="isFnChanged()"></select>
       </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="is-theta"><span class="tip" tabindex="0" data-tip="The mean of the biased sampling distribution N(θ, 1). Setting θ = T puts about half of the draws in the tail. Too small a shift wastes draws; too large a shift makes the weights uneven and widens the interval again.">Sampling shift θ</span></label>
-        <input type="range" id="is-theta" min="0" max="6" step="0.25" value="3" oninput="isThetaShow()" onchange="isParamsChanged()" aria-describedby="is-theta-val">
-        <span class="rng-val" id="is-theta-val">3.00</span>
-        <button class="btn-clear" type="button" onclick="isMatchT()">Set θ = T</button>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="is-T"><span class="tip" tabindex="0" data-tip="The event is h(x) ≥ T on the output scale. Changing the model resets T to a value that makes the event rare. Typing a new T re-evaluates the last run at the same seed; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed.">Threshold T</span></label>
+        <input class="par-inp" id="is-T" type="text" inputmode="decimal" value="3" autocomplete="off" spellcheck="false" aria-describedby="is-par-msg" onchange="isParamsChanged()">
       </span>
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="is-n">Draws per run n</label>
@@ -911,6 +1062,15 @@ svg.fig { display: block; width: 100%; height: auto; }
           <option value="0.9">90%</option><option value="0.8">80%</option>
         </select>
       </span>
+      <span class="ctrl-pair ctrl-pair-wide">
+        <label class="ctrl-lbl" for="is-theta-val"><span class="tip" id="is-theta-lbl" tabindex="0" data-tip="The mean of the proposal distribution N(θ, 1) on the input. Aim it at the input threshold, not at T. Too small a shift wastes draws; too large a shift makes the weights uneven and widens the interval again. Drag the slider, or the proposal curve in the figure, to re-evaluate the last run at the same seed with a different shift; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; type a value in the field to go beyond the slider's range.">Sampling shift θ</span></label>
+        <span class="rs-wrap rs-wrap-fixed">
+          <input type="range" id="is-theta" class="rs-input" min="0" max="6" step="0.05" value="3" aria-labelledby="is-theta-lbl" oninput="isThetaDrag()">
+        </span>
+        <input class="par-inp" id="is-theta-val" type="text" inputmode="decimal" value="3" autocomplete="off" spellcheck="false" aria-describedby="is-par-msg" onchange="isParamsChanged()">
+        <button class="btn-clear" type="button" data-tip="Puts the proposal distribution's mean at the edge of the event on the input scale: T for the identity, ln T for exp(x), and √T for x², whose other input threshold stays uncovered." data-tip-press onclick="isMatchT()">Aim θ at T</button>
+      </span>
+      <span class="seed-msg" id="is-par-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
@@ -921,35 +1081,46 @@ svg.fig { display: block; width: 100%; height: auto; }
         </label>
       </span>
       <button class="btn-run" id="is-run" onclick="runIs()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
-      <button class="btn-run2" id="is-run100" onclick="runIsBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. The weighted tally should settle near α; the direct one misses whenever a run sees no tail event at all." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-run2" id="is-run100" onclick="runIsBatch()" data-tip="Runs 100 experiments from consecutive seeds and draws only the last. The weighted tally should settle near α; the direct one misses whenever a run sees no event at all." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
       <button class="btn-clear" onclick="clearIs()">Clear history</button>
       <span class="seed-msg" id="is-seed-msg" role="status" aria-live="polite"></span>
     </div>
     <div class="viz-row">
       <div class="cv-card">
-        <svg class="fig" id="is-fig" role="img" aria-label="The standard normal density and the shifted sampling density with the tail beyond the threshold shaded under each, and a rug of the shifted draws"></svg>
-        <div class="cv-leg">
-          <span style="color:var(--truth)"><span class="lg-s">—</span>target density φ(x), tail shaded</span>
-          <span style="color:var(--est)"><span class="lg-s">—</span>sampling density φ(x − θ), rug of its draws (tall ticks are in the tail)</span>
+        <div class="seq-hd">
+          <span class="sec-hd" style="margin:0">Sample shown:</span>
+          <span class="seg" role="group" aria-label="Which sample to show">
+            <button type="button" class="seg-btn" id="is-mode-direct" aria-pressed="false" onclick="isMode('direct')">Direct draws</button>
+            <button type="button" class="seg-btn" id="is-mode-prop" aria-pressed="true" onclick="isMode('prop')">Proposal draws</button>
+          </span>
         </div>
-        <div class="fig-note" id="is-fig-note"></div>
+        <svg class="fig" id="is-fig" role="img" aria-label="Three linked regions on a toggle between the direct and proposal samples. The main panel plots the model's curve from input to output, heavier than the density curves below, with the current sample's draws marked on it in its own color (filled where they land in the event, hollow otherwise) and the threshold T and the input threshold shown as dashed lines. The input strip below shares the input axis and shows the target and proposal densities together, a histogram of the current sample's inputs (darker in the event's pre-image), and a rug of the current sample, tall where it lands in the event. The output strip shares the output axis and shows the target and proposal output densities together, a histogram of the current sample's outputs (darker past the threshold), and a rug mirroring the input one."></svg>
+        <div class="cv-leg" id="is-fig-leg"></div>
+        <div class="cv-cap" id="is-fig-cap"></div>
       </div>
       <div class="stats-panel">
-        <div class="sg">
-          <div class="sc"><div class="sc-lbl">Direct: tail events in n</div><div class="sc-val acc" id="is-s-hits">—</div></div>
-          <div class="sc"><div class="sc-lbl">Weighted: draws in tail, <span class="sym">ESS</span></div><div class="sc-val acc" id="is-s-tail">—</div></div>
-          <div class="sc"><div class="sc-lbl">Direct estimate ± H</div><div class="sc-val" id="is-s-d">—</div></div>
-          <div class="sc"><div class="sc-lbl">Weighted estimate ± H</div><div class="sc-val" id="is-s-w">—</div></div>
+        <div class="sg sg-two sg-is">
+          <div class="sc sc-full"><div class="sc-lbl"><span class="tip" id="is-true-tip" tabindex="0" data-tip="1 − Φ(T)">True <span class="sym">p</span> = <span class="sym">P(h(X) ≥ T)</span></span></div><div class="sc-val dim" id="is-s-true">—</div></div>
+          <div class="sc"><div class="sc-lbl">Direct: events in n</div><div class="sc-val acc" id="is-s-hits">—</div></div>
+          <div class="sc"><div class="sc-lbl">Weighted: draws in the event</div><div class="sc-val acc" id="is-s-tail">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Direct estimate ± H</div><div class="sc-val" id="is-s-d">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl">Weighted estimate ± H</div><div class="sc-val" id="is-s-w">—</div></div>
           <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, direct</div><div class="sc-val" id="is-s-rd">—</div></div>
           <div class="sc"><div class="sc-lbl">Relative half-width <span class="sym">H/p</span>, weighted</div><div class="sc-val" id="is-s-rw">—</div></div>
-          <div class="sc"><div class="sc-lbl">True <span class="sym">p</span> = 1 − <span class="sym">Φ</span>(T)</div><div class="sc-val dim" id="is-s-true">—</div></div>
-          <div class="sc"><div class="sc-lbl">Weight at the threshold <span class="sym">W(T)</span></div><div class="sc-val dim" id="is-s-wt">—</div></div>
+          <div class="sc sc-full"><div class="sc-lbl"><span class="tip" id="is-ess-tip" tabindex="0" data-tip="Effective sample size (Kish): the number of equally weighted event draws that would give the weighted estimate the same sampling variance. The gap between the event count and the ESS is what the uneven weights have discarded. Below 30, or below 5% of the event count, the weighted interval is as unreliable as one built from that few draws.">Effective sample size <span class="sym">ESS</span></span></div><div class="sc-val" id="is-s-ess">—</div></div>
         </div>
       </div>
     </div>
-    <div class="hint wide">Both arms spend n draws. The direct arm counts how many standard normals land beyond T; at T = 5 that count is almost always zero, and an interval built from all zeros is the single point [0, 0], which is wrong every time. The weighted arm draws from a normal centered at θ instead, and so the tail is visited often. It multiplies each tail draw by the likelihood ratio W(y) = φ(y)/φ(y − θ), which undoes the bias exactly. Push θ well past T, and the weights become so uneven that the interval is no longer trustworthy; the effective sample size in the stats says when that has happened. The weighted values are ordinary independent observations, and the usual interval applies to them.</div>
+    <div class="cv-card" style="margin-bottom:14px">
+      <div class="sec-hd" style="margin:0 0 9px"><span class="tip" tabindex="0" data-tip="Always the proposal sample, regardless of the toggle above: the direct sample carries no weights to redistribute.">Likelihood weighting</span></div>
+      <div class="eq-row" style="margin:-4px 0 9px"><span class="eq-val"><span class="sym" style="color:var(--est)">hist[h(<span class="sym">X̃</span>)]</span> · <span class="sym" style="color:var(--ratio)">W(<span class="sym">X̃</span>)</span> → <span class="sym" style="color:var(--truth)">hist[h(X)]</span></span></div>
+      <svg class="fig" id="is-pair-fig" role="img" aria-label="Three plots on the same output-value axis. The left histogram counts each of the proposal's outputs once against the proposal's own output density; the middle plots the likelihood ratio W on a logarithmic axis, with a reference line at W = 1; the right histogram counts each output W times against the target's output density. A threshold line at T appears on all three, and the bars past it are darker."></svg>
+      <div class="cv-leg" id="is-pair-leg"></div>
+      <div class="cv-cap" id="is-pair-cap"></div>
+    </div>
+    <div class="hint wide">Both sampling approaches draw n samples. The direct-sampling approach runs the model on standard normals and counts the outputs that land beyond T. The importance-sampling approach draws its inputs from a proposal distribution, N(θ, 1), instead of the target (the rare-event literature also calls it the biasing or importance distribution), runs the same model, and multiplies each output beyond T by the input likelihood ratio W(y) = φ(y)/φ(y − θ). The pair of plots below shows the proposal's outputs counted once and counted W(y) times; weighting turns the proposal's histogram into the target's, and the tail past T is estimated from the many draws the proposal put there. For a monotone model, the output event is the input event x ≥ h⁻¹(T), and so the shift aims at that edge. x² has two input thresholds: a one-sided shift covers one and never visits the other, and so the weighted estimate settles at half the truth, with a narrow interval that misses every time while ESS looks healthy because the uncovered side is simply absent, not represented by a few huge weights. ESS warns only about uneven weights among the draws the sampler does make, which is the failure that shows up when θ is pushed too far past the input threshold. The threshold line, its pre-image, and the proposal curve in the figure above can all be dragged directly: the T line vertically, the others horizontally.</div>
     <div class="sec">
-      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">p = P(X ≥ T)</span></div>
+      <div class="sec-hd">Experiment history — confidence intervals for <span class="sym">p = P(h(X) ≥ T)</span></div>
       <div class="hist-hd">Direct sampling (mean of the indicator)</div>
       <div id="is-hw1"><svg class="hsv" id="is-hist1"></svg></div>
       <div class="hist-cap" id="is-cap1"></div>
@@ -959,15 +1130,18 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="sec">
       <div class="sec-hd">Why sampling from the wrong distribution, corrected by a weight, gives the right answer</div>
-      <div class="eq-row"><span class="eq-lbl">Change of measure:</span><span class="eq-val">E<sub>X</sub>[g(X)] = ∫ g(x) f<sub>X</sub>(x) dx = ∫ g(x) · [f<sub>X</sub>(x)/f<sub>Y</sub>(x)] · f<sub>Y</sub>(x) dx = E<sub>Y</sub>[g(Y) W(Y)]</span></div>
-      <div class="eq-row"><span class="eq-lbl">Here:</span><span class="eq-val">g(x) = 1[x ≥ T],&nbsp; f<sub>X</sub> = φ(x),&nbsp; f<sub>Y</sub> = φ(x − θ),&nbsp; W(y) = exp(−θy + θ²/2)</span></div>
-      <div class="eq-row"><span class="eq-lbl">Estimator:</span><span class="eq-val">p̂ = (1/n) Σ 1[Y<sub>i</sub> ≥ T] W(Y<sub>i</sub>),&nbsp; Y<sub>i</sub> ~ N(θ, 1)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Change of measure:</span><span class="eq-val">E<sub>X</sub>[1[h(X) ≥ T]] = ∫ 1[h(x) ≥ T] φ(x) dx = ∫ 1[h(x) ≥ T] · [φ(x)/q(x)] · q(x) dx = E[1[h(<span class="sym">X̃</span>) ≥ T] W(<span class="sym">X̃</span>)]</span></div>
+      <div class="eq-row"><span class="eq-lbl">Here:</span><span class="eq-val">q(x) = φ(x − θ) is the proposal density,&nbsp; W(x) = φ(x)/q(x) = exp(−θx + θ²/2)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Estimator:</span><span class="eq-val">p̂ = (1/n) Σ 1[h(<span class="sym">X̃</span><sub>i</sub>) ≥ T] W(<span class="sym">X̃</span><sub>i</sub>),&nbsp; <span class="sym">X̃</span><sub>i</sub> ~ N(θ, 1)</span></div>
+      <div class="eq-row"><span class="eq-lbl">Effective sample size:</span><span class="eq-val">ESS = (Σ W)² / Σ W² over the draws in the event</span></div>
       <div class="eq-hr"></div>
-      <div class="exp-note">The identity holds for any sampling density that is positive wherever the target is, and so the sampler is free to put its draws where the interesting outcomes are. The weight pays back exactly what the bias borrowed. The variance, though, depends on the choice. Weights near one across the tail give a tight interval, whereas a shift far past T makes the few draws nearest T carry weights thousands of times larger than the rest, the effective sample size collapses, and the interval widens again; pushed far enough, that same shift makes the interval unreliable, and it can even run below zero for a quantity that is a probability. Slide θ past T, and watch the effective sample size in the stats fall.</div>
+      <div class="exp-note">The identity holds for any proposal density that is positive wherever the target is, and so the sampler is free to put its draws where the interesting outputs come from. The weight lives on the input and undoes exactly the bias introduced there, regardless of what the model h does afterward. The variance, though, depends on the choice of θ. Weights near one across the input threshold give a tight interval, whereas a shift far past it makes the few draws nearest the edge carry weights thousands of times larger than the rest, the effective sample size collapses, and the interval widens again; pushed far enough, that same shift makes the interval unreliable, and it can even run below zero for a quantity that is a probability. Slide θ past the input threshold, and watch the effective sample size in the stats fall.</div>
       <div class="cards">
-        <div class="card"><strong>Direct sampling at T = 5</strong>Ten million standard normals would be expected to produce about three tail events; a thousand produce none, the sample variance is zero, and the interval is [0, 0]. Its miss tally is 100 of 100, which is not a violation of the guarantee so much as a warning that the t interval needs some variation to work with.</div>
+        <div class="card"><strong>Where the interval fails</strong>Direct sampling fails when the sample is all zeros: the interval collapses to the single point [0, 0], wrong every time. Importance sampling fails when θ sits too far past the input threshold, and so the weights grow uneven and the interval narrows while it misses; ESS is the warning sign for that failure.</div>
         <div class="card"><strong>The same interval formula</strong>Nothing changes downstream: the weighted values are independent, their mean is p, and the one-sample t interval captures p about 100(1 − α)% of the time. Importance sampling is a change of what is averaged, not of how the average is analyzed.</div>
-        <div class="card"><strong>Bias on purpose</strong>The other three techniques leave the sampling distribution alone and reduce variance by correlation or by a correction term. The right distribution almost never produces the event of interest; this one deliberately samples from the wrong distribution and then corrects for it with the weight.</div>
+        <div class="card"><strong>Bias on purpose</strong>The other three techniques leave the sampling distribution alone and reduce variance by correlation or by a correction term. The target distribution almost never produces the event of interest; this one deliberately samples from a proposal distribution instead and corrects for it with the weight.</div>
+        <div class="card"><strong>Aim on the input scale</strong>θ lives on the input, not the output, and so it has to aim at the input threshold, not at T itself. For exp(x), the input threshold is ln T, not T: at the default T = 20 that is about 3.00, whereas aiming θ at 20 directly would center the sampler on inputs where exp(x) is astronomically larger than the threshold, wasting nearly every draw and leaving the few that do land near the input threshold carrying enormous, uneven weights.</div>
+        <div class="card"><strong>Two input thresholds</strong>x² reaches T from two input thresholds, ±√T; a one-sided shift covers one and never visits the other, and so the weighted estimate settles at half the truth, with a narrow interval that misses every time, and nothing in the sample warns: ESS looks as healthy as on the identity because the uncovered side is simply absent, not represented by a few huge weights. The estimator is unbiased only in the sense that an astronomically rare left-side draw would carry an astronomically large weight. The fix is a sampler that covers both input thresholds, such as a two-component mixture.</div>
       </div>
     </div>
   </section>
@@ -1183,11 +1357,17 @@ function sampleCorr(a, b) {
 }
 
 /* The one-sample t interval: mean ± t_{1-α/2, n-1} s/√n.  A sample with zero
-   spread (every value equal, as when no direct draw lands in a rare tail) gives
-   h = 0 and an interval that is a single point. */
+   spread (every value equal, as when no direct draw lands in a rare tail, or when
+   a model's variance-reduction arm cancels it exactly) gives h = 0 and an interval
+   that is a single point.  A spread below 1e-9 relative to max(1, |mean|) counts
+   as zero: floating-point noise from the arithmetic that cancels a variance (the
+   identity's antithetic pair means, its control-adjusted values) sits near 1e-17,
+   far under that threshold, and so it is treated as exact rather than left as a
+   sliver of an interval. */
 function ciMean(values, conf) {
   var n = values.length, m = mean(values), s = n > 1 ? Math.sqrt(sampleVar(values)) : 0;
-  var df = n - 1, t = tQuantile(1 - (1 - conf) / 2, df), h = t * s / Math.sqrt(n);
+  if (s < 1e-9 * Math.max(1, Math.abs(m))) s = 0;
+  var df = n - 1, t = tQuantile(1 - (1 - conf) / 2, df), h = s === 0 ? 0 : t * s / Math.sqrt(n);
   return { n: n, mean: m, s: s, df: df, t: t, h: h, lo: m - h, hi: m + h };
 }
 /* Two independent samples: Welch's interval for the difference of means. */
@@ -1200,7 +1380,13 @@ function ciWelch(a, b, conf) {
   return { n1: n1, n2: n2, mean1: m1, mean2: m2, diff: m1 - m2, s1: Math.sqrt(v1), s2: Math.sqrt(v2),
            df: df, t: t, h: h, lo: m1 - m2 - h, hi: m1 - m2 + h };
 }
-function captured(ci, truth) { return ci.lo <= truth && truth <= ci.hi; }
+/* A relative tolerance of 1e-9 (of max(1, |truth|)) so that a point interval
+   sitting on the truth up to floating-point noise still counts as a capture;
+   histRecord below shares this same test rather than repeating it. */
+function captured(ci, truth) {
+  var tol = 1e-9 * Math.max(1, Math.abs(truth));
+  return ci.lo - tol <= truth && truth <= ci.hi + tol;
+}
 
 /* Two-sided p-value against a zero difference for an interval built from a mean `est`,
    its standard error `se`, and `df` degrees of freedom: p = 2 (1 − F_t(|est|/se, df)).
@@ -1222,7 +1408,7 @@ function runNormal(seed, p) {
 /* The record the history chart stores: point estimate, endpoints, the true value the
    run is judged against, its own α, and a key naming the parameter set. */
 function histRecord(est, ci, truth, n, conf, key) {
-  return { est: est, lo: ci.lo, hi: ci.hi, truth: truth, hit: ci.lo <= truth && truth <= ci.hi,
+  return { est: est, lo: ci.lo, hi: ci.hi, truth: truth, hit: captured(ci, truth),
            n: n, alpha: 1 - conf, key: key };
 }
 /* c4(n) = sqrt(2/(n-1)) Γ(n/2) / Γ((n-1)/2): E[S] = c4 σ for a normal sample. */
@@ -1233,9 +1419,14 @@ function c4(n) {
 /* ── The function menu shared by tabs ②, ③, and ④ ─────────────────────
    Each h is a stand-in for a simulation model driven by one uniform.  The moments
    are exact: mean E[h(U)], m2 E[h(U)²], cross E[h(U) h(1−U)], and covU cov(U, h(U)).
-   The first three are monotone; the bowl is the counterexample on which both
-   techniques do nothing, because h(1−u) = h(u) and cov(U, h(U)) = 0. */
+   Four of the five are monotone; the bowl is the counterexample on which both
+   techniques do nothing, because h(1−u) = h(u) and cov(U, h(U)) = 0.  The identity
+   is the linear limit of a monotone model: antithetic pairing and the control
+   variate both remove all of its variance, and its cards are the exact zero-
+   variance case the other three only approach. */
 var FUNCS = {
+  ident: { label: 'u', h: function (u) { return u; },
+           mean: 1 / 2, m2: 1 / 3, cross: 1 / 6, covU: 1 / 12, mono: true },
   exp:   { label: 'exp(u)', h: function (u) { return Math.exp(u); },
            mean: Math.E - 1, m2: (Math.E * Math.E - 1) / 2, cross: Math.E, covU: 1 - (Math.E - 1) / 2, mono: true },
   sqrt:  { label: '√u', h: function (u) { return Math.sqrt(u); },
@@ -1245,7 +1436,7 @@ var FUNCS = {
   bowl:  { label: '(u − ½)²', h: function (u) { return (u - 0.5) * (u - 0.5); },
            mean: 1 / 12, m2: 1 / 80, cross: 1 / 80, covU: 0, mono: false }
 };
-var FUNC_KEYS = ['exp', 'sqrt', 'recip', 'bowl'];
+var FUNC_KEYS = ['ident', 'exp', 'sqrt', 'recip', 'bowl'];
 function funcVar(f) { return f.m2 - f.mean * f.mean; }
 function funcAntiCov(f) { return f.cross - f.mean * f.mean; }
 
@@ -1255,7 +1446,7 @@ function funcAntiCov(f) { return f.cross - f.mean * f.mean; }
    Z_k the system's own standard-normal noise.  Under independent inputs system 2 reads
    its own uniform U′; under common random numbers both systems read U.  System 1 and
    both noises are identical in the two arms, and so the only thing that differs is the
-   input system 2 saw, and both arms cost 2n outputs.  With system 2 plotted to the
+   input system 2 saw, and both arms produce 2n outputs.  With system 2 plotted to the
    right of system 1 in the figure, every difference reads system 2 − system 1. */
 function runCRN(seed, p) {
   var f1 = FUNCS[p.fn1], f2 = FUNCS[p.fn2], rand = mulberry32(seed);
@@ -1291,7 +1482,7 @@ function crnPredicted(p) {
 }
 
 /* ── Tab ③: antithetic pairs ──────────────────────────────────────────
-   p = {fn, n, conf, sigE}.  Both arms cost 2n evaluations and share the first n draws
+   p = {fn, n, conf, sigE}.  Both arms evaluate h 2n times and share the first n draws
    u_i.  The independent arm pairs each u_i with a fresh draw v_i and averages
    the pair, w_i = (h(u_i) + h(v_i)) / 2; the antithetic arm pairs it with its
    mirror instead, z_i = (h(u_i) + h(1 − u_i)) / 2.  The two arms then differ
@@ -1350,24 +1541,83 @@ function runCV(seed, p) {
            plain: plain, cv: cv, truth: f.mean, hitPlain: captured(plain, f.mean), hitCv: captured(cv, f.mean) };
 }
 
-/* ── Tab ⑤: a normal tail probability by importance sampling ──────────
-   p = {T, theta, n, conf}.  Target p = P(X ≥ T) for X ~ N(0, 1).  The direct arm
-   averages the indicator over n standard normals.  The weighted arm draws n values
-   from N(θ, 1) and averages 1[y ≥ T] W(y), with the likelihood ratio
-   W(y) = φ(y) / φ(y − θ) = exp(−θ y + θ²/2), so that E_θ[1[Y ≥ T] W(Y)] = p exactly.
-   ess is Kish's effective sample size of the in-tail weights, (ΣW)² / ΣW². */
+/* ── Tab ⑤: the model menu — a transfer function h from an input to an output,
+   with the rare event on the output side ────────────────────────────────
+   Each entry turns a standard-normal input X into an output h(X), and the event
+   is h(X) ≥ T for a threshold T on the output scale. Fields:
+     label        menu text
+     h(x)         the model itself
+     truth(T)     the closed-form tail probability P(h(X) ≥ T)
+     wayIn(T)     the input-scale edge of the event's pre-image, the point θ aims
+                  at (for a monotone increasing h this is the only edge; sq is
+                  two-sided and also carries leftWayIn, its mirror image)
+     outDensity(y, theta)  the density of h(Y) for Y ~ N(theta, 1); theta = 0 gives
+                  the target model's own output density. Used by the figure's
+                  output strip and pinned by the verify script's quadrature.
+     defaultT     the threshold this model starts at when selected
+     tRange       [lo, hi] valid range for T
+     twoSided     whether the event's pre-image has two disjoint ways in
+   normPdf and normCdf below are φ and Φ. */
+var IS_FUNCS = {
+  ident: {
+    label: 'x', h: function (x) { return x; },
+    truth: function (T) { return 1 - normCdf(T); },
+    wayIn: function (T) { return T; },
+    outDensity: function (y, theta) { return normPdf(y - theta); },
+    defaultT: 3, tRange: [-8, 8], twoSided: false
+  },
+  exp: {
+    label: 'exp(x)', h: function (x) { return Math.exp(x); },
+    truth: function (T) { return T <= 0 ? 1 : 1 - normCdf(Math.log(T)); },
+    wayIn: function (T) { return Math.log(T); },
+    outDensity: function (y, theta) { return y > 0 ? normPdf(Math.log(y) - theta) / y : 0; },
+    defaultT: 20, tRange: [0.01, 10000], twoSided: false
+  },
+  sq: {
+    label: 'x²', h: function (x) { return x * x; },
+    truth: function (T) { return T <= 0 ? 1 : 2 * (1 - normCdf(Math.sqrt(T))); },
+    wayIn: function (T) { return Math.sqrt(T); },
+    leftWayIn: function (T) { return -Math.sqrt(T); },
+    outDensity: function (y, theta) {
+      return y > 0 ? (normPdf(Math.sqrt(y) - theta) + normPdf(-Math.sqrt(y) - theta)) / (2 * Math.sqrt(y)) : 0;
+    },
+    defaultT: 9, tRange: [0, 100], twoSided: true
+  }
+};
+var IS_KEYS = ['ident', 'exp', 'sq'];
+function isTruth(fn, T) { return IS_FUNCS[fn].truth(T); }
+
+/* ── Tab ⑤: a rare event on a model's output, by importance sampling ──
+   p = {fn, T, theta, n, conf}. Target p = P(h(X) ≥ T) for X ~ N(0, 1) and h the
+   model named by p.fn. The direct arm draws n standard normals and averages the
+   indicator 1[h(X) ≥ T]. The weighted arm draws n values from N(θ, 1), the same
+   biased input for every model (the bias lives on the input, not the output), and
+   averages 1[h(Y) ≥ T] W(Y), with the likelihood ratio on the input
+   W(y) = φ(y) / φ(y − θ) = exp(−θ y + θ²/2), so that E_θ[1[h(Y) ≥ T] W(Y)] = p
+   exactly regardless of h. Both arms draw in the same order as before the model
+   menu was added — all n direct draws, then all n biased draws — so that the
+   identity model reproduces every existing run byte for byte. ess is Kish's
+   effective sample size of the in-tail weights, (ΣW)² / ΣW². xs and hxs are the
+   direct arm's own inputs and outputs (hxs[i] = h(xs[i]) for every i), returned
+   so the transfer plot can draw the direct sample too (Task 7l), without
+   touching the draw order above. */
 function isWeight(y, theta) { return Math.exp(-theta * y + theta * theta / 2); }
 function runIS(seed, p) {
-  var rand = mulberry32(seed), ind = [], w = [], ys = [], hits = 0, tail = 0, sw = 0, sw2 = 0;
-  for (var i = 0; i < p.n; i++) { var x = normalDraw(rand, 0, 1), k = x >= p.T ? 1 : 0; ind.push(k); hits += k; }
+  var fn = IS_FUNCS[p.fn], rand = mulberry32(seed);
+  var ind = [], w = [], xs = [], hxs = [], ys = [], hs = [], lr = [], hits = 0, tail = 0, sw = 0, sw2 = 0;
+  for (var i = 0; i < p.n; i++) {
+    var x = normalDraw(rand, 0, 1), hx = fn.h(x), k = hx >= p.T ? 1 : 0;
+    xs.push(x); hxs.push(hx); ind.push(k); hits += k;
+  }
   for (var j = 0; j < p.n; j++) {
-    var y = normalDraw(rand, p.theta, 1), wj = y >= p.T ? isWeight(y, p.theta) : 0;
-    ys.push(y); w.push(wj);
+    var y = normalDraw(rand, p.theta, 1), hj = fn.h(y), lj = isWeight(y, p.theta), wj = hj >= p.T ? lj : 0;
+    ys.push(y); hs.push(hj); lr.push(lj); w.push(wj);
     if (wj > 0) { tail++; sw += wj; sw2 += wj * wj; }
   }
-  var direct = ciMean(ind, p.conf), wtd = ciMean(w, p.conf), truth = 1 - normCdf(p.T);
-  return { ys: ys, w: w, hits: hits, tail: tail, direct: direct, wtd: wtd, truth: truth,
-           ess: sw2 > 0 ? sw * sw / sw2 : 0, hitDirect: captured(direct, truth), hitWtd: captured(wtd, truth) };
+  var direct = ciMean(ind, p.conf), wtd = ciMean(w, p.conf), truth = fn.truth(p.T);
+  return { ys: ys, hs: hs, lr: lr, w: w, hits: hits, tail: tail, direct: direct, wtd: wtd, truth: truth,
+           ess: sw2 > 0 ? sw * sw / sw2 : 0, hitDirect: captured(direct, truth), hitWtd: captured(wtd, truth),
+           xs: xs, hxs: hxs };
 }
 
 var CI = {
@@ -1382,6 +1632,7 @@ var CI = {
   , FUNCS: FUNCS, FUNC_KEYS: FUNC_KEYS, funcVar: funcVar, funcAntiCov: funcAntiCov, runAV: runAV
   , runCV: runCV
   , isWeight: isWeight, runIS: runIS
+  , IS_FUNCS: IS_FUNCS, IS_KEYS: IS_KEYS, isTruth: isTruth
 };
 /* ===== CI-CORE-END ===== */
 </script>
@@ -1395,6 +1646,7 @@ const C = {
   truth: tok('--truth'), est: tok('--est'), estPale: tok('--est-pale'),
   hit: tok('--hit'), miss: tok('--miss'), warn: tok('--warn'),
   pair: tok('--pair'), band: tok('--band'),
+  truthDark: tok('--truth-dark'), estDark: tok('--est-dark'), ratio: tok('--ratio'),
 };
 const FF_MONO = 'IBM Plex Mono,monospace';
 const FF_SANS = 'Outfit,sans-serif';
@@ -1837,6 +2089,17 @@ function svgSet(el, w, h, inner) {
 // (confirmed: tab ③'s longest combined note, truncation text plus a clip
 // count, does wrap at 390px, and must keep doing so).
 function setFigNote(id, text) { $(id).textContent = text || ' '; }
+// Updates a [data-tip] element's own tooltip text after page load (tab ⑤'s True
+// p card, whose closed form depends on the selected model). The tooltip system
+// below mirrors every [data-tip] element's text into a visually hidden span at
+// load time and points at it with aria-describedby; that span has to be kept in
+// sync here too, or the accessible description would go stale even though the
+// tip itself (read live from data-tip on every open) would not.
+function setTip(el, text) {
+  el.setAttribute('data-tip', text);
+  const id = el.getAttribute('aria-describedby');
+  if (id) { const sp = document.getElementById(id); if (sp) sp.innerHTML = text; }
+}
 // A numeric parameter field: parses, clamps to [min, max], writes back what was
 // used, and reports through the row's status span. Returns null when unusable.
 function readNum(id, msgId, min, max, what) {
@@ -1862,7 +2125,32 @@ function fmtPShort(p) {
 }
 // Decimal places that make a value readable next to a scale of `scale`.
 function decFor(scale) { return scale < 0.002 ? 6 : scale < 0.02 ? 5 : scale < 0.2 ? 4 : scale < 2 ? 3 : 2; }
-
+// Round-number axis ticks (1-2-2.5-5-10 step selection, ceil/floor-snapped to
+// the chosen step), ported from power_analysis/power_explorer.html's own
+// niceTicks -- this file carried no such routine before tab ⑤'s transfer plot
+// needed one (fix round 1), and none of tab ①-④'s own figures called for one
+// either, and so it lives here as a shared helper for any figure to reuse, not
+// only tab ⑤'s. `want` is roughly the desired number of intervals, not ticks;
+// the 2.5 step (beyond power_explorer's own 1-2-5-10) fills the gap between 2
+// and 5 that otherwise left some spans with only one or two ticks.
+function niceTicks(lo, hi, want) {
+  const span = hi - lo;
+  if (!(span > 0)) return [lo];
+  const raw = span / (want || 6);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  let step = mag;
+  [1, 2, 2.5, 5, 10].some(k => { if (raw <= k * mag) { step = k * mag; return true; } return false; });
+  const t = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(Math.abs(v) < 1e-9 ? 0 : v);
+  return t;
+}
+// The fewest decimals that represent `step` exactly (up to 1e-9): a step of
+// 2.5 needs one decimal even though its own order of magnitude is 10^0, which
+// a purely magnitude-based decimal count (as decFor gives) would round away.
+function stepDecimals(step) {
+  for (let d = 0; d <= 6; d++) { if (Math.abs(step - Number(step.toFixed(d))) < 1e-9) return d; }
+  return 6;
+}
 // ── Spinners ─────────────────────────────────────────
 // One stepper per numeric field, shared by ArrowUp/ArrowDown and by the hover buttons.
 // Each entry moves its field by one step (dir = ±1; shift = ten steps, or one whole
@@ -1930,14 +2218,14 @@ function sigESliderRange(sigmaHs) {
 // the slider's own current value into the paired numeric field and hands off
 // to the tab's own ParamsChanged function, which re-syncs the slider from the
 // field and re-evaluates the last run at the same seed if σₑ actually changed.
-// The `true` argument tells …ParamsChanged that this call came from a drag:
-// the history chart never depends on σₑ, and so a drag skips re-rendering it
-// (measured at each tab's own largest n; see the Task 6s report for the
-// numbers). A frame this cheap needs no requestAnimationFrame coalescing on
-// top of that.
+// The most recent history entry has to move with the slider (Task 7g), and so
+// …ParamsChanged now re-renders the history chart on every call, drag frames
+// included (measured at each tab's own largest n; see the Task 7g report for
+// the numbers and whether a frame ever needed requestAnimationFrame
+// coalescing) -- a drag call needs nothing different from a plain one.
 function sigeDrag(tab, changedFn) {
   $(tab + '-sige').value = $(tab + '-sige-rng').value;
-  changedFn(true);
+  changedFn();
 }
 
 // The seed is an integer: ±1 (±100 with Shift), clamped to 0..SEED_MAX, then the
@@ -2036,6 +2324,15 @@ function figWidth(svgEl) {
   const w = card && card.clientWidth > 0 ? card.clientWidth - 24 : 380;    // 12px padding each side
   return Math.max(300, Math.min(760, w || 380));
 }
+// The same card-padding measurement, without figWidth's 760px upper clamp:
+// tab ⑤'s likelihood-weighting pair (Task 7m) lives in a full-width card with
+// no fixed-width stats-panel sibling to share the row with, and so it can run
+// wider than any figure figWidth was sized for.
+function fullCardWidth(svgEl) {
+  const card = svgEl.parentElement;
+  const w = card && card.clientWidth > 0 ? card.clientWidth - 24 : 380;
+  return Math.max(300, w || 380);
+}
 const ciFrame = W => ({ W: W, H: 250, pL: 30, pR: 14, pT: 12, pB: 66 });
 const CI_MU_LABEL_DX = 13; // clears the grab stroke's half-width
 // The axis window and height scale for a population. The x-axis is fixed: it is set
@@ -2082,6 +2379,27 @@ function ciSvgPoint(svg, ev) {
   const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
   return pt.matrixTransform(svg.getScreenCTM().inverse());
 }
+// Shared rAF-coalescing scaffolding for a drag's own pointermove handler (tabs
+// ① and ⑤, Task 7h fix round 1): many pointermoves can land in the same
+// frame, and only the latest one needs to move the figure, and so
+// `schedule(ev)` queues an event and fires `run(ev)` at most once per
+// animation frame, and `flush()` applies any still-pending event
+// synchronously -- a pointerup can beat the queued frame, and flushing first
+// keeps the release from rendering a stale position. `run` itself stays with
+// each caller because the drag math differs per tab; only the
+// queue-one-frame-at-a-time wrapper is shared.
+function coalesceToFrame(run) {
+  let pendingEv = null, movePending = false, rafId = null;
+  const fire = () => {
+    movePending = false; rafId = null;
+    const ev = pendingEv; pendingEv = null; if (!ev) return;
+    run(ev);
+  };
+  return {
+    schedule(ev) { pendingEv = ev; if (!movePending) { movePending = true; rafId = requestAnimationFrame(fire); } },
+    flush() { if (movePending) { cancelAnimationFrame(rafId); fire(); } }
+  };
+}
 function ciInitDrag() {
   const svg = $('ci-fig');
   // Hover feedback: thicken whichever line or curve a cursor sits over. Suppressed
@@ -2104,12 +2422,7 @@ function ciInitDrag() {
     try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
     svg.classList.add('hot-' + g.dataset.handle);
   });
-  // Coalesce drag updates to one render per animation frame: many pointermoves can
-  // land in the same frame, and only the latest one needs to move the figure.
-  let pendingEv = null, movePending = false, rafId = null;
-  const applyMove = () => {
-    movePending = false; rafId = null;
-    const ev = pendingEv; pendingEv = null; if (!ev) return;
+  const coalescer = coalesceToFrame(ev => {
     const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
     const p = ciParams(); if (!p) return;
     const F = CIS.frame, q = ciSvgPoint(svg, ev), cW = F.W - F.pL - F.pR;
@@ -2117,18 +2430,14 @@ function ciInitDrag() {
     if (d.which === 'mu') { p.mu = ciRound(x, d.frozen.sigma0); $('ci-mu').value = String(p.mu); }
     else { p.sigma = Math.max(ciRound(Math.abs(x - p.mu), d.frozen.sigma0), ciStep(d.frozen.sigma0)); $('ci-sigma').value = String(p.sigma); }
     ciParamsChanged(d.frozen);
-  };
+  });
   svg.addEventListener('pointermove', ev => {
     const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
-    pendingEv = ev;
-    if (!movePending) { movePending = true; rafId = requestAnimationFrame(applyMove); }
+    coalescer.schedule(ev);
   });
   const end = ev => {
     const d = CIS.drag; if (!d || ev.pointerId !== d.pid) return;
-    // A pointerup can beat the queued animation frame: apply any pending move
-    // synchronously, while CIS.drag is still set for applyMove to read, so the
-    // release never renders the frame before this one's stale position.
-    if (movePending) { cancelAnimationFrame(rafId); applyMove(); }
+    coalescer.flush();
     CIS.drag = null;
     svg.classList.remove('hot-' + d.which);
     ciParamsChanged();
@@ -2704,27 +3013,39 @@ function drawCrnFlow(p) {
     (ox, oy, s, second) => ({ h: crnFlowDiagram(ox, oy, s, second, p, f1, f2, fmtShift), height: 142 }),
     "u, u₁, u₂ are uniform on (0, 1); z₁, z₂ are independent standard normals; system 2's shift and both systems' noise scale σ<sub>e</sub> come from the controls above; the independent arm averages each system first and then differences the two means, whereas the common-random-numbers arm differences each pair first and then averages.");
 }
-function crnParamsChanged(fromSigeDrag) {
+function crnParamsChanged() {
   const p = crnParams(); if (!p) return;
   const f1 = CI.FUNCS[p.fn1], f2 = CI.FUNCS[p.fn2], delta = f2.mean + p.shift2 - f1.mean;
   $('crn-s-delta').textContent = fmt(delta, decFor(Math.abs(delta) || 1));
   crnSyncSigeSlider(p, f1, f2);
-  // Live re-evaluation (Task 6s): a σₑ that differs from the last run's own
-  // re-runs the core at that run's stored seed with every other parameter
-  // pinned to the run (Object.assign only ever overwrites sigE), and so a model
-  // changed after the run keeps showing the run's own models even though the
-  // slider's own range now follows the new menu. Never touches the history or
-  // the repeat-detection key CRS.last.
-  if (CRS.lastRunObj && CRS.lastRunP && p.sigE !== CRS.lastRunP.sigE) {
-    const np = Object.assign({}, CRS.lastRunP, { sigE: p.sigE });
-    CRS.lastRunObj = CI.runCRN(CRS.lastSeed, np);
-    CRS.lastRunP = np;
-    crnShowStats(CRS.lastRunObj, np);
+  // Live re-evaluation (Task 6s, extended in Task 7g): both models, the shift,
+  // σₑ, and confidence are live; n is not. Any of them differing from the last
+  // run's own re-runs the core at that run's stored seed with every other
+  // parameter pinned to the run. A model or shift change is a genuinely new
+  // picture and relocks CRS.scale from the re-evaluated run; a σₑ or confidence
+  // change keeps the existing lock so a drag clips inside it instead of
+  // rescaling it. The re-evaluated run then replaces the most recent history
+  // entry of each arm (crnReplaceLast) under the new key, and so the history
+  // stays true to the figure, and a divider marks where the settings changed;
+  // the repeat-detection key CRS.last moves with it, and so a later run at
+  // the same seed and settings still reports a repeat.
+  if (CRS.lastRunObj && CRS.lastRunP) {
+    const relock = p.fn1 !== CRS.lastRunP.fn1 || p.fn2 !== CRS.lastRunP.fn2 || p.shift2 !== CRS.lastRunP.shift2;
+    const changed = relock || p.sigE !== CRS.lastRunP.sigE || p.conf !== CRS.lastRunP.conf;
+    if (changed) {
+      const np = Object.assign({}, CRS.lastRunP, { fn1: p.fn1, fn2: p.fn2, shift2: p.shift2, sigE: p.sigE, conf: p.conf });
+      CRS.lastRunObj = CI.runCRN(CRS.lastSeed, np);
+      CRS.lastRunP = np;
+      crnShowStats(CRS.lastRunObj, np);
+      if (relock) CRS.scale = crnLockScale(CRS.lastRunObj, np, CRS.lastSeed);
+      crnReplaceLast(CRS.lastRunObj, np);
+    }
   }
   drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p);
   drawCrnFlow(p);
-  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
-  if (!fromSigeDrag) renderCrnHist(p);
+  // The last history entry has to move with a live change (Task 7g), and so
+  // every call re-renders the history, drag frames included.
+  renderCrnHist(p);
 }
 // Two stacked rows, "Independent inputs" then "Common random numbers", each with an
 // inputs panel, an outputs panel, and a differences strip: system 1 always reads u,
@@ -3007,7 +3328,7 @@ function drawCrnFig(run, p) {
   });
 
   svgSet(svg, W, H, h);
-  setFigNote('crn-fig-note', run && p.n > MAXPAIRS ? ' · first ' + MAXPAIRS + ' of ' + p.n + ' pairs drawn' : '');
+  setFigNote('crn-fig-note', run && p.n > MAXPAIRS ? 'The first ' + MAXPAIRS.toLocaleString() + ' of the ' + p.n.toLocaleString() + ' pairs are shown.' : '');
 }
 function crnShowStats(run, p) {
   const d = decFor(Math.min(run.ind.h, run.crn.h) || 1);
@@ -3040,6 +3361,19 @@ function crnShowStats(run, p) {
     ? 'yes: S<sub class="sym">d</sub>² &lt; S₁² + S₂²'
     : 'no: S<sub class="sym">d</sub>² > S₁² + S₂²';
   $('crn-s-help').style.color = helps ? C.hit : C.miss;
+}
+// A live parameter change (Task 7g) replaces the most recent entry of each
+// arm in place, rather than pushing a new one (crnRecord's own job, for an
+// actual run), and so the history stays true to the figure; histPlot draws a
+// divider wherever a run's key differs from the one before it, and so the
+// divider appears here for free whenever the new key differs from the entry
+// it replaced. CRS.last also moves to the new key, and so a later run at the
+// same seed and settings still reports a repeat.
+function crnReplaceLast(run, p) {
+  const k = crnKey(p);
+  if (CRS.ind.length) CRS.ind[CRS.ind.length - 1] = CI.histRecord(run.ind.diff, run.ind, run.truth, p.n, p.conf, k);
+  if (CRS.crn.length) CRS.crn[CRS.crn.length - 1] = CI.histRecord(run.crn.mean, run.crn, run.truth, p.n, p.conf, k);
+  CRS.last = { seed: CRS.lastSeed, key: k };
 }
 function crnRecord(run, p) {
   const k = crnKey(p);
@@ -3093,7 +3427,7 @@ function renderCrnHist(p) {
   histCaption($('crn-cap2'), histPlot($('crn-hist2'), $('crn-hw2'), CRS.crn, opts), 'δ', 'zero');
 }
 TABS.crn = {
-  init() { fnOptions($('crn-fn1')); fnOptions($('crn-fn2')); crnParamsChanged(); },
+  init() { fnOptions($('crn-fn1'), 'exp'); fnOptions($('crn-fn2'), 'exp'); crnParamsChanged(); },
   render() { const p = crnParams(); if (p) { drawCrnFig(CRS.lastRunObj || null, CRS.lastRunP || p); drawCrnFlow(p); } renderCrnHist(p); }
 };
 SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
@@ -3259,10 +3593,14 @@ function drawAvFlow(p) {
   const f = CI.FUNCS[p.fn];
   drawFlowPair('av-flow', 'av-flow-cap', 'av-flow-arrow',
     (ox, oy, s, second) => avFlowDiagram(ox, oy, s, second, p, f),
-    "u₁, u₂, … are the PRNG's uniform draws on (0, 1); z's are independent standard normals scaled by σₑ; the independent arm spends 2n of them on n pairs of runs of h and averages each pair, whereas the antithetic arm spends n of them twice, once as drawn and once complemented (y<sub>i</sub>′ = h(1 − u<sub>i</sub>)), and averages each pair. A simulation package does the complementing for you by re-seeding the stream and returning 1 − u for every draw. Each arm's n pair means are then averaged, and the cards' interval is on that average.");
+    "u₁, u₂, … are the PRNG's uniform draws on (0, 1); z's are independent standard normals scaled by σₑ; the independent arm uses 2n of them on n pairs of runs of h and averages each pair, whereas the antithetic arm uses n of them twice, once as drawn and once complemented (y<sub>i</sub>′ = h(1 − u<sub>i</sub>)), and averages each pair. A simulation package does the complementing for you by re-seeding the stream and returning 1 − u for every draw. Each arm's n pair means are then averaged, and the cards' interval is on that average.");
 }
-function fnOptions(sel) {
+// def names the key that should start selected; every menu built from FUNC_KEYS
+// would otherwise land on whichever key is listed first (now the identity), and
+// exp(u) is the model every tab has always opened on.
+function fnOptions(sel, def) {
   sel.innerHTML = CI.FUNC_KEYS.map(k => `<option value="${k}">${CI.FUNCS[k].label}</option>`).join('');
+  if (def) sel.value = def;
 }
 // The curve of h over [0, 1] and its value range, sampled once per model.
 function fnCurve(f) {
@@ -3314,25 +3652,34 @@ function avLockScale(run, p) {
   const f = CI.FUNCS[p.fn];
   return { fig: avScaleFor(run, f, true), seq: avScaleFor(run, f, false) };
 }
-function avParamsChanged(fromSigeDrag) {
+function avParamsChanged() {
   const p = avParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('av-s-true').textContent = f.mean.toFixed(5);
   avSyncSigeSlider(p, f);
-  // Live re-evaluation (Task 6s): see crnParamsChanged's own comment. n and fn
-  // stay pinned to the last run even if the menu changed since then; only sigE
-  // moves.
-  if (AVS.lastRunObj && AVS.lastRunP && p.sigE !== AVS.lastRunP.sigE) {
-    const np = Object.assign({}, AVS.lastRunP, { sigE: p.sigE });
-    AVS.lastRunObj = CI.runAV(AVS.lastSeed, np);
-    AVS.lastRunP = np;
-    avShowStats(AVS.lastRunObj);
+  // Live re-evaluation (Task 6s, extended in Task 7g): see crnParamsChanged's
+  // own comment. The model, σₑ, and confidence are live; n is not. A model
+  // change relocks AVS.scale from the re-evaluated run (a new picture); σₑ and
+  // confidence keep the existing lock. The re-evaluated run replaces the most
+  // recent history entry of each arm (avReplaceLast) under the new key.
+  if (AVS.lastRunObj && AVS.lastRunP) {
+    const relock = p.fn !== AVS.lastRunP.fn;
+    const changed = relock || p.sigE !== AVS.lastRunP.sigE || p.conf !== AVS.lastRunP.conf;
+    if (changed) {
+      const np = Object.assign({}, AVS.lastRunP, { fn: p.fn, sigE: p.sigE, conf: p.conf });
+      AVS.lastRunObj = CI.runAV(AVS.lastSeed, np);
+      AVS.lastRunP = np;
+      avShowStats(AVS.lastRunObj);
+      if (relock) AVS.scale = avLockScale(AVS.lastRunObj, np);
+      avReplaceLast(AVS.lastRunObj, np);
+    }
   }
   drawAvFlow(p);
   drawAvFig(AVS.lastRunObj, AVS.lastRunP || p);
   if (typeof drawAvSeq === 'function') drawAvSeq(AVS.lastRunObj, AVS.lastRunP || p);
-  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
-  if (!fromSigeDrag) renderAvHist(p);
+  // The last history entry has to move with a live change (Task 7g), and so
+  // every call re-renders the history, drag frames included.
+  renderAvHist(p);
 }
 // The dot-and-pair legend text is deliberately mode-neutral ("first of the pair" /
 // "second") because what the second point actually is -- h(1 - u) + noise in
@@ -3441,7 +3788,7 @@ function drawAvFig(run, p) {
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
   svgSet($('av-fig'), W, H, h);
   $('av-fig-leg').innerHTML = avFigLegendHtml(mode);
-  setFigNote('av-fig-note', run && p.n > MAXP ? ' · first ' + MAXP + ' of ' + p.n + ' pairs drawn' : '');
+  setFigNote('av-fig-note', run && p.n > MAXP ? 'The first ' + MAXP.toLocaleString() + ' of the ' + p.n.toLocaleString() + ' pairs are shown.' : '');
 }
 // Tab ③'s draw-order panel: the same run's 2n outputs, in the order the stream
 // produced them. It carries no toggle of its own -- it reads AVS.mode, the same
@@ -3544,8 +3891,8 @@ function drawAvSeq(run, p) {
   [1, n, count].forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
   svgSet($('av-seq'), W, H, h);
   $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
-  let note = count > 400 ? ' · first 400 of ' + count + ' dots drawn' : '';
-  if (clipped > 0) note += ' · ' + clipped + ' of ' + drawCount + ' dots beyond the panel\'s fixed scale';
+  let note = count > 400 ? 'The first 400 of the ' + count.toLocaleString() + ' dots are shown.' : '';
+  if (clipped > 0) note += (note ? ' ' : '') + 'Of the ' + drawCount.toLocaleString() + ' dots drawn, ' + clipped.toLocaleString() + ' lie beyond the panel\'s fixed scale.';
   setFigNote('av-seq-note', note);
 }
 function avShowStats(run) {
@@ -3573,6 +3920,15 @@ function avRecord(run, p) {
   const k = avKey(p);
   AVS.ind.push(CI.histRecord(run.ind.mean, run.ind, run.truth, p.n, p.conf, k));
   AVS.av.push(CI.histRecord(run.av.mean, run.av, run.truth, p.n, p.conf, k));
+}
+// A live parameter change (Task 7g) replaces the most recent entry of each
+// arm in place; see crnReplaceLast's own comment for why the divider needs no
+// extra code here.
+function avReplaceLast(run, p) {
+  const k = avKey(p);
+  if (AVS.ind.length) AVS.ind[AVS.ind.length - 1] = CI.histRecord(run.ind.mean, run.ind, run.truth, p.n, p.conf, k);
+  if (AVS.av.length) AVS.av[AVS.av.length - 1] = CI.histRecord(run.av.mean, run.av, run.truth, p.n, p.conf, k);
+  AVS.last = { seed: AVS.lastSeed, key: k };
 }
 function runAv() {
   const seed = readSeed('av'); if (seed === null) return;
@@ -3616,7 +3972,7 @@ function renderAvHist(p) {
   histCaption($('av-cap2'), histPlot($('av-hist2'), $('av-hw2'), AVS.av, opts), 'E[h]', null);
 }
 TABS.av = {
-  init() { fnOptions($('av-fn')); avParamsChanged(); const p = avParams(); if (p) drawAvFig(null, p); },
+  init() { fnOptions($('av-fn'), 'exp'); avParamsChanged(); const p = avParams(); if (p) drawAvFig(null, p); },
   render() {
     const p = AVS.lastRunP || avParams();
     if (p) { drawAvFlow(p); drawAvFig(AVS.lastRunObj, p); if (typeof drawAvSeq === 'function') drawAvSeq(AVS.lastRunObj, p); }
@@ -3655,29 +4011,37 @@ function cvLockScale(run, p) {
   const span = Math.max(dMax - dMin, 1e-9), pad = Math.max(span * 0.35, sh);
   return { lo: dMin - pad, hi: dMax + pad };
 }
-function cvParamsChanged(fromSigeDrag) {
+function cvParamsChanged() {
   const p = cvParams(); if (!p) return;
   const f = CI.FUNCS[p.fn];
   $('cv-s-true').textContent = f.mean.toFixed(5);
   cvSyncSigeSlider(p, f);
-  // Live re-evaluation (Task 6s): see crnParamsChanged's own comment. c then
-  // snaps to the new run's own estimated ĉ (Ted's approved recommendation),
-  // which also relocks the c slider's own range and ticks.
-  if (CVS.lastRunObj && CVS.lastRunP && p.sigE !== CVS.lastRunP.sigE) {
-    const np = Object.assign({}, CVS.lastRunP, { sigE: p.sigE });
-    CVS.lastRunObj = CI.runCV(CVS.lastSeed, np);
-    CVS.lastRunP = np;
-    // CVS.scale (panels 2-3's own y-scale) is NOT recomputed here: a
-    // re-evaluation reuses the lock from the run that set it, unchanged.
-    // cvSnapSlider's own cvSetSliderRange call below is a different lock (the
-    // c slider's own -2ĉ..4ĉ range), which is meant to move on every run.
-    cvSnapSlider(CVS.lastRunObj);
-    cvShowStats(CVS.lastRunObj);
+  // Live re-evaluation (Task 6s, extended in Task 7g): see crnParamsChanged's
+  // own comment. The model, σₑ, and confidence are live; n is not. A model
+  // change relocks CVS.scale (panels 2-3's own y-scale) from the re-evaluated
+  // run (a new picture); σₑ and confidence keep the existing lock. c snaps to
+  // the new run's own estimated ĉ on every live change either way (Ted's
+  // approved recommendation), which also relocks the c slider's own,
+  // separate -2ĉ..4ĉ range and ticks. The re-evaluated run replaces the most
+  // recent history entry of each arm (cvReplaceLast) under the new key.
+  if (CVS.lastRunObj && CVS.lastRunP) {
+    const relock = p.fn !== CVS.lastRunP.fn;
+    const changed = relock || p.sigE !== CVS.lastRunP.sigE || p.conf !== CVS.lastRunP.conf;
+    if (changed) {
+      const np = Object.assign({}, CVS.lastRunP, { fn: p.fn, sigE: p.sigE, conf: p.conf });
+      CVS.lastRunObj = CI.runCV(CVS.lastSeed, np);
+      CVS.lastRunP = np;
+      if (relock) CVS.scale = cvLockScale(CVS.lastRunObj, np);
+      cvSnapSlider(CVS.lastRunObj);
+      cvShowStats(CVS.lastRunObj);
+      cvReplaceLast(CVS.lastRunObj, np);
+    }
   }
   drawCvFig(CVS.lastRunObj, CVS.lastRunP || p);
   drawCvFlow(p);
-  // The history chart never depends on σₑ, and so a drag frame skips it (Task 6s).
-  if (!fromSigeDrag) renderCvHist(p);
+  // The last history entry has to move with a live change (Task 7g), and so
+  // every call re-renders the history, drag frames included.
+  renderCvHist(p);
 }
 // One diagram (Plain estimate or Control-variate estimate), drawn into local
 // coordinates 0-380 wide and offset/scaled exactly like crnFlowDiagram and
@@ -4001,8 +4365,8 @@ function drawCvFig(run, p) {
       if (run.y[i] < lo23 || run.y[i] > hi23) clipped++;
       if (eff.z[i] < lo23 || eff.z[i] > hi23) clipped++;
     }
-    note = n > 200 ? ' · first 200 of ' + n + ' draws drawn' : '';
-    if (clipped > 0) note += ' · ' + clipped + ' of ' + (2 * m) + ' dots beyond the panel\'s fixed scale';
+    note = n > 200 ? 'The first 200 of the ' + n.toLocaleString() + ' draws are shown.' : '';
+    if (clipped > 0) note += (note ? ' ' : '') + 'Of the ' + (2 * m).toLocaleString() + ' dots drawn, ' + clipped.toLocaleString() + ' lie beyond the panel\'s fixed scale.';
     h2 += svgIntervalMark(barX, yP2(run.plain.hi), yP2(run.plain.lo), yP2(run.plain.mean), run.hitPlain);
     h3 += svgIntervalMark(barX, yP3(eff.cv.hi), yP3(eff.cv.lo), yP3(eff.cv.mean), CI.captured(eff.cv, run.truth));
     h += `<g clip-path="url(#cv-panel2-clip)">${h2}</g><g clip-path="url(#cv-panel3-clip)">${h3}</g>`;
@@ -4083,6 +4447,15 @@ function cvRecord(run, p) {
   CVS.plain.push(CI.histRecord(run.plain.mean, run.plain, run.truth, p.n, p.conf, k));
   CVS.cv.push(CI.histRecord(run.cv.mean, run.cv, run.truth, p.n, p.conf, k));
 }
+// A live parameter change (Task 7g) replaces the most recent entry of each
+// arm in place; see crnReplaceLast's own comment for why the divider needs no
+// extra code here.
+function cvReplaceLast(run, p) {
+  const k = cvKey(p);
+  if (CVS.plain.length) CVS.plain[CVS.plain.length - 1] = CI.histRecord(run.plain.mean, run.plain, run.truth, p.n, p.conf, k);
+  if (CVS.cv.length) CVS.cv[CVS.cv.length - 1] = CI.histRecord(run.cv.mean, run.cv, run.truth, p.n, p.conf, k);
+  CVS.last = { seed: CVS.lastSeed, key: k };
+}
 // Every run (single or batch) and Clear all snap the slider to the run's own
 // estimated ĉ (or disable it) because the slider is for exploring away from an
 // estimate that already exists, not a setting a student would carry between runs.
@@ -4141,111 +4514,1066 @@ function renderCvHist(p) {
   histCaption($('cv-cap2'), histPlot($('cv-hist2'), $('cv-hw2'), CVS.cv, opts), 'E[h]', null);
 }
 TABS.cv = {
-  init() { fnOptions($('cv-fn')); cvParamsChanged(); const p = cvParams(); if (p) drawCvFig(null, p); },
+  init() { fnOptions($('cv-fn'), 'exp'); cvParamsChanged(); const p = cvParams(); if (p) drawCvFig(null, p); },
   render() { const p = cvParams(); if (p) { drawCvFig(CVS.lastRunObj, CVS.lastRunP || p); drawCvFlow(p); } renderCvHist(p); }
 };
 SPIN['cv-seed'] = seedSpin('cv');
 SPIN['cv-sige'] = decimalSpin('cv-sige', 0, cvParamsChanged, 0.01);
 // ── Tab ⑤: importance sampling ───────────────────────
-const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null };
-function isThetaShow() { $('is-theta-val').textContent = (+$('is-theta').value).toFixed(2); }
-function isMatchT() { $('is-theta').value = $('is-T').value; isThetaShow(); isParamsChanged(); }
-function isParams() { return { T: +$('is-T').value, theta: +$('is-theta').value, n: +$('is-n').value, conf: +$('is-conf').value }; }
-function isKey(p) { return [p.T, p.theta, p.n, p.conf].join('|'); }
-function isParamsChanged() {
-  const p = isParams();
-  isThetaShow();
-  $('is-s-true').textContent = (1 - CI.normCdf(p.T)).toExponential(4);
-  $('is-s-wt').textContent = CI.isWeight(p.T, p.theta).toExponential(3);
-  drawIsFig(ISS.lastRunObj, ISS.lastRunP || p);
-  renderIsHist();
+const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null, drag: null, frame: null, pairFrame: null, mode: 'prop' };
+// The one toggle for tab ⑤'s whole transfer-plot figure (Task 7l): which arm's
+// sample it draws, direct or proposal. Mirrors avMode's own pattern -- it
+// redraws from the last run if there is one, or the empty state otherwise, and
+// never re-evaluates or touches the history, because both arms already ride
+// on every run.
+function isMode(m) {
+  ISS.mode = m;
+  $('is-mode-direct').setAttribute('aria-pressed', String(m === 'direct'));
+  $('is-mode-prop').setAttribute('aria-pressed', String(m === 'prop'));
+  const p = ISS.lastRunP || isParams();
+  if (p) drawIsFig(ISS.lastRunObj, p);
 }
-function drawIsFig(run, p) {
-  const W = figWidth($('is-fig')), H = 250, pL = 14, pR = 14, pT = 14, pB = 48, cW = W - pL - pR, cH = H - pT - pB, MAXR = 300;
-  const x0 = -4, x1 = Math.max(p.T, p.theta) + 4;
-  const xP = x => pL + (x - x0) / (x1 - x0) * cW, yP = f => pT + cH - f / 0.45 * cH;
-  const curve = (mu, from, to) => { let d = ''; for (let i = 0; i <= 160; i++) { const x = from + (to - from) * i / 160; d += (i ? 'L' : 'M') + xP(x).toFixed(1) + ',' + yP(CI.normPdf(x - mu)).toFixed(1); } return d; };
-  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
-  // shaded tails under each density
-  h += `<path d="${curve(0, p.T, x1)} L${xP(x1)},${yP(0)} L${xP(p.T)},${yP(0)} Z" fill="${C.band}"/>`;
-  h += `<path d="${curve(p.theta, p.T, x1)} L${xP(x1)},${yP(0)} L${xP(p.T)},${yP(0)} Z" fill="${C.estPale}"/>`;
-  h += `<path d="${curve(0, x0, x1)}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
-  h += `<path d="${curve(p.theta, x0, x1)}" fill="none" stroke="${C.est}" stroke-width="2" stroke-dasharray="6,3"/>`;
-  h += `<line x1="${xP(p.T)}" y1="${pT}" x2="${xP(p.T)}" y2="${pT + cH + 22}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
-  h += `<text x="${xP(p.T) + 4}" y="${pT + 12}" fill="${C.muted}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">T = ${p.T}</text>`;
-  h += `<text x="${xP(p.theta)}" y="${yP(0.4) - 4}" text-anchor="middle" fill="${C.est}" font-size="10" font-family="${FF_MONO}">θ = ${p.theta}</text>`;
-  h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc"/>`;
-  for (let x = Math.ceil(x0); x <= Math.floor(x1); x++) {
-    h += `<text x="${xP(x)}" y="${pT + cH + 13}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${x}</text>`;
-  }
-  if (run) {
-    const rugY = pT + cH + 18, m = Math.min(MAXR, p.n);
-    for (let i = 0; i < m; i++) {
-      const inTail = run.w[i] > 0, x = xP(Math.min(x1, Math.max(x0, run.ys[i])));
-      h += `<line x1="${x}" y1="${rugY}" x2="${x}" y2="${rugY + (inTail ? 12 : 6)}" stroke="${C.est}" stroke-width="1" opacity="${inTail ? .9 : .45}"/>`;
+// Tab ⑤'s legend (Task 7m): the model curve and both density curves are the
+// same in either view (the transfer plot now shows inputs and outputs only,
+// with both curves always drawn), and only the sample-specific entries --
+// the draws on the curve, their rug, and the histogram -- change color and
+// wording with the "Sample shown" toggle above.
+function isLegendHtml(mode) {
+  const sc = mode === 'direct' ? 'var(--truth)' : 'var(--est)';
+  const word = mode === 'direct' ? 'direct' : 'proposal';
+  let h = '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--truth)" stroke-width="2.6"/></svg>model curve y = h(x)</span>'
+    + '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--truth)" stroke-width="1.3"/></svg>target density, input and output</span>'
+    + '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--est)" stroke-width="1.3" stroke-dasharray="6,3"/></svg>proposal density, input and output</span>'
+    + '<span style="color:' + sc + '"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><circle cx="12" cy="6" r="2.6" fill="' + sc + '"/></svg>' + word + ' draws on the curve: filled past the threshold</span>'
+    + '<span style="color:' + sc + '"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><circle cx="12" cy="6" r="2.6" fill="#fff" stroke="' + sc + '" stroke-width="1.4"/></svg>hollow below it</span>'
+    + '<span style="color:' + sc + '"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="8" y1="11" x2="8" y2="0" stroke="' + sc + '" stroke-width="1" opacity=".9"/><line x1="16" y1="11" x2="16" y2="6" stroke="' + sc + '" stroke-width="1" opacity=".45"/></svg>rug of the ' + word + ' draws</span>'
+    + '<span style="color:' + sc + '"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="10" height="9" fill="' + sc + '" opacity=".55"/><rect x="13" y="2" width="10" height="9" fill="' + (mode === 'direct' ? 'var(--truth-dark)' : 'var(--est-dark)') + '" opacity=".55"/></svg>histogram of the ' + word + ' draws, darker past the threshold and in its pre-image</span>'
+    + '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3,3"/></svg>threshold T and the input threshold h⁻¹(T)</span>';
+  return h;
+}
+function isFnOptions(sel) {
+  sel.innerHTML = CI.IS_KEYS.map(k => `<option value="${k}">${CI.IS_FUNCS[k].label}</option>`).join('');
+  sel.value = 'ident';
+}
+// The closed form shown in the True p card's tooltip, one per model (Task 7c).
+function isTrueTipText(fnKey) {
+  return fnKey === 'ident' ? '1 − Φ(T)' : fnKey === 'exp' ? '1 − Φ(ln T)' : '2(1 − Φ(√T))';
+}
+function isFnChanged() {
+  const fn = CI.IS_FUNCS[$('is-fn').value];
+  // The one place in the widget where a menu change writes another field: T's
+  // scale is the model's, and so the old T rarely still makes sense under a
+  // new model. θ is left alone (spec).
+  $('is-T').value = String(fn.defaultT);
+  isParamsChanged();
+}
+function isMatchT() {
+  const p = isParams(); if (!p) return;
+  const fn = CI.IS_FUNCS[p.fn], theta = Math.min(6, Math.max(0, fn.wayIn(p.T)));
+  $('is-theta-val').value = String(theta); $('is-theta').value = String(theta);
+  isParamsChanged();
+}
+// The slider's own drag path (Task 6s's sigeDrag, adapted: θ's range is fixed
+// per the spec rather than model-dependent, and so there is no per-model range to
+// resync here, only the field to keep in step with the thumb).
+function isThetaDrag() { $('is-theta-val').value = $('is-theta').value; isParamsChanged(); }
+function isParams() {
+  const fnKey = $('is-fn').value, fn = CI.IS_FUNCS[fnKey];
+  const T = readNum('is-T', 'is-par-msg', fn.tRange[0], fn.tRange[1], 'T');
+  if (T === null) return null;
+  // T and θ share one status span; an unclamped θ read right after a clamped T
+  // would otherwise blank the T message the moment both fields are re-read
+  // together (see ciParams's own comment for the same pattern).
+  const tMsg = $('is-par-msg').textContent;
+  const theta = readNum('is-theta-val', 'is-par-msg', 0, 6, 'θ');
+  if (theta === null) return null;
+  if (!$('is-par-msg').textContent && tMsg) $('is-par-msg').textContent = tMsg;
+  return { fn: fnKey, T: T, theta: theta, n: +$('is-n').value, conf: +$('is-conf').value };
+}
+function isKey(p) { return [p.fn, p.T, p.theta, p.n, p.conf].join('|'); }
+// T's step and floor depend on the current model (0.5 for the identity, 1 for
+// the other two, per the spec); read fresh on every spin, unlike decimalSpin's
+// fixed min baked in at registration, and so a model change takes effect at once.
+// Clamped to both ends of fn.tRange (Task 7h fix round 1), matching the field's
+// own onchange validation and the drag's isRoundT -- the spinner used to clamp
+// only the lower bound, letting repeated spins push T past the model's own
+// upper range where the other two live paths for the same field would not.
+function isTSpin(dir, shift) {
+  const fn = CI.IS_FUNCS[$('is-fn').value];
+  const st0 = fn === CI.IS_FUNCS.ident ? 0.5 : 1, dec = Math.max(0, -Math.floor(Math.log10(st0)));
+  const inp = $('is-T'), v = Number(inp.value);
+  if (!Number.isFinite(v)) return;
+  const st = shift ? st0 * 10 : st0;
+  const next = Math.min(fn.tRange[1], Math.max(fn.tRange[0], Number((v + dir * st).toFixed(dec))));
+  inp.value = String(next); isParamsChanged();
+}
+function isParamsChanged() {
+  const p = isParams(); if (!p) return;
+  $('is-theta').value = String(p.theta); $('is-theta-val').value = String(p.theta);
+  setTip($('is-true-tip'), isTrueTipText(p.fn));
+  $('is-s-true').textContent = CI.isTruth(p.fn, p.T).toExponential(4);
+  // Live re-evaluation (Task 6s, extended in Task 7g): see crnParamsChanged's
+  // own comment. The model, T, θ, and confidence are all live; n is not. A
+  // model change (isFnChanged has already reset T to the new model's default
+  // by the time this reads the fields, and so the inputs stay and the
+  // outputs change) relocks ISS.scale from the re-evaluated run -- a
+  // genuinely new picture; a T, θ, or confidence change keeps the existing
+  // lock, and so a drag clips inside it rather than rescaling it (drawIsFig
+  // computes the way in fresh from the live T on every call regardless, and
+  // so it still tracks T exactly even though the ranges themselves stay
+  // locked). The re-evaluated run replaces the most recent history entry of
+  // each arm (isReplaceLast) under the new key.
+  if (ISS.lastRunObj && ISS.lastRunP) {
+    const relock = p.fn !== ISS.lastRunP.fn;
+    const changed = relock || p.T !== ISS.lastRunP.T || p.theta !== ISS.lastRunP.theta || p.conf !== ISS.lastRunP.conf;
+    if (changed) {
+      const np = Object.assign({}, ISS.lastRunP, { fn: p.fn, T: p.T, theta: p.theta, conf: p.conf });
+      ISS.lastRunObj = CI.runIS(ISS.lastSeed, np);
+      ISS.lastRunP = np;
+      isShowStats(ISS.lastRunObj);
+      if (relock) ISS.scale = isComputeScale(np);
+      isReplaceLast(ISS.lastRunObj, np);
     }
   }
-  h += `<text x="${pL + cW / 2}" y="${H - 3}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">x</text>`;
+  drawIsFig(ISS.lastRunObj, ISS.lastRunP || p);
+  drawIsPairFig(ISS.lastRunObj, ISS.lastRunP || p);
+  // The last history entry has to move with a live change (Task 7g), and so
+  // every call re-renders the history, drag frames included.
+  renderIsHist(p);
+}
+const IS_MAXR = 300; // dots and rug cap (histograms below still use every draw)
+// The output strip's density curve is singular at y = yLo for x² (it blows up
+// as y -> 0+); both the scale search and the drawn curve start a small
+// fraction of the range above yLo instead of at yLo itself, so that
+// singularity never sets the scale or shows up as a spike at the very edge.
+function isOutYEps(yLo, yHi) { return Math.max((yHi - yLo) * 0.02, 1e-6); }
+// The figure's axes and the output strip's density scale are fixed at run
+// time into ISS.scale (the same lock CVS.scale/AVS.scale use), and so a live
+// T or θ drag redraws inside the same window instead of rescaling it. Every
+// value here is a pure function of p -- x_hi and the y-range never touch the
+// run's own sampled draws -- and so the empty state (no ISS.scale yet) just
+// calls this fresh from the current parameters instead of caching anything.
+// wayIn/leftWayIn are used below only to size these locked ranges at the time
+// the lock is taken; they are deliberately not part of the returned object
+// (Task 7g): the way in has to follow the live T at all times, even though
+// the ranges above stay locked to the run that set them -- drawIsFig
+// recomputes it fresh from the current p on every call instead of reading it
+// back from the lock.
+function isComputeScale(p) {
+  const fn = CI.IS_FUNCS[p.fn];
+  const wayIn = fn.wayIn(p.T), leftWayIn = fn.twoSided ? fn.leftWayIn(p.T) : null;
+  const x0 = -4, x1 = Math.max(p.theta, wayIn) + 2.5, N = 400;
+  let yLo = Infinity;
+  for (let i = 0; i <= N; i++) { const v = fn.h(x0 + (x1 - x0) * i / N); if (v < yLo) yLo = v; }
+  if (x0 <= 0 && 0 <= x1) yLo = Math.min(yLo, fn.h(0)); // x²'s true minimum sits exactly at x = 0
+  // The x-domain still runs out to x1 (+2.5 past the way in) so the curve's
+  // own shape past the event keeps drawing, but the y-range tops out closer
+  // in, at +1.5 past the way in/θ rather than the full +2.5 -- x1 would put T
+  // within 20-30% of the panel's own top for exp and x² (fix round 1); a
+  // dot or a curve segment above this top now clips via the main clip-path
+  // instead of stretching the axis to fit it.
+  let yHi = fn.h(Math.max(p.theta, wayIn) + 1.5);
+  if (!(yHi > yLo)) yHi = yLo + 1e-6;
+  const yEps = isOutYEps(yLo, yHi);
+  let densScale = 0;
+  for (let i = 0; i <= N; i++) {
+    const y = yLo + yEps + (yHi - yLo - yEps) * i / N;
+    const dT = fn.outDensity(y, 0), dS = fn.outDensity(y, p.theta);
+    if (dT > densScale) densScale = dT;
+    if (dS > densScale) densScale = dS;
+  }
+  if (!(densScale > 0)) densScale = 1;
+  return { x0: x0, x1: x1, yLo: yLo, yHi: yHi, densScale: densScale };
+}
+// About 2√n bins (clamped to [10, 80], not the √n drawCiFig itself uses --
+// this histogram sits in a strip only a third as tall) over the figure's own
+// locked [yLo, yHi], not the sample's range, and so the bars stay inside the same
+// window the curves and the rug already draw against, with one bin edge
+// forced to sit exactly at T (clipped into [yLo, yHi]): every bin then falls
+// entirely on one side of the event, and so summing the weighted bars at or
+// past that edge reproduces the weighted estimate exactly, not just
+// approximately. A draw outside [yLo, yHi] is not dropped -- it clamps into
+// the bin at that edge (the bottom bin for anything below yLo, the top bin
+// for anything at or above its own lower edge, yHi included) -- and so the
+// unweighted counts still sum to n and the unweighted density still
+// integrates to 1 over the visible bins alone. Alongside the count-based
+// unweighted rule, this histogram also carries each bin's Σ of the biased
+// draws' full likelihood ratios, gated by nothing but which bin a draw landed
+// in, and so the weighted bars trace the target's own output density
+// everywhere, not only past the threshold.
+// hs is whichever arm's outputs are being binned (the proposal's run.hs or the
+// direct arm's run.hxs, Task 7l); lr is the matching likelihood ratios, or
+// null for the direct arm, which carries no weight at all -- sumW then just
+// stays zero and the caller skips the weighted outline entirely.
+function isHistBins(hs, lr, T, yLo, yHi) {
+  const n = hs.length;
+  const k = Math.min(80, Math.max(10, Math.ceil(2 * Math.sqrt(n))));
+  const bw0 = (yHi - yLo) / k;
+  const Tc = Math.min(Math.max(T, yLo), yHi);
+  const kb = Tc > yLo ? Math.max(1, Math.round((Tc - yLo) / bw0)) : 0;
+  const ka = yHi > Tc ? Math.max(1, Math.round((yHi - Tc) / bw0)) : 0;
+  const bwB = kb > 0 ? (Tc - yLo) / kb : 0, bwA = ka > 0 ? (yHi - Tc) / ka : 0;
+  const kk = kb + ka, lo = new Array(kk), hi = new Array(kk), cntU = new Array(kk).fill(0), sumW = new Array(kk).fill(0);
+  for (let b = 0; b < kb; b++) { lo[b] = yLo + b * bwB; hi[b] = yLo + (b + 1) * bwB; }
+  for (let b = 0; b < ka; b++) { lo[kb + b] = Tc + b * bwA; hi[kb + b] = Tc + (b + 1) * bwA; }
+  for (let i = 0; i < n; i++) {
+    const v = hs[i];
+    let b;
+    if (v < Tc && kb > 0) b = Math.min(kb - 1, Math.max(0, Math.floor((v - yLo) / bwB)));
+    else if (ka > 0) b = kb + Math.min(ka - 1, Math.max(0, Math.floor((v - Tc) / bwA)));
+    else b = kb - 1;
+    cntU[b]++; if (lr) sumW[b] += lr[i];
+  }
+  return { lo: lo, hi: hi, cntU: cntU, sumW: sumW, kb: kb, n: n };
+}
+// Companion to isHistBins for the input strip's own histogram (Task 7m): the
+// same k = clamp(ceil(2√n), 10, 80) bin count, but over the model's input
+// domain [x0, x1] with an edge at the input threshold wayIn, and a second
+// edge at leftWayIn for a two-sided model (x²) -- pass null for leftWayIn
+// otherwise. Bins are allocated to each of the (two or three) resulting
+// segments in proportion to that segment's own width, with a floor of one
+// bin per non-empty segment (isHistBins's own kb/ka rounding, generalized to
+// any number of segments), and so summing the whole bins flagged `pre` (at
+// or beyond an edge) reproduces the pre-image's own mass exactly, the same
+// reasoning isHistBins's own edge at T carries for the output side.
+function isHistBinsX(xs, wayIn, leftWayIn, x0, x1) {
+  const n = xs.length;
+  const k = Math.min(80, Math.max(10, Math.ceil(2 * Math.sqrt(n))));
+  const bw0 = (x1 - x0) / k;
+  const hasLeft = leftWayIn !== null && leftWayIn > x0 && leftWayIn < x1;
+  const wc = Math.min(Math.max(wayIn, x0), x1);
+  const lc = hasLeft ? Math.min(Math.max(leftWayIn, x0), x1) : x0;
+  // Two segments without a left edge ([x0, wc), [wc, x1]), three with one
+  // ([x0, lc), [lc, wc), [wc, x1]) -- the first and last are the pre-image
+  // when there is a left edge, only the last one otherwise.
+  const bounds = hasLeft ? [x0, lc, wc, x1] : [x0, wc, x1];
+  const lo = [], hi = [], pre = [];
+  for (let s = 0; s < bounds.length - 1; s++) {
+    const w = bounds[s + 1] - bounds[s];
+    const kk = w > 0 ? Math.max(1, Math.round(w / bw0)) : 0;
+    const bw = kk > 0 ? w / kk : 0;
+    const isPre = hasLeft ? (s === 0 || s === bounds.length - 2) : (s === bounds.length - 2);
+    for (let b = 0; b < kk; b++) { lo.push(bounds[s] + b * bw); hi.push(bounds[s] + (b + 1) * bw); pre.push(isPre); }
+  }
+  const kk2 = lo.length, cnt = new Array(kk2).fill(0);
+  for (let i = 0; i < n; i++) {
+    let v = xs[i]; if (v < x0) v = x0; else if (v > x1) v = x1;
+    let b = kk2 - 1;
+    for (let j = 0; j < kk2; j++) { if (v < hi[j] || j === kk2 - 1) { b = j; break; } }
+    cnt[b]++;
+  }
+  return { lo: lo, hi: hi, cnt: cnt, pre: pre, n: n };
+}
+// Three linked regions sharing two axes: a main panel (input horizontal,
+// output vertical) with the model's curve and the biased draws on it, an
+// input strip below sharing the horizontal axis, and an output strip sharing
+// the vertical axis -- to its left when there is room, or turned into a band
+// above the main panel (mirroring the input strip's own shape) when there
+// is not.
+function drawIsFig(run, p) {
+  const fn = CI.IS_FUNCS[p.fn];
+  // Which sample the figure draws (Task 7l): the direct arm's own inputs and
+  // outputs, or the proposal arm's -- both ride on every run regardless, and
+  // so a toggle just picks which one the main panel, the two rugs, and the
+  // output histogram read from, with no re-evaluation.
+  const mode = ISS.mode;
+  const sample = run ? (mode === 'direct' ? { xs: run.xs, hs: run.hxs } : { xs: run.ys, hs: run.hs }) : null;
+  const sampleInTail = i => sample.hs[i] >= p.T;
+  const scale = ISS.scale || isComputeScale(p);
+  const x0 = scale.x0, x1 = scale.x1, yLo = scale.yLo, yHi = scale.yHi, densScale = scale.densScale;
+  // The way in follows the live T at all times (Task 7g), even though the
+  // ranges above stay locked to the run that set them: computed fresh from
+  // p.T/p.fn on every call rather than read back from the lock, and so a T
+  // change that only re-evaluates in place (no relock) still moves this line.
+  const wayIn = fn.wayIn(p.T), leftWayIn = fn.twoSided ? fn.leftWayIn(p.T) : null;
+  const yEps = isOutYEps(yLo, yHi);
+
+  const W = figWidth($('is-fig'));
+  const pL = 16, yTickGutter = 30, outStripW = 90, xTickGutter = 10, outBandH = 70, bandGutter = 10;
+  // pB carries three stacked foot rows below the input strip now (Task 7m):
+  // the input-threshold label, the θ label (moved out of the strip so it can
+  // clear the input histogram's bars), and the "input x" axis title -- 12
+  // units taller than the two-row budget it replaces.
+  const inputH = 70, pB = 46, pR = 14, pT = 14;
+  const mainHWide = 250, mainHNarrow = 180;
+  const wideMainLeft = pL + outStripW + yTickGutter, wideMainW = W - wideMainLeft - pR;
+  const narrow = wideMainW < 200;
+  const mainLeft = narrow ? pL + yTickGutter : wideMainLeft;
+  const mainW = narrow ? W - mainLeft - pR : wideMainW;
+  const mainH = narrow ? mainHNarrow : mainHWide;
+  const mainTop = narrow ? pT + outBandH + bandGutter : pT;
+  const inputTop = mainTop + mainH + xTickGutter;
+  const H = inputTop + inputH + pB;
+
+  const xMain = x => mainLeft + (x - x0) / (x1 - x0) * mainW;
+  // A margin of 10 units plus the dot radius (2.6) is reserved at both ends of
+  // the mapped range, inside the main panel's own height, and so a curve's minimum
+  // (x²'s parabola, or a dot sitting on it) never touches the panel's own
+  // top/bottom edges the way a bare min-to-max mapping would.
+  const dotR = 2.6, yMargin = 10 + dotR;
+  const yMain = y => mainTop + (mainH - yMargin) - (y - yLo) / (yHi - yLo) * (mainH - 2 * yMargin);
+  // Geometry snapshot for the drag handles (Task 7h): the same linear maps
+  // xMain/yMain use, captured here so a pointer position can be inverted back
+  // to a model value without duplicating this function's own local scope.
+  ISS.frame = { x0: x0, x1: x1, yLo: yLo, yHi: yHi, mainLeft: mainLeft, mainW: mainW, mainTop: mainTop, mainH: mainH, yMargin: yMargin };
+  const inputMargin = 6;
+  const yInDens = d => inputTop + d / 0.4 * (inputH - inputMargin);
+
+  // The output strip's density direction is linear, scaled by densScale (the
+  // larger of the target's and the proposal's own output-density maxima over
+  // the visible range, Task 7m -- densScale itself is still computed in
+  // isComputeScale exactly as it was before the log axis). Both output
+  // densities and the output histogram below route through this one mapping,
+  // and so nothing can drift onto a different scale.
+  //
+  // outMap(v, d): a point at output value v, output density d, in whichever
+  // orientation the output region is currently drawn -- density horizontal
+  // beside the main panel, or density vertical in a band above it.
+  let outX0, outY0, outW, outH, outMap, xOutVal;
+  if (!narrow) {
+    outX0 = pL; outY0 = pT; outW = outStripW; outH = mainH;
+    outMap = (v, d) => [(pL + outStripW) - d / densScale * outStripW, yMain(v)];
+  } else {
+    outX0 = mainLeft; outY0 = pT; outW = mainW; outH = outBandH;
+    xOutVal = v => mainLeft + (v - yLo) / (yHi - yLo) * mainW;
+    outMap = (v, d) => [xOutVal(v), (pT + outBandH) - d / densScale * (outBandH - 6)];
+  }
+  const outBase = v => outMap(v, 0);
+  // Filled bars with no stroke, in whichever orientation outMap draws (Task
+  // 7m): the same three-corner min/max trick as the input-strip bars below,
+  // generalized past yInDens's simple vertical bars because outMap can also
+  // run horizontally (the wide, side-strip layout).
+  const outBar = (v0, v1, dens, fill) => {
+    const p0 = outMap(v0, dens), p1 = outMap(v1, dens), b0 = outBase(v0);
+    const x = Math.min(p0[0], p1[0], b0[0]), x2 = Math.max(p0[0], p1[0], b0[0]);
+    const y = Math.min(p0[1], p1[1], b0[1]), y2 = Math.max(p0[1], p1[1], b0[1]);
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(0, x2 - x).toFixed(1)}" height="${Math.max(0, y2 - y).toFixed(1)}" fill="${fill}" opacity=".55"/>`;
+  };
+
+  let bg = '', mainG = '', inputG = '', outputG = '', lbl = '', handles = '';
+
+  bg += `<rect x="${mainLeft}" y="${mainTop}" width="${mainW}" height="${mainH}" fill="${C.bg}" rx="3"/>`;
+  bg += `<rect x="${outX0}" y="${outY0}" width="${outW}" height="${outH}" fill="${C.bg}" rx="3"/>`;
+  bg += `<rect x="${mainLeft}" y="${inputTop}" width="${mainW}" height="${inputH}" fill="${C.bg}" rx="3"/>`;
+
+  // ---- main panel: the model's own curve, sampled at 200 points --------
+  let curveD = '';
+  for (let i = 0; i <= 200; i++) {
+    const x = x0 + (x1 - x0) * i / 200, cx = xMain(x), cy = yMain(fn.h(x));
+    curveD += (i ? 'L' : 'M') + cx.toFixed(1) + ',' + cy.toFixed(1);
+  }
+  mainG += `<path d="${curveD}" fill="none" stroke="${C.truth}" stroke-width="2.6"/>`;
+
+  // ---- input strip: target and proposal densities (both, always -- Task
+  // 7m: the transfer plot now shows inputs and outputs only, with no area
+  // shading under either curve, and a histogram of the shown sample stands
+  // in for where its mass sits), and the current sample's rug ------------
+  const inCurve = (mu, from, to) => {
+    let d = '';
+    for (let i = 0; i <= 160; i++) {
+      const x = from + (to - from) * i / 160;
+      d += (i ? 'L' : 'M') + xMain(x).toFixed(1) + ',' + yInDens(CI.normPdf(x - mu)).toFixed(1);
+    }
+    return d;
+  };
+  // Filled bars with no stroke (Task 7m), in the sample's own color -- C.est
+  // for proposal draws, C.truth for direct draws -- and a darker shade of
+  // that same hue in the pre-image (both sides for x²), which replaces the
+  // area shading this strip used to carry under whichever curve was biased.
+  const sampleColor = mode === 'direct' ? C.truth : C.est, sampleColorDark = mode === 'direct' ? C.truthDark : C.estDark;
+  const inBar = (v0, v1, dens, fill) => {
+    const bx0 = xMain(v0), bx1 = xMain(v1), by = yInDens(dens), base = yInDens(0);
+    const x = Math.min(bx0, bx1), y = Math.min(by, base);
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.abs(bx1 - bx0).toFixed(1)}" height="${Math.abs(base - by).toFixed(1)}" fill="${fill}" opacity=".55"/>`;
+  };
+  if (run) {
+    const bins = isHistBinsX(sample.xs, wayIn, fn.twoSided ? leftWayIn : null, x0, x1);
+    for (let b = 0; b < bins.lo.length; b++) {
+      const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
+      const dens = bins.cnt[b] / (bins.n * bw); if (!(dens > 0)) continue;
+      inputG += inBar(bins.lo[b], bins.hi[b], dens, bins.pre[b] ? sampleColorDark : sampleColor);
+    }
+  }
+  inputG += `<path d="${inCurve(0, x0, x1)}" fill="none" stroke="${C.truth}" stroke-width="1.3"/>`;
+  // Captured once so the visible curve and its drag handle (Task 7k) trace
+  // exactly the same path -- the handle is the curve, just given a wide
+  // invisible stroke, not a separate approximation of its shape. The curve
+  // itself is always drawn now (Task 7m: both density curves stay in both
+  // strips in both modes); only its drag handle and θ label stay proposal-
+  // mode only because dragging or reading θ makes sense only for the
+  // distribution actually being sampled from.
+  const thetaCurveD = inCurve(p.theta, x0, x1);
+  inputG += `<path class="is-theta-vis" d="${thetaCurveD}" fill="none" stroke="${C.est}" stroke-width="1.3" stroke-dasharray="6,3"/>`;
+  if (mode === 'prop') {
+    // Drag handle (Task 7k): an invisible 24px stroke over the proposal-density
+    // curve, unclipped like the T and input-threshold handles above so the hit
+    // area never loses width at the input strip's own edge. A horizontal drag
+    // sets θ to the pointer's x (the peak follows the finger); the curve can
+    // slide under the strip's own clipped edge without the locked ranges moving.
+    handles += `<path class="is-handle" data-handle="theta" d="${thetaCurveD}" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+    // The θ label itself is a foot label below the strip now (Task 7m), and
+    // so it can clear the input histogram's bars -- see the foot-label block
+    // below, alongside the input threshold's own label.
+  }
+  if (run) {
+    const rugBase = inputTop + inputH - 1, m = Math.min(IS_MAXR, sample.xs.length);
+    for (let i = 0; i < m; i++) {
+      const inTail = sampleInTail(i), rx = xMain(Math.min(x1, Math.max(x0, sample.xs[i])));
+      inputG += `<line x1="${rx}" y1="${rugBase}" x2="${rx}" y2="${rugBase - (inTail ? 12 : 6)}" stroke="${sampleColor}" stroke-width="1" opacity="${inTail ? .9 : .45}"/>`;
+    }
+  }
+
+  // ---- main panel: the current sample's draws on the curve, hollow painted
+  // first; a later filled dot can never sit under an earlier hollow one --
+  // colored by mode (Task 7m: C.est for proposal draws, C.truth for direct).
+  if (run) {
+    const m = Math.min(IS_MAXR, sample.xs.length);
+    for (let i = 0; i < m; i++) {
+      if (sampleInTail(i)) continue;
+      mainG += `<circle cx="${xMain(sample.xs[i]).toFixed(1)}" cy="${yMain(sample.hs[i]).toFixed(1)}" r="2.6" fill="#fff" stroke="${sampleColor}" stroke-width="1.4"/>`;
+    }
+    for (let i = 0; i < m; i++) {
+      if (!sampleInTail(i)) continue;
+      mainG += `<circle cx="${xMain(sample.xs[i]).toFixed(1)}" cy="${yMain(sample.hs[i]).toFixed(1)}" r="2.6" fill="${sampleColor}"/>`;
+    }
+  }
+
+  // ---- output strip/band: target and proposal output densities (both,
+  // always -- Task 7m: no area shading under either curve; the histogram
+  // below stands in for where the shown sample's own mass sits) ----------
+  const outCurve = theta => {
+    let d = '';
+    for (let i = 0; i <= 160; i++) {
+      const v = yLo + yEps + (yHi - yLo - yEps) * i / 160, pt = outMap(v, fn.outDensity(v, theta));
+      d += (i ? 'L' : 'M') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1);
+    }
+    return d;
+  };
+  outputG += `<path d="${outCurve(0)}" fill="none" stroke="${C.truth}" stroke-width="1.3"/>`;
+  outputG += `<path d="${outCurve(p.theta)}" fill="none" stroke="${C.est}" stroke-width="1.3" stroke-dasharray="6,3"/>`;
+
+  // ---- output strip/band: a filled-bar histogram of the current sample's
+  // outputs (Task 7m: replaces the step-outline pair and the weighted
+  // histogram, both gone -- weighting now lives in its own pair of plots
+  // below), one bin edge forced to sit at T so the bars at or past it (the
+  // event) sum to exactly the shown sample's own hit count, colored darker
+  // there in the sample's own color. -------------------------------------
+  if (run) {
+    const bins = isHistBins(sample.hs, null, p.T, yLo, yHi);
+    for (let b = 0; b < bins.lo.length; b++) {
+      const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
+      const dens = bins.cntU[b] / (bins.n * bw); if (!(dens > 0)) continue;
+      outputG += outBar(bins.lo[b], bins.hi[b], dens, b >= bins.kb ? sampleColorDark : sampleColor);
+    }
+  }
+
+  // ---- output strip/band: rug of the current sample's outputs, mirroring
+  // the input rug's sizes/opacities, anchored at the strip's edge adjacent to
+  // the main panel and projecting into the strip's own body (tall ticks over
+  // T) -----
+  if (run) {
+    const mo = Math.min(IS_MAXR, sample.xs.length);
+    for (let i = 0; i < mo; i++) {
+      const inTail = sampleInTail(i), len = inTail ? 12 : 6, op = inTail ? .9 : .45;
+      const yc = Math.min(yHi, Math.max(yLo, sample.hs[i]));
+      if (!narrow) {
+        const edgeX = outX0 + outStripW, yy = yMain(yc);
+        outputG += `<line x1="${edgeX}" y1="${yy}" x2="${edgeX - len}" y2="${yy}" stroke="${sampleColor}" stroke-width="1" opacity="${op}"/>`;
+      } else {
+        const edgeY = outY0 + outBandH, xx = xOutVal(yc);
+        outputG += `<line x1="${xx}" y1="${edgeY}" x2="${xx}" y2="${edgeY - len}" stroke="${sampleColor}" stroke-width="1" opacity="${op}"/>`;
+      }
+    }
+  }
+
+  // ---- threshold T, split across the main panel and the output region --
+  // Live T stays clamped into the locked window for every label: the drawn
+  // lines already clip via their own region's clip-path, but text is never
+  // clipped, and an unclamped label could drift clean off the figure.
+  const Tclamp = Math.min(Math.max(p.T, yLo), yHi);
+  mainG += `<line class="is-t-vis" x1="${mainLeft}" y1="${yMain(p.T)}" x2="${mainLeft + mainW}" y2="${yMain(p.T)}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+  lbl += `<text class="is-t-lbl" x="${mainLeft + mainW - 4}" y="${yMain(Tclamp) - 4}" text-anchor="end" fill="${C.muted}" font-size="10.5" font-weight="700" font-family="${FF_MONO}">T</text>`;
+  // Drag handle (Task 7h): an invisible 24px stroke over the T line, one for
+  // the main panel and, when there is room for it, a second over the wide
+  // output strip's own copy of the same line -- both sit at the same
+  // yMain(p.T), and so one handler covers either segment. Dragging vertically
+  // anywhere along either sets T to the value under the pointer.
+  handles += `<line class="is-handle" data-handle="T" x1="${mainLeft}" y1="${yMain(p.T)}" x2="${mainLeft + mainW}" y2="${yMain(p.T)}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  if (!narrow) {
+    outputG += `<line class="is-t-vis" x1="${outX0}" y1="${yMain(p.T)}" x2="${outX0 + outStripW}" y2="${yMain(p.T)}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+    handles += `<line class="is-handle" data-handle="T" x1="${outX0}" y1="${yMain(p.T)}" x2="${outX0 + outStripW}" y2="${yMain(p.T)}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  } else {
+    const tx = xOutVal(p.T), txClamp = xOutVal(Tclamp);
+    outputG += `<line class="is-t-vis" x1="${tx}" y1="${pT}" x2="${tx}" y2="${pT + outBandH}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+    lbl += `<text class="is-t-lbl" x="${txClamp + 3}" y="${pT + 10}" fill="${C.muted}" font-size="9.5" font-weight="700" font-family="${FF_MONO}">T</text>`;
+  }
+
+  // ---- the way in, one vertical dashed line per side, split at the gutter
+  const xWay = xMain(wayIn), xLeftWay = fn.twoSided ? xMain(leftWayIn) : null;
+  mainG += `<line class="is-way-vis" x1="${xWay}" y1="${mainTop}" x2="${xWay}" y2="${mainTop + mainH}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+  inputG += `<line class="is-way-vis" x1="${xWay}" y1="${inputTop}" x2="${xWay}" y2="${inputTop + inputH}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+  // Drag handle (Task 7h): an invisible 24px stroke over each way-in line's
+  // own two segments (main panel and input strip), covering both sides for
+  // x². Dragging any of them horizontally sets T = h(x) at the pointer's x,
+  // which moves both way-in lines together for x² because h is the same
+  // function on either side.
+  handles += `<line class="is-handle" data-handle="way" x1="${xWay}" y1="${mainTop}" x2="${xWay}" y2="${mainTop + mainH}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  handles += `<line class="is-handle" data-handle="way" x1="${xWay}" y1="${inputTop}" x2="${xWay}" y2="${inputTop + inputH}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  if (fn.twoSided) {
+    mainG += `<line class="is-way-vis" x1="${xLeftWay}" y1="${mainTop}" x2="${xLeftWay}" y2="${mainTop + mainH}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+    inputG += `<line class="is-way-vis" x1="${xLeftWay}" y1="${inputTop}" x2="${xLeftWay}" y2="${inputTop + inputH}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+    handles += `<line class="is-handle" data-handle="way" x1="${xLeftWay}" y1="${mainTop}" x2="${xLeftWay}" y2="${mainTop + mainH}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+    handles += `<line class="is-handle" data-handle="way" x1="${xLeftWay}" y1="${inputTop}" x2="${xLeftWay}" y2="${inputTop + inputH}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  }
+  // Foot labels sit below the strip, clear of its rug (which stays near the
+  // strip's own bottom edge, above the axis title): one combined ± label for
+  // x², whose two lines share one magnitude, or a single h⁻¹(T) otherwise.
+  // Clamped into the window like θ and T above -- a live T drag moves the way
+  // in too, and it can walk past the locked x1/leftmost edge.
+  const xWayC = xMain(Math.min(x1, Math.max(x0, wayIn)));
+  const xLeftWayC = fn.twoSided ? xMain(Math.min(x1, Math.max(x0, leftWayIn))) : null;
+  const footY = inputTop + inputH + 11;
+  if (!fn.twoSided) {
+    lbl += `<text class="is-way-lbl" x="${xWayC}" y="${footY}" text-anchor="middle" fill="${C.muted}" font-size="9" font-weight="700" font-family="${FF_MONO}">h⁻¹(T) = ${fmt(wayIn, 2)}</text>`;
+  } else {
+    lbl += `<text class="is-way-lbl" x="${(xWayC + xLeftWayC) / 2}" y="${footY}" text-anchor="middle" fill="${C.muted}" font-size="9" font-weight="700" font-family="${FF_MONO}">±√T = ±${fmt(wayIn, 2)}</text>`;
+  }
+  // θ's own foot label (Task 7m): a second row below the input threshold's,
+  // clamped into the window the same way, and so it clears the input
+  // histogram's bars entirely -- the strip's own clip-path ends at
+  // inputTop + inputH, and this row sits well below that, unlike its old
+  // place inside the strip.
+  if (mode === 'prop') {
+    const xThetaC = xMain(Math.min(x1, Math.max(x0, p.theta)));
+    lbl += `<text class="is-theta-txt" x="${xThetaC}" y="${footY + 12}" text-anchor="middle" fill="${C.est}" font-size="9" font-weight="700" font-family="${FF_MONO}">θ = ${fmt(p.theta, 2)}</text>`;
+  }
+
+  // ---- axes: shared x (integers) between the main panel and input strip,
+  // shared y (the main panel's own gutter) between the output region and the
+  // main panel, and the two rotated/centered axis titles ---------------
+  const xTickY = mainTop + mainH + 8;
+  for (let x = Math.ceil(x0); x <= Math.floor(x1); x++) {
+    lbl += `<text x="${xMain(x)}" y="${xTickY}" text-anchor="middle" fill="${C.muted}" font-size="8.5" font-family="${FF_MONO}">${x}</text>`;
+  }
+  // Round-number ticks (niceTicks, fix round 1) rather than the endpoints and
+  // their midpoint: formatted to the chosen step's own precision, so a step of
+  // 2.5 shows one decimal and a step of 20 shows none, regardless of yLo/yHi's
+  // own magnitude.
+  const yTicks = niceTicks(yLo, yHi, 4), yTickX = mainLeft - 6;
+  const yTickStep = yTicks.length > 1 ? yTicks[1] - yTicks[0] : (yHi - yLo);
+  const decY = stepDecimals(yTickStep);
+  yTicks.forEach(v => {
+    lbl += `<text x="${yTickX}" y="${(yMain(v) + 3).toFixed(1)}" text-anchor="end" fill="${C.muted}" font-size="8" font-family="${FF_MONO}">${v.toFixed(decY)}</text>`;
+  });
+  lbl += `<text x="${mainLeft + mainW / 2}" y="${inputTop + inputH + 40}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">input x</text>`;
+  const yLX = 13, yLY = mainTop + mainH / 2;
+  lbl += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">output y = h(x)</text>`;
+
+
+  const h = bg
+    + `<defs><clipPath id="is-main-clip"><rect x="${mainLeft}" y="${mainTop}" width="${mainW}" height="${mainH}"/></clipPath>`
+    + `<clipPath id="is-input-clip"><rect x="${mainLeft}" y="${inputTop}" width="${mainW}" height="${inputH}"/></clipPath>`
+    + `<clipPath id="is-output-clip"><rect x="${outX0}" y="${outY0}" width="${outW}" height="${outH}"/></clipPath></defs>`
+    + `<g clip-path="url(#is-main-clip)">${mainG}</g>`
+    + `<g clip-path="url(#is-input-clip)">${inputG}</g>`
+    + `<g clip-path="url(#is-output-clip)">${outputG}</g>`
+    + lbl
+    // Handles sit outside every clip-path, unclipped, and so a 24px hit area
+    // never loses width to a panel edge the way a clipped stroke would
+    // (Task 7h); they paint last, on top, which also settles pointer
+    // precedence at the one point a T handle and a way-in handle cross.
+    + handles;
   svgSet($('is-fig'), W, H, h);
-  $('is-fig-note').textContent = run && p.n > MAXR ? ' · first ' + MAXR + ' of ' + p.n + ' draws in the rug' : '';
+  $('is-fig-leg').innerHTML = isLegendHtml(mode);
+  setIsFigCap(run);
+}
+// Inverts a pointer's SVG-space position back to a model value, undoing the
+// same linear maps xMain/yMain use inside drawIsFig. `fr` merges the drag's
+// own frozen value-window (x0/x1/yLo/yHi/yMargin, fixed for the drag) with
+// the live pixel geometry read fresh from ISS.frame on every move (Task 7h
+// fix round 1) -- see isInitDrag's own comment for why each half is sourced
+// differently.
+function isYInv(fr, py) { return fr.yLo + ((fr.mainTop + (fr.mainH - fr.yMargin)) - py) / (fr.mainH - 2 * fr.yMargin) * (fr.yHi - fr.yLo); }
+function isXInv(fr, px) { return fr.x0 + (px - fr.mainLeft) / fr.mainW * (fr.x1 - fr.x0); }
+// A dragged T rounds to the same field precision isTSpin uses (0.5 for the
+// identity, 1 otherwise) and then clamps to the model's own valid range, and
+// so a drag never leaves T somewhere a typed value could not reach.
+function isRoundT(fn, v) {
+  const st0 = fn === CI.IS_FUNCS.ident ? 0.5 : 1, dec = Math.max(0, -Math.floor(Math.log10(st0)));
+  const r = Number((Math.round(v / st0) * st0).toFixed(dec));
+  return Math.min(fn.tRange[1], Math.max(fn.tRange[0], r));
+}
+// A dragged θ rounds to the slider's own step (0.05, matching decimalSpin's
+// registration for is-theta-val) and clamps to [0, 6], the slider's own range
+// (Task 7k).
+function isRoundTheta(v) {
+  const r = Number((Math.round(v / 0.05) * 0.05).toFixed(2));
+  return Math.min(6, Math.max(0, r));
+}
+// Tab ⑤ drag handles: the transfer plot's T line, the input threshold, and
+// the proposal-density curve (Tasks 7h/7k), plus the likelihood-weighting
+// pair's own three T handles, one per plot (coordinator's second addendum on
+// Task 7m) -- one shared pointer system bound to both SVGs rather than a
+// second copy of it, following ciInitDrag's own pattern: an invisible 24px
+// stroke per handle, a hover class that thickens the visible line/curve and
+// its label -- T (transfer plot) and pairT (the pair's own three) share one
+// highlight group, hot-T, applied to BOTH SVGs at once by setHot below, so
+// hovering or dragging any one of the four T lines thickens all four
+// together (coordinator's third addendum); way and theta keep their own
+// separate, single-SVG classes -- and pointer events with capture,
+// coalesced to one redraw
+// per animation frame via the shared coalesceToFrame helper. `svg` is
+// resolved from the event's own currentTarget rather than closed over, so
+// the same code path serves whichever of the two SVGs the drag started on.
+// Only the drag's own value-window (x0/x1/yLo/yHi/yMargin, fixed for the
+// drag because T/θ never relock ISS.scale) is captured at pointerdown,
+// exactly as ciInitDrag freezes d.frozen; the pixel geometry (mainLeft/
+// mainW/mainTop/mainH for the transfer plot, pL2/innerW/panelX for the
+// pair) is read live from ISS.frame/ISS.pairFrame on every move instead,
+// the way ciInitDrag reads CIS.frame live -- a mid-drag resize (the
+// widget's own ResizeObserver reacts to one), or the pair's own stacked/
+// side-by-side flip, then maps the pointer's position with the figure's
+// current geometry, not a stale one (fix round 1's own reasoning, carried
+// over here rather than freezing a panel's pixel position at pointerdown).
+// The theta handle needs no y-geometry at all (isXInv ignores it), and so
+// it shares the transfer plot's own merged fr object with its other two
+// handles; the pairT handle needs neither yMargin nor a frozen x-window,
+// only the frozen yLo/yHi it shares with every other T handle.
+function isInitDrag() {
+  const svgs = [$('is-fig'), $('is-pair-fig')];
+  // T (transfer plot) and pairT (the pair's own three) share one highlight
+  // group -- hovering or dragging either adds hot-T to both SVGs at once, so
+  // all four T lines/labels thicken together (coordinator's third addendum);
+  // way and theta stay single-SVG, each with its own class, unaffected.
+  const setHot = (which, on) => {
+    if (which === 'T' || which === 'pairT') svgs.forEach(s => s.classList.toggle('hot-T', on));
+    else $('is-fig').classList.toggle('hot-' + which, on);
+  };
+  const hover = ev => {
+    if (ISS.drag) return;
+    const g = ev.target.closest ? ev.target.closest('.is-handle') : null; if (!g) return;
+    setHot(g.dataset.handle, ev.type === 'pointerover');
+  };
+  const coalescer = coalesceToFrame(ev => {
+    const d = ISS.drag; if (!d || ev.pointerId !== d.pid) return;
+    const svg = $(d.svgId);
+    const fn = CI.IS_FUNCS[$('is-fn').value];
+    const q = ciSvgPoint(svg, ev);
+    if (d.which === 'pairT') {
+      const pf = ISS.pairFrame, ox = pf.panelX[d.panelIdx];
+      const T = d.frozen.yLo + (q.x - (ox + pf.pL2)) / pf.innerW * (d.frozen.yHi - d.frozen.yLo);
+      $('is-T').value = String(isRoundT(fn, T));
+    } else {
+      const F = ISS.frame;
+      const fr = { x0: d.frozen.x0, x1: d.frozen.x1, yLo: d.frozen.yLo, yHi: d.frozen.yHi, yMargin: d.frozen.yMargin,
+                   mainLeft: F.mainLeft, mainW: F.mainW, mainTop: F.mainTop, mainH: F.mainH };
+      if (d.which === 'theta') {
+        const theta = isRoundTheta(isXInv(fr, q.x));
+        $('is-theta-val').value = String(theta); $('is-theta').value = String(theta);
+      } else {
+        const T = d.which === 'T' ? isYInv(fr, q.y) : fn.h(isXInv(fr, q.x));
+        $('is-T').value = String(isRoundT(fn, T));
+      }
+    }
+    isParamsChanged();
+  });
+  const end = ev => {
+    const d = ISS.drag; if (!d || ev.pointerId !== d.pid) return;
+    coalescer.flush();
+    ISS.drag = null;
+    setHot(d.which, false);
+    isParamsChanged();
+  };
+  svgs.forEach(svg => {
+    svg.addEventListener('pointerover', hover);
+    svg.addEventListener('pointerout', hover);
+    svg.addEventListener('pointerdown', ev => {
+      if (ISS.drag) return;
+      const g = ev.target.closest ? ev.target.closest('.is-handle') : null; if (!g) return;
+      const p = isParams(); if (!p) return;
+      ev.preventDefault();
+      const which = g.dataset.handle;
+      const frozen = which === 'pairT'
+        ? { yLo: ISS.pairFrame.yLo, yHi: ISS.pairFrame.yHi }
+        : { x0: ISS.frame.x0, x1: ISS.frame.x1, yLo: ISS.frame.yLo, yHi: ISS.frame.yHi, yMargin: ISS.frame.yMargin };
+      ISS.drag = { which: which, svgId: svg.id, panelIdx: g.dataset.panelIdx !== undefined ? Number(g.dataset.panelIdx) : null,
+                   frozen: frozen, pid: ev.pointerId };
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+      setHot(which, true);
+    });
+    svg.addEventListener('pointermove', ev => {
+      const d = ISS.drag; if (!d || ev.pointerId !== d.pid) return;
+      coalescer.schedule(ev);
+    });
+    svg.addEventListener('pointerup', end);
+    svg.addEventListener('pointercancel', end);
+  });
+}
+// The one place that writes is-fig-cap's text, empty or filled, so the two
+// states cannot drift apart (histCaption's own zero-state pattern): the
+// em dash keeps the sentence's own clause shape before a run, wrapping to the
+// same number of lines at every width as the filled sentence does, rather than
+// collapsing to a blank line that grows the card the moment a run fills it in
+// (fix round 2, the A = B = C page-height rule). The draw-count sentence
+// (Task 7f) is this caption's own first sentence rather than a separate
+// #is-fig-note element, and it appears for every run regardless of n -- "All n
+// draws are shown" once n is at or under IS_MAXR, the original "first IS_MAXR
+// of n" phrasing above that cap -- so a filled caption always carries the same
+// two sentences and never leaves the second sentence to wrap alone under the
+// height the CSS reserved for both. n's own two phrasings wrap at different
+// card widths, so this also stamps the element's own data-shape ("short" or
+// "long") for the CSS tiers above to key on; before a run there is no run.wtd.n
+// yet, and so the live n selector's own value stands in, keeping the empty
+// state's reservation the same as whatever the next run will need (Task 7j).
+// The two sentences follow whichever sample the figure currently draws
+// (Task 7m): the first names the shown sample (direct or proposal draws),
+// and the second reports how many of them landed past the threshold, with no
+// trailing estimate clause -- the estimate itself lives in the stat cards,
+// and the weighted mass equals the weighted estimate is now the new pair
+// card's own caption below, not this one. n is shared by both arms, and so
+// the data-shape tiers stay keyed on it regardless of which view is showing.
+function setIsFigCap(run) {
+  const mode = ISS.mode, parts = [];
+  const n = run ? run.wtd.n : Number($('is-n').value);
+  const word = mode === 'direct' ? 'direct' : 'proposal';
+  if (run) {
+    parts.push(n > IS_MAXR
+      ? 'The first ' + IS_MAXR.toLocaleString() + ' of the ' + n.toLocaleString() + ' ' + word + ' draws are shown.'
+      : 'All ' + n.toLocaleString() + ' ' + word + ' draws are shown.');
+    const count = mode === 'direct' ? run.hits : run.tail;
+    const landed = count === 0 ? 'None' : count.toLocaleString();
+    parts.push(landed + ' of the ' + n.toLocaleString() + ' landed past the threshold.');
+  } else {
+    parts.push('— of the — landed past the threshold.');
+  }
+  $('is-fig-cap').dataset.shape = n > IS_MAXR ? 'long' : 'short';
+  $('is-fig-cap').dataset.mode = mode;
+  $('is-fig-cap').textContent = parts.join(' ');
+}
+// The likelihood ratio W at output value y (Task 7m addendum), inverting h
+// analytically for each of tab ⑤'s three models -- a page-script-only
+// concern (CI-CORE carries no general inverse, only wayIn's single point),
+// used solely to draw the pair's middle plot. ident and exp are single-
+// valued; sq is two-valued (x = +√y feeds almost all of the proposal's own
+// draws, x = -√y the other, uncovered branch), and so it returns both.
+function isWOfY(fnKey, theta, y) {
+  const Wat = x => Math.exp(-theta * x + theta * theta / 2);
+  if (fnKey === 'ident') return { plus: Wat(y) };
+  if (fnKey === 'exp') return y > 0 ? { plus: Wat(Math.log(y)) } : null;
+  if (y < 0) return null;
+  const r = Math.sqrt(y);
+  return { plus: Wat(r), minus: Wat(-r) };
+}
+// Power-of-ten ticks, the log-scale analog of niceTicks (Task 7m addendum):
+// every 10^k between lo and hi, or the two ends themselves when the span is
+// under one decade (niceTicks has no such axis to serve; none existed here).
+function niceLogTicks(lo, hi) {
+  if (!(lo > 0) || !(hi > lo)) return [];
+  const k0 = Math.ceil(Math.log10(lo)), k1 = Math.floor(Math.log10(hi));
+  const t = [];
+  for (let k = k0; k <= k1; k++) t.push(Math.pow(10, k));
+  return t.length ? t : [lo, hi];
+}
+const SUP_DIGITS = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+// "10^k" as a literal power of ten (the middle plot's own ticks are always
+// exact powers, unlike fmtPow10's old mantissa case, which is why this is
+// its own small helper rather than a revival of that one).
+function fmtPow10Tick(w) { return '10' + String(Math.round(Math.log10(w))).split('').map(c => SUP_DIGITS[c] || c).join(''); }
+// The likelihood-weighting trio (Task 7m, extended by the coordinator's same-
+// day addendum to a third, middle plot): the proposal's own outputs counted
+// once (left) and counted W(y) times (right), on one shared output-value
+// axis (the transfer plot's own locked y-range) and one shared linear
+// density axis (its own densScale) -- flanking the likelihood ratio W(y)
+// itself (middle, log axis), and so a reader can read "left times middle
+// equals right" directly off the row. Side by side above 760px, stacked
+// below it.
+// Always the proposal sample, regardless of the "Sample shown" toggle: the
+// direct sample carries no weights to redistribute, and so it has nothing to
+// show here.
+function drawIsPairFig(run, p) {
+  const fn = CI.IS_FUNCS[p.fn];
+  const scale = ISS.scale || isComputeScale(p);
+  const yLo = scale.yLo, yHi = scale.yHi, densScale = scale.densScale;
+  const yEps = isOutYEps(yLo, yHi);
+  const W = fullCardWidth($('is-pair-fig'));
+  const stacked = !window.matchMedia('(min-width: 761px)').matches;
+  // pT2 carries two title lines now (the factor and its one-word/-phrase
+  // role) rather than one, per the coordinator's naming addendum.
+  const gap = 16, subH = 190, pT2 = 34, pB2 = 30, pL2 = 8, pR2 = 8;
+  const plotW = stacked ? W : (W - 2 * gap) / 3;
+  const innerW = plotW - pL2 - pR2, innerH = subH - pT2 - pB2;
+  const H = stacked ? subH * 3 + 2 * gap : subH;
+  const bins = run ? isHistBins(run.hs, run.lr, p.T, yLo, yHi) : null;
+  const cols = stacked ? [[0, 0], [0, subH + gap], [0, 2 * (subH + gap)]] : [[0, 0], [plotW + gap, 0], [2 * (plotW + gap), 0]];
+  // The pair's own drag frame (coordinator's second addendum): every panel
+  // shares this one output-value mapping, and so a T handle on any of the
+  // three inverts through the same pL2/innerW regardless of which panel it
+  // sits in -- only its own panel's ox differs, read live by index on every
+  // move (isInitDrag), not frozen at pointerdown, and so a mid-drag resize
+  // (or a stacked/side-by-side flip) still maps correctly.
+  ISS.pairFrame = { yLo: yLo, yHi: yHi, pL2: pL2, innerW: innerW, panelX: cols.map(c => c[0]) };
+
+  // Every panel maps the same output-value axis; only where a panel sits (ox,
+  // oy) and how it maps its own vertical quantity differ.
+  const xMapOf = ox => v => ox + pL2 + (v - yLo) / (yHi - yLo) * innerW;
+  const panelChrome = (ox, oy, main, sub, color, X, subColor, subClass) => {
+    let s = `<rect x="${ox}" y="${oy}" width="${plotW}" height="${subH}" fill="${C.bg}" rx="3"/>`;
+    s += `<text x="${ox + plotW / 2}" y="${oy + 13}" text-anchor="middle" fill="${color}" font-size="10" font-weight="700" font-family="${FF_MONO}">${main}</text>`;
+    s += `<text${subClass ? ' class="' + subClass + '"' : ''} x="${ox + plotW / 2}" y="${oy + 25}" text-anchor="middle" fill="${subColor || C.muted}" font-size="8" font-family="${subColor ? FF_MONO : FF_SANS}">${sub}</text>`;
+    const ticks = niceTicks(yLo, yHi, 4), step = ticks.length > 1 ? ticks[1] - ticks[0] : (yHi - yLo), dec = stepDecimals(step);
+    ticks.forEach(v => { s += `<text x="${X(v).toFixed(1)}" y="${(oy + subH - pB2 + 11).toFixed(1)}" text-anchor="middle" fill="${C.muted}" font-size="8" font-family="${FF_MONO}">${v.toFixed(dec)}</text>`; });
+    s += `<text x="${ox + plotW / 2}" y="${oy + subH - 2}" text-anchor="middle" fill="${C.muted}" font-size="8.5" font-family="${FF_SANS}">output y</text>`;
+    return s;
+  };
+  // The threshold line, its label, and its drag handle are identical on all
+  // three panels (coordinator's second addendum: no more "labeled once"),
+  // appended after a panel's own content so they paint on top of its bars or
+  // curve; the handle feeds isInitDrag's own shared pointer machinery via
+  // data-handle="pairT" and data-panel-idx (see isInitDrag's own comment).
+  let g = '', handles = '';
+  const drawPanelT = (ox, oy, idx) => {
+    const X = xMapOf(ox), base = oy + pT2 + innerH;
+    const Tc = Math.min(Math.max(p.T, yLo), yHi), tx = X(Tc);
+    g += `<line class="is-pair-t-vis" x1="${tx}" y1="${oy + pT2}" x2="${tx}" y2="${base}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+    g += `<text class="is-pair-t-lbl" x="${(tx + 3).toFixed(1)}" y="${oy + pT2 + 9}" fill="${C.muted}" font-size="9" font-weight="700" font-family="${FF_MONO}" paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round">T</text>`;
+    handles += `<line class="is-handle" data-handle="pairT" data-panel-idx="${idx}" x1="${tx}" y1="${oy + pT2}" x2="${tx}" y2="${base}" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  };
+  const drawHistPanel = (ox, oy, main, sub, curveTheta, densOf, color, colorDark) => {
+    const X = xMapOf(ox);
+    const Y = d => oy + pT2 + innerH - Math.min(1, d / densScale) * innerH;
+    const base = oy + pT2 + innerH;
+    g += panelChrome(ox, oy, main, sub, color, X);
+    if (bins) {
+      for (let b = 0; b < bins.lo.length; b++) {
+        const bw = bins.hi[b] - bins.lo[b]; if (!(bw > 0)) continue;
+        const dens = densOf(b); if (!(dens > 0)) continue;
+        const past = b >= bins.kb, x0b = X(bins.lo[b]), x1b = X(bins.hi[b]), yb = Y(dens);
+        g += `<rect x="${Math.min(x0b, x1b).toFixed(1)}" y="${yb.toFixed(1)}" width="${Math.abs(x1b - x0b).toFixed(1)}" height="${Math.max(0, base - yb).toFixed(1)}" fill="${past ? colorDark : color}" opacity=".55"/>`;
+      }
+    }
+    let d = '';
+    for (let i = 0; i <= 160; i++) {
+      const v = yLo + yEps + (yHi - yLo - yEps) * i / 160, px = X(v), py = Y(fn.outDensity(v, curveTheta));
+      d += (i ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1);
+    }
+    g += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.3"${curveTheta !== 0 ? ' stroke-dasharray="6,3"' : ''}/>`;
+  };
+  // The middle plot (coordinator's first addendum): W(y) itself, log axis --
+  // the curve's own min/max over the visible range sets the log scale (the
+  // identity spans about thirteen decades at θ = 3), and a muted W = 1
+  // reference line orients the reader before they compare bars either side.
+  // Its own title and curve take the ratio color (a third data color, not
+  // est or truth -- see the palette comment on --ratio for why --pair was
+  // not reused here).
+  const drawWPanel = (ox, oy, main, sub) => {
+    const X = xMapOf(ox);
+    const base = oy + pT2 + innerH;
+    let wMin = Infinity, wMax = -Infinity;
+    for (let i = 0; i <= 200; i++) {
+      const v = yLo + yEps + (yHi - yLo - yEps) * i / 200, w = isWOfY(p.fn, p.theta, v);
+      if (!w) continue;
+      [w.plus, w.minus].forEach(x => { if (x !== undefined) { if (x < wMin) wMin = x; if (x > wMax) wMax = x; } });
+    }
+    if (!(wMax > wMin)) { wMin = 0.1; wMax = 10; }
+    const logLo = Math.log10(wMin), logHi = Math.log10(wMax);
+    const Y = w => oy + pT2 + innerH - (Math.log10(Math.max(w, wMin)) - logLo) / (logHi - logLo) * innerH;
+    g += panelChrome(ox, oy, main, sub, C.ratio, X, C.ratio, 'is-pair-w-formula');
+    if (wMin <= 1 && 1 <= wMax) {
+      const y1 = Y(1);
+      g += `<line x1="${ox + pL2}" y1="${y1.toFixed(1)}" x2="${ox + pL2 + innerW}" y2="${y1.toFixed(1)}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+      g += `<text x="${(ox + pL2 + innerW - 3).toFixed(1)}" y="${(y1 - 3).toFixed(1)}" text-anchor="end" fill="${C.muted}" font-size="8.5" font-weight="700" font-family="${FF_MONO}">W = 1</text>`;
+    }
+    niceLogTicks(wMin, wMax).forEach(w => {
+      g += `<text x="${(ox + 4).toFixed(1)}" y="${(Y(w) + 3).toFixed(1)}" fill="${C.muted}" font-size="7.5" font-family="${FF_MONO}">${fmtPow10Tick(w)}</text>`;
+    });
+    const branch = (getX, dashed) => {
+      let d = '', open = false, lastPt = null;
+      for (let i = 0; i <= 200; i++) {
+        const v = yLo + yEps + (yHi - yLo - yEps) * i / 200, w = isWOfY(p.fn, p.theta, v);
+        const val = w ? getX(w) : undefined;
+        if (val === undefined) { open = false; continue; }
+        const px = X(v), py = Y(val);
+        d += (open ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1);
+        open = true; lastPt = [px, py];
+      }
+      if (d) g += `<path d="${d}" fill="none" stroke="${C.ratio}" stroke-width="1.6"${dashed ? ' stroke-dasharray="6,3"' : ''}/>`;
+      return lastPt;
+    };
+    const pPlus = branch(w => w.plus, false);
+    if (pPlus && fn.twoSided) g += `<text x="${(pPlus[0] - 3).toFixed(1)}" y="${(pPlus[1] - 4).toFixed(1)}" text-anchor="end" fill="${C.ratio}" font-size="8" font-family="${FF_MONO}">x = +√y</text>`;
+    if (fn.twoSided) {
+      const pMinus = branch(w => w.minus, true);
+      if (pMinus) g += `<text x="${(pMinus[0] - 3).toFixed(1)}" y="${(pMinus[1] + 11).toFixed(1)}" text-anchor="end" fill="${C.ratio}" font-size="8" font-family="${FF_MONO}">x = -√y</text>`;
+    }
+  };
+
+  drawHistPanel(cols[0][0], cols[0][1], 'hist[h(X̃)]', 'counted once', p.theta,
+    b => bins.cntU[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.est, C.estDark);
+  // The middle plot's own subtitle carries W's definition rather than a plain
+  // label (coordinator's third addendum): the full form with its worked-out
+  // exponential, or -- checked below, once the SVG is live -- the bare
+  // ratio alone where the full form would not fit on one line.
+  drawWPanel(cols[1][0], cols[1][1], 'W(X̃)', 'W(x) = φ(x) / q(x) = exp(−θx + θ²/2)');
+  drawHistPanel(cols[2][0], cols[2][1], 'hist[h(X)]', 'counted W(X̃) times, on the target\'s density', 0,
+    b => bins.sumW[b] / (bins.n * (bins.hi[b] - bins.lo[b])), C.truth, C.truthDark);
+  cols.forEach((c, idx) => drawPanelT(c[0], c[1], idx));
+
+  svgSet($('is-pair-fig'), W, H, g + handles);
+  // Swap the middle plot's subtitle down to the bare ratio when its full,
+  // worked-out form does not fit the panel's own width at one line (the
+  // stacked, narrow-screen layout) -- measured against the live, rendered
+  // text rather than guessed from a character count because FF_MONO's own
+  // metrics are what actually decide it.
+  const wFormula = $('is-pair-fig').querySelector('.is-pair-w-formula');
+  if (wFormula && wFormula.getComputedTextLength() > innerW - 4) wFormula.textContent = 'W(x) = φ(x) / q(x)';
+  $('is-pair-leg').innerHTML = isPairLegendHtml(p.fn);
+  setIsPairCap(run, p.fn);
+}
+function isPairLegendHtml(fnKey) {
+  let h = '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--est)" stroke-width="1.3" stroke-dasharray="6,3"/></svg>proposal output density</span>'
+    + '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--truth)" stroke-width="1.3"/></svg>target output density</span>'
+    + '<span style="color:var(--est)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="22" height="9" fill="var(--est)" opacity=".55"/></svg>bars counted once</span>'
+    + '<span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="22" height="9" fill="var(--truth)" opacity=".55"/></svg>bars counted W(y) times</span>'
+    + '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="1" y="2" width="10" height="9" fill="var(--est)" opacity=".55"/><rect x="13" y="2" width="10" height="9" fill="var(--est-dark)" opacity=".55"/></svg>past the threshold (darker)</span>';
+  if (fnKey === 'sq') {
+    h += '<span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--ratio)" stroke-width="1.6"/></svg>likelihood ratio W(y), x = +√y branch</span>'
+      + '<span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--ratio)" stroke-width="1.6" stroke-dasharray="6,3"/></svg>likelihood ratio W(y), x = -√y branch</span>';
+  } else {
+    h += '<span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--ratio)" stroke-width="1.6"/></svg>likelihood ratio W(y)</span>';
+  }
+  h += '<span style="color:var(--muted)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3,3"/></svg>threshold T, draggable on each plot</span>';
+  return h;
+}
+// The pair's own caption (Task 7m, extended by the coordinator's addendum):
+// always naming the weighted mass and the proposal's own event-draw count --
+// both read straight off the run's existing wtd/tail fields regardless of
+// the "Sample shown" toggle because the pair itself always shows the
+// proposal sample -- plus the middle plot's own one-line arithmetic, and, for
+// x², the note that the proposal's own draws come from only one of its two
+// branches.
+function setIsPairCap(run, fnKey) {
+  const mean = run ? run.wtd.mean.toExponential(3) : '—';
+  const tail = run ? run.tail.toLocaleString() : '—';
+  let s = "Weighting each output by W(y) turns the proposal's histogram into the target's; the weighted mass past T is the weighted estimate, "
+    + mean + ', and it comes from the ' + tail + ' draws the proposal placed there.'
+    + ' Each bar on the left times the ratio in the middle gives the bar on the right.';
+  if (fnKey === 'sq') s += " The proposal's draws come almost entirely from the +√y branch.";
+  $('is-pair-cap').textContent = s;
 }
 function isShowStats(run) {
   const e = v => Number.isFinite(v) ? v.toExponential(3) : '—';
-  $('is-s-hits').textContent = run.hits + ' of ' + run.direct.n;
   const lowEss = run.ess < 30 || run.ess < 0.05 * run.tail;
-  $('is-s-tail').textContent = run.tail + ' of ' + run.wtd.n + ', ESS ' + run.ess.toFixed(1) + (lowEss ? ' – low; interval unreliable' : '');
+  $('is-s-hits').textContent = run.hits + ' of ' + run.direct.n;
+  $('is-s-tail').textContent = run.tail + ' of ' + run.wtd.n;
   $('is-s-d').textContent = e(run.direct.mean) + ' ± ' + e(run.direct.h);
   $('is-s-w').textContent = e(run.wtd.mean) + ' ± ' + e(run.wtd.h);
   $('is-s-rd').textContent = fmt(run.direct.h / run.truth, 2);
   $('is-s-rw').textContent = fmt(run.wtd.h / run.truth, 3);
-  $('is-s-tail').style.color = lowEss ? C.warn : '';
+  setIsEss(run.ess.toFixed(1), lowEss);
   $('is-s-w').style.color = lowEss ? C.warn : '';
+  setTip($('is-ess-tip'), isEssTipText(run));
+}
+// The fraction of the event draws' own information the uneven weights have
+// thrown away, 1 - ESS/tail, read off in words rather than as a number the
+// card beside it already shows: under 0.2 "very little", under 0.5 "about a
+// third", under 0.85 "more than half", at or above that "almost all".
+function isEssBand(frac) {
+  return frac < 0.2 ? 'very little' : frac < 0.5 ? 'about a third' : frac < 0.85 ? 'more than half' : 'almost all';
+}
+// The ESS card's own tooltip, filled in from the run on screen (coordinator's
+// addition to Task 7l): before a run, or after one with no event draws at all
+// (nothing for the weights to have discarded a share of), the sentence names
+// the idea without a number; the (ΣW)² / ΣW² formula itself stays in the
+// equations section below, not here.
+function isEssTipText(run) {
+  const lede = 'Effective sample size (Kish): the number of equally weighted event draws that would give the weighted estimate the same sampling variance.';
+  const floor = 'Below 30, or below 5% of the event count, the weighted interval is as unreliable as one built from that few draws.';
+  if (!run || !(run.tail > 0)) {
+    return lede + ' The gap between the event count and the ESS is what the uneven weights have discarded. ' + floor;
+  }
+  const band = isEssBand(1 - run.ess / run.tail);
+  return lede + ' With ' + run.tail.toLocaleString() + ' event draws and an ESS of ' + Math.round(run.ess).toLocaleString()
+    + ', the uneven weights have discarded ' + band + ' of what those draws could tell you. ' + floor;
+}
+// The one place that writes is-s-ess's text, whether or not the low-ESS
+// warning applies: the warning joins the value on its own last line as a
+// .sc-aside, the same pattern cv-s-r2 uses for its own "(1 - r² = ...)"
+// aside, rather than a reserved line of its own -- a reserved line above the
+// value left visible blank space in the unflagged state and put the value one
+// line lower than its row neighbor's (Task 7j, fix round 2 of the ESS-card
+// alignment). Nothing is added when the flag is off, so the card's height
+// matches its neighbor's and does not move when the flag flips. The wording
+// is "low, unreliable" rather than the longer "low; interval unreliable"
+// because this card is only 230px wide beside the figure at 760px and up,
+// and the longer phrase wraps there, which the fixed-height, no-wrap
+// .sc-val was written to avoid in the first place.
+function setIsEss(text, lowEss) {
+  const el = $('is-s-ess');
+  el.innerHTML = text + (lowEss ? ' <span class="sc-aside" style="color:' + C.warn + '">– low, unreliable</span>' : '');
+  el.style.color = lowEss ? C.warn : '';
 }
 function isRecord(run, p) {
   const k = isKey(p);
   ISS.direct.push(CI.histRecord(run.direct.mean, run.direct, run.truth, p.n, p.conf, k));
   ISS.wtd.push(CI.histRecord(run.wtd.mean, run.wtd, run.truth, p.n, p.conf, k));
 }
+// A live parameter change (Task 7g) replaces the most recent entry of each
+// arm in place; see crnReplaceLast's own comment for why the divider needs no
+// extra code here.
+function isReplaceLast(run, p) {
+  const k = isKey(p);
+  if (ISS.direct.length) ISS.direct[ISS.direct.length - 1] = CI.histRecord(run.direct.mean, run.direct, run.truth, p.n, p.conf, k);
+  if (ISS.wtd.length) ISS.wtd[ISS.wtd.length - 1] = CI.histRecord(run.wtd.mean, run.wtd, run.truth, p.n, p.conf, k);
+  ISS.last = { seed: ISS.lastSeed, key: k };
+}
 function runIs() {
   const seed = readSeed('is'); if (seed === null) return;
-  const p = isParams(), run = CI.runIS(seed, p);
+  const p = isParams(); if (!p) return;
+  const run = CI.runIS(seed, p);
   const repeat = ISS.last && ISS.last.seed === seed && ISS.last.key === isKey(p);
   ISS.last = { seed: seed, key: isKey(p) };
-  ISS.lastRunObj = run; ISS.lastRunP = p;
-  isRecord(run, p); drawIsFig(run, p); isShowStats(run); renderIsHist();
+  ISS.lastRunObj = run; ISS.lastRunP = p; ISS.lastSeed = seed; ISS.scale = isComputeScale(p);
+  isRecord(run, p); drawIsFig(run, p); drawIsPairFig(run, p); isShowStats(run); renderIsHist(p);
   noteRun('is', seed, ISS.wtd.length, repeat);
 }
 function runIsBatch() {
   const s0 = readSeed('is'); if (s0 === null) return;
-  const p = isParams();
+  const p = isParams(); if (!p) return;
   batchRun('is', () => {
     const first = ISS.wtd.length + 1; let run = null;
     for (let i = 0; i < BATCH_RUNS; i++) { run = CI.runIS(batchSeed(s0, i), p); isRecord(run, p); }
     ISS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: isKey(p) };
-    ISS.lastRunObj = run; ISS.lastRunP = p;
-    drawIsFig(run, p); isShowStats(run); renderIsHist();
+    ISS.lastRunObj = run; ISS.lastRunP = p; ISS.lastSeed = batchSeed(s0, BATCH_RUNS - 1); ISS.scale = isComputeScale(p);
+    drawIsFig(run, p); drawIsPairFig(run, p); isShowStats(run); renderIsHist(p);
     noteBatch('is', s0, first, ISS.wtd.length);
   });
 }
 function clearIs() {
   ISS.direct = []; ISS.wtd = []; ISS.last = null; ISS.lastRunObj = null; ISS.lastRunP = null; lastRun.is = null;
+  ISS.lastSeed = null; ISS.scale = null; ISS.drag = null;
   ['is-s-hits', 'is-s-tail', 'is-s-d', 'is-s-w', 'is-s-rd', 'is-s-rw'].forEach(id => { $(id).textContent = '—'; });
-  $('is-s-tail').style.color = ''; $('is-s-w').style.color = '';
-  drawIsFig(null, isParams()); seedMsg('is', '', false); renderIsHist();
+  $('is-s-w').style.color = '';
+  setIsEss('—', false); // keeps the aside's own line reserved, same shape as a populated run
+  setTip($('is-ess-tip'), isEssTipText(null));
+  const p = isParams(); if (p) { drawIsFig(null, p); drawIsPairFig(null, p); }
+  seedMsg('is', '', false); renderIsHist(p);
 }
-function renderIsHist() {
-  const p = isParams(), truth = 1 - CI.normCdf(p.T);
+function renderIsHist(p) {
+  p = p || { fn: 'ident', T: 3, theta: 3, n: 1000, conf: 0.95 };
+  const truth = CI.isTruth(p.fn, p.T);
   const win = histWindow([ISS.direct, ISS.wtd]) || { lo: 0, hi: truth * 2.5 };
-  const opts = { yLabel: 'tail probability', truthLabel: v => 'p = ' + v.toExponential(2), window: win,
+  const opts = { yLabel: 'probability', truthLabel: v => 'p = ' + v.toExponential(2), window: win,
                  liveTruth: truth, emptyWindow: win, nLabel: 'n' };
   histCaption($('is-cap1'), histPlot($('is-hist1'), $('is-hw1'), ISS.direct, opts), 'p', null);
   histCaption($('is-cap2'), histPlot($('is-hist2'), $('is-hw2'), ISS.wtd, opts), 'p', null);
 }
 TABS.is = {
-  init() { isParamsChanged(); drawIsFig(null, isParams()); },
-  render() { drawIsFig(ISS.lastRunObj, ISS.lastRunP || isParams()); renderIsHist(); }
+  init() { isFnOptions($('is-fn')); setIsEss('—', false); isParamsChanged(); drawIsFig(null, isParams()); drawIsPairFig(null, isParams()); isInitDrag(); },
+  render() { const p = isParams(); if (p) { drawIsFig(ISS.lastRunObj, ISS.lastRunP || p); drawIsPairFig(ISS.lastRunObj, ISS.lastRunP || p); } renderIsHist(p); }
 };
 SPIN['is-seed'] = seedSpin('is');
+SPIN['is-T'] = isTSpin;
+SPIN['is-theta-val'] = decimalSpin('is-theta-val', 0, isParamsChanged, 0.05);
 
 // ── Tooltips ────────────────────────────────────────────
 // One floating element serves every [data-tip] on the page, so two tips can never be

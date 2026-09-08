@@ -656,23 +656,29 @@ better.
      histogram surfaced in the UI as a teaching point.)*
 - `output_analysis/ci_explorer.html` *(confidence intervals taught by experiment: tab ① draws n
   values from N(μ, σ²), forms the t interval, and keeps a history whose true-mean line steps when μ
-  changes; tabs ②–⑤ apply common random numbers, antithetic variates, control variates, and
-  importance sampling to stylized models with closed-form means, each as a plain history over an
-  improved one on a shared scale. Conventions relied on by code outside the file, which any later
-  edit has to preserve:*
+  changes; tabs ②–④ apply common random numbers, antithetic variates, and control variates to a
+  shared five-model menu (the identity, exp(u), √u, 1/(1 + u), and the bowl) whose exact moments the
+  verify script pins, each as a plain history over an improved one on a shared scale; tab ⑤ applies
+  importance sampling to a normal input through its own three-model menu (x, exp(x), and x²), with
+  the threshold on the output scale, the shift aimed at the way in, and closed-form tail
+  probabilities. Conventions relied on by code outside the file, which any later edit has to
+  preserve:*
   1. *Everything between the `CI-CORE-BEGIN` / `CI-CORE-END` sentinels is pure numerics with no DOM
      access (the block must not contain the words "window" or "document").
      `output_analysis/verify_ci_explorer.mjs` slices that block out of the HTML and runs it in Node.*
   2. *`verify_ci_explorer.mjs` is not shipped with the widget and is not linked from the site. Run
-     it (`node output_analysis/verify_ci_explorer.mjs`, about three minutes; `CI_CALIB_REPS`
-     shortens the calibration sections) after touching anything in the core. It checks the special
-     functions against exact identities and t tables, capture rates against 1 − α for every tab, the
-     paired-to-Welch half-width ratio against √(1 − ρ), the function menu's moments against their
-     closed forms (the exp(u) pair-mean standard error of 0.0028 and c* of 1.690), and the
-     importance-sampling estimator's unbiasedness.*
-  3. *The function menu shared by tabs ③ and ④ carries exact moments (`mean`, `m2`, `cross`,
-     `covU`) that the verify script pins, so adding a function means deriving its four moments,
-     not only its formula. The `bowl` entry is the deliberate counterexample on which neither
+     it (`node output_analysis/verify_ci_explorer.mjs`, about three and a half minutes;
+     `CI_CALIB_REPS` shortens the calibration sections) after touching anything in the core. It
+     checks the special functions against exact identities and t tables, capture rates against
+     1 − α for every tab, the paired-to-Welch half-width ratio against √(1 − ρ), the function menu's
+     moments against their closed forms (the exp(u) pair-mean standard error of 0.0028 and c* of
+     1.690), the importance-sampling estimator's unbiasedness, and tab ⑤'s output densities:
+     it integrates each to 1, checks its tail mass beyond T against the closed-form truth, and pins
+     the x² model's silent-failure numbers (a weighted estimate at half the truth, near-zero
+     capture, and a healthy ESS that gives no warning).*
+  3. *The function menu shared by tabs ②–④ carries exact moments (`mean`, `m2`, `cross`, `covU`)
+     that the verify script pins, and so adding a function means deriving its four moments, not
+     only its formula. The `bowl` entry is the deliberate counterexample on which neither
      technique helps and must stay non-monotone with zero covariance.)*
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
