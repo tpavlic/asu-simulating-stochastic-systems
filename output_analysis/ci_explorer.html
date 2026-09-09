@@ -1636,20 +1636,35 @@ function renderActiveHist() {
 // df span is therefore given the pixel width of its widest possible text,
 // measured in its own font by a hidden clone: the exact df where n fixes it,
 // and the Welch–Satterthwaite ceiling 2(n − 1) with its decimal for the one
-// df the data decides. The placeholder and the filled form then occupy the
-// same width, whatever either says.
+// df the data decides. The placeholder is measured alongside them, because at
+// a small n it is the widest of the three -- "df —" outruns "df 9" -- and a
+// reservation that covered only the filled forms would let the span shrink on
+// the first run, which is the same wrap shift in the other direction.
+// Chrome returns an empty string for the `font` shorthand whenever the value
+// cannot round-trip through it, which any non-normal font-variant-numeric
+// causes -- and the tabular-nums rule that keeps a digit swap from moving a
+// wrap point sets exactly that on every element measured here. A clone built
+// with `font:` + that empty string silently inherited whatever its host
+// offered instead (the body's 14px/400 rather than a label's 11.52px/700,
+// a fifth too wide), and so the longhands are copied one by one.
+function cloneFontCss(cs) {
+  return 'font-family:' + cs.fontFamily + ';font-size:' + cs.fontSize + ';font-weight:' + cs.fontWeight
+    + ';font-style:' + cs.fontStyle + ';font-stretch:' + cs.fontStretch
+    + ';font-variant-numeric:' + cs.fontVariantNumeric + ';font-feature-settings:' + cs.fontFeatureSettings
+    + ';letter-spacing:' + cs.letterSpacing + ';word-spacing:' + cs.wordSpacing
+    + ';text-transform:' + cs.textTransform;
+}
 function reserveDfWidth(id, candidates) {
   const el = $(id); if (!el) return;
   const c = el.cloneNode(false);
   c.removeAttribute('id');
   const cs = getComputedStyle(el);
-  c.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;display:inline;min-width:0;left:-9999px;top:0;font:' + cs.font
-    + ';letter-spacing:' + cs.letterSpacing + ';text-transform:' + cs.textTransform + ';font-variant-numeric:' + cs.fontVariantNumeric + ';word-spacing:' + cs.wordSpacing;
+  c.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;display:inline;min-width:0;left:-9999px;top:0;' + cloneFontCss(cs);
   // Measured on the body, not beside the span: a span inside a tab that is
   // not showing has no layout, and a clone beside it would measure zero.
   document.body.appendChild(c);
   let w = 0;
-  candidates.forEach(t => { c.textContent = t; w = Math.max(w, c.getBoundingClientRect().width); });
+  candidates.concat(['df —']).forEach(t => { c.textContent = t; w = Math.max(w, c.getBoundingClientRect().width); });
   c.remove();
   el.style.display = 'inline-block';
   el.style.minWidth = Math.ceil(w) + 'px';
@@ -5320,8 +5335,7 @@ function reserveCapHeight(el, worst, asHtml) {
   // The clone carries the element's classes but not its id, and so the
   // typography that id selectors set is copied across by hand.
   c.style.cssText = 'position:absolute;visibility:hidden;min-height:0;height:auto;left:-9999px;top:0;width:' + cs.width
-    + ';font:' + cs.font + ';line-height:' + cs.lineHeight + ';padding:' + cs.padding + ';box-sizing:' + cs.boxSizing
-    + ';letter-spacing:' + cs.letterSpacing + ';text-transform:' + cs.textTransform + ';font-variant-numeric:' + cs.fontVariantNumeric + ';word-spacing:' + cs.wordSpacing;
+    + ';line-height:' + cs.lineHeight + ';padding:' + cs.padding + ';box-sizing:' + cs.boxSizing + ';' + cloneFontCss(cs);
   if (asHtml) c.innerHTML = worst; else c.textContent = worst;
   el.parentNode.appendChild(c);
   const h = c.getBoundingClientRect().height;
