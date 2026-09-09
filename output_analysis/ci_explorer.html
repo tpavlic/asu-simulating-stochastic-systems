@@ -11,8 +11,8 @@
 <meta property="og:title" content="Confidence Interval and Variance Reduction Techniques Explorer — interactive explainer">
 <meta property="og:description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer-preview.png">
-<meta property="og:image:width" content="1020">
-<meta property="og:image:height" content="510">
+<meta property="og:image:width" content="2040">
+<meta property="og:image:height" content="1020">
 <meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer.html">
 <meta property="fb:app_id" content="2385695445236853">
 
@@ -325,6 +325,18 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .sc-aside { font-size: .72em; font-weight: 500; color: var(--muted); }
 .hint { background: #f5f2f3; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
 .hint.wide { margin-bottom: 13px; }
+/* Each tab opens with a two-sentence lede saying what the tab shows, above its
+   own controls: a reader arriving on tab 5 meets a theta slider and a "Sample
+   shown" toggle whose vocabulary the long .hint paragraph does not reach until
+   below the figures. Unlike that paragraph, this one carries no panel of its
+   own -- it reads as body text under the tab bar rather than as a second
+   instruction block -- and its content is static, and so it costs the same
+   height on every run. */
+.lede { font-size: .88rem; color: var(--text); line-height: 1.5; margin: 0 0 13px; }
+/* A term the lede introduces is bold as well as dotted, and so it reads as the
+   tab's own vocabulary rather than as emphasis; the tooltip behind it is the
+   page's shared one, which reaches a keyboard and a finger as well as a mouse. */
+.lede .tip { font-weight: 700; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 /* Capture tally under a history chart -- what the 100-run sweep is for. The height
@@ -578,6 +590,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ①: confidence intervals ─────────────────────────────────── -->
   <section id="tab-ci" class="tp active">
+    <p class="lede">A <span class="tip" tabindex="0" data-tip="A range computed from a sample, built so that ranges made this way capture the unknown true value a stated share of the time.">confidence interval</span> is a recipe that promises to capture the true mean a fixed share of the time. Because the population is known here, every interval it produces can be checked against the mean it was aiming at.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="ci-mu"><span class="tip" tabindex="0" data-tip="The population mean, the number every interval is trying to capture. Changing it mid-history moves the dashed line in the chart below rather than clearing the chart. Arrow keys move it by 0.1; hold Shift for 1. You can also drag the dashed line in the figure.">Population mean μ</span></label>
@@ -664,6 +677,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ②: common random numbers ────────────────────────────────── -->
   <section id="tab-crn" class="tp">
+    <p class="lede">Under <span class="tip" tabindex="0" data-tip="Driving both systems with the same stream of random inputs, so their difference is not clouded by the luck of separate draws.">common random numbers</span>, two systems are compared on the same random inputs rather than on separate ones. Sharing the inputs pairs the runs one for one, and whatever the two systems have in common drops out of the difference.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
@@ -770,6 +784,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ③: antithetic variates ──────────────────────────────────── -->
   <section id="tab-av" class="tp">
+    <p class="lede">With <span class="tip" tabindex="0" data-tip="Pairing each random draw with its mirror, 1 &minus; u, so that a high draw and a low one average out.">antithetic variates</span>, each draw is paired with its mirror image, 1 − u, and the pair is averaged. A high draw meets a low partner, and so the pair means sit closer to the true mean than single draws do.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="av-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one uniform random number u. The first three rise or fall steadily in u; the last one does not, and on it antithetic pairing does nothing.">Model h(u)</span></label>
@@ -875,6 +890,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ④: control variates ─────────────────────────────────────── -->
   <section id="tab-cv" class="tp">
+    <p class="lede">A <span class="tip" tabindex="0" data-tip="A quantity whose own mean is known and which moves with the output; subtracting its deviation removes the part of the output it explains.">control variate</span> is a quantity whose mean is already known. Subtracting the part of the output that follows it leaves values with the same mean and less spread, which is what narrows the interval.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="cv-fn"><span class="tip" tabindex="0" data-tip="The same four stand-in models as the antithetic tab. The control variate is the uniform input itself, whose mean 0.5 is known exactly.">Model h(u)</span></label>
@@ -979,6 +995,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ⑤: importance sampling ──────────────────────────────────── -->
   <section id="tab-is" class="tp">
+    <p class="lede">When almost no draw reaches the event, the direct estimate is mostly zeros. <span class="tip" tabindex="0" data-tip="Sampling from a distribution that reaches the event often, then correcting each draw by how much likelier that distribution made it.">Importance sampling</span> draws instead from a <span class="tip" tabindex="0" data-tip="The distribution actually sampled from, shifted so the event happens often; also called the biasing or importance distribution.">proposal distribution</span>, a normal shifted toward the event, and reweights each draw to undo the shift.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="is-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one standard normal input x. The identity is the bare tail probability; exp(x) is a monotone curve, and so the output event is an input event; x² reaches the threshold from both sides.">Model h(x)</span></label>
@@ -1056,7 +1073,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="cv-leg" id="is-pair-leg"></div>
       <div class="cv-cap" id="is-pair-cap"></div>
     </div>
-    <div class="hint wide">Both approaches draw n samples; direct sampling runs the model on standard normals and counts the outputs beyond T. Importance sampling draws inputs from a proposal distribution N(θ, 1) (also called the biasing or importance distribution), runs the same model, and multiplies each output beyond T by the likelihood ratio W(y) = φ(y)/φ(y − θ). The pair of plots below counts the proposal's outputs once and by W(y), turning its histogram into the target's; the tail past T comes from the draws the proposal put there. Move the pointer across the three plots below to read a bin's count, its weight, and its weighted count together. For a monotone model, the output event is the input event x ≥ h⁻¹(T), and so the shift aims there. The threshold line, its pre-image, and the proposal curve above can all be dragged: the T line vertically, the others horizontally.</div>
+    <div class="hint wide">Both approaches draw n samples; direct sampling runs the model on standard normals and counts the outputs beyond T. Importance sampling draws inputs from a proposal distribution N(θ, 1) (also called the biasing or importance distribution), runs the same model, and multiplies each output beyond T by the likelihood ratio W(y) = φ(y)/φ(y − θ). The pair of plots above counts the proposal's outputs once and by W(y), turning its histogram into the target's; the tail past T comes from the draws the proposal put there. Move the pointer across those three plots to read a bin's count, its weight, and its weighted count together. For a monotone model, the output event is the input event x ≥ h⁻¹(T), and so the shift aims there. The threshold line, its pre-image, and the proposal curve above can all be dragged: the T line vertically, the others horizontally.</div>
     <div class="sec">
       <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">p = P(h(X) ≥ T)</span></div>
       <div class="hist-hd">Direct sampling (mean of the indicator)</div>
@@ -4880,24 +4897,22 @@ function drawIsFig(run, p) {
   inputG += `<path d="${inCurve(0, x0, x1)}" fill="none" stroke="${C.truth}" stroke-width="1.3"/>`;
   // Captured once so the visible curve and its drag handle (Task 7k) trace
   // exactly the same path -- the handle is the curve, just given a wide
-  // invisible stroke, not a separate approximation of its shape. The curve
-  // itself is always drawn now (Task 7m: both density curves stay in both
-  // strips in both modes); only its drag handle and θ label stay proposal-
-  // mode only because dragging or reading θ makes sense only for the
-  // distribution actually being sampled from.
+  // invisible stroke, not a separate approximation of its shape. The curve,
+  // its handle, and its label are all drawn in both views (Task 7m drew the
+  // curve itself in both; the handle and label followed once Ted pointed out
+  // that the θ slider is live in the direct view too, and so a curve that
+  // cannot be grabbed there is the odd one out).
   const thetaCurveD = inCurve(p.theta, x0, x1);
   inputG += `<path class="is-theta-vis" d="${thetaCurveD}" fill="none" stroke="${C.est}" stroke-width="1.3" stroke-dasharray="6,3"/>`;
-  if (mode === 'prop') {
-    // Drag handle (Task 7k): an invisible 24px stroke over the proposal-density
-    // curve, unclipped like the T and input-threshold handles above so the hit
-    // area never loses width at the input strip's own edge. A horizontal drag
-    // sets θ to the pointer's x (the peak follows the finger); the curve can
-    // slide under the strip's own clipped edge without the locked ranges moving.
-    handles += `<path class="is-handle" data-handle="theta" d="${thetaCurveD}" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
-    // The θ label itself is a foot label below the strip now (Task 7m), and
-    // so it can clear the input histogram's bars -- see the foot-label block
-    // below, alongside the input threshold's own label.
-  }
+  // Drag handle (Task 7k): an invisible 24px stroke over the proposal-density
+  // curve, unclipped like the T and input-threshold handles above so the hit
+  // area never loses width at the input strip's own edge. A horizontal drag
+  // sets θ to the pointer's x (the peak follows the finger); the curve can
+  // slide under the strip's own clipped edge without the locked ranges moving.
+  handles += `<path class="is-handle" data-handle="theta" d="${thetaCurveD}" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>`;
+  // The θ label itself is a foot label below the strip now (Task 7m), and
+  // so it can clear the input histogram's bars -- see the foot-label block
+  // below, alongside the input threshold's own label.
   if (run) {
     const rugBase = inputTop + inputH - 1, m = Math.min(IS_MAXR, sample.xs.length);
     for (let i = 0; i < m; i++) {
@@ -5030,10 +5045,8 @@ function drawIsFig(run, p) {
   // histogram's bars entirely -- the strip's own clip-path ends at
   // inputTop + inputH, and this row sits well below that, unlike its old
   // place inside the strip.
-  if (mode === 'prop') {
-    const xThetaC = xMain(Math.min(x1, Math.max(x0, p.theta)));
-    lbl += `<text class="is-theta-txt" x="${xThetaC}" y="${footY + 12}" text-anchor="middle" fill="${C.est}" font-size="9" font-weight="700" font-family="${FF_MONO}">θ = ${fmt(p.theta, 2)}</text>`;
-  }
+  const xThetaC = xMain(Math.min(x1, Math.max(x0, p.theta)));
+  lbl += `<text class="is-theta-txt" x="${xThetaC}" y="${footY + 12}" text-anchor="middle" fill="${C.est}" font-size="9" font-weight="700" font-family="${FF_MONO}">θ = ${fmt(p.theta, 2)}</text>`;
 
   // ---- axes: shared x (integers) between the main panel and input strip,
   // shared y (the main panel's own gutter) between the output region and the
