@@ -271,7 +271,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    760px, where .viz-row is a row rather than a column): a single column balances
    the figure's own three-panel height better than two narrow columns do, and the
    cards are reordered to read True mean, Plain mean, Plain half-width, CV mean,
-   CV half-width, Estimated c*, r² -- grouping each estimate with its own
+   CV half-width, Estimated c*, R² -- grouping each estimate with its own
    half-width -- rather than the DOM order the two-column layout wants (both
    means, and then both half-widths, and so paired cards land in the same row). */
 @media (min-width: 761px) {
@@ -590,7 +590,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ①: confidence intervals ─────────────────────────────────── -->
   <section id="tab-ci" class="tp active">
-    <p class="lede">A <span class="tip" tabindex="0" data-tip="A range computed from a sample, built so that ranges made this way capture the unknown true value a stated share of the time.">confidence interval</span> is a recipe that promises to capture the true mean a fixed share of the time. Because the population is known here, every interval it produces can be checked against the mean it was aiming at.</p>
+    <p class="lede">A confidence interval is a visual representation of many <span class="tip" tabindex="0" data-tip="Here, a one-sample, two-sided Student's t-test at level α. The interval holds exactly the values of μ that such a test would not reject on this sample.">hypothesis tests</span> all at once. Here, because we know the population mean ahead of time, we can confirm that a <span class="tip" tabindex="0" data-tip="The confidence level, 1 − α, where α is the type-I error rate: the chance of rejecting a null hypothesis that is true. At 95%, α is 0.05, and about one interval in twenty misses.">95% confidence</span> interval captures the mean 95% of the time.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="ci-mu"><span class="tip" tabindex="0" data-tip="The population mean, the number every interval is trying to capture. Changing it mid-history moves the dashed line in the chart below rather than clearing the chart. Arrow keys move it by 0.1; hold Shift for 1. You can also drag the dashed line in the figure.">Population mean μ</span></label>
@@ -677,7 +677,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ②: common random numbers ────────────────────────────────── -->
   <section id="tab-crn" class="tp">
-    <p class="lede">Under <span class="tip" tabindex="0" data-tip="Driving both systems with the same stream of random inputs, so their difference is not clouded by the luck of separate draws.">common random numbers</span>, two systems are compared on the same random inputs rather than on separate ones. Sharing the inputs pairs the runs one for one, and whatever the two systems have in common drops out of the difference.</p>
+    <p class="lede">Common Random Numbers (CRN) uses <span class="tip" tabindex="0" data-tip="Holding a source of variation fixed across the things being compared, so that a difference between them cannot be confused with it. The shared input stream is the block here, and the comparison becomes a paired one.">statistical blocking</span> to apply the same input combination to every system under test so that the differences between systems can be isolated from the differences across inputs.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
@@ -784,7 +784,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ③: antithetic variates ──────────────────────────────────── -->
   <section id="tab-av" class="tp">
-    <p class="lede">With <span class="tip" tabindex="0" data-tip="Pairing each random draw with its mirror, 1 &minus; u, so that a high draw and a low one average out.">antithetic variates</span>, each draw is paired with its mirror image, 1 − u, and the pair is averaged. A high draw meets a low partner, and so the pair means sit closer to the true mean than single draws do.</p>
+    <p class="lede">Antithetic variates are designed to create negative correlation between pairs of simulation outputs to accelerate the natural averaging that comes from the <span class="tip" tabindex="0" data-tip="The average of independent draws settles on the true mean as their number grows. Pairing each draw with a negatively correlated partner makes that average settle sooner.">Law of Large Numbers</span>. Even runs use <span class="tip" tabindex="0" data-tip="A pseudorandom number generator: a deterministic recurrence whose stream passes as independent uniform draws on (0, 1). Started from the same seed, it repeats exactly, which is what lets one run reuse the draws of another.">PRNG</span> draws (1 − u) that are the complement of the draws (u) from the prior odd run.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="av-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one uniform random number u. The first three rise or fall steadily in u; the last one does not, and on it antithetic pairing does nothing.">Model h(u)</span></label>
@@ -890,7 +890,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ④: control variates ─────────────────────────────────────── -->
   <section id="tab-cv" class="tp">
-    <p class="lede">A <span class="tip" tabindex="0" data-tip="A quantity whose own mean is known and which moves with the output; subtracting its deviation removes the part of the output it explains.">control variate</span> is a quantity whose mean is already known. Subtracting the part of the output that follows it leaves values with the same mean and less spread, which is what narrows the interval.</p>
+    <p class="lede">Control variates use knowledge about how extreme draws from an <span class="tip" tabindex="0" data-tip="A probability distribution standing in for one source of variation in the simulation, its shape and parameters settled before the run (fit to previously collected data, say). Its mean is therefore known ahead of time, unlike the output's.">input model</span> are relative to the mean of that model in order to isolate <span class="tip" tabindex="0" data-tip="The share of the output's variance that the input accounts for, R² in a regression. The rest, 1 − R², is what no control variate built on that input can remove.">explained variance</span> (explained by inputs) from model variance.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="cv-fn"><span class="tip" tabindex="0" data-tip="The same four stand-in models as the antithetic tab. The control variate is the uniform input itself, whose mean 0.5 is known exactly.">Model h(u)</span></label>
@@ -911,7 +911,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         </select>
       </span>
       <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="cv-sige"><span class="tip" id="cv-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and r² falls. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; c snaps to the new estimate; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
+        <label class="ctrl-lbl" for="cv-sige"><span class="tip" id="cv-sige-lbl" tabindex="0" data-tip="Noise added to every output, independent of the input. It is the part of the output's variance that no control based on u can remove: raise it, and R² falls. Drag the slider to re-evaluate the last run at the same seed with a different noise scale; the figure, the cards, and the latest history entry follow, and a divider marks where the settings changed; c snaps to the new estimate; type a value in the field to go beyond the slider's range.">Own noise σ<sub>e</sub></span></label>
         <span class="rs-wrap rs-wrap-fixed">
           <input type="range" id="cv-sige-rng" class="rs-input" min="0" max="1" step="0.01" value="0" aria-labelledby="cv-sige-lbl" oninput="cvSigeDrag()">
         </span>
@@ -963,7 +963,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <div class="sc"><div class="sc-lbl">Plain half-width (<span id="cv-s-hp-df">df —</span>)</div><div class="sc-val" id="cv-s-hp">—</div></div>
           <div class="sc"><div class="sc-lbl">Control-variate half-width (<span id="cv-s-hc-df">df —</span>)</div><div class="sc-val" id="cv-s-hc">—</div></div>
           <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The slope of y on u, fitted from the same run it corrects. Its target is Cov(U, Y) / Var(U), which the noise does not change.">Estimated <span class="sym">c<sup>*</sup></span> = <span class="sym">S<sub class="sym">uy</sub> / S<sub class="sym">u</sub>²</span></span></div><div class="sc-val" id="cv-s-c">—</div></div>
-          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The squared sample correlation between u and y. A line in u explains this share of the output's variance, and the control-variate interval's variance is the remaining 1 − r² share. Noise lowers it.">r²: share of y var explained by u</span></div><div class="sc-val" id="cv-s-r2">—</div></div>
+          <div class="sc sc-wide"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The squared sample correlation between u and y. A line in u explains this share of the output's variance, and the control-variate interval's variance is the remaining 1 − R² share. Noise lowers it.">R²: share of y var explained by u</span></div><div class="sc-val" id="cv-s-r2">—</div></div>
         </div>
       </div>
     </div>
@@ -988,14 +988,14 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="card"><strong>Pick the bowl</strong>For h(u) = (u − ½)², the output is symmetric in u, and Cov(U, h(U)) is exactly zero. The fitted slope wobbles around zero from run to run, and the interval does not shrink. A control has to co-vary with the output to help.</div>
         <div class="card"><strong>Estimating c undershoots a little</strong>The slope is fitted from the same run it corrects, which makes the interval slightly optimistic. At n = 50, the capture rate is about two points under nominal; at n = 10, it runs about ten points under, near 83% for a nominal 95%. Larger runs, or a c fixed from a pilot, remove the shortfall.</div>
         <div class="card"><strong>The same idea as regression</strong>The control-variate estimate is the fitted value of the regression of Y on X at X = E[X]. Two or more controls generalize to a multiple regression in the same way.</div>
-        <div class="card"><strong>What the control cannot remove</strong>The control subtracts only the part of y that a straight line in u predicts. With no noise, that line explains all of u, about 98% of exp(u), 97% of 1/(1 + u), and 96% of √u, but none of the bowl; what remains is the curvature of h. Noise adds a second part no function of u can predict, and so r² falls as σ<sub>e</sub> rises and the two intervals converge. A model closer to linear, or a quieter one, gives the control more to remove.</div>
+        <div class="card"><strong>What the control cannot remove</strong>The control subtracts only the part of y that a straight line in u predicts. With no noise, that line explains all of u, about 98% of exp(u), 97% of 1/(1 + u), and 96% of √u, but none of the bowl; what remains is the curvature of h. Noise adds a second part no function of u can predict, and so R² falls as σ<sub>e</sub> rises and the two intervals converge. A model closer to linear, or a quieter one, gives the control more to remove.</div>
       </div>
     </div>
   </section>
 
   <!-- ── TAB ⑤: importance sampling ──────────────────────────────────── -->
   <section id="tab-is" class="tp">
-    <p class="lede">When almost no draw reaches the event, the direct estimate is mostly zeros. <span class="tip" tabindex="0" data-tip="Sampling from a distribution that reaches the event often, then correcting each draw by how much likelier that distribution made it.">Importance sampling</span> draws instead from a <span class="tip" tabindex="0" data-tip="The distribution actually sampled from, shifted so the event happens often; also called the biasing or importance distribution.">proposal distribution</span>, a normal shifted toward the event, and reweights each draw to undo the shift.</p>
+    <p class="lede">Importance sampling allows for estimating rare events by concentrating inputs only on “important” cases that are likely to generate those rare events. To recover the right proportions, <span class="tip" tabindex="0" data-tip="How probable an observed draw is under a given distribution, read as a function of the distribution rather than of the draw. Dividing the target’s likelihood by the proposal’s gives each draw its weight.">likelihood</span> ratios reweight the biased outcomes.</p>
     <div class="ctrl-row par-row">
       <span class="ctrl-pair">
         <label class="ctrl-lbl" for="is-fn"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model driven by one standard normal input x. The identity is the bare tail probability; exp(x) is a monotone curve, and so the output event is an input event; x² reaches the threshold from both sides.">Model h(x)</span></label>
@@ -4203,7 +4203,7 @@ function drawCvFlow(p) {
 // The control-variate arm recomputed at an arbitrary c (the slider's own value,
 // not necessarily the estimated ĉ): z stays y - c(u - 0.5), and ciMean is the same
 // one-sample interval builder every other arm uses, and so any c gives a genuine
-// interval -- just not the variance-minimizing one. r² is not recomputed here: it
+// interval -- just not the variance-minimizing one. R² is not recomputed here: it
 // depends only on u and y, not on c, and so it never moves as the slider does.
 function cvEffective(run, c, conf) {
   const n = run.u.length, z = new Array(n);
@@ -4399,7 +4399,7 @@ function cvShowStats(run) {
   $('cv-s-hc').textContent = fmt(eff.cv.h, d);
   $('cv-s-hc-df').textContent = 'df ' + eff.cv.df;
   $('cv-s-c').textContent = fmt(run.c, 4);
-  $('cv-s-r2').innerHTML = fmt(run.r2, 3) + ' <span class="sc-aside">(1 − r² = ' + fmt(1 - run.r2, 3) + ')</span>';
+  $('cv-s-r2').innerHTML = fmt(run.r2, 3) + ' <span class="sc-aside">(1 − R² = ' + fmt(1 - run.r2, 3) + ')</span>';
 }
 // Dragging the c slider: recompute z at the new c and its interval, redraw panels
 // 2-3 and the CV cards, but never touch the history (no cvRecord call) or the
@@ -5854,7 +5854,7 @@ function isEssTipText(run) {
 }
 // The one place that writes is-s-ess's text, whether or not the low-ESS
 // warning applies: the warning joins the value on its own last line as a
-// .sc-aside, the same pattern cv-s-r2 uses for its own "(1 - r² = ...)"
+// .sc-aside, the same pattern cv-s-r2 uses for its own "(1 - R² = ...)"
 // aside, rather than a reserved line of its own -- a reserved line above the
 // value left visible blank space in the unflagged state and put the value one
 // line lower than its row neighbor's (Task 7j, fix round 2 of the ESS-card
