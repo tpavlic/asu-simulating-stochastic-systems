@@ -596,7 +596,7 @@ better.
      and a binomial fit, the bearing policies against exact discrete renewal functions on the
      100-hour grid, the activity network against scaled Irwin–Hall CDFs and numerically
      integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
-     and 2.15 row by row and against the Erlang C steady-state wait on long replications.*
+     and 2.15 row by row and against the Erlang-C steady-state wait on long replications.*
   3. *Deliberate conventions: histograms plot the fraction of runs on axes with a bin width fixed
      per output at design time; the range starts at a design-time value too and extends to fit
      (never shrinks within a batch), except for an output whose whole range is fixed by its sample

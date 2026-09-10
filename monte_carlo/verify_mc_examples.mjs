@@ -265,7 +265,7 @@ section('Queueing node (Tables 2.11 and 2.15)');
   for (let i = 0; i < NE; i++) se += M.expInv(M.unif(r0), 0.5);
   close(se / NE, 2, 0.02, 'exponential by inverse transform has mean 1/rate');
   close(M.mmcWq(0.8, 1, 1), 4, 1e-12, 'M/M/1 Wq = rho/(mu - lambda) = 4');
-  close(M.mmcWq(1.6, 1, 2), 0.7111111111 / 0.4, 1e-8, 'M/M/2 Erlang C Wq at lambda 1.6, mu 1');
+  close(M.mmcWq(1.6, 1, 2), 0.7111111111 / 0.4, 1e-8, 'M/M/2 Erlang-C Wq at lambda 1.6, mu 1');
   /* Book Table 2.11 (M/M/1): the first eleven customers. */
   const ia1 = [null, 5, 5, 4, 2, 8, 7, 8, 5, 2, 1], sv1 = [2, 2, 4, 4, 3, 2, 3, 5, 1, 6, 4];
   const t11 = q.run({ lam: 1, mu: 1, c: 1, n: 11 }, { iaValue: i => ia1[i - 1], svcValue: i => sv1[i - 1] });
