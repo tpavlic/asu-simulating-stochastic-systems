@@ -546,10 +546,11 @@ power: Fix the margins on the narrow-screen layout
 ```
 
 Tags are not enumerated anywhere and are not permanent, because widgets keep arriving. While a
-directory holds a single widget its name is the natural tag (`prng`, `input`, `mc`, or a trimmed
+directory holds a single widget its name is the natural tag (`prng`, `input`, or a trimmed
 `power` for `power_analysis/`); once it holds several independent tools, tag the widget instead
 (`analyzer`, `tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let
-earlier commits keep the tags they were written with. Reuse whatever a widget has been tagged
+earlier commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
+explorer's tag and `mcx` is the examples widget's. Reuse whatever a widget has been tagged
 before – `git log --oneline -- prng/` shows it – and keep the tag short: the whole subject line
 should stay at 72 characters or fewer. This is not Conventional Commits, as there is no
 `feat:`/`fix:` type and the tag names a widget rather than a kind of change.
@@ -569,6 +570,43 @@ better.
   estimation by a walking robot, and Monte Carlo integration. The three experiment tabs carry
   accumulating 95% confidence intervals and a 100-run sweep; the robot tab is an animated extension
   with no controls. Expected to gain further tabs tailored to this course)*
+- `monte_carlo/mc_examples.html` *(six tabs, each a short simulation per replication rendered as a
+  spreadsheet-style table that can be stepped row by row, a bespoke structure view, and an
+  accumulating output histogram with a draggable success threshold, t and Wilson intervals, an
+  experiment log of finished batches (each row expandable into that batch's own histogram), and a
+  New batch / Clear all / Clear log trio: ① a queueing node (the book's M/M/1 and M/M/2
+  spreadsheets) with exponential interarrival and service times, a capacity toggle, and the average
+  and longest wait as outputs, ② the order-up-to (M, N) refrigerator policy with two outputs, ③
+  bearing replacement under three policies over 20 000 operating hours, ④ the newsvendor with Q
+  (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon with n
+  and a toggle between the drops scatter and the landing distribution, and ⑥ a three-path activity
+  network with 1, 2, and 4 uniform steps of equal mean and support (chosen to differ from the
+  book's breakfast network, which is a lab exercise) and no decision, whose point is that only the
+  path that finishes last matters (the histogram of the longest path shows it). Commit tag `mcx`.
+  Conventions relied on by code outside the file, which any later edit has to preserve:*
+  1. *Everything between the `MCX-CORE-BEGIN` / `MCX-CORE-END` sentinels is pure numerics with no
+     DOM access, and the block must not contain the words "window" or "document".
+     `monte_carlo/verify_mc_examples.mjs` slices that block out of the HTML and runs it in Node.*
+  2. *`verify_mc_examples.mjs` is not shipped with the widget and is not linked from the site. Run
+     it (`node monte_carlo/verify_mc_examples.mjs`, a few seconds; `MCX_CALIB_REPS` shortens the
+     interval-coverage section) after touching anything in the core. It checks the samplers and
+     intervals, the newsvendor Monte Carlo mean against the exact expected profit for every Q, the
+     order-up-to model against the book's Table 2.21 row by row (fed the book's own demand and
+     lead-time sequence), the drop model against quadrature of the bivariate normal over the octagon
+     and a binomial fit, the bearing policies against exact discrete renewal functions on the
+     100-hour grid, the activity network against scaled Irwin–Hall CDFs and numerically
+     integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
+     and 2.15 row by row and against the Erlang C steady-state wait on long replications.*
+  3. *Deliberate conventions: histograms plot the fraction of runs on axes with a bin width fixed
+     per output at design time; the range starts at a design-time value too and extends to fit
+     (never shrinks within a batch), except for an output whose whole range is fixed by its sample
+     space or exact support (the drops count, the network finish time), and each logged batch's
+     histogram (redrawn on demand when its log row expands) keeps the range it ended with rather
+     than the live one's; the newsvendor's 17-cent lost-profit charge is the book's and is
+     a toggle; the bearing clock counts operating hours only (downtime is charged, not clocked),
+     bearing-hours are 3 × 20 000, and under the age policy a life equal to T is replaced as planned;
+     the one-step path's density is taken as 1 on the closed interval so the exact finish-time
+     density integrates to 1 under quadrature.)*
 
 ### Pseudorandom Number Generation
 

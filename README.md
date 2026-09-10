@@ -26,7 +26,8 @@ below.
 
 | Directory | Description |
 | --- | --- |
-| [`monte_carlo/`](monte_carlo/) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, area from a walking robot's crossing trails, and Monte Carlo integration, with accumulating 95% confidence intervals |
+| [`monte_carlo/mc_explorer.html`](monte_carlo/mc_explorer.html) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, area from a walking robot's crossing trails, and Monte Carlo integration, with accumulating 95% confidence intervals |
+| [`monte_carlo/mc_examples.html`](monte_carlo/mc_examples.html) | Six textbook-style Monte Carlo experiments where each replication is a short simulation (an M/M/1 or M/M/2 queueing node, an order-up-to inventory policy, a bearing-replacement policy, a newsvendor, aid drops into a delivery zone, and a stochastic activity network): step through one replication, accumulate a batch, and move a decision knob against a success threshold to watch the output distribution and the probability of success change, with an experiment log of finished batches and their expandable histograms below |
 
 ### Pseudorandom Number Generation
 
