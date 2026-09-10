@@ -287,16 +287,34 @@ section('Queueing node (Tables 2.11 and 2.15)');
   ok(JSON.stringify(h('wait')) === JSON.stringify([0, 0, 2, 0, 0, 0, 2, 2, 1, 1]), 'caller delay', JSON.stringify(h('wait')));
   ok(JSON.stringify(h('sys')) === JSON.stringify([4, 4, 5, 3, 5, 5, 7, 6, 3, 4]), 'time in system (M/M/2)', JSON.stringify(h('sys')));
   ok(q.columnsFor({ c: 2 }).length === 12 && q.columnsFor({ c: 1 }).length === 9, 'column sets by capacity (amended Task 60: no u columns)');
-  const a = q.replicate(9, { lam: 0.8, mu: 1, c: 1, n: 20 }), b = q.replicate(9, { lam: 0.8, mu: 1, c: 1, n: 20 });
-  ok(JSON.stringify(a) === JSON.stringify(b) && a.rows.length === 20 && a.rows[0].ia === null, 'same seed reproduces; first customer arrives at 0');
+  /* Task 67: T (end time), not n (a customer count), is the decision now;
+     this exercises that path (n undefined, T terminates the loop) rather
+     than the fixed-cap one Tables 2.11/2.15 use above. */
+  const a = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 }), b = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 });
+  ok(JSON.stringify(a) === JSON.stringify(b) && a.rows.length > 0 && a.rows[0].ia === null && a.rows.every(r => r.arr <= 25), 'same seed reproduces; first customer arrives at 0; every arrival by T');
   /* Long replications approach the steady-state wait (the start-from-empty
-     transient is a small downward bias at n = 4000). */
-  const w1 = []; for (let i = 0; i < 40; i++) w1.push(q.replicate(100 + i, { lam: 0.8, mu: 1, c: 1, n: 4000 }).outputs.avgWait);
+     transient is a small downward bias); T = 5000 min gives a comparable
+     customer count to the old n = 4000 at these rates. */
+  const w1 = []; for (let i = 0; i < 40; i++) w1.push(q.replicate(100 + i, { lam: 0.8, mu: 1, c: 1, T: 5000 }).outputs.avgWait);
   const m1 = w1.reduce((x, y) => x + y, 0) / 40;
   ok(Math.abs(m1 - 4) / 4 < 0.08, `M/M/1 long-run average wait near 4 (${m1.toFixed(3)})`);
-  const w2 = []; for (let i = 0; i < 40; i++) w2.push(q.replicate(200 + i, { lam: 1.6, mu: 1, c: 2, n: 4000 }).outputs.avgWait);
+  const w2 = []; for (let i = 0; i < 40; i++) w2.push(q.replicate(200 + i, { lam: 1.6, mu: 1, c: 2, T: 5000 }).outputs.avgWait);
   const m2 = w2.reduce((x, y) => x + y, 0) / 40;
   ok(Math.abs(m2 - 1.7778) / 1.7778 < 0.08, `M/M/2 long-run average wait near 1.778 (${m2.toFixed(3)})`);
+  /* Every customer arrives at or before T, and the arrival count across many
+     replications is Poisson-plausible: mean lambda*T, standard error of the
+     200-replication sample mean sqrt(lambda*T/200). */
+  const lamChk = 0.8, Tchk = 200, repsChk = 200;
+  let allByT = true; const counts = [];
+  for (let i = 0; i < repsChk; i++) {
+    const rep = q.replicate(3000 + i, { lam: lamChk, mu: 1, c: 1, T: Tchk });
+    if (!rep.rows.every(r => r.arr <= Tchk)) allByT = false;
+    counts.push(rep.rows.length);
+  }
+  ok(allByT, 'every customer in a replication arrives at or before T');
+  const meanCount = counts.reduce((x, y) => x + y, 0) / repsChk, expectedCount = lamChk * Tchk;
+  const seCount = Math.sqrt(expectedCount / repsChk);
+  ok(Math.abs(meanCount - expectedCount) <= 4 * seCount, `arrival count is Poisson-plausible (mean ${meanCount.toFixed(1)} vs lambda*T = ${expectedCount}, 4 se = ${(4 * seCount).toFixed(2)})`);
 }
 
 // SECTIONS-END

@@ -288,36 +288,41 @@ table.sim tr.linked-pin td { background: var(--accent-tint); }
 table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 .summary { font-size: .85rem; margin-top: 8px; min-height: 1.4em; }
 .summary strong { font-family: 'IBM Plex Mono', monospace; color: var(--accent); font-variant-numeric: tabular-nums; }
-/* Aggregate layer (Task 54b). .agg's direct children are always, in DOM
-   order: cards-top (buttons + Runs), the first output's histogram card, the
-   first output's own mean/P(success) cards, and -- on a two-output tab only
-   -- the second output's histogram card and its own mean/P(success) cards.
-   That order is exactly the narrow (below 720px), single-column reading
-   order the brief asks for, and so the narrow rule below only has to reset
-   grid-column/grid-row back to the browser's default (auto), not reorder
-   anything. At 720px and up, the nth-child rules place those same children
-   explicitly: column 1 is a histogram card spanning both of that output's
-   rows; column 2 is cards-top (row 1) stacked above the first output's own
-   cards (row 2), or, on a two-output tab, the second output's histogram
-   (row 3, column 1) stacked below the first and its own cards (row 3,
-   column 2). A one-output tab simply never has a 4th/5th child, and so its
-   nth-child(4)/(5) rules below match nothing. align-items: start keeps a
-   shorter column's cards from being stretched to fill a taller row, and so
-   neither column's height depends on which output's histogram happens to
-   be tallest -- the page-height rule holds through a run exactly as before.
-   The row template keeps row 1 at cards-top's own height and gives row 2
-   the rest of the spanning histogram's height, so the first output's cards
-   sit directly under Runs instead of the gap the equal split of a spanned
-   height would otherwise leave. */
-.agg { display: grid; grid-template-columns: minmax(0, 1fr) 232px; grid-template-rows: auto 1fr auto; gap: 14px; align-items: start; }
+/* Aggregate layer (Task 54b, extended for a third output by Task 66).
+   .agg's direct children are always, in DOM order: cards-top (buttons +
+   Runs), the first output's histogram card, the first output's own
+   mean/P(success) cards, and then, one output at a time, each further
+   output's histogram card and its own mean/P(success) cards (today, up to
+   a third, on the inventory tab only). That order is exactly the narrow
+   (below 720px), single-column reading order the brief asks for, and so
+   the narrow rule below only has to reset grid-column/grid-row back to the
+   browser's default (auto), not reorder anything. At 720px and up, the
+   nth-child rules place those same children explicitly: column 1 is a
+   histogram card spanning both of that output's rows (the first output)
+   or its own single row (every later output); column 2 is cards-top (row
+   1) stacked above the first output's own cards (row 2), then each later
+   output's histogram (column 1) stacked below its own cards (column 2), a
+   row per output. A tab with fewer outputs simply never has the later
+   children, and so their nth-child rules below match nothing. align-items:
+   start keeps a shorter column's cards from being stretched to fill a
+   taller row, and so neither column's height depends on which output's
+   histogram happens to be tallest -- the page-height rule holds through a
+   run exactly as before. The row template keeps row 1 at cards-top's own
+   height and gives row 2 the rest of the spanning histogram's height, so
+   the first output's cards sit directly under Runs instead of the gap the
+   equal split of a spanned height would otherwise leave; every row after
+   that is auto-sized to whichever output owns it. */
+.agg { display: grid; grid-template-columns: minmax(0, 1fr) 232px; grid-template-rows: auto 1fr auto auto; gap: 14px; align-items: start; }
 .agg > :nth-child(1) { grid-column: 2; grid-row: 1; }
 .agg > :nth-child(2) { grid-column: 1; grid-row: 1 / span 2; }
 .agg > :nth-child(3) { grid-column: 2; grid-row: 2; }
 .agg > :nth-child(4) { grid-column: 1; grid-row: 3; }
 .agg > :nth-child(5) { grid-column: 2; grid-row: 3; }
+.agg > :nth-child(6) { grid-column: 1; grid-row: 4; }
+.agg > :nth-child(7) { grid-column: 2; grid-row: 4; }
 @media (max-width: 720px) {
   .agg { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
-  .agg > :nth-child(1), .agg > :nth-child(2), .agg > :nth-child(3), .agg > :nth-child(4), .agg > :nth-child(5) { grid-column: auto; grid-row: auto; }
+  .agg > :nth-child(1), .agg > :nth-child(2), .agg > :nth-child(3), .agg > :nth-child(4), .agg > :nth-child(5), .agg > :nth-child(6), .agg > :nth-child(7) { grid-column: auto; grid-row: auto; }
 }
 .hist-card { border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 12px 8px; min-width: 0; }
 .hist-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
@@ -417,7 +422,7 @@ input[type=range] { height: 26px; }
 <div class="widget">
   <div style="margin-bottom:14px">
     <div class="wh-title">Monte Carlo Simulation Examples</div>
-    <div class="wh-sub">Six short simulations, one replication at a time, then the distribution: move a decision and watch the probability of success change</div>
+    <div class="wh-sub">Six short simulations that show the variety of ways Monte Carlo methods apply to dynamic and static stochastic modeling problems</div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
   <nav class="tabs">
@@ -449,7 +454,7 @@ input[type=range] { height: 26px; }
 
   <!-- TAB ① -->
   <section id="tab-q" class="tp active">
-    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> follows n customers through the spreadsheet: arrival, service begins, wait, service ends. The arrival rate, the service rate, and the number of servers are the decisions, and the threshold asks how long the average wait may be. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
+    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> runs to an end time through the spreadsheet: arrival, service begins, wait, service ends. The arrival rate, the service rate, the number of servers, and the end time are the decisions, and the threshold asks how long the average wait may be. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
     <div class="sec"><div class="sec-hd">Inputs and decision</div><div id="q-inputs">
       <div class="inp-wrap">
         <table class="inp" aria-label="Queueing node inputs"><tr><th>Input</th><th>Distribution</th></tr>
@@ -464,10 +469,10 @@ input[type=range] { height: 26px; }
           <span class="spin"><button type="button" aria-label="Decrease μ" onclick="spinStep('q-mu',-1)">−</button><input id="q-mu" type="number" min="0.1" max="2.0" step="0.1" value="1.0" inputmode="decimal" onchange="spinCommit('q-mu')"><button type="button" aria-label="Increase μ" onclick="spinStep('q-mu',1)">+</button></span></label>
         <label class="knob" for="q-c"><span class="tip" tabindex="0" data-tip="How many identical servers work in parallel, sharing one queue. One of three decisions in this model.">Servers</span>
           <span class="spin"><select id="q-c" onchange="MCXUI.onKnob('q')"><option value="1">1</option><option value="2">2</option></select></span></label>
-        <label class="knob" for="q-n"><span class="tip" tabindex="0" data-tip="How many customers the replication follows, from the first arrival to the last one served.">Customers, n</span>
-          <span class="spin"><button type="button" aria-label="Decrease n" onclick="spinStep('q-n',-1)">−</button><input id="q-n" type="number" min="10" max="100" step="10" value="20" inputmode="numeric" onchange="spinCommit('q-n')"><button type="button" aria-label="Increase n" onclick="spinStep('q-n',1)">+</button></span></label>
-        <span class="knob"><span class="tip" tabindex="0" data-tip="Traffic intensity, the fraction of time the servers are busy in the long run. Above 1, the queue grows without bound; a replication of n customers runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
-        <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang C probability that an arriving customer has to wait and a = λ/μ. A replication of n customers starts empty, and so its average sits below this value; the gap closes as n grows.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
+        <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="How long arrivals keep coming. Every customer who arrives by T is served to the end, and so a replication's clock can run past T. A longer T lets the average wait settle toward the steady-state value.">End time, T (min)</span>
+          <span class="spin"><button type="button" aria-label="Decrease T" onclick="spinStep('q-T',-1)">−</button><input id="q-T" type="number" min="20" max="600" step="20" value="60" inputmode="numeric" onchange="spinCommit('q-T')"><button type="button" aria-label="Increase T" onclick="spinStep('q-T',1)">+</button></span></label>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="Traffic intensity, the fraction of time the servers are busy in the long run. Above 1, the queue grows without bound; a replication runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang C probability that an arriving customer has to wait and a = λ/μ. A replication starts empty, and so its average wait tends to sit below this line; the gap closes as T grows.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
       </div>
     </div></div>
     <div class="sec"><div class="sec-hd">Servers and the queue over time</div><div id="q-struct" class="struct">
@@ -591,6 +596,14 @@ input[type=range] { height: 26px; }
           <div class="legend" id="inv-legend-b"></div>
         </div>
         <div class="sg one" id="inv-cards-shortDays"></div>
+        <div class="hist-card">
+          <div class="hist-hd"><span>Average ending inventory, fraction of runs</span>
+            <label class="knob" for="inv-thr-c"><span class="tip" tabindex="0" data-tip="A run succeeds when its average ending inventory over the 25 days stays at or below this value. Drag the line on the plot or type a value.">Success threshold</span>
+              <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('inv-thr-c',-1)">−</button><input id="inv-thr-c" type="number" step="0.25" value="4" inputmode="decimal" onchange="MCXUI.onThreshold('inv','avgInv',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('inv-thr-c',1)">+</button></span></label></div>
+          <div id="inv-hist-c"></div>
+          <div class="legend" id="inv-legend-c"></div>
+        </div>
+        <div class="sg one" id="inv-cards-avgInv"></div>
       </div>
       <div class="log-hd">
         <span class="tip" tabindex="0" data-tip="One row per finished batch: its setting, thresholds, runs, mean, and probability of success with 95 % intervals. Click a row to see that batch's histogram.">Experiment log</span>
@@ -1414,26 +1427,37 @@ var Q_COLUMNS_2 = [
 ];
 MODELS.q = {
   key: 'q',
-  defaults: { lam: 0.8, mu: 1.0, c: 1, n: 20 },
+  defaults: { lam: 0.8, mu: 1.0, c: 1, T: 60 },
   tables: { servers: Q_SERVERS },
   columns: Q_COLUMNS_1,
   columnsFor: function (p) { return p.c === 2 ? Q_COLUMNS_2 : Q_COLUMNS_1; },
   /* draw.ia() and draw.svc() return uniforms; draw.iaValue(i) and
-     draw.svcValue(i) return times directly and take precedence when present. */
+     draw.svcValue(i) return times directly and take precedence when present.
+     Task 67: customers keep arriving while the next arrival time is at or
+     before p.T (end time, minutes); every customer who arrives by T is
+     served to completion, so the last few rows' own end/sys can fall past
+     T even though no later row's arr ever does. p.n, when present, is an
+     optional cap on the count honored alongside T (the verify script's
+     Table 2.11/2.15 checks feed a fixed draw sequence and pass n with no T
+     at all, relying on the cap alone to stop the loop -- T defaults to
+     Infinity in that case, matching the old fixed-n loop exactly). */
   run: function (p, draw) {
-    var c = p.c === 2 ? 2 : 1, n = p.n, rows = [], free = [0, 0], prevEnd = 0, arr = 0;
+    var c = p.c === 2 ? 2 : 1, T = p.T != null ? p.T : Infinity, cap = p.n;
+    var rows = [], free = [0, 0], prevEnd = 0, arr = 0;
     var sumWait = 0, maxWait = 0, sumSys = 0, busy = 0, waited = 0, lastEnd = 0;
-    for (var i = 1; i <= n; i++) {
+    for (var k = 1; cap == null || k <= cap; k++) {
       var u1 = null, ia = 0;
-      if (i > 1) { if (draw.iaValue) ia = draw.iaValue(i); else { u1 = draw.ia(); ia = expInv(u1, p.lam); } }
-      arr += ia;
+      if (k > 1) { if (draw.iaValue) ia = draw.iaValue(k); else { u1 = draw.ia(); ia = expInv(u1, p.lam); } }
+      var nextArr = arr + ia;
+      if (nextArr > T) break;
+      arr = nextArr;
       var u2 = null, svc;
-      if (draw.svcValue) svc = draw.svcValue(i); else { u2 = draw.svc(); svc = expInv(u2, p.mu); }
-      var row = { i: i, u1: u1, ia: i > 1 ? ia : null, arr: arr, u2: u2, svc: svc };
+      if (draw.svcValue) svc = draw.svcValue(k); else { u2 = draw.svc(); svc = expInv(u2, p.mu); }
+      var row = { i: k, u1: u1, ia: k > 1 ? ia : null, arr: arr, u2: u2, svc: svc };
       var begin, end;
       if (c === 1) {
         begin = Math.max(arr, prevEnd); end = begin + svc;
-        row.idle = i > 1 ? Math.max(0, begin - prevEnd) : null;
+        row.idle = k > 1 ? Math.max(0, begin - prevEnd) : null;
         row.server = 0; prevEnd = end;
       } else {
         row.freeA = free[0]; row.freeB = free[1];
@@ -1447,9 +1471,10 @@ MODELS.q = {
       if (end > lastEnd) lastEnd = end;
       rows.push(row);
     }
-    var avgWait = sumWait / n;
+    var n = rows.length;
+    var avgWait = n > 0 ? sumWait / n : 0;
     return { rows: rows,
-             summary: { avgWait: avgWait, maxWait: maxWait, avgSys: sumSys / n, waitedFrac: waited / n, makespan: lastEnd, util: lastEnd > 0 ? busy / (c * lastEnd) : 0, c: c, n: n },
+             summary: { avgWait: avgWait, maxWait: maxWait, avgSys: n > 0 ? sumSys / n : 0, waitedFrac: n > 0 ? waited / n : 0, makespan: lastEnd, util: lastEnd > 0 ? busy / (c * lastEnd) : 0, c: c, n: n, T: p.T },
              outputs: { avgWait: avgWait, maxWait: maxWait } };
   },
   replicate: function (seed, p) { var rand = mulberry32(seed); return this.run(p, { ia: function () { return unif(rand); }, svc: function () { return unif(rand); } }); }
@@ -1860,16 +1885,23 @@ function renderQWaitEq(st, k) {
   for (let i = 0; i < n; i++) { sumWait += rows[i].wait; if (rows[i].wait > maxWait) maxWait = rows[i].wait; }
   el.innerHTML = qWaitExpr(sumWait.toFixed(2), String(n), (sumWait / n).toFixed(2), maxWait.toFixed(2));
 }
-// 999999.99/100/99999.99/99999.99 (Task 65a) cover the true reachable corner
-// at lambda = 2.0, mu = 0.1, c = 1, n = 100 -- sums near 70,000 and maxima
-// above 1,000 measured directly against the core -- with a full extra digit
-// of headroom, rather than the 3-4 digit budget the original literals
-// assumed.
+// Task 65a widened these against the old fixed-n corner (sums near 70,000).
+// Task 67 (an end time T, not a customer count) reopened the question: at
+// c = 1, mu = 0.1 (its own minimum), lambda = 2.0 (its own maximum) is a
+// deeply overloaded queue (rho = 20), and run out to T's own maximum, 600
+// min, the count of customers who still arrive (a Poisson process, unbroken
+// by how far behind service has fallen) reaches into the thousands while
+// their waits compound -- measured directly against the core across 300
+// seeds at that exact corner: sums up to ~8.55 million, longest waits up to
+// ~13,100, counts up to ~1,297. 99999999.99/9999/99999.99/99999.99 covers
+// that with an order of magnitude to spare on the sum and the count, the
+// two the old literals underestimated; the average and the longest wait
+// were already wide enough.
 function reserveQWaitEqHeight() {
   const el = $('q-wait-eq');
   if (!el) return;
   const symbolic = qWaitExpr(null, null, null, null);
-  const worst = qWaitExpr('999999.99', '100', '99999.99', '99999.99');
+  const worst = qWaitExpr('99999999.99', '9999', '99999.99', '99999.99');
   const h = Math.max(measureOffscreen(el, symbolic), measureOffscreen(el, worst));
   el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
 }
@@ -2790,6 +2822,14 @@ window.addEventListener('load', function () {
         axis: { min: -0.5, max: 15.5, bin: 1, tick: 5 }, integer: true, success: 'le', thrDefault: 2, thrStep: 1,
         fmt: v => String(v), axisFmt: v => String(Math.round(v)),
         successLabel: t => 'P(shortage days ≤ ' + t + ')', reference: () => null
+      },
+      {
+        // Task 66: the book's own reference example histograms this third
+        // output too, over the same 25-day replication as the other two.
+        key: 'avgInv', label: 'Average ending inventory (refrigerators)', meanLabel: 'Mean of the average ending inventory', short: 'avg inventory',
+        histId: 'inv-hist-c', thrId: 'inv-thr-c', legendId: 'inv-legend-c',
+        axis: { min: 0, max: 8, bin: 0.25, tick: 2 }, integer: false, success: 'le', thrDefault: 4, thrStep: 0.25,
+        fmt: v => v.toFixed(2), successLabel: t => 'P(average ending inventory ≤ ' + t.toFixed(2) + ')', reference: () => null
       }
     ],
     structure: STRUCT.inv,
@@ -3011,32 +3051,36 @@ window.addEventListener('load', function () {
     // same place br and an disable their own conditional knob, because the
     // harness calls readParams() on every knob change and every render.
     readParams: () => {
-      const lam = Number($('q-lam').value), mu = Number($('q-mu').value), c = Number($('q-c').value), n = Number($('q-n').value);
+      const lam = Number($('q-lam').value), mu = Number($('q-mu').value), c = Number($('q-c').value), T = Number($('q-T').value);
       const rhoEl = $('q-rho-val');
       if (rhoEl) rhoEl.textContent = (lam / (c * mu)).toFixed(2);
       const wqEl = $('q-wq-val');
       if (wqEl) { const wq = MCX.mmcWq(lam, mu, c); wqEl.textContent = isFinite(wq) ? wq.toFixed(2) + ' min' : '∞'; }
       const wqF = $('q-wq-formula');
       if (wqF) wqF.textContent = c === 1 ? 'ρ/(μ − λ)' : 'C(' + c + ', λ/μ)/(' + c + 'μ − λ)';
-      const params = { lam: lam, mu: mu, c: c, n: n };
+      const params = { lam: lam, mu: mu, c: c, T: T };
       renderQSchema(params);
       return params;
     },
-    settingLabel: p => 'λ = ' + p.lam.toFixed(1) + ', μ = ' + p.mu.toFixed(1) + ', c = ' + p.c + ', n = ' + p.n,
-    knobIds: ['q-lam', 'q-mu', 'q-c', 'q-n'],
+    settingLabel: p => 'λ = ' + p.lam.toFixed(1) + ', μ = ' + p.mu.toFixed(1) + ', c = ' + p.c + ', T = ' + p.T + ' min',
+    knobIds: ['q-lam', 'q-mu', 'q-c', 'q-T'],
     outputs: [
       {
         key: 'avgWait', label: 'Average wait in queue (min)', meanLabel: 'Mean of the average wait (min)', short: 'avg wait', histId: 'q-hist-a', thrId: 'q-thr-a', legendId: 'q-legend-a',
-        axis: { min: 0, max: 8, bin: 0.5, tick: 2 }, integer: false, success: 'le', thrDefault: 3, thrStep: 0.5,
+        // max re-derived for Task 67's default T = 60 (was 8, sized for the
+        // old fixed n = 20): the smallest tick multiple at or above the 99th
+        // percentile of 2,000 replications at the default knobs (about
+        // 11.3-11.5 across resamples).
+        axis: { min: 0, max: 12, bin: 0.5, tick: 2 }, integer: false, success: 'le', thrDefault: 3, thrStep: 0.5,
         fmt: v => v.toFixed(2), unit: 'min', successLabel: t => 'P(average wait ≤ ' + t.toFixed(2) + ' min)',
         // The only steady-state reference in the widget (the bearing's and
         // newsvendor's line references are exact finite-horizon
         // expectations, not long-run limits), and so the only one whose
         // legend entry needs a tip explaining that a finite replication is
         // only ever an approach to the line, not a target it should hit.
-        referenceTip: 'The long-run average wait for this M/M/c system. A replication starts with an empty queue, so its average wait tends to sit below this line; the gap closes as n grows.',
+        referenceTip: 'The long-run average wait for this M/M/c system. A replication starts with an empty queue, and so its average wait tends to sit below this line; the gap closes as T grows.',
         // Omitted above rho = 1, where the steady-state wait is infinite and
-        // a replication of n customers is not settling toward any fixed value.
+        // a replication is not settling toward any fixed value.
         // The label carries no value of its own (Task 54a): renderLegend
         // appends o.fmt(ref.x) plus o.unit for every line reference now,
         // generalized from this tab's own one-off version.
@@ -3047,14 +3091,25 @@ window.addEventListener('load', function () {
       },
       {
         key: 'maxWait', label: 'Longest wait (min)', meanLabel: 'Mean of the longest wait (min)', short: 'longest', histId: 'q-hist-b', thrId: 'q-thr-b', legendId: 'q-legend-b',
-        axis: { min: 0, max: 20, bin: 1, tick: 5 }, integer: false, success: 'le', thrDefault: 10, thrStep: 1,
+        // max re-derived for Task 67's default T = 60 (was 20, sized for the
+        // old fixed n = 20): the smallest tick multiple at or above the 99th
+        // percentile of 2,000 replications at the default knobs (about
+        // 20.4-22.8 across resamples).
+        axis: { min: 0, max: 25, bin: 1, tick: 5 }, integer: false, success: 'le', thrDefault: 10, thrStep: 1,
         fmt: v => v.toFixed(2), successLabel: t => 'P(longest wait ≤ ' + t.toFixed(2) + ' min)', reference: () => null
       }
     ],
     structure: STRUCT.q,
-    summary: rep => 'This replication: average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
-    summaryWorst: 'This replication: average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
-    rowsWorst: p => p.n,
+    summary: rep => 'This replication: <strong>' + rep.summary.n + '</strong> customers by T = ' + rep.summary.T + ' min; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
+    summaryWorst: 'This replication: <strong>1300</strong> customers by T = 600 min; average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
+    // The largest plausible row count at the current knobs, not a fixed
+    // count (Task 67: arrivals are now a Poisson process run out to T, and
+    // so the count varies by seed). Arrivals by T follow Poisson(lambda*T);
+    // mean plus 3 standard deviations, with a small flat margin, is
+    // exceeded only in the tail the widget does not promise to reserve for
+    // -- about 1,300 at the knobs' own corner, lambda = 2.0 and T = 600,
+    // matching the brief's own figure.
+    rowsWorst: p => Math.ceil(p.lam * p.T + 3 * Math.sqrt(Math.max(1, p.lam * p.T))) + 10,
     // A window resize is the only other thing (besides a knob change,
     // already covered inside renderQSchema itself) that can move the
     // schematic relative to the inputs table it aligns to; the wait
@@ -3206,7 +3261,7 @@ function makeLinker(cfg) {
   // and font-size are set once on the parent tspan (nv-v-profit, in the two
   // layout builders below) and inherited here, not repeated per segment.
   function nvEqExpr(st, row) {
-    const price = st.cfg.model.tables.price, charge = st.params.charge, c = v => v.toFixed(2);
+    const price = st.cfg.model.tables.price, charge = st.params.charge, c = v => '$' + v.toFixed(2);
     const sales = row ? String(row.sales) : 'sales', q = row ? String(st.params.Q) : 'Q';
     const unsold = row ? String(row.unsold) : 'unsold', unmet = row ? String(row.unmet) : 'unmet';
     const seg = (text, color) => '<tspan fill="' + color + '">' + escNv(text) + '</tspan>';
@@ -4748,12 +4803,15 @@ function makeLinker(cfg) {
     const H = queueBottom + AXIS_H;
     // Fits the current replication (computed in full before stepping begins,
     // and so this never moves between Steps of the same replication, only
-    // between one replication and the next): 1.12x the last departure gives
-    // the end-anchored "arrivals"/"departures" rug labels room, rounded up
-    // to a labeled tick (Task 59a). With no replication yet, n/lambda -- the
-    // expected span of n arrivals -- stands in for "the last departure."
+    // between one replication and the next): 1.12x the larger of the last
+    // departure and T itself gives the end-anchored "arrivals"/"departures"
+    // rug labels room and keeps the T line (below) always on the visible
+    // axis, even on the rare replication whose last arrival trails well
+    // behind T, rounded up to a labeled tick (Task 59a). With no
+    // replication yet, T -- the end of the window the replication will
+    // cover -- stands in for "the last departure."
     const lastDep = st.rep && st.rep.rows.length ? st.rep.rows.reduce((m, row) => Math.max(m, row.end), 0) : null;
-    const xMax = niceAxisMax((lastDep != null ? lastDep : p.n / p.lam) * 1.12);
+    const xMax = niceAxisMax(Math.max(lastDep != null ? lastDep : p.T, p.T) * 1.12);
     const xAt = t => L + Math.min(1, Math.max(0, t / xMax)) * innerW;
     const servers = MCX.models.q.tables.servers;
 
@@ -4874,12 +4932,31 @@ function makeLinker(cfg) {
     // on the same scale, and so one row of ticks along the bottom is enough.
     s += '<line x1="' + L + '" y1="' + queueBottom + '" x2="' + (L + innerW) + '" y2="' + queueBottom + '" stroke="var(--border)" stroke-width="1"/>';
     const tickStep = xMax / 5, wholeTicks = Number.isInteger(tickStep);
+    // T's own label (below) sits in this same row, and a round T -- the
+    // knob steps by 20, and niceAxisMax's own ticks land on round numbers
+    // too -- lands exactly on one of these five often enough that it is not
+    // an edge case (the default 60/20 is itself one instance): skip a
+    // regular tick's own number where it would collide, keeping its mark.
+    const tXforSkip = xAt(p.T);
     for (let i = 0; i <= 5; i++) {
       const v = tickStep * i, x = xAt(v), anchor = i === 0 ? 'start' : i === 5 ? 'end' : 'middle';
       const tx = anchor === 'start' ? x + 2 : anchor === 'end' ? x - 2 : x;
       s += '<line x1="' + x.toFixed(2) + '" y1="' + queueBottom + '" x2="' + x.toFixed(2) + '" y2="' + (queueBottom + 4) + '" stroke="var(--border)" stroke-width="1"/>';
-      s += '<text x="' + tx.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">' + (wholeTicks ? Math.round(v) : v.toFixed(1)) + '</text>';
+      if (Math.abs(x - tXforSkip) > 16) {
+        s += '<text x="' + tx.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">' + (wholeTicks ? Math.round(v) : v.toFixed(1)) + '</text>';
+      }
     }
+    // The end-of-arrivals line (Task 67): every arrival tick on the rug sits
+    // at or left of it, even though a bar or the queue-length step can
+    // still extend well past it (a customer who arrived just before T can
+    // still be served, or still waiting, long after). Spans the full plot
+    // height, drawn over the bars/rug already in s, and so it reads as a
+    // reference through the whole chart rather than a fifth axis tick; its
+    // own label sits in the tick row below rather than the cramped 6px top
+    // margin, on top of whichever tick, if any, it happens to fall near.
+    const tX = xAt(p.T);
+    s += '<line x1="' + tX.toFixed(2) + '" y1="' + T + '" x2="' + tX.toFixed(2) + '" y2="' + queueBottom + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+    s += '<text x="' + tX.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">T</text>';
     s += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Time (min)</text>';
 
     // A transparent hit rect over the queue plot's own area for the "who is

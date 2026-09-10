@@ -575,8 +575,8 @@ better.
   accumulating output histogram with a draggable success threshold, t and Wilson intervals, an
   experiment log of finished batches (each row expandable into that batch's own histogram), and a
   New batch / Clear all / Clear log trio: ① a queueing node (the book's M/M/1 and M/M/2
-  spreadsheets) with exponential interarrival and service times, a capacity toggle, and the average
-  and longest wait as outputs, ② the order-up-to (M, N) refrigerator policy with two outputs, ③
+  spreadsheets) with exponential interarrival and service times, a capacity toggle, and an end
+  time, ② the order-up-to (M, N) refrigerator policy with three outputs, ③
   bearing replacement under three policies over 20 000 operating hours, ④ the newsvendor with Q
   (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon with n
   and a toggle between the drops scatter and the landing distribution, and ⑥ a three-path activity
