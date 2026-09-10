@@ -4896,9 +4896,9 @@ function makeLinker(cfg) {
       // data-begin/data-end/data-svc (Task 52) are what the readout needs
       // now that it is about the service only, not the wait; data-server
       // names the server only when there is a choice to name (c = 2).
-      bars += '<rect class="q-cust" data-cust="' + row.i + '" data-begin="' + row.begin.toFixed(3) + '" data-end="' + row.end.toFixed(3) + '" data-svc="' + row.svc.toFixed(3)
+      bars += '<rect class="q-cust" data-cust="' + row.i + '" data-begin="' + row.begin.toFixed(3) + '" data-end="' + row.end.toFixed(3) + '" data-svc="' + row.svc.toFixed(3) + '"'
         + (c === 2 ? ' data-server="' + servers[lane] + '"' : '')
-        + '" data-vy="' + barY + '" data-vh="' + barH
+        + ' data-vy="' + barY + '" data-vh="' + barH
         + '" x="' + x0.toFixed(2) + '" y="' + yTop.toFixed(2) + '" width="' + bw.toFixed(2) + '" height="' + LANE_H + '" fill="transparent" pointer-events="all"/>';
     }
     s += bars;
