@@ -358,6 +358,12 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
    hovered or being dragged -- the same visual the histogram threshold's
    .thr-grab.active gives its own line. */
 .inv-drag-hi { stroke: var(--est); stroke-width: 2; }
+/* The T line's own drag handle (Task 68), same pattern as .inv-drag/
+   .inv-drag-hi above: touch-action:none keeps a drag from also scrolling
+   the page, and the CSS class beats the line's own stroke/stroke-width
+   presentation attributes while the handle is hovered or being dragged. */
+.q-drag { touch-action: none; cursor: ew-resize; }
+.q-drag-hi { stroke: var(--est); stroke-width: 2; }
 /* The New batch / Clear all pair sits at the top of the cards column, above
    the Runs card (Task 54b), in every tab's Many replications card. */
 .batch-btns { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -478,7 +484,7 @@ input[type=range] { height: 26px; }
     <div class="sec"><div class="sec-hd">Servers and the queue over time</div><div id="q-struct" class="struct">
       <svg id="q-servers" viewBox="0 0 640 200" role="img" aria-label="Server activity and queue length over the replication"></svg>
       <div class="out-eq" id="q-wait-eq"></div>
-      <div class="fig-cap" id="q-servers-cap">The rug on top marks every event. Below it, each bar is one customer's service on the server that took it, from the moment the customer reaches the server to the moment it leaves; a customer still waiting has no bar yet. The step plot counts customers waiting; hover or tap it to see who is waiting at that instant. In the rug, a tick up (blue) is an arrival and a tick down (red) is a departure, each with its own readout on hover or tap. Hover or tap a bar for that service's start, end, and length. Hover a row or a bar to link them; click to pin the pair, and click again to release. The running average above uses only the customers revealed so far.</div>
+      <div class="fig-cap" id="q-servers-cap">The rug on top marks every event. Below it, each bar is one customer's service on the server that took it, from the moment the customer reaches the server to the moment it leaves; a customer still waiting has no bar yet. The step plot counts customers waiting; hover or tap it to see who is waiting at that instant. In the rug, a tick up (blue) is an arrival and a tick down (red) is a departure, each with its own readout on hover or tap. Hover or tap a bar for that service's start, end, and length. Hover a row or a bar to link them; click to pin the pair, and click again to release. The running average above uses only the customers revealed so far. Drag the dashed T line to change the end time; the spinner above does the same.</div>
     </div></div>
     <div class="sec"><div class="sec-hd">One replication</div><div id="q-rep">
       <div class="ctrl-row">
@@ -4955,7 +4961,7 @@ function makeLinker(cfg) {
     // own label sits in the tick row below rather than the cramped 6px top
     // margin, on top of whichever tick, if any, it happens to fall near.
     const tX = xAt(p.T);
-    s += '<line x1="' + tX.toFixed(2) + '" y1="' + T + '" x2="' + tX.toFixed(2) + '" y2="' + queueBottom + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+    s += '<line id="q-t-line" x1="' + tX.toFixed(2) + '" y1="' + T + '" x2="' + tX.toFixed(2) + '" y2="' + queueBottom + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
     s += '<text x="' + tX.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">T</text>';
     s += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Time (min)</text>';
 
@@ -4970,6 +4976,14 @@ function makeLinker(cfg) {
     // element below, rather than re-attached to these bars, which innerHTML
     // rebuilds on every render.
     s += '<g id="q-readout" pointer-events="none"></g>';
+
+    // The T line's own drag handle (Task 68), on the pattern of Task 46's
+    // M/N handles on the inventory sawtooth: 24 CSS px converted to this
+    // render's own viewBox units, full plot height, drawn last so it sits
+    // on top of every other hit target (the rug strip, the queue-plot hit
+    // rect, a bar) and wins a pointerdown that lands on it.
+    const dragPx = 24 * W / cw;
+    s += '<rect class="q-drag" data-knob="T" x="' + (tX - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + (queueBottom - T).toFixed(2) + '" fill="transparent" pointer-events="all"/>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
@@ -5137,6 +5151,19 @@ function makeLinker(cfg) {
   // reset whenever the replication identity changes (see renderQServers).
   let qQueueTapPx = null;
 
+  // Drag state for the T handle (Task 68): while a drag is under way, the
+  // general pointermove/pointerleave listeners below step aside entirely --
+  // the drag's own move handler (registered only for its own duration) owns
+  // the pointer, and every readout (the ring, the tick/queue readouts)
+  // stays quiet the whole time, per the brief. setQHandleHi toggles the
+  // highlight on the T line itself, the same trick .inv-drag-hi uses for
+  // the sawtooth's own M/review-line handles.
+  let qDragging = false;
+  function setQHandleHi(on) {
+    const el = document.getElementById('q-t-line');
+    if (el) el.classList.toggle('q-drag-hi', !!on);
+  }
+
   // The bars', rug's, and queue-plot's pointer listeners, delegated once on
   // the persistent #q-servers element (the same pattern used for tab ②'s
   // sawtooth), because renderQServers rebuilds all three by innerHTML on
@@ -5171,8 +5198,11 @@ function makeLinker(cfg) {
       return xPix != null && st.qEvents ? nearestQEvent(st.qEvents, xPix) : null;
     }
     svg.addEventListener('pointermove', ev => {
-      if (ev.pointerType === 'touch') return;
+      if (ev.pointerType === 'touch' || qDragging) return;
       const st = MCXUI.state('q'); if (!st) return;
+      const dragHandle = ev.target.closest && ev.target.closest('.q-drag');
+      if (dragHandle) { qLinker.unhover(); paintQTickReadout(st, null); if (qQueueTapPx == null) paintQueueReadout(st, null); setQHandleHi(true); return; }
+      setQHandleHi(false);
       const bar = ev.target.closest && ev.target.closest('.q-cust');
       if (bar) { qLinker.hover(Number(bar.dataset.cust)); return; }
       const rugHit = ev.target.closest && ev.target.closest('.q-rug-hit');
@@ -5213,9 +5243,67 @@ function makeLinker(cfg) {
       }
     });
     svg.addEventListener('pointerleave', ev => {
-      if (ev.pointerType === 'touch') return;
+      if (ev.pointerType === 'touch' || qDragging) return;
       qLinker.unhover();
+      setQHandleHi(false);
       if (qQueueTapPx == null) { const st = MCXUI.state('q'); if (st) paintQueueReadout(st, null); }
+    });
+
+    // The T handle itself (Task 68): pointer capture on #q-servers, as
+    // wireThresholdDrag does on the histogram and Task 46's M/N handles do
+    // on the sawtooth. Unlike those, the geometry is captured once here at
+    // pointerdown and reused for the whole drag, never re-read from
+    // st.qGeom mid-drag: changing T redraws the chart with a new xMax
+    // (Task 59a fits the axis to the replication), and so reading the
+    // geometry fresh on every move, the way the sawtooth handles do since
+    // Task 53a, would make the pointer-to-time mapping shift under the same
+    // drag. The map is plain linear scaling, and so it already extrapolates
+    // past the plot's own right edge on its own (xPix beyond L + innerW
+    // yields a time beyond xMax with no extra branch needed) -- pointer
+    // capture keeps delivering move events once the cursor leaves the svg,
+    // so T can keep climbing beyond what the axis currently shows; the axis
+    // itself only catches up once a value change below redraws the chart.
+    svg.addEventListener('pointerdown', e => {
+      const handle = e.target.closest && e.target.closest('.q-drag');
+      if (!handle) return;
+      const st = MCXUI.state('q'); if (!st || !st.qGeom) return;
+      e.preventDefault();
+      try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+      qDragging = true;
+      const geom = st.qGeom; // captured once; never re-read for the rest of this drag
+      let lastVal = Number($('q-T').value);
+      handle.classList.add('active');
+      setQHandleHi(true);
+      const move = ev => {
+        const rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+        if (!rect.width || !vb) return;
+        const scaleX = vb.width / rect.width, xPix = (ev.clientX - rect.left) * scaleX;
+        const time = (xPix - geom.L) / geom.innerW * geom.xMax;
+        const val = Math.min(600, Math.max(20, Math.round(time / 20) * 20));
+        if (val !== lastVal) {
+          lastVal = val; $('q-T').value = String(val); MCXUI.onKnob('q');
+          // onKnob redraws the servers chart by innerHTML, which destroys
+          // the handle DOM node .active was set on; the fresh node needs it
+          // too (only one T handle ever exists, unlike the sawtooth's own
+          // M/N handles, and so there is no data-knob/data-k to match on).
+          const freshHandle = svg.querySelector('.q-drag');
+          if (freshHandle) freshHandle.classList.add('active');
+          setQHandleHi(true);
+        }
+      };
+      const up = () => {
+        qDragging = false;
+        const liveHandle = svg.querySelector('.q-drag.active');
+        if (liveHandle) liveHandle.classList.remove('active');
+        setQHandleHi(false);
+        svg.removeEventListener('pointermove', move);
+        svg.removeEventListener('pointerup', up);
+        svg.removeEventListener('pointercancel', up);
+        try { svg.releasePointerCapture(e.pointerId); } catch (err) {}
+      };
+      svg.addEventListener('pointermove', move);
+      svg.addEventListener('pointerup', up);
+      svg.addEventListener('pointercancel', up);
     });
   })();
 
