@@ -818,7 +818,7 @@ input[type=range] { height: 26px; }
         <span class="dr-zone-key"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8" fill="none" stroke="var(--truth)" stroke-width="2"/></svg>delivery zone</span>
         <span class="dr-ramp-key"><span>fewer landings per m²</span><svg class="dr-ramp-bar" viewBox="0 0 160 10"><defs><linearGradient id="dr-ramp-grad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FBFAFA"/><stop offset="1" stop-color="#9E979B"/></linearGradient></defs><rect x="0" y="0" width="160" height="10" fill="url(#dr-ramp-grad)"/></svg><span>more</span></span>
       </div>
-      <div class="fig-cap" id="dr-map-cap">Landing points for the current replication, on the landing distribution in gray; the last 20 replications of this batch stay faded behind, and a new batch clears them. Filled blue: in the zone. Red cross: outside. The exact p is the gray mass inside the zone. Hover a row or a point to link them; click to pin the pair, and click again to release.</div>
+      <div class="fig-cap" id="dr-map-cap">Landing points for the current replication, on the landing distribution in gray; the last 20 replications of this batch stay faded behind, and a new batch clears them. Filled blue: in the zone. Red cross: outside. The exact p is the gray mass inside the zone; hover or tap an empty spot to read the mass on that side of it. Hover a row or a point to link them; click to pin the pair, and click again to release.</div>
     </div></div>
     </div>
     <div class="sec"><div class="sec-hd">One replication</div><div id="dr-rep">
@@ -4010,15 +4010,25 @@ function makeLinker(cfg) {
   // Standard deviations the gradient runs out to; past it the last stop's
   // color (the ground, to within a unit of rgb) continues.
   const DR_REACH = 3.5, DR_STOPS = 28;
-  function densitySurface(sx, sy) {
+  // Drawn twice, once clipped to the zone and once to its complement (the
+  // frame with the zone punched out, one evenodd path), so hovering a side
+  // can dim the other and the mass being read stands out; the same
+  // gradient fills both.
+  function densitySurface(sx, sy, t) {
     let stops = '';
     for (let i = 0; i <= DR_STOPS; i++) {
-      const t = i / DR_STOPS, r = t * DR_REACH;
-      stops += '<stop offset="' + t.toFixed(4) + '" stop-color="' + drRampColor(Math.exp(-r * r / 2)) + '"/>';
+      const tt = i / DR_STOPS, r = tt * DR_REACH;
+      stops += '<stop offset="' + tt.toFixed(4) + '" stop-color="' + drRampColor(Math.exp(-r * r / 2)) + '"/>';
     }
+    const zone = zonePoints(t);
+    const zonePath = 'M' + t.poly.map(pt => xAt(pt[0]).toFixed(2) + ',' + yAt(pt[1]).toFixed(2)).join(' L') + ' Z';
+    const fill = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#dr-dens)"/>';
     return '<defs><radialGradient id="dr-dens" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate('
-      + xAt(0) + ',' + yAt(0) + ') scale(' + (DR_REACH * sx / 4).toFixed(3) + ',' + (DR_REACH * sy / 4).toFixed(3) + ')">' + stops + '</radialGradient></defs>'
-      + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#dr-dens)"/>';
+      + xAt(0) + ',' + yAt(0) + ') scale(' + (DR_REACH * sx / 4).toFixed(3) + ',' + (DR_REACH * sy / 4).toFixed(3) + ')">' + stops + '</radialGradient>'
+      + '<clipPath id="dr-zone-clip"><polygon points="' + zone + '"/></clipPath>'
+      + '<clipPath id="dr-outside-clip"><path d="M0,0 H' + W + ' V' + H + ' H0 Z ' + zonePath + '" clip-rule="evenodd"/></clipPath></defs>'
+      + '<g id="dr-dens-inside" clip-path="url(#dr-zone-clip)">' + fill + '</g>'
+      + '<g id="dr-dens-outside" clip-path="url(#dr-outside-clip)">' + fill + '</g>';
   }
 
   // rep is the replication currently shown (or null), k the number of its
@@ -4031,14 +4041,17 @@ function makeLinker(cfg) {
     // so it stands in for the identity check tabs ①–③ run against st.rep
     // itself.
     if (rep !== drLinkedRep) { drLinkedRep = rep; drLinker.reset(); }
+    // A fresh draw drops a tapped side's readout along with the markup it
+    // sat on.
+    drTapSide = null;
     const el = $('dr-map');
     const t = MCX.models.dr.tables, sig = drSig();
     let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>';
-    s += densitySurface(sig.sx, sig.sy);
+    s += densitySurface(sig.sx, sig.sy, t);
     s += gridLines();
     // The delivery zone: an outline only, so the distribution shows through
     // it and the exact p reads as the gray mass inside.
-    s += '<polygon points="' + zonePoints(t) + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
+    s += '<polygon id="dr-zone" points="' + zonePoints(t) + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
     s += axisLabels();
 
     // Earlier replications, faded, drawn before (so underneath) the current one.
@@ -4050,7 +4063,7 @@ function makeLinker(cfg) {
     // Hit targets, drawn last so they win any pointer that lands
     // on a point, and the link readout's own group.
     if (rep) for (let i = 0; i < k && i < rep.rows.length; i++) s += markHit(rep.rows[i]);
-    s += '<g id="dr-map-link"></g>';
+    s += '<g id="dr-map-readout" pointer-events="none"></g><g id="dr-map-link"></g>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
@@ -4058,24 +4071,81 @@ function makeLinker(cfg) {
     drLinker.refresh();
   }
 
-  // The points' pointer listeners, delegated once on the
-  // persistent #dr-map element (the same pattern used for tabs ①–③),
-  // because renderDrMap rebuilds every point by innerHTML on each render.
+  // The pointer's position in world meters, through the svg's rendered
+  // scale and the fixed /4 mapping above.
+  function drWorldPoint(svg, clientX, clientY) {
+    const rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    if (!rect.width || !vb) return null;
+    const scale = vb.width / rect.width;
+    const px = (clientX - rect.left) * scale, py = (clientY - rect.top) * scale;
+    return { x: px * 4 - 1200, y: 800 - py * 4 };
+  }
+  function drSideOf(pt) { const t = MCX.models.dr.tables; return MCX.insidePolygon(t.poly, pt.x, pt.y) ? 'in' : 'out'; }
+  // The mass readout for the side of the zone the pointer is on: the exact
+  // p inside, 1 - p outside, each the numerical integral of the landing
+  // distribution over that region at the spreads set above. The other
+  // side's density dims to 35% and the zone's own stroke thickens while the
+  // pointer is inside it, so the region being read stands out without any
+  // redraw. pt null puts everything back.
+  let drTapSide = null;
+  function drMassReadout(pt) {
+    const g = document.getElementById('dr-map-readout'), zone = document.getElementById('dr-zone');
+    const inEl = document.getElementById('dr-dens-inside'), outEl = document.getElementById('dr-dens-outside');
+    if (!g) return;
+    if (!pt) {
+      g.innerHTML = ''; if (zone) zone.setAttribute('stroke-width', '2');
+      if (inEl) inEl.removeAttribute('opacity'); if (outEl) outEl.removeAttribute('opacity');
+      return;
+    }
+    const sig = drSig(), p = MCX.drHitProb(sig.sx, sig.sy), inside = drSideOf(pt) === 'in';
+    const label = inside ? 'Mass inside the zone: ' + p.toFixed(3) + ', the exact p' : 'Mass outside the zone: ' + (1 - p).toFixed(3);
+    if (zone) zone.setAttribute('stroke-width', inside ? '3' : '2');
+    if (inEl) inEl.setAttribute('opacity', inside ? '1' : '0.35');
+    if (outEl) outEl.setAttribute('opacity', inside ? '0.35' : '1');
+    g.innerHTML = '<text id="dr-map-readout-txt" x="0" y="0" font-size="11" font-family="Outfit, sans-serif">' + label + '</text>';
+    const txt = document.getElementById('dr-map-readout-txt');
+    let tw = 150, th = 13;
+    try { const bb = txt.getBBox(); tw = bb.width; th = bb.height; } catch (e) {}
+    const padX = 7, padY = 5, boxW = tw + padX * 2, boxH = th + padY * 2, bx = 8, by = 8;
+    g.innerHTML =
+      '<rect x="' + bx + '" y="' + by + '" width="' + boxW.toFixed(2) + '" height="' + boxH.toFixed(2) + '" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>' +
+      '<text x="' + (bx + padX) + '" y="' + (by + boxH / 2 + 4).toFixed(2) + '" font-size="11" font-family="Outfit, sans-serif" fill="var(--text)">' + label + '</text>';
+  }
+
+  // One pointer system for the map, delegated once on the persistent
+  // #dr-map element because renderDrMap rebuilds everything inside it by
+  // innerHTML on each render. Over a point of the current replication the
+  // pointer links that point to its table row (hover, and click to pin);
+  // over empty ground it reads the mass on that side of the zone instead,
+  // and the two never show at once. On a touch screen, where there is no
+  // hover, a tap on empty ground shows the side's mass and a second tap on
+  // the same side clears it; a tap on a point pins its row as a click does.
   (function () {
     const svg = document.getElementById('dr-map');
     if (!svg) return;
     svg.addEventListener('pointermove', ev => {
       if (ev.pointerType === 'touch') return;
       const hit = ev.target.closest && ev.target.closest('.dr-pt');
-      if (hit) drLinker.hover(Number(hit.dataset.i)); else drLinker.unhover();
+      if (hit) { drLinker.hover(Number(hit.dataset.i)); drMassReadout(null); return; }
+      drLinker.unhover();
+      drMassReadout(drWorldPoint(svg, ev.clientX, ev.clientY));
     });
     svg.addEventListener('pointerdown', ev => {
       const hit = ev.target.closest && ev.target.closest('.dr-pt');
-      if (hit) drLinker.click(Number(hit.dataset.i));
+      if (hit) { drLinker.click(Number(hit.dataset.i)); drTapSide = null; drMassReadout(null); }
     });
     svg.addEventListener('pointerleave', ev => {
       if (ev.pointerType === 'touch') return;
       drLinker.unhover();
+      if (drTapSide === null) drMassReadout(null);
+    });
+    svg.addEventListener('click', ev => {
+      if (ev.target.closest && ev.target.closest('.dr-pt')) return;
+      const pt = drWorldPoint(svg, ev.clientX, ev.clientY);
+      if (!pt) return;
+      const side = drSideOf(pt);
+      if (drTapSide === side) { drTapSide = null; drMassReadout(null); }
+      else { drTapSide = side; drMassReadout(pt); }
     });
   })();
 
