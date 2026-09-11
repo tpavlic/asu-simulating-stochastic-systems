@@ -598,7 +598,7 @@ better.
      lead-time sequence), the drop model against quadrature of the bivariate normal over the octagon
      and a binomial fit (at the book's own standard deviations and at three other pairs, since
      those are a knob), the bearing policies against exact discrete renewal functions on the
-     100-hour grid, the activity network against scaled Irwin–Hall CDFs and numerically
+     100-hour grid (with and without a warm-up), the activity network against scaled Irwin–Hall CDFs and numerically
      integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
      and 2.15 row by row and against the Erlang-C steady-state wait on long replications.*
   3. *Deliberate conventions: histograms plot the fraction of runs on axes with a bin width fixed
@@ -610,7 +610,18 @@ better.
      a toggle; the bearing clock counts operating hours only (downtime is charged, not clocked),
      bearing-hours are 3 × 20 000, and under the age policy a life equal to T is replaced as planned;
      the one-step path's density is taken as 1 on the closed interval so the exact finish-time
-     density integrates to 1 under quadrature.)*
+     density integrates to 1 under quadrature.*
+  4. *The three dynamic tabs carry a warm-up W (a post-processing knob, marked `data-post` in the
+     markup): it changes which observations a replication yields, never the system simulated, and
+     so changing it neither logs nor clears the batch. The harness keeps every committed
+     replication's seed and re-derives the batch, and the shown replication, by re-running the
+     seeds under the new params. Rows inside the warm-up carry `phase: 'warm'`. On the queue, W is
+     minutes and a customer counts if it arrives at or after W (a replication with none is
+     counted in `noObs` and yields no observation); on the inventory and bearing tabs the run is
+     lengthened by W (days, or operating hours) and the 25 days or 20,000 hours after W are
+     measured, on a fixed axis of 25 + 10 days or 20,000 + 5,000 hours, and the bearing tab's
+     replace-on-failure policy is generated in clock order across the three positions so a
+     longer horizon only appends draws. At W = 0 every model is the book's, draw for draw.)*
 
 ### Pseudorandom Number Generation
 

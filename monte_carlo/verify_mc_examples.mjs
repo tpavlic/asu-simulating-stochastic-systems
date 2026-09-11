@@ -178,6 +178,21 @@ section('Order-up-to inventory (Table 2.21)');
   ok(totalOrdered <= 11 + 25 * 2, `total ordered over 25 days is at most M plus total demand (${totalOrdered} <= 61)`);
 }
 
+{
+  /* Warm-up: W extra days ahead of the 25 measured. The first 25 days are the
+     same draws as the run without a warm-up, the run is 25 + W days long,
+     and the outputs come from days W + 1 to W + 25 alone. */
+  const inv = M.models.inv, p0 = { M: 11, N: 5, h: 1, p: 10 }, pW = { M: 11, N: 5, h: 1, p: 10, W: 5 };
+  const r0 = inv.replicate(17, p0), rW = inv.replicate(17, pW);
+  ok(r0.rows.length === 26 && rW.rows.length === 31, `a 5-day warm-up runs 30 days (${rW.rows.length - 1}) where none runs 25 (${r0.rows.length - 1})`);
+  ok(r0.rows.slice(1, 26).every((r, i) => r.demand === rW.rows[i + 1].demand && r.ending === rW.rows[i + 1].ending), 'the first 25 days are draw for draw the same with and without a warm-up');
+  ok(rW.rows.slice(0, 6).every(r => r.phase === 'warm') && rW.rows.slice(6).every(r => r.phase === 'in'), 'days 0-5 carry phase warm and days 6-30 phase in');
+  const kept = rW.rows.slice(6), sumEnd = kept.reduce((a, r) => a + r.ending, 0), sumShort = kept.reduce((a, r) => a + r.shortage, 0);
+  close(rW.outputs.cost, 1 * sumEnd + 10 * sumShort, 1e-12, 'the cost is taken over days 6-30 only');
+  close(rW.outputs.avgInv, sumEnd / 25, 1e-12, 'the average ending inventory divides by the 25 measured days');
+  ok(rW.outputs.shortDays === kept.filter(r => r.shortage > 0).length, 'shortage days are counted over the measured days only');
+}
+
 section('Delivery drops');
 {
   const dr = M.models.dr, poly = dr.tables.poly;
@@ -251,6 +266,25 @@ section('Bearing replacement');
     mcMeanOk(xs, want, 3.5, `MC mean cost matches renewal reference, ${policy} T=${T} (${want.toFixed(1)})`);
   }
   ok(M.brExpectedCost('set', 0) < M.brExpectedCost('each', 0), 'replace-all is cheaper per bearing-hour than replace-on-failure');
+  /* Warm-up: the clock runs to W + 20,000 h, events before W are not charged,
+     the events up to 20,000 h are the same draws as without a warm-up, and
+     the renewal-equation reference over (W, W + 20,000] matches the sampler. */
+  {
+    const r0 = br.replicate(23, { policy: 'each', T: 1300 }), rW = br.replicate(23, { policy: 'each', T: 1300, W: 2000 });
+    ok(rW.summary.horizon === 22000 && rW.summary.lanes.every(l => l[l.length - 1].end === 22000), 'a 2,000 h warm-up runs the lanes to 22,000 h');
+    const clocks0 = r0.rows.slice(1).map(r => r.clock), clocksW = rW.rows.slice(1).map(r => r.clock).filter(c => c < 20000);
+    ok(clocks0.length === clocksW.length && clocks0.every((c, i) => c === clocksW[i]), 'events before 20,000 h are the same with and without a warm-up');
+    ok(rW.rows[0].phase === 'warm' && rW.rows.every(r => (r.phase === 'warm') === (r.clock < 2000)), 'rows at clocks before W carry phase warm, the install row included');
+    const charged = rW.rows.slice(1).filter(r => r.clock >= 2000).reduce((a, r) => a + r.cost, 0);
+    close(rW.outputs.cost, charged / 6, 1e-9, 'the output charges only the events at or after W, over 60,000 bearing-hours');
+    ok(M.brRenewalCount(M.models.br.tables.life, 20000, 0) === M.brRenewalCount(M.models.br.tables.life, 20000), 'a zero warm-up is the plain renewal count');
+    for (const [policy, T, W] of [['each', 1300, 2000], ['age', 1300, 3000]]) {
+      const want = M.brExpectedCost(policy, T, W), xs = [];
+      for (let i = 0; i < 4000; i++) xs.push(br.replicate(i, { policy, T, W }).outputs.cost);
+      const mean = xs.reduce((a, b) => a + b, 0) / xs.length, sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (xs.length - 1)), se = sd / Math.sqrt(xs.length);
+      ok(Math.abs(mean - want) < 4 * se, `policy ${policy} with a ${W} h warm-up: sampler mean ${mean.toFixed(1)} vs renewal reference ${want.toFixed(1)} (4 se = ${(4 * se).toFixed(1)})`);
+    }
+  }
   const lanes = br.replicate(11, { policy: 'set', T: 1300 }).summary.lanes;
   ok(lanes.length === 3 && lanes[0].length === lanes[1].length && lanes[0].every((b, i) => b.end === lanes[1][i].end), 'set policy cuts all three lanes at the same clocks');
 }
@@ -330,6 +364,22 @@ section('Queueing node (Tables 2.11 and 2.15)');
   const meanCount = counts.reduce((x, y) => x + y, 0) / repsChk, expectedCount = lamChk * Tchk;
   const seCount = Math.sqrt(expectedCount / repsChk);
   ok(Math.abs(meanCount - expectedCount) <= 4 * seCount, `arrival count is Poisson-plausible (mean ${meanCount.toFixed(1)} vs lambda*T = ${expectedCount}, 4 se = ${(4 * seCount).toFixed(2)})`);
+}
+
+{
+  /* Warm-up on the queue: the same customers, the early ones marked warm and
+     left out of the averages; a warm-up past the last arrival leaves no
+     observation at all. */
+  const q = M.models.q, p0 = { lam: 0.8, mu: 1, c: 1, T: 60 }, pW = { lam: 0.8, mu: 1, c: 1, T: 60, W: 20 };
+  const r0 = q.replicate(31, p0), rW = q.replicate(31, pW);
+  ok(r0.rows.length === rW.rows.length && r0.rows.every((r, i) => r.arr === rW.rows[i].arr && r.wait === rW.rows[i].wait), 'the customers are the same with and without a warm-up');
+  ok(rW.rows.every(r => (r.phase === 'warm') === (r.arr < 20)), 'a customer arriving before W carries phase warm');
+  const kept = rW.rows.filter(r => r.arr >= 20);
+  ok(kept.length > 0 && rW.summary.n === kept.length && rW.summary.nWarm === rW.rows.length - kept.length, `the summary counts the ${kept.length} kept customers and ${rW.summary.nWarm} warm ones`);
+  close(rW.outputs.avgWait, kept.reduce((a, r) => a + r.wait, 0) / kept.length, 1e-12, 'the average wait is over the kept customers only');
+  close(rW.outputs.maxWait, Math.max(...kept.map(r => r.wait)), 1e-12, 'the longest wait is over the kept customers only');
+  const none = q.replicate(31, { lam: 0.8, mu: 1, c: 1, T: 60, W: 59.999 });
+  ok(none.outputs.avgWait === null && none.outputs.maxWait === null || none.summary.n > 0, 'a warm-up that leaves no customer gives null outputs rather than a number');
 }
 
 // SECTIONS-END

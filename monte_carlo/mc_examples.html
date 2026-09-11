@@ -279,6 +279,8 @@ table.sim th.sym { text-transform: none; }
 table.sim td { padding: 3px 8px; text-align: right; border-top: 1px solid #f0ecee; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; }
 table.sim td.txt { font-family: 'Outfit', sans-serif; text-align: left; }
 table.sim tr.unrevealed td { visibility: hidden; }
+/* A row inside the warm-up: simulated and shown, but not counted. */
+table.sim tr.warm td { color: var(--muted); background: #f7f5f6; }
 table.sim tr.cur td { background: var(--accent-wash); }
 table.sim td.bad { color: var(--fail); font-weight: 600; }
 table.sim tr.placeholder td { color: var(--muted); font-style: italic; font-family: 'Outfit', sans-serif; text-align: left; }
@@ -389,7 +391,7 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
    vertical-scroll allowance above. */
 .inv-drag { touch-action: none; }
 .inv-drag[data-knob="M"] { cursor: ns-resize; }
-.inv-drag[data-knob="N"] { cursor: ew-resize; }
+.inv-drag[data-knob="N"], .inv-drag[data-knob="W"] { cursor: ew-resize; }
 /* A CSS class beats an SVG presentation attribute in the cascade, and so this
    overrides the M/review line's own stroke/stroke-width while a handle is
    hovered or being dragged -- the same visual the histogram threshold's
@@ -401,6 +403,8 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
    presentation attributes while the handle is hovered or being dragged. */
 .q-drag { touch-action: none; cursor: ew-resize; }
 .q-drag-hi { stroke: var(--est); stroke-width: 2; }
+.br-drag { touch-action: none; cursor: ew-resize; }
+.br-drag-hi { stroke: var(--est); stroke-width: 2; }
 /* The New batch / Clear all pair sits at the top of the cards column, above
    the Runs card, in every tab's Many replications card. */
 .batch-btns { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -513,8 +517,14 @@ input[type=range] { height: 26px; }
           <span class="spin"><button type="button" aria-label="Decrease μ" onclick="spinStep('q-mu',-1)">−</button><input id="q-mu" type="number" min="0.1" max="2.0" step="0.1" value="1.0" inputmode="decimal" onchange="spinCommit('q-mu')"><button type="button" aria-label="Increase μ" onclick="spinStep('q-mu',1)">+</button></span></label>
         <label class="knob" for="q-c"><span class="tip" tabindex="0" data-tip="How many identical servers work in parallel, sharing one queue. One of three decisions in this model.">Servers</span>
           <span class="spin"><select id="q-c" onchange="MCXUI.onKnob('q')"><option value="1">1</option><option value="2">2</option></select></span></label>
+      </div>
+      <div class="knobs">
         <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="How long arrivals keep coming. Every customer who arrives by T is served to the end, and so a replication's clock can run past T. A longer T lets the average wait settle toward the steady-state value.">End time, T (min)</span>
           <span class="spin"><button type="button" aria-label="Decrease T" onclick="spinStep('q-T',-1)">−</button><input id="q-T" type="number" min="20" max="600" step="20" value="60" inputmode="numeric" onchange="spinCommit('q-T')"><button type="button" aria-label="Increase T" onclick="spinStep('q-T',1)">+</button></span></label>
+        <label class="knob" for="q-W"><span class="tip" tabindex="0" data-tip="Customers who arrive before this time are simulated and shown but left out of the averages, so the empty-queue start does not drag them down: deleting the transient is the other answer to a start-up bias besides running longer. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (min)</span>
+          <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('q-W',-1)">−</button><input id="q-W" type="number" min="0" max="580" step="5" value="0" inputmode="numeric" data-post onchange="spinCommit('q-W')"><button type="button" aria-label="Increase W" onclick="spinStep('q-W',1)">+</button></span></label>
+      </div>
+      <div class="knobs">
         <span class="knob"><span class="tip" tabindex="0" data-tip="Traffic intensity, the fraction of time the servers are busy in the long run. Above 1, the queue grows without bound; a replication runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
         <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang-C probability that an arriving customer has to wait and a = λ/μ. A replication starts empty, and so its average wait tends to sit below this line; the gap closes as T grows.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
       </div>
@@ -588,6 +598,8 @@ input[type=range] { height: 26px; }
           <span class="spin"><button type="button" aria-label="Decrease M" onclick="spinStep('inv-m',-1)">−</button><input id="inv-m" type="number" min="1" max="20" step="1" value="11" inputmode="numeric" onchange="spinCommit('inv-m')"><button type="button" aria-label="Increase M" onclick="spinStep('inv-m',1)">+</button></span></label>
         <label class="knob" for="inv-n"><span class="tip" tabindex="0" data-tip="How many days pass between one review of the inventory position and the next. The other decision in this model.">Review every N days</span>
           <span class="spin"><button type="button" aria-label="Decrease N" onclick="spinStep('inv-n',-1)">−</button><input id="inv-n" type="number" min="1" max="10" step="1" value="5" inputmode="numeric" onchange="spinCommit('inv-n')"><button type="button" aria-label="Increase N" onclick="spinStep('inv-n',1)">+</button></span></label>
+        <label class="knob" for="inv-W"><span class="tip" tabindex="0" data-tip="Days run ahead of the 25 that are measured, so the given starting stock and its order in flight no longer shape them: the run is W + 25 days, the first W are simulated and shown but not counted, and the cost, the shortage days, and the average inventory all come from the 25 days after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (days)</span>
+          <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('inv-W',-1)">−</button><input id="inv-W" type="number" min="0" max="10" step="1" value="0" inputmode="numeric" data-post onchange="spinCommit('inv-W')"><button type="button" aria-label="Increase W" onclick="spinStep('inv-W',1)">+</button></span></label>
         <label class="knob" for="inv-h" style="flex-basis:100%"><span class="tip" tabindex="0" style="color:var(--ok)" data-tip="A holding charge accrues on each day's ending inventory, and a backorder charge accrues on each day's shortage. The charge and its sum share a color in the cost line under the chart.">Holding charge, $ per refrigerator per day</span>
           <span class="spin"><button type="button" aria-label="Decrease h" onclick="spinStep('inv-h',-1)">−</button><input id="inv-h" type="number" min="0" max="10" step="0.5" value="1" inputmode="decimal" onchange="spinCommit('inv-h')"><button type="button" aria-label="Increase h" onclick="spinStep('inv-h',1)">+</button></span></label>
         <label class="knob" for="inv-p" style="flex-basis:100%"><span class="tip" tabindex="0" style="color:var(--fail)" data-tip="A holding charge accrues on each day's ending inventory, and a backorder charge accrues on each day's shortage. The charge and its sum share a color in the cost line under the chart.">Backorder charge, $ per refrigerator per day</span>
@@ -680,6 +692,8 @@ input[type=range] { height: 26px; }
           </select></span></label>
         <label class="knob" for="br-t"><span class="tip" tabindex="0" data-tip="All three are replaced together at age T, measured from the set's last replacement. A failure before T replaces the set at once and restarts the clock, and so with T at 1,300 h only the cycles in which all three survive that long reach the planned age.">Planned age, T (h)</span>
           <span class="spin" id="br-t-spin"><button type="button" aria-label="Decrease T" onclick="spinStep('br-t',-1)" disabled>−</button><input id="br-t" type="number" min="1000" max="1900" step="100" value="1300" inputmode="numeric" disabled onchange="spinCommit('br-t')"><button type="button" aria-label="Increase T" onclick="spinStep('br-t',1)" disabled>+</button></span></label>
+        <label class="knob" for="br-W"><span class="tip" tabindex="0" data-tip="Operating hours run ahead of the 20,000 that are measured, so the three fresh bearings installed at time 0 no longer shape them: the clock runs to W + 20,000 h, replacements before W are simulated and shown but not charged, and the cost is the 20,000 hours after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (h)</span>
+          <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('br-W',-1)">−</button><input id="br-W" type="number" min="0" max="5000" step="500" value="0" inputmode="numeric" data-post onchange="spinCommit('br-W')"><button type="button" aria-label="Increase W" onclick="spinStep('br-W',1)">+</button></span></label>
       </div>
     </div></div>
     <div class="sec"><div class="sec-hd">Bearing lifetimes and replacements</div><div id="br-struct" class="struct">
@@ -1123,15 +1137,21 @@ MODELS.inv = {
     { key: 'onOrder', label: 'On order', fmt: 'int' }, { key: 'order', label: 'Order qty', fmt: 'int' }, { key: 'lead', label: 'Lead (days)', fmt: 'int' }, { key: 'daysUntil', label: 'Days until arrival', fmt: 'int' }
   ],
   /* draw.demand() and draw.lead() return uniforms; draw.demandValue(day) and
-     draw.leadValue(k) return values directly and take precedence when present. */
+     draw.leadValue(k) return values directly and take precedence when present.
+     p.W (warm-up, days, default 0) puts W extra days in front of the 25 that
+     are measured: the run is days 1 to W + 25, a row with day <= W carries
+     phase 'warm' (day 0's setup row too, when W > 0), and the three outputs
+     are taken over days W + 1 to W + 25 alone. At W = 0 this is the book's
+     own 25-day run, draw for draw. */
   run: function (p, draw) {
-    var M = p.M, N = p.N, h = p.h == null ? 1 : p.h, pen = p.p == null ? 10 : p.p;
+    var M = p.M, N = p.N, h = p.h == null ? 1 : p.h, pen = p.p == null ? 10 : p.p, W = p.W || 0, lastDay = INV_DAYS + W;
     var rows = [], pending = [], onHand = INV_INIT, back = 0, sumEnd = 0, shortDays = 0, totalShort = 0, orders = [];
     var initQty = Math.max(M - INV_INIT, 0);
     var row0 = { day: 0, cycle: 0, dayIn: N, begin: null, u1: null, demand: null, ending: INV_INIT, shortage: 0, hold: null, pen: null, onOrder: 0, order: null, u2: null, lead: null, daysUntil: null };
     if (initQty > 0) { pending.push({ qty: initQty, arrive: 0 + INV_INIT_LEAD + 1 }); row0.order = initQty; row0.lead = INV_INIT_LEAD; row0.daysUntil = INV_INIT_LEAD; orders.push({ day: 0, qty: initQty, lead: INV_INIT_LEAD, arrive: INV_INIT_LEAD + 1 }); }
+    row0.phase = W > 0 ? 'warm' : 'in';
     rows.push(row0);
-    for (var day = 1; day <= INV_DAYS; day++) {
+    for (var day = 1; day <= lastDay; day++) {
       var cycle = Math.ceil(day / N), dayIn = day - (cycle - 1) * N;
       var arrived = 0;
       for (var i = pending.length - 1; i >= 0; i--) if (pending[i].arrive === day) { arrived += pending[i].qty; pending.splice(i, 1); }
@@ -1143,7 +1163,8 @@ MODELS.inv = {
       var net = begin - back - D, ending, shortage;
       if (net >= 0) { ending = net; shortage = 0; } else { ending = 0; shortage = -net; }
       onHand = ending; back = shortage;
-      sumEnd += ending; totalShort += shortage; if (shortage > 0) shortDays++;
+      var inSpan = day > W;
+      if (inSpan) { sumEnd += ending; totalShort += shortage; if (shortage > 0) shortDays++; }
       var row = { day: day, cycle: cycle, dayIn: dayIn, begin: begin, u1: u1, demand: D, ending: ending, shortage: shortage, hold: h * ending, pen: pen * shortage, onOrder: onOrder, order: null, u2: null, lead: null, daysUntil: null };
       if (dayIn === N) {
         var qty = M - ending - onOrder + shortage, u2 = null, L;
@@ -1155,10 +1176,11 @@ MODELS.inv = {
         for (i = 0; i < pending.length; i++) { var left = pending[i].arrive - day - 1; if (left >= 1 && (soonest === null || left < soonest)) soonest = left; }
         row.daysUntil = soonest;
       }
+      row.phase = inSpan ? 'in' : 'warm';
       rows.push(row);
     }
     var avgInv = sumEnd / INV_DAYS, holdCost = h * sumEnd, penCost = pen * totalShort, cost = holdCost + penCost;
-    return { rows: rows, summary: { avgInv: avgInv, shortDays: shortDays, totalShort: totalShort, orders: orders, cost: cost, holdCost: holdCost, penCost: penCost },
+    return { rows: rows, summary: { avgInv: avgInv, shortDays: shortDays, totalShort: totalShort, orders: orders, cost: cost, holdCost: holdCost, penCost: penCost, sumEnd: sumEnd, W: W, lastDay: lastDay },
              outputs: { cost: cost, shortDays: shortDays, avgInv: avgInv } };
   },
   replicate: function (seed, p) {
@@ -1272,16 +1294,19 @@ function brCycleTable(policy, T) {
 }
 /* Expected number of renewals by H on the 100-hour grid, by the discrete renewal
    equation m(t) = sum_l p_l [l <= t] (1 + m(t - l)). */
-function brRenewalCount(cycle, H) {
-  var g = 100, n = Math.round(H / g), m = new Array(n + 1);
+function brRenewalCount(cycle, H, W) {
+  var g = 100, n = Math.round(H / g), nW = Math.round((W || 0) / g), m = new Array(n + 1);
   for (var t = 0; t <= n; t++) m[t] = 0;
   for (t = 1; t <= n; t++) { var s = 0; for (var i = 0; i < cycle.values.length; i++) { var l = Math.round(cycle.values[i] / g); if (l <= t) s += cycle.probs[i] * (1 + m[t - l]); } m[t] = s; }
-  return m[n];
+  /* With a warm-up W the count is the renewals in (W, H], m(H) - m(W). */
+  return m[n] - (nW > 0 ? m[nW] : 0);
 }
-function brExpectedCost(policy, T) {
-  var eDelay = tableMean(BR_DELAY);
-  if (policy === 'each') return BR_POS * brRenewalCount(BR_LIFE, BR_H) * BR_COST.eventEach(eDelay) / (BR_POS * BR_H / 10000);
-  var cyc = brCycleTable(policy, T), eCount = brRenewalCount(cyc, BR_H), pPlanned = 0;
+/* Expected cost per 10,000 bearing-hours over the measured span: the
+   20,000 hours that follow a warm-up of W hours (default 0). */
+function brExpectedCost(policy, T, W) {
+  var eDelay = tableMean(BR_DELAY), Hend = BR_H + (W || 0);
+  if (policy === 'each') return BR_POS * brRenewalCount(BR_LIFE, Hend, W) * BR_COST.eventEach(eDelay) / (BR_POS * BR_H / 10000);
+  var cyc = brCycleTable(policy, T), eCount = brRenewalCount(cyc, Hend, W), pPlanned = 0;
   if (policy === 'age') pPlanned = cyc.probs[cyc.probs.length - 1];
   var eCost = (1 - pPlanned) * BR_COST.eventSet(eDelay) + pPlanned * BR_COST.planned;
   return eCount * eCost / (BR_POS * BR_H / 10000);
@@ -1311,26 +1336,40 @@ MODELS.br = {
      clock is where they were installed), one cycle behind where they are
      drawn -- the reason the loops below carry a life value into the next
      pass instead of consuming it immediately. */
+  /* p.W (warm-up, operating hours, default 0) runs the clock to W + 20,000
+     hours and charges only the events at clocks in [W, W + 20,000): a row
+     with clock < W carries phase 'warm' (the install row too, when W > 0),
+     the lanes run to the longer horizon, and the output is the kept span's
+     cost over its own 60,000 bearing-hours. At W = 0 this is the book's own
+     20,000-hour run, draw for draw. */
   run: function (p, draw) {
-    var events = [], lanes = [[], [], []], total = 0, i, life, u, pos;
+    var events = [], lanes = [[], [], []], total = 0, i, life, u, pos, W = p.W || 0, Hend = BR_H + W;
     var installLifeU = [], installLifeH = [];
     if (p.policy === 'each') {
+      // Generated in clock order across the three positions, not one lane
+      // at a time: the draws are then consumed in the order the events
+      // happen, and so a longer horizon (a warm-up) only appends draws and
+      // never changes an event that a shorter horizon already had. Each
+      // failure consumes a delay draw and then the replacement's life draw.
+      var tPos = [], lifePos = [];
       for (pos = 0; pos < BR_POS; pos++) {
-        var t = 0;
         var uLife = draw.life(); life = BR_LIFE.values[discrete(BR_LIFE, uLife)];
-        installLifeU.push(uLife); installLifeH.push(life);
-        while (true) {
-          if (t + life > BR_H) { lanes[pos].push({ start: t, end: BR_H, cause: 'censored', discardTo: null }); break; }
-          lanes[pos].push({ start: t, end: t + life, cause: 'failure', discardTo: null });
-          t += life; u = draw.delay(); var d = BR_DELAY.values[discrete(BR_DELAY, u)];
-          var uLifeNext = draw.life(), lifeNext = BR_LIFE.values[discrete(BR_LIFE, uLifeNext)];
-          // failedPos repeats pos under 'each' (the event is only ever about
-          // that one bearing), and so the Cause cell reads "failure (k)" under
-          // every policy alike. lifeU/lifeH carry the newly installed
-          // bearing's own draw, the one this event's own replacement starts.
-          events.push({ clock: t, pos: String(pos + 1), cause: 'failure', u: u, delay: d, down: d + BR_COST.changeOne, cost: BR_COST.eventEach(d), failedPos: pos + 1, lifeU: [uLifeNext], lifeH: [lifeNext] });
-          life = lifeNext;
-        }
+        installLifeU.push(uLife); installLifeH.push(life); tPos.push(0); lifePos.push(life);
+      }
+      while (true) {
+        var fMin = Infinity, fPos = -1;
+        for (pos = 0; pos < BR_POS; pos++) if (tPos[pos] + lifePos[pos] < fMin) { fMin = tPos[pos] + lifePos[pos]; fPos = pos; }
+        if (fMin > Hend) { for (pos = 0; pos < BR_POS; pos++) lanes[pos].push({ start: tPos[pos], end: Hend, cause: 'censored', discardTo: null }); break; }
+        var t = fMin; pos = fPos;
+        lanes[pos].push({ start: tPos[pos], end: t, cause: 'failure', discardTo: null });
+        u = draw.delay(); var d = BR_DELAY.values[discrete(BR_DELAY, u)];
+        var uLifeNext = draw.life(), lifeNext = BR_LIFE.values[discrete(BR_LIFE, uLifeNext)];
+        // failedPos repeats pos under 'each' (the event is only ever about
+        // that one bearing), and so the Cause cell reads "failure (k)" under
+        // every policy alike. lifeU/lifeH carry the newly installed
+        // bearing's own draw, the one this event's own replacement starts.
+        events.push({ clock: t, pos: String(pos + 1), cause: 'failure', u: u, delay: d, down: d + BR_COST.changeOne, cost: BR_COST.eventEach(d), failedPos: pos + 1, lifeU: [uLifeNext], lifeH: [lifeNext] });
+        tPos[pos] = t; lifePos[pos] = lifeNext;
       }
       events.sort(function (a, b) { return a.clock - b.clock || a.pos.localeCompare(b.pos); });
     } else {
@@ -1342,7 +1381,7 @@ MODELS.br = {
         var m = Infinity, minPos = -1;
         for (pos = 0; pos < BR_POS; pos++) if (lives[pos] < m) { m = lives[pos]; minPos = pos; }
         var planned = p.policy === 'age' && m >= p.T, cut = planned ? p.T : m;
-        if (tt + cut > BR_H) { for (pos = 0; pos < BR_POS; pos++) lanes[pos].push({ start: tt, end: BR_H, cause: 'censored', discardTo: Math.min(tt + lives[pos], BR_H) }); break; }
+        if (tt + cut > Hend) { for (pos = 0; pos < BR_POS; pos++) lanes[pos].push({ start: tt, end: Hend, cause: 'censored', discardTo: Math.min(tt + lives[pos], Hend) }); break; }
         for (pos = 0; pos < BR_POS; pos++) lanes[pos].push({ start: tt, end: tt + cut, cause: planned ? 'planned' : (lives[pos] === m ? 'failure' : 'cut'), discardTo: lives[pos] > cut ? tt + lives[pos] : null });
         tt += cut;
         var ev;
@@ -1365,10 +1404,15 @@ MODELS.br = {
     // Event 0: the three bearings installed at time 0, regardless of policy
     // (every position starts with one, even under 'each'). Uncharged, like
     // every later install, and so cost/cum both start at 0.
-    rows.push({ i: 0, clock: 0, pos: 'all', cause: 'install', u: null, delay: null, down: 0, cost: 0, cum: 0, failedPos: null, lifeU: installLifeU, lifeH: installLifeH });
-    for (i = 0; i < events.length; i++) { total += events[i].cost; var e = events[i]; rows.push({ i: i + 1, clock: e.clock, pos: e.pos, cause: e.cause, u: e.u, delay: e.delay, down: e.down, cost: e.cost, cum: total, failedPos: e.failedPos, lifeU: e.lifeU, lifeH: e.lifeH }); }
+    rows.push({ i: 0, clock: 0, pos: 'all', cause: 'install', u: null, delay: null, down: 0, cost: 0, cum: 0, failedPos: null, lifeU: installLifeU, lifeH: installLifeH, phase: W > 0 ? 'warm' : 'in' });
+    var inSpan = 0;
+    for (i = 0; i < events.length; i++) {
+      var e = events[i], warmRow = e.clock < W;
+      if (!warmRow) { total += e.cost; inSpan++; }
+      rows.push({ i: i + 1, clock: e.clock, pos: e.pos, cause: e.cause, u: e.u, delay: e.delay, down: e.down, cost: e.cost, cum: total, failedPos: e.failedPos, lifeU: e.lifeU, lifeH: e.lifeH, phase: warmRow ? 'warm' : 'in' });
+    }
     var cost = total / (BR_POS * BR_H / 10000);
-    return { rows: rows, summary: { cost: cost, total: total, events: events.length, lanes: lanes }, outputs: { cost: cost } };
+    return { rows: rows, summary: { cost: cost, total: total, events: events.length, eventsKept: inSpan, lanes: lanes, W: W, horizon: Hend }, outputs: { cost: cost } };
   },
   replicate: function (seed, p) { var rand = mulberry32(seed); return this.run(p, { life: function () { return rand(); }, delay: function () { return rand(); } }); }
 };
@@ -1492,11 +1536,16 @@ MODELS.q = {
      optional cap on the count honored alongside T (the verify script's
      Table 2.11/2.15 checks feed a fixed draw sequence and pass n with no T
      at all, relying on the cap alone to stop the loop -- T defaults to
-     Infinity in that case, matching the old fixed-n loop exactly). */
+     Infinity in that case, matching the old fixed-n loop exactly).
+     p.W (warm-up, minutes, default 0) changes which customers count, not
+     what happens: every customer is simulated and shown, a row whose
+     arrival falls before W carries phase 'warm', and the outputs average
+     over the rest. With no customer arriving at or after W there is no
+     observation, and the outputs are null. */
   run: function (p, draw) {
-    var c = p.c === 2 ? 2 : 1, T = p.T != null ? p.T : Infinity, cap = p.n;
+    var c = p.c === 2 ? 2 : 1, T = p.T != null ? p.T : Infinity, cap = p.n, W = p.W || 0;
     var rows = [], free = [0, 0], prevEnd = 0, arr = 0;
-    var sumWait = 0, maxWait = 0, sumSys = 0, busy = 0, waited = 0, lastEnd = 0;
+    var sumWait = 0, maxWait = 0, sumSys = 0, busy = 0, waited = 0, lastEnd = 0, kept = 0, warm = 0;
     for (var k = 1; cap == null || k <= cap; k++) {
       var u1 = null, ia = 0;
       if (k > 1) { if (draw.iaValue) ia = draw.iaValue(k); else { u1 = draw.ia(); ia = expInv(u1, p.lam); } }
@@ -1519,15 +1568,17 @@ MODELS.q = {
         row.server = Q_SERVERS[sIdx]; row.serverIdx = sIdx; row.nextA = free[0]; row.nextB = free[1];
       }
       row.begin = begin; row.end = end; row.wait = begin - arr; row.sys = end - arr;
-      sumWait += row.wait; sumSys += row.sys; busy += svc; if (row.wait > maxWait) maxWait = row.wait; if (row.wait > 0) waited++;
-      if (end > lastEnd) lastEnd = end;
+      row.phase = arr < W ? 'warm' : 'in';
+      busy += svc; if (end > lastEnd) lastEnd = end;
+      if (row.phase === 'warm') warm++;
+      else { kept++; sumWait += row.wait; sumSys += row.sys; if (row.wait > maxWait) maxWait = row.wait; if (row.wait > 0) waited++; }
       rows.push(row);
     }
-    var n = rows.length;
-    var avgWait = n > 0 ? sumWait / n : 0;
+    var n = kept;
+    var avgWait = n > 0 ? sumWait / n : null, maxOut = n > 0 ? maxWait : null;
     return { rows: rows,
-             summary: { avgWait: avgWait, maxWait: maxWait, avgSys: n > 0 ? sumSys / n : 0, waitedFrac: n > 0 ? waited / n : 0, makespan: lastEnd, util: lastEnd > 0 ? busy / (c * lastEnd) : 0, c: c, n: n, T: p.T },
-             outputs: { avgWait: avgWait, maxWait: maxWait } };
+             summary: { avgWait: avgWait, maxWait: maxOut, avgSys: n > 0 ? sumSys / n : null, waitedFrac: n > 0 ? waited / n : null, makespan: lastEnd, util: lastEnd > 0 ? busy / (c * lastEnd) : 0, c: c, n: n, nAll: rows.length, nWarm: warm, W: W, T: p.T },
+             outputs: { avgWait: avgWait, maxWait: maxOut } };
   },
   replicate: function (seed, p) { var rand = mulberry32(seed); return this.run(p, { ia: function () { return unif(rand); }, svc: function () { return unif(rand); } }); }
 };
@@ -1572,6 +1623,12 @@ function showTabFromSelect(sel) { showTab(sel.value, null); }
 
 <!-- Harness and structure views. -->
 <script>
+// The longest warm-up the inventory tab's knob allows, in days; the
+// sawtooth's fixed axis is 25 days plus this.
+const INV_WMAX = 10;
+// The longest warm-up the bearing tab's knob allows, in operating hours;
+// the lanes' fixed axis is 20,000 h plus this.
+const BR_WMAX = 5000;
 // ── Number formats ──────────────────────────────────────────────────────
 // Every count and money value uses tabular figures via CSS.
 const fmtUsd = v => (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
@@ -1629,7 +1686,9 @@ function spinCommit(id) {
   if (!Number.isFinite(v)) v = min;
   v = Number((Math.round(v / step) * step).toFixed(stepDecimals(el.step || String(step))));
   el.value = String(Math.min(max, Math.max(min, v)));
-  MCXUI.onKnob(id.split('-')[0]);
+  // A knob marked data-post is a post-processing knob (a warm-up): it
+  // re-derives the batch rather than starting a new one.
+  if (el.dataset.post != null) MCXUI.onPost(id.split('-')[0]); else MCXUI.onKnob(id.split('-')[0]);
 }
 
 // ── Seeds (the sibling widgets' seed helpers, generalized to every tab) ────
@@ -1830,10 +1889,11 @@ function renderInvCost(st) {
   if (!el) return;
   const lastDay = st.sawLastDay;
   if (!st.rep || lastDay < 0) { el.innerHTML = invCostExpr('h', 'Σ ending inventory', 'p', 'Σ shortage', null); return; }
-  // Charged only from day 1 on, matching MODELS.inv.run's own sumEnd/
-  // totalShort accumulation, which never counts day 0's initial state.
+  // Charged over the revealed measured days only, matching MODELS.inv.run's
+  // own sumEnd/totalShort accumulation, which counts neither day 0's
+  // initial state nor a warm-up day.
   let sumEnd = 0, totalShort = 0;
-  for (let day = 1; day <= lastDay; day++) { sumEnd += st.rep.rows[day].ending; totalShort += st.rep.rows[day].shortage; }
+  for (let day = 1; day <= lastDay; day++) { const r = st.rep.rows[day]; if (r.phase === 'warm') continue; sumEnd += r.ending; totalShort += r.shortage; }
   const h = st.params.h, p = st.params.p, cost = h * sumEnd + p * totalShort;
   el.innerHTML = invCostExpr(fmtUsd(h), String(sumEnd), fmtUsd(p), String(totalShort), fmtUsd(cost));
 }
@@ -1943,7 +2003,13 @@ window.MCXUI = (() => {
   function register(cfg) {
     const st = S[cfg.tab] = {
       cfg, params: cfg.readParams(), outputs: {}, runs: 0, rep: null, revealed: 0, stepping: false,
-      thr: {}, runIdx: 0, axisMax: {}, dragKey: null, log: [], logExpanded: null
+      thr: {}, runIdx: 0, axisMax: {}, dragKey: null, log: [], logExpanded: null,
+      // seeds holds every committed replication's seed, in commit order, and
+      // repSeed the shown replication's, so a post-processing knob (a
+      // warm-up) can re-derive the batch and the shown replication exactly.
+      // noObs counts committed replications that produced no observation
+      // (a queue with no customer after its warm-up).
+      seeds: [], repSeed: null, noObs: 0
     };
     cfg.outputs.forEach(o => { st.outputs[o.key] = []; st.thr[o.key] = o.thrDefault; st.axisMax[o.key] = o.axis.max; $(o.thrId).value = String(o.thrDefault); });
     $(cfg.tab + '-seed').value = String(randomSeed());
@@ -1961,10 +2027,14 @@ window.MCXUI = (() => {
   // happens to produce).
   function effAxis(o, axisMax) { return o.axis.fixed ? o.axis : Object.assign({}, o.axis, { max: axisMax }); }
   // --- replication ---
-  function commit(st, rep) {
-    st.runs++;
+  // Adds one replication's outputs to the batch's tallies. A null output
+  // (a queue whose warm-up left no customer) is no observation: it is
+  // skipped and counted in noObs instead.
+  function tally(st, rep) {
+    let missing = false;
     st.cfg.outputs.forEach(o => {
       const v = rep.outputs[o.key];
+      if (v == null) { missing = true; return; }
       st.outputs[o.key].push(v);
       // Grows to the smallest multiple of the tick at or above value + bin,
       // and so a bar for v always has room; never shrinks within a batch,
@@ -1973,6 +2043,12 @@ window.MCXUI = (() => {
         st.axisMax[o.key] = Math.ceil((v + o.axis.bin) / o.axis.tick) * o.axis.tick;
       }
     });
+    if (missing) st.noObs++;
+  }
+  function commit(st, rep, seed) {
+    st.runs++;
+    st.seeds.push(seed);
+    tally(st, rep);
     if (st.cfg.onCommit) st.cfg.onCommit(st, rep);
   }
   function show(st, rep, revealed) { st.rep = rep; st.revealed = revealed; renderTable(st); renderSummary(st); st.cfg.structure.draw(st, revealed); }
@@ -1981,7 +2057,8 @@ window.MCXUI = (() => {
     if (st.stepping) { finishStep(st); return; }
     const seed = readSeed(tab); if (seed === null) return;
     const rep = cfg.model.replicate(seed, st.params);
-    commit(st, rep); show(st, rep, rep.rows.length); afterRuns(st);
+    st.repSeed = seed;
+    commit(st, rep, seed); show(st, rep, rep.rows.length); afterRuns(st);
     st.runIdx++; noteRun(tab, seed, st.runIdx, /*repeat*/ false);
   }
   function runBatch(tab, n) {
@@ -1990,7 +2067,7 @@ window.MCXUI = (() => {
     const s0 = readSeed(tab); if (s0 === null) return;
     batchRun(tab, n, () => {
       let rep = null;
-      for (let i = 0; i < n; i++) { rep = cfg.model.replicate(batchSeed(s0, i), st.params); commit(st, rep); }
+      for (let i = 0; i < n; i++) { const seed = batchSeed(s0, i); rep = cfg.model.replicate(seed, st.params); commit(st, rep, seed); st.repSeed = seed; }
       show(st, rep, rep.rows.length); afterRuns(st);
       const first = st.runIdx + 1; st.runIdx += n; noteBatch(tab, s0, first, st.runIdx, n);
     });
@@ -1999,7 +2076,7 @@ window.MCXUI = (() => {
     const st = S[tab], cfg = st.cfg;
     if (!st.stepping) {
       const seed = readSeed(tab); if (seed === null) return;
-      st.stepping = true; st.stepSeed = seed;
+      st.stepping = true; st.stepSeed = seed; st.repSeed = seed;
       show(st, cfg.model.replicate(seed, st.params), 1);
       seedMsg(tab, 'Stepping seed ' + seed + ': row 1 of ' + st.rep.rows.length + '.', false);
       if (st.rep.rows.length === 1) finishStep(st);
@@ -2011,7 +2088,7 @@ window.MCXUI = (() => {
     else seedMsg(tab, 'Stepping seed ' + st.stepSeed + ': row ' + st.revealed + ' of ' + st.rep.rows.length + '.', false);
     scrollRowIntoView(st);
   }
-  function finishStep(st) { st.stepping = false; st.revealed = st.rep.rows.length; commit(st, st.rep); show(st, st.rep, st.revealed); afterRuns(st); st.runIdx++; noteRun(st.cfg.tab, st.stepSeed, st.runIdx, false); }
+  function finishStep(st) { st.stepping = false; st.revealed = st.rep.rows.length; commit(st, st.rep, st.stepSeed); show(st, st.rep, st.revealed); afterRuns(st); st.runIdx++; noteRun(st.cfg.tab, st.stepSeed, st.runIdx, false); }
   function afterRuns(st) { st.cfg.outputs.forEach(o => renderHist(st, o)); renderCards(st); updateBatchButtons(st); }
   // New batch is enabled only once a batch exists to move into the log.
   function updateBatchButtons(st) {
@@ -2022,7 +2099,7 @@ window.MCXUI = (() => {
   // outputs and the replication on screen, without touching the log --
   // whether (and what) to record there first is each caller's own decision.
   function resetBatch(st) {
-    st.stepping = false; st.rep = null; st.revealed = 0; st.runs = 0;
+    st.stepping = false; st.rep = null; st.revealed = 0; st.runs = 0; st.seeds = []; st.repSeed = null; st.noObs = 0;
     st.cfg.outputs.forEach(o => { st.outputs[o.key] = []; st.axisMax[o.key] = o.axis.max; });
     if (st.cfg.onReset) st.cfg.onReset(st);
     st.cfg.structure.clear(st);
@@ -2058,14 +2135,14 @@ window.MCXUI = (() => {
     // not leave a stale replication on screen under the new parameters.
     if (st.runs > 0) {
       st.log.push(snapshot(st));
-      st.runs = 0;
+      st.runs = 0; st.seeds = []; st.noObs = 0;
       st.cfg.outputs.forEach(o => st.outputs[o.key] = []);
     }
     // The axis range resets on every knob change, not only when
     // there was a batch to log -- a decision change starts the next batch
     // at the design-time range regardless.
     st.cfg.outputs.forEach(o => st.axisMax[o.key] = o.axis.max);
-    st.stepping = false; st.rep = null; st.revealed = 0;
+    st.stepping = false; st.rep = null; st.revealed = 0; st.repSeed = null;
     if (st.cfg.onReset) st.cfg.onReset(st);
     // params is swapped in before structure.clear(), not after, and so a
     // structure view whose own layout depends on a param (tab ①'s server
@@ -2076,6 +2153,29 @@ window.MCXUI = (() => {
     st.params = next;
     st.cfg.structure.clear(st);
     buildTable(st); renderTable(st); renderSummary(st); afterRuns(st); reserveAll(st); renderLog(st);
+  }
+  // A post-processing knob (a warm-up) changes which observations a
+  // replication yields, not the system simulated, and so it neither logs
+  // nor clears the batch: every committed replication is re-run from its
+  // own seed under the new params, which reproduces it exactly, and the
+  // batch's tallies are rebuilt from the results. The shown replication is
+  // re-derived the same way, keeping its place in a step. The axis range
+  // is rebuilt from the design-time range, since the batch is being
+  // re-derived rather than extended. Logged batches are untouched; each
+  // records the setting it was logged at.
+  function onPost(tab) {
+    const st = S[tab], cfg = st.cfg;
+    st.params = cfg.readParams();
+    cfg.outputs.forEach(o => { st.outputs[o.key] = []; st.axisMax[o.key] = o.axis.max; });
+    st.noObs = 0;
+    st.seeds.forEach(seed => tally(st, cfg.model.replicate(seed, st.params)));
+    if (st.rep && st.repSeed != null) {
+      st.rep = cfg.model.replicate(st.repSeed, st.params);
+      st.revealed = st.stepping ? Math.min(st.revealed, st.rep.rows.length) : st.rep.rows.length;
+    }
+    buildTable(st);
+    if (st.rep) show(st, st.rep, st.revealed); else { renderTable(st); renderSummary(st); cfg.structure.clear(st); }
+    afterRuns(st); reserveAll(st);
   }
   function onThreshold(tab, key, value) {
     const st = S[tab], o = st.cfg.outputs.find(o => o.key === key);
@@ -2189,6 +2289,7 @@ window.MCXUI = (() => {
   function rowHtml(row, i, cols, st) {
     const trCls = [];
     if (i >= st.revealed) trCls.push('unrevealed');
+    if (row.phase === 'warm') trCls.push('warm');
     if (st.stepping && i === st.revealed - 1) trCls.push('cur');
     // data-i carries the row's flat index regardless of which mini table it
     // lands in, and so scrollRowIntoView can find "row i" the same way
@@ -2514,7 +2615,11 @@ window.MCXUI = (() => {
     const cfg = st.cfg;
     // A tab can add one card of its own, right after Runs -- tab ⑤'s pooled
     // hit rate beside the exact probability it estimates.
-    const runsHtml = '<div class="sc"><div class="sc-lbl">Runs</div><div class="sc-val">' + st.runs + '</div></div>' + (cfg.extraCard ? cfg.extraCard(st) : '');
+    // A tab whose warm-up can leave a replication with no observation
+    // (noObsNote) reserves a line under Runs for the count, blank when
+    // it is zero so the card's height never changes.
+    const noObs = cfg.noObsNote ? '<div class="sc-sub">' + (st.noObs > 0 ? st.noObs + ' ' + cfg.noObsNote : '&nbsp;') + '</div>' : '';
+    const runsHtml = '<div class="sc"><div class="sc-lbl">Runs</div><div class="sc-val">' + st.runs + '</div>' + noObs + '</div>' + (cfg.extraCard ? cfg.extraCard(st) : '');
     const runsEl = $(cfg.tab + '-cards-runs');
     if (runsEl) runsEl.innerHTML = runsHtml;
     cfg.outputs.forEach(o => {
@@ -2736,7 +2841,7 @@ window.MCXUI = (() => {
     }
   }
 
-  return { register, runOne, runBatch, step, clear, newBatch, onKnob, onThreshold, onTabShown, clearLog, toggleLogRow, state, binFracs, curvePieces, successCount, fmt: FMT };
+  return { register, runOne, runBatch, step, clear, newBatch, onKnob, onPost, onThreshold, onTabShown, clearLog, toggleLogRow, state, binFracs, curvePieces, successCount, fmt: FMT };
 })();
 
 // ── Tab ② registration ────────────────────────────────────────────────────
@@ -2848,9 +2953,9 @@ window.addEventListener('load', function () {
   buildInvTables();
   MCXUI.register({
     tab: 'inv', model: MCX.models.inv,
-    readParams: () => ({ M: Number($('inv-m').value), N: Number($('inv-n').value), h: Number($('inv-h').value), p: Number($('inv-p').value) }),
-    settingLabel: p => nwJoin(['M = ' + p.M, 'N = ' + p.N, 'h = $' + p.h, 'p = $' + p.p]),
-    knobIds: ['inv-m', 'inv-n', 'inv-h', 'inv-p'],
+    readParams: () => ({ M: Number($('inv-m').value), N: Number($('inv-n').value), h: Number($('inv-h').value), p: Number($('inv-p').value), W: Number($('inv-W').value) }),
+    settingLabel: p => nwJoin(['M = ' + p.M, 'N = ' + p.N, 'h = $' + p.h, 'p = $' + p.p, 'warm-up ' + p.W + ' d']),
+    knobIds: ['inv-m', 'inv-n', 'inv-h', 'inv-p', 'inv-W'],
     outputs: [
       {
         key: 'cost', label: '25-day cost', short: 'cost', histId: 'inv-hist-a', thrId: 'inv-thr-a', legendId: 'inv-legend-a',
@@ -2879,7 +2984,7 @@ window.addEventListener('load', function () {
     structure: STRUCT.inv,
     summary: (rep) => 'This replication: 25-day cost <strong>' + fmtUsd0(rep.outputs.cost) + '</strong> (holding ' + fmtUsd0(rep.summary.holdCost) + ', backorders ' + fmtUsd0(rep.summary.penCost) + '); average ending inventory <strong>' + rep.outputs.avgInv.toFixed(2) + '</strong>, <strong>' + rep.outputs.shortDays + '</strong> day' + (rep.outputs.shortDays === 1 ? '' : 's') + ' with a shortage.',
     summaryWorst: 'This replication: 25-day cost <strong>$9,999</strong> (holding $9,999, backorders $9,999); average ending inventory <strong>20.00</strong>, <strong>25</strong> days with a shortage.',
-    rowsWorst: 26,
+    rowsWorst: 36, // day 0 plus 25 measured days plus the longest warm-up
     extraReserve: () => reserveInvCostHeight()
   });
 
@@ -2943,21 +3048,21 @@ window.addEventListener('load', function () {
       const policy = $('br-policy').value, age = policy === 'age';
       $('br-t').disabled = !age;
       document.querySelectorAll('#br-t-spin button').forEach(b => { b.disabled = !age; });
-      return { policy: policy, T: Number($('br-t').value) };
+      return { policy: policy, T: Number($('br-t').value), W: Number($('br-W').value) };
     },
-    settingLabel: p => ({ each: 'replace on failure', set: 'replace all on any failure', age: 'replace all at ' + p.T + ' h or on failure' })[p.policy],
-    knobIds: ['br-policy', 'br-t'],
+    settingLabel: p => nwJoin([({ each: 'replace on failure', set: 'replace all on any failure', age: 'replace all at ' + p.T + ' h or on failure' })[p.policy], 'warm-up ' + p.W + ' h']),
+    knobIds: ['br-policy', 'br-t', 'br-W'],
     outputs: [{
       key: 'cost', label: 'Cost per 10,000 bearing-hours', histId: 'br-hist', thrId: 'br-thr',
       axis: { min: 0, max: 2500, bin: 100, tick: 500 }, integer: false, success: 'le', thrDefault: 2000, thrStep: 50,
       fmt: v => fmtUsd0(v), unit: '$', axisFmt: v => fmtAxisUsd0(v), successLabel: t => 'P(cost ≤ ' + fmtUsd0(t) + ')',
-      referenceTip: 'The long-run expected cost for this policy from the renewal equation on the 100-hour grid, over the same 20,000-hour horizon.',
+      referenceTip: 'The expected cost for this policy from the renewal equation on the 100-hour grid, over the same 20,000 measured hours (the ones after the warm-up).',
       // The renewal-equation cost walks a 200-step grid, and so it is cached on
       // st, keyed by the policy and T that fed it, rather than recomputed on
       // every render; only a knob change (a new key) redoes the work.
       reference: (st, p) => {
-        const key = p.policy + ':' + p.T;
-        if (!st.brCostCache || st.brCostCache.key !== key) st.brCostCache = { key: key, value: MCX.brExpectedCost(p.policy, p.T) };
+        const key = p.policy + ':' + p.T + ':' + (p.W || 0);
+        if (!st.brCostCache || st.brCostCache.key !== key) st.brCostCache = { key: key, value: MCX.brExpectedCost(p.policy, p.T, p.W || 0) };
         return { type: 'line', x: st.brCostCache.value, label: 'exact expected cost' };
       }
     }],
@@ -2966,9 +3071,9 @@ window.addEventListener('load', function () {
     // table (a life draw per installed bearing, a delay draw per failure);
     // it is static, and so summaryWorst below carries it too, verbatim, for
     // the height reservation to measure the same text the live one shows.
-    summary: rep => 'This replication: <strong>' + fmtUsd0(rep.outputs.cost) + '</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>' + rep.summary.events + '</strong> replacement events over 20,000 h. Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
-    summaryWorst: 'This replication: <strong>$9,999</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>999</strong> replacement events over 20,000 h. Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
-    rowsWorst: 63, // +1 over the worst real-event count for the install row
+    summary: rep => 'This replication: <strong>' + fmtUsd0(rep.outputs.cost) + '</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>' + rep.summary.eventsKept + '</strong> replacement events over the 20,000 h' + (rep.summary.W ? ' after the ' + rep.summary.W.toLocaleString('en-US') + ' h warm-up (' + (rep.summary.events - rep.summary.eventsKept) + ' more inside it)' : '') + '. Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
+    summaryWorst: 'This replication: <strong>$9,999</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>999</strong> replacement events over the 20,000 h after the 5,000 h warm-up (999 more inside it). Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
+    rowsWorst: 78, // the install row, the worst count over 20,000 h, and 15 more for the longest warm-up
     extraReserve: () => reserveBrCostEqHeight()
   });
 
@@ -3101,18 +3206,23 @@ window.addEventListener('load', function () {
     // harness calls readParams() on every knob change and every render.
     readParams: () => {
       const lam = Number($('q-lam').value), mu = Number($('q-mu').value), c = Number($('q-c').value), T = Number($('q-T').value);
+      // The warm-up has to leave at least one 20-minute step of the run
+      // after it; shrinking T pulls W back to that.
+      let W = Number($('q-W').value);
+      if (W > T - 20) { W = Math.max(0, T - 20); $('q-W').value = String(W); }
       const rhoEl = $('q-rho-val');
       if (rhoEl) rhoEl.textContent = (lam / (c * mu)).toFixed(2);
       const wqEl = $('q-wq-val');
       if (wqEl) { const wq = MCX.mmcWq(lam, mu, c); wqEl.textContent = isFinite(wq) ? wq.toFixed(2) + ' min' : '∞'; }
       const wqF = $('q-wq-formula');
       if (wqF) wqF.textContent = c === 1 ? 'ρ/(μ − λ)' : 'C(' + c + ', λ/μ)/(' + c + 'μ − λ)';
-      const params = { lam: lam, mu: mu, c: c, T: T };
+      const params = { lam: lam, mu: mu, c: c, T: T, W: W };
       renderQSchema(params);
       return params;
     },
-    settingLabel: p => nwJoin(['λ = ' + p.lam.toFixed(1), 'μ = ' + p.mu.toFixed(1), 'c = ' + p.c, 'T = ' + p.T + ' min']),
-    knobIds: ['q-lam', 'q-mu', 'q-c', 'q-T'],
+    settingLabel: p => nwJoin(['λ = ' + p.lam.toFixed(1), 'μ = ' + p.mu.toFixed(1), 'c = ' + p.c, 'T = ' + p.T + ' min', 'warm-up ' + p.W + ' min']),
+    knobIds: ['q-lam', 'q-mu', 'q-c', 'q-T', 'q-W'],
+    noObsNote: 'with no customer after the warm-up',
     outputs: [
       {
         key: 'avgWait', label: 'Average wait in queue (min)', meanLabel: 'Mean of the average wait (min)', short: 'avg wait', histId: 'q-hist-a', thrId: 'q-thr-a', legendId: 'q-legend-a',
@@ -3149,8 +3259,10 @@ window.addEventListener('load', function () {
       }
     ],
     structure: STRUCT.q,
-    summary: rep => 'This replication: <strong>' + rep.summary.n + '</strong> customers by T = ' + rep.summary.T + ' min; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
-    summaryWorst: 'This replication: <strong>1300</strong> customers by T = 600 min; average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
+    summary: rep => rep.summary.n === 0
+      ? 'This replication: <strong>' + rep.summary.nAll + '</strong> customers by T = ' + rep.summary.T + ' min, all inside the ' + rep.summary.W + ' min warm-up; nothing counted, and so no observation.'
+      : 'This replication: <strong>' + rep.summary.n + '</strong> ' + (rep.summary.n === 1 ? 'customer' : 'customers') + ' counted by T = ' + rep.summary.T + ' min' + (rep.summary.nWarm ? ' (' + rep.summary.nWarm + ' more in the warm-up)' : '') + '; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
+    summaryWorst: 'This replication: <strong>1300</strong> customers counted by T = 600 min (1300 more in the warm-up); average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
     // The largest plausible row count at the current knobs, not a fixed
     // count (arrivals are now a Poisson process run out to T, and
     // so the count varies by seed). Arrivals by T follow Poisson(lambda*T);
@@ -3590,7 +3702,12 @@ function makeLinker(cfg) {
     // plus the same 4 units of headroom the plot always carried, so changing
     // or dragging M moves only the dashed M line, never the axis under it.
     const yTop = 24, yBot = -8;
-    const xAt = day => L + day / 25 * innerW;
+    // The axis is fixed at 25 days plus the longest warm-up the knob
+    // allows, whatever W is: the measured 25-day span slides right as W
+    // grows, the days before it are shaded as the warm-up, and the days
+    // after it, which the run never reaches, are covered.
+    const DAYS_AXIS = 25 + INV_WMAX, warmW = p.W || 0, endDay = warmW + 25;
+    const xAt = day => L + day / DAYS_AXIS * innerW;
     const yAt = v => T + (yTop - v) / (yTop - yBot) * innerH;
     const seg = (x0, y0, x1, y1) => splitAtZero(x0, y0, x1, y1).map(g =>
       '<line x1="' + xAt(g.x0).toFixed(2) + '" y1="' + yAt(g.y0).toFixed(2) + '" x2="' + xAt(g.x1).toFixed(2) + '" y2="' + yAt(g.y1).toFixed(2)
@@ -3621,9 +3738,19 @@ function makeLinker(cfg) {
     s += '<text x="' + laneX1 + '" y="' + midY.toFixed(2) + '" text-anchor="middle" transform="rotate(-90 ' + laneX1 + ' ' + midY.toFixed(2) + ')" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">on hand (above 0)</text>';
     s += '<text x="' + laneX2 + '" y="' + midY.toFixed(2) + '" text-anchor="middle" transform="rotate(-90 ' + laneX2 + ' ' + midY.toFixed(2) + ')" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">backordered (below 0)</text>';
 
-    // x axis: days 0-25, every 5
+    // The warm-up band, and the cover over the days past the measured span.
+    const wX = xAt(warmW), eX = xAt(endDay);
+    if (warmW > 0) s += '<rect x="' + L + '" y="' + T + '" width="' + (wX - L).toFixed(2) + '" height="' + innerH + '" fill="var(--muted)" fill-opacity="0.13" pointer-events="none"/>';
+    if (endDay < DAYS_AXIS) {
+      s += '<rect x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + innerH + '" fill="#ebe7e9" pointer-events="none"/>';
+      if (L + innerW - eX >= 84) s += '<text data-tip="The run stops at day W + 25; these days are never simulated." x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + innerH / 2 + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">beyond the 25 days</text>';
+    }
+    s += '<line id="inv-w-line" x1="' + wX.toFixed(2) + '" y1="' + T + '" x2="' + wX.toFixed(2) + '" y2="' + (T + innerH) + '" stroke="var(--muted)" stroke-width="1.3"/>';
+    if (wX - L >= 58) s += '<text class="inv-warm-lbl" data-tip="Everything before W is the warm-up: simulated and shown, but left out of the cost, the shortage days, and the average inventory." x="' + ((L + wX) / 2).toFixed(2) + '" y="' + (T + innerH - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Warm-up</text>';
+
+    // x axis: every 5 days across the fixed axis
     s += '<line x1="' + L + '" y1="' + (T + innerH) + '" x2="' + (L + innerW) + '" y2="' + (T + innerH) + '" stroke="var(--border)" stroke-width="1"/>';
-    for (let d = 0; d <= 25; d += 5) {
+    for (let d = 0; d <= DAYS_AXIS; d += 5) {
       const x = xAt(d);
       s += '<line x1="' + x.toFixed(2) + '" y1="' + (T + innerH) + '" x2="' + x.toFixed(2) + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>';
       s += '<text x="' + x.toFixed(2) + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="IBM Plex Mono, monospace">' + d + '</text>';
@@ -3634,7 +3761,7 @@ function makeLinker(cfg) {
     // k = 1, day 2N is k = 2, ...) so the drag handles appended below can be
     // matched back to the line they belong to.
     let reviewK = 0;
-    for (let d = N; d <= 25; d += N) {
+    for (let d = N; d <= endDay; d += N) {
       reviewK++;
       const x = xAt(d);
       s += '<line class="inv-review-line" data-k="' + reviewK + '" x1="' + x.toFixed(2) + '" y1="' + T + '" x2="' + x.toFixed(2) + '" y2="' + (T + innerH) + '" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1.5 3"/>';
@@ -3642,8 +3769,8 @@ function makeLinker(cfg) {
 
     // M, dashed
     const yM = yAt(M);
-    s += '<line id="inv-m-line" x1="' + L + '" y1="' + yM.toFixed(2) + '" x2="' + (L + innerW) + '" y2="' + yM.toFixed(2) + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 4"/>';
-    s += '<text x="' + (L + innerW - 2) + '" y="' + (yM - 4).toFixed(2) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="Outfit, sans-serif">M</text>';
+    s += '<line id="inv-m-line" x1="' + L + '" y1="' + yM.toFixed(2) + '" x2="' + eX.toFixed(2) + '" y2="' + yM.toFixed(2) + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 4"/>';
+    s += '<text x="' + (eX - 2).toFixed(2) + '" y="' + (yM - 4).toFixed(2) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="Outfit, sans-serif">M</text>';
 
     let lastDay = -1;
     if (st.rep && k > 0) {
@@ -3681,7 +3808,7 @@ function makeLinker(cfg) {
       // order arriving after day 25 causes no rise inside the plot, and so
       // draws no arrow at all.
       const yBand = yAt(M + 2.4);
-      st.rep.summary.orders.filter(o => o.day <= lastDay && o.arrive <= 25).forEach(o => {
+      st.rep.summary.orders.filter(o => o.day <= lastDay && o.arrive <= endDay).forEach(o => {
         const x1 = xAt(o.day), x2 = xAt(o.arrive - 1);
         s += '<line x1="' + x1.toFixed(2) + '" y1="' + yBand.toFixed(2) + '" x2="' + x2.toFixed(2) + '" y2="' + yBand.toFixed(2)
           + '" stroke="var(--lane-stroke)" stroke-width="1.6" marker-end="url(#inv-arrow-head)"/>';
@@ -3704,8 +3831,11 @@ function makeLinker(cfg) {
     // rect above and win a pointerdown that lands on one.
     const dragPx = 24 * W / cw;
     s += '<rect class="inv-drag" data-knob="M" x="' + L + '" y="' + (yM - dragPx / 2).toFixed(2) + '" width="' + innerW + '" height="' + dragPx.toFixed(2) + '" fill="transparent" pointer-events="all"/>';
+    // The warm-up handle goes down before the review handles, and so a
+    // review line that sits exactly at W still wins its own grab.
+    s += '<rect class="inv-drag" data-knob="W" x="' + (wX - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + innerH + '" fill="transparent" pointer-events="all"/>';
     reviewK = 0;
-    for (let d = N; d <= 25; d += N) {
+    for (let d = N; d <= endDay; d += N) {
       reviewK++;
       const x = xAt(d);
       s += '<rect class="inv-drag" data-knob="N" data-k="' + reviewK + '" x="' + (x - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + innerH + '" fill="transparent" pointer-events="all"/>';
@@ -3714,7 +3844,7 @@ function makeLinker(cfg) {
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
 
-    st.sawGeom = { xAt: xAt, yAt: yAt, L: L, R: R, T: T, B: B, innerW: innerW, innerH: innerH, W: W, H: H, yTop: yTop, yBot: yBot };
+    st.sawGeom = { xAt: xAt, yAt: yAt, L: L, R: R, T: T, B: B, innerW: innerW, innerH: innerH, W: W, H: H, yTop: yTop, yBot: yBot, daysAxis: DAYS_AXIS };
     st.sawPoints = (st.rep && lastDay >= 0) ? sawPoints(st.rep, lastDay) : [];
     st.sawLastDay = lastDay;
     // A pin set mid-step survives the innerHTML rebuild above.
@@ -3763,9 +3893,10 @@ function makeLinker(cfg) {
   // it is what keeps the drag tracking the pointer once it leaves the svg.
   let sawDragging = false;
   function setSawHandleHi(handle) {
-    document.querySelectorAll('#inv-m-line.inv-drag-hi, .inv-review-line.inv-drag-hi').forEach(el => el.classList.remove('inv-drag-hi'));
+    document.querySelectorAll('#inv-m-line.inv-drag-hi, #inv-w-line.inv-drag-hi, .inv-review-line.inv-drag-hi').forEach(el => el.classList.remove('inv-drag-hi'));
     if (!handle) return;
     if (handle.dataset.knob === 'M') { const el = document.getElementById('inv-m-line'); if (el) el.classList.add('inv-drag-hi'); }
+    else if (handle.dataset.knob === 'W') { const el = document.getElementById('inv-w-line'); if (el) el.classList.add('inv-drag-hi'); }
     else { const el = document.querySelector('.inv-review-line[data-k="' + handle.dataset.k + '"]'); if (el) el.classList.add('inv-drag-hi'); }
   }
   (function () {
@@ -3818,7 +3949,7 @@ function makeLinker(cfg) {
       try { svg.setPointerCapture(e.pointerId); } catch (err) {}
       sawDragging = true;
       const knob = handle.dataset.knob, k = handle.dataset.k ? Number(handle.dataset.k) : null;
-      const id = knob === 'M' ? 'inv-m' : 'inv-n';
+      const id = knob === 'M' ? 'inv-m' : knob === 'W' ? 'inv-W' : 'inv-n';
       let lastVal = Number($(id).value);
       handle.classList.add('active');
       setSawHandleHi(handle);
@@ -3834,11 +3965,14 @@ function makeLinker(cfg) {
           val = Math.min(20, Math.max(1, Math.round(v)));
         } else {
           const scaleX = vb.width / rect.width, xPix = (ev.clientX - rect.left) * scaleX;
-          const day = (xPix - geom.L) / geom.innerW * 25;
-          val = Math.min(10, Math.max(1, Math.round(day / k)));
+          const day = (xPix - geom.L) / geom.innerW * geom.daysAxis;
+          val = knob === 'W' ? Math.min(INV_WMAX, Math.max(0, Math.round(day))) : Math.min(10, Math.max(1, Math.round(day / k)));
         }
         if (val !== lastVal) {
-          lastVal = val; $(id).value = String(val); MCXUI.onKnob('inv');
+          lastVal = val; $(id).value = String(val);
+          // W is a post-processing knob: it re-derives the batch rather
+          // than starting a new one.
+          if (knob === 'W') MCXUI.onPost('inv'); else MCXUI.onKnob('inv');
           // onKnob redraws the sawtooth by innerHTML, which destroys the
           // handle DOM node .active was set on; the fresh node needs it too.
           const freshHandle = svg.querySelector('.inv-drag[data-knob="' + knob + '"]' + (k != null ? '[data-k="' + k + '"]' : ''));
@@ -4246,10 +4380,29 @@ function makeLinker(cfg) {
     const widget = document.querySelector('.widget');
     const cw = el.clientWidth || (widget ? widget.clientWidth : 640) || 640;
     const W = Math.max(240, Math.min(cw, 640));
-    const horizon = MCX.models.br.tables.H, innerW = W - L - R, axisY = T + 3 * LANE;
-    const xAt = t => L + (t / horizon) * innerW;
+    // The axis is fixed at 20,000 h plus the longest warm-up the knob
+    // allows, whatever W is: the measured 20,000 h slide right as W grows,
+    // the hours before them are shaded as the warm-up, and the hours after
+    // them, which the run never reaches, are covered.
+    const axisH = MCX.models.br.tables.H + BR_WMAX, warmW = params.W || 0, endH = warmW + MCX.models.br.tables.H;
+    const innerW = W - L - R, axisY = T + 3 * LANE;
+    const xAt = t => L + (t / axisH) * innerW;
 
     let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>';
+
+    // The warm-up band, the cover over the hours past the measured span,
+    // and the warm-up's own line (its drag handle is added last, below).
+    const wX = xAt(warmW), eX = xAt(endH);
+    if (warmW > 0) s += '<rect x="' + L + '" y="' + T + '" width="' + (wX - L).toFixed(2) + '" height="' + (axisY - T) + '" fill="var(--muted)" fill-opacity="0.13" pointer-events="none"/>';
+    if (endH < axisH) {
+      s += '<rect x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + (axisY - T) + '" fill="#ebe7e9" pointer-events="none"/>';
+      if (L + innerW - eX >= 92) s += '<text data-tip="The run stops at W + 20,000 h; these hours are never simulated." x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + 1.5 * LANE + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">beyond the 20,000 h</text>';
+    }
+    s += '<line id="br-w-line" x1="' + wX.toFixed(2) + '" y1="' + T + '" x2="' + wX.toFixed(2) + '" y2="' + axisY + '" stroke="var(--muted)" stroke-width="1.3"/>';
+    // The label is written after the lanes (below), with a halo, since the
+    // lanes fill the whole plot height and it would otherwise sit behind
+    // lane 3's bars.
+    const warmLabel = wX - L >= 58 ? '<text class="br-warm-lbl" data-tip="Everything before W is the warm-up: simulated and shown, but not charged." x="' + ((L + wX) / 2).toFixed(2) + '" y="' + (T + 1.5 * LANE + 3.5).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" stroke="var(--chart-bg)" stroke-width="3.5" paint-order="stroke" font-size="10" font-weight="600" font-family="Outfit, sans-serif">Warm-up</text>' : '';
 
     for (let p = 0; p < 3; p++) {
       const yTop = T + p * LANE, yMid = yTop + LANE / 2;
@@ -4259,8 +4412,8 @@ function makeLinker(cfg) {
     s += '<line x1="' + L + '" y1="' + axisY + '" x2="' + (L + innerW) + '" y2="' + axisY + '" stroke="var(--border)" stroke-width="1"/>';
     // The end ticks anchor to start/end rather than middle, or "0" and
     // "20,000" would run past the canvas edge with nothing to balance them.
-    for (let h = 0; h <= horizon; h += 5000) {
-      const x = xAt(h), anchor = h === 0 ? 'start' : h === horizon ? 'end' : 'middle';
+    for (let h = 0; h <= axisH; h += 5000) {
+      const x = xAt(h), anchor = h === 0 ? 'start' : h === axisH ? 'end' : 'middle';
       s += '<line x1="' + x.toFixed(2) + '" y1="' + axisY + '" x2="' + x.toFixed(2) + '" y2="' + (axisY + 4) + '" stroke="var(--border)" stroke-width="1"/>';
       s += '<text x="' + x.toFixed(2) + '" y="' + (axisY + 15) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9.5" font-family="IBM Plex Mono, monospace">' + h.toLocaleString('en-US') + '</text>';
     }
@@ -4303,7 +4456,7 @@ function makeLinker(cfg) {
           }
           if (params.policy === 'age') {
             const plannedTime = prevClock + params.T;
-            if (plannedTime <= horizon) triangles += triangleMark(xAt(plannedTime), TRI_Y, row.cause === 'planned');
+            if (plannedTime <= rep.summary.horizon) triangles += triangleMark(xAt(plannedTime), TRI_Y, row.cause === 'planned');
           }
           prevClock = row.clock;
         }
@@ -4398,10 +4551,17 @@ function makeLinker(cfg) {
     // Drawn empty on every render (including Clear, where rep is null); the
     // hover/pin listeners that fill it are delegated once on the persistent
     // #br-lanes element below, rather than re-attached here.
+    s += warmLabel;
     s += '<g id="br-readout" pointer-events="none"></g>';
+    // The warm-up handle: 24 CSS px in this render's viewBox units, the
+    // full lane height, drawn last so it wins a pointerdown that lands on
+    // it over any mark beneath.
+    const dragPx = 24 * W / cw;
+    s += '<rect class="br-drag" data-knob="W" x="' + (wX - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + (axisY - T) + '" fill="transparent" pointer-events="all"/>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
+    st.brGeom = { L: L, innerW: innerW, axisH: axisH };
     // A pin set mid-step survives the innerHTML rebuild above.
     brLinker.refresh();
     renderBrCostEq(st, k);
@@ -4466,17 +4626,55 @@ function makeLinker(cfg) {
   // The marks' pointer listeners, delegated once on the persistent
   // #br-lanes element (the same pattern used for tabs ①/②), because
   // renderBrLanes rebuilds every mark by innerHTML on each render.
+  let brDragging = false;
+  function setBrHandleHi(on) { const el = document.getElementById('br-w-line'); if (el) el.classList.toggle('br-drag-hi', !!on); }
   (function () {
     const svg = document.getElementById('br-lanes');
     if (!svg) return;
     svg.addEventListener('pointermove', ev => {
-      if (ev.pointerType === 'touch') return;
+      if (ev.pointerType === 'touch' || brDragging) return;
+      if (ev.target.closest && ev.target.closest('.br-drag')) { brTailTarget = null; brLinker.unhover(); setBrHandleHi(true); return; }
+      setBrHandleHi(false);
       const hit = ev.target.closest && ev.target.closest('.br-mark');
       if (!hit) { brTailTarget = null; brLinker.unhover(); return; }
       brTailTarget = hit.dataset.tail === '1' ? hit : null;
       brLinker.hover(Number(hit.dataset.event));
     });
+    // The warm-up handle's drag: pointer capture on #br-lanes, the geometry
+    // captured once at pointerdown (the axis is fixed, and so nothing about
+    // it changes under the drag). W is a post-processing knob and re-derives
+    // the batch as it moves.
+    svg.addEventListener('pointerdown', e => {
+      const handle = e.target.closest && e.target.closest('.br-drag');
+      if (!handle) return;
+      const st = MCXUI.state('br'); if (!st || !st.brGeom) return;
+      e.preventDefault();
+      try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+      brDragging = true;
+      const geom = st.brGeom;
+      let lastVal = Number($('br-W').value);
+      setBrHandleHi(true);
+      const move = ev => {
+        const rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+        if (!rect.width || !vb) return;
+        const scaleX = vb.width / rect.width, xPix = (ev.clientX - rect.left) * scaleX;
+        const hours = (xPix - geom.L) / geom.innerW * geom.axisH;
+        const val = Math.min(BR_WMAX, Math.max(0, Math.round(hours / 500) * 500));
+        if (val !== lastVal) { lastVal = val; $('br-W').value = String(val); MCXUI.onPost('br'); setBrHandleHi(true); }
+      };
+      const up = () => {
+        brDragging = false; setBrHandleHi(false);
+        svg.removeEventListener('pointermove', move);
+        svg.removeEventListener('pointerup', up);
+        svg.removeEventListener('pointercancel', up);
+        try { svg.releasePointerCapture(e.pointerId); } catch (err) {}
+      };
+      svg.addEventListener('pointermove', move);
+      svg.addEventListener('pointerup', up);
+      svg.addEventListener('pointercancel', up);
+    });
     svg.addEventListener('pointerdown', ev => {
+      if (ev.target.closest && ev.target.closest('.br-drag')) return;
       const hit = ev.target.closest && ev.target.closest('.br-mark');
       if (!hit) return;
       const evt = Number(hit.dataset.event);
@@ -4485,9 +4683,10 @@ function makeLinker(cfg) {
       scrollBrRowIntoView(evt);
     });
     svg.addEventListener('pointerleave', ev => {
-      if (ev.pointerType === 'touch') return;
+      if (ev.pointerType === 'touch' || brDragging) return;
       brTailTarget = null;
       brLinker.unhover();
+      setBrHandleHi(false);
     });
   })();
 
@@ -4831,6 +5030,8 @@ function makeLinker(cfg) {
 
     let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>';
 
+    const warmW = p.W || 0, wX = xAt(warmW);
+
     const rows = st.rep ? st.rep.rows : [];
     const revealed = st.rep ? Math.min(k, rows.length) : 0;
 
@@ -4979,6 +5180,16 @@ function makeLinker(cfg) {
     // still wins a pointer that lands on one of them.
     s += '<rect class="q-queue-hit" x="' + L + '" y="' + queueTop + '" width="' + innerW + '" height="' + queueH + '" fill="transparent" pointer-events="all"/>';
 
+    // The warm-up: a translucent band laid over everything before W, rug,
+    // lanes, and queue plot alike (drawn here, after all of them, since the
+    // queue plot paints its own ground), its right edge a solid line the
+    // reader can drag (the handle is added with T's, below), and a label
+    // inside it when there is room. At W = 0 the band has no width and only
+    // the line remains, at the axis.
+    if (warmW > 0) s += '<rect x="' + L + '" y="' + T + '" width="' + (wX - L).toFixed(2) + '" height="' + (queueBottom - T).toFixed(2) + '" fill="var(--muted)" fill-opacity="0.13" pointer-events="none"/>';
+    s += '<line id="q-w-line" x1="' + wX.toFixed(2) + '" y1="' + T + '" x2="' + wX.toFixed(2) + '" y2="' + queueBottom + '" stroke="var(--muted)" stroke-width="1.3" pointer-events="none"/>';
+    if (wX - L >= 58) s += '<text class="q-warm-lbl" data-tip="Everything before W is the warm-up: simulated and shown, but left out of the averages and the histograms below." x="' + ((L + wX) / 2).toFixed(2) + '" y="' + (queueBottom - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Warm-up</text>';
+
     // The pointer readout's own group, drawn empty on every render; the
     // listeners that fill it are delegated once on the persistent #q-servers
     // element below, rather than re-attached to these bars, which innerHTML
@@ -4992,6 +5203,10 @@ function makeLinker(cfg) {
     // rect, a bar) and wins a pointerdown that lands on it.
     const dragPx = 24 * W / cw;
     s += '<rect class="q-drag" data-knob="T" x="' + (tX - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + (queueBottom - T).toFixed(2) + '" fill="transparent" pointer-events="all"/>';
+    // The warm-up handle goes down after T's, and so wins where the two
+    // overlap (W is only ever grabbed from its own line, which sits at or
+    // left of T's).
+    s += '<rect class="q-drag" data-knob="W" x="' + (wX - dragPx / 2).toFixed(2) + '" y="' + T + '" width="' + dragPx.toFixed(2) + '" height="' + (queueBottom - T).toFixed(2) + '" fill="transparent" pointer-events="all"/>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
@@ -5166,9 +5381,13 @@ function makeLinker(cfg) {
   // highlight on the T line itself, the same trick .inv-drag-hi uses for
   // the sawtooth's own M/review-line handles.
   let qDragging = false;
-  function setQHandleHi(on) {
-    const el = document.getElementById('q-t-line');
-    if (el) el.classList.toggle('q-drag-hi', !!on);
+  // Highlights the line a handle belongs to (knob 'T' or 'W'); with on
+  // false, or no knob named, clears both.
+  function setQHandleHi(on, knob) {
+    ['T', 'W'].forEach(kn => {
+      const el = document.getElementById(kn === 'T' ? 'q-t-line' : 'q-w-line');
+      if (el) el.classList.toggle('q-drag-hi', !!on && (!knob || knob === kn));
+    });
   }
 
   // The bars', rug's, and queue-plot's pointer listeners, delegated once on
@@ -5208,7 +5427,7 @@ function makeLinker(cfg) {
       if (ev.pointerType === 'touch' || qDragging) return;
       const st = MCXUI.state('q'); if (!st) return;
       const dragHandle = ev.target.closest && ev.target.closest('.q-drag');
-      if (dragHandle) { qLinker.unhover(); paintQTickReadout(st, null); if (qQueueTapPx == null) paintQueueReadout(st, null); setQHandleHi(true); return; }
+      if (dragHandle) { qLinker.unhover(); paintQTickReadout(st, null); if (qQueueTapPx == null) paintQueueReadout(st, null); setQHandleHi(true, dragHandle.dataset.knob); return; }
       setQHandleHi(false);
       const bar = ev.target.closest && ev.target.closest('.q-cust');
       if (bar) { qLinker.hover(Number(bar.dataset.cust)); return; }
@@ -5278,24 +5497,28 @@ function makeLinker(cfg) {
       try { svg.setPointerCapture(e.pointerId); } catch (err) {}
       qDragging = true;
       const geom = st.qGeom; // captured once; never re-read for the rest of this drag
-      let lastVal = Number($('q-T').value);
+      // Which knob this handle moves: T (a knob change, a new batch) or the
+      // warm-up W (a post-processing change that re-derives the batch).
+      const knob = handle.dataset.knob, id = knob === 'W' ? 'q-W' : 'q-T';
+      let lastVal = Number($(id).value);
       handle.classList.add('active');
-      setQHandleHi(true);
+      setQHandleHi(true, knob);
       const move = ev => {
         const rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
         if (!rect.width || !vb) return;
         const scaleX = vb.width / rect.width, xPix = (ev.clientX - rect.left) * scaleX;
         const time = (xPix - geom.L) / geom.innerW * geom.xMax;
-        const val = Math.min(600, Math.max(20, Math.round(time / 20) * 20));
+        const val = knob === 'W'
+          ? Math.min(Number($('q-T').value) - 20, Math.max(0, Math.round(time / 5) * 5))
+          : Math.min(600, Math.max(20, Math.round(time / 20) * 20));
         if (val !== lastVal) {
-          lastVal = val; $('q-T').value = String(val); MCXUI.onKnob('q');
-          // onKnob redraws the servers chart by innerHTML, which destroys
-          // the handle DOM node .active was set on; the fresh node needs it
-          // too (only one T handle ever exists, unlike the sawtooth's own
-          // M/N handles, and so there is no data-knob/data-k to match on).
-          const freshHandle = svg.querySelector('.q-drag');
+          lastVal = val; $(id).value = String(val);
+          if (knob === 'W') MCXUI.onPost('q'); else MCXUI.onKnob('q');
+          // The redraw rebuilds the chart by innerHTML, which destroys the
+          // handle DOM node .active was set on; the fresh node needs it too.
+          const freshHandle = svg.querySelector('.q-drag[data-knob="' + knob + '"]');
           if (freshHandle) freshHandle.classList.add('active');
-          setQHandleHi(true);
+          setQHandleHi(true, knob);
         }
       };
       const up = () => {
