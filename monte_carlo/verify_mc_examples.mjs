@@ -341,6 +341,28 @@ section('Queueing node (Tables 2.11 and 2.15)');
      one Tables 2.11/2.15 use above. */
   const a = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 }), b = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 });
   ok(JSON.stringify(a) === JSON.stringify(b) && a.rows.length > 0 && a.rows[0].ia === null && a.rows.every(r => r.arr <= 25), 'same seed reproduces; first customer arrives at 0; every arrival by T');
+  ok(t11.rows.every(r => r.phase === 'in') && t15.rows.every(r => r.phase === 'in'), 'with a customer count and no T, nothing is cut');
+  /* The clock stops at T: a customer who has begun service by T is counted
+     with its wait; one still in the queue at T is cut (phase 'cut', with
+     begin, wait, end, sys, and the server fields null), and, service being
+     first come, first served, every customer after the first cut one is cut
+     too. Utilization is the busy time inside [0, T] over c*T. */
+  {
+    const heavy = q.replicate(11, { lam: 2, mu: 1, c: 1, T: 60 });
+    const firstCut = heavy.rows.findIndex(r => r.phase === 'cut');
+    ok(firstCut > 0 && heavy.rows.slice(firstCut).every(r => r.phase === 'cut' && r.begin === null && r.wait === null && r.end === null && r.sys === null && r.idle === null), `a cut customer has no begin, wait, end, sys, or idle, and every later customer is cut too (first cut at row ${firstCut + 1} of ${heavy.rows.length})`);
+    ok(heavy.rows.slice(0, firstCut).every(r => r.begin <= 60) && heavy.rows.every(r => r.arr <= 60), 'every counted customer began service by T, and the cut ones still arrived by T');
+    const inRows = heavy.rows.filter(r => r.phase === 'in');
+    ok(heavy.summary.n === inRows.length && heavy.summary.nCut === heavy.rows.length - firstCut && heavy.summary.nAll === heavy.rows.length, 'the summary counts the counted, the cut, and all customers');
+    close(heavy.outputs.avgWait, inRows.reduce((s, r) => s + r.wait, 0) / inRows.length, 1e-12, 'the average wait is over the counted customers only');
+    close(heavy.outputs.maxWait, Math.max(...inRows.map(r => r.wait)), 1e-12, 'the longest wait is over the counted customers only');
+    ok(heavy.summary.util > 0.99 && heavy.summary.util <= 1 + 1e-12, `utilization is busy time inside [0, T] over T (${heavy.summary.util.toFixed(4)} on an overloaded queue)`);
+    const heavy2 = q.replicate(3, { lam: 1.8, mu: 1, c: 2, T: 60 });
+    const cut2 = heavy2.rows.filter(r => r.phase === 'cut');
+    ok(cut2.length > 0 && cut2.every(r => r.server === null && r.nextA === null && r.nextB === null && r.freeA != null && r.freeB != null), `at c = 2 a cut customer names no server and no next completion, and still records when each server was free (${cut2.length} cut)`);
+    const light = q.replicate(7, { lam: 0.8, mu: 1, c: 1, T: 5000 });
+    ok(Math.abs(light.summary.util - 0.8) < 0.05, `utilization on a long M/M/1 replication is near rho = 0.8 (${light.summary.util.toFixed(3)})`);
+  }
   /* Long replications approach the steady-state wait (the start-from-empty
      transient is a small downward bias); T = 5000 min gives a comparable
      customer count to the old n = 4000 at these rates. */

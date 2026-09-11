@@ -576,7 +576,9 @@ better.
   experiment log of finished batches (each row expandable into that batch's own histogram), and a
   New batch / Clear all / Clear log trio: ① a queueing node (the book's M/M/1 and M/M/2
   spreadsheets) with exponential interarrival and service times, a capacity toggle, and an end
-  time, ② the order-up-to (M, N) refrigerator policy with three outputs, ③
+  time T at which the clock stops (a customer who has begun service by T is counted with its
+  wait; one still in the queue at T is shown, muted, but not counted, and the chart's axis ends
+  at T), ② the order-up-to (M, N) refrigerator policy with three outputs, ③
   bearing replacement under three policies over 20 000 operating hours, ④ the newsvendor with Q
   (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon, with
   n and a slider for each landing spread set inside the distribution table, the landing
@@ -600,7 +602,9 @@ better.
      those are a knob), the bearing policies against exact discrete renewal functions on the
      100-hour grid (with and without a warm-up), the activity network against scaled Irwin–Hall CDFs and numerically
      integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
-     and 2.15 row by row and against the Erlang-C steady-state wait on long replications.*
+     and 2.15 row by row, against the Erlang-C steady-state wait on long replications, and for
+     the cut at T (every counted customer began service by T, the cut ones carry null fields,
+     and utilization is busy time inside [0, T]).*
   3. *Deliberate conventions: histograms plot the fraction of runs on axes with a bin width fixed
      per output at design time; the range starts at a design-time value too and extends to fit
      (never shrinks within a batch), except for an output whose whole range is fixed by its sample
@@ -616,8 +620,10 @@ better.
      so changing it neither logs nor clears the batch. The harness keeps every committed
      replication's seed and re-derives the batch, and the shown replication, by re-running the
      seeds under the new params. Rows inside the warm-up carry `phase: 'warm'`. On the queue, W is
-     minutes and a customer counts if it arrives at or after W (a replication with none is
-     counted in `noObs` and yields no observation); on the inventory and bearing tabs the run is
+     minutes and a customer counts if it arrives at or after W and has begun service by T (a
+     customer still in the queue at T carries `phase: 'cut'` with null begin, wait, end, and sys,
+     and a replication with no counted customer is counted in `noObs` and yields no
+     observation); on the inventory and bearing tabs the run is
      lengthened by W (days, or operating hours) and the 25 days or 20,000 hours after W are
      measured, on a fixed axis of 25 + 10 days or 20,000 + 5,000 hours, and the bearing tab's
      replace-on-failure policy is generated in clock order across the three positions so a

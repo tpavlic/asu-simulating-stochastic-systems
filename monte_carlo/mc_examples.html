@@ -280,7 +280,9 @@ table.sim td { padding: 3px 8px; text-align: right; border-top: 1px solid #f0ece
 table.sim td.txt { font-family: 'Outfit', sans-serif; text-align: left; }
 table.sim tr.unrevealed td { visibility: hidden; }
 /* A row inside the warm-up: simulated and shown, but not counted. */
-table.sim tr.warm td { color: var(--muted); background: #f7f5f6; }
+/* Rows outside the count: inside a warm-up, or (on the queue) a customer
+   still waiting when the clock stops at T. */
+table.sim tr.warm td, table.sim tr.cut td { color: var(--muted); background: #f7f5f6; }
 table.sim tr.cur td { background: var(--accent-wash); }
 table.sim td.bad { color: var(--fail); font-weight: 600; }
 table.sim tr.placeholder td { color: var(--muted); font-style: italic; font-family: 'Outfit', sans-serif; text-align: left; }
@@ -502,7 +504,7 @@ input[type=range] { height: 26px; }
 
   <!-- TAB ① -->
   <section id="tab-q" class="tp active">
-    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> runs to an end time through the spreadsheet: arrival, service begins, wait, service ends. The arrival rate, the service rate, the number of servers, and the end time are the decisions, and the threshold asks how long the average wait may be. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
+    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> runs to an end time T through the spreadsheet: arrival, service begins, wait, service ends. A customer still in the queue when the clock stops is shown but not counted. The arrival rate, the service rate, the number of servers, and the end time are the decisions, and the threshold asks how long the average wait may be. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
     <div class="sec"><div class="sec-hd">Inputs and decision</div><div id="q-inputs">
       <div class="inp-wrap">
         <table class="inp" aria-label="Queueing node inputs"><tr><th>Input</th><th>Distribution</th></tr>
@@ -519,7 +521,7 @@ input[type=range] { height: 26px; }
           <span class="spin"><select id="q-c" onchange="MCXUI.onKnob('q')"><option value="1">1</option><option value="2">2</option></select></span></label>
       </div>
       <div class="knobs">
-        <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="How long arrivals keep coming. Every customer who arrives by T is served to the end, and so a replication's clock can run past T. A longer T lets the average wait settle toward the steady-state value.">End time, T (min)</span>
+        <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="When the clock stops. A customer who has begun service by T is counted, with the wait it had; one still in the queue at T is shown but not counted, since its wait is not yet known. Leaving those out drops the longest waits and pulls the average down a little, which matters less as T grows, and a longer T also lets the average settle toward the steady-state value. The T line on the chart below can be dragged too.">End time, T (min)</span>
           <span class="spin"><button type="button" aria-label="Decrease T" onclick="spinStep('q-T',-1)">−</button><input id="q-T" type="number" min="20" max="600" step="20" value="60" inputmode="numeric" onchange="spinCommit('q-T')"><button type="button" aria-label="Increase T" onclick="spinStep('q-T',1)">+</button></span></label>
         <label class="knob" for="q-W"><span class="tip" tabindex="0" data-tip="Customers who arrive before this time are simulated and shown but left out of the averages, so the empty-queue start does not drag them down: deleting the transient is the other answer to a start-up bias besides running longer. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (min)</span>
           <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('q-W',-1)">−</button><input id="q-W" type="number" min="0" max="580" step="5" value="0" inputmode="numeric" data-post onchange="spinCommit('q-W')"><button type="button" aria-label="Increase W" onclick="spinStep('q-W',1)">+</button></span></label>
@@ -1529,23 +1531,30 @@ MODELS.q = {
   columnsFor: function (p) { return p.c === 2 ? Q_COLUMNS_2 : Q_COLUMNS_1; },
   /* draw.ia() and draw.svc() return uniforms; draw.iaValue(i) and
      draw.svcValue(i) return times directly and take precedence when present.
-     Customers keep arriving while the next arrival time is at or
-     before p.T (end time, minutes); every customer who arrives by T is
-     served to completion, so the last few rows' own end/sys can fall past
-     T even though no later row's arr ever does. p.n, when present, is an
-     optional cap on the count honored alongside T (the verify script's
-     Table 2.11/2.15 checks feed a fixed draw sequence and pass n with no T
-     at all, relying on the cap alone to stop the loop -- T defaults to
-     Infinity in that case, matching the old fixed-n loop exactly).
+     Customers keep arriving while the next arrival time is at or before
+     p.T (end time, minutes), and the clock stops at T: a customer who has
+     begun service by T is counted with the wait it had (its service may
+     run on past T, and its end and sys are still known from the draw), and
+     a customer still in the queue at T carries phase 'cut' with begin,
+     wait, end, sys, and the server fields null, since its wait is not yet
+     known. Leaving the cut customers out drops the longest waits of the
+     replication, a downward bias that fades as T grows against a typical
+     wait. Because service is first come, first served, once one customer is
+     cut every later one is too. p.n, when present, is an optional cap on
+     the count honored alongside T (the verify script's Table 2.11/2.15
+     checks feed a fixed draw sequence and pass n with no T at all, relying
+     on the cap alone to stop the loop -- T defaults to Infinity in that
+     case, and nothing is cut).
      p.W (warm-up, minutes, default 0) changes which customers count, not
      what happens: every customer is simulated and shown, a row whose
      arrival falls before W carries phase 'warm', and the outputs average
-     over the rest. With no customer arriving at or after W there is no
-     observation, and the outputs are null. */
+     over the rest ('in'). With no customer counted there is no
+     observation, and the outputs are null. Server utilization is the busy
+     time inside [0, T] over c*T. */
   run: function (p, draw) {
     var c = p.c === 2 ? 2 : 1, T = p.T != null ? p.T : Infinity, cap = p.n, W = p.W || 0;
     var rows = [], free = [0, 0], prevEnd = 0, arr = 0;
-    var sumWait = 0, maxWait = 0, sumSys = 0, busy = 0, waited = 0, lastEnd = 0, kept = 0, warm = 0;
+    var sumWait = 0, maxWait = 0, sumSys = 0, busy = 0, waited = 0, lastEnd = 0, kept = 0, warm = 0, cut = 0;
     for (var k = 1; cap == null || k <= cap; k++) {
       var u1 = null, ia = 0;
       if (k > 1) { if (draw.iaValue) ia = draw.iaValue(k); else { u1 = draw.ia(); ia = expInv(u1, p.lam); } }
@@ -1555,29 +1564,39 @@ MODELS.q = {
       var u2 = null, svc;
       if (draw.svcValue) svc = draw.svcValue(k); else { u2 = draw.svc(); svc = expInv(u2, p.mu); }
       var row = { i: k, u1: u1, ia: k > 1 ? ia : null, arr: arr, u2: u2, svc: svc };
-      var begin, end;
+      var begin, end, sIdx = 0;
+      /* The server bookkeeping runs on through the cut customers, and so a
+         cut row's freeA/freeB (the servers' state at its arrival) are still
+         exact; the fields that name what happens after T are what it lacks. */
       if (c === 1) {
         begin = Math.max(arr, prevEnd); end = begin + svc;
         row.idle = k > 1 ? Math.max(0, begin - prevEnd) : null;
         row.server = 0; prevEnd = end;
       } else {
         row.freeA = free[0]; row.freeB = free[1];
-        var sIdx = free[0] <= free[1] ? 0 : 1;
+        sIdx = free[0] <= free[1] ? 0 : 1;
         begin = Math.max(arr, Math.min(free[0], free[1])); end = begin + svc;
         free[sIdx] = end;
         row.server = Q_SERVERS[sIdx]; row.serverIdx = sIdx; row.nextA = free[0]; row.nextB = free[1];
       }
+      if (begin > T) {
+        row.phase = 'cut'; cut++;
+        row.begin = null; row.end = null; row.wait = null; row.sys = null;
+        row.idle = null; row.server = null; row.serverIdx = null; row.nextA = null; row.nextB = null;
+        rows.push(row);
+        continue;
+      }
       row.begin = begin; row.end = end; row.wait = begin - arr; row.sys = end - arr;
       row.phase = arr < W ? 'warm' : 'in';
-      busy += svc; if (end > lastEnd) lastEnd = end;
+      busy += Math.min(end, T) - begin; if (end > lastEnd) lastEnd = end;
       if (row.phase === 'warm') warm++;
       else { kept++; sumWait += row.wait; sumSys += row.sys; if (row.wait > maxWait) maxWait = row.wait; if (row.wait > 0) waited++; }
       rows.push(row);
     }
-    var n = kept;
+    var n = kept, horizon = isFinite(T) ? T : lastEnd;
     var avgWait = n > 0 ? sumWait / n : null, maxOut = n > 0 ? maxWait : null;
     return { rows: rows,
-             summary: { avgWait: avgWait, maxWait: maxOut, avgSys: n > 0 ? sumSys / n : null, waitedFrac: n > 0 ? waited / n : null, makespan: lastEnd, util: lastEnd > 0 ? busy / (c * lastEnd) : 0, c: c, n: n, nAll: rows.length, nWarm: warm, W: W, T: p.T },
+             summary: { avgWait: avgWait, maxWait: maxOut, avgSys: n > 0 ? sumSys / n : null, waitedFrac: n > 0 ? waited / n : null, makespan: lastEnd, util: horizon > 0 ? busy / (c * horizon) : 0, c: c, n: n, nAll: rows.length, nWarm: warm, nCut: cut, W: W, T: p.T },
              outputs: { avgWait: avgWait, maxWait: maxOut } };
   },
   replicate: function (seed, p) { var rand = mulberry32(seed); return this.run(p, { ia: function () { return unif(rand); }, svc: function () { return unif(rand); } }); }
@@ -1968,11 +1987,15 @@ function qWaitExpr(sumTxt, nTxt, avgTxt, maxTxt) {
 function renderQWaitEq(st, k) {
   const el = $('q-wait-eq');
   if (!el) return;
+  // Over the revealed rows that count (phase 'in'): a warm-up row and a
+  // customer still waiting at T are shown in the table but are no part of
+  // the average, and so the equation matches the observation the
+  // replication contributes to the histogram.
   const rows = st.rep ? st.rep.rows : [];
-  const n = st.rep ? Math.min(k, rows.length) : 0;
-  if (!st.rep || n <= 0) { el.innerHTML = qWaitExpr(null, null, null, null); return; }
-  let sumWait = 0, maxWait = 0;
-  for (let i = 0; i < n; i++) { sumWait += rows[i].wait; if (rows[i].wait > maxWait) maxWait = rows[i].wait; }
+  const revealed = st.rep ? Math.min(k, rows.length) : 0;
+  let sumWait = 0, maxWait = 0, n = 0;
+  for (let i = 0; i < revealed; i++) { const row = rows[i]; if (row.phase !== 'in') continue; n++; sumWait += row.wait; if (row.wait > maxWait) maxWait = row.wait; }
+  if (n <= 0) { el.innerHTML = qWaitExpr(null, null, null, null); return; }
   el.innerHTML = qWaitExpr(sumWait.toFixed(2), String(n), (sumWait / n).toFixed(2), maxWait.toFixed(2));
 }
 // The worst case is at
@@ -2290,6 +2313,7 @@ window.MCXUI = (() => {
     const trCls = [];
     if (i >= st.revealed) trCls.push('unrevealed');
     if (row.phase === 'warm') trCls.push('warm');
+    if (row.phase === 'cut') trCls.push('cut');
     if (st.stepping && i === st.revealed - 1) trCls.push('cur');
     // data-i carries the row's flat index regardless of which mini table it
     // lands in, and so scrollRowIntoView can find "row i" the same way
@@ -3222,7 +3246,7 @@ window.addEventListener('load', function () {
     },
     settingLabel: p => nwJoin(['λ = ' + p.lam.toFixed(1), 'μ = ' + p.mu.toFixed(1), 'c = ' + p.c, 'T = ' + p.T + ' min', 'warm-up ' + p.W + ' min']),
     knobIds: ['q-lam', 'q-mu', 'q-c', 'q-T', 'q-W'],
-    noObsNote: 'with no customer after the warm-up',
+    noObsNote: 'with no customer counted',
     outputs: [
       {
         key: 'avgWait', label: 'Average wait in queue (min)', meanLabel: 'Mean of the average wait (min)', short: 'avg wait', histId: 'q-hist-a', thrId: 'q-thr-a', legendId: 'q-legend-a',
@@ -3259,10 +3283,18 @@ window.addEventListener('load', function () {
       }
     ],
     structure: STRUCT.q,
-    summary: rep => rep.summary.n === 0
-      ? 'This replication: <strong>' + rep.summary.nAll + '</strong> customers by T = ' + rep.summary.T + ' min, all inside the ' + rep.summary.W + ' min warm-up; nothing counted, and so no observation.'
-      : 'This replication: <strong>' + rep.summary.n + '</strong> ' + (rep.summary.n === 1 ? 'customer' : 'customers') + ' counted by T = ' + rep.summary.T + ' min' + (rep.summary.nWarm ? ' (' + rep.summary.nWarm + ' more in the warm-up)' : '') + '; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
-    summaryWorst: 'This replication: <strong>1300</strong> customers counted by T = 600 min (1300 more in the warm-up); average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
+    // The parenthetical names the customers shown but not counted: those
+    // inside the warm-up, and those still waiting when the clock stopped.
+    summary: rep => {
+      const s = rep.summary, left = [];
+      if (s.nWarm) left.push(s.nWarm + ' in the warm-up');
+      if (s.nCut) left.push(s.nCut + ' still waiting at T');
+      const aside = left.length ? ' (' + left.join(', ') + ')' : '';
+      return s.n === 0
+        ? 'This replication: <strong>' + s.nAll + '</strong> customers by T = ' + s.T + ' min, none counted' + aside + '; no observation.'
+        : 'This replication: <strong>' + s.n + '</strong> ' + (s.n === 1 ? 'customer' : 'customers') + ' counted by T = ' + s.T + ' min' + (left.length ? ' (' + left.map(t => t.replace(/^(\d+)/, '$1 more')).join(', ') + ')' : '') + '; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(s.util * 100) + '%</strong> of the time.';
+    },
+    summaryWorst: 'This replication: <strong>1300</strong> customers counted by T = 600 min (1300 more in the warm-up, 1300 more still waiting at T); average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
     // The largest plausible row count at the current knobs, not a fixed
     // count (arrivals are now a Poisson process run out to T, and
     // so the count varies by seed). Arrivals by T follow Poisson(lambda*T);
@@ -4962,32 +4994,18 @@ function makeLinker(cfg) {
   // whatever the server count.
   const T = 6, RUG_BAND = 34, LANE_H = 30, RUG_H = 24, PLOT_GAP = 10, QUEUE_H = 128, AXIS_H = 26, L = 44, R = 10;
 
-  // Rounds a positive number up to 1, 2, or 5 times a power of ten, and so the
-  // time axis ends on a value a reader would actually choose, not on
-  // whatever 1.5·n/λ happens to compute to.
-  function niceCeil(x) {
-    if (x <= 0) return 1;
-    const mag = Math.pow(10, Math.floor(Math.log10(x)));
-    const norm = x / mag;
-    const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
-    return nice * mag;
-  }
-  // A nice tick step for range (niceCeil applied to a fifth of it,
-  // so five or six ticks land on it), and the smallest multiple of that step
-  // at or above range -- the axis ends on a labeled tick instead of on
-  // whatever range happens to compute to.
-  function niceAxisMax(range) {
-    const tickStep = niceCeil(range / 5);
-    return Math.ceil(range / tickStep) * tickStep;
-  }
-
   // Every event a customer contributes to the queue-length step plot: +1 at
   // the arrival of a customer who has to wait, −1 when that customer's own
   // service begins. A customer who never waits contributes nothing, since
-  // arrival and service begin at the same instant and cancel out.
+  // arrival and service begin at the same instant and cancel out. A
+  // customer still waiting at T (begin null) joins the queue and never
+  // leaves it inside the plot.
   function queueEvents(rows) {
     const evs = [];
-    rows.forEach(row => { if (row.wait > 0) { evs.push({ t: row.arr, d: 1 }); evs.push({ t: row.begin, d: -1 }); } });
+    rows.forEach(row => {
+      if (row.begin == null) evs.push({ t: row.arr, d: 1 });
+      else if (row.wait > 0) { evs.push({ t: row.arr, d: 1 }); evs.push({ t: row.begin, d: -1 }); }
+    });
     evs.sort((a, b) => (a.t - b.t) || (b.d - a.d));
     return evs;
   }
@@ -5025,17 +5043,12 @@ function makeLinker(cfg) {
     const lanesTop = T + RUG_BAND, serverAreaH = c * LANE_H, lanesBottom = lanesTop + serverAreaH;
     const queueTop = lanesBottom + PLOT_GAP, queueBottom = queueTop + QUEUE_H, queueH = QUEUE_H;
     const H = queueBottom + AXIS_H;
-    // Fits the current replication (computed in full before stepping begins,
-    // and so this never moves between Steps of the same replication, only
-    // between one replication and the next): 1.12x the larger of the last
-    // departure and T itself gives the end-anchored "arrivals"/"departures"
-    // rug labels room and keeps the T line (below) always on the visible
-    // axis, even on the rare replication whose last arrival trails well
-    // behind T, rounded up to a labeled tick. With no
-    // replication yet, T -- the end of the window the replication will
-    // cover -- stands in for "the last departure."
-    const lastDep = st.rep && st.rep.rows.length ? st.rep.rows.reduce((m, row) => Math.max(m, row.end), 0) : null;
-    const xMax = niceAxisMax(Math.max(lastDep != null ? lastDep : p.T, p.T) * 1.12);
+    // The axis ends at T, where the clock stops, and so it depends on the
+    // knobs alone and never moves from one replication of a batch to the
+    // next. A service that runs on past T is cut at the edge (its bar
+    // ends on the T line), and a customer still waiting at T has no bar
+    // at all, only its arrival tick and its place in the queue plot.
+    const xMax = p.T;
     const xAt = t => L + Math.min(1, Math.max(0, t / xMax)) * innerW;
     const servers = MCX.models.q.tables.servers;
 
@@ -5071,8 +5084,11 @@ function makeLinker(cfg) {
         qEvents.push({ t: row.end, kind: 'departure', cust: row.i, x: x });
       }
     }
-    rug += '<text x="' + (L + innerW) + '" y="' + (rugY - 6).toFixed(2) + '" text-anchor="end" fill="var(--ok)" font-size="9" font-family="Outfit, sans-serif">arrivals</text>';
-    rug += '<text x="' + (L + innerW) + '" y="' + (rugY + 12).toFixed(2) + '" text-anchor="end" fill="var(--fail)" font-size="9" font-family="Outfit, sans-serif">departures</text>';
+    // Haloed, since the T line (drawn later, at the plot's right edge) runs
+    // through both.
+    const halo = ' stroke="var(--chart-bg)" stroke-width="3" paint-order="stroke"';
+    rug += '<text x="' + (L + innerW) + '" y="' + (rugY - 6).toFixed(2) + '" text-anchor="end" fill="var(--ok)"' + halo + ' font-size="9" font-family="Outfit, sans-serif">arrivals</text>';
+    rug += '<text x="' + (L + innerW) + '" y="' + (rugY + 12).toFixed(2) + '" text-anchor="end" fill="var(--fail)"' + halo + ' font-size="9" font-family="Outfit, sans-serif">departures</text>';
     s += rug;
     s += '<rect class="q-rug-hit" x="' + L + '" y="' + (rugY - RUG_H / 2).toFixed(2) + '" width="' + innerW + '" height="' + RUG_H + '" fill="transparent" pointer-events="all"/>';
 
@@ -5091,7 +5107,7 @@ function makeLinker(cfg) {
     let bars = '';
     for (let i = 0; i < revealed; i++) {
       const row = rows[i];
-      if (row.begin >= xMax) continue;
+      if (row.begin == null || row.begin >= xMax) continue;
       const lane = c === 2 ? row.serverIdx : 0;
       const yTop = lanesTop + lane * LANE_H, barY = yTop + 5, barH = LANE_H - 10, yMid = yTop + LANE_H / 2;
       const x0 = xAt(row.begin), x1 = xAt(Math.min(row.end, xMax)), bw = Math.max(0, x1 - x0);
@@ -5117,7 +5133,7 @@ function makeLinker(cfg) {
       // now that it is about the service only, not the wait; data-server
       // names the server only when there is a choice to name (c = 2).
       bars += '<rect class="q-cust" data-cust="' + row.i + '" data-begin="' + row.begin.toFixed(3) + '" data-end="' + row.end.toFixed(3) + '" data-svc="' + row.svc.toFixed(3) + '"'
-        + (c === 2 ? ' data-server="' + servers[lane] + '"' : '')
+        + (c === 2 ? ' data-server="' + servers[lane] + '"' : '') + (row.end > xMax ? ' data-cut="1"' : '')
         + ' data-vy="' + barY + '" data-vh="' + barH
         + '" x="' + x0.toFixed(2) + '" y="' + yTop.toFixed(2) + '" width="' + bw.toFixed(2) + '" height="' + LANE_H + '" fill="transparent" pointer-events="all"/>';
     }
@@ -5157,32 +5173,24 @@ function makeLinker(cfg) {
     // x axis, shared by the lanes above and the queue plot: both read time
     // on the same scale, and so one row of ticks along the bottom is enough.
     s += '<line x1="' + L + '" y1="' + queueBottom + '" x2="' + (L + innerW) + '" y2="' + queueBottom + '" stroke="var(--border)" stroke-width="1"/>';
+    // Five equal steps to T; the knob steps by 20, and so every tick is a
+    // whole minute. The last tick is T itself and is labeled as such.
     const tickStep = xMax / 5, wholeTicks = Number.isInteger(tickStep);
-    // T's own label (below) sits in this same row, and a round T -- the
-    // knob steps by 20, and niceAxisMax's own ticks land on round numbers
-    // too -- lands exactly on one of these five often enough that it is not
-    // an edge case (the default 60/20 is itself one instance): skip a
-    // regular tick's own number where it would collide, keeping its mark.
-    const tXforSkip = xAt(p.T);
     for (let i = 0; i <= 5; i++) {
       const v = tickStep * i, x = xAt(v), anchor = i === 0 ? 'start' : i === 5 ? 'end' : 'middle';
       const tx = anchor === 'start' ? x + 2 : anchor === 'end' ? x - 2 : x;
+      const lbl = wholeTicks ? String(Math.round(v)) : v.toFixed(1);
       s += '<line x1="' + x.toFixed(2) + '" y1="' + queueBottom + '" x2="' + x.toFixed(2) + '" y2="' + (queueBottom + 4) + '" stroke="var(--border)" stroke-width="1"/>';
-      if (Math.abs(x - tXforSkip) > 16) {
-        s += '<text x="' + tx.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">' + (wholeTicks ? Math.round(v) : v.toFixed(1)) + '</text>';
-      }
+      s += '<text x="' + tx.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">' + (i === 5 ? 'T = ' + lbl : lbl) + '</text>';
     }
-    // The end-of-arrivals line: every arrival tick on the rug sits
-    // at or left of it, even though a bar or the queue-length step can
-    // still extend well past it (a customer who arrived just before T can
-    // still be served, or still waiting, long after). Spans the full plot
-    // height, drawn over the bars/rug already in s, and so it reads as a
-    // reference through the whole chart rather than a fifth axis tick; its
-    // own label sits in the tick row below rather than the cramped 6px top
-    // margin, on top of whichever tick, if any, it happens to fall near.
+    // The end-of-run line, at the plot's right edge: the clock stops here,
+    // and so every arrival tick sits at or left of it, a bar in service
+    // ends on it, and the queue plot's last level runs into it. Spans the
+    // full plot height, drawn over the bars and the rug already in s, and
+    // so it reads as a reference through the whole chart; its drag handle
+    // is added last, below.
     const tX = xAt(p.T);
     s += '<line id="q-t-line" x1="' + tX.toFixed(2) + '" y1="' + T + '" x2="' + tX.toFixed(2) + '" y2="' + queueBottom + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
-    s += '<text x="' + tX.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">T</text>';
     s += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Time (min)</text>';
 
     // A transparent hit rect over the queue plot's own area for the "who is
@@ -5234,10 +5242,12 @@ function makeLinker(cfg) {
   // and the queue plot's own job now) -- "Customer 5 on Able: in service
   // 6.1 to 8.4 min (2.3 min)", or, at c = 1 with no server to name,
   // "Customer 5: in service 6.1 to 8.4 min (2.3 min)".
+  // A service that runs on past T (data-cut) says so, since its bar stops
+  // at the T line while the times named run past it.
   function qBarLabel(bar) {
     const cust = bar.dataset.cust, begin = Number(bar.dataset.begin), end = Number(bar.dataset.end), svc = Number(bar.dataset.svc);
     const onServer = bar.dataset.server ? ' on ' + bar.dataset.server : '';
-    return 'Customer ' + cust + onServer + ': in service ' + begin.toFixed(1) + ' to ' + end.toFixed(1) + ' min (' + svc.toFixed(1) + ' min)';
+    return 'Customer ' + cust + onServer + ': in service ' + begin.toFixed(1) + ' to ' + end.toFixed(1) + ' min (' + svc.toFixed(1) + ' min)' + (bar.dataset.cut ? ', still in service at T' : '');
   }
 
   // A generic box-and-text readout, shared by every readout on this chart.
@@ -5323,7 +5333,7 @@ function makeLinker(cfg) {
     if (!st.rep) return [];
     const rows = st.rep.rows, revealed = Math.min(st.revealed, rows.length);
     const waiting = [];
-    for (let i = 0; i < revealed; i++) { const row = rows[i]; if (row.arr <= t && t < row.begin) waiting.push(row.i); }
+    for (let i = 0; i < revealed; i++) { const row = rows[i]; if (row.arr <= t && (row.begin == null || t < row.begin)) waiting.push(row.i); }
     return waiting;
   }
   // Hover/tap readout for the queue plot itself: "t = 12.3
@@ -5491,9 +5501,9 @@ function makeLinker(cfg) {
     // on the sawtooth. Unlike those, the geometry is captured once here at
     // pointerdown and reused for the whole drag, never re-read from
     // st.qGeom mid-drag: changing T redraws the chart with a new xMax
-    // (the axis is fitted to the replication), and so reading the
-    // geometry fresh on every move, the way the sawtooth handles do, would
-    // make the pointer-to-time mapping shift under the same
+    // (the axis ends at T), and so reading the geometry fresh on every
+    // move, the way the sawtooth handles do, would make the
+    // pointer-to-time mapping shift under the same
     // drag. The map is plain linear scaling, and so it already extrapolates
     // past the plot's own right edge on its own (xPix beyond L + innerW
     // yields a time beyond xMax with no extra branch needed) -- pointer
