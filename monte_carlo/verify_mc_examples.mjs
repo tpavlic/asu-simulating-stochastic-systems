@@ -248,7 +248,7 @@ section('Bearing replacement');
   ok(repA.rows[0].cause === 'install' && repA.rows.slice(1).every(r => r.cause === 'planned') && repA.summary.events === 15, 'age policy with long lives: planned every 1300 h, 15 in the horizon (plus the install row)');
   const repA2 = br.run({ policy: 'age', T: 1000 }, { life: () => 0.05, delay: () => 0.1 });
   ok(repA2.rows.slice(1).every(r => r.cause === 'planned'), 'a life equal to T is replaced as planned');
-  // Task 60: the install row and the first replacement rows carry the
+  // The install row and the first replacement rows carry the
   // expected lives (u = 0.05 discretizes to 1000 h throughout this
   // deterministic setup), and the new row leaves cost/cum untouched.
   ok(rep.rows[0].cause === 'install' && rep.rows[0].pos === 'all' && rep.rows[0].cost === 0 && rep.rows[0].cum === 0
@@ -335,10 +335,10 @@ section('Queueing node (Tables 2.11 and 2.15)');
   ok(JSON.stringify(h('nextA')) === JSON.stringify([4, 4, 7, 7, 12, 12, 17, 17, 19, 19]) && JSON.stringify(h('nextB')) === JSON.stringify([0, 5, 5, 8, 8, 14, 14, 18, 18, 21]), 'next completion times', JSON.stringify([h('nextA'), h('nextB')]));
   ok(JSON.stringify(h('wait')) === JSON.stringify([0, 0, 2, 0, 0, 0, 2, 2, 1, 1]), 'caller delay', JSON.stringify(h('wait')));
   ok(JSON.stringify(h('sys')) === JSON.stringify([4, 4, 5, 3, 5, 5, 7, 6, 3, 4]), 'time in system (M/M/2)', JSON.stringify(h('sys')));
-  ok(q.columnsFor({ c: 2 }).length === 12 && q.columnsFor({ c: 1 }).length === 9, 'column sets by capacity (amended Task 60: no u columns)');
-  /* Task 67: T (end time), not n (a customer count), is the decision now;
-     this exercises that path (n undefined, T terminates the loop) rather
-     than the fixed-cap one Tables 2.11/2.15 use above. */
+  ok(q.columnsFor({ c: 2 }).length === 12 && q.columnsFor({ c: 1 }).length === 9, 'column sets by capacity (no u columns)');
+  /* T (end time), not n (a customer count), is the decision; this exercises
+     that path (n undefined, T terminates the loop) rather than the fixed-cap
+     one Tables 2.11/2.15 use above. */
   const a = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 }), b = q.replicate(9, { lam: 0.8, mu: 1, c: 1, T: 25 });
   ok(JSON.stringify(a) === JSON.stringify(b) && a.rows.length > 0 && a.rows[0].ia === null && a.rows.every(r => r.arr <= 25), 'same seed reproduces; first customer arrives at 0; every arrival by T');
   /* Long replications approach the steady-state wait (the start-from-empty
