@@ -91,7 +91,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 }
 .tp { display: none; } .tp.active { display: block; }
 .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; container-type: inline-size; }
-/* Task 55a: Step, Run 1, Run x10, and Run x100 wrap onto the next line as one
+/* Step, Run 1, Run x10, and Run x100 wrap onto the next line as one
    unit (equal offsetTop) rather than breaking mid-group; the seed group and
    the seed message either side keep wrapping independently, since only the
    four run buttons are inside this span. On a card too narrow for the four
@@ -287,38 +287,34 @@ table.sim tr.placeholder td { color: var(--muted); font-style: italic; font-fami
    tr.cur, which is the harness's own stepping marker and always wins. */
 table.sim tr.linked-hover td { background: var(--accent-wash); }
 table.sim tr.linked-pin td { background: var(--accent-tint); }
-/* The activity network's three mini tables (Task 41): a flex row above
+/* The activity network's three mini tables: a flex row above
    about 720px, stacked below it, each table narrow enough (no 560px floor,
    unlike the wider per-tab tables) to sit three across. */
 .an-tables { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
 .an-tables table.sim { flex: 1 1 200px; min-width: 0; }
 .an-tables table.sim caption.sec-hd { caption-side: top; text-align: left; padding: 2px 8px 6px; font-size: .7rem; margin-bottom: 0; }
-/* Task 53c set a fixed 436px below 720px against the shared .tbl-box's
-   ordinary 296px above it, on the assumption that three-across always holds
-   at 720px and up. Task 62c's own re-measurement found that assumption
-   false: Chrome's table layout keeps the three mini tables wrapped two
-   across and one below well past 720px (up to roughly 1017px in this
-   page's own column width, a browser table-sizing detail rather than a
-   clean CSS breakpoint), and so a single extra media-query band could not
-   be both correct and simple. reserveAll's own generic grouped-model
-   measurement (keyed off cfg.model.groups, called from every registration,
-   tab-show, and resize, same as every other per-tab reservation) replaces
-   both constants with a live measurement of the real content at the real
-   current width; the content itself is still a constant (every step row
-   exists in the DOM at every reveal state, per Task 53c's own observation),
-   and so this holds the page-height-stability rule exactly as the two
-   hardcoded constants intended to. Task 65e tightened that measurement
-   further: see reserveAll for the fabricate/measure/restore trick itself. */
+/* The box height is measured live rather than set by a media-query band:
+   Chrome's table layout keeps the three mini tables wrapped two across and
+   one below well past 720px (up to roughly 1017px in this page's own
+   column width, a browser table-sizing detail rather than a clean CSS
+   breakpoint), and so no single breakpoint could be both correct and
+   simple. reserveAll's generic grouped-model measurement (keyed off
+   cfg.model.groups, called from every registration, tab-show, and resize,
+   same as every other per-tab reservation) measures the real content at
+   the real current width; the content itself is still a constant (every
+   step row exists in the DOM at every reveal state), and so this holds the
+   page-height-stability rule. See reserveAll for the
+   fabricate/measure/restore trick itself. */
 table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 .summary { font-size: .85rem; margin-top: 8px; min-height: 1.4em; }
 .summary strong { font-family: 'IBM Plex Mono', monospace; color: var(--accent); font-variant-numeric: tabular-nums; }
-/* Aggregate layer (Task 54b, extended for a third output by Task 66).
+/* Aggregate layer.
    .agg's direct children are always, in DOM order: cards-top (buttons +
    Runs), the first output's histogram card, the first output's own
    mean/P(success) cards, and then, one output at a time, each further
    output's histogram card and its own mean/P(success) cards (today, up to
    a third, on the inventory tab only). That order is exactly the narrow
-   (below 720px), single-column reading order the brief asks for, and so
+   (below 720px), single-column reading order, and so
    the narrow rule below only has to reset grid-column/grid-row back to the
    browser's default (auto), not reorder anything. At 720px and up, the
    nth-child rules place those same children explicitly: column 1 is a
@@ -387,7 +383,7 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 .thr-grab:hover + .thr-line, .thr-grab.active + .thr-line { stroke-width: 3; }
 /* The sawtooth's pointer readout: a vertical swipe still scrolls the page. */
 .inv-saw-hit { cursor: pointer; touch-action: pan-y; }
-/* M/N drag handles (Task 46): invisible, sit on top of .inv-saw-hit; a
+/* M/N drag handles: invisible, sit on top of .inv-saw-hit; a
    handle's own touch-action:none keeps a drag from also scrolling the page,
    while the rest of the chart (outside a handle) keeps .inv-saw-hit's
    vertical-scroll allowance above. */
@@ -399,14 +395,14 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
    hovered or being dragged -- the same visual the histogram threshold's
    .thr-grab.active gives its own line. */
 .inv-drag-hi { stroke: var(--est); stroke-width: 2; }
-/* The T line's own drag handle (Task 68), same pattern as .inv-drag/
+/* The T line's own drag handle, same pattern as .inv-drag/
    .inv-drag-hi above: touch-action:none keeps a drag from also scrolling
    the page, and the CSS class beats the line's own stroke/stroke-width
    presentation attributes while the handle is hovered or being dragged. */
 .q-drag { touch-action: none; cursor: ew-resize; }
 .q-drag-hi { stroke: var(--est); stroke-width: 2; }
 /* The New batch / Clear all pair sits at the top of the cards column, above
-   the Runs card (Task 54b), in every tab's Many replications card. */
+   the Runs card, in every tab's Many replications card. */
 .batch-btns { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 /* Experiment log: a fixed-height scroll box (matches .tbl-box) below the aggregate
    grid, one row per finished batch, with an expandable histogram sub-row that lives
@@ -435,20 +431,20 @@ table.log tr.log-detail td { padding: 8px; background: var(--chart-bg); white-sp
 .struct-row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-start; }
 .struct-row > * { min-width: 0; }
 /* Tab ⑥'s struct-row: the network diagram stays in the left column and the
-   three path histograms stay in the right column at every width (Task 62b
-   correction) -- only the "Longest path" tally ever moves, and only between
+   three path histograms stay in the right column at every width -- only
+   the "Longest path" tally ever moves, and only between
    these two columns, never duplicated. Below some width this flex-wraps to
    a plain stack in DOM order (diagram, caption, three histograms, tally,
    wherever #layoutAnTally last placed it -- see below, which also resets it
    to the right column whenever the columns are stacked). Once #an-left and
-   #an-right are actually side by side (Task 65d: decided from their own
+   #an-right are actually side by side (decided from their own
    offsetTop, not a hardcoded width -- the flex-basis below and the columns'
    real wrap point do not land on the same pixel), #layoutAnTally (called
    from the tab's own extraReserve, alongside every run/step/resize that
    re-lays it out) moves the tally's one DOM node into #an-left, appended
    after the caption, only when leaving it in #an-right would make the right
-   column taller than the left -- the ticks added to the three histograms by
-   Task 62a are what can cause that; otherwise it stays exactly where the
+   column taller than the left -- the three histograms' tick rows are what
+   can cause that; otherwise it stays exactly where the
    markup below puts it, as the last item under the three histograms. */
 #an-struct-row > .an-left { flex: 1 1 360px; }
 #an-struct-row > .an-right { flex: 1 1 260px; }
@@ -457,8 +453,8 @@ table.log tr.log-detail td { padding: 8px; background: var(--chart-bg); white-sp
    than a run-of-the-mill margin to read as attached to the chart below it. */
 .an-mini-lbl { font-size: .72rem; font-weight: 600; color: var(--muted); margin: 10px 0 3px; }
 .fig-cap { font-size: .76rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
-/* Shared by the inventory cost line, the bearing cost equation (Task 61a),
-   and the queue wait equations (Task 61b): a label (Outfit) around values
+/* Shared by the inventory cost line, the bearing cost equation,
+   and the queue wait equations: a label (Outfit) around values
    (IBM Plex Mono, tabular figures). */
 .out-eq { font-size: .82rem; margin-top: 6px; line-height: 1.4; }
 .out-eq .lbl { font-family: 'Outfit', sans-serif; color: var(--text); }
@@ -1117,9 +1113,8 @@ MODELS.inv = {
      inventory and shortage into a 25-day cost. */
   defaults: { M: 11, N: 5, h: 1, p: 10 },
   tables: { demand: INV_DEMAND, lead: INV_LEAD, days: INV_DAYS, init: INV_INIT, initLead: INV_INIT_LEAD },
-  // Amendment to Task 60: no u columns on this dynamic tab (the core keeps
-  // drawing and carrying u1/u2 on every row; only the table stops showing
-  // them).
+  // No u columns on this dynamic tab (the core keeps drawing and carrying
+  // u1/u2 on every row; only the table stops showing them).
   columns: [
     { key: 'day', label: 'Day', fmt: 'int' }, { key: 'cycle', label: 'Cycle', fmt: 'int' }, { key: 'dayIn', label: 'Day in cycle', fmt: 'int' },
     { key: 'begin', label: 'Beginning inv.', fmt: 'int' }, { key: 'demand', label: 'Demand', fmt: 'int' },
@@ -1298,7 +1293,7 @@ MODELS.br = {
   columns: [
     { key: 'i', label: 'Event', fmt: 'int' }, { key: 'clock', label: 'Clock (h)', fmt: 'int' }, { key: 'pos', label: 'Replaced', fmt: 'txt', align: 'center' },
     { key: 'cause', label: 'Cause', fmt: 'cause', align: 'center', bad: function (v) { return v === 'failure'; } },
-    // Task 60, amended: one life per bearing installed at this row (three on
+    // One life per bearing installed at this row (three on
     // the install row and every set/age row, including a 'planned' one,
     // since a scheduled replacement installs three real new bearings too;
     // one under 'each') -- the uniform itself stays off the table (no u
@@ -1308,7 +1303,7 @@ MODELS.br = {
     { key: 'down', label: 'Downtime (min)', fmt: 'int' }, { key: 'cost', label: 'Cost', fmt: 'usd0' }, { key: 'cum', label: 'Cumulative', fmt: 'usd0' }
   ],
   /* draw.life() and draw.delay() return uniforms. Under 'each' the order is life,
-     then delay, per position in turn. Every event row (Task 60) carries lifeU/
+     then delay, per position in turn. Every event row carries lifeU/
      lifeH -- the uniform(s) and the resulting life(s) of whichever bearing(s)
      get installed at that very event, and so the table shows every draw that
      shaped the replication, not only the delay draws. That means the life(s)
@@ -1414,7 +1409,7 @@ MODELS.an = {
     { key: 'u', label: 'u', fmt: 'u' }, { key: 'dur', label: 'Duration (h)', fmt: 'h' }, { key: 'sofar', label: 'Total so far (h)', fmt: 'h' }
   ],
   // Splits the flat row list into one mini table per path for the harness's
-  // buildTable/renderTable (Task 41): key names the field rows are grouped
+  // buildTable/renderTable: key names the field rows are grouped
   // by, caption(j, p) is that group's heading (the path name and its
   // distribution, moved out of the row columns above), and footer(rows,
   // summary, j) returns the mini table's own total row -- {label, value}
@@ -1467,9 +1462,8 @@ function mmcWq(lam, mu, c) {
   var last = term / (1 - rho), C = last / (sum + last);
   return C / (c * mu - lam);
 }
-// Amendment to Task 60: no u columns on this dynamic tab (the core keeps
-// drawing and carrying u1/u2 on every row; only the table stops showing
-// them).
+// No u columns on this dynamic tab (the core keeps drawing and carrying
+// u1/u2 on every row; only the table stops showing them).
 var Q_COLUMNS_1 = [
   { key: 'i', label: 'Customer', fmt: 'int' }, { key: 'ia', label: 'Interarrival', fmt: 'h' },
   { key: 'arr', label: 'Arrival', fmt: 'h' }, { key: 'svc', label: 'Service time', fmt: 'h' },
@@ -1491,7 +1485,7 @@ MODELS.q = {
   columnsFor: function (p) { return p.c === 2 ? Q_COLUMNS_2 : Q_COLUMNS_1; },
   /* draw.ia() and draw.svc() return uniforms; draw.iaValue(i) and
      draw.svcValue(i) return times directly and take precedence when present.
-     Task 67: customers keep arriving while the next arrival time is at or
+     Customers keep arriving while the next arrival time is at or
      before p.T (end time, minutes); every customer who arrives by T is
      served to completion, so the last few rows' own end/sys can fall past
      T even though no later row's arr ever does. p.n, when present, is an
@@ -1576,7 +1570,7 @@ function showTab(name, btn) {
 function showTabFromSelect(sel) { showTab(sel.value, null); }
 </script>
 
-<!-- Harness (Task 8), structure views (Tasks 10–14) go here. -->
+<!-- Harness and structure views. -->
 <script>
 // ── Number formats ──────────────────────────────────────────────────────
 // Every count and money value uses tabular figures via CSS.
@@ -1601,7 +1595,7 @@ const FMT = {
   h: v => v == null ? '' : v.toFixed(2),
   txt: v => v == null ? '' : String(v),
   yn: v => v ? 'yes' : 'no',
-  // The bearing table's Cause column (Task 53e): a plain cause under the
+  // The bearing table's Cause column: a plain cause under the
   // 'each' policy, where Replaced already names the one position an event
   // is ever about, and "failure (2)" under 'set'/'age', where Replaced
   // reads "all" and so the position that triggered the event has nowhere
@@ -1609,7 +1603,7 @@ const FMT = {
   // ignores; rowHtml passes it so this one formatter can reach failedPos
   // alongside the cause value itself.
   cause: (v, row) => v == null ? '' : (v === 'failure' && row && row.failedPos != null ? 'failure (' + row.failedPos + ')' : v),
-  // The bearing table's New life column (Task 60): one value per bearing
+  // The bearing table's New life column: one value per bearing
   // installed at that row, in position order, separated by " / ".
   hArr: v => v == null ? '' : v.map(x => String(Math.round(x))).join(' / ')
 };
@@ -1765,13 +1759,11 @@ function cloneFontCss(cs) {
     + ';letter-spacing:' + cs.letterSpacing + ';word-spacing:' + cs.wordSpacing
     + ';text-transform:' + cs.textTransform;
 }
-// Task 65b: the one off-screen-measurement helper shared by every "measure a
+// The one off-screen-measurement helper shared by every "measure a
 // worst case before committing to a fixed height" reservation in the file --
 // reserveCapHeight (every tab's summary/seed-msg/legend captions),
-// reserveInvCostHeight, reserveQWaitEqHeight, and the drops map's caption
-// reservation (since removed along with that map's view toggle) had each
-// grown their own near-identical clone/position-absolute/measure/remove
-// closure. Clones el (shallow) off-screen with the given html as its
+// reserveInvCostHeight, and reserveQWaitEqHeight. Clones el (shallow)
+// off-screen with the given html as its
 // content, matching el's own display/line-height/padding/box-sizing/font
 // and its parent's content width, and returns the measured height; an
 // inline display on el (a flow-root wrapper, say) is covered by
@@ -1784,7 +1776,7 @@ function measureOffscreen(el, html) {
   c.removeAttribute('id');
   const cs = getComputedStyle(el);
   const pw = getComputedStyle(el.parentNode).width;
-  // line-height is deliberately not copied here (Task 65e fix): body's own
+  // line-height is deliberately not copied here: body's own
   // line-height: 1.5 is unitless, and a unitless line-height is inherited
   // as that ratio, recomputed against each descendant's own font-size --
   // copying el's *computed*, already-pixel value instead would freeze that
@@ -1810,13 +1802,13 @@ function reserveCapHeight(el, worst, asHtml) {
   const html = asHtml ? worst : worst.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   el.style.minHeight = (Math.ceil(measureOffscreen(el, html) * 100) / 100) + 'px';
 }
-// Task 65b: lbl (Outfit label text) and val (IBM Plex Mono value, optionally
+// Lbl (Outfit label text) and val (IBM Plex Mono value, optionally
 // colored) are the one span-builder pair every output equation shares --
 // invCostExpr, brCostExpr, and qWaitExpr each grew their own copy.
 function eqLbl(t) { return '<span class="lbl">' + t + '</span>'; }
 function eqVal(t, color) { return '<span class="val"' + (color ? ' style="color:' + color + '"' : '') + '>' + t + '</span>'; }
 
-// The cost equation under the inventory sawtooth (Task 53b), in the style of
+// The cost equation under the inventory sawtooth, in the style of
 // the newsvendor's own profit line: a label (Outfit) around values (IBM Plex
 // Mono), the holding charge and the ending-inventory sum colored like the
 // plot's on-hand side and the backorder charge and the shortage sum like its
@@ -1847,9 +1839,9 @@ function renderInvCost(st) {
 }
 // Measures both the symbolic form and a generously large revealed form
 // off-screen (the M/N/h/p spinners' own maximums, run the full 25 days) and
-// reserves the taller. Task 65a's audit of the true
-// achievable range (M <= 20, N <= 10, h <= 10, p <= 50, demand 0-4 over 25
-// days) confirms these were already worst-case-safe: sumEnd <= 500 (25 days
+// reserves the taller. An audit of the true achievable range (M <= 20,
+// N <= 10, h <= 10, p <= 50, demand 0-4 over 25 days) confirms these are
+// worst-case-safe: sumEnd <= 500 (25 days
 // x M's own ceiling) and totalShort's true ceiling is far under 500 (the
 // demand distribution alone bounds any one day's shortage near 4).
 function reserveInvCostHeight() {
@@ -1861,7 +1853,7 @@ function reserveInvCostHeight() {
   el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
 }
 
-// The cost equation under the bearing lanes (Task 61a), same pattern as
+// The cost equation under the bearing lanes, same pattern as
 // invCostExpr above: the running sum substitutes for "Σ event costs" once
 // any event is revealed (the install row's own cost of 0 is included, and
 // so Step shows the sum growing from $0); the constant divisor, 6 (three
@@ -1869,7 +1861,7 @@ function reserveInvCostHeight() {
 // its own tooltip rather than a value. Both the sum and the result are
 // var(--accent), matching the histogram's own output color; there is no
 // second color to split, unlike the inventory line's holding/backorder pair.
-// $999,999 (Task 65a) covers the true worst case with room to spare: the
+// $999,999 covers the true worst case with room to spare: the
 // each policy's largest reachable cumulative cost over 20,000 h, at the
 // delay distribution's own maximum on every failure, is nowhere near six
 // figures, but a round, generous ceiling costs nothing to reserve for.
@@ -1897,10 +1889,10 @@ function reserveBrCostEqHeight() {
   el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
 }
 
-// The two wait equations under the queue's servers chart (Task 61b). Unlike
+// The two wait equations under the queue's servers chart. Unlike
 // brCostExpr and invCostExpr, the symbolic label ("Σ waits / n", "max wait")
 // stays put and the evaluated chain is appended after its own "=", because
-// that is the form Ted's brief spells out verbatim; sums and the maximum run
+// that is the form the lecture's spreadsheet uses; sums and the maximum run
 // over the revealed customers only, and so Step grows the average and the
 // longest wait can still drop back as a later customer's own wait is
 // revealed. The average's sum and result share the "typical" color used for
@@ -1923,8 +1915,7 @@ function renderQWaitEq(st, k) {
   for (let i = 0; i < n; i++) { sumWait += rows[i].wait; if (rows[i].wait > maxWait) maxWait = rows[i].wait; }
   el.innerHTML = qWaitExpr(sumWait.toFixed(2), String(n), (sumWait / n).toFixed(2), maxWait.toFixed(2));
 }
-// Task 65a widened these against the old fixed-n corner (sums near 70,000).
-// Task 67 (an end time T, not a customer count) reopened the question: at
+// The worst case is at
 // c = 1, mu = 0.1 (its own minimum), lambda = 2.0 (its own maximum) is a
 // deeply overloaded queue (rho = 20), and run out to T's own maximum, 600
 // min, the count of customers who still arrive (a Poisson process, unbroken
@@ -1962,7 +1953,7 @@ window.MCXUI = (() => {
     cfg.outputs.forEach(o => wireThresholdDrag(st, o));
   }
 
-  // Task 59b: the range a histogram, its threshold, and its reference all
+  // The range a histogram, its threshold, and its reference all
   // read against -- o.axis with .max replaced by the batch's own grown
   // value, or o.axis itself unchanged for an output declaring axis.fixed
   // (the drops count and the network finish time, whose whole range is
@@ -2070,7 +2061,7 @@ window.MCXUI = (() => {
       st.runs = 0;
       st.cfg.outputs.forEach(o => st.outputs[o.key] = []);
     }
-    // The axis range resets on every knob change (Task 59b), not only when
+    // The axis range resets on every knob change, not only when
     // there was a batch to log -- a decision change starts the next batch
     // at the design-time range regardless.
     st.cfg.outputs.forEach(o => st.axisMax[o.key] = o.axis.max);
@@ -2093,8 +2084,7 @@ window.MCXUI = (() => {
     renderHist(st, o); renderCards(st);
   }
   // axisMax is the current (possibly grown) end of the range; an output
-  // declaring axis.fixed ignores it and clamps to its own o.axis.max, same
-  // as before Task 59b.
+  // declaring axis.fixed ignores it and clamps to its own o.axis.max.
   function clampThr(o, v, axisMax) {
     const hiMax = effAxis(o, axisMax).max;
     const lo = o.axis.min + (o.integer ? 0.5 : 0), hi = hiMax - (o.integer ? 0.5 : 0);
@@ -2191,7 +2181,7 @@ window.MCXUI = (() => {
   }
   // A model with model.groups (only the activity network, so far) renders as
   // one mini <table class="sim"> per distinct group value instead of one
-  // table for the whole replication (Task 41). The container element
+  // table for the whole replication. The container element
   // (#<tab>-table) is a plain <div> for such a model -- it has to be, to
   // hold several sibling <table>s -- and so every string built for it here
   // includes its own <table class="sim">...</table> wrapper; an ungrouped
@@ -2314,7 +2304,7 @@ window.MCXUI = (() => {
     const tLine = o.integer ? (o.success === 'le' ? t + 0.5 : t - 0.5) : t;
 
     // y max is recomputed fresh on every render from what is actually drawn
-    // (Task 63): the nice ceiling of the taller of the live bars' own
+    //: the nice ceiling of the taller of the live bars' own
     // tallest fraction and the reference curve's or pmf's peak, with no
     // memory between renders -- a lone Run 1 sets a tight ceiling around its
     // one 100% bar, and it both grows and shrinks with the batch from there,
@@ -2477,8 +2467,7 @@ window.MCXUI = (() => {
       if (ref.type === 'line') { glyph = '<line x1="13" y1="1" x2="13" y2="11" stroke="var(--truth)" stroke-width="2"/>'; kind = 'line'; }
       else if (ref.type === 'pmf') { glyph = '<circle cx="13" cy="6" r="3.4" fill="var(--truth)" stroke="var(--card)" stroke-width="1.2"/>'; kind = 'marks'; }
       else { glyph = '<polyline points="2,10 9,4 16,7 24,3" fill="none" stroke="var(--truth)" stroke-width="2"/>'; kind = 'curve'; }
-      // Every line reference carries its own value (Task 54a, generalized
-      // from Task 52's queue-only version): o.fmt(ref.x) is the number in
+      // Every line reference carries its own value: o.fmt(ref.x) is the number in
       // the output's own display format (already a complete "$203.00" for a
       // dollar output), with o.unit appended as a trailing word (" min")
       // only when it is set and is not '$' -- '$' on an output (the
@@ -2516,7 +2505,7 @@ window.MCXUI = (() => {
   // plain normal-approximation interval).
   const MEAN_CI_TIP = '<span class="tip" tabindex="0" data-tip="A t interval: a 95% interval for the mean, built from the sample\'s spread, that widens when there are few runs and narrows as more accumulate.">95% CI</span>';
   const PROP_CI_TIP = '<span class="tip" tabindex="0" data-tip="A Wilson interval: a 95% interval for a proportion that stays inside 0 to 1 and behaves well near the edges.">95% CI</span>';
-  // Task 54b split the single #<tab>-cards container into #<tab>-cards-runs
+  // The cards are split: #<tab>-cards-runs
   // (the Runs card, plus a tab's own extraCard if it has one) inside
   // #<tab>-cards-top alongside the batch buttons, and one #<tab>-cards-<key>
   // per output (its mean and P(success) cards) -- one grid row per output,
@@ -2682,7 +2671,7 @@ window.MCXUI = (() => {
       renderLegend(st, o);
       reserveCapHeight(el, worstHtml, true);
     });
-    // Task 62c: a grouped model's replication box (today, only tab ⑥'s
+    // A grouped model's replication box (today, only tab ⑥'s
     // three mini tables) is taller once grouped than the single ordinary
     // placeholder table buildTable shows before any replication -- the very
     // first Step already switches to the taller shape (renderTable's own
@@ -2710,7 +2699,7 @@ window.MCXUI = (() => {
         const worstHtml = tableEl.outerHTML;
         st.rep = savedRep; st.revealed = savedRevealed;
         renderTable(st);
-        // Task 65e: box.style.height, not reserveCapHeight's own min-height
+        // Box.style.height, not reserveCapHeight's own min-height
         // -- .tbl-box's own class sets a generic height:296px meant for
         // every other tab's single table, and a min-height only ever grows
         // past that floor, and so at 1020px, where the true three-across
@@ -2879,7 +2868,7 @@ window.addEventListener('load', function () {
         successLabel: t => 'P(shortage days ≤ ' + t + ')', reference: () => null
       },
       {
-        // Task 66: the book's own reference example histograms this third
+        // The book's own reference example histograms this third
         // output too, over the same 25-day replication as the other two.
         key: 'avgInv', label: 'Average ending inventory (refrigerators)', meanLabel: 'Mean of the average ending inventory', short: 'avg inventory',
         histId: 'inv-hist-c', thrId: 'inv-thr-c', legendId: 'inv-legend-c',
@@ -2911,7 +2900,7 @@ window.addEventListener('load', function () {
     knobIds: ['dr-n', 'dr-sx', 'dr-sy'],
     outputs: [{
       key: 'hits', label: 'Packages in the zone', histId: 'dr-hist', thrId: 'dr-thr',
-      // fixed (Task 59b): 0 to n (the axis's own max of 20 is n's own
+      // fixed: 0 to n (the axis's own max of 20 is n's own
       // ceiling) is the whole sample space, not a range to extend.
       axis: { min: -0.5, max: 20.5, bin: 1, tick: 1, fixed: true }, integer: true, success: 'ge', thrDefault: 6, thrStep: 1,
       fmt: v => String(v), axisFmt: v => String(Math.round(v)),
@@ -2973,27 +2962,27 @@ window.addEventListener('load', function () {
       }
     }],
     structure: STRUCT.br,
-    // Task 60: the trailing sentence names the two draws now visible in the
+    // The trailing sentence names the two draws now visible in the
     // table (a life draw per installed bearing, a delay draw per failure);
     // it is static, and so summaryWorst below carries it too, verbatim, for
     // the height reservation to measure the same text the live one shows.
     summary: rep => 'This replication: <strong>' + fmtUsd0(rep.outputs.cost) + '</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>' + rep.summary.events + '</strong> replacement events over 20,000 h. Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
     summaryWorst: 'This replication: <strong>$9,999</strong> per 10,000 <span class="tip" tabindex="0" data-tip="One hour of running time for one bearing; three positions running together accumulate three bearing-hours every clock hour.">bearing-hours</span> from <strong>999</strong> replacement events over 20,000 h. Every life and delay that shaped the replication is in the table: a life for each bearing installed, and a delay for each failure.',
-    rowsWorst: 63, // +1 over the worst real-event count for Task 60's install row
+    rowsWorst: 63, // +1 over the worst real-event count for the install row
     extraReserve: () => reserveBrCostEqHeight()
   });
 
   buildAnPathTable();
   MCXUI.register({
     tab: 'an', model: MCX.models.an,
-    // No decision on this tab any more: the network has three fixed paths
-    // and nothing to knob.
+    // No decision on this tab: the network has three fixed paths and
+    // nothing to knob.
     readParams: () => ({}),
     settingLabel: () => 'fixed network',
     knobIds: [],
     outputs: [{
       key: 'finish', label: 'Finish time (h)', histId: 'an-hist', thrId: 'an-thr',
-      // fixed (Task 59b): 4 to 12 h is every path's exact support, not a
+      // fixed: 4 to 12 h is every path's exact support, not a
       // range that a run could ever exceed.
       axis: { min: 4, max: 12, bin: 0.25, tick: 1, fixed: true }, integer: false, success: 'le', thrDefault: 10, thrStep: 0.25,
       fmt: v => v.toFixed(2), successLabel: t => 'P(finish ≤ ' + t + ' h)',
@@ -3022,7 +3011,7 @@ window.addEventListener('load', function () {
   // (a fork into two boxes rather than one), and both fit the same 300x110
   // viewBox. Rebuilt from readParams(), below, which runs once at
   // registration and again on every knob change -- never on a run or step.
-  // Second pass (Task 48 addendum): one font throughout (Outfit, 11 units,
+  // One font throughout (Outfit, 11 units,
   // var(--text), matching the newsvendor flowchart's own labels -- no more
   // IBM Plex Mono here), a 340x120 viewBox, and the newsvendor flowchart's
   // own arrowhead size (7x7, stroke 1.6) so every arrow reads as an arrow.
@@ -3036,7 +3025,7 @@ window.addEventListener('load', function () {
     // Arrivals: three small circles walking in from the left edge, under an
     // arrow into the queue. A two-line label sits above the arrow's own
     // midpoint (not at the top of the canvas): "arrivals" above, the tracked
-    // rate below. Compacted to a 380-unit viewBox (Task 55d): the type sizes
+    // rate below. Compacted to a 380-unit viewBox: the type sizes
     // are unchanged, only the layout's own coordinates are tighter.
     [6, 15, 24].forEach(x => { s += '<circle cx="' + x + '" cy="' + cy + '" r="4" fill="var(--ok)"/>'; });
     s += '<line x1="31" y1="' + cy + '" x2="92" y2="' + cy + '" stroke="var(--lane-stroke)" stroke-width="1.6" marker-end="url(#q-sch-arrow)"/>';
@@ -3078,7 +3067,7 @@ window.addEventListener('load', function () {
     alignQSchemaToInputs();
   }
 
-  // Vertical alignment (Task 48 addendum): in the wide layout, where the
+  // Vertical alignment: in the wide layout, where the
   // schematic sits beside the inputs table rather than wrapped below it,
   // the schematic's own flow line (cy) is set level with the boundary
   // between the table's "Interarrival time" and "Service time" rows, by
@@ -3127,8 +3116,8 @@ window.addEventListener('load', function () {
     outputs: [
       {
         key: 'avgWait', label: 'Average wait in queue (min)', meanLabel: 'Mean of the average wait (min)', short: 'avg wait', histId: 'q-hist-a', thrId: 'q-thr-a', legendId: 'q-legend-a',
-        // max re-derived for Task 67's default T = 60 (was 8, sized for the
-        // old fixed n = 20): the smallest tick multiple at or above the 99th
+        // max derived for the default T = 60:
+        // the smallest tick multiple at or above the 99th
         // percentile of 2,000 replications at the default knobs (about
         // 11.3-11.5 across resamples).
         axis: { min: 0, max: 12, bin: 0.5, tick: 2 }, integer: false, success: 'le', thrDefault: 3, thrStep: 0.5,
@@ -3141,7 +3130,7 @@ window.addEventListener('load', function () {
         referenceTip: 'The long-run average wait for this M/M/c system. A replication starts with an empty queue, and so its average wait tends to sit below this line; the gap closes as T grows.',
         // Omitted above rho = 1, where the steady-state wait is infinite and
         // a replication is not settling toward any fixed value.
-        // The label carries no value of its own (Task 54a): renderLegend
+        // The label carries no value of its own: renderLegend
         // appends o.fmt(ref.x) plus o.unit for every line reference now,
         // generalized from this tab's own one-off version.
         reference: (st, p) => {
@@ -3151,8 +3140,8 @@ window.addEventListener('load', function () {
       },
       {
         key: 'maxWait', label: 'Longest wait (min)', meanLabel: 'Mean of the longest wait (min)', short: 'longest', histId: 'q-hist-b', thrId: 'q-thr-b', legendId: 'q-legend-b',
-        // max re-derived for Task 67's default T = 60 (was 20, sized for the
-        // old fixed n = 20): the smallest tick multiple at or above the 99th
+        // max derived for the default T = 60:
+        // the smallest tick multiple at or above the 99th
         // percentile of 2,000 replications at the default knobs (about
         // 20.4-22.8 across resamples).
         axis: { min: 0, max: 25, bin: 1, tick: 5 }, integer: false, success: 'le', thrDefault: 10, thrStep: 1,
@@ -3163,17 +3152,16 @@ window.addEventListener('load', function () {
     summary: rep => 'This replication: <strong>' + rep.summary.n + '</strong> customers by T = ' + rep.summary.T + ' min; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(rep.summary.util * 100) + '%</strong> of the time.',
     summaryWorst: 'This replication: <strong>1300</strong> customers by T = 600 min; average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
     // The largest plausible row count at the current knobs, not a fixed
-    // count (Task 67: arrivals are now a Poisson process run out to T, and
+    // count (arrivals are now a Poisson process run out to T, and
     // so the count varies by seed). Arrivals by T follow Poisson(lambda*T);
     // mean plus 3 standard deviations, with a small flat margin, is
     // exceeded only in the tail the widget does not promise to reserve for
-    // -- about 1,300 at the knobs' own corner, lambda = 2.0 and T = 600,
-    // matching the brief's own figure.
+    // -- about 1,300 at the knobs' own corner, lambda = 2.0 and T = 600.
     rowsWorst: p => Math.ceil(p.lam * p.T + 3 * Math.sqrt(Math.max(1, p.lam * p.T))) + 10,
     // A window resize is the only other thing (besides a knob change,
     // already covered inside renderQSchema itself) that can move the
     // schematic relative to the inputs table it aligns to; the wait
-    // equations (Task 61b) need their own re-measure for the same reason.
+    // equations need their own re-measure for the same reason.
     extraReserve: () => { alignQSchemaToInputs(); reserveQWaitEqHeight(); }
   });
 });
@@ -3219,8 +3207,8 @@ function makeLinker(cfg) {
       clearClass('linked-hover');
       cfg.ring(null);
     },
-    // Paints several rows at once (the queue tab's "who is waiting" hover,
-    // Task 51), rather than the single row hover()/click() manage. Calls
+    // Paints several rows at once (the queue tab's "who is waiting" hover),
+    // rather than the single row hover()/click() manage. Calls
     // cfg.ring(null): there is no single mark to ring for a set of rows, so
     // the caller draws whatever it needs (the rug's own per-customer rings)
     // itself and leaves this method to the row highlighting alone.
@@ -3395,7 +3383,7 @@ function makeLinker(cfg) {
     set('nv-v-sales', row ? String(row.sales) : '—');
     set('nv-v-unsold', row ? String(row.unsold) : '—');
     set('nv-v-unmet', row ? String(row.unmet) : '—');
-    // The profit line is a run of colored <tspan>s (Task 45), not plain
+    // The profit line is a run of colored <tspan>s, not plain
     // text, and so it goes through innerHTML rather than the textContent
     // helper above.
     const profitEl = document.getElementById('nv-v-profit');
@@ -3598,7 +3586,7 @@ function makeLinker(cfg) {
     // 0/M tick numbers, and so is wider than a single-line axis needs.
     const L = 46, R = 14, T = 20, B = 26, innerW = W - L - R, innerH = H - T - B;
     const p = st.params, M = p.M, N = p.N;
-    // A fixed y scale (Task 53a): yTop is the spinner's own maximum M (20)
+    // A fixed y scale: yTop is the spinner's own maximum M (20)
     // plus the same 4 units of headroom the plot always carried, so changing
     // or dragging M moves only the dashed M line, never the axis under it.
     const yTop = 24, yBot = -8;
@@ -3710,7 +3698,7 @@ function makeLinker(cfg) {
     s += '<g id="inv-saw-readout" pointer-events="none"></g>';
     s += '<rect class="inv-saw-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent" pointer-events="all"/>';
 
-    // Drag handles for M and the review lines (Task 46): 24 CSS px converted
+    // Drag handles for M and the review lines: 24 CSS px converted
     // to this render's own viewBox units (cw/W CSS px per unit, and so 24 CSS px
     // is 24*W/cw units), drawn last so they sit on top of the readout hit
     // rect above and win a pointerdown that lands on one.
@@ -3729,7 +3717,7 @@ function makeLinker(cfg) {
     st.sawGeom = { xAt: xAt, yAt: yAt, L: L, R: R, T: T, B: B, innerW: innerW, innerH: innerH, W: W, H: H, yTop: yTop, yBot: yBot };
     st.sawPoints = (st.rep && lastDay >= 0) ? sawPoints(st.rep, lastDay) : [];
     st.sawLastDay = lastDay;
-    // A pin set mid-step survives the innerHTML rebuild above (Task 47).
+    // A pin set mid-step survives the innerHTML rebuild above.
     invLinker.refresh();
     renderInvCost(st);
   }
@@ -3763,11 +3751,11 @@ function makeLinker(cfg) {
   // rather than re-attached to the .inv-saw-hit rect renderInvSaw rebuilds on
   // every redraw. st.sawGeom is read fresh on every event, and so it always
   // reflects whichever render last ran.
-  // Drag state for the M/N handles (Task 46): while a drag is under way, the
+  // Drag state for the M/N handles: while a drag is under way, the
   // general pointermove/pointerleave listeners below step aside entirely --
   // the drag's own move handler (registered only for its own duration) owns
-  // the pointer, and the readout stays quiet the whole time, per the brief.
-  // Since Task 53a fixed the y scale, st.sawGeom no longer changes shape when
+  // the pointer, and the readout stays quiet the whole time.
+  // Because the y scale is fixed, st.sawGeom does not change shape when
   // M (or N) changes mid-drag, and so the move handler below reads it fresh
   // from MCXUI.state('inv') on every pointer move rather than working from a
   // geometry snapshot taken at pointerdown; the pointer capture itself (still
@@ -3820,7 +3808,7 @@ function makeLinker(cfg) {
     // The M/N drag handles themselves: pointer capture on #inv-saw, as
     // wireThresholdDrag does on the histogram. A handle's own value is
     // recomputed from the pointer position through st.sawGeom, read fresh on
-    // every move -- safe now that Task 53a fixed the y scale, so a value
+    // every move -- safe because the y scale is fixed, so a value
     // change redrawing mid-drag never changes what that geometry means.
     svg.addEventListener('pointerdown', e => {
       const handle = e.target.closest && e.target.closest('.inv-drag');
@@ -3941,13 +3929,13 @@ function makeLinker(cfg) {
       : '<line x1="' + (xAt(row.x) - 5).toFixed(2) + '" y1="' + (yAt(row.y) - 5).toFixed(2) + '" x2="' + (xAt(row.x) + 5).toFixed(2) + '" y2="' + (yAt(row.y) + 5).toFixed(2) + '" stroke="var(--fail)" stroke-width="1.8" stroke-linecap="round"/>'
       + '<line x1="' + (xAt(row.x) - 5).toFixed(2) + '" y1="' + (yAt(row.y) + 5).toFixed(2) + '" x2="' + (xAt(row.x) + 5).toFixed(2) + '" y2="' + (yAt(row.y) - 5).toFixed(2) + '" stroke="var(--fail)" stroke-width="1.8" stroke-linecap="round"/>';
   }
-  // A transparent hit target over one current-replication point (Task 53d):
+  // A transparent hit target over one current-replication point:
   // 23 viewBox units clears 24 CSS px at the narrowest width this map
   // renders at (390px container, about 0.543 render scale), the same
   // "clears the floor at the tightest scale" sizing every other tab's touch
   // targets use. Drawn only for the current replication's own points, and
   // so a point from the faded trail (mark() above, drawn with no id) is
-  // never linkable, per the brief.
+  // never linkable.
   function markHit(row) {
     return '<circle class="dr-pt" data-i="' + row.i + '" cx="' + xAt(row.x).toFixed(2) + '" cy="' + yAt(row.y).toFixed(2) + '" r="23" fill="transparent" pointer-events="all"/>';
   }
@@ -4059,18 +4047,18 @@ function makeLinker(cfg) {
     // The current replication, rows below k only.
     if (rep) for (let i = 0; i < k && i < rep.rows.length; i++) s += mark(rep.rows[i]);
 
-    // Hit targets (Task 53d), drawn last so they win any pointer that lands
+    // Hit targets, drawn last so they win any pointer that lands
     // on a point, and the link readout's own group.
     if (rep) for (let i = 0; i < k && i < rep.rows.length; i++) s += markHit(rep.rows[i]);
     s += '<g id="dr-map-link"></g>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
-    // A pin set mid-step survives the innerHTML rebuild above (Task 47).
+    // A pin set mid-step survives the innerHTML rebuild above.
     drLinker.refresh();
   }
 
-  // The points' pointer listeners (Task 53d), delegated once on the
+  // The points' pointer listeners, delegated once on the
   // persistent #dr-map element (the same pattern used for tabs ①–③),
   // because renderDrMap rebuilds every point by innerHTML on each render.
   (function () {
@@ -4233,7 +4221,7 @@ function makeLinker(cfg) {
       // planned or pre-empted by a failure -- also gets a triangle at its own
       // planned time, cycleStart + T.
       let prevClock = 0, sharedLines = '', triangles = '';
-      // Starts at 1, past the install row (Task 60): it is not a cycle
+      // Starts at 1, past the install row: it is not a cycle
       // transition, and prevClock already starts at 0 for the first real
       // row's own planned-time calculation without it.
       for (let i = 1; i < k && i < rep.rows.length; i++) {
@@ -4309,8 +4297,8 @@ function makeLinker(cfg) {
           // also carries its own geometry in data-tx/data-tw so a hovered
           // tail can be ringed on its own.
           if (bar.cause !== 'censored') {
-            // A lane's very first bar (the bearing installed at clock 0, per
-            // Task 60's install row) links to that install row instead of to
+            // A lane's very first bar (the bearing installed at clock 0, on
+            // the install row) links to that install row instead of to
             // the event that ends it -- eventIdxByLaneEnd is keyed by clock
             // regardless of which end of a bar it names, and the install
             // row's own clock (0) is exactly this bar's start.
@@ -4344,7 +4332,7 @@ function makeLinker(cfg) {
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
-    // A pin set mid-step survives the innerHTML rebuild above (Task 47).
+    // A pin set mid-step survives the innerHTML rebuild above.
     brLinker.refresh();
     renderBrCostEq(st, k);
   }
@@ -4441,9 +4429,9 @@ function makeLinker(cfg) {
   (function () {
     const table = document.getElementById('br-table'), box = table && table.closest('.tbl-box');
     if (!table || !box) return;
-    // The table's Event column is 0-based (Task 60's install row is event
+    // The table's Event column is 0-based (the install row is event
     // 0), matching the event index used everywhere else (rep.rows,
-    // data-event) directly -- no offset, unlike before that row existed.
+    // data-event) directly, with no offset.
     function rowEvent(tr) {
       if (!tr || !tr.parentElement || tr.parentElement.tagName !== 'TBODY' || tr.classList.contains('placeholder')) return null;
       const cell = tr.children[0];
@@ -4541,7 +4529,7 @@ function makeLinker(cfg) {
 
   function renderAnPathHist(j, totals) {
     const el = $(PH_IDS[j]);
-    // H2 grew from 60 to 74 (Task 62a) for a labeled x axis below the
+    // H2 grew from 60 to 74 for a labeled x axis below the
     // baseline; innerH keeps the original 60-unit plot geometry (bars and
     // the exact curve are unaffected) and the extra 14 units are pure
     // axis-label space, always drawn (the viewBox never varies with data),
@@ -4570,7 +4558,7 @@ function makeLinker(cfg) {
 
     let s = '<rect x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="var(--chart-bg)" rx="2"/>';
     s += '<line x1="' + L + '" y1="' + (T + innerH) + '" x2="' + (L + innerW) + '" y2="' + (T + innerH) + '" stroke="var(--border)" stroke-width="1"/>';
-    // x axis ticks (Task 62a), every 2 h across the fixed 4-12 h support --
+    // x axis ticks, every 2 h across the fixed 4-12 h support --
     // the main histograms' own tick-spacing search is unneeded here, since
     // the range and a labelable step are both fixed by design; the first
     // and last labels anchor inward (start/end) the way the main histograms'
@@ -4600,9 +4588,8 @@ function makeLinker(cfg) {
   }
 
   // MCX.anLongestProbs() integrates numerically over all three paths; with
-  // no knob to change them any more, its result never changes either, and so
-  // it is computed once, lazily, rather than kept in a per-state cache keyed
-  // on a setting that no longer exists.
+  // no knob to change them, its result never changes either, and so it is
+  // computed once, lazily.
   let anProbsCached = null;
   function anProbs() {
     if (!anProbsCached) anProbsCached = MCX.anLongestProbs();
@@ -4641,7 +4628,7 @@ function makeLinker(cfg) {
     renderAnTally(longestCounts);
   }
 
-  // Task 62b (corrected): the network diagram stays left and the three path
+  // The network diagram stays left and the three path
   // histograms stay right at every width; the "Longest path" tally -- one
   // DOM node, never duplicated -- moves into the left column, under the
   // caption, only when leaving it under the three histograms would make the
@@ -4650,11 +4637,11 @@ function makeLinker(cfg) {
   // below 720px regardless of height, and because the height comparison
   // below has to measure the right column with the tally back in its
   // default place to judge whether keeping it there still fits. Every input
-  // here is either fixed layout (the diagram, the tick-bearing histograms
-  // from Task 62a) or static text, and so the outcome depends only on the
+  // here is either fixed layout (the diagram, the tick-bearing histograms)
+  // or static text, and so the outcome depends only on the
   // column width, not on the replication or the reveal step -- called from
   // the tab's own extraReserve, which already reruns on every resize.
-  // Task 65d: whether the columns are actually side by side is read from
+  // Whether the columns are actually side by side is read from
   // their own layout (equal offsetTop, both being simple block children of
   // the same flex row with no vertical offset of their own), not a
   // hardcoded width -- the columns' flex-basis (360/260px) and gap do not
@@ -4682,10 +4669,10 @@ function makeLinker(cfg) {
 (function () {
   // Fixed per-setting geometry, like the bearing lanes: the axis carries only
   // a handful of numbers, and so it stays legible shrunk to a phone width.
-  // Task 51 order, top to bottom: the event rug, the server lane(s), the
+  // Order, top to bottom: the event rug, the server lane(s), the
   // queue-length step plot. RUG_BAND is the rug's own layout band (its
   // baseline centered within it); RUG_H is the height of the rug's single
-  // hit strip (Task 52 review Finding 2 -- one strip, not a hit rect per
+  // hit strip (one strip, not a hit rect per
   // tick, so its own width is never the constraint; 24, not 22, so the
   // strip still clears the 24 CSS px floor at 390px, where this render's
   // own scale is exactly 1:1), smaller than RUG_BAND so the right-end
@@ -4705,7 +4692,7 @@ function makeLinker(cfg) {
     const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
     return nice * mag;
   }
-  // Task 59a: a nice tick step for range (niceCeil applied to a fifth of it,
+  // A nice tick step for range (niceCeil applied to a fifth of it,
   // so five or six ticks land on it), and the smallest multiple of that step
   // at or above range -- the axis ends on a labeled tick instead of on
   // whatever range happens to compute to.
@@ -4764,7 +4751,7 @@ function makeLinker(cfg) {
     // departure and T itself gives the end-anchored "arrivals"/"departures"
     // rug labels room and keeps the T line (below) always on the visible
     // axis, even on the rare replication whose last arrival trails well
-    // behind T, rounded up to a labeled tick (Task 59a). With no
+    // behind T, rounded up to a labeled tick. With no
     // replication yet, T -- the end of the window the replication will
     // cover -- stands in for "the last departure."
     const lastDep = st.rep && st.rep.rows.length ? st.rep.rows.reduce((m, row) => Math.max(m, row.end), 0) : null;
@@ -4777,14 +4764,14 @@ function makeLinker(cfg) {
     const rows = st.rep ? st.rep.rows : [];
     const revealed = st.rep ? Math.min(k, rows.length) : 0;
 
-    // The event rug (Tasks 49/51/52): a baseline with an arrival tick (up,
+    // The event rug: a baseline with an arrival tick (up,
     // var(--ok)) and a departure tick (down, var(--fail)) for every
     // revealed customer, and so the reader sees the raw arrival/departure
     // process the bars and the step plot are both built from. Right-end
     // labels replace a single left-end one, because each kind now has its
-    // own color. A single hit strip covers the whole rug (Task 52 review
-    // Finding 2, replacing one hit rect per tick, which never cleared the
-    // 24 CSS px floor at any width); qEvents records every revealed tick's
+    // own color. A single hit strip covers the whole rug (rather than one
+    // hit rect per tick, which never cleared the 24 CSS px floor at any
+    // width); qEvents records every revealed tick's
     // own x for the nearest-tick lookup the pointer handlers do below, the
     // same pattern the sawtooth's nearestSawPoint already uses.
     let rug = '<line x1="' + L + '" y1="' + rugY.toFixed(2) + '" x2="' + (L + innerW) + '" y2="' + rugY.toFixed(2) + '" stroke="var(--border)" stroke-width="1"/>';
@@ -4844,7 +4831,7 @@ function makeLinker(cfg) {
       // the drawn bar's own geometry (for the readout ring), and so the tap
       // target clears the 24px floor even though the drawn mark itself is
       // shorter -- the touch-target rule is about the hit area, not the mark.
-      // data-begin/data-end/data-svc (Task 52) are what the readout needs
+      // data-begin/data-end/data-svc are what the readout needs
       // now that it is about the service only, not the wait; data-server
       // names the server only when there is a choice to name (c = 2).
       bars += '<rect class="q-cust" data-cust="' + row.i + '" data-begin="' + row.begin.toFixed(3) + '" data-end="' + row.end.toFixed(3) + '" data-svc="' + row.svc.toFixed(3) + '"'
@@ -4903,7 +4890,7 @@ function makeLinker(cfg) {
         s += '<text x="' + tx.toFixed(2) + '" y="' + (queueBottom + 14) + '" text-anchor="' + anchor + '" fill="var(--muted)" font-size="9" font-family="IBM Plex Mono, monospace">' + (wholeTicks ? Math.round(v) : v.toFixed(1)) + '</text>';
       }
     }
-    // The end-of-arrivals line (Task 67): every arrival tick on the rug sits
+    // The end-of-arrivals line: every arrival tick on the rug sits
     // at or left of it, even though a bar or the queue-length step can
     // still extend well past it (a customer who arrived just before T can
     // still be served, or still waiting, long after). Spans the full plot
@@ -4917,7 +4904,7 @@ function makeLinker(cfg) {
     s += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Time (min)</text>';
 
     // A transparent hit rect over the queue plot's own area for the "who is
-    // waiting" hover/tap (Task 51), on top of the plot but drawn before the
+    // waiting" hover/tap, on top of the plot but drawn before the
     // readout group so a bar or a tick (drawn earlier, further up the svg)
     // still wins a pointer that lands on one of them.
     s += '<rect class="q-queue-hit" x="' + L + '" y="' + queueTop + '" width="' + innerW + '" height="' + queueH + '" fill="transparent" pointer-events="all"/>';
@@ -4928,8 +4915,8 @@ function makeLinker(cfg) {
     // rebuilds on every render.
     s += '<g id="q-readout" pointer-events="none"></g>';
 
-    // The T line's own drag handle (Task 68), on the pattern of Task 46's
-    // M/N handles on the inventory sawtooth: 24 CSS px converted to this
+    // The T line's own drag handle, on the pattern of the M/N handles on
+    // the inventory sawtooth: 24 CSS px converted to this
     // render's own viewBox units, full plot height, drawn last so it sits
     // on top of every other hit target (the rug strip, the queue-plot hit
     // rect, a bar) and wins a pointerdown that lands on it.
@@ -4940,14 +4927,14 @@ function makeLinker(cfg) {
     el.innerHTML = s;
     st.qGeom = { L: L, R: R, T: T, innerW: innerW, H: H, queueTop: queueTop, queueBottom: queueBottom, xMax: xMax, rugY: rugY };
     st.qEvents = qEvents;
-    // A pin set mid-step survives the innerHTML rebuild above (Task 47):
+    // A pin set mid-step survives the innerHTML rebuild above:
     // the table (rebuilt first, by show()) and every bar/tick this function
     // just redrew both lost whatever pin class or ring they carried.
     qLinker.refresh();
     renderQWaitEq(st, k);
   }
 
-  // Task 52: the readout is about the service only (waiting is the rug's
+  // The readout is about the service only (waiting is the rug's
   // and the queue plot's own job now) -- "Customer 5 on Able: in service
   // 6.1 to 8.4 min (2.3 min)", or, at c = 1 with no server to name,
   // "Customer 5: in service 6.1 to 8.4 min (2.3 min)".
@@ -4957,13 +4944,12 @@ function makeLinker(cfg) {
     return 'Customer ' + cust + onServer + ': in service ' + begin.toFixed(1) + ' to ' + end.toFixed(1) + ' min (' + svc.toFixed(1) + ' min)';
   }
 
-  // A generic box-and-text readout, shared by every readout on this chart
-  // (Task 52 review Finding 3: the bar readout used to duplicate this same
-  // box-layout logic). anchor = { x, y, h = 0, gap = 8, minY, maxY }: the
+  // A generic box-and-text readout, shared by every readout on this chart.
+  // anchor = { x, y, h = 0, gap = 8, minY, maxY }: the
   // box is centered on x, preferring above y (or above y + h, if the
   // anchor is a rect rather than a point) and falling back below when that
   // would clip minY (the svg's own top by default; the queue plot's own
-  // top for Task 52 review Finding 1, so the "who is waiting" box never
+  // top for the "who is waiting" box, so it never
   // lands on the lane strip above it); by is then clamped to [minY, maxY].
   function qReadoutBox(geom, label, anchor, extraSvg) {
     const g = document.getElementById('q-readout');
@@ -5001,7 +4987,7 @@ function makeLinker(cfg) {
   }
 
   // Redraws one rug tick at stroke-width 3, 2 units longer at each end, in
-  // its own color (Task 52: no ring or circle on the rug any more). x is in
+  // its own color (no ring or circle on the rug). x is in
   // viewBox units; kind picks the color and which way the tick already
   // points (arrival rises from the baseline, departure drops from it).
   function tickHighlightSvg(geom, x, kind) {
@@ -5018,11 +5004,11 @@ function makeLinker(cfg) {
     events.forEach(e => { const d = Math.abs(e.x - xVal); if (d < bestD) { bestD = d; best = e; } });
     return bestD <= 6 ? best : null;
   }
-  // Hover/tap readout for one rug tick (Task 49, hit-tested via the single
-  // rug strip since Task 52): "t = 4.32 min: customer 5 arrives/departs."
+  // Hover/tap readout for one rug tick, hit-tested via the single rug
+  // strip: "t = 4.32 min: customer 5 arrives/departs."
   // ev (from st.qEvents, or null to clear) is a plain {t, kind, cust, x}
-  // record, not a DOM element -- Task 52 replaced the per-tick hit rects a
-  // DOM lookup would have used. The customer's row links through
+  // record, not a DOM element -- there are no per-tick hit rects for a DOM
+  // lookup to use. The customer's row links through
   // qLinker.hover/click exactly as a bar does (wired below); this only
   // draws the tick-specific box, replacing whatever qLinker's own ring()
   // callback (built for a bar) already drew into the same #q-readout group.
@@ -5035,7 +5021,7 @@ function makeLinker(cfg) {
     qReadoutBox(geom, label, { x: ev.x, y: geom.rugY }, tickHighlightSvg(geom, ev.x, ev.kind));
   }
 
-  // The customers waiting at time t (Task 51): arrived but not yet at the
+  // The customers waiting at time t: arrived but not yet at the
   // server, among the rows revealed so far, in arrival order.
   function qWaitingAt(st, t) {
     if (!st.rep) return [];
@@ -5044,12 +5030,12 @@ function makeLinker(cfg) {
     for (let i = 0; i < revealed; i++) { const row = rows[i]; if (row.arr <= t && t < row.begin) waiting.push(row.i); }
     return waiting;
   }
-  // Hover/tap readout for the queue plot itself (Task 51/52): "t = 12.3
+  // Hover/tap readout for the queue plot itself: "t = 12.3
   // min: waiting: customers 7, 8" (or "nobody waiting"), the same waiting
   // customers' rows lit together via qLinker.hoverSet, and each one's own
-  // arrival tick redrawn at weight (Task 52: no ring). pointerY anchors the
+  // arrival tick redrawn at weight (no ring). pointerY anchors the
   // box at the pointer's own height, clamped to stay inside the queue plot
-  // itself (Task 52 review Finding 1) rather than the whole svg. t null
+  // itself rather than the whole svg. t null
   // clears everything.
   function paintQueueReadout(st, t, pointerY) {
     const g = document.getElementById('q-readout');
@@ -5096,17 +5082,17 @@ function makeLinker(cfg) {
     }
   });
 
-  // The queue plot's own tap-toggle state (Task 51): the last tapped CSS
+  // The queue plot's own tap-toggle state: the last tapped CSS
   // pixel x, or null. A second tap within a few pixels of it clears the
   // "who is waiting" readout, the way the drops heatmap's side-tap does;
   // reset whenever the replication identity changes (see renderQServers).
   let qQueueTapPx = null;
 
-  // Drag state for the T handle (Task 68): while a drag is under way, the
+  // Drag state for the T handle: while a drag is under way, the
   // general pointermove/pointerleave listeners below step aside entirely --
   // the drag's own move handler (registered only for its own duration) owns
   // the pointer, and every readout (the ring, the tick/queue readouts)
-  // stays quiet the whole time, per the brief. setQHandleHi toggles the
+  // stays quiet the whole time. setQHandleHi toggles the
   // highlight on the T line itself, the same trick .inv-drag-hi uses for
   // the sawtooth's own M/review-line handles.
   let qDragging = false;
@@ -5140,7 +5126,7 @@ function makeLinker(cfg) {
       const geom = st.qGeom;
       return Math.min(st.qGeom.xMax, Math.max(0, (xPix - geom.L) / geom.innerW * geom.xMax));
     }
-    // The rug strip has one hit rect (Task 52), not one per tick; the
+    // The rug strip has one hit rect, not one per tick; the
     // nearest event to the pointer's own x (in viewBox units, the same
     // units st.qEvents' own x is in) stands in for "the tick under the
     // pointer," within reach or not at all.
@@ -5200,14 +5186,14 @@ function makeLinker(cfg) {
       if (qQueueTapPx == null) { const st = MCXUI.state('q'); if (st) paintQueueReadout(st, null); }
     });
 
-    // The T handle itself (Task 68): pointer capture on #q-servers, as
-    // wireThresholdDrag does on the histogram and Task 46's M/N handles do
+    // The T handle itself: pointer capture on #q-servers, as
+    // wireThresholdDrag does on the histogram and the M/N handles do
     // on the sawtooth. Unlike those, the geometry is captured once here at
     // pointerdown and reused for the whole drag, never re-read from
     // st.qGeom mid-drag: changing T redraws the chart with a new xMax
-    // (Task 59a fits the axis to the replication), and so reading the
-    // geometry fresh on every move, the way the sawtooth handles do since
-    // Task 53a, would make the pointer-to-time mapping shift under the same
+    // (the axis is fitted to the replication), and so reading the
+    // geometry fresh on every move, the way the sawtooth handles do, would
+    // make the pointer-to-time mapping shift under the same
     // drag. The map is plain linear scaling, and so it already extrapolates
     // past the plot's own right edge on its own (xPix beyond L + innerW
     // yields a time beyond xMax with no extra branch needed) -- pointer
