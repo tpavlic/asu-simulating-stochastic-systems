@@ -3739,11 +3739,15 @@ function makeLinker(cfg) {
     s += '<text x="' + laneX2 + '" y="' + midY.toFixed(2) + '" text-anchor="middle" transform="rotate(-90 ' + laneX2 + ' ' + midY.toFixed(2) + ')" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">backordered (below 0)</text>';
 
     // The warm-up band, and the cover over the days past the measured span.
+    // The cover's own tip rides on a transparent rect added after the
+    // pointer hit rect below, since that hit rect spans the whole plot and
+    // would otherwise take the hover and answer with the nearest point.
     const wX = xAt(warmW), eX = xAt(endDay);
+    const COVER_TIP = 'The run stops at day W + 25, and these days are never simulated. The axis holds room for them so a longer warm-up, up to 10 days, slides the measured 25 days to the right instead of re-scaling the chart.';
     if (warmW > 0) s += '<rect x="' + L + '" y="' + T + '" width="' + (wX - L).toFixed(2) + '" height="' + innerH + '" fill="var(--muted)" fill-opacity="0.13" pointer-events="none"/>';
     if (endDay < DAYS_AXIS) {
       s += '<rect x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + innerH + '" fill="#ebe7e9" pointer-events="none"/>';
-      if (L + innerW - eX >= 84) s += '<text data-tip="The run stops at day W + 25; these days are never simulated." x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + innerH / 2 + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">beyond the 25 days</text>';
+      if (L + innerW - eX >= 84) s += '<text x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + innerH / 2 + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif" pointer-events="none">beyond the 25 days</text>';
     }
     s += '<line id="inv-w-line" x1="' + wX.toFixed(2) + '" y1="' + T + '" x2="' + wX.toFixed(2) + '" y2="' + (T + innerH) + '" stroke="var(--muted)" stroke-width="1.3"/>';
     if (wX - L >= 58) s += '<text class="inv-warm-lbl" data-tip="Everything before W is the warm-up: simulated and shown, but left out of the cost, the shortage days, and the average inventory." x="' + ((L + wX) / 2).toFixed(2) + '" y="' + (T + innerH - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">Warm-up</text>';
@@ -3824,6 +3828,11 @@ function makeLinker(cfg) {
     // render and so cannot keep listeners of its own attached across renders.
     s += '<g id="inv-saw-readout" pointer-events="none"></g>';
     s += '<rect class="inv-saw-hit" x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="transparent" pointer-events="all"/>';
+    // The cover's tip target, over the hit rect (so the pointer handlers
+    // below see a target that is not .inv-saw-hit and clear the readout)
+    // and under the drag handles (so a review line at day W + 25 still
+    // wins its own grab).
+    if (endDay < DAYS_AXIS) s += '<rect class="inv-cover-hit" data-tip="' + COVER_TIP + '" x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + innerH + '" fill="transparent" pointer-events="all"/>';
 
     // Drag handles for M and the review lines: 24 CSS px converted
     // to this render's own viewBox units (cw/W CSS px per unit, and so 24 CSS px
@@ -4394,9 +4403,11 @@ function makeLinker(cfg) {
     // and the warm-up's own line (its drag handle is added last, below).
     const wX = xAt(warmW), eX = xAt(endH);
     if (warmW > 0) s += '<rect x="' + L + '" y="' + T + '" width="' + (wX - L).toFixed(2) + '" height="' + (axisY - T) + '" fill="var(--muted)" fill-opacity="0.13" pointer-events="none"/>';
+    // The cover itself carries the tip (the label passes the pointer
+    // through to it), and the lanes' marks drawn later still win over it.
     if (endH < axisH) {
-      s += '<rect x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + (axisY - T) + '" fill="#ebe7e9" pointer-events="none"/>';
-      if (L + innerW - eX >= 92) s += '<text data-tip="The run stops at W + 20,000 h; these hours are never simulated." x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + 1.5 * LANE + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">beyond the 20,000 h</text>';
+      s += '<rect data-tip="The run stops at W + 20,000 h, and these hours are never simulated. The axis holds room for them so a longer warm-up, up to 5,000 h, slides the measured 20,000 h to the right instead of re-scaling the chart." x="' + eX.toFixed(2) + '" y="' + T + '" width="' + (L + innerW - eX).toFixed(2) + '" height="' + (axisY - T) + '" fill="#ebe7e9" pointer-events="all"/>';
+      if (L + innerW - eX >= 92) s += '<text x="' + ((eX + L + innerW) / 2).toFixed(2) + '" y="' + (T + 1.5 * LANE + 3).toFixed(2) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif" pointer-events="none">beyond the 20,000 h</text>';
     }
     s += '<line id="br-w-line" x1="' + wX.toFixed(2) + '" y1="' + T + '" x2="' + wX.toFixed(2) + '" y2="' + axisY + '" stroke="var(--muted)" stroke-width="1.3"/>';
     // The label is written after the lanes (below), with a halo, since the
