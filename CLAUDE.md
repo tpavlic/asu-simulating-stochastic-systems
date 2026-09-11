@@ -578,11 +578,14 @@ better.
   spreadsheets) with exponential interarrival and service times, a capacity toggle, and an end
   time, ② the order-up-to (M, N) refrigerator policy with three outputs, ③
   bearing replacement under three policies over 20 000 operating hours, ④ the newsvendor with Q
-  (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon with n
-  and a toggle between the drops scatter and the landing distribution, and ⑥ a three-path activity
-  network with 1, 2, and 4 uniform steps of equal mean and support (chosen to differ from the
-  book's breakfast network, which is a lab exercise) and no decision, whose point is that only the
-  path that finishes last matters (the histogram of the longest path shows it). Commit tag `mcx`.
+  (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon, with
+  n and a slider for each landing spread set inside the distribution table, the landing
+  distribution always drawn under the drops as a continuous gray surface, and a map frame that
+  never re-scales (the slider ranges are capped so under 2.5% of packages fall past its edge),
+  and ⑥ a three-path activity network with 1, 2, and 4 uniform steps of equal mean and support
+  (chosen to differ from the book's breakfast network, which is a lab exercise) and no decision,
+  whose point is that only the path that finishes last matters (the histogram of the longest path
+  shows it). Commit tag `mcx`.
   Conventions relied on by code outside the file, which any later edit has to preserve:*
   1. *Everything between the `MCX-CORE-BEGIN` / `MCX-CORE-END` sentinels is pure numerics with no
      DOM access, and the block must not contain the words "window" or "document".
@@ -593,7 +596,8 @@ better.
      intervals, the newsvendor Monte Carlo mean against the exact expected profit for every Q, the
      order-up-to model against the book's Table 2.21 row by row (fed the book's own demand and
      lead-time sequence), the drop model against quadrature of the bivariate normal over the octagon
-     and a binomial fit, the bearing policies against exact discrete renewal functions on the
+     and a binomial fit (at the book's own standard deviations and at three other pairs, since
+     those are a knob), the bearing policies against exact discrete renewal functions on the
      100-hour grid, the activity network against scaled Irwin–Hall CDFs and numerically
      integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
      and 2.15 row by row and against the Erlang-C steady-state wait on long replications.*

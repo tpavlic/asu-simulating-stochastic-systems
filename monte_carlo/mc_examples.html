@@ -90,13 +90,19 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
   color: var(--muted); background: var(--bg); padding: 0 7px; white-space: nowrap;
 }
 .tp { display: none; } .tp.active { display: block; }
-.ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; container-type: inline-size; }
 /* Task 55a: Step, Run 1, Run x10, and Run x100 wrap onto the next line as one
    unit (equal offsetTop) rather than breaking mid-group; the seed group and
    the seed message either side keep wrapping independently, since only the
-   four run buttons are inside this span. */
+   four run buttons are inside this span. On a card too narrow for the four
+   in a row with their labels on one line (the control row is its own size
+   container, so this follows the card, not the window; at a 390px phone
+   width the row is 326px, and the four would otherwise be squeezed until
+   "Run ×100" broke across two lines inside its button) the unit becomes a
+   2 x 2 grid spanning the row. */
 .run-btns { display: inline-flex; gap: 10px; flex-wrap: nowrap; }
 @media (max-width: 420px) { .run-btns { gap: 6px; } }
+@container (max-width: 360px) { .run-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; } }
 /* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
    the WCAG 2.5.8 floor. The rows are already taller than this, and so nothing moves. */
 .ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap;
@@ -228,6 +234,24 @@ table.inp td.bar i { display: block; height: 9px; background: var(--lane); borde
 .spin button:hover:not(:disabled) { background: var(--accent-tint); }
 .spin select { height: 28px; border: none; border-radius: 0; max-width: 100%; text-overflow: ellipsis; }
 .spin input:disabled, .spin button:disabled, .spin select:disabled { color: #aaa; background: #f5f2f3; cursor: not-allowed; }
+/* Tab ⑤'s two spread sliders sit inside the distribution table, each in
+   the cell of the distribution it sets, under the "Normal(0, σ²)" whose σ
+   it changes: the control and the quantity it controls are one thing, and
+   a reader dragging the slider watches the figure above it move. A spinner
+   would take dozens of presses to cross these ranges, and so this is the
+   one control in the widget that is not a spinner. The height comes from
+   the global input[type=range] rule, which keeps every range input above
+   the touch-target floor. */
+table.inp.dr-inp td { vertical-align: middle; padding-top: 4px; padding-bottom: 4px; }
+/* The coordinate label may wrap on a card too narrow for the table, since
+   the distribution cell's own text cannot, and the slider takes the width
+   of that cell rather than a width of its own, so neither can push the
+   table past the card's edge. */
+table.inp.dr-inp td:first-child { white-space: normal; }
+table.inp.dr-inp td.dr-dist-cell .dr-sd { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+table.inp.dr-inp td.dr-dist-cell input[type="range"] { display: block; width: 100%; min-width: 72px; max-width: 124px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+/* The decision stands apart from the per-package inputs above it. */
+.knobs.dr-decision { margin-top: 18px; }
 /* The newsvendor's Q spinner lives inside its flowchart svg (a foreignObject),
    which is scaled down along with the whole diagram at some container
    widths -- unlike every other .spin control, which sits in ordinary flow at
@@ -333,11 +357,28 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 #br-lanes-legend .br-leg-item.dim { opacity: .45; }
 #br-lanes-legend svg { width: 16px; height: 12px; flex: none; display: block; }
 @media (max-width: 720px) { #br-lanes-legend { flex-direction: column; gap: 3px; } }
-.dr-dist-legend[hidden] { display: none; }
-.dr-dist-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .74rem; color: var(--muted); margin-top: 8px; }
-.dr-dist-legend .dr-ramp-bar { width: 160px; height: 10px; flex: none; display: block; }
-.dr-dist-legend .dr-zone-key { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+/* Two keys under the map: the zone outline at the left edge, the density
+   ramp at the right. The legend is its own size container, and so once the
+   card is too narrow for both keys on one line (which depends on the card,
+   not the viewport: the right-hand card of the two-column layout is
+   narrower than the stacked layout below it) each key takes a line of its
+   own, centered under the map. The threshold sits just above the two keys'
+   one-line width, so they never wrap without also centering. */
+.dr-dist-legend { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 16px;
+                  font-size: .74rem; color: var(--muted); margin-top: 8px; container-type: inline-size; }
+.dr-dist-legend .dr-zone-key, .dr-dist-legend .dr-ramp-key { display: inline-flex; align-items: center; gap: 6px; }
+/* The ramp is 160px where there is room and gives way before either of
+   its labels does: the key can shrink below its content (min-width: 0),
+   the labels cannot, and so a card too narrow even for one key per line
+   shortens the bar rather than pushing "more" past the card's edge. */
+.dr-dist-legend .dr-ramp-key { min-width: 0; max-width: 100%; }
+.dr-dist-legend .dr-ramp-key > span { flex: none; white-space: nowrap; }
+.dr-dist-legend .dr-ramp-bar { flex: 0 1 160px; min-width: 40px; height: 10px; display: block; }
 .dr-dist-legend .dr-zone-key svg { width: 16px; height: 12px; flex: none; display: block; }
+@container (max-width: 440px) {
+  .dr-dist-legend { justify-content: center; }
+  .dr-dist-legend .dr-zone-key, .dr-dist-legend .dr-ramp-key { flex-basis: 100%; justify-content: center; }
+}
 .sg.one { grid-template-columns: minmax(0, 1fr); }
 .sc-sub { font-size: .72rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
 /* Threshold grab: an invisible wide stroke is the target; hover thickens the line. */
@@ -764,30 +805,24 @@ input[type=range] { height: 26px; }
     <div class="sec-pair">
     <div class="sec"><div class="sec-hd">Inputs and decision</div><div id="dr-inputs">
       <div class="inp-wrap">
-        <table class="inp" id="dr-input-table" aria-label="Landing point distribution"></table>
-        <div><div class="inp-cap">Landing point: x ~ Normal(0, 400 m), y ~ Normal(0, 200 m), independent. The zone is the delivery target, an octagon about 1.2 km across.</div></div>
+        <table class="inp dr-inp" id="dr-input-table" aria-label="Landing point distribution"></table>
+        <div><div class="inp-cap">A package misses the aim point by an independent normal draw in each direction; drag a slider to change that direction's spread, and the map and the exact p follow as it moves. The zone is the delivery target, an octagon about 1.2 km across.</div></div>
       </div>
       <div class="knobs">
-        <label class="knob" for="dr-n"><span class="tip" tabindex="0" data-tip="How many aid packages the aircraft releases over the zone in one pass. The one decision in this model.">Packages released, n</span>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="For reference: the probability that one package lands inside the zone, by numerical integration of the landing distribution over the zone at the spreads set above. The simulation estimates the same number without any integration, by dropping packages and counting, the way random points on a square estimate π.">Exact hit probability per package, p =</span> <span id="dr-p-val" style="display:inline-block;min-width:5ch;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600"></span></span>
+      </div>
+      <div class="knobs dr-decision">
+        <label class="knob" for="dr-n"><span class="tip" tabindex="0" data-tip="How many aid packages the aircraft releases over the zone in one pass. The one decision in this model, and the one input that is about the drop as a whole rather than about each package.">Packages released, n</span>
           <span class="spin"><button type="button" aria-label="Decrease n" onclick="spinStep('dr-n',-1)">−</button><input id="dr-n" type="number" min="1" max="20" step="1" value="10" inputmode="numeric" onchange="spinCommit('dr-n')"><button type="button" aria-label="Increase n" onclick="spinStep('dr-n',1)">+</button></span></label>
-        <span class="knob"><span class="tip" tabindex="0" data-tip="For reference: the probability that one package lands inside the zone, by numerical integration of the landing distribution over the zone. The simulation estimates the same number without any integration, by dropping packages and counting, the way random points on a square estimate π.">Exact hit probability per package, p =</span> <span id="dr-p-val" style="display:inline-block;min-width:5ch;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600"></span></span>
       </div>
     </div></div>
     <div class="sec"><div class="sec-hd">Where the packages land</div><div id="dr-struct" class="struct">
-      <div class="ctrl-row" style="margin-bottom:8px" role="group" aria-label="Map view">
-        <button type="button" class="btn-run2" id="dr-view-drops" aria-pressed="true" onclick="setDrView('drops')">Drops</button>
-        <button type="button" class="btn-run2" id="dr-view-dist" aria-pressed="false" onclick="setDrView('dist')">Landing distribution</button>
+      <svg id="dr-map" viewBox="0 0 600 400" role="img" aria-label="Landing points for the current replication over the delivery zone, drawn on the landing distribution, which is shaded darker where more packages land per square meter"></svg>
+      <div id="dr-dist-legend" class="dr-dist-legend">
+        <span class="dr-zone-key"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8" fill="none" stroke="var(--truth)" stroke-width="2"/></svg>delivery zone</span>
+        <span class="dr-ramp-key"><span>fewer landings per m²</span><svg class="dr-ramp-bar" viewBox="0 0 160 10"><defs><linearGradient id="dr-ramp-grad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FBFAFA"/><stop offset="1" stop-color="#9E979B"/></linearGradient></defs><rect x="0" y="0" width="160" height="10" fill="url(#dr-ramp-grad)"/></svg><span>more</span></span>
       </div>
-      <svg id="dr-map" viewBox="0 0 600 400" role="img" aria-label="Landing points for the current replication over the delivery zone"></svg>
-      <div id="dr-cap-wrap" style="display:flow-root">
-        <div id="dr-dist-legend" class="dr-dist-legend" hidden>
-          <span>fewer landings per m²</span>
-          <svg class="dr-ramp-bar" viewBox="0 0 160 10"><defs><linearGradient id="dr-ramp-grad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F6F4F7"/><stop offset="1" stop-color="#3F4C8C"/></linearGradient></defs><rect x="0" y="0" width="160" height="10" fill="url(#dr-ramp-grad)"/></svg>
-          <span>more</span>
-          <span class="dr-zone-key"><svg viewBox="0 0 16 12"><rect x="1" y="2" width="14" height="8" fill="none" stroke="var(--truth)" stroke-width="2"/></svg>delivery zone</span>
-        </div>
-        <div class="fig-cap" id="dr-map-cap">Landing points for the current replication; the last 20 replications of this batch stay faded behind, and a new batch clears them. Filled blue: in the zone. Red cross: outside. Hover a row or a point to link them; click to pin the pair, and click again to release.</div>
-      </div>
+      <div class="fig-cap" id="dr-map-cap">Landing points for the current replication, on the landing distribution in gray; the last 20 replications of this batch stay faded behind, and a new batch clears them. Filled blue: in the zone. Red cross: outside. The exact p is the gray mass inside the zone. Hover a row or a point to link them; click to pin the pair, and click again to release.</div>
     </div></div>
     </div>
     <div class="sec"><div class="sec-hd">One replication</div><div id="dr-rep">
@@ -837,7 +872,7 @@ input[type=range] { height: 26px; }
     <p class="lede" id="an-lede">Three chains of steps run in parallel, and the shipment leaves when the last one finishes. Every chain has the same mean and range, but a chain of four steps is rarely all long or all short at once, and so its total is concentrated near the mean where a single step's is flat. Adapted from the activity network in Banks, Carson, Nelson, and Nicol (2010, Section 2.5.4), with a different network.</p>
     <div class="sec"><div class="sec-hd">Inputs</div><div id="an-inputs">
       <div class="inp-wrap">
-        <table class="inp" id="an-path-table" aria-label="Activity network paths"></table>
+        <div style="min-width:0;max-width:100%;overflow-x:auto"><table class="inp" id="an-path-table" aria-label="Activity network paths"></table></div>
         <div><div class="inp-cap">Every path has mean 8 h and range 4 to 12 h. The paths differ only in how many steps share that range.</div></div>
       </div>
     </div></div>
@@ -1139,7 +1174,10 @@ MODELS.inv = {
 
 /* ── ③ Delivery drops (BCNN Section 2.5.2, Figure 2.17) ───────────────────
    The zone is the book's octagon, traced from the figure; a landing point has
-   independent normal coordinates with standard deviations 400 m and 200 m. */
+   independent normal coordinates whose standard deviations are the book's
+   400 m and 200 m by default and are a knob on this tab, and so every
+   quantity derived from them takes the pair as an argument rather than
+   reading the defaults. */
 var DR_POLY = [[-400, 200], [-100, 540], [300, 540], [500, 400], [500, -200], [250, -420], [-130, -420], [-400, -200]];
 var DR_SX = 400, DR_SY = 200;
 function insidePolygon(poly, x, y) {
@@ -1161,33 +1199,46 @@ function polygonXIntervals(poly, y) {
   var out = []; for (i = 0; i + 1 < xs.length; i += 2) out.push([xs[i], xs[i + 1]]);
   return out;
 }
-var DR_P = null;
-/* The single-drop hit probability, by Simpson's rule over y of the normal
-   density times the x-mass inside the zone at that height. */
-function drHitProb() {
-  if (DR_P !== null) return DR_P;
+/* Memoized by the standard-deviation pair rather than computed once: the
+   quadrature below runs on every render (the reference pmf, the pooled-rate
+   card, the distribution view's readout), and the pair changes only when the
+   reader moves a knob, and so a handful of entries covers a whole session. */
+var DR_P = {};
+/* The single-drop hit probability at standard deviations sx and sy, by
+   Simpson's rule over y of the normal density times the x-mass inside the
+   zone at that height. The y limits are the zone's own extent, where the
+   integrand vanishes, and so they hold at every sx and sy. */
+function drHitProb(sx, sy) {
+  sx = sx || DR_SX; sy = sy || DR_SY;
+  var key = sx + ',' + sy;
+  if (DR_P[key] !== undefined) return DR_P[key];
   var yMin = -420, yMax = 540, n = 1920, h = (yMax - yMin) / n, s = 0;
   for (var i = 0; i <= n; i++) {
     var y = yMin + i * h, iv = polygonXIntervals(DR_POLY, y), inner = 0;
-    for (var k = 0; k < iv.length; k++) inner += Phi(iv[k][1] / DR_SX) - Phi(iv[k][0] / DR_SX);
-    var fy = Math.exp(-0.5 * (y / DR_SY) * (y / DR_SY)) / (DR_SY * Math.sqrt(2 * Math.PI));
+    for (var k = 0; k < iv.length; k++) inner += Phi(iv[k][1] / sx) - Phi(iv[k][0] / sx);
+    var fy = Math.exp(-0.5 * (y / sy) * (y / sy)) / (sy * Math.sqrt(2 * Math.PI));
     s += fy * inner * (i === 0 || i === n ? 1 : (i % 2 ? 4 : 2));
   }
-  return (DR_P = s * h / 3);
+  return (DR_P[key] = s * h / 3);
 }
 MODELS.dr = {
   key: 'dr',
-  defaults: { n: 10 },
+  defaults: { n: 10, sx: DR_SX, sy: DR_SY },
+  /* sx and sy here are the book's own figures, which the knobs start at;
+     the live pair travels in params, and every renderer reads it there. */
   tables: { poly: DR_POLY, sx: DR_SX, sy: DR_SY, world: { x: 1200, y: 800 } },
   columns: [
     { key: 'i', label: 'Drop', fmt: 'int' }, { key: 'z1', label: 'z₁', fmt: 'z' }, { key: 'x', label: 'x (m)', fmt: 'int0' },
     { key: 'z2', label: 'z₂', fmt: 'z' }, { key: 'y', label: 'y (m)', fmt: 'int0' }, { key: 'hit', label: 'In zone', fmt: 'yn', bad: function (v) { return !v; } }
   ],
-  /* draw.z() returns standard normals, two per drop. */
+  /* draw.z() returns standard normals, two per drop. p.sx and p.sy are the
+     standard deviations in metres; they fall back to the book's own figures
+     so a caller that passes only n (the verification script does) still runs
+     the book's case. */
   run: function (p, draw) {
-    var rows = [], hits = 0;
+    var rows = [], hits = 0, sx = p.sx || DR_SX, sy = p.sy || DR_SY;
     for (var i = 1; i <= p.n; i++) {
-      var z1 = draw.z(), z2 = draw.z(), x = DR_SX * z1, y = DR_SY * z2, hit = insidePolygon(DR_POLY, x, y);
+      var z1 = draw.z(), z2 = draw.z(), x = sx * z1, y = sy * z2, hit = insidePolygon(DR_POLY, x, y);
       if (hit) hits++;
       rows.push({ i: i, z1: z1, x: x, z2: z2, y: y, hit: hit });
     }
@@ -1717,12 +1768,13 @@ function cloneFontCss(cs) {
 // Task 65b: the one off-screen-measurement helper shared by every "measure a
 // worst case before committing to a fixed height" reservation in the file --
 // reserveCapHeight (every tab's summary/seed-msg/legend captions),
-// reserveDrCapArea, reserveInvCostHeight, and reserveQWaitEqHeight had each
+// reserveInvCostHeight, reserveQWaitEqHeight, and the drops map's caption
+// reservation (since removed along with that map's view toggle) had each
 // grown their own near-identical clone/position-absolute/measure/remove
 // closure. Clones el (shallow) off-screen with the given html as its
 // content, matching el's own display/line-height/padding/box-sizing/font
-// and its parent's content width, and returns the measured height; el's own
-// inline style (#dr-cap-wrap's display:flow-root, for one) is covered by
+// and its parent's content width, and returns the measured height; an
+// inline display on el (a flow-root wrapper, say) is covered by
 // copying the *computed* display rather than by cloning the style
 // attribute, because the rest of this cssText assignment replaces it
 // wholesale anyway (clearing a previous call's own min-height along with
@@ -1764,33 +1816,6 @@ function reserveCapHeight(el, worst, asHtml) {
 function eqLbl(t) { return '<span class="lbl">' + t + '</span>'; }
 function eqVal(t, color) { return '<span class="val"' + (color ? ' style="color:' + color + '"' : '') + '>' + t + '</span>'; }
 
-// The drops tab's two map views carry their own caption text, and the
-// distribution view alone also shows a color legend beneath the map; shared
-// here so setDrView (which swaps the live text and toggles the legend) and
-// reserveDrCapArea (below) never drift apart.
-const DR_DROPS_CAPTION = 'Landing points for the current replication; the last 20 replications of this batch stay faded behind, and a new batch clears them. Filled blue: in the zone. Red cross: outside. Hover a row or a point to link them; click to pin the pair, and click again to release.';
-const DR_DIST_CAPTION = 'The landing distribution: independent normals with standard deviations 400 m east–west and 200 m north–south, darker where more packages land per square meter. The exact hit probability is the mass of this distribution inside the zone; hover or tap a side to see its mass.';
-// Reserves a fixed height across #dr-cap-wrap (the legend plus the caption)
-// so toggling the map view never moves the page: the legend is present only
-// in the distribution view, and so the two arrangements' natural heights differ
-// by more than reserveCapHeight's single-element, same-wording trick can
-// absorb. Two full markup strings (legend shown/hidden, each with its own
-// caption text) are built from real clones -- deep for the legend, and so
-// its own swatch rows survive; shallow plus a fresh textContent for the caption,
-// matching measureOffscreen's own el/html contract -- and measured
-// off-screen via measureOffscreen(wrap, ...); the wrapper's min-height is
-// set to the taller.
-function reserveDrCapArea() {
-  const wrap = $('dr-cap-wrap'), legend = $('dr-dist-legend'), cap = $('dr-map-cap');
-  if (!wrap || !legend || !cap) return;
-  function withText(el, text) { const c = el.cloneNode(false); c.removeAttribute('id'); c.textContent = text; return c.outerHTML; }
-  function legendHtml(hiddenFlag) { const c = legend.cloneNode(true); c.removeAttribute('id'); c.hidden = hiddenFlag; return c.outerHTML; }
-  const dropsHtml = legendHtml(true) + withText(cap, DR_DROPS_CAPTION);
-  const distHtml = legendHtml(false) + withText(cap, DR_DIST_CAPTION);
-  const h = Math.max(measureOffscreen(wrap, dropsHtml), measureOffscreen(wrap, distHtml));
-  wrap.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
-}
-
 // The cost equation under the inventory sawtooth (Task 53b), in the style of
 // the newsvendor's own profit line: a label (Outfit) around values (IBM Plex
 // Mono), the holding charge and the ending-inventory sum colored like the
@@ -1822,8 +1847,7 @@ function renderInvCost(st) {
 }
 // Measures both the symbolic form and a generously large revealed form
 // off-screen (the M/N/h/p spinners' own maximums, run the full 25 days) and
-// reserves the taller, the way reserveDrCapArea reserves for two differently
-// shaped states of its own caption area. Task 65a's audit of the true
+// reserves the taller. Task 65a's audit of the true
 // achievable range (M <= 20, N <= 10, h <= 10, p <= 50, demand 0-4 over 25
 // days) confirms these were already worst-case-safe: sumEnd <= 500 (25 days
 // x M's own ceiling) and totalShort's true ceiling is far under 500 (the
@@ -2747,16 +2771,32 @@ function buildInvTables() {
 }
 
 // ── Tab ⑤ registration ────────────────────────────────────────────────────
-// Same reasoning again: the standard deviations come from MCX-CORE's own
-// tables rather than being retyped here.
+// Built once, at load, with each spread's slider inside the cell of the
+// distribution it sets. Only the figures are rewritten after that (see
+// drSyncReadouts): rebuilding the table while a slider is being dragged
+// would replace the very element under the pointer and end the drag. The
+// slider ranges are capped so the map's fixed frame still holds at least
+// 2.4 standard deviations each way (under 2.5% of packages ever land past
+// an edge, and those still count; they are only not drawn), rather than
+// re-scaling the map, whose fixed frame is what makes a miss legible.
 function buildDrInputTable() {
-  const t = MCX.models.dr.tables;
-  $('dr-input-table').innerHTML = '<tr><th>Coordinate</th><th>Distribution</th></tr>'
-    + '<tr><td>x (east–west, m)</td><td>Normal(0, ' + t.sx + ')</td></tr>'
-    + '<tr><td>y (north–south, m)</td><td>Normal(0, ' + t.sy + ')</td></tr>';
-  // A single number, independent of every knob: computed once here rather
-  // than on every render.
-  $('dr-p-val').textContent = MCX.drHitProb().toFixed(3);
+  const d = MCX.models.dr.defaults;
+  function row(coord, id, label, min, max, val) {
+    return '<tr><td>' + coord + '</td><td class="dr-dist-cell"><div>Normal(0, <span class="dr-sd" id="' + id + '-val">' + val + '</span>²)</div>'
+      + '<input id="' + id + '" type="range" min="' + min + '" max="' + max + '" step="25" value="' + val + '" aria-label="' + label + '" oninput="MCXUI.onKnob(\'dr\')"></td></tr>';
+  }
+  $('dr-input-table').innerHTML = '<tr><th>Coordinate</th><th><span class="tip" tabindex="0" data-tip="Normal with mean 0 and the standard deviation shown, in meters; drag the slider to change it, and the map and the exact p follow as it moves. The book\'s own figures are 400 m east–west and 200 m north–south. The map is fixed at 1,200 m each way east–west and 800 m north–south, and the ranges stop where under 2.5% of packages would land beyond an edge; one that does still counts.">Distribution</span></th></tr>'
+    + row('x (east–west, m)', 'dr-sx', 'East–west spread, the standard deviation of x in meters', 100, 500, d.sx)
+    + row('y (north–south, m)', 'dr-sy', 'North–south spread, the standard deviation of y in meters', 50, 300, d.sy);
+  if (window.mirrorTips) window.mirrorTips();
+  drSyncReadouts(d.sx, d.sy);
+}
+// The figures that follow the two sliders: the σ inside each "Normal(0, σ²)"
+// and the exact hit probability. Called from readParams(), which every knob
+// change passes through, and so they move with the slider, as the map does.
+function drSyncReadouts(sx, sy) {
+  $('dr-sx-val').textContent = sx; $('dr-sy-val').textContent = sy;
+  $('dr-p-val').textContent = MCX.drHitProb(sx, sy).toFixed(3);
 }
 
 // ── Tab ③ registration ────────────────────────────────────────────────────
@@ -2857,9 +2897,18 @@ window.addEventListener('load', function () {
   buildDrInputTable();
   MCXUI.register({
     tab: 'dr', model: MCX.models.dr,
-    readParams: () => ({ n: Number($('dr-n').value) }),
-    settingLabel: p => 'n = ' + p.n,
-    knobIds: ['dr-n'],
+    readParams: () => {
+      const params = { n: Number($('dr-n').value), sx: Number($('dr-sx').value), sy: Number($('dr-sy').value) };
+      // Same idiom as tab ①'s readParams: the figures that follow a knob
+      // are refreshed here, where every knob change passes. The sliders
+      // commit on input rather than on release, and so this runs on every
+      // step of a drag; the batch is logged on the first step only, since
+      // the harness logs only a batch with runs in it.
+      drSyncReadouts(params.sx, params.sy);
+      return params;
+    },
+    settingLabel: p => nwJoin(['n = ' + p.n, 'σ<sub>x</sub> = ' + p.sx + ' m', 'σ<sub>y</sub> = ' + p.sy + ' m']),
+    knobIds: ['dr-n', 'dr-sx', 'dr-sy'],
     outputs: [{
       key: 'hits', label: 'Packages in the zone', histId: 'dr-hist', thrId: 'dr-thr',
       // fixed (Task 59b): 0 to n (the axis's own max of 20 is n's own
@@ -2868,7 +2917,7 @@ window.addEventListener('load', function () {
       fmt: v => String(v), axisFmt: v => String(Math.round(v)),
       successLabel: t => 'P(hits ≥ ' + t + ')',
       reference: (st, p) => {
-        const pm = MCX.binomPmf(p.n, MCX.drHitProb());
+        const pm = MCX.binomPmf(p.n, MCX.drHitProb(p.sx, p.sy));
         return { type: 'pmf', xs: pm.map((_, i) => i), ps: pm, label: 'exact binomial(n, p)' };
       }
     }],
@@ -2879,7 +2928,7 @@ window.addEventListener('load', function () {
     extraCard: st => {
       const runs = st.runs, drops = runs * st.params.n, hits = st.outputs.hits.reduce((a, b) => a + b, 0);
       const phat = drops > 0 ? (hits / drops).toFixed(3) : '—';
-      return '<div class="sc"><div class="sc-lbl">Pooled hit rate, p̂</div><div class="sc-val">' + phat + '</div><div class="sc-sub">exact p ' + MCX.drHitProb().toFixed(3) + '</div></div>';
+      return '<div class="sc"><div class="sc-lbl">Pooled hit rate, p̂</div><div class="sc-val">' + phat + '</div><div class="sc-sub">exact p ' + MCX.drHitProb(st.params.sx, st.params.sy).toFixed(3) + '</div></div>';
     },
     // Pushes the completed replication's points onto the faded trail the map
     // draws underneath the current one, capped at the last 20 so the map does
@@ -2892,11 +2941,7 @@ window.addEventListener('load', function () {
     onReset: st => { st.recent = []; },
     summary: rep => 'This replication: <strong>' + rep.outputs.hits + '</strong> of <strong>' + rep.summary.n + '</strong> packages landed in the zone.',
     summaryWorst: 'This replication: <strong>20</strong> of <strong>20</strong> packages landed in the zone.',
-    rowsWorst: p => p.n,
-    // The map caption swaps text on the drops/distribution toggle, and the
-    // distribution view alone adds a color legend; reserve the taller of the
-    // two full arrangements so the toggle itself never moves the page.
-    extraReserve: () => reserveDrCapArea()
+    rowsWorst: p => p.n
   });
 
   buildBrTables();
@@ -3871,10 +3916,23 @@ function makeLinker(cfg) {
   // clientWidth.
   // World meters map onto viewBox units at a flat /4 in both directions
   // (2400 m of x across 600 units, 1600 m of y across 400), and y is flipped
-  // because the world's y is up while SVG y grows downward.
+  // because the world's y is up while SVG y grows downward. The frame is
+  // fixed whatever the spreads are set to: the zone and the room around it
+  // are what a reader watches, and a frame that re-scaled with the knobs
+  // would move the zone under a reader who had not touched the map. The
+  // slider ranges are capped instead (see buildDrInputTable), and a package
+  // that lands beyond the frame is counted but not drawn.
   const W = 600, H = 400;
   const xAt = x => (x + 1200) / 4;
   const yAt = y => (800 - y) / 4;
+  // The live spread pair, read from the tab's own params. The harness swaps
+  // params in before it clears a structure view, and so a knob change draws
+  // at the new pair; the defaults stand in before the tab has registered.
+  function drSig() {
+    const d = MCX.models.dr.defaults, st = window.MCXUI && MCXUI.state ? MCXUI.state('dr') : null;
+    const prm = st && st.params ? st.params : d;
+    return { sx: prm.sx || d.sx, sy: prm.sy || d.sy };
+  }
 
   function mark(row) {
     const x = xAt(row.x).toFixed(2), y = yAt(row.y).toFixed(2);
@@ -3906,9 +3964,7 @@ function makeLinker(cfg) {
     ring: i => paintDrReadout(i)
   });
   // Draws the ring around point i's own hit target, or clears it -- silently
-  // a no-op with nothing revealed yet, or in the landing-distribution view,
-  // where renderDrDist draws no .dr-pt and no link group at all, and so the
-  // link is inert there and the view's own readout group is left alone.
+  // a no-op with nothing revealed yet.
   function paintDrReadout(i) {
     const g = document.getElementById('dr-map-link');
     if (!g) return;
@@ -3918,12 +3974,12 @@ function makeLinker(cfg) {
     g.innerHTML = '<circle cx="' + pt.getAttribute('cx') + '" cy="' + pt.getAttribute('cy') + '" r="8" fill="none" stroke="var(--est)" stroke-width="3"/>';
   }
 
-  // Shared by both views: a light 200 m grid, and the meter axis labels kept
-  // at 11 viewBox units so they read at 390px. Anchor and offset are nudged
-  // near the edges so a label at the extreme of its range (x = ±1200,
-  // y = ±800) still sits inside the canvas. The x = −1200 label is dropped
-  // outright: it sits at the same bottom-left corner as the y = −800 label,
-  // and the two would otherwise overlap.
+  // A light 200 m grid, and the meter axis labels kept at 11 viewBox units
+  // so they read at 390px. Anchor and offset are nudged near the edges so a
+  // label at the extreme of its range (x = ±1200, y = ±800) still sits
+  // inside the canvas. The x = −1200 label is dropped outright: it sits at
+  // the same bottom-left corner as the y = −800 label, and the two would
+  // otherwise overlap.
   function gridLines() {
     let s = '';
     for (let x = -1200; x <= 1200; x += 200) s += '<line x1="' + xAt(x).toFixed(2) + '" y1="0" x2="' + xAt(x).toFixed(2) + '" y2="' + H + '" stroke="var(--border)" stroke-width="1"/>';
@@ -3945,6 +4001,38 @@ function makeLinker(cfg) {
   }
   function zonePoints(t) { return t.poly.map(pt => xAt(pt[0]).toFixed(2) + ',' + yAt(pt[1]).toFixed(2)).join(' '); }
 
+  // The landing distribution, always the map's background, drawn as the
+  // continuous surface it is rather than as cells. With independent
+  // coordinates the density is exp(−(x²/2σx² + y²/2σy²)), constant on
+  // ellipses, and so a radial gradient on the unit circle, scaled by σx
+  // and σy, paints it exactly; its stops sit along the radius at the
+  // Gaussian profile itself, closely enough that the straight-line
+  // interpolation between them is invisible. One rect carries it, and so
+  // a slider redraws it at no cost as it moves. The ramp is a neutral gray
+  // on purpose, from the plot ground to a mid gray, so the blue hits, the
+  // red misses, and the teal zone read on top of it as three other things,
+  // and the darkest tone stays light enough for the faded trail of earlier
+  // replications to show through.
+  const DR_RAMP_LO = [0xFB, 0xFA, 0xFA], DR_RAMP_HI = [0x9E, 0x97, 0x9B];
+  function drRampColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    const c = DR_RAMP_LO.map((lo, i) => Math.round(lo + (DR_RAMP_HI[i] - lo) * t));
+    return '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  // Standard deviations the gradient runs out to; past it the last stop's
+  // color (the ground, to within a unit of rgb) continues.
+  const DR_REACH = 3.5, DR_STOPS = 28;
+  function densitySurface(sx, sy) {
+    let stops = '';
+    for (let i = 0; i <= DR_STOPS; i++) {
+      const t = i / DR_STOPS, r = t * DR_REACH;
+      stops += '<stop offset="' + t.toFixed(4) + '" stop-color="' + drRampColor(Math.exp(-r * r / 2)) + '"/>';
+    }
+    return '<defs><radialGradient id="dr-dens" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate('
+      + xAt(0) + ',' + yAt(0) + ') scale(' + (DR_REACH * sx / 4).toFixed(3) + ',' + (DR_REACH * sy / 4).toFixed(3) + ')">' + stops + '</radialGradient></defs>'
+      + '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#dr-dens)"/>';
+  }
+
   // rep is the replication currently shown (or null), k the number of its
   // rows revealed so far; recent is st.recent, the last 20 committed
   // replications' rows, drawn faded underneath. clear() always passes rep
@@ -3956,11 +4044,13 @@ function makeLinker(cfg) {
     // itself.
     if (rep !== drLinkedRep) { drLinkedRep = rep; drLinker.reset(); }
     const el = $('dr-map');
-    const t = MCX.models.dr.tables;
-    let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>' + gridLines();
-
-    // The delivery zone.
-    s += '<polygon points="' + zonePoints(t) + '" fill="var(--truth-pale)" stroke="var(--truth)" stroke-width="1.5"/>';
+    const t = MCX.models.dr.tables, sig = drSig();
+    let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>';
+    s += densitySurface(sig.sx, sig.sy);
+    s += gridLines();
+    // The delivery zone: an outline only, so the distribution shows through
+    // it and the exact p reads as the gray mass inside.
+    s += '<polygon points="' + zonePoints(t) + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
     s += axisLabels();
 
     // Earlier replications, faded, drawn before (so underneath) the current one.
@@ -3972,7 +4062,7 @@ function makeLinker(cfg) {
     // Hit targets (Task 53d), drawn last so they win any pointer that lands
     // on a point, and the link readout's own group.
     if (rep) for (let i = 0; i < k && i < rep.rows.length; i++) s += markHit(rep.rows[i]);
-    s += '<g id="dr-map-readout"></g><g id="dr-map-link"></g>';
+    s += '<g id="dr-map-link"></g>';
 
     el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     el.innerHTML = s;
@@ -3980,138 +4070,9 @@ function makeLinker(cfg) {
     drLinker.refresh();
   }
 
-  // The landing distribution: a 40x40 m grid of the joint normal density
-  // (independent normals, sd 400 m east–west and 200 m north–south), each
-  // cell colored by a sequential ramp on its own density, drawn in two
-  // groups sharing the same cell markup: one clipped to the zone polygon,
-  // one clipped to its complement (the world rect plus the zone in a single
-  // path with clip-rule="evenodd", and so the zone punches a hole out of the
-  // rect). Hovering or tapping one side dims the other group's opacity, and
-  // so the mass being read stands out without redrawing any cell.
-  const DR_CELL = 40;
-  // Sequential ramp, interpolated in sRGB, from #F6F4F7 (density 0) through
-  // var(--ok) = #3F4C8C (density 1, the peak).
-  const DR_RAMP_LO = [0xF6, 0xF4, 0xF7], DR_RAMP_HI = [0x3F, 0x4C, 0x8C];
-  function drRampColor(t) {
-    t = Math.max(0, Math.min(1, t));
-    const c = DR_RAMP_LO.map((lo, i) => Math.round(lo + (DR_RAMP_HI[i] - lo) * t));
-    return '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
-  }
-  function drDensityCells(sx, sy) {
-    const cells = [];
-    for (let cx = -1200 + DR_CELL / 2; cx < 1200; cx += DR_CELL) {
-      for (let cy = -800 + DR_CELL / 2; cy < 800; cy += DR_CELL) {
-        const dens = Math.exp(-(cx * cx / (2 * sx * sx) + cy * cy / (2 * sy * sy)));
-        if (dens < 0.004) continue;
-        cells.push({ x0: xAt(cx - DR_CELL / 2), y0: yAt(cy + DR_CELL / 2), color: drRampColor(dens) });
-      }
-    }
-    return cells;
-  }
-  // Reset whenever the map is redrawn from scratch, and so a tap's "clear on
-  // the second tap on the same side" memory never survives a fresh draw (a
-  // view toggle, a run, a step, or Clear).
-  let drTapSide = null;
-  function renderDrDist() {
-    drTapSide = null;
-    const el = $('dr-map');
-    const t = MCX.models.dr.tables;
-    let s = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="var(--chart-bg)"/>';
-
-    const cells = drDensityCells(t.sx, t.sy);
-    const cellsHtml = cells.map(c => '<rect x="' + c.x0.toFixed(2) + '" y="' + c.y0.toFixed(2) + '" width="10" height="10" fill="' + c.color + '"/>').join('');
-    const insideClip = 'dr-dist-zone-clip', outsideClip = 'dr-dist-outside-clip';
-    const rectPath = 'M0,0 H' + W + ' V' + H + ' H0 Z';
-    const zonePath = 'M' + t.poly.map(pt => xAt(pt[0]).toFixed(2) + ',' + yAt(pt[1]).toFixed(2)).join(' L') + ' Z';
-    s += '<defs>'
-      + '<clipPath id="' + insideClip + '"><polygon points="' + zonePoints(t) + '"/></clipPath>'
-      + '<clipPath id="' + outsideClip + '"><path d="' + rectPath + ' ' + zonePath + '" clip-rule="evenodd"/></clipPath>'
-      + '</defs>';
-    s += '<g id="dr-dist-inside" clip-path="url(#' + insideClip + ')" opacity="1">' + cellsHtml + '</g>';
-    s += '<g id="dr-dist-outside" clip-path="url(#' + outsideClip + ')" opacity="1">' + cellsHtml + '</g>';
-
-    s += gridLines();
-    s += axisLabels();
-    s += '<polygon id="dr-dist-zone" points="' + zonePoints(t) + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
-    s += '<g id="dr-map-readout"></g>';
-
-    el.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    el.innerHTML = s;
-  }
-
-  // Hover (or tap) readout for the distribution view: which side of the zone
-  // the pointer sits on, and the exact mass there. Listens on the svg
-  // element itself, which renderDrDist/renderDrMap never replace (only their
-  // innerHTML), and so the wiring survives every redraw; it no-ops outside
-  // the distribution view.
-  function drWorldPoint(svg, clientX, clientY) {
-    const rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
-    if (!rect.width || !vb) return null;
-    const scale = vb.width / rect.width;
-    const px = (clientX - rect.left) * scale, py = (clientY - rect.top) * scale;
-    return { x: px * 4 - 1200, y: 800 - py * 4 };
-  }
-  function drSideOf(pt) { const t = MCX.models.dr.tables; return MCX.insidePolygon(t.poly, pt.x, pt.y) ? 'in' : 'out'; }
-  // Dims the cell group on the side the pointer is NOT over, to 35%, and
-  // brings both back to full when nothing is hovered (pt null). The zone's
-  // own stroke also thickens while the pointer is inside it, unchanged from
-  // before apart from the new 2px base weight.
-  function drDistReadout(pt) {
-    const g = document.getElementById('dr-map-readout'), zone = document.getElementById('dr-dist-zone');
-    const inEl = document.getElementById('dr-dist-inside'), outEl = document.getElementById('dr-dist-outside');
-    if (!g) return;
-    if (!pt) {
-      g.innerHTML = ''; if (zone) zone.setAttribute('stroke-width', '2');
-      if (inEl) inEl.setAttribute('opacity', '1'); if (outEl) outEl.setAttribute('opacity', '1');
-      return;
-    }
-    const p = MCX.drHitProb();
-    const inside = drSideOf(pt) === 'in';
-    const label = inside ? 'Mass inside the zone: ' + p.toFixed(3) + ', the exact p' : 'Mass outside: ' + (1 - p).toFixed(3);
-    if (zone) zone.setAttribute('stroke-width', inside ? '3' : '2');
-    if (inEl) inEl.setAttribute('opacity', inside ? '1' : '0.35');
-    if (outEl) outEl.setAttribute('opacity', inside ? '0.35' : '1');
-    g.innerHTML = '<text id="dr-map-readout-txt" x="0" y="0" font-size="11" font-family="Outfit, sans-serif">' + label + '</text>';
-    const txt = document.getElementById('dr-map-readout-txt');
-    let tw = 150, th = 13;
-    try { const bb = txt.getBBox(); tw = bb.width; th = bb.height; } catch (e) {}
-    const padX = 7, padY = 5, boxW = tw + padX * 2, boxH = th + padY * 2, bx = 8, by = 8;
-    g.innerHTML =
-      '<rect x="' + bx + '" y="' + by + '" width="' + boxW.toFixed(2) + '" height="' + boxH.toFixed(2) + '" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>' +
-      '<text x="' + (bx + padX) + '" y="' + (by + boxH / 2 + 4).toFixed(2) + '" font-size="11" font-family="Outfit, sans-serif" fill="var(--text)">' + label + '</text>';
-  }
-  (function wireDrDistReadout() {
-    const svg = $('dr-map');
-    if (!svg) return;
-    const active = () => { const st = MCXUI.state('dr'); return st && (st.drView || 'drops') === 'dist'; };
-    svg.addEventListener('pointermove', e => {
-      if (e.pointerType === 'touch' || !active()) return;
-      drDistReadout(drWorldPoint(svg, e.clientX, e.clientY));
-    });
-    svg.addEventListener('pointerleave', e => {
-      if (e.pointerType === 'touch' || !active()) return;
-      drTapSide = null; drDistReadout(null);
-    });
-    // A tap (or a click) behaves like a hover, and a second tap on the same
-    // side clears it -- the only way a touch screen, which has no hover, can
-    // dismiss the readout once it has been shown.
-    svg.addEventListener('click', e => {
-      if (!active()) return;
-      const pt = drWorldPoint(svg, e.clientX, e.clientY);
-      if (!pt) return;
-      const side = drSideOf(pt);
-      if (drTapSide === side) { drTapSide = null; drDistReadout(null); }
-      else { drTapSide = side; drDistReadout(pt); }
-    });
-  })();
-
   // The points' pointer listeners (Task 53d), delegated once on the
   // persistent #dr-map element (the same pattern used for tabs ①–③),
   // because renderDrMap rebuilds every point by innerHTML on each render.
-  // A .dr-pt only ever exists in the drops view's own markup, and so these
-  // simply find nothing to link to in the landing-distribution view,
-  // without needing their own view check the way wireDrDistReadout above
-  // does.
   (function () {
     const svg = document.getElementById('dr-map');
     if (!svg) return;
@@ -4152,27 +4113,8 @@ function makeLinker(cfg) {
   })();
 
   STRUCT.dr = {
-    draw(st, k) { (st.drView || 'drops') === 'dist' ? renderDrDist() : renderDrMap(st.rep, k, st.recent || []); },
-    clear(st) { (st.drView || 'drops') === 'dist' ? renderDrDist() : renderDrMap(null, 0, []); }
-  };
-
-  // Toggle between the drops scatter and the landing distribution, called
-  // from the two view buttons above the map. State lives on st.drView so it
-  // persists across runs; switching redraws with whatever data the harness
-  // currently has (a shown replication, or the empty/cleared state).
-  window.setDrView = function (view) {
-    const st = MCXUI.state('dr');
-    if (!st || (st.drView || 'drops') === view) return;
-    st.drView = view;
-    const dropsBtn = $('dr-view-drops'), distBtn = $('dr-view-dist'), cap = $('dr-map-cap'), map = $('dr-map'), legend = $('dr-dist-legend');
-    if (dropsBtn) dropsBtn.setAttribute('aria-pressed', String(view === 'drops'));
-    if (distBtn) distBtn.setAttribute('aria-pressed', String(view === 'dist'));
-    if (cap) cap.textContent = view === 'dist' ? DR_DIST_CAPTION : DR_DROPS_CAPTION;
-    if (legend) legend.hidden = view !== 'dist';
-    if (map) map.setAttribute('aria-label', view === 'dist'
-      ? 'The landing distribution over the delivery zone, darker where more packages land per square meter'
-      : 'Landing points for the current replication over the delivery zone');
-    if (st.rep) STRUCT.dr.draw(st, st.revealed); else STRUCT.dr.clear(st);
+    draw(st, k) { renderDrMap(st.rep, k, st.recent || []); },
+    clear(st) { renderDrMap(null, 0, []); }
   };
 })();
 

@@ -197,6 +197,21 @@ section('Delivery drops');
   const pmf = M.binomPmf(10, p); let chi = 0;
   for (let k = 0; k <= 10; k++) { const e = N * pmf[k]; if (e >= 5) chi += (counts[k] - e) ** 2 / e; }
   ok(chi < 30, `hit count is binomial (chi-square ${chi.toFixed(1)} < 30 on about 9 df)`);
+  /* The standard deviations are a knob, and so the quadrature and the sampler
+     have to agree away from the book's own pair, not only at it. */
+  close(M.drHitProb(dr.tables.sx, dr.tables.sy), p, 1e-12, 'the default pair is what drHitProb() assumes with no arguments');
+  for (const [sx, sy] of [[200, 200], [700, 120], [400, 400]]) {
+    const pq = M.drHitProb(sx, sy);
+    let h2 = 0;
+    for (let i = 0; i < N; i++) h2 += dr.replicate(i, { n: 10, sx: sx, sy: sy }).outputs.hits;
+    rateOk(h2, 10 * N, pq, 4, `pooled hit rate matches quadrature at sd ${sx} m by ${sy} m (p = ${pq.toFixed(4)})`);
+  }
+  /* Widening either spread moves mass off a zone that is bounded in both
+     directions, and so the hit probability has to fall. */
+  const wider = [100, 200, 400, 800].map(sx => M.drHitProb(sx, 200));
+  ok(wider.every((v, i) => i === 0 || v < wider[i - 1]), `hit probability falls as the east-west spread grows (${wider.map(v => v.toFixed(3)).join(' > ')})`);
+  const taller = [50, 200, 300, 400].map(sy => M.drHitProb(400, sy));
+  ok(taller.every((v, i) => i === 0 || v < taller[i - 1]), `hit probability falls as the north-south spread grows (${taller.map(v => v.toFixed(3)).join(' > ')})`);
 }
 
 section('Bearing replacement');
