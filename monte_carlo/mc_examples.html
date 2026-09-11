@@ -375,9 +375,10 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 .log-box { height: 196px; overflow: auto; border: 1.5px solid var(--border); border-radius: 8px; background: #fff; }
 table.log { border-collapse: collapse; font-size: .76rem; font-variant-numeric: tabular-nums; width: 100%; }
 table.log th { position: sticky; top: 0; background: #f5f2f3; color: var(--muted); font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; text-align: right; white-space: nowrap; z-index: 1; }
-table.log th:first-child, table.log td:first-child { text-align: left; }
+table.log th:first-child, table.log td:first-child, table.log th.log-thr, table.log td.log-thr { text-align: left; }
 table.log td { padding: 6px 8px; text-align: right; border-top: 1px solid #f0ecee; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
-table.log td:first-child { font-family: 'Outfit', sans-serif; text-align: left; white-space: normal; }
+table.log td:first-child { font-family: 'Outfit', sans-serif; white-space: normal; }
+table.log td.log-thr { white-space: normal; }
 table.log tr.log-row { cursor: pointer; }
 table.log tr.log-row:hover { background: var(--accent-wash); }
 table.log tr.log-row.expanded { background: var(--accent-tint); }
@@ -1532,6 +1533,13 @@ const fmtUsd = v => (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2);
 // A whole-dollar axis tick, comma-grouped: "$1,000", not "$1000".
 const fmtAxisUsd0 = v => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString('en-US');
 const fmtUsd0 = v => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString('en-US');
+// A comma-joined list of short relations (settingLabel, logThrCell), each
+// wrapped so it can never itself break: the only place the Setting and
+// Threshold(s) log columns may wrap a line is the plain space after a
+// comma, between two relations, not inside one. Defined here, ahead of the
+// MCXUI IIFE, so both its internal logThrCell and the later per-tab
+// settingLabel closures (registered after the IIFE returns) can reach it.
+const nwJoin = items => items.map(s => '<span style="white-space:nowrap">' + s + '</span>').join(', ');
 const FMT = {
   int: v => v == null ? '' : (v < 0 ? '−' : '') + String(Math.abs(v)),
   int0: v => v == null ? '' : (v < 0 ? '−' : '') + String(Math.round(Math.abs(v))),
@@ -2539,7 +2547,8 @@ window.MCXUI = (() => {
   // when a tab carries more than one output to tell them apart.
   function logThrCell(cfg, entry) {
     const multi = cfg.outputs.length > 1;
-    return cfg.outputs.map(o => (multi ? o.short + ' ' : '') + (o.success === 'ge' ? '≥ ' : '≤ ') + o.fmt(entry.thr[o.key])).join(multi ? ', ' : '');
+    const items = cfg.outputs.map(o => (multi ? o.short + ' ' : '') + (o.success === 'ge' ? '≥ ' : '≤ ') + o.fmt(entry.thr[o.key]));
+    return multi ? nwJoin(items) : items[0];
   }
   // A compact, static histogram of one finished batch's values for one
   // output: the same fixed axis and bins renderHist uses, bars split at
@@ -2579,7 +2588,7 @@ window.MCXUI = (() => {
     if (btn) btn.disabled = st.log.length === 0;
     const multi = cfg.outputs.length > 1;
     const nCols = 3 + cfg.outputs.length * 2;
-    let head = '<thead><tr><th>Setting</th><th>Threshold(s)</th><th>Runs</th>'
+    let head = '<thead><tr><th>Setting</th><th class="log-thr">Threshold(s)</th><th>Runs</th>'
       + cfg.outputs.map(o => '<th>Mean' + (multi ? ' (' + o.short + ')' : '') + '</th>').join('')
       + cfg.outputs.map(o => '<th>P(success)' + (multi ? ' (' + o.short + ')' : '') + '</th>').join('')
       + '</tr></thead>';
@@ -2591,7 +2600,7 @@ window.MCXUI = (() => {
         const e = st.log[i], expanded = st.logExpanded === i;
         body += '<tr class="log-row' + (expanded ? ' expanded' : '') + '" tabindex="0" role="button" aria-expanded="' + expanded
           + '" onclick="MCXUI.toggleLogRow(\'' + cfg.tab + '\',' + i + ')" onkeydown="if(event.key===\'Enter\'){MCXUI.toggleLogRow(\'' + cfg.tab + '\',' + i + ')}">'
-          + '<td>' + e.setting + '</td><td>' + logThrCell(cfg, e) + '</td><td>' + e.runs + '</td>';
+          + '<td>' + e.setting + '</td><td class="log-thr">' + logThrCell(cfg, e) + '</td><td>' + e.runs + '</td>';
         cfg.outputs.forEach(o => {
           const s = e.stats[o.key];
           const range = e.runs > 1 ? fmtMean(o, s.mean - s.hw) + '–' + fmtMean(o, s.mean + s.hw) : '—';
@@ -2792,7 +2801,7 @@ window.addEventListener('load', function () {
   MCXUI.register({
     tab: 'nv', model: MCX.models.nv,
     readParams: () => ({ Q: Number($('nv-q').value), charge: $('nv-charge').checked }),
-    settingLabel: p => 'Q = ' + p.Q + (p.charge ? ', lost profit charged' : ', no lost-profit charge'),
+    settingLabel: p => nwJoin(['Q = ' + p.Q, p.charge ? 'lost profit charged' : 'no lost-profit charge']),
     knobIds: ['nv-q', 'nv-charge'],
     outputs: [{
       key: 'profit', label: '20-day profit', unit: '$', histId: 'nv-hist', thrId: 'nv-thr',
@@ -2811,7 +2820,7 @@ window.addEventListener('load', function () {
   MCXUI.register({
     tab: 'inv', model: MCX.models.inv,
     readParams: () => ({ M: Number($('inv-m').value), N: Number($('inv-n').value), h: Number($('inv-h').value), p: Number($('inv-p').value) }),
-    settingLabel: p => 'M = ' + p.M + ', N = ' + p.N + ', h = $' + p.h + ', p = $' + p.p,
+    settingLabel: p => nwJoin(['M = ' + p.M, 'N = ' + p.N, 'h = $' + p.h, 'p = $' + p.p]),
     knobIds: ['inv-m', 'inv-n', 'inv-h', 'inv-p'],
     outputs: [
       {
@@ -3068,7 +3077,7 @@ window.addEventListener('load', function () {
       renderQSchema(params);
       return params;
     },
-    settingLabel: p => 'λ = ' + p.lam.toFixed(1) + ', μ = ' + p.mu.toFixed(1) + ', c = ' + p.c + ', T = ' + p.T + ' min',
+    settingLabel: p => nwJoin(['λ = ' + p.lam.toFixed(1), 'μ = ' + p.mu.toFixed(1), 'c = ' + p.c, 'T = ' + p.T + ' min']),
     knobIds: ['q-lam', 'q-mu', 'q-c', 'q-T'],
     outputs: [
       {
