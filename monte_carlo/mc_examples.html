@@ -350,6 +350,15 @@ table.sim tr.tot td { border-top: 1.5px solid var(--border); font-weight: 600; }
 }
 .hist-card { border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 12px 8px; min-width: 0; }
 .hist-hd { display: flex; justify-content: space-between; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+/* The word between a band output's two spinners. */
+.thr-sep { font-weight: 400; color: var(--muted); }
+/* A band carries two spinners, and its label plus both of them runs wider
+   than a card at phone widths. Unlike an ordinary knob it therefore wraps
+   inside itself rather than running past the card's own edge. The pair
+   "spinner to spinner" is kept whole by .thr-pair, so a wrap puts the label
+   on one row and both spinners on the next instead of splitting the pair. */
+.knob-band { flex-wrap: wrap; max-width: 100%; row-gap: 6px; }
+.thr-pair { display: inline-flex; align-items: center; gap: 6px; }
 .legend { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; font-size: .74rem; color: var(--muted); margin-top: 8px; align-items: center; }
 .legend svg { width: 26px; height: 12px; display: block; }
 #br-lanes-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: .74rem; color: var(--muted); margin: 8px 0 0; }
@@ -504,7 +513,7 @@ input[type=range] { height: 26px; }
 
   <!-- TAB ① -->
   <section id="tab-q" class="tp active">
-    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> runs to an end time T through the spreadsheet: arrival, service begins, wait, service ends. A customer still in the queue when the clock stops is shown but not counted. The arrival rate, the service rate, the number of servers, and the end time are the decisions, and the threshold asks how long the average wait may be. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
+    <p class="lede" id="q-lede">One queue feeds one or two identical servers, and each <span class="tip" tabindex="0" data-tip="One full run of the simulated system, following its random draws from start to finish, that produces a single value of the output being studied.">replication</span> runs to an end time T through the spreadsheet: arrival, service begins, wait, service ends. A customer still in the queue when the clock stops is shown but not counted. The arrival rate, the service rate, the number of servers, and the end time are the decisions, and the thresholds ask how long the waits may run and how busy the servers stay. Adapted from Banks, Carson, Nelson, and Nicol (2010, Sections 2.3.2 and 2.3.3).</p>
     <div class="sec"><div class="sec-hd">Inputs and decision</div><div id="q-inputs">
       <div class="inp-wrap">
         <table class="inp" aria-label="Queueing node inputs"><tr><th>Input</th><th>Distribution</th></tr>
@@ -527,14 +536,14 @@ input[type=range] { height: 26px; }
           <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('q-W',-1)">−</button><input id="q-W" type="number" min="0" max="580" step="5" value="0" inputmode="numeric" data-post onchange="spinCommit('q-W')"><button type="button" aria-label="Increase W" onclick="spinStep('q-W',1)">+</button></span></label>
       </div>
       <div class="knobs">
-        <span class="knob"><span class="tip" tabindex="0" data-tip="Traffic intensity, the fraction of time the servers are busy in the long run. Above 1, the queue grows without bound; a replication runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
-        <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang-C probability that an arriving customer has to wait and a = λ/μ. A replication starts empty, and so its average wait tends to sit below this line; the gap closes as T grows.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="The work arriving per unit of server capacity. Below 1 it is also the expected utilization, the fraction of time the servers are busy in the long run, which the histogram below compares each replication against. Above 1 the servers are busy all the time and the queue grows without bound; a replication runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang-C probability that an arriving customer has to wait and a = λ/μ. A replication starts empty, and so its average wait tends to sit below this line. Either a longer T or a longer warm-up W narrows that gap: one dilutes the start-up transient, and the other leaves it out of the measurement.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
       </div>
     </div></div>
     <div class="sec"><div class="sec-hd">Servers and the queue over time</div><div id="q-struct" class="struct">
       <svg id="q-servers" viewBox="0 0 640 200" role="img" aria-label="Server activity and queue length over the replication"></svg>
       <div class="out-eq" id="q-wait-eq"></div>
-      <div class="fig-cap" id="q-servers-cap">The rug on top marks every event. Below it, each bar is one customer's service on the server that took it, from the moment the customer reaches the server to the moment it leaves; a customer still waiting has no bar yet. The step plot counts customers waiting; hover or tap it to see who is waiting at that instant. In the rug, a tick up (blue) is an arrival and a tick down (red) is a departure, each with its own readout on hover or tap. Hover or tap a bar for that service's start, end, and length. Hover a row or a bar to link them; click to pin the pair, and click again to release. The running average above uses only the customers revealed so far. Drag the dashed T line to change the end time; the spinner above does the same.</div>
+      <div class="fig-cap" id="q-servers-cap">The rug on top marks every event. Below it, each bar is one customer's service on the server that took it, from the moment the customer reaches the server to the moment it leaves; a customer still waiting has no bar yet. The step plot counts customers waiting; hover or tap it to see who is waiting at that instant. In the rug, a tick up (blue) is an arrival and a tick down (red) is a departure, each with its own readout on hover or tap. Hover or tap a bar for that service's start, end, and length. Hover a row or a bar to link them; click to pin the pair, and click again to release. The running average above uses only the counted customers revealed so far. Drag the dashed T line to change the end time; the spinner above does the same.</div>
     </div></div>
     <div class="sec"><div class="sec-hd">One replication</div><div id="q-rep">
       <div class="ctrl-row">
@@ -577,6 +586,14 @@ input[type=range] { height: 26px; }
           <div class="legend" id="q-legend-b"></div>
         </div>
         <div class="sg one" id="q-cards-maxWait"></div>
+        <div class="hist-card">
+          <div class="hist-hd"><span>Server utilization, fraction of runs</span>
+            <span class="knob knob-band"><span class="tip" tabindex="0" data-tip="A run succeeds when its server utilization lands between these two values. Both ends are real goals: servers that sit idle are capacity paid for and not used, and servers busy every minute leave no slack for the next burst, which is where the waits above run away. Drag either line on the plot or type a value.">Success thresholds</span>
+              <span class="thr-pair"><span class="spin"><button type="button" aria-label="Lower the minimum utilization" onclick="spinStep('q-thr-c',-1)">−</button><input id="q-thr-c" type="number" step="0.05" value="0.6" inputmode="decimal" aria-label="Minimum utilization" onchange="MCXUI.onThreshold('q','util',Number(this.value),'lo')"><button type="button" aria-label="Raise the minimum utilization" onclick="spinStep('q-thr-c',1)">+</button></span><span class="thr-sep">to</span><span class="spin"><button type="button" aria-label="Lower the maximum utilization" onclick="spinStep('q-thr-c-hi',-1)">−</button><input id="q-thr-c-hi" type="number" step="0.05" value="0.9" inputmode="decimal" aria-label="Maximum utilization" onchange="MCXUI.onThreshold('q','util',Number(this.value),'hi')"><button type="button" aria-label="Raise the maximum utilization" onclick="spinStep('q-thr-c-hi',1)">+</button></span></span></span></div>
+          <div id="q-hist-c"></div>
+          <div class="legend" id="q-legend-c"></div>
+        </div>
+        <div class="sg one" id="q-cards-util"></div>
       </div>
       <div class="log-hd">
         <span class="tip" tabindex="0" data-tip="One row per finished batch: its setting, thresholds, runs, mean, and probability of success with 95 % intervals. Click a row to see that batch's histogram.">Experiment log</span>
@@ -1549,8 +1566,13 @@ MODELS.q = {
      what happens: every customer is simulated and shown, a row whose
      arrival falls before W carries phase 'warm', and the outputs average
      over the rest ('in'). With no customer counted there is no
-     observation, and the outputs are null. Server utilization is the busy
-     time inside [0, T] over c*T. */
+     observation, and all three outputs are null.
+     Server utilization is the third output and is measured over the same
+     span the waits are: the service delivered inside [W, T], over
+     c*(T - W). A service that straddles either edge is counted only for
+     the part inside, and so a warm-up customer still being served after W
+     contributes its tail. It is a time average rather than an average
+     over customers, which is why it is worth having beside them. */
   run: function (p, draw) {
     var c = p.c === 2 ? 2 : 1, T = p.T != null ? p.T : Infinity, cap = p.n, W = p.W || 0;
     var rows = [], free = [0, 0], prevEnd = 0, arr = 0;
@@ -1588,16 +1610,21 @@ MODELS.q = {
       }
       row.begin = begin; row.end = end; row.wait = begin - arr; row.sys = end - arr;
       row.phase = arr < W ? 'warm' : 'in';
-      busy += Math.min(end, T) - begin; if (end > lastEnd) lastEnd = end;
+      busy += Math.max(0, Math.min(end, T) - Math.max(begin, W)); if (end > lastEnd) lastEnd = end;
       if (row.phase === 'warm') warm++;
       else { kept++; sumWait += row.wait; sumSys += row.sys; if (row.wait > maxWait) maxWait = row.wait; if (row.wait > 0) waited++; }
       rows.push(row);
     }
-    var n = kept, horizon = isFinite(T) ? T : lastEnd;
+    var n = kept, span = (isFinite(T) ? T : lastEnd) - W;
+    var util = span > 0 ? busy / (c * span) : 0;
+    /* A replication with no counted customer yields no observation at all,
+       utilization included: it is reported as one number per replication
+       beside the two waits, and so all three have to come from the same
+       replications or the batch's counts would disagree. */
     var avgWait = n > 0 ? sumWait / n : null, maxOut = n > 0 ? maxWait : null;
     return { rows: rows,
-             summary: { avgWait: avgWait, maxWait: maxOut, avgSys: n > 0 ? sumSys / n : null, waitedFrac: n > 0 ? waited / n : null, makespan: lastEnd, util: horizon > 0 ? busy / (c * horizon) : 0, c: c, n: n, nAll: rows.length, nWarm: warm, nCut: cut, W: W, T: p.T },
-             outputs: { avgWait: avgWait, maxWait: maxOut } };
+             summary: { avgWait: avgWait, maxWait: maxOut, avgSys: n > 0 ? sumSys / n : null, waitedFrac: n > 0 ? waited / n : null, makespan: lastEnd, util: util, c: c, n: n, nAll: rows.length, nWarm: warm, nCut: cut, W: W, T: p.T },
+             outputs: { avgWait: avgWait, maxWait: maxOut, util: n > 0 ? util : null } };
   },
   replicate: function (seed, p) { var rand = mulberry32(seed); return this.run(p, { ia: function () { return unif(rand); }, svc: function () { return unif(rand); } }); }
 };
@@ -2026,7 +2053,7 @@ window.MCXUI = (() => {
   function register(cfg) {
     const st = S[cfg.tab] = {
       cfg, params: cfg.readParams(), outputs: {}, runs: 0, rep: null, revealed: 0, stepping: false,
-      thr: {}, runIdx: 0, axisMax: {}, dragKey: null, log: [], logExpanded: null,
+      thr: {}, runIdx: 0, axisMax: {}, dragKey: null, dragEnd: null, log: [], logExpanded: null,
       // seeds holds every committed replication's seed, in commit order, and
       // repSeed the shown replication's, so a post-processing knob (a
       // warm-up) can re-derive the batch and the shown replication exactly.
@@ -2034,7 +2061,7 @@ window.MCXUI = (() => {
       // (a queue with no customer after its warm-up).
       seeds: [], repSeed: null, noObs: 0
     };
-    cfg.outputs.forEach(o => { st.outputs[o.key] = []; st.thr[o.key] = o.thrDefault; st.axisMax[o.key] = o.axis.max; $(o.thrId).value = String(o.thrDefault); });
+    cfg.outputs.forEach(o => { st.outputs[o.key] = []; st.thr[o.key] = cloneThr(o.thrDefault); st.axisMax[o.key] = o.axis.max; setThrInputs(o, st.thr[o.key]); });
     $(cfg.tab + '-seed').value = String(randomSeed());
     buildTable(st); renderTable(st); renderSummary(st); cfg.outputs.forEach(o => renderHist(st, o)); renderCards(st); renderLog(st);
     updateBatchButtons(st); reserveAll(st);
@@ -2200,20 +2227,42 @@ window.MCXUI = (() => {
     if (st.rep) show(st, st.rep, st.revealed); else { renderTable(st); renderSummary(st); cfg.structure.clear(st); }
     afterRuns(st); reserveAll(st);
   }
-  function onThreshold(tab, key, value) {
+  // which ('lo' or 'hi') names the end being moved on a band output, and is
+  // ignored on a one-sided one, which has only the one threshold.
+  function onThreshold(tab, key, value, which) {
     const st = S[tab], o = st.cfg.outputs.find(o => o.key === key);
-    const v = clampThr(o, value, st.axisMax[key]);
-    st.thr[key] = v; $(o.thrId).value = String(v);
+    if (o.success === 'band') {
+      const cur = st.thr[key], end = which === 'hi' ? 'hi' : 'lo';
+      let v = clampThr(o, value, st.axisMax[key]);
+      // The ends never cross, and never meet: a band of no width would call
+      // every run a failure whatever the batch actually did, which reads as
+      // a broken readout rather than as a demanding target.
+      v = end === 'lo' ? Math.min(v, snapStep(cur.hi - o.thrStep)) : Math.max(v, snapStep(cur.lo + o.thrStep));
+      // A plain clamp, not clampThr again: both bounds already sit on the
+      // step grid, and re-snapping here could undo the ordering just set.
+      const axis = effAxis(o, st.axisMax[key]);
+      v = Math.max(axis.min, Math.min(axis.max, v));
+      st.thr[key] = end === 'lo' ? { lo: v, hi: cur.hi } : { lo: cur.lo, hi: v };
+    } else {
+      st.thr[key] = clampThr(o, value, st.axisMax[key]);
+    }
+    setThrInputs(o, st.thr[key]);
     renderHist(st, o); renderCards(st);
   }
   // axisMax is the current (possibly grown) end of the range; an output
   // declaring axis.fixed ignores it and clamps to its own o.axis.max.
+  // Binary floating point does not hold a step of 0.05: seven of them
+  // multiply back out to 0.35000000000000003, and 0.6 - 0.05 lands on
+  // 0.5499999999999999, either of which the spinner would then show
+  // verbatim. Every threshold value is put back on the step's own precision.
+  function snapStep(v) { return Number(v.toPrecision(12)); }
   function clampThr(o, v, axisMax) {
     const hiMax = effAxis(o, axisMax).max;
     const lo = o.axis.min + (o.integer ? 0.5 : 0), hi = hiMax - (o.integer ? 0.5 : 0);
-    v = Math.round(v / o.thrStep) * o.thrStep; return Math.min(hi, Math.max(lo, v));
+    v = snapStep(Math.round(v / o.thrStep) * o.thrStep);
+    return Math.min(hi, Math.max(lo, v));
   }
-  function successCount(st, o) { const t = st.thr[o.key]; return st.outputs[o.key].filter(v => o.success === 'ge' ? v >= t : v <= t).length; }
+  function successCount(st, o) { const r = passRange(o, st.thr[o.key]); return st.outputs[o.key].filter(v => v >= r.lo && v <= r.hi).length; }
 
   // --- bins ---
   function nBins(axis) { return Math.round((axis.max - axis.min) / axis.bin); }
@@ -2225,15 +2274,50 @@ window.MCXUI = (() => {
   // Splits one bin [v0, v1) at a threshold t into one or two pieces, each
   // flagged with whether it lies on the failure side, and so a straddling bin can
   // be painted in two tones split exactly at the line.
-  function binSplit(v0, v1, t, success) {
-    if (success === 'ge') {
-      if (v1 <= t) return [{ v0: v0, v1: v1, fail: true }];
-      if (v0 >= t) return [{ v0: v0, v1: v1, fail: false }];
-      return [{ v0: v0, v1: t, fail: true }, { v0: t, v1: v1, fail: false }];
+  // Every output's success region is an interval, and so one representation
+  // covers all three kinds: 'le' passes everything up to the threshold,
+  // 'ge' everything from it up, and 'band' everything between a low and a
+  // high one. A band output's own st.thr entry is a { lo, hi } pair rather
+  // than a number, which is the only place the shape differs.
+  function passRange(o, t) {
+    if (o.success === 'band') return { lo: t.lo, hi: t.hi };
+    if (o.success === 'ge') return { lo: t, hi: Infinity };
+    return { lo: -Infinity, hi: t };
+  }
+  // The same interval, moved to the bin edges facing the failure side on an
+  // integer output, so a whole-integer bin resolves fully to one side and
+  // never splits. On a continuous output the edges are the thresholds
+  // themselves. Every bar-coloring decision and every drawn line uses these.
+  function passLines(o, t) {
+    const r = passRange(o, t), d = o.integer ? 0.5 : 0;
+    return { lo: isFinite(r.lo) ? r.lo - d : r.lo, hi: isFinite(r.hi) ? r.hi + d : r.hi };
+  }
+  // A band threshold has to be copied rather than shared: a logged batch
+  // keeps the thresholds it was run under, and a shallow copy of st.thr
+  // would hand every logged entry the same live pair to be mutated later.
+  function cloneThr(t) { return (t && typeof t === 'object') ? { lo: t.lo, hi: t.hi } : t; }
+  function thrSnapshot(cfg, st) {
+    const out = {};
+    cfg.outputs.forEach(o => { out[o.key] = cloneThr(st.thr[o.key]); });
+    return out;
+  }
+  function setThrInputs(o, t) {
+    if (o.success === 'band') {
+      if ($(o.thrId)) $(o.thrId).value = String(t.lo);
+      if ($(o.thrIdHi)) $(o.thrIdHi).value = String(t.hi);
+    } else if ($(o.thrId)) $(o.thrId).value = String(t);
+  }
+  // Splits one bin against the pass interval, in order, marking each piece.
+  // A one-sided threshold contributes at most one cut inside the bin (its
+  // other end is infinite); a band can contribute two.
+  function binSplitRange(v0, v1, lo, hi) {
+    const cuts = [lo, hi].filter(c => c > v0 && c < v1).sort((a, b) => a - b);
+    const edges = [v0].concat(cuts, [v1]), out = [];
+    for (let i = 0; i < edges.length - 1; i++) {
+      const a = edges[i], b = edges[i + 1], mid = (a + b) / 2;
+      out.push({ v0: a, v1: b, fail: !(mid >= lo && mid <= hi) });
     }
-    if (v1 <= t) return [{ v0: v0, v1: v1, fail: false }];
-    if (v0 >= t) return [{ v0: v0, v1: v1, fail: true }];
-    return [{ v0: v0, v1: t, fail: false }, { v0: t, v1: v1, fail: true }];
+    return out;
   }
 
   // A {type:'curve'} reference either carries pts (an already-sampled
@@ -2420,13 +2504,9 @@ window.MCXUI = (() => {
     const axis = effAxis(o, st.axisMax[o.key]), xs = st.outputs[o.key], n = nBins(axis);
     const fracs = binFracs(xs, axis);
     const ref = o.reference ? o.reference(st, st.params) : null;
-    const t = st.thr[o.key];
-    // On an integer output the line sits on the bin edge facing the failure
-    // side, rather than through the middle of a whole-integer bin, and every
-    // bar-coloring decision (the split below, and the drawn line itself) uses
-    // this adjusted value so an integer bin resolves fully to one side and
-    // never splits. For a continuous output tLine is just t.
-    const tLine = o.integer ? (o.success === 'le' ? t + 0.5 : t - 0.5) : t;
+    // The pass interval's own edges, one finite for a one-sided threshold
+    // and two for a band; see passLines for the integer adjustment.
+    const lines = passLines(o, st.thr[o.key]);
 
     // y max is recomputed fresh on every render from what is actually drawn
     //: the nice ceiling of the taller of the live bars' own
@@ -2486,7 +2566,12 @@ window.MCXUI = (() => {
     };
     const clearing = candidates.filter(clears);
     const tick = (clearing.find(dividesRange)) || clearing[0] || candidates[candidates.length - 1];
-    for (let v = axis.min; v <= axis.max + 1e-9; v += tick) {
+    // Stepped by index and snapped to the step's own precision rather than
+    // accumulated: adding 0.2 repeatedly reaches 0.6000000000000001 by the
+    // third tick, and the label prints whatever the number actually is.
+    const steps = Math.floor((axis.max - axis.min) / tick + 1e-9);
+    for (let i = 0; i <= steps; i++) {
+      const v = Number((axis.min + i * tick).toPrecision(12));
       const x = xAt(v);
       h += '<line x1="' + x + '" y1="' + (T + innerH) + '" x2="' + x + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>';
       // The first and last labels are anchored at the axis ends rather than centered,
@@ -2500,7 +2585,7 @@ window.MCXUI = (() => {
     // bars, split into two tones at the threshold when it falls inside a bin
     for (let i = 0; i < n; i++) {
       const b0 = axis.min + i * axis.bin, b1 = b0 + axis.bin, y = yAt(fracs[i]), barH = (T + innerH) - y;
-      binSplit(b0, b1, tLine, o.success).forEach(pc => {
+      binSplitRange(b0, b1, lines.lo, lines.hi).forEach(pc => {
         const x0 = xAt(pc.v0), x1 = xAt(pc.v1);
         h += '<rect class="bar' + (pc.fail ? ' fail' : '') + '" x="' + x0 + '" y="' + y + '" width="' + Math.max(0, x1 - x0) + '" height="' + Math.max(0, barH) + '" fill="' + (pc.fail ? 'var(--fail)' : 'var(--ok)') + '"/>';
       });
@@ -2528,16 +2613,42 @@ window.MCXUI = (() => {
       }
     }
 
-    // threshold line, at tLine (see above)
-    const tx = xAt(tLine);
-    h += '<line class="thr-grab" x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '"/>';
-    h += '<line class="thr-line" x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '"/>';
-    h += '<text x="' + (tx + 4) + '" y="' + (T + 9) + '" fill="var(--text)" font-size="9.5" font-family="Outfit, sans-serif">threshold</text>';
+    // The threshold line, or a band's two. Each carries the end it moves, so
+    // a drag on it knows which one it has hold of. A band's labels sit inside
+    // the pass region, the minimum's to the right of its line and the
+    // maximum's to the left of its own, and so they bracket what passes
+    // instead of running off the plot at the right edge.
+    const thrLines = [];
+    if (isFinite(lines.lo)) thrLines.push({ v: lines.lo, end: 'lo' });
+    if (isFinite(lines.hi)) thrLines.push({ v: lines.hi, end: 'hi' });
+    const band = thrLines.length > 1;
+    // A band's labels normally sit inside it, bracketing what passes. Once
+    // the two lines are closer together than the pair of labels is wide they
+    // swap to the outside instead of overprinting each other, and a label
+    // that would then run past a plot edge swaps back, which is what keeps a
+    // band pinned against either end of the axis readable. LBL_W is the
+    // rendered width of "min" and "max" at this size, rounded up.
+    const LBL_W = 21;
+    const tight = band && (xAt(thrLines[1].v) - xAt(thrLines[0].v)) < 2 * LBL_W + 8;
+    thrLines.forEach(tl => {
+      const tx = xAt(tl.v);
+      h += '<line class="thr-grab" data-end="' + tl.end + '" x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '"/>';
+      h += '<line class="thr-line" x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '"/>';
+      let left = band && (tight ? tl.end === 'lo' : tl.end === 'hi');
+      if (left && tx - 4 - LBL_W < L) left = false;
+      else if (!left && tx + 4 + LBL_W > L + innerW) left = true;
+      h += '<text x="' + (left ? tx - 4 : tx + 4) + '" y="' + (T + 9) + '" text-anchor="' + (left ? 'end' : 'start') + '" fill="var(--text)" font-size="9.5" font-family="Outfit, sans-serif">' + (band ? (tl.end === 'lo' ? 'min' : 'max') : 'threshold') + '</text>';
+    });
 
     if (xs.length === 0) h += '<text x="' + (L + innerW / 2) + '" y="' + (T + innerH / 2) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-style="italic" font-family="Outfit, sans-serif">No runs yet</text>';
 
     container.innerHTML = '<svg class="hsv" viewBox="0 0 ' + W + ' ' + H + '" data-l="' + L + '" data-r="' + R + '">' + h + '</svg>';
-    if (st.dragKey === o.key) { const g = container.querySelector('.thr-grab'); if (g) g.classList.add('active'); }
+    // The rebuilt SVG loses the class the drag put on the old grab node, and
+    // so a drag in progress re-marks its own end's grab, not merely the first.
+    if (st.dragKey === o.key) {
+      const g = container.querySelector('.thr-grab[data-end="' + (st.dragEnd || 'lo') + '"]') || container.querySelector('.thr-grab');
+      if (g) g.classList.add('active');
+    }
     renderLegend(st, o);
   }
 
@@ -2554,6 +2665,7 @@ window.MCXUI = (() => {
       e.preventDefault();
       try { container.setPointerCapture(e.pointerId); } catch (err) {}
       st.dragKey = o.key;
+      st.dragEnd = grab.dataset.end || 'lo';
       grab.classList.add('active');
       const move = ev => {
         const svg = container.querySelector('svg');
@@ -2564,10 +2676,10 @@ window.MCXUI = (() => {
         const L = Number(svg.dataset.l), R = Number(svg.dataset.r), innerW = vb.width - L - R;
         const frac = Math.min(1, Math.max(0, (xPix - L) / innerW));
         const dragAxis = effAxis(o, st.axisMax[o.key]);
-        onThreshold(st.cfg.tab, o.key, dragAxis.min + frac * (dragAxis.max - dragAxis.min));
+        onThreshold(st.cfg.tab, o.key, dragAxis.min + frac * (dragAxis.max - dragAxis.min), st.dragEnd);
       };
       const up = () => {
-        st.dragKey = null;
+        st.dragKey = null; st.dragEnd = null;
         container.removeEventListener('pointermove', move);
         container.removeEventListener('pointerup', up);
         container.removeEventListener('pointercancel', up);
@@ -2585,7 +2697,11 @@ window.MCXUI = (() => {
     const rows = [];
     const row = (glyph, label) => rows.push('<svg viewBox="0 0 26 12">' + glyph + '</svg><span>' + label + '</span>');
     row('<rect x="2" y="2" width="22" height="8" fill="var(--ok)"/>', 'filled blue bar: fraction of runs at this value');
-    row('<rect x="2" y="2" width="22" height="8" fill="var(--fail)"/>', 'red bar: runs on the failure side of the threshold');
+    // A band output fails on both sides of its pass region rather than on one
+    // side of a single threshold, and so both of these rows name what they
+    // actually mark there.
+    const band = o.success === 'band';
+    row('<rect x="2" y="2" width="22" height="8" fill="var(--fail)"/>', band ? 'red bar: runs outside the thresholds' : 'red bar: runs on the failure side of the threshold');
     const ref = o.reference ? o.reference(st, st.params) : null;
     if (ref) {
       let glyph, kind;
@@ -2608,7 +2724,7 @@ window.MCXUI = (() => {
       // throughout the page.
       row(glyph, o.referenceTip ? '<span class="tip" tabindex="0" data-tip="' + o.referenceTip.replace(/"/g, '&quot;') + '">' + refText + '</span>' : refText);
     }
-    row('<line x1="13" y1="1" x2="13" y2="11" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="5 4"/>', 'dashed black line: success threshold');
+    row('<line x1="13" y1="1" x2="13" y2="11" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="5 4"/>', band ? 'dashed black lines: the two success thresholds' : 'dashed black line: success threshold');
     el.innerHTML = rows.join('');
     if (window.mirrorTips) window.mirrorTips();
   }
@@ -2672,7 +2788,7 @@ window.MCXUI = (() => {
       stats[o.key] = { mean: ci.mean, hw: ci.hw, k: k, lo: w.lo, hi: w.hi };
       outputs[o.key] = xs.slice();
     });
-    return { setting: cfg.settingLabel(st.params), thr: Object.assign({}, st.thr), runs: st.runs, stats: stats, outputs: outputs, axisMax: Object.assign({}, st.axisMax) };
+    return { setting: cfg.settingLabel(st.params), thr: thrSnapshot(cfg, st), runs: st.runs, stats: stats, outputs: outputs, axisMax: Object.assign({}, st.axisMax) };
   }
   function clearLog(tab) {
     const st = S[tab];
@@ -2689,7 +2805,12 @@ window.MCXUI = (() => {
   // when a tab carries more than one output to tell them apart.
   function logThrCell(cfg, entry) {
     const multi = cfg.outputs.length > 1;
-    const items = cfg.outputs.map(o => (multi ? o.short + ' ' : '') + (o.success === 'ge' ? '≥ ' : '≤ ') + o.fmt(entry.thr[o.key]));
+    const items = cfg.outputs.map(o => {
+      const t = entry.thr[o.key], head = multi ? o.short + ' ' : '';
+      // A band reads as the interval it is, rather than as two relations that
+      // would break across the comma the column wraps at.
+      return o.success === 'band' ? head + o.fmt(t.lo) + '–' + o.fmt(t.hi) : head + (o.success === 'ge' ? '≥ ' : '≤ ') + o.fmt(t);
+    });
     return multi ? nwJoin(items) : items[0];
   }
   // A compact, static histogram of one finished batch's values for one
@@ -2705,17 +2826,19 @@ window.MCXUI = (() => {
     const W = 260, H = 80, L = 3, R = 3, T = 3, B = 13, innerW = W - L - R, innerH = H - T - B;
     const xAt = v => L + (v - axis.min) / (axis.max - axis.min) * innerW;
     const yAt = f => T + innerH - Math.min(1, f / ymax) * innerH;
-    const tLine = o.integer ? (o.success === 'le' ? thr + 0.5 : thr - 0.5) : thr;
+    const lines = passLines(o, thr);
     let h = '<rect x="' + L + '" y="' + T + '" width="' + innerW + '" height="' + innerH + '" fill="var(--chart-bg)" rx="3"/>';
     for (let i = 0; i < n; i++) {
       const b0 = axis.min + i * axis.bin, b1 = b0 + axis.bin, y = yAt(fracs[i]), barH = (T + innerH) - y;
-      binSplit(b0, b1, tLine, o.success).forEach(pc => {
+      binSplitRange(b0, b1, lines.lo, lines.hi).forEach(pc => {
         const x0 = xAt(pc.v0), x1 = xAt(pc.v1);
         h += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(0, x1 - x0) + '" height="' + Math.max(0, barH) + '" fill="' + (pc.fail ? 'var(--fail)' : 'var(--ok)') + '"/>';
       });
     }
-    const tx = xAt(tLine);
-    h += '<line x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '" stroke="var(--text)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+    [lines.lo, lines.hi].filter(v => isFinite(v)).forEach(v => {
+      const tx = xAt(v);
+      h += '<line x1="' + tx + '" y1="' + T + '" x2="' + tx + '" y2="' + (T + innerH) + '" stroke="var(--text)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+    });
     h += '<text x="' + L + '" y="' + (H - 2) + '" text-anchor="start" fill="var(--muted)" font-size="8" font-family="IBM Plex Mono, monospace">' + (o.axisFmt ? o.axisFmt(axis.min) : axis.min) + '</text>';
     h += '<text x="' + (L + innerW) + '" y="' + (H - 2) + '" text-anchor="end" fill="var(--muted)" font-size="8" font-family="IBM Plex Mono, monospace">' + (o.axisFmt ? o.axisFmt(axis.max) : axis.max) + '</text>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + o.label + ' histogram for this batch">' + h + '</svg>';
@@ -2792,11 +2915,17 @@ window.MCXUI = (() => {
       if (!el) return;
       const needsRef = typeof o.reference === 'function' && !st.outputs[o.key].length;
       if (!needsRef) return;
-      const realOut = st.outputs[o.key];
-      st.outputs[o.key] = [o.thrDefault];
+      const realOut = st.outputs[o.key], realRef = o.reference;
+      st.outputs[o.key] = [o.axis.min];
+      // A reference row can also be dropped by the knobs rather than by the
+      // batch being empty: the queue's steady-state wait and its expected
+      // utilization both go once rho reaches 1. Forcing the row in for the
+      // measurement keeps the reserved height the same on both sides of that
+      // boundary, or the page would jump by a legend row when rho crossed it.
+      if (o.referenceWorst && realRef(st, st.params) == null) o.reference = () => o.referenceWorst;
       renderLegend(st, o);
       const worstHtml = el.innerHTML;
-      st.outputs[o.key] = realOut;
+      st.outputs[o.key] = realOut; o.reference = realRef;
       renderLegend(st, o);
       reserveCapHeight(el, worstHtml, true);
     });
@@ -3261,12 +3390,15 @@ window.addEventListener('load', function () {
         // expectations, not long-run limits), and so the only one whose
         // legend entry needs a tip explaining that a finite replication is
         // only ever an approach to the line, not a target it should hit.
-        referenceTip: 'The long-run average wait for this M/M/c system. A replication starts with an empty queue, and so its average wait tends to sit below this line; the gap closes as T grows.',
+        referenceTip: 'The long-run average wait for this M/M/c system. A replication starts with an empty queue, and so its average wait tends to sit below this line. Either a longer T or a longer warm-up W narrows that gap: one dilutes the start-up transient, and the other leaves it out of the measurement.',
         // Omitted above rho = 1, where the steady-state wait is infinite and
         // a replication is not settling toward any fixed value.
         // The label carries no value of its own: renderLegend
         // appends o.fmt(ref.x) plus o.unit for every line reference now,
         // generalized from this tab's own one-off version.
+        // Stands in for the real line while the legend's height is reserved,
+        // and so the reserve does not shrink where the line is dropped.
+        referenceWorst: { type: 'line', x: 0, label: 'steady-state W<sub>q</sub>' },
         reference: (st, p) => {
           const wq = MCX.mmcWq(p.lam, p.mu, p.c);
           return isFinite(wq) ? { type: 'line', x: wq, label: 'steady-state W<sub>q</sub>' } : null;
@@ -3280,6 +3412,34 @@ window.addEventListener('load', function () {
         // 20.4-22.8 across resamples).
         axis: { min: 0, max: 25, bin: 1, tick: 5 }, integer: false, success: 'le', thrDefault: 10, thrStep: 1,
         fmt: v => v.toFixed(2), successLabel: t => 'P(longest wait ≤ ' + t.toFixed(2) + ' min)', reference: () => null
+      },
+      {
+        // The one time average among the three: the waits are averages over
+        // customers, and this is the fraction of the measured window the
+        // servers spend busy. Its range is fixed by what it is -- a
+        // fraction of time cannot leave [0, 1] -- and so the axis never
+        // grows, the way the drops count's and the network's do not.
+        key: 'util', label: 'Server utilization', meanLabel: 'Mean server utilization', short: 'utilization', histId: 'q-hist-c', thrId: 'q-thr-c', legendId: 'q-legend-c',
+        // The one two-sided target in the widget, because it is the one
+        // output where both ends are real goals: servers that sit idle are
+        // capacity paid for and not used, and servers busy every minute have
+        // no slack for the next burst, which is where the waits above run
+        // away. A one-sided minimum would score a saturated queue -- the
+        // worst setting these knobs can reach -- a perfect 100%.
+        axis: { min: 0, max: 1, bin: 0.05, tick: 0.2, fixed: true }, integer: false,
+        success: 'band', thrDefault: { lo: 0.6, hi: 0.9 }, thrStep: 0.05, thrIdHi: 'q-thr-c-hi',
+        fmt: v => v.toFixed(2), successLabel: t => 'P(' + t.lo.toFixed(2) + ' ≤ utilization ≤ ' + t.hi.toFixed(2) + ')',
+        referenceTip: 'The fraction of time the servers are busy in the long run, which is the traffic intensity ρ = λ/(cμ). A replication starts with an empty queue, and so its utilization tends to sit below this line. Either a longer T or a longer warm-up W narrows that gap: one dilutes the start-up transient, and the other leaves it out of the measurement.',
+        referenceWorst: { type: 'line', x: 0, label: 'expected utilization' },
+        // Omitted from rho = 1 up, exactly where the steady-state wait's own
+        // line is, and so the two references appear and disappear together
+        // on the one condition that the queue is stable. At rho = 1 the line
+        // would also land on the plot's right border, where it could not be
+        // told from the frame.
+        reference: (st, p) => {
+          const rho = p.lam / ((p.c === 2 ? 2 : 1) * p.mu);
+          return rho < 1 ? { type: 'line', x: rho, label: 'expected utilization' } : null;
+        }
       }
     ],
     structure: STRUCT.q,
@@ -3292,9 +3452,9 @@ window.addEventListener('load', function () {
       const aside = left.length ? ' (' + left.join(', ') + ')' : '';
       return s.n === 0
         ? 'This replication: <strong>' + s.nAll + '</strong> customers by T = ' + s.T + ' min, none counted' + aside + '; no observation.'
-        : 'This replication: <strong>' + s.n + '</strong> ' + (s.n === 1 ? 'customer' : 'customers') + ' counted by T = ' + s.T + ' min' + (left.length ? ' (' + left.map(t => t.replace(/^(\d+)/, '$1 more')).join(', ') + ')' : '') + '; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(s.util * 100) + '%</strong> of the time.';
+        : 'This replication: <strong>' + s.n + '</strong> ' + (s.n === 1 ? 'customer' : 'customers') + ' counted by T = ' + s.T + ' min' + (left.length ? ' (' + left.map(t => t.replace(/^(\d+)/, '$1 more')).join(', ') + ')' : '') + '; average wait <strong>' + rep.outputs.avgWait.toFixed(2) + ' min</strong>, longest wait <strong>' + rep.outputs.maxWait.toFixed(2) + ' min</strong>, servers busy <strong>' + Math.round(s.util * 100) + '%</strong> of the measured window.';
     },
-    summaryWorst: 'This replication: <strong>1300</strong> customers counted by T = 600 min (1300 more in the warm-up, 1300 more still waiting at T); average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the time.',
+    summaryWorst: 'This replication: <strong>1300</strong> customers counted by T = 600 min (1300 more in the warm-up, 1300 more still waiting at T); average wait <strong>99.99 min</strong>, longest wait <strong>99.99 min</strong>, servers busy <strong>100%</strong> of the measured window.',
     // The largest plausible row count at the current knobs, not a fixed
     // count (arrivals are now a Poisson process run out to T, and
     // so the count varies by seed). Arrivals by T follow Poisson(lambda*T);

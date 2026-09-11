@@ -402,6 +402,56 @@ section('Queueing node (Tables 2.11 and 2.15)');
   close(rW.outputs.maxWait, Math.max(...kept.map(r => r.wait)), 1e-12, 'the longest wait is over the kept customers only');
   const none = q.replicate(31, { lam: 0.8, mu: 1, c: 1, T: 60, W: 59.999 });
   ok(none.outputs.avgWait === null && none.outputs.maxWait === null || none.summary.n > 0, 'a warm-up that leaves no customer gives null outputs rather than a number');
+  ok(none.outputs.util === null || none.summary.n > 0, 'utilization is null too when the replication yields no observation, and so all three outputs come from the same replications');
+}
+
+{
+  /* Server utilization, the third output and the only time average among
+     them: the fraction of the measured window [W, T] the servers are busy.
+     Checked against a grid integration of the number in service, which
+     shares no code with the running sum the core accumulates. */
+  const q = M.models.q;
+  const gridUtil = (rep, p, steps) => {
+    const c = p.c === 2 ? 2 : 1, W = p.W || 0, T = p.T, dt = (T - W) / steps;
+    let acc = 0;
+    for (let i = 0; i < steps; i++) {
+      const t = W + (i + 0.5) * dt;
+      let inService = 0;
+      rep.rows.forEach(r => { if (r.begin != null && r.begin <= t && t < r.end) inService++; });
+      acc += inService;
+    }
+    return acc / (steps * c);
+  };
+  for (const p of [{ lam: 0.8, mu: 1, c: 1, T: 60 }, { lam: 0.8, mu: 1, c: 1, T: 60, W: 20 },
+                   { lam: 1.6, mu: 1, c: 2, T: 60 }, { lam: 1.6, mu: 1, c: 2, T: 60, W: 25 }]) {
+    const rep = q.replicate(61, p);
+    close(rep.outputs.util, gridUtil(rep, p, 40000), 2e-3, `utilization over [W, T] matches a grid integration (lam ${p.lam}, c ${p.c}, W ${p.W || 0})`);
+  }
+  /* The warm-up is a post-processing knob for utilization too: the same
+     seed simulates the same customers, and only the window changes. */
+  const p0 = { lam: 0.8, mu: 1, c: 1, T: 60 }, pW = { lam: 0.8, mu: 1, c: 1, T: 60, W: 20 };
+  const r0 = q.replicate(31, p0), rW = q.replicate(31, pW);
+  ok(r0.rows.length === rW.rows.length && r0.rows.every((r, i) => r.arr === rW.rows[i].arr && r.begin === rW.rows[i].begin),
+    'the customers are unchanged by the warm-up');
+  ok(r0.outputs.util !== rW.outputs.util, 'utilization is measured over the post-warm-up window, and so the warm-up moves it');
+  /* Never outside [0, 1], including on a saturated queue. */
+  let allIn = true, sawOne = false;
+  for (let i = 0; i < 400; i++) {
+    const u = q.replicate(7000 + i, { lam: 2, mu: 1, c: 1, T: 60 }).outputs.util;
+    if (!(u >= 0 && u <= 1 + 1e-12)) allIn = false;
+    if (u > 1 - 1e-12) sawOne = true;
+  }
+  ok(allIn && sawOne, 'utilization stays within [0, 1] and reaches 1 on a saturated queue');
+  /* Long replications approach rho, the same way the average wait
+     approaches Wq; a short one sits below it from the empty start. */
+  const longU = [], shortU = [];
+  for (let i = 0; i < 300; i++) {
+    longU.push(q.replicate(8000 + i, { lam: 0.8, mu: 1, c: 1, T: 5000 }).outputs.util);
+    shortU.push(q.replicate(8000 + i, { lam: 0.8, mu: 1, c: 1, T: 60 }).outputs.util);
+  }
+  const mLong = longU.reduce((a, b) => a + b, 0) / longU.length, mShort = shortU.reduce((a, b) => a + b, 0) / shortU.length;
+  ok(Math.abs(mLong - 0.8) < 0.01, `long-run utilization approaches rho = 0.8 (${mLong.toFixed(4)})`);
+  ok(mShort < mLong && mShort < 0.8, `a short replication's utilization sits below rho from the empty start (${mShort.toFixed(4)} against ${mLong.toFixed(4)})`);
 }
 
 // SECTIONS-END

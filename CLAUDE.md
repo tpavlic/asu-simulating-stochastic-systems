@@ -578,7 +578,12 @@ better.
   spreadsheets) with exponential interarrival and service times, a capacity toggle, and an end
   time T at which the clock stops (a customer who has begun service by T is counted with its
   wait; one still in the queue at T is shown, muted, but not counted, and the chart's axis ends
-  at T), ② the order-up-to (M, N) refrigerator policy with three outputs, ③
+  at T), whose three outputs are the average wait, the longest wait, and server utilization --
+  the one time average among them, on a fixed 0-to-1 axis against an expected-utilization
+  reference line that is shown only while ρ < 1, exactly where the steady-state wait's line
+  is, and carrying the widget's only two-sided success target (a min/max band, since servers
+  that sit idle are capacity paid for and not used, and servers busy every minute have no
+  slack left), ② the order-up-to (M, N) refrigerator policy with three outputs, ③
   bearing replacement under three policies over 20 000 operating hours, ④ the newsvendor with Q
   (its spinner lives inside the flowchart's own svg), ⑤ aid drops into the book's octagon, with
   n and a slider for each landing spread set inside the distribution table, the landing
@@ -602,13 +607,15 @@ better.
      those are a knob), the bearing policies against exact discrete renewal functions on the
      100-hour grid (with and without a warm-up), the activity network against scaled Irwin–Hall CDFs and numerically
      integrated longest-path probabilities, and the queueing node against the book's Tables 2.11
-     and 2.15 row by row, against the Erlang-C steady-state wait on long replications, and for
-     the cut at T (every counted customer began service by T, the cut ones carry null fields,
-     and utilization is busy time inside [0, T]).*
+     and 2.15 row by row, against the Erlang-C steady-state wait on long replications, for
+     the cut at T (every counted customer began service by T, and the cut ones carry null
+     fields), and for server utilization (against a grid integration of the number in service
+     at four knob settings, bounded in [0, 1], and approaching ρ on long replications).*
   3. *Deliberate conventions: histograms plot the fraction of runs on axes with a bin width fixed
      per output at design time; the range starts at a design-time value too and extends to fit
      (never shrinks within a batch), except for an output whose whole range is fixed by its sample
-     space or exact support (the drops count, the network finish time), and each logged batch's
+     space or exact support (the drops count, the network finish time, the queue's server
+     utilization), and each logged batch's
      histogram (redrawn on demand when its log row expands) keeps the range it ended with rather
      than the live one's; the newsvendor's 17-cent lost-profit charge is the book's and is
      a toggle; the bearing clock counts operating hours only (downtime is charged, not clocked),
@@ -623,11 +630,20 @@ better.
      minutes and a customer counts if it arrives at or after W and has begun service by T (a
      customer still in the queue at T carries `phase: 'cut'` with null begin, wait, end, and sys,
      and a replication with no counted customer is counted in `noObs` and yields no
-     observation); on the inventory and bearing tabs the run is
+     observation, utilization included, so that all three outputs come from the same
+     replications), server utilization is measured over [W, T] like the waits rather than over
+     the whole run; on the inventory and bearing tabs the run is
      lengthened by W (days, or operating hours) and the 25 days or 20,000 hours after W are
      measured, on a fixed axis of 25 + 10 days or 20,000 + 5,000 hours, and the bearing tab's
      replace-on-failure policy is generated in clock order across the three positions so a
-     longer horizon only appends draws. At W = 0 every model is the book's, draw for draw.)*
+     longer horizon only appends draws. At W = 0 every model is the book's, draw for draw.*
+  5. *An output's success region is an interval, and the harness handles all three kinds
+     through one path: `success: 'le'` passes up to the threshold, `'ge'` from it up, and
+     `'band'` between a `{ lo, hi }` pair, which is then the shape of that output's `thr`
+     entry and so must be cloned rather than shared when a batch is logged. A band output
+     also declares `thrIdHi` for its second spinner. The band is general on purpose but is
+     used in exactly one place, the queue's server utilization, because every other output
+     in the widget has only one end worth stating.)*
 
 ### Pseudorandom Number Generation
 
