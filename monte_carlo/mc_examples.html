@@ -522,21 +522,21 @@ input[type=range] { height: 26px; }
         <svg id="q-schema" viewBox="0 0 380 120" role="img" aria-label="Schematic of arrivals feeding a queue and one server"></svg>
       </div>
       <div class="knobs">
-        <label class="knob" for="q-lam"><span class="tip" tabindex="0" data-tip="How often customers arrive: the rate of the exponential interarrival time, so λ customers arrive per minute on average and the mean interarrival time is 1/λ minutes. One of three decisions in this model.">Arrival rate, λ</span>
+        <label class="knob" for="q-lam"><span class="tip" tabindex="0" data-tip="How often customers arrive: the rate of the exponential interarrival time, and so λ customers arrive per minute on average, and the mean interarrival time is 1/λ minutes. One of three decisions in this model.">Arrival rate, λ</span>
           <span class="spin"><button type="button" aria-label="Decrease λ" onclick="spinStep('q-lam',-1)">−</button><input id="q-lam" type="number" min="0.1" max="2.0" step="0.1" value="0.8" inputmode="decimal" onchange="spinCommit('q-lam')"><button type="button" aria-label="Increase λ" onclick="spinStep('q-lam',1)">+</button></span></label>
-        <label class="knob" for="q-mu"><span class="tip" tabindex="0" data-tip="How fast one server works: the rate of its exponential service time, so a server finishes μ customers per minute on average and the mean service time is 1/μ minutes. Queueing notation names the rate, and the spreadsheet draws the time. One of three decisions in this model.">Service rate, μ</span>
+        <label class="knob" for="q-mu"><span class="tip" tabindex="0" data-tip="How fast one server works: the rate of its exponential service time, and so a server finishes μ customers per minute on average, and the mean service time is 1/μ minutes. Queueing notation names the rate, and the spreadsheet draws the time. One of three decisions in this model.">Service rate, μ</span>
           <span class="spin"><button type="button" aria-label="Decrease μ" onclick="spinStep('q-mu',-1)">−</button><input id="q-mu" type="number" min="0.1" max="2.0" step="0.1" value="1.0" inputmode="decimal" onchange="spinCommit('q-mu')"><button type="button" aria-label="Increase μ" onclick="spinStep('q-mu',1)">+</button></span></label>
         <label class="knob" for="q-c"><span class="tip" tabindex="0" data-tip="How many identical servers work in parallel, sharing one queue. One of three decisions in this model.">Servers</span>
           <span class="spin"><select id="q-c" onchange="MCXUI.onKnob('q')"><option value="1">1</option><option value="2">2</option></select></span></label>
       </div>
       <div class="knobs">
-        <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="When the clock stops. A customer who has begun service by T is counted, with the wait it had; one still in the queue at T is shown but not counted, since its wait is not yet known. Leaving those out drops the longest waits and pulls the average down a little, which matters less as T grows, and a longer T also lets the average settle toward the steady-state value. The T line on the chart below can be dragged too.">End time, T (min)</span>
+        <label class="knob" for="q-T"><span class="tip" tabindex="0" data-tip="When the clock stops. A customer who has begun service by T is counted, with the wait it had; one still in the queue at T is shown but not counted because its wait is not yet known. Leaving those out drops the longest waits and pulls the average down a little, which matters less as T grows, and a longer T also lets the average settle toward the steady-state value. The T line on the chart below can be dragged too.">End time, T (min)</span>
           <span class="spin"><button type="button" aria-label="Decrease T" onclick="spinStep('q-T',-1)">−</button><input id="q-T" type="number" min="20" max="600" step="20" value="60" inputmode="numeric" onchange="spinCommit('q-T')"><button type="button" aria-label="Increase T" onclick="spinStep('q-T',1)">+</button></span></label>
-        <label class="knob" for="q-W"><span class="tip" tabindex="0" data-tip="Customers who arrive before this time are simulated and shown but left out of the averages, so the empty-queue start does not drag them down: deleting the transient is the other answer to a start-up bias besides running longer. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (min)</span>
+        <label class="knob" for="q-W"><span class="tip" tabindex="0" data-tip="Customers who arrive before this time are simulated and shown but left out of the averages, and so the empty-queue start does not drag them down: deleting the transient is the other answer to a start-up bias besides running longer. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (min)</span>
           <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('q-W',-1)">−</button><input id="q-W" type="number" min="0" max="580" step="5" value="0" inputmode="numeric" data-post onchange="spinCommit('q-W')"><button type="button" aria-label="Increase W" onclick="spinStep('q-W',1)">+</button></span></label>
       </div>
       <div class="knobs">
-        <span class="knob"><span class="tip" tabindex="0" data-tip="The work arriving per unit of server capacity. Below 1 it is also the expected utilization, the fraction of time the servers are busy in the long run, which the histogram below compares each replication against. Above 1 the servers are busy all the time and the queue grows without bound; a replication runs either way.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
+        <span class="knob"><span class="tip" tabindex="0" data-tip="The work arriving per unit of server capacity. Below 1, it is also the expected utilization, the fraction of time the servers are busy in the long run. Above 1, the servers are busy all the time, and the queue grows without bound.">Traffic intensity, ρ = λ/(cμ) =</span> <span id="q-rho-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">0.80</span></span>
         <span class="knob"><span class="tip" tabindex="0" data-tip="The long-run average wait in queue for this M/M/c system. With one server it is ρ/(μ − λ); with c servers it is C(c, a)/(cμ − λ), where C(c, a) is the Erlang-C probability that an arriving customer has to wait and a = λ/μ. A replication starts empty, and so its average wait tends to sit below this line. Either a longer T or a longer warm-up W narrows that gap: one dilutes the start-up transient, and the other leaves it out of the measurement.">Steady-state wait, W<sub>q</sub> = <span id="q-wq-formula">ρ/(μ − λ)</span> =</span> <span id="q-wq-val" style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600">— min</span></span>
       </div>
     </div></div>
@@ -572,7 +572,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>Average wait, fraction of runs</span>
-            <label class="knob" for="q-thr-a"><span class="tip" tabindex="0" data-tip="A run succeeds when its average wait in queue stays at or below this value. Drag the line on the plot or type a value.">Success threshold (min)</span>
+            <label class="knob" for="q-thr-a"><span class="tip" tabindex="0" data-tip="A run succeeds when its average wait in queue stays at or below this value. Drag the line on the plot, or type a value.">Success threshold (min)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('q-thr-a',-1)">−</button><input id="q-thr-a" type="number" step="0.5" value="3" inputmode="decimal" onchange="MCXUI.onThreshold('q','avgWait',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('q-thr-a',1)">+</button></span></label></div>
           <div id="q-hist-a"></div>
           <div class="legend" id="q-legend-a"></div>
@@ -580,7 +580,7 @@ input[type=range] { height: 26px; }
         <div class="sg one" id="q-cards-avgWait"></div>
         <div class="hist-card">
           <div class="hist-hd"><span>Longest wait, fraction of runs</span>
-            <label class="knob" for="q-thr-b"><span class="tip" tabindex="0" data-tip="A run succeeds when its longest wait in queue stays at or below this value. Drag the line on the plot or type a value.">Success threshold (min)</span>
+            <label class="knob" for="q-thr-b"><span class="tip" tabindex="0" data-tip="A run succeeds when its longest wait in queue stays at or below this value. Drag the line on the plot, or type a value.">Success threshold (min)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('q-thr-b',-1)">−</button><input id="q-thr-b" type="number" step="1" value="10" inputmode="numeric" onchange="MCXUI.onThreshold('q','maxWait',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('q-thr-b',1)">+</button></span></label></div>
           <div id="q-hist-b"></div>
           <div class="legend" id="q-legend-b"></div>
@@ -588,7 +588,7 @@ input[type=range] { height: 26px; }
         <div class="sg one" id="q-cards-maxWait"></div>
         <div class="hist-card">
           <div class="hist-hd"><span>Server utilization, fraction of runs</span>
-            <span class="knob knob-band"><span class="tip" tabindex="0" data-tip="A run succeeds when its server utilization lands between these two values. Both ends are real goals: servers that sit idle are capacity paid for and not used, and servers busy every minute leave no slack for the next burst, which is where the waits above run away. Drag either line on the plot or type a value.">Success thresholds</span>
+            <span class="knob knob-band"><span class="tip" tabindex="0" data-tip="A run succeeds when its server utilization lands between these two values. Both ends are real goals: servers that sit idle are capacity paid for and not used, and servers busy every minute leave no slack for the next burst, which is where the waits above run away. Drag either line on the plot, or type a value.">Success thresholds</span>
               <span class="thr-pair"><span class="spin"><button type="button" aria-label="Lower the minimum utilization" onclick="spinStep('q-thr-c',-1)">−</button><input id="q-thr-c" type="number" step="0.05" value="0.6" inputmode="decimal" aria-label="Minimum utilization" onchange="MCXUI.onThreshold('q','util',Number(this.value),'lo')"><button type="button" aria-label="Raise the minimum utilization" onclick="spinStep('q-thr-c',1)">+</button></span><span class="thr-sep">to</span><span class="spin"><button type="button" aria-label="Lower the maximum utilization" onclick="spinStep('q-thr-c-hi',-1)">−</button><input id="q-thr-c-hi" type="number" step="0.05" value="0.9" inputmode="decimal" aria-label="Maximum utilization" onchange="MCXUI.onThreshold('q','util',Number(this.value),'hi')"><button type="button" aria-label="Raise the maximum utilization" onclick="spinStep('q-thr-c-hi',1)">+</button></span></span></span></div>
           <div id="q-hist-c"></div>
           <div class="legend" id="q-legend-c"></div>
@@ -617,7 +617,7 @@ input[type=range] { height: 26px; }
           <span class="spin"><button type="button" aria-label="Decrease M" onclick="spinStep('inv-m',-1)">−</button><input id="inv-m" type="number" min="1" max="20" step="1" value="11" inputmode="numeric" onchange="spinCommit('inv-m')"><button type="button" aria-label="Increase M" onclick="spinStep('inv-m',1)">+</button></span></label>
         <label class="knob" for="inv-n"><span class="tip" tabindex="0" data-tip="How many days pass between one review of the inventory position and the next. The other decision in this model.">Review every N days</span>
           <span class="spin"><button type="button" aria-label="Decrease N" onclick="spinStep('inv-n',-1)">−</button><input id="inv-n" type="number" min="1" max="10" step="1" value="5" inputmode="numeric" onchange="spinCommit('inv-n')"><button type="button" aria-label="Increase N" onclick="spinStep('inv-n',1)">+</button></span></label>
-        <label class="knob" for="inv-W"><span class="tip" tabindex="0" data-tip="Days run ahead of the 25 that are measured, so the given starting stock and its order in flight no longer shape them: the run is W + 25 days, the first W are simulated and shown but not counted, and the cost, the shortage days, and the average inventory all come from the 25 days after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (days)</span>
+        <label class="knob" for="inv-W"><span class="tip" tabindex="0" data-tip="Days run ahead of the 25 that are measured, and so the given starting stock and its order in flight no longer shape them: the run is W + 25 days, the first W are simulated and shown but not counted, and the cost, the shortage days, and the average inventory all come from the 25 days after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (days)</span>
           <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('inv-W',-1)">−</button><input id="inv-W" type="number" min="0" max="10" step="1" value="0" inputmode="numeric" data-post onchange="spinCommit('inv-W')"><button type="button" aria-label="Increase W" onclick="spinStep('inv-W',1)">+</button></span></label>
         <label class="knob" for="inv-h" style="flex-basis:100%"><span class="tip" tabindex="0" style="color:var(--ok)" data-tip="A holding charge accrues on each day's ending inventory, and a backorder charge accrues on each day's shortage. The charge and its sum share a color in the cost line under the chart.">Holding charge, $ per refrigerator per day</span>
           <span class="spin"><button type="button" aria-label="Decrease h" onclick="spinStep('inv-h',-1)">−</button><input id="inv-h" type="number" min="0" max="10" step="0.5" value="1" inputmode="decimal" onchange="spinCommit('inv-h')"><button type="button" aria-label="Increase h" onclick="spinStep('inv-h',1)">+</button></span></label>
@@ -657,7 +657,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>25-day cost, fraction of runs</span>
-            <label class="knob" for="inv-thr-a"><span class="tip" tabindex="0" data-tip="A run succeeds when its 25-day cost stays at or below this value. Drag the line on the plot or type a value.">Success threshold ($)</span>
+            <label class="knob" for="inv-thr-a"><span class="tip" tabindex="0" data-tip="A run succeeds when its 25-day cost stays at or below this value. Drag the line on the plot, or type a value.">Success threshold ($)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('inv-thr-a',-1)">−</button><input id="inv-thr-a" type="number" step="10" value="300" inputmode="numeric" onchange="MCXUI.onThreshold('inv','cost',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('inv-thr-a',1)">+</button></span></label></div>
           <div id="inv-hist-a"></div>
           <div class="legend" id="inv-legend-a"></div>
@@ -665,7 +665,7 @@ input[type=range] { height: 26px; }
         <div class="sg one" id="inv-cards-cost"></div>
         <div class="hist-card">
           <div class="hist-hd"><span>Days with a shortage, fraction of runs</span>
-            <label class="knob" for="inv-thr-b"><span class="tip" tabindex="0" data-tip="A run succeeds when it has at most this many shortage days out of 25. Drag the line on the plot or type a value.">Success threshold</span>
+            <label class="knob" for="inv-thr-b"><span class="tip" tabindex="0" data-tip="A run succeeds when it has at most this many shortage days out of 25. Drag the line on the plot, or type a value.">Success threshold</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('inv-thr-b',-1)">−</button><input id="inv-thr-b" type="number" step="1" value="2" inputmode="numeric" onchange="MCXUI.onThreshold('inv','shortDays',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('inv-thr-b',1)">+</button></span></label></div>
           <div id="inv-hist-b"></div>
           <div class="legend" id="inv-legend-b"></div>
@@ -673,7 +673,7 @@ input[type=range] { height: 26px; }
         <div class="sg one" id="inv-cards-shortDays"></div>
         <div class="hist-card">
           <div class="hist-hd"><span>Average ending inventory, fraction of runs</span>
-            <label class="knob" for="inv-thr-c"><span class="tip" tabindex="0" data-tip="A run succeeds when its average ending inventory over the 25 days stays at or below this value. Drag the line on the plot or type a value.">Success threshold</span>
+            <label class="knob" for="inv-thr-c"><span class="tip" tabindex="0" data-tip="A run succeeds when its average ending inventory over the 25 days stays at or below this value. Drag the line on the plot, or type a value.">Success threshold</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('inv-thr-c',-1)">−</button><input id="inv-thr-c" type="number" step="0.25" value="4" inputmode="decimal" onchange="MCXUI.onThreshold('inv','avgInv',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('inv-thr-c',1)">+</button></span></label></div>
           <div id="inv-hist-c"></div>
           <div class="legend" id="inv-legend-c"></div>
@@ -711,7 +711,7 @@ input[type=range] { height: 26px; }
           </select></span></label>
         <label class="knob" for="br-t"><span class="tip" tabindex="0" data-tip="All three are replaced together at age T, measured from the set's last replacement. A failure before T replaces the set at once and restarts the clock, and so with T at 1,300 h only the cycles in which all three survive that long reach the planned age.">Planned age, T (h)</span>
           <span class="spin" id="br-t-spin"><button type="button" aria-label="Decrease T" onclick="spinStep('br-t',-1)" disabled>−</button><input id="br-t" type="number" min="1000" max="1900" step="100" value="1300" inputmode="numeric" disabled onchange="spinCommit('br-t')"><button type="button" aria-label="Increase T" onclick="spinStep('br-t',1)" disabled>+</button></span></label>
-        <label class="knob" for="br-W"><span class="tip" tabindex="0" data-tip="Operating hours run ahead of the 20,000 that are measured, so the three fresh bearings installed at time 0 no longer shape them: the clock runs to W + 20,000 h, replacements before W are simulated and shown but not charged, and the cost is the 20,000 hours after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (h)</span>
+        <label class="knob" for="br-W"><span class="tip" tabindex="0" data-tip="Operating hours run ahead of the 20,000 that are measured, and so the three fresh bearings installed at time 0 no longer shape them: the clock runs to W + 20,000 h, replacements before W are simulated and shown but not charged, and the cost is the 20,000 hours after. Changing it re-derives the current batch from the same seeds rather than starting a new one; the shaded band on the chart below can be dragged too.">Warm-up, W (h)</span>
           <span class="spin"><button type="button" aria-label="Decrease W" onclick="spinStep('br-W',-1)">−</button><input id="br-W" type="number" min="0" max="5000" step="500" value="0" inputmode="numeric" data-post onchange="spinCommit('br-W')"><button type="button" aria-label="Increase W" onclick="spinStep('br-W',1)">+</button></span></label>
       </div>
     </div></div>
@@ -759,7 +759,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>Cost per 10,000 bearing-hours, fraction of runs</span>
-            <label class="knob" for="br-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when its cost per 10,000 bearing-hours stays at or below this value. Drag the line on the plot or type a value.">Success threshold ($)</span>
+            <label class="knob" for="br-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when its cost per 10,000 bearing-hours stays at or below this value. Drag the line on the plot, or type a value.">Success threshold ($)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('br-thr',-1)">−</button><input id="br-thr" type="number" step="50" value="2000" inputmode="numeric" onchange="MCXUI.onThreshold('br','cost',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('br-thr',1)">+</button></span></label></div>
           <div id="br-hist"></div>
           <div class="legend" id="br-legend"></div>
@@ -813,7 +813,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>20-day profit, fraction of runs</span>
-            <label class="knob" for="nv-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when its 20-day profit reaches this value. Drag the line on the plot or type a value.">Success threshold ($)</span>
+            <label class="knob" for="nv-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when its 20-day profit reaches this value. Drag the line on the plot, or type a value.">Success threshold ($)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('nv-thr',-1)">−</button><input id="nv-thr" type="number" step="5" value="100" inputmode="numeric" onchange="MCXUI.onThreshold('nv','profit',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('nv-thr',1)">+</button></span></label></div>
           <div id="nv-hist"></div>
           <div class="legend" id="nv-legend"></div>
@@ -881,7 +881,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>Packages in the zone, fraction of runs</span>
-            <label class="knob" for="dr-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when at least this many packages land in the zone. Drag the line on the plot or type a value.">Success threshold</span>
+            <label class="knob" for="dr-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when at least this many packages land in the zone. Drag the line on the plot, or type a value.">Success threshold</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('dr-thr',-1)">−</button><input id="dr-thr" type="number" step="1" value="6" inputmode="numeric" onchange="MCXUI.onThreshold('dr','hits',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('dr-thr',1)">+</button></span></label></div>
           <div id="dr-hist"></div>
           <div class="legend" id="dr-legend"></div>
@@ -952,7 +952,7 @@ input[type=range] { height: 26px; }
         </div>
         <div class="hist-card">
           <div class="hist-hd"><span>Finish time (h), fraction of runs</span>
-            <label class="knob" for="an-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when the shipment leaves at or before this time. Drag the line on the plot or type a value.">Success threshold (h)</span>
+            <label class="knob" for="an-thr"><span class="tip" tabindex="0" data-tip="A run succeeds when the shipment leaves at or before this time. Drag the line on the plot, or type a value.">Success threshold (h)</span>
               <span class="spin"><button type="button" aria-label="Lower threshold" onclick="spinStep('an-thr',-1)">−</button><input id="an-thr" type="number" step="0.25" value="10" inputmode="decimal" onchange="MCXUI.onThreshold('an','finish',Number(this.value))"><button type="button" aria-label="Raise threshold" onclick="spinStep('an-thr',1)">+</button></span></label></div>
           <div id="an-hist"></div>
           <div class="legend" id="an-legend"></div>
