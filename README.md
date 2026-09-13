@@ -40,7 +40,7 @@ below.
 | Directory | Description |
 | --- | --- |
 | [`input_modeling/input_analyzer.html`](input_modeling/input_analyzer.html) | Fit a distribution to sample data and read off the expression for a simulation model: maximum-likelihood fits of fourteen candidates ranked by AIC and BIC beside Arena's square-error criterion, chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values, Q–Q and P–P diagnostics, a nonhomogeneous-Poisson arrival mode, and export to Arena, Simio, AnyLogic, R, MATLAB, and SciPy |
-| [`input_modeling/prob_models.html`](input_modeling/prob_models.html) | A gallery of eighteen input-modeling distributions, each on its own tab with a live pdf or pmf and cdf plot against three reference settings, formulas and moments, choose-it-when guidance, an animated inverse-transform generator, and, for most, a second construction from simpler draws; a Map tab lays out every distribution as a two-group pill picker and four shared family-relationship diagrams show how they connect |
+| [`input_modeling/prob_models.html`](input_modeling/prob_models.html) | A gallery of eighteen input-modeling distributions, each on its own tab with a live pdf or pmf and cdf plot against three reference settings, formulas and moments, choose-it-when guidance, an animated inverse-transform generator, and, for most, a second construction from other distributions; a Map tab lays out every distribution as a two-group pill picker and four shared family-relationship diagrams show how they connect |
 
 ### Output Analysis
 

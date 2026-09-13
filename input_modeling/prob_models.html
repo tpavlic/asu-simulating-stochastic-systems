@@ -372,6 +372,13 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .famedge { fill: none; stroke: var(--ref); stroke-width: 1.3; }
 .famedge.bridge { stroke-dasharray: 5 4; }
 .famlabel { font-family: 'Outfit', sans-serif; fill: var(--text); stroke: var(--card); stroke-width: 4px; paint-order: stroke; }
+/* A label drawn on the construction plane (a foot's coordinate, the angle,
+   the radius) sits on a translucent box in the plot's own background color
+   (see dgPlaneLabel), so it stays readable over the growing cloud of
+   earlier draws without blanking them out entirely. A glyph-outline halo
+   would not do here: it leaves the gaps between letters open, and a gray
+   dot in such a gap is what makes the label hard to read. */
+.plane-lbl-bg { fill: var(--chart-bg); fill-opacity: .85; }
 .fam-note, .fam-fact { font-size: .86rem; color: var(--muted); margin-top: 8px; }
 .fam-fact + .fam-fact { margin-top: 4px; }
 /* ── Generator panel: the inverse-transform transfer plot beside a side
@@ -435,7 +442,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
   .sum-est, .sum-true { min-width: 5ch; }
   .sum-ci { min-width: 13ch; }
 }
-/* ── "Built from simpler draws" panels: a second, independent way to land on
+/* ── "Built from other distributions" panels: a second, independent way to land on
    nine of the eighteen distributions, nested inside the generator section
    they extend. The picture and the histogram share the transfer plot's own
    520-wide sizing so the two sections read as one family, and the picture's
@@ -1396,7 +1403,7 @@ DG.dists = [];
 DG.byId = {};
 for (var i = 0; i < DG.dists.length; i++) DG.byId[DG.dists[i].id] = DG.dists[i];
 
-/* ── Constructions from simpler draws ────────────────────────────────────
+/* ── Constructions from other distributions ────────────────────────────────────
    A second, independent way to land on nine of the distributions above,
    each one built out of nothing but DG.unif calls rather than out of a
    quantile function. Every entry returns the draw itself under x (or under
@@ -3164,7 +3171,7 @@ var DG_RECIPE = {
       + 'This floor form and the ceiling form the core computes agree everywhere except when (b − a + 1)·U lands exactly on an integer, which happens with probability zero.';
   }
 };
-/* On a tab that also carries a "built from simpler draws" panel, the lede
+/* On a tab that also carries a "built from other distributions" panel, the lede
    presents inverse transform as one way among others rather than as the
    way, and on the Normal it also says up front that the cdf being inverted
    is a numerical approximation. */
@@ -3214,7 +3221,7 @@ function genPanelBodyHtml(d) {
   return html;
 }
 
-/* ── "Built from simpler draws" panels ───────────────────────────────────
+/* ── "Built from other distributions" panels ───────────────────────────────────
    A second, independent way to land on nine of the eighteen distributions,
    built out of nothing but DG.unif calls (DG.construct in the core) rather
    than out of a quantile function. Nested inside the same section as the
@@ -3239,8 +3246,8 @@ var DG_CON_LEDE = {
    smallest of a finite set of uniforms is only defined for a whole-number
    alpha, and beta sets how many uniforms join it in that set. */
 function conBetaOk(p) { return p.alpha === Math.round(p.alpha) && p.beta === Math.round(p.beta); }
-/* The five (or, for the Rayleigh, two) steps of the "Built from simpler
-   draws" equations block for the Normal and Rayleigh tabs, one per step of
+/* The five (or, for the Rayleigh, two) steps of the "Built from other
+   distributions" equations block for the Normal and Rayleigh tabs, one per step of
    the mechanism, each with a title, a description carrying the reasoning
    (and a jump link to any distribution it names), and the symbolic line
    with the current draw's own numbers on its right (nothing there before
@@ -3391,13 +3398,13 @@ function conPanelBodyHtml(d) {
   var isBoxMuller = d.id === 'norm' || d.id === 'rayl';
   var heading, lede;
   if (d.id === 'norm') {
-    heading = 'Built from simpler draws: the Box–Muller transform';
+    heading = 'Built from other distributions: the Box–Muller transform';
     lede = 'The Box–Muller transform turns two independent uniforms into two independent standard normals, in the five steps below; the last step stretches and shifts them to the normal the parameters above describe.';
   } else if (d.id === 'rayl') {
-    heading = 'Built from simpler draws: the magnitude of two normals';
+    heading = 'Built from other distributions: the magnitude of two normals';
     lede = DG_CON_LEDE.rayl;
   } else {
-    heading = 'Built from simpler draws';
+    heading = 'Built from other distributions';
     lede = DG_CON_LEDE[d.id];
   }
   var html = '<div class="sec con-sec" id="con-' + d.id + '"><div class="sec-hd">' + heading + '</div>';
@@ -3667,6 +3674,19 @@ function dgConPlaneGeom(W, H, axisScale) {
    to sigma, which values feed each marginal and what the marginal bars and
    the point's own geometry are colored, and how the two feet and the
    radius are labeled – so the geometry itself is written once. */
+/* One label on the construction plane: a translucent box in the plot's
+   background, then the text over it. The box is sized from the string's
+   length at the monospace font's advance width (0.6em) rather than measured,
+   because the picture is built as one string before it is in the DOM; a
+   superscript digit counts as an ordinary character, which slightly
+   over-sizes the box, and the box's corners are rounded so a small overhang
+   reads as padding. x, y are the text's own anchor point and baseline. */
+function dgPlaneLabel(x, y, anchor, text, color, size) {
+  var chars = text.replace(/<[^>]+>/g, '').length, w = chars * size * 0.6 + 6, hgt = size + 4;
+  var bx = anchor === 'middle' ? x - w / 2 : (anchor === 'end' ? x - w + 3 : x - 3);
+  return '<rect class="plane-lbl-bg" x="' + bx + '" y="' + (y - size * 0.8 - 2) + '" width="' + w + '" height="' + hgt + '" rx="2"/>'
+    + '<text x="' + x + '" y="' + y + '" text-anchor="' + anchor + '" fill="' + color + '" font-size="' + size + '" font-family="\'IBM Plex Mono\', monospace">' + text + '</text>';
+}
 function dgConPlanePic(st, W, H, opts) {
   var geo = dgConPlaneGeom(W, H, opts.axisScale);
   var scale = geo.scale, padOuter = geo.padOuter, stripThick = geo.stripThick;
@@ -3726,26 +3746,33 @@ function dgConPlanePic(st, W, H, opts) {
     + '<circle cx="' + px + '" cy="' + pcy + '" r="3" fill="' + opts.footColor + '"/><circle cx="' + pcx + '" cy="' + py + '" r="3" fill="' + opts.footColor + '"/>';
   var hAnchor = px >= pcx ? 'start' : 'end', hDx = px >= pcx ? 7 : -7;
   var vAnchor = py <= pcy ? 'start' : 'end';
-  h += '<text x="' + (px + hDx) + '" y="' + (pcy + (py <= pcy ? 15 : -8)) + '" text-anchor="' + hAnchor + '" fill="' + opts.footColor + '" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + opts.footH + '</text>';
-  h += '<text x="' + (pcx + (px >= pcx ? -7 : 7)) + '" y="' + (py + (py <= pcy ? -8 : 15)) + '" text-anchor="' + (px >= pcx ? 'end' : 'start') + '" fill="' + opts.footColor + '" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + opts.footV + '</text>';
+  h += dgPlaneLabel(px + hDx, pcy + (py <= pcy ? 15 : -8), hAnchor, opts.footH, opts.footColor, 11);
+  h += dgPlaneLabel(pcx + (px >= pcx ? -7 : 7), py + (py <= pcy ? -8 : 15), px >= pcx ? 'end' : 'start', opts.footV, opts.footColor, 11);
   if (opts.theta !== undefined) {
     var arcR = Math.min(30, half * 0.3), thetaDeg = opts.theta * 180 / Math.PI;
     var ax = pcx + arcR, ay = pcy, bx = pcx + arcR * Math.cos(opts.theta), by = pcy - arcR * Math.sin(opts.theta);
     h += '<path d="M ' + ax + ' ' + ay + ' A ' + arcR + ' ' + arcR + ' 0 ' + (thetaDeg > 180 ? 1 : 0) + ' 0 ' + bx + ' ' + by + '" fill="none" stroke="' + opts.thetaColor + '" stroke-width="1.3"/>';
     var labelR = arcR + 13, labelAng = opts.theta / 2;
-    h += '<text x="' + (pcx + labelR * Math.cos(labelAng)) + '" y="' + (pcy - labelR * Math.sin(labelAng) + 4) + '" text-anchor="middle" fill="' + opts.thetaColor + '" font-size="11.5" font-family="\'IBM Plex Mono\', monospace">Θ</text>';
+    h += dgPlaneLabel(pcx + labelR * Math.cos(labelAng), pcy - labelR * Math.sin(labelAng) + 4, 'middle', 'Θ', opts.thetaColor, 11.5);
   }
   h += '<line x1="' + pcx + '" y1="' + pcy + '" x2="' + px + '" y2="' + py + '" stroke="' + opts.pointColor + '" stroke-width="1.8"/>'
     + '<circle cx="' + px + '" cy="' + py + '" r="4.5" fill="' + opts.pointColor + '" stroke="#fff" stroke-width="1"/>';
-  // The radius label sits off to the side of the line itself, offset along
-  // its own perpendicular rather than always straight up: a point that
-  // lands close to either axis puts the radius line almost on top of that
-  // axis's own foot label, and only a perpendicular offset keeps the two
-  // apart regardless of which way the line happens to run.
+  // The radius label continues the ray just past the point, so it reads as
+  // the length of that ray rather than as a label on the line somewhere
+  // along it. Its box is estimated from the string's length; the offset
+  // along the ray is whatever puts the box's near edge a few pixels clear
+  // of the dot. A point near the plane's edge has no room beyond it, and
+  // then the label is clamped inside the plane and, if that would land it
+  // on the dot itself, moved to the ray's inner side instead.
   var rdx = px - pcx, rdy = py - pcy, rlen = Math.max(1, Math.sqrt(rdx * rdx + rdy * rdy));
-  var rmx = pcx + rdx * 0.5, rmy = pcy + rdy * 0.5;
-  var rlx = rmx - (rdy / rlen) * 22, rly = rmy + (rdx / rlen) * 22;
-  h += '<text x="' + rlx + '" y="' + rly + '" text-anchor="middle" fill="' + opts.pointColor + '" font-size="11.5" font-family="\'IBM Plex Mono\', monospace">' + opts.radiusLabel + '</text>';
+  var ux = rdx / rlen, uy = rdy / rlen;
+  var estW = opts.radiusLabel.length * 6.9 + 6, estH = 16;
+  var off = 9 + Math.abs(ux) * estW / 2 + Math.abs(uy) * estH / 2;
+  var minX = px0 + estW / 2 + 3, maxX = px1 - estW / 2 - 3, minY = py0 + estH, maxY = py1 - 4;
+  function clampLbl(x, y) { return [Math.min(maxX, Math.max(minX, x)), Math.min(maxY, Math.max(minY, y))]; }
+  var lp = clampLbl(px + ux * off, py + uy * off);
+  if (Math.sqrt((lp[0] - px) * (lp[0] - px) + (lp[1] - py) * (lp[1] - py)) < 8) lp = clampLbl(px - ux * off, py - uy * off);
+  h += dgPlaneLabel(lp[0], lp[1] + 4, 'middle', opts.radiusLabel, opts.pointColor, 11.5);
   return h;
 }
 /* The Normal's own reading: the point sits at the standard (sigma-free)
@@ -4746,7 +4773,7 @@ function genUpdateMsg(d) {
    container already is one. */
 function genSideNoteHtml(d) {
   if (d.gen.kind === 'closed') return 'The recipe above is F⁻¹(U) in closed form, and so every draw is one uniform and a little arithmetic.';
-  return 'F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from simpler draws.';
+  return 'F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from other distributions.';
 }
 function genSideTableHtml(d, p, landedK) {
   var lo = d.support(p).lo, hi = Math.ceil(d.quantile(0.999, p));

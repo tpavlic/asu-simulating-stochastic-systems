@@ -728,7 +728,7 @@ better.
      against exact identities, every pdf against quadrature of its own cdf and every quantile as its
      round trip, every sampler against its own cdf by goodness of fit, moments against closed forms,
      the chi-square and F constructions against sums and ratios of standard normals, every "built
-     from simpler draws" panel's construction against its distribution's own direct sampler,
+     from other distributions" panel's construction against its distribution's own direct sampler,
      every closed-form generator recipe against the core's own quantile, and the goodness-of-fit
      tests' calibration (rejection rate near 5% on the distribution's own draws, and well above it
      on draws from a different one).)*
