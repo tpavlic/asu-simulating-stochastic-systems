@@ -700,9 +700,14 @@ better.
 - `input_modeling/prob_models.html` *(a gallery of eighteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
-  inverse-transform generator; most tabs add a second panel constructing the same draw from simpler
+  inverse-transform generator; nine tabs add a second panel constructing the same draw from simpler
   pieces (a sum of exponentials for Erlang, a sum of squared normals for chi-square, a ratio of
-  scaled chi-squares for F, and so on). Navigation is a pill picker standing above every page in two
+  scaled chi-squares for F, the Box–Muller spinner for the normal, two normals arriving from the
+  plane's edges for the Rayleigh, e raised to a normal for the log-normal, and so on). Every panel's
+  draw summary is a table of the mean and sd with 95% intervals beside the distribution's own,
+  plus a goodness-of-fit test against the distribution at its known parameters (Kolmogorov–Smirnov
+  for a continuous tab, chi-square for a discrete one). Green marks a draw's input and orange its
+  output wherever the two are drawn apart. Navigation is a pill picker standing above every page in two
   groups, continuous and discrete, each pill carrying its distribution's support and a colored edge
   marking its group, and collapsing to a `<select>` below 61em. A Map tab holds a thumbnail tile per
   distribution, grouped by the modeling question each answers, and four family-relationship diagrams
@@ -723,8 +728,10 @@ better.
      against exact identities, every pdf against quadrature of its own cdf and every quantile as its
      round trip, every sampler against its own cdf by goodness of fit, moments against closed forms,
      the chi-square and F constructions against sums and ratios of standard normals, every "built
-     from simpler draws" panel's construction against its distribution's own direct sampler, and
-     every closed-form generator recipe against the core's own quantile.)*
+     from simpler draws" panel's construction against its distribution's own direct sampler,
+     every closed-form generator recipe against the core's own quantile, and the goodness-of-fit
+     tests' calibration (rejection rate near 5% on the distribution's own draws, and well above it
+     on draws from a different one).)*
 
 ### Output Analysis
 

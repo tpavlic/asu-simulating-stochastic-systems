@@ -42,7 +42,7 @@
   --chart-bg:    #fbfafa;
 
   /* ── Chrome, but keyed to meaning: the picker's two groups (continuous,
-     discrete) and the Map tab's tile borders share one color each, so the
+     discrete) and the Map tab's tile borders share one color each, and so the
      picker doubles as the key for the Map's colors. Subtle chrome, not data,
      but each still clears 3:1 against white (5.68:1 and 5.87:1), because color
      is the only cue that tells the two groups apart. */
@@ -54,6 +54,13 @@
        histogram, and the mean-and-spread mark, because that mark describes
        only the current setting
      --est   the sampled thing: histogram bars of draws and the moving draw itself
+     --in    the uniform input to a draw, wherever a draw's input is drawn
+       separately from its output: the U histogram bars on the transfer plot,
+       the moving dot while it still carries U, and the two normal
+       coordinates that arrive on the Rayleigh's plane. --est stays the
+       output everywhere. --in clears 3:1 on white (5.13:1), and its meaning
+       is always carried by position and direction of travel as well, never
+       by color alone.
      --ref   the relationship-diagram edges on the Map tab
      --ref-1/2/3 the three fixed reference settings shown on every distribution
        plot, one purple family at three lightnesses (dark to light) so they
@@ -68,6 +75,7 @@
        both plots. */
   --truth: #0F6E8C;  --truth-pale: rgba(15,110,140,.12);
   --est:   #C2570A;  --est-pale: rgba(194,87,10,.35);
+  --in:    #2E7D32;  --in-pale: rgba(46,125,50,.35);
   --ref:   #8a8a8a;
   --ref-1: #3B2E6E;  --ref-2: #6B5BA8;  --ref-3: #8C80B8;
 }
@@ -91,6 +99,8 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 .sc-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; font-weight: 600; color: var(--accent); white-space: nowrap; min-width: 0; font-variant-numeric: tabular-nums; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
+.choose-more { margin-top: 9px; }
+.choose-more strong { color: var(--accent); }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 /* A dotted underline means the same thing across these widgets: there is a tooltip
    here, reachable by hover, tap, or keyboard focus. Never carried by a title
@@ -144,15 +154,15 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    one control across nineteen destinations. Map is not a distribution, so
    its pill sits alone in the top row, set off by a rule, rather than inside
    either group below it, where it would read as a member. Pills wrap
-   freely, so the card never has to overflow or scroll at any width.
+   freely, and so the card never has to overflow or scroll at any width.
    The picker groups by type alone (continuous, discrete) in a fixed pill
    order (DG_PICKER_GROUPS), which is a different, shallower grouping than
    the Map tab's six modeling-question groups (DG_ROLE_GROUPS) below it --
    the Map keeps that deeper organization, as it is a one-time reference
-   page, while the picker sits on every one of the nineteen destinations and
+   page, whereas the picker sits on every one of the nineteen destinations and
    so stays as short as it can. Each pill's left edge carries its group's
    color (--group-cont or --group-disc), and the Map's tiles carry the same
-   two colors on their own left edge, so the picker doubles as the key for
+   two colors on their own left edge, and so the picker doubles as the key for
    the Map's colors and neither needs its own legend. Each pill's second
    line is that distribution's support, read from DG_TEXT rather than
    computed, because the notation is symbolic (a, b, k, ...), not a numeric
@@ -202,20 +212,32 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .intg { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 .1em; }
 .intg-glyph { font-size: 1.6em; line-height: 1; }
 .intg-lims { display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; font-size: .7em; line-height: 1.1; margin-left: 1px; }
-/* A cases block: a tall brace in the first grid column, spanning every row,
-   with each branch's expression and condition in the next two columns. The
-   brace occupies column 1 in every row only because it is the one child
-   explicitly placed there (grid-row: 1 / -1); the branch cells that follow it
-   in the markup are auto-placed into columns 2 and 3, one row at a time, by
+/* A cases block, set the way LaTeX's cases environment reads: the shared
+   left-hand side ("X =") once, then a tall brace, then one row per branch
+   holding that branch's expression and its condition. The wrapper is a
+   block-level flex row pairing the lhs with the grid so the lhs sits
+   vertically centered beside a brace of any height. Nothing inside it ever
+   wraps – a branch broken across lines beside a brace stops reading as a
+   case – so on a screen too narrow for the whole block, the block scrolls
+   sideways on its own, the page underneath does not. */
+.cases-wrap { display: flex; align-items: center; gap: 6px; max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
+.cases-wrap + .cases-wrap { margin-top: 4px; }
+.cases-lhs { font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
+/* The brace occupies column 1 in every row only because it is the one child
+   explicitly placed there (grid-row: span <row count>, set inline per
+   instance because a fixed "1 / -1" would resolve before the auto-placed
+   branch rows that follow it in the markup have created the rest of the
+   grid); those branch cells fall into columns 2 and 3, one row at a time, by
    the grid's own default left-to-right, row-by-row flow. */
-.cases { display: inline-grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 2px; margin: 4px 0; vertical-align: middle; }
-/* grid-row is set inline per instance (span <row count>), not here: a
-   fixed "1 / -1" resolves against however many rows exist at the moment the
-   brace itself is placed, before the auto-placed branch rows that follow it
-   in the markup have created the rest of the grid, so it ends up reserving
-   only the first row and a later row's own auto-placed content lands back
-   in column 1 instead of column 2. */
-.cases-brace { grid-column: 1; font-size: 2.3em; line-height: 1; font-weight: 300; transform: scaleY(1.15); align-self: center; }
+.cases { display: inline-grid; grid-template-columns: auto auto auto; align-items: center; column-gap: 8px; row-gap: 2px; margin: 4px 0; flex-shrink: 0; }
+/* Stretched to the full height of the rows it spans (align-self: stretch
+   overrides the grid's own align-items: center above) rather than a text
+   "{" that stays one line tall regardless of how many branches sit beside
+   it: the brace is an SVG path in a fixed viewBox with
+   preserveAspectRatio="none", and so sizing the element itself to 100% of its
+   grid area stretches the path to match, the way a LaTeX \left\{ does. */
+.cases-brace { grid-column: 1; align-self: stretch; width: .65em; min-height: 2.3em; color: var(--muted); }
+.cases-brace svg { display: block; width: 100%; height: 100%; }
 .cases-cond { color: var(--muted); font-size: .85em; white-space: nowrap; }
 /* flex + min-width: 0 gives an .eq its row's remaining width from CSS layout
    alone, before any text is ever placed in it – the recipe span is empty at
@@ -226,6 +248,20 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .eq { font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; flex: 1 1 auto; min-width: 0; }
 .eq-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 4px 0; }
 .eq-lbl { font-family: 'Outfit', sans-serif; font-weight: 600; color: var(--muted); font-size: .8rem; }
+/* An equation with more than one top-level "=" (X = expr = expr): a
+   two-column grid, the left-hand side on its own then every "= ..." chunk
+   in a wrapping flex row, and so the block reads as one line when it fits and,
+   once it does not, each wrapped chunk starts under the first "=" – the
+   LaTeX align look, without knowing in advance how many chunks fit on a
+   line. minmax(0, 1fr) on the second column is what lets it actually
+   shrink to the available width instead of overflowing at 390px. */
+.eq-align { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .5em; row-gap: 2px; align-items: baseline; }
+.eq-chunks { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; min-width: 0; }
+/* A chunk too long even for a line of its own wraps internally with a
+   hanging indent, and so a continuation line sits indented under the leading
+   "=" rather than flush with the left edge. */
+.eq-chunk { text-indent: -1em; padding-left: 1em; }
+.cases-expr { white-space: nowrap; }
 /* Knobs: label, spinner, slider on one wrapping line; the readout wraps rather than overflowing. */
 .knob-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 6px 0; }
 .knob-lbl { font-weight: 600; font-size: .86rem; min-width: 8.5em; }
@@ -242,7 +278,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* The checkbox's own box stays default-sized; the hit area instead comes from
-   padding on the label that wraps it, so the whole label – box, gap, and text --
+   padding on the label that wraps it, and so the whole label – box, gap, and text --
    is clickable and clears the 24x24 CSS-pixel touch-target floor. */
 .refs-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 6px 4px; box-sizing: border-box;
                min-height: 24px; font-size: .78rem; color: var(--muted); cursor: pointer; }
@@ -256,7 +292,7 @@ svg.dg { display: block; width: 100%; height: auto; }
    the live curve, each showing the actual mark (its line or stem sample and
    marker shape) beside the parameter values, replacing labels that used to
    float on the plot itself. The live entry's value text changes with the
-   knobs, so its container's height is reserved the same way the Support
+   knobs, and so its container's height is reserved the same way the Support
    line's is, and its numbers are tabular so a digit swap never reflows. */
 .legend { display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--border); font-size: .8rem; }
 .legend-item { display: flex; align-items: center; gap: 6px; }
@@ -268,7 +304,7 @@ svg.dg { display: block; width: 100%; height: auto; }
    reserveLegendHeight, always for the entries-shown case) keeps the page from
    moving when these entries disappear. */
 .legend.refs-hidden .legend-ref { display: none; }
-/* Jump links between tabs are buttons styled as links, so they work from the keyboard and never navigate. */
+/* Jump links between tabs are buttons styled as links, and so they work from the keyboard and never navigate. */
 /* min-width keeps a one-letter name (F) at a 24px-wide hit area without
    padding pushing the glyph away from the text that follows it. */
 .jump { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: none; min-height: 24px; min-width: 24px; }
@@ -306,7 +342,7 @@ svg.dg { display: block; width: 100%; height: auto; }
    against the thumbnail where a short name like "Beta" strands a large gap
    before the card's edge. */
 .tile .t-name { font-weight: 700; color: var(--accent); align-self: center; display: block; text-align: center; }
-/* Spans both grid columns, under the thumbnail and the name alike, so the
+/* Spans both grid columns, under the thumbnail and the name alike, and so the
    notation is never squeezed into the 1fr column the name sits in. */
 .tile .t-body { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; }
 .tile .t-note, .tile .t-supp { font-family: 'IBM Plex Mono', monospace; color: var(--muted); white-space: nowrap; }
@@ -370,17 +406,74 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
              background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px;
              cursor: pointer; transition: .15s; }
 .btn-clear:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
-.seed-msg { flex: 0 0 100%; min-height: 1.15em; margin-top: -2px; font-size: .75rem; line-height: 1.35;
-            color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The running summary block: how many draws, a compact table of the sample
+   mean and standard deviation against their 95% intervals and the
+   distribution's own exact values, and a goodness-of-fit test line beneath
+   it. The draw count sits in the table's corner cell on the generator panel
+   and in the histogram's caption on a construction panel. Inside the generator's own ctrl-row it drops onto its own full-width
+   line the way the sentence it replaces did; inside a construction panel's
+   histogram column it is simply the column's own width. */
+.sum { width: 100%; min-height: 1.15em; font-size: .75rem; line-height: 1.35; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ctrl-row .sum { flex: 0 0 100%; margin-top: -2px; }
+.sum-n { margin-bottom: 3px; }
+.sum-table { border-collapse: collapse; font-size: .82rem; color: var(--text); }
+.sum-table th, .sum-table td { padding: 1px 8px 1px 0; text-align: right; font-variant-numeric: tabular-nums; }
+.sum-table th:first-child, .sum-table td:first-child { text-align: left; color: var(--muted); }
+.sum-table thead th { border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; padding-bottom: 3px; }
+.sum-est, .sum-true { min-width: 7ch; }
+.sum-ci { min-width: 18ch; }
+.sum-test { font-size: .82rem; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 10px; }
+.sum-corner { white-space: nowrap; }
+/* The table's four columns need about 45 characters, more than a phone's
+   content column holds at this size, and so below 480px the type and the
+   column floors shrink a step; the wrapper scrolls sideways on its own for
+   any remaining excess rather than letting the page itself scroll. */
+.sum-table-wrap { overflow-x: auto; max-width: 100%; }
+@media (max-width: 480px) {
+  .sum-table { font-size: .74rem; }
+  .sum-table th, .sum-table td { padding-right: 6px; }
+  .sum-est, .sum-true { min-width: 5ch; }
+  .sum-ci { min-width: 13ch; }
+}
 /* ── "Built from simpler draws" panels: a second, independent way to land on
-   eight of the eighteen distributions, nested inside the generator section
+   nine of the eighteen distributions, nested inside the generator section
    they extend. The picture and the histogram share the transfer plot's own
    520-wide sizing so the two sections read as one family, and the picture's
    viewBox never changes shape between a normal draw and the gated note that
-   replaces it on the Beta tab, so gating never moves the page. ── */
+   replaces it on the Beta tab, and so gating never moves the page. ── */
 .con-sec { margin-top: 12px; }
 .con-pic, .con-hist { max-width: 520px; }
 .con-hist { margin-top: 8px; }
+/* The picture sits beside its histogram in a flex row wherever the column is
+   wide enough to hold both at a legible width, and wraps into the stacked
+   layout below that; each plot keeps the max-width it already had, and so this
+   only ever changes whether the wrap happens. */
+.con-plots { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.con-pic { flex: 0 1 520px; min-width: 0; }
+.con-hist-col { flex: 1 1 300px; min-width: 0; max-width: 520px; }
+.con-hist-col .con-hist { width: 100%; }
+/* The Normal and Rayleigh construction pictures get their own square,
+   wider frame instead of the 520x160 one every other construction picture
+   uses (set inline per instance, above), because the projections and the
+   angle (or its deliberate absence) are the whole point there. */
+.con-pic-square { max-width: 440px; margin-bottom: 4px; flex-basis: 440px; min-width: 0; }
+/* Two 520-wide plots cannot sit side by side at the widget's own content
+   width, and so the six wide pictures and the histogram column beside each one
+   take a narrower, matching share instead. */
+.con-pic:not(.con-pic-square) { flex-basis: 440px; }
+.con-pic:not(.con-pic-square) + .con-hist-col { flex: 1 1 440px; max-width: 440px; }
+/* The Box-Muller equations block: one step per line of the mechanism, each
+   a header naming the step, a description in the page's own prose font, and
+   the symbolic line with that step's current numbers on the right, in the
+   same monospace, tabular-figure style as every other .eq span on the page. */
+.con-eq { margin: 6px 0 10px; }
+.con-eq-line { padding: 7px 0; }
+.con-eq-line + .con-eq-line { border-top: 1px solid var(--border); }
+.con-eq-step-hd { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .86rem; color: var(--text); margin-bottom: 2px; }
+.con-eq-desc { font-family: 'Outfit', sans-serif; font-weight: 400; font-size: .82rem; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
+.con-eq-sym-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px; font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.con-eq-sym { flex: 1 1 260px; color: var(--text); }
+.con-eq-val { color: var(--truth); text-align: right; white-space: nowrap; }
 /* ── "In common tools" panel: a small reference table of how five common
    tools draw this same distribution, nested under the generator the same
    way the construction panel is. Wrapped in its own scrolling container so
@@ -396,15 +489,29 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .tools-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .82rem; }
 .tools-table th, .tools-table td { padding: 4px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: break-word; }
 .tools-table thead th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
-.tools-table col.tools-col-tool { width: 27%; }
-.tools-table col.tools-col-code { width: 41%; }
-.tools-table col.tools-col-note { width: 32%; }
+/* Two columns only, tool and code – there is no separate Note column at
+   any width. A row that needs a caveat carries it as a muted line inside
+   the code cell itself (.tools-note), directly under that row's code. */
+.tools-table col.tools-col-tool { width: 22%; }
+.tools-table col.tools-col-code { width: 78%; }
 /* The tool name is the one cell that must never break mid-word (a wrapped
-   "MATLAB" reads as a typo), so it keeps nowrap and its column is sized
+   "MATLAB" reads as a typo), and so it keeps nowrap and its column is sized
    generously enough at 390px to hold "MATLAB" and "NumPy" whole. */
 .tools-table td:first-child { font-weight: 600; white-space: nowrap; overflow-wrap: normal; }
 .tools-table code { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; white-space: normal; overflow-wrap: break-word; }
-.tools-table td:last-child { color: var(--muted); font-size: .78rem; }
+.tools-table .tools-note { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; font-family: 'Outfit', sans-serif; }
+/* Below 720px the table reflows into a stack of cards, one per tool: the
+   header row carries no information once there is nothing to line up in
+   columns, and so it is hidden from view (but not from assistive tech)
+   rather than rendered as two more full-width lines above the first card. */
+@media (max-width: 720px) {
+  .tools-table, .tools-table tbody, .tools-table tr, .tools-table td { display: block; width: auto; }
+  .tools-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+                        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .tools-table tr { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .tools-table tr:last-child { border-bottom: none; }
+  .tools-table td { border-bottom: none; padding: 2px 0; }
+}
 </style>
 </head>
 <body>
@@ -471,7 +578,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
    slices it out of the HTML and runs it in Node, and refuses the block if it
    names the browser's global object or the page object. */
 var DG = {};
-/* mulberry32: the same seeded generator as the sibling widgets, so a seed means
+/* mulberry32: the same seeded generator as the sibling widgets, and so a seed means
    the same stream everywhere. Seed 0 is legal. */
 DG.mulberry32 = function (seed) {
   var a = seed >>> 0;
@@ -536,7 +643,7 @@ DG.sf = (function () {
     var bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x));
     return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b;
   }
-  /* erfc from the exact identity erfc(z) = 1 - P(1/2, z^2), so its accuracy tracks
+  /* erfc from the exact identity erfc(z) = 1 - P(1/2, z^2), and so its accuracy tracks
      gammaP's rather than a separate fitted approximation. */
   function erfc(x) {
     var z = Math.abs(x), r = 1 - gammaP(0.5, z * z);
@@ -579,6 +686,22 @@ DG.bisectQ = function (cdf, u, lo, hi) {
   }
   return 0.5 * (lo + hi);
 };
+/* Student's t quantile, by the regularized incomplete beta: F(t) =
+   1 - 0.5*I_x(nu/2, 1/2) with x = nu/(nu + t^2), for t >= 0. That form is
+   monotonic in t on [0, infinity), from F(0) = 0.5 up to 1, and so it
+   inverts directly with DG.bisectQ; F(-t) = 1 - F(t) by the distribution's
+   own symmetry about 0 covers the rest, which is why only the non-negative
+   branch is ever handed to bisectQ. */
+DG.sf.tQ = function (p, nu) {
+  if (p === 0.5) return 0;
+  var sign = p > 0.5 ? 1 : -1;
+  var q = p > 0.5 ? p : 1 - p;
+  function cdfPos(t) {
+    var x = nu / (nu + t * t);
+    return 1 - 0.5 * DG.sf.betaI(nu / 2, 0.5, x);
+  }
+  return sign * DG.bisectQ(cdfPos, q, 0, 10);
+};
 /* Discrete inverse transform: the smallest k >= kmin with F(k) >= u, by
    stepping from kmin (every pmf here has a mean of a few tens at most). */
 DG.searchQ = function (cdf, u, kmin) {
@@ -587,7 +710,7 @@ DG.searchQ = function (cdf, u, kmin) {
   return k;
 };
 /* ---------------------------------------------------------------------
-   The distribution registry: sixteen input-modeling distributions, one
+   The distribution registry: eighteen input-modeling distributions, one
    per gallery tab, each exposing the same pdf/cdf/quantile/moment/sample
    interface so the UI can render every tab from one generic template.
    Densities that can blow up at a support endpoint (a shape parameter
@@ -601,7 +724,7 @@ function dgLinBins(x0, x1, n) {
   for (var i = 0; i <= n; i++) edges.push(x0 + (x1 - x0) * i / n);
   return edges;
 }
-/* Bin edges for an integer-valued histogram: one bin per integer, so the
+/* Bin edges for an integer-valued histogram: one bin per integer, and so the
    edges fall at the half-integers bracketing every displayed value. */
 function dgIntBins(x0, x1) {
   var edges = [];
@@ -1055,7 +1178,7 @@ DG.dists = [];
     function pdf(x, p) {
       var k = p.k;
       if (x < 0) return 0;
-      /* At k = 2 the shape exponent k/2 - 1 is exactly zero, so the x = 0
+      /* At k = 2 the shape exponent k/2 - 1 is exactly zero, and so the x = 0
          term drops out of the exponent rather than multiplying 0 by −∞. */
       if (x === 0) { if (k < 2) return Infinity; return k === 2 ? 0.5 : 0; }
       return Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.log(2) - sf.lgamma(k / 2));
@@ -1274,11 +1397,11 @@ DG.byId = {};
 for (var i = 0; i < DG.dists.length; i++) DG.byId[DG.dists[i].id] = DG.dists[i];
 
 /* ── Constructions from simpler draws ────────────────────────────────────
-   A second, independent way to land on eight of the distributions above,
+   A second, independent way to land on nine of the distributions above,
    each one built out of nothing but DG.unif calls rather than out of a
    quantile function. Every entry returns the draw itself under x (or under
    x for a ratio) plus the intermediate values the picture needs to show its
-   work, so the UI layer never recomputes anything the core already did. */
+   work, and so the UI layer never recomputes anything the core already did. */
 DG.construct = {
   /* k exponential stages laid end to end; the product form −ln(ΠU)/λ is the
      same sum, just accumulated one stage at a time so each stage is kept. */
@@ -1301,7 +1424,7 @@ DG.construct = {
   },
   /* A Rayleigh radius and a uniform angle give two independent N(0, sigma^2)
      components: the squared radius of two independent normals is
-     exponentially distributed, so drawing the radius from that exponential
+     exponentially distributed, and so drawing the radius from that exponential
      and pairing it with a uniform angle lands a point whose coordinates are
      independent normals. */
   boxMuller: function (rand, sigma) {
@@ -1339,7 +1462,83 @@ DG.construct = {
     var c1 = DG.construct.chisq(rand, { k: p.d1 }), c2 = DG.construct.chisq(rand, { k: p.d2 });
     var r1 = c1.x / p.d1, r2 = c2.x / p.d2;
     return { x: r1 / r2, c1: c1, c2: c2, r1: r1, r2: r2 };
+  },
+  /* A log-normal draw is, by definition, e raised to a normal draw: one
+     Box–Muller pair supplies that normal, at the tab's own sigma, and y is
+     kept alongside x so the construction panel can show the normal draw
+     underneath the log-normal draw it produced. */
+  lnorm: function (rand, p) {
+    var bm = DG.construct.boxMuller(rand, p.sigma), y = p.mu + bm.a;
+    return { y: y, x: Math.exp(y) };
   }
+};
+
+/* ── Goodness-of-fit tests ───────────────────────────────────────────────
+   Both compare a sample of draws against a distribution's own cdf or pmf at
+   parameters that are known rather than estimated from the sample, and so
+   the classical reference distribution for the test statistic applies
+   without the small-sample correction an estimated-parameter test would
+   need. */
+/* The two-sided asymptotic p-value of the one-sample Kolmogorov–Smirnov
+   statistic D at sample size n, by the Kolmogorov series with Stephens's
+   finite-sample correction to the argument z (Stephens 1970), summed until
+   a term falls below 1e-12 or 100 terms are spent, whichever comes first. */
+DG.sf.ksP = function (D, n) {
+  var z = D * (Math.sqrt(n) + 0.12 + 0.11 / Math.sqrt(n));
+  if (z <= 0) return 1;
+  var sum = 0;
+  for (var j = 1; j <= 100; j++) {
+    var term = Math.exp(-2 * j * j * z * z);
+    sum += (j % 2 === 1 ? 1 : -1) * term;
+    if (term < 1e-12) break;
+  }
+  return Math.max(0, Math.min(1, 2 * sum));
+};
+DG.gof = {};
+/* One-sample Kolmogorov–Smirnov test of a sample against a fully specified
+   continuous distribution: D is the largest gap, at any sorted draw, between
+   the empirical cdf just below and just at that draw and the distribution's
+   own cdf there. With fewer than five draws the asymptotic p-value would
+   mean nothing, and so this returns null instead of a number that looks
+   precise but is not. */
+DG.gof.ks = function (xs, d, p) {
+  var n = xs.length;
+  if (n < 5) return null;
+  var sorted = xs.slice().sort(function (a, b) { return a - b; });
+  var D = 0;
+  for (var i = 0; i < n; i++) {
+    var F = d.cdf(sorted[i], p);
+    D = Math.max(D, (i + 1) / n - F, F - i / n);
+  }
+  return { n: n, D: D, p: DG.sf.ksP(D, n) };
+};
+/* Pearson chi-square test of a sample against a fully specified discrete
+   distribution: cells are built by walking k up from the support's lower
+   end, closing a cell once its expected count reaches 5, and finally
+   folding whatever tail mass never reaches 5 into the last cell so no cell
+   is ever left under-powered. Because the parameters are known rather than
+   fit to this sample, no degree of freedom is spent estimating them, and
+   the statistic is referred to cells − 1 degrees of freedom. With fewer
+   than two cells there is no test to run, and so this returns null rather
+   than a meaningless zero-df statistic. */
+DG.gof.chisq = function (xs, d, p) {
+  var n = xs.length, counts = {};
+  for (var i = 0; i < n; i++) { var xi = xs[i]; counts[xi] = (counts[xi] || 0) + 1; }
+  var lo = d.support(p).lo;
+  var cells = [], eAcc = 0, oAcc = 0, seen = 0;
+  for (var k = lo; k < lo + 1e6; k++) {
+    eAcc += n * d.pdf(k, p);
+    var o = counts[k] || 0;
+    oAcc += o; seen += o;
+    var tailMass = n * (1 - d.cdf(k, p));
+    if (tailMass < 5) { cells.push([oAcc + (n - seen), eAcc + tailMass]); break; }
+    if (eAcc >= 5) { cells.push([oAcc, eAcc]); eAcc = 0; oAcc = 0; }
+  }
+  if (cells.length < 2) return null;
+  var stat = 0;
+  cells.forEach(function (c) { var o = c[0], e = c[1]; stat += (o - e) * (o - e) / e; });
+  var df = cells.length - 1;
+  return { n: n, stat: stat, df: df, cells: cells.length, p: 1 - DG.sf.gammaP(df / 2, stat / 2) };
 };
 
 /* ===== DG-CORE-END ===== */
@@ -1403,32 +1602,41 @@ var DG_TEXT = {
     mode: "no unique mode",
     when: "only the bounds are known",
     lede: "The uniform is equal likelihood between two bounds and nothing more: every value from a to b is as likely as any other.",
-    choose: ["Choose it when only the bounds are known: every value between a and b is equally likely, and nothing in between is favored. It is the maximum-entropy choice for a bounded interval, which is to say it adds no assumption beyond the bounds.", "Prefer the triangular when a most-likely value is also known, and the Beta when the shape inside the interval is known from data. Every other distribution in this gallery is generated from U(0, 1) draws, which is the uniform's other role."]
+    choose: ["Choose it when <strong>only the bounds are known</strong>: every value between a and b is equally likely, and nothing in between is favored. It is the maximum-entropy choice for a bounded interval, which is to say it adds no assumption beyond the bounds.", { hd: "Relationship to other distributions", text: "Prefer the triangular when a most-likely value is also known, and the Beta when the shape inside the interval is known from data. Every other distribution in this gallery is generated from U(0, 1) draws, which is the uniform's other role." }]
   },
   tri: {
     support: "[a, b]",
     paramRange: "a < c < b, all real (the endpoints, and c the most likely value)",
-    pdf: "f(x) = 2(x − a)/((b − a)(c − a)) for a ≤ x ≤ c; 2(b − x)/((b − a)(b − c)) for c ≤ x ≤ b",
-    cdf: "F(x) = (x − a)<sup>2</sup>/((b − a)(c − a)) for a ≤ x ≤ c; 1 − (b − x)<sup>2</sup>/((b − a)(b − c)) for c ≤ x ≤ b",
+    pdf: dgCasesHtml('f(x)', [
+      { expr: "<span class=\"frac\"><span class=\"num\">2(x − a)</span><span class=\"den\">(b − a)(c − a)</span></span>", cond: "a ≤ x ≤ c" },
+      { expr: "<span class=\"frac\"><span class=\"num\">2(b − x)</span><span class=\"den\">(b − a)(b − c)</span></span>", cond: "c ≤ x ≤ b" },
+      { expr: "0", cond: "otherwise" }
+    ]),
+    cdf: dgCasesHtml('F(x)', [
+      { expr: "0", cond: "x &lt; a" },
+      { expr: "<span class=\"frac\"><span class=\"num\">(x − a)<sup>2</sup></span><span class=\"den\">(b − a)(c − a)</span></span>", cond: "a ≤ x ≤ c" },
+      { expr: "1 − <span class=\"frac\"><span class=\"num\">(b − x)<sup>2</sup></span><span class=\"den\">(b − a)(b − c)</span></span>", cond: "c ≤ x ≤ b" },
+      { expr: "1", cond: "x &gt; b" }
+    ]),
     mean: "<span class=\"frac\"><span class=\"num\">a + b + c</span><span class=\"den\">3</span></span>",
     variance: "<span class=\"frac\"><span class=\"num\">a<sup>2</sup> + b<sup>2</sup> + c<sup>2</sup> − ab − ac − bc</span><span class=\"den\">18</span></span>",
     mode: "c",
     when: "bounds and a most-likely value are known",
     lede: "The triangular is a uniform sharpened by one number, a most likely value between the same two bounds.",
-    choose: ["Choose it when the bounds and a most-likely value are known, typically from judgment rather than data: a shortest, a longest, and a usual task time.", "Over the uniform it adds one number, the mode c, and it stays easy to elicit. The Beta takes over once data show a shape a triangle cannot follow, such as a long tail inside the interval."]
+    choose: ["Choose it when <strong>the bounds and a most-likely value are known</strong>, typically from judgment rather than data: a shortest, a longest, and a usual task time.", { hd: "Relationship to other distributions", text: "Over the uniform it adds one number, the mode c, and it stays easy to elicit. The Beta takes over once data show a shape a triangle cannot follow, such as a long tail inside the interval." }]
   },
   norm: {
     support: "(−∞, ∞)",
-    paramRange: "μ real, σ > 0 (the center, and the spread)",
+    paramRange: "μ real, σ > 0 (the center and the spread)",
     pdf: "f(x) = <span class=\"frac\"><span class=\"num\">e<sup>−(x − μ)<sup>2</sup>/(2σ<sup>2</sup>)</sup></span><span class=\"den\">σ√(2π)</span></span>",
     cdf: "F(x) = " + dgIntg('−∞', 'x') + " f(t) dt",
-    standardized: "With z ≜ (x − μ)/σ, every normal is the one standard shape: φ(z) ≜ σf(x) = <span class=\"frac\"><span class=\"num\">e<sup>−z<sup>2</sup>/2</sup></span><span class=\"den\">√(2π)</span></span> and Φ(z) ≜ F(x) = " + dgIntg('−∞', 'z') + " φ(t) dt.",
+    standardized: "With z ≜ (x − μ)/σ, every normal is the one standard shape.<br>φ(z) ≜ σf(x) = <span class=\"frac\"><span class=\"num\">e<sup>−z<sup>2</sup>/2</sup></span><span class=\"den\">√(2π)</span></span><br>Φ(z) ≜ F(x) = " + dgIntg('−∞', 'z') + " φ(t) dt.",
     mean: "μ",
     variance: "σ<sup>2</sup>",
     mode: "μ",
     when: "mean and variance known; the sum of many small effects",
     lede: "The normal is the bell curve that many small independent effects add up to, symmetric around its mean.",
-    choose: ["Choose it for a practically unbounded quantity whose mean and variance are better known than its range, and which is the sum of many small independent effects. That sum is what the central limit theorem says makes a bell curve.", "It is symmetric and takes negative values, so a service time or a lifetime that is strictly positive and skewed is better served by the log-normal, the Gamma, or the Weibull. Simulation software often offers a truncated normal as the compromise.", "The formula is less mysterious than it looks. Writing z for the distance from the mean in standard deviations, the density is e raised to −z²/2: a normal is an exponential decay in squared distance from its center, and nothing more. That also explains a fact used to generate normals, because for two independent normal coordinates the squared radius is exponentially distributed."]
+    choose: ["Choose it for <strong>a practically unbounded quantity that is the sum of many small independent effects</strong>, whose mean and variance are better known than its range. That sum is what the central limit theorem says makes a bell curve.", { hd: "When not to use it", text: "It is symmetric and takes negative values, and so a service time or a lifetime that is strictly positive and skewed is better served by the log-normal, the Gamma, or the Weibull. Simulation software often offers a truncated normal as the compromise." }, { hd: "Why the formula looks the way it does", text: "Writing z for the distance from the mean in standard deviations, the density is e raised to −z²/2: a normal is an exponential decay in squared distance from its center, and nothing more. That also explains a fact used to generate normals, because for two independent normal coordinates the squared radius is exponentially distributed." }]
   },
   expo: {
     support: "[0, ∞)",
@@ -1440,11 +1648,11 @@ var DG_TEXT = {
     mode: "0",
     when: "memoryless waiting time with a known mean",
     lede: "The exponential is the memoryless waiting time: the gap between independent arrivals, or the life of a component that never ages.",
-    choose: ["Choose it for a non-negative waiting time with a known mean and no memory: the time to the next arrival when arrivals are independent of the past, or the time to a random failure at a constant rate. The mean and the standard deviation are both 1/λ.", "Memorylessness is the reason and the warning: Pr(X > x + y | X > x) = Pr(X > y), so an old component is exactly as likely to fail in the next minute as a new one. When the failure rate rises or falls with age, use the Weibull; when the time is a sum of stages, use the Erlang."]
+    choose: ["Choose it for <strong>a non-negative waiting time with a known mean and no memory</strong>: the time to the next arrival when arrivals are independent of the past, or the time to a random failure at a constant rate. The mean and the standard deviation are both 1/λ.", { hd: "Memorylessness", text: "Pr(X > x + y | X > x) = Pr(X > y): an old component is exactly as likely to fail in the next minute as a new one. That is the reason to choose it and the warning against it. When the failure rate rises or falls with age, use the Weibull; when the time is a sum of stages, use the Erlang." }]
   },
   erlang: {
     support: "[0, ∞)",
-    paramRange: "k, a positive integer, and λ > 0 (how many exponential stages are summed, and each stage rate)",
+    paramRange: "k, a positive integer, and λ > 0 (how many exponential stages are summed and the rate of each)",
     pdf: "f(x) = λ<sup>k</sup>x<sup>k−1</sup>e<sup>−λx</sup>/(k − 1)! for x ≥ 0",
     cdf: "F(x) = 1 − Σ<sub>i=0</sub><sup>k−1</sup> (λx)<sup>i</sup>e<sup>−λx</sup>/i!",
     mean: "<span class=\"frac\"><span class=\"num\">k</span><span class=\"den\">λ</span></span>",
@@ -1452,7 +1660,7 @@ var DG_TEXT = {
     mode: "<span class=\"frac\"><span class=\"num\">k − 1</span><span class=\"den\">λ</span></span>",
     when: "the sum of k exponential stages",
     lede: "The Erlang is the wait for k independent exponential stages to finish in a row.",
-    choose: ["Choose it for a time that is the sum of k independent exponential stages of the same rate: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal."]
+    choose: ["Choose it for <strong>a time that is the sum of k independent exponential stages of the same rate</strong>: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", { hd: "Relationship to other distributions", text: "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, and so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal." }]
   },
   weib: {
     support: "[0, ∞)",
@@ -1464,23 +1672,30 @@ var DG_TEXT = {
     mode: "μ((k − 1)/k)<sup>1/k</sup> when k > 1; 0 otherwise",
     when: "a failure rate that rises or falls with age",
     lede: "The Weibull is a lifetime whose failure rate is free to rise or fall with age, generalizing the exponential's constant one.",
-    choose: ["Choose it for a lifetime whose failure rate changes with age: shape k below 1 for early failures that thin out, k = 1 for a constant rate, and k above 1 for wear-out. Whatever k is, the scale μ is the 63.2nd percentile, because F(μ) = 1 − e<sup>−1</sup>.", "Over the exponential it adds the shape; over the Gamma it keeps a closed-form cdf, which makes the inverse-transform generator and the Weibull plot easy. Reliability engineers fit it from failure data with that plot."]
+    choose: ["Choose it for <strong>a lifetime whose failure rate changes with age</strong>: shape k below 1 for early failures that thin out, k = 1 for a constant rate, and k above 1 for wear-out. Whatever k is, the scale μ is the 63.2nd percentile, because F(μ) = 1 − e<sup>−1</sup>.", { hd: "Relationship to other distributions", text: "Over the exponential it adds the shape; over the Gamma it keeps a closed-form cdf, which makes the inverse-transform generator and the Weibull plot easy. Reliability engineers fit it from failure data with that plot." }]
   },
   bern: {
     support: "{0, 1}",
     paramRange: "0 ≤ p ≤ 1 (the probability of a success)",
-    pdf: "p(1) = p, p(0) = 1 − p",
-    cdf: "F(x) = 0 for x &lt; 0; 1 − p for 0 ≤ x &lt; 1; 1 for x ≥ 1",
+    pdf: dgCasesHtml('p(k)', [
+      { expr: "1 − p", cond: "k = 0" },
+      { expr: "p", cond: "k = 1" }
+    ]),
+    cdf: dgCasesHtml('F(x)', [
+      { expr: "0", cond: "x &lt; 0" },
+      { expr: "1 − p", cond: "0 ≤ x &lt; 1" },
+      { expr: "1", cond: "x ≥ 1" }
+    ]),
     mean: "p",
     variance: "p(1 − p)",
     mode: "1 when p > 1/2; 0 when p &lt; 1/2; both when p = 1/2",
     when: "one weighted coin flip",
     lede: "The Bernoulli is one weighted coin flip, the building block for every other trial-based distribution here.",
-    choose: ["Choose it for one trial with two outcomes: a part passes or fails inspection, a customer balks or joins, a coin lands heads.", "It is the building block for the rest of the trial-based distributions: the count of successes in n trials is binomial, and the count of trials until a success is geometric. With p = 0.5 it is the discrete uniform on {0, 1}."]
+    choose: ["Choose it for <strong>one trial with two outcomes</strong>: a part passes or fails inspection, a customer balks or joins, a coin lands heads.", { hd: "Relationship to other distributions", text: "It is the building block for the rest of the trial-based distributions: the count of successes in n trials is binomial, and the count of trials until a success is geometric. With p = 0.5 it is the discrete uniform on {0, 1}." }]
   },
   binom: {
     support: "{0, …, n}",
-    paramRange: "n, a positive integer, and 0 ≤ p ≤ 1 (how many trials, and the probability of a success on each)",
+    paramRange: "n, a positive integer, and 0 ≤ p ≤ 1 (how many trials and the probability of a success on each)",
     pdf: "p(k) = C(n, k)p<sup>k</sup>(1 − p)<sup>n−k</sup> for k = 0, …, n",
     cdf: "F(x) = Σ<sub>k=0</sub><sup>⌊x⌋</sup> p(k)",
     mean: "np",
@@ -1488,7 +1703,7 @@ var DG_TEXT = {
     mode: "⌊(n + 1)p⌋",
     when: "successes in n flips",
     lede: "The binomial counts the successes in a fixed number of independent, identical trials.",
-    choose: ["Choose it for the number of successes in a fixed number n of independent trials with the same success probability p: defective items in a batch of n, or the customers among n who choose the express lane.", "The trials must be independent with a constant p; sampling without replacement from a small lot is hypergeometric instead. For a large n and a small p the Poisson with α = np is a close and simpler approximation, and for a large n the shape is close to normal."]
+    choose: ["Choose it for <strong>the number of successes in a fixed number n of independent trials with the same success probability p</strong>: defective items in a batch of n, or the customers among n who choose the express lane.", { hd: "Relationship to other distributions", text: "The trials must be independent with a constant p; sampling without replacement from a small lot is hypergeometric instead. For a large n and a small p, the Poisson with α = np is a close and simpler approximation, and for a large n the shape is close to normal." }]
   },
   geom: {
     support: "{1, 2, …}",
@@ -1500,11 +1715,11 @@ var DG_TEXT = {
     mode: "1",
     when: "flips until the first success",
     lede: "The geometric counts the trials up to and including the first success, the discrete analog of the exponential's memoryless wait.",
-    choose: ["Choose it for the number of trials up to and including the first success: inspections until the first defective, or attempts until a connection goes through. Here X counts trials, so the range starts at 1 and the mean is 1/p; software sometimes counts the failures before the success instead, which shifts everything by one.", "It is the discrete memoryless distribution, the analog of the exponential: having failed x times says nothing about the next trial. The negative binomial is the wait for the r-th success rather than the first."]
+    choose: ["Choose it for <strong>the number of trials up to and including the first success</strong>: inspections until the first defective, or attempts until a connection goes through. Here, X counts trials, and so the range starts at 1 and the mean is 1/p; software sometimes counts the failures before the success instead, which shifts everything by one.", { hd: "Relationship to other distributions", text: "It is the discrete memoryless distribution, the analog of the exponential: having failed x times says nothing about the next trial. The negative binomial is the wait for the r-th success rather than the first." }]
   },
   nbinom: {
     support: "{r, r+1, …}",
-    paramRange: "r, a positive integer, and 0 < p ≤ 1 (how many successes to wait for, and the probability of a success on each trial)",
+    paramRange: "r, a positive integer, and 0 < p ≤ 1 (how many successes to wait for and the probability of a success on each trial)",
     pdf: "p(k) = C(k − 1, r − 1)p<sup>r</sup>(1 − p)<sup>k−r</sup> for k = r, r + 1, …",
     cdf: "F(x) = Σ<sub>k=r</sub><sup>⌊x⌋</sup> p(k)",
     mean: "<span class=\"frac\"><span class=\"num\">r</span><span class=\"den\">p</span></span>",
@@ -1512,7 +1727,7 @@ var DG_TEXT = {
     mode: "1 when r = 1; ⌊r + (r − 1)(1 − p)/p⌋ otherwise",
     when: "flips until the r-th success",
     lede: "The negative binomial counts the trials up to and including the r-th success, the sum of r geometric waits.",
-    choose: ["Choose it for the number of trials up to and including the r-th success: units inspected until r defectives are found, or a demand count whose variance exceeds its mean, where the Poisson is too tight.", "It is the sum of r geometric waits, and with r = 1 it is the geometric. As a demand model, it and the geometric let the variance exceed the mean, which the Poisson cannot. Software may define it on the failures rather than the trials, which shifts the range by r."]
+    choose: ["Choose it for <strong>the number of trials up to and including the r-th success</strong>: units inspected until r defectives are found, or a demand count whose variance exceeds its mean, where the Poisson is too tight.", { hd: "Relationship to other distributions", text: "It is the sum of r geometric waits, and with r = 1 it is the geometric. As a demand model, it and the geometric let the variance exceed the mean, which the Poisson cannot. Software may define it on the failures rather than the trials, which shifts the range by r." }]
   },
   pois: {
     support: "{0, 1, …}",
@@ -1524,7 +1739,7 @@ var DG_TEXT = {
     mode: "⌊α⌋",
     when: "events in a fixed interval at a known average rate",
     lede: "The Poisson counts the events in a fixed interval when they occur independently at a known average rate.",
-    choose: ["Choose it for the number of events in a fixed interval when events occur one at a time, independently, at a known average rate: arrivals in an hour, orders in a day, or defects per unit length. The parameter α is both the mean and the variance.", "It is the counting side of the exponential: when interarrival times are exponential with rate λ, the count in an interval of length t is Poisson with α = λt. When the observed variance is larger than the mean, the negative binomial fits better; when it is smaller, a binomial does."]
+    choose: ["Choose it for <strong>the number of events in a fixed interval when events occur one at a time, independently, at a known average rate</strong>: arrivals in an hour, orders in a day, or defects per unit length. The parameter α is both the mean and the variance.", { hd: "Relationship to other distributions", text: "It is the counting side of the exponential: when interarrival times are exponential with rate λ, the count in an interval of length t is Poisson with α = λt. When the observed variance is larger than the mean, the negative binomial fits better; when it is smaller, a binomial does." }]
   },
   gamma: {
     support: "(0, ∞)",
@@ -1536,7 +1751,7 @@ var DG_TEXT = {
     mode: "(k − 1)θ when k ≥ 1; 0 otherwise",
     when: "an Erlang with a real-valued stage count",
     lede: "The Gamma generalizes the Erlang to a real-valued stage count, keeping the same positive, right-skewed shape.",
-    choose: ["Choose it for a positive, right-skewed quantity when the Erlang's whole-number stage count is too restrictive: the shape k sets the skew and the scale θ sets the units, and the mean is kθ.", "With an integer k it is the Erlang, and with k = 1 it is the exponential with mean θ. Beside the log-normal and the Weibull it is one of the three usual choices for a positive skewed variable. Its cdf has no closed form, so software draws from it by acceptance-rejection rather than by inverting the cdf."]
+    choose: ["Choose it for <strong>a positive, right-skewed quantity</strong> when the Erlang's whole-number stage count is too restrictive: the shape k sets the skew and the scale θ sets the units, and the mean is kθ.", { hd: "Relationship to other distributions", text: "With an integer k it is the Erlang, and with k = 1 it is the exponential with mean θ. Beside the log-normal and the Weibull, it is one of the three usual choices for a positive skewed variable. Its cdf has no closed form, and so software draws from it by acceptance-rejection rather than by inverting the cdf." }]
   },
   chisq: {
     support: "[0, ∞)",
@@ -1548,19 +1763,19 @@ var DG_TEXT = {
     mode: "max(k − 2, 0)",
     when: "a sum of k squared standard normals",
     lede: "The chi-square is what a sum of squared standard normal variates follows, and it is the reference curve behind the goodness-of-fit test.",
-    choose: ["It is not an input model. A chi-square appears as the distribution of a statistic computed from data, most often a goodness-of-fit statistic or a scaled sample variance, each of which reduces to a sum of squared standard normal terms.", "The shape follows k alone. At k = 1 the density is unbounded at zero, at k = 2 it is exactly the exponential with mean 2, and as k grows it approaches a normal, because a sum of many independent squares obeys the central limit theorem like any other sum."]
+    choose: ["<strong>It is not an input model.</strong> A chi-square appears as the distribution of a statistic computed from data, most often a goodness-of-fit statistic or a scaled sample variance, each of which reduces to a sum of squared standard normal terms.", { hd: "How the shape follows k", text: "At k = 1 the density is unbounded at zero, at k = 2 it is exactly the exponential with mean 2, and as k grows it approaches a normal, because a sum of many independent squares obeys the central limit theorem like any other sum." }]
   },
   fdist: {
     support: "(0, ∞)",
     paramRange: "d₁ and d₂, positive integers (the degrees of freedom of the numerator and of the denominator)",
     pdf: "f(x) = d<sub>1</sub><sup>d<sub>1</sub>/2</sup>d<sub>2</sub><sup>d<sub>2</sub>/2</sup>x<sup>d<sub>1</sub>/2 − 1</sup>/((d<sub>1</sub>x + d<sub>2</sub>)<sup>(d<sub>1</sub>+d<sub>2</sub>)/2</sup>B(d<sub>1</sub>/2, d<sub>2</sub>/2)) for x > 0",
-    cdf: "F(x) = I<sub>z</sub>(d<sub>1</sub>/2, d<sub>2</sub>/2), z = d<sub>1</sub>x/(d<sub>1</sub>x + d<sub>2</sub>)",
+    cdf: "F(x) = I<sub>z</sub>(d<sub>1</sub>/2, d<sub>2</sub>/2)<br>z = d<sub>1</sub>x/(d<sub>1</sub>x + d<sub>2</sub>)",
     mean: "<span class=\"frac\"><span class=\"num\">d<sub>2</sub></span><span class=\"den\">d<sub>2</sub> − 2</span></span> for d<sub>2</sub> > 2",
     variance: "<span class=\"frac\"><span class=\"num\">2d<sub>2</sub><sup>2</sup>(d<sub>1</sub> + d<sub>2</sub> − 2)</span><span class=\"den\">d<sub>1</sub>(d<sub>2</sub> − 2)<sup>2</sup>(d<sub>2</sub> − 4)</span></span> for d<sub>2</sub> > 4",
     mode: "<span class=\"frac\"><span class=\"num\">d<sub>1</sub> − 2</span><span class=\"den\">d<sub>1</sub></span></span>&middot;<span class=\"frac\"><span class=\"num\">d<sub>2</sub></span><span class=\"den\">d<sub>2</sub> + 2</span></span> for d<sub>1</sub> > 2",
     when: "a ratio of two scaled chi-squares",
     lede: "The F is a ratio of two chi-squares, each divided by its own degrees of freedom, and it is the reference curve for comparing two variances.",
-    choose: ["It is not an input model either. An F appears when two estimates of variance are compared, as in an analysis of variance or a test of whether two samples have the same spread: each sum of squares is a chi-square, and their scaled ratio is F.", "Both degrees of freedom shape it. The density gathers around one as they grow, because each half of the ratio settles on its own mean, and a small denominator degrees of freedom leaves a heavy right tail. The mean d₂/(d₂ − 2) exists only for d₂ above 2, and the variance only for d₂ above 4, which is why the denominator knob starts at 5."]
+    choose: ["<strong>It is not an input model either.</strong> An F appears when two estimates of variance are compared, as in an analysis of variance or a test of whether two samples have the same spread: each sum of squares is a chi-square, and their scaled ratio is F.", { hd: "How the shape follows the degrees of freedom", text: "The density gathers around one as both grow, because each half of the ratio settles on its own mean, and a small denominator degrees of freedom leaves a heavy right tail. The mean d₂/(d₂ − 2) exists only for d₂ above 2, and the variance only for d₂ above 4, which is why the denominator degrees of freedom here start at 5." }]
   },
   beta: {
     support: "[0, 1]",
@@ -1572,7 +1787,7 @@ var DG_TEXT = {
     mode: "<span class=\"frac\"><span class=\"num\">α − 1</span><span class=\"den\">α + β − 2</span></span> when α, β > 1",
     when: "a bounded interval whose inner shape is known from data",
     lede: "The Beta is the flexible shape for a bounded quantity, reaching a flat, a bell, a ramp, or a U from two parameters.",
-    choose: ["Choose it for a bounded quantity whose shape inside the interval matters: a proportion, a task time scaled to its bounds, or an uncertain probability. Two parameters reach a flat, a U, a bell, or a ramp, which is why it is the usual choice when a bounded variable has data but no obvious family.", "Read α and β as pseudo-counts: Beta(1, 1) is the uniform, and each observed success adds one to α and each failure one to β, so the density sharpens around the observed fraction. The k-th smallest of n uniform draws is Beta(k, n − k + 1), which is a way to generate it without inverting the cdf."]
+    choose: ["Choose it for <strong>a bounded quantity whose shape inside the interval matters</strong>: a proportion, a task time scaled to its bounds, or an uncertain probability. Two parameters reach a flat, a U, a bell, or a ramp, which is why it is the usual choice when a bounded variable has data but no obvious family.", { hd: "Reading the parameters", text: "Read α and β as pseudo-counts: Beta(1, 1) is the uniform, and each observed success adds one to α and each failure one to β, and so the density sharpens around the observed fraction. The k-th smallest of n uniform draws is Beta(k, n − k + 1), which is a way to generate it without inverting the cdf." }]
   },
   lnorm: {
     support: "(0, ∞)",
@@ -1585,7 +1800,7 @@ var DG_TEXT = {
     mode: "e<sup>μ − σ<sup>2</sup></sup>",
     when: "positive; the product of many small effects",
     lede: "The log-normal is a positive quantity whose logarithm is normal, the product of many small independent factors.",
-    choose: ["Choose it for a positive quantity that is the product of many small independent factors, so that its logarithm is a sum and therefore normal: growth, prices, and some repair times. The parameters μ and σ are the mean and standard deviation of ln X, not of X.", "It has a heavier right tail than the Gamma or the Weibull with the same mean and variance, and it is the usual alternative to them for a positive skewed variable. Generate it as e raised to a normal draw."]
+    choose: ["Choose it for <strong>a positive quantity whose logarithm is normal</strong>, which is what the product of many small independent factors is, because a product's logarithm is a sum: growth, prices, and some repair times. The parameters μ and σ are the mean and standard deviation of ln X, not of X.", { hd: "Relationship to other distributions", text: "It has a heavier right tail than the Gamma or the Weibull with the same mean and variance, and it is the usual alternative to them for a positive skewed variable. Generate it as e raised to a normal draw." }]
   },
   rayl: {
     support: "[0, ∞)",
@@ -1597,7 +1812,7 @@ var DG_TEXT = {
     mode: "σ",
     when: "the magnitude of a two-dimensional normal error",
     lede: "The Rayleigh is the magnitude of a two-dimensional error whose components are independent, equally spread normals.",
-    choose: ["Choose it for the magnitude of a two-dimensional error whose components are independent normals with the same spread: the miss distance of a projectile, or the radial error of a landing. The single parameter σ is the spread of each component.", "It is the Weibull with shape 2 and scale σ√2, and R²/σ² is chi-square with two degrees of freedom, which is the exponential with mean 2. That radius is the one the Box–Muller transform draws, so the inverse of its cdf, R = σ√(−2 ln(1 − U)), is half of the standard way to generate normals."]
+    choose: ["Choose it for <strong>the magnitude of a two-dimensional error whose components are independent normals with the same spread</strong>: the miss distance of a projectile, or the radial error of a landing. The single parameter σ is the spread of each component.", { hd: "Relationship to other distributions", text: "It is the Weibull with shape 2 and scale σ√2, and R²/σ² is chi-square with two degrees of freedom, which is the exponential with mean 2. That radius is the one the Box–Muller transform draws, and so the inverse of its cdf, R = σ√(−2 ln(1 − U)), is half of the standard way to generate normals." }]
   },
   dunif: {
     support: "{a, …, b}",
@@ -1609,7 +1824,7 @@ var DG_TEXT = {
     mode: "no unique mode",
     when: "equally likely integers",
     lede: "The discrete uniform is equal likelihood spread across a finite set of integers, the uniform's counterpart for counting outcomes.",
-    choose: ["Choose it for equally likely outcomes on a finite set of integers: a fair die, or a random slot from a to b.", "It is the maximum-entropy choice for a finite set, the way the continuous uniform is for an interval, and Bernoulli(0.5) is its two-point case. Generate it as a + ⌊(b − a + 1)U⌋."]
+    choose: ["Choose it for <strong>equally likely outcomes on a finite set of integers</strong>: a fair die, or a random slot from a to b.", { hd: "Relationship to other distributions", text: "It is the maximum-entropy choice for a finite set, the way the continuous uniform is for an interval, and Bernoulli(0.5) is its two-point case. Generate it as a + ⌊(b − a + 1)U⌋." }]
   }
 };
 
@@ -1617,7 +1832,7 @@ var DG_TEXT = {
    Every distribution tab is built once, at load, from its DG.dists entry
    and its DG_TEXT content, rather than hand-written eighteen times over.
    The knobs, chips, plots, moments, and related links all come out of this
-   one function, so a change to the layout only has to be made once. */
+   one function, and so a change to the layout only has to be made once. */
 function fmtNum(v) {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   if (Math.abs(v) < 1e-9) v = 0;
@@ -1680,7 +1895,7 @@ function dgMarkerShape(shape, cx, cy, r, stroke) {
 /* The legend's own small sample of each mark: a horizontal line at that
    reference's lightness (dashed for a continuous curve, plain for a discrete
    one, matching the plot) with its marker shape centered on it – a vertical
-   stem sample read as an unrelated pictograph at this size, so the swatch
+   stem sample read as an unrelated pictograph at this size, and so the swatch
    stays horizontal even on a discrete tab. The live curve gets the plain
    heavier teal line, plus a filled dot for a discrete pmf's stem top, because
    color, weight, and dash already set it apart from the three references. */
@@ -1728,7 +1943,12 @@ function buildTab(d) {
   var xSym = d.type === 'c' ? 'x' : 'k';
   var html = '';
   html += '<p class="lede">' + t.lede + '</p>';
-  html += '<div class="sec"><div class="sec-hd">When to choose it</div>' + t.choose.map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>';
+  // The first paragraph carries the one-line summary of what the
+  // distribution is, in bold, and any later paragraph opens with a bold
+  // run-in heading naming what it is for, set off by a little space.
+  html += '<div class="sec"><div class="sec-hd">When to choose it</div>' + t.choose.map(function (p) {
+    return typeof p === 'string' ? '<p class="choose-lead">' + p + '</p>' : '<p class="choose-more"><strong>' + p.hd + '.</strong> ' + p.text + '</p>';
+  }).join('') + '</div>';
   html += '<div class="sec">';
   html += '<div class="sec-hd">' + d.name + ' · ' + typeLabel + '</div>';
   html += '<dl class="meta">';
@@ -1750,13 +1970,13 @@ function buildTab(d) {
   html += '<label class="refs-toggle" for="refs-' + d.id + '"><input type="checkbox" id="refs-' + d.id + '" checked onchange="DGUI.onRefsToggle(\'' + d.id + '\')">Show reference settings</label>';
   html += '</div>';
   html += '<div id="knobs-' + d.id + '">' + d.params.map(function (q) { return knobRowHtml(d, q); }).join('') + '</div>';
-  html += '<p class="knob-note">The sliders above only cover the span this plot\'s fixed axis can show; the distribution itself is not limited to it.</p>';
+  html += '<p class="knob-note">The parameter ranges above cover only the span this plot\'s fixed axis can show; the distribution itself is not limited to it.</p>';
   html += '</div>';
   html += '<div class="sec">';
   html += '<div class="sec-hd">Formulas and moments</div>';
-  html += '<div class="eq-row"><span class="eq-lbl">' + kindWord + '</span><span class="eq">' + t.pdf + '</span></div>';
-  html += '<div class="eq-row"><span class="eq-lbl">cdf</span><span class="eq">' + t.cdf + '</span></div>';
-  if (t.standardized) html += '<div class="eq-row"><span class="eq-lbl">Standardized</span><span class="eq">' + t.standardized + '</span></div>';
+  html += '<div class="eq-row"><span class="eq-lbl">' + kindWord + '</span><span class="eq">' + dgFormulaHtml(t.pdf) + '</span></div>';
+  html += '<div class="eq-row"><span class="eq-lbl">cdf</span><span class="eq">' + dgFormulaHtml(t.cdf) + '</span></div>';
+  if (t.standardized) html += '<div class="eq-row"><span class="eq-lbl">Standardized</span><span class="eq">' + dgEqHtml(t.standardized) + '</span></div>';
   html += '<div class="sg mom-grid">';
   html += momentCardHtml('Mean', 'm-mean-' + d.id, t.mean);
   html += momentCardHtml('Variance', 'm-var-' + d.id, t.variance);
@@ -1802,7 +2022,7 @@ function dgIntRange(x0, x1) { return [Math.ceil(x0 - 1e-9), Math.floor(x1 + 1e-9
    at or after x0 – for a discrete axis padded by half a unit on each side
    (bern's -0.5 to 1.5, say) that puts the first tick on the first whole
    value rather than on the padding itself. */
-/* Widens a tick step until each label has about 26px of axis, so a narrow
+/* Widens a tick step until each label has about 26px of axis, and so a narrow
    plot shows every fifth value rather than a run of digits with no gaps. */
 function dgTickStepFor(x0, x1, xt, px) {
   var mult = [1, 2, 5, 10, 20, 50], n = (x1 - x0) / xt;
@@ -1836,7 +2056,7 @@ var DG_RISER_DASH = '2 2';
    a knob; only the y-axis is allowed to grow past the design height axis.y1,
    and only far enough to keep a spiking live curve from clipping – the
    three reference curves never drive that growth. A pmf has no mass between
-   the integers, so every bar here is a stem: a line from zero up to p(k)
+   the integers, and so every bar here is a stem: a line from zero up to p(k)
    topped with a marker, never a filled rectangle (which would read as a
    histogram of draws that were never taken) and never a line connecting the
    tops (which would claim the distribution exists between the integers). */
@@ -1865,7 +2085,7 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
   }
   var yMax = Math.max(d.axis.y1, yMaxLive * 1.05);
   /* The top markH px of the frame are reserved for the mean-and-spread mark
-     and excluded from every curve's range, so a curve that spikes toward
+     and excluded from every curve's range, and so a curve that spikes toward
      yMax still stops short of the mark rather than fighting it for the same
      pixels. */
   var markH = 16, plotT = T + markH, plotH = innerH - markH;
@@ -1903,7 +2123,7 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
          the three settings apart would put marks where the distribution has no
          mass, which is the misreading a stem plot exists to prevent; the
          settings are told apart by marker shape and lightness instead, and the
-         markers are hollow, so one standing on another still shows through. */
+         markers are hollow, and so one standing on another still shows through. */
       for (var kk = rng[0]; kk <= rng[1]; kk++) {
         var yv2 = d.pdf(kk, ref.p), xk = xAt(kk), yTop = yAt(yv2);
         h += '<line x1="' + xk + '" y1="' + (T + innerH) + '" x2="' + xk + '" y2="' + yTop + '" stroke="' + color + '" stroke-width="1.2"/>';
@@ -1950,7 +2170,7 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
    The horizontal step itself carries no dash pattern, because its shape and
    the endpoint fill already say what it is – a dash reads as Morse code
    once it is chopped into a run of short steps – but a dashed vertical
-   riser connects that hollow dot up to the next step's filled one, so the
+   riser connects that hollow dot up to the next step's filled one, and so the
    jump between two steps reads as a jump rather than as two floating,
    unrelated dots. The live curve is heavier; the three references
    are thinner and colored from the --ref-1/2/3 ramp. ── */
@@ -2135,7 +2355,7 @@ function buildPickerGroups() {
    distribution answers, plus a relationship diagram. Both are pure string
    builders over DG.dists and DG_TEXT, matching the pattern the distribution
    tabs already use. Each tile carries the same continuous/discrete color as
-   its picker pill (data-type, styled in CSS), so the picker's key covers
+   its picker pill (data-type, styled in CSS), and so the picker's key covers
    the Map's tiles too. */
 function mapTileHtml(d) {
   var t = DG_TEXT[d.id];
@@ -2232,7 +2452,7 @@ var DG_TAB_FAMILY = {
 };
 /* A handful of DG_TEXT's old related-distribution facts describe a pair that
    no family edge connects (the two sit in different subtrees, or in
-   families that never meet). Those facts would otherwise be lost, so they
+   families that never meet). Those facts would otherwise be lost, and so they
    are kept here as one sentence each, read out under the tab's diagram. */
 var DG_EXTRA_RELATED = {
   unif: [
@@ -2409,7 +2629,7 @@ function dgFamilyNodeHtml(id, pos, dim, highlightId) {
 }
 /* A label's home position is the midpoint of its own edge, nudged off the
    line by dim.labelOffset in the direction perpendicular to it – never
-   scaled by the label's length, so it always reads as sitting on its own
+   scaled by the label's length, and so it always reads as sitting on its own
    edge rather than floating free of it. At that small an offset the label's
    own box is expected to touch or cross its own line (the halo in its CSS
    is what keeps that legible); the collision pass in dgResolveFamilyDiagram
@@ -2417,7 +2637,7 @@ function dgFamilyNodeHtml(id, pos, dim, highlightId) {
    this label, while still checking it against every other edge, node, and
    label. `others` is the center of every other node in the tree; the side
    chosen is whichever keeps the label's home position farther from the
-   nearest one, so the label leans away from a crowded neighbor rather than
+   nearest one, and so the label leans away from a crowded neighbor rather than
    always the same side an edge happens to lean toward. */
 function dgFamilyLabelHtml(a, b, edge, dim, others, eid) {
   var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -2445,18 +2665,18 @@ function dgFamilyEdgeHtml(a, b, edge, dim, others, eid) {
    deep descendant back to an ancestor would run right on top of the very
    chain of nodes and edges that connects them. Three segments carry it out
    past the widest node in the tree, up (or down) to the target's own row,
-   and back in to the target – an elbow, not a curve, so every segment is
+   and back in to the target – an elbow, not a curve, and so every segment is
    still a plain .famedge line and the existing label-collision pass in
    dgResolveFamilyDiagram (which reads x1/y1/x2/y2 off exactly that class)
    needs no changes to treat it like any other edge. All three segments and
-   the one label share `eid`, so the collision pass's own-edge exclusion
+   the one label share `eid`, and so the collision pass's own-edge exclusion
    covers the whole elbow, not just the middle leg the label sits beside. */
 function dgFamilyBackEdgeHtml(edge, tree, pos, dim, eid) {
   var a = pos[edge.from], b = pos[edge.to], hw = dim.nodeW / 2;
   var maxRight = Math.max.apply(null, tree.allIds.map(function (id) { return pos[id].x + hw; }));
   /* Only a plain column gap clears the nodes – the label's own offset (and
      whatever the collision pass in dgResolveFamilyDiagram grows it to)
-     reaches further right than this on its own, so folding labelOffsetMax
+     reaches further right than this on its own, and so folding labelOffsetMax
      in here as well would double that margin and, on the four-column
      waiting family, push the narrow diagram's own scale below the 0.85
      legibility floor. */
@@ -2489,7 +2709,7 @@ function dgFamilySvg(family, highlightId, wide) {
   var h = dim.pad * 2 + dim.nodeH + layout.maxDepth * (dim.nodeH + dim.vGap);
   /* A back edge's elbow can reach past this tree-only estimate (it bows out
      beyond the widest node); dgResolveFamilyDiagram retightens the viewBox
-     to what was actually drawn, so this w/h pair only needs to be a safe
+     to what was actually drawn, and so this w/h pair only needs to be a safe
      starting box, not the final one. */
   return '<svg class="famdiagram" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="group" aria-label="' + dgEsc(family.heading) + ' family tree">'
     + edgesHtml + nodesHtml + '</svg>';
@@ -2516,7 +2736,7 @@ function dgResolveFamilyDiagram(svg) {
   /* Whether a straight line actually passes through (or within m of) a
      rectangle – used for an edge other than the label's own, in place of
      comparing two bounding boxes. Two edges sharing a node fan out from the
-     same point in different directions, so their thin diagonal strokes can
+     same point in different directions, and so their thin diagonal strokes can
      sit nowhere near each other while their axis-aligned bounding boxes
      still overlap heavily near that shared point; a bbox-vs-bbox test would
      misreport that as a collision. */
@@ -2628,7 +2848,7 @@ function dgCloneFontCss(cs) {
    extreme (2.5), and a reserve built only from the corners can under-reserve
    for it. Walks every combination on each param's own step grid (small: a
    knob's range divided by its step) and returns the params object scoring
-   highest under scoreFn, so the caller can add just this one extra candidate
+   highest under scoreFn, and so the caller can add just this one extra candidate
    to whatever corner/reference set it already measures. */
 function worstOverGrid(d, scoreFn) {
   var best = null, bestScore = -Infinity;
@@ -2666,6 +2886,21 @@ function dgMeasureOffscreen(el, html) {
   var h = c.getBoundingClientRect().height;
   c.remove();
   return h;
+}
+/* Like dgMeasureOffscreen, but the candidate's own natural width rather
+   than a height measured at some fixed width – used to reserve a value
+   slot's min-width so substituting a real number for an empty placeholder
+   can never itself be the thing that makes a line wrap. */
+function dgMeasureOffscreenTextWidth(el, html) {
+  var c = el.cloneNode(false);
+  c.removeAttribute('id');
+  var cs = getComputedStyle(el);
+  c.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;white-space:nowrap;display:inline-block;' + dgCloneFontCss(cs);
+  c.innerHTML = html;
+  document.body.appendChild(c);
+  var w = c.getBoundingClientRect().width;
+  c.remove();
+  return w;
 }
 function reserveSupportHeight(d) {
   var el = $('meta-supp-' + d.id);
@@ -2715,7 +2950,7 @@ function reserveLegendHeight(d) {
   /* The knob extremes alone are not always the widest text: a distribution
      can have two or more params whose individual mins/maxes are shorter
      than a two-digit combination one of the three fixed reference settings
-     actually uses (F's d1 = 10, d2 = 20, say), so the refs' own texts are
+     actually uses (F's d1 = 10, d2 = 20, say), and so the refs' own texts are
      measured too, not only the def/lo/hi corners. */
   var candidates = [paramValueLine(d, d.clamp(def)), paramValueLine(d, d.clamp(lo)), paramValueLine(d, d.clamp(hi))]
     .concat(d.refs.map(function (r) { return paramValueLine(d, r.p); }));
@@ -2775,19 +3010,86 @@ function updateChips(d, p) {
    either a short note or, for a search-kind distribution, the cumulative
    table the search itself walks. Shared by all eighteen tabs: only the
    recipe text and the side panel differ, both keyed off the registry's own
-   gen.kind, so one set of functions renders every tab from DG_RECIPE and the
+   gen.kind, and so one set of functions renders every tab from DG_RECIPE and the
    distribution object itself. ── */
-/* A multi-branch recipe, set as a tall brace against a grid of "expression
-   when condition" rows rather than jammed onto one line. rows is an array of
-   { expr, cond } pairs; the brace is the one cell explicitly placed in
-   column 1 across every row, and the expr/cond cells that follow it in the
-   markup fall into columns 2 and 3 by the grid's own row-by-row auto-flow. */
-function dgCasesHtml(rows) {
+/* A curly brace scaled to whatever height its cases block turns out to
+   need: a path in a fixed viewBox with preserveAspectRatio="none", so
+   giving the element itself a CSS height stretches the path to match
+   rather than leaving a text "{" that stays one line tall regardless of how
+   many branches sit beside it. */
+function dgBraceSvg() {
+  return '<svg viewBox="0 0 20 100" preserveAspectRatio="none" aria-hidden="true">'
+    + '<path d="M17,2 C10,2 10,9 10,17 L10,42 C10,48 10,49 2,50 C10,51 10,52 10,58 L10,83 C10,91 10,98 17,98" '
+    + 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+/* A multi-branch recipe, set the LaTeX cases way: the shared left-hand side
+   (lhs, e.g. "X") once, then a tall brace, then a grid of "expression when
+   condition" rows. rows is an array of { expr, cond } pairs; the brace is
+   the one cell explicitly placed in column 1 across every row, and the
+   expr/cond cells that follow it in the markup fall into columns 2 and 3 by
+   the grid's own row-by-row auto-flow. Each expr is its own hanging-indent
+   unit (see .cases-expr), and so a branch too long for one line wraps with its
+   continuation indented rather than flush against the brace. */
+function dgCasesHtml(lhs, rows) {
   // The row span is set here, from the known row count, rather than left as
   // a CSS "1 / -1": see the note on .cases-brace above.
-  return '<span class="cases"><span class="cases-brace" style="grid-row:span ' + rows.length + '">{</span>' + rows.map(function (r) {
-    return '<span>' + r.expr + '</span><span class="cases-cond">' + r.cond + '</span>';
-  }).join('') + '</span>';
+  return '<span class="cases-wrap"><span class="cases-lhs">' + lhs + ' =</span><span class="cases">'
+    + '<span class="cases-brace" style="grid-row:span ' + rows.length + '">' + dgBraceSvg() + '</span>'
+    + rows.map(function (r) {
+      return '<span class="cases-expr">' + r.expr + '</span><span class="cases-cond">' + r.cond + '</span>';
+    }).join('') + '</span></span>';
+}
+/* Renders one line of equation text: a bare "=" that sits in the line's own
+   visible text (not inside an HTML tag, such as the "=" in class="frac")
+   marks a top-level equality. A line with at most one such "=" is left as
+   ordinary flowing text; a line with two or more (a chain, X = expr = expr)
+   is rendered as the two-column .eq-align grid described above it, and so a
+   wrap lines every chunk's own "=" up under the first one. */
+function dgEqLineHtml(line) {
+  var idxs = [], inTag = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line.charAt(i);
+    if (c === '<') inTag = true;
+    else if (c === '>') inTag = false;
+    else if (c === '=' && !inTag) idxs.push(i);
+  }
+  if (idxs.length < 2) return line;
+  var lhs = line.slice(0, idxs[0]).replace(/\s+$/, '');
+  var chunks = [];
+  for (var j = 0; j < idxs.length; j++) {
+    var end = (j + 1 < idxs.length) ? idxs[j + 1] : line.length;
+    chunks.push(line.slice(idxs[j], end).replace(/\s+$/, ''));
+  }
+  return '<span class="eq-align"><span class="eq-lhs">' + lhs + '</span><span class="eq-chunks">'
+    + chunks.map(function (c) { return '<span class="eq-chunk">' + c + '</span>'; }).join('') + '</span></span>';
+}
+/* Applies dgEqLineHtml to a whole .eq span's content, one line at a time,
+   splitting on any literal "<br>" the caller already uses to separate
+   distinct lines (a recipe's symbolic line from its numeric note, say):
+   each line is judged for the align treatment on its own, and so a plain note
+   sentence elsewhere in the same span is never disturbed by an unrelated
+   equation above it. Never call this on markup built by dgCasesHtml – a
+   cases block's own class attributes (class="cases") contain a literal "="
+   that is not a math equality, and this function does not know to skip it. */
+function dgEqHtml(html) { return html.split('<br>').map(dgEqLineHtml).join('<br>'); }
+/* The one entry point for a formula or recipe string: a string holding a
+   cases block (the triangular's pdf and cdf, the Bernoulli's, and the
+   three cases-style recipes) is returned untouched, because dgEqHtml would
+   slice its markup at the "=" signs its own conditions and lhs carry;
+   everything else gets the equals-alignment treatment. */
+function dgFormulaHtml(html) { return html.indexOf('class="cases-wrap"') >= 0 ? html : dgEqHtml(html); }
+/* Drops a coefficient of exactly 1 from a substituted term ("1·Φ⁻¹(U)"
+   changes nothing and reads as noise beside the plain "Φ⁻¹(U)" it means),
+   used wherever a recipe multiplies a uniform-built term by a scale
+   parameter that can land on 1 at the tab's own default. */
+function dgCoefTerm(coef, term) { return coef === 1 ? term : fmtNum(coef) + '·' + term; }
+/* The Normal's and Log-normal's substituted recipes are an offset plus a
+   scaled term, and at the default parameters the offset is 0 and the scale
+   is 1 – both changing nothing, and so both are dropped rather than shown
+   as "0 + 1·Φ⁻¹(U)". */
+function dgLinearRecipe(offset, coef, term) {
+  var s = fmtNum(offset) + ' + ' + dgCoefTerm(coef, term);
+  return offset === 0 ? s.replace(/^0 \+ /, '') : s;
 }
 var DG_SEARCH_RECIPE = 'X is the smallest k with F(k) ≥ U: walk the cumulative table until it passes U.';
 var DG_RECIPE = {
@@ -2796,18 +3098,18 @@ var DG_RECIPE = {
   },
   tri: function (p) {
     var q = (p.c - p.a) / (p.b - p.a);
-    var symbolic = dgCasesHtml([
-      { expr: 'X = a + √(U(b − a)(c − a))', cond: 'when U < (c − a)/(b − a)' },
-      { expr: 'X = b − √((1 − U)(b − a)(b − c))', cond: 'otherwise' }
+    var symbolic = dgCasesHtml('X', [
+      { expr: 'a + √(U(b − a)(c − a))', cond: 'U &lt; (c − a)/(b − a)' },
+      { expr: 'b − √((1 − U)(b − a)(b − c))', cond: 'otherwise' }
     ]);
-    var substituted = dgCasesHtml([
-      { expr: 'X = ' + fmtNum(p.a) + ' + √(U·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.c - p.a) + ')', cond: 'when U < ' + fmtNum(q) },
-      { expr: 'X = ' + fmtNum(p.b) + ' − √((1 − U)·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.b - p.c) + ')', cond: 'otherwise' }
+    var substituted = dgCasesHtml('X', [
+      { expr: fmtNum(p.a) + ' + √(U·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.c - p.a) + ')', cond: 'U &lt; ' + fmtNum(q) },
+      { expr: fmtNum(p.b) + ' − √((1 − U)·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.b - p.c) + ')', cond: 'otherwise' }
     ]);
-    return symbolic + '<br>' + substituted;
+    return symbolic + substituted;
   },
   norm: function (p) {
-    return 'X = μ + σ·Φ<sup>−1</sup>(U) = ' + fmtNum(p.mu) + ' + ' + fmtNum(p.sigma) + '·Φ<sup>−1</sup>(U)<br>'
+    return 'X = μ + σ·Φ<sup>−1</sup>(U) = ' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)') + '<br>'
       + 'Φ<sup>−1</sup> has no closed form; the plot uses a numerical approximation of it, which is what spreadsheet and simulation software do too.';
   },
   expo: function (p) {
@@ -2815,26 +3117,26 @@ var DG_RECIPE = {
       + 'Because 1 − U is also uniform, −ln(U)/λ gives the same distribution with one subtraction fewer.';
   },
   erlang: function (p) {
-    return 'X = F<sup>−1</sup>(U) by numeric search, or as the sum of ' + fmtNum(p.k) + ' exponentials: X = −(1/' + fmtNum(p.lam) + ')·ln(U<sub>1</sub>·U<sub>2</sub>·⋯·U<sub>' + fmtNum(p.k) + '</sub>)';
+    return 'X = F<sup>−1</sup>(U) by numeric search.<br>Equivalently, as the sum of ' + fmtNum(p.k) + ' exponentials: X = −(1/' + fmtNum(p.lam) + ')·ln(U<sub>1</sub>·U<sub>2</sub>·⋯·U<sub>' + fmtNum(p.k) + '</sub>)';
   },
   weib: function (p) {
     return 'X = μ(−ln(1 − U))<sup>1/k</sup> = ' + fmtNum(p.mu) + '·(−ln(1 − U))<sup>' + fmtNum(1 / p.k) + '</sup>';
   },
   bern: function (p) {
-    var cases = dgCasesHtml([
-      { expr: 'X = 1', cond: 'when U > 1 − p = ' + fmtNum(1 - p.p) },
-      { expr: 'X = 0', cond: 'otherwise' }
+    var cases = dgCasesHtml('X', [
+      { expr: '1', cond: 'U &gt; 1 − p = ' + fmtNum(1 - p.p) },
+      { expr: '0', cond: 'otherwise' }
     ]);
-    return cases + '<br>Equivalently, X = 1 when U < p; both compare one uniform to one number.';
+    return cases + 'Equivalently, X = 1 when U &lt; p; both compare one uniform to one number.';
   },
   binom: function () { return DG_SEARCH_RECIPE; },
   geom: function (p) {
-    var currentExpr = 'X = ⌈ln(1 − U) / ln(1 − p)⌉' + (p.p < 1 ? ' = ⌈ln(1 − U) / ' + fmtNum(Math.log(1 - p.p)) + '⌉' : '');
-    var cases = dgCasesHtml([
-      { expr: currentExpr, cond: 'when p < 1' },
-      { expr: 'X = 1', cond: 'otherwise' }
+    var currentExpr = '⌈ln(1 − U) / ln(1 − p)⌉' + (p.p < 1 ? ' = ⌈ln(1 − U) / ' + fmtNum(Math.log(1 - p.p)) + '⌉' : '');
+    var cases = dgCasesHtml('X', [
+      { expr: currentExpr, cond: 'p &lt; 1' },
+      { expr: '1', cond: 'otherwise' }
     ]);
-    return cases + '<br>ln(1 − p) is undefined at p = 1, because every trial already succeeds.';
+    return cases + 'ln(1 − p) is undefined at p = 1, because every trial already succeeds.';
   },
   nbinom: function () { return DG_SEARCH_RECIPE; },
   pois: function () { return DG_SEARCH_RECIPE; },
@@ -2851,25 +3153,33 @@ var DG_RECIPE = {
     return 'X = F<sup>−1</sup>(U) by numeric search. Software uses a numerical inverse or a ratio of two Gamma draws.';
   },
   lnorm: function (p) {
-    return 'X = e<sup>μ + σ·Φ<sup>−1</sup>(U)</sup> = exp(' + fmtNum(p.mu) + ' + ' + fmtNum(p.sigma) + '·Φ<sup>−1</sup>(U))';
+    return 'X = e<sup>μ + σ·Φ<sup>−1</sup>(U)</sup> = exp(' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)') + ')<br>'
+      + 'Equivalently, draw a normal and exponentiate it: the panel below does exactly that.';
   },
   rayl: function (p) {
-    return 'R = σ√(−2 ln(1 − U)) = ' + fmtNum(p.sigma) + '·√(−2 ln(1 − U))';
+    return 'R = σ√(−2 ln(1 − U)) = ' + dgCoefTerm(p.sigma, '√(−2 ln(1 − U))');
   },
   dunif: function (p) {
     return 'X = a + ⌊(b − a + 1)·U⌋ = ' + fmtNum(p.a) + ' + ⌊' + fmtNum(p.b - p.a + 1) + '·U⌋<br>'
       + 'This floor form and the ceiling form the core computes agree everywhere except when (b − a + 1)·U lands exactly on an integer, which happens with probability zero.';
   }
 };
+/* On a tab that also carries a "built from simpler draws" panel, the lede
+   presents inverse transform as one way among others rather than as the
+   way, and on the Normal it also says up front that the cdf being inverted
+   is a numerical approximation. */
 function genLedeHtml(d) {
-  var s = '<p class="lede" style="margin-bottom:8px">Inverse transform: draw U from U(0, 1), read across to the cdf, and drop to the axis. The value where the drop lands is a random variate with this distribution.</p>';
+  var how = 'draw U from U(0, 1), read across to the cdf, and drop to the axis. The value where the drop lands is a random variate with this distribution. '
+    + 'The dot is green while it carries the uniform and turns orange at the cdf, where it becomes the output; those two colors mean input and output everywhere on this page.';
+  var opener;
+  if (d.id === 'norm') opener = 'The inverse-transform approach can generate a normal from a numerical approximation of its cdf: ';
+  else if (DG_CON_LEDE[d.id]) opener = 'Inverse transform is one way to draw from this distribution: ';
+  else opener = 'Inverse transform: ';
+  var s = '<p class="lede" style="margin-bottom:8px">' + opener + how + '</p>';
   if (d.type === 'd') {
     s += '<p class="lede" style="margin-bottom:8px">The true probabilities above are drawn as stems, because a pmf has no mass between the integers; the histogram of draws below is drawn as bars, because a sample of draws is a count.</p>';
   }
-  if (d.id === 'norm') {
-    s += '<p class="lede" style="margin-bottom:8px">The panel below builds a normal another way.</p>';
-  }
-  s += '<p class="knob-note" style="margin-top:0">A knob change resets the draws below, because new parameters describe a different distribution to draw from.</p>';
+  s += '<p class="knob-note" style="margin-top:0">Changing the parameters above resets the draws below, because new parameters describe a different distribution to draw from.</p>';
   return s;
 }
 function genPanelBodyHtml(d) {
@@ -2899,94 +3209,379 @@ function genPanelBodyHtml(d) {
   html += '<span class="run-btns"><button class="btn-run2" onclick="DGUI.genDraw(\'' + d.id + '\',1)">Draw one</button>'
     + '<button class="btn-run2" onclick="DGUI.genDraw(\'' + d.id + '\',Number($(\'' + d.id + '-batch\').value))">Draw batch</button>'
     + '<button class="btn-clear" onclick="DGUI.genReset(\'' + d.id + '\')">Reset</button></span>';
-  html += '<span class="seed-msg" id="gen-msg-' + d.id + '">No draws yet.</span>';
+  html += '<div class="sum" id="gen-msg-' + d.id + '">No draws yet.</div>';
   html += '</div>';
   return html;
 }
 
 /* ── "Built from simpler draws" panels ───────────────────────────────────
-   A second, independent way to land on eight of the eighteen distributions,
+   A second, independent way to land on nine of the eighteen distributions,
    built out of nothing but DG.unif calls (DG.construct in the core) rather
    than out of a quantile function. Nested inside the same section as the
    inverse-transform generator above, because both panels answer the same
    question – how does software actually produce a draw – from two
    different angles. Only the picture differs by distribution; the draw and
    reset controls, the running message, and the histogram against the true
-   pdf or pmf are built once and shared by all eight. */
+   pdf or pmf are built once and shared by all nine. */
 var DG_CON_LEDE = {
   erlang: 'Each stage is an exponential draw; the k stages laid end to end make one Erlang draw.',
   binom: 'n coin flips; the count of heads is one binomial draw.',
   nbinom: 'Flip until the r-th head; the number of flips is one negative binomial draw. With r = 1 this is the geometric.',
   norm: 'The squared radius of two independent normals is exponentially distributed, and so a radius drawn from that exponential, paired with a uniform angle, lands a point whose two coordinates are independent normals.',
-  rayl: 'The same picture from the other side: the radius of a point with two independent normal coordinates is Rayleigh.',
+  rayl: 'Draw two independent normal coordinates with the same spread; their distance from the origin is a Rayleigh draw. This is the Box–Muller picture read the other way, but the transform itself is a way to get normals, not a way to get a Rayleigh.',
   beta: 'For whole-number α and β, sort n = α + β minus 1 uniform draws and take the α-th smallest.',
   chisq: 'Each of the k standard normal draws is squared, and the squares stack up to a running total, which is one chi-square draw.',
-  fdist: 'Two chi-square draws, each divided by its own degrees of freedom, and their ratio is one F draw.'
+  fdist: 'Two chi-square draws, each divided by its own degrees of freedom, and their ratio is one F draw.',
+  lnorm: 'A normal draw Y with mean μ and standard deviation σ, and then X = e<sup>Y</sup>; the log-normal is what a normal becomes on the exponential scale.'
 };
 /* Whether the current alpha and beta are both whole numbers, the one
    requirement DG.construct.betaOrder places on its inputs: the alpha-th
    smallest of a finite set of uniforms is only defined for a whole-number
    alpha, and beta sets how many uniforms join it in that set. */
 function conBetaOk(p) { return p.alpha === Math.round(p.alpha) && p.beta === Math.round(p.beta); }
-function conPanelBodyHtml(d) {
-  var kindWord = d.type === 'c' ? 'pdf' : 'pmf';
-  var isBoxMuller = d.id === 'norm' || d.id === 'rayl';
-  var heading = isBoxMuller ? 'Built from simpler draws: the Box–Muller transform' : 'Built from simpler draws';
-  var lede = isBoxMuller
-    ? 'The Box–Muller transform turns two independent uniforms into two independent standard normals. ' + DG_CON_LEDE[d.id]
-    : DG_CON_LEDE[d.id];
-  var html = '<div class="sec con-sec" id="con-' + d.id + '"><div class="sec-hd">' + heading + '</div>';
-  html += '<p class="lede" style="margin-bottom:8px">' + lede + '</p>';
-  html += '<div class="ctrl-row">';
-  html += '<span class="run-btns"><button class="btn-run2" id="con-run-' + d.id + '" onclick="DGUI.conDraw(\'' + d.id + '\')">Draw one</button>'
-    + '<button class="btn-clear" onclick="DGUI.conReset(\'' + d.id + '\')">Reset</button></span>';
-  html += '<span class="seed-msg" id="con-msg-' + d.id + '">No draws yet.</span>';
-  html += '</div>';
-  html += '<svg class="dg con-pic" id="con-svg-' + d.id + '" viewBox="0 0 520 160" role="img" aria-label="Picture of the construction behind the latest ' + d.name + ' draw"></svg>';
-  html += '<svg class="dg con-hist" id="con-hist-' + d.id + '" viewBox="0 0 520 160" role="img" aria-label="Histogram of ' + d.name + ' draws produced this way, against the true ' + kindWord + '"></svg>';
-  html += '<div class="plot-cap">Histogram of the draws produced this way (orange), against the true ' + kindWord + ' (teal).</div>';
-  html += '</div>';
-  return html;
+/* The five (or, for the Rayleigh, two) steps of the "Built from simpler
+   draws" equations block for the Normal and Rayleigh tabs, one per step of
+   the mechanism, each with a title, a description carrying the reasoning
+   (and a jump link to any distribution it names), and the symbolic line
+   with the current draw's own numbers on its right (nothing there before
+   the first draw, when vals is null). The Normal's steps match the
+   classical Box-Muller derivation exactly: two uniforms, a standard
+   Rayleigh radius, a uniform angle, the two standard normals that radius
+   and angle locate, and only in the last step the mean and spread the
+   knobs set. The Rayleigh reuses the same mechanism but reads it as X and Y
+   already at the tab's own spread, because that tab's point is the
+   magnitude of two normals, not a way to build them. */
+function conEqLines(id, vals) {
+  if (id === 'norm') {
+    return [
+      { title: 'Draw two uniforms',
+        desc: 'Every pass through the transform uses two independent uniforms and yields two independent normals.',
+        sym: 'U<sub>1</sub>, U<sub>2</sub> ~ U(0, 1), independent',
+        val: vals ? '(u<sub>1</sub>, u<sub>2</sub>) = (' + fmtNum(vals.u1) + ', ' + fmtNum(vals.u2) + ')' : '' },
+      { title: 'Turn U<sub>1</sub> into a radius',
+        desc: 'The radius has to be the distance from the origin of a standard normal pair. That squared distance is the sum of two squared standard normals, a ' + dgFamilyJumpButton('chisq') + ' with two degrees of freedom, which is the same distribution as an ' + dgFamilyJumpButton('expo') + ' with mean 2, and the inverse-transform recipe for that exponential is −2 ln U<sub>1</sub>. Its square root is a standard ' + dgFamilyJumpButton('rayl') + ' draw.',
+        sym: 'R = √(−2 ln U<sub>1</sub>)',
+        val: vals ? 'R = ' + fmtNum(vals.stdR) : '' },
+      { title: 'Turn U<sub>2</sub> into an angle',
+        desc: 'A standard normal pair is symmetric under rotation, and so its direction from the origin is uniform around the circle.',
+        sym: 'Θ = 2πU<sub>2</sub> ~ U(0, 2π)',
+        val: vals ? 'Θ = ' + fmtNum(vals.theta) : '' },
+      { title: 'Place the point and read off its coordinates',
+        desc: 'The point at distance R in direction Θ has two coordinates, and each is a standard normal, independent of the other: the marginal histograms on the plane\'s two edges and the round, untilted cloud show both.',
+        sym: 'A = R cos Θ and B = R sin Θ, independent N(0, 1)',
+        val: vals ? '(A, B) = (' + fmtNum(vals.stdA) + ', ' + fmtNum(vals.stdB) + ')' : '' },
+      { title: 'Stretch and shift to the normal wanted',
+        desc: 'A and B are standard normals, and the parameters above ask for N(μ, σ<sup>2</sup>). Every normal is the standard one stretched by σ and moved to μ (the standardized line among the formulas above), and so this step scales each coordinate and adds the mean. At μ = 0 and σ = 1 it changes nothing, which is why X<sub>1</sub> and A then print the same number.',
+        sym: 'X<sub>1</sub> = μ + σA and X<sub>2</sub> = μ + σB',
+        val: vals ? '(X<sub>1</sub>, X<sub>2</sub>) = (' + fmtNum(vals.x1) + ', ' + fmtNum(vals.x2) + ')' : '' }
+    ];
+  }
+  return [
+    { title: 'Draw two normal coordinates',
+      desc: 'X and Y are independent ' + dgFamilyJumpButton('norm') + ' draws with mean 0 and the same spread σ; each arrives from its own edge of the plane.',
+      sym: 'X, Y ~ N(0, σ<sup>2</sup>), independent',
+      val: vals ? '(X, Y) = (' + fmtNum(vals.x) + ', ' + fmtNum(vals.y) + ')' : '' },
+    { title: 'Take the distance from the origin',
+      desc: 'The distance of the point (X, Y) from the origin is one Rayleigh draw with that same σ.',
+      sym: 'R = √(X<sup>2</sup> + Y<sup>2</sup>)',
+      val: vals ? 'R = ' + fmtNum(vals.r) : '' }
+  ];
 }
-function reserveConMsgHeight(d) {
-  var el = $('con-msg-' + d.id);
+/* Renders those steps, with each value slot's min-width pinned to whatever
+   reserveConEqSizes last measured as its widest plausible number: an empty
+   slot then occupies exactly the room its eventual number needs, and so the
+   first draw's numbers land without nudging a single line, let alone the
+   ones below it. The descriptions are static (they do not depend on vals),
+   so the block's reserved height already accounts for them without any
+   extra measurement. */
+function conEqHtml(id, vals) {
+  var w = (DGUI.con[id] && DGUI.con[id].eqW) || [];
+  return conEqLines(id, vals).map(function (ln, i) {
+    var style = w[i] ? ' style="min-width:' + w[i] + 'px"' : '';
+    return '<div class="con-eq-line">'
+      + '<div class="con-eq-step-hd">Step ' + (i + 1) + ' · ' + ln.title + '</div>'
+      + '<p class="con-eq-desc">' + ln.desc + '</p>'
+      + '<div class="con-eq-sym-row"><span class="con-eq-sym">' + ln.sym + '</span><span class="con-eq-val"' + style + '>' + ln.val + '</span></div>'
+      + '</div>';
+  }).join('');
+}
+/* The Normal tab reads R, Θ, A, and B in their standard (sigma-free) form,
+   dividing the core's own sigma-scaled a and b back down, because the
+   equations above only bring sigma in at the very last line; the Rayleigh
+   tab instead reads X and Y exactly as the core returns them, because its
+   own equations put sigma in at the first line. */
+function conEqValsFromLast(id, p, res) {
+  if (!res) return null;
+  if (id === 'norm') {
+    return { u1: res.u1, u2: res.u2, stdR: Math.sqrt(-2 * Math.log(res.u1)), theta: res.theta,
+      stdA: res.a / p.sigma, stdB: res.b / p.sigma, x1: p.mu + res.a, x2: p.mu + res.b };
+  }
+  return { x: res.a, y: res.b, r: res.r };
+}
+function conUpdateEq(d) {
+  var el = $('con-eq-' + d.id);
+  if (!el) return;
+  var st = DGUI.con[d.id];
+  el.innerHTML = conEqHtml(d.id, conEqValsFromLast(d.id, DGUI.params(d.id), st && st.last));
+}
+/* Reserves both the block's own height and, line by line, each value slot's
+   min-width, and so a draw can never make any line – or a line below it --
+   move. The widest plausible number comes from pairing every parameter
+   corner with a deliberately extreme draw (a U1 near 0 pushes R, and
+   everything built from it, about as large as this mechanism ever prints;
+   a U2 away from a multiple of pi/2 keeps cos and sin, and so A and B, away
+   from the near-zero values that would only shorten the printed digits). */
+function reserveConEqSizes(d) {
+  if (d.id !== 'norm' && d.id !== 'rayl') return;
+  var wrap = $('con-eq-' + d.id);
+  if (!wrap) return;
+  var def = {}, lo = {}, hi = {};
+  d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
+  var paramCorners = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
+  var eu1 = 1e-4, eu2 = 0.6827, etheta = 2 * Math.PI * eu2, estdR = Math.sqrt(-2 * Math.log(eu1));
+  var estdA = estdR * Math.cos(etheta), estdB = estdR * Math.sin(etheta);
+  function extremeVals(p) {
+    return d.id === 'norm'
+      ? { u1: eu1, u2: eu2, stdR: estdR, theta: etheta, stdA: estdA, stdB: estdB, x1: p.mu + p.sigma * estdA, x2: p.mu + p.sigma * estdB }
+      : { x: p.sigma * estdA, y: p.sigma * estdB, r: p.sigma * estdR };
+  }
+  var lineCount = conEqLines(d.id, null).length, widths = new Array(lineCount).fill(0);
+  var valRefEl = wrap.querySelector('.con-eq-val') || wrap;
+  paramCorners.forEach(function (p) {
+    conEqLines(d.id, extremeVals(p)).forEach(function (ln, i) {
+      widths[i] = Math.max(widths[i], dgMeasureOffscreenTextWidth(valRefEl, ln.val));
+    });
+  });
+  DGUI.conEnsure(d.id).eqW = widths.map(function (w) { return Math.ceil(w * 100) / 100; });
+  conUpdateEq(d); // re-render the current state with the reserved widths applied
+  var worst = dgMeasureOffscreen(wrap, conEqHtml(d.id, null));
+  paramCorners.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(wrap, conEqHtml(d.id, extremeVals(p)))); });
+  wrap.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
+}
+/* The Rayleigh construction panel's second paragraph: the two-normal
+   picture above is one route to a Rayleigh draw, but a single exponential
+   draw is enough, and this restates the recipe above in exactly those
+   terms. Only the R = ... line's own sigma is substituted with the knob's
+   current value (written the same way the recipe line above it substitutes
+   sigma, with a middot before the root so the digit and the radical sign
+   never run together); the rest is fixed prose. */
+function conRaylNoteHtml(p) {
+  var rFormula = 'R = ' + (p.sigma === 1 ? '' : fmtNum(p.sigma) + '·') + '√(−2 ln U)';
+  return '<strong>Faster alternative: draw one exponential instead of two normals.</strong> X<sup>2</sup> + Y<sup>2</sup> is the sum of two squared normals, which has the ' + dgFamilyJumpButton('expo') + ' distribution with mean 2σ<sup>2</sup> (σ<sup>2</sup> times a ' + dgFamilyJumpButton('chisq') + ' with two degrees of freedom). One draw from that exponential is R<sup>2</sup>, and its square root is R. That is the inverse-transform recipe above, '
+    + rFormula + ' with U uniform, where −2 ln U is the exponential draw with mean 2. The two-normal route uses two uniforms plus a cosine and a sine; this route uses one uniform and one logarithm.';
+}
+function conUpdateRaylNote(d) {
+  if (d.id !== 'rayl') return;
+  var el = $('con-rayl-note');
+  if (el) el.innerHTML = conRaylNoteHtml(DGUI.params('rayl'));
+}
+function reserveConRaylNoteHeight(d) {
+  if (d.id !== 'rayl') return;
+  var el = $('con-rayl-note');
   if (!el) return;
   var def = {}, lo = {}, hi = {};
   d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
-  var worst = dgMeasureOffscreen(el, 'No draws yet.');
-  function msgFor(p) {
-    var mu = d.mean(p), sd = Math.sqrt(Math.max(0, d.variance(p)));
-    return '500 draws. Mean ' + fmtNum(mu) + ', sd ' + fmtNum(sd) + '; expected ' + fmtNum(mu) + ', ' + fmtNum(sd) + '.';
+  var candidates = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
+  var worst = 0;
+  candidates.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(el, conRaylNoteHtml(p))); });
+  el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
+}
+function conPanelBodyHtml(d) {
+  var kindWord = d.type === 'c' ? 'pdf' : 'pmf';
+  var isBoxMuller = d.id === 'norm' || d.id === 'rayl';
+  var heading, lede;
+  if (d.id === 'norm') {
+    heading = 'Built from simpler draws: the Box–Muller transform';
+    lede = 'The Box–Muller transform turns two independent uniforms into two independent standard normals, in the five steps below; the last step stretches and shifts them to the normal the parameters above describe.';
+  } else if (d.id === 'rayl') {
+    heading = 'Built from simpler draws: the magnitude of two normals';
+    lede = DG_CON_LEDE.rayl;
+  } else {
+    heading = 'Built from simpler draws';
+    lede = DG_CON_LEDE[d.id];
   }
-  [d.clamp(def), d.clamp(lo), d.clamp(hi), worstOverGrid(d, function (p) { return msgFor(p).length; })].forEach(function (p) {
-    worst = Math.max(worst, dgMeasureOffscreen(el, msgFor(p)));
+  var html = '<div class="sec con-sec" id="con-' + d.id + '"><div class="sec-hd">' + heading + '</div>';
+  html += '<p class="lede" style="margin-bottom:8px">' + lede + '</p>';
+  if (isBoxMuller) html += '<div class="con-eq" id="con-eq-' + d.id + '"></div>';
+  // The panel's own batch size, separate from the inverse-transform
+  // generator's above: the two panels draw independently, and a reader
+  // should see the size this button uses right beside it.
+  html += '<div class="ctrl-row">';
+  html += '<label class="ctrl-lbl" for="' + d.id + '-con-batch">Batch</label>';
+  html += '<span class="spin"><button type="button" aria-label="Decrease batch" onclick="spinStep(\'' + d.id + '-con-batch\',-1)">−</button>'
+    + '<input id="' + d.id + '-con-batch" data-dist="' + d.id + '" data-batch type="number" min="10" max="500" step="10" value="100" inputmode="numeric" onchange="spinCommit(\'' + d.id + '-con-batch\')">'
+    + '<button type="button" aria-label="Increase batch" onclick="spinStep(\'' + d.id + '-con-batch\',1)">+</button></span>';
+  html += '<span class="run-btns"><button class="btn-run2" id="con-run-' + d.id + '" onclick="DGUI.conDraw(\'' + d.id + '\',1)">Draw one</button>'
+    + '<button class="btn-run2" id="con-batch-' + d.id + '" onclick="DGUI.conDraw(\'' + d.id + '\',Number($(\'' + d.id + '-con-batch\').value))">Draw batch</button>'
+    + '<button class="btn-clear" onclick="DGUI.conReset(\'' + d.id + '\')">Reset</button></span>';
+  html += '</div>';
+  var picClass = isBoxMuller ? 'dg con-pic con-pic-square' : 'dg con-pic';
+  var picViewBox = isBoxMuller ? '0 0 440 440' : '0 0 520 160';
+  var picSvg = '<svg class="' + picClass + '" id="con-svg-' + d.id + '" viewBox="' + picViewBox + '" role="img" aria-label="Picture of the construction behind the latest ' + d.name + ' draw"></svg>';
+  // The Normal reads both coordinates off the marginal strips drawn along
+  // the plane's own edges, and so it carries no separate output histogram or
+  // caption below the picture and needs no flex row to hold one beside it;
+  // every other tab, including the Rayleigh, keeps both, laid out beside the
+  // picture and wrapping under it once the row is too narrow to hold both at
+  // a legible width. The running summary sits under whichever caption is
+  // last on the tab – the plane's own caption here, the histogram's below –
+  // so it always reads as the report on the draws just above it.
+  if (d.id === 'norm') {
+    html += picSvg + '<div class="plot-cap">Both marginal histograms are read against the standard normal (teal), and the round, untilted cloud is the independence of the two coordinates; the numbers in the summary table are X<sub>1</sub> and X<sub>2</sub>, after step 5 above.</div>'
+      + '<div class="sum" id="con-msg-' + d.id + '"></div>';
+  } else {
+    html += '<div class="con-plots">' + picSvg
+      + '<div class="con-hist-col"><svg class="dg con-hist" id="con-hist-' + d.id + '" viewBox="0 0 520 160" role="img" aria-label="Histogram of ' + d.name + ' draws produced this way, against the true ' + kindWord + '"></svg>'
+      + '<div class="plot-cap" id="con-cap-' + d.id + '">' + conHistCaption(d, 0) + '</div>'
+      + '<div class="sum" id="con-msg-' + d.id + '"></div></div></div>';
+  }
+  // The Rayleigh alone gets a second paragraph naming the shorter route: the
+  // two-normal picture above is one way to land on a Rayleigh draw, but a
+  // single exponential draw is enough, and this restates the recipe above
+  // in exactly those terms. Kept in step with the sigma knob the same way
+  // the recipe and the equations above already are (see conUpdateRaylNote).
+  if (d.id === 'rayl') {
+    html += '<p class="lede" id="con-rayl-note" style="margin-top:16px">' + conRaylNoteHtml(DGUI.params('rayl')) + '</p>';
+  }
+  html += '</div>';
+  return html;
+}
+/* The generator and construction panels' running summary block – shared by
+   both, because each reports the same statistics over a different source of
+   draws. Below two draws there is no interval to report, because a t
+   interval on a single observation has zero degrees of freedom, and so only
+   the draw count is shown. From two draws on, the block carries a table
+   with a 95% t interval for the mean and a 95% chi-square interval for the
+   sd, alongside the distribution's own exact mean and sd, and a
+   goodness-of-fit test line against the distribution itself at the
+   parameters shown above. dgSummaryStats keeps the interval arithmetic
+   exactly as it always has; everything past it is presentation. */
+function dgSummaryStats(n, mean, sd) {
+  var half = DG.sf.tQ(0.975, n - 1) * sd / Math.sqrt(n);
+  var chiLo = DG.byId.chisq.quantile(0.975, { k: n - 1 });
+  var chiHi = DG.byId.chisq.quantile(0.025, { k: n - 1 });
+  var sdLo = sd * Math.sqrt((n - 1) / chiLo), sdHi = sd * Math.sqrt((n - 1) / chiHi);
+  return { meanLo: mean - half, meanHi: mean + half, sdLo: sdLo, sdHi: sdHi };
+}
+function dgSumRow(label, est, lo, hi, truth) {
+  return '<tr><td>' + label + '</td><td class="sum-est">' + fmtNum(est) + '</td>'
+    + '<td class="sum-ci">' + fmtNum(lo) + ' to ' + fmtNum(hi) + '</td>'
+    + '<td class="sum-true">' + fmtNum(truth) + '</td></tr>';
+}
+/* The goodness-of-fit line under the table: Kolmogorov–Smirnov against a
+   continuous cdf, chi-square against a discrete pmf, both run at the
+   parameters shown above rather than at parameters fit to xs. */
+function dgTestLineHtml(d, p, xs) {
+  if (d.type === 'c') {
+    var r = DG.gof.ks(xs, d, p);
+    return r ? ('Kolmogorov–Smirnov test against the distribution\'s own cdf: D = ' + fmtNum(r.D) + ', p = ' + fmtNum(r.p) + '.')
+      : 'Too few draws for a Kolmogorov–Smirnov test.';
+  }
+  var r2 = DG.gof.chisq(xs, d, p);
+  return r2 ? ('Chi-square test against the distribution\'s own pmf: χ² = ' + fmtNum(r2.stat) + ' on ' + r2.df + ' df, p = ' + fmtNum(r2.p) + '.')
+    : 'Too few draws for a chi-square test.';
+}
+/* Static regardless of the distribution or the draws: what the test line
+   above it means and how to read its p-value. */
+function dgSumNote(d) {
+  return 'The ' + (d.type === 'c' ? 'K–S' : 'chi-square') + ' test compares the draws with the distribution at the parameters above, which are known rather than estimated from the draws, and so the classical p-value applies. A p-value below 0.05 says the draws do not look like the distribution; about one batch in twenty gets one by chance.';
+}
+/* The draw count sits in the table's own corner cell on the generator
+   panel, which has no caption to carry it; on a construction panel the
+   histogram's caption already says how many draws it holds (see
+   conHistCaption), and so the block there carries no count of its own and
+   is empty below two draws. */
+function dgSummaryHtml(d, n, mean, sd, trueMean, trueSd, testLine, countInTable) {
+  var count = n + (n === 1 ? ' draw' : ' draws');
+  if (!countInTable) { if (n < 2) return ''; }
+  else if (!n) return 'No draws yet.';
+  else if (n < 2) return '<div class="sum-n">' + count + '</div>';
+  var st = dgSummaryStats(n, mean, sd);
+  var corner = countInTable ? '<th class="sum-corner">' + count + '</th>' : '<th></th>';
+  var table = '<table class="sum-table"><thead><tr>' + corner + '<th class="sum-est">Estimate</th><th class="sum-ci">95% interval</th><th class="sum-true">Distribution</th></tr></thead><tbody>'
+    + dgSumRow('Mean', mean, st.meanLo, st.meanHi, trueMean)
+    + dgSumRow('Std. dev.', sd, st.sdLo, st.sdHi, trueSd)
+    + '</tbody></table>';
+  return '<div class="sum-table-wrap">' + table + '</div><div class="sum-test">' + testLine + '</div><div class="knob-note" style="margin-top:4px">' + dgSumNote(d) + '</div>';
+}
+/* The construction histogram's caption, carrying the count of draws it
+   shows; the empty state says so in the same sentence rather than in a
+   separate line. */
+function conHistCaption(d, n) {
+  var kindWord = d.type === 'c' ? 'pdf' : 'pmf';
+  var what = n ? 'Histogram of ' + n + (n === 1 ? ' draw' : ' draws') + ' produced this way' : 'Histogram of the draws produced this way';
+  return what + ' (orange), against the true ' + kindWord + ' (teal).' + (n ? '' : ' No draws yet.');
+}
+function conUpdateCaption(d) {
+  var el = $('con-cap-' + d.id);
+  if (!el) return;
+  var st = DGUI.con[d.id];
+  el.textContent = conHistCaption(d, st ? st.xs.length : 0);
+}
+function reserveConCaptionHeight(d) {
+  var el = $('con-cap-' + d.id);
+  if (!el) return;
+  var worst = 0;
+  [0, 1, 10000].forEach(function (n) { worst = Math.max(worst, dgMeasureOffscreen(el, conHistCaption(d, n))); });
+  el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
+}
+/* Reserves the summary block's height at the widest plausible content: an
+   empty and a single-draw state (both short), plus – at each of the knob's
+   corner settings and its own worst-length grid point – a full table and
+   test line built from 500 real draws at that setting, and so the reserve
+   reflects a genuine goodness-of-fit result rather than a guessed number of
+   digits. */
+function dgReserveSumHeight(el, d, countInTable) {
+  if (!el) return;
+  var def = {}, lo = {}, hi = {};
+  d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
+  var worst = dgMeasureOffscreen(el, dgSummaryHtml(d, 0, 0, 0, 0, 0, '', countInTable));
+  worst = Math.max(worst, dgMeasureOffscreen(el, dgSummaryHtml(d, 1, 0, 0, 0, 0, '', countInTable)));
+  function cheapLen(p) {
+    var mu = d.mean(p), sd = Math.sqrt(Math.max(0, d.variance(p)));
+    return dgSummaryHtml(d, 500, mu, sd, mu, sd, '', countInTable).length;
+  }
+  var rand = DG.mulberry32(20260913);
+  [d.clamp(def), d.clamp(lo), d.clamp(hi), worstOverGrid(d, cheapLen)].forEach(function (p) {
+    var mu = d.mean(p), sd = Math.sqrt(Math.max(0, d.variance(p)));
+    var xs = []; for (var i = 0; i < 500; i++) xs.push(d.sample(rand, p));
+    var testLine = dgTestLineHtml(d, p, xs);
+    worst = Math.max(worst, dgMeasureOffscreen(el, dgSummaryHtml(d, 500, mu, sd, mu, sd, testLine, countInTable)));
   });
   el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
 }
+// The Normal's block sits under the plane's caption, which carries no
+// count, and so it keeps the count in its own corner cell.
+function reserveConMsgHeight(d) { dgReserveSumHeight($('con-msg-' + d.id), d, d.id === 'norm'); reserveConCaptionHeight(d); }
 function conUpdateMsg(d) {
   var el = $('con-msg-' + d.id);
   if (!el) return;
   var st = DGUI.con[d.id];
-  if (!st || st.xs.length === 0) { el.textContent = 'No draws yet.'; return; }
+  conUpdateCaption(d);
+  var cit = d.id === 'norm';
+  if (!st || st.xs.length === 0) { el.innerHTML = dgSummaryHtml(d, 0, 0, 0, 0, 0, '', cit); return; }
   var p = DGUI.params(d.id), n = st.xs.length;
   var mean = st.xs.reduce(function (a, b) { return a + b; }, 0) / n;
   var variance = n > 1 ? st.xs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (n - 1) : 0;
   var sd = Math.sqrt(Math.max(0, variance));
-  el.textContent = n + ' draws. Mean ' + fmtNum(mean) + ', sd ' + fmtNum(sd) + '; expected ' + fmtNum(d.mean(p)) + ', ' + fmtNum(Math.sqrt(Math.max(0, d.variance(p)))) + '.';
+  var testLine = n >= 2 ? dgTestLineHtml(d, p, st.xs) : '';
+  el.innerHTML = dgSummaryHtml(d, n, mean, sd, d.mean(p), Math.sqrt(Math.max(0, d.variance(p))), testLine, cit);
 }
 /* The Beta panel is the only one that can be gated: a fractional alpha or
-   beta has no order statistic to draw, so Draw one is disabled and the
+   beta has no order statistic to draw, and so Draw one is disabled and the
    picture explains why in its own place rather than moving anything else
    on the page. */
 function conUpdateGate(d) {
   if (d.id !== 'beta') return;
-  var btn = $('con-run-beta');
-  if (btn) btn.disabled = !conBetaOk(DGUI.params('beta'));
+  var gated = !conBetaOk(DGUI.params('beta'));
+  var runBtn = $('con-run-beta'), batchBtn = $('con-batch-beta');
+  if (runBtn) runBtn.disabled = gated;
+  if (batchBtn) batchBtn.disabled = gated;
 }
 /* One row of coin flips for the binomial and negative binomial pictures,
    wrapped every 25 flips so a large n still fits the fixed-height frame;
    the negative binomial's last flip is always a success (that is what ends
-   the trial), so it alone gets a ring around it, marking the r-th success
+   the trial), and so it alone gets a ring around it, marking the r-th success
    the draw stopped on. */
 function conPicFlips(d, p, st, W, H) {
   var res = st.last;
@@ -3038,38 +3633,159 @@ function conPicErlang(d, p, st, W, H) {
     + '<text x="' + ((xStart + xEnd) / 2) + '" y="' + (y - 32) + '" text-anchor="middle" fill="var(--truth)" font-size="11" font-family="\'IBM Plex Mono\', monospace">X = ' + fmtNum(res.x) + '</text>';
   return h;
 }
-/* Shared by the Normal and Rayleigh tabs: a plane holding the latest
-   Box–Muller point, its radius drawn as a segment from the origin and its
-   angle as a small arc, with every earlier draw left behind as a gray dot.
-   The Normal tab reads the a coordinate off this same point; because the
-   mechanism itself only ever centers on zero, the mean mu the knob sets is
-   added in afterward, both in the readout here and in the value the
-   histogram below actually bins. */
-function conPicBoxMuller(d, p, st, W, H) {
-  var sigma = p.sigma, scale = 3.5 * sigma;
-  var side = Math.max(60, Math.min(H - 16, W * 0.46)), pcx = 14 + side / 2, pcy = H / 2, half = side / 2 - 6;
-  var xAt = function (v) { return pcx + (v / scale) * half; }, yAt = function (v) { return pcy - (v / scale) * half; };
-  var h = '<rect x="' + (pcx - side / 2) + '" y="' + (pcy - side / 2) + '" width="' + side + '" height="' + side + '" fill="var(--chart-bg)" stroke="var(--border)" stroke-width="1"/>'
-    + '<line x1="' + (pcx - side / 2) + '" y1="' + pcy + '" x2="' + (pcx + side / 2) + '" y2="' + pcy + '" stroke="var(--border)" stroke-width="1"/>'
-    + '<line x1="' + pcx + '" y1="' + (pcy - side / 2) + '" x2="' + pcx + '" y2="' + (pcy + side / 2) + '" stroke="var(--border)" stroke-width="1"/>';
-  var pts = st.pts || [];
-  for (var i = 0; i < pts.length - 1; i++) h += '<circle cx="' + xAt(pts[i].a) + '" cy="' + yAt(pts[i].b) + '" r="2.2" fill="var(--ref)"/>';
-  var textX = pcx + side / 2 + 14;
-  if (!pts.length) {
-    return h + '<text x="' + textX + '" y="' + pcy + '" fill="var(--muted)" font-size="11.5" font-family="Outfit, sans-serif">Draw one to see the point.</text>';
+/* The Normal and Rayleigh plane picture's shared geometry: a square plane
+   in the upper right of the frame, a histogram strip of stripThick units
+   along its left edge, and another along its bottom, each held off the
+   plane by a small gap, and so the total frame stays square. dgConPlanePic,
+   the Rayleigh's own arriving-dot animation, and the Normal's own spinner
+   and departing-dot animation all read this same geometry, and so a dot's start
+   and end points always land exactly where the static picture would draw
+   them. */
+function dgConPlaneGeom(W, H, axisScale) {
+  var scale = 3.6 * axisScale;
+  var padOuter = 4, stripThick = 64, gap = 10, padTop = 14;
+  var side = Math.min(W, H) - padOuter - stripThick - gap - padTop;
+  var px0 = padOuter + stripThick + gap, px1 = px0 + side;
+  var py1 = H - padOuter - stripThick - gap, py0 = py1 - side;
+  var pcx = (px0 + px1) / 2, pcy = (py0 + py1) / 2, half = side / 2;
+  return {
+    scale: scale, padOuter: padOuter, stripThick: stripThick,
+    px0: px0, px1: px1, py0: py0, py1: py1, pcx: pcx, pcy: pcy, half: half,
+    leftBaseline: padOuter, bottomBaseline: H - padOuter,
+    xAt: function (v) { return pcx + (v / scale) * half; },
+    yAt: function (v) { return pcy - (v / scale) * half; }
+  };
+}
+/* Shared by the Normal and Rayleigh tabs: a square plane holding the latest
+   point, dashed projections down to each axis, every earlier draw left
+   behind as a gray dot, and a histogram of each coordinate's own marginal
+   drawn as a strip along the plane's left and bottom edges – bars against a
+   true density, growing inward from a baseline at the strip's own outer
+   edge, the same way the transfer plot draws the density strips in its own
+   margins. opts carries what differs between the two readings of the same
+   picture: whether an angle arc is drawn at all, how the axis scale relates
+   to sigma, which values feed each marginal and what the marginal bars and
+   the point's own geometry are colored, and how the two feet and the
+   radius are labeled – so the geometry itself is written once. */
+function dgConPlanePic(st, W, H, opts) {
+  var geo = dgConPlaneGeom(W, H, opts.axisScale);
+  var scale = geo.scale, padOuter = geo.padOuter, stripThick = geo.stripThick;
+  var px0 = geo.px0, px1 = geo.px1, py0 = geo.py0, py1 = geo.py1;
+  var pcx = geo.pcx, pcy = geo.pcy, half = geo.half, xAt = geo.xAt, yAt = geo.yAt;
+  var h = '<rect x="' + px0 + '" y="' + py0 + '" width="' + (px1 - px0) + '" height="' + (py1 - py0) + '" fill="var(--chart-bg)" stroke="var(--border)" stroke-width="1"/>'
+    + '<line x1="' + px0 + '" y1="' + pcy + '" x2="' + px1 + '" y2="' + pcy + '" stroke="var(--border)" stroke-width="1"/>'
+    + '<line x1="' + pcx + '" y1="' + py0 + '" x2="' + pcx + '" y2="' + py1 + '" stroke="var(--border)" stroke-width="1"/>';
+
+  // Marginal strips: 24 fixed bins over the plane's own full range, each
+  // coordinate's own sample against the true density (always teal, because
+  // both edges share the same normal on each tab), on a scale that fits the
+  // taller of the true peak and the tallest bar so the curve never clips.
+  var nBins = 24, binW = (2 * scale) / nBins;
+  function densities(vals) {
+    var counts = new Array(nBins).fill(0);
+    vals.forEach(function (v) {
+      var idx = Math.floor((v + scale) / (2 * scale) * nBins);
+      counts[Math.max(0, Math.min(nBins - 1, idx))]++;
+    });
+    return counts.map(function (c) { return vals.length ? (c / vals.length) / binW : 0; });
   }
-  var last = pts[pts.length - 1], res = st.last, px = xAt(last.a), py = yAt(last.b);
-  var arcR = Math.min(22, half * 0.4), thetaDeg = res.theta * 180 / Math.PI;
-  var ax = pcx + arcR, ay = pcy, bx = pcx + arcR * Math.cos(res.theta), by = pcy - arcR * Math.sin(res.theta);
-  h += '<path d="M ' + ax + ' ' + ay + ' A ' + arcR + ' ' + arcR + ' 0 ' + (thetaDeg > 180 ? 1 : 0) + ' 0 ' + bx + ' ' + by + '" fill="none" stroke="var(--muted)" stroke-width="1.2"/>'
-    + '<line x1="' + pcx + '" y1="' + pcy + '" x2="' + px + '" y2="' + py + '" stroke="var(--est)" stroke-width="1.6"/>'
-    + '<circle cx="' + px + '" cy="' + py + '" r="4" fill="var(--est)" stroke="#fff" stroke-width="1"/>';
-  var lines = ['R = ' + fmtNum(res.r), 'Θ = ' + fmtNum(thetaDeg) + '°', '(a, b) = (' + fmtNum(res.a) + ', ' + fmtNum(res.b) + ')'];
-  if (d.id === 'norm') lines.push('X = μ + a = ' + fmtNum(p.mu + res.a));
-  lines.forEach(function (t, li) {
-    h += '<text x="' + textX + '" y="' + (pcy - 18 + li * 18) + '" fill="var(--text)" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + t + '</text>';
-  });
+  var hDens = densities(opts.hVals), vDens = densities(opts.vVals), barMax = 0;
+  hDens.concat(vDens).forEach(function (v) { if (v > barMax) barMax = v; });
+  var stripMax = Math.max(opts.truthPdf(0), barMax);
+  var lenAt = function (dens) { return Math.min(1, dens / stripMax) * stripThick; };
+  for (var bi = 0; bi < nBins; bi++) {
+    var lo = -scale + bi * binW, hi = lo + binW;
+    var yTop = yAt(hi), yBot = yAt(lo), lenV = lenAt(vDens[bi]);
+    h += '<rect x="' + padOuter + '" y="' + yTop + '" width="' + lenV + '" height="' + (yBot - yTop) + '" fill="' + opts.barColor + '" fill-opacity="0.55" stroke="' + opts.barColor + '" stroke-width="1"/>';
+    var xL = xAt(lo), xR = xAt(hi), lenH = lenAt(hDens[bi]);
+    h += '<rect x="' + xL + '" y="' + (geo.bottomBaseline - lenH) + '" width="' + (xR - xL) + '" height="' + lenH + '" fill="' + opts.barColor + '" fill-opacity="0.55" stroke="' + opts.barColor + '" stroke-width="1"/>';
+  }
+  var vCurve = [], hCurve = [];
+  for (var si = 0; si <= 48; si++) {
+    var v = -scale + (2 * scale) * si / 48, dens = opts.truthPdf(v), len = lenAt(dens);
+    vCurve.push((padOuter + len) + ',' + yAt(v));
+    hCurve.push(xAt(v) + ',' + (geo.bottomBaseline - len));
+  }
+  h += '<polyline points="' + vCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
+  h += '<polyline points="' + hCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
+  h += '<text x="' + (padOuter + 2) + '" y="' + (py0 + 10) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, sans-serif">' + opts.vLabel + '</text>';
+  h += '<text x="' + (px0 + 2) + '" y="' + (geo.bottomBaseline - 4) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, sans-serif">' + opts.hLabel + '</text>';
+
+  var pts = st.pts || [];
+  for (var i = 0; i < pts.length - 1; i++) h += '<circle cx="' + xAt(pts[i].a) + '" cy="' + yAt(pts[i].b) + '" r="2.4" fill="var(--ref)"/>';
+  if (!pts.length) {
+    // Centered inside the plane itself: below it sits the bottom strip's
+    // own true-density curve, which the words would otherwise cross.
+    return h + '<text x="' + pcx + '" y="' + (pcy - 10) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">Draw one to see the point.</text>';
+  }
+  var last = pts[pts.length - 1], px = xAt(last.a), py = yAt(last.b);
+  // Dashed projections from the point down to each axis, with a small foot
+  // marker where each one lands.
+  h += '<line x1="' + px + '" y1="' + py + '" x2="' + px + '" y2="' + pcy + '" stroke="' + opts.footColor + '" stroke-width="1.3" stroke-dasharray="4 3"/>'
+    + '<line x1="' + px + '" y1="' + py + '" x2="' + pcx + '" y2="' + py + '" stroke="' + opts.footColor + '" stroke-width="1.3" stroke-dasharray="4 3"/>'
+    + '<circle cx="' + px + '" cy="' + pcy + '" r="3" fill="' + opts.footColor + '"/><circle cx="' + pcx + '" cy="' + py + '" r="3" fill="' + opts.footColor + '"/>';
+  var hAnchor = px >= pcx ? 'start' : 'end', hDx = px >= pcx ? 7 : -7;
+  var vAnchor = py <= pcy ? 'start' : 'end';
+  h += '<text x="' + (px + hDx) + '" y="' + (pcy + (py <= pcy ? 15 : -8)) + '" text-anchor="' + hAnchor + '" fill="' + opts.footColor + '" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + opts.footH + '</text>';
+  h += '<text x="' + (pcx + (px >= pcx ? -7 : 7)) + '" y="' + (py + (py <= pcy ? -8 : 15)) + '" text-anchor="' + (px >= pcx ? 'end' : 'start') + '" fill="' + opts.footColor + '" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + opts.footV + '</text>';
+  if (opts.theta !== undefined) {
+    var arcR = Math.min(30, half * 0.3), thetaDeg = opts.theta * 180 / Math.PI;
+    var ax = pcx + arcR, ay = pcy, bx = pcx + arcR * Math.cos(opts.theta), by = pcy - arcR * Math.sin(opts.theta);
+    h += '<path d="M ' + ax + ' ' + ay + ' A ' + arcR + ' ' + arcR + ' 0 ' + (thetaDeg > 180 ? 1 : 0) + ' 0 ' + bx + ' ' + by + '" fill="none" stroke="' + opts.thetaColor + '" stroke-width="1.3"/>';
+    var labelR = arcR + 13, labelAng = opts.theta / 2;
+    h += '<text x="' + (pcx + labelR * Math.cos(labelAng)) + '" y="' + (pcy - labelR * Math.sin(labelAng) + 4) + '" text-anchor="middle" fill="' + opts.thetaColor + '" font-size="11.5" font-family="\'IBM Plex Mono\', monospace">Θ</text>';
+  }
+  h += '<line x1="' + pcx + '" y1="' + pcy + '" x2="' + px + '" y2="' + py + '" stroke="' + opts.pointColor + '" stroke-width="1.8"/>'
+    + '<circle cx="' + px + '" cy="' + py + '" r="4.5" fill="' + opts.pointColor + '" stroke="#fff" stroke-width="1"/>';
+  // The radius label sits off to the side of the line itself, offset along
+  // its own perpendicular rather than always straight up: a point that
+  // lands close to either axis puts the radius line almost on top of that
+  // axis's own foot label, and only a perpendicular offset keeps the two
+  // apart regardless of which way the line happens to run.
+  var rdx = px - pcx, rdy = py - pcy, rlen = Math.max(1, Math.sqrt(rdx * rdx + rdy * rdy));
+  var rmx = pcx + rdx * 0.5, rmy = pcy + rdy * 0.5;
+  var rlx = rmx - (rdy / rlen) * 22, rly = rmy + (rdx / rlen) * 22;
+  h += '<text x="' + rlx + '" y="' + rly + '" text-anchor="middle" fill="' + opts.pointColor + '" font-size="11.5" font-family="\'IBM Plex Mono\', monospace">' + opts.radiusLabel + '</text>';
   return h;
+}
+/* The Normal's own reading: the point sits at the standard (sigma-free)
+   coordinates (A, B), the axis scale is fixed regardless of sigma because a
+   standard normal's own spread never changes, and the angle arc is part of
+   the story. R and Θ are built straight from the two uniforms, and so the
+   radius line, the angle arc, and the point all carry the input color; the
+   projections and the two coordinates they read off are the output, so
+   they and the marginal bars carry the output color. The marginals are fed
+   from st.outA/st.outB rather than st.pts, because those two arrays gain a
+   value only once an animated draw's own pair of dots has arrived at its
+   own strip, ahead of the point itself landing (see conAnimateNorm). */
+function conPicBoxMullerNorm(d, p, st, W, H) {
+  return dgConPlanePic(st, W, H, {
+    axisScale: 1, theta: st.last ? st.last.theta : undefined,
+    footH: 'A = R cos Θ', footV: 'B = R sin Θ', radiusLabel: 'R',
+    pointColor: 'var(--in)', thetaColor: 'var(--in)', footColor: 'var(--est)',
+    barColor: 'var(--est)', truthPdf: function (v) { return DG.byId.norm.pdf(v, { mu: 0, sigma: 1 }); },
+    hVals: st.outA || [], vVals: st.outB || [],
+    hLabel: 'A', vLabel: 'B'
+  });
+}
+/* The Rayleigh's own reading: the point sits at X and Y themselves, already
+   at the tab's own sigma, and there is no angle anywhere in this tab's
+   story – only two normal coordinates and the distance between them. X and
+   Y are the inputs the two edges of the plane show arriving, and so their
+   marginal bars carry the input color; the landed point and its radius
+   line stay the output color, as they already were. The marginals are fed
+   from st.inX/st.inY rather than st.pts, because those two arrays gain a
+   value the moment a draw's dot appears on its own edge, before the point
+   itself has landed. */
+function conPicBoxMullerMagnitude(d, p, st, W, H) {
+  return dgConPlanePic(st, W, H, {
+    axisScale: p.sigma, theta: undefined,
+    footH: 'X', footV: 'Y', radiusLabel: 'R = √(X² + Y²)',
+    pointColor: 'var(--est)', thetaColor: 'var(--muted)', footColor: 'var(--muted)',
+    barColor: 'var(--in)', truthPdf: function (v) { return DG.byId.norm.pdf(v, { mu: 0, sigma: p.sigma }); },
+    hVals: st.inX || [], vVals: st.inY || [],
+    hLabel: 'X', vLabel: 'Y'
+  });
 }
 /* The Beta picture: n = alpha + beta - 1 uniform draws as ticks on the unit
    strip, sorted, with the alpha-th smallest picked out. When alpha or beta
@@ -3078,7 +3794,7 @@ function conPicBoxMuller(d, p, st, W, H) {
 function conPicBetaOrder(d, p, st, W, H) {
   if (!conBetaOk(p)) {
     var l1 = 'This construction needs whole-number α and β;';
-    var l2 = 'the knobs are at α = ' + fmtNum(p.alpha) + ', β = ' + fmtNum(p.beta) + '.';
+    var l2 = 'the parameters are α = ' + fmtNum(p.alpha) + ', β = ' + fmtNum(p.beta) + '.';
     return '<text x="' + (W / 2) + '" y="' + (H / 2 - 8) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">' + l1 + '</text>'
       + '<text x="' + (W / 2) + '" y="' + (H / 2 + 12) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">' + l2 + '</text>';
   }
@@ -3149,16 +3865,83 @@ function conPicFdist(d, p, st, W, H) {
     + '<text x="' + textX + '" y="' + (baseY - maxH / 2 + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9" font-family="Outfit, sans-serif">(x₁/d₁) / (x₂/d₂)</text>';
   return h;
 }
-var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMuller, rayl: conPicBoxMuller, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist };
+/* The Log-normal picture: two horizontal axes on the same 520x160 strip the
+   Erlang uses, the upper one the normal draw Y on the log-normal's own
+   μ ± 3σ range, the lower one the log-normal draw X = e^Y on the tab's own
+   fixed axis, with a dashed line joining the latest pair – green on the
+   input Y, orange on the output X, the same two colors the inverse-transform
+   plot above uses for the same roles. */
+function conPicLnorm(d, p, st, W, H) {
+  var res = st.last, L = 14, R = 14, yTop = H * 0.35, yBot = H * 0.65;
+  var mu = p.mu, sigma = p.sigma, yLo = mu - 3 * sigma, yHi = mu + 3 * sigma;
+  var xAtTop = function (y) { return L + (y - yLo) / (yHi - yLo) * (W - L - R); };
+  var x0 = d.axis.x0, x1 = d.axis.x1;
+  var xAtBot = function (x) { return L + (x - x0) / (x1 - x0) * (W - L - R); };
+  // The axis lines sit well off the top and bottom edges (rather than the
+  // usual near-edge placement) because each one needs room, outward, for
+  // both its own tick numbers and – once a draw lands – the value beside
+  // its dot. Each axis's name sits in the gap between the two lines,
+  // pinned to the far corner from the other axis's own name so the two
+  // never collide even when that gap is short.
+  var h = '<line x1="' + L + '" y1="' + yTop + '" x2="' + (W - R) + '" y2="' + yTop + '" stroke="var(--border)" stroke-width="1.5"/>';
+  [-1, -0.5, 0, 0.5, 1].forEach(function (f) {
+    var v = mu + f * 3 * sigma, xx = xAtTop(v);
+    h += '<line x1="' + xx + '" y1="' + (yTop - 3) + '" x2="' + xx + '" y2="' + (yTop + 3) + '" stroke="var(--border)" stroke-width="1"/>'
+      + '<text x="' + xx + '" y="' + (yTop - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="8.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
+  });
+  h += '<text x="' + L + '" y="' + (yTop + 13) + '" text-anchor="start" fill="var(--muted)" font-size="9.5" font-family="Outfit, sans-serif">Y = ln X</text>';
+  h += '<line x1="' + L + '" y1="' + yBot + '" x2="' + (W - R) + '" y2="' + yBot + '" stroke="var(--border)" stroke-width="1.5"/>';
+  dgAxisTicks(x0, x1, dgTickStepFor(x0, x1, d.axis.xt, W - L - R)).forEach(function (v) {
+    var xx = xAtBot(v);
+    h += '<line x1="' + xx + '" y1="' + (yBot - 3) + '" x2="' + xx + '" y2="' + (yBot + 3) + '" stroke="var(--border)" stroke-width="1"/>'
+      + '<text x="' + xx + '" y="' + (yBot + 13) + '" text-anchor="middle" fill="var(--muted)" font-size="8.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
+  });
+  h += '<text x="' + (W - R) + '" y="' + (yBot - 8) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="Outfit, sans-serif">X = e^Y</text>';
+  if (!res) {
+    return h + '<text x="' + (W / 2) + '" y="' + ((yTop + yBot) / 2) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, sans-serif">Draw one to see the pair.</text>';
+  }
+  var yC = Math.max(yLo, Math.min(yHi, res.y)), xC = Math.max(x0, Math.min(x1, res.x));
+  var pxTop = xAtTop(yC), pxBot = xAtBot(xC);
+  h += '<line x1="' + pxTop + '" y1="' + yTop + '" x2="' + pxBot + '" y2="' + yBot + '" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+  h += '<circle cx="' + pxTop + '" cy="' + yTop + '" r="4.5" fill="var(--in)" stroke="#fff" stroke-width="1"/>';
+  h += '<circle cx="' + pxBot + '" cy="' + yBot + '" r="4.5" fill="var(--est)" stroke="#fff" stroke-width="1"/>';
+  // The drawn value sits in a row of its own, clear of the tick-number row
+  // each axis already carries, and so the two never overlap regardless of
+  // where the dot happens to land relative to a tick.
+  var topAnchor = pxTop >= W / 2 ? 'end' : 'start', topDx = pxTop >= W / 2 ? -8 : 8;
+  var botAnchor = pxBot >= W / 2 ? 'end' : 'start', botDx = pxBot >= W / 2 ? -8 : 8;
+  h += '<text x="' + (pxTop + topDx) + '" y="' + (yTop - 19) + '" text-anchor="' + topAnchor + '" fill="var(--in)" font-size="10" font-family="\'IBM Plex Mono\', monospace">Y = ' + fmtNum(res.y) + '</text>';
+  h += '<text x="' + (pxBot + botDx) + '" y="' + (yBot + 26) + '" text-anchor="' + botAnchor + '" fill="var(--est)" font-size="10" font-family="\'IBM Plex Mono\', monospace">X = ' + fmtNum(res.x) + '</text>';
+  return h;
+}
+var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist, lnorm: conPicLnorm };
+// The Normal and Rayleigh pictures get a bigger, square canvas (capped at
+// about 440px) instead of the wide 520x160 frame every other construction
+// picture uses, because the projections and the angle (or its deliberate
+// absence) are the whole point of those two tabs.
+var CON_PIC_SQUARE = { norm: true, rayl: true };
+/* Renders into a dedicated static <g> rather than the svg's own innerHTML,
+   the same convention DGUI.genRedraw uses, and so the Rayleigh's own arriving
+   dots – appended straight to the svg, after this group, by
+   conAnimateRayl – can be redrawn here mid-flight (to grow the input
+   strips under them) without erasing the dots still in flight. */
 function conRenderPicture(d) {
   var svg = $('con-svg-' + d.id);
   if (!svg) return;
   var cw = svg.getBoundingClientRect().width || 460;
-  var W = Math.max(240, Math.min(520, cw)), H = Math.round(W * 160 / 520);
+  var square = !!CON_PIC_SQUARE[d.id];
+  var W = square ? Math.max(200, Math.min(440, cw)) : Math.max(240, Math.min(520, cw));
+  var H = square ? W : Math.round(W * 160 / 520);
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-  var st = DGUI.con[d.id] || { xs: [], pts: [], last: null };
+  var staticG = svg.querySelector('#con-static-' + d.id);
+  if (!staticG) {
+    staticG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    staticG.setAttribute('id', 'con-static-' + d.id);
+    svg.insertBefore(staticG, svg.firstChild);
+  }
+  var st = DGUI.con[d.id] || { xs: [], pts: [], inX: [], inY: [], last: null };
   var fn = CON_PIC[d.id];
-  svg.innerHTML = fn ? fn(d, DGUI.params(d.id), st, W, H) : '';
+  staticG.innerHTML = fn ? fn(d, DGUI.params(d.id), st, W, H) : '';
 }
 /* The histogram of the construction's own draws against the true pdf or
    pmf, drawn the same way the transfer plot's own bottom margin is: bars
@@ -3207,7 +3990,11 @@ function buildConHistMarkup(d, p, xs, W, H) {
   h += '<text x="' + L + '" y="' + (T - 1) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
   return h;
 }
+/* The Normal's own output histogram is gone – both its coordinates are read
+   off the plane's marginal strips instead – so this never runs for norm,
+   even though DGUI.conRefresh calls it unconditionally for every id. */
 function conRenderHist(d) {
+  if (d.id === 'norm') return;
   var svg = $('con-hist-' + d.id);
   if (!svg) return;
   var cw = svg.getBoundingClientRect().width || 460;
@@ -3218,39 +4005,399 @@ function conRenderHist(d) {
 }
 DGUI.con = {};
 DGUI.conEnsure = function (id) {
-  if (!DGUI.con[id]) DGUI.con[id] = { rand: DG.mulberry32(Date.now() >>> 0), xs: [], pts: [], last: null };
+  if (!DGUI.con[id]) DGUI.con[id] = {
+    rand: DG.mulberry32(Date.now() >>> 0), xs: [], pts: [], inX: [], inY: [], outA: [], outB: [], last: null, eqW: null,
+    animating: false, animId: null, dots: null, overflow: null
+  };
   return DGUI.con[id];
 };
 DGUI.conRefresh = function (id) {
   var d = DG.byId[id]; if (!d || !DG_CON_LEDE[id]) return;
   conUpdateMsg(d);
   conUpdateGate(d);
+  if (id === 'norm' || id === 'rayl') conUpdateEq(d);
+  conUpdateRaylNote(d);
   conRenderPicture(d);
   conRenderHist(d);
 };
+/* Removes every dot element the Rayleigh's in-flight animation created,
+   landed or not – called on a reset and at the end of conFinishAnimRayl, so
+   no stray dot is ever left floating over a redraw that no longer knows
+   about it (conRenderPicture only rebuilds its own static <g>, not these,
+   which are appended straight to the svg). */
+function conRemoveDots(st) {
+  (st.dots || []).forEach(function (D) {
+    if (D.xDot && D.xDot.parentNode) D.xDot.remove();
+    if (D.yDot && D.yDot.parentNode) D.yDot.remove();
+  });
+  st.dots = null;
+}
+/* Removes every element one Normal draw's spinner animation created for
+   itself – the radius line and its tip dot, the sweep arc, the two dashed
+   projections and their feet, and the two departing marginal dots – leaving
+   none behind whether the draw landed on its own or was cut short by a
+   reset or a finish-instantly. Each field is null until its own phase
+   creates it, and so a draw cut short in the radius or spin phase simply has
+   nothing yet to remove for the fields the emit phase would have filled. */
+function conRemoveNormEls(D) {
+  ['line', 'dot', 'arc', 'dashH', 'dashV', 'footHc', 'footVc', 'downDot', 'leftDot'].forEach(function (k) {
+    if (D[k] && D[k].parentNode) D[k].remove();
+  });
+}
+function conRemoveNormDots(st) {
+  (st.dots || []).forEach(conRemoveNormEls);
+  st.dots = null;
+}
 DGUI.conReset = function (id) {
   if (!DG_CON_LEDE[id]) return;
-  DGUI.con[id] = { rand: DG.mulberry32(Date.now() >>> 0), xs: [], pts: [], last: null };
+  var st = DGUI.con[id];
+  if (st) {
+    if (st.animId) cancelAnimationFrame(st.animId);
+    if (id === 'rayl') conRemoveDots(st);
+    if (id === 'norm') conRemoveNormDots(st);
+  }
+  // eqW survives a reset: it is sized off the parameter range, not off any
+  // particular draw, and reserveConEqSizes only ever runs from onTabShown.
+  var eqW = st ? st.eqW : null;
+  DGUI.con[id] = {
+    rand: DG.mulberry32(Date.now() >>> 0), xs: [], pts: [], inX: [], inY: [], outA: [], outB: [], last: null, eqW: eqW,
+    animating: false, animId: null, dots: null, overflow: null
+  };
   DGUI.conRefresh(id);
 };
-/* One click of the construction's own draw: run the recipe in DG.construct,
-   record the value the tab's own distribution cares about (a coordinate for
-   the Normal, a radius for the Rayleigh, the construction's own x for
-   everything else), and keep whatever the picture needs to show its work. */
-DGUI.conDraw = function (id) {
+/* Finishes the Rayleigh's in-flight animation instantly: every pair of dots
+   still traveling is committed at its final (X, Y) on the spot, and any
+   batch overflow past the first 100 animated draws lands with it. Used when
+   a new click arrives mid-animation, and so the new draws never stack on top of
+   ones still in flight. */
+function conFinishAnimRayl(id) {
+  var st = DGUI.con[id]; if (!st) return;
+  if (st.animId) cancelAnimationFrame(st.animId);
+  st.animId = null; st.animating = false;
+  (st.dots || []).forEach(function (D) {
+    if (D.landed) return;
+    if (!D.appeared) { st.inX.push(D.res.a); st.inY.push(D.res.b); D.appeared = true; }
+    st.pts.push({ a: D.res.a, b: D.res.b }); st.last = D.res; st.xs.push(D.res.r);
+    D.landed = true;
+  });
+  (st.overflow || []).forEach(function (res) {
+    st.pts.push({ a: res.a, b: res.b }); st.inX.push(res.a); st.inY.push(res.b);
+    st.last = res; st.xs.push(res.r);
+  });
+  st.overflow = null;
+  DGUI.conRefresh(id);
+  conRemoveDots(st);
+}
+/* Animates the Rayleigh's own draws: for each one, an X and a Y arrive at
+   the baseline of the plane's bottom and left edges, in --in while they are
+   still separate coordinates the input strips already count, then travel
+   in a straight line – the bottom dot straight up, the left dot straight
+   right – to meet at the point, which lands in --est as the output radius
+   is read off. Up to 100 draws of a batch animate as a staggered swarm (a
+   single draw is a swarm of one, with no stagger); any further draws land
+   instantly once the swarm finishes. Follows genAnimateDraw's own shape:
+   dots are svg circles appended straight to the picture's svg, one
+   requestAnimationFrame loop drives all of them, and the static picture
+   redraws only on a frame where something actually changed. */
+function conAnimateRayl(id, n) {
+  var d = DG.byId[id], st = DGUI.conEnsure(id), svg = $('con-svg-' + id);
+  var p = DGUI.params(id), draws = [];
+  for (var i = 0; i < n; i++) draws.push(DG.construct.boxMuller(st.rand, p.sigma));
+  if (!svg) {
+    draws.forEach(function (res) {
+      st.pts.push({ a: res.a, b: res.b }); st.inX.push(res.a); st.inY.push(res.b);
+      st.last = res; st.xs.push(res.r);
+    });
+    DGUI.conRefresh(id);
+    return;
+  }
+  var animated = draws.slice(0, 100), overflow = draws.slice(100);
+  var cw = svg.getBoundingClientRect().width || 460;
+  var W = Math.max(200, Math.min(440, cw)), H = W;
+  var geo = dgConPlaneGeom(W, H, p.sigma);
+  var multi = animated.length > 1;
+  st.animating = true; st.overflow = overflow;
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var dots = animated.map(function (res) {
+    var xDot = document.createElementNS(svgNS, 'circle'), yDot = document.createElementNS(svgNS, 'circle');
+    [xDot, yDot].forEach(function (c) {
+      c.setAttribute('r', multi ? '3' : '4.5');
+      c.setAttribute('fill', 'var(--in)');
+      c.setAttribute('stroke', '#fff');
+      c.setAttribute('stroke-width', '1');
+      svg.appendChild(c);
+    });
+    var endX = geo.xAt(res.a), endY = geo.yAt(res.b);
+    xDot.setAttribute('cx', endX); xDot.setAttribute('cy', geo.bottomBaseline);
+    yDot.setAttribute('cx', geo.leftBaseline); yDot.setAttribute('cy', endY);
+    return { xDot: xDot, yDot: yDot, res: res, endX: endX, endY: endY, landed: false, appeared: false, start: 0 };
+  });
+  st.dots = dots;
+  var span = multi ? 700 : 0, perDelay = multi ? span / animated.length : 0;
+  dots.forEach(function (D, i) { D.start = i * perDelay; });
+  var leg = 350, t0 = null;
+  function frame(ts) {
+    if (t0 === null) t0 = ts;
+    var elapsed = ts - t0, stillGoing = false, anyChanged = false, anyLanded = false;
+    dots.forEach(function (D) {
+      if (D.landed) return;
+      var el = elapsed - D.start;
+      if (el < 0) { stillGoing = true; return; }
+      // The dot's turn has come up: its coordinate counts toward its own
+      // input strip right here, before it has traveled anywhere.
+      if (!D.appeared) { D.appeared = true; st.inX.push(D.res.a); st.inY.push(D.res.b); anyChanged = true; }
+      if (el < leg) {
+        var f = el / leg;
+        D.xDot.setAttribute('cy', geo.bottomBaseline + (D.endY - geo.bottomBaseline) * f);
+        D.yDot.setAttribute('cx', geo.leftBaseline + (D.endX - geo.leftBaseline) * f);
+        stillGoing = true;
+      } else {
+        D.landed = true; D.xDot.remove(); D.yDot.remove();
+        st.pts.push({ a: D.res.a, b: D.res.b }); st.last = D.res; st.xs.push(D.res.r);
+        anyChanged = true; anyLanded = true;
+      }
+    });
+    if (anyChanged) conRenderPicture(d);
+    if (anyLanded) { conRenderHist(d); conUpdateMsg(d); }
+    if (stillGoing) {
+      st.animId = requestAnimationFrame(frame);
+    } else {
+      st.overflow.forEach(function (res) {
+        st.pts.push({ a: res.a, b: res.b }); st.inX.push(res.a); st.inY.push(res.b);
+        st.last = res; st.xs.push(res.r);
+      });
+      st.overflow = null; st.animating = false; st.animId = null;
+      DGUI.conRefresh(id);
+      st.dots = null;
+    }
+  }
+  st.animId = requestAnimationFrame(frame);
+}
+/* Finishes the Normal's in-flight spinner animation instantly: every draw
+   still in flight lands at its own final (A, B) on the spot, and any batch
+   overflow past the first 100 animated draws lands with it. Used when a new
+   click arrives mid-animation, and so the new draws never stack on top of
+   ones still spinning. */
+function conFinishAnimNorm(id) {
+  var st = DGUI.con[id]; if (!st) return;
+  if (st.animId) cancelAnimationFrame(st.animId);
+  st.animId = null; st.animating = false;
+  var p = DGUI.params(id);
+  (st.dots || []).forEach(function (D) {
+    if (D.landed) return;
+    st.outA.push(D.stdA); st.outB.push(D.stdB);
+    st.pts.push({ a: D.stdA, b: D.stdB }); st.last = D.res; st.xs.push(p.mu + D.res.a, p.mu + D.res.b);
+    D.landed = true;
+  });
+  (st.overflow || []).forEach(function (res) {
+    var stdA = res.a / p.sigma, stdB = res.b / p.sigma;
+    st.outA.push(stdA); st.outB.push(stdB);
+    st.pts.push({ a: stdA, b: stdB }); st.last = res; st.xs.push(p.mu + res.a, p.mu + res.b);
+  });
+  st.overflow = null;
+  DGUI.conRefresh(id);
+  conRemoveNormDots(st);
+}
+/* Animates the Normal's own draws through the Box–Muller recipe itself,
+   rather than landing the point straight away: for each draw, three phases
+   run in sequence, all in the plane's own standard (sigma-free) coordinates.
+   (1) Radius: a green line grows from the origin along the angle-0 axis,
+   from length 0 to length R, with a dot at its tip – R is step 2 of the
+   recipe, U1 turned into a radius. (2) Spin: the line and its dot sweep
+   counterclockwise from angle 0 to angle Θ, easing into the landing the way
+   a spinner slows, tracing the same small fixed-radius arc the static
+   picture draws for the latest point – Θ is step 3, U2 turned into an
+   angle. Every spin starts from the origin rather than from the previous
+   point, because each draw is independent of the last, and a path drawn
+   from one point to the next would read as a dependence between them that
+   is not there. (3) Emit: two orange dots leave the tip at once, one
+   straight down into the bottom strip and one straight left into the left
+   strip, with the dashed projections and their feet drawn behind them as
+   they go; each dot's own coordinate joins its own strip's array
+   (st.outA/st.outB) the moment it arrives, and once both have arrived the
+   point joins st.pts and st.xs the way a plain draw already would. Up to
+   100 draws of a batch animate as a staggered swarm (a single draw is a
+   swarm of one); any further draws land instantly once the swarm finishes.
+   Follows conAnimateRayl's own shape: the traveling elements are svg nodes
+   appended straight to the picture's svg, one requestAnimationFrame loop
+   drives all of them, and the static picture redraws only on a frame where
+   something a marginal or the latest point actually depends on has
+   changed. */
+function conAnimateNorm(id, n) {
+  var st = DGUI.conEnsure(id), svg = $('con-svg-' + id);
+  var p = DGUI.params(id), draws = [];
+  for (var i = 0; i < n; i++) draws.push(DG.construct.boxMuller(st.rand, p.sigma));
+  if (!svg) {
+    draws.forEach(function (res) {
+      var stdA = res.a / p.sigma, stdB = res.b / p.sigma;
+      st.outA.push(stdA); st.outB.push(stdB);
+      st.pts.push({ a: stdA, b: stdB }); st.last = res; st.xs.push(p.mu + res.a, p.mu + res.b);
+    });
+    DGUI.conRefresh(id);
+    return;
+  }
+  var animated = draws.slice(0, 100), overflow = draws.slice(100);
+  var cw = svg.getBoundingClientRect().width || 460;
+  var W = Math.max(200, Math.min(440, cw)), H = W;
+  var geo = dgConPlaneGeom(W, H, 1);
+  var multi = animated.length > 1;
+  st.animating = true; st.overflow = overflow;
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var legR = 250, legS = 450, legE = 350, legDur = legR + legS + legE;
+  var dots = animated.map(function (res) {
+    var stdR = Math.sqrt(-2 * Math.log(res.u1)), theta = res.theta;
+    var stdA = stdR * Math.cos(theta), stdB = stdR * Math.sin(theta);
+    var line = document.createElementNS(svgNS, 'line');
+    line.setAttribute('stroke', 'var(--in)'); line.setAttribute('stroke-width', '1.8');
+    var dot = document.createElementNS(svgNS, 'circle');
+    dot.setAttribute('r', multi ? '3' : '4.5'); dot.setAttribute('fill', 'var(--in)');
+    dot.setAttribute('stroke', '#fff'); dot.setAttribute('stroke-width', '1');
+    svg.appendChild(line); svg.appendChild(dot);
+    return {
+      res: res, stdR: stdR, theta: theta, stdA: stdA, stdB: stdB, landed: false, start: 0,
+      line: line, dot: dot, arc: null, dashH: null, dashV: null, footHc: null, footVc: null, downDot: null, leftDot: null
+    };
+  });
+  st.dots = dots;
+  var span = multi ? 700 : 0, perDelay = multi ? span / animated.length : 0;
+  dots.forEach(function (D, i) { D.start = i * perDelay; });
+  var t0 = null;
+  function frame(ts) {
+    if (t0 === null) t0 = ts;
+    var elapsed = ts - t0, stillGoing = false, anyChanged = false, anyLanded = false;
+    dots.forEach(function (D) {
+      if (D.landed) return;
+      var el = elapsed - D.start;
+      if (el < 0) { stillGoing = true; return; }
+      if (el < legR) {
+        // Radius: the line and its tip dot grow out along angle 0.
+        var f = el / legR, px = geo.xAt(D.stdR * f), py = geo.yAt(0);
+        D.line.setAttribute('x1', geo.pcx); D.line.setAttribute('y1', geo.pcy);
+        D.line.setAttribute('x2', px); D.line.setAttribute('y2', py);
+        D.dot.setAttribute('cx', px); D.dot.setAttribute('cy', py);
+        stillGoing = true;
+      } else if (el < legR + legS) {
+        // Spin: the line and its tip dot sweep to angle Θ, eased into the
+        // landing, tracing the small fixed-radius arc as they go.
+        var fs = (el - legR) / legS, eased = 1 - Math.pow(1 - fs, 3), curTheta = eased * D.theta;
+        var px2 = geo.xAt(D.stdR * Math.cos(curTheta)), py2 = geo.yAt(D.stdR * Math.sin(curTheta));
+        D.line.setAttribute('x1', geo.pcx); D.line.setAttribute('y1', geo.pcy);
+        D.line.setAttribute('x2', px2); D.line.setAttribute('y2', py2);
+        D.dot.setAttribute('cx', px2); D.dot.setAttribute('cy', py2);
+        if (!D.arc) {
+          D.arc = document.createElementNS(svgNS, 'path');
+          D.arc.setAttribute('fill', 'none'); D.arc.setAttribute('stroke', 'var(--in)'); D.arc.setAttribute('stroke-width', '1.3');
+          svg.insertBefore(D.arc, D.dot);
+        }
+        var arcR = Math.min(30, geo.half * 0.3);
+        var ax = geo.pcx + arcR, ay = geo.pcy;
+        var bx = geo.pcx + arcR * Math.cos(curTheta), by = geo.pcy - arcR * Math.sin(curTheta);
+        var largeArc = (curTheta * 180 / Math.PI) > 180 ? 1 : 0;
+        D.arc.setAttribute('d', 'M ' + ax + ' ' + ay + ' A ' + arcR + ' ' + arcR + ' 0 ' + largeArc + ' 0 ' + bx + ' ' + by);
+        stillGoing = true;
+      } else if (el < legDur) {
+        // Emit: two dots leave the landed tip at once, the dashed
+        // projections and their feet drawn behind them as they start.
+        if (!D.downDot) {
+          var ex = geo.xAt(D.stdA), ey = geo.yAt(D.stdB);
+          D.dashH = document.createElementNS(svgNS, 'line');
+          D.dashH.setAttribute('x1', ex); D.dashH.setAttribute('y1', ey);
+          D.dashH.setAttribute('x2', ex); D.dashH.setAttribute('y2', geo.pcy);
+          D.dashH.setAttribute('stroke', 'var(--est)'); D.dashH.setAttribute('stroke-width', '1.3'); D.dashH.setAttribute('stroke-dasharray', '4 3');
+          D.dashV = document.createElementNS(svgNS, 'line');
+          D.dashV.setAttribute('x1', ex); D.dashV.setAttribute('y1', ey);
+          D.dashV.setAttribute('x2', geo.pcx); D.dashV.setAttribute('y2', ey);
+          D.dashV.setAttribute('stroke', 'var(--est)'); D.dashV.setAttribute('stroke-width', '1.3'); D.dashV.setAttribute('stroke-dasharray', '4 3');
+          D.footHc = document.createElementNS(svgNS, 'circle');
+          D.footHc.setAttribute('cx', ex); D.footHc.setAttribute('cy', geo.pcy); D.footHc.setAttribute('r', '3'); D.footHc.setAttribute('fill', 'var(--est)');
+          D.footVc = document.createElementNS(svgNS, 'circle');
+          D.footVc.setAttribute('cx', geo.pcx); D.footVc.setAttribute('cy', ey); D.footVc.setAttribute('r', '3'); D.footVc.setAttribute('fill', 'var(--est)');
+          svg.appendChild(D.dashH); svg.appendChild(D.dashV); svg.appendChild(D.footHc); svg.appendChild(D.footVc);
+          D.downDot = document.createElementNS(svgNS, 'circle');
+          D.downDot.setAttribute('r', multi ? '3' : '4.5'); D.downDot.setAttribute('fill', 'var(--est)');
+          D.downDot.setAttribute('stroke', '#fff'); D.downDot.setAttribute('stroke-width', '1');
+          D.leftDot = document.createElementNS(svgNS, 'circle');
+          D.leftDot.setAttribute('r', multi ? '3' : '4.5'); D.leftDot.setAttribute('fill', 'var(--est)');
+          D.leftDot.setAttribute('stroke', '#fff'); D.leftDot.setAttribute('stroke-width', '1');
+          svg.appendChild(D.downDot); svg.appendChild(D.leftDot);
+          D.emitX = ex; D.emitY = ey;
+        }
+        var fe = (el - legR - legS) / legE;
+        D.downDot.setAttribute('cx', D.emitX); D.downDot.setAttribute('cy', D.emitY + (geo.bottomBaseline - D.emitY) * fe);
+        D.leftDot.setAttribute('cx', D.emitX + (geo.leftBaseline - D.emitX) * fe); D.leftDot.setAttribute('cy', D.emitY);
+        stillGoing = true;
+      } else {
+        // Landed: both marginals gain their value and the point itself
+        // joins the running draws, all in the same frame, because the two
+        // dots share one duration and so always arrive together.
+        D.landed = true; anyChanged = true; anyLanded = true;
+        st.outA.push(D.stdA); st.outB.push(D.stdB);
+        st.pts.push({ a: D.stdA, b: D.stdB }); st.last = D.res; st.xs.push(p.mu + D.res.a, p.mu + D.res.b);
+        conRemoveNormEls(D);
+      }
+    });
+    if (anyChanged) conRenderPicture(DG.byId[id]);
+    if (anyLanded) { conRenderHist(DG.byId[id]); conUpdateMsg(DG.byId[id]); }
+    if (stillGoing) {
+      st.animId = requestAnimationFrame(frame);
+    } else {
+      st.overflow.forEach(function (res) {
+        var stdA = res.a / p.sigma, stdB = res.b / p.sigma;
+        st.outA.push(stdA); st.outB.push(stdB);
+        st.pts.push({ a: stdA, b: stdB }); st.last = res; st.xs.push(p.mu + res.a, p.mu + res.b);
+      });
+      st.overflow = null; st.animating = false; st.animId = null;
+      DGUI.conRefresh(id);
+      st.dots = null;
+    }
+  }
+  st.animId = requestAnimationFrame(frame);
+}
+/* One click of the construction's own draw, one or many at once: run the
+   recipe in DG.construct n times, record every value (or, for the Normal,
+   the two values each pass yields – X1 and X2 both come out of one pass
+   through the transform) the tab's own distribution cares about, and keep
+   whatever the picture needs to show its work. Only the picture follows the
+   LAST draw of the n (st.last is overwritten each pass, and every picture
+   function reads only that field, or – for the Normal and Rayleigh's own
+   growing swarm of points – treats every earlier point the same way a run
+   of single draws already would); the histogram and the running summary
+   below see every one of the n draws, because both are built from st.xs,
+   which every pass pushes onto. The Beta's whole-number gate is checked
+   once up front, exactly as it is for a single draw, and so a batch on an
+   ungated Beta does nothing rather than drawing until the gate closes. The
+   Normal and Rayleigh alone draw through an animation (conAnimateNorm,
+   conAnimateRayl), because each one's whole point is watching its own
+   mechanism run rather than seeing the point simply appear; a click that
+   lands mid-animation finishes the swarm already in flight first, and so no
+   draw is ever lost or layered. */
+DGUI.conDraw = function (id, n) {
   var d = DG.byId[id]; if (!d || !DG_CON_LEDE[id]) return;
-  var st = DGUI.conEnsure(id), p = DGUI.params(id), res, x;
-  if (id === 'beta' && !conBetaOk(p)) return;
-  if (id === 'erlang') { res = DG.construct.erlang(st.rand, p); x = res.x; }
-  else if (id === 'binom') { res = DG.construct.binom(st.rand, p); x = res.x; }
-  else if (id === 'nbinom') { res = DG.construct.nbinom(st.rand, p); x = res.x; }
-  else if (id === 'norm') { res = DG.construct.boxMuller(st.rand, p.sigma); x = p.mu + res.a; st.pts.push({ a: res.a, b: res.b }); }
-  else if (id === 'rayl') { res = DG.construct.boxMuller(st.rand, p.sigma); x = res.r; st.pts.push({ a: res.a, b: res.b }); }
-  else if (id === 'beta') { res = DG.construct.betaOrder(st.rand, p); if (!res) return; x = res.x; }
-  else if (id === 'chisq') { res = DG.construct.chisq(st.rand, p); x = res.x; }
-  else if (id === 'fdist') { res = DG.construct.fdist(st.rand, p); x = res.x; }
-  else return;
-  st.last = res; st.xs.push(x);
+  n = Math.max(1, Math.round(Number(n) || 1));
+  if (id === 'beta' && !conBetaOk(DGUI.params(id))) return;
+  if (id === 'rayl') {
+    var stR = DGUI.conEnsure(id);
+    if (stR.animating) conFinishAnimRayl(id);
+    conAnimateRayl(id, n);
+    return;
+  }
+  if (id === 'norm') {
+    var stN = DGUI.conEnsure(id);
+    if (stN.animating) conFinishAnimNorm(id);
+    conAnimateNorm(id, n);
+    return;
+  }
+  var st = DGUI.conEnsure(id), p = DGUI.params(id), res;
+  for (var i = 0; i < n; i++) {
+    if (id === 'erlang') { res = DG.construct.erlang(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'binom') { res = DG.construct.binom(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'nbinom') { res = DG.construct.nbinom(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'beta') { res = DG.construct.betaOrder(st.rand, p); if (!res) break; st.last = res; st.xs.push(res.x); }
+    else if (id === 'chisq') { res = DG.construct.chisq(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'fdist') { res = DG.construct.fdist(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'lnorm') { res = DG.construct.lnorm(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else return;
+  }
   DGUI.conRefresh(id);
 };
 
@@ -3260,11 +4407,30 @@ DGUI.conDraw = function (id) {
    distribution – a built-in sampler where the tool has one, or the
    inverse-transform recipe above written in that tool's own syntax where it
    does not. Every function here returns an array of row objects keyed off
-   the CURRENT parameters, so the table updates with the knobs the same way
+   the CURRENT parameters, and so the table updates with the knobs the same way
    the recipe text above it does. A row whose code is the string "no
    built-in" or "no inverse function" (in whole or in part) is prose, not
    code, and is rendered in the ordinary font rather than the monospace one. */
-function dgToolRow(tool, code, note) { return { tool: tool, code: code, note: note || '', plain: false }; }
+/* Drops a redundant unit coefficient or offset from a substituted code
+   string: a leading "1 * " or "1*" (multiplying by 1 changes nothing), a
+   trailing " * 1", and a trailing " + 0" or leading "0 + " (adding 0
+   changes nothing) – and so a Rayleigh at sigma = 1 reads "sqrt(...)" rather
+   than "1 * sqrt(...)". Anchored to the very start or end of the string (an
+   Excel formula's leading "=" is stepped over first) so "10" and "1.5"
+   are never mistaken for the coefficient 1: after that leading "1", the
+   pattern requires whitespace or "*" next, which "10" and "1.5" do not
+   have. A divisor of 1 (as in the exponential's "/1" at lambda = 1) is left
+   alone; only multiplication and addition are simplified here. */
+function dgSimplifyCoef(code) {
+  var lead = '';
+  if (code.charAt(0) === '=') { lead = '='; code = code.slice(1); }
+  code = code.replace(/^1\s*\*\s*/, '');
+  code = code.replace(/\s*\*\s*1$/, '');
+  code = code.replace(/\s*\+\s*0$/, '');
+  code = code.replace(/^0\s*\+\s*/, '');
+  return lead + code;
+}
+function dgToolRow(tool, code, note) { return { tool: tool, code: dgSimplifyCoef(code), note: note || '', plain: false }; }
 function dgToolRowPlain(tool, text, note) { return { tool: tool, code: text, note: note || '', plain: true }; }
 var DG_TOOLS = {
   unif: function (p) {
@@ -3281,7 +4447,7 @@ var DG_TOOLS = {
     var a = fmtNum(p.a), b = fmtNum(p.b), c = fmtNum(p.c);
     return [
       dgToolRow('Arena', 'TRIA(' + a + ', ' + c + ', ' + b + ')', "Arena's order is minimum, mode, maximum"),
-      dgToolRow('R', 'u <- runif(n); ifelse(u < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + sqrt(u*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - sqrt((1 - u)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))', 'base R has no triangular sampler'),
+      dgToolRow('R', 'u <- runif(n); ifelse(u < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + sqrt(u*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - sqrt((1 - u)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))'),
       dgToolRow('MATLAB', "random(makedist('Triangular', 'A', " + a + ", 'B', " + c + ", 'C', " + b + '), n, 1)', "MATLAB's B is the mode"),
       dgToolRow('NumPy', 'rng.triangular(' + a + ', ' + c + ', ' + b + ', n)', 'left, mode, right'),
       dgToolRow('Excel', '=IF(A1 < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + SQRT(A1*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - SQRT((1 - A1)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))', 'assumes a uniform draw already in cell A1, reused by both branches')
@@ -3320,7 +4486,7 @@ var DG_TOOLS = {
   weib: function (p) {
     var k = fmtNum(p.k), mu = fmtNum(p.mu);
     return [
-      dgToolRow('Arena', 'WEIB(' + mu + ', ' + k + ')', 'Arena writes the scale first, then the shape'),
+      dgToolRow('Arena', 'WEIB(' + mu + ', ' + k + ')', 'Arena writes the scale first and then the shape'),
       dgToolRow('R', 'rweibull(n, shape = ' + k + ', scale = ' + mu + ')'),
       dgToolRow('MATLAB', 'wblrnd(' + mu + ', ' + k + ', n, 1)', 'scale, then shape'),
       dgToolRow('NumPy', mu + ' * rng.weibull(' + k + ', n)', "NumPy's Weibull has scale 1"),
@@ -3330,7 +4496,7 @@ var DG_TOOLS = {
   bern: function (p) {
     var pr = fmtNum(p.p);
     return [
-      dgToolRow('Arena', 'DISC(' + fmtNum(1 - p.p) + ', 0, 1, 1)', 'cumulative probability, then value, in pairs'),
+      dgToolRow('Arena', 'DISC(' + fmtNum(1 - p.p) + ', 0, 1, 1)', 'cumulative probability and then value, in pairs'),
       dgToolRow('R', 'rbinom(n, 1, ' + pr + ')'),
       dgToolRow('MATLAB', 'binornd(1, ' + pr + ', n, 1)'),
       dgToolRow('NumPy', 'rng.binomial(1, ' + pr + ', n)'),
@@ -3350,8 +4516,8 @@ var DG_TOOLS = {
   geom: function (p) {
     var pr = fmtNum(p.p);
     return [
-      dgToolRow('Arena', 'AINT(LN(1 - UNIF(0, 1)) / LN(1 - ' + pr + ')) + 1', 'no built-in; AINT truncates'),
-      dgToolRow('R', 'rgeom(n, ' + pr + ') + 1', 'R counts the failures before the success, so add 1 for trials'),
+      dgToolRow('Arena', 'AINT(LN(1 - UNIF(0, 1)) / LN(1 - ' + pr + ')) + 1', 'AINT truncates'),
+      dgToolRow('R', 'rgeom(n, ' + pr + ') + 1', 'R counts the failures before the success; add 1 for trials'),
       dgToolRow('MATLAB', 'geornd(' + pr + ', n, 1) + 1', 'counts failures; add 1'),
       dgToolRow('NumPy', 'rng.geometric(' + pr + ', n)', 'NumPy counts trials, as this page does'),
       dgToolRow('Excel', '=CEILING(LN(1 - RAND())/LN(1 - ' + pr + '), 1)')
@@ -3400,7 +4566,7 @@ var DG_TOOLS = {
   fdist: function (p) {
     var d1 = fmtNum(p.d1), d2 = fmtNum(p.d2);
     return [
-      dgToolRow('Arena', '(GAMM(2, ' + fmtNum(p.d1 / 2) + ')/' + d1 + ') / (GAMM(2, ' + fmtNum(p.d2 / 2) + ')/' + d2 + ')', 'no built-in; the ratio of two scaled chi-squares'),
+      dgToolRow('Arena', '(GAMM(2, ' + fmtNum(p.d1 / 2) + ')/' + d1 + ') / (GAMM(2, ' + fmtNum(p.d2 / 2) + ')/' + d2 + ')', 'the ratio of two scaled chi-squares'),
       dgToolRow('R', 'rf(n, ' + d1 + ', ' + d2 + ')'),
       dgToolRow('MATLAB', 'frnd(' + d1 + ', ' + d2 + ', n, 1)'),
       dgToolRow('NumPy', 'rng.f(' + d1 + ', ' + d2 + ', n)'),
@@ -3431,7 +4597,7 @@ var DG_TOOLS = {
   rayl: function (p) {
     var sigma = fmtNum(p.sigma);
     return [
-      dgToolRow('Arena', sigma + ' * SQRT(-2 * LN(UNIF(0, 1)))', "no built-in; the recipe written in Arena's own functions"),
+      dgToolRow('Arena', sigma + ' * SQRT(-2 * LN(UNIF(0, 1)))'),
       dgToolRow('R', sigma + ' * sqrt(-2 * log(runif(n)))'),
       dgToolRow('MATLAB', 'raylrnd(' + sigma + ', n, 1)'),
       dgToolRow('NumPy', 'rng.rayleigh(' + sigma + ', n)'),
@@ -3441,7 +4607,7 @@ var DG_TOOLS = {
   dunif: function (p) {
     var a = fmtNum(p.a), b = fmtNum(p.b);
     return [
-      dgToolRow('Arena', a + ' + AINT((' + b + ' - ' + a + ' + 1) * UNIF(0, 1))', 'no built-in; AINT truncates'),
+      dgToolRow('Arena', a + ' + AINT((' + b + ' - ' + a + ' + 1) * UNIF(0, 1))', 'AINT truncates'),
       dgToolRow('R', 'sample(' + a + ':' + b + ', n, replace = TRUE)'),
       dgToolRow('MATLAB', 'randi([' + a + ' ' + b + '], n, 1)'),
       dgToolRow('NumPy', 'rng.integers(' + a + ', ' + b + ' + 1, n)', 'the upper end is exclusive'),
@@ -3449,12 +4615,16 @@ var DG_TOOLS = {
     ];
   }
 };
+// Every DG_TOOLS row renders in two columns, tool and code, with a note (if
+// it has one) as a muted line under that row's own code – there is never a
+// separate Note column, at any width.
 function toolsRowHtml(r) {
   // Escaped as plain text either way: a code snippet's own "<" (an ifelse
   // condition, a RAND() comparison) would otherwise open a tag rather than
   // print as a character.
   var codeHtml = r.plain ? dgEsc(r.code) : '<code>' + dgEsc(r.code) + '</code>';
-  return '<tr><td>' + r.tool + '</td><td>' + codeHtml + '</td><td>' + (r.note ? dgEsc(r.note) : '') + '</td></tr>';
+  var noteHtml = r.note ? '<span class="tools-note">' + dgEsc(r.note) + '</span>' : '';
+  return '<tr><td>' + r.tool + '</td><td>' + codeHtml + noteHtml + '</td></tr>';
 }
 function toolsPanelBodyHtml(d) {
   var p = DGUI.params(d.id);
@@ -3462,17 +4632,24 @@ function toolsPanelBodyHtml(d) {
   var html = '<div class="sec tools-sec" id="tools-' + d.id + '"><div class="sec-hd">In common tools</div>';
   html += '<p class="lede" style="margin-bottom:8px">Where a tool has a built-in sampler, that is shown; where it does not, the inverse-transform recipe above is written in that tool\'s own syntax.</p>';
   html += '<div class="tools-table-wrap" id="tools-wrap-' + d.id + '"><table class="tools-table">'
-    + '<colgroup><col class="tools-col-tool"><col class="tools-col-code"><col class="tools-col-note"></colgroup>'
-    + '<thead><tr><th>Tool</th><th>Code</th><th>Note</th></tr></thead><tbody id="tools-rows-' + d.id + '">'
+    + '<colgroup><col class="tools-col-tool"><col class="tools-col-code"></colgroup>'
+    + '<thead><tr><th>Tool</th><th>Code</th></tr></thead><tbody id="tools-rows-' + d.id + '">'
     + rows.map(toolsRowHtml).join('') + '</tbody></table></div>';
   html += '<p class="knob-note" style="margin-top:6px">In every R and NumPy line, n is the number of draws and rng is numpy.random.default_rng().</p>';
+  // The Rayleigh alone gets a reminder tying every tool's own square root
+  // back to the construction panel above: whatever the tool's own syntax,
+  // the quantity inside that root is always the same exponential draw.
+  if (d.id === 'rayl') {
+    html += '<p class="knob-note" style="margin-top:2px">Inside every square root above is −2 ln(U), an exponential draw with mean 2; the Rayleigh is σ times its square root.</p>';
+  }
   html += '</div>';
   return html;
 }
 function updateToolsTable(d) {
   var tbody = $('tools-rows-' + d.id);
   if (!tbody || !DG_TOOLS[d.id]) return;
-  tbody.innerHTML = DG_TOOLS[d.id](DGUI.params(d.id), d).map(toolsRowHtml).join('');
+  var rows = DG_TOOLS[d.id](DGUI.params(d.id), d);
+  tbody.innerHTML = rows.map(toolsRowHtml).join('');
 }
 function reserveToolsHeight(d) {
   var el = $('tools-wrap-' + d.id);
@@ -3506,7 +4683,7 @@ function dgGenLayout(d, W) {
   // get for free (T and R are themselves that clearance): the strip's own
   // baseline sits exactly on the outer edge of its margin, and a stroke or
   // a discrete pmf's marker centered on a near-zero value straddles that
-  // edge, so without this the marker's own radius pokes past the viewBox.
+  // edge, and so without this the marker's own radius pokes past the viewBox.
   var pad = 4;
   var L = pad + uGap + uStrip, R = 12, T = 12, B = xGap + xStrip + pad, S = W - L - R;
   var x0 = d.axis.x0, x1 = d.axis.x1;
@@ -3532,10 +4709,11 @@ DGUI.genEnsure = function (id) {
   if (!DGUI.gen[id]) DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, dots: null, overflow: null, batch: false };
   return DGUI.gen[id];
 };
+function genRecipeHtml(d, p) { return dgFormulaHtml(DG_RECIPE[d.id](p)); }
 function genUpdateRecipe(d) {
   var el = $('recipe-' + d.id);
   if (!el) return;
-  el.innerHTML = DG_RECIPE[d.id](DGUI.params(d.id));
+  el.innerHTML = genRecipeHtml(d, DGUI.params(d.id));
 }
 function reserveGenRecipeHeight(d) {
   var el = $('recipe-' + d.id);
@@ -3545,34 +4723,21 @@ function reserveGenRecipeHeight(d) {
   var candidates = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
   candidates.push(worstOverGrid(d, function (p) { return DG_RECIPE[d.id](p).length; }));
   var worst = 0;
-  candidates.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(el, DG_RECIPE[d.id](p))); });
+  candidates.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(el, genRecipeHtml(d, p))); });
   el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
 }
-function reserveGenMsgHeight(d) {
-  var el = $('gen-msg-' + d.id);
-  if (!el) return;
-  var def = {}, lo = {}, hi = {};
-  d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
-  var worst = dgMeasureOffscreen(el, 'No draws yet.');
-  function msgFor(p) {
-    var mu = d.mean(p), sd = Math.sqrt(Math.max(0, d.variance(p)));
-    return '500 draws. Mean ' + fmtNum(mu) + ', sd ' + fmtNum(sd) + '; expected ' + fmtNum(mu) + ', ' + fmtNum(sd) + '.';
-  }
-  [d.clamp(def), d.clamp(lo), d.clamp(hi), worstOverGrid(d, function (p) { return msgFor(p).length; })].forEach(function (p) {
-    worst = Math.max(worst, dgMeasureOffscreen(el, msgFor(p)));
-  });
-  el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
-}
+function reserveGenMsgHeight(d) { dgReserveSumHeight($('gen-msg-' + d.id), d, true); }
 function genUpdateMsg(d) {
   var el = $('gen-msg-' + d.id);
   if (!el) return;
   var st = DGUI.gen[d.id];
-  if (!st || st.xs.length === 0) { el.textContent = 'No draws yet.'; return; }
+  if (!st || st.xs.length === 0) { el.innerHTML = dgSummaryHtml(d, 0, 0, 0, 0, 0, '', true); return; }
   var p = DGUI.params(d.id), n = st.xs.length;
   var mean = st.xs.reduce(function (a, b) { return a + b; }, 0) / n;
   var variance = n > 1 ? st.xs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (n - 1) : 0;
   var sd = Math.sqrt(Math.max(0, variance));
-  el.textContent = n + ' draws. Mean ' + fmtNum(mean) + ', sd ' + fmtNum(sd) + '; expected ' + fmtNum(d.mean(p)) + ', ' + fmtNum(Math.sqrt(Math.max(0, d.variance(p)))) + '.';
+  var testLine = n >= 2 ? dgTestLineHtml(d, p, st.xs) : '';
+  el.innerHTML = dgSummaryHtml(d, n, mean, sd, d.mean(p), Math.sqrt(Math.max(0, d.variance(p))), testLine, true);
 }
 /* The one-sentence note under the recipe for a closed-form or numeric
    sampler, and the cumulative table a search-kind sampler actually walks
@@ -3580,7 +4745,7 @@ function genUpdateMsg(d) {
    beside the plot. Plain inline text, not its own <p>: the caller's
    container already is one. */
 function genSideNoteHtml(d) {
-  if (d.gen.kind === 'closed') return 'The recipe above is F⁻¹(U) in closed form, so every draw is one uniform and a little arithmetic.';
+  if (d.gen.kind === 'closed') return 'The recipe above is F⁻¹(U) in closed form, and so every draw is one uniform and a little arithmetic.';
   return 'F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from simpler draws.';
 }
 function genSideTableHtml(d, p, landedK) {
@@ -3613,10 +4778,10 @@ function genRenderSide(d) {
    (staircase for a discrete distribution, curve for a continuous one), the
    U histogram in the left margin, and the X histogram under the true pdf or
    pmf in the bottom margin. This writes into a dedicated "static" <g> rather
-   than the svg's own innerHTML, so it can run mid-animation (as each dot in
+   than the svg's own innerHTML, and so it can run mid-animation (as each dot in
    a batch lands, to grow the margins under it) without erasing the other
    dots still in flight, which genAnimateDraw appends straight to the svg,
-   after this group, so they paint on top of it. */
+   after this group, and so they paint on top of it. */
 DGUI.genRedraw = function (id) {
   var d = DG.byId[id]; if (!d) return;
   var svg = $('tp-' + id); if (!svg) return;
@@ -3624,7 +4789,7 @@ DGUI.genRedraw = function (id) {
   var W = Math.max(240, Math.min(520, cw));
   var geo = dgGenLayout(d, W), L = geo.L, T = geo.T, S = geo.S;
   // The margins are no longer equal on every side (the U and x strips are
-  // each wider than the top/right padding), so the height is computed from
+  // each wider than the top/right padding), and so the height is computed from
   // them directly rather than assumed square.
   var H = T + S + geo.B;
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -3670,7 +4835,7 @@ DGUI.genRedraw = function (id) {
   // The U margin is two disjoint bands (see dgGenLayout): the tick numbers
   // live in uGap, right against the axis, and are never touched by a bar;
   // the histogram lives entirely in uStrip, further out, as a density (a
-  // bar's length is its fraction of the draws times the bin count, so ten
+  // bar's length is its fraction of the draws times the bin count, and so ten
   // even bins on [0, 1] turn a fraction into "fraction per unit width"),
   // scaled so the true U(0, 1) density – a flat line at 1 – has one place
   // to live and the bars are read against it rather than against each
@@ -3689,7 +4854,7 @@ DGUI.genRedraw = function (id) {
   for (var bi = 0; bi < uBins; bi++) {
     var yTopPx = geo.uAt((bi + 1) / uBins), yBotPx = geo.uAt(bi / uBins);
     var barLen = uScaleAt(uDensities[bi]);
-    h += '<rect x="' + uBaseX + '" y="' + yTopPx + '" width="' + barLen + '" height="' + (yBotPx - yTopPx) + '" fill="var(--est)" fill-opacity="0.5" stroke="var(--est)" stroke-width="1"/>';
+    h += '<rect x="' + uBaseX + '" y="' + yTopPx + '" width="' + barLen + '" height="' + (yBotPx - yTopPx) + '" fill="var(--in)" fill-opacity="0.5" stroke="var(--in)" stroke-width="1"/>';
   }
   // The true U(0, 1) density – flat at 1 – drawn the same way the bottom
   // strip draws the true pdf over its own bars: one line, in --truth, so
@@ -3740,7 +4905,7 @@ DGUI.genRedraw = function (id) {
   // the strip's top-left corner: that corner sits at x = L, exactly where
   // the axis's own x0 tick lands whenever x0 is itself a tick value (0 for
   // most of these distributions), and a bin there can also be the tallest
-  // bar in the strip, so anything drawn at x = L collides with one or both.
+  // bar in the strip, and so anything drawn at x = L collides with one or both.
   h += '<text x="' + (L - 4) + '" y="' + (xStripTop + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
   // Placed just past the axis's own right end, on the axis line itself,
   // rather than centered far below the bottom strip's bars.
@@ -3757,7 +4922,7 @@ DGUI.genRefresh = function (id) {
   updateToolsTable(d);
 };
 /* Removes every dot element the in-flight animation created, landed or not
-   – called on a reset and at the end of genFinishAnim, so no stray dot is
+   – called on a reset and at the end of genFinishAnim, and so no stray dot is
    ever left floating over a redraw that no longer knows about it (genRedraw
    only rebuilds its own static <g>, not these, which are appended straight
    to the svg). */
@@ -3783,7 +4948,13 @@ function genFinishAnim(id) {
   if (st.animId) cancelAnimationFrame(st.animId);
   st.animId = null; st.animating = false;
   (st.dots || []).forEach(function (D) {
-    if (!D.landed) { st.us.push(D.pair[0]); st.xs.push(D.pair[1]); D.landed = true; }
+    if (!D.landed) {
+      // A dot finished mid-flight may already have counted toward the U
+      // margin (see genAnimateDraw's frame loop) but not yet the x margin;
+      // pushing u again here would double-count that bin.
+      if (!D.appeared) { st.us.push(D.pair[0]); D.appeared = true; }
+      st.xs.push(D.pair[1]); D.landed = true;
+    }
   });
   (st.overflow || []).forEach(function (pair) { st.us.push(pair[0]); st.xs.push(pair[1]); });
   st.overflow = null;
@@ -3795,9 +4966,13 @@ function genFinishAnim(id) {
    axis at its own U, with its start staggered over about 700ms so the swarm
    reads as a stream, then travels right to the cdf and drops to the x axis,
    same as a single draw's own path. Any draws past the first 100 land
-   instantly once every animated dot has landed. The margins grow live, one
-   redraw per dot landed, because DGUI.genRedraw only touches its own static
-   <g> and so never disturbs the dots still in flight. */
+   instantly once every animated dot has landed. The margins grow live and in
+   the order the mechanism itself runs: the U histogram's bar grows the
+   moment a dot's own turn in the stagger comes up (input), the dot then
+   travels to the cdf and drops (transform), and the x histogram's bar grows
+   only once it lands (output) – one redraw per such moment, because
+   DGUI.genRedraw only touches its own static <g> and so never disturbs the
+   dots still in flight. */
 function genAnimateDraw(id, draws) {
   var d = DG.byId[id], st = DGUI.gen[id], svg = $('tp-' + id);
   if (!svg) {
@@ -3816,7 +4991,7 @@ function genAnimateDraw(id, draws) {
   var dots = animated.map(function (pair) {
     var dot = document.createElementNS(svgNS, 'circle');
     dot.setAttribute('r', multi ? '3' : '4.5');
-    dot.setAttribute('fill', 'var(--est)');
+    dot.setAttribute('fill', 'var(--in)');
     dot.setAttribute('stroke', '#fff');
     dot.setAttribute('stroke-width', '1');
     svg.appendChild(dot);
@@ -3824,7 +4999,7 @@ function genAnimateDraw(id, draws) {
     var xStart = geo.L, xEnd = geo.xAt(Math.max(geo.x0, Math.min(geo.x1, x)));
     var yTop = geo.uAt(u), yBottom = geo.uAt(0);
     dot.setAttribute('cx', xStart); dot.setAttribute('cy', yTop);
-    return { dot: dot, pair: pair, xStart: xStart, xEnd: xEnd, yTop: yTop, yBottom: yBottom, landed: false, start: 0 };
+    return { dot: dot, pair: pair, xStart: xStart, xEnd: xEnd, yTop: yTop, yBottom: yBottom, landed: false, appeared: false, start: 0 };
   });
   st.dots = dots;
   var span = multi ? 700 : 0, perDelay = multi ? span / animated.length : 0;
@@ -3832,26 +5007,33 @@ function genAnimateDraw(id, draws) {
   var leg1 = 350, leg2 = 350, dur = leg1 + leg2, t0 = null;
   function frame(ts) {
     if (t0 === null) t0 = ts;
-    var elapsed = ts - t0, stillGoing = false, anyLanded = false;
+    var elapsed = ts - t0, stillGoing = false, anyChanged = false;
     dots.forEach(function (D) {
       if (D.landed) return;
       var el = elapsed - D.start;
       if (el < 0) { stillGoing = true; return; }
+      // The dot's turn has come up: it appears on the U axis right here,
+      // which is the moment its own U bin counts toward the U histogram,
+      // before it has traveled anywhere.
+      if (!D.appeared) { D.appeared = true; st.us.push(D.pair[0]); anyChanged = true; }
       if (el < leg1) {
         var f1 = el / leg1;
         D.dot.setAttribute('cx', D.xStart + (D.xEnd - D.xStart) * f1); D.dot.setAttribute('cy', D.yTop);
         stillGoing = true;
       } else if (el < dur) {
+        // The drop to the axis is also the moment the dot stops carrying the
+        // uniform and starts carrying the output value it lands on.
+        if (D.dot.getAttribute('fill') !== 'var(--est)') D.dot.setAttribute('fill', 'var(--est)');
         var f2 = (el - leg1) / leg2;
         D.dot.setAttribute('cx', D.xEnd); D.dot.setAttribute('cy', D.yTop + (D.yBottom - D.yTop) * f2);
         stillGoing = true;
       } else {
         D.landed = true; D.dot.remove();
-        st.us.push(D.pair[0]); st.xs.push(D.pair[1]);
-        anyLanded = true;
+        st.xs.push(D.pair[1]);
+        anyChanged = true;
       }
     });
-    if (anyLanded) DGUI.genRedraw(id);
+    if (anyChanged) DGUI.genRedraw(id);
     if (stillGoing) {
       st.animId = requestAnimationFrame(frame);
     } else {
@@ -3866,7 +5048,7 @@ function genAnimateDraw(id, draws) {
 /* One click's worth of draws: up to 100 of a batch animate together as a
    staggered swarm (a single draw is just a swarm of one), and any further
    draws land instantly once that swarm finishes. A click that arrives
-   mid-animation finishes the animation in flight instantly first, so draws
+   mid-animation finishes the animation in flight instantly first, and so draws
    are never lost or layered. */
 DGUI.genDraw = function (id, n) {
   var d = DG.byId[id]; if (!d) return;
@@ -3906,7 +5088,7 @@ DGUI.refresh = function (id) {
   updateLegendRefsVisibility(d);
   DGUI.drawPlots(id);
 };
-/* The checkbox never touches the knobs, so a full refresh – which redraws
+/* The checkbox never touches the knobs, and so a full refresh – which redraws
    the plots and hides or shows the matching legend entries together – is
    exactly what a toggle needs and nothing more. */
 DGUI.onRefsToggle = function (id) { DGUI.refresh(id); };
@@ -3988,12 +5170,14 @@ DGUI.onTabShown = function (name) {
   reserveGenRecipeHeight(d);
   reserveGenMsgHeight(d);
   if (DG_CON_LEDE[name]) reserveConMsgHeight(d);
+  reserveConEqSizes(d);
+  reserveConRaylNoteHeight(d);
   reserveToolsHeight(d);
 };
 
 /* ── Build every tab once, at load, then keep the visible one in step with
    the viewport: a plot lays itself out from a container that is zero-width
-   while its tab is hidden, so a resize re-renders whichever tab is showing
+   while its tab is hidden, and so a resize re-renders whichever tab is showing
    rather than every tab up front. ── */
 (function () {
   buildPickerGroups();

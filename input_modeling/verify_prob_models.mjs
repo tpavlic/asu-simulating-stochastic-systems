@@ -7,7 +7,9 @@
    Slices the block between the DG-CORE sentinels out of the HTML and runs it
    in a Node vm context, so the code under test is byte-for-byte the code the
    page ships. Reference values are exact identities, quadrature of each pdf,
-   closed-form moments, and goodness-of-fit calibration of every sampler.
+   closed-form moments, goodness-of-fit calibration of every sampler, the
+   Student's t quantile against table values, and the coverage of the
+   generator and construction panels' own 95% mean and sd intervals.
    DG_CALIB_REPS (default 200) shortens the calibration sections.
    ══════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
@@ -309,6 +311,90 @@ for (const d of DG.dists) {
   }
 }
 
+section('goodness-of-fit tests');
+{
+  /* At large n the Stephens finite-sample correction is negligible, so ksP
+     should sit close to the textbook asymptotic critical values at the 5%
+     and 1% levels, and it should fall monotonically as D grows. */
+  const nBig = 1e6;
+  function closeAbs(got, want, tol, label) { ok(Math.abs(got - want) <= tol, `${label}  (|${got.toFixed(6)} - ${want}| <= ${tol})`); }
+  closeAbs(DG.sf.ksP(1.358 / Math.sqrt(nBig), nBig), 0.05, 2e-3, 'ksP at the asymptotic 5% critical value');
+  closeAbs(DG.sf.ksP(1.628 / Math.sqrt(nBig), nBig), 0.01, 1e-3, 'ksP at the asymptotic 1% critical value');
+  {
+    let prevP = 1, monotone = true;
+    for (const D of [0, 0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.8, 1.2]) {
+      const p = DG.sf.ksP(D, 100);
+      if (p > prevP + 1e-12) monotone = false;
+      prevP = p;
+    }
+    ok(monotone, 'ksP is monotone decreasing in D');
+  }
+
+  function defParams(d) { const p = {}; for (const q of d.params) p[q.key] = q.def; return d.clamp(p); }
+
+  /* Calibration: at each distribution's own default parameters, the
+     fraction of samples DG.gof.ks rejects at the 5% level should itself sit
+     near 5%, because the parameters tested are the ones the sample was
+     actually drawn from. */
+  for (const id of ['expo', 'weib', 'beta']) {
+    const d = DG.byId[id], p = defParams(d);
+    const rand = DG.mulberry32(31013 + id.length);
+    let rejects = 0;
+    for (let i = 0; i < REPS; i++) {
+      const xs = []; for (let j = 0; j < 100; j++) xs.push(d.sample(rand, p));
+      const r = DG.gof.ks(xs, d, p);
+      if (r.p < 0.05) rejects++;
+    }
+    rateOk(rejects, REPS, 0.05, 4, `${id}: DG.gof.ks rejection rate at n=100, own parameters`);
+  }
+
+  /* Power: draws from the wrong distribution should be rejected far more
+     often than draws from the right one. */
+  {
+    const expo = DG.byId.expo, weib = DG.byId.weib;
+    const pExpo = defParams(expo), pWeibWrong = { k: 2, mu: 1 };
+    const rand = DG.mulberry32(41111);
+    let rejects = 0;
+    for (let i = 0; i < REPS; i++) {
+      const xs = []; for (let j = 0; j < 100; j++) xs.push(expo.sample(rand, pExpo));
+      const r = DG.gof.ks(xs, weib, pWeibWrong);
+      if (r.p < 0.05) rejects++;
+    }
+    ok(rejects / REPS > 0.5, `exponential draws tested against Weibull(k=2) reject well over 50% at n=100 (${rejects}/${REPS})`);
+  }
+
+  /* The same calibration check for the chi-square test on three discrete
+     distributions at their own default parameters. */
+  for (const id of ['pois', 'binom', 'geom']) {
+    const d = DG.byId[id], p = defParams(d);
+    const rand = DG.mulberry32(51017 + id.length);
+    let rejects = 0, nulls = 0;
+    for (let i = 0; i < REPS; i++) {
+      const xs = []; for (let j = 0; j < 200; j++) xs.push(d.sample(rand, p));
+      const r = DG.gof.chisq(xs, d, p);
+      if (!r) { nulls++; continue; }
+      if (r.p < 0.05) rejects++;
+    }
+    ok(nulls === 0, `${id}: DG.gof.chisq never declines for lack of cells at n=200`);
+    rateOk(rejects, REPS, 0.05, 4, `${id}: DG.gof.chisq rejection rate at n=200, own parameters`);
+  }
+
+  /* Power: Poisson draws tested against the geometric should be rejected
+     far more often than they would be against the Poisson itself. */
+  {
+    const pois = DG.byId.pois, geom = DG.byId.geom;
+    const pPois = defParams(pois), pGeomWrong = defParams(geom);
+    const rand = DG.mulberry32(61121);
+    let rejects = 0;
+    for (let i = 0; i < REPS; i++) {
+      const xs = []; for (let j = 0; j < 200; j++) xs.push(pois.sample(rand, pPois));
+      const r = DG.gof.chisq(xs, geom, pGeomWrong);
+      if (r && r.p < 0.05) rejects++;
+    }
+    ok(rejects / REPS > 0.5, `Poisson draws tested against the geometric reject well over 50% at n=200 (${rejects}/${REPS})`);
+  }
+}
+
 section('Clamping');
 {
   const u = DG.byId.unif.clamp({ a: 5, b: 3 }); ok(u.b > u.a, 'uniform: b is pushed above a');
@@ -402,7 +488,7 @@ section('Chi-square and F identities');
 }
 
 section('Constructions match the direct samplers');
-/* DG.construct builds eight distributions out of nothing but uniform draws,
+/* DG.construct builds nine distributions out of nothing but uniform draws,
    independently of the quantile-based sampler each Dist object carries. A
    two-sample Kolmogorov–Smirnov test compares the whole distribution the
    construction produces against the whole distribution the direct sampler
@@ -419,6 +505,7 @@ section('Constructions match the direct samplers');
     ['beta', { alpha: 2, beta: 5 }, r => C.betaOrder(r, { alpha: 2, beta: 5 }).x],
     ['chisq', { k: 5 }, r => C.chisq(r, { k: 5 }).x],
     ['fdist', { d1: 5, d2: 10 }, r => C.fdist(r, { d1: 5, d2: 10 }).x],
+    ['lnorm', { mu: 0, sigma: 0.5 }, r => C.lnorm(r, { mu: 0, sigma: 0.5 }).x],
   ]) {
     const d = DG.byId[id], xs = [], ys = [];
     for (let i = 0; i < n; i++) { xs.push(draw(rand)); ys.push(d.sample(rand, p)); }
@@ -435,6 +522,18 @@ section('Constructions match the direct samplers');
   close(cs.run[cs.run.length - 1], cs.x, 1e-12, 'Chi-square construction: the running total ends at the draw');
   const fs = C.fdist(DG.mulberry32(17), { d1: 4, d2: 8 });
   close(fs.x, fs.r1 / fs.r2, 1e-12, 'F construction: the ratio of the two scaled chi-squares is the draw');
+  const ln = C.lnorm(DG.mulberry32(19), { mu: 0.2, sigma: 0.6 });
+  close(Math.log(ln.x), ln.y, 1e-12, 'Log-normal construction: y = ln(x)');
+
+  /* A second parameter pair, away from the defaults tested in the loop
+     above, so the construction is not merely checked at one setting. */
+  {
+    const p2 = { mu: -1, sigma: 1 }, rand2 = DG.mulberry32(23), n2 = 4000;
+    const xs2 = [], ys2 = [];
+    for (let i = 0; i < n2; i++) { xs2.push(C.lnorm(rand2, p2).x); ys2.push(DG.byId.lnorm.sample(rand2, p2)); }
+    const D2 = ks2(xs2, ys2), crit2 = 1.628 * Math.sqrt(2 / n2);
+    ok(D2 < crit2, `lnorm: construction vs direct sampler at mu=-1, sigma=1, two-sample KS D = ${D2.toFixed(4)} < ${crit2.toFixed(4)}`);
+  }
 }
 
 section('Closed-form recipes agree with the quantile');
@@ -477,6 +576,48 @@ section('Closed-form recipes agree with the quantile');
     }
     ok(mismatches === 0, `dunif: floor and ceiling forms agree away from the exact-integer tie (0 mismatches over ${total} draws, ${ties} exact ties)`);
   }
+}
+
+section('Student\'s t quantile');
+/* Table values to seven significant figures, the standard reference for a
+   two-sided 95% (or 99%) interval at these degrees of freedom. */
+{
+  close(DG.sf.tQ(0.975, 1), 12.7062047, 1e-6, 'tQ(0.975, 1)');
+  close(DG.sf.tQ(0.975, 2), 4.3026527, 1e-6, 'tQ(0.975, 2)');
+  close(DG.sf.tQ(0.975, 10), 2.2281389, 1e-6, 'tQ(0.975, 10)');
+  close(DG.sf.tQ(0.975, 30), 2.0422725, 1e-6, 'tQ(0.975, 30)');
+  close(DG.sf.tQ(0.995, 5), 4.0321430, 1e-6, 'tQ(0.995, 5)');
+  ok(DG.sf.tQ(0.5, 7) === 0, 'tQ(0.5, 7) = 0');
+  close(DG.sf.tQ(0.025, 10), -DG.sf.tQ(0.975, 10), 1e-9, 'tQ(p) = -tQ(1 - p) by symmetry');
+}
+
+section('Interval coverage (calibration)');
+/* The generator and construction panels' summary line reports a 95% t
+   interval for the mean and a 95% chi-square interval for the sd. Over many
+   replications of N = 30 exponential draws, the t interval's coverage of
+   the true mean should sit near 0.95 (the t interval is exact regardless of
+   the parent shape, because it is built from the sample mean and sd alone).
+   The chi-square interval for the sd assumes a normal parent, which the
+   exponential is not, and so its coverage at this N is only reported here,
+   not held to 0.95. */
+{
+  const N = 30, R = 400, lam = 1, trueMean = 1 / lam, trueSd = 1 / lam;
+  const expo = DG.byId.expo, chisq = DG.byId.chisq;
+  const rand = DG.mulberry32(20260913);
+  let meanCovers = 0, sdCovers = 0;
+  for (let i = 0; i < R; i++) {
+    const xs = []; for (let j = 0; j < N; j++) xs.push(expo.sample(rand, { lam }));
+    const m = xs.reduce((a, b) => a + b, 0) / N;
+    const v = xs.reduce((a, b) => a + (b - m) * (b - m), 0) / (N - 1);
+    const s = Math.sqrt(v);
+    const half = DG.sf.tQ(0.975, N - 1) * s / Math.sqrt(N);
+    if (m - half <= trueMean && trueMean <= m + half) meanCovers++;
+    const chiLo = chisq.quantile(0.975, { k: N - 1 }), chiHi = chisq.quantile(0.025, { k: N - 1 });
+    const sdLo = s * Math.sqrt((N - 1) / chiLo), sdHi = s * Math.sqrt((N - 1) / chiHi);
+    if (sdLo <= trueSd && trueSd <= sdHi) sdCovers++;
+  }
+  rateOk(meanCovers, R, 0.95, 4, `t interval for the mean covers 1/lambda over ${R} reps of N=${N} exponential draws`);
+  console.log(`  chi-square interval for the sd, same reps (skewed parent at N=${N}, not held to 0.95): ${(sdCovers / R).toFixed(4)}`);
 }
 
 // SECTIONS-END
