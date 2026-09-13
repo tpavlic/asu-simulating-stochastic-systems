@@ -546,14 +546,15 @@ power: Fix the margins on the narrow-screen layout
 ```
 
 Tags are not enumerated anywhere and are not permanent, because widgets keep arriving. While a
-directory holds a single widget its name is the natural tag (`prng`, `input`, or a trimmed
-`power` for `power_analysis/`); once it holds several independent tools, tag the widget instead
-(`analyzer`, `tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let
-earlier commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
-explorer's tag and `mcx` is the examples widget's. Reuse whatever a widget has been tagged
-before – `git log --oneline -- prng/` shows it – and keep the tag short: the whole subject line
-should stay at 72 characters or fewer. This is not Conventional Commits, as there is no
-`feat:`/`fix:` type and the tag names a widget rather than a kind of change.
+directory holds a single widget its name is the natural tag (`prng`, or a trimmed `power` for
+`power_analysis/`); once it holds several independent tools, tag the widget instead (`analyzer`,
+`tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let earlier
+commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
+explorer's tag and `mcx` is the examples widget's. `input_modeling/` also now holds two: `analyzer`
+is `input_analyzer.html`'s tag and `models` is `prob_models.html`'s. Reuse whatever a widget has
+been tagged before – `git log --oneline -- prng/` shows it – and keep the tag short: the whole
+subject line should stay at 72 characters or fewer. This is not Conventional Commits, as there is
+no `feat:`/`fix:` type and the tag names a widget rather than a kind of change.
 
 **Omit the tag when the subject already says where the work is**, either because it names its target
 ("Add mobile-friendliness rules to CLAUDE.md") or because it describes a sweep ("Change the color
@@ -696,6 +697,34 @@ better.
      shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
      4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.)*
+- `input_modeling/prob_models.html` *(a gallery of eighteen input-modeling distributions, one per
+  tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
+  and moments, choose-it-when prose, related-distribution jump links, and an animated
+  inverse-transform generator; most tabs add a second panel constructing the same draw from simpler
+  pieces (a sum of exponentials for Erlang, a sum of squared normals for chi-square, a ratio of
+  scaled chi-squares for F, and so on). Navigation is a pill picker standing above every page in two
+  groups, continuous and discrete, each pill carrying its distribution's support and a colored edge
+  marking its group, and collapsing to a `<select>` below 61em. A Map tab holds a thumbnail tile per
+  distribution, grouped by the modeling question each answers, and four family-relationship diagrams
+  -- shown together, unlinked, on the Map, and singly with the current tab's own node highlighted on
+  each tab that belongs to one -- draw how the distributions are built from each other. Conventions
+  relied on by code outside the file, which any later edit has to preserve:*
+  1. *Every axis is fixed at design time, with each knob's range capped so that even at the most
+     extreme reachable setting, the true curve keeps under about 5% of its mass outside the frame,
+     and each frame is sized to the three reference settings a reader compares against rather than
+     to the widest reachable knob corner. A pmf is drawn as stems standing on the integers, never as
+     a curve or as bars; a sample is drawn as bars.*
+  2. *Everything between the `DG-CORE-BEGIN` / `DG-CORE-END` sentinels is pure numerics with no DOM
+     access, and the block must not contain the words "window" or "document".
+     `input_modeling/verify_prob_models.mjs` slices that block out of the HTML and runs it in Node.*
+  3. *`verify_prob_models.mjs` is not shipped with the widget and is not linked from the site. Run it
+     (`node input_modeling/verify_prob_models.mjs`; about ten minutes at the default
+     `DG_CALIB_REPS` of 200, and about two at 40) after touching anything in the core. It checks the special functions
+     against exact identities, every pdf against quadrature of its own cdf and every quantile as its
+     round trip, every sampler against its own cdf by goodness of fit, moments against closed forms,
+     the chi-square and F constructions against sums and ratios of standard normals, every "built
+     from simpler draws" panel's construction against its distribution's own direct sampler, and
+     every closed-form generator recipe against the core's own quantile.)*
 
 ### Output Analysis
 
