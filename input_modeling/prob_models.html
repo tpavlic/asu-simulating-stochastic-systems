@@ -195,6 +195,28 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 .15em; font-size: .92em; line-height: 1.15; }
 .frac > .num { border-bottom: 1px solid currentColor; padding: 0 .2em; }
 .frac > .den { padding: 0 .2em; }
+/* A definite integral, set with its limits stacked against the glyph rather
+   than floating off to the upper right the way a bare <sub>/<sup> pair would
+   place them. The glyph is enlarged on its own so the two limits, at their
+   smaller size, still land at roughly the glyph's own visual center. */
+.intg { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 .1em; }
+.intg-glyph { font-size: 1.6em; line-height: 1; }
+.intg-lims { display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; font-size: .7em; line-height: 1.1; margin-left: 1px; }
+/* A cases block: a tall brace in the first grid column, spanning every row,
+   with each branch's expression and condition in the next two columns. The
+   brace occupies column 1 in every row only because it is the one child
+   explicitly placed there (grid-row: 1 / -1); the branch cells that follow it
+   in the markup are auto-placed into columns 2 and 3, one row at a time, by
+   the grid's own default left-to-right, row-by-row flow. */
+.cases { display: inline-grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 2px; margin: 4px 0; vertical-align: middle; }
+/* grid-row is set inline per instance (span <row count>), not here: a
+   fixed "1 / -1" resolves against however many rows exist at the moment the
+   brace itself is placed, before the auto-placed branch rows that follow it
+   in the markup have created the rest of the grid, so it ends up reserving
+   only the first row and a later row's own auto-placed content lands back
+   in column 1 instead of column 2. */
+.cases-brace { grid-column: 1; font-size: 2.3em; line-height: 1; font-weight: 300; transform: scaleY(1.15); align-self: center; }
+.cases-cond { color: var(--muted); font-size: .85em; white-space: nowrap; }
 /* flex + min-width: 0 gives an .eq its row's remaining width from CSS layout
    alone, before any text is ever placed in it – the recipe span is empty at
    the very first reserve-height measurement (its content arrives later, from
@@ -204,11 +226,6 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .eq { font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; flex: 1 1 auto; min-width: 0; }
 .eq-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 4px 0; }
 .eq-lbl { font-family: 'Outfit', sans-serif; font-weight: 600; color: var(--muted); font-size: .8rem; }
-/* The standardizing note on the Normal and Log-normal tabs: a flex sibling
-   of the formula itself, so it sits beside it when the row has room and
-   wraps onto its own line underneath when it does not, with no separate
-   narrow-screen rule needed. */
-.eq-where { font-family: 'Outfit', sans-serif; font-size: .8rem; color: var(--muted); }
 /* Knobs: label, spinner, slider on one wrapping line; the readout wraps rather than overflowing. */
 .knob-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 6px 0; }
 .knob-lbl { font-weight: 600; font-size: .86rem; min-width: 8.5em; }
@@ -364,6 +381,30 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .con-sec { margin-top: 12px; }
 .con-pic, .con-hist { max-width: 520px; }
 .con-hist { margin-top: 8px; }
+/* ── "In common tools" panel: a small reference table of how five common
+   tools draw this same distribution, nested under the generator the same
+   way the construction panel is. Wrapped in its own scrolling container so
+   a long code line can never force the page itself to scroll sideways at
+   narrow widths; code otherwise wraps at spaces like any other text. ── */
+.tools-sec { margin-top: 12px; }
+.tools-table-wrap { overflow-x: auto; }
+/* table-layout: fixed with the columns pinned to shares of the table's own
+   width – auto layout would size each column to its widest unbroken word
+   first and only shrink once the total already overflows, which left a few
+   pixels of unavoidable horizontal scroll inside the wrap at 390px even
+   though every cell can wrap. Fixed layout wraps within budget instead. */
+.tools-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .82rem; }
+.tools-table th, .tools-table td { padding: 4px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: break-word; }
+.tools-table thead th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.tools-table col.tools-col-tool { width: 27%; }
+.tools-table col.tools-col-code { width: 41%; }
+.tools-table col.tools-col-note { width: 32%; }
+/* The tool name is the one cell that must never break mid-word (a wrapped
+   "MATLAB" reads as a typo), so it keeps nowrap and its column is sized
+   generously enough at 390px to hold "MATLAB" and "NumPy" whole. */
+.tools-table td:first-child { font-weight: 600; white-space: nowrap; overflow-wrap: normal; }
+.tools-table code { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; white-space: normal; overflow-wrap: break-word; }
+.tools-table td:last-child { color: var(--muted); font-size: .78rem; }
 </style>
 </head>
 <body>
@@ -1341,6 +1382,12 @@ function spinCommit(id) {
 window.DGUI = { onKnob() {}, onTabShown() {} };
 </script>
 <script>
+/* One definite integral, its limits stacked against the glyph instead of
+   floating off to the upper right the way a bare sub/sup pair would place
+   them. Used by the Normal and Log-normal formula entries below. */
+function dgIntg(lo, hi) {
+  return '<span class="intg"><span class="intg-glyph">∫</span><span class="intg-lims"><span>' + hi + '</span><span>' + lo + '</span></span></span>';
+}
 /* Distribution tab content: formulas, moments, and choose-it-when prose.
    Every field here is plain data; the markup that reads it lives in the
    builder just below. The related-distribution family trees are a separate
@@ -1373,9 +1420,9 @@ var DG_TEXT = {
   norm: {
     support: "(−∞, ∞)",
     paramRange: "μ real, σ > 0 (the center, and the spread)",
-    pdf: "f(x) = φ(z)/σ, φ(z) ≜ e<sup>−z<sup>2</sup>/2</sup>/√(2π)",
-    cdf: "F(x) = Φ(z) ≜ ∫<sub>−∞</sub><sup>z</sup> φ(t) dt",
-    where: "z = (x − μ)/σ",
+    pdf: "f(x) = <span class=\"frac\"><span class=\"num\">e<sup>−(x − μ)<sup>2</sup>/(2σ<sup>2</sup>)</sup></span><span class=\"den\">σ√(2π)</span></span>",
+    cdf: "F(x) = " + dgIntg('−∞', 'x') + " f(t) dt",
+    standardized: "With z ≜ (x − μ)/σ, every normal is the one standard shape: φ(z) ≜ σf(x) = <span class=\"frac\"><span class=\"num\">e<sup>−z<sup>2</sup>/2</sup></span><span class=\"den\">√(2π)</span></span> and Φ(z) ≜ F(x) = " + dgIntg('−∞', 'z') + " φ(t) dt.",
     mean: "μ",
     variance: "σ<sup>2</sup>",
     mode: "μ",
@@ -1530,9 +1577,9 @@ var DG_TEXT = {
   lnorm: {
     support: "(0, ∞)",
     paramRange: "μ real, σ > 0 (the mean and standard deviation of ln X, not of X)",
-    pdf: "f(x) = φ(z)/(xσ), φ(z) ≜ e<sup>−z<sup>2</sup>/2</sup>/√(2π) for x > 0",
-    cdf: "F(x) = Φ(z) ≜ ∫<sub>−∞</sub><sup>z</sup> φ(t) dt for x > 0",
-    where: "z = (ln x − μ)/σ",
+    pdf: "f(x) = <span class=\"frac\"><span class=\"num\">e<sup>−(ln x − μ)<sup>2</sup>/(2σ<sup>2</sup>)</sup></span><span class=\"den\">xσ√(2π)</span></span> for x > 0",
+    cdf: "F(x) = " + dgIntg('0', 'x') + " f(t) dt for x > 0",
+    standardized: "With z ≜ (ln x − μ)/σ, F(x) = Φ(z), the standard normal cdf.",
     mean: "e<sup>μ + σ<sup>2</sup>/2</sup>",
     variance: "(e<sup>σ<sup>2</sup></sup> − 1)e<sup>2μ + σ<sup>2</sup></sup>",
     mode: "e<sup>μ − σ<sup>2</sup></sup>",
@@ -1707,9 +1754,9 @@ function buildTab(d) {
   html += '</div>';
   html += '<div class="sec">';
   html += '<div class="sec-hd">Formulas and moments</div>';
-  var whereHtml = t.where ? '<span class="eq-where">where ' + t.where + '</span>' : '';
-  html += '<div class="eq-row"><span class="eq-lbl">' + kindWord + '</span><span class="eq">' + t.pdf + '</span>' + whereHtml + '</div>';
-  html += '<div class="eq-row"><span class="eq-lbl">cdf</span><span class="eq">' + t.cdf + '</span>' + whereHtml + '</div>';
+  html += '<div class="eq-row"><span class="eq-lbl">' + kindWord + '</span><span class="eq">' + t.pdf + '</span></div>';
+  html += '<div class="eq-row"><span class="eq-lbl">cdf</span><span class="eq">' + t.cdf + '</span></div>';
+  if (t.standardized) html += '<div class="eq-row"><span class="eq-lbl">Standardized</span><span class="eq">' + t.standardized + '</span></div>';
   html += '<div class="sg mom-grid">';
   html += momentCardHtml('Mean', 'm-mean-' + d.id, t.mean);
   html += momentCardHtml('Variance', 'm-var-' + d.id, t.variance);
@@ -1719,7 +1766,7 @@ function buildTab(d) {
   html += '</div>';
   html += '<div class="sec"><div class="sec-hd">Related distributions</div>' + familyTabHtml(d.id) + '</div>';
   html += '<div class="sec" id="gen-' + d.id + '"><div class="sec-hd">Generating a random variate</div>' + genPanelBodyHtml(d)
-    + (DG_CON_LEDE[d.id] ? conPanelBodyHtml(d) : '') + '</div>';
+    + (DG_CON_LEDE[d.id] ? conPanelBodyHtml(d) : '') + toolsPanelBodyHtml(d) + '</div>';
   $('tab-' + d.id).innerHTML = html;
 }
 
@@ -1730,20 +1777,38 @@ function fmtNum(v) {
   v = Math.abs(v);
   if (v < 1e-9) v = 0;
   var s;
-  if (v !== 0 && (v < 1e-3 || v >= 100000)) {
+  /* A probability such as 0.5^10 (0.0009765625) is an exact value, not
+     round-off noise, and reads as noise once scientific notation puts a
+     lone "9.766e-4" in a table cell. Below 1e-3 it is written out in fixed
+     decimal to three significant figures instead, down to 1e-6, below which
+     the true value is too small for even that to show a nonzero digit. */
+  if (v !== 0 && v < 1e-6) {
+    s = '< 0.000001';
+  } else if (v !== 0 && v < 1e-3) {
+    var sigDigits = 3 - Math.floor(Math.log10(v)) - 1;
+    s = v.toFixed(sigDigits);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  } else if (v !== 0 && v >= 100000) {
     s = v.toExponential(3);
   } else {
     var digits = v === 0 ? 2 : Math.max(0, 3 - Math.floor(Math.log10(v)) - 1);
     s = v.toFixed(Math.min(6, digits));
     if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
   }
-  return (neg && s !== '0' ? '−' : '') + s;
+  return (neg && s !== '0' && s.indexOf('<') < 0 ? '−' : '') + s;
 }
 function dgIntRange(x0, x1) { return [Math.ceil(x0 - 1e-9), Math.floor(x1 + 1e-9)]; }
 /* Ticks land on multiples of the axis's own step, starting at the first one
    at or after x0 – for a discrete axis padded by half a unit on each side
    (bern's -0.5 to 1.5, say) that puts the first tick on the first whole
    value rather than on the padding itself. */
+/* Widens a tick step until each label has about 26px of axis, so a narrow
+   plot shows every fifth value rather than a run of digits with no gaps. */
+function dgTickStepFor(x0, x1, xt, px) {
+  var mult = [1, 2, 5, 10, 20, 50], n = (x1 - x0) / xt;
+  for (var i = 0; i < mult.length; i++) { if (px / (n / mult[i]) >= 26) return xt * mult[i]; }
+  return xt * 50;
+}
 function dgAxisTicks(x0, x1, xt) {
   var dec = stepDecimals(String(xt)) + 2;
   var first = Math.ceil((x0 - 1e-9) / xt) * xt;
@@ -1814,7 +1879,7 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
     h += '<text x="' + (L - 7) + '" y="' + (yy + 3) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(yMax * frac) + '</text>';
   });
   h += '<line x1="' + L + '" y1="' + (T + innerH) + '" x2="' + (L + innerW) + '" y2="' + (T + innerH) + '" stroke="var(--border)" stroke-width="1"/>';
-  dgAxisTicks(x0, x1, xt).forEach(function (v) {
+  dgAxisTicks(x0, x1, dgTickStepFor(x0, x1, xt, innerW)).forEach(function (v) {
     var xx = xAt(v);
     h += '<line x1="' + xx + '" y1="' + (T + innerH) + '" x2="' + xx + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>';
     h += '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
@@ -1904,7 +1969,7 @@ function buildCdfMarkup(d, p, W, H, showRefs) {
     h += '<text x="' + (L - 7) + '" y="' + (yy + 3) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + f + '</text>';
   });
   h += '<line x1="' + L + '" y1="' + (T + innerH) + '" x2="' + (L + innerW) + '" y2="' + (T + innerH) + '" stroke="var(--border)" stroke-width="1"/>';
-  dgAxisTicks(x0, x1, xt).forEach(function (v) {
+  dgAxisTicks(x0, x1, dgTickStepFor(x0, x1, xt, innerW)).forEach(function (v) {
     var xx = xAt(v);
     h += '<line x1="' + xx + '" y1="' + (T + innerH) + '" x2="' + xx + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>';
     h += '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
@@ -2712,6 +2777,18 @@ function updateChips(d, p) {
    recipe text and the side panel differ, both keyed off the registry's own
    gen.kind, so one set of functions renders every tab from DG_RECIPE and the
    distribution object itself. ── */
+/* A multi-branch recipe, set as a tall brace against a grid of "expression
+   when condition" rows rather than jammed onto one line. rows is an array of
+   { expr, cond } pairs; the brace is the one cell explicitly placed in
+   column 1 across every row, and the expr/cond cells that follow it in the
+   markup fall into columns 2 and 3 by the grid's own row-by-row auto-flow. */
+function dgCasesHtml(rows) {
+  // The row span is set here, from the known row count, rather than left as
+  // a CSS "1 / -1": see the note on .cases-brace above.
+  return '<span class="cases"><span class="cases-brace" style="grid-row:span ' + rows.length + '">{</span>' + rows.map(function (r) {
+    return '<span>' + r.expr + '</span><span class="cases-cond">' + r.cond + '</span>';
+  }).join('') + '</span>';
+}
 var DG_SEARCH_RECIPE = 'X is the smallest k with F(k) ≥ U: walk the cumulative table until it passes U.';
 var DG_RECIPE = {
   unif: function (p) {
@@ -2719,9 +2796,15 @@ var DG_RECIPE = {
   },
   tri: function (p) {
     var q = (p.c - p.a) / (p.b - p.a);
-    return 'X = a + √(U·(b − a)(c − a)) when U < (c − a)/(b − a); otherwise X = b − √((1 − U)(b − a)(b − c))<br>'
-      + '= ' + fmtNum(p.a) + ' + √(U·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.c - p.a) + ') when U < ' + fmtNum(q)
-      + '; otherwise = ' + fmtNum(p.b) + ' − √((1 − U)·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.b - p.c) + ')';
+    var symbolic = dgCasesHtml([
+      { expr: 'X = a + √(U(b − a)(c − a))', cond: 'when U < (c − a)/(b − a)' },
+      { expr: 'X = b − √((1 − U)(b − a)(b − c))', cond: 'otherwise' }
+    ]);
+    var substituted = dgCasesHtml([
+      { expr: 'X = ' + fmtNum(p.a) + ' + √(U·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.c - p.a) + ')', cond: 'when U < ' + fmtNum(q) },
+      { expr: 'X = ' + fmtNum(p.b) + ' − √((1 − U)·' + fmtNum(p.b - p.a) + '·' + fmtNum(p.b - p.c) + ')', cond: 'otherwise' }
+    ]);
+    return symbolic + '<br>' + substituted;
   },
   norm: function (p) {
     return 'X = μ + σ·Φ<sup>−1</sup>(U) = ' + fmtNum(p.mu) + ' + ' + fmtNum(p.sigma) + '·Φ<sup>−1</sup>(U)<br>'
@@ -2738,14 +2821,20 @@ var DG_RECIPE = {
     return 'X = μ(−ln(1 − U))<sup>1/k</sup> = ' + fmtNum(p.mu) + '·(−ln(1 − U))<sup>' + fmtNum(1 / p.k) + '</sup>';
   },
   bern: function (p) {
-    return 'X = 1 if U > 1 − p = ' + fmtNum(1 - p.p) + ', else 0<br>'
-      + 'Equivalently, X = 1 when U < p; both compare one uniform to one number.';
+    var cases = dgCasesHtml([
+      { expr: 'X = 1', cond: 'when U > 1 − p = ' + fmtNum(1 - p.p) },
+      { expr: 'X = 0', cond: 'otherwise' }
+    ]);
+    return cases + '<br>Equivalently, X = 1 when U < p; both compare one uniform to one number.';
   },
   binom: function () { return DG_SEARCH_RECIPE; },
   geom: function (p) {
-    var gen = 'X = ⌈ln(1 − U) / ln(1 − p)⌉';
-    if (p.p >= 1) return gen + ' = 1 when p = 1, because ln(1 − p) is undefined there and every trial already succeeds.';
-    return gen + ' = ⌈ln(1 − U) / ' + fmtNum(Math.log(1 - p.p)) + '⌉';
+    var currentExpr = 'X = ⌈ln(1 − U) / ln(1 − p)⌉' + (p.p < 1 ? ' = ⌈ln(1 − U) / ' + fmtNum(Math.log(1 - p.p)) + '⌉' : '');
+    var cases = dgCasesHtml([
+      { expr: currentExpr, cond: 'when p < 1' },
+      { expr: 'X = 1', cond: 'otherwise' }
+    ]);
+    return cases + '<br>ln(1 − p) is undefined at p = 1, because every trial already succeeds.';
   },
   nbinom: function () { return DG_SEARCH_RECIPE; },
   pois: function () { return DG_SEARCH_RECIPE; },
@@ -2786,9 +2875,21 @@ function genLedeHtml(d) {
 function genPanelBodyHtml(d) {
   var html = genLedeHtml(d);
   html += '<div class="eq-row"><span class="eq-lbl">Recipe</span><span class="eq" id="recipe-' + d.id + '" style="min-height:2.6em"></span></div>';
+  // The one-sentence "how F-inverse was found" note sits right under the
+  // recipe for a closed-form or numeric sampler; it does not vary with the
+  // knobs (it is keyed only to d.gen.kind, which is fixed per distribution),
+  // so unlike the recipe span it needs no height reservation. A search-kind
+  // sampler instead gets a side column holding the cumulative table it
+  // actually walks, kept in the plot row below rather than under the recipe,
+  // because it is a table, not a sentence.
+  if (d.gen.kind !== 'search') {
+    html += '<p class="knob-note" id="gen-note-' + d.id + '" style="margin-top:0"></p>';
+  }
   html += '<div class="gen-wrap">';
   html += '<svg class="dg" id="tp-' + d.id + '" role="img" aria-label="Inverse-transform plot for the ' + d.name + ' distribution"></svg>';
-  html += '<div class="gen-side" id="gen-side-' + d.id + '"></div>';
+  if (d.gen.kind === 'search') {
+    html += '<div class="gen-side" id="gen-side-' + d.id + '"></div>';
+  }
   html += '</div>';
   html += '<div class="ctrl-row">';
   html += '<label class="ctrl-lbl" for="' + d.id + '-batch">Batch</label>';
@@ -2829,8 +2930,13 @@ var DG_CON_LEDE = {
 function conBetaOk(p) { return p.alpha === Math.round(p.alpha) && p.beta === Math.round(p.beta); }
 function conPanelBodyHtml(d) {
   var kindWord = d.type === 'c' ? 'pdf' : 'pmf';
-  var html = '<div class="sec con-sec" id="con-' + d.id + '"><div class="sec-hd">Built from simpler draws</div>';
-  html += '<p class="lede" style="margin-bottom:8px">' + DG_CON_LEDE[d.id] + '</p>';
+  var isBoxMuller = d.id === 'norm' || d.id === 'rayl';
+  var heading = isBoxMuller ? 'Built from simpler draws: the Box–Muller transform' : 'Built from simpler draws';
+  var lede = isBoxMuller
+    ? 'The Box–Muller transform turns two independent uniforms into two independent standard normals. ' + DG_CON_LEDE[d.id]
+    : DG_CON_LEDE[d.id];
+  var html = '<div class="sec con-sec" id="con-' + d.id + '"><div class="sec-hd">' + heading + '</div>';
+  html += '<p class="lede" style="margin-bottom:8px">' + lede + '</p>';
   html += '<div class="ctrl-row">';
   html += '<span class="run-btns"><button class="btn-run2" id="con-run-' + d.id + '" onclick="DGUI.conDraw(\'' + d.id + '\')">Draw one</button>'
     + '<button class="btn-clear" onclick="DGUI.conReset(\'' + d.id + '\')">Reset</button></span>';
@@ -2911,7 +3017,7 @@ function conPicErlang(d, p, st, W, H) {
   var res = st.last, L = 14, R = 14, y = H * 0.62, x0 = d.axis.x0, x1 = d.axis.x1;
   var xAt = function (x) { return L + (x - x0) / (x1 - x0) * (W - L - R); };
   var h = '<line x1="' + xAt(x0) + '" y1="' + y + '" x2="' + xAt(x1) + '" y2="' + y + '" stroke="var(--border)" stroke-width="1.5"/>';
-  dgAxisTicks(x0, x1, d.axis.xt).forEach(function (v) {
+  dgAxisTicks(x0, x1, dgTickStepFor(x0, x1, d.axis.xt, W - L - R)).forEach(function (v) {
     var xx = xAt(v);
     h += '<line x1="' + xx + '" y1="' + (y - 3) + '" x2="' + xx + '" y2="' + (y + 3) + '" stroke="var(--border)" stroke-width="1"/>'
       + '<text x="' + xx + '" y="' + (y + 16) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
@@ -3093,7 +3199,7 @@ function buildConHistMarkup(d, p, xs, W, H) {
     });
   }
   h += '<line x1="' + L + '" y1="' + (T + innerH) + '" x2="' + (L + innerW) + '" y2="' + (T + innerH) + '" stroke="var(--border)" stroke-width="1"/>';
-  dgAxisTicks(x0, x1, xt).forEach(function (v) {
+  dgAxisTicks(x0, x1, dgTickStepFor(x0, x1, xt, innerW)).forEach(function (v) {
     var xx = xAt(v);
     h += '<line x1="' + xx + '" y1="' + (T + innerH) + '" x2="' + xx + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>'
       + '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
@@ -3148,15 +3254,265 @@ DGUI.conDraw = function (id) {
   DGUI.conRefresh(id);
 };
 
+/* ── "In common tools" panel ─────────────────────────────────────────────
+   A small reference table, one row per tool, showing how five widely used
+   pieces of simulation and spreadsheet software draw this same
+   distribution – a built-in sampler where the tool has one, or the
+   inverse-transform recipe above written in that tool's own syntax where it
+   does not. Every function here returns an array of row objects keyed off
+   the CURRENT parameters, so the table updates with the knobs the same way
+   the recipe text above it does. A row whose code is the string "no
+   built-in" or "no inverse function" (in whole or in part) is prose, not
+   code, and is rendered in the ordinary font rather than the monospace one. */
+function dgToolRow(tool, code, note) { return { tool: tool, code: code, note: note || '', plain: false }; }
+function dgToolRowPlain(tool, text, note) { return { tool: tool, code: text, note: note || '', plain: true }; }
+var DG_TOOLS = {
+  unif: function (p) {
+    var a = fmtNum(p.a), b = fmtNum(p.b);
+    return [
+      dgToolRow('Arena', 'UNIF(' + a + ', ' + b + ')'),
+      dgToolRow('R', 'runif(n, ' + a + ', ' + b + ')'),
+      dgToolRow('MATLAB', a + ' + (' + b + ' - ' + a + ')*rand(n, 1)'),
+      dgToolRow('NumPy', 'rng.uniform(' + a + ', ' + b + ', n)'),
+      dgToolRow('Excel', '=' + a + ' + (' + b + ' - ' + a + ')*RAND()')
+    ];
+  },
+  tri: function (p) {
+    var a = fmtNum(p.a), b = fmtNum(p.b), c = fmtNum(p.c);
+    return [
+      dgToolRow('Arena', 'TRIA(' + a + ', ' + c + ', ' + b + ')', "Arena's order is minimum, mode, maximum"),
+      dgToolRow('R', 'u <- runif(n); ifelse(u < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + sqrt(u*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - sqrt((1 - u)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))', 'base R has no triangular sampler'),
+      dgToolRow('MATLAB', "random(makedist('Triangular', 'A', " + a + ", 'B', " + c + ", 'C', " + b + '), n, 1)', "MATLAB's B is the mode"),
+      dgToolRow('NumPy', 'rng.triangular(' + a + ', ' + c + ', ' + b + ', n)', 'left, mode, right'),
+      dgToolRow('Excel', '=IF(A1 < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + SQRT(A1*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - SQRT((1 - A1)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))', 'assumes a uniform draw already in cell A1, reused by both branches')
+    ];
+  },
+  norm: function (p) {
+    var mu = fmtNum(p.mu), sigma = fmtNum(p.sigma);
+    return [
+      dgToolRow('Arena', 'NORM(' + mu + ', ' + sigma + ')'),
+      dgToolRow('R', 'rnorm(n, ' + mu + ', ' + sigma + ')'),
+      dgToolRow('MATLAB', 'normrnd(' + mu + ', ' + sigma + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.normal(' + mu + ', ' + sigma + ', n)'),
+      dgToolRow('Excel', '=NORM.INV(RAND(), ' + mu + ', ' + sigma + ')')
+    ];
+  },
+  expo: function (p) {
+    var lam = fmtNum(p.lam), mean = fmtNum(1 / p.lam);
+    return [
+      dgToolRow('Arena', 'EXPO(' + mean + ')', 'Arena takes the mean'),
+      dgToolRow('R', 'rexp(n, rate = ' + lam + ')'),
+      dgToolRow('MATLAB', 'exprnd(' + mean + ', n, 1)', 'takes the mean'),
+      dgToolRow('NumPy', 'rng.exponential(' + mean + ', n)', 'takes the scale, which is the mean'),
+      dgToolRow('Excel', '=-LN(1 - RAND())/' + lam)
+    ];
+  },
+  erlang: function (p) {
+    var k = fmtNum(p.k), lam = fmtNum(p.lam), mean = fmtNum(1 / p.lam);
+    return [
+      dgToolRow('Arena', 'ERLA(' + mean + ', ' + k + ')', 'the mean of one stage, then k'),
+      dgToolRow('R', 'rgamma(n, shape = ' + k + ', rate = ' + lam + ')'),
+      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + mean + ', n, 1)', 'shape, then scale'),
+      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + mean + ', n)', 'shape, then scale'),
+      dgToolRow('Excel', '=GAMMA.INV(RAND(), ' + k + ', ' + mean + ')', 'shape, then scale')
+    ];
+  },
+  weib: function (p) {
+    var k = fmtNum(p.k), mu = fmtNum(p.mu);
+    return [
+      dgToolRow('Arena', 'WEIB(' + mu + ', ' + k + ')', 'Arena writes the scale first, then the shape'),
+      dgToolRow('R', 'rweibull(n, shape = ' + k + ', scale = ' + mu + ')'),
+      dgToolRow('MATLAB', 'wblrnd(' + mu + ', ' + k + ', n, 1)', 'scale, then shape'),
+      dgToolRow('NumPy', mu + ' * rng.weibull(' + k + ', n)', "NumPy's Weibull has scale 1"),
+      dgToolRow('Excel', '=' + mu + '*(-LN(1 - RAND()))^(1/' + k + ')')
+    ];
+  },
+  bern: function (p) {
+    var pr = fmtNum(p.p);
+    return [
+      dgToolRow('Arena', 'DISC(' + fmtNum(1 - p.p) + ', 0, 1, 1)', 'cumulative probability, then value, in pairs'),
+      dgToolRow('R', 'rbinom(n, 1, ' + pr + ')'),
+      dgToolRow('MATLAB', 'binornd(1, ' + pr + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.binomial(1, ' + pr + ', n)'),
+      dgToolRow('Excel', '=IF(RAND() < ' + pr + ', 1, 0)')
+    ];
+  },
+  binom: function (p) {
+    var n = fmtNum(p.n), pr = fmtNum(p.p);
+    return [
+      dgToolRowPlain('Arena', 'no built-in; add n Bernoulli draws in the model logic'),
+      dgToolRow('R', 'rbinom(n, ' + n + ', ' + pr + ')', 'the second argument is the number of trials'),
+      dgToolRow('MATLAB', 'binornd(' + n + ', ' + pr + ', n, 1)', 'the first argument is the number of trials'),
+      dgToolRow('NumPy', 'rng.binomial(' + n + ', ' + pr + ', n)'),
+      dgToolRow('Excel', '=BINOM.INV(' + n + ', ' + pr + ', RAND())')
+    ];
+  },
+  geom: function (p) {
+    var pr = fmtNum(p.p);
+    return [
+      dgToolRow('Arena', 'AINT(LN(1 - UNIF(0, 1)) / LN(1 - ' + pr + ')) + 1', 'no built-in; AINT truncates'),
+      dgToolRow('R', 'rgeom(n, ' + pr + ') + 1', 'R counts the failures before the success, so add 1 for trials'),
+      dgToolRow('MATLAB', 'geornd(' + pr + ', n, 1) + 1', 'counts failures; add 1'),
+      dgToolRow('NumPy', 'rng.geometric(' + pr + ', n)', 'NumPy counts trials, as this page does'),
+      dgToolRow('Excel', '=CEILING(LN(1 - RAND())/LN(1 - ' + pr + '), 1)')
+    ];
+  },
+  nbinom: function (p) {
+    var r = fmtNum(p.r), pr = fmtNum(p.p);
+    return [
+      dgToolRowPlain('Arena', 'no built-in; add r geometric draws'),
+      dgToolRow('R', 'rnbinom(n, size = ' + r + ', prob = ' + pr + ') + ' + r, 'R counts failures; add r for trials'),
+      dgToolRow('MATLAB', 'nbinrnd(' + r + ', ' + pr + ', n, 1) + ' + r, 'counts failures; add r'),
+      dgToolRow('NumPy', 'rng.negative_binomial(' + r + ', ' + pr + ', n) + ' + r, 'counts failures; add r'),
+      dgToolRowPlain('Excel', 'no inverse function; add r geometric draws')
+    ];
+  },
+  pois: function (p) {
+    var alpha = fmtNum(p.alpha);
+    return [
+      dgToolRow('Arena', 'POIS(' + alpha + ')'),
+      dgToolRow('R', 'rpois(n, ' + alpha + ')'),
+      dgToolRow('MATLAB', 'poissrnd(' + alpha + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.poisson(' + alpha + ', n)'),
+      dgToolRowPlain('Excel', 'no inverse function; walk the cumulative table with POISSON.DIST(k, α, TRUE) until it passes RAND()')
+    ];
+  },
+  gamma: function (p) {
+    var k = fmtNum(p.k), theta = fmtNum(p.theta);
+    return [
+      dgToolRow('Arena', 'GAMM(' + theta + ', ' + k + ')', 'scale first, then shape'),
+      dgToolRow('R', 'rgamma(n, shape = ' + k + ', scale = ' + theta + ')'),
+      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + theta + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + theta + ', n)'),
+      dgToolRow('Excel', '=GAMMA.INV(RAND(), ' + k + ', ' + theta + ')')
+    ];
+  },
+  chisq: function (p) {
+    var k = fmtNum(p.k);
+    return [
+      dgToolRow('Arena', 'GAMM(2, ' + fmtNum(p.k / 2) + ')', 'a chi-square is Gamma with scale 2 and shape k/2; Arena writes scale first'),
+      dgToolRow('R', 'rchisq(n, df = ' + k + ')'),
+      dgToolRow('MATLAB', 'chi2rnd(' + k + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.chisquare(' + k + ', n)'),
+      dgToolRow('Excel', '=CHISQ.INV(RAND(), ' + k + ')')
+    ];
+  },
+  fdist: function (p) {
+    var d1 = fmtNum(p.d1), d2 = fmtNum(p.d2);
+    return [
+      dgToolRow('Arena', '(GAMM(2, ' + fmtNum(p.d1 / 2) + ')/' + d1 + ') / (GAMM(2, ' + fmtNum(p.d2 / 2) + ')/' + d2 + ')', 'no built-in; the ratio of two scaled chi-squares'),
+      dgToolRow('R', 'rf(n, ' + d1 + ', ' + d2 + ')'),
+      dgToolRow('MATLAB', 'frnd(' + d1 + ', ' + d2 + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.f(' + d1 + ', ' + d2 + ', n)'),
+      dgToolRow('Excel', '=F.INV(RAND(), ' + d1 + ', ' + d2 + ')')
+    ];
+  },
+  beta: function (p) {
+    var alpha = fmtNum(p.alpha), beta = fmtNum(p.beta);
+    return [
+      dgToolRow('Arena', 'BETA(' + alpha + ', ' + beta + ')'),
+      dgToolRow('R', 'rbeta(n, ' + alpha + ', ' + beta + ')'),
+      dgToolRow('MATLAB', 'betarnd(' + alpha + ', ' + beta + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.beta(' + alpha + ', ' + beta + ', n)'),
+      dgToolRow('Excel', '=BETA.INV(RAND(), ' + alpha + ', ' + beta + ')')
+    ];
+  },
+  lnorm: function (p, d) {
+    var mu = fmtNum(p.mu), sigma = fmtNum(p.sigma);
+    var xMean = fmtNum(d.mean(p)), xSd = fmtNum(Math.sqrt(Math.max(0, d.variance(p))));
+    return [
+      dgToolRow('Arena', 'LOGN(' + xMean + ', ' + xSd + ')', "Arena's LOGN takes the mean and standard deviation of X, not of ln X"),
+      dgToolRow('R', 'rlnorm(n, meanlog = ' + mu + ', sdlog = ' + sigma + ')'),
+      dgToolRow('MATLAB', 'lognrnd(' + mu + ', ' + sigma + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.lognormal(' + mu + ', ' + sigma + ', n)'),
+      dgToolRow('Excel', '=LOGNORM.INV(RAND(), ' + mu + ', ' + sigma + ')')
+    ];
+  },
+  rayl: function (p) {
+    var sigma = fmtNum(p.sigma);
+    return [
+      dgToolRow('Arena', sigma + ' * SQRT(-2 * LN(UNIF(0, 1)))', "no built-in; the recipe written in Arena's own functions"),
+      dgToolRow('R', sigma + ' * sqrt(-2 * log(runif(n)))'),
+      dgToolRow('MATLAB', 'raylrnd(' + sigma + ', n, 1)'),
+      dgToolRow('NumPy', 'rng.rayleigh(' + sigma + ', n)'),
+      dgToolRow('Excel', '=' + sigma + '*SQRT(-2*LN(1 - RAND()))')
+    ];
+  },
+  dunif: function (p) {
+    var a = fmtNum(p.a), b = fmtNum(p.b);
+    return [
+      dgToolRow('Arena', a + ' + AINT((' + b + ' - ' + a + ' + 1) * UNIF(0, 1))', 'no built-in; AINT truncates'),
+      dgToolRow('R', 'sample(' + a + ':' + b + ', n, replace = TRUE)'),
+      dgToolRow('MATLAB', 'randi([' + a + ' ' + b + '], n, 1)'),
+      dgToolRow('NumPy', 'rng.integers(' + a + ', ' + b + ' + 1, n)', 'the upper end is exclusive'),
+      dgToolRow('Excel', '=RANDBETWEEN(' + a + ', ' + b + ')')
+    ];
+  }
+};
+function toolsRowHtml(r) {
+  // Escaped as plain text either way: a code snippet's own "<" (an ifelse
+  // condition, a RAND() comparison) would otherwise open a tag rather than
+  // print as a character.
+  var codeHtml = r.plain ? dgEsc(r.code) : '<code>' + dgEsc(r.code) + '</code>';
+  return '<tr><td>' + r.tool + '</td><td>' + codeHtml + '</td><td>' + (r.note ? dgEsc(r.note) : '') + '</td></tr>';
+}
+function toolsPanelBodyHtml(d) {
+  var p = DGUI.params(d.id);
+  var rows = DG_TOOLS[d.id] ? DG_TOOLS[d.id](p, d) : [];
+  var html = '<div class="sec tools-sec" id="tools-' + d.id + '"><div class="sec-hd">In common tools</div>';
+  html += '<p class="lede" style="margin-bottom:8px">Where a tool has a built-in sampler, that is shown; where it does not, the inverse-transform recipe above is written in that tool\'s own syntax.</p>';
+  html += '<div class="tools-table-wrap" id="tools-wrap-' + d.id + '"><table class="tools-table">'
+    + '<colgroup><col class="tools-col-tool"><col class="tools-col-code"><col class="tools-col-note"></colgroup>'
+    + '<thead><tr><th>Tool</th><th>Code</th><th>Note</th></tr></thead><tbody id="tools-rows-' + d.id + '">'
+    + rows.map(toolsRowHtml).join('') + '</tbody></table></div>';
+  html += '<p class="knob-note" style="margin-top:6px">In every R and NumPy line, n is the number of draws and rng is numpy.random.default_rng().</p>';
+  html += '</div>';
+  return html;
+}
+function updateToolsTable(d) {
+  var tbody = $('tools-rows-' + d.id);
+  if (!tbody || !DG_TOOLS[d.id]) return;
+  tbody.innerHTML = DG_TOOLS[d.id](DGUI.params(d.id), d).map(toolsRowHtml).join('');
+}
+function reserveToolsHeight(d) {
+  var el = $('tools-wrap-' + d.id);
+  if (!el || !DG_TOOLS[d.id]) return;
+  var def = {}, lo = {}, hi = {};
+  d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
+  var candidates = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
+  candidates.push(worstOverGrid(d, function (p) { return DG_TOOLS[d.id](p, d).map(function (r) { return r.code; }).join('').length; }));
+  var worst = 0;
+  candidates.forEach(function (p) {
+    var rowsHtml = DG_TOOLS[d.id](p, d).map(toolsRowHtml).join('');
+    worst = Math.max(worst, dgMeasureOffscreenDeep(el, function (clone) {
+      var tb = clone.querySelector('tbody');
+      if (tb) { tb.removeAttribute('id'); tb.innerHTML = rowsHtml; }
+    }));
+  });
+  el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
+}
+
 /* Pixel geometry for one transfer plot at its current rendered width W: a
-   square inner region (margins left 96 for the U histogram, bottom 96 for
-   the X histogram, right 12, top 12) holding the cdf, with U increasing
-   upward and x increasing rightward on the distribution's own fixed axis. */
+   square inner region holding the cdf, with U increasing upward and x
+   increasing rightward on the distribution's own fixed axis. Each margin is
+   two disjoint bands, axis-out: a narrow gap that belongs to the axis's own
+   tick labels alone (uGap left of the U axis, xGap below the x axis), then a
+   separate strip further out that belongs to the histogram alone (uStrip,
+   xStrip) – keeping the bars out of the label band is what keeps them from
+   ever drawing over the numbers. */
 function dgGenLayout(d, W) {
-  var L = 96, R = 12, T = 12, B = 96, S = W - L - R;
+  var uGap = 22, uStrip = 90, xGap = 16, xStrip = 90;
+  // pad is the same few-pixel clearance the top and right margins already
+  // get for free (T and R are themselves that clearance): the strip's own
+  // baseline sits exactly on the outer edge of its margin, and a stroke or
+  // a discrete pmf's marker centered on a near-zero value straddles that
+  // edge, so without this the marker's own radius pokes past the viewBox.
+  var pad = 4;
+  var L = pad + uGap + uStrip, R = 12, T = 12, B = xGap + xStrip + pad, S = W - L - R;
   var x0 = d.axis.x0, x1 = d.axis.x1;
   return {
     W: W, L: L, R: R, T: T, B: B, S: S, x0: x0, x1: x1,
+    uGap: uGap, uStrip: uStrip, xGap: xGap, xStrip: xStrip,
     xAt: function (x) { return L + (x - x0) / (x1 - x0) * S; },
     uAt: function (u) { return T + (1 - u) * S; }
   };
@@ -3173,7 +3529,7 @@ function dgGenBinIndex(bins, x) {
 }
 DGUI.gen = {};
 DGUI.genEnsure = function (id) {
-  if (!DGUI.gen[id]) DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, pending: null };
+  if (!DGUI.gen[id]) DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, dots: null, overflow: null, batch: false };
   return DGUI.gen[id];
 };
 function genUpdateRecipe(d) {
@@ -3218,12 +3574,14 @@ function genUpdateMsg(d) {
   var sd = Math.sqrt(Math.max(0, variance));
   el.textContent = n + ' draws. Mean ' + fmtNum(mean) + ', sd ' + fmtNum(sd) + '; expected ' + fmtNum(d.mean(p)) + ', ' + fmtNum(Math.sqrt(Math.max(0, d.variance(p)))) + '.';
 }
-/* Side panel: the cumulative table a search-kind sampler actually walks,
-   with the row the latest draw landed on highlighted, or else a one-line
-   note about how the recipe above was found. */
+/* The one-sentence note under the recipe for a closed-form or numeric
+   sampler, and the cumulative table a search-kind sampler actually walks
+   (with the row the latest draw landed on highlighted), in the side column
+   beside the plot. Plain inline text, not its own <p>: the caller's
+   container already is one. */
 function genSideNoteHtml(d) {
-  if (d.gen.kind === 'closed') return '<p>The recipe above is F⁻¹(U) in closed form, so every draw is one uniform and a little arithmetic.</p>';
-  return '<p>F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from simpler draws.</p>';
+  if (d.gen.kind === 'closed') return 'The recipe above is F⁻¹(U) in closed form, so every draw is one uniform and a little arithmetic.';
+  return 'F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from simpler draws.';
 }
 function genSideTableHtml(d, p, landedK) {
   var lo = d.support(p).lo, hi = Math.ceil(d.quantile(0.999, p));
@@ -3235,31 +3593,47 @@ function genSideTableHtml(d, p, landedK) {
   return '<div class="gen-table-wrap"><table><thead><tr><th>k</th><th>p(k)</th><th>F(k)</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 function genRenderSide(d) {
+  if (d.gen.kind !== 'search') {
+    var noteEl = $('gen-note-' + d.id);
+    if (noteEl) noteEl.innerHTML = genSideNoteHtml(d);
+    return;
+  }
   var el = $('gen-side-' + d.id);
   if (!el) return;
   var p = DGUI.params(d.id);
-  if (d.gen.kind === 'search') {
-    var st = DGUI.gen[d.id];
-    var landedK = st && st.xs.length ? st.xs[st.xs.length - 1] : null;
-    el.innerHTML = genSideTableHtml(d, p, landedK);
-    var hlRow = el.querySelector('tr[style]');
-    if (hlRow && hlRow.scrollIntoView) hlRow.scrollIntoView({ block: 'nearest' });
-  } else {
-    el.innerHTML = genSideNoteHtml(d);
-  }
+  var st = DGUI.gen[d.id];
+  // A batch highlights no row: the highlight reads as "this is where the
+  // latest draw landed," a claim that only makes sense for a single draw.
+  var landedK = (st && !st.batch && st.xs.length) ? st.xs[st.xs.length - 1] : null;
+  el.innerHTML = genSideTableHtml(d, p, landedK);
+  var hlRow = el.querySelector('tr[style]');
+  if (hlRow && hlRow.scrollIntoView) hlRow.scrollIntoView({ block: 'nearest' });
 }
 /* Redraws the whole transfer-plot svg from the current draws: the cdf
    (staircase for a discrete distribution, curve for a continuous one), the
    U histogram in the left margin, and the X histogram under the true pdf or
-   pmf in the bottom margin. Called at rest – never mid-animation, when the
-   moving dot is instead pushed onto the already-drawn static plot. */
+   pmf in the bottom margin. This writes into a dedicated "static" <g> rather
+   than the svg's own innerHTML, so it can run mid-animation (as each dot in
+   a batch lands, to grow the margins under it) without erasing the other
+   dots still in flight, which genAnimateDraw appends straight to the svg,
+   after this group, so they paint on top of it. */
 DGUI.genRedraw = function (id) {
   var d = DG.byId[id]; if (!d) return;
   var svg = $('tp-' + id); if (!svg) return;
   var cw = svg.getBoundingClientRect().width || 460;
   var W = Math.max(240, Math.min(520, cw));
-  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + W);
   var geo = dgGenLayout(d, W), L = geo.L, T = geo.T, S = geo.S;
+  // The margins are no longer equal on every side (the U and x strips are
+  // each wider than the top/right padding), so the height is computed from
+  // them directly rather than assumed square.
+  var H = T + S + geo.B;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  var staticG = svg.querySelector('#tp-static-' + id);
+  if (!staticG) {
+    staticG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    staticG.setAttribute('id', 'tp-static-' + id);
+    svg.insertBefore(staticG, svg.firstChild);
+  }
   var p = DGUI.params(id);
   var st = DGUI.gen[id] || { us: [], xs: [] };
   var isC = d.type === 'c';
@@ -3286,26 +3660,42 @@ DGUI.genRedraw = function (id) {
     h += '<line x1="' + (L - 4) + '" y1="' + uy + '" x2="' + L + '" y2="' + uy + '" stroke="var(--border)" stroke-width="1"/>';
     h += '<text x="' + (L - 7) + '" y="' + (uy + 3) + '" text-anchor="end" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + f + '</text>';
   });
-  dgAxisTicks(geo.x0, geo.x1, d.axis.xt).forEach(function (v) {
+  dgAxisTicks(geo.x0, geo.x1, dgTickStepFor(geo.x0, geo.x1, d.axis.xt, S)).forEach(function (v) {
     var xx = geo.xAt(v);
     h += '<line x1="' + xx + '" y1="' + (T + S) + '" x2="' + xx + '" y2="' + (T + S + 4) + '" stroke="var(--border)" stroke-width="1"/>';
+    h += '<text x="' + xx + '" y="' + (T + S + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
   h += '<text x="' + (L + S / 2) + '" y="' + (T - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">cdf F(' + (isC ? 'x' : 'k') + ')</text>';
 
+  // The U margin is two disjoint bands (see dgGenLayout): the tick numbers
+  // live in uGap, right against the axis, and are never touched by a bar;
+  // the histogram lives entirely in uStrip, further out, as a density (a
+  // bar's length is its fraction of the draws times the bin count, so ten
+  // even bins on [0, 1] turn a fraction into "fraction per unit width"),
+  // scaled so the true U(0, 1) density – a flat line at 1 – has one place
+  // to live and the bars are read against it rather than against each
+  // other's own tallest bar. Bars grow rightward, toward the axis, off a
+  // baseline at the strip's own outer (left) edge.
   var uBins = 10, uCounts = new Array(uBins).fill(0);
   st.us.forEach(function (u) { uCounts[Math.min(uBins - 1, Math.floor(u * uBins))]++; });
-  var uMaxFrac = 0; uCounts.forEach(function (c) { var f = st.us.length ? c / st.us.length : 0; if (f > uMaxFrac) uMaxFrac = f; });
-  var uBarMax = 70;
-  // Centered above the widest a U-histogram bar can ever draw, so the "U"
-  // label sits above the inner square where no bar can reach it, rather
-  // than in the margin the bars themselves fill.
-  h += '<text x="' + (L - uBarMax / 2) + '" y="' + (T - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">U</text>';
+  var uDensities = uCounts.map(function (c) { return (st.us.length ? c / st.us.length : 0) * uBins; });
+  var uDensMax = 0; uDensities.forEach(function (v) { if (v > uDensMax) uDensMax = v; });
+  var uAxisMax = Math.max(1, uDensMax);
+  var uBaseX = L - geo.uGap - geo.uStrip;
+  var uScaleAt = function (dens) { return Math.min(1, dens / uAxisMax) * geo.uStrip; };
+  // Placed at the axis's own top, the way the pdf/cdf plots label their own
+  // y-axis, rather than centered in the margin far below the bars.
+  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">U</text>';
   for (var bi = 0; bi < uBins; bi++) {
     var yTopPx = geo.uAt((bi + 1) / uBins), yBotPx = geo.uAt(bi / uBins);
-    var frac = st.us.length ? uCounts[bi] / st.us.length : 0;
-    var barLen = uMaxFrac > 0 ? (frac / uMaxFrac) * uBarMax : 0;
-    h += '<rect x="' + (L - barLen) + '" y="' + yTopPx + '" width="' + barLen + '" height="' + (yBotPx - yTopPx) + '" fill="var(--est)" fill-opacity="0.5" stroke="var(--est)" stroke-width="1"/>';
+    var barLen = uScaleAt(uDensities[bi]);
+    h += '<rect x="' + uBaseX + '" y="' + yTopPx + '" width="' + barLen + '" height="' + (yBotPx - yTopPx) + '" fill="var(--est)" fill-opacity="0.5" stroke="var(--est)" stroke-width="1"/>';
   }
+  // The true U(0, 1) density – flat at 1 – drawn the same way the bottom
+  // strip draws the true pdf over its own bars: one line, in --truth, so
+  // both marginals read as "sample bars under the true density."
+  var uTrueX = uBaseX + uScaleAt(1);
+  h += '<line x1="' + uTrueX + '" y1="' + geo.uAt(0) + '" x2="' + uTrueX + '" y2="' + geo.uAt(1) + '" stroke="var(--truth)" stroke-width="2"/>';
 
   var bins = d.gen.bins, xCounts = new Array(bins.length - 1).fill(0);
   st.xs.forEach(function (x) { xCounts[dgGenBinIndex(bins, x)]++; });
@@ -3323,23 +3713,40 @@ DGUI.genRedraw = function (id) {
     var rng2 = dgIntRange(geo.x0, geo.x1); pdfStems = [];
     for (var kk = rng2[0]; kk <= rng2[1]; kk++) { var yv = d.pdf(kk, p); pdfStems.push([kk, yv]); if (yv > pdfMax) pdfMax = yv; }
   }
-  var yMaxBottom = Math.max(d.axis.y1, barMax * 1.05, pdfMax * 1.05);
-  var bottomH = 84;
-  var y2At = function (val) { return (T + S) + Math.min(1, val / yMaxBottom) * bottomH; };
+  // Same two-band shape as the U margin: xGap (already drawn above, ticks
+  // and numbers only) then xStrip, entirely below it, for the histogram.
+  // The scale includes the true curve's own peak (pdfMax), not only the
+  // fixed axis.y1 and the tallest bar, because a knob can push the true
+  // peak above axis.y1 (a design-time constant sized for the tab's own pdf
+  // plot) and the curve must never be the thing that clips. Bars grow
+  // upward off a baseline at the strip's own outer (bottom) edge, and the
+  // curve is drawn upright over them the same way it is on every other plot
+  // in this widget – taller means a higher density, not a deeper dip.
+  var yMaxBottom = Math.max(d.axis.y1, barMax, pdfMax);
+  var xStripTop = T + S + geo.xGap, xBaseY = xStripTop + geo.xStrip;
+  var y2At = function (val) { return xBaseY - Math.min(1, val / yMaxBottom) * geo.xStrip; };
   for (var bk2 = 0; bk2 < barVals.length; bk2++) {
     var xL2 = geo.xAt(bins[bk2]), xR2 = geo.xAt(bins[bk2 + 1]), yv2 = y2At(barVals[bk2]);
-    h += '<rect x="' + xL2 + '" y="' + (T + S) + '" width="' + (xR2 - xL2) + '" height="' + (yv2 - (T + S)) + '" fill="var(--est)" fill-opacity="0.55" stroke="var(--est)" stroke-width="1"/>';
+    h += '<rect x="' + xL2 + '" y="' + yv2 + '" width="' + (xR2 - xL2) + '" height="' + (xBaseY - yv2) + '" fill="var(--est)" fill-opacity="0.55" stroke="var(--est)" stroke-width="1"/>';
   }
   if (isC) {
     var lp = pdfPts.map(function (pt) { return geo.xAt(pt[0]) + ',' + y2At(pt[1]); }).join(' ');
     h += '<polyline points="' + lp + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
   } else {
-    pdfStems.forEach(function (s) { var xk = geo.xAt(s[0]), yTop = y2At(s[1]); h += '<line x1="' + xk + '" y1="' + (T + S) + '" x2="' + xk + '" y2="' + yTop + '" stroke="var(--truth)" stroke-width="2.2"/><circle cx="' + xk + '" cy="' + yTop + '" r="3" fill="var(--truth)"/>'; });
+    pdfStems.forEach(function (s) { var xk = geo.xAt(s[0]), yTop = y2At(s[1]); h += '<line x1="' + xk + '" y1="' + xBaseY + '" x2="' + xk + '" y2="' + yTop + '" stroke="var(--truth)" stroke-width="2.2"/><circle cx="' + xk + '" cy="' + yTop + '" r="3" fill="var(--truth)"/>'; });
   }
-  h += '<line x1="' + L + '" y1="' + (T + S) + '" x2="' + (L + S) + '" y2="' + (T + S) + '" stroke="var(--border)" stroke-width="1"/>';
-  h += '<text x="' + (L + S / 2) + '" y="' + (T + S + bottomH + 11) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
+  // The strip's own label, in the empty corner outside the plot area (left
+  // of the axis, below the U margin's own bottom at T + S) rather than at
+  // the strip's top-left corner: that corner sits at x = L, exactly where
+  // the axis's own x0 tick lands whenever x0 is itself a tick value (0 for
+  // most of these distributions), and a bin there can also be the tallest
+  // bar in the strip, so anything drawn at x = L collides with one or both.
+  h += '<text x="' + (L - 4) + '" y="' + (xStripTop + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
+  // Placed just past the axis's own right end, on the axis line itself,
+  // rather than centered far below the bottom strip's bars.
+  h += '<text x="' + (L + S + 4) + '" y="' + (T + S + 4) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
 
-  svg.innerHTML = h;
+  staticG.innerHTML = h;
 };
 DGUI.genRefresh = function (id) {
   var d = DG.byId[id]; if (!d) return;
@@ -3347,68 +3754,120 @@ DGUI.genRefresh = function (id) {
   genRenderSide(d);
   DGUI.genRedraw(id);
   genUpdateMsg(d);
+  updateToolsTable(d);
 };
+/* Removes every dot element the in-flight animation created, landed or not
+   – called on a reset and at the end of genFinishAnim, so no stray dot is
+   ever left floating over a redraw that no longer knows about it (genRedraw
+   only rebuilds its own static <g>, not these, which are appended straight
+   to the svg). */
+function genRemoveDots(st) {
+  (st.dots || []).forEach(function (D) { if (D.dot && D.dot.parentNode) D.dot.remove(); });
+  st.dots = null;
+}
 DGUI.genReset = function (id) {
   var st = DGUI.gen[id];
-  if (st && st.animId) cancelAnimationFrame(st.animId);
-  DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, pending: null };
+  if (st) {
+    if (st.animId) cancelAnimationFrame(st.animId);
+    genRemoveDots(st);
+  }
+  DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, dots: null, overflow: null, batch: false };
   DGUI.genRefresh(id);
 };
-/* Finishes the in-flight animation, committing whichever draws it carries --
-   the ones the caller passes, when the animation reaches its own end, or
-   the state's own pending list, when a new draw request interrupts it and
-   so must complete the old one instantly first. */
-function genFinishAnim(id, draws) {
+/* Finishes the in-flight animation instantly: every dot still traveling is
+   committed at its final value on the spot, and any batch overflow past the
+   first 100 animated draws lands with it. Dots already landed mid-animation
+   were already committed when they landed, and so are left alone here. */
+function genFinishAnim(id) {
   var st = DGUI.gen[id]; if (!st) return;
   if (st.animId) cancelAnimationFrame(st.animId);
   st.animId = null; st.animating = false;
-  var list = draws || st.pending || [];
-  st.pending = null;
-  list.forEach(function (pair) { st.us.push(pair[0]); st.xs.push(pair[1]); });
+  (st.dots || []).forEach(function (D) {
+    if (!D.landed) { st.us.push(D.pair[0]); st.xs.push(D.pair[1]); D.landed = true; }
+  });
+  (st.overflow || []).forEach(function (pair) { st.us.push(pair[0]); st.xs.push(pair[1]); });
+  st.overflow = null;
   DGUI.genRefresh(id);
+  genRemoveDots(st);
+  st.batch = false;
 }
+/* Animates up to 100 draws of the batch at once: each dot starts on the U
+   axis at its own U, with its start staggered over about 700ms so the swarm
+   reads as a stream, then travels right to the cdf and drops to the x axis,
+   same as a single draw's own path. Any draws past the first 100 land
+   instantly once every animated dot has landed. The margins grow live, one
+   redraw per dot landed, because DGUI.genRedraw only touches its own static
+   <g> and so never disturbs the dots still in flight. */
 function genAnimateDraw(id, draws) {
   var d = DG.byId[id], st = DGUI.gen[id], svg = $('tp-' + id);
-  if (!svg) { genFinishAnim(id, draws); return; }
+  if (!svg) {
+    draws.forEach(function (pair) { st.us.push(pair[0]); st.xs.push(pair[1]); });
+    st.batch = draws.length > 1;
+    DGUI.genRefresh(id);
+    st.batch = false;
+    return;
+  }
+  var animated = draws.slice(0, 100), overflow = draws.slice(100);
   var W = svg.getBoundingClientRect().width || 460;
   var geo = dgGenLayout(d, W);
-  var dot = svg.querySelector('#gen-dot-' + id);
-  if (!dot) {
-    dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    dot.setAttribute('id', 'gen-dot-' + id);
-    dot.setAttribute('r', '4.5');
+  var multi = animated.length > 1;
+  st.animating = true; st.batch = draws.length > 1; st.overflow = overflow;
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var dots = animated.map(function (pair) {
+    var dot = document.createElementNS(svgNS, 'circle');
+    dot.setAttribute('r', multi ? '3' : '4.5');
     dot.setAttribute('fill', 'var(--est)');
     dot.setAttribute('stroke', '#fff');
     dot.setAttribute('stroke-width', '1');
     svg.appendChild(dot);
-  }
-  var u = draws[0][0], x = draws[0][1];
-  var xStart = geo.L, xEnd = geo.xAt(Math.max(geo.x0, Math.min(geo.x1, x)));
-  var yTop = geo.uAt(u), yBottom = geo.uAt(0);
-  dot.setAttribute('cx', xStart); dot.setAttribute('cy', yTop);
-  st.animating = true; st.pending = draws;
-  var t0 = null, leg1 = 350, leg2 = 350;
+    var u = pair[0], x = pair[1];
+    var xStart = geo.L, xEnd = geo.xAt(Math.max(geo.x0, Math.min(geo.x1, x)));
+    var yTop = geo.uAt(u), yBottom = geo.uAt(0);
+    dot.setAttribute('cx', xStart); dot.setAttribute('cy', yTop);
+    return { dot: dot, pair: pair, xStart: xStart, xEnd: xEnd, yTop: yTop, yBottom: yBottom, landed: false, start: 0 };
+  });
+  st.dots = dots;
+  var span = multi ? 700 : 0, perDelay = multi ? span / animated.length : 0;
+  dots.forEach(function (D, i) { D.start = i * perDelay; });
+  var leg1 = 350, leg2 = 350, dur = leg1 + leg2, t0 = null;
   function frame(ts) {
     if (t0 === null) t0 = ts;
-    var el = ts - t0;
-    if (el < leg1) {
-      var f1 = el / leg1;
-      dot.setAttribute('cx', xStart + (xEnd - xStart) * f1); dot.setAttribute('cy', yTop);
-      st.animId = requestAnimationFrame(frame);
-    } else if (el < leg1 + leg2) {
-      var f2 = (el - leg1) / leg2;
-      dot.setAttribute('cx', xEnd); dot.setAttribute('cy', yTop + (yBottom - yTop) * f2);
+    var elapsed = ts - t0, stillGoing = false, anyLanded = false;
+    dots.forEach(function (D) {
+      if (D.landed) return;
+      var el = elapsed - D.start;
+      if (el < 0) { stillGoing = true; return; }
+      if (el < leg1) {
+        var f1 = el / leg1;
+        D.dot.setAttribute('cx', D.xStart + (D.xEnd - D.xStart) * f1); D.dot.setAttribute('cy', D.yTop);
+        stillGoing = true;
+      } else if (el < dur) {
+        var f2 = (el - leg1) / leg2;
+        D.dot.setAttribute('cx', D.xEnd); D.dot.setAttribute('cy', D.yTop + (D.yBottom - D.yTop) * f2);
+        stillGoing = true;
+      } else {
+        D.landed = true; D.dot.remove();
+        st.us.push(D.pair[0]); st.xs.push(D.pair[1]);
+        anyLanded = true;
+      }
+    });
+    if (anyLanded) DGUI.genRedraw(id);
+    if (stillGoing) {
       st.animId = requestAnimationFrame(frame);
     } else {
-      genFinishAnim(id, draws);
+      st.overflow.forEach(function (pair) { st.us.push(pair[0]); st.xs.push(pair[1]); });
+      st.overflow = null; st.animating = false; st.animId = null;
+      DGUI.genRefresh(id);
+      st.dots = null; st.batch = false;
     }
   }
   st.animId = requestAnimationFrame(frame);
 }
-/* One click's worth of draws: the first animates (a dot travels from the U
-   axis to the cdf and drops to the x axis), and the rest of a batch land at
-   once right behind it. A click that arrives mid-animation finishes the
-   animation in flight instantly first, so draws are never lost or layered. */
+/* One click's worth of draws: up to 100 of a batch animate together as a
+   staggered swarm (a single draw is just a swarm of one), and any further
+   draws land instantly once that swarm finishes. A click that arrives
+   mid-animation finishes the animation in flight instantly first, so draws
+   are never lost or layered. */
 DGUI.genDraw = function (id, n) {
   var d = DG.byId[id]; if (!d) return;
   n = Math.max(1, Math.round(Number(n) || 1));
@@ -3529,6 +3988,7 @@ DGUI.onTabShown = function (name) {
   reserveGenRecipeHeight(d);
   reserveGenMsgHeight(d);
   if (DG_CON_LEDE[name]) reserveConMsgHeight(d);
+  reserveToolsHeight(d);
 };
 
 /* ── Build every tab once, at load, then keep the visible one in step with
