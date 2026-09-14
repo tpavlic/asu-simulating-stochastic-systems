@@ -477,6 +477,9 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
    take a narrower, matching share instead. */
 .con-pic:not(.con-pic-square) { flex-basis: 440px; }
 .con-pic:not(.con-pic-square) + .con-hist-col { flex: 1 1 440px; max-width: 440px; }
+/* The t picture is narrower than the rest, and fixed rather than fluid, so
+   that its two axes keep the same units per pixel at every screen width. */
+.con-pic.con-pic-slope { max-width: 256px; flex-basis: 256px; margin-bottom: 4px; }
 /* The Box-Muller equations block: one step per line of the mechanism, each
    a header naming the step, a description in the page's own prose font, and
    the symbolic line with that step's current numbers on the right, in the
@@ -3333,7 +3336,7 @@ var DG_CON_LEDE = {
   rayl: 'Draw two independent normal coordinates with the same spread; their distance from the origin is a Rayleigh draw. This is the Box–Muller picture read the other way, but the transform itself is a way to get normals, not a way to get a Rayleigh.',
   beta: 'For whole-number α and β, sort n = α + β minus 1 uniform draws and take the α-th smallest.',
   chisq: 'Each of the k standard normal draws is squared, and the k squares added together make one chi-square draw.',
-  tdist: 'A standard normal draw Z over the square root of a chi-square draw V divided by its degrees of freedom; Z/√(V/ν) is one t draw. In the picture, S = √(V/ν) runs along the bottom and Z up the side, and t is the slope of the ray from the origin to the point (S, Z).',
+  tdist: 'A standard normal draw Z over the square root of a chi-square draw V divided by its degrees of freedom; Z/√(V/ν) is one t draw. In the picture, the bottom axis is S/σ = √(V/ν), the sample standard deviation measured against the true one, Z runs up the side, and t is the slope of the ray from the origin to the point. Both axes are drawn to the same scale, and so a ray at 45 degrees is a t of 1. Raise ν and the run tightens onto the dashed line at S/σ = 1, where the sample spread has landed exactly on the true one, and that leaves the slope little more than Z itself – a t that has become a standard normal.',
   lnorm: 'A normal draw Y with mean μ and standard deviation σ, and then X = e<sup>Y</sup>; the log-normal is what a normal becomes on the exponential scale.'
 };
 /* Whether the current alpha and beta are both whole numbers, the one
@@ -4069,10 +4072,13 @@ function dgConTransferPic(st, W, H, opts) {
     hCurve.push(geo.xAt(hzv) + ',' + (geo.bottomBaseline - Math.min(1, hd / hStripMax) * geo.botThick));
   }
   h += '<polyline points="' + hCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
-  // In the strip's top-left corner, which the input density's left tail
-  // leaves empty on both tabs; at the baseline the label sat on the frame's
-  // bottom edge.
-  h += '<text x="' + (geo.mapX0 + 2) + '" y="' + (geo.mapY1 + geo.hGap + 9) + '" text-anchor="start" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.hStripLabel + '</text>';
+  // In whichever top corner of the strip the input density leaves empty: the
+  // left one on the two tabs whose input is a standard normal, the right one
+  // on the t, whose run concentrates on a spike at 1 as ν grows and would run
+  // into a label on the left. At the baseline the label sat on the frame's
+  // own bottom edge.
+  var hLabEnd = opts.hStripLabelAt === 'end';
+  h += '<text x="' + (hLabEnd ? geo.mapX1 - 2 : geo.mapX0 + 2) + '" y="' + (geo.mapY1 + geo.hGap + 9) + '" text-anchor="' + (hLabEnd ? 'end' : 'start') + '" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.hStripLabel + '</text>';
 
   // Left strip: opts.vBins over the vertical range (the Chi-square's own
   // 26 fixed bins of 0.5, or the Log-normal's own d.gen.bins), bars growing
@@ -4167,29 +4173,36 @@ var CON_TRANSFER_OPTS = {
   /* The t map's two strips are both inputs – Z along the bottom, V along
      the left – with no curve deriving one from the other, and so no
      transferFn is given; conPicTdist draws the meeting point itself.
-     vMax keeps the left strip's own chi-square under about 1% of its mass
-     clipped at every reachable ν, the same margin every other tab's fixed
-     axis keeps. */
-  /* The t's axes are chosen so that the draw is a slope: S = √(V/ν), the
-     scale estimate, runs along the bottom and Z up the side, and so the
-     ray from the origin to the point (S, Z) rises Z over a run of S – its
-     slope is t. The bottom strip's true density is that of S, the
-     chi-square's own transformed through s = √(v/ν). */
+
+     The axes are chosen so that the draw is a slope: the run is S/σ = √(V/ν),
+     the sample standard deviation in units of the true one, and Z is the rise,
+     and so the ray from the origin to the landed point has a slope of t. The
+     run is written S/σ rather than S because the sample it comes from has its
+     own σ: standardizing the mean by S instead of σ is what divides the
+     normal by this ratio, and the ratio is 1 exactly when the sample's spread
+     matches the population's.
+     Both ranges are fixed, and the frame (CON_PIC_FRAME.tdist) is shaped to
+     give the two the same units per pixel, which buys two readings an axis
+     rescaled per ν would have hidden: a ray at 45 degrees is a t of 1, and
+     raising ν visibly pulls the run onto a spike at 1, leaving the slope
+     little more than Z itself. The run stays inside 2.5 for all but about one
+     draw in a thousand at ν = 3, where its spread is widest, and Z inside 3
+     for about three in a thousand. The bottom strip's true density is that of
+     S/σ, the chi-square's own transformed through s = √(v/ν). */
   tdist: function (d, p) {
-    var nu = p.nu, zSpan = 3.6, vMax = Math.max(13, Math.round(nu + 4 * Math.sqrt(2 * nu)));
-    var sMax = Math.ceil(2 * Math.sqrt(vMax / nu)) / 2;
+    var nu = p.nu, zSpan = 3, sMax = 2.5;
     return {
       hRange: [0, sMax], vRange: [-zSpan, zSpan],
       hTicks: function (px) { return dgAxisTicks(0, sMax, dgTickStepFor(0, sMax, 0.5, px)); },
       vTicks: function (px) { return dgAxisTicks(-zSpan, zSpan, dgTickStepFor(-zSpan, zSpan, 1, px)); },
-      hNameHtml: 'S = √(V/ν)', vNameHtml: 'Z',
-      hStripLabel: 'S, with V ~ ' + dgSvgChiSq('ν', '', 9.5), vStripLabel: 'Z ~ N(0, 1)',
+      hNameHtml: 'S/σ = √(V/ν)', vNameHtml: 'Z',
+      hStripLabel: 'V ~ ' + dgSvgChiSq('ν', '', 9.5), hStripLabelAt: 'end', vStripLabel: 'Z ~ N(0, 1)',
       vColor: 'var(--in)',
-      hBins: dgLinBins(0, sMax, 24), vBins: dgLinBins(-zSpan, zSpan, 24),
+      hBins: dgLinBins(0, sMax, 25), vBins: dgLinBins(-zSpan, zSpan, 24),
       hVals: function (s) { return s.ts; }, vVals: function (s) { return s.tz; },
       hTruthPdf: function (sv) { return sv <= 0 ? 0 : DG.byId.chisq.pdf(nu * sv * sv, { k: nu }) * 2 * nu * sv; },
       vTruthPdf: function (z) { return DG.byId.norm.pdf(z, { mu: 0, sigma: 1 }); },
-      emptyMsg: ['Draw one to sample a normal', 'and a chi-square.'],
+      emptyMsg: ['Draw one to sample', 'a normal and', 'a chi-square.'],
       // A little below the top: the chi-square's own strip is emptiest
       // there for every ν this tab reaches, and so the message never
       // crosses its curve.
@@ -4263,8 +4276,13 @@ function conPicTdist(d, p, st, W, H) {
   for (var i = 0; i < pts.length - 1; i++) {
     h += '<circle cx="' + geo.xAt(pts[i].h) + '" cy="' + geo.yAt(pts[i].v) + '" r="2.4" fill="var(--ref)"/>';
   }
-  // A faint horizontal through Z = 0, so the ray's rise reads against it.
-  h += '<line x1="' + geo.mapX0 + '" y1="' + geo.yAt(0) + '" x2="' + geo.mapX1 + '" y2="' + geo.yAt(0) + '" stroke="var(--border)" stroke-width="1"/>';
+  // A faint horizontal through Z = 0, so the ray's rise reads against it,
+  // and a dashed vertical at S/σ = 1, where the sample's own spread has come
+  // out at exactly the population's. The cloud squeezes onto that line as ν
+  // grows, and a ray meeting the line has a slope of Z alone; between them the
+  // two lines cross at the ray's origin.
+  h += '<line x1="' + geo.mapX0 + '" y1="' + geo.yAt(0) + '" x2="' + geo.mapX1 + '" y2="' + geo.yAt(0) + '" stroke="var(--border)" stroke-width="1"/>'
+    + '<line x1="' + geo.xAt(1) + '" y1="' + geo.mapY0 + '" x2="' + geo.xAt(1) + '" y2="' + geo.mapY1 + '" stroke="var(--ref)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="5 4"/>';
   if (pts.length) {
     // The draw itself is the slope of the ray from the origin to the latest
     // point, and so the ray is the mark drawn in the output color; the
@@ -4275,10 +4293,10 @@ function conPicTdist(d, p, st, W, H) {
       + '<line x1="' + ox + '" y1="' + oy + '" x2="' + px + '" y2="' + py + '" stroke="var(--est)" stroke-width="2.2"/>'
       + '<circle cx="' + ox + '" cy="' + oy + '" r="2.5" fill="var(--est)"/>'
       + '<circle cx="' + px + '" cy="' + py + '" r="4.5" fill="var(--est)" stroke="#fff" stroke-width="1"/>';
-    var label = 'slope t = ' + fmtNum(st.last.x), estW = label.length * 11.5 * 0.6 + 6;
+    var label = 'slope t = ' + fmtNum(st.last.x), fs = 10.5, estW = label.length * fs * 0.6 + 6;
     var lx = Math.min(geo.mapX1 - estW / 2 - 3, Math.max(geo.mapX0 + estW / 2 + 3, px));
     var ly = Math.max(geo.mapY0 + 12, py - 10);
-    h += dgPlaneLabel(lx, ly, 'middle', label, 'var(--est)', 11.5);
+    h += dgPlaneLabel(lx, ly, 'middle', label, 'var(--est)', fs);
   }
   return h;
 }
@@ -4293,7 +4311,7 @@ var CON_SUM_HTML = {
   },
   tdist: function (res, p) {
     return 't = Z / √(V/ν)' + (res ? ' = ' + fmtNum(res.x) : '')
-      + '<br><span class="con-sum-sub">' + (res ? '= ' + fmtNum(res.z) + ' / √(' + fmtNum(res.v) + '/' + fmtNum(p.nu) + '), the slope of the ray' : '&nbsp;') + '</span>';
+      + '<br><span class="con-sum-sub">' + (res ? '= ' + fmtNum(res.z) + ' / √(' + fmtNum(res.v) + '/' + fmtNum(p.nu) + ')' : '&nbsp;') + '</span>';
   }
 };
 function conUpdateSum(d) {
@@ -4309,12 +4327,18 @@ var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, n
    square, because the projections and the angle (or its deliberate absence)
    are the whole point of those two tabs; the Chi-square and Log-normal are
    both taller than they are wide, because each stands a transfer map with
-   a histogram strip along its bottom and another along its left. */
+   a histogram strip along its bottom and another along its left. The t is
+   taller and narrower still: its 160-by-384 map carries a Z range of 6
+   against an S range of 2.5, which is the one shape that gives its two
+   axes the same units per pixel, and so the ray's drawn slope is the draw.
+   Its minimum width equals its maximum for the same reason – the strips
+   and padding around the map are fixed pixel widths, and a narrower frame
+   would eat into the map's width alone and tilt every ray. */
 var CON_PIC_FRAME = {
   norm: { maxW: 440, minW: 200, ratio: 1, cls: ' con-pic-square' },
   rayl: { maxW: 440, minW: 200, ratio: 1, cls: ' con-pic-square' },
   chisq: { maxW: 440, minW: 200, ratio: 370 / 440, cls: ' con-pic-tall' },
-  tdist: { maxW: 440, minW: 200, ratio: 370 / 440, cls: ' con-pic-tall' },
+  tdist: { maxW: 256, minW: 256, ratio: 474 / 256, cls: ' con-pic-slope' },
   lnorm: { maxW: 440, minW: 200, ratio: 370 / 440, cls: ' con-pic-tall' }
 };
 var CON_PIC_FRAME_DEFAULT = { maxW: 520, minW: 240, ratio: 160 / 520, cls: '' };
@@ -4431,7 +4455,7 @@ DGUI.conEnsure = function (id) {
     // produced); ys is the Log-normal's own bottom-strip source (every
     // normal draw Y), its left strip reading xs like every other tab's.
     // ts and tz are the t map's own bottom- and left-strip sources – every
-    // S = √(V/ν) and every Z drawn – with pts (above) holding the (s, z) pair each
+    // S/σ = √(V/ν) and every Z drawn – with pts (above) holding the pair each
     // draw's point landed at.
     zs: [], outY: [], ys: [], tz: [], ts: [],
     animating: false, animId: null, dots: null, overflow: null
