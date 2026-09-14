@@ -1770,7 +1770,7 @@ var DG_TEXT = {
     mode: "max(k − 2, 0)",
     when: "a sum of k squared standard normals",
     lede: "The chi-square is what a sum of squared standard normal variates follows, and it is the reference curve behind the goodness-of-fit test.",
-    choose: ["<strong>It is not an input model.</strong> A chi-square appears as the distribution of a statistic computed from data, most often a goodness-of-fit statistic or a scaled sample variance, each of which reduces to a sum of squared standard normal terms.", { hd: "How the shape follows k", text: "At k = 1 the density is unbounded at zero, at k = 2 it is exactly the exponential with mean 2, and as k grows it approaches a normal, because a sum of many independent squares obeys the central limit theorem like any other sum." }]
+    choose: ["It commonly appears when <strong>a hypothesis about a whole distribution is tested</strong>: whether a sample follows a claimed distribution (a goodness-of-fit test), or whether one variable changes the distribution of another (a test of independence). It also sits behind inference about a variance, such as a confidence interval for σ<sup>2</sup>.", { hd: "Relationship to other distributions", text: "It is the sum of k squared standard normals. With two bins, a count of successes and a count of failures, Pearson's statistic is exactly the square of the normal approximation to the binomial, and adding bins carries that approximation from a single two-outcome count to a whole discrete distribution. Because the counts have to add up to the sample size, one of them follows from the rest, which leaves m − 1 degrees of freedom rather than m. A sample variance is the same story: for a sample from a normal population, (n − 1)S<sup>2</sup>/σ<sup>2</sup> is the sum of the squared deviations from the sample mean, each divided by σ<sup>2</sup>, and those deviations add up to zero, which leaves n − 1. What sets the degrees of freedom in each case is the constraint on the terms, not how many terms there are." }, { hd: "How the shape follows k", text: "At k = 1 the density is unbounded at zero, at k = 2 it is exactly the exponential with mean 2, and as k grows the shape approaches a normal: the k terms are independent draws from one distribution with a finite variance, which is the case the central limit theorem covers." }]
   },
   fdist: {
     support: "(0, ∞)",
@@ -1782,7 +1782,7 @@ var DG_TEXT = {
     mode: "<span class=\"frac\"><span class=\"num\">d<sub>1</sub> − 2</span><span class=\"den\">d<sub>1</sub></span></span>&middot;<span class=\"frac\"><span class=\"num\">d<sub>2</sub></span><span class=\"den\">d<sub>2</sub> + 2</span></span> for d<sub>1</sub> > 2",
     when: "a ratio of two scaled chi-squares",
     lede: "The F is a ratio of two chi-squares, each divided by its own degrees of freedom, and it is the reference curve for comparing two variances.",
-    choose: ["<strong>It is not an input model either.</strong> An F appears when two estimates of variance are compared, as in an analysis of variance or a test of whether two samples have the same spread: each sum of squares is a chi-square, and their scaled ratio is F.", { hd: "How the shape follows the degrees of freedom", text: "The density gathers around one as both grow, because each half of the ratio settles on its own mean, and a small denominator degrees of freedom leaves a heavy right tail. The mean d₂/(d₂ − 2) exists only for d₂ above 2, and the variance only for d₂ above 4, which is why the denominator degrees of freedom here start at 5." }]
+    choose: ["It commonly appears when <strong>two estimates of variance are compared</strong>: whether a factor explains more variation than chance alone would (an analysis of variance), or whether two samples have the same spread.", { hd: "Relationship to other distributions", text: "Each half of the ratio is a chi-square divided by its own degrees of freedom, which makes each half an estimate of a variance, and the F asks whether the two estimates agree. With one numerator degree of freedom it is the square of a t, which is why comparing two groups by F and by a two-sided t test gives the same answer. As the denominator degrees of freedom grow, the denominator settles on one and d₁F becomes a chi-square with d₁ degrees of freedom: with the second variance estimated from a lot of data, the F test becomes the chi-square test." }, { hd: "How the shape follows the degrees of freedom", text: "The density gathers around one as both grow, because each half of the ratio settles on its own mean, and a small denominator degrees of freedom leaves a heavy right tail. The mean d₂/(d₂ − 2) exists only for d₂ above 2, and the variance only for d₂ above 4, which is why the denominator degrees of freedom here start at 5." }]
   },
   beta: {
     support: "[0, 1]",
@@ -1953,7 +1953,12 @@ function buildTab(d) {
   // The first paragraph carries the one-line summary of what the
   // distribution is, in bold, and any later paragraph opens with a bold
   // run-in heading naming what it is for, set off by a little space.
-  html += '<div class="sec"><div class="sec-hd">When to choose it</div>' + t.choose.map(function (p) {
+  // Chi-square and F are not chosen as input models; their pages report
+  // where the shape commonly turns up in statistical work instead, and the
+  // heading says so rather than reusing the input-modeling framing every
+  // other tab carries.
+  var chooseHd = (d.id === 'chisq' || d.id === 'fdist') ? 'Common use in statistical applications' : 'Common use in stochastic models';
+  html += '<div class="sec"><div class="sec-hd">' + chooseHd + '</div>' + t.choose.map(function (p) {
     return typeof p === 'string' ? '<p class="choose-lead">' + p + '</p>' : '<p class="choose-more"><strong>' + p.hd + '.</strong> ' + p.text + '</p>';
   }).join('') + '</div>';
   html += '<div class="sec">';
