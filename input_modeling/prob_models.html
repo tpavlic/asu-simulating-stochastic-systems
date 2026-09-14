@@ -1303,10 +1303,13 @@ DG.dists = [];
       id: 'tdist', name: "Student's t", type: 'c', group: 'rel', role: 'stat',
       notation: 'X ~ t(ν)',
       params: [
-        /* The floor of 3 keeps the variance ν/(ν − 2) finite and keeps under
-           1% of the mass outside the fixed axis; ν = 1 (the Cauchy, with no
-           mean) and ν = 2 (infinite variance) are named in the prose below
-           instead of being reachable by the knob. */
+        /* The floor of 3 keeps the variance ν/(ν − 2) finite and keeps the
+           mass outside the fixed axis under 3%, which is what lets that axis
+           stop at 4 rather than 6: the shape's whole answer to ν lives inside
+           2 and a half, and a wider frame shrank it to the point where low and
+           high ν drew nearly the same curve. ν = 1 (the Cauchy, with no mean)
+           and ν = 2 (infinite variance) are named in the prose below instead
+           of being reachable by the knob. */
         { key: 'nu', sym: 'ν', label: 'Degrees of freedom, ν', min: 3, max: 30, step: 1, def: 5, int: true }
       ],
       clamp: clamp, support: support, pdf: pdf, cdf: cdf, quantile: quantile,
@@ -1316,8 +1319,8 @@ DG.dists = [];
         { label: 'ν = 5', p: { nu: 5 } },
         { label: 'ν = 30', p: { nu: 30 } }
       ],
-      axis: { x0: -6, x1: 6, y1: 0.42, xt: 2 },
-      gen: { kind: 'numeric', bins: dgLinBins(-6, 6, 40) }
+      axis: { x0: -4, x1: 4, y1: 0.42, xt: 1 },
+      gen: { kind: 'numeric', bins: dgLinBins(-4, 4, 32) }
     });
   })();
 
@@ -2058,7 +2061,7 @@ function buildTab(d) {
     + (d.type === 'c' ? '' : ' A pmf places its mass on the integers alone, and so it is drawn as stems rather than as a curve or as bars.')
     + '</div></div>';
   html += '<div class="plot"><svg class="dg" id="cdf-' + d.id + '" role="img" aria-label="cdf of the ' + d.name + ' distribution"></svg>'
-    + '<div class="plot-cap">cdf F(' + xSym + ').</div></div>';
+    + '<div class="plot-cap">cdf F(' + xSym + '): solid teal, the current parameters.</div></div>';
   html += '</div>';
   html += legendHtml(d);
   html += '<div class="chips-row">';
@@ -2363,7 +2366,7 @@ var DG_THUMB = {
   dunif: { x0: 0.5, x1: 6.5, settings: [{ a: 1, b: 6 }] },
   chisq: { x0: 0, x1: 25, settings: [{ k: 1 }, { k: 4 }, { k: 10 }] },
   fdist: { x0: 0, x1: 5, settings: [{ d1: 5, d2: 10 }] },
-  tdist: { x0: -5, x1: 5, settings: [{ nu: 3 }] }
+  tdist: { x0: -4, x1: 4, settings: [{ nu: 3 }] }
 };
 /* Thumbnail at gallery-tile size, with no axes or labels, drawn from the
    distribution's own DG_THUMB entry rather than its tab's refs and axis.
