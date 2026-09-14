@@ -210,7 +210,7 @@ section('RNG');
 section('Registry shape');
 {
   const ids = DG.dists.map(d => d.id);
-  ok(ids.join(',') === 'unif,tri,norm,expo,erlang,weib,bern,binom,geom,nbinom,pois,gamma,chisq,fdist,beta,lnorm,rayl,dunif', 'eighteen distributions in tab order');
+  ok(ids.join(',') === 'unif,tri,norm,expo,erlang,weib,bern,binom,geom,nbinom,pois,gamma,chisq,fdist,tdist,beta,lnorm,rayl,dunif', 'nineteen distributions in tab order');
   for (const d of DG.dists) {
     ok(d.refs.length === 3 && d.params.length >= 1 && ['closed', 'search', 'numeric'].includes(d.gen.kind), `${d.id}: three refs, params, and a generator kind`);
     /* Three edges is the true floor, not an arbitrary one: the Bernoulli has
@@ -481,14 +481,19 @@ section('Chi-square and F identities');
   }
 
   /* F(1, d2)'s cdf also equals 2*T(sqrt(x)) - 1 for a Student t variate T
-     with d2 degrees of freedom, but checking that would mean adding a t cdf
-     to the core purely to verify a distribution the widget does not carry;
-     the KS check above already exercises F(1, d2) against its own
-     definition, so that identity is left unchecked here. */
+     with d2 degrees of freedom, because T^2 ~ F(1, d2): P(T^2 <= x) is the
+     probability T falls in [-sqrt(x), sqrt(x)], which by T's own symmetry
+     is 2*F_T(sqrt(x)) - 1. */
+  const tdist = DG.byId.tdist;
+  for (const d2 of [3, 5, 10, 30]) {
+    for (const x of [0.1, 1, 3, 8]) {
+      close(fdist.cdf(x, { d1: 1, d2 }), 2 * tdist.cdf(Math.sqrt(x), { nu: d2 }) - 1, 1e-9, `F(1, ${d2}) cdf(${x}) = 2*T(sqrt(${x}), nu=${d2}) - 1`);
+    }
+  }
 }
 
 section('Constructions match the direct samplers');
-/* DG.construct builds nine distributions out of nothing but uniform draws,
+/* DG.construct builds ten distributions out of nothing but uniform draws,
    independently of the quantile-based sampler each Dist object carries. A
    two-sample Kolmogorov–Smirnov test compares the whole distribution the
    construction produces against the whole distribution the direct sampler
@@ -505,6 +510,7 @@ section('Constructions match the direct samplers');
     ['beta', { alpha: 2, beta: 5 }, r => C.betaOrder(r, { alpha: 2, beta: 5 }).x],
     ['chisq', { k: 5 }, r => C.chisq(r, { k: 5 }).x],
     ['fdist', { d1: 5, d2: 10 }, r => C.fdist(r, { d1: 5, d2: 10 }).x],
+    ['tdist', { nu: 5 }, r => C.tdist(r, { nu: 5 }).x],
     ['lnorm', { mu: 0, sigma: 0.5 }, r => C.lnorm(r, { mu: 0, sigma: 0.5 }).x],
   ]) {
     const d = DG.byId[id], xs = [], ys = [];
@@ -522,6 +528,9 @@ section('Constructions match the direct samplers');
   close(cs.run[cs.run.length - 1], cs.x, 1e-12, 'Chi-square construction: the running total ends at the draw');
   const fs = C.fdist(DG.mulberry32(17), { d1: 4, d2: 8 });
   close(fs.x, fs.r1 / fs.r2, 1e-12, 'F construction: the ratio of the two scaled chi-squares is the draw');
+  const td = C.tdist(DG.mulberry32(21), { nu: 5 });
+  close(td.x, td.z / Math.sqrt(td.v / 5), 1e-12, 'Student t construction: x = z / sqrt(v/nu)');
+  close(DG.byId.tdist.variance({ nu: 5 }), 5 / 3, 1e-12, 'tdist variance at nu=5 is 5/3');
   const ln = C.lnorm(DG.mulberry32(19), { mu: 0.2, sigma: 0.6 });
   close(Math.log(ln.x), ln.y, 1e-12, 'Log-normal construction: y = ln(x)');
 
@@ -533,6 +542,16 @@ section('Constructions match the direct samplers');
     for (let i = 0; i < n2; i++) { xs2.push(C.lnorm(rand2, p2).x); ys2.push(DG.byId.lnorm.sample(rand2, p2)); }
     const D2 = ks2(xs2, ys2), crit2 = 1.628 * Math.sqrt(2 / n2);
     ok(D2 < crit2, `lnorm: construction vs direct sampler at mu=-1, sigma=1, two-sample KS D = ${D2.toFixed(4)} < ${crit2.toFixed(4)}`);
+  }
+
+  /* A second degrees-of-freedom setting for the t, away from the nu=5
+     tested in the loop above. */
+  {
+    const p3 = { nu: 12 }, rand3 = DG.mulberry32(29), n3 = 4000;
+    const xs3 = [], ys3 = [];
+    for (let i = 0; i < n3; i++) { xs3.push(C.tdist(rand3, p3).x); ys3.push(DG.byId.tdist.sample(rand3, p3)); }
+    const D3 = ks2(xs3, ys3), crit3 = 1.628 * Math.sqrt(2 / n3);
+    ok(D3 < crit3, `tdist: construction vs direct sampler at nu=12, two-sample KS D = ${D3.toFixed(4)} < ${crit3.toFixed(4)}`);
   }
 }
 

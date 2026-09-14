@@ -697,14 +697,18 @@ better.
      shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
      4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.)*
-- `input_modeling/prob_models.html` *(a gallery of eighteen input-modeling distributions, one per
+- `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
   inverse-transform generator; nine tabs add a second panel constructing the same draw from simpler
-  pieces (a sum of exponentials for Erlang, a sum of squared normals for chi-square, a ratio of
-  scaled chi-squares for F, the Box–Muller spinner for the normal, two normals arriving from the
-  plane's edges for the Rayleigh, e raised to a normal for the log-normal, and so on). Every panel's
-  draw summary is a table of the mean and sd with 95% intervals beside the distribution's own,
+  pieces (a sum of exponentials for Erlang, the Box–Muller spinner for the normal, two normals
+  arriving from the plane's edges for the Rayleigh, a transfer map from a standard normal to its
+  square for chi-square and from a normal to its exponential for the log-normal, and, for Student's
+  t, two independent inputs – a standard normal and a chi-square – meeting at a point on that same
+  transfer-map layout rather than one deriving the other, and so on). Chi-square, F, and t are not
+  chosen as input models and share the "Common use in statistical applications" heading in place of
+  the other tabs' "Common use in stochastic models". Every panel's draw summary is a table of the
+  mean and sd with 95% intervals beside the distribution's own,
   plus a goodness-of-fit test against the distribution at its known parameters (Kolmogorov–Smirnov
   for a continuous tab, chi-square for a discrete one). Green marks a draw's input and orange its
   output wherever the two are drawn apart. Navigation is a pill picker standing above every page in two
