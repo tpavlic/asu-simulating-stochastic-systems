@@ -582,7 +582,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
   </div>
   <nav class="dist-picker sec" aria-label="Distributions">
     <div class="picker-row-map">
-      <button class="tab pill pill-map active" data-tab="map" onclick="showTab('map',this)">Map</button>
+      <a class="tab pill pill-map active" data-tab="map" href="#map" onclick="showTab('map',this);return false;">Map</a>
     </div>
     <p class="picker-key">A pill's left edge marks continuous (blue-gray) or discrete (clay brown), the colors repeated on the Map's tiles.</p>
     <div id="picker-groups"></div>
@@ -1664,7 +1664,26 @@ DG.gof.chisq = function (xs, d, p) {
 </script>
 <script>
 const $ = id => document.getElementById(id);
-function showTab(name, btn) {
+/* Keeps the URL's fragment in step with the visible tab, so a reader can
+   right-click any internal link (or just copy the address bar) to get a
+   link straight back to this tab. Replaces rather than pushes a history
+   entry, and so switching tabs never fills the back button with every tab
+   visited along the way -- the point is a link that can be shared or
+   bookmarked, not browser-history navigation between tabs. A direct visit
+   with no fragment is left untouched until the reader switches tabs, and
+   only then does the address bar pick one up. */
+function dgSetTabHash(name) {
+  if (!window.history || !history.replaceState) return;
+  var hash = '#' + name;
+  if (location.hash === hash) return;
+  try { history.replaceState(history.state, '', hash); } catch (e) {}
+}
+/* The DOM side of switching tabs -- which section and nav controls read as
+   active, and the URL fragment -- split from the render below it so the
+   boot sequence can activate the tab a shared link named without rendering
+   it twice: redrawActive() (further down) renders whichever tab ends up
+   active exactly once, after this has picked it. */
+function dgActivateTab(name, btn) {
   document.querySelectorAll('.tp').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   $('tab-' + name).classList.add('active');
@@ -1672,12 +1691,30 @@ function showTab(name, btn) {
   if (tabBtn) tabBtn.classList.add('active');
   const tabSel = $('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  dgSetTabHash(name);
+}
+function showTab(name, btn) {
+  dgActivateTab(name, btn);
   // A plot lays itself out from its container, which is zero-width while its
   // tab is hidden, and so the tab is re-rendered on the way in.
   if (window.DGUI) DGUI.onTabShown(name);
 }
 function showTabFromSelect(sel) { showTab(sel.value, null); }
 function jumpTo(name) { showTab(name, null); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+/* Every internal tab link is a real anchor with an href to its tab's own
+   hash (so right-click offers Copy Link even though a click is handled in
+   JS below); this is the one place that decides whether a hash names a
+   real tab, shared by the boot-time read and by a hashchange the widget did
+   not cause itself (a hand-typed address, a pasted link opened while the
+   page is already sitting open). Elements are checked directly rather than
+   through DG.byId, because the Map tab has no distribution behind it. */
+function dgValidTab(name) { return !!(name && ($('tab-' + name) || name === 'map')); }
+window.addEventListener('hashchange', function () {
+  var name = location.hash.slice(1);
+  if (!dgValidTab(name)) return;
+  var active = document.querySelector('.tp.active');
+  if (!active || active.id !== 'tab-' + name) jumpTo(name);
+});
 function stepDecimals(step) { const s = String(step); const i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; }
 function spinStep(id, dir) {
   const el = $(id);
@@ -2485,8 +2522,8 @@ var DG_PICKER_GROUPS = [
 ];
 function pillHtml(d) {
   var t = DG_TEXT[d.id];
-  return '<button class="tab pill" data-tab="' + d.id + '" data-type="' + d.type + '" onclick="showTab(\'' + d.id + '\',this)">' + d.name
-    + '<span class="pill-supp">' + t.support + '</span></button>';
+  return '<a class="tab pill" data-tab="' + d.id + '" data-type="' + d.type + '" href="#' + d.id + '" onclick="showTab(\'' + d.id + '\',this);return false;">' + d.name
+    + '<span class="pill-supp">' + t.support + '</span></a>';
 }
 function buildPickerGroups() {
   var el = $('picker-groups');
@@ -2504,7 +2541,7 @@ function buildPickerGroups() {
    the Map's tiles too. */
 function mapTileHtml(d) {
   var t = DG_TEXT[d.id];
-  return '<button class="tile" data-type="' + d.type + '" onclick="jumpTo(\'' + d.id + '\')">' + renderThumb(d, 86, 52)
+  return '<a class="tile" data-type="' + d.type + '" href="#' + d.id + '" onclick="jumpTo(\'' + d.id + '\');return false;">' + renderThumb(d, 86, 52)
     + '<span class="t-name">' + d.name + '</span>'
     + '<span class="t-body"><span class="t-note">' + d.notation + '</span>'
     + '<span class="t-supp">' + t.support + '</span>'
@@ -2647,7 +2684,7 @@ function dgEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'
 /* One "%s" template filled with a jump-link button, for DG_EXTRA_RELATED. */
 function dgFact(targetId, template) {
   var target = DG.byId[targetId];
-  var jb = '<button class="jump" onclick="jumpTo(\'' + targetId + '\')">' + target.name + '</button>';
+  var jb = '<a class="jump" href="#' + targetId + '" onclick="jumpTo(\'' + targetId + '\');return false;">' + target.name + '</a>';
   return template.replace('%s', jb);
 }
 function dgFactsHtml(tabId) {
@@ -2666,7 +2703,7 @@ function dgFamilyNoteHtml(family) {
    target is not foreign at all – it is the box already sitting at the top
    of this very diagram. */
 function dgFamilyJumpButton(id) {
-  return '<button class="jump" onclick="jumpTo(\'' + id + '\')">' + DG.byId[id].name + '</button>';
+  return '<a class="jump" href="#' + id + '" onclick="jumpTo(\'' + id + '\');return false;">' + DG.byId[id].name + '</a>';
 }
 /* Every mention of another distribution on this page inside a choose card
    becomes a jump to its tab. Longer names go first so "negative binomial"
@@ -2693,7 +2730,7 @@ function dgLinkNames(html, selfId) {
     var before = entry[3] ? '(?<=\\b(?:a|an|the|of|by) )' : '(?<![\\w₁₂-])';
     var re = new RegExp(before + '(' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:s\\b)?)(?![\\w-]|\\s+(?:decay|test|tests|table|plot)\\b)', 'g' + entry[2]);
     html = html.replace(re, function (m) {
-      held.push('<button class="jump" onclick="jumpTo(\'' + id + '\')">' + m + '</button>');
+      held.push('<a class="jump" href="#' + id + '" onclick="jumpTo(\'' + id + '\');return false;">' + m + '</a>');
       return '\u0001' + (held.length - 1) + '\u0001';
     });
   });
@@ -2801,12 +2838,17 @@ function dgFamilyPositions(tree, layout, dim) {
 function dgFamilyNodeHtml(id, pos, dim, highlightId) {
   var d = DG.byId[id], hw = dim.nodeW / 2, hh = dim.nodeH / 2;
   var isCurrent = id === highlightId;
+  // The current node is a "you are here" marker, not a link, and stays a
+  // plain <g>; every other node is a real SVG <a> with an href to its own
+  // tab, the way the footer's copyright link wraps a <text> in one, so a
+  // right-click on a family-diagram node offers Copy Link too.
+  var tag = isCurrent ? 'g' : 'a';
   var attrs = isCurrent
     ? ' aria-current="page"'
-    : ' role="link" tabindex="0" aria-label="Go to the ' + d.name + ' tab" onclick="jumpTo(\'' + id + '\')" onkeydown="if(event.key===\'Enter\'){jumpTo(\'' + id + '\');}"';
-  return '<g class="famnode' + (isCurrent ? ' current' : '') + '"' + attrs + '>'
+    : ' href="#' + id + '" role="link" tabindex="0" aria-label="Go to the ' + d.name + ' tab" onclick="jumpTo(\'' + id + '\');return false;" onkeydown="if(event.key===\'Enter\'){jumpTo(\'' + id + '\');}"';
+  return '<' + tag + ' class="famnode' + (isCurrent ? ' current' : '') + '"' + attrs + '>'
     + '<rect x="' + (pos.x - hw) + '" y="' + (pos.y - hh) + '" width="' + dim.nodeW + '" height="' + dim.nodeH + '" rx="6"/>'
-    + '<text x="' + pos.x + '" y="' + pos.y + '" text-anchor="middle" dominant-baseline="middle" font-size="' + dim.font + '">' + dgEsc(d.name) + '</text></g>';
+    + '<text x="' + pos.x + '" y="' + pos.y + '" text-anchor="middle" dominant-baseline="middle" font-size="' + dim.font + '">' + dgEsc(d.name) + '</text></' + tag + '>';
 }
 /* A label's home position is the midpoint of its own edge, nudged off the
    line by dim.labelOffset in the direction perpendicular to it – never
@@ -3458,7 +3500,7 @@ function genPanelBodyHtml(d) {
    reset controls, the running message, and the histogram against the true
    pdf or pmf are built once and shared by all eight. */
 var DG_CON_LEDE = {
-  erlang: 'Instead of using a numerical search to do inverse-transform sampling, Erlang random variates can be generated by summing <button class="jump" onclick="jumpTo(\'expo\')">exponentials</button> (which themselves have an analytical generator that requires no search). The process draws k exponentials, each by transforming a <button class="jump" onclick="jumpTo(\'unif\')">uniform</button> through the exponential\'s own generator −ln(U)/λ, and the k exponentials laid end to end sum to one Erlang draw. A sum of logarithms is the logarithm of the product, which is why the generator written above the histogram is shown with only one logarithm.',
+  erlang: 'Instead of using a numerical search to do inverse-transform sampling, Erlang random variates can be generated by summing <a class="jump" href="#expo" onclick="jumpTo(\'expo\');return false;">exponentials</a> (which themselves have an analytical generator that requires no search). The process draws k exponentials, each by transforming a <a class="jump" href="#unif" onclick="jumpTo(\'unif\');return false;">uniform</a> through the exponential\'s own generator −ln(U)/λ, and the k exponentials laid end to end sum to one Erlang draw. A sum of logarithms is the logarithm of the product, which is why the generator written above the histogram is shown with only one logarithm.',
   binom: 'n coin flips; the count of heads is one binomial draw.',
   nbinom: 'Flip until the r-th head; the number of flips is one negative binomial draw. With r = 1 this is the geometric.',
   norm: 'The squared radius of two independent normals is exponentially distributed, and so a radius drawn from that exponential, paired with a uniform angle, lands a point whose two coordinates are independent normals.',
@@ -3649,7 +3691,7 @@ var DG_STAT_CARD = {
         desc: 'Dividing the numerator and the denominator by σ/√n changes nothing and splits the statistic into two pieces: a standardized mean, which is a standard normal, over the sample standard deviation measured against the true one.',
         sym: 't = ((<span class="bar">X</span> − μ)/(σ/√n)) / (S/σ) = Z / (S/σ), ' + dgTxt('with') + ' Z ~ N(0, 1)' },
       { title: 'The denominator is a scaled chi-square',
-        desc: 'The sum of the squared standardized deviations from the sample mean is a <button class="jump" onclick="jumpTo(\'chisq\')">chi-square</button> with n − 1 degrees of freedom, one fewer than n because the deviations sum to zero. Writing V for that chi-square and ν = n − 1, the denominator is √(V/ν).',
+        desc: 'The sum of the squared standardized deviations from the sample mean is a <a class="jump" href="#chisq" onclick="jumpTo(\'chisq\');return false;">chi-square</a> with n − 1 degrees of freedom, one fewer than n because the deviations sum to zero. Writing V for that chi-square and ν = n − 1, the denominator is √(V/ν).',
         sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> = ' + dgSigma('i = 1', 'n') + ' ((X<sub>i</sub> − <span class="bar">X</span>)/σ)<sup>2</sup> = V ~ χ<sup>2</sup><sub>n−1</sub>, ' + dgTxt('and so') + ' S/σ = √(V/ν)' },
       { title: 'The two pieces are independent',
         desc: 'For a normal population, the sample mean and the sample standard deviation are independent, a fact particular to the normal that is stated here rather than derived. Z and V can therefore be drawn separately, which is exactly how the panel further down builds a t.',
@@ -3672,7 +3714,7 @@ var DG_STAT_CARD = {
         desc: 'The F statistic tests whether two populations differ in spread, and so it is built on the hypothesis that they do not: two independent samples, of sizes n<sub>1</sub> and n<sub>2</sub>, from normal populations that share one standard deviation σ. Each sample gives a sample variance, and the statistic is their ratio, near 1 when the two spreads agree and far from it when they do not.',
         sym: 'F = S<sub>1</sub><sup>2</sup> / S<sub>2</sub><sup>2</sup>' },
       { title: 'Each variance is a scaled chi-square',
-        desc: 'Scaled by the common σ<sup>2</sup>, each sample variance is a <button class="jump" onclick="jumpTo(\'chisq\')">chi-square</button> divided by its own degrees of freedom, d<sub>1</sub> = n<sub>1</sub> − 1 for the first sample and d<sub>2</sub> = n<sub>2</sub> − 1 for the second; this is the same fact the <button class="jump" onclick="jumpTo(\'tdist\')">t statistic</button> rests on. Call those two chi-squares V<sub>1</sub> and V<sub>2</sub>. The ratio of the variances is then a ratio of scaled chi-squares, and the σ<sup>2</sup> cancels in it, which is why the F needs no σ at all.',
+        desc: 'Scaled by the common σ<sup>2</sup>, each sample variance is a <a class="jump" href="#chisq" onclick="jumpTo(\'chisq\');return false;">chi-square</a> divided by its own degrees of freedom, d<sub>1</sub> = n<sub>1</sub> − 1 for the first sample and d<sub>2</sub> = n<sub>2</sub> − 1 for the second; this is the same fact the <a class="jump" href="#tdist" onclick="jumpTo(\'tdist\');return false;">t statistic</a> rests on. Call those two chi-squares V<sub>1</sub> and V<sub>2</sub>. The ratio of the variances is then a ratio of scaled chi-squares, and the σ<sup>2</sup> cancels in it, which is why the F needs no σ at all.',
         sym: 'S<sub>1</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>1</sub>/d<sub>1</sub> ' + dgTxt('and') + ' S<sub>2</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>2</sub>/d<sub>2</sub>, ' + dgTxt('and so') + ' F = (V<sub>1</sub>/d<sub>1</sub>) / (V<sub>2</sub>/d<sub>2</sub>), ' + dgTxt('with') + ' d<sub>1</sub> = n<sub>1</sub> − 1 ' + dgTxt('and') + ' d<sub>2</sub> = n<sub>2</sub> − 1' },
       { title: 'Analysis of variance is the same ratio',
         desc: 'In an analysis of variance, the numerator is the variance among the group means and the denominator the variance within the groups; under the null hypothesis, both estimate the same σ<sup>2</sup>, and their ratio is an F with the groups\' degrees of freedom on top and the residual degrees of freedom below.',
@@ -6454,6 +6496,11 @@ DGUI.onTabShown = function (name) {
     updateLegendLive(d, p);
     updateLegendRefsVisibility(d);
   });
+  // A page opened on a shared link lands on the tab the link names, in
+  // place -- no animated scroll, and rendered exactly once by
+  // redrawActive() below rather than a second time here.
+  var startHash = location.hash.slice(1);
+  if (dgValidTab(startHash) && startHash !== 'map') dgActivateTab(startHash, null);
   var resizeTimer = null;
   function redrawActive() {
     var active = document.querySelector('.tp.active');
