@@ -961,7 +961,7 @@ DG.dists = [];
       id: 'erlang', name: 'Erlang', type: 'c', group: 'cont', role: 'time',
       notation: 'X ~ Erlang(k, λ)',
       params: [
-        { key: 'k', sym: 'k', label: 'Stages, k', min: 1, max: 5, step: 1, def: 2, int: true },
+        { key: 'k', sym: 'k', label: 'Shape, k', min: 1, max: 5, step: 1, def: 2, int: true },
         { key: 'lam', sym: 'λ', label: 'Rate, λ', min: 0.8, max: 5, step: 0.1, def: 1, int: false }
       ],
       clamp: clamp, support: support, pdf: pdf, cdf: cdf, quantile: quantile,
@@ -1819,8 +1819,8 @@ var DG_TEXT = {
     variance: "<span class=\"frac\"><span class=\"num\">k</span><span class=\"den\">λ<sup>2</sup></span></span>",
     mode: "<span class=\"frac\"><span class=\"num\">k − 1</span><span class=\"den\">λ</span></span>",
     when: "the sum of k exponentials",
-    lede: "The Erlang is the wait for k independent exponentials to finish in a row; it is sometimes written Erlang-k, with k pulled up into the name.",
-    choose: ["Choose it for <strong>a time that is the sum of k independent exponentials of the same rate</strong>: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", { hd: "Relationship to other distributions", text: "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, and so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal." }]
+    lede: "The Erlang is the wait for k independent <a class=\"jump\" href=\"#expo\" onclick=\"jumpTo('expo');return false;\">exponentials</a> to finish in a row; it is sometimes written Erlang-k, with k pulled up into the name.",
+    choose: ["Choose it for <strong>a time that is the sum of k independent exponentials of the same rate</strong>: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", { hd: "Relationship to other distributions", text: "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, and so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal (consistent with predictions about sums of independent variables from the <a href=\"https://en.wikipedia.org/wiki/Central_limit_theorem\" target=\"_blank\" rel=\"noopener\">central limit theorem</a>)." }]
   },
   weib: {
     support: "[0, ∞)",
@@ -3268,12 +3268,21 @@ function dgCasesHtml(lhs, rows) {
    is rendered as the two-column .eq-align grid described above it, and so a
    wrap lines every chunk's own "=" up under the first one. */
 function dgEqLineHtml(line) {
-  var idxs = [], inTag = false;
+  // A "=" inside a <sub>/<sup> is part of a compound subscript label (a
+  // sum's "i=0" under a sigma), not a top-level equality -- counting it
+  // would cut the chain right through the subscript, stranding "i" on one
+  // side of an align row and "=0" on the other. subSup tracks nesting
+  // depth rather than a flag, since a <sup> can sit inside a <sub> label.
+  var idxs = [], inTag = false, subSup = 0;
   for (var i = 0; i < line.length; i++) {
     var c = line.charAt(i);
-    if (c === '<') inTag = true;
+    if (c === '<') {
+      inTag = true;
+      if (line.startsWith('<sub>', i) || line.startsWith('<sup>', i)) subSup++;
+      else if (line.startsWith('</sub>', i) || line.startsWith('</sup>', i)) subSup--;
+    }
     else if (c === '>') inTag = false;
-    else if (c === '=' && !inTag) idxs.push(i);
+    else if (c === '=' && !inTag && subSup === 0) idxs.push(i);
   }
   if (idxs.length < 2) return line;
   var lhs = line.slice(0, idxs[0]).replace(/\s+$/, '');
