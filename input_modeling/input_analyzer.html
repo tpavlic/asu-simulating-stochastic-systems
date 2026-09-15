@@ -434,8 +434,8 @@ footer a:hover { text-decoration: underline; }
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="fit" type="button">① Fit a Distribution</button>
-    <button class="tab" data-tab="arr" type="button">② Arrival Process</button>
+    <a class="tab active" href="#fit" data-tab="fit">① Fit a Distribution</a>
+    <a class="tab" href="#arr" data-tab="arr">② Arrival Process</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="fit">① Fit a Distribution</option>
@@ -7774,7 +7774,16 @@ function showTab(name) {
   for (var j = 0; j < tabs.length; j++)
     tabs[j].classList.toggle('active', tabs[j].getAttribute('data-tab') === name);
   $('tab-select').value = name;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
 }
+function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', function () {
+  var name = location.hash.slice(1);
+  if (name && validTab(name)) showTab(name);
+});
 
 document.addEventListener('DOMContentLoaded', function () {
   initGenerator();
@@ -7782,7 +7791,7 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ── Tabs ─────────────────────────────────────────────────────── */
   var tabs = document.querySelectorAll('.tab');
   for (var i = 0; i < tabs.length; i++) {
-    tabs[i].addEventListener('click', function () { showTab(this.getAttribute('data-tab')); });
+    tabs[i].addEventListener('click', function (e) { e.preventDefault(); showTab(this.getAttribute('data-tab')); });
   }
   $('tab-select').addEventListener('change', function () { showTab(this.value); });
 
@@ -7957,6 +7966,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var a0 = ARRIVAL_SAMPLES.rush;
   AST.unit = a0.unit;
   A_LOADER.loadText(a0.v.join('\n'), a0.name, 'built-in sample "' + a0.name + '"');
+
+  /* An incoming #id link opens straight to that tab instead of the default. */
+  var startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'fit' && validTab(startHash)) showTab(startHash);
 });
 </script>
 

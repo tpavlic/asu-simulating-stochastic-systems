@@ -258,10 +258,10 @@ footer a:hover { text-decoration: underline; }
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
   <nav class="tabs">
-    <button class="tab active" data-tab="pi" onclick="showTab('pi',this)">① Est. π: Dartboard</button>
-    <button class="tab" data-tab="bn" onclick="showTab('bn',this)">② Est. π: Buffon’s Needle</button>
-    <button class="tab" data-tab="ra" onclick="showTab('ra',this)">③ Est. Area by Robot</button>
-    <button class="tab" data-tab="mc" onclick="showTab('mc',this)">④ MC Integration</button>
+    <a class="tab active" href="#pi" data-tab="pi" onclick="showTab('pi',this);return false;">① Est. π: Dartboard</a>
+    <a class="tab" href="#bn" data-tab="bn" onclick="showTab('bn',this);return false;">② Est. π: Buffon’s Needle</a>
+    <a class="tab" href="#ra" data-tab="ra" onclick="showTab('ra',this);return false;">③ Est. Area by Robot</a>
+    <a class="tab" href="#mc" data-tab="mc" onclick="showTab('mc',this);return false;">④ MC Integration</a>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTabFromSelect(this)">
     <option value="pi">① Est. π: Dartboard</option>
@@ -787,6 +787,9 @@ function showTab(name, btn) {
   // shrinking the window below 345px does not reveal the wrong option.
   const tabSel = document.getElementById('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   // A history chart lays itself out from its container, which is zero-width while
   // its tab is hidden, so re-render on the way in.
   renderActiveHist();
@@ -838,6 +841,12 @@ function showTab(name, btn) {
 }
 
 function showTabFromSelect(sel){ showTab(sel.value, null); }
+function validTab(name){ return !!document.querySelector('.tab[data-tab="'+name+'"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', () => {
+  const name = location.hash.slice(1);
+  if (name && validTab(name)) showTab(name, null);
+});
 
 // Redraw whichever history chart is on screen. The SVG scales with its viewBox, so
 // without this a resized window stretches the old layout instead of re-fitting it.
@@ -2065,6 +2074,10 @@ window.addEventListener('load',()=>{
   // Draw blank history chart for Tab ① immediately (blank axes on init)
   renderPiHist();
   watchHistWidth();
+
+  // An incoming #id link opens straight to that tab instead of the default.
+  const startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'pi' && validTab(startHash)) showTab(startHash, null);
 });
 </script>
 <footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">

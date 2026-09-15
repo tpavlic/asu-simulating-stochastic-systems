@@ -149,6 +149,47 @@ One underline behavior per page: no resting underline, underline on hover. Color
 `var(--accent)` so color marks them as links rather than a permanent underline. Apply this to the
 copyright and license links too, so every link on the page behaves the same way.
 
+## Tabs and deep links
+
+Every tab is externally linkable. A reader should be able to right-click a tab and copy a link
+straight to it, and a link ending in `#id` should open on that tab rather than the default one.
+
+- **A tab control is an `<a href="#id">`, never a `<button>`.** The click handler still does the
+  work (`onclick="showTab('id',this);return false;"`, or `e.preventDefault()` first when the tab is
+  wired through `addEventListener` instead of an inline `onclick`), but the anchor is what makes
+  "Copy Link" show up on right-click. This includes the pill/tile pickers some widgets use in place
+  of a plain tab row, and any hand-written prose link that jumps to another tab. It does not extend
+  to the narrow-screen `<select id="tab-select">` fallback, which stays a `<select>` and drives the
+  same handler through its `change` event. No CSS change is needed for the conversion: `.tab`
+  already carries its own border, background, and cursor, and the nav row is a flex container, so a
+  flex item is block-boxed the same way regardless of whether the tag is `<a>` or `<button>`.
+- **The tab-switching function sets the hash itself, with `history.replaceState`, never
+  `pushState`.** Switching tabs should update the address bar so the current tab is always what a
+  copied link points to, but it must never grow the back/forward history — a reader tapping through
+  eight tabs should not have to fight the back button eight times to leave the page.
+  `if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);` inside the
+  function that activates a tab is enough; nothing upstream needs to change, because every path that
+  switches tabs (a click, the `<select>`, a `hashchange`, the boot-time read) already funnels through it.
+- **A `validTab(name)` guard checks the hash against the real tab set before acting on it**, so a
+  stray or stale fragment never breaks the page. Building the selector as
+  `'.tab[data-tab="' + name + '"]'` and testing it with `document.querySelector` is enough, since it
+  reads the same markup the tab row already carries rather than a second list that could drift out
+  of step.
+- **A `hashchange` listener re-activates a tab when the hash changes from outside the page** (an
+  external link opened while the page is already loaded, or a back/forward step across one), by
+  calling the same tab-switching function the click handlers use.
+- **At boot, read the hash once and switch to that tab if it names one other than the default.**
+  Let the page's own startup sequence finish priming its default tab first, and only then check
+  `location.hash`, so a widget whose default tab does lazy setup work inside its tab-switching
+  function (a canvas sized on first visit, an animation started or stopped) still gets that setup
+  when the incoming link points elsewhere. One boot-time call to the existing tab-switching function
+  covers it; no separate render path is needed.
+
+The worked version is `input_modeling/prob_models.html`; the same pattern, adapted to each widget's
+own tab-switching function, is also in `monte_carlo/mc_explorer.html`, `monte_carlo/mc_examples.html`,
+`prng/prng_explorer.html`, `input_modeling/input_analyzer.html`, `power_analysis/power_explorer.html`,
+and `output_analysis/ci_explorer.html`.
+
 ## Contrast reference
 
 | Color | On white | Use for |

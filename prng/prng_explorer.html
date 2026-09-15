@@ -332,15 +332,15 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
   </div>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="gen" onclick="showTab('gen',this)">① The LCG</button>
-    <button class="tab" data-tab="clcg" onclick="showTab('clcg',this)">② Combining LCGs</button>
-    <button class="tab" data-tab="mrg" onclick="showTab('mrg',this)">③ MRG &amp; MRG32k3a</button>
+    <a class="tab active" href="#gen" data-tab="gen" onclick="showTab('gen',this);return false;">① The LCG</a>
+    <a class="tab" href="#clcg" data-tab="clcg" onclick="showTab('clcg',this);return false;">② Combining LCGs</a>
+    <a class="tab" href="#mrg" data-tab="mrg" onclick="showTab('mrg',this);return false;">③ MRG &amp; MRG32k3a</a>
     <div class="tab-group">
       <span class="tab-group-lbl" aria-hidden="true">Watermarking randomness: from numbers to text</span>
-      <button class="tab" data-tab="wm" onclick="showTab('wm',this)">④ Parameter Marks</button>
-      <button class="tab" data-tab="rw" onclick="showTab('rw',this)">⑤ Output Seeding</button>
-      <button class="tab" data-tab="wt" onclick="showTab('wt',this)">⑥ Tournaments</button>
-      <button class="tab" data-tab="tx" onclick="showTab('tx',this)">⑦ Marking Text</button>
+      <a class="tab" href="#wm" data-tab="wm" onclick="showTab('wm',this);return false;">④ Parameter Marks</a>
+      <a class="tab" href="#rw" data-tab="rw" onclick="showTab('rw',this);return false;">⑤ Output Seeding</a>
+      <a class="tab" href="#wt" data-tab="wt" onclick="showTab('wt',this);return false;">⑥ Tournaments</a>
+      <a class="tab" href="#tx" data-tab="tx" onclick="showTab('tx',this);return false;">⑦ Marking Text</a>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
@@ -4565,8 +4565,17 @@ function showTab(name, btn) {
   if (tabBtn) tabBtn.classList.add('active');
   var tabSel = document.getElementById('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   renderActive();
 }
+function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', function () {
+  var name = location.hash.slice(1);
+  if (name && validTab(name)) showTab(name, null);
+});
 function renderActive() {
   var active = document.querySelector('.tp.active').id;
   if (active === 'tab-gen') renderPanels();
@@ -4614,6 +4623,10 @@ function renderActive() {
   });
   Editor('c', CLCG_PRESETS, 'toyc', renderClcgExtras);
   Editor('m', MRG_PRESETS, 'toy2', renderMrgExtras);
+
+  // An incoming #id link opens straight to that tab instead of the default.
+  var startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'gen' && validTab(startHash)) showTab(startHash, null);
 })();
 
 // ── Tooltips ────────────────────────────────────────────

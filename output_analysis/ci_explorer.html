@@ -564,13 +564,13 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
   <nav class="tabs">
-    <button class="tab active" data-tab="ci" onclick="showTab('ci',this)">① Confidence Intervals</button>
+    <a class="tab active" href="#ci" data-tab="ci" onclick="showTab('ci',this);return false;">① Confidence Intervals</a>
     <div class="tab-group">
       <span class="tab-group-lbl" aria-hidden="true">Variance reduction: narrowing the interval</span>
-      <button class="tab" data-tab="crn" onclick="showTab('crn',this)">② Common Random Numbers</button>
-      <button class="tab" data-tab="av" onclick="showTab('av',this)">③ Antithetic Variates</button>
-      <button class="tab" data-tab="cv" onclick="showTab('cv',this)">④ Control Variates</button>
-      <button class="tab" data-tab="is" onclick="showTab('is',this)">⑤ Importance Sampling</button>
+      <a class="tab" href="#crn" data-tab="crn" onclick="showTab('crn',this);return false;">② Common Random Numbers</a>
+      <a class="tab" href="#av" data-tab="av" onclick="showTab('av',this);return false;">③ Antithetic Variates</a>
+      <a class="tab" href="#cv" data-tab="cv" onclick="showTab('cv',this);return false;">④ Control Variates</a>
+      <a class="tab" href="#is" data-tab="is" onclick="showTab('is',this);return false;">⑤ Importance Sampling</a>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
@@ -1616,8 +1616,17 @@ function showTab(name, btn) {
   if (tabBtn) tabBtn.classList.add('active');
   const tabSel = $('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   renderActiveHist();
 }
+function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', () => {
+  const name = location.hash.slice(1);
+  if (name && validTab(name)) showTab(name, null);
+});
 function renderActiveHist() {
   const pane = document.querySelector('.tp.active');
   if (!pane) return;
@@ -6021,6 +6030,10 @@ window.addEventListener('DOMContentLoaded', () => {
   // so they are measured again once the web fonts have arrived.
   reserveAllDf();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { reserveAllDf(); renderActiveHist(); });
+
+  // An incoming #id link opens straight to that tab instead of the default.
+  const startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'ci' && validTab(startHash)) showTab(startHash, null);
 });
 </script>
 <footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">

@@ -487,15 +487,15 @@ input[type=range] { height: 26px; }
   <nav class="tabs">
     <div class="tab-group">
       <span class="tab-group-lbl" aria-hidden="true">Dynamic: state carries over</span>
-      <button class="tab active" data-tab="q" onclick="showTab('q',this)">① Queueing Node</button>
-      <button class="tab" data-tab="inv" onclick="showTab('inv',this)">② Order-Up-To Inventory</button>
-      <button class="tab" data-tab="br" onclick="showTab('br',this)">③ Bearing Replacement</button>
+      <a class="tab active" href="#q" data-tab="q" onclick="showTab('q',this);return false;">① Queueing Node</a>
+      <a class="tab" href="#inv" data-tab="inv" onclick="showTab('inv',this);return false;">② Order-Up-To Inventory</a>
+      <a class="tab" href="#br" data-tab="br" onclick="showTab('br',this);return false;">③ Bearing Replacement</a>
     </div>
     <div class="tab-group">
       <span class="tab-group-lbl" aria-hidden="true">Static: each period starts fresh</span>
-      <button class="tab" data-tab="nv" onclick="showTab('nv',this)">④ Newsvendor</button>
-      <button class="tab" data-tab="dr" onclick="showTab('dr',this)">⑤ Delivery Drops</button>
-      <button class="tab" data-tab="an" onclick="showTab('an',this)">⑥ Activity Network</button>
+      <a class="tab" href="#nv" data-tab="nv" onclick="showTab('nv',this);return false;">④ Newsvendor</a>
+      <a class="tab" href="#dr" data-tab="dr" onclick="showTab('dr',this);return false;">⑤ Delivery Drops</a>
+      <a class="tab" href="#an" data-tab="an" onclick="showTab('an',this);return false;">⑥ Activity Network</a>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTabFromSelect(this)" aria-label="Select tab">
@@ -1660,11 +1660,20 @@ function showTab(name, btn) {
   // Keep the dropdown in sync when the tab was changed from a .tab button.
   const tabSel = document.getElementById('tab-select');
   if (tabSel && tabSel.value !== name) tabSel.value = name;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   // A plot lays itself out from its container, which is zero-width while its tab
   // is hidden, and so the harness re-renders the tab on the way in.
   if (window.MCXUI) MCXUI.onTabShown(name);
 }
 function showTabFromSelect(sel) { showTab(sel.value, null); }
+function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', () => {
+  const name = location.hash.slice(1);
+  if (name && validTab(name)) showTab(name, null);
+});
 </script>
 
 <!-- Harness and structure views. -->
@@ -3468,6 +3477,10 @@ window.addEventListener('load', function () {
     // equations need their own re-measure for the same reason.
     extraReserve: () => { alignQSchemaToInputs(); reserveQWaitEqHeight(); }
   });
+
+  // An incoming #id link opens straight to that tab instead of the default.
+  const startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'q' && validTab(startHash)) showTab(startHash, null);
 });
 </script>
 

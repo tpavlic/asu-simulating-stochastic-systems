@@ -337,11 +337,11 @@ footer a:hover { text-decoration: underline; }
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="explore" type="button">① Explore a Test</button>
-    <button class="tab" data-tab="curves" type="button">② Power Curves</button>
-    <button class="tab" data-tab="oc" type="button">③ OC Chart</button>
-    <button class="tab" data-tab="paired" type="button">④ Pilot &amp; Paired Runs</button>
-    <button class="tab" data-tab="adv" type="button">⑤ Beyond Formulas</button>
+    <a class="tab active" href="#explore" data-tab="explore">① Explore a Test</a>
+    <a class="tab" href="#curves" data-tab="curves">② Power Curves</a>
+    <a class="tab" href="#oc" data-tab="oc">③ OC Chart</a>
+    <a class="tab" href="#paired" data-tab="paired">④ Pilot &amp; Paired Runs</a>
+    <a class="tab" href="#adv" data-tab="adv">⑤ Beyond Formulas</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="explore">① Explore a Test</option>
@@ -4671,8 +4671,17 @@ function showTab(id) {
     s.classList.toggle('active', s.id === 'tab-' + id);
   });
   $('tab-select').value = id;
+  // replaceState, not pushState: switching tabs updates the link a reader could
+  // copy without growing the back/forward history.
+  if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
   renderVisibleTab();
 }
+function validTab(id) { return !!document.querySelector('.tab[data-tab="' + id + '"]'); }
+// An externally opened #id, or a back/forward step across one, lands on that tab.
+window.addEventListener('hashchange', function () {
+  var id = location.hash.slice(1);
+  if (id && validTab(id)) showTab(id);
+});
 var adAutoRan = false;
 function renderVisibleTab() {
   /* Re-measure first: a resize that happened while this tab was hidden
@@ -4845,7 +4854,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('ad-run').addEventListener('click', runLogit);
 
   Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
-    b.addEventListener('click', function () { showTab(b.dataset.tab); });
+    b.addEventListener('click', function (e) { e.preventDefault(); showTab(b.dataset.tab); });
   });
   $('tab-select').addEventListener('change', function () { showTab(this.value); });
 
@@ -4871,6 +4880,10 @@ document.addEventListener('DOMContentLoaded', function () {
   /* Open on something moving rather than a blank page */
   seedOCLookup();
   settingsChanged();
+
+  /* An incoming #id link opens straight to that tab instead of the default. */
+  var startHash = location.hash.slice(1);
+  if (startHash && startHash !== 'explore' && validTab(startHash)) showTab(startHash);
 });
 </script>
 
