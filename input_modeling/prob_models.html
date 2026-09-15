@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Distribution Gallery — interactive explainer</title>
+<title>Distribution Explorer — interactive explainer</title>
 <meta name="description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Distribution Gallery — interactive explainer">
+<meta property="og:title" content="Distribution Explorer — interactive explainer">
 <meta property="og:description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/prob_models-preview.png">
 <meta property="og:image:width" content="2400">
@@ -18,7 +18,7 @@
 
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Distribution Gallery — interactive explainer">
+<meta name="twitter:title" content="Distribution Explorer — interactive explainer">
 <meta name="twitter:description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/prob_models-preview.png">
 
@@ -26,7 +26,7 @@
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-Y66V2TS0R6"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Y66V2TS0R6');</script>
 
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:wght@400;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   /* ── Chrome: course palette (see ../THEME.md) ─────────────────────── */
@@ -80,7 +80,14 @@
   --ref-1: #3B2E6E;  --ref-2: #6B5BA8;  --ref-3: #8C80B8;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
+/* Outfit has no Greek, and every sans face tried, the system fallback and
+   Plex Sans among them, draws ν as a v. Source Serif 4 stands behind Outfit
+   in every sans stack so that a Greek letter in prose takes its glyph from
+   a face whose ν is unmistakably ν, as the serif faces draw it, with a
+   curved left stroke. Google serves it in unicode-range subsets, and so only
+   the Greek one is ever fetched: nothing Latin falls through to it. (Plex
+   Serif would have matched the mono, but Google's build has no Greek.) */
+body { font-family: 'Outfit', 'Source Serif 4', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
        -webkit-text-size-adjust: 100%; }
 .widget { max-width: 1020px; margin: 0 auto; padding: 18px 18px 4px; }
 .wh-copy { text-align:right; font-size:.72rem; color:var(--muted); margin-top:4px; }
@@ -115,7 +122,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 #tipbox { position: fixed; z-index: 60; max-width: 260px; padding: 8px 11px; border-radius: 7px;
-          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
+          background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', 'Source Serif 4', sans-serif;
           box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
           transition: opacity .08s; }
 /* Body links share the footer links' behavior: accent color, underline on hover
@@ -130,7 +137,7 @@ footer a:hover { text-decoration: underline; }
 .cr-br { display: none; }
 @media (max-width: 360px) { .cr-br { display: inline; } .cr-sep { display: none; } }
 .tab-select {
-  display: none; width: 100%; font-family: 'Outfit', sans-serif;
+  display: none; width: 100%; font-family: 'Outfit', 'Source Serif 4', sans-serif;
   font-size: .95rem; font-weight: 700; padding: 8px 14px;
   border: 2px solid var(--accent); border-radius: 7px;
   background: var(--card); color: var(--accent); cursor: pointer;
@@ -177,7 +184,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 }
 .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill {
-  font-family: 'Outfit', sans-serif; font-size: .86rem; font-weight: 500;
+  font-family: 'Outfit', 'Source Serif 4', sans-serif; font-size: .86rem; font-weight: 500;
   min-height: 28px; padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 15px;
   background: transparent; color: var(--text); cursor: pointer; transition: .15s;
 }
@@ -205,6 +212,10 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 .15em; font-size: .92em; line-height: 1.15; }
 .frac > .num { border-bottom: 1px solid currentColor; padding: 0 .2em; }
 .frac > .den { padding: 0 .2em; }
+/* The sample mean's own bar, drawn as a text-decoration rather than the
+   precomposed combining-overline character so it sits over the X at the
+   font's own weight. */
+.bar { text-decoration: overline; }
 /* A definite integral, set with its limits stacked against the glyph rather
    than floating off to the upper right the way a bare <sub>/<sup> pair would
    place them. The glyph is enlarged on its own so the two limits, at their
@@ -247,7 +258,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    line, wildly overstating the height to reserve. */
 .eq { font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; flex: 1 1 auto; min-width: 0; }
 .eq-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 4px 0; }
-.eq-lbl { font-family: 'Outfit', sans-serif; font-weight: 600; color: var(--muted); font-size: .8rem; }
+.eq-lbl { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 600; color: var(--muted); font-size: .8rem; }
 /* An equation with more than one top-level "=" (X = expr = expr): a
    two-column grid, the left-hand side on its own then every "= ..." chunk
    in a wrapping flex row, and so the block reads as one line when it fits and,
@@ -363,7 +374,7 @@ svg.dg { display: block; width: 100%; height: auto; }
 svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 .famnode:not(.current) { cursor: pointer; }
 .famnode rect { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
-.famnode text { font-family: 'Outfit', sans-serif; font-weight: 600; fill: var(--accent); }
+.famnode text { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 600; fill: var(--accent); }
 .famnode:not(.current):hover rect { stroke: var(--accent); }
 .famnode:not(.current):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .famnode:not(.current):focus-visible rect { stroke: var(--accent); stroke-width: 2.5; }
@@ -371,7 +382,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .famnode.current text { fill: #fff; }
 .famedge { fill: none; stroke: var(--ref); stroke-width: 1.3; }
 .famedge.bridge { stroke-dasharray: 5 4; }
-.famlabel { font-family: 'Outfit', sans-serif; fill: var(--text); stroke: var(--card); stroke-width: 4px; paint-order: stroke; }
+.famlabel { font-family: 'Outfit', 'Source Serif 4', sans-serif; fill: var(--text); stroke: var(--card); stroke-width: 4px; paint-order: stroke; }
 /* A label drawn on the construction plane (a foot's coordinate, the angle,
    the radius) sits on a translucent box in the plot's own background color
    (see dgPlaneLabel), so it stays readable over the growing cloud of
@@ -404,12 +415,12 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 @media (max-width: 420px) { .run-btns { gap: 6px; } }
 @container (max-width: 360px) { .run-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; } }
 .btn-run2 { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 24px;
-            font-family: 'Outfit', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px;
+            font-family: 'Outfit', 'Source Serif 4', sans-serif; font-size: .9rem; font-weight: 700; padding: 6px 16px;
             background: transparent; color: var(--accent); border: 2px solid var(--accent); border-radius: 6px;
             cursor: pointer; transition: .15s; }
 .btn-run2:hover:not(:disabled) { background: var(--accent); color: #fff; }
 .btn-run2:disabled { color: #aaa; border-color: #d6d0d2; cursor: not-allowed; }
-.btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; min-height: 24px;
+.btn-clear { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-size: .82rem; padding: 6px 13px; min-height: 24px;
              background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px;
              cursor: pointer; transition: .15s; }
 .btn-clear:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
@@ -487,11 +498,17 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .con-eq { margin: 6px 0 10px; }
 .con-eq-line { padding: 7px 0; }
 .con-eq-line + .con-eq-line { border-top: 1px solid var(--border); }
-.con-eq-step-hd { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .86rem; color: var(--text); margin-bottom: 2px; }
-.con-eq-desc { font-family: 'Outfit', sans-serif; font-weight: 400; font-size: .82rem; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
+.con-eq-step-hd { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 700; font-size: .86rem; color: var(--text); margin-bottom: 2px; }
+.con-eq-desc { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 400; font-size: .82rem; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
 .con-eq-sym-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px; font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .con-eq-sym { flex: 1 1 260px; color: var(--text); }
 .con-eq-val { color: var(--truth); text-align: right; white-space: nowrap; }
+/* The statistical-application card: a stepwise derivation beside (or, once
+   the row is too narrow, above) a picture of the joint density the statistic
+   is read off. */
+.stat-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 18px; }
+.stat-steps { flex: 1 1 300px; min-width: 0; }
+.stat-pic { margin-top: 4px; }
 /* ── "In common tools" panel: a small reference table of how five common
    tools draw this same distribution, nested under the generator the same
    way the construction panel is. Wrapped in its own scrolling container so
@@ -517,7 +534,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
    generously enough at 390px to hold "MATLAB" and "NumPy" whole. */
 .tools-table td:first-child { font-weight: 600; white-space: nowrap; overflow-wrap: normal; }
 .tools-table code { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; white-space: normal; overflow-wrap: break-word; }
-.tools-table .tools-note { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; font-family: 'Outfit', sans-serif; }
+.tools-table .tools-note { display: block; margin-top: 3px; color: var(--muted); font-size: .78rem; font-family: 'Outfit', 'Source Serif 4', sans-serif; }
 /* Below 720px the table reflows into a stack of cards, one per tool: the
    header row carries no information once there is nothing to line up in
    columns, and so it is hidden from view (but not from assistive tech)
@@ -535,7 +552,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 <body>
 <div class="widget">
   <div style="margin-bottom:14px">
-    <div class="wh-title">Distribution Gallery</div>
+    <div class="wh-title">Distribution Explorer</div>
     <div class="wh-sub">Common probability distributions for input modeling: what each one looks like, when to choose it, how the distributions relate, and how to generate a random variate from each</div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
@@ -562,7 +579,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
   </select>
 
   <section id="tab-map" class="tp active">
-    <p class="lede">A probability distribution is an input model: a description of the variation a simulation draws from. This gallery holds the common ones, grouped here by the modeling question each answers. Open a tile to see its shape change with its parameters, how it relates to the others, and how a random variate is generated from it.</p>
+    <p class="lede">A probability distribution is an input model: a description of the variation a simulation draws from. This page holds the common ones, grouped here by the modeling question each answers. Open a tile to see its shape change with its parameters, how it relates to the others, and how a random variate is generated from it.</p>
     <div id="map-groups"></div>
     <div class="sec"><div class="sec-hd">How the distributions relate</div>
       <p class="plot-cap" style="text-align:left;margin-bottom:2px">Four families, each a small tree rooted at the distribution the rest are built from. Every box is a link to that distribution's tab; a solid arrow derives one distribution from another, and a dashed arrow marks a special case, either landing in a different family, shown lower down, or closing a loop back onto a root already drawn.</p>
@@ -1684,7 +1701,7 @@ var DG_TEXT = {
     mode: "no unique mode",
     when: "only the bounds are known",
     lede: "The uniform is equal likelihood between two bounds and nothing more: every value from a to b is as likely as any other.",
-    choose: ["Choose it when <strong>only the bounds are known</strong>: every value between a and b is equally likely, and nothing in between is favored. It is the maximum-entropy choice for a bounded interval, which is to say it adds no assumption beyond the bounds.", { hd: "Relationship to other distributions", text: "Prefer the triangular when a most-likely value is also known, and the Beta when the shape inside the interval is known from data. Every other distribution in this gallery is generated from U(0, 1) draws, which is the uniform's other role." }]
+    choose: ["Choose it when <strong>only the bounds are known</strong>: every value between a and b is equally likely, and nothing in between is favored. It is the maximum-entropy choice for a bounded interval, which is to say it adds no assumption beyond the bounds.", { hd: "Relationship to other distributions", text: "Prefer the triangular when a most-likely value is also known, and the Beta when the shape inside the interval is known from data. Every other distribution on this page is generated from U(0, 1) draws, which is the uniform's other role." }]
   },
   tri: {
     support: "[a, b]",
@@ -2071,6 +2088,7 @@ function buildTab(d) {
   html += '<div id="knobs-' + d.id + '">' + d.params.map(function (q) { return knobRowHtml(d, q); }).join('') + '</div>';
   html += '<p class="knob-note">The parameter ranges above cover only the span this plot\'s fixed axis can show; the distribution itself is not limited to it.</p>';
   html += '</div>';
+  html += statCardHtml(d);
   html += '<div class="sec">';
   html += '<div class="sec-hd">Formulas and moments</div>';
   html += '<div class="eq-row"><span class="eq-lbl">' + kindWord + '</span><span class="eq">' + dgFormulaHtml(t.pdf) + '</span></div>';
@@ -2083,7 +2101,9 @@ function buildTab(d) {
   html += momentCardHtml('Mode', 'm-mode-' + d.id, t.mode);
   html += '</div>';
   html += '</div>';
-  html += '<div class="sec"><div class="sec-hd">Related distributions</div>' + familyTabHtml(d.id) + '</div>';
+  // One heading names both the section and the family the tab belongs to;
+  // the diagram's own heading is for the Map, where four of them stack.
+  html += '<div class="sec"><div class="sec-hd">Related distributions · ' + dgEsc(DG_FAM_BY_ID[DG_TAB_FAMILY[d.id]].heading) + '</div>' + familyTabHtml(d.id) + '</div>';
   html += '<div class="sec" id="gen-' + d.id + '"><div class="sec-hd">Generating a random variate</div>' + genPanelBodyHtml(d)
     + (DG_CON_LEDE[d.id] ? conPanelBodyHtml(d) : '') + toolsPanelBodyHtml(d) + '</div>';
   $('tab-' + d.id).innerHTML = html;
@@ -2203,8 +2223,8 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
     h += '<line x1="' + xx + '" y1="' + (T + innerH) + '" x2="' + xx + '" y2="' + (T + innerH + 4) + '" stroke="var(--border)" stroke-width="1"/>';
     h += '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
-  h += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
-  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
+  h += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
+  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
 
   if (showRefs) d.refs.forEach(function (ref, ri) {
     var color = 'var(--ref-' + (ri + 1) + ')';
@@ -2294,8 +2314,8 @@ function buildCdfMarkup(d, p, W, H, showRefs) {
     h += '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
   var xSym = isC ? 'x' : 'k';
-  h += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + xSym + '</text>';
-  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">F(' + xSym + ')</text>';
+  h += '<text x="' + (L + innerW / 2) + '" y="' + (H - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">' + xSym + '</text>';
+  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">F(' + xSym + ')</text>';
 
   if (showRefs) d.refs.forEach(function (ref, ri) {
     var color = 'var(--ref-' + (ri + 1) + ')';
@@ -2910,8 +2930,7 @@ function dgResolveFamilyDiagram(svg) {
 function familyTabHtml(tabId) {
   var family = DG_FAM_BY_ID[DG_TAB_FAMILY[tabId]];
   if (!family) return '';
-  return '<div class="famdiagram-hd">' + dgEsc(family.heading) + '</div>'
-    + '<div class="famdiagram-wrap" id="famdiag-' + tabId + '"></div>'
+  return '<div class="famdiagram-wrap" id="famdiag-' + tabId + '"></div>'
     + dgFamilyNoteHtml(family) + dgFamilyBridgeCaption(family) + dgFactsHtml(tabId);
 }
 function dgFamilyBlockHtml(family) {
@@ -3252,7 +3271,7 @@ var DG_RECIPE = {
     return 'X = F<sup>−1</sup>(U) by numeric search. Software usually builds a chi-square from k squared standard normal draws instead, which is its definition.';
   },
   fdist: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software draws an F as (X<sub>1</sub>/d<sub>1</sub>)/(X<sub>2</sub>/d<sub>2</sub>) instead: two independent chi-square draws, X<sub>1</sub> with d<sub>1</sub> degrees of freedom and X<sub>2</sub> with d<sub>2</sub>, each divided by its own degrees of freedom.';
+    return 'X = F<sup>−1</sup>(U) by numeric search. Software builds an F as (V<sub>1</sub>/d<sub>1</sub>)/(V<sub>2</sub>/d<sub>2</sub>) instead: two independent chi-square draws, V<sub>1</sub> with d<sub>1</sub> degrees of freedom and V<sub>2</sub> with d<sub>2</sub>, each divided by its own degrees of freedom.';
   },
   beta: function () {
     return 'X = F<sup>−1</sup>(U) by numeric search. Software uses a numerical inverse or a ratio of two Gamma draws.';
@@ -3317,7 +3336,7 @@ function genPanelBodyHtml(d) {
   html += '<span class="run-btns"><button class="btn-run2" onclick="DGUI.genDraw(\'' + d.id + '\',1)">Draw one</button>'
     + '<button class="btn-run2" onclick="DGUI.genDraw(\'' + d.id + '\',Number($(\'' + d.id + '-batch\').value))">Draw batch</button>'
     + '<button class="btn-clear" onclick="DGUI.genReset(\'' + d.id + '\')">Reset</button></span>';
-  html += '<div class="sum" id="gen-msg-' + d.id + '">No draws yet.</div>';
+  html += '<div class="sum" id="gen-msg-' + d.id + '"></div>';
   html += '</div>';
   return html;
 }
@@ -3340,6 +3359,7 @@ var DG_CON_LEDE = {
   beta: 'For whole-number α and β, sort n = α + β minus 1 uniform draws and take the α-th smallest.',
   chisq: 'Each of the k standard normal draws is squared, and the k squares added together make one chi-square draw.',
   tdist: 'A standard normal draw Z over the square root of a chi-square draw V divided by its degrees of freedom; Z/√(V/ν) is one t draw. In the picture, the bottom axis is S/σ = √(V/ν), the sample standard deviation measured against the true one, Z runs up the side, and t is the slope of the ray from the origin to the point. Both axes are drawn to the same scale, and so a ray at 45 degrees is a t of 1. Raise ν and the run tightens onto the dashed line at S/σ = 1, where the sample spread has landed exactly on the true one, and that leaves the slope little more than Z itself – a t that has become a standard normal.',
+  fdist: 'Two independent chi-square draws, V<sub>1</sub> with d<sub>1</sub> degrees of freedom and V<sub>2</sub> with d<sub>2</sub>, each divided by its own degrees of freedom; (V<sub>1</sub>/d<sub>1</sub>)/(V<sub>2</sub>/d<sub>2</sub>) is one F draw. In the picture, V<sub>2</sub>/d<sub>2</sub> runs along the bottom, V<sub>1</sub>/d<sub>1</sub> up the side, and F is the slope of the ray from the origin to the point. Both axes are drawn to the same scale, and so a ray at 45 degrees is an F of 1. Raise both degrees of freedom and the cloud tightens onto the corner (1, 1).',
   lnorm: 'A normal draw Y with mean μ and standard deviation σ, and then X = e<sup>Y</sup>; the log-normal is what a normal becomes on the exponential scale.'
 };
 /* Whether the current alpha and beta are both whole numbers, the one
@@ -3494,6 +3514,119 @@ function reserveConRaylNoteHeight(d) {
   candidates.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(el, conRaylNoteHtml(p))); });
   el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
 }
+/* ── "Statistical application" cards ──────────────────────────────────────
+   The t, F, and chi-square are not chosen as input models, and their tabs
+   say so (see chooseHd above); this card is where each shows what it is
+   for instead, walking the derivation that turns a normal sample into the
+   statistic itself. It reuses the .con-eq-line layout the "built from other
+   distributions" panels use for their own step-by-step equations, minus the
+   value column those panels fill in from a live draw – there is no draw
+   here, only the fixed algebra. The t and F cards also carry a picture of
+   the two chi-square-scaled pieces' joint density, read the same way their
+   own construction picture reads a landed draw: as the slope of a ray from
+   the origin. */
+var DG_STAT_CARD = {
+  tdist: {
+    heading: 'Statistical application: the t statistic',
+    pic: {
+      emptyState: function () { return { ts: [], tz: [] }; },
+      ref: { refH: 1, refV: 0 },
+      rays: [-2, -1, 1, 2], raySym: 't',
+      ariaLabel: 'Contours of the joint density of S/σ and Z, with t as the slope of a ray from the origin'
+    },
+    steps: [
+      { title: 'The statistic',
+        desc: 'For a sample X<sub>1</sub>, …, X<sub>n</sub> from a normal population with mean μ and standard deviation σ, the t statistic measures how far the sample mean sits from μ in units of its own estimated standard error, with S the sample standard deviation.',
+        sym: 't = <span class="frac"><span class="num"><span class="bar">X</span> − μ</span><span class="den">S/√n</span></span>' },
+      { title: 'Divide through by the true standard error',
+        desc: 'Dividing the numerator and the denominator by σ/√n changes nothing and splits the statistic into two pieces: a standardized mean, which is a standard normal, over the sample standard deviation measured against the true one.',
+        sym: 't = [(<span class="bar">X</span> − μ)/(σ/√n)] / (S/σ) = Z / (S/σ), with Z ~ N(0, 1)' },
+      { title: 'The denominator is a scaled chi-square',
+        desc: 'The sum of the squared standardized deviations from the sample mean is a chi-square with n − 1 degrees of freedom, one fewer than n because the deviations sum to zero. Writing V for that chi-square and ν = n − 1, the denominator is √(V/ν).',
+        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> = ' + dgSigma('i = 1', 'n') + ' ((X<sub>i</sub> − <span class="bar">X</span>)/σ)<sup>2</sup> = V ~ χ<sup>2</sup><sub>n−1</sub>, and so S/σ = √(V/ν)' },
+      { title: 'The two pieces are independent',
+        desc: 'For a normal population, the sample mean and the sample standard deviation are independent, a fact particular to the normal that is stated here rather than derived. Z and V can therefore be drawn separately, which is exactly how the panel further down builds a t.',
+        sym: 't = Z / √(V/ν), with Z and V independent' },
+      { title: 'Why t becomes Z',
+        desc: 'As the sample grows, S settles on σ, the run S/σ settles on 1, and the slope is Z alone: the t tends to the standard normal. In the picture, the contours of the joint density of (S/σ, Z) squeeze onto the dashed line S/σ = 1 as ν rises; the curve on the left is the standard normal, the curve along the bottom is the density of S/σ, and the contours are their product.',
+        sym: 'S/σ → 1, and so t → Z as ν → ∞' }
+    ]
+  },
+  fdist: {
+    heading: 'Statistical application: the F statistic',
+    pic: {
+      emptyState: function () { return { fh: [], fv: [] }; },
+      ref: { refH: 1, refV: 1 },
+      rays: [0.5, 1, 2], raySym: 'F',
+      ariaLabel: 'Contours of the joint density of V1/d1 and V2/d2, with F as the slope of a ray from the origin'
+    },
+    steps: [
+      { title: 'The statistic',
+        desc: 'Two independent samples from normal populations with a common standard deviation σ, of sizes n<sub>1</sub> and n<sub>2</sub>, give two sample variances, and the F statistic is their ratio: near 1 when the two spreads agree, far from it when they do not.',
+        sym: 'F = S<sub>1</sub><sup>2</sup> / S<sub>2</sub><sup>2</sup>' },
+      { title: 'Each variance is a scaled chi-square',
+        desc: 'Each sample variance, scaled by the common σ<sup>2</sup>, is a chi-square over its own degrees of freedom, the same fact the t statistic rests on. The σ<sup>2</sup> cancels in the ratio, which is why the F needs no σ at all.',
+        sym: 'S<sub>1</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>1</sub>/d<sub>1</sub> and S<sub>2</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>2</sub>/d<sub>2</sub>, and so F = (V<sub>1</sub>/d<sub>1</sub>) / (V<sub>2</sub>/d<sub>2</sub>), with d<sub>1</sub> = n<sub>1</sub> − 1 and d<sub>2</sub> = n<sub>2</sub> − 1' },
+      { title: 'Analysis of variance is the same ratio',
+        desc: 'In an analysis of variance, the numerator is the variance among the group means and the denominator the variance within the groups; under the null hypothesis, both estimate the same σ<sup>2</sup>, and their ratio is an F with the groups\' degrees of freedom on top and the residual degrees of freedom below.',
+        sym: 'F = (between-group mean square) / (within-group mean square)' },
+      { title: 'Why F settles on 1',
+        desc: 'Each scaled chi-square has mean 1 and a spread that shrinks as its degrees of freedom grow, and so the joint density of the pair gathers around the point (1, 1) and the ratio around 1. In the picture, F is the slope of the ray from the origin to a point, and raising d<sub>1</sub> and d<sub>2</sub> squeezes the contours onto that corner. With d<sub>1</sub> = 1, the numerator is a single squared standard normal, and F is the square of a t with d<sub>2</sub> degrees of freedom.',
+        sym: 'V<sub>1</sub>/d<sub>1</sub> → 1 and V<sub>2</sub>/d<sub>2</sub> → 1, and so F → 1; F(1, ν) = t<sup>2</sup>(ν)' }
+    ]
+  },
+  chisq: {
+    heading: 'Statistical application: the chi-square statistic',
+    steps: [
+      { title: 'Two bins',
+        desc: 'Sort n independent trials into two bins: a count O<sub>1</sub> lands in the first with probability p, and the remaining O<sub>2</sub> = n − O<sub>1</sub> in the second. O<sub>1</sub> is binomial, and the expected counts are E<sub>1</sub> = np and E<sub>2</sub> = n(1 − p).',
+        sym: 'O<sub>1</sub> ~ Bin(n, p), E<sub>1</sub> = np, E<sub>2</sub> = n(1 − p)' },
+      { title: 'The normal approximation',
+        desc: 'For a large n, the binomial count is close to normal, and so its standardized deviation is close to a standard normal.',
+        sym: 'Z = (O<sub>1</sub> − np) / √(np(1 − p)) ≈ N(0, 1)' },
+      { title: 'The two-bin statistic is one squared normal',
+        desc: 'After substituting E<sub>1</sub> = np, E<sub>2</sub> = n(1 − p), and O<sub>2</sub> = n − O<sub>1</sub> and then simplifying to put both terms over a common denominator, the chi-square statistic for two bins matches the squared standardized count in the first bin. Thus, a chi-square with one degree of freedom describes one squared standard normal.',
+        sym: '(O<sub>1</sub> − E<sub>1</sub>)<sup>2</sup>/E<sub>1</sub> + (O<sub>2</sub> − E<sub>2</sub>)<sup>2</sup>/E<sub>2</sub> = (O<sub>1</sub> − np)<sup>2</sup>/(np) + (O<sub>2</sub> − n(1 − p))<sup>2</sup>/(n(1 − p)) = (O<sub>1</sub> − np)<sup>2</sup> / (np(1 − p)) = Z<sup>2</sup> ~ χ<sup>2</sup><sub>1</sub>' },
+      { title: 'k bins',
+        desc: 'With k bins, the k deviations O<sub>i</sub> − E<sub>i</sub> still sum to zero, and so only k − 1 of them are free; for a large n, the statistic is a sum of k − 1 squared standard normals, a chi-square with k − 1 degrees of freedom. The two-bin case above is the algebra, and the general case is the same statement made about a multivariate normal. Each parameter estimated from the data takes one more degree of freedom away.',
+        sym: dgSigma('i = 1', 'k') + ' (O<sub>i</sub> − E<sub>i</sub>)<sup>2</sup>/E<sub>i</sub> ≈ χ<sup>2</sup><sub>k−1</sub>' },
+      { title: 'The same shape from a sample variance',
+        desc: 'A scaled sample variance from a normal population, (n − 1)S<sup>2</sup>/σ<sup>2</sup>, has the same distribution with n − 1 degrees of freedom: it is the sum of the n squared standardized deviations from the sample mean, with one degree of freedom taken by the mean. This is the fact the t and F statistics rest on.',
+        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> ~ χ<sup>2</sup><sub>n−1</sub>' }
+    ]
+  }
+};
+/* One step of a card's derivation, in the same markup the "built from other
+   distributions" panels use for their own equations (see conEqHtml), minus
+   the value column: there is no draw behind these steps, only fixed
+   algebra, so every render of a given tab is identical and nothing needs
+   reserving. */
+function statStepsHtml(id) {
+  return DG_STAT_CARD[id].steps.map(function (ln, i) {
+    return '<div class="con-eq-line">'
+      + '<div class="con-eq-step-hd">Step ' + (i + 1) + ' · ' + ln.title + '</div>'
+      + '<p class="con-eq-desc">' + ln.desc + '</p>'
+      + '<div class="con-eq-sym-row"><span class="con-eq-sym">' + ln.sym + '</span></div>'
+      + '</div>';
+  }).join('');
+}
+/* The card itself, or nothing for the sixteen tabs with no entry in
+   DG_STAT_CARD. The t and F cards carry a picture beside the steps; the
+   chi-square's two-bin derivation needs none, since the shape it is
+   building toward is already on the plot above. The svg's own frame reuses
+   whichever class and size the tab's own construction picture uses
+   (conPicFrame), so it lines up with that picture exactly. */
+function statCardHtml(d) {
+  var card = DG_STAT_CARD[d.id];
+  if (!card) return '';
+  var svg = '';
+  if (card.pic) {
+    var frame = conPicFrame(d.id);
+    svg = '<svg class="dg con-pic' + frame.cls + ' stat-pic" id="stat-svg-' + d.id + '" viewBox="0 0 ' + frame.maxW + ' ' + conFrameH(frame, frame.maxW) + '" role="img" aria-label="' + card.pic.ariaLabel + '"></svg>';
+  }
+  return '<div class="sec stat-sec" id="stat-' + d.id + '"><div class="sec-hd">' + card.heading + '</div>'
+    + '<div class="stat-body"><div class="stat-steps">' + statStepsHtml(d.id) + '</div>' + svg + '</div></div>';
+}
 /* Whether a construction tab reads its transformed variable off a strip
    built into the picture itself rather than off a separate histogram
    column: the Normal reads both coordinates off the plane's own marginal
@@ -3531,7 +3664,7 @@ function conPanelBodyHtml(d) {
   html += '</div>';
   var frame = conPicFrame(d.id);
   var picClass = 'dg con-pic' + frame.cls;
-  var picViewBox = '0 0 ' + frame.maxW + ' ' + Math.round(frame.maxW * frame.ratio);
+  var picViewBox = '0 0 ' + frame.maxW + ' ' + conFrameH(frame, frame.maxW);
   var picSvg = '<svg class="' + picClass + '" id="con-svg-' + d.id + '" viewBox="' + picViewBox + '" role="img" aria-label="Picture of the construction behind the latest ' + d.name + ' draw"></svg>';
   // The Normal reads both coordinates off the marginal strips drawn along
   // the plane's own edges, and so it carries no separate output histogram or
@@ -3582,10 +3715,14 @@ function dgSummaryStats(n, mean, sd) {
   var sdLo = sd * Math.sqrt((n - 1) / chiLo), sdHi = sd * Math.sqrt((n - 1) / chiHi);
   return { meanLo: mean - half, meanHi: mean + half, sdLo: sdLo, sdHi: sdHi };
 }
+/* A cell with nothing to show yet holds a dash rather than a number, so the
+   table can stand before the first draw with its shape already in place. */
+function dgSumCell(v) { return (v === null || v === undefined || !Number.isFinite(v)) ? '—' : fmtNum(v); }
 function dgSumRow(label, est, lo, hi, truth) {
-  return '<tr><td>' + label + '</td><td class="sum-est">' + fmtNum(est) + '</td>'
-    + '<td class="sum-ci">' + fmtNum(lo) + ' to ' + fmtNum(hi) + '</td>'
-    + '<td class="sum-true">' + fmtNum(truth) + '</td></tr>';
+  var ci = (lo === null || hi === null) ? '—' : fmtNum(lo) + ' to ' + fmtNum(hi);
+  return '<tr><td>' + label + '</td><td class="sum-est">' + dgSumCell(est) + '</td>'
+    + '<td class="sum-ci">' + ci + '</td>'
+    + '<td class="sum-true">' + dgSumCell(truth) + '</td></tr>';
 }
 /* The goodness-of-fit line under the table: Kolmogorov–Smirnov against a
    continuous cdf, chi-square against a discrete pmf, both run at the
@@ -3605,21 +3742,22 @@ function dgTestLineHtml(d, p, xs) {
 function dgSumNote(d) {
   return 'The ' + (d.type === 'c' ? 'K–S' : 'chi-square') + ' test compares the draws with the distribution at the parameters above, which are known rather than estimated from the draws, and so the classical p-value applies. A p-value below 0.05 says the draws do not look like the distribution; about one batch in twenty gets one by chance.';
 }
-/* The draw count sits in the table's own corner cell on the generator
-   panel, which has no caption to carry it; on a construction panel the
-   histogram's caption already says how many draws it holds (see
-   conHistCaption), and so the block there carries no count of its own and
-   is empty below two draws. */
+/* The block is drawn in full from the start, before any draw: the
+   Distribution column already knows its numbers from the parameters above,
+   and the estimate cells hold dashes until there are draws to fill them, so
+   that the space reserved for the table (see dgReserveSumHeight) is never a
+   blank under a one-line notice. The draw count sits in the table's own
+   corner cell on the generator panel, which has no caption to carry it; on a
+   construction panel the histogram's caption already says how many draws it
+   holds (see conHistCaption), and so the corner there stays empty. */
 function dgSummaryHtml(d, n, mean, sd, trueMean, trueSd, testLine, countInTable) {
   var count = n + (n === 1 ? ' draw' : ' draws');
-  if (!countInTable) { if (n < 2) return ''; }
-  else if (!n) return 'No draws yet.';
-  else if (n < 2) return '<div class="sum-n">' + count + '</div>';
-  var st = dgSummaryStats(n, mean, sd);
+  var st = n >= 2 ? dgSummaryStats(n, mean, sd) : { meanLo: null, meanHi: null, sdLo: null, sdHi: null };
+  if (n < 2) testLine = 'Too few draws for a ' + (d.type === 'c' ? 'Kolmogorov–Smirnov' : 'chi-square') + ' test.';
   var corner = countInTable ? '<th class="sum-corner">' + count + '</th>' : '<th></th>';
   var table = '<table class="sum-table"><thead><tr>' + corner + '<th class="sum-est">Estimate</th><th class="sum-ci">95% interval</th><th class="sum-true">Distribution</th></tr></thead><tbody>'
-    + dgSumRow('Mean', mean, st.meanLo, st.meanHi, trueMean)
-    + dgSumRow('Std. dev.', sd, st.sdLo, st.sdHi, trueSd)
+    + dgSumRow('Mean', n ? mean : null, st.meanLo, st.meanHi, trueMean)
+    + dgSumRow('Std. dev.', n >= 2 ? sd : null, st.sdLo, st.sdHi, trueSd)
     + '</tbody></table>';
   return '<div class="sum-table-wrap">' + table + '</div><div class="sum-test">' + testLine + '</div><div class="knob-note" style="margin-top:4px">' + dgSumNote(d) + '</div>';
 }
@@ -3669,6 +3807,19 @@ function dgReserveSumHeight(el, d, countInTable) {
   });
   el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
 }
+/* The summary block for a list of draws: their mean and standard deviation
+   (the latter only once there are two), the distribution's own from the
+   parameters shown above, and the goodness-of-fit line. Shared by the
+   generator and construction panels, which differ only in where the count
+   is shown. */
+function dgSummaryBlockHtml(d, xs, countInTable) {
+  var p = DGUI.params(d.id), n = xs.length;
+  var mean = n ? xs.reduce(function (a, b) { return a + b; }, 0) / n : null;
+  var variance = n > 1 ? xs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (n - 1) : null;
+  var sd = variance === null ? null : Math.sqrt(Math.max(0, variance));
+  var testLine = n >= 2 ? dgTestLineHtml(d, p, xs) : '';
+  return dgSummaryHtml(d, n, mean, sd, d.mean(p), Math.sqrt(Math.max(0, d.variance(p))), testLine, countInTable);
+}
 // A tab with no histogram column sits its summary under the picture's own
 // caption, which carries no count, and so it keeps the count in its own
 // corner cell instead.
@@ -3678,14 +3829,7 @@ function conUpdateMsg(d) {
   if (!el) return;
   var st = DGUI.con[d.id];
   conUpdateCaption(d);
-  var cit = conNoHistCol(d.id);
-  if (!st || st.xs.length === 0) { el.innerHTML = dgSummaryHtml(d, 0, 0, 0, 0, 0, '', cit); return; }
-  var p = DGUI.params(d.id), n = st.xs.length;
-  var mean = st.xs.reduce(function (a, b) { return a + b; }, 0) / n;
-  var variance = n > 1 ? st.xs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (n - 1) : 0;
-  var sd = Math.sqrt(Math.max(0, variance));
-  var testLine = n >= 2 ? dgTestLineHtml(d, p, st.xs) : '';
-  el.innerHTML = dgSummaryHtml(d, n, mean, sd, d.mean(p), Math.sqrt(Math.max(0, d.variance(p))), testLine, cit);
+  el.innerHTML = dgSummaryBlockHtml(d, st ? st.xs : [], conNoHistCol(d.id));
 }
 /* The Beta panel is the only one that can be gated: a fractional alpha or
    beta has no order statistic to draw, and so Draw one is disabled and the
@@ -3706,7 +3850,7 @@ function conUpdateGate(d) {
 function conPicFlips(d, p, st, W, H) {
   var res = st.last;
   if (!res) {
-    return '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, sans-serif">Draw one to see the flips.</text>';
+    return '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the flips.</text>';
   }
   var flips = res.flips, count = flips.length, cols = Math.min(25, count), rows = Math.ceil(count / 25);
   var padX = 14, padY = 12, availW = W - 2 * padX, availH = H - 2 * padY - 20;
@@ -3721,7 +3865,7 @@ function conPicFlips(d, p, st, W, H) {
     if (d.id === 'nbinom' && i === count - 1) h += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (rad + 3) + '" fill="none" stroke="var(--est)" stroke-width="2"/>';
   }
   var label = d.id === 'binom' ? ('Heads: ' + res.x + ' of ' + p.n + ' flips') : ('Flips to the r-th head: ' + res.x + ' (r = ' + p.r + ')');
-  h += '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Outfit, sans-serif">' + label + '</text>';
+  h += '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Outfit, Source Serif 4, sans-serif">' + label + '</text>';
   return h;
 }
 /* The Erlang picture: the k exponential stages laid end to end on the
@@ -3738,7 +3882,7 @@ function conPicErlang(d, p, st, W, H) {
       + '<text x="' + xx + '" y="' + (y + 16) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
   if (!res) {
-    return h + '<text x="' + (W / 2) + '" y="' + (H * 0.28) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, sans-serif">Draw one to see the stages.</text>';
+    return h + '<text x="' + (W / 2) + '" y="' + (H * 0.28) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the stages.</text>';
   }
   var acc = 0;
   res.parts.forEach(function (part, i) {
@@ -3841,15 +3985,15 @@ function dgConPlanePic(st, W, H, opts) {
   }
   h += '<polyline points="' + vCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
   h += '<polyline points="' + hCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
-  h += '<text x="' + (padOuter + 2) + '" y="' + (py0 + 10) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, sans-serif">' + opts.vLabel + '</text>';
-  h += '<text x="' + (px0 + 2) + '" y="' + (geo.bottomBaseline - 4) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, sans-serif">' + opts.hLabel + '</text>';
+  h += '<text x="' + (padOuter + 2) + '" y="' + (py0 + 10) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, Source Serif 4, sans-serif">' + opts.vLabel + '</text>';
+  h += '<text x="' + (px0 + 2) + '" y="' + (geo.bottomBaseline - 4) + '" text-anchor="start" fill="var(--muted)" font-size="10.5" font-family="Outfit, Source Serif 4, sans-serif">' + opts.hLabel + '</text>';
 
   var pts = st.pts || [];
   for (var i = 0; i < pts.length - 1; i++) h += '<circle cx="' + xAt(pts[i].a) + '" cy="' + yAt(pts[i].b) + '" r="2.4" fill="var(--ref)"/>';
   if (!pts.length) {
     // Centered inside the plane itself: below it sits the bottom strip's
     // own true-density curve, which the words would otherwise cross.
-    return h + '<text x="' + pcx + '" y="' + (pcy - 10) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">Draw one to see the point.</text>';
+    return h + '<text x="' + pcx + '" y="' + (pcy - 10) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the point.</text>';
   }
   var last = pts[pts.length - 1], px = xAt(last.a), py = yAt(last.b);
   // Dashed projections from the point down to each axis, with a small foot
@@ -3935,8 +4079,8 @@ function conPicBetaOrder(d, p, st, W, H) {
   if (!conBetaOk(p)) {
     var l1 = 'This construction needs whole-number α and β;';
     var l2 = 'the parameters are α = ' + fmtNum(p.alpha) + ', β = ' + fmtNum(p.beta) + '.';
-    return '<text x="' + (W / 2) + '" y="' + (H / 2 - 8) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">' + l1 + '</text>'
-      + '<text x="' + (W / 2) + '" y="' + (H / 2 + 12) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, sans-serif">' + l2 + '</text>';
+    return '<text x="' + (W / 2) + '" y="' + (H / 2 - 8) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, Source Serif 4, sans-serif">' + l1 + '</text>'
+      + '<text x="' + (W / 2) + '" y="' + (H / 2 + 12) + '" text-anchor="middle" fill="var(--muted)" font-size="12.5" font-family="Outfit, Source Serif 4, sans-serif">' + l2 + '</text>';
   }
   var L = 20, R = 20, y = H * 0.55, xAt = function (u) { return L + u * (W - L - R); };
   var h = '<line x1="' + L + '" y1="' + y + '" x2="' + (W - R) + '" y2="' + y + '" stroke="var(--border)" stroke-width="1.5"/>';
@@ -3944,7 +4088,7 @@ function conPicBetaOrder(d, p, st, W, H) {
     h += '<text x="' + xAt(v) + '" y="' + (y + 16) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + v + '</text>';
   });
   var res = st.last;
-  if (!res) return h + '<text x="' + (W / 2) + '" y="' + (H * 0.25) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, sans-serif">Draw one to see the sorted uniforms.</text>';
+  if (!res) return h + '<text x="' + (W / 2) + '" y="' + (H * 0.25) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the sorted uniforms.</text>';
   res.us.forEach(function (u, i) {
     var isChosen = i === res.k - 1, xx = xAt(u);
     h += '<line x1="' + xx + '" y1="' + (y - 9) + '" x2="' + xx + '" y2="' + (y + 9) + '" stroke="' + (isChosen ? 'var(--est)' : 'var(--text)') + '" stroke-width="' + (isChosen ? 2.4 : 1.6) + '"/>';
@@ -3952,7 +4096,7 @@ function conPicBetaOrder(d, p, st, W, H) {
   var chosenX = xAt(res.us[res.k - 1]);
   h += '<circle cx="' + chosenX + '" cy="' + y + '" r="5" fill="var(--est)" stroke="#fff" stroke-width="1"/>'
     + '<text x="' + chosenX + '" y="' + (y - 14) + '" text-anchor="middle" fill="var(--est)" font-size="11" font-family="\'IBM Plex Mono\', monospace">X = ' + fmtNum(res.x) + '</text>'
-    + '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="Outfit, sans-serif">n = ' + res.us.length + ' uniforms, ' + res.k + '-th smallest chosen</text>';
+    + '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="var(--muted)" font-size="10.5" font-family="Outfit, Source Serif 4, sans-serif">n = ' + res.us.length + ' uniforms, ' + res.k + '-th smallest chosen</text>';
   return h;
 }
 /* Shared geometry for a transfer-map construction picture: the input
@@ -3988,9 +4132,16 @@ function dgSvgChiSq(sub, rest, size) {
   var up = 0.42 * size, down = 0.28 * size, small = (0.72 * size).toFixed(2);
   return 'χ<tspan dy="-' + up.toFixed(2) + '" font-size="' + small + '">2</tspan><tspan dy="' + (up + down).toFixed(2) + '" font-size="' + small + '">' + sub + '</tspan><tspan dy="-' + down.toFixed(2) + '">' + (rest || '') + '</tspan>';
 }
+/* The fixed pixel bands around a transfer map – the left strip and its gap,
+   the right padding, the top label band, the bottom strip and its gap – and
+   their sums per axis, so that a frame's height can be derived from its
+   width with the map's own aspect held (see conFrameH). */
+var DG_TRANSFER_PAD = { padOuter: 4, leftThick: 52, vGap: 26, rightPad: 14, topPad: 18, hGap: 14, botThick: 52, botPad: 6 };
+DG_TRANSFER_PAD.w = DG_TRANSFER_PAD.padOuter + DG_TRANSFER_PAD.leftThick + DG_TRANSFER_PAD.vGap + DG_TRANSFER_PAD.rightPad;
+DG_TRANSFER_PAD.h = DG_TRANSFER_PAD.topPad + DG_TRANSFER_PAD.hGap + DG_TRANSFER_PAD.botThick + DG_TRANSFER_PAD.botPad;
 function dgConTransferGeom(W, H, opts) {
-  var padOuter = 4, leftThick = 52, vGap = 26, rightPad = 14;
-  var topPad = 18, hGap = 14, botThick = 52, botPad = 6;
+  var P = DG_TRANSFER_PAD, padOuter = P.padOuter, leftThick = P.leftThick, vGap = P.vGap, rightPad = P.rightPad;
+  var topPad = P.topPad, hGap = P.hGap, botThick = P.botThick, botPad = P.botPad;
   var mapX0 = padOuter + leftThick + vGap, mapX1 = W - rightPad;
   var mapY0 = topPad, mapY1 = H - botPad - botThick - hGap;
   var hx0 = opts.hRange[0], hx1 = opts.hRange[1], vy0 = opts.vRange[0], vy1 = opts.vRange[1];
@@ -4019,7 +4170,7 @@ function dgConTransferGeom(W, H, opts) {
    by default) for a tab where that strip is an input too. */
 function dgConTransferPic(st, W, H, opts) {
   var geo = dgConTransferGeom(W, H, opts);
-  var mono = ' font-family="\'IBM Plex Mono\', monospace"', sans = ' font-family="Outfit, sans-serif"';
+  var mono = ' font-family="\'IBM Plex Mono\', monospace"', sans = ' font-family="Outfit, Source Serif 4, sans-serif"';
   var h = '<rect x="' + geo.mapX0 + '" y="' + geo.mapY0 + '" width="' + (geo.mapX1 - geo.mapX0) + '" height="' + (geo.mapY1 - geo.mapY0) + '" fill="var(--chart-bg)" stroke="var(--border)" stroke-width="1"/>';
 
   var hTicks = typeof opts.hTicks === 'function' ? opts.hTicks(geo.mapX1 - geo.mapX0) : opts.hTicks;
@@ -4029,7 +4180,10 @@ function dgConTransferPic(st, W, H, opts) {
     h += '<line x1="' + (geo.mapX0 - 4) + '" y1="' + yy + '" x2="' + geo.mapX0 + '" y2="' + yy + '" stroke="var(--border)" stroke-width="1"/>'
       + '<text x="' + (geo.mapX0 - 7) + '" y="' + (yy + 3.5) + '" text-anchor="end" fill="var(--muted)" font-size="9.5"' + mono + '>' + fmtNum(v) + '</text>';
   });
-  h += '<text x="' + geo.mapX0 + '" y="' + (geo.mapY0 - 5) + '" text-anchor="start" fill="var(--muted)" font-size="10.5"' + mono + '>' + opts.vNameHtml + '</text>';
+  // An axis name is where a transfer identity goes (Y = Z squared, X = e to
+  // the Y); a tab whose two strips are both plain inputs gives none, and its
+  // strip labels, which start with the axis variable, name the axes instead.
+  if (opts.vNameHtml) h += '<text x="' + geo.mapX0 + '" y="' + (geo.mapY0 - 5) + '" text-anchor="start" fill="var(--muted)" font-size="10.5"' + mono + '>' + opts.vNameHtml + '</text>';
 
   h += '<line x1="' + geo.mapX0 + '" y1="' + geo.mapY1 + '" x2="' + geo.mapX1 + '" y2="' + geo.mapY1 + '" stroke="var(--border)" stroke-width="1.2"/>';
   hTicks.forEach(function (v) {
@@ -4037,7 +4191,7 @@ function dgConTransferPic(st, W, H, opts) {
     h += '<line x1="' + xx + '" y1="' + geo.mapY1 + '" x2="' + xx + '" y2="' + (geo.mapY1 + 3) + '" stroke="var(--border)" stroke-width="1"/>'
       + '<text x="' + xx + '" y="' + (geo.mapY1 + geo.hGap - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5"' + mono + '>' + fmtNum(v) + '</text>';
   });
-  h += '<text x="' + geo.mapX1 + '" y="' + (geo.mapY1 - 5) + '" text-anchor="end" fill="var(--muted)" font-size="10.5"' + mono + '>' + opts.hNameHtml + '</text>';
+  if (opts.hNameHtml) h += '<text x="' + geo.mapX1 + '" y="' + (geo.mapY1 - 5) + '" text-anchor="end" fill="var(--muted)" font-size="10.5"' + mono + '>' + opts.hNameHtml + '</text>';
 
   // The curve is the mechanism itself, drawn only when opts.transferFn says
   // one input becomes the other; a tab whose two strips are both independent
@@ -4115,20 +4269,26 @@ function dgConTransferPic(st, W, H, opts) {
     vCurve.push((geo.padOuter + Math.min(1, vd / vStripMax) * geo.leftThick) + ',' + geo.yAt(vyv));
   }
   h += '<polyline points="' + vCurve.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
-  h += '<text x="' + (geo.padOuter + 2) + '" y="' + (geo.mapY0 + 10) + '" text-anchor="start" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.vStripLabel + '</text>';
+  // In the band above the strip, on the row of the axis name, rather than
+  // inside the strip's top corner: there it sat on the row of the top tick
+  // label, and "Z ~ N(0, 1)" beside a "3" read as one string.
+  h += '<text x="' + (geo.padOuter + 2) + '" y="' + (geo.mapY0 - 5) + '" text-anchor="start" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.vStripLabel + '</text>';
 
   // Empty only while nothing has happened yet at all – hVals/vVals, not
   // xs, because xs gains the Chi-square's own first entry only once a
   // whole draw's k dots have all landed, and the placeholder has to clear
   // the moment the first dot of that first draw appears, not stay up
-  // through the whole animation that follows it.
-  if (!hVals.length && !vVals.length) {
+  // through the whole animation that follows it. opts.noEmptyMsg skips this
+  // block outright, for a picture built with no draws to ever have (the
+  // statistical-application cards' own pictures), where the strips are
+  // meant to stand with nothing but their true densities on them.
+  if (!opts.noEmptyMsg && !hVals.length && !vVals.length) {
     var ep = opts.emptyPos(geo);
     // The message scales with the frame so it stays inside the map at the
     // narrow render, where the map is a third of its desktop width.
     var lines = Array.isArray(opts.emptyMsg) ? opts.emptyMsg : [opts.emptyMsg], fs = Math.min(12, W / 27);
     lines.forEach(function (ln, li) {
-      h += '<text x="' + ep[0] + '" y="' + (ep[1] + li * fs * 1.3) + '" text-anchor="middle" fill="var(--muted)" font-size="' + fs + '" font-family="Outfit, sans-serif">' + ln + '</text>';
+      h += '<text x="' + ep[0] + '" y="' + (ep[1] + li * fs * 1.3) + '" text-anchor="middle" fill="var(--muted)" font-size="' + fs + '" font-family="Outfit, Source Serif 4, sans-serif">' + ln + '</text>';
     });
   }
   return h;
@@ -4185,7 +4345,7 @@ var CON_TRANSFER_OPTS = {
      normal by this ratio, and the ratio is 1 exactly when the sample's spread
      matches the population's.
      Both ranges are fixed, and the frame (CON_PIC_FRAME.tdist) is shaped to
-     give the two the same units per pixel, which buys two readings an axis
+     give the two the same units per pixel, which allows two readings an axis
      rescaled per ν would have hidden: a ray at 45 degrees is a t of 1, and
      raising ν visibly pulls the run onto a spike at 1, leaving the slope
      little more than Z itself. The run stays inside 2.5 for all but about one
@@ -4198,8 +4358,8 @@ var CON_TRANSFER_OPTS = {
       hRange: [0, sMax], vRange: [-zSpan, zSpan],
       hTicks: function (px) { return dgAxisTicks(0, sMax, dgTickStepFor(0, sMax, 0.5, px)); },
       vTicks: function (px) { return dgAxisTicks(-zSpan, zSpan, dgTickStepFor(-zSpan, zSpan, 1, px)); },
-      hNameHtml: 'S/σ = √(V/ν)', vNameHtml: 'Z',
-      hStripLabel: 'V ~ ' + dgSvgChiSq('ν', '', 9.5), hStripLabelAt: 'end', vStripLabel: 'Z ~ N(0, 1)',
+      hNameHtml: '', vNameHtml: '',
+      hStripLabel: 'S/σ = √(V/ν)', hStripLabelAt: 'end', vStripLabel: 'Z ~ N(0, 1)',
       vColor: 'var(--in)',
       hBins: dgLinBins(0, sMax, 25), vBins: dgLinBins(-zSpan, zSpan, 24),
       hVals: function (s) { return s.ts; }, vVals: function (s) { return s.tz; },
@@ -4216,6 +4376,46 @@ var CON_TRANSFER_OPTS = {
         return { res: res, h: Math.sqrt(res.v / pp.nu), v: res.z };
       },
       appear: function (st, dr) { st.ts.push(dr.h); st.tz.push(dr.v); },
+      finalize: function (st, dr) { st.xs.push(dr.res.x); st.pts.push({ h: dr.h, v: dr.v }); st.last = dr.res; }
+    };
+  },
+  /* The F map is the same slope shape as the t's above, on both counts:
+     V<sub>2</sub>/d<sub>2</sub> and V<sub>1</sub>/d<sub>1</sub> are both
+     independent inputs with no curve deriving one from the other, so
+     conPicFdist draws the meeting point itself the way conPicTdist does for
+     the t, and the two axes are drawn to the same scale so the ray from the
+     origin to the landed point has a slope of F, with a ray at 45 degrees
+     an F of 1. Both ranges stop at 4: at d1 = 1, about 4.6% of the V1/d1
+     mass lies past 4, the most any reachable setting clips, and d2 starts
+     at 5, where under 0.2% of V2/d2 does. Raising both degrees of freedom
+     pulls the cloud onto the corner (1, 1), where the two reference lines
+     drawn by conPicSlope cross. Each strip's true density is the
+     chi-square's own, transformed through the same v = V/d scaling the
+     t's own bottom strip uses. */
+  fdist: function (d, p) {
+    return {
+      hRange: [0, 4], vRange: [0, 4],
+      hTicks: function (px) { return dgAxisTicks(0, 4, dgTickStepFor(0, 4, 1, px)); },
+      vTicks: function (px) { return dgAxisTicks(0, 4, dgTickStepFor(0, 4, 1, px)); },
+      hNameHtml: '', vNameHtml: '',
+      hStripLabel: 'V' + dgSvgSub('2', '/d', 9.5) + dgSvgSub('2', ', V', 9.5) + dgSvgSub('2', ' ~ ', 9.5) + dgSvgChiSq('d' + dgSvgSub('2', '', 6.84), '', 9.5), hStripLabelAt: 'end',
+      vStripLabel: 'V' + dgSvgSub('1', '/d', 9.5) + dgSvgSub('1', ', V', 9.5) + dgSvgSub('1', ' ~ ', 9.5) + dgSvgChiSq('d' + dgSvgSub('1', '', 6.84), '', 9.5),
+      vColor: 'var(--in)',
+      hBins: dgLinBins(0, 4, 32), vBins: dgLinBins(0, 4, 32),
+      hVals: function (s) { return s.fh; }, vVals: function (s) { return s.fv; },
+      hTruthPdf: function (x) { return DG.byId.chisq.pdf(p.d2 * x, { k: p.d2 }) * p.d2; },
+      vTruthPdf: function (y) { return DG.byId.chisq.pdf(p.d1 * y, { k: p.d1 }) * p.d1; },
+      vCap: p.d1 === 1 ? 1.2 : undefined,
+      emptyMsg: ['Draw one to sample', 'two chi-squares.'],
+      // Upper right: the density lives near (1, 1), lower left, for every
+      // reachable pair of degrees of freedom.
+      emptyPos: function (geo) { return [geo.mapX0 + (geo.mapX1 - geo.mapX0) * 0.62, geo.mapY0 + (geo.mapY1 - geo.mapY0) * 0.15]; },
+      maxAnimDraws: function () { return 100; },
+      draw: function (rand, pp) {
+        var res = DG.construct.fdist(rand, pp);
+        return { res: res, h: res.r2, v: res.r1 };
+      },
+      appear: function (st, dr) { st.fh.push(dr.h); st.fv.push(dr.v); },
       finalize: function (st, dr) { st.xs.push(dr.res.x); st.pts.push({ h: dr.h, v: dr.v }); st.last = dr.res; }
     };
   },
@@ -4264,44 +4464,208 @@ function conPicChisq(d, p, st, W, H) {
 function conPicLnorm(d, p, st, W, H) {
   return dgConTransferPic(st, W, H, CON_TRANSFER_OPTS.lnorm(d, p));
 }
-/* The t picture: the transfer map's own two input strips with no curve
-   between them (see CON_TRANSFER_OPTS.tdist), every earlier draw's meeting
-   point kept as a small gray dot, and the latest drawn larger, in orange,
-   with dashed projections to each axis and a label carrying its own value --
-   the same convention dgConPlanePic uses for the Normal and Rayleigh's own
-   landed point, read here on the transfer map's two independently scaled
-   axes instead of one shared plane. */
-function conPicTdist(d, p, st, W, H) {
-  var opts = CON_TRANSFER_OPTS.tdist(d, p);
+/* The two reference lines a slope picture reads a draw against: a solid,
+   faint horizontal at the vertical axis's own reference value (cfg.refV)
+   and a dashed vertical at the horizontal axis's (cfg.refH), each held to
+   whichever value the two chi-square-scaled pieces settle on as their
+   degrees of freedom grow. Shared by conPicSlope and by the t and F
+   statistical-application cards, which read the same two lines without a
+   draw on top of them. */
+function conRefLinesHtml(cfg, geo) {
+  return '<line x1="' + geo.mapX0 + '" y1="' + geo.yAt(cfg.refV) + '" x2="' + geo.mapX1 + '" y2="' + geo.yAt(cfg.refV) + '" stroke="var(--border)" stroke-width="1"/>'
+    + '<line x1="' + geo.xAt(cfg.refH) + '" y1="' + geo.mapY0 + '" x2="' + geo.xAt(cfg.refH) + '" y2="' + geo.mapY1 + '" stroke="var(--ref)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="5 4"/>';
+}
+/* The t and F pictures: the transfer map's own two input strips with no
+   curve between them (see CON_TRANSFER_OPTS.tdist and .fdist), every
+   earlier draw's meeting point kept as a small gray dot, and the latest
+   drawn larger, in orange, with dashed projections to each axis and a label
+   carrying its own value -- the same convention dgConPlanePic uses for the
+   Normal and Rayleigh's own landed point, read here on the transfer map's
+   two independently scaled axes instead of one shared plane. cfg names
+   which tab's own CON_TRANSFER_OPTS entry to read (cfg.id), the label the
+   landed point's own value carries (cfg.label), and where the two
+   reference lines drawn by conRefLinesHtml sit: Z = 0 for the t, V1/d1 = 1
+   for the F, where the pair crosses the corner (1, 1) the cloud tightens
+   onto. */
+function conPicSlope(d, p, st, W, H, cfg) {
+  var opts = CON_TRANSFER_OPTS[cfg.id](d, p);
   var geo = dgConTransferGeom(W, H, opts);
   var h = dgConTransferPic(st, W, H, opts);
   var pts = st.pts || [];
   for (var i = 0; i < pts.length - 1; i++) {
     h += '<circle cx="' + geo.xAt(pts[i].h) + '" cy="' + geo.yAt(pts[i].v) + '" r="2.4" fill="var(--ref)"/>';
   }
-  // A faint horizontal through Z = 0, so the ray's rise reads against it,
-  // and a dashed vertical at S/σ = 1, where the sample's own spread has come
-  // out at exactly the population's. The cloud squeezes onto that line as ν
-  // grows, and a ray meeting the line has a slope of Z alone; between them the
-  // two lines cross at the ray's origin.
-  h += '<line x1="' + geo.mapX0 + '" y1="' + geo.yAt(0) + '" x2="' + geo.mapX1 + '" y2="' + geo.yAt(0) + '" stroke="var(--border)" stroke-width="1"/>'
-    + '<line x1="' + geo.xAt(1) + '" y1="' + geo.mapY0 + '" x2="' + geo.xAt(1) + '" y2="' + geo.mapY1 + '" stroke="var(--ref)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="5 4"/>';
+  h += conRefLinesHtml(cfg, geo);
   if (pts.length) {
     // The draw itself is the slope of the ray from the origin to the latest
     // point, and so the ray is the mark drawn in the output color; the
-    // dashed projections that read off S and Z stay muted.
+    // dashed projections that read off the two axes stay muted.
     var last = pts[pts.length - 1], px = geo.xAt(last.h), py = geo.yAt(last.v), ox = geo.xAt(0), oy = geo.yAt(0);
     h += '<line x1="' + px + '" y1="' + py + '" x2="' + px + '" y2="' + geo.mapY1 + '" stroke="var(--muted)" stroke-width="1" stroke-opacity="0.6" stroke-dasharray="4 3"/>'
       + '<line x1="' + px + '" y1="' + py + '" x2="' + geo.mapX0 + '" y2="' + py + '" stroke="var(--muted)" stroke-width="1" stroke-opacity="0.6" stroke-dasharray="4 3"/>'
       + '<line x1="' + ox + '" y1="' + oy + '" x2="' + px + '" y2="' + py + '" stroke="var(--est)" stroke-width="2.2"/>'
       + '<circle cx="' + ox + '" cy="' + oy + '" r="2.5" fill="var(--est)"/>'
       + '<circle cx="' + px + '" cy="' + py + '" r="4.5" fill="var(--est)" stroke="#fff" stroke-width="1"/>';
-    var label = 'slope t = ' + fmtNum(st.last.x), fs = 10.5, estW = label.length * fs * 0.6 + 6;
+    var label = cfg.label + ' = ' + fmtNum(st.last.x), fs = 10.5, estW = label.length * fs * 0.6 + 6;
     var lx = Math.min(geo.mapX1 - estW / 2 - 3, Math.max(geo.mapX0 + estW / 2 + 3, px));
     var ly = Math.max(geo.mapY0 + 12, py - 10);
     h += dgPlaneLabel(lx, ly, 'middle', label, 'var(--est)', fs);
   }
   return h;
+}
+function conPicTdist(d, p, st, W, H) { return conPicSlope(d, p, st, W, H, { id: 'tdist', label: 'slope t', refH: 1, refV: 0 }); }
+function conPicFdist(d, p, st, W, H) { return conPicSlope(d, p, st, W, H, { id: 'fdist', label: 'slope F', refH: 1, refV: 1 }); }
+/* Marching squares on a grid sampled at cell centers, never on an axis
+   itself, so a density unbounded right at one edge (the F's V1/d1 at
+   d1 = 1) is never evaluated where it blows up. Each 2x2 block of
+   neighboring samples contributes at most two short segments of the
+   contour, found by linearly interpolating along whichever of the block's
+   four edges cross the level; the two cases where the block's corners
+   alternate high and low along a diagonal are the classic ambiguous ones,
+   split by the block's own average against the level so the two branches
+   the level could take never cross each other. xAt/yAt turn a grid index
+   into a pixel coordinate, so the caller supplies the map's own geometry
+   without this routine needing to know about it. */
+function dgContourPaths(grid, nx, ny, level, xAt, yAt) {
+  function val(i, j) { return grid[j * nx + i]; }
+  function lerp(p1, p2, v1, v2) {
+    var t = (level - v1) / (v2 - v1);
+    return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+  }
+  var segs = [];
+  function seg(a, b) { segs.push('M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + 'L' + b[0].toFixed(2) + ',' + b[1].toFixed(2)); }
+  for (var j = 0; j < ny - 1; j++) {
+    for (var i = 0; i < nx - 1; i++) {
+      var v00 = val(i, j), v10 = val(i + 1, j), v11 = val(i + 1, j + 1), v01 = val(i, j + 1);
+      var caseIdx = (v00 >= level ? 1 : 0) | (v10 >= level ? 2 : 0) | (v11 >= level ? 4 : 0) | (v01 >= level ? 8 : 0);
+      if (caseIdx === 0 || caseIdx === 15) continue;
+      var P00 = [xAt(i), yAt(j)], P10 = [xAt(i + 1), yAt(j)], P11 = [xAt(i + 1), yAt(j + 1)], P01 = [xAt(i), yAt(j + 1)];
+      var eBot = lerp(P00, P10, v00, v10), eRight = lerp(P10, P11, v10, v11);
+      var eTop = lerp(P01, P11, v01, v11), eLeft = lerp(P00, P01, v00, v01);
+      var avgHigh = (v00 + v10 + v11 + v01) / 4 >= level;
+      switch (caseIdx) {
+        case 1: case 14: seg(eLeft, eBot); break;
+        case 2: case 13: seg(eBot, eRight); break;
+        case 3: case 12: seg(eLeft, eRight); break;
+        case 4: case 11: seg(eRight, eTop); break;
+        case 6: case 9: seg(eBot, eTop); break;
+        case 7: case 8: seg(eLeft, eTop); break;
+        case 5: if (avgHigh) { seg(eLeft, eTop); seg(eBot, eRight); } else { seg(eLeft, eBot); seg(eRight, eTop); } break;
+        case 10: if (avgHigh) { seg(eLeft, eBot); seg(eRight, eTop); } else { seg(eLeft, eTop); seg(eBot, eRight); } break;
+      }
+    }
+  }
+  return segs;
+}
+/* Contours of the two chi-square-scaled pieces' joint density, g(h, v) =
+   hTruthPdf(h) * vTruthPdf(v) since the two are independent, sampled on a
+   64x64 grid over the map's own ranges and drawn at fixed fractions of the
+   grid's own peak (never of some fixed height, since the peak moves with
+   the degrees of freedom) so the same six levels read the same way at
+   every reachable parameter setting. The outermost level is drawn faintest
+   so the eye reads the cloud from its edge inward toward its peak. */
+var DG_CONTOUR_LEVELS = [0.05, 0.15, 0.3, 0.5, 0.7, 0.9];
+function statContoursHtml(opts, geo) {
+  var nx = 64, ny = 64, grid = new Array(nx * ny), peak = 0;
+  var hStep = (opts.hRange[1] - opts.hRange[0]) / nx, vStep = (opts.vRange[1] - opts.vRange[0]) / ny;
+  function hAt(i) { return opts.hRange[0] + (i + 0.5) * hStep; }
+  function vAt(j) { return opts.vRange[0] + (j + 0.5) * vStep; }
+  for (var j = 0; j < ny; j++) {
+    for (var i = 0; i < nx; i++) {
+      var g = opts.hTruthPdf(hAt(i)) * opts.vTruthPdf(vAt(j));
+      grid[j * nx + i] = g;
+      if (g > peak) peak = g;
+    }
+  }
+  var xAt = function (i) { return geo.xAt(hAt(i)); }, yAt = function (j) { return geo.yAt(vAt(j)); };
+  var out = '';
+  DG_CONTOUR_LEVELS.forEach(function (frac, li) {
+    var segs = dgContourPaths(grid, nx, ny, frac * peak, xAt, yAt);
+    if (!segs.length) return;
+    var op = 0.35 + 0.65 * li / (DG_CONTOUR_LEVELS.length - 1);
+    out += '<path d="' + segs.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="1.4" stroke-opacity="' + op.toFixed(2) + '"/>';
+  });
+  return out;
+}
+/* Where a ray of the given slope, starting at the origin and running in the
+   direction both axes increase, first leaves the map: whichever of the
+   horizontal axis's own far edge and the vertical axis's own top or bottom
+   edge it reaches first. The ray is drawn only out to this point, and so it
+   is already clipped to the map with no separate clip path needed. */
+function dgRayExit(hRange, vRange, slope) {
+  var hEdge = hRange[1], vAtEdge = slope * hEdge;
+  if (vAtEdge >= vRange[0] && vAtEdge <= vRange[1]) return { h: hEdge, v: vAtEdge };
+  var vEdge = slope > 0 ? vRange[1] : vRange[0];
+  return { h: vEdge / slope, v: vEdge };
+}
+/* The rectangle a dgPlaneLabel-style label would occupy, sized the same way
+   dgPlaneLabel sizes its own background box, so two labels' rectangles can
+   be tested for overlap before either is actually drawn. */
+function dgLabelRect(x, y, text, size, anchor) {
+  var chars = text.replace(/<[^>]+>/g, '').length, w = chars * size * 0.6 + 6, hgt = size + 4;
+  var x0 = anchor === 'middle' ? x - w / 2 : (anchor === 'end' ? x - w : x);
+  return { x0: x0, y0: y - size * 0.8 - 2, x1: x0 + w, y1: y - size * 0.8 - 2 + hgt };
+}
+function dgRectsOverlap(a, b) { return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0; }
+/* Faint reference rays from the origin at the card's own fixed slopes, each
+   labeled a little back from where it leaves the map along the same ray –
+   far enough that the label reads over the map's own background rather
+   than crossing the border – and nudged further back still, in the same
+   steps, while its own rectangle would otherwise overlap an axis name, on
+   a tab that gives one (vNameHtml at the map's top-left corner, hNameHtml
+   at its bottom-right, both set the same way dgConTransferPic places them). */
+function statRaysHtml(card, opts, geo) {
+  var ox = geo.xAt(0), oy = geo.yAt(0);
+  var avoid = [];
+  if (opts.vNameHtml) avoid.push(dgLabelRect(geo.mapX0, geo.mapY0 - 5, opts.vNameHtml, 10.5, 'start'));
+  if (opts.hNameHtml) avoid.push(dgLabelRect(geo.mapX1, geo.mapY1 - 5, opts.hNameHtml, 10.5, 'end'));
+  var h = '';
+  card.rays.forEach(function (m) {
+    var exit = dgRayExit(opts.hRange, opts.vRange, m);
+    var ex = geo.xAt(exit.h), ey = geo.yAt(exit.v);
+    h += '<line x1="' + ox + '" y1="' + oy + '" x2="' + ex + '" y2="' + ey + '" stroke="var(--ref)" stroke-width="1" stroke-opacity="0.5"/>';
+    var dx = ex - ox, dy = ey - oy, len = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / len, uy = dy / len;
+    var label = card.raySym + ' = ' + fmtNum(m), inset = 14, lx, ly, lr;
+    for (var tries = 0; tries < 6; tries++) {
+      lx = ex - ux * inset; ly = ey - uy * inset;
+      lr = dgLabelRect(lx, ly, label, 9.5, 'middle');
+      if (!avoid.some(function (r) { return dgRectsOverlap(lr, r); })) break;
+      inset += 14;
+    }
+    h += dgPlaneLabel(lx, ly, 'middle', label, 'var(--ref)', 9.5);
+  });
+  return h;
+}
+/* The t and F cards' own picture: the transfer map with no draws on it (an
+   empty state built for whichever fields opts.hVals/vVals read, and
+   opts.noEmptyMsg so dgConTransferPic leaves off its "draw one" message),
+   the same two reference lines conPicSlope draws for a landed draw, and
+   contours of the joint density the ray's slope is read against, with the
+   same three reference rays this tab's own construction panel could show a
+   draw meeting. */
+function statPicHtml(d, p, W, H) {
+  var card = DG_STAT_CARD[d.id].pic;
+  var opts = CON_TRANSFER_OPTS[d.id](d, p);
+  var geo = dgConTransferGeom(W, H, opts);
+  var h = dgConTransferPic(card.emptyState(), W, H, Object.assign({}, opts, { noEmptyMsg: true }));
+  h += conRefLinesHtml(card.ref, geo);
+  h += statContoursHtml(opts, geo);
+  h += statRaysHtml(card, opts, geo);
+  return h;
+}
+/* Redraws a tab's own statistical-application picture, or does nothing for
+   a tab with no DG_STAT_CARD entry or none with a picture (the chi-square's
+   two-bin card has neither). Sized from the element's own rendered width
+   the way conRenderPicture is, so that on a narrow screen the frame
+   narrows with its map's aspect held rather than scaling its type down. */
+function statRender(id) {
+  var card = DG_STAT_CARD[id] && DG_STAT_CARD[id].pic;
+  var svg = $('stat-svg-' + id);
+  if (!card || !svg) return;
+  var frame = conPicFrame(id), cw = svg.getBoundingClientRect().width || frame.maxW;
+  var W = Math.max(frame.minW, Math.min(frame.maxW, cw)), H = conFrameH(frame, W);
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.innerHTML = statPicHtml(DG.byId[id], DGUI.params(id), W, H);
 }
 /* The line that turns a construction's pieces into the value the output
    histogram collects, standing directly above that histogram: the
@@ -4315,6 +4679,10 @@ var CON_SUM_HTML = {
   tdist: function (res, p) {
     return 't = Z / √(V/ν)' + (res ? ' = ' + fmtNum(res.x) : '')
       + '<br><span class="con-sum-sub">' + (res ? '= ' + fmtNum(res.z) + ' / √(' + fmtNum(res.v) + '/' + fmtNum(p.nu) + ')' : '&nbsp;') + '</span>';
+  },
+  fdist: function (res, p) {
+    return 'F = (V<sub>1</sub>/d<sub>1</sub>)/(V<sub>2</sub>/d<sub>2</sub>)' + (res ? ' = ' + fmtNum(res.x) : '')
+      + '<br><span class="con-sum-sub">' + (res ? '= (' + fmtNum(res.c1.x) + '/' + fmtNum(p.d1) + ')/(' + fmtNum(res.c2.x) + '/' + fmtNum(p.d2) + ')' : '&nbsp;') + '</span>';
   }
 };
 function conUpdateSum(d) {
@@ -4323,7 +4691,7 @@ function conUpdateSum(d) {
   var st = DGUI.con[d.id];
   el.innerHTML = CON_SUM_HTML[d.id](st && st.last, DGUI.params(d.id));
 }
-var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, tdist: conPicTdist, lnorm: conPicLnorm };
+var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist, tdist: conPicTdist, lnorm: conPicLnorm };
 /* Each construction picture's frame: the width it is capped at, the height
    as a fraction of that width, and the class that caps the element itself.
    Most are the wide 520x160 strip. The Normal and Rayleigh planes are
@@ -4334,18 +4702,32 @@ var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, n
    taller and narrower still: its 160-by-384 map carries a Z range of 6
    against an S range of 2.5, which is the one shape that gives its two
    axes the same units per pixel, and so the ray's drawn slope is the draw.
-   Its minimum width equals its maximum for the same reason – the strips
-   and padding around the map are fixed pixel widths, and a narrower frame
-   would eat into the map's width alone and tilt every ray. */
+   The F reads the same way but square: its 440-wide frame gives a
+   344-by-344 map once the fixed paddings around it are subtracted, so its
+   own two axes – each a 0-to-4 range – share one scale too. Those two
+   frames carry a mapAspect (the map's height over its width) in place of a
+   ratio, because the strips and padding around a map are fixed pixel
+   widths: a height taken as a fraction of the width would let a narrower
+   frame eat into the map's width alone and tilt every ray, whereas
+   conFrameH holds the map's aspect at any width the element renders at. */
 var CON_PIC_FRAME = {
   norm: { maxW: 440, minW: 200, ratio: 1, cls: ' con-pic-square' },
   rayl: { maxW: 440, minW: 200, ratio: 1, cls: ' con-pic-square' },
   chisq: { maxW: 440, minW: 200, ratio: 370 / 440, cls: ' con-pic-tall' },
-  tdist: { maxW: 256, minW: 256, ratio: 474 / 256, cls: ' con-pic-slope' },
+  fdist: { maxW: 440, minW: 200, mapAspect: 1, cls: ' con-pic-square' },
+  tdist: { maxW: 256, minW: 200, mapAspect: 2.4, cls: ' con-pic-slope' },
   lnorm: { maxW: 440, minW: 200, ratio: 370 / 440, cls: ' con-pic-tall' }
 };
 var CON_PIC_FRAME_DEFAULT = { maxW: 520, minW: 240, ratio: 160 / 520, cls: '' };
 function conPicFrame(id) { return CON_PIC_FRAME[id] || CON_PIC_FRAME_DEFAULT; }
+/* A frame's height at a given width: a fixed fraction of the width for most
+   pictures, or, for a frame that declares mapAspect, that aspect applied to
+   the width left once the fixed paddings are subtracted, plus the paddings
+   above and below. */
+function conFrameH(frame, W) {
+  if (frame.mapAspect) return Math.round(frame.mapAspect * (W - DG_TRANSFER_PAD.w) + DG_TRANSFER_PAD.h);
+  return Math.round(W * frame.ratio);
+}
 /* Renders into a dedicated static <g> rather than the svg's own innerHTML,
    the same convention DGUI.genRedraw uses, and so the Rayleigh's own arriving
    dots – appended straight to the svg, after this group, by
@@ -4357,7 +4739,7 @@ function conRenderPicture(d) {
   var cw = svg.getBoundingClientRect().width || 460;
   var frame = conPicFrame(d.id);
   var W = Math.max(frame.minW, Math.min(frame.maxW, cw));
-  var H = Math.round(W * frame.ratio);
+  var H = conFrameH(frame, W);
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   var staticG = svg.querySelector('#con-static-' + d.id);
   if (!staticG) {
@@ -4420,7 +4802,7 @@ function buildConHistMarkup(d, p, xs, W, H, labelOverride) {
       + '<text x="' + xx + '" y="' + (T + innerH + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
   var yLabel = (labelOverride && labelOverride.yLabel) || (isC ? 'f(x)' : 'p(k)');
-  var lblFace = labelOverride ? "'IBM Plex Mono', monospace" : 'Outfit, sans-serif';
+  var lblFace = labelOverride ? "'IBM Plex Mono', monospace" : 'Outfit, Source Serif 4, sans-serif';
   h += '<text x="' + L + '" y="' + (T - 1) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="' + lblFace + '">' + yLabel + '</text>';
   if (labelOverride && labelOverride.xName) {
     h += '<text x="' + (L + innerW) + '" y="' + (T + innerH - 4) + '" text-anchor="end" fill="var(--muted)" font-size="10" font-family="' + lblFace + '">' + labelOverride.xName + '</text>';
@@ -4443,10 +4825,13 @@ function conRenderHist(d) {
   svg.innerHTML = buildConHistMarkup(d, DGUI.params(d.id), st.xs, W, H, CON_HIST_LABEL[d.id]);
 }
 /* The chi-square histogram column is of a sum of k squares, not of x in
-   general, and so its own axis label and name say so; every other tab
-   (this map has no other entries) keeps the generic f(x)/p(k) label. */
+   general, and so its own axis label and name say so; the t and F columns
+   are likewise of their own ratio rather than a generic x, and carry their
+   own letter the same way. Every tab outside this map keeps the generic
+   f(x)/p(k) label instead. */
 var CON_HIST_LABEL = {
   chisq: { yLabel: 'f(' + dgSvgChiSq('k', ')', 10), xName: dgSvgChiSq('k', '', 10) },
+  fdist: { yLabel: 'f(F)', xName: 'F' },
   tdist: { yLabel: 'f(t)', xName: 't' }
 };
 DGUI.con = {};
@@ -4459,8 +4844,10 @@ DGUI.conEnsure = function (id) {
     // normal draw Y), its left strip reading xs like every other tab's.
     // ts and tz are the t map's own bottom- and left-strip sources – every
     // S/σ = √(V/ν) and every Z drawn – with pts (above) holding the pair each
-    // draw's point landed at.
-    zs: [], outY: [], ys: [], tz: [], ts: [],
+    // draw's point landed at. fh and fv are the F map's own bottom- and
+    // left-strip sources – every V2/d2 and every V1/d1 drawn – reusing the
+    // same pts field the t's own meeting point does.
+    zs: [], outY: [], ys: [], tz: [], ts: [], fh: [], fv: [],
     animating: false, animId: null, dots: null, overflow: null
   };
   return DGUI.con[id];
@@ -4511,14 +4898,14 @@ DGUI.conReset = function (id) {
     if (id === 'rayl') conRemoveDots(st);
     if (id === 'norm') conRemoveNormDots(st);
     if (id === 'chisq' || id === 'lnorm') conRemoveTransferDots(st);
-    if (id === 'tdist') conRemoveMeetDots(st);
+    if (id === 'tdist' || id === 'fdist') conRemoveMeetDots(st);
   }
   // eqW survives a reset: it is sized off the parameter range, not off any
   // particular draw, and reserveConEqSizes only ever runs from onTabShown.
   var eqW = st ? st.eqW : null;
   DGUI.con[id] = {
     rand: DG.mulberry32(Date.now() >>> 0), xs: [], pts: [], inX: [], inY: [], outA: [], outB: [], last: null, eqW: eqW,
-    zs: [], outY: [], ys: [], tz: [], ts: [],
+    zs: [], outY: [], ys: [], tz: [], ts: [], fh: [], fv: [],
     animating: false, animId: null, dots: null, overflow: null
   };
   DGUI.conRefresh(id);
@@ -4845,7 +5232,7 @@ function conAnimateTransfer(id, n) {
   }
   var cw = svg.getBoundingClientRect().width || 460;
   var frame = conPicFrame(id);
-  var W = Math.max(frame.minW, Math.min(frame.maxW, cw)), H = Math.round(W * frame.ratio);
+  var W = Math.max(frame.minW, Math.min(frame.maxW, cw)), H = conFrameH(frame, W);
   var geo = dgConTransferGeom(W, H, opts);
   var maxDraws = Math.max(1, Math.floor(opts.maxAnimDraws(p)));
   var animated = draws.slice(0, maxDraws), overflow = draws.slice(maxDraws);
@@ -4942,21 +5329,21 @@ function conRemoveMeetDots(st) {
   });
   st.dots = null;
 }
-/* Animates the t tab's own draws: unlike the Chi-square and Log-normal
-   transfer maps, both of the t's strips are independent inputs rather than
-   one derived from the other, and so this does not reuse
+/* Animates the t and F tabs' own draws: unlike the Chi-square and
+   Log-normal transfer maps, both tabs' two strips are independent inputs
+   rather than one derived from the other, and so this does not reuse
    conAnimateTransfer's single-dot, turn-once shape – it follows
    conAnimateRayl's meeting choreography instead, read on the transfer map's
    two independently scaled axes (dgConTransferGeom) rather than on one
    shared plane. For each draw, a green dot appears on the bottom strip's
-   baseline at Z (the bottom histogram grows) and another on the left
-   strip's baseline at V (the left histogram grows), and both travel in a
-   straight line toward the point they meet at – the Z dot straight up, the
-   V dot straight right – landing together, at which point conPicTdist
-   takes over and draws the landed point in orange with its projections and
-   label. Up to 100 draws of a batch animate as a staggered swarm (a single
-   draw is a swarm of one); any further draws land instantly once the swarm
-   finishes. */
+   baseline at its own value (the bottom histogram grows) and another on
+   the left strip's baseline at its own value (the left histogram grows),
+   and both travel in a straight line toward the point they meet at – the
+   bottom dot straight up, the left dot straight right – landing together,
+   at which point conPicSlope takes over and draws the landed point in
+   orange with its projections and label. Up to 100 draws of a batch
+   animate as a staggered swarm (a single draw is a swarm of one); any
+   further draws land instantly once the swarm finishes. */
 function conAnimateMeet(id, n) {
   var d = DG.byId[id], st = DGUI.conEnsure(id), svg = $('con-svg-' + id);
   var p = DGUI.params(id), opts = CON_TRANSFER_OPTS[id](d, p);
@@ -4970,7 +5357,7 @@ function conAnimateMeet(id, n) {
   }
   var cw = svg.getBoundingClientRect().width || 460;
   var frame = conPicFrame(id);
-  var W = Math.max(frame.minW, Math.min(frame.maxW, cw)), H = Math.round(W * frame.ratio);
+  var W = Math.max(frame.minW, Math.min(frame.maxW, cw)), H = conFrameH(frame, W);
   var geo = dgConTransferGeom(W, H, opts);
   var maxDraws = Math.max(1, Math.floor(opts.maxAnimDraws(p)));
   var animated = draws.slice(0, maxDraws), overflow = draws.slice(maxDraws);
@@ -5025,11 +5412,11 @@ function conAnimateMeet(id, n) {
   }
   st.animId = requestAnimationFrame(frame3);
 }
-/* Finishes the t tab's in-flight meeting animation instantly: every pair of
-   dots still traveling is committed at its own final (Z, V) on the spot,
-   and any batch overflow past the first 100 animated draws lands with it.
-   Used when a new click arrives mid-animation, and so the new draws never
-   stack on top of ones still in flight. */
+/* Finishes the t or F tab's in-flight meeting animation instantly: every
+   pair of dots still traveling is committed at its own final position on
+   the spot, and any batch overflow past the first 100 animated draws lands
+   with it. Used when a new click arrives mid-animation, and so the new
+   draws never stack on top of ones still in flight. */
 function conFinishAnimMeet(id) {
   var st = DGUI.con[id]; if (!st) return;
   if (st.animId) cancelAnimationFrame(st.animId);
@@ -5062,7 +5449,7 @@ function conFinishAnimMeet(id) {
    Normal and Rayleigh draw through their own spinner and arriving-point
    animation (conAnimateNorm, conAnimateRayl), the Chi-square and Log-normal
    through the shared transfer-map animation (conAnimateTransfer), and the t
-   through the meeting animation it shares no other tab's shape with
+   and F through the meeting animation they share with no other tab
    (conAnimateMeet), because each tab's whole point is watching its own
    mechanism run rather than seeing the point simply appear; a click that
    lands mid-animation finishes the swarm already in flight first, and so no
@@ -5089,7 +5476,7 @@ DGUI.conDraw = function (id, n) {
     conAnimateTransfer(id, n);
     return;
   }
-  if (id === 'tdist') {
+  if (id === 'tdist' || id === 'fdist') {
     var stM = DGUI.conEnsure(id);
     if (stM.animating) conFinishAnimMeet(id);
     conAnimateMeet(id, n);
@@ -5446,13 +5833,7 @@ function genUpdateMsg(d) {
   var el = $('gen-msg-' + d.id);
   if (!el) return;
   var st = DGUI.gen[d.id];
-  if (!st || st.xs.length === 0) { el.innerHTML = dgSummaryHtml(d, 0, 0, 0, 0, 0, '', true); return; }
-  var p = DGUI.params(d.id), n = st.xs.length;
-  var mean = st.xs.reduce(function (a, b) { return a + b; }, 0) / n;
-  var variance = n > 1 ? st.xs.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / (n - 1) : 0;
-  var sd = Math.sqrt(Math.max(0, variance));
-  var testLine = n >= 2 ? dgTestLineHtml(d, p, st.xs) : '';
-  el.innerHTML = dgSummaryHtml(d, n, mean, sd, d.mean(p), Math.sqrt(Math.max(0, d.variance(p))), testLine, true);
+  el.innerHTML = dgSummaryBlockHtml(d, st ? st.xs : [], true);
 }
 /* The one-sentence note under the recipe for a closed-form or numeric
    sampler, and the cumulative table a search-kind sampler actually walks
@@ -5545,7 +5926,7 @@ DGUI.genRedraw = function (id) {
     h += '<line x1="' + xx + '" y1="' + (T + S) + '" x2="' + xx + '" y2="' + (T + S + 4) + '" stroke="var(--border)" stroke-width="1"/>';
     h += '<text x="' + xx + '" y="' + (T + S + 15) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
-  h += '<text x="' + (L + S / 2) + '" y="' + (T - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">cdf F(' + (isC ? 'x' : 'k') + ')</text>';
+  h += '<text x="' + (L + S / 2) + '" y="' + (T - 3) + '" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">cdf F(' + (isC ? 'x' : 'k') + ')</text>';
 
   // The U margin is two disjoint bands (see dgGenLayout): the tick numbers
   // live in uGap, right against the axis, and are never touched by a bar;
@@ -5565,7 +5946,7 @@ DGUI.genRedraw = function (id) {
   var uScaleAt = function (dens) { return Math.min(1, dens / uAxisMax) * geo.uStrip; };
   // Placed at the axis's own top, the way the pdf/cdf plots label their own
   // y-axis, rather than centered in the margin far below the bars.
-  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">U</text>';
+  h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">U</text>';
   for (var bi = 0; bi < uBins; bi++) {
     var yTopPx = geo.uAt((bi + 1) / uBins), yBotPx = geo.uAt(bi / uBins);
     var barLen = uScaleAt(uDensities[bi]);
@@ -5621,10 +6002,10 @@ DGUI.genRedraw = function (id) {
   // the axis's own x0 tick lands whenever x0 is itself a tick value (0 for
   // most of these distributions), and a bin there can also be the tallest
   // bar in the strip, and so anything drawn at x = L collides with one or both.
-  h += '<text x="' + (L - 4) + '" y="' + (xStripTop + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
+  h += '<text x="' + (L - 4) + '" y="' + (xStripTop + 18) + '" text-anchor="end" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">' + (isC ? 'f(x)' : 'p(k)') + '</text>';
   // Placed just past the axis's own right end, on the axis line itself,
   // rather than centered far below the bottom strip's bars.
-  h += '<text x="' + (L + S + 4) + '" y="' + (T + S + 4) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
+  h += '<text x="' + (L + S + 4) + '" y="' + (T + S + 4) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">' + (isC ? 'x' : 'k') + '</text>';
 
   staticG.innerHTML = h;
 };
@@ -5802,6 +6183,7 @@ DGUI.refresh = function (id) {
   updateLegendLive(d, p);
   updateLegendRefsVisibility(d);
   DGUI.drawPlots(id);
+  statRender(id);
 };
 /* The checkbox never touches the knobs, and so a full refresh – which redraws
    the plots and hides or shows the matching legend entries together – is

@@ -700,15 +700,19 @@ better.
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
-  inverse-transform generator; nine tabs add a second panel constructing the same draw from simpler
+  inverse-transform generator; ten tabs add a second panel constructing the same draw from simpler
   pieces (a sum of exponentials for Erlang, the Box–Muller spinner for the normal, two normals
   arriving from the plane's edges for the Rayleigh, a transfer map from a standard normal to its
   square for chi-square and from a normal to its exponential for the log-normal, and, for Student's
-  t, two independent inputs – a standard normal and a chi-square – meeting at a point on that same
-  transfer-map layout rather than one deriving the other, and so on). Chi-square, F, and t are not
-  chosen as input models and share the "Common use in statistical applications" heading in place of
-  the other tabs' "Common use in stochastic models". Every panel's draw summary is a table of the
-  mean and sd with 95% intervals beside the distribution's own,
+  t and for the F, two independent inputs meeting at a point on axes drawn to one scale, so that the
+  draw is the slope of the ray from the origin – Z over S/σ = √(V/ν) for the t, V₁/d₁ over V₂/d₂
+  for the F – and so on). Chi-square, F, and t are not chosen as input models: they share the
+  "Common use in statistical applications" heading in place of the other tabs' "Common use in
+  stochastic models", and each carries a "Statistical application" card between its plots and its
+  formulas that derives its statistic in steps, the t's and F's beside contours of the joint density
+  their slope is read off, redrawn as the parameters move. Every panel's draw summary is a table of
+  the mean and sd with 95% intervals beside the distribution's own, drawn in full before the first
+  draw with dashes in the estimate cells,
   plus a goodness-of-fit test against the distribution at its known parameters (Kolmogorov–Smirnov
   for a continuous tab, chi-square for a discrete one). Green marks a draw's input and orange its
   output wherever the two are drawn apart. Navigation is a pill picker standing above every page in two
