@@ -3569,10 +3569,10 @@ var DG_STAT_CARD = {
     },
     steps: [
       { title: 'The statistic',
-        desc: 'Two independent samples from normal populations with a common standard deviation σ, of sizes n<sub>1</sub> and n<sub>2</sub>, give two sample variances, and the F statistic is their ratio: near 1 when the two spreads agree, far from it when they do not.',
+        desc: 'The F statistic tests whether two populations differ in spread, and so it is built on the hypothesis that they do not: two independent samples, of sizes n<sub>1</sub> and n<sub>2</sub>, from normal populations that share one standard deviation σ. Each sample gives a sample variance, and the statistic is their ratio, near 1 when the two spreads agree and far from it when they do not.',
         sym: 'F = S<sub>1</sub><sup>2</sup> / S<sub>2</sub><sup>2</sup>' },
       { title: 'Each variance is a scaled chi-square',
-        desc: 'Each sample variance, scaled by the common σ<sup>2</sup>, is a chi-square over its own degrees of freedom, the same fact the t statistic rests on. The σ<sup>2</sup> cancels in the ratio, which is why the F needs no σ at all.',
+        desc: 'Scaled by the common σ<sup>2</sup>, each sample variance is a <button class="jump" onclick="jumpTo(\'chisq\')">chi-square</button> divided by its own degrees of freedom, d<sub>1</sub> = n<sub>1</sub> − 1 for the first sample and d<sub>2</sub> = n<sub>2</sub> − 1 for the second; this is the same fact the <button class="jump" onclick="jumpTo(\'tdist\')">t statistic</button> rests on. Call those two chi-squares V<sub>1</sub> and V<sub>2</sub>. The ratio of the variances is then a ratio of scaled chi-squares, and the σ<sup>2</sup> cancels in it, which is why the F needs no σ at all.',
         sym: 'S<sub>1</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>1</sub>/d<sub>1</sub> and S<sub>2</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>2</sub>/d<sub>2</sub>, and so F = (V<sub>1</sub>/d<sub>1</sub>) / (V<sub>2</sub>/d<sub>2</sub>), with d<sub>1</sub> = n<sub>1</sub> − 1 and d<sub>2</sub> = n<sub>2</sub> − 1' },
       { title: 'Analysis of variance is the same ratio',
         desc: 'In an analysis of variance, the numerator is the variance among the group means and the denominator the variance within the groups; under the null hypothesis, both estimate the same σ<sup>2</sup>, and their ratio is an F with the groups\' degrees of freedom on top and the residual degrees of freedom below.',
@@ -4283,7 +4283,10 @@ function dgConTransferPic(st, W, H, opts) {
   // In the band above the strip, on the row of the axis name, rather than
   // inside the strip's top corner: there it sat on the row of the top tick
   // label, and "Z ~ N(0, 1)" beside a "3" read as one string.
-  h += '<text x="' + (geo.padOuter + 2) + '" y="' + (geo.mapY0 - 5) + '" text-anchor="start" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.vStripLabel + '</text>';
+  // opts.vStripLabelLift raises it further for a label whose nested
+  // subscripts (the F's chi-square with a subscripted d) would otherwise
+  // descend into the top tick label on the row below.
+  h += '<text x="' + (geo.padOuter + 2) + '" y="' + (geo.mapY0 - 5 - (opts.vStripLabelLift || 0)) + '" text-anchor="start" fill="var(--muted)" font-size="9.5"' + mono + '>' + opts.vStripLabel + '</text>';
 
   // Empty only while nothing has happened yet at all – hVals/vVals, not
   // xs, because xs gains the Chi-square's own first entry only once a
@@ -4411,6 +4414,7 @@ var CON_TRANSFER_OPTS = {
       hNameHtml: '', vNameHtml: '',
       hStripLabel: 'V' + dgSvgSub('2', '/d', 9.5) + dgSvgSub('2', ', V', 9.5) + dgSvgSub('2', ' ~ ', 9.5) + dgSvgChiSq('d' + dgSvgSub('2', '', 6.84), '', 9.5), hStripLabelAt: 'end',
       vStripLabel: 'V' + dgSvgSub('1', '/d', 9.5) + dgSvgSub('1', ', V', 9.5) + dgSvgSub('1', ' ~ ', 9.5) + dgSvgChiSq('d' + dgSvgSub('1', '', 6.84), '', 9.5),
+      vStripLabelLift: 4,
       vColor: 'var(--in)',
       hBins: dgLinBins(0, 4, 32), vBins: dgLinBins(0, 4, 32),
       hVals: function (s) { return s.fh; }, vVals: function (s) { return s.fv; },
