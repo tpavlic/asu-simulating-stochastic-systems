@@ -316,9 +316,13 @@ svg.dg { display: block; width: 100%; height: auto; }
    moving when these entries disappear. */
 .legend.refs-hidden .legend-ref { display: none; }
 /* Jump links between tabs are buttons styled as links, and so they work from the keyboard and never navigate. */
-/* min-width keeps a one-letter name (F) at a 24px-wide hit area without
-   padding pushing the glyph away from the text that follows it. */
-.jump { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: none; min-height: 24px; min-width: 24px; }
+/* The 24px hit area comes from an invisible pseudo-element reaching past
+   the glyphs on every side, rather than from a min-width or min-height on
+   the button itself: a minimum size would center a one-letter name (F) in a
+   box wider than the letter and open a gap on each side of it in the
+   sentence it sits in. */
+.jump { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: none; position: relative; }
+.jump::after { content: ''; position: absolute; inset: -4px -9px; }
 .jump:hover { text-decoration: underline; }
 .lede { font-size: .93rem; margin-bottom: 12px; }
 .meta { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; font-size: .86rem; margin-bottom: 10px; }
@@ -3596,8 +3600,9 @@ var DG_STAT_CARD = {
         sym: dgSigma('i = 1', 'k') + ' (O<sub>i</sub> − E<sub>i</sub>)<sup>2</sup>/E<sub>i</sub> ≈ χ<sup>2</sup><sub>k−1</sub>',
         after: 'If the distribution behind the expected counts has parameters set from the data, such as a mean set to the sample mean, then each parameter fixed that way is one more substitution of the same kind, and the degrees of freedom fall by one more for each.' },
       { title: 'The same shape from a sample variance',
-        desc: 'A scaled sample variance from a normal population, (n − 1)S<sup>2</sup>/σ<sup>2</sup>, has the same distribution with n − 1 degrees of freedom: it is the sum of the n squared standardized deviations from the sample mean, with one degree of freedom taken by the mean. This is the fact the t and F statistics rest on.',
-        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> ~ χ<sup>2</sup><sub>n−1</sub>' }
+        desc: 'The sample variance of n draws from a normal population is S<sup>2</sup> = Σ(X<sub>i</sub> − <span class="bar">X</span>)<sup>2</sup>/(n − 1), and so multiplying it by (n − 1)/σ<sup>2</sup> cancels the n − 1 and leaves the sum of the n squared deviations from the sample mean, each in units of σ. As a result, a sample variance scaled by the ratio of its degrees of freedom, n − 1, to the true population variance σ<sup>2</sup> is distributed exactly, not approximately, as the sum of n − 1 squared standard normals.',
+        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> = ((n − 1)/σ<sup>2</sup>) · ' + dgSigma('i = 1', 'n') + ' (X<sub>i</sub> − <span class="bar">X</span>)<sup>2</sup>/(n − 1) = ' + dgSigma('i = 1', 'n') + ' ((X<sub>i</sub> − <span class="bar">X</span>)/σ)<sup>2</sup> ~ χ<sup>2</sup><sub>n−1</sub>',
+        after: 'This assumes that S<sup>2</sup> was calculated without knowledge of the population mean, and so one degree of freedom was lost to basing the calculation on the sample mean instead. If the variance is calculated with the true population mean, then scaling it by n/σ<sup>2</sup> gives a quantity distributed as the sum of n squared standard normals. In general, scaling a sample variance by the ratio of its degrees of freedom to the true population variance gives a chi-square with those same degrees of freedom, and that fact is used in deriving both the ' + dgFamilyJumpButton('fdist') + ' and ' + dgFamilyJumpButton('tdist') + ' distributions.' }
     ]
   }
 };
