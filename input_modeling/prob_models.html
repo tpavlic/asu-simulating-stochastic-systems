@@ -500,6 +500,9 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .con-eq-line + .con-eq-line { border-top: 1px solid var(--border); }
 .con-eq-step-hd { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 700; font-size: .86rem; color: var(--text); margin-bottom: 2px; }
 .con-eq-desc { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-weight: 400; font-size: .82rem; color: var(--muted); line-height: 1.4; margin-bottom: 4px; }
+/* A step's second paragraph, below its symbolic line, for what the line
+   just shown means. */
+.con-eq-after { margin: 6px 0 0; }
 .con-eq-sym-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px; font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .con-eq-sym { flex: 1 1 260px; color: var(--text); }
 .con-eq-val { color: var(--truth); text-align: right; white-space: nowrap; }
@@ -3586,10 +3589,12 @@ var DG_STAT_CARD = {
         sym: 'Z = (O<sub>1</sub> − np) / √(np(1 − p)) ≈ N(0, 1)' },
       { title: 'The two-bin statistic is one squared normal',
         desc: 'After substituting E<sub>1</sub> = np, E<sub>2</sub> = n(1 − p), and O<sub>2</sub> = n − O<sub>1</sub> and then simplifying to put both terms over a common denominator, the chi-square statistic for two bins matches the squared standardized count in the first bin. Thus, a chi-square with one degree of freedom describes one squared standard normal.',
-        sym: '(O<sub>1</sub> − E<sub>1</sub>)<sup>2</sup>/E<sub>1</sub> + (O<sub>2</sub> − E<sub>2</sub>)<sup>2</sup>/E<sub>2</sub> = (O<sub>1</sub> − np)<sup>2</sup>/(np) + (O<sub>2</sub> − n(1 − p))<sup>2</sup>/(n(1 − p)) = (O<sub>1</sub> − np)<sup>2</sup> / (np(1 − p)) = Z<sup>2</sup> ~ χ<sup>2</sup><sub>1</sub>' },
+        sym: '(O<sub>1</sub> − E<sub>1</sub>)<sup>2</sup>/E<sub>1</sub> + (O<sub>2</sub> − E<sub>2</sub>)<sup>2</sup>/E<sub>2</sub> = (O<sub>1</sub> − np)<sup>2</sup>/(np) + (O<sub>2</sub> − n(1 − p))<sup>2</sup>/(n(1 − p)) = (O<sub>1</sub> − np)<sup>2</sup> / (np(1 − p)) = Z<sup>2</sup> ~ χ<sup>2</sup><sub>1</sub>',
+        after: 'With two bins, knowing the count in one bin fixes the count in the other, because the total is known. Consequently, when judging whether the observed counts depart from the expected counts by more than chance allows, the distribution of acceptable deviations has to be based on only one of the two counts, or the same departure is counted twice. This is what it means for two bins to have one degree of freedom, and it is why the statistic, written with both counts, reduces to a form based on a single count. When the expected count in that bin is at least 5, that single-count expression is distributed approximately as a squared standard normal.' },
       { title: 'k bins',
-        desc: 'With k bins, the k deviations O<sub>i</sub> − E<sub>i</sub> still sum to zero, and so only k − 1 of them are free; for a large n, the statistic is a sum of k − 1 squared standard normals, a chi-square with k − 1 degrees of freedom. The two-bin case above is the algebra, and the general case is the same statement made about a multivariate normal. Each parameter estimated from the data takes one more degree of freedom away.',
-        sym: dgSigma('i = 1', 'k') + ' (O<sub>i</sub> − E<sub>i</sub>)<sup>2</sup>/E<sub>i</sub> ≈ χ<sup>2</sup><sub>k−1</sub>' },
+        desc: 'Just as with two bins, k bins have only k − 1 degrees of freedom: the k deviations O<sub>i</sub> − E<sub>i</sub> sum to zero, and so the statistic can be rewritten in terms of k − 1 of them. If every bin has an expected count of at least 5, that rewritten statistic has, approximately, the distribution of a sum of k − 1 independent squared standard normals – not one per deviation, because the k − 1 free deviations are correlated and it takes a change of variables to separate them, but k − 1 of them all the same. Thus, a chi-square with k − 1 degrees of freedom has the distribution of the sum of k − 1 squared standard normals.',
+        sym: dgSigma('i = 1', 'k') + ' (O<sub>i</sub> − E<sub>i</sub>)<sup>2</sup>/E<sub>i</sub> ≈ χ<sup>2</sup><sub>k−1</sub>',
+        after: 'If the distribution behind the expected counts has parameters set from the data, such as a mean set to the sample mean, then each parameter fixed that way is one more substitution of the same kind, and the degrees of freedom fall by one more for each.' },
       { title: 'The same shape from a sample variance',
         desc: 'A scaled sample variance from a normal population, (n − 1)S<sup>2</sup>/σ<sup>2</sup>, has the same distribution with n − 1 degrees of freedom: it is the sum of the n squared standardized deviations from the sample mean, with one degree of freedom taken by the mean. This is the fact the t and F statistics rest on.',
         sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> ~ χ<sup>2</sup><sub>n−1</sub>' }
@@ -3607,6 +3612,7 @@ function statStepsHtml(id) {
       + '<div class="con-eq-step-hd">Step ' + (i + 1) + ' · ' + ln.title + '</div>'
       + '<p class="con-eq-desc">' + ln.desc + '</p>'
       + '<div class="con-eq-sym-row"><span class="con-eq-sym">' + ln.sym + '</span></div>'
+      + (ln.after ? '<p class="con-eq-desc con-eq-after">' + ln.after + '</p>' : '')
       + '</div>';
   }).join('');
 }
