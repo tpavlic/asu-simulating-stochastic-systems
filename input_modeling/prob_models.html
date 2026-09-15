@@ -266,6 +266,19 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    LaTeX align look, without knowing in advance how many chunks fit on a
    line. minmax(0, 1fr) on the second column is what lets it actually
    shrink to the available width instead of overflowing at 390px. */
+.eq-note { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-size: .82rem; color: var(--muted); }
+.eq-txt { font-family: 'Outfit', 'Source Serif 4', sans-serif; font-size: .84rem; }
+/* A recipe is a stack of lines under its own label: an equation line is set
+   off from the prose around it by an indent, and a sentence sits flush. */
+.recipe-blk { margin: 6px 0 4px; }
+.recipe-blk .eq-lbl { display: block; margin-bottom: 2px; }
+.recipe-blk .eq { display: block; }
+/* The line classes are not scoped to the block: the height reservation
+   measures a recipe in a clone placed outside it, and scoped rules would not
+   reach the clone. */
+.eq-line { display: block; }
+.eq-line + .eq-line { margin-top: 3px; }
+.eq-disp { padding-left: 1.4em; }
 .eq-align { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .5em; row-gap: 2px; align-items: baseline; }
 .eq-chunks { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; min-width: 0; }
 /* A chunk too long even for a line of its own wraps internally with a
@@ -477,6 +490,10 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 /* The construction's own equation, centered over its output histogram. */
 .con-sum { text-align: center; white-space: nowrap; margin: 2px 0 4px; }
 .con-sum-out { color: var(--est); }
+/* The Erlang's line is an equality chain that wraps, its chunks aligned
+   under the first equals sign by dgEqLineHtml, rather than one centered
+   line. */
+.con-sum-eq { text-align: left; white-space: normal; }
 .con-sum-sub { color: var(--muted); font-size: .8rem; }
 /* The Normal and Rayleigh construction pictures get their own square,
    wider frame instead of the 520x160 one every other construction picture
@@ -507,7 +524,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 /* A step's second paragraph, below its symbolic line, for what the line
    just shown means. */
 .con-eq-after { margin: 6px 0 0; }
-.con-eq-sym-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px; font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.con-eq-sym-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px; padding-left: 1.4em; font-family: 'IBM Plex Mono', monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
 .con-eq-sym { flex: 1 1 260px; color: var(--text); }
 .con-eq-val { color: var(--truth); text-align: right; white-space: nowrap; }
 /* The statistical-application card: a stepwise derivation beside (or, once
@@ -1498,9 +1515,9 @@ DG.construct = {
   /* k exponential stages laid end to end; the product form −ln(ΠU)/λ is the
      same sum, just accumulated one stage at a time so each stage is kept. */
   erlang: function (rand, p) {
-    var parts = [], x = 0;
-    for (var i = 0; i < p.k; i++) { var e = -Math.log(DG.unif(rand)) / p.lam; parts.push(e); x += e; }
-    return { x: x, parts: parts };
+    var parts = [], us = [], x = 0;
+    for (var i = 0; i < p.k; i++) { var u = DG.unif(rand), e = -Math.log(u) / p.lam; us.push(u); parts.push(e); x += e; }
+    return { x: x, parts: parts, us: us };
   },
   /* n coin flips; the count of heads is the binomial draw. */
   binom: function (rand, p) {
@@ -1754,19 +1771,19 @@ var DG_TEXT = {
     mode: "0",
     when: "memoryless waiting time with a known mean",
     lede: "The exponential is the memoryless waiting time: the gap between independent arrivals, or the life of a component that never ages.",
-    choose: ["Choose it for <strong>a non-negative waiting time with a known mean and no memory</strong>: the time to the next arrival when arrivals are independent of the past, or the time to a random failure at a constant rate. The mean and the standard deviation are both 1/λ.", { hd: "Memorylessness", text: "Pr(X > x + y | X > x) = Pr(X > y): an old component is exactly as likely to fail in the next minute as a new one. That is the reason to choose it and the warning against it. When the failure rate rises or falls with age, use the Weibull; when the time is a sum of stages, use the Erlang." }]
+    choose: ["Choose it for <strong>a non-negative waiting time with a known mean and no memory</strong>: the time to the next arrival when arrivals are independent of the past, or the time to a random failure at a constant rate. The mean and the standard deviation are both 1/λ.", { hd: "Memorylessness", text: "Pr(X > x + y | X > x) = Pr(X > y): an old component is exactly as likely to fail in the next minute as a new one. That is the reason to choose it and the warning against it. When the failure rate rises or falls with age, use the Weibull; when the time is a sum of exponentials, use the Erlang." }]
   },
   erlang: {
     support: "[0, ∞)",
-    paramRange: "k, a positive integer, and λ > 0 (how many exponential stages are summed and the rate of each)",
+    paramRange: "k, a positive integer, the <strong>shape</strong>, and λ > 0, the <strong>rate</strong>: the rate sets the <strong>scale</strong> 1/λ, which is the mean of each of the k exponentials being summed",
     pdf: "f(x) = λ<sup>k</sup>x<sup>k−1</sup>e<sup>−λx</sup>/(k − 1)! for x ≥ 0",
     cdf: "F(x) = 1 − Σ<sub>i=0</sub><sup>k−1</sup> (λx)<sup>i</sup>e<sup>−λx</sup>/i!",
     mean: "<span class=\"frac\"><span class=\"num\">k</span><span class=\"den\">λ</span></span>",
     variance: "<span class=\"frac\"><span class=\"num\">k</span><span class=\"den\">λ<sup>2</sup></span></span>",
     mode: "<span class=\"frac\"><span class=\"num\">k − 1</span><span class=\"den\">λ</span></span>",
-    when: "the sum of k exponential stages",
-    lede: "The Erlang is the wait for k independent exponential stages to finish in a row.",
-    choose: ["Choose it for <strong>a time that is the sum of k independent exponential stages of the same rate</strong>: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", { hd: "Relationship to other distributions", text: "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, and so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal." }]
+    when: "the sum of k exponentials",
+    lede: "The Erlang is the wait for k independent exponentials to finish in a row; it is sometimes written Erlang-k, with k pulled up into the name.",
+    choose: ["Choose it for <strong>a time that is the sum of k independent exponentials of the same rate</strong>: a service made of k steps, the lead time for k units made in sequence, or the failure time of k redundant components that all have to fail.", { hd: "Relationship to other distributions", text: "It is the exponential with a memory: for k ≥ 2 the density starts at zero, and the coefficient of variation is 1/√k, and so it is the usual step away from the exponential when times are less variable than memoryless. The Gamma is the same family with a real-valued k, and as k grows with the mean held fixed the shape approaches a normal." }]
   },
   weib: {
     support: "[0, ∞)",
@@ -1855,9 +1872,9 @@ var DG_TEXT = {
     mean: "kθ",
     variance: "kθ<sup>2</sup>",
     mode: "(k − 1)θ when k ≥ 1; 0 otherwise",
-    when: "an Erlang with a real-valued stage count",
-    lede: "The Gamma generalizes the Erlang to a real-valued stage count, keeping the same positive, right-skewed shape.",
-    choose: ["Choose it for <strong>a positive, right-skewed quantity</strong> when the Erlang's whole-number stage count is too restrictive: the shape k sets the skew and the scale θ sets the units, and the mean is kθ.", { hd: "Relationship to other distributions", text: "With an integer k it is the Erlang, and with k = 1 it is the exponential with mean θ. Beside the log-normal and the Weibull, it is one of the three usual choices for a positive skewed variable. Its cdf has no closed form, and so software draws from it by acceptance-rejection rather than by inverting the cdf." }]
+    when: "an Erlang with a real-valued k",
+    lede: "The Gamma generalizes the Erlang to a real-valued k, keeping the same positive, right-skewed shape.",
+    choose: ["Choose it for <strong>a positive, right-skewed quantity</strong> when the Erlang's whole-number k is too restrictive: the shape k sets the skew and the scale θ sets the units, and the mean is kθ.", { hd: "Relationship to other distributions", text: "With an integer k it is the Erlang, and with k = 1 it is the exponential with mean θ. Beside the log-normal and the Weibull, it is one of the three usual choices for a positive skewed variable. Its cdf has no closed form, and so software draws from it by acceptance-rejection rather than by inverting the cdf." }]
   },
   chisq: {
     support: "[0, ∞)",
@@ -2070,7 +2087,8 @@ function buildTab(d) {
   // other tab carries.
   var chooseHd = (d.id === 'chisq' || d.id === 'fdist' || d.id === 'tdist') ? 'Common use in statistical applications' : 'Common use in stochastic models';
   html += '<div class="sec"><div class="sec-hd">' + chooseHd + '</div>' + t.choose.map(function (p) {
-    return typeof p === 'string' ? '<p class="choose-lead">' + p + '</p>' : '<p class="choose-more"><strong>' + p.hd + '.</strong> ' + p.text + '</p>';
+    return typeof p === 'string' ? '<p class="choose-lead">' + dgLinkNames(p, d.id) + '</p>'
+      : '<p class="choose-more"><strong>' + p.hd + '.</strong> ' + dgLinkNames(p.text, d.id) + '</p>';
   }).join('') + '</div>';
   html += '<div class="sec">';
   html += '<div class="sec-hd">' + d.name + ' · ' + typeLabel + '</div>';
@@ -2650,6 +2668,37 @@ function dgFamilyNoteHtml(family) {
 function dgFamilyJumpButton(id) {
   return '<button class="jump" onclick="jumpTo(\'' + id + '\')">' + DG.byId[id].name + '</button>';
 }
+/* Every mention of another distribution on this page inside a choose card
+   becomes a jump to its tab. Longer names go first so "negative binomial"
+   is never split into a bare "binomial" link, and a linked run is set
+   aside before the shorter names are tried. The one-letter names, F and
+   t, are linked only after an article ("the square of a t", "by F"), which
+   keeps the cdf F(μ), a time t, and λt as text; a test or table named
+   after a distribution (t test, F test, t table), an exponential decay,
+   and a Weibull plot are not the distributions themselves and stay as
+   text either; the tab's own name is never linked to itself. */
+var DG_LINK_NAMES = [
+  ['negative binomial', 'nbinom', 'i'], ['discrete uniform', 'dunif', 'i'], ['continuous uniform', 'unif', 'i'],
+  ['log-normal', 'lnorm', 'i'], ['chi-square', 'chisq', 'i'], ["Student's t", 'tdist', ''],
+  ['Bernoulli', 'bern', ''], ['binomial', 'binom', 'i'], ['geometric', 'geom', 'i'], ['Poisson', 'pois', ''],
+  ['exponential', 'expo', 'i'], ['Erlang', 'erlang', ''], ['Weibull', 'weib', ''], ['Gamma', 'gamma', ''],
+  ['Beta', 'beta', ''], ['Rayleigh', 'rayl', ''], ['normal', 'norm', 'i'], ['uniform', 'unif', 'i'],
+  ['triangular', 'tri', 'i'], ['F', 'fdist', '', true], ['t', 'tdist', '', true]
+];
+function dgLinkNames(html, selfId) {
+  var held = [];
+  DG_LINK_NAMES.forEach(function (entry) {
+    var name = entry[0], id = entry[1];
+    if (id === selfId) return;
+    var before = entry[3] ? '(?<=\\b(?:a|an|the|of|by) )' : '(?<![\\w₁₂-])';
+    var re = new RegExp(before + '(' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:s\\b)?)(?![\\w-]|\\s+(?:decay|test|tests|table|plot)\\b)', 'g' + entry[2]);
+    html = html.replace(re, function (m) {
+      held.push('<button class="jump" onclick="jumpTo(\'' + id + '\')">' + m + '</button>');
+      return '\u0001' + (held.length - 1) + '\u0001';
+    });
+  });
+  return html.replace(/\u0001(\d+)\u0001/g, function (m, i) { return held[Number(i)]; });
+}
 /* Oxford-comma joiner for the name list in one bridge clause – two targets
    sharing the same fate (the same foreign home, or both closing the loop)
    read as one clause ("X and Y are native to...") rather than two identical
@@ -3222,7 +3271,47 @@ function dgLinearRecipe(offset, coef, term) {
   var s = fmtNum(offset) + ' + ' + dgCoefTerm(coef, term);
   return offset === 0 ? s.replace(/^0 \+ /, '') : s;
 }
-var DG_SEARCH_RECIPE = 'X is the smallest k with F(k) ≥ U: walk the cumulative table until it passes U.';
+/* A sentence inside a recipe: the page's own face, beside the monospace
+   equation lines, the way the step descriptions on the statistical cards sit
+   beside their symbolic lines. */
+function dgNote(html) { return '<span class="eq-note">' + html + '</span>'; }
+/* A connective inside an equation line ("and", "with", "and so"): the page's
+   face at the line's own color, the way a typeset display sets its words in
+   roman between the symbols. */
+function dgTxt(html) { return '<span class="eq-txt">' + html + '</span>'; }
+/* A recipe's parts: a string is the recipe itself, and an object carries an
+   alternative way to draw the same variate under its own label, kept apart
+   from the recipe and the note under it rather than interleaved with them. */
+function dgRecipeParts(r) { return typeof r === 'string' ? { main: r, alt: '' } : r; }
+/* Lays a recipe out one line per <br>: a line that is only a sentence stands
+   flush, and any other line is an equation set off by an indent (a cases
+   block is passed through whole, as dgFormulaHtml explains). */
+function dgRecipeBlockHtml(html) {
+  return html.split('<br>').map(function (line) {
+    var t = line.trim();
+    if (/^<span class="eq-note">[\s\S]*<\/span>$/.test(t) && t.indexOf('<span class="eq-note">', 1) < 0) return '<span class="eq-line eq-prose">' + t + '</span>';
+    return '<span class="eq-line eq-disp">' + dgFormulaHtml(t) + '</span>';
+  }).join('');
+}
+/* The uniform names in a k-stage Erlang line: every one through three
+   stages, and past that the first two, an ellipsis, and the last, so the
+   list never repeats a subscript. */
+function dgErlangUs(k) {
+  var us = [];
+  for (var i = 1; i <= Math.min(k, 3); i++) us.push('U<sub>' + i + '</sub>');
+  if (k > 3) us = [us[0], us[1], '⋯', 'U<sub>' + k + '</sub>'];
+  return us;
+}
+/* The Erlang as a sum of exponential stages, each stage written in the
+   Exponential tab's own form −ln(U)/λ, and then the sum of logarithms
+   collected into the logarithm of the product. */
+function dgErlangSumHtml(k, lam) {
+  if (k === 1) return 'X = −ln(U)/' + lam;
+  var us = dgErlangUs(k);
+  var terms = us.map(function (u) { return u === '⋯' ? u : 'ln(' + u + ')/' + lam; }).join(' − ');
+  return 'X = −' + terms + ' = −ln(' + us.join('·') + ')/' + lam;
+}
+var DG_SEARCH_RECIPE = dgNote('X is the smallest k with F(k) ≥ U: walk the cumulative table until it passes U.');
 var DG_RECIPE = {
   unif: function (p) {
     return 'X = a + (b − a)·U = ' + fmtNum(p.a) + ' + ' + fmtNum(p.b - p.a) + '·U';
@@ -3240,16 +3329,13 @@ var DG_RECIPE = {
     return symbolic + substituted;
   },
   norm: function (p) {
-    return 'X = μ + σ·Φ<sup>−1</sup>(U) = ' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)') + '<br>'
-      + 'Φ<sup>−1</sup> has no closed form; the plot uses a numerical approximation of it, which is what spreadsheet and simulation software do too.';
+    return 'X = μ + σ·Φ<sup>−1</sup>(U) = ' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)');
   },
   expo: function (p) {
-    return 'X = −ln(1 − U)/λ = −ln(1 − U)/' + fmtNum(p.lam) + '<br>'
-      + 'Because 1 − U is also uniform, −ln(U)/λ gives the same distribution with one subtraction fewer.';
+    return { main: 'X = −ln(1 − U)/λ = −ln(1 − U)/' + fmtNum(p.lam),
+      alt: dgNote('Because 1 − U is also uniform, −ln(U)/λ gives the same distribution with one subtraction fewer.') };
   },
-  erlang: function (p) {
-    return 'X = F<sup>−1</sup>(U) by numeric search.<br>Equivalently, as the sum of ' + fmtNum(p.k) + ' exponentials: X = −(1/' + fmtNum(p.lam) + ')·ln(U<sub>1</sub>·U<sub>2</sub>·⋯·U<sub>' + fmtNum(p.k) + '</sub>)';
-  },
+  erlang: function () { return 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.'); },
   weib: function (p) {
     return 'X = μ(−ln(1 − U))<sup>1/k</sup> = ' + fmtNum(p.mu) + '·(−ln(1 − U))<sup>' + fmtNum(1 / p.k) + '</sup>';
   },
@@ -3258,7 +3344,7 @@ var DG_RECIPE = {
       { expr: '1', cond: 'U &gt; 1 − p = ' + fmtNum(1 - p.p) },
       { expr: '0', cond: 'otherwise' }
     ]);
-    return cases + 'Equivalently, X = 1 when U &lt; p; both compare one uniform to one number.';
+    return { main: cases, alt: dgNote('X = 1 when U &lt; p; both compare one uniform to one number.') };
   },
   binom: function () { return DG_SEARCH_RECIPE; },
   geom: function (p) {
@@ -3267,49 +3353,67 @@ var DG_RECIPE = {
       { expr: currentExpr, cond: 'p &lt; 1' },
       { expr: '1', cond: 'otherwise' }
     ]);
-    return cases + 'ln(1 − p) is undefined at p = 1, because every trial already succeeds.';
+    return cases + '<br>' + dgNote('ln(1 − p) is undefined at p = 1, because every trial already succeeds.');
   },
   nbinom: function () { return DG_SEARCH_RECIPE; },
   pois: function () { return DG_SEARCH_RECIPE; },
   gamma: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software draws a Gamma by acceptance-rejection instead, because neither F nor F<sup>−1</sup> has a closed form.';
+    return { main: 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.'), alt: dgNote('Software draws a Gamma by acceptance-rejection, because neither F nor F<sup>−1</sup> has a closed form.') };
   },
   chisq: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software usually builds a chi-square from k squared standard normal draws instead, which is its definition.';
+    return 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.');
   },
   fdist: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software builds an F as (V<sub>1</sub>/d<sub>1</sub>)/(V<sub>2</sub>/d<sub>2</sub>) instead: two independent chi-square draws, V<sub>1</sub> with d<sub>1</sub> degrees of freedom and V<sub>2</sub> with d<sub>2</sub>, each divided by its own degrees of freedom.';
+    return 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.');
   },
   beta: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software uses a numerical inverse or a ratio of two Gamma draws.';
+    return { main: 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.'), alt: dgNote('Software uses a numerical inverse or a ratio of two Gamma draws.') };
   },
   tdist: function () {
-    return 'X = F<sup>−1</sup>(U) by numeric search. Software builds a t as Z/√(V/ν) instead: a standard normal draw Z over the square root of a chi-square draw V with ν degrees of freedom, divided by ν.';
+    return 'X = F<sup>−1</sup>(U) ' + dgNote('by numeric search.');
   },
   lnorm: function (p) {
-    return 'X = e<sup>μ + σ·Φ<sup>−1</sup>(U)</sup> = exp(' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)') + ')<br>'
-      + 'Equivalently, draw a normal and exponentiate it: the panel below does exactly that.';
+    return 'X = e<sup>μ + σ·Φ<sup>−1</sup>(U)</sup> = exp(' + dgLinearRecipe(p.mu, p.sigma, 'Φ<sup>−1</sup>(U)') + ')';
   },
   rayl: function (p) {
     return 'R = σ√(−2 ln(1 − U)) = ' + dgCoefTerm(p.sigma, '√(−2 ln(1 − U))');
   },
   dunif: function (p) {
     return 'X = a + ⌊(b − a + 1)·U⌋ = ' + fmtNum(p.a) + ' + ⌊' + fmtNum(p.b - p.a + 1) + '·U⌋<br>'
-      + 'This floor form and the ceiling form the core computes agree everywhere except when (b − a + 1)·U lands exactly on an integer, which happens with probability zero.';
+      + dgNote('This floor form and the ceiling form the core computes agree everywhere except when (b − a + 1)·U lands exactly on an integer, which happens with probability zero.');
   }
 };
 /* On a tab that also carries a "built from other distributions" panel, the lede
    presents inverse transform as one way among others rather than as the
    way, and on the Normal it also says up front that the cdf being inverted
    is a numerical approximation. */
+/* One sentence per tab on the way the plot below actually finds F⁻¹, and,
+   where a construction card follows, one more naming the route it takes. */
+var GEN_ALT_BELOW = {
+  erlang: 'A more practical approach, presented farther below, uses the definition of the Erlang as a sum of exponentials and avoids the search.',
+  chisq: 'A more practical approach, presented farther below, uses the definition of the chi-square as a sum of squared standard normals and avoids the search.',
+  tdist: 'A more practical approach, presented farther below, builds the t as a standard normal over the square root of a scaled chi-square and avoids the search.',
+  fdist: 'A more practical approach, presented farther below, builds the F as a ratio of two scaled chi-squares and avoids the search.',
+  lnorm: 'A more practical approach, presented farther below, exponentiates a normal draw and avoids the search.',
+  beta: 'An alternative approach, presented farther below, sorts uniform draws when α and β are whole numbers and avoids the search.',
+  norm: 'An alternative approach, presented farther below, turns two uniforms into two normals with the Box–Muller transform and needs no inverse at all.',
+  rayl: 'An alternative approach, presented farther below, takes the distance from the origin of two normal draws.',
+  binom: 'An alternative approach, presented farther below, counts the successes in n Bernoulli trials directly.',
+  nbinom: 'An alternative approach, presented farther below, runs Bernoulli trials until the r-th success.'
+};
+function genMethodHtml(d) {
+  var how;
+  if (d.id === 'norm') how = 'For the normal, Φ<sup>−1</sup> has no closed form, and the plot uses a numerical approximation of it, which is what spreadsheet and simulation software do too.';
+  else if (d.gen.kind === 'closed') how = 'For this distribution, the cdf inverts in closed form, and so every draw is one uniform and a little arithmetic.';
+  else if (d.gen.kind === 'search') how = 'For a discrete distribution, the inverse is a lookup: X is the smallest k with F(k) ≥ U, found by walking the cumulative table beside the plot.';
+  else how = 'For this distribution, the cdf is not analytically invertible, and so the plot approximates inverse-transform sampling with a numerical search for the inverse (bisection on the cdf).';
+  return how + (GEN_ALT_BELOW[d.id] ? ' ' + GEN_ALT_BELOW[d.id] : '');
+}
 function genLedeHtml(d) {
-  var how = 'draw U from U(0, 1), read across to the cdf, and drop to the axis. The value where the drop lands is a random variate with this distribution. '
-    + 'The dot is green while it carries the uniform and turns orange at the cdf, where it becomes the output; those two colors mean input and output everywhere on this page.';
-  var opener;
-  if (d.id === 'norm') opener = 'The inverse-transform approach can generate a normal from a numerical approximation of its cdf: ';
-  else if (DG_CON_LEDE[d.id]) opener = 'Inverse transform is one way to draw from this distribution: ';
-  else opener = 'Inverse transform: ';
-  var s = '<p class="lede" style="margin-bottom:8px">' + opener + how + '</p>';
+  var s = '<p class="lede" style="margin-bottom:8px"><strong>Inverse-transform sampling</strong> is a generic approach for drawing samples, and it applies to this distribution too. '
+    + 'Draw U from U(0, 1), read across to the cdf, and drop from that point on the curve to the axis; that is the cdf inverted graphically, and the value where the drop lands is a random variate with this distribution. '
+    + 'In the plot below, the dot is green while it carries the uniform and turns orange at the cdf, where it becomes the output; those two colors mean input and output everywhere on this page. '
+    + genMethodHtml(d) + '</p>';
   if (d.type === 'd') {
     s += '<p class="lede" style="margin-bottom:8px">The true probabilities above are drawn as stems, because a pmf has no mass between the integers; the histogram of draws below is drawn as bars, because a sample of draws is a count.</p>';
   }
@@ -3318,17 +3422,13 @@ function genLedeHtml(d) {
 }
 function genPanelBodyHtml(d) {
   var html = genLedeHtml(d);
-  html += '<div class="eq-row"><span class="eq-lbl">Recipe</span><span class="eq" id="recipe-' + d.id + '" style="min-height:2.6em"></span></div>';
-  // The one-sentence "how F-inverse was found" note sits right under the
-  // recipe for a closed-form or numeric sampler; it does not vary with the
-  // knobs (it is keyed only to d.gen.kind, which is fixed per distribution),
-  // so unlike the recipe span it needs no height reservation. A search-kind
-  // sampler instead gets a side column holding the cumulative table it
-  // actually walks, kept in the plot row below rather than under the recipe,
-  // because it is a table, not a sentence.
-  if (d.gen.kind !== 'search') {
-    html += '<p class="knob-note" id="gen-note-' + d.id + '" style="margin-top:0"></p>';
-  }
+  html += '<div class="recipe-blk"><span class="eq-lbl">Recipe</span><span class="eq" id="recipe-' + d.id + '" style="min-height:2.6em"></span></div>';
+  // The alternative, when the recipe carries one, follows the recipe under
+  // its own label rather than interrupting it; the block is hidden until one
+  // is set. A search-kind sampler gets a side column holding the cumulative
+  // table it actually walks, kept in the plot row below, because it is a
+  // table, not a sentence.
+  html += '<div class="recipe-blk" id="recipe-alt-blk-' + d.id + '" hidden><span class="eq-lbl">Alternative</span><span class="eq" id="recipe-alt-' + d.id + '"></span></div>';
   html += '<div class="gen-wrap">';
   html += '<svg class="dg" id="tp-' + d.id + '" role="img" aria-label="Inverse-transform plot for the ' + d.name + ' distribution"></svg>';
   if (d.gen.kind === 'search') {
@@ -3358,7 +3458,7 @@ function genPanelBodyHtml(d) {
    reset controls, the running message, and the histogram against the true
    pdf or pmf are built once and shared by all eight. */
 var DG_CON_LEDE = {
-  erlang: 'Each stage is an exponential draw; the k stages laid end to end make one Erlang draw.',
+  erlang: 'Instead of using a numerical search to do inverse-transform sampling, Erlang random variates can be generated by summing <button class="jump" onclick="jumpTo(\'expo\')">exponentials</button> (which themselves have an analytical generator that requires no search). The process draws k exponentials, each by transforming a <button class="jump" onclick="jumpTo(\'unif\')">uniform</button> through the exponential\'s own generator −ln(U)/λ, and the k exponentials laid end to end sum to one Erlang draw. A sum of logarithms is the logarithm of the product, which is why the generator written above the histogram is shown with only one logarithm.',
   binom: 'n coin flips; the count of heads is one binomial draw.',
   nbinom: 'Flip until the r-th head; the number of flips is one negative binomial draw. With r = 1 this is the geometric.',
   norm: 'The squared radius of two independent normals is exponentially distributed, and so a radius drawn from that exponential, paired with a uniform angle, lands a point whose two coordinates are independent normals.',
@@ -3391,7 +3491,7 @@ function conEqLines(id, vals) {
     return [
       { title: 'Draw two uniforms',
         desc: 'Every pass through the transform uses two independent uniforms and yields two independent normals.',
-        sym: 'U<sub>1</sub>, U<sub>2</sub> ~ U(0, 1), independent',
+        sym: 'U<sub>1</sub>, U<sub>2</sub> ~ U(0, 1), ' + dgTxt('independent'),
         val: vals ? '(u<sub>1</sub>, u<sub>2</sub>) = (' + fmtNum(vals.u1) + ', ' + fmtNum(vals.u2) + ')' : '' },
       { title: 'Turn U<sub>1</sub> into a radius',
         desc: 'The radius has to be the distance from the origin of a standard normal pair. That squared distance is the sum of two squared standard normals, a ' + dgFamilyJumpButton('chisq') + ' with two degrees of freedom, which is the same distribution as an ' + dgFamilyJumpButton('expo') + ' with mean 2, and the inverse-transform recipe for that exponential is −2 ln U<sub>1</sub>. Its square root is a standard ' + dgFamilyJumpButton('rayl') + ' draw.',
@@ -3403,18 +3503,18 @@ function conEqLines(id, vals) {
         val: vals ? 'Θ = ' + fmtNum(vals.theta) : '' },
       { title: 'Place the point and read off its coordinates',
         desc: 'The point at distance R in direction Θ has two coordinates, and each is a standard normal, independent of the other: the marginal histograms on the plane\'s two edges and the round, untilted cloud show both.',
-        sym: 'A = R cos Θ and B = R sin Θ, independent N(0, 1)',
+        sym: 'A = R cos Θ ' + dgTxt('and') + ' B = R sin Θ, ' + dgTxt('independent') + ' N(0, 1)',
         val: vals ? '(A, B) = (' + fmtNum(vals.stdA) + ', ' + fmtNum(vals.stdB) + ')' : '' },
       { title: 'Stretch and shift to the normal wanted',
         desc: 'A and B are standard normals, and the parameters above ask for N(μ, σ<sup>2</sup>). Every normal is the standard one stretched by σ and moved to μ (the standardized line among the formulas above), and so this step scales each coordinate and adds the mean. At μ = 0 and σ = 1 it changes nothing, which is why X<sub>1</sub> and A then print the same number.',
-        sym: 'X<sub>1</sub> = μ + σA and X<sub>2</sub> = μ + σB',
+        sym: 'X<sub>1</sub> = μ + σA ' + dgTxt('and') + ' X<sub>2</sub> = μ + σB',
         val: vals ? '(X<sub>1</sub>, X<sub>2</sub>) = (' + fmtNum(vals.x1) + ', ' + fmtNum(vals.x2) + ')' : '' }
     ];
   }
   return [
     { title: 'Draw two normal coordinates',
       desc: 'X and Y are independent ' + dgFamilyJumpButton('norm') + ' draws with mean 0 and the same spread σ; each arrives from its own edge of the plane.',
-      sym: 'X, Y ~ N(0, σ<sup>2</sup>), independent',
+      sym: 'X, Y ~ N(0, σ<sup>2</sup>), ' + dgTxt('independent'),
       val: vals ? '(X, Y) = (' + fmtNum(vals.x) + ', ' + fmtNum(vals.y) + ')' : '' },
     { title: 'Take the distance from the origin',
       desc: 'The distance of the point (X, Y) from the origin is one Rayleigh draw with that same σ.',
@@ -3547,16 +3647,16 @@ var DG_STAT_CARD = {
         sym: 't = <span class="frac"><span class="num"><span class="bar">X</span> − μ</span><span class="den">S/√n</span></span>' },
       { title: 'Divide through by the true standard error',
         desc: 'Dividing the numerator and the denominator by σ/√n changes nothing and splits the statistic into two pieces: a standardized mean, which is a standard normal, over the sample standard deviation measured against the true one.',
-        sym: 't = ((<span class="bar">X</span> − μ)/(σ/√n)) / (S/σ) = Z / (S/σ), with Z ~ N(0, 1)' },
+        sym: 't = ((<span class="bar">X</span> − μ)/(σ/√n)) / (S/σ) = Z / (S/σ), ' + dgTxt('with') + ' Z ~ N(0, 1)' },
       { title: 'The denominator is a scaled chi-square',
         desc: 'The sum of the squared standardized deviations from the sample mean is a <button class="jump" onclick="jumpTo(\'chisq\')">chi-square</button> with n − 1 degrees of freedom, one fewer than n because the deviations sum to zero. Writing V for that chi-square and ν = n − 1, the denominator is √(V/ν).',
-        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> = ' + dgSigma('i = 1', 'n') + ' ((X<sub>i</sub> − <span class="bar">X</span>)/σ)<sup>2</sup> = V ~ χ<sup>2</sup><sub>n−1</sub>, and so S/σ = √(V/ν)' },
+        sym: '(n − 1)S<sup>2</sup>/σ<sup>2</sup> = ' + dgSigma('i = 1', 'n') + ' ((X<sub>i</sub> − <span class="bar">X</span>)/σ)<sup>2</sup> = V ~ χ<sup>2</sup><sub>n−1</sub>, ' + dgTxt('and so') + ' S/σ = √(V/ν)' },
       { title: 'The two pieces are independent',
         desc: 'For a normal population, the sample mean and the sample standard deviation are independent, a fact particular to the normal that is stated here rather than derived. Z and V can therefore be drawn separately, which is exactly how the panel further down builds a t.',
-        sym: 't = Z / √(V/ν), with Z and V independent' },
+        sym: 't = Z / √(V/ν), ' + dgTxt('with') + ' Z ' + dgTxt('and') + ' V ' + dgTxt('independent') + '' },
       { title: 'Why t becomes Z',
         desc: 'As the sample grows, S settles on σ, the run S/σ settles on 1, and the slope is Z alone: the t tends to the standard normal. In the picture, the contours of the joint density of (S/σ, Z) squeeze onto the dashed line S/σ = 1 as ν rises; the curve on the left is the standard normal, the curve along the bottom is the density of S/σ, and the contours are their product.',
-        sym: 'S/σ → 1, and so t → Z as ν → ∞' }
+        sym: 'S/σ → 1, ' + dgTxt('and so') + ' t → Z ' + dgTxt('as') + ' ν → ∞' }
     ]
   },
   fdist: {
@@ -3573,13 +3673,13 @@ var DG_STAT_CARD = {
         sym: 'F = S<sub>1</sub><sup>2</sup> / S<sub>2</sub><sup>2</sup>' },
       { title: 'Each variance is a scaled chi-square',
         desc: 'Scaled by the common σ<sup>2</sup>, each sample variance is a <button class="jump" onclick="jumpTo(\'chisq\')">chi-square</button> divided by its own degrees of freedom, d<sub>1</sub> = n<sub>1</sub> − 1 for the first sample and d<sub>2</sub> = n<sub>2</sub> − 1 for the second; this is the same fact the <button class="jump" onclick="jumpTo(\'tdist\')">t statistic</button> rests on. Call those two chi-squares V<sub>1</sub> and V<sub>2</sub>. The ratio of the variances is then a ratio of scaled chi-squares, and the σ<sup>2</sup> cancels in it, which is why the F needs no σ at all.',
-        sym: 'S<sub>1</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>1</sub>/d<sub>1</sub> and S<sub>2</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>2</sub>/d<sub>2</sub>, and so F = (V<sub>1</sub>/d<sub>1</sub>) / (V<sub>2</sub>/d<sub>2</sub>), with d<sub>1</sub> = n<sub>1</sub> − 1 and d<sub>2</sub> = n<sub>2</sub> − 1' },
+        sym: 'S<sub>1</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>1</sub>/d<sub>1</sub> ' + dgTxt('and') + ' S<sub>2</sub><sup>2</sup>/σ<sup>2</sup> = V<sub>2</sub>/d<sub>2</sub>, ' + dgTxt('and so') + ' F = (V<sub>1</sub>/d<sub>1</sub>) / (V<sub>2</sub>/d<sub>2</sub>), ' + dgTxt('with') + ' d<sub>1</sub> = n<sub>1</sub> − 1 ' + dgTxt('and') + ' d<sub>2</sub> = n<sub>2</sub> − 1' },
       { title: 'Analysis of variance is the same ratio',
         desc: 'In an analysis of variance, the numerator is the variance among the group means and the denominator the variance within the groups; under the null hypothesis, both estimate the same σ<sup>2</sup>, and their ratio is an F with the groups\' degrees of freedom on top and the residual degrees of freedom below.',
-        sym: 'F = (between-group mean square) / (within-group mean square)' },
+        sym: 'F = (' + dgTxt('between-group mean square') + ') / (' + dgTxt('within-group mean square') + ')' },
       { title: 'Why F settles on 1',
         desc: 'Each scaled chi-square has mean 1 and a spread that shrinks as its degrees of freedom grow, and so the joint density of the pair gathers around the point (1, 1) and the ratio around 1. In the picture, F is the slope of the ray from the origin to a point, and raising d<sub>1</sub> and d<sub>2</sub> squeezes the contours onto that corner. With d<sub>1</sub> = 1, the numerator is a single squared standard normal, and F is the square of a t with d<sub>2</sub> degrees of freedom.',
-        sym: 'V<sub>1</sub>/d<sub>1</sub> → 1 and V<sub>2</sub>/d<sub>2</sub> → 1, and so F → 1; F(1, ν) = t<sup>2</sup>(ν)' }
+        sym: 'V<sub>1</sub>/d<sub>1</sub> → 1 ' + dgTxt('and') + ' V<sub>2</sub>/d<sub>2</sub> → 1, ' + dgTxt('and so') + ' F → 1; F(1, ν) = t<sup>2</sup>(ν)' }
     ]
   },
   chisq: {
@@ -3693,7 +3793,7 @@ function conPanelBodyHtml(d) {
       + '<div class="sum" id="con-msg-' + d.id + '"></div>';
   } else {
     html += '<div class="con-plots">' + picSvg
-      + '<div class="con-hist-col">' + (CON_SUM_HTML[d.id] ? '<div class="eq con-sum" id="con-sum-' + d.id + '"></div>' : '')
+      + '<div class="con-hist-col">' + (CON_SUM_HTML[d.id] ? '<div class="eq con-sum' + (d.id === 'erlang' ? ' con-sum-eq' : '') + '" id="con-sum-' + d.id + '"></div>' : '')
       + '<svg class="dg con-hist" id="con-hist-' + d.id + '" viewBox="0 0 520 160" role="img" aria-label="Histogram of ' + d.name + ' draws produced this way, against the true ' + kindWord + '"></svg>'
       + '<div class="plot-cap" id="con-cap-' + d.id + '">' + conHistCaption(d, 0) + '</div>'
       + '<div class="sum" id="con-msg-' + d.id + '"></div></div></div>';
@@ -3893,7 +3993,7 @@ function conPicErlang(d, p, st, W, H) {
       + '<text x="' + xx + '" y="' + (y + 16) + '" text-anchor="middle" fill="var(--muted)" font-size="9.5" font-family="\'IBM Plex Mono\', monospace">' + fmtNum(v) + '</text>';
   });
   if (!res) {
-    return h + '<text x="' + (W / 2) + '" y="' + (H * 0.28) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the stages.</text>';
+    return h + '<text x="' + (W / 2) + '" y="' + (H * 0.28) + '" text-anchor="middle" fill="var(--muted)" font-size="12" font-family="Outfit, Source Serif 4, sans-serif">Draw one to see the exponentials.</text>';
   }
   var acc = 0;
   res.parts.forEach(function (part, i) {
@@ -3902,10 +4002,18 @@ function conPicErlang(d, p, st, W, H) {
     acc += part;
   });
   var xStart = xAt(x0), xEnd = xAt(Math.min(x1, res.x));
+  /* The label is centered over the span, except when a short span near
+     the left edge would push its start off the picture: then the "X" alone
+     is centered over the span and the rest runs to the right of it. At the
+     right edge the label is held inside the frame the same way. */
+  var label = 'X = ' + fmtNum(res.x), cw = 11 * 0.6, half = cw * label.length / 2;
+  var cx = (xStart + xEnd) / 2, lx = cx, anchor = 'middle';
+  if (cx - half < 2) { lx = cx - cw / 2; anchor = 'start'; }
+  else if (cx + half > W - 2) { lx = W - 2; anchor = 'end'; }
   h += '<line x1="' + xStart + '" y1="' + (y - 22) + '" x2="' + xEnd + '" y2="' + (y - 22) + '" stroke="var(--truth)" stroke-width="1.4"/>'
     + '<line x1="' + xStart + '" y1="' + (y - 28) + '" x2="' + xStart + '" y2="' + (y - 16) + '" stroke="var(--truth)" stroke-width="1.4"/>'
     + '<line x1="' + xEnd + '" y1="' + (y - 28) + '" x2="' + xEnd + '" y2="' + (y - 16) + '" stroke="var(--truth)" stroke-width="1.4"/>'
-    + '<text x="' + ((xStart + xEnd) / 2) + '" y="' + (y - 32) + '" text-anchor="middle" fill="var(--truth)" font-size="11" font-family="\'IBM Plex Mono\', monospace">X = ' + fmtNum(res.x) + '</text>';
+    + '<text x="' + lx + '" y="' + (y - 32) + '" text-anchor="' + anchor + '" fill="var(--truth)" font-size="11" font-family="\'IBM Plex Mono\', monospace">' + label + '</text>';
   return h;
 }
 /* The Normal and Rayleigh plane picture's shared geometry: a square plane
@@ -4688,6 +4796,13 @@ function statRender(id) {
    draw's numbers substituted once a draw has landed. Every state has the
    same number of lines, so the line never changes height. */
 var CON_SUM_HTML = {
+  erlang: function (res, p) {
+    var line = dgErlangSumHtml(p.k, 'λ');
+    // The product of the drawn uniforms is one unbroken run of digits and
+    // dots; the break opportunities after each dot let it wrap on a phone.
+    if (res) line += ' = −ln(' + res.us.map(fmtNum).join('·<wbr>') + ')/' + fmtNum(p.lam) + ' = <span class="con-sum-out">' + fmtNum(res.x) + '</span>';
+    return dgEqLineHtml(line);
+  },
   chisq: function (res) {
     return 'χ<sup>2</sup><sub>k</sub> = ' + dgSigma('i = 1', 'k') + ' <span class="con-sum-out">Y<sub>i</sub></span>' + (res ? ' = ' + fmtNum(res.x) : '');
   },
@@ -4705,6 +4820,20 @@ function conUpdateSum(d) {
   if (!el) return;
   var st = DGUI.con[d.id];
   el.innerHTML = CON_SUM_HTML[d.id](st && st.last, DGUI.params(d.id));
+  if (!(st && st.last)) reserveConSumHeight(d);
+}
+/* The Erlang's chain grows by two chunks at the first draw and wraps onto
+   more rows on a narrow screen, so its height is reserved for the current
+   stage count with the widest numbers a draw can print, and the histogram
+   below it never moves within a run. A change of parameters resets the
+   draws, and so the reservation is redone for the new count then. */
+function reserveConSumHeight(d) {
+  var el = $('con-sum-' + d.id);
+  if (!el || d.id !== 'erlang') return;
+  var p = DGUI.params(d.id), us = [];
+  for (var i = 0; i < p.k; i++) us.push(0.00123);
+  var h = dgMeasureOffscreen(el, CON_SUM_HTML.erlang({ x: 0.00123, us: us }, { k: p.k, lam: 0.00123 }));
+  el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
 }
 var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist, tdist: conPicTdist, lnorm: conPicLnorm };
 /* Each construction picture's frame: the width it is capped at, the height
@@ -5539,195 +5668,214 @@ function dgSimplifyCoef(code) {
 }
 function dgToolRow(tool, code, note) { return { tool: tool, code: dgSimplifyCoef(code), note: note || '', plain: false }; }
 function dgToolRowPlain(tool, text, note) { return { tool: tool, code: text, note: note || '', plain: true }; }
+/* Every row builder below is run twice per tab, once with the parameters
+   as their symbols and once with their current values, and v hands it the
+   right text either way: v.k is "k" or the formatted value of p.k, and
+   v.expr(text, value) is a derived quantity written out ("1/λ") or the
+   formatted value it evaluates to. */
+function dgToolVars(d, p, symbolic) {
+  var v = {};
+  d.params.forEach(function (q) { v[q.key] = symbolic ? q.sym : fmtNum(p[q.key]); });
+  v.expr = function (text, value) { return symbolic ? text : fmtNum(value); };
+  return v;
+}
+/* One row per tool, each carrying the general form (sym) and the same call
+   at the current parameters (code). */
+function dgToolRows(d, p) {
+  if (!DG_TOOLS[d.id]) return [];
+  var syms = DG_TOOLS[d.id](p, d, dgToolVars(d, p, true));
+  var nums = DG_TOOLS[d.id](p, d, dgToolVars(d, p, false));
+  return nums.map(function (r, i) { r.sym = syms[i].code; return r; });
+}
 var DG_TOOLS = {
-  unif: function (p) {
-    var a = fmtNum(p.a), b = fmtNum(p.b);
+  unif: function (p, d, v) {
+    var a = v.a, b = v.b;
     return [
       dgToolRow('Arena', 'UNIF(' + a + ', ' + b + ')'),
-      dgToolRow('R', 'runif(n, ' + a + ', ' + b + ')'),
-      dgToolRow('MATLAB', a + ' + (' + b + ' - ' + a + ')*rand(n, 1)'),
-      dgToolRow('NumPy', 'rng.uniform(' + a + ', ' + b + ', n)'),
+      dgToolRow('R', 'runif(N, ' + a + ', ' + b + ')'),
+      dgToolRow('MATLAB', a + ' + (' + b + ' - ' + a + ')*rand(N, 1)'),
+      dgToolRow('NumPy', 'rng.uniform(' + a + ', ' + b + ', N)'),
       dgToolRow('Excel', '=' + a + ' + (' + b + ' - ' + a + ')*RAND()')
     ];
   },
-  tri: function (p) {
-    var a = fmtNum(p.a), b = fmtNum(p.b), c = fmtNum(p.c);
+  tri: function (p, d, v) {
+    var a = v.a, b = v.b, c = v.c;
     return [
-      dgToolRow('Arena', 'TRIA(' + a + ', ' + c + ', ' + b + ')', "Arena's order is minimum, mode, maximum"),
-      dgToolRow('R', 'u <- runif(n); ifelse(u < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + sqrt(u*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - sqrt((1 - u)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))'),
-      dgToolRow('MATLAB', "random(makedist('Triangular', 'A', " + a + ", 'B', " + c + ", 'C', " + b + '), n, 1)', "MATLAB's B is the mode"),
-      dgToolRow('NumPy', 'rng.triangular(' + a + ', ' + c + ', ' + b + ', n)', 'left, mode, right'),
+      dgToolRow('Arena', 'TRIA(' + a + ', ' + c + ', ' + b + ')', 'Parameter order: minimum, mode, maximum'),
+      dgToolRow('R', 'u <- runif(N); ifelse(u < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + sqrt(u*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - sqrt((1 - u)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))'),
+      dgToolRow('MATLAB', "random(makedist('Triangular', 'A', " + a + ", 'B', " + c + ", 'C', " + b + '), N, 1)', "MATLAB's B is the mode"),
+      dgToolRow('NumPy', 'rng.triangular(' + a + ', ' + c + ', ' + b + ', N)', 'Parameter order: left, mode, right'),
       dgToolRow('Excel', '=IF(A1 < (' + c + ' - ' + a + ')/(' + b + ' - ' + a + '), ' + a + ' + SQRT(A1*(' + b + ' - ' + a + ')*(' + c + ' - ' + a + ')), ' + b + ' - SQRT((1 - A1)*(' + b + ' - ' + a + ')*(' + b + ' - ' + c + ')))', 'assumes a uniform draw already in cell A1, reused by both branches')
     ];
   },
-  norm: function (p) {
-    var mu = fmtNum(p.mu), sigma = fmtNum(p.sigma);
+  norm: function (p, d, v) {
+    var mu = v.mu, sigma = v.sigma;
     return [
       dgToolRow('Arena', 'NORM(' + mu + ', ' + sigma + ')'),
-      dgToolRow('R', 'rnorm(n, ' + mu + ', ' + sigma + ')'),
-      dgToolRow('MATLAB', 'normrnd(' + mu + ', ' + sigma + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.normal(' + mu + ', ' + sigma + ', n)'),
+      dgToolRow('R', 'rnorm(N, ' + mu + ', ' + sigma + ')'),
+      dgToolRow('MATLAB', 'normrnd(' + mu + ', ' + sigma + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.normal(' + mu + ', ' + sigma + ', N)'),
       dgToolRow('Excel', '=NORM.INV(RAND(), ' + mu + ', ' + sigma + ')')
     ];
   },
-  expo: function (p) {
-    var lam = fmtNum(p.lam), mean = fmtNum(1 / p.lam);
+  expo: function (p, d, v) {
+    var lam = v.lam, mean = v.expr('1/λ', 1 / p.lam);
     return [
       dgToolRow('Arena', 'EXPO(' + mean + ')', 'Arena takes the mean'),
-      dgToolRow('R', 'rexp(n, rate = ' + lam + ')'),
-      dgToolRow('MATLAB', 'exprnd(' + mean + ', n, 1)', 'takes the mean'),
-      dgToolRow('NumPy', 'rng.exponential(' + mean + ', n)', 'takes the scale, which is the mean'),
+      dgToolRow('R', 'rexp(N, rate = ' + lam + ')'),
+      dgToolRow('MATLAB', 'exprnd(' + mean + ', N, 1)', 'takes the mean'),
+      dgToolRow('NumPy', 'rng.exponential(' + mean + ', N)', 'takes the scale, which is the mean'),
       dgToolRow('Excel', '=-LN(1 - RAND())/' + lam)
     ];
   },
-  erlang: function (p) {
-    var k = fmtNum(p.k), lam = fmtNum(p.lam), mean = fmtNum(1 / p.lam);
+  erlang: function (p, d, v) {
+    var k = v.k, lam = v.lam, mean = v.expr('1/λ', 1 / p.lam);
     return [
-      dgToolRow('Arena', 'ERLA(' + mean + ', ' + k + ')', 'the mean of one stage, then k'),
-      dgToolRow('R', 'rgamma(n, shape = ' + k + ', rate = ' + lam + ')'),
-      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + mean + ', n, 1)', 'shape, then scale'),
-      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + mean + ', n)', 'shape, then scale'),
-      dgToolRow('Excel', '=GAMMA.INV(RAND(), ' + k + ', ' + mean + ')', 'shape, then scale')
+      dgToolRow('Arena', 'ERLA(' + mean + ', ' + k + ')', 'Parameter order: the exponential mean 1/λ, then k'),
+      dgToolRow('R', 'rgamma(N, shape = ' + k + ', rate = ' + lam + ')'),
+      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + mean + ', N, 1)', 'Parameter order: shape, scale'),
+      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + mean + ', N)', 'Parameter order: shape, scale'),
+      dgToolRow('Excel', '=GAMMA.INV(RAND(), ' + k + ', ' + mean + ')', 'Parameter order: shape, scale')
     ];
   },
-  weib: function (p) {
-    var k = fmtNum(p.k), mu = fmtNum(p.mu);
+  weib: function (p, d, v) {
+    var k = v.k, mu = v.mu;
     return [
-      dgToolRow('Arena', 'WEIB(' + mu + ', ' + k + ')', 'Arena writes the scale first and then the shape'),
-      dgToolRow('R', 'rweibull(n, shape = ' + k + ', scale = ' + mu + ')'),
-      dgToolRow('MATLAB', 'wblrnd(' + mu + ', ' + k + ', n, 1)', 'scale, then shape'),
-      dgToolRow('NumPy', mu + ' * rng.weibull(' + k + ', n)', "NumPy's Weibull has scale 1"),
+      dgToolRow('Arena', 'WEIB(' + mu + ', ' + k + ')', 'Parameter order: scale, shape'),
+      dgToolRow('R', 'rweibull(N, shape = ' + k + ', scale = ' + mu + ')'),
+      dgToolRow('MATLAB', 'wblrnd(' + mu + ', ' + k + ', N, 1)', 'Parameter order: scale, shape'),
+      dgToolRow('NumPy', mu + ' * rng.weibull(' + k + ', N)', "NumPy's Weibull has scale 1"),
       dgToolRow('Excel', '=' + mu + '*(-LN(1 - RAND()))^(1/' + k + ')')
     ];
   },
-  bern: function (p) {
-    var pr = fmtNum(p.p);
+  bern: function (p, d, v) {
+    var pr = v.p;
     return [
-      dgToolRow('Arena', 'DISC(' + fmtNum(1 - p.p) + ', 0, 1, 1)', 'cumulative probability and then value, in pairs'),
-      dgToolRow('R', 'rbinom(n, 1, ' + pr + ')'),
-      dgToolRow('MATLAB', 'binornd(1, ' + pr + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.binomial(1, ' + pr + ', n)'),
+      dgToolRow('Arena', 'DISC(' + v.expr('1 - p', 1 - p.p) + ', 0, 1, 1)', 'Parameter order: cumulative probability, then value, in pairs'),
+      dgToolRow('R', 'rbinom(N, 1, ' + pr + ')'),
+      dgToolRow('MATLAB', 'binornd(1, ' + pr + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.binomial(1, ' + pr + ', N)'),
       dgToolRow('Excel', '=IF(RAND() < ' + pr + ', 1, 0)')
     ];
   },
-  binom: function (p) {
-    var n = fmtNum(p.n), pr = fmtNum(p.p);
+  binom: function (p, d, v) {
+    var n = v.n, pr = v.p;
     return [
       dgToolRowPlain('Arena', 'no built-in; add n Bernoulli draws in the model logic'),
-      dgToolRow('R', 'rbinom(n, ' + n + ', ' + pr + ')', 'the second argument is the number of trials'),
-      dgToolRow('MATLAB', 'binornd(' + n + ', ' + pr + ', n, 1)', 'the first argument is the number of trials'),
-      dgToolRow('NumPy', 'rng.binomial(' + n + ', ' + pr + ', n)'),
+      dgToolRow('R', 'rbinom(N, ' + n + ', ' + pr + ')', 'the second argument is the number of trials'),
+      dgToolRow('MATLAB', 'binornd(' + n + ', ' + pr + ', N, 1)', 'the first argument is the number of trials'),
+      dgToolRow('NumPy', 'rng.binomial(' + n + ', ' + pr + ', N)'),
       dgToolRow('Excel', '=BINOM.INV(' + n + ', ' + pr + ', RAND())')
     ];
   },
-  geom: function (p) {
-    var pr = fmtNum(p.p);
+  geom: function (p, d, v) {
+    var pr = v.p;
     return [
       dgToolRow('Arena', 'AINT(LN(1 - UNIF(0, 1)) / LN(1 - ' + pr + ')) + 1', 'AINT truncates'),
-      dgToolRow('R', 'rgeom(n, ' + pr + ') + 1', 'R counts the failures before the success; add 1 for trials'),
-      dgToolRow('MATLAB', 'geornd(' + pr + ', n, 1) + 1', 'counts failures; add 1'),
-      dgToolRow('NumPy', 'rng.geometric(' + pr + ', n)', 'NumPy counts trials, as this page does'),
+      dgToolRow('R', 'rgeom(N, ' + pr + ') + 1', 'R counts the failures before the success; add 1 for trials'),
+      dgToolRow('MATLAB', 'geornd(' + pr + ', N, 1) + 1', 'counts failures; add 1'),
+      dgToolRow('NumPy', 'rng.geometric(' + pr + ', N)', 'NumPy counts trials, as this page does'),
       dgToolRow('Excel', '=CEILING(LN(1 - RAND())/LN(1 - ' + pr + '), 1)')
     ];
   },
-  nbinom: function (p) {
-    var r = fmtNum(p.r), pr = fmtNum(p.p);
+  nbinom: function (p, d, v) {
+    var r = v.r, pr = v.p;
     return [
       dgToolRowPlain('Arena', 'no built-in; add r geometric draws'),
-      dgToolRow('R', 'rnbinom(n, size = ' + r + ', prob = ' + pr + ') + ' + r, 'R counts failures; add r for trials'),
-      dgToolRow('MATLAB', 'nbinrnd(' + r + ', ' + pr + ', n, 1) + ' + r, 'counts failures; add r'),
-      dgToolRow('NumPy', 'rng.negative_binomial(' + r + ', ' + pr + ', n) + ' + r, 'counts failures; add r'),
+      dgToolRow('R', 'rnbinom(N, size = ' + r + ', prob = ' + pr + ') + ' + r, 'R counts failures; add r for trials'),
+      dgToolRow('MATLAB', 'nbinrnd(' + r + ', ' + pr + ', N, 1) + ' + r, 'counts failures; add r'),
+      dgToolRow('NumPy', 'rng.negative_binomial(' + r + ', ' + pr + ', N) + ' + r, 'counts failures; add r'),
       dgToolRowPlain('Excel', 'no inverse function; add r geometric draws')
     ];
   },
-  pois: function (p) {
-    var alpha = fmtNum(p.alpha);
+  pois: function (p, d, v) {
+    var alpha = v.alpha;
     return [
       dgToolRow('Arena', 'POIS(' + alpha + ')'),
-      dgToolRow('R', 'rpois(n, ' + alpha + ')'),
-      dgToolRow('MATLAB', 'poissrnd(' + alpha + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.poisson(' + alpha + ', n)'),
+      dgToolRow('R', 'rpois(N, ' + alpha + ')'),
+      dgToolRow('MATLAB', 'poissrnd(' + alpha + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.poisson(' + alpha + ', N)'),
       dgToolRowPlain('Excel', 'no inverse function; walk the cumulative table with POISSON.DIST(k, α, TRUE) until it passes RAND()')
     ];
   },
-  gamma: function (p) {
-    var k = fmtNum(p.k), theta = fmtNum(p.theta);
+  gamma: function (p, d, v) {
+    var k = v.k, theta = v.theta;
     return [
-      dgToolRow('Arena', 'GAMM(' + theta + ', ' + k + ')', 'scale first, then shape'),
-      dgToolRow('R', 'rgamma(n, shape = ' + k + ', scale = ' + theta + ')'),
-      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + theta + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + theta + ', n)'),
+      dgToolRow('Arena', 'GAMM(' + theta + ', ' + k + ')', 'Parameter order: scale, shape'),
+      dgToolRow('R', 'rgamma(N, shape = ' + k + ', scale = ' + theta + ')'),
+      dgToolRow('MATLAB', 'gamrnd(' + k + ', ' + theta + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.gamma(' + k + ', ' + theta + ', N)'),
       dgToolRow('Excel', '=GAMMA.INV(RAND(), ' + k + ', ' + theta + ')')
     ];
   },
-  chisq: function (p) {
-    var k = fmtNum(p.k);
+  chisq: function (p, d, v) {
+    var k = v.k;
     return [
-      dgToolRow('Arena', 'GAMM(2, ' + fmtNum(p.k / 2) + ')', 'a chi-square is Gamma with scale 2 and shape k/2; Arena writes scale first'),
-      dgToolRow('R', 'rchisq(n, df = ' + k + ')'),
-      dgToolRow('MATLAB', 'chi2rnd(' + k + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.chisquare(' + k + ', n)'),
+      dgToolRow('Arena', 'GAMM(2, ' + v.expr('k/2', p.k / 2) + ')', 'a chi-square is a Gamma with scale 2 and shape k/2; parameter order: scale, shape'),
+      dgToolRow('R', 'rchisq(N, df = ' + k + ')'),
+      dgToolRow('MATLAB', 'chi2rnd(' + k + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.chisquare(' + k + ', N)'),
       dgToolRow('Excel', '=CHISQ.INV(RAND(), ' + k + ')')
     ];
   },
-  fdist: function (p) {
-    var d1 = fmtNum(p.d1), d2 = fmtNum(p.d2);
+  fdist: function (p, d, v) {
+    var d1 = v.d1, d2 = v.d2;
     return [
-      dgToolRow('Arena', '(GAMM(2, ' + fmtNum(p.d1 / 2) + ')/' + d1 + ') / (GAMM(2, ' + fmtNum(p.d2 / 2) + ')/' + d2 + ')', 'the ratio of two scaled chi-squares'),
-      dgToolRow('R', 'rf(n, ' + d1 + ', ' + d2 + ')'),
-      dgToolRow('MATLAB', 'frnd(' + d1 + ', ' + d2 + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.f(' + d1 + ', ' + d2 + ', n)'),
+      dgToolRow('Arena', '(GAMM(2, ' + v.expr('d₁/2', p.d1 / 2) + ')/' + d1 + ') / (GAMM(2, ' + v.expr('d₂/2', p.d2 / 2) + ')/' + d2 + ')', 'the ratio of two scaled chi-squares'),
+      dgToolRow('R', 'rf(N, ' + d1 + ', ' + d2 + ')'),
+      dgToolRow('MATLAB', 'frnd(' + d1 + ', ' + d2 + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.f(' + d1 + ', ' + d2 + ', N)'),
       dgToolRow('Excel', '=F.INV(RAND(), ' + d1 + ', ' + d2 + ')')
     ];
   },
-  tdist: function (p) {
-    var nu = fmtNum(p.nu);
+  tdist: function (p, d, v) {
+    var nu = v.nu;
     return [
-      dgToolRow('Arena', 'NORM(0, 1) / SQRT(GAMM(2, ' + fmtNum(p.nu / 2) + ') / ' + nu + ')', "the construction in Arena's own functions: GAMM(2, ν/2) is a chi-square with ν degrees of freedom"),
-      dgToolRow('R', 'rt(n, df = ' + nu + ')'),
-      dgToolRow('MATLAB', 'trnd(' + nu + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.standard_t(' + nu + ', n)'),
+      dgToolRow('Arena', 'NORM(0, 1) / SQRT(GAMM(2, ' + v.expr('ν/2', p.nu / 2) + ') / ' + nu + ')', "the construction in Arena's own functions: GAMM(2, ν/2) is a chi-square with ν degrees of freedom"),
+      dgToolRow('R', 'rt(N, df = ' + nu + ')'),
+      dgToolRow('MATLAB', 'trnd(' + nu + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.standard_t(' + nu + ', N)'),
       dgToolRow('Excel', '=T.INV(RAND(), ' + nu + ')')
     ];
   },
-  beta: function (p) {
-    var alpha = fmtNum(p.alpha), beta = fmtNum(p.beta);
+  beta: function (p, d, v) {
+    var alpha = v.alpha, beta = v.beta;
     return [
       dgToolRow('Arena', 'BETA(' + alpha + ', ' + beta + ')'),
-      dgToolRow('R', 'rbeta(n, ' + alpha + ', ' + beta + ')'),
-      dgToolRow('MATLAB', 'betarnd(' + alpha + ', ' + beta + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.beta(' + alpha + ', ' + beta + ', n)'),
+      dgToolRow('R', 'rbeta(N, ' + alpha + ', ' + beta + ')'),
+      dgToolRow('MATLAB', 'betarnd(' + alpha + ', ' + beta + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.beta(' + alpha + ', ' + beta + ', N)'),
       dgToolRow('Excel', '=BETA.INV(RAND(), ' + alpha + ', ' + beta + ')')
     ];
   },
-  lnorm: function (p, d) {
-    var mu = fmtNum(p.mu), sigma = fmtNum(p.sigma);
-    var xMean = fmtNum(d.mean(p)), xSd = fmtNum(Math.sqrt(Math.max(0, d.variance(p))));
+  lnorm: function (p, d, v) {
+    var mu = v.mu, sigma = v.sigma;
+    var xMean = v.expr('exp(μ + σ²/2)', d.mean(p)), xSd = v.expr('exp(μ + σ²/2)*sqrt(exp(σ²) - 1)', Math.sqrt(Math.max(0, d.variance(p))));
     return [
       dgToolRow('Arena', 'LOGN(' + xMean + ', ' + xSd + ')', "Arena's LOGN takes the mean and standard deviation of X, not of ln X"),
-      dgToolRow('R', 'rlnorm(n, meanlog = ' + mu + ', sdlog = ' + sigma + ')'),
-      dgToolRow('MATLAB', 'lognrnd(' + mu + ', ' + sigma + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.lognormal(' + mu + ', ' + sigma + ', n)'),
+      dgToolRow('R', 'rlnorm(N, meanlog = ' + mu + ', sdlog = ' + sigma + ')'),
+      dgToolRow('MATLAB', 'lognrnd(' + mu + ', ' + sigma + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.lognormal(' + mu + ', ' + sigma + ', N)'),
       dgToolRow('Excel', '=LOGNORM.INV(RAND(), ' + mu + ', ' + sigma + ')')
     ];
   },
-  rayl: function (p) {
-    var sigma = fmtNum(p.sigma);
+  rayl: function (p, d, v) {
+    var sigma = v.sigma;
     return [
       dgToolRow('Arena', sigma + ' * SQRT(-2 * LN(UNIF(0, 1)))'),
-      dgToolRow('R', sigma + ' * sqrt(-2 * log(runif(n)))'),
-      dgToolRow('MATLAB', 'raylrnd(' + sigma + ', n, 1)'),
-      dgToolRow('NumPy', 'rng.rayleigh(' + sigma + ', n)'),
+      dgToolRow('R', sigma + ' * sqrt(-2 * log(runif(N)))'),
+      dgToolRow('MATLAB', 'raylrnd(' + sigma + ', N, 1)'),
+      dgToolRow('NumPy', 'rng.rayleigh(' + sigma + ', N)'),
       dgToolRow('Excel', '=' + sigma + '*SQRT(-2*LN(1 - RAND()))')
     ];
   },
-  dunif: function (p) {
-    var a = fmtNum(p.a), b = fmtNum(p.b);
+  dunif: function (p, d, v) {
+    var a = v.a, b = v.b;
     return [
       dgToolRow('Arena', a + ' + AINT((' + b + ' - ' + a + ' + 1) * UNIF(0, 1))', 'AINT truncates'),
-      dgToolRow('R', 'sample(' + a + ':' + b + ', n, replace = TRUE)'),
-      dgToolRow('MATLAB', 'randi([' + a + ' ' + b + '], n, 1)'),
-      dgToolRow('NumPy', 'rng.integers(' + a + ', ' + b + ' + 1, n)', 'the upper end is exclusive'),
+      dgToolRow('R', 'sample(' + a + ':' + b + ', N, replace = TRUE)'),
+      dgToolRow('MATLAB', 'randi([' + a + ' ' + b + '], N, 1)'),
+      dgToolRow('NumPy', 'rng.integers(' + a + ', ' + b + ' + 1, N)', 'the upper end is exclusive'),
       dgToolRow('Excel', '=RANDBETWEEN(' + a + ', ' + b + ')')
     ];
   }
@@ -5739,20 +5887,21 @@ function toolsRowHtml(r) {
   // Escaped as plain text either way: a code snippet's own "<" (an ifelse
   // condition, a RAND() comparison) would otherwise open a tag rather than
   // print as a character.
-  var codeHtml = r.plain ? dgEsc(r.code) : '<code>' + dgEsc(r.code) + '</code>';
+  var codeHtml = r.plain ? dgEsc(r.code)
+    : '<code>' + dgEsc(r.sym) + '</code>' + (r.code !== r.sym ? '<br><code>' + dgEsc(r.code) + '</code>' : '');
   var noteHtml = r.note ? '<span class="tools-note">' + dgEsc(r.note) + '</span>' : '';
   return '<tr><td>' + r.tool + '</td><td>' + codeHtml + noteHtml + '</td></tr>';
 }
 function toolsPanelBodyHtml(d) {
   var p = DGUI.params(d.id);
-  var rows = DG_TOOLS[d.id] ? DG_TOOLS[d.id](p, d) : [];
+  var rows = dgToolRows(d, p);
   var html = '<div class="sec tools-sec" id="tools-' + d.id + '"><div class="sec-hd">In common tools</div>';
-  html += '<p class="lede" style="margin-bottom:8px">Where a tool has a built-in sampler, that is shown; where it does not, the inverse-transform recipe above is written in that tool\'s own syntax.</p>';
+  html += '<p class="lede" style="margin-bottom:8px">Where a tool has a built-in sampler, that is shown; where it does not, the inverse-transform recipe above is written in that tool\'s own syntax. Each row gives the general form first and then the same call with the parameters set above.</p>';
   html += '<div class="tools-table-wrap" id="tools-wrap-' + d.id + '"><table class="tools-table">'
     + '<colgroup><col class="tools-col-tool"><col class="tools-col-code"></colgroup>'
     + '<thead><tr><th>Tool</th><th>Code</th></tr></thead><tbody id="tools-rows-' + d.id + '">'
     + rows.map(toolsRowHtml).join('') + '</tbody></table></div>';
-  html += '<p class="knob-note" style="margin-top:6px">In every R and NumPy line, n is the number of draws and rng is numpy.random.default_rng().</p>';
+  html += '<p class="knob-note" style="margin-top:6px">In every R, MATLAB, and NumPy line, N is the number of draws, and rng is numpy.random.default_rng().</p>';
   // The Rayleigh alone gets a reminder tying every tool's own square root
   // back to the construction panel above: whatever the tool's own syntax,
   // the quantity inside that root is always the same exponential draw.
@@ -5765,8 +5914,7 @@ function toolsPanelBodyHtml(d) {
 function updateToolsTable(d) {
   var tbody = $('tools-rows-' + d.id);
   if (!tbody || !DG_TOOLS[d.id]) return;
-  var rows = DG_TOOLS[d.id](DGUI.params(d.id), d);
-  tbody.innerHTML = rows.map(toolsRowHtml).join('');
+  tbody.innerHTML = dgToolRows(d, DGUI.params(d.id)).map(toolsRowHtml).join('');
 }
 function reserveToolsHeight(d) {
   var el = $('tools-wrap-' + d.id);
@@ -5774,10 +5922,10 @@ function reserveToolsHeight(d) {
   var def = {}, lo = {}, hi = {};
   d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
   var candidates = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
-  candidates.push(worstOverGrid(d, function (p) { return DG_TOOLS[d.id](p, d).map(function (r) { return r.code; }).join('').length; }));
+  candidates.push(worstOverGrid(d, function (p) { return dgToolRows(d, p).map(function (r) { return r.sym + r.code; }).join('').length; }));
   var worst = 0;
   candidates.forEach(function (p) {
-    var rowsHtml = DG_TOOLS[d.id](p, d).map(toolsRowHtml).join('');
+    var rowsHtml = dgToolRows(d, p).map(toolsRowHtml).join('');
     worst = Math.max(worst, dgMeasureOffscreenDeep(el, function (clone) {
       var tb = clone.querySelector('tbody');
       if (tb) { tb.removeAttribute('id'); tb.innerHTML = rowsHtml; }
@@ -5826,11 +5974,18 @@ DGUI.genEnsure = function (id) {
   if (!DGUI.gen[id]) DGUI.gen[id] = { rand: DG.mulberry32(Date.now() >>> 0), us: [], xs: [], animating: false, animId: null, dots: null, overflow: null, batch: false };
   return DGUI.gen[id];
 };
-function genRecipeHtml(d, p) { return dgFormulaHtml(DG_RECIPE[d.id](p)); }
+function genRecipeHtml(d, p) { return dgRecipeBlockHtml(dgRecipeParts(DG_RECIPE[d.id](p)).main); }
+function genRecipeAltHtml(d, p) { var alt = dgRecipeParts(DG_RECIPE[d.id](p)).alt; return alt ? dgRecipeBlockHtml(alt) : ''; }
 function genUpdateRecipe(d) {
-  var el = $('recipe-' + d.id);
+  var el = $('recipe-' + d.id), altEl = $('recipe-alt-' + d.id), blk = $('recipe-alt-blk-' + d.id);
   if (!el) return;
-  el.innerHTML = genRecipeHtml(d, DGUI.params(d.id));
+  var p = DGUI.params(d.id);
+  el.innerHTML = genRecipeHtml(d, p);
+  if (altEl) {
+    var alt = genRecipeAltHtml(d, p);
+    altEl.innerHTML = alt;
+    if (blk) blk.hidden = !alt;
+  }
 }
 function reserveGenRecipeHeight(d) {
   var el = $('recipe-' + d.id);
@@ -5838,10 +5993,14 @@ function reserveGenRecipeHeight(d) {
   var def = {}, lo = {}, hi = {};
   d.params.forEach(function (q) { def[q.key] = q.def; lo[q.key] = q.min; hi[q.key] = q.max; });
   var candidates = [d.clamp(def), d.clamp(lo), d.clamp(hi)].concat(d.refs.map(function (r) { return r.p; }));
-  candidates.push(worstOverGrid(d, function (p) { return DG_RECIPE[d.id](p).length; }));
-  var worst = 0;
-  candidates.forEach(function (p) { worst = Math.max(worst, dgMeasureOffscreen(el, genRecipeHtml(d, p))); });
+  candidates.push(worstOverGrid(d, function (p) { var r = dgRecipeParts(DG_RECIPE[d.id](p)); return r.main.length + r.alt.length; }));
+  var worst = 0, worstAlt = 0, altEl = $('recipe-alt-' + d.id);
+  candidates.forEach(function (p) {
+    worst = Math.max(worst, dgMeasureOffscreen(el, genRecipeHtml(d, p)));
+    if (altEl) worstAlt = Math.max(worstAlt, dgMeasureOffscreen(altEl, genRecipeAltHtml(d, p)));
+  });
   el.style.minHeight = (Math.ceil(worst * 100) / 100) + 'px';
+  if (altEl && worstAlt) altEl.style.minHeight = (Math.ceil(worstAlt * 100) / 100) + 'px';
 }
 function reserveGenMsgHeight(d) { dgReserveSumHeight($('gen-msg-' + d.id), d, true); }
 function genUpdateMsg(d) {
@@ -5855,10 +6014,6 @@ function genUpdateMsg(d) {
    (with the row the latest draw landed on highlighted), in the side column
    beside the plot. Plain inline text, not its own <p>: the caller's
    container already is one. */
-function genSideNoteHtml(d) {
-  if (d.gen.kind === 'closed') return 'The recipe above is F⁻¹(U) in closed form, and so every draw is one uniform and a little arithmetic.';
-  return 'F⁻¹ is found by bisection on the cdf here. Software uses either a numerical approximation of F⁻¹ or a construction from other distributions.';
-}
 function genSideTableHtml(d, p, landedK) {
   var lo = d.support(p).lo, hi = Math.ceil(d.quantile(0.999, p));
   var rows = '';
@@ -5869,11 +6024,7 @@ function genSideTableHtml(d, p, landedK) {
   return '<div class="gen-table-wrap"><table><thead><tr><th>k</th><th>p(k)</th><th>F(k)</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 function genRenderSide(d) {
-  if (d.gen.kind !== 'search') {
-    var noteEl = $('gen-note-' + d.id);
-    if (noteEl) noteEl.innerHTML = genSideNoteHtml(d);
-    return;
-  }
+  if (d.gen.kind !== 'search') return;
   var el = $('gen-side-' + d.id);
   if (!el) return;
   var p = DGUI.params(d.id);
@@ -6283,6 +6434,7 @@ DGUI.onTabShown = function (name) {
   reserveGenMsgHeight(d);
   if (DG_CON_LEDE[name]) reserveConMsgHeight(d);
   reserveConEqSizes(d);
+  reserveConSumHeight(d);
   reserveConRaylNoteHeight(d);
   reserveToolsHeight(d);
 };
