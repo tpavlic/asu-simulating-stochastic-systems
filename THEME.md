@@ -175,6 +175,13 @@ straight to it, and a link ending in `#id` should open on that tab rather than t
   `'.tab[data-tab="' + name + '"]'` and testing it with `document.querySelector` is enough, since it
   reads the same markup the tab row already carries rather than a second list that could drift out
   of step.
+- **If a tab is identified by its position (a numeric index) rather than a string key, hash a fixed
+  slug for that tab, never the raw index.** A link built from the index breaks the moment a tab is
+  inserted anywhere but the end: every later tab's index shifts, so a link someone already shared
+  silently opens the wrong content instead of failing loudly. Keep the index for whatever internal
+  wiring already depends on it, and add one small array mapping each position to a permanent name
+  (`const TAB_SLUGS = ['overview', 'perpproj', ...]`) used only for the hash and for translating an
+  incoming hash back to an index.
 - **A `hashchange` listener re-activates a tab when the hash changes from outside the page** (an
   external link opened while the page is already loaded, or a back/forward step across one), by
   calling the same tab-switching function the click handlers use.
