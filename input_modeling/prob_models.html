@@ -2232,6 +2232,49 @@ var DG_REF_MARK = ['circle', 'square', 'triangle'];
    than as two floating, unrelated dots. */
 var DG_RISER_DASH = '2 2';
 
+/* A continuous pdf's own curve, sampled only across its support intersected
+   with the visible axis, plus every genuine jump the support's finite edges
+   carry within that axis. Sampling the full axis edge to edge, support and
+   all, put one sample still at zero just outside a finite edge and the next
+   already on the far side of the jump (a uniform's is the cleanest case,
+   with a nonzero density right up to a and b and none outside), and the
+   straight line the polyline drew between those two points read as a
+   slanted or trapezoidal edge in place of the vertical one the pdf actually
+   has there. Confining the samples to the support removes the need to
+   interpolate across the jump at all, and the jump itself is reported
+   separately so the caller can draw it as its own vertical segment. */
+function dgContPdfPts(d, p, x0, x1, N) {
+  var supp = d.support(p), lo = supp.lo, hi = supp.hi;
+  var sx0 = Math.max(x0, lo), sx1 = Math.min(x1, hi);
+  var pts = [];
+  if (sx0 <= sx1) {
+    for (var i = 0; i <= N; i++) {
+      var x = sx0 + (sx1 - sx0) * i / N, y = d.pdf(x, p);
+      if (Number.isFinite(y)) pts.push([x, y]);
+    }
+  }
+  var jumps = [];
+  if (Number.isFinite(lo) && lo > x0 && lo < x1) {
+    var yLo = d.pdf(lo, p);
+    if (Number.isFinite(yLo) && yLo > 1e-9) jumps.push({ x: lo, y: yLo });
+  }
+  if (Number.isFinite(hi) && hi > x0 && hi < x1) {
+    var yHi = d.pdf(hi, p);
+    if (Number.isFinite(yHi) && yHi > 1e-9) jumps.push({ x: hi, y: yHi });
+  }
+  return { pts: pts, jumps: jumps };
+}
+/* One of dgContPdfPts's jumps, drawn as a strictly vertical segment capped
+   with a hollow dot where the density is only approached (always 0, from
+   outside the support) and a filled dot where the pdf actually attains it
+   -- the same open/closed convention the discrete cdf's own steps already
+   use, so a reader meets a discontinuity the same way wherever one shows up. */
+function dgPdfJumpHtml(xAtFn, yAtFn, jump, color, lineW, circleR, circleW) {
+  var xPx = xAtFn(jump.x), y0px = yAtFn(0), y1px = yAtFn(jump.y);
+  return '<line x1="' + xPx + '" y1="' + y0px + '" x2="' + xPx + '" y2="' + y1px + '" stroke="' + color + '" stroke-width="' + lineW + '"/>'
+    + '<circle cx="' + xPx + '" cy="' + y0px + '" r="' + circleR + '" fill="var(--card)" stroke="' + color + '" stroke-width="' + circleW + '"/>'
+    + '<circle cx="' + xPx + '" cy="' + y1px + '" r="' + circleR + '" fill="' + color + '"/>';
+}
 /* ── The pdf/pmf plot ──────────────────────────────────────────────────
    The x-axis is the distribution's own fixed axis.x0/x1, never rescaled by
    a knob; only the y-axis is allowed to grow past the design height axis.y1,
@@ -2248,13 +2291,11 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
   var N = 400;
   var xAt = function (x) { return L + (x - x0) / (x1 - x0) * innerW; };
 
-  var yMaxLive = 0, livePts = null, liveBars = null, range = null;
+  var yMaxLive = 0, livePts = null, liveJumps = null, liveBars = null, range = null;
   if (isC) {
-    livePts = [];
-    for (var i = 0; i <= N; i++) {
-      var x = x0 + (x1 - x0) * i / N, y = d.pdf(x, p);
-      if (Number.isFinite(y)) { livePts.push([x, y]); if (y > yMaxLive) yMaxLive = y; }
-    }
+    var contLive = dgContPdfPts(d, p, x0, x1, N);
+    livePts = contLive.pts; liveJumps = contLive.jumps;
+    livePts.forEach(function (pt) { if (pt[1] > yMaxLive) yMaxLive = pt[1]; });
   } else {
     range = dgIntRange(x0, x1);
     liveBars = [];
@@ -2291,13 +2332,10 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
   if (showRefs) d.refs.forEach(function (ref, ri) {
     var color = 'var(--ref-' + (ri + 1) + ')';
     if (isC) {
-      var pts = [];
-      for (var j = 0; j <= N; j++) {
-        var xx2 = x0 + (x1 - x0) * j / N, yy2 = d.pdf(xx2, ref.p);
-        if (!Number.isFinite(yy2)) continue;
-        pts.push(xAt(xx2) + ',' + yAt(yy2));
-      }
+      var contRef = dgContPdfPts(d, ref.p, x0, x1, N);
+      var pts = contRef.pts.map(function (pt) { return xAt(pt[0]) + ',' + yAt(pt[1]); });
       h += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.2" stroke-dasharray="' + DG_REF_DASH[ri] + '"/>';
+      contRef.jumps.forEach(function (j) { h += dgPdfJumpHtml(xAt, yAt, j, color, 1.2, 2.2, 1.2); });
     } else {
       var rng = dgIntRange(x0, x1), shape = DG_REF_MARK[ri];
       /* Every stem stands exactly on its integer, references included. Nudging
@@ -2316,6 +2354,7 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
   if (isC) {
     var lp = livePts.map(function (pt) { return xAt(pt[0]) + ',' + yAt(pt[1]); }).join(' ');
     h += '<polyline points="' + lp + '" fill="none" stroke="var(--truth)" stroke-width="2.2"/>';
+    liveJumps.forEach(function (j) { h += dgPdfJumpHtml(xAt, yAt, j, 'var(--truth)', 2.2, 2.8, 1.4); });
   } else {
     liveBars.forEach(function (b) {
       var xk = xAt(b[0]), yTop = yAt(b[1]);
@@ -2492,19 +2531,21 @@ function renderThumb(d, w, h) {
   spec.settings.forEach(function (p, ri) {
     var color = multi ? 'var(--ref-' + (ri + 1) + ')' : 'var(--truth)';
     var dash = multi ? ' stroke-dasharray="' + DG_REF_DASH[ri] + '"' : '';
-    var yMax = 0;
-    if (isC) { for (var j = 0; j <= 200; j++) { var xx = x0 + (x1 - x0) * j / 200, yy = d.pdf(xx, p); if (Number.isFinite(yy) && yy > yMax) yMax = yy; } }
+    var yMax = 0, cont = null;
+    if (isC) { cont = dgContPdfPts(d, p, x0, x1, 200); cont.pts.forEach(function (pt) { if (pt[1] > yMax) yMax = pt[1]; }); }
     else { for (var k = rng[0]; k <= rng[1]; k++) { var yv = d.pdf(k, p); if (yv > yMax) yMax = yv; } }
     if (!(yMax > 0)) yMax = 1;
     var yAt = function (y) { return h - pad - Math.min(1, y / yMax) * (h - 2 * pad); };
     if (isC) {
-      var pts = [];
-      for (var j2 = 0; j2 <= 200; j2++) {
-        var xx2 = x0 + (x1 - x0) * j2 / 200, yy2 = d.pdf(xx2, p);
-        if (!Number.isFinite(yy2)) continue;
-        pts.push(xAt(xx2) + ',' + yAt(yy2));
-      }
+      var pts = cont.pts.map(function (pt) { return xAt(pt[0]) + ',' + yAt(pt[1]); });
       s += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.3"' + dash + '/>';
+      // No open/filled dots at this size -- just the plain connecting stroke,
+      // so a boundary jump (a uniform's edges) still reads as a jump rather
+      // than as the curve floating in from nowhere.
+      cont.jumps.forEach(function (j) {
+        var xk = xAt(j.x);
+        s += '<line x1="' + xk + '" y1="' + yAt(0) + '" x2="' + xk + '" y2="' + yAt(j.y) + '" stroke="' + color + '" stroke-width="1.3"' + dash + '/>';
+      });
     } else {
       for (var k2 = rng[0]; k2 <= rng[1]; k2++) {
         var xk = xAt(k2), yTop = yAt(d.pdf(k2, p));
@@ -4984,10 +5025,11 @@ function buildConHistMarkup(d, p, xs, W, H, labelOverride) {
     var val = isC ? frac / width : frac;
     barVals.push(val); if (val > barMax) barMax = val;
   }
-  var pdfPts = null, pdfStems = null, pdfMax = 0;
+  var pdfPts = null, pdfJumps = null, pdfStems = null, pdfMax = 0;
   if (isC) {
-    pdfPts = [];
-    for (var j = 0; j <= 200; j++) { var xx = x0 + (x1 - x0) * j / 200, yy = d.pdf(xx, p); if (Number.isFinite(yy)) { pdfPts.push([xx, yy]); if (yy > pdfMax) pdfMax = yy; } }
+    var contHist = dgContPdfPts(d, p, x0, x1, 400);
+    pdfPts = contHist.pts; pdfJumps = contHist.jumps;
+    pdfPts.forEach(function (pt) { if (pt[1] > pdfMax) pdfMax = pt[1]; });
   } else {
     var rng = dgIntRange(x0, x1); pdfStems = [];
     for (var k = rng[0]; k <= rng[1]; k++) { var yv = d.pdf(k, p); pdfStems.push([k, yv]); if (yv > pdfMax) pdfMax = yv; }
@@ -5001,6 +5043,7 @@ function buildConHistMarkup(d, p, xs, W, H, labelOverride) {
   }
   if (isC) {
     h += '<polyline points="' + pdfPts.map(function (pt) { return xAt(pt[0]) + ',' + yAt(pt[1]); }).join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
+    pdfJumps.forEach(function (j) { h += dgPdfJumpHtml(xAt, yAt, j, 'var(--truth)', 2, 2.8, 1.4); });
   } else {
     pdfStems.forEach(function (s) {
       var xk = xAt(s[0]), yTop2 = yAt(s[1]);
@@ -6175,23 +6218,35 @@ DGUI.genRedraw = function (id) {
   var uBins = 10, uCounts = new Array(uBins).fill(0);
   st.us.forEach(function (u) { uCounts[Math.min(uBins - 1, Math.floor(u * uBins))]++; });
   var uDensities = uCounts.map(function (c) { return (st.us.length ? c / st.us.length : 0) * uBins; });
-  var uDensMax = 0; uDensities.forEach(function (v) { if (v > uDensMax) uDensMax = v; });
-  var uAxisMax = Math.max(1, uDensMax);
+  // Fixed, not autoscaled to the tallest bar seen so far: an autoscaled max
+  // put the true density at "wherever density 1 falls under the live
+  // scale," which moved on every draw, and a bare line with no fill was
+  // already easy to miss at zero draws, when the axis defaulted to its
+  // narrowest span and pushed that line out to the strip's far edge. 2
+  // clips a bar only once a bin's empirical density has drifted to twice
+  // the true rate, rare past a single small batch and self-explanatory
+  // when it does happen (an unusually lopsided run of draws into that bin).
+  var uAxisMax = 2;
   var uBaseX = L - geo.uGap - geo.uStrip;
   var uScaleAt = function (dens) { return Math.min(1, dens / uAxisMax) * geo.uStrip; };
   // Placed at the axis's own top, the way the pdf/cdf plots label their own
   // y-axis, rather than centered in the margin far below the bars.
   h += '<text x="' + L + '" y="' + (T - 2) + '" text-anchor="start" fill="var(--muted)" font-size="10" font-family="Outfit, Source Serif 4, sans-serif">U</text>';
+  // The true U(0, 1) density – flat at 1 everywhere – drawn unfilled, like
+  // every other true curve in this widget, as an outline on three sides:
+  // across the top (U = 1), down the density-1 edge, and across the bottom
+  // (U = 0). The fourth side, where the baseline (density 0) would run, is
+  // left open, the same way a plain pdf polyline never draws its own
+  // baseline either -- only the curve itself is the density, not the
+  // region under it, and closing that side would read as a filled histogram
+  // bar rather than a reference curve.
+  var uTrueX = uBaseX + uScaleAt(1);
+  h += '<polyline points="' + uBaseX + ',' + geo.uAt(1) + ' ' + uTrueX + ',' + geo.uAt(1) + ' ' + uTrueX + ',' + geo.uAt(0) + ' ' + uBaseX + ',' + geo.uAt(0) + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
   for (var bi = 0; bi < uBins; bi++) {
     var yTopPx = geo.uAt((bi + 1) / uBins), yBotPx = geo.uAt(bi / uBins);
     var barLen = uScaleAt(uDensities[bi]);
     h += '<rect x="' + uBaseX + '" y="' + yTopPx + '" width="' + barLen + '" height="' + (yBotPx - yTopPx) + '" fill="var(--in)" fill-opacity="0.5" stroke="var(--in)" stroke-width="1"/>';
   }
-  // The true U(0, 1) density – flat at 1 – drawn the same way the bottom
-  // strip draws the true pdf over its own bars: one line, in --truth, so
-  // both marginals read as "sample bars under the true density."
-  var uTrueX = uBaseX + uScaleAt(1);
-  h += '<line x1="' + uTrueX + '" y1="' + geo.uAt(0) + '" x2="' + uTrueX + '" y2="' + geo.uAt(1) + '" stroke="var(--truth)" stroke-width="2"/>';
 
   var bins = d.gen.bins, xCounts = new Array(bins.length - 1).fill(0);
   st.xs.forEach(function (x) { xCounts[dgGenBinIndex(bins, x)]++; });
@@ -6201,10 +6256,11 @@ DGUI.genRedraw = function (id) {
     var val = isC ? fracX / width : fracX;
     barVals.push(val); if (val > barMax) barMax = val;
   }
-  var pdfPts = null, pdfStems = null, pdfMax = 0;
+  var pdfPts = null, pdfJumps = null, pdfStems = null, pdfMax = 0;
   if (isC) {
-    pdfPts = [];
-    for (var pj = 0; pj <= 200; pj++) { var xx = geo.x0 + (geo.x1 - geo.x0) * pj / 200, yy = d.pdf(xx, p); if (Number.isFinite(yy)) { pdfPts.push([xx, yy]); if (yy > pdfMax) pdfMax = yy; } }
+    var contGen = dgContPdfPts(d, p, geo.x0, geo.x1, 400);
+    pdfPts = contGen.pts; pdfJumps = contGen.jumps;
+    pdfPts.forEach(function (pt) { if (pt[1] > pdfMax) pdfMax = pt[1]; });
   } else {
     var rng2 = dgIntRange(geo.x0, geo.x1); pdfStems = [];
     for (var kk = rng2[0]; kk <= rng2[1]; kk++) { var yv = d.pdf(kk, p); pdfStems.push([kk, yv]); if (yv > pdfMax) pdfMax = yv; }
@@ -6228,6 +6284,7 @@ DGUI.genRedraw = function (id) {
   if (isC) {
     var lp = pdfPts.map(function (pt) { return geo.xAt(pt[0]) + ',' + y2At(pt[1]); }).join(' ');
     h += '<polyline points="' + lp + '" fill="none" stroke="var(--truth)" stroke-width="2"/>';
+    pdfJumps.forEach(function (j) { h += dgPdfJumpHtml(geo.xAt, y2At, j, 'var(--truth)', 2, 2.8, 1.4); });
   } else {
     pdfStems.forEach(function (s) { var xk = geo.xAt(s[0]), yTop = y2At(s[1]); h += '<line x1="' + xk + '" y1="' + xBaseY + '" x2="' + xk + '" y2="' + yTop + '" stroke="var(--truth)" stroke-width="2.2"/><circle cx="' + xk + '" cy="' + yTop + '" r="3" fill="var(--truth)"/>'; });
   }
