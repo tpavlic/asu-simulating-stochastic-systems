@@ -2355,6 +2355,21 @@ function buildPdfMarkup(d, p, W, H, showRefs) {
    jump between two steps reads as a jump rather than as two floating,
    unrelated dots. The live curve is heavier; the three references
    are thinner and colored from the --ref-1/2/3 ramp. ── */
+/* The flat F=0 lead-in before a discrete cdf's first drawn support point.
+   The axis's left edge is chosen with the true minimum support value in
+   mind, but that padding is often under one integer wide, and the per-k
+   loop below only ever draws whole unit-wide steps -- so without this, the
+   sliver between the frame's edge and the first real step is left blank
+   rather than showing the F = 0 it actually is. Ends in a hollow dot and a
+   dashed riser up to the first step, matching how every other jump in the
+   staircase is already drawn. */
+function dgCdfLeadIn(xAtFn, yAtFn, leftX, x0, firstK, cdfFirst, color, lineW, circleR, circleW, riserW) {
+  if (firstK <= x0 + 1e-9) return '';
+  var y0 = yAtFn(0), xFirst = xAtFn(firstK);
+  return '<line x1="' + leftX + '" y1="' + y0 + '" x2="' + xFirst + '" y2="' + y0 + '" stroke="' + color + '" stroke-width="' + lineW + '"/>'
+    + '<circle cx="' + xFirst + '" cy="' + y0 + '" r="' + circleR + '" fill="var(--card)" stroke="' + color + '" stroke-width="' + circleW + '"/>'
+    + '<line x1="' + xFirst + '" y1="' + y0 + '" x2="' + xFirst + '" y2="' + yAtFn(cdfFirst) + '" stroke="' + color + '" stroke-width="' + riserW + '" stroke-dasharray="' + DG_RISER_DASH + '"/>';
+}
 function buildCdfMarkup(d, p, W, H, showRefs) {
   var L = 42, R = 12, T = 10, B = 32, innerW = W - L - R, innerH = H - T - B;
   var x0 = d.axis.x0, x1 = d.axis.x1, xt = d.axis.xt;
@@ -2387,6 +2402,7 @@ function buildCdfMarkup(d, p, W, H, showRefs) {
       h += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.2" stroke-dasharray="' + DG_REF_DASH[ri] + '"/>';
     } else {
       var rng = dgIntRange(x0, x1);
+      h += dgCdfLeadIn(xAt, yAt, L, x0, rng[0], d.cdf(rng[0], ref.p), color, 1.4, 2.2, 1.2, 1);
       for (var k = rng[0]; k <= rng[1]; k++) {
         var xL = xAt(k), xR = Math.min(xAt(k + 1), L + innerW), yv = yAt(d.cdf(k, ref.p));
         h += '<line x1="' + xL + '" y1="' + yv + '" x2="' + xR + '" y2="' + yv + '" stroke="' + color + '" stroke-width="1.4"/>';
@@ -2406,6 +2422,7 @@ function buildCdfMarkup(d, p, W, H, showRefs) {
     h += '<polyline points="' + lp.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2.2"/>';
   } else {
     var rng2 = dgIntRange(x0, x1);
+    h += dgCdfLeadIn(xAt, yAt, L, x0, rng2[0], d.cdf(rng2[0], p), 'var(--truth)', 2.2, 2.6, 1.4, 1.2);
     for (var k2 = rng2[0]; k2 <= rng2[1]; k2++) {
       var xL2 = xAt(k2), xR2 = Math.min(xAt(k2 + 1), L + innerW), yv2 = yAt(d.cdf(k2, p));
       h += '<line x1="' + xL2 + '" y1="' + yv2 + '" x2="' + xR2 + '" y2="' + yv2 + '" stroke="var(--truth)" stroke-width="2.2"/>';
@@ -6123,6 +6140,7 @@ DGUI.genRedraw = function (id) {
     h += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--truth)" stroke-width="2.2"/>';
   } else {
     var rng = dgIntRange(geo.x0, geo.x1);
+    h += dgCdfLeadIn(geo.xAt, geo.uAt, L, geo.x0, rng[0], d.cdf(rng[0], p), 'var(--truth)', 2.2, 2.6, 1.4, 1.2);
     for (var k = rng[0]; k <= rng[1]; k++) {
       var xL = geo.xAt(k), xR = Math.min(geo.xAt(k + 1), L + S), uv = geo.uAt(d.cdf(k, p));
       h += '<line x1="' + xL + '" y1="' + uv + '" x2="' + xR + '" y2="' + uv + '" stroke="var(--truth)" stroke-width="2.2"/>';
