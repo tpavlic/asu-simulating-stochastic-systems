@@ -271,6 +271,18 @@ table.tbl th { text-align: left; font-size: .68rem; font-weight: 700; color: var
 /* A column header is uppercased like a card label, and a variable inside
    one needs the same escape hatch. */
 table.tbl th .lit { text-transform: none; letter-spacing: 0; }
+/* A header that carries an explanation needs a finger-sized way in, and a
+   line of 11px type gives it 14 pixels.  The padding grows the hit area to
+   the 24 the guideline asks for and the negative margin takes the space
+   back, so the row is laid out exactly as it was before.  Sideways the
+   padding stops at 4px, which is inside the 8px gutter between columns:
+   any wider and two headers would overlap and a tap near the boundary
+   would open the wrong one. */
+table.tbl th .tip { display: inline-block; padding: 5px 4px; margin: -5px -4px; }
+/* One character of label leaves 14px even after that, so this one reaches
+   leftwards instead, into the empty right-hand end of the distribution
+   column, where there is no other target to collide with. */
+table.tbl th .tip.narrow { padding-left: 14px; margin-left: -14px; }
 table.tbl th.num, table.tbl td.num { text-align: right; }
 table.tbl td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
 table.tbl td.num { font-family: 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
@@ -278,6 +290,11 @@ table.tbl tr:last-child td { border-bottom: none; }
 table.tbl tr.picked td { background: var(--accent-wash); }
 table.tbl tr.clickable { cursor: pointer; }
 table.tbl tr.clickable:hover td { background: var(--accent-tint); }
+/* Keyboard focus on a selectable row.  :focus-visible rather than :focus, so
+   the ring answers a Tab key and never a mouse click, and the table looks
+   exactly as it did before to a reader using a pointer.  The offset is
+   negative because a collapsed border leaves no room outside the row box. */
+table.tbl tr.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Holding a parameter: a checkbox and, once ticked, the value to hold it
    at.  Kept in the parameter table rather than in a panel of its own, so
    the estimate you are replacing is on the same line as the replacement. */
@@ -5484,10 +5501,50 @@ function renderRanking() {
   var bAic = IA.bestBy(ST.rows, 'aic'), bBic = IA.bestBy(ST.rows, 'bic');
   var bLl = IA.bestBy(ST.rows, 'll'), bSqe = IA.bestBy(ST.rows, 'sqe');
 
+  /* These five are the only bare abbreviations in the widget that nothing
+     beside them explains, and the disclosure that does explain them sits
+     below the table, collapsed, and runs several hundred words on which
+     criterion to believe.  A header tip answers the smaller question the
+     reader actually has while scanning a row: what is this number.  The
+     text is written here rather than passed through esc() so that it can
+     carry markup, which the tip box renders; it therefore must not contain
+     a double quote. */
+  var hdr = function (label, tip, extra) {
+    return '<th class="num"><span class="tip' + (extra ? ' ' + extra : '') +
+           '" tabindex="0" data-tip="' + tip + '">' + label + '</span></th>';
+  };
+  /* Choosing a candidate was a click and nothing else, which left the whole
+     table unreachable without a mouse.  A tab stop per selectable row plus
+     Enter and Space is the least invasive fix: the table keeps its native
+     semantics, and so a screen reader still announces it as a table and its
+     own arrow keys still walk the cells.  aria-current marks which fit the
+     panels below are showing, which until now was carried by a background
+     tint alone. */
+  var rowAttrs = function (r) {
+    return ' tabindex="0"' + (r.key === ST.pick ? ' aria-current="true"' : '');
+  };
   var h = '<table class="tbl"><thead><tr>' +
-    '<th>Distribution</th><th class="num"><span class="lit">k</span></th>' +
-    '<th class="num">Log-likelihood</th>' +
-    '<th class="num">AIC</th><th class="num">BIC</th><th class="num">Square error</th>' +
+    '<th>Distribution</th>' +
+    hdr('<span class="lit">k</span>',
+        'How many quantities were estimated from your data. AIC and BIC both grow with it; ' +
+        'the chi-square test subtracts a smaller count that leaves out endpoints read straight ' +
+        'off the sample range.', 'narrow') +
+    hdr('Log-likelihood',
+        'How probable your data is under this fitted model. Bigger is better, but adding ' +
+        'parameters to a distribution always raises it as more parameters provide more ' +
+        'modeling flexibility. However, the increased ability of the model to represent a ' +
+        'given data set can decrease its ability to describe generic patterns in real data.') +
+    hdr('AIC',
+        '<code>AIC = 2k − 2 lnL</code>: the log-likelihood, with 2 added for every estimated ' +
+        'parameter. Smaller is better.') +
+    hdr('BIC',
+        '<code>BIC = k ln n − 2 lnL</code>: like AIC, but each parameter adds ln n rather than ' +
+        '2, and so past about seven observations it leans harder toward simpler models. ' +
+        'Smaller is better.') +
+    hdr('Square error',
+        'Arena’s criterion: the summed squared gaps between the histogram bars and the ' +
+        'probability the model puts in each bin. Smaller is better, but it moves with the bin ' +
+        'count and takes no account of how many parameters were estimated.') +
     '</tr></thead><tbody>';
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
@@ -5508,14 +5565,14 @@ function renderRanking() {
       var why = r.key === 'discreteEmpirical'
         ? 'not scored: ' + freeK + ' free probabilities, one per distinct value'
         : 'not scored: one breakpoint per observation';
-      h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '">' +
+      h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '"' + rowAttrs(r) + '>' +
            '<td class="rank-name">' + esc(r.dist.name) +
            '<span class="rank-sub">' + why + '</span></td>' +
            '<td class="num">' + freeK + '</td><td class="num">—</td><td class="num">—</td>' +
            '<td class="num">—</td><td class="num">' + fmt(r.sqe, 3) + '</td></tr>';
       continue;
     }
-    h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '">' +
+    h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '"' + rowAttrs(r) + '>' +
       '<td class="rank-name">' + esc(r.dist.name) +
         (r.fit.degenerate ? '<span class="rank-sub">the shifted fit has no maximum</span>' :
          r.fit.atBound ? '<span class="rank-sub">shift sits at the smallest observation</span>' : '') +
@@ -5540,13 +5597,33 @@ function renderRanking() {
       : '') + '</div>';
   $('rank-host').innerHTML = h;
 
+  /* renderRanking rebuilds this table from a string, and so the row that was
+     focused stops existing the moment it is chosen.  A keyboard user would be
+     dropped back at the top of the document on every pick, so focus is put
+     back on the replacement row.  Only for a keyboard pick: calling focus()
+     after a mouse click would be gratuitous. */
+  function pick(key, refocus) {
+    ST.pick = key;
+    ST.userPicked = true;
+    ST.gof = null;
+    renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
+    if (refocus) {
+      var again = $('rank-host').querySelector('tr[data-key="' + key + '"]');
+      if (again) again.focus();
+    }
+  }
   var tr = $('rank-host').querySelectorAll('tr.clickable');
   for (var j = 0; j < tr.length; j++) {
     tr[j].addEventListener('click', function () {
-      ST.pick = this.getAttribute('data-key');
-      ST.userPicked = true;
-      ST.gof = null;
-      renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
+      pick(this.getAttribute('data-key'), false);
+    });
+    tr[j].addEventListener('keydown', function (e) {
+      /* Space is spelled two ways across browsers, and left alone it would
+         scroll the page instead of choosing the row. */
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        pick(this.getAttribute('data-key'), true);
+      }
     });
   }
   renderDisagreement(bAic, bBic, bLl, bSqe);
