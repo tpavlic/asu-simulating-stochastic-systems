@@ -228,7 +228,7 @@ table.inp td.bar i { display: block; height: 9px; background: var(--lane); borde
    not compress these fixed-size controls below the 24px touch-target floor;
    the label text is what wraps instead. The policy select on tab ③ has no
    fixed size of its own and keeps shrinking (see the media query below). */
-.spin input { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 64px; height: 28px; border: none; text-align: center; color: var(--text); background: #fff; -moz-appearance: textfield; flex-shrink: 0; }
+.spin input { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 64px; height: 28px; border: none; text-align: center; color: var(--text); background: #fff; -moz-appearance: textfield; appearance: textfield; flex-shrink: 0; }
 .spin input::-webkit-outer-spin-button, .spin input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .spin button { width: 26px; min-height: 28px; border: none; background: var(--accent-wash); color: var(--accent); font-weight: 700; cursor: pointer; font-size: 1rem; flex-shrink: 0; }
 .spin button:hover:not(:disabled) { background: var(--accent-tint); }

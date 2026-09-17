@@ -147,7 +147,7 @@ footer a:hover { text-decoration: underline; }
 /* flex-shrink: 0 on the input and each button – a knob whose label is long
    enough to crowd a narrow screen must not compress these fixed-size controls
    below the 24px touch-target floor; the label text is what wraps instead. */
-.spin input { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 64px; height: 28px; border: none; text-align: center; color: var(--text); background: #fff; -moz-appearance: textfield; flex-shrink: 0; }
+.spin input { font-family: 'IBM Plex Mono', monospace; font-size: .88rem; width: 64px; height: 28px; border: none; text-align: center; color: var(--text); background: #fff; -moz-appearance: textfield; appearance: textfield; flex-shrink: 0; }
 .spin input::-webkit-outer-spin-button, .spin input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .spin button { width: 26px; min-height: 28px; border: none; background: var(--accent-wash); color: var(--accent); font-weight: 700; cursor: pointer; font-size: 1rem; flex-shrink: 0; }
 .spin button:hover:not(:disabled) { background: var(--accent-tint); }
@@ -2545,7 +2545,7 @@ function mapTileHtml(d) {
     + '<span class="t-name">' + d.name + '</span>'
     + '<span class="t-body"><span class="t-note">' + d.notation + '</span>'
     + '<span class="t-supp">' + t.support + '</span>'
-    + '<span class="t-when">' + t.when + '</span></span></button>';
+    + '<span class="t-when">' + t.when + '</span></span></a>';
 }
 function buildMapGroups() {
   var el = $('map-groups');
