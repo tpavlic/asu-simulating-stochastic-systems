@@ -652,13 +652,13 @@ footer a:hover { text-decoration: underline; }
       <summary>Why the criteria disagree, and which one to believe</summary>
       <div class="why-body">
         <p><strong>Log-likelihood</strong> asks how probable your data is under each fitted model.
-        It always improves when a distribution has more parameters to spend, and so on its own it
-        would pick the most flexible candidate every time, whether or not the extra flexibility
-        described anything real.</p>
-        <p><strong>AIC</strong> and <strong>BIC</strong> are the log-likelihood with a price
-        attached to each parameter: <code>AIC = 2k &minus; 2 lnL</code> and
+        It always improves when a distribution has more parameters, because each one adds modeling
+        flexibility. On its own it would therefore pick the most flexible candidate every time,
+        whether or not that flexibility described anything real.</p>
+        <p><strong>AIC</strong> and <strong>BIC</strong> are the log-likelihood with a penalty
+        term added for each parameter: <code>AIC = 2k &minus; 2 lnL</code> and
         <code>BIC = k ln n &minus; 2 lnL</code>, both smaller-is-better. Because
-        <code>ln n</code> is larger than 2 for any sample past seven observations, BIC charges
+        <code>ln n</code> is larger than 2 for any sample past seven observations, BIC adds
         more per parameter than AIC and so leans toward simpler models, and it leans harder the
         more data you have. When they disagree, the disagreement is telling you the extra
         parameter is doing something worth about one or two log-likelihood units—real, but
@@ -672,8 +672,8 @@ footer a:hover { text-decoration: underline; }
           candidates can change places when you drag the bin slider because the criterion is
           computed on the histogram rather than on the data. Try it: sort by square error and
           then move the slider in section 4.</li>
-          <li><strong>It does not charge for parameters.</strong> A three-parameter distribution
-          can always track a histogram at least as closely as a one-parameter distribution can,
+          <li><strong>It ignores how many parameters were estimated.</strong> A three-parameter
+          distribution can always track a histogram at least as closely as a one-parameter one can,
           and so square error rewards flexibility for its own sake—the same flaw as raw
           log-likelihood, without the compensating property of being a likelihood.</li>
         </ul>
@@ -704,7 +704,7 @@ footer a:hover { text-decoration: underline; }
         a location parameter of their own and a second one would be redundant. Turn the shift on
         when the process has an unavoidable minimum: a fixed setup time, a mandatory inspection,
         a walk down a corridor that cannot be done in zero seconds. Turn it off otherwise because
-        it costs a parameter and it is estimated from the smallest value you happened to see.</p>
+        it adds a parameter and it is estimated from the smallest value you happened to see.</p>
       </div>
     </details>
   </section>
@@ -812,9 +812,9 @@ footer a:hover { text-decoration: underline; }
         <code>1/&radic;n</code>, and so asymptotically it behaves like a constant that was known all
         along and absorbs none of the discrepancy the correction exists to account for. Subtracting
         for it would throw away power for nothing; the degrees of freedom therefore count only the
-        <em>regular</em> parameters. AIC and BIC keep the full count because their penalty is a
-        charge for complexity rather than a distributional correction, and a number read off the
-        data is a number the data paid for however fast it converged.</p>
+        <em>regular</em> parameters. AIC and BIC keep the full count because their penalty
+        measures complexity rather than correcting a distribution, and a number read off the data
+        was still estimated from the data however fast it converged.</p>
         <p><strong>And the correction is exact only when the parameters were estimated from the
         binned counts,</strong> which is not what happens here&mdash;every fit on this page uses
         the ungrouped data. Chernoff and Lehmann showed in 1954 that the true distribution then sits
@@ -822,8 +822,8 @@ footer a:hover { text-decoration: underline; }
         subtracting everything; the conventional df is an approximation whichever way you count.
         That is why the chi-square statistic is bootstrapped here too. The bootstrap re-bins and
         re-fits each resample exactly as your own sample was handled, and so its p-value needs no
-        convention at all&mdash;and comparing it with the table column tells you how much the
-        convention cost you on your data.</p>
+        convention at all&mdash;and comparing it with the table column tells you how far the
+        convention moved the answer on your data.</p>
       </div>
     </details>
 
@@ -1138,8 +1138,8 @@ footer a:hover { text-decoration: underline; }
         it will never produce the lunch queue that the real system produces every day.</p>
         <p><strong>The gaps are not missing the information; tab ① is throwing it away.</strong>
         Timestamps and gaps hold the same thing: add the gaps up and you have the arrival times
-        back, give or take where you put the zero. Losing the origin costs you the ability to say
-        <em>the peak was at noon</em>, and costs you nothing at all when the question is whether
+        back, give or take where you put the zero. Losing the origin leaves you unable to say
+        <em>the peak was at noon</em>, and changes nothing at all when the question is whether
         there was a peak: the spacing between arrivals is untouched by sliding the whole record
         sideways.</p>
         <p>What does the damage is fitting a distribution to them. A distribution is a statement
@@ -1249,14 +1249,14 @@ footer a:hover { text-decoration: underline; }
       underneath answer that, and they answer it in a way you could act on without ever computing
       a maximum-likelihood estimate: a variance near the mean, bars that sit under the spikes.
       <br><br>
-      <strong>Counts are far cheaper to collect than timestamps.</strong> Recording
+      <strong>Counts are far easier to collect than timestamps.</strong> Recording
       the moment of every single arrival is tedious and error-prone; standing at a door with a
       tally sheet and writing down how many came in each ten minutes is not. If the counts are
       Poisson you can back the exponential rate straight out of them
       (<span class="mono">λ̂ = mean count / interval width</span>) and never record a timestamp at
-      all. What you are buying that shortcut with is an assumption: that the rate held constant
+      all. That shortcut rests on an assumption: that the rate held constant
       across the whole stretch, or at least that the counts in your intervals are independent and
-      identically distributed. The bars and spikes below are how you check you could afford it.
+      identically distributed. The bars and spikes below are how you check it.
     </div>
 
     <div class="plot-hd" style="margin-top:14px">The gaps, against the fitted exponential</div>
@@ -1302,7 +1302,7 @@ footer a:hover { text-decoration: underline; }
 
 
     <details class="why">
-      <summary>Counting is cheaper than timing, and it survives a changing rate</summary>
+      <summary>Counting is easier than timing, and it survives a changing rate</summary>
       <div class="why-body">
         <p><strong>From the gaps.</strong> If the rate is constant, the interarrival times are
         independent draws from an exponential, and the maximum-likelihood estimate of an
@@ -1324,14 +1324,14 @@ footer a:hover { text-decoration: underline; }
         watched—you started at 08:00 and stopped at 16:00—use that, count all <code>n</code>
         arrivals, and the ambiguity goes away. With a few hundred arrivals the two agree to well
         inside their own confidence intervals anyway.</p>
-        <p><strong>The count route is also far cheaper to collect.</strong> Recording the exact
+        <p><strong>The count route is also far easier to collect.</strong> Recording the exact
         moment of every arrival takes a stopwatch and steady attention; counting how many arrived
         in each ten-minute block takes a tally sheet. If the counts are Poisson, the rate falls out
-        of them directly and no timestamp is ever needed. That shortcut is paid for with an
+        of them directly and no timestamp is ever needed. That shortcut rests on an
         assumption, that the rate held constant over the stretch, or at least that the counts
         across your chosen subintervals are independent and identically distributed, and that is
         exactly what the histogram and the variance-to-mean ratio below let you check. It
-        is worth knowing that the cheaper data collection is available and what it costs.</p>
+        is worth knowing that the easier data collection is available and what it assumes.</p>
         <p><strong>So why bother with the count route otherwise?</strong> Because it is the one
         that survives the rate not being constant. Each block can carry its own <code>&lambda;</code>; a single
         exponential fitted to all the gaps cannot and will hand you an average that describes no
@@ -5591,7 +5591,8 @@ function renderRanking() {
       ? ' The empirical row is unscored in the first four columns but still carries a square ' +
         'error, and it is normally the smallest on the table by a wide margin. That is not a ' +
         'rounding artefact and it is not a recommendation: a distribution with one breakpoint per ' +
-        'observation traces any histogram almost exactly and is charged nothing for doing so, ' +
+        'observation traces any histogram almost exactly, and square error takes no account of how ' +
+        'many breakpoints that took, ' +
         'which is the clearest demonstration on this page of what is wrong with ranking by square ' +
         'error. It is excluded from the ★ for that reason.'
       : '') + '</div>';
@@ -5642,12 +5643,12 @@ function renderDisagreement(bAic, bBic, bLl, bSqe) {
     msgs.push('<strong>AIC and square error disagree.</strong> AIC picks the ' +
       esc(nm(bAic)) + '; Arena\'s square-error criterion picks the ' + esc(nm(bSqe)) + '. ' +
       'Trust AIC. Square error is computed from the histogram, and so it changes when you move the ' +
-      'bin slider in section 4—try it—and it charges nothing for extra parameters, and so it ' +
+      'bin slider in section 4—try it—and it takes no account of extra parameters, and so it ' +
       'rewards a flexible distribution for flexibility alone.');
   }
   if (bAic && bBic && bAic !== bBic) {
     msgs.push('<strong>AIC and BIC disagree.</strong> AIC picks the ' + esc(nm(bAic)) +
-      ' and BIC the ' + esc(nm(bBic)) + '. BIC charges ln n = ' + fmt(Math.log(ST.s.n), 3) +
+      ' and BIC the ' + esc(nm(bBic)) + '. BIC adds ln n = ' + fmt(Math.log(ST.s.n), 3) +
       ' per parameter against AIC\'s 2, and so it prefers the simpler of the two. A disagreement here ' +
       'means the extra parameter is worth roughly one or two log-likelihood units: real, but ' +
       'marginal. With n = ' + ST.s.n + ' either answer is defensible; prefer the simpler one ' +
@@ -5657,7 +5658,7 @@ function renderDisagreement(bAic, bBic, bLl, bSqe) {
     msgs.push('<strong>The raw log-likelihood picks the ' + esc(nm(bLl)) + ',</strong> which has ' +
       'more parameters than the ' + esc(nm(bAic)) + ' that AIC picks. That is the expected ' +
       'behavior, not a contradiction: log-likelihood can only improve when a distribution is ' +
-      'given another parameter to spend, which is exactly why it is never used on its own to choose.');
+      'given another parameter, which is exactly why it is never used on its own to choose.');
   }
   $('disagree').innerHTML = msgs.length
     ? msgs.map(function (m) { return '<div class="note">' + m + '</div>'; }).join('')
@@ -5700,7 +5701,7 @@ function renderShiftNote() {
     '<span class="mono">γ + ' + esc(d.name) + '(…)</span> instead, the same shape slid sideways to ' +
     'start at <span class="mono">γ</span>. Use it when the task has an unavoidable minimum—a fixed ' +
     'setup, a mandatory inspection, a walk down a corridor—and leave it off otherwise because it ' +
-    'costs a parameter and γ is estimated from the smallest value you happened to observe.';
+    'adds a parameter and γ is estimated from the smallest value you happened to observe.';
 }
 
 function renderFit() {
@@ -5844,8 +5845,9 @@ function holdNote(r) {
       'estimated parameters, in two presses.</div>';
   }
   return '<div class="note quiet"><strong>' + nHeld + ' of ' + f.fixed.length +
-    ' parameters held.</strong> Only the free ones count toward k, and so this fit is charged ' +
-    (f.k === 0 ? 'nothing' : 'k = ' + f.k) + ' by AIC and BIC, and the chi-square test gains a ' +
+    ' parameters held.</strong> Only the free ones count toward k, and so AIC and BIC see ' +
+    (f.k === 0 ? 'no estimated parameters here' : 'k = ' + f.k + ' here') +
+    ', and the chi-square test gains a ' +
     'degree of freedom for each parameter you took off the data\'s hands. The bootstrap refits ' +
     'under the same holds, and its p-value therefore stays the honest one; the table column is still too ' +
     'large, but by less than it was.</div>';
@@ -6146,7 +6148,8 @@ function renderChi() {
       (chi.kChi !== r.fit.k
         ? ' ' + (r.fit.k - chi.kChi) + ' of this fit\'s ' + r.fit.k + ' estimated ' +
           'quantities do not appear in that subtraction: they are extreme order statistics, and ' +
-          'they cost the chi-square test nothing. The note below explains why, and the bootstrap ' +
+          'they absorb none of the discrepancy the subtraction exists to correct. The note below ' +
+          'explains why, and the bootstrap ' +
           'column checks it.'
         : '') +
       (chi.short
