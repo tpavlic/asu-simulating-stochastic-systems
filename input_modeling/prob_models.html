@@ -2268,10 +2268,16 @@ function dgContPdfPts(d, p, x0, x1, N) {
    with a hollow dot where the density is only approached (always 0, from
    outside the support) and a filled dot where the pdf actually attains it
    -- the same open/closed convention the discrete cdf's own steps already
-   use, so a reader meets a discontinuity the same way wherever one shows up. */
+   use, so a reader meets a discontinuity the same way wherever one shows up.
+   The segment carries the same DG_RISER_DASH every discrete riser already
+   does, not a solid stroke: solid read as a third, impossibly steep side of
+   the curve itself (a uniform's jump looked like a steep-walled trapezoid
+   rather than a vertical one), and a reference's own DG_REF_DASH pattern
+   would have been mistaken for identifying which reference setting the
+   jump belonged to, when color already does that job. */
 function dgPdfJumpHtml(xAtFn, yAtFn, jump, color, lineW, circleR, circleW) {
   var xPx = xAtFn(jump.x), y0px = yAtFn(0), y1px = yAtFn(jump.y);
-  return '<line x1="' + xPx + '" y1="' + y0px + '" x2="' + xPx + '" y2="' + y1px + '" stroke="' + color + '" stroke-width="' + lineW + '"/>'
+  return '<line x1="' + xPx + '" y1="' + y0px + '" x2="' + xPx + '" y2="' + y1px + '" stroke="' + color + '" stroke-width="' + lineW + '" stroke-dasharray="' + DG_RISER_DASH + '"/>'
     + '<circle cx="' + xPx + '" cy="' + y0px + '" r="' + circleR + '" fill="var(--card)" stroke="' + color + '" stroke-width="' + circleW + '"/>'
     + '<circle cx="' + xPx + '" cy="' + y1px + '" r="' + circleR + '" fill="' + color + '"/>';
 }
