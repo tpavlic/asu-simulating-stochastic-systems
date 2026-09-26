@@ -82,12 +82,12 @@ Inside `<head>`, include all of the following, filling in the actual values:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Demo Title — interactive explainer</title>
+<title>Demo Title – interactive explainer</title>
 <meta name="description" content="One or two sentences describing the demo.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Demo Title — interactive explainer">
+<meta property="og:title" content="Demo Title – interactive explainer">
 <meta property="og:description" content="One or two sentences describing the demo.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/my_demo/my_demo-preview.png">
 <meta property="og:image:width" content="ACTUAL_WIDTH">
@@ -97,7 +97,7 @@ Inside `<head>`, include all of the following, filling in the actual values:
 
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Demo Title — interactive explainer">
+<meta name="twitter:title" content="Demo Title – interactive explainer">
 <meta name="twitter:description" content="One or two sentences describing the demo.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/my_demo/my_demo-preview.png">
 
@@ -106,6 +106,15 @@ Inside `<head>`, include all of the following, filling in the actual values:
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Y66V2TS0R6');</script>
 </head>
 ```
+
+**Separate a title from its subtitle with a spaced en dash (`–`), never an em dash.** The space
+before the dash is non-breaking, so the dash cannot wrap to the start of a line. In the
+`<title>` element and the `og:title` and `twitter:title` values, that space is a literal U+00A0,
+never `&nbsp;`: tools that read these as plain text (link unfurlers, bookmark exporters,
+scripts) can show an entity verbatim, as the literal-characters rule below explains. In a
+visible heading in the page body, such as an `index.html` entry, write `Demo Title&nbsp;–
+subtitle`. The space after the dash is an ordinary space. Every widget, `index.html`, and `README.md` follow this form, so keep it
+consistent when adding or renaming one.
 
 **Twitter/X image requirements** (stricter than other platforms):
 
@@ -122,7 +131,7 @@ entities — a title like `Foo &amp; Bar` can surface verbatim as "Foo &amp; Bar
 ampersand followed by a space (`Foo & Bar`) is not even a valid entity, so escaping is both
 unnecessary and harmful here. Write the literal character instead: `og:title` and
 `twitter:title` (and the matching `:description` tags) should contain `&`, not `&amp;`, and
-likewise use literal `—`, `<`, `>`, `'`, etc. (This applies only to the social-card meta
+likewise use literal `–`, `<`, `>`, `'`, and a literal non-breaking space, etc. (This applies only to the social-card meta
 `content` attributes; the human-visible `<title>` element and page body still follow normal
 HTML escaping rules.)
 
@@ -346,7 +355,7 @@ ends with a placeholder comment marking where to insert (`<!-- Add more <topic> 
          alt="My Demo preview"
          width="120" height="90">
     <div class="demo-text">
-      <h3>Demo Title — interactive explainer</h3>
+      <h3>Demo Title&nbsp;– interactive explainer</h3>
       <p>One sentence description that conveys what the demo shows and why it matters for the course.</p>
     </div>
   </a>
