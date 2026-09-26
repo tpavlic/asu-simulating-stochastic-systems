@@ -176,6 +176,8 @@ a:focus-visible, textarea:focus-visible {
               cursor: pointer; transition: .15s; border-right: 1.5px solid var(--border); }
 .seg button:last-child { border-right: none; }
 .seg button.on { background: var(--accent); color: #fff; font-weight: 700; }
+/* A narrow button wraps its label after the comma, never at the hyphen. */
+.seg .nw { white-space: nowrap; }
 .seg button:hover:not(.on) { background: var(--accent-wash); color: var(--accent); }
 
 /* ── Stat cards ──────────────────────────────────────────────────────── */
@@ -393,9 +395,9 @@ footer a:hover { text-decoration: underline; }
       <span class="ctrl-grp">
         <span class="ctrl-lbl" id="sided-lbl">Alternative</span>
         <span class="seg" role="group" aria-labelledby="sided-lbl" id="sided-seg">
-          <button type="button" data-sided="two" class="on">two-sided</button>
-          <button type="button" data-sided="left">one-sided, less</button>
-          <button type="button" data-sided="right">one-sided, greater</button>
+          <button type="button" data-sided="two" class="on"><span class="nw">two-sided</span></button>
+          <button type="button" data-sided="left"><span class="nw">one-sided,</span> less</button>
+          <button type="button" data-sided="right"><span class="nw">one-sided,</span> greater</button>
         </span>
       </span>
       <span class="ctrl-note" id="sided-note"></span>
@@ -697,6 +699,37 @@ footer a:hover { text-decoration: underline; }
       plots a false-negative rate, and reading power off it is reading sensitivity.</p>
 
     <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="oc-test">Test</label>
+        <select id="oc-test"></select>
+      </span>
+      <span class="p-item" id="oc-struct"><label for="oc-struct-in" id="oc-struct-lbl"></label>
+        <input type="number" id="oc-struct-in" class="p-in narrow"></span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <span class="p-item"><label for="oc-alpha">Significance level α =</label>
+          <input type="number" id="oc-alpha" class="p-in narrow" min="0" max="0.2" step="0.005"
+                 value="0.05"></span>
+        <span class="seg" role="group" aria-label="Significance levels of the classic printed charts"
+              id="oc-alpha-seg">
+          <button type="button" data-alpha="0.05">0.05</button>
+          <button type="button" data-alpha="0.01">0.01</button>
+        </span>
+      </span>
+      <span class="seg" role="group" aria-label="Alternative" id="oc-sided-seg">
+        <button type="button" data-sided="two"><span class="nw">two-sided</span></button>
+        <button type="button" data-sided="one"><span class="nw">one-sided</span></button>
+        <button type="button" data-sided="left"><span class="nw">one-sided,</span> less</button>
+        <button type="button" data-sided="right"><span class="nw">one-sided,</span> greater</button>
+      </span>
+    </div>
+    <div class="ctrl-note" style="margin-bottom:10px">A printed chart is drawn for one test at one
+      α and one sidedness, most often α = 0.05 or 0.01, and so these settings pick which chart is
+      drawn. Any α from 0.001 to 0.2 can be typed. Every setting here is shared with tabs ① and ②,
+      and so changing one here changes it there as well. <span id="oc-test-note"></span></div>
+
+    <div class="ctrl-row">
       <span class="ctrl-lbl">Look up:</span>
       <span class="p-item"><label for="oc-eff" id="oc-eff-lbl">d =</label>
         <input type="number" id="oc-eff" class="p-in" step="0.05" value="0.5"></span>
@@ -730,7 +763,7 @@ footer a:hover { text-decoration: underline; }
         sheet of paper can hold only two axes. A printed OC chart freezes α and the sidedness
         (that is why textbooks print separate charts for α = 0.05 and α = 0.01, one-sided and
         two-sided), spends its axes on effect and β, and handles n by printing a family of curves.
-        This page draws the same slice live—change α or the sidedness in tab ① and the whole
+        This page draws the same slice live—change α or the sidedness above and the whole
         chart redraws, which is the manipulation no printed chart can offer.</p>
         <p>Reading β at your effect and n here, and reading power on tab ②, are the same lookup:
         every OC chart is a power curve drawn upside down.</p>
@@ -2479,7 +2512,7 @@ var ST = {
   m: 10000, seed: 20260819,
   mc: null,       /* last completed MC run, with a .fresh flag */
   solved: null,   /* analytic solve-for-n result in n mode */
-  ocN: null, ocEff: null, ocBeta: null, pnMax: 0,
+  ocN: null, ocEff: null, ocBeta: null, ocKey: null, pnMax: 0,
   ad: null        /* last gamma-regression MC run */
 };
 
@@ -2508,6 +2541,29 @@ function fmtP(v) { return Number.isFinite(v) ? (v < 0.0001 && v > 0 ? v.toExpone
 function fmtCI(w) { return '[' + fmtP(w.lo) + ', ' + fmtP(w.hi) + ']'; }
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+/* Test labels write a subscript Unicode lacks as _A or _{means}.  These
+   two set it as a real subscript, in HTML and in SVG text. */
+var SUB_RE = /_(?:\{([^}]*)\}|([A-Za-z0-9]+))/g;
+function mathHtml(s) {
+  return esc(s).replace(SUB_RE, function (m, br, bare) { return '<sub>' + (br || bare) + '</sub>'; });
+}
+function mathSvg(s) {
+  /* SVG has no <sub>, and so each subscript is a tspan shifted down 3px,
+     and the text after it a tspan shifted back up. */
+  var out = '', down = false, last = 0, m;
+  s = String(s);
+  SUB_RE.lastIndex = 0;
+  while ((m = SUB_RE.exec(s))) {
+    var before = s.slice(last, m.index);
+    if (before) { out += down ? '<tspan dy="-3">' + esc(before) + '</tspan>' : esc(before); down = false; }
+    out += '<tspan dy="' + (down ? 0 : 3) + '" style="font-size:75%">' + esc(m[1] || m[2]) + '</tspan>';
+    down = true;
+    last = SUB_RE.lastIndex;
+  }
+  var rest = s.slice(last);
+  if (rest) out += down ? '<tspan dy="-3">' + esc(rest) + '</tspan>' : esc(rest);
+  return out;
 }
 /* A math symbol inside a card or plot heading label: the label is
    uppercased by CSS, and uppercasing turns β into Β and ρ into Ρ, which
@@ -2728,12 +2784,14 @@ function mainThreadJob(msg, onProgress, onDone, alive) {
 
 /* ── Test picker and parameter controls ────────────────────────────── */
 function buildTestSelect() {
-  var sel = $('test-select'), html = '';
+  var html = '';
   PA.TEST_KEYS.forEach(function (id) {
     html += '<option value="' + id + '">' + esc(PA.TESTS[id].name) + '</option>';
   });
-  sel.innerHTML = html;
-  sel.value = ST.test;
+  ['test-select', 'oc-test'].forEach(function (sid) {
+    $(sid).innerHTML = html;
+    $(sid).value = ST.test;
+  });
 }
 
 function renderParams() {
@@ -2741,12 +2799,12 @@ function renderParams() {
   t.params.forEach(function (q) {
     if (q.vector) {
       html += '<span class="p-item"><label for="par-' + q.key + '">' + esc(q.label) +
-        ' <span class="sym">' + q.sym + '</span></label>' +
+        ' <span class="sym">' + mathHtml(q.sym) + '</span></label>' +
         '<input type="text" id="par-' + q.key + '" class="p-in mono-in" style="width:13em" value="' +
         esc(p[q.key].map(function (v) { return N(v, 6); }).join(', ')) + '"></span>';
     } else {
       html += '<span class="p-item"><label for="par-' + q.key + '">' + esc(q.label) +
-        ' <span class="sym">' + q.sym + '</span></label>' +
+        ' <span class="sym">' + mathHtml(q.sym) + '</span></label>' +
         '<input type="number" id="par-' + q.key + '" class="p-in" step="' + (q.step || 0.1) +
         '" value="' + N(p[q.key], 8) + '"></span>';
     }
@@ -2810,7 +2868,17 @@ function readParam(q, el) {
 /* ── Sidedness, alpha, n, mode ─────────────────────────────────────── */
 function renderSided() {
   var t = curTest();
-  var seg = $('sided-seg');
+  var seg = $('sided-seg'), ocSeg = $('oc-sided-seg');
+  /* On the OC chart's magnitude axis, the less and greater charts of a
+     symmetric statistic are the same chart, and so that tab offers a single
+     one-sided choice for them. */
+  var oneOnly = ocSymm();
+  ocSeg.style.display = t.sidedFixed ? 'none' : '';
+  Array.prototype.forEach.call(ocSeg.children, function (b) {
+    var sd = b.dataset.sided;
+    b.style.display = (sd === 'one' ? oneOnly : (sd === 'two' || !oneOnly)) ? '' : 'none';
+    b.classList.toggle('on', sd === 'one' ? ST.sided !== 'two' : sd === ST.sided);
+  });
   if (t.sidedFixed) {
     seg.style.display = 'none';
     $('sided-note').textContent = 'This statistic only signals disagreement by being large, and so ' +
@@ -2832,6 +2900,91 @@ function renderSided() {
     }
     $('sided-note').textContent = note;
   }
+}
+
+/* α lives in two controls: tab ①'s select of common levels and the OC
+   tab's free box.  A level typed into the box that the select does not
+   list is added to the select as one extra option, so that both always
+   show the α actually in force. */
+var ALPHA_MIN = 0.001, ALPHA_MAX = 0.2;
+function renderAlpha() {
+  var sel = $('alpha-sel'), a = ST.alpha, extra = sel.querySelector('option[data-typed]');
+  if (extra) extra.remove();
+  var opts = Array.prototype.slice.call(sel.options);
+  var hit = opts.filter(function (o) { return Math.abs(Number(o.value) - a) < 1e-12; })[0];
+  if (!hit) {
+    hit = extra || document.createElement('option');
+    hit.dataset.typed = '1';
+    hit.value = hit.textContent = N(a, 4);
+    /* Keep the list ascending, with the typed level in its place. */
+    sel.insertBefore(hit, opts.filter(function (o) { return Number(o.value) > a; })[0] || null);
+  }
+  hit.selected = true;
+  $('oc-alpha').value = N(a, 4);
+  Array.prototype.forEach.call($('oc-alpha-seg').children, function (b) {
+    b.classList.toggle('on', Math.abs(Number(b.dataset.alpha) - a) < 1e-12);
+  });
+}
+
+/* The one input besides α and the sidedness that moves an OC chart: the
+   null proportion for the exact binomial test, and the number of
+   categories or groups, which sets the degrees of freedom, for the
+   chi-square and F tests.  Every other parameter cancels out of the
+   standardized effect on the chart's axis. */
+var OC_STRUCT = {
+  p:     { lbl: 'Null proportion p₀ =', min: 0.001, max: 0.999, step: 0.01,
+           get: function (p) { return p.p0; },
+           note: 'For this test the chart also depends on the null proportion p₀, and so it is set here too.' },
+  gof:   { lbl: 'Categories k =', min: 2, max: 10, step: 1,
+           get: function (p) { return p.p0v.length; },
+           note: 'For this test the chart also depends on the number of categories k. Changing k ' +
+                 'here drops the last categories or adds new ones with the average share, and then ' +
+                 'rescales both lists of proportions on tab ① to sum to 1.' },
+  anova: { lbl: 'Groups k =', min: 2, max: 10, step: 1,
+           get: function (p) { return p.means.length; },
+           note: 'For this test the chart also depends on the number of groups k. Changing k here ' +
+                 'drops the last group means on tab ① or adds new groups at the grand mean.' }
+};
+function renderOCStruct() {
+  var t = curTest(), cfg = OC_STRUCT[t.id], el = $('oc-struct-in');
+  $('oc-struct').style.display = cfg ? '' : 'none';
+  var note = cfg ? cfg.note : '';
+  if (ocSymm()) note = 'For this test the chart plots the size of the effect, on which a ' +
+    'one-sided test watching either direction draws the same chart, and so one one-sided ' +
+    'choice stands for both.';
+  $('oc-test-note').textContent = note;
+  if (!cfg) return;
+  $('oc-struct-lbl').textContent = cfg.lbl;
+  el.min = cfg.min; el.max = cfg.max; el.step = cfg.step;
+  el.value = N(cfg.get(curParams()), 6);
+}
+function readOCStruct(el) {
+  var t = curTest(), cfg = OC_STRUCT[t.id], p = curParams(), v = Number(el.value);
+  if (!cfg) return;
+  if (el.value.trim() === '' || !Number.isFinite(v)) { renderOCStruct(); return; }
+  v = Math.min(cfg.max, Math.max(cfg.min, v));
+  if (t.id === 'p') {
+    p.p0 = v;
+  } else {
+    var k = Math.round(v);
+    if (t.id === 'gof') {
+      /* A new category takes the average share of the old ones, and so a
+         uniform list stays uniform. */
+      var fit = function (arr) {
+        var out = arr.slice(0, k), avg = 1 / arr.length;
+        while (out.length < k) out.push(avg);
+        var tot = out.reduce(function (a, b) { return a + b; }, 0);
+        return out.map(function (x) { return x / tot; });
+      };
+      p.p0v = fit(p.p0v); p.p1v = fit(p.p1v);
+    } else {
+      var gm = p.means.reduce(function (a, b) { return a + b; }, 0) / p.means.length;
+      p.means = p.means.slice(0, k);
+      while (p.means.length < k) p.means.push(gm);
+    }
+  }
+  renderParams();
+  settingsChanged();
 }
 
 function renderNControls() {
@@ -3846,7 +3999,7 @@ function renderCurves() {
   var W = gm.W, H = gm.H;
   var fr = frame(W, H, 44, 10, 12, 40, t.effect.min, t.effect.max, 0, 1);
   var s = drawAxes(fr, niceTicks(t.effect.min, t.effect.max, gm.narrow ? 4 : 6),
-                   [0, 0.2, 0.4, 0.6, 0.8, 1], t.effect.label, 'power');
+                   [0, 0.2, 0.4, 0.6, 0.8, 1], mathSvg(t.effect.label), 'power');
   s += svLine(fr.mL, fr.Y(a), fr.mL + fr.iw, fr.Y(a), 'stroke:' + C.muted + ';stroke-width:1;stroke-dasharray:3 3');
   s += svTxt(fr.mL + fr.iw - 4, fr.Y(a) - 4, 'α', FONT + ';font-size:10.5px;fill:' + C.muted, 'end');
   if ($('pe-overlay').checked) {
@@ -3902,7 +4055,7 @@ function renderCurves() {
   }
   $('pn-plot').innerHTML = s2;
   if (document.activeElement !== $('pn-max')) $('pn-max').value = pn.hi;
-  $('pn-hd-e').innerHTML = '· at ' + lit(t.effect.sym) + ' = ' + N(e, 4);
+  $('pn-hd-e').innerHTML = '· at ' + lit(mathHtml(t.effect.sym)) + ' = ' + N(e, 4);
   $('pn-cap').textContent = t.id === 'p'
     ? 'Single-n resolution on purpose: the sawtooth is real, not noise—power falls at some n → n+1 steps.'
     : 'Power climbs monotonically in n for this test.';
@@ -3957,6 +4110,12 @@ function ocSolveN(e, beta) {
   return hi;
 }
 
+/* Everything that decides which chart is drawn.  A stored n is the answer
+   for one chart only, and so it is solved again once any of these moves. */
+function ocChartKey() {
+  return JSON.stringify([ST.test, curParams(), ST.alpha, curSided()]);
+}
+
 /* Start the lookup from whatever tab ① is set to: the effect and n come
    from there, and β follows from the pair. */
 function seedOCLookup() {
@@ -3965,6 +4124,7 @@ function seedOCLookup() {
   ST.ocEff = Math.abs(curEffect());
   ST.ocBeta = Math.min(0.995, Math.max(0.005,
     1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, curParams(), ST.alpha, curSided())));
+  ST.ocKey = ocChartKey();
   $('oc-n').value = ST.ocN;
   $('oc-eff').value = N(ST.ocEff, 4);
   $('oc-beta').value = N(ST.ocBeta, 4);
@@ -3984,8 +4144,10 @@ function renderOC() {
   var xt = niceTicks(xlo, xhi, gm.narrow ? 5 : 10);
   var yt = gm.narrow ? [0, 0.2, 0.4, 0.6, 0.8, 1]
                      : [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
-  var s = drawAxes(fr, xt, yt, t.effect.label + (t.id === 'p' || t.id === 'var' ? '' : '  (magnitude)'),
-                   'β  =  P(fail to reject)');
+  var s = drawAxes(fr, xt, yt, mathSvg(t.effect.label + (ocSymm() ? '  (magnitude)' : '')),
+                   /* β is a function of the effect on the other axis, and so it is
+                      written as the conditional probability it is. */
+                   mathSvg('β = Pr(fail to reject H₀ | ' + t.effect.sym + ')'));
   /* extra fine grid, in the manner of a printed chart */
   for (var g = 0.05; g < 1; g += 0.1)
     s += svLine(fr.mL, fr.Y(g), fr.mL + fr.iw, fr.Y(g), 'stroke:' + C.grid + ';stroke-width:0.5');
@@ -4042,18 +4204,36 @@ function renderOC() {
 
   svg.innerHTML = s;
   OCV = { fr: fr, xlo: xlo, xhi: xhi, W: W, H: H, narrow: gm.narrow, bw: bw, bh: bh };
-  /* The settings may have moved under the stored lookup, and so n is solved
-     again unless the one on record still reaches the recorded β. */
+  /* The settings may have moved under the stored lookup.  On a different
+     chart, n is solved again from the dot; on the same one, the n on record
+     stands unless it no longer reaches the recorded β. */
+  var key = ocChartKey();
   if (Number.isFinite(ST.ocEff) && Number.isFinite(ST.ocBeta) &&
-      !(Number.isFinite(ST.ocN) && ST.ocN >= t.nMin &&
-        t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, p, a, sided) >= 1 - ST.ocBeta - 1e-12))
+      (key !== ST.ocKey ||
+       !(Number.isFinite(ST.ocN) && ST.ocN >= t.nMin &&
+         t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, p, a, sided) >= 1 - ST.ocBeta - 1e-12)))
     ST.ocN = ocSolveN(ocSigned(ST.ocEff), ST.ocBeta);
+  ST.ocKey = key;
   updateOCOverlay();
   $('oc-cap').textContent = 'One curve per sample size, β against the effect, at α = ' + N(a, 3) +
     ' (' + (sided === 'two' ? 'two-sided' : 'one-sided') + ')—redrawn live for the ' +
-    t.name + '. At effect 0, every curve starts at β = 1 − α' +
-    (t.attainedAlpha ? ' (1 − attained α, for this discrete test)' : '') + '.';
-  $('oc-eff-lbl').textContent = t.effect.sym + ' =';
+    t.name + '. ' + ocNullNote(t, p) + '.';
+  $('oc-eff-lbl').innerHTML = mathHtml(t.effect.sym) + ' =';
+}
+
+/* Where the null is true on this chart's axis, every curve reads 1 − α.
+   On an effect-size axis that is the left edge; on the proportion and
+   variance-ratio axes it is an interior point, where a one-sided or a
+   biased two-sided curve passes through that level rather than peaking. */
+function ocNullNote(t, p) {
+  var tail = t.attainedAlpha
+    ? ' (1 − the attained α, which differs from curve to curve for this discrete test)' : '';
+  if (t.id === 'p')
+    return 'At p₁ = p₀ = ' + N(p.p0, 4) + ', where the null is true, every curve passes through ' +
+      'β = 1 − α' + tail;
+  if (t.id === 'var')
+    return 'At σ₁²/σ₀² = 1, where the null is true, every curve passes through β = 1 − α' + tail;
+  return 'At effect 0, where the null is true, every curve starts at β = 1 − α' + tail;
 }
 
 /* The curve for the sample size the lookup lands on, drawn among the printed
@@ -4226,7 +4406,7 @@ function wireOCPointer() {
     hr.setAttribute('x', rx); hr.setAttribute('y', ry);
     $('oc-ht').innerHTML =
       '<tspan x="' + N(rx + 9, 6) + '" y="' + N(ry + 14, 6) + '">β = ' + N(c.beta, 3) + '</tspan>' +
-      '<tspan x="' + N(rx + 9, 6) + '" y="' + N(ry + 27, 6) + '">' + esc(t.effect.sym) + ' = ' + N(c.d, 3) + '</tspan>' +
+      '<tspan x="' + N(rx + 9, 6) + '" y="' + N(ry + 27, 6) + '">' + mathSvg(t.effect.sym) + ' = ' + N(c.d, 3) + '</tspan>' +
       '<tspan x="' + N(rx + 9, 6) + '" y="' + N(ry + 40, 6) + '">n ≈ ' + (nImp === null ? 'out of reach' : nImp) + '</tspan>';
   }
 
@@ -4614,6 +4794,8 @@ function settingsChanged() {
   syncRunBtn();
   ST.seed = parseSeed($('seed').value);
   renderSided();
+  renderAlpha();
+  renderOCStruct();
   if (ST.mode === 'n') renderSolve();
   renderNVPlot();
   renderCritPanel();
@@ -4638,7 +4820,8 @@ function renderEffectRead() {
       N(curParams().p1 - curParams().p0, 4);
   } else {
     var elbl = t.effect.label;
-    $('effect-read').textContent = elbl.charAt(0).toUpperCase() + elbl.slice(1) + ' = ' + N(curEffect(), 4);
+    $('effect-read').innerHTML = mathHtml(elbl.charAt(0).toUpperCase() + elbl.slice(1)) + ' = ' +
+      N(curEffect(), 4);
   }
   $('test-desc').textContent = t.short;
 }
@@ -4646,6 +4829,7 @@ function renderEffectRead() {
 function switchTest(id) {
   ST.test = id;
   $('test-select').value = id;
+  $('oc-test').value = id;
   ST.solved = null;
   renderParams();
   renderNControls();
@@ -4713,18 +4897,42 @@ document.addEventListener('DOMContentLoaded', function () {
 
   $('test-select').addEventListener('change', function () { switchTest(this.value); });
 
-  $('alpha-sel').addEventListener('change', function () {
-    ST.alpha = Number(this.value);
+  function setAlpha(a) {
+    ST.alpha = a;
     if (ST.mode === 'n') renderSolve();
     settingsChanged();
+  }
+  $('alpha-sel').addEventListener('change', function () { setAlpha(Number(this.value)); });
+  /* The OC tab's box takes any level in range: an entry outside it is
+     pulled to the nearer end, and one that is not a number is undone. */
+  $('oc-alpha').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(ST.alpha, 4); return; }
+    /* Rounded to the four figures the boxes show, so the level on screen
+       is the level in use. */
+    setAlpha(Number(N(Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, v)), 4)));
   });
-  Array.prototype.forEach.call($('sided-seg').children, function (b) {
-    b.addEventListener('click', function () {
-      ST.sided = b.dataset.sided;
-      if (ST.mode === 'n') renderSolve();
-      settingsChanged();
+  Array.prototype.forEach.call($('oc-alpha-seg').children, function (b) {
+    b.addEventListener('click', function () { setAlpha(Number(b.dataset.alpha)); });
+  });
+  ['sided-seg', 'oc-sided-seg'].forEach(function (id) {
+    Array.prototype.forEach.call($(id).children, function (b) {
+      b.addEventListener('click', function () {
+        var sd = b.dataset.sided;
+        /* The OC tab's single one-sided choice keeps a direction already
+           chosen, and otherwise takes the one the effect on tab ① points. */
+        if (sd === 'one') {
+          if (ST.sided !== 'two') return;
+          sd = curEffect() < (curTest().effect.zero || 0) ? 'left' : 'right';
+        }
+        ST.sided = sd;
+        if (ST.mode === 'n') renderSolve();
+        settingsChanged();
+      });
     });
   });
+  $('oc-test').addEventListener('change', function () { switchTest(this.value); });
+  $('oc-struct-in').addEventListener('change', function () { readOCStruct(this); });
   Array.prototype.forEach.call($('mode-seg').children, function (b) {
     b.addEventListener('click', function () {
       ST.mode = b.dataset.mode;
