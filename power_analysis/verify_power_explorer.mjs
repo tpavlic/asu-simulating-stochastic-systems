@@ -23,6 +23,10 @@
      central pbeta (sum_j dpois(j, l/2) * pbeta(x, d1/2 + j, d2/2),
      j = 0..2000), which is exact to ~1e-15 and against which pf(ncp)
      itself deviates in the 9th decimal.
+   - The pooled two-sample t at an unequal split (n_A = 12, n_B = 30):
+     MATLAB R2026a sampsizepwr('t2', [0 2], 1.2, [], 12, 'Ratio', 2.5),
+     computed on 2026-09-26.  sampsizepwr leaves r*n unrounded, and so it
+     is a valid reference only where r*n is a whole number, as it is here.
    - power.t.test values use strict = TRUE, which counts both rejection
      tails; the default drops the far tail and differs in the 4th-5th
      decimal.  The widget computes the strict (exact) quantity.
@@ -37,6 +41,11 @@
    If Rscript is on the PATH, section 11 re-derives a row of power
    values in R with the same formulas the widget's export panel emits,
    and compares them against the core.  Without Rscript it is skipped.
+
+   Section 13 checks the pooled-versus-Welch comparison: that both tests
+   see the very same datasets (their counts equal the one-test engine's at
+   the same seed), and the textbook behavior of the pooled test's level
+   when the variances and the group sizes both differ.
 
    Section 12 slices the Beyond Formulas tab's Monte Carlo template out
    of the HTML verbatim and runs it in R, Python, and MATLAB (each
@@ -110,6 +119,19 @@ function mc(testId, params, n, alpha, sided, m, seed) {
 
 /* ═══ 1. Special functions: exact identities ═══════════════════════ */
 section('1. Special functions (exact identities; canonical copies from input_analyzer.html)');
+{
+  /* The sampler's inverse normal skips normInv's refinement step; it must
+     stay within Acklam's published relative error of 1.15e-9, tails
+     included, so that a seed gives the same datasets as the refined one. */
+  let worst = 0;
+  const rng = PA.MRG32k3a(31337);
+  for (let i = 0; i < 400000; i++) {
+    const u = i < 2000 ? (i + 0.5) / 2e9 : (i < 4000 ? 1 - (i - 1999.5) / 2e9 : rng());
+    const a = PA.normInv(u);
+    worst = Math.max(worst, Math.abs(PA.normInvSample(u) - a) / Math.abs(a));
+  }
+  ok(worst < 1.2e-9, `normInvSample within 1.2e-9 relative of normInv (worst ${worst.toExponential(2)})`);
+}
 close(PA.logGamma(0.5), 0.5 * Math.log(Math.PI), 1e-14, 'logGamma(1/2) = log sqrt(pi)');
 close(PA.logGamma(6), Math.log(120), 1e-14, 'logGamma(6) = log 5!');
 close(PA.gammaP(1, 0.7), 1 - Math.exp(-0.7), 1e-14, 'P(1,x) = 1 - e^-x');
@@ -211,7 +233,7 @@ section('5. Wilson score interval vs R prop.test(correct = FALSE)');
 
 /* ═══ 6. Analytic power at zero effect equals alpha ════════════════ */
 section('6. Power at zero effect = alpha, every test, every sidedness');
-for (const id of ['z', 't', 't2', 'var', 'gof', 'anova', 'reg']) {
+for (const id of ['z', 't', 't2', 'tw', 'var', 'gof', 'anova', 'reg']) {
   const t = PA.TESTS[id];
   const p0 = t.nullParams(defaults(t));
   const sides = t.sidedFixed ? [t.sidedFixed] : ['two', 'left', 'right'];
@@ -220,6 +242,12 @@ for (const id of ['z', 't', 't2', 'var', 'gof', 'anova', 'reg']) {
       close(t.analyticPower(30, p0, a, s), a, 1e-9, `${id} (${s}, alpha=${a})`);
     }
   }
+}
+/* the two-sample tests at an unequal split, and Welch at unequal variances */
+for (const [id, params] of [['t2', { muA: 0, muB: 0, sigma: 2, r: 2.5 }],
+                            ['tw', { muA: 0, muB: 0, sigmaA: 1, sigmaB: 3, r: 0.4 }]]) {
+  for (const s of ['two', 'left', 'right'])
+    close(PA.TESTS[id].analyticPower(17, params, 0.05, s), 0.05, 1e-9, `${id} r=${params.r} (${s}, alpha=0.05)`);
 }
 /* the p test attains at most alpha, exactly the null region probability */
 {
@@ -240,6 +268,15 @@ close(PA.TESTS.t.analyticPower(30, { mu0: 0, mu1: 0.4, sigma: 1 }, 0.05, 'right'
       0.689512766297012, 1e-10, 'one-sample t, n=30, d=0.4, one-sided');
 close(PA.TESTS.t2.analyticPower(25, { muA: 1.2, muB: 0, sigma: 2 }, 0.05, 'two'),
       0.547312459262732, 1e-10, 'two-sample t, n=25/group, d=0.6, two-sided (strict)');
+close(PA.TESTS.t2.analyticPower(25, { muA: 1.2, muB: 0, sigma: 2, r: 1 }, 0.05, 'two'),
+      0.547312459262732, 1e-10, 'pooled t with r = 1 is the balanced design');
+close(PA.TESTS.t2.analyticPower(12, { muA: 1.2, muB: 0, sigma: 2, r: 2.5 }, 0.05, 'two'),
+      0.403145781705295, 1e-10, 'pooled t, n_A=12, n_B=30 (MATLAB sampsizepwr Ratio 2.5)');
+/* Welch at equal standard deviations and equal groups has df 2n - 2, and
+   so its approximation is the pooled test's exact power. */
+close(PA.TESTS.tw.analyticPower(25, { muA: 1.2, muB: 0, sigmaA: 2, sigmaB: 2, r: 1 }, 0.05, 'two'),
+      0.547312459262732, 1e-10, 'Welch at equal sds and groups reduces to the pooled power');
+close(PA.TESTS.tw.df(25, { sigmaA: 2, sigmaB: 2, r: 1 }), 48, 1e-12, 'Welch df at equal sds and groups is 2n - 2');
 /* power.anova.test(groups=4, n=12, between.var=1, within.var=9) = 0.330363878430393;
    lambda = n (g-1) bv / wv = 4, i.e. Cohen's f = sqrt(4/48).  Tolerance
    1e-8 because R's value goes through its own pf(ncp). */
@@ -257,6 +294,8 @@ const GRID = [
   ['t', { mu0: 1, mu1: 1.3, sigma: 0.8 }, 40, 0.01, 'right'],
   ['t2', { muA: 1.2, muB: 0, sigma: 2 }, 25, 0.05, 'two'],
   ['t2', { muA: 0, muB: 0.9, sigma: 1.5 }, 14, 0.10, 'left'],
+  ['t2', { muA: 1.2, muB: 0, sigma: 2, r: 2.5 }, 12, 0.05, 'two'],
+  ['t2', { muA: 0, muB: 0.7, sigma: 1, r: 0.3 }, 30, 0.05, 'left'],
   ['var', { v0: 4, v1: 8 }, 20, 0.05, 'two'],
   ['var', { v0: 4, v1: 2 }, 20, 0.05, 'two'],
   ['var', { v0: 1, v1: 1.8 }, 35, 0.05, 'right'],
@@ -281,6 +320,26 @@ for (const [id, params, n, alpha, sided] of GRID) {
   const wN = PA.wilson(r.rejNull, r.m, 0.999);
   ok(target >= wN.lo && target <= wN.hi,
      `${id} null-run level ${(r.rejNull / r.m).toFixed(4)} consistent with ${target.toFixed(4)}`);
+}
+/* Welch: the analytic curve is the noncentral t at the df the TRUE
+   variances imply, an approximation, and each simulated dataset uses its
+   own df.  The approximation is close but not exact, and so it is held to
+   4 SE + 0.005 rather than to pure Monte Carlo error, and the null level
+   to within 0.005 of alpha beyond its interval. */
+for (const [params, n, alpha, sided] of [
+  [{ muA: 1, muB: 0, sigmaA: 1, sigmaB: 3, r: 0.5 }, 20, 0.05, 'two'],
+  [{ muA: 0, muB: 0.8, sigmaA: 2, sigmaB: 1, r: 3 }, 10, 0.05, 'left'],
+  [{ muA: 1.2, muB: 0, sigmaA: 2, sigmaB: 2, r: 1 }, 25, 0.05, 'two'],
+  [{ muA: 0.5, muB: 0, sigmaA: 0.5, sigmaB: 1.5, r: 2 }, 15, 0.01, 'right']]) {
+  const t = PA.TESTS.tw;
+  const approx = t.analyticPower(n, params, alpha, sided);
+  const r = mc('tw', params, n, alpha, sided, MC_M, seedBase += 13);
+  const est = r.rejAlt / r.m, se = Math.sqrt(est * (1 - est) / r.m);
+  ok(Math.abs(est - approx) < 4 * se + 0.005,
+     `tw n=${n} r=${params.r} sd ${params.sigmaA}/${params.sigmaB} ${sided}: MC ${est.toFixed(4)} vs approximation ${approx.toFixed(4)}`);
+  const wN = PA.wilson(r.rejNull, r.m, 0.999);
+  ok(alpha >= wN.lo - 0.005 && alpha <= wN.hi + 0.005,
+     `tw null-run level ${(r.rejNull / r.m).toFixed(4)} near ${alpha}`);
 }
 /* gof: the analytic curve is the LARGE-n noncentral chi-square
    approximation, so it is checked at a large n and against a widened
@@ -320,6 +379,8 @@ const SOLVE = [
   ['t', { mu0: 0, mu1: 0.5, sigma: 1 }, 0.05, 'two', 0.8],
   ['t', { mu0: 0, mu1: 0.25, sigma: 1 }, 0.05, 'right', 0.9],
   ['t2', { muA: 1.2, muB: 0, sigma: 2 }, 0.05, 'two', 0.9],
+  ['t2', { muA: 1.2, muB: 0, sigma: 2, r: 1.5 }, 0.05, 'two', 0.9],
+  ['tw', { muA: 1, muB: 0, sigmaA: 1, sigmaB: 3, r: 0.5 }, 0.05, 'right', 0.9],
   ['var', { v0: 4, v1: 8 }, 0.05, 'two', 0.8],
   ['var', { v0: 4, v1: 2 }, 0.05, 'two', 0.8],
   ['gof', { p0v: [0.25, 0.25, 0.25, 0.25], p1v: [0.4, 0.2, 0.2, 0.2] }, 0.05, 'right', 0.85],
@@ -547,6 +608,21 @@ fmt(pt(tc, n - 2, ncp = delta, lower.tail = FALSE) + pt(-tc, n - 2, ncp = delta)
 mu0 <- 0; mu1 <- 0.5; sigma <- 1; n <- 20; alpha <- 0.05
 theta <- (mu1 - mu0)/(sigma/sqrt(n)); zc <- qnorm(1 - alpha/2)
 fmt(pnorm(-zc - theta) + pnorm(zc - theta, lower.tail = FALSE))
+muA <- 1.2; muB <- 0; sigma <- 2; r <- 2.5; alpha <- 0.05
+pwp <- function(nA) {
+  nB <- max(2, floor(r * nA + 0.5)); nu <- nA + nB - 2
+  delta <- (muA - muB) / (sigma * sqrt(1/nA + 1/nB)); tc <- qt(1 - alpha/2, nu)
+  pt(tc, nu, ncp = delta, lower.tail = FALSE) + pt(-tc, nu, ncp = delta)
+}
+fmt(pwp(12)); fmt(pwp(11))
+muA <- 1; muB <- 0; sA <- 1; sB <- 3; r <- 0.5; alpha <- 0.05
+pww <- function(nA) {
+  nB <- max(2, floor(r * nA + 0.5)); vA <- sA^2 / nA; vB <- sB^2 / nB
+  nu <- (vA + vB)^2 / (vA^2 / (nA - 1) + vB^2 / (nB - 1))
+  delta <- (muA - muB) / sqrt(vA + vB); tc <- qt(1 - alpha/2, nu)
+  pt(tc, nu, ncp = delta, lower.tail = FALSE) + pt(-tc, nu, ncp = delta)
+}
+fmt(pww(20)); fmt(pww(7))
 `;
   const out = execFileSync('Rscript', ['-e', rCode], { encoding: 'utf8' })
     .trim().split('\n').map(Number);
@@ -558,11 +634,19 @@ fmt(pnorm(-zc - theta) + pnorm(zc - theta, lower.tail = FALSE))
     PA.TESTS.p.analyticPower(50, { p0: 0.3, p1: 0.5 }, 0.05, 'two'),
     PA.TESTS.gof.analyticPower(100, { p0v: [0.25, 0.25, 0.25, 0.25], p1v: [0.4, 0.2, 0.2, 0.2] }, 0.05, 'right'),
     PA.TESTS.reg.analyticPower(30, { b1: 0.4, sigma: 1, sx: 1 }, 0.05, 'two'),
-    PA.TESTS.z.analyticPower(20, { mu0: 0, mu1: 0.5, sigma: 1 }, 0.05, 'two')
+    PA.TESTS.z.analyticPower(20, { mu0: 0, mu1: 0.5, sigma: 1 }, 0.05, 'two'),
+    PA.TESTS.t2.analyticPower(12, { muA: 1.2, muB: 0, sigma: 2, r: 2.5 }, 0.05, 'two'),
+    PA.TESTS.t2.analyticPower(11, { muA: 1.2, muB: 0, sigma: 2, r: 2.5 }, 0.05, 'two'),
+    PA.TESTS.tw.analyticPower(20, { muA: 1, muB: 0, sigmaA: 1, sigmaB: 3, r: 0.5 }, 0.05, 'two'),
+    PA.TESTS.tw.analyticPower(7, { muA: 1, muB: 0, sigmaA: 1, sigmaB: 3, r: 0.5 }, 0.05, 'two')
   ];
   const names = ['t (power.t.test strict)', 't2 (power.t.test strict)', 'anova (power.anova.test)',
                  'var (pchisq formula)', 'p (pbinom enumeration)', 'gof (pchisq ncp)',
-                 'reg (pt ncp)', 'z (pnorm formula)'];
+                 'reg (pt ncp)', 'z (pnorm formula)',
+                 'pooled t, n_A=12, r=2.5 (pt ncp formula)',
+                 'pooled t, n_A=11, r=2.5: n_B = 27.5 rounds half up to 28',
+                 'Welch approximation, n_A=20, r=0.5 (pt ncp at Welch df)',
+                 'Welch approximation, n_A=7, r=0.5: n_B = 3.5 rounds half up to 4'];
   /* 1e-8: the t/F rows go through R's noncentral approximations */
   mine.forEach((v, i) => close(v, out[i], 1e-8, `R agrees: ${names[i]}`));
 }
@@ -622,6 +706,83 @@ section('12. Monte Carlo template of tab 5 (R, Python, MATLAB; skipped if absent
     checkPair('MATLAB', ah, ph);
   }
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+/* ═══ 13. Pooled against Welch on shared datasets ══════════════════ */
+section('13. Pooled vs. Welch comparison: shared datasets and the pooled level');
+{
+  /* At equal standard deviations the comparison draws exactly the datasets
+     the one-test engine draws at the same seed, and so each test's counts
+     must equal that engine's, not merely agree statistically. */
+  const p = { muA: 1.2, muB: 0, sigmaA: 2, sigmaB: 2, r: 2 };
+  const c = PA.cmpRun(p, 12, 0.05, 'two', 5000, 4242); c.step(5000);
+  const cr = c.result();
+  const a = mc('t2', { muA: 1.2, muB: 0, sigma: 2, r: 2 }, 12, 0.05, 'two', 5000, 4242);
+  const b = mc('tw', p, 12, 0.05, 'two', 5000, 4242);
+  ok(cr.pool.alt === a.rejAlt && cr.pool.nul === a.rejNull,
+     `pooled counts equal the one-test engine's (${cr.pool.alt}/${cr.pool.nul} vs ${a.rejAlt}/${a.rejNull})`);
+  ok(cr.welch.alt === b.rejAlt && cr.welch.nul === b.rejNull,
+     `Welch counts equal the one-test engine's (${cr.welch.alt}/${cr.welch.nul} vs ${b.rejAlt}/${b.rejNull})`);
+  ok(cr.nA === 12 && cr.nB === 24, `group sizes n_A = 12, n_B = round(2 * 12) = 24 (got ${cr.nA}, ${cr.nB})`);
+}
+{
+  /* sigmasAtRatio holds the root-mean-square sd, and so the standardized
+     effect, while the ratio moves. */
+  for (const rho of [0.25, 1, 3]) {
+    const sg = PA.sigmasAtRatio(1.7, rho);
+    close(Math.sqrt((sg.sigmaA ** 2 + sg.sigmaB ** 2) / 2), 1.7, 1e-14, `rms sd held at ratio ${rho}`);
+    close(sg.sigmaB / sg.sigmaA, rho, 1e-14, `sd ratio is ${rho}`);
+  }
+}
+{
+  /* The textbook behavior (the Behrens-Fisher problem): with unequal groups,
+     the pooled test is liberal when the SMALLER group has the larger
+     variance and conservative when the larger group has it; with equal
+     groups it stays near its level; Welch holds its level throughout. */
+  const m = Math.min(MC_M, 40000);
+  const lvl = (n, r, rho, seed) => {
+    const sg = PA.sigmasAtRatio(1, rho);
+    const run = PA.cmpRun({ muA: 0, muB: 0, sigmaA: sg.sigmaA, sigmaB: sg.sigmaB, r }, n, 0.05, 'two', m, seed);
+    run.step(m);
+    const x = run.result();
+    return { pool: x.pool.nul / m, welch: x.welch.nul / m };
+  };
+  const lib = lvl(8, 3, 0.25, 6101), con = lvl(8, 3, 4, 6102), bal = lvl(15, 1, 0.25, 6103);
+  ok(lib.pool > 0.15, `smaller group more variable (n 8 vs 24, sd ratio 4:1): pooled level ${lib.pool.toFixed(4)} > 0.15`);
+  ok(con.pool < 0.015, `larger group more variable: pooled level ${con.pool.toFixed(4)} < 0.015`);
+  ok(bal.pool > 0.045 && bal.pool < 0.07, `equal groups (15 and 15), sd ratio 4:1: pooled level ${bal.pool.toFixed(4)} in (0.045, 0.07)`);
+  for (const [nm, v] of [['liberal case', lib], ['conservative case', con], ['equal groups', bal]])
+    ok(v.welch > 0.04 && v.welch < 0.06, `Welch holds its level in the ${nm}: ${v.welch.toFixed(4)} in (0.04, 0.06)`);
+}
+{
+  /* Keeping the statistics for the plots must not change a single count,
+     and the kept decisions must sum to the counts, including Welch's,
+     whose critical value varies by dataset. */
+  const p = { muA: 1, muB: 0, sigmaA: 2, sigmaB: 1, r: 2.5 };
+  const a = PA.cmpRun(p, 10, 0.05, 'two', 5000, 99, true); a.step(5000);
+  const b = PA.cmpRun(p, 10, 0.05, 'two', 5000, 99); b.step(5000);
+  const ra = a.result(), rb = b.result();
+  ok(JSON.stringify([ra.pool, ra.welch]) === JSON.stringify([rb.pool, rb.welch]),
+     'keeping statistics leaves every count unchanged');
+  const sum = arr => arr.reduce((x, y) => x + y, 0);
+  ok(sum(ra.stats.pool.nulRej) === ra.pool.nul && sum(ra.stats.pool.altRej) === ra.pool.alt &&
+     sum(ra.stats.welch.nulRej) === ra.welch.nul && sum(ra.stats.welch.altRej) === ra.welch.alt,
+     'kept decisions sum to the rejection counts for both tests and both arms');
+  let beyond = 0;
+  for (const t of ra.stats.pool.nul) if (t <= ra.critPool.lo || t >= ra.critPool.hi) beyond++;
+  ok(beyond === ra.pool.nul, `pooled null statistics beyond the critical values (${beyond}) equal its count`);
+  ok(ra.sample.a.length === 10 && ra.sample.b.length === 25, 'the kept sample has n_A = 10 and n_B = 25 values');
+}
+{
+  /* The sweep stepper covers every ratio with its own run and the full
+     count of replications. */
+  const st = PA.cmpStages({ params: { muA: 1, muB: 0, sigmaA: 2, sigmaB: 1, r: 2.5 }, n: 10, alpha: 0.05,
+                            sided: 'two', m: 1000, mSweep: 500, seed: 5, ratios: [0.25, 1, 4] });
+  let guard = 0;
+  while (!st.finished() && guard++ < 10000) st.step(137);
+  const res = st.result();
+  ok(res.head.m === 1000 && res.sweep.length === 3 && res.sweep.every(x => x.m === 500),
+     `cmpStages runs the headline (m = ${res.head.m}) and every ratio (${res.sweep.map(x => x.ratio).join(', ')})`);
 }
 
 /* ═══ Summary ══════════════════════════════════════════════════════ */

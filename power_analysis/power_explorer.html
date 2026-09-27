@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Power Explorer – statistical power by simulation and by formula</title>
-<meta name="description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, and copy a verified power-analysis call for MATLAB, R, or Python.">
+<meta name="description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, see what the choice between the pooled and Welch two-sample t tests does to power and to the actual α, and copy a verified power-analysis call for MATLAB, R, or Python.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Power Explorer – statistical power by simulation and by formula">
-<meta property="og:description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, and copy a verified power-analysis call for MATLAB, R, or Python.">
+<meta property="og:description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, see what the choice between the pooled and Welch two-sample t tests does to power and to the actual α, and copy a verified power-analysis call for MATLAB, R, or Python.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/power_analysis/power_explorer-preview.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1200">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Power Explorer – statistical power by simulation and by formula">
-<meta name="twitter:description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, and copy a verified power-analysis call for MATLAB, R, or Python.">
+<meta name="twitter:description" content="Statistical power made manipulable: watch the null and alternative sampling distributions separate as the sample size grows, estimate power by Monte Carlo simulation and check it against the exact answer, solve for power or for the minimum n, read classic OC curves, see what the choice between the pooled and Welch two-sample t tests does to power and to the actual α, and copy a verified power-analysis call for MATLAB, R, or Python.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/power_analysis/power_explorer-preview.png">
 
 <!-- Google Analytics -->
@@ -61,6 +61,16 @@
   --altc-fill:  rgba(194,87,10,.18);
   --exact:      #0F6E8C;               /* analytic/exact reference */
   --exact-fill: rgba(15,110,140,.14);
+  --pooled:     #8b6914;               /* tab 6: the pooled two-sample t test
+                                           (dashed line, hollow squares) */
+  --welch:      #0F6E8C;               /* tab 6: Welch's two-sample t test
+                                           (solid line, filled circles); teal rather than
+                                           indigo, because the tab's statistic panels reuse
+                                           tab 1's indigo/orange for the null and alternative */
+  --miss:       #D62828;               /* tab 6: an actual-α interval that excludes the
+                                           nominal α (5.0:1 on white); the card also says so */
+  --win:        #2E7D32;               /* tab 6: the higher of the two powers; the card
+                                           also says so */
   --warn:       #8b6914;               /* dark ochre: readable gold stand-in */
   --grid:       #ece7e9;
 }
@@ -114,9 +124,9 @@ summary { min-height: 26px; }
   background: var(--card); color: var(--accent); cursor: pointer;
   margin-bottom: 14px; appearance: auto;
 }
-/* Five labels: swap to the dropdown well before they would wrap.  In em,
+/* Six labels: swap to the dropdown well before they would wrap.  In em,
    so that a reader with a larger default font gets the switch sooner. */
-@media (max-width: 52em) { .tabs { display: none; } .tab-select { display: block; } }
+@media (max-width: 64em) { .tabs { display: none; } .tab-select { display: block; } }
 
 /* ── Panels ──────────────────────────────────────────────────────────── */
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px;
@@ -198,6 +208,13 @@ a:focus-visible, textarea:focus-visible {
 /* Subs wrap rather than truncate: several carry a full clause, and an
    ellipsis would hide the caveat that is their whole job. */
 .sc-sub { font-size: .7rem; color: var(--muted); margin-top: 1px; line-height: 1.35; }
+/* Tab 6 card states.  Each also carries its meaning in words, and so the
+   color is never the only cue. */
+.sc.miss { border-color: var(--miss); }
+.sc.miss .sc-sub { color: var(--miss); font-weight: 600; }
+.sc.win { border-color: var(--win); }
+.sc.win .sc-val, .sc.win .sc-sub { color: var(--win); }
+.sc.win .sc-sub { font-weight: 600; }
 
 /* ── Plots ───────────────────────────────────────────────────────────── */
 .plot-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px;
@@ -344,6 +361,7 @@ footer a:hover { text-decoration: underline; }
     <a class="tab" href="#oc" data-tab="oc">③ OC Chart</a>
     <a class="tab" href="#paired" data-tab="paired">④ Pilot &amp; Paired Runs</a>
     <a class="tab" href="#adv" data-tab="adv">⑤ Beyond Formulas</a>
+    <a class="tab" href="#welch" data-tab="welch">⑥ Pooled vs. Welch</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="explore">① Explore a Test</option>
@@ -351,6 +369,7 @@ footer a:hover { text-decoration: underline; }
     <option value="oc">③ OC Chart</option>
     <option value="paired">④ Pilot &amp; Paired Runs</option>
     <option value="adv">⑤ Beyond Formulas</option>
+    <option value="welch">⑥ Pooled vs. Welch</option>
   </select>
 
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -431,7 +450,7 @@ footer a:hover { text-decoration: underline; }
   <!-- ── 2. NULL VS ALTERNATIVE ───────────────────────────────────── -->
   <section class="sec">
     <div class="sec-hd">2 &middot; Null vs. alternative
-      <span class="sec-note">the whole story of one test, on one axis—drag n and watch β shrink</span></div>
+      <span class="sec-note">one test on one axis: drag n and watch β shrink</span></div>
 
     <div class="plot-card" style="border:none;padding:0">
       <div class="scrollwrap">
@@ -622,7 +641,7 @@ footer a:hover { text-decoration: underline; }
   <!-- ── 5. TAKE IT WITH YOU ──────────────────────────────────────── -->
   <section class="sec">
     <div class="sec-hd">5 &middot; Take it with you
-      <span class="sec-note">the same analysis, in the tools you will actually use</span></div>
+      <span class="sec-note">the same analysis in MATLAB, R, and Python</span></div>
 
     <div id="exp-rows"></div>
     <div class="ctrl-note" id="exp-note" style="margin-top:8px"></div>
@@ -691,20 +710,21 @@ footer a:hover { text-decoration: underline; }
       <span class="sec-note">the printed chart your textbook uses, drawn live for the current test</span></div>
 
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      An OC chart plots β—the probability of <em>failing</em> to reject—against the
-      standardized effect, one curve per sample size. Before software, this was how a power
-      analysis was done: pick the curve for your n, run a finger up from your effect size, read β
-      off the axis. Do that lookup here, and then notice it is the same point as on the power curve of
-      tab ② flipped upside down: <strong>power = 1 − β</strong>. In classifier terms, an OC chart
-      plots a false-negative rate, and reading power off it is reading sensitivity.</p>
+      An OC chart plots β, the probability of <em>failing</em> to reject H₀, against the
+      standardized effect, with one curve per sample size. Before modern statistical software, a
+      power analysis required printed charts like the one below. To find the minimum sample size
+      for a given <strong>statistical power (1 − β)</strong>, you locate the point where the effect
+      size to detect meets β = 1 − power, and the lowest curve passing at or below that point gives
+      the required sample size. In classifier terms, statistical power is the test's
+      <strong>sensitivity</strong>, and each OC curve, read across at one β, gives the smallest
+      effect that its sample size detects with that sensitivity.</p>
 
     <div class="ctrl-row">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="oc-test">Test</label>
         <select id="oc-test"></select>
       </span>
-      <span class="p-item" id="oc-struct"><label for="oc-struct-in" id="oc-struct-lbl"></label>
-        <input type="number" id="oc-struct-in" class="p-in narrow"></span>
+      <span class="ctrl-grp" id="oc-struct"></span>
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
@@ -726,8 +746,8 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="ctrl-note" style="margin-bottom:10px">A printed chart is drawn for one test at one
       α and one sidedness, most often α = 0.05 or 0.01, and so these settings pick which chart is
-      drawn. Any α from 0.001 to 0.2 can be typed. Every setting here is shared with tabs ① and ②,
-      and so changing one here changes it there as well. <span id="oc-test-note"></span></div>
+      drawn. Any α from 0.001 to 0.2 can be typed. These settings belong to this tab alone, and
+      so the test and settings on tabs ① and ② stay as they are. <span id="oc-test-note"></span></div>
 
     <div class="ctrl-row">
       <span class="ctrl-lbl">Look up:</span>
@@ -830,17 +850,18 @@ footer a:hover { text-decoration: underline; }
 
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
       To compare two configurations of a system, run both under the <em>same</em> <em><strong>input</strong></em> conditions and
-      test the paired differences D = X₁ − X₂ with the one-sample t-test of tab ①. What the
-      pairing buys is variance: the differences have</p>
+      test the paired differences D = X₁ − X₂ with the one-sample t-test of tab ①. Pairing helps
+      through the standard deviation of those differences:</p>
     <div class="mono" style="font-size:.88rem;margin:0 0 10px 1.5em">σ<sub>d</sub> = √(σ₁² + σ₂² − 2ρσ₁σ₂).</div>
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      So positive correlation ρ between the paired observations shrinks σ<sub>d</sub>, and every
-      bit of shrinkage is pure power—or, run the other direction, fewer runs for the same power.
+      Positive correlation ρ between the paired observations therefore shrinks σ<sub>d</sub>, and
+      every bit of that shrinkage raises power (or, run the other direction, cuts the runs needed
+      for the same power).
       In contrast, the method of antithetic variates induces <em>negative</em> correlation between
       paired runs to reduce the variance of their average. Whereas common random numbers aim to
       reduce the runs needed to detect a small difference between two systems, antithetic variates
       aim to reduce the runs needed for a high-precision estimate of a single system's
-      performance—the σ-of-a-pair-mean readout below tracks that side of the story.</p>
+      performance, which the card below for the σ of a pair mean tracks.</p>
 
     <div class="ctrl-row">
       <span class="p-item"><label for="pr-s1">σ₁</label>
@@ -899,7 +920,7 @@ footer a:hover { text-decoration: underline; }
 <section id="tab-adv" class="tp">
   <section class="sec">
     <div class="sec-hd">Power with no formula: a gamma-regression slope
-      <span class="sec-note">the simulate-and-count definition is the only route here—and it is enough</span></div>
+      <span class="sec-note">the simulate-and-count definition is the only route here</span></div>
 
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
       Power for generalized linear models—logistic, Poisson, or gamma regression—generally has no
@@ -1108,6 +1129,200 @@ print(r1/m, stats.binomtest(r1, m).proportion_ci())    # power + 95% CI
   </section>
 </section>
 
+<!-- ══════════════════════════════════════════════════════════════════════
+     TAB ⑥—POOLED VS. WELCH
+     ══════════════════════════════════════════════════════════════════ -->
+<section id="tab-welch" class="tp">
+  <section class="sec">
+    <div class="sec-hd">Designing a two-group experiment
+      <span class="sec-note">what each two-sample test assumes, and what each assumption does for power</span></div>
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:8px">
+      How an experiment collects its two sets of data decides which two-sample tests can be run
+      afterward, and so <strong>the design of the experiment has power implications</strong>. A test that is allowed
+      to assume more can detect a smaller effect when its assumptions hold, and so the flexibility
+      that makes data easier to collect usually lowers power. The two-sample t tests differ in how
+      they estimate the variance behind their standard error:</p>
+    <ul style="font-size:.85rem;line-height:1.55;margin:0 0 8px;padding-left:1.3em">
+      <li style="margin-bottom:6px"><strong>Pooled t test.</strong> Assumes the two populations share one variance and
+        estimates it from both groups together,
+        s<sub>p</sub>² = ((n<sub>A</sub> − 1)s<sub>A</sub>² + (n<sub>B</sub> − 1)s<sub>B</sub>²) /
+        (n<sub>A</sub> + n<sub>B</sub> − 2), with n<sub>A</sub> + n<sub>B</sub> − 2 degrees of
+        freedom. The formula accounts for any group sizes, and so when the variances really are
+        equal, the test holds its α exactly at any split. The split is still a design choice:
+        with equal variances, splitting a given total evenly gives the most power, and if the
+        variances turn out to differ, an even split also keeps the test's α close to where it was
+        set, whereas an uneven one can push it above or below that level.</li>
+      <li><strong>Welch's t test.</strong> Drops the shared-variance assumption, estimates each
+        group's variance on its own, and uses the <span class="tip" tabindex="0" data-tip="ν = (s&lt;sub&gt;A&lt;/sub&gt;²/n&lt;sub&gt;A&lt;/sub&gt; + s&lt;sub&gt;B&lt;/sub&gt;²/n&lt;sub&gt;B&lt;/sub&gt;)² / [(s&lt;sub&gt;A&lt;/sub&gt;²/n&lt;sub&gt;A&lt;/sub&gt;)²/(n&lt;sub&gt;A&lt;/sub&gt; − 1) + (s&lt;sub&gt;B&lt;/sub&gt;²/n&lt;sub&gt;B&lt;/sub&gt;)²/(n&lt;sub&gt;B&lt;/sub&gt; − 1)], computed from each dataset’s own sample variances s&lt;sub&gt;A&lt;/sub&gt;² and s&lt;sub&gt;B&lt;/sub&gt;², and so it changes from one dataset to the next and is rarely a whole number. It always lies between the smaller of n&lt;sub&gt;A&lt;/sub&gt; − 1 and n&lt;sub&gt;B&lt;/sub&gt; − 1 and the pooled test’s n&lt;sub&gt;A&lt;/sub&gt; + n&lt;sub&gt;B&lt;/sub&gt; − 2.">Welch–Satterthwaite degrees of freedom</span>. With equal
+        variances, it has slightly less power than the pooled test on the same data; with unequal
+        variances and unequal group sizes, it is the test whose α stays where it was set.</li>
+    </ul>
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:0">
+      A test applied to data that break its assumptions loses more than power: its actual type I
+      error rate can land above or below the α it was set to hold, as the runs below show.</p>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">Choosing a two-sample test
+      <span class="sec-note">the same simulated data, analyzed both ways</span></div>
+
+    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
+      On this tab, every dataset is generated once and handed to both tests: the pooled two-sample
+      t test, which assumes the two groups share one variance, and Welch's t test, which estimates
+      each group's variance on its own. The defaults put the larger variance in the
+      <em>smaller</em> group, which is the setting where the pooled test's actual α rises above its
+      nominal level, and where its higher power is therefore no fair comparison with Welch's.</p>
+
+    <div class="ctrl-row">
+      <span class="p-item"><label for="cw-dmu">Mean difference μ<sub>A</sub> − μ<sub>B</sub></label>
+        <input type="number" id="cw-dmu" class="p-in" step="0.1" value="1"></span>
+      <span class="p-item"><label for="cw-sA">Std. dev. σ<sub>A</sub></label>
+        <input type="number" id="cw-sA" class="p-in narrow" min="0.0001" step="0.1" value="2"></span>
+      <span class="p-item"><label for="cw-sB">Std. dev. σ<sub>B</sub></label>
+        <input type="number" id="cw-sB" class="p-in narrow" min="0.0001" step="0.1" value="1"></span>
+      <span class="p-item"><label for="cw-nA">Group-A size n<sub>A</sub></label>
+        <input type="number" id="cw-nA" class="p-in narrow" min="2" step="1" value="10"></span>
+      <span class="p-item"><label for="cw-r">Group-size ratio r = n<sub>B</sub>/n<sub>A</sub></label>
+        <input type="number" id="cw-r" class="p-in narrow" min="0.1" max="10" step="0.1" value="2.5"></span>
+      <label class="chk" data-tip="With this ticked, changing r moves observations between the groups rather than adding them, and so a change in power comes from the split alone." data-tip-press>
+        <input type="checkbox" id="cw-holdtotal"> <span class="tip">Hold the total fixed</span>
+      </label>
+      <span class="ctrl-note" id="cw-nb-read"></span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <span class="p-item"><label for="cw-alpha">Significance level α =</label>
+          <input type="number" id="cw-alpha" class="p-in narrow" min="0.001" max="0.2" step="0.005"
+                 value="0.05"></span>
+        <span class="seg" role="group" aria-label="Preset significance levels" id="cw-alpha-seg">
+          <button type="button" data-alpha="0.05" class="on">0.05</button>
+          <button type="button" data-alpha="0.01">0.01</button>
+        </span>
+      </span>
+      <span class="ctrl-grp">
+        <span class="ctrl-lbl" id="cw-sided-lbl">Alternative</span>
+        <span class="seg" role="group" aria-labelledby="cw-sided-lbl" id="cw-sided-seg">
+          <button type="button" data-sided="two" class="on"><span class="nw">two-sided</span></button>
+          <button type="button" data-sided="one"><span class="nw">one-sided</span></button>
+        </span>
+      </span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="cw-m">Replications m</label>
+        <select id="cw-m">
+          <option value="5000">5,000</option>
+          <option value="10000" selected>10,000</option>
+          <option value="20000">20,000</option>
+        </select>
+      </span>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="cw-seed"><span class="tip" tabindex="0" data-tip="Whole number 0 to 2147483647. The same seed reproduces the same estimates exactly.">Seed</span></label>
+        <input class="mono-in" id="cw-seed" type="text" inputmode="numeric" value="20260926"
+               style="width:8.5em" aria-label="Random number seed">
+        <button class="btn2" id="cw-seed-new" type="button" data-tip="Draw a fresh seed and run" data-tip-press>New</button>
+      </span>
+      <label class="chk" data-tip="Each run uses the seed in the box. With this ticked, a fresh seed is drawn after each run for the next one. Untick it to re-run a changed setting on the same seed, so that any difference in the results comes from the setting rather than from new random draws." data-tip-press>
+        <input type="checkbox" id="cw-newseed" checked> <span class="tip">New seed after each run</span>
+      </label>
+    </div>
+    <div class="ctrl-note" id="cw-seed-msg" style="min-height:1.45em;margin-bottom:6px"></div>
+    <div class="ctrl-note" style="margin-bottom:6px">These settings belong to this tab alone:
+      nothing here reads from or writes to tabs ①–⑤. Each run also sweeps 2,500 replications at
+      each of seven σ<sub>B</sub>/σ<sub>A</sub> ratios for the two plots below, in addition to the
+      headline run at m replications shown in the cards.</div>
+
+    <div class="prog-wrap" id="cw-prog-wrap" style="display:none">
+      <div class="prog"><i id="cw-prog"></i></div>
+      <span class="prog-txt" id="cw-prog-txt"></span>
+    </div>
+
+    <div class="plot-card">
+      <div class="plot-hd">The data</div>
+      <svg id="cw-data-plot" class="plot" viewBox="0 0 940 230" role="img"
+           aria-label="The two populations group A and group B are drawn from, with a rug of the first simulated dataset's observations"></svg>
+      <div class="plot-cap" id="cw-data-cap"></div>
+    </div>
+
+    <div class="plot-hd" style="margin-top:12px">Pooled t test (assumes equal variances)</div>
+    <div class="sg" id="cw-cards-pool"></div>
+    <div class="plot-hd" style="margin-top:10px">Welch's t test (allows unequal variances)</div>
+    <div class="sg" id="cw-cards-welch"></div>
+
+    <div class="note" id="cw-verdict" style="margin-top:10px;min-height:3.2em"></div>
+
+    <div class="plot-hd" style="margin-top:12px">The test statistics</div>
+    <div class="plot-grid">
+      <div class="plot-card">
+        <div class="plot-hd">Pooled t test</div>
+        <svg id="cw-stat-pool" class="plot" viewBox="0 0 460 300" role="img"
+             aria-label="Histogram of the pooled test's statistic under the null and under the alternative, split by decision"></svg>
+      </div>
+      <div class="plot-card">
+        <div class="plot-hd">Welch's t test</div>
+        <svg id="cw-stat-welch" class="plot" viewBox="0 0 460 300" role="img"
+             aria-label="Histogram of Welch's statistic under the null and under the alternative, split by decision"></svg>
+      </div>
+    </div>
+    <div class="plot-cap" id="cw-stat-cap" style="text-align:left"></div>
+
+    <div class="plot-hd" style="margin-top:12px">Actual <span class="lit">α</span> and power against
+      <span class="lit">σ<sub>B</sub>/σ<sub>A</sub></span></div>
+    <div class="plot-grid">
+      <div class="plot-card">
+        <div class="plot-hd">Actual <span class="lit">α</span> against
+          <span class="lit">σ<sub>B</sub>/σ<sub>A</sub></span></div>
+        <svg id="cw-plot-a" class="plot" viewBox="0 0 460 300" role="img"
+             aria-label="Actual alpha for the pooled and Welch tests against the ratio of standard deviations"></svg>
+        <div class="plot-cap" id="cw-cap-a"></div>
+      </div>
+      <div class="plot-card">
+        <div class="plot-hd">Power against <span class="lit">σ<sub>B</sub>/σ<sub>A</sub></span></div>
+        <svg id="cw-plot-p" class="plot" viewBox="0 0 460 300" role="img"
+             aria-label="Power for the pooled and Welch tests against the ratio of standard deviations"></svg>
+        <div class="plot-cap" id="cw-cap-p"></div>
+      </div>
+    </div>
+
+    <details class="why">
+      <summary>Why the pooled test's type I error rate (α) varies above and below its nominal level</summary>
+      <div class="why-body">
+        <p>The pooled test estimates one shared variance from both groups at once,
+        s<sub>p</sub>² = ((n<sub>A</sub>−1)s<sub>A</sub>² + (n<sub>B</sub>−1)s<sub>B</sub>²) /
+        (n<sub>A</sub> + n<sub>B</sub> − 2), which weights each group's own sample variance by its
+        degrees of freedom and so leans toward the <strong>larger</strong> group's variance. The
+        true variance of the difference in means, though, is
+        σ<sub>A</sub>²/n<sub>A</sub> + σ<sub>B</sub>²/n<sub>B</sub>, which weights each variance by
+        the <strong>reciprocal</strong> of its own group's size.</p>
+        <p>When the smaller group carries the larger variance, those two weightings disagree: the
+        pooled standard error s<sub>p</sub>√(1/n<sub>A</sub> + 1/n<sub>B</sub>) comes out too
+        small, T comes out too large, and the test rejects a true null more often than its
+        nominal α promises. Swap which group carries the larger variance, and the mismatch runs
+        the other way: the pooled standard error comes out too large, and the test turns
+        conservative instead.</p>
+        <p>With equal group sizes, the two weightings agree on average, which is why the pooled
+        test is robust to unequal variances when n<sub>A</sub> = n<sub>B</sub>. Set r = 1 above,
+        and watch the pooled α line in the α plot flatten out close to the nominal level at every
+        ratio.</p>
+        <p>Welch's test sidesteps the mismatch by estimating each group's variance separately,
+        s<sub>A</sub>²/n<sub>A</sub> + s<sub>B</sub>²/n<sub>B</sub>, and using the
+        <span class="tip" tabindex="0" data-tip="ν = (s&lt;sub&gt;A&lt;/sub&gt;²/n&lt;sub&gt;A&lt;/sub&gt; + s&lt;sub&gt;B&lt;/sub&gt;²/n&lt;sub&gt;B&lt;/sub&gt;)² / [(s&lt;sub&gt;A&lt;/sub&gt;²/n&lt;sub&gt;A&lt;/sub&gt;)²/(n&lt;sub&gt;A&lt;/sub&gt; − 1) + (s&lt;sub&gt;B&lt;/sub&gt;²/n&lt;sub&gt;B&lt;/sub&gt;)²/(n&lt;sub&gt;B&lt;/sub&gt; − 1)], computed from each dataset’s own sample variances s&lt;sub&gt;A&lt;/sub&gt;² and s&lt;sub&gt;B&lt;/sub&gt;², and so it changes from one dataset to the next and is rarely a whole number. It always lies between the smaller of n&lt;sub&gt;A&lt;/sub&gt; − 1 and n&lt;sub&gt;B&lt;/sub&gt; − 1 and the pooled test’s n&lt;sub&gt;A&lt;/sub&gt; + n&lt;sub&gt;B&lt;/sub&gt; − 2.">Welch–Satterthwaite degrees of freedom</span> those two estimates imply. When the variances
+        really are equal, Welch's test has only a little less power than the pooled test, as setting
+        σ<sub>B</sub> = σ<sub>A</sub> above shows.</p>
+        <p>For a fixed total n<sub>A</sub> + n<sub>B</sub> and equal variances, an even split
+        gives the pooled test the most power, and an uneven split lowers its power while leaving
+        its α exactly where it was set. When the variances differ, the split that makes the
+        difference in means most precise instead puts more observations in the
+        <strong>more variable</strong> group, n<sub>A</sub>/n<sub>B</sub> = σ<sub>A</sub>/σ<sub>B</sub>,
+        and Welch's test is the one that can use that split while its actual α stays at the nominal level. Tick <strong>Hold the total fixed</strong> above, and move r to see the
+        trade-off directly.</p>
+      </div>
+    </details>
+  </section>
+</section>
+
 </div>
 
 <script id="pa-core">
@@ -1167,7 +1382,7 @@ function MRG32k3a(seed) {
 
     return (p1 > p2 ? p1 - p2 : p1 - p2 + MRG_M1) * MRG_NORM;
   }
-  u01.normal = function () { return normInv(u01()); };
+  u01.normal = function () { return normInvSample(u01()); };
   return u01;
 }
 
@@ -1298,6 +1513,30 @@ function normInv(p) {
   var u = e * 2.5066282746310002 * Math.exp(x * x / 2);
   x = x - u / (1 + x * u / 2);
   return x;
+}
+
+/* Acklam's rational approximation alone, without normInv's refinement
+   step: relative error under 1.2e-9, which is far below anything a
+   simulated statistic can resolve.  The refinement calls erfc, an
+   incomplete-gamma series, and made each normal draw about thirty times
+   slower; normInv keeps it, because printed quantiles and critical values
+   are shown to full precision.  One uniform per draw, as before, and so a
+   seed gives the same datasets to within that error. */
+function normInvSample(p) {
+  var pl = 0.02425, q, r;
+  if (p < pl) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((ACK_C[0]*q+ACK_C[1])*q+ACK_C[2])*q+ACK_C[3])*q+ACK_C[4])*q+ACK_C[5]) /
+           ((((ACK_D[0]*q+ACK_D[1])*q+ACK_D[2])*q+ACK_D[3])*q+1);
+  }
+  if (p <= 1 - pl) {
+    q = p - 0.5; r = q * q;
+    return (((((ACK_A[0]*r+ACK_A[1])*r+ACK_A[2])*r+ACK_A[3])*r+ACK_A[4])*r+ACK_A[5])*q /
+           (((((ACK_B[0]*r+ACK_B[1])*r+ACK_B[2])*r+ACK_B[3])*r+ACK_B[4])*r+1);
+  }
+  q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((ACK_C[0]*q+ACK_C[1])*q+ACK_C[2])*q+ACK_C[3])*q+ACK_C[4])*q+ACK_C[5]) /
+          ((((ACK_D[0]*q+ACK_D[1])*q+ACK_D[2])*q+ACK_D[3])*q+1);
 }
 
 /* Bisection and bracket-widening, copied from input_analyzer.html. */
@@ -1633,7 +1872,10 @@ function binomRegionProb(n, p, reg) {
      statistic         (data, n, p) -> the test statistic
      nullParams        params with the effect switched off
      approxNote        set when the analytic curve is an approximation
-                       rather than exact (the chi-square GOF case)
+                       rather than exact (chi-square GOF, Welch)
+     reject(x,n,p,a,s) optional; decides one dataset when the critical
+                       value depends on the data (Welch's df)
+     twoGroup          sample is n in group A and groupB(n, p) in B
 
    The simulate/statistic pair is the definition of power made
    executable: draw data under a hypothesis, compute the statistic,
@@ -1647,7 +1889,7 @@ function critTwoSidedSym(q, alpha, sided) {
 }
 
 var TESTS = {};
-var TEST_KEYS = ['z', 't', 't2', 'p', 'gof', 'var', 'anova', 'reg'];
+var TEST_KEYS = ['z', 't', 't2', 'tw', 'p', 'gof', 'var', 'anova', 'reg'];
 var TEST_KEYS_ALL = TEST_KEYS.concat(['glm']);
 
 /* ── z: one-sample z-test, sigma known ──────────────────────────────── */
@@ -1744,29 +1986,33 @@ TESTS.t = {
 /* ── t2: two-sample pooled t-test, equal variances, equal n ─────────── */
 TESTS.t2 = {
   id: 't2', name: 'Two-sample t (pooled)', mlId: 't2',
-  short: 'Difference of two population means, equal variances, n per group.',
+  short: 'Difference of two population means, assuming the two groups share one variance. Group A has n observations and group B has r·n of them (rounded), and so r = 1 is the balanced design.',
   params: [
     { key: 'muA', label: 'Mean of group A',   sym: 'μ_A', def: 1.2, step: 0.1 },
     { key: 'muB', label: 'Mean of group B',   sym: 'μ_B', def: 0,   step: 0.1 },
-    { key: 'sigma', label: 'Common std. dev.', sym: 'σ',  def: 2,   step: 0.1, min: 1e-12 }
+    { key: 'sigma', label: 'Common std. dev.', sym: 'σ',  def: 2,   step: 0.1, min: 1e-12 },
+    { key: 'r', label: 'Group-size ratio n_B/n_A', sym: 'r', def: 1, step: 0.1, min: 0.1, max: 10 }
   ],
-  nMin: 2, nLabel: 'n per group', perGroup: true, statSym: 'T', table: 't',
-  df: function (n) { return 2 * n - 2; },
+  nMin: 2, nLabel: 'group-A size n', perGroup: true, twoGroup: true, statSym: 'T', table: 't',
+  df: function (n, p) { return n + groupB(n, p) - 2; },
   effect: {
     sym: 'd', label: 'standardized effect d = (μ_A − μ_B)/σ',
     min: -3, max: 3, get: function (p) { return (p.muA - p.muB) / p.sigma; }
   },
   crit: function (n, p, a, s) {
-    var nu = 2 * n - 2;
+    var nu = TESTS.t2.df(n, p);
     return critTwoSidedSym(function (q) { return tQuantile(q, nu); }, a, s);
   },
-  nullPdf: function (n) { var nu = 2 * n - 2; return function (x) { return tPdf(x, nu); }; },
+  nullPdf: function (n, p) { var nu = TESTS.t2.df(n, p); return function (x) { return tPdf(x, nu); }; },
   altPdf: function (n, p) {
-    var nu = 2 * n - 2, del = (p.muA - p.muB) / p.sigma * Math.sqrt(n / 2);
+    var nu = TESTS.t2.df(n, p), del = TESTS.t2.ncp((p.muA - p.muB) / p.sigma, n, p);
     return function (x) { return nctPdf(x, nu, del); };
   },
+  /* Noncentrality of the pooled t at standardized effect e: the mean
+     difference over its standard error, sigma times sqrt(1/nA + 1/nB). */
+  ncp: function (e, n, p) { return e / Math.sqrt(1 / n + 1 / groupB(n, p)); },
   powerAtEffect: function (e, n, p, a, s) {
-    var nu = 2 * n - 2, del = e * Math.sqrt(n / 2);
+    var nu = TESTS.t2.df(n, p), del = TESTS.t2.ncp(e, n, p);
     var c = TESTS.t2.crit(n, p, a, s);
     var pow = 0;
     if (c.lo > -Infinity) pow += nctCdf(c.lo, nu, del);
@@ -1777,23 +2023,119 @@ TESTS.t2 = {
     return TESTS.t2.powerAtEffect(TESTS.t2.effect.get(p), n, p, a, s);
   },
   simulate: function (n, p, rng) {
-    var x = new Float64Array(2 * n);
-    for (var i = 0; i < n; i++)     x[i] = p.muA + p.sigma * rng.normal();
-    for (var j = n; j < 2 * n; j++) x[j] = p.muB + p.sigma * rng.normal();
-    return x;
+    return simTwoGroups(n, groupB(n, p), p.muA, p.sigma, p.muB, p.sigma, rng);
   },
-  statistic: function (x, n) {
-    var sA = 0, sB = 0, i;
-    for (i = 0; i < n; i++) sA += x[i];
-    for (i = n; i < 2 * n; i++) sB += x[i];
-    var mA = sA / n, mB = sB / n, ss = 0, d;
-    for (i = 0; i < n; i++)     { d = x[i] - mA; ss += d * d; }
-    for (i = n; i < 2 * n; i++) { d = x[i] - mB; ss += d * d; }
-    var sp2 = ss / (2 * n - 2);
-    return (mA - mB) / Math.sqrt(sp2 * 2 / n);
-  },
-  nullParams: function (p) { return { muA: p.muB, muB: p.muB, sigma: p.sigma }; }
+  statistic: function (x, n, p) { return pooledT(x, n, groupB(n, p)); },
+  nullParams: function (p) { return { muA: p.muB, muB: p.muB, sigma: p.sigma, r: p.r }; }
 };
+
+/* ── tw: Welch's two-sample t ──────────────────────────────────────── */
+/* Each dataset's own Welch–Satterthwaite degrees of freedom set its
+   critical value, and so the Monte Carlo engine decides each replication
+   through reject() rather than against one fixed boundary.  The analytic
+   curve is the standard approximation: a noncentral t at the degrees of
+   freedom the TRUE variances imply.  The effect is standardized by the
+   root mean square of the two standard deviations, which is sigma itself
+   when they are equal, and so the pooled and Welch tests share one axis. */
+TESTS.tw = {
+  id: 'tw', name: 'Two-sample t (Welch)', mlId: null,
+  short: 'Difference of two population means without assuming equal variances. Group A has n observations and group B has r·n of them (rounded). Each dataset gets its own degrees of freedom from the Welch–Satterthwaite formula, and so the analytic curve is an approximation (a noncentral t at the degrees of freedom the true variances imply), and the histogram is the exact answer.',
+  params: [
+    { key: 'muA', label: 'Mean of group A', sym: 'μ_A', def: 1.2, step: 0.1 },
+    { key: 'muB', label: 'Mean of group B', sym: 'μ_B', def: 0,   step: 0.1 },
+    { key: 'sigmaA', label: 'Std. dev. of group A', sym: 'σ_A', def: 2, step: 0.1, min: 1e-12 },
+    { key: 'sigmaB', label: 'Std. dev. of group B', sym: 'σ_B', def: 2, step: 0.1, min: 1e-12 },
+    { key: 'r', label: 'Group-size ratio n_B/n_A', sym: 'r', def: 1, step: 0.1, min: 0.1, max: 10 }
+  ],
+  nMin: 2, nLabel: 'group-A size n', perGroup: true, twoGroup: true, statSym: 'T', table: 't',
+  approxNote: 'the noncentral t at the Welch–Satterthwaite degrees of freedom is an approximation; the histogram is the exact answer',
+  df: function (n, p) { return welchDf(p.sigmaA * p.sigmaA / n, p.sigmaB * p.sigmaB / groupB(n, p), n, groupB(n, p)); },
+  effect: {
+    sym: 'd', label: 'standardized effect d = (μ_A − μ_B)/σ̄',
+    min: -3, max: 3,
+    get: function (p) { return (p.muA - p.muB) / rmsSigma(p); }
+  },
+  crit: function (n, p, a, s) {
+    var nu = TESTS.tw.df(n, p);
+    return critTwoSidedSym(function (q) { return tQuantile(q, nu); }, a, s);
+  },
+  nullPdf: function (n, p) { var nu = TESTS.tw.df(n, p); return function (x) { return tPdf(x, nu); }; },
+  altPdf: function (n, p) {
+    var nu = TESTS.tw.df(n, p), del = TESTS.tw.ncp(TESTS.tw.effect.get(p), n, p);
+    return function (x) { return nctPdf(x, nu, del); };
+  },
+  ncp: function (e, n, p) {
+    var nb = groupB(n, p);
+    return e * rmsSigma(p) / Math.sqrt(p.sigmaA * p.sigmaA / n + p.sigmaB * p.sigmaB / nb);
+  },
+  powerAtEffect: function (e, n, p, a, s) {
+    var nu = TESTS.tw.df(n, p), del = TESTS.tw.ncp(e, n, p);
+    var c = TESTS.tw.crit(n, p, a, s);
+    var pow = 0;
+    if (c.lo > -Infinity) pow += nctCdf(c.lo, nu, del);
+    if (c.hi < Infinity)  pow += 1 - nctCdf(c.hi, nu, del);
+    return pow;
+  },
+  analyticPower: function (n, p, a, s) {
+    return TESTS.tw.powerAtEffect(TESTS.tw.effect.get(p), n, p, a, s);
+  },
+  simulate: function (n, p, rng) {
+    return simTwoGroups(n, groupB(n, p), p.muA, p.sigmaA, p.muB, p.sigmaB, rng);
+  },
+  statistic: function (x, n, p) { return welchT(x, n, groupB(n, p)).t; },
+  reject: function (x, n, p, a, s) {
+    var w = welchT(x, n, groupB(n, p));
+    return tTailReject(w.t, w.df, a, s);
+  },
+  nullParams: function (p) {
+    return { muA: p.muB, muB: p.muB, sigmaA: p.sigmaA, sigmaB: p.sigmaB, r: p.r };
+  }
+};
+
+/* ── Shared two-sample pieces ──────────────────────────────────────── */
+/* Group B's size: r times group A's, rounded, and never under 2, so that
+   both groups have a sample variance. */
+function groupB(n, p) { return Math.max(2, Math.round((p.r || 1) * n)); }
+function rmsSigma(p) { return Math.sqrt(0.5 * (p.sigmaA * p.sigmaA + p.sigmaB * p.sigmaB)); }
+/* Welch–Satterthwaite degrees of freedom from the two variances of the
+   group means, vA = sA²/nA and vB = sB²/nB. */
+function welchDf(vA, vB, nA, nB) {
+  var v = vA + vB;
+  return v * v / (vA * vA / (nA - 1) + vB * vB / (nB - 1));
+}
+/* One dataset: group A in [0, nA), group B in [nA, nA + nB). */
+function simTwoGroups(nA, nB, muA, sdA, muB, sdB, rng) {
+  var x = new Float64Array(nA + nB), i;
+  for (i = 0; i < nA; i++) x[i] = muA + sdA * rng.normal();
+  for (i = nA; i < nA + nB; i++) x[i] = muB + sdB * rng.normal();
+  return x;
+}
+function groupMoments(x, nA, nB) {
+  var sA = 0, sB = 0, i, d;
+  for (i = 0; i < nA; i++) sA += x[i];
+  for (i = nA; i < nA + nB; i++) sB += x[i];
+  var mA = sA / nA, mB = sB / nB, ssA = 0, ssB = 0;
+  for (i = 0; i < nA; i++) { d = x[i] - mA; ssA += d * d; }
+  for (i = nA; i < nA + nB; i++) { d = x[i] - mB; ssB += d * d; }
+  return { mA: mA, mB: mB, ssA: ssA, ssB: ssB };
+}
+function pooledT(x, nA, nB) {
+  var g = groupMoments(x, nA, nB);
+  var sp2 = (g.ssA + g.ssB) / (nA + nB - 2);
+  return (g.mA - g.mB) / Math.sqrt(sp2 * (1 / nA + 1 / nB));
+}
+function welchT(x, nA, nB) {
+  var g = groupMoments(x, nA, nB);
+  var vA = g.ssA / (nA - 1) / nA, vB = g.ssB / (nB - 1) / nB;
+  return { t: (g.mA - g.mB) / Math.sqrt(vA + vB), df: welchDf(vA, vB, nA, nB) };
+}
+/* Reject by the t distribution's tail area at this dataset's own df. */
+function tTailReject(t, nu, a, s) {
+  var F = tCdf(t, nu);
+  if (s === 'two') return 2 * Math.min(F, 1 - F) <= a;
+  if (s === 'left') return F <= a;
+  return 1 - F <= a;
+}
 
 /* ── var: chi-square test of a variance ─────────────────────────────── */
 TESTS['var'] = {
@@ -2255,25 +2597,33 @@ function mcRun(testId, params, n, alpha, sided, m, seed) {
   var rngN = MRG32k3a(seed + 0x9e37);   /* independent stream for the null */
   var pNull = test.nullParams(params);
   var statsAlt = new Float64Array(m), statsNull = new Float64Array(m);
+  /* The decision on each alternative replication, kept because a test with
+     reject() cannot have its decisions re-derived from the statistic. */
+  var rejFlags = new Uint8Array(m);
   var rejAlt = 0, rejNull = 0, done = 0;
 
-  function rejects(s) { return s <= crit.lo || s >= crit.hi; }
+  /* A test whose critical value depends on the data (Welch's df) decides
+     each replication itself; every other test is judged against crit. */
+  function rejects(x, s, p) {
+    return test.reject ? test.reject(x, n, p, alpha, sided) : (s <= crit.lo || s >= crit.hi);
+  }
 
   return {
     step: function (k) {
       var end = Math.min(m, done + k);
       for (; done < end; done++) {
-        var sA = test.statistic(test.simulate(n, params, rngA), n, params);
-        var sN = test.statistic(test.simulate(n, pNull, rngN), n, pNull);
+        var xA = test.simulate(n, params, rngA), xN = test.simulate(n, pNull, rngN);
+        var sA = test.statistic(xA, n, params);
+        var sN = test.statistic(xN, n, pNull);
         statsAlt[done] = sA; statsNull[done] = sN;
-        if (rejects(sA)) rejAlt++;
-        if (rejects(sN)) rejNull++;
+        if (rejects(xA, sA, params)) { rejAlt++; rejFlags[done] = 1; }
+        if (rejects(xN, sN, pNull)) rejNull++;
       }
       return done;
     },
     result: function () {
       return { m: m, rejAlt: rejAlt, rejNull: rejNull, crit: crit,
-               statsAlt: statsAlt, statsNull: statsNull };
+               statsAlt: statsAlt, statsNull: statsNull, rejFlags: rejFlags };
     }
   };
 }
@@ -2348,6 +2698,113 @@ function mcSweep(testId, paramsList, n, alpha, sided, m, seed) {
     out.push(wilson(r.rejAlt, m));
   }
   return out;
+}
+
+/* Pooled against Welch on the same data.  Each replication draws one
+   dataset from two normal groups with their own standard deviations and
+   decides it with both tests, under the alternative (the means as given)
+   and under the null (both means at muB, the standard deviations kept).
+   Counting both tests on shared datasets makes the comparison paired:
+   any gap between them is the tests, not the draws.  The pooled test's
+   critical value is fixed by its df; Welch's comes from each dataset. */
+function cmpRun(params, n, alpha, sided, m, seed, keepStats) {
+  var nb = groupB(n, params);
+  var cPool = TESTS.t2.crit(n, { r: params.r }, alpha, sided);
+  var rngA = MRG32k3a(seed), rngN = MRG32k3a(seed + 0x9e37);
+  var c = { pool: { alt: 0, nul: 0 }, welch: { alt: 0, nul: 0 } }, done = 0;
+  /* With keepStats, every statistic and every decision is kept for the
+     histograms (Welch's decisions cannot be re-derived from its statistic,
+     because each dataset has its own critical value), and the first
+     alternative dataset is kept as the sample the data plot shows. */
+  var mk = function () { return { alt: new Float64Array(m), nul: new Float64Array(m),
+                                  altRej: new Uint8Array(m), nulRej: new Uint8Array(m) }; };
+  var st = keepStats ? { pool: mk(), welch: mk() } : null;
+  var sample = null;
+  function tally(x, key, i) {
+    var tp = pooledT(x, n, nb), rp = tp <= cPool.lo || tp >= cPool.hi;
+    var w = welchT(x, n, nb), rw = tTailReject(w.t, w.df, alpha, sided);
+    if (rp) c.pool[key]++;
+    if (rw) c.welch[key]++;
+    if (st) {
+      st.pool[key][i] = tp; st.pool[key + 'Rej'][i] = rp ? 1 : 0;
+      st.welch[key][i] = w.t; st.welch[key + 'Rej'][i] = rw ? 1 : 0;
+    }
+  }
+  return {
+    step: function (k) {
+      var end = Math.min(m, done + k);
+      for (; done < end; done++) {
+        var xA = simTwoGroups(n, nb, params.muA, params.sigmaA, params.muB, params.sigmaB, rngA);
+        if (keepStats && done === 0) sample = { a: Array.prototype.slice.call(xA, 0, n),
+                                                b: Array.prototype.slice.call(xA, n) };
+        tally(xA, 'alt', done);
+        tally(simTwoGroups(n, nb, params.muB, params.sigmaA, params.muB, params.sigmaB, rngN), 'nul', done);
+      }
+      return done;
+    },
+    result: function () {
+      var r = { m: m, nA: n, nB: nb, pool: { alt: c.pool.alt, nul: c.pool.nul },
+                welch: { alt: c.welch.alt, nul: c.welch.nul } };
+      if (st) { r.stats = st; r.sample = sample; r.critPool = cPool; }
+      return r;
+    }
+  };
+}
+
+/* The standard deviations at a ratio rho = sigmaB/sigmaA with their root
+   mean square held at sbar, and so the standardized effect d stays put
+   while the variance ratio sweeps. */
+function sigmasAtRatio(sbar, rho) {
+  var sA = sbar * Math.sqrt(2 / (1 + rho * rho));
+  return { sigmaA: sA, sigmaB: rho * sA };
+}
+
+/* cmpRun at each ratio in turn, as one stepper over ratios.length * m
+   replications.  Each ratio gets its own seed. */
+function cmpSweep(params, n, alpha, sided, m, seed, ratios) {
+  var sbar = rmsSigma(params), out = [], i = 0, cur = null, total = ratios.length * m, done = 0;
+  function open() {
+    var sg = sigmasAtRatio(sbar, ratios[i]);
+    cur = cmpRun({ muA: params.muA, muB: params.muB, sigmaA: sg.sigmaA, sigmaB: sg.sigmaB,
+                   r: params.r }, n, alpha, sided, m, seed + 7919 * (i + 1));
+  }
+  return {
+    step: function (k) {
+      while (k > 0 && i < ratios.length) {
+        if (!cur) open();
+        var before = cur.step(0), after = cur.step(k);
+        k -= after - before; done += after - before;
+        if (after >= m) {
+          var r = cur.result(); r.ratio = ratios[i]; out.push(r);
+          cur = null; i++;
+        }
+      }
+      return done;
+    },
+    total: total,
+    result: function () { return out; }
+  };
+}
+
+/* The comparison tab's whole job as one stepper: first the headline run at
+   the given standard deviations (m replications, with every statistic and
+   one sample kept for the plots), then the sweep over the
+   standard-deviation ratios (mSweep replications at each).  msg carries
+   params, n, alpha, sided, m, mSweep, seed, and ratios. */
+function cmpStages(msg) {
+  var head = cmpRun(msg.params, msg.n, msg.alpha, msg.sided, msg.m, msg.seed, true);
+  var sweep = cmpSweep(msg.params, msg.n, msg.alpha, msg.sided, msg.mSweep, msg.seed + 1, msg.ratios);
+  var total = msg.m + sweep.total, doneHead = 0, doneSweep = 0;
+  return {
+    total: total,
+    step: function (k) {
+      if (doneHead < msg.m) { doneHead = head.step(k); }
+      else { doneSweep = sweep.step(k); }
+      return doneHead + doneSweep;
+    },
+    finished: function () { return doneHead + doneSweep >= total; },
+    result: function () { return { head: head.result(), sweep: sweep.result() }; }
+  };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -2472,7 +2929,7 @@ var PA = {
   MRG32k3a: MRG32k3a,
   logGamma: logGamma, logBeta: logBeta, gammaP: gammaP, gammaQ: gammaQ,
   betaInc: betaInc, erf: erf, erfc: erfc,
-  normPdf: normPdf, normCdf: normCdf, normInv: normInv,
+  normPdf: normPdf, normCdf: normCdf, normInv: normInv, normInvSample: normInvSample,
   tCdf: tCdf, tPdf: tPdf, chi2Cdf: chi2Cdf, chi2Pdf: chi2Pdf,
   fCdf: fCdf, fPdf: fPdf,
   binomCdf: binomCdf, binomPmf: binomPmf,
@@ -2486,6 +2943,8 @@ var PA = {
   regDesign: regDesign, glmFit: glmFit, gammaSample: gammaSample,
   solveNAnalytic: solveNAnalytic, solveNMC: solveNMC,
   mcRun: mcRun, mcSweep: mcSweep,
+  cmpRun: cmpRun, cmpSweep: cmpSweep, cmpStages: cmpStages, sigmasAtRatio: sigmasAtRatio,
+  groupB: groupB, rmsSigma: rmsSigma, welchDf: welchDf, pooledT: pooledT, welchT: welchT,
   parseColumns: parseColumns, pilotColumns: pilotColumns, transposeText: transposeText,
   summarizeCol: summarizeCol, pairedSummary: pairedSummary,
   num: num, csvEscape: csvEscape, toCsv: toCsv
@@ -2513,13 +2972,21 @@ var ST = {
   mc: null,       /* last completed MC run, with a .fresh flag */
   solved: null,   /* analytic solve-for-n result in n mode */
   ocN: null, ocEff: null, ocBeta: null, ocKey: null, pnMax: 0,
-  ad: null        /* last gamma-regression MC run */
+  ad: null,       /* last gamma-regression MC run */
+  cmp: {          /* tab 6: pooled-vs.-Welch, entirely independent of the rest of the page */
+    dmu: 1, sigmaA: 2, sigmaB: 1, nA: 10, r: 2.5,
+    alpha: 0.05, sided: 'two', m: 10000, seed: 20260926,
+    holdTotal: false, total: null,   /* the recorded nA + nB while "hold the total fixed" is ticked */
+    res: null,      /* last completed PA.cmpStages() result: { head, sweep } */
+    resParams: null, resSeed: undefined,   /* the params and seed that produced res, frozen until the next run finishes */
+    statScale: null /* { lo, hi, bw, ymax } for the test-statistic histograms, fixed per run */
+  }
 };
 
 /* Per-test slider ranges; the number box goes far beyond the slider. */
-var N_RANGE = { z: [1, 200], t: [2, 200], t2: [2, 150], 'var': [2, 200],
+var N_RANGE = { z: [1, 200], t: [2, 200], t2: [2, 150], tw: [2, 150], 'var': [2, 200],
                 p: [1, 500], gof: [10, 500], anova: [2, 100], reg: [3, 200] };
-var N_DEFAULT = { z: 20, t: 20, t2: 25, 'var': 25, p: 50, gof: 100, anova: 10, reg: 30 };
+var N_DEFAULT = { z: 20, t: 20, t2: 25, tw: 25, 'var': 25, p: 50, gof: 100, anova: 10, reg: 30 };
 
 function defaultsFor(id) {
   var t = PA.TESTS[id], out = {};
@@ -2530,6 +2997,14 @@ PA.TEST_KEYS_ALL.forEach(function (id) {
   ST.P[id] = defaultsFor(id);
   ST.n[id] = N_DEFAULT[id] || PA.TESTS[id].nMin;
 });
+/* The OC chart tab keeps its own test, α, sidedness, and parameters, and
+   so what is set there stays put while tabs ① and ② change, and the
+   other way round. */
+ST.oc = { test: 't', alpha: 0.05, sided: 'two', P: {} };
+PA.TEST_KEYS.forEach(function (id) { ST.oc.P[id] = defaultsFor(id); });
+function ocTest()   { return PA.TESTS[ST.oc.test]; }
+function ocParams() { return ST.oc.P[ST.oc.test]; }
+function ocSided()  { return ocTest().sidedFixed || ST.oc.sided; }
 function curTest()   { return PA.TESTS[ST.test]; }
 function curParams() { return ST.P[ST.test]; }
 function curN()      { return ST.mode === 'n' && ST.solved && ST.solved.n ? ST.solved.n : ST.n[ST.test]; }
@@ -2576,8 +3051,12 @@ function litNLabel(t) {
   return t.nLabel.replace('(x, y)', lit('(x, y)')).replace(/\bn\b/, lit('n'));
 }
 
-function card(lbl, val, sub, litLbl) {
-  return '<div class="sc"><div class="sc-lbl' + (litLbl ? ' lit' : '') + '">' + lbl +
+/* How to name a test's analytic power: exact, or the approximation its
+   approxNote describes (chi-square GOF, Welch). */
+function powWord(t) { return t.approxNote ? 'approximate' : 'exact'; }
+
+function card(lbl, val, sub, litLbl, cls) {
+  return '<div class="sc' + (cls ? ' ' + cls : '') + '"><div class="sc-lbl' + (litLbl ? ' lit' : '') + '">' + lbl +
          '</div><div class="sc-val small">' + val + '</div>' +
          (sub ? '<div class="sc-sub">' + sub + '</div>' : '') + '</div>';
 }
@@ -2590,6 +3069,7 @@ function tok(nm) { return CSSVAR.getPropertyValue(nm).trim(); }
 var C = { nullc: tok('--nullc'), nullcF: tok('--nullc-fill'),
           altc: tok('--altc'), altcF: tok('--altc-fill'),
           exact: tok('--exact'), exactF: tok('--exact-fill'),
+          pooled: tok('--pooled'), welch: tok('--welch'),
           muted: tok('--muted'), grid: tok('--grid'), text: tok('--text'),
           accent: tok('--accent'), bg: tok('--chart-bg') };
 var FONT = "font-family:'Outfit',system-ui,sans-serif";
@@ -2713,8 +3193,16 @@ function workerSource() {
     '    }\n' +
     '    var r = run.result();\n' +
     '    self.postMessage({ type: "done", rejAlt: r.rejAlt, rejNull: r.rejNull, m: r.m,\n' +
-    '                       statsAlt: r.statsAlt.buffer, statsNull: r.statsNull.buffer },\n' +
-    '                     [r.statsAlt.buffer, r.statsNull.buffer]);\n' +
+    '                       statsAlt: r.statsAlt.buffer, statsNull: r.statsNull.buffer,\n' +
+    '                       rejFlags: r.rejFlags.buffer },\n' +
+    '                     [r.statsAlt.buffer, r.statsNull.buffer, r.rejFlags.buffer]);\n' +
+    '  } else if (m.job === "cmp") {\n' +
+    '    var st = cmpStages(m), done = 0;\n' +
+    '    while (!st.finished()) {\n' +
+    '      done = st.step(Math.max(200, Math.round(st.total / 80)));\n' +
+    '      self.postMessage({ type: "progress", done: done, of: st.total });\n' +
+    '    }\n' +
+    '    self.postMessage({ type: "done", res: st.result() });\n' +
     '  } else if (m.job === "solven") {\n' +
     '    var res = solveNMC(m.test, m.params, m.alpha, m.sided, m.target, m.m, m.seed,\n' +
     '      function (evals, n) { self.postMessage({ type: "progress", evals: evals, n: n }); });\n' +
@@ -2767,8 +3255,18 @@ function mainThreadJob(msg, onProgress, onDone, alive) {
       else {
         var r = run.result();
         onDone({ rejAlt: r.rejAlt, rejNull: r.rejNull, m: r.m,
-                 statsAlt: r.statsAlt.buffer, statsNull: r.statsNull.buffer });
+                 statsAlt: r.statsAlt.buffer, statsNull: r.statsNull.buffer,
+                 rejFlags: r.rejFlags.buffer });
       }
+    })();
+  } else if (msg.job === 'cmp') {
+    var st = PA.cmpStages(msg);
+    (function tick() {
+      if (!alive()) return;
+      var done = st.step(Math.max(100, Math.round(st.total / 160)));
+      onProgress({ done: done, of: st.total });
+      if (!st.finished()) { JOB.timer = setTimeout(tick, 0); }
+      else onDone({ res: st.result() });
     })();
   } else if (msg.job === 'solven') {
     /* The search is bursty rather than steppable; run it whole.  At the
@@ -2788,10 +3286,9 @@ function buildTestSelect() {
   PA.TEST_KEYS.forEach(function (id) {
     html += '<option value="' + id + '">' + esc(PA.TESTS[id].name) + '</option>';
   });
-  ['test-select', 'oc-test'].forEach(function (sid) {
-    $(sid).innerHTML = html;
-    $(sid).value = ST.test;
-  });
+  $('test-select').innerHTML = $('oc-test').innerHTML = html;
+  $('test-select').value = ST.test;
+  $('oc-test').value = ST.oc.test;
 }
 
 function renderParams() {
@@ -2868,17 +3365,7 @@ function readParam(q, el) {
 /* ── Sidedness, alpha, n, mode ─────────────────────────────────────── */
 function renderSided() {
   var t = curTest();
-  var seg = $('sided-seg'), ocSeg = $('oc-sided-seg');
-  /* On the OC chart's magnitude axis, the less and greater charts of a
-     symmetric statistic are the same chart, and so that tab offers a single
-     one-sided choice for them. */
-  var oneOnly = ocSymm();
-  ocSeg.style.display = t.sidedFixed ? 'none' : '';
-  Array.prototype.forEach.call(ocSeg.children, function (b) {
-    var sd = b.dataset.sided;
-    b.style.display = (sd === 'one' ? oneOnly : (sd === 'two' || !oneOnly)) ? '' : 'none';
-    b.classList.toggle('on', sd === 'one' ? ST.sided !== 'two' : sd === ST.sided);
-  });
+  var seg = $('sided-seg');
   if (t.sidedFixed) {
     seg.style.display = 'none';
     $('sided-note').textContent = 'This statistic only signals disagreement by being large, and so ' +
@@ -2902,89 +3389,115 @@ function renderSided() {
   }
 }
 
-/* α lives in two controls: tab ①'s select of common levels and the OC
-   tab's free box.  A level typed into the box that the select does not
-   list is added to the select as one extra option, so that both always
-   show the α actually in force. */
 var ALPHA_MIN = 0.001, ALPHA_MAX = 0.2;
-function renderAlpha() {
-  var sel = $('alpha-sel'), a = ST.alpha, extra = sel.querySelector('option[data-typed]');
-  if (extra) extra.remove();
-  var opts = Array.prototype.slice.call(sel.options);
-  var hit = opts.filter(function (o) { return Math.abs(Number(o.value) - a) < 1e-12; })[0];
-  if (!hit) {
-    hit = extra || document.createElement('option');
-    hit.dataset.typed = '1';
-    hit.value = hit.textContent = N(a, 4);
-    /* Keep the list ascending, with the typed level in its place. */
-    sel.insertBefore(hit, opts.filter(function (o) { return Number(o.value) > a; })[0] || null);
-  }
-  hit.selected = true;
+/* The OC chart tab's own controls: its test, α box and presets, and
+   sidedness.  On the chart's magnitude axis, the less and greater charts of
+   a symmetric statistic are the same chart, and so the tab offers a single
+   one-sided choice for those tests. */
+function renderOCControls() {
+  var t = ocTest(), a = ST.oc.alpha, ocSeg = $('oc-sided-seg'), oneOnly = ocSymm();
+  $('oc-test').value = ST.oc.test;
   $('oc-alpha').value = N(a, 4);
   Array.prototype.forEach.call($('oc-alpha-seg').children, function (b) {
     b.classList.toggle('on', Math.abs(Number(b.dataset.alpha) - a) < 1e-12);
   });
+  ocSeg.style.display = t.sidedFixed ? 'none' : '';
+  Array.prototype.forEach.call(ocSeg.children, function (b) {
+    var sd = b.dataset.sided;
+    b.style.display = (sd === 'one' ? oneOnly : (sd === 'two' || !oneOnly)) ? '' : 'none';
+    b.classList.toggle('on', sd === 'one' ? ST.oc.sided !== 'two' : sd === ST.oc.sided);
+  });
+  renderOCStruct();
+}
+/* Any change on the OC chart tab redraws only that tab. */
+function ocSettingsChanged() {
+  renderOCControls();
+  TAB_DIRTY.oc = true;
+  renderVisibleTab();
 }
 
-/* The one input besides α and the sidedness that moves an OC chart: the
-   null proportion for the exact binomial test, and the number of
-   categories or groups, which sets the degrees of freedom, for the
-   chi-square and F tests.  Every other parameter cancels out of the
-   standardized effect on the chart's axis. */
+/* The inputs besides α and the sidedness that move an OC chart: the null
+   proportion for the exact binomial test; the number of categories or
+   groups, which sets the degrees of freedom, for the chi-square and F
+   tests; the group-size ratio for both two-sample t tests; and, for
+   Welch, the ratio of the two standard deviations, which moves its
+   degrees of freedom.  Every other parameter cancels out of the
+   standardized effect on the chart's axis.  Each field reads and writes
+   the shared parameters through get and set. */
+var RATIO_FIELD = { lbl: 'Group-size ratio n_B/n_A =', min: 0.1, max: 10, step: 0.1,
+  get: function (p) { return p.r; }, set: function (p, v) { p.r = v; } };
 var OC_STRUCT = {
-  p:     { lbl: 'Null proportion p₀ =', min: 0.001, max: 0.999, step: 0.01,
-           get: function (p) { return p.p0; },
-           note: 'For this test the chart also depends on the null proportion p₀, and so it is set here too.' },
-  gof:   { lbl: 'Categories k =', min: 2, max: 10, step: 1,
-           get: function (p) { return p.p0v.length; },
-           note: 'For this test the chart also depends on the number of categories k. Changing k ' +
-                 'here drops the last categories or adds new ones with the average share, and then ' +
-                 'rescales both lists of proportions on tab ① to sum to 1.' },
-  anova: { lbl: 'Groups k =', min: 2, max: 10, step: 1,
-           get: function (p) { return p.means.length; },
-           note: 'For this test the chart also depends on the number of groups k. Changing k here ' +
-                 'drops the last group means on tab ① or adds new groups at the grand mean.' }
+  p: { fields: [{ lbl: 'Null proportion p₀ =', min: 0.001, max: 0.999, step: 0.01,
+         get: function (p) { return p.p0; }, set: function (p, v) { p.p0 = v; } }],
+       note: 'For this test the chart also depends on the null proportion p₀, and so it is set here too.' },
+  gof: { fields: [{ lbl: 'Categories k =', min: 2, max: 10, step: 1, integer: true,
+         get: function (p) { return p.p0v.length; },
+         /* A new category takes the average share of the old ones, and so a
+            uniform list stays uniform. */
+         set: function (p, k) {
+           var fit = function (arr) {
+             var out = arr.slice(0, k), avg = 1 / arr.length;
+             while (out.length < k) out.push(avg);
+             var tot = out.reduce(function (a, b) { return a + b; }, 0);
+             return out.map(function (x) { return x / tot; });
+           };
+           p.p0v = fit(p.p0v); p.p1v = fit(p.p1v);
+         } }],
+       note: 'For this test the chart also depends on the number of categories k, which sets ' +
+             'its degrees of freedom, and so k is set here too.' },
+  anova: { fields: [{ lbl: 'Groups k =', min: 2, max: 10, step: 1, integer: true,
+         get: function (p) { return p.means.length; },
+         set: function (p, k) {
+           var gm = p.means.reduce(function (a, b) { return a + b; }, 0) / p.means.length;
+           p.means = p.means.slice(0, k);
+           while (p.means.length < k) p.means.push(gm);
+         } }],
+       note: 'For this test the chart also depends on the number of groups k, which sets its ' +
+             'degrees of freedom, and so k is set here too.' },
+  t2: { fields: [RATIO_FIELD],
+        note: 'For this test the chart also depends on how the sample is split between the ' +
+              'groups, and so the ratio r = n_B/n_A is set here too; the curves are labeled by ' +
+              'group A’s size n.' },
+  tw: { fields: [{ lbl: 'Std. dev. ratio σ_B/σ_A =', min: 0.1, max: 10, step: 0.1,
+          get: function (p) { return p.sigmaB / p.sigmaA; },
+          set: function (p, v) { p.sigmaB = v * p.sigmaA; } }, RATIO_FIELD],
+        note: 'For this test the chart also depends on the ratio of the two standard deviations ' +
+              'and on how the sample is split, which together set the Welch degrees of freedom, ' +
+              'and so both are set here too. The curves are labeled by group A’s size n.' }
 };
+var OCS_BUILT = null;
 function renderOCStruct() {
-  var t = curTest(), cfg = OC_STRUCT[t.id], el = $('oc-struct-in');
-  $('oc-struct').style.display = cfg ? '' : 'none';
+  var t = ocTest(), cfg = OC_STRUCT[t.id], box = $('oc-struct');
+  box.style.display = cfg ? '' : 'none';
   var note = cfg ? cfg.note : '';
-  if (ocSymm()) note = 'For this test the chart plots the size of the effect, on which a ' +
-    'one-sided test watching either direction draws the same chart, and so one one-sided ' +
-    'choice stands for both.';
-  $('oc-test-note').textContent = note;
-  if (!cfg) return;
-  $('oc-struct-lbl').textContent = cfg.lbl;
-  el.min = cfg.min; el.max = cfg.max; el.step = cfg.step;
-  el.value = N(cfg.get(curParams()), 6);
-}
-function readOCStruct(el) {
-  var t = curTest(), cfg = OC_STRUCT[t.id], p = curParams(), v = Number(el.value);
-  if (!cfg) return;
-  if (el.value.trim() === '' || !Number.isFinite(v)) { renderOCStruct(); return; }
-  v = Math.min(cfg.max, Math.max(cfg.min, v));
-  if (t.id === 'p') {
-    p.p0 = v;
-  } else {
-    var k = Math.round(v);
-    if (t.id === 'gof') {
-      /* A new category takes the average share of the old ones, and so a
-         uniform list stays uniform. */
-      var fit = function (arr) {
-        var out = arr.slice(0, k), avg = 1 / arr.length;
-        while (out.length < k) out.push(avg);
-        var tot = out.reduce(function (a, b) { return a + b; }, 0);
-        return out.map(function (x) { return x / tot; });
-      };
-      p.p0v = fit(p.p0v); p.p1v = fit(p.p1v);
-    } else {
-      var gm = p.means.reduce(function (a, b) { return a + b; }, 0) / p.means.length;
-      p.means = p.means.slice(0, k);
-      while (p.means.length < k) p.means.push(gm);
-    }
+  if (ocSymm()) note = (note ? note + ' ' : '') + 'The chart plots the size of the effect, on ' +
+    'which a one-sided test watching either direction draws the same chart, and so one ' +
+    'one-sided choice stands for both.';
+  $('oc-test-note').innerHTML = mathHtml(note);
+  if (!cfg) { box.innerHTML = ''; OCS_BUILT = null; return; }
+  /* Rebuilt only when the test changes, so that moving from one field to
+     the next keeps its focus through the redraw the first one triggers. */
+  if (OCS_BUILT !== t.id) {
+    box.innerHTML = cfg.fields.map(function (f, i) {
+      return '<span class="p-item"><label for="oc-sf-' + i + '">' + mathHtml(f.lbl) + '</label>' +
+        '<input type="number" id="oc-sf-' + i + '" class="p-in narrow" min="' + f.min +
+        '" max="' + f.max + '" step="' + f.step + '"></span>';
+    }).join('');
+    cfg.fields.forEach(function (f, i) {
+      $('oc-sf-' + i).addEventListener('change', function () { readOCStruct(i, this); });
+    });
+    OCS_BUILT = t.id;
   }
-  renderParams();
-  settingsChanged();
+  cfg.fields.forEach(function (f, i) { $('oc-sf-' + i).value = N(f.get(ocParams()), 6); });
+}
+function readOCStruct(i, el) {
+  var cfg = OC_STRUCT[ocTest().id], v = Number(el.value);
+  if (!cfg) return;
+  var f = cfg.fields[i];
+  if (el.value.trim() === '' || !Number.isFinite(v)) { renderOCStruct(); return; }
+  v = Math.min(f.max, Math.max(f.min, v));
+  f.set(ocParams(), f.integer ? Math.round(v) : v);
+  ocSettingsChanged();
 }
 
 function renderNControls() {
@@ -3007,10 +3520,10 @@ function renderNControls() {
 /* ── The central plot: null vs alternative ─────────────────────────── */
 function statRangeFor(t, p, n, crit) {
   var e;
-  if (t.id === 'z' || t.id === 't' || t.id === 't2' || t.id === 'reg' || t.id === 'glm') {
-    var del = { z: function () { return (p.mu1 - p.mu0) / p.sigma * Math.sqrt(n); },
+  if (t.id === 'z' || t.id === 't' || t.twoGroup || t.id === 'reg' || t.id === 'glm') {
+    var del = t.ncp ? t.ncp(t.effect.get(p), n, p) :
+              { z: function () { return (p.mu1 - p.mu0) / p.sigma * Math.sqrt(n); },
                 t: function () { return (p.mu1 - p.mu0) / p.sigma * Math.sqrt(n); },
-                t2: function () { return (p.muA - p.muB) / p.sigma * Math.sqrt(n / 2); },
                 reg: function () { return p.b1 * p.sx * Math.sqrt(n) / p.sigma; },
                 glm: function () { return 0; } }[t.id]();
     var lo = Math.min(-4.2, del - 4.5), hi = Math.max(4.2, del + 4.5);
@@ -3133,8 +3646,10 @@ function renderNVPlot() {
   if (pdf1) s += '<path d="' + curvePath(y1) + '" fill="none" stroke="' + C.altc +
                  '" stroke-width="2.4"/>';
 
-  /* Critical values, labeled in the table's own notation. */
+  /* Critical values, labeled in the table's own notation.  Welch's df is
+     not a whole number, and so it is shown to four figures. */
   var df = t.df(n, p);
+  if (typeof df === 'number' && !Number.isInteger(df)) df = N(df, 4);
   var critLbl = function (v, side) {
     var q, sub;
     if (t.table === 't')   { q = sided === 'two' ? a / 2 : a; sub = N(q, 3) + ',' + (Array.isArray(df) ? df[0] : df); return (side < 0 ? '−t' : (t.statSym === 'T' ? '+t' : 't')) + '<tspan dy="3" style="font-size:9px">' + sub + '</tspan><tspan dy="-3"> = ' + N(Math.abs(v), 4) + '</tspan>'; }
@@ -3277,7 +3792,7 @@ function renderNVPlot() {
      critical-value label inside the plot. */
   var capBits = [t.nLabel + ' = ' + n];
   if (ST.mode === 'n' && ST.solved && ST.solved.n) capBits[0] += ' (the solved minimum)';
-  if (pow !== null) capBits.push('β = ' + N(1 - pow, 4) + ' · exact power = 1 − β = ' + N(pow, 4));
+  if (pow !== null) capBits.push('β = ' + N(1 - pow, 4) + ' · ' + powWord(t) + ' power = 1 − β = ' + N(pow, 4));
   $('nv-cap').innerHTML = nvLegendHtml(mc) + esc(capBits.join(' · '));
 }
 
@@ -3386,16 +3901,29 @@ function renderCritPanel() {
     var q1 = t.table === 't' ? PA.tQuantile(1 - a, df) : PA.normInv(1 - a);
     var q2 = t.table === 't' ? PA.tQuantile(1 - a / 2, df) : PA.normInv(1 - a / 2);
     var sym = t.table === 't' ? 't' : 'z';
-    var dfTxt = t.table === 't' ? ', row ν = ' + df : '';
-    cards += card('one-tail value at ' + lit('α') + ' = ' + N(a, 3), N(q1, 5), sym + ' table, ' + N(a, 3) + ' column' + dfTxt);
-    cards += card('two-tail value (' + lit('α/2') + ' column)', N(q2, 5), sym + ' table, ' + N(a / 2, 3) + ' column' + dfTxt);
+    /* Welch's df is fractional; a printed table has whole rows only. */
+    var dfFrac = t.table === 't' && !Number.isInteger(df);
+    var dfShow = dfFrac ? N(df, 4) : df;
+    var dfTxt = t.table === 't' ? (dfFrac ? ', ν ≈ ' + dfShow : ', row ν = ' + df) : '';
+    /* Short labels, so that they fit a phone-width card; the sub-line names
+       the column read. */
+    cards += card('one-tail value', N(q1, 5), sym + ' table, α = ' + N(a, 3) + ' column' + dfTxt);
+    cards += card('two-tail value', N(q2, 5), sym + ' table, α/2 = ' + N(a / 2, 3) + ' column' + dfTxt);
     cards += card('in use now', sided === 'two' ? '±' + N(q2, 5) : (sided === 'left' ? '−' : '+') + N(q1, 5),
                   sided === 'two' ? 'two-sided: the α/2 value' : 'one-sided: the α value');
     note = 'α = ' + N(a, 3) + ' ' + (sided === 'two' ? 'two-sided' : 'one-sided') +
-      (t.table === 't' ? ', ν = ' + df : '') + ': a one-tail ' + sym + ' table gives this boundary in its <strong>' +
-      N(sided === 'two' ? a / 2 : a, 4) + ' column</strong>' +
-      (t.table === 't' ? ', row ν = ' + df : '') + ' → ' + N(sided === 'two' ? q2 : q1, 5) +
+      (t.table === 't' ? (dfFrac ? ', ν ≈ ' : ', ν = ') + dfShow : '') + ': a one-tail ' + sym +
+      ' table gives this boundary in its <strong>' + N(sided === 'two' ? a / 2 : a, 4) + ' column</strong>' +
+      (t.table === 't' && !dfFrac ? ', row ν = ' + df : '') + ' → ' + N(sided === 'two' ? q2 : q1, 5) +
       '. The other column is the one you must <em>not</em> read for this test.';
+    if (dfFrac) {
+      var dfRow = Math.max(1, Math.floor(df));
+      var qRow = PA.tQuantile(1 - (sided === 'two' ? a / 2 : a), dfRow);
+      note += ' This ν is the Welch–Satterthwaite value the true standard deviations imply; each ' +
+        'simulated dataset gets its own from its own sample variances. A printed table has only ' +
+        'whole rows, and so the usual practice rounds ν down, to row ' + dfRow + ', whose ' +
+        'boundary ' + N(qRow, 5) + ' is slightly larger and so errs on the conservative side.';
+    }
   } else if (t.table === 'chi2' && t.id === 'var') {
     var nu = df;
     var lo2 = PA.chi2Quantile(a / 2, nu), hi2 = PA.chi2Quantile(1 - a / 2, nu);
@@ -3486,9 +4014,9 @@ function runMC() {
   /* Cost guard: each replication simulates n observations twice (null and
      alternative); cap n*m rather than freezing the worker for minutes
      at a huge typed-in n.  The reduction is reported, not silent. */
-  var mEff = ST.m;
-  if (n * mEff > 2.5e8) {
-    mEff = Math.max(200, Math.floor(2.5e8 / n));
+  var mEff = ST.m, size = t.twoGroup ? n + PA.groupB(n, curParams()) : n;
+  if (size * mEff > 2.5e8) {
+    mEff = Math.max(200, Math.floor(2.5e8 / size));
     $('param-msg').textContent = 'At n = ' + n.toLocaleString() + ', m was reduced to ' +
       mEff.toLocaleString() + ' to keep the simulation under a few seconds.';
   }
@@ -3503,7 +4031,7 @@ function runMC() {
       $('mc-prog-wrap').style.display = 'none';
       ST.mc = { m: msg.m, rejAlt: msg.rejAlt, rejNull: msg.rejNull,
                 statsAlt: new Float64Array(msg.statsAlt), statsNull: new Float64Array(msg.statsNull),
-                key: key, fresh: true, n: n, seed: ST.seed };
+                rejFlags: new Uint8Array(msg.rejFlags), key: key, fresh: true, n: n, seed: ST.seed };
       syncRunBtn();
       renderMCCards();
       renderTrace();
@@ -3529,7 +4057,10 @@ function renderMCCards() {
   html += card('95% CI (Wilson)', fmtCI(w), 'seed ' + mc.seed);
   if (ana !== null) {
     var inside = ana >= w.lo && ana <= w.hi;
-    html += card('exact power', N(ana, 4), inside ? 'inside the CI ✓' : 'outside the CI—rerun or enlarge m');
+    /* The card label is abbreviated so that it fits a phone-width card. */
+    html += card((t.approxNote ? 'approx.' : 'exact') + ' power', N(ana, 4), inside ? 'inside the CI ✓' :
+                 t.approxNote ? 'outside the CI: the formula is an approximation, and the simulation is exact'
+                              : 'outside the CI—rerun or enlarge m');
   } else {
     html += card('exact power', 'none exists', 'simulation is the only route');
   }
@@ -3553,17 +4084,24 @@ function renderTrace() {
   var ana = t.analyticPower ? t.analyticPower(mc.n, p, ST.alpha, curSided()) : null;
   drawTraceInto(svg, mc.statsAlt, crit, ana, 'trace-cap',
     ana === null ? 'No analytic value exists for this test; the band is the answer.' :
-    'The running estimate (orange) narrows onto the exact value (teal) like 1/√m.');
+    t.approxNote ? 'The running estimate (orange) narrows like 1/√m onto the true power, which the ' +
+                   'approximate value (teal) sits close to but not exactly on.' :
+    'The running estimate (orange) narrows onto the exact value (teal) like 1/√m.',
+    { flags: mc.rejFlags, approx: !!t.approxNote });
 }
 
-/* Shared by the main trace and the gamma-regression demo's trace. */
-function drawTraceInto(svg, stats, crit, ana, capId, capText) {
+/* Shared by the main trace and the gamma-regression demo's trace.  opts.flags,
+   when given, holds each replication's own decision (needed for a test whose
+   critical value varies by dataset); opts.approx labels ana an approximation. */
+function drawTraceInto(svg, stats, crit, ana, capId, capText, opts) {
+  opts = opts || {};
+  var flags = opts.flags;
   var m = stats.length;
   var NPTS = Math.min(120, m);
   var xs = [], est = [], lo = [], hi = [];
   var rej = 0, i, next = 0, idx = 0;
   for (i = 0; i < m; i++) {
-    if (stats[i] <= crit.lo || stats[i] >= crit.hi) rej++;
+    if (flags ? flags[i] : (stats[i] <= crit.lo || stats[i] >= crit.hi)) rej++;
     if (i + 1 >= next || i === m - 1) {
       var w = PA.wilson(rej, i + 1);
       xs.push(i + 1); est.push(w.p); lo.push(w.lo); hi.push(w.hi);
@@ -3588,7 +4126,7 @@ function drawTraceInto(svg, stats, crit, ana, capId, capText) {
        as a visible casing around it. */
     s += svLine(fr.mL, fr.Y(ana), fr.mL + fr.iw, fr.Y(ana),
                 'stroke:' + C.exact + ';stroke-width:4.5');
-    s += svTxt(fr.mL + fr.iw - 4, fr.Y(ana) - 5, 'exact = ' + N(ana, 4),
+    s += svTxt(fr.mL + fr.iw - 4, fr.Y(ana) - 5, (opts.approx ? 'approx. = ' : 'exact = ') + N(ana, 4),
                MONO + ';font-size:11px;fill:' + C.exact, 'end');
   }
   var pts = [];
@@ -3714,6 +4252,67 @@ function buildSnippets() {
     if (sided === 'right') return 'power = nct.sf(t.ppf(1 - alpha, ' + nuExpr + '), ' + nuExpr + ', delta)';
     return 'power = nct.cdf(-t.ppf(1 - alpha, ' + nuExpr + '), ' + nuExpr + ', delta)';
   }
+  function mlTwoTailT(nu, del) {
+    if (sided === 'two') return 'nctcdf(-tinv(1 - alpha/2, ' + nu + '), ' + nu + ', ' + del + ') + 1 - nctcdf(tinv(1 - alpha/2, ' + nu + '), ' + nu + ', ' + del + ')';
+    if (sided === 'right') return '1 - nctcdf(tinv(1 - alpha, ' + nu + '), ' + nu + ', ' + del + ')';
+    return 'nctcdf(-tinv(1 - alpha, ' + nu + '), ' + nu + ', ' + del + ')';
+  }
+  /* Pooled at an unequal split, and Welch at any split, written out as the
+     noncentral-t formula with group B's size rounded exactly as this page
+     rounds it (halves up; R's and Python's round() send halves to even,
+     and so they get floor(x + 0.5) instead).  MATLAB's sampsizepwr 'Ratio'
+     option leaves r·n unrounded, and so it is not used here. */
+  function twoGroupSnippets(welch) {
+    var head = 'muA <- ' + N(p.muA) + '; muB <- ' + N(p.muB) + '; ' +
+      (welch ? 'sA <- ' + N(p.sigmaA) + '; sB <- ' + N(p.sigmaB) : 'sigma <- ' + N(p.sigma)) +
+      '; r <- ' + N(p.r) + '; alpha <- ' + N(a) + '\n';
+    var rBody = welch
+      ? '  nB <- max(2, floor(r * nA + 0.5)); vA <- sA^2 / nA; vB <- sB^2 / nB\n' +
+        '  nu <- (vA + vB)^2 / (vA^2 / (nA - 1) + vB^2 / (nB - 1))\n' +
+        '  delta <- (muA - muB) / sqrt(vA + vB)\n'
+      : '  nB <- max(2, floor(r * nA + 0.5)); nu <- nA + nB - 2\n' +
+        '  delta <- (muA - muB) / (sigma * sqrt(1/nA + 1/nB))\n';
+    var rCode = head + 'pw <- function(nA) {\n' + rBody + '  ' +
+      rTwoTailT(null, 'nu').split('\n').join('\n  ') + '\n  power\n}\n' +
+      (solveN ? 'nA <- 2; while (pw(nA) < ' + N(target) + ') nA <- nA + 1\nc(nA = nA, nB = max(2, floor(r * nA + 0.5)))'
+              : 'pw(' + n + ')');
+    add('R', 'base stats; nA is group A’s size', rCode);
+    var pyHead = 'from math import floor, sqrt\nfrom scipy.stats import t, nct\n' +
+      'muA, muB, ' + (welch ? 'sA, sB' : 'sigma') + ', r, alpha = ' + N(p.muA) + ', ' + N(p.muB) + ', ' +
+      (welch ? N(p.sigmaA) + ', ' + N(p.sigmaB) : N(p.sigma)) + ', ' + N(p.r) + ', ' + N(a) + '\n';
+    var pyBody = welch
+      ? '    nB = max(2, floor(r * nA + 0.5)); vA, vB = sA**2 / nA, sB**2 / nB\n' +
+        '    nu = (vA + vB)**2 / (vA**2 / (nA - 1) + vB**2 / (nB - 1))\n' +
+        '    delta = (muA - muB) / sqrt(vA + vB)\n'
+      : '    nB = max(2, floor(r * nA + 0.5)); nu = nA + nB - 2\n' +
+        '    delta = (muA - muB) / (sigma * sqrt(1/nA + 1/nB))\n';
+    var pyCode = pyHead + 'def pw(nA):\n' + pyBody + '    ' +
+      pyTwoTailT('nu').split('\n').join('\n    ') + '\n    return power\n' +
+      (solveN ? 'nA = 2\nwhile pw(nA) < ' + N(target) + ':\n    nA += 1\nprint(nA, max(2, floor(r * nA + 0.5)))'
+              : 'print(pw(' + n + '))');
+    add('Python', 'scipy; nA is group A’s size', pyCode);
+    var mlHead = 'muA = ' + N(p.muA) + '; muB = ' + N(p.muB) + '; ' +
+      (welch ? 'sA = ' + N(p.sigmaA) + '; sB = ' + N(p.sigmaB) : 'sigma = ' + N(p.sigma)) +
+      '; r = ' + N(p.r) + '; alpha = ' + N(a) + ';\n' +
+      'nB = @(nA) max(2, round(r * nA));\n' +
+      (welch
+        ? 'vA = @(nA) sA^2 / nA;  vB = @(nA) sB^2 / nB(nA);\n' +
+          'nu = @(nA) (vA(nA) + vB(nA))^2 / (vA(nA)^2 / (nA - 1) + vB(nA)^2 / (nB(nA) - 1));\n' +
+          'delta = @(nA) (muA - muB) / sqrt(vA(nA) + vB(nA));\n'
+        : 'nu = @(nA) nA + nB(nA) - 2;\n' +
+          'delta = @(nA) (muA - muB) / (sigma * sqrt(1/nA + 1/nB(nA)));\n') +
+      'pw = @(nA) ' + mlTwoTailT('nu(nA)', 'delta(nA)') + ';\n';
+    add('MATLAB', 'tinv and nctcdf, Statistics and ML Toolbox; nA is group A’s size', mlHead +
+      (solveN ? 'nA = 2; while pw(nA) < ' + N(target) + ', nA = nA + 1; end\n[nA, nB(nA)]' : 'pw(' + n + ')'));
+    if (welch) {
+      noteR = 'This is the standard approximation: a noncentral t at the Welch–Satterthwaite degrees ' +
+        'of freedom the true standard deviations imply.  Base R, scipy, and MATLAB have no built-in ' +
+        'Welch power function, and the simulation on this page is the exact answer.';
+    } else {
+      noteMl = 'sampsizepwr(\'t2\', …, \'Ratio\', r) leaves r·n unrounded, and so it agrees with this ' +
+        'page only when r·n is a whole number.';
+    }
+  }
 
   if (t.id === 'z' || t.id === 't') {
     var code = solveN
@@ -3749,7 +4348,7 @@ function buildSnippets() {
       add('Python', 'scipy—statsmodels has no one-sample z with known σ', pyZ);
       noteMl = solveN ? '' : 'sampsizepwr solves the other direction by swapping which argument is []: pass the power and leave n empty.';
     }
-  } else if (t.id === 't2') {
+  } else if (t.id === 't2' && p.r === 1) {
     add('MATLAB', 'sampsizepwr; n is PER GROUP', solveN
       ? "n = sampsizepwr('t2', [" + N(p.muB) + ' ' + N(p.sigma) + '], ' + N(p.muA) + ', ' + N(target) + ", [], 'Alpha', " + N(a) + ", 'Tail', '" + tail + "')"
       : "power = sampsizepwr('t2', [" + N(p.muB) + ' ' + N(p.sigma) + '], ' + N(p.muA) + ', [], ' + n + ", 'Alpha', " + N(a) + ", 'Tail', '" + tail + "')");
@@ -3761,6 +4360,8 @@ function buildSnippets() {
         (solveN ? 'nobs1=None' : 'nobs1=' + n) + ', alpha=' + N(a) + ',\n' +
         '                            power=' + (solveN ? N(target) : 'None') + ", ratio=1.0, alternative='" + pyAlt + "')");
     noteR = 'strict = TRUE for the exact two-sided power, as in the one-sample case.';
+  } else if (t.twoGroup) {
+    twoGroupSnippets(t.id === 'tw');
   } else if (t.id === 'var') {
     add('MATLAB', 'sampsizepwr', solveN
       ? "n = sampsizepwr('var', " + N(p.v0) + ', ' + N(p.v1) + ', ' + N(target) + ", [], 'Alpha', " + N(a) + ", 'Tail', '" + tail + "')"
@@ -3870,7 +4471,8 @@ function buildSnippets() {
 var GP_FAMILY = {
   z: 'G*Power has no one-sample z with known σ; its nearest procedure is the one-sample t (family “t tests”).',
   t: 'In G*Power, this lives in the “t tests” family as “Means: Difference from constant (one sample case)”; the paired framing is “Means: Difference between two dependent means (matched pairs)”.',
-  t2: 'In G*Power, this lives in the “t tests” family as “Means: Difference between two independent means (two groups)”.',
+  t2: 'In G*Power, this lives in the “t tests” family as “Means: Difference between two independent means (two groups)”, whose allocation ratio N2/N1 is this page’s r.',
+  tw: 'G*Power’s “Means: Difference between two independent means (two groups)” procedure assumes equal variances, and so it computes the pooled test’s power, not Welch’s.',
   'var': 'In G*Power, this lives in the “χ² tests” family as “Variance: Difference from constant (one sample case)”.',
   p: 'In G*Power, this lives in the “Exact” family as “Proportion: Difference from constant (binomial test, one sample case)”.',
   gof: 'In G*Power, this lives in the “χ² tests” family as “Goodness-of-fit tests: Contingency tables”.',
@@ -4031,7 +4633,7 @@ function renderCurves() {
   }
   $('pe-plot').innerHTML = s;
   $('pe-hd-n').innerHTML = '· at ' + litNLabel(t) + ' = ' + n;
-  $('pe-cap').textContent = 'Teal: exact power. Orange dot: the current settings' +
+  $('pe-cap').textContent = 'Teal: ' + powWord(t) + ' power. Orange dot: the current settings' +
     (ST.mc && ST.mc.fresh ? '; the hollow ring and bar are the Monte Carlo estimate with its 95% CI.' : '.');
 
   /* power vs n */
@@ -4082,18 +4684,19 @@ var OC_NS_NARROW = [2, 3, 5, 10, 20, 50, 100];
 var OCV = null;
 
 function ocSymm() {
-  return ST.test === 'z' || ST.test === 't' || ST.test === 't2' || ST.test === 'reg';
+  var id = ST.oc.test;
+  return id === 'z' || id === 't' || id === 't2' || id === 'tw' || id === 'reg';
 }
 /* Only the symmetric-statistic tests flip sign for a left-sided lookup;
    the proportion axis is p₁ itself and the variance axis is the ratio,
    where "less" means a value below 1, not a negation. */
-function ocSigned(e) { return (curSided() === 'left' && ocSymm()) ? -e : e; }
+function ocSigned(e) { return (ocSided() === 'left' && ocSymm()) ? -e : e; }
 
 /* Smallest n whose power at effect e reaches 1 − beta.  The proportion
    test's power is not monotone in n, and so it is scanned for the first
    crossing instead of bisected. */
 function ocSolveN(e, beta) {
-  var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided();
+  var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
   var target = 1 - beta;
   var pw = function (n) { return t.powerAtEffect(e, n, p, a, sided); };
   if (t.id === 'p') {
@@ -4113,17 +4716,17 @@ function ocSolveN(e, beta) {
 /* Everything that decides which chart is drawn.  A stored n is the answer
    for one chart only, and so it is solved again once any of these moves. */
 function ocChartKey() {
-  return JSON.stringify([ST.test, curParams(), ST.alpha, curSided()]);
+  return JSON.stringify([ST.oc.test, ocParams(), ST.oc.alpha, ocSided()]);
 }
 
-/* Start the lookup from whatever tab ① is set to: the effect and n come
-   from there, and β follows from the pair. */
+/* Start the lookup from the chart's own test: its default sample size and
+   the effect of its parameters, with β following from the pair. */
 function seedOCLookup() {
-  var t = curTest();
-  ST.ocN = curN();
-  ST.ocEff = Math.abs(curEffect());
+  var t = ocTest();
+  ST.ocN = N_DEFAULT[t.id] || t.nMin;
+  ST.ocEff = Math.abs(t.effect.get(ocParams()));
   ST.ocBeta = Math.min(0.995, Math.max(0.005,
-    1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, curParams(), ST.alpha, curSided())));
+    1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, ocParams(), ST.oc.alpha, ocSided())));
   ST.ocKey = ocChartKey();
   $('oc-n').value = ST.ocN;
   $('oc-eff').value = N(ST.ocEff, 4);
@@ -4131,7 +4734,7 @@ function seedOCLookup() {
 }
 
 function renderOC() {
-  var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided();
+  var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
   /* The classic chart runs the |effect| axis from 0 (β = 1 − α) upward;
      for the proportion test the natural axis is p₁ itself. */
   var xlo = t.id === 'p' ? 0.01 : (t.id === 'var' ? 0.1 : 0);
@@ -4255,10 +4858,10 @@ function drawOCSolvedCurve(n, betaDot) {
   var key = n + '@' + lev;
   if (OCV.ncKey === key) return;
   OCV.ncKey = key;
-  var t = curTest(), p = curParams(), fr = OCV.fr, pts = [];
+  var t = ocTest(), p = ocParams(), fr = OCV.fr, pts = [];
   for (var i = 0; i <= 120; i++) {
     var e = OCV.xlo + (OCV.xhi - OCV.xlo) * i / 120;
-    pts.push([fr.X(e), fr.Y(1 - t.powerAtEffect(ocSigned(e), n, p, ST.alpha, curSided()))]);
+    pts.push([fr.X(e), fr.Y(1 - t.powerAtEffect(ocSigned(e), n, p, ST.oc.alpha, ocSided()))]);
   }
   el.setAttribute('d', polyPath(pts));
   var best = 0;
@@ -4280,7 +4883,7 @@ function drawOCSolvedCurve(n, betaDot) {
    solved from them by whoever moved it and arrives here already decided. */
 function updateOCOverlay(live, extraMsg) {
   if (!OCV) return;
-  var t = curTest(), p = curParams(), a = ST.alpha, sided = curSided();
+  var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
   var fr = OCV.fr, ov = $('oc-ov');
   if (!ov) return;
   var d, beta, n;
@@ -4384,7 +4987,7 @@ function wireOCPointer() {
   }
   function showHover(q) {
     if (!OCV || !inPlot(q)) { hideHover(); return; }
-    var t = curTest(), fr = OCV.fr;
+    var t = ocTest(), fr = OCV.fr;
     var c = toData(q);
     var nImp = ocSolveN(ocSigned(c.d), c.beta);
     var hov = $('oc-hov');
@@ -4523,6 +5126,766 @@ function wireOCPointer() {
   });
 }
 
+/* ── Pooled vs. Welch tab ──────────────────────────────────────────────
+   Entirely self-contained: its own state (ST.cmp), its own α and
+   sidedness, its own PA.cmpStages() run.  Nothing here reads from or
+   writes to ST.test, ST.alpha, ST.sided, or any other tab's state. */
+function cwParams() {
+  return { muA: ST.cmp.dmu, muB: 0, sigmaA: ST.cmp.sigmaA, sigmaB: ST.cmp.sigmaB, r: ST.cmp.r };
+}
+/* 'two' stays 'two'; the one-sided choice points toward whichever side
+   the true difference favors, exactly as the OC tab's own toggle does. */
+function cwSidedCore() {
+  return ST.cmp.sided === 'two' ? 'two' : (ST.cmp.dmu >= 0 ? 'right' : 'left');
+}
+function cwRenderNbRead() {
+  var nb = PA.groupB(ST.cmp.nA, { r: ST.cmp.r });
+  var total = ST.cmp.nA + nb;
+  $('cw-nb-read').innerHTML = mathHtml('n_B = ' + nb + ' (total ' + total +
+    (ST.cmp.holdTotal ? ', held' : '') + ')');
+}
+/* The integer n_A (>= 2) whose n_A + PA.groupB(n_A, {r}) lands closest to
+   total, ties going to the smaller n_A.  n_A + n_B is nondecreasing in n_A
+   for a fixed r > 0, and so a single ascending scan finds it, and the first
+   ratio to reach the minimum gap is kept. */
+function cwBestNAForTotal(r, total) {
+  var best = 2, bestDiff = Infinity, cap = Math.max(2, total);
+  for (var na = 2; na <= cap; na++) {
+    var diff = Math.abs(na + PA.groupB(na, { r: r }) - total);
+    if (diff < bestDiff) { bestDiff = diff; best = na; }
+  }
+  return best;
+}
+function renderCwAlpha() {
+  $('cw-alpha').value = N(ST.cmp.alpha, 4);
+  Array.prototype.forEach.call($('cw-alpha-seg').children, function (b) {
+    b.classList.toggle('on', Math.abs(Number(b.dataset.alpha) - ST.cmp.alpha) < 1e-12);
+  });
+}
+
+/* ── Plot 1: the data ──────────────────────────────────────────────────
+   The two populations the current run draws from, plus a rug of the
+   first alternative dataset PA.cmpStages kept.  The curves and the x
+   range are frozen to whatever params actually produced ST.cmp.res
+   (ST.cmp.resParams), and so a control the reader is still typing into never
+   moves this plot until the run it triggers finishes; before the first
+   run there is nothing frozen yet, and the curves track the live boxes
+   instead. */
+function cwDataParams() {
+  return ST.cmp.resParams || { dmu: ST.cmp.dmu, sigmaA: ST.cmp.sigmaA, sigmaB: ST.cmp.sigmaB,
+                                nA: ST.cmp.nA, r: ST.cmp.r };
+}
+function renderCwDataPlot() {
+  var svg = $('cw-data-plot');
+  var gm = plotGeom(svg, 940, 230, 0.86, 620);
+  var W = gm.W, H = gm.H;
+  var p = cwDataParams();
+  var lo = Math.min(p.dmu - 3.5 * p.sigmaA, -3.5 * p.sigmaB);
+  var hi = Math.max(p.dmu + 3.5 * p.sigmaA, 3.5 * p.sigmaB);
+  if (!(hi > lo)) { hi = lo + 1; }
+  var pdfA = function (x) { return PA.normPdf((x - p.dmu) / p.sigmaA) / p.sigmaA; };
+  var pdfB = function (x) { return PA.normPdf(x / p.sigmaB) / p.sigmaB; };
+  var NPX = 200, i, x, xs = [], yA = [], yB = [], ymax = 0, pkAi = 0, pkBi = 0;
+  for (i = 0; i <= NPX; i++) {
+    x = lo + (hi - lo) * i / NPX;
+    xs.push(x);
+    var vA = pdfA(x), vB = pdfB(x);
+    yA.push(vA); yB.push(vB);
+    if (vA > yA[pkAi]) pkAi = i;
+    if (vB > yB[pkBi]) pkBi = i;
+    if (vA > ymax) ymax = vA;
+    if (vB > ymax) ymax = vB;
+  }
+  ymax *= 1.2;
+  /* The two rug rows get a strip inside the frame, under the curves' zero
+     line, and so the tick labels and the axis title stay clear of them.
+     The strip is made by extending the y range below zero. */
+  var rugGap = 21, strip = 2 * rugGap + 8, mB = 38, mT = 14;
+  var ylo = -ymax * strip / (H - mT - mB - strip);
+  var fr = frame(W, H, 14, 14, mT, mB, lo, hi, ylo, ymax);
+  var s = drawAxes(fr, niceTicks(lo, hi, gm.narrow ? 6 : 9), [], 'observed value', '', null, null);
+  s += svLine(fr.mL, fr.Y(0), fr.mL + fr.iw, fr.Y(0), 'stroke:' + C.muted + ';stroke-width:1');
+  function curvePath(ys, dash) {
+    var pts = xs.map(function (xx, j) { return [fr.X(xx), fr.Y(Math.min(ys[j], ymax))]; });
+    return '<path d="' + polyPath(pts) + '" fill="none" stroke="' + C.text + '" stroke-width="2"' +
+           (dash ? ' stroke-dasharray="7 4"' : '') + '/>';
+  }
+  s += curvePath(yA, false) + curvePath(yB, true);
+  /* Each curve is labeled where it stands highest above the other one,
+     among points at least half its own peak height, and so a label never
+     sits on the other curve where the two cross. */
+  function labelAt(ys, other, pk) {
+    var best = pk, bestGap = -Infinity;
+    for (var j = 0; j <= NPX; j++) {
+      if (ys[j] < 0.5 * ys[pk]) continue;
+      var gap = fr.Y(other[j]) - fr.Y(ys[j]);
+      if (gap > bestGap) { bestGap = gap; best = j; }
+    }
+    return best;
+  }
+  var la = labelAt(yA, yB, pkAi), lb = labelAt(yB, yA, pkBi);
+  s += svTxt(fr.X(xs[la]), fr.Y(yA[la]) - 8, 'A', FONT + ';font-weight:700;font-size:13px;fill:' + C.text, 'middle');
+  s += svTxt(fr.X(xs[lb]), fr.Y(yB[lb]) - 8, 'B', FONT + ';font-weight:700;font-size:13px;fill:' + C.text, 'middle');
+
+  var sample = ST.cmp.res ? ST.cmp.res.head.sample : null;
+  var nb = PA.groupB(p.nA, { r: p.r });
+  var rowAy = fr.Y(0) + rugGap - 3, rowBy = rowAy + rugGap;
+  /* Each row's label sits inside the frame, just above its row's left end. */
+  function rugRow(y, label, n, vals) {
+    var txt = sample ? (label + ', n = ' + n) : label;
+    var out = svTxt(fr.mL + 4, y - 7, esc(txt), FONT + ';font-size:10px;font-weight:600;fill:' + C.muted, 'start');
+    out += svLine(fr.mL, y, fr.mL + fr.iw, y, 'stroke:' + C.grid + ';stroke-width:1');
+    if (vals && vals.length) {
+      var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+      vals.forEach(function (v) {
+        if (v < lo || v > hi) return;
+        var xp = fr.X(v);
+        out += svLine(xp, y - 5, xp, y + 5, 'stroke:' + C.altc + ';stroke-width:1.3;opacity:0.8');
+      });
+      var mx = fr.X(Math.min(Math.max(mean, lo), hi));
+      out += '<path d="M' + N(mx - 5, 4) + ' ' + N(y + 8, 4) + 'L' + N(mx + 5, 4) + ' ' +
+             N(y + 8, 4) + 'L' + N(mx, 4) + ' ' + N(y - 1, 4) + 'Z" fill="' + C.altc + '"/>';
+    }
+    return out;
+  }
+  s += rugRow(rowAy, 'A', p.nA, sample ? sample.a : null);
+  s += rugRow(rowBy, 'B', nb, sample ? sample.b : null);
+  svg.innerHTML = s;
+}
+function cwDataCaption() {
+  if (!ST.cmp.res)
+    return 'The curves are the two populations group A and group B are drawn from; once the ' +
+      'first run finishes, the rows below fill in with that run’s first simulated dataset.';
+  return mathHtml('The solid curve is population A, N(μ_A − μ_B, σ_A²); the dashed curve is ' +
+    'population B, N(0, σ_B²). Each tick below is one observation from the first dataset this ' +
+    'run drew, under seed ' + ST.cmp.resSeed + ', and the caret marks that row’s sample mean.');
+}
+
+/* Cards for one test's two headline numbers (actual alpha, power), plus the
+   formula card that only that test can offer.  res === null draws every
+   value cell as a dash, at the same label and layout the real numbers use,
+   and so the page reserves the same height before the first run ever completes. */
+/* An actual α whose 95% interval excludes the nominal level is marked a
+   miss, and the higher of the two powers is marked a win.  A win beside a
+   miss says in words that the power is not comparable, because a test
+   whose α is inflated also rejects more often under the alternative. */
+function cwAlphaHolds(h, key) {
+  var w = PA.wilson(h[key].nul, h.m);
+  return w.lo <= ST.cmp.alpha && ST.cmp.alpha <= w.hi;
+}
+function cwTestCards(res, key, formulaCard) {
+  var aVal = '—', aSub = '', pVal = '—', pSub = '', aCls = '', pCls = '';
+  if (res) {
+    var h = res.head, other = key === 'pool' ? 'welch' : 'pool';
+    var wA = PA.wilson(h[key].nul, h.m), wP = PA.wilson(h[key].alt, h.m);
+    var holds = cwAlphaHolds(h, key), nom = 'α = ' + N(ST.cmp.alpha, 3);
+    aVal = N(h[key].nul / h.m, 4);
+    aSub = fmtCI(wA) + (holds ? ' includes ' : ' excludes ') + nom;
+    if (!holds) aCls = 'miss';
+    pVal = N(h[key].alt / h.m, 4);
+    pSub = fmtCI(wP);
+    if (h[key].alt > h[other].alt) {
+      pSub += holds ? '; higher of the two' : '; higher of the two, but not comparable while this test’s α is off';
+      pCls = 'win';
+    } else if (!holds) {
+      pSub += '; not comparable while this test’s α is off';
+    }
+  }
+  return card('actual ' + lit('α̂'), aVal, aSub, false, aCls) +
+         card('power', pVal, pSub, false, pCls) + formulaCard;
+}
+function cwCardsHtml(res) {
+  var sameSigma = Math.abs(ST.cmp.sigmaA - ST.cmp.sigmaB) < 1e-9;
+  var poolForm, welchForm;
+  if (!res) {
+    poolForm = card('exact power', '—', '');
+    welchForm = card('approx. power', '—', '');
+  } else {
+    if (sameSigma) {
+      var pw1 = PA.TESTS.t2.analyticPower(ST.cmp.nA,
+        { muA: ST.cmp.dmu, muB: 0, sigma: ST.cmp.sigmaA, r: ST.cmp.r }, ST.cmp.alpha, cwSidedCore());
+      poolForm = card('exact power', N(pw1, 4), mathHtml('the noncentral t, valid because σ_A = σ_B'));
+    } else {
+      poolForm = card('exact power', 'no formula', mathHtml('the pooled test assumes σ_A = σ_B'));
+    }
+    var pw2 = PA.TESTS.tw.analyticPower(ST.cmp.nA, cwParams(), ST.cmp.alpha, cwSidedCore());
+    welchForm = card('approx. power', N(pw2, 4), 'noncentral t at the Welch–Satterthwaite df');
+  }
+  $('cw-cards-pool').innerHTML = cwTestCards(res, 'pool', poolForm);
+  $('cw-cards-welch').innerHTML = cwTestCards(res, 'welch', welchForm);
+}
+
+/* A verdict sentence chosen from the headline pooled alpha-hat's own Wilson
+   interval against the nominal level: entirely above it, entirely below
+   it, or straddling it (the well-calibrated case). */
+function cwVerdictText(res) {
+  if (!res)
+    return 'Results appear once the first run finishes, in about three seconds.';
+  var h = res.head, alpha = ST.cmp.alpha;
+  var w = PA.wilson(h.pool.nul, h.m);
+  var aHat = h.pool.nul / h.m;
+  var aPct = N(100 * aHat, 3) + '%', nomPct = N(100 * alpha, 3) + '%';
+  var poolPow = h.pool.alt / h.m, welchPow = h.welch.alt / h.m;
+  var sameSigma = Math.abs(ST.cmp.sigmaA - ST.cmp.sigmaB) < 1e-9;
+  if (w.lo > alpha)
+    return 'The pooled test rejects a true null ' + aPct + ' of the time at a nominal ' +
+      nomPct + ', and so its higher power is not comparable with Welch’s: a test that ' +
+      'raises more false alarms also rejects more often when the difference is real.';
+  if (w.hi < alpha)
+    return 'The pooled test is conservative (it rejects a true null only ' + aPct +
+      ' of the time at a nominal ' + nomPct + '), and it loses power as a result: pooled power ' +
+      N(poolPow, 4) + ' against Welch’s ' + N(welchPow, 4) + '.';
+  var s = 'Both tests hold α near its nominal level, and so their powers compare directly ' +
+    '(pooled ' + N(poolPow, 4) + ', Welch ' + N(welchPow, 4) + ').';
+  if (sameSigma)
+    s += ' With σ_A = σ_B, that gap is what Welch gives up when the variances really are equal.';
+  return s;
+}
+
+/* ── Plot 2: the test statistics ────────────────────────────────────────
+   A back-to-back filled histogram per test: the null runs stand above a
+   shared baseline, the alternative runs hang below it, and each bar is
+   split by the KEPT decision (res.head.stats[key].nulRej/altRej) rather
+   than by a single fixed threshold because Welch's own critical value
+   moves with each dataset's degrees of freedom and so cannot be redrawn
+   from the statistic and one line.  Both panels share one x range and one
+   density scale, computed once per run from all four kept arrays so nb
+   is fixed the moment a run finishes and never moves while a control is
+   read. */
+function cwComputeStatScale(res) {
+  var bw = 0.25, all = [];
+  ['pool', 'welch'].forEach(function (key) {
+    ['nul', 'alt'].forEach(function (kind) {
+      var arr = res.head.stats[key][kind];
+      for (var i = 0; i < arr.length; i++) all.push(arr[i]);
+    });
+  });
+  all.sort(function (a, b) { return a - b; });
+  var n = all.length;
+  var lo = all[Math.max(0, Math.floor(0.001 * n))];
+  var hi = all[Math.min(n - 1, Math.ceil(0.999 * n))];
+  lo = Math.floor(lo / bw) * bw;
+  hi = Math.ceil(hi / bw) * bw;
+  if (hi - lo < bw) hi = lo + bw;
+  var nb = Math.round((hi - lo) / bw), ymax = 0;
+  ['pool', 'welch'].forEach(function (key) {
+    ['nul', 'alt'].forEach(function (kind) {
+      var arr = res.head.stats[key][kind], counts = new Float64Array(nb);
+      for (var i = 0; i < arr.length; i++) {
+        var idx = Math.floor((arr[i] - lo) / bw);
+        if (idx >= 0 && idx < nb) counts[idx]++;
+      }
+      for (var j = 0; j < nb; j++) {
+        var d = counts[j] / (res.head.m * bw);
+        if (d > ymax) ymax = d;
+      }
+    });
+  });
+  return { lo: lo, hi: hi, bw: bw, ymax: ymax * 1.15 };
+}
+function cwRenderStatPanel(svgId, key) {
+  var svg = $(svgId);
+  var gm = plotGeom(svg, 460, 300, 1.15, 380);
+  var W = gm.W, H = gm.H, res = ST.cmp.res;
+  var sc = ST.cmp.statScale || { lo: -4, hi: 4, bw: 0.25, ymax: 0.5 };
+  var fr = frame(W, H, gm.narrow ? 34 : 40, 10, 14, gm.narrow ? 30 : 26, sc.lo, sc.hi, -sc.ymax, sc.ymax);
+  var s = drawAxes(fr, niceTicks(sc.lo, sc.hi, gm.narrow ? 5 : 7), [], 'T', '', null, null);
+  s += svLine(fr.mL, fr.Y(0), fr.mL + fr.iw, fr.Y(0), 'stroke:' + C.text + ';stroke-width:1.4');
+  if (res) {
+    var st = res.head.stats[key], m = res.head.m, bw = sc.bw;
+    var nb = Math.max(1, Math.round((sc.hi - sc.lo) / bw));
+    var nul0 = new Float64Array(nb), nul1 = new Float64Array(nb);
+    var alt0 = new Float64Array(nb), alt1 = new Float64Array(nb);
+    function fillBins(arr, rej, b0, b1) {
+      for (var i = 0; i < arr.length; i++) {
+        var idx = Math.floor((arr[i] - sc.lo) / bw);
+        if (idx < 0 || idx >= nb) continue;
+        (rej[i] ? b1 : b0)[idx]++;
+      }
+    }
+    fillBins(st.nul, st.nulRej, nul0, nul1);
+    fillBins(st.alt, st.altRej, alt0, alt1);
+    function rect(x, y, w, h, fill) {
+      if (h < 0) { y += h; h = -h; }
+      return '<rect x="' + N(x, 4) + '" y="' + N(y, 4) + '" width="' + N(w, 4) +
+             '" height="' + N(h, 4) + '" fill="' + fill + '"/>';
+    }
+    /* A bin that holds both decisions (the one a critical line cuts, or,
+       for Welch, any bin near its reference line, as each dataset's own df
+       moves its critical value) stacks its rejected part against the
+       baseline, so that the dark region stays one piece with the fully
+       rejected bars beside it rather than floating at the bar's far end. */
+    var yBase = fr.Y(0);
+    for (var j = 0; j < nb; j++) {
+      var xA = fr.X(sc.lo + j * bw), xB = fr.X(sc.lo + (j + 1) * bw), w = xB - xA;
+      var d0 = nul0[j] / (m * bw), d1 = nul1[j] / (m * bw);
+      var yT1 = fr.Y(d1), yT0 = fr.Y(d1 + d0);
+      s += rect(xA, yT1, w, yBase - yT1, C.nullc) + rect(xA, yT0, w, yT1 - yT0, C.nullcF);
+      var e0 = alt0[j] / (m * bw), e1 = alt1[j] / (m * bw);
+      var yB1 = fr.Y(-e1), yB0 = fr.Y(-(e1 + e0));
+      s += rect(xA, yBase, w, yB1 - yBase, C.altc) + rect(xA, yB1, w, yB0 - yB1, C.altcF);
+    }
+    /* The t density the test assumes for its null, drawn over the null
+       half: pooled always assumes n_A + n_B - 2 df; Welch's reference
+       curve is at nu-star, the df its TRUE sigmas imply, even though each
+       kept dataset actually used its own df, which is exactly why some
+       bars near Welch's line are partly dark. */
+    var nu = key === 'pool' ? PA.TESTS.t2.df(ST.cmp.nA, { r: ST.cmp.r })
+                            : PA.TESTS.tw.df(ST.cmp.nA, cwParams());
+    var pts = [];
+    for (var i2 = 0; i2 <= 160; i2++) {
+      var x = sc.lo + (sc.hi - sc.lo) * i2 / 160;
+      pts.push([fr.X(x), fr.Y(Math.min(PA.tPdf(x, nu), sc.ymax))]);
+    }
+    s += '<path d="' + polyPath(pts) + '" fill="none" stroke="' + C.nullc +
+         '" stroke-width="1.8" stroke-dasharray="6 4"/>';
+    var crit = key === 'pool' ? res.head.critPool
+                              : PA.TESTS.tw.crit(ST.cmp.nA, cwParams(), ST.cmp.alpha, cwSidedCore());
+    var refTag = key === 'welch' ? ' at ν*' : '';
+    [['lo', -1], ['hi', 1]].forEach(function (pair) {
+      var v = crit[pair[0]];
+      if (!Number.isFinite(v)) return;
+      s += svLine(fr.X(v), fr.mT, fr.X(v), fr.mT + fr.ih,
+                  'stroke:' + C.text + ';stroke-width:1.3;stroke-dasharray:3 3');
+      s += svTxt(fr.X(v) + (pair[1] < 0 ? -4 : 4), fr.mT + 11,
+                 (pair[1] < 0 ? '−t' : '+t') + refTag + ' = ' + N(v, 3),
+                 MONO + ';font-size:9px;fill:' + C.text, pair[1] < 0 ? 'end' : 'start');
+    });
+  }
+  svg.innerHTML = s;
+}
+function cwStatLegendHtml() {
+  function box(color) {
+    return '<svg width="14" height="10" viewBox="0 0 14 10" style="vertical-align:-1px">' +
+      '<rect width="14" height="10" fill="' + color + '"/></svg>';
+  }
+  /* Each swatch copies its mark in the plot: the density curve runs across
+     in long dashes, and a critical value stands upright in short ones. */
+  function curveSw() {
+    return '<svg width="24" height="10" viewBox="0 0 24 10" style="vertical-align:-1px">' +
+      '<line x1="1" y1="5" x2="23" y2="5" style="stroke:' + C.nullc +
+      ';stroke-width:1.8;stroke-dasharray:6 4"/></svg>';
+  }
+  function critSw() {
+    return '<svg width="24" height="14" viewBox="0 0 24 14" style="vertical-align:-3px">' +
+      '<line x1="12" y1="0.5" x2="12" y2="13.5" style="stroke:' + C.text +
+      ';stroke-width:1.3;stroke-dasharray:3 3"/></svg>';
+  }
+  var cells = [
+    box(C.nullc) + ' rejected under the null: actual α',
+    box(C.nullcF) + ' not rejected under the null: 1 − α',
+    box(C.altc) + ' rejected under the alternative: power',
+    box(C.altcF) + ' not rejected under the alternative: β',
+    curveSw() + ' t density the test assumes',
+    critSw() + ' critical value'
+  ];
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));' +
+    'gap:3px 10px;font-size:.74rem;color:' + C.muted + ';margin-bottom:6px;text-align:left">' +
+    cells.map(function (c) { return '<span style="white-space:nowrap">' + c + '</span>'; }).join('') +
+    '</div>';
+}
+function cwStatCaption(res) {
+  if (!res) return 'Results appear once the first run finishes, in about three seconds.';
+  return mathHtml('Each histogram stands above the baseline for the null runs and hangs below ' +
+    'it for the alternative runs, and each bar is split by what that replication’s own test ' +
+    'decided: the darker part was rejected and the lighter part was not. The dark indigo share ' +
+    'above the baseline is therefore exactly the actual α in the cards above, and the dark ' +
+    'orange share below it is the power. The dashed curve is the t density each test assumes ' +
+    'for its null. The pooled test uses the same n_A + n_B − 2 degrees of freedom for every ' +
+    'dataset, but Welch’s degrees of freedom come from each dataset’s own sample standard ' +
+    'deviations s_A and s_B, and so its dashed critical-value line sits at a reference ν*, the ' +
+    'degrees of freedom the true standard deviations imply, and the bars nearest that line mix ' +
+    'rejected and not-rejected replications.');
+}
+function renderCwStatPlots() {
+  cwRenderStatPanel('cw-stat-pool', 'pool');
+  cwRenderStatPanel('cw-stat-welch', 'welch');
+  $('cw-stat-cap').innerHTML = cwStatLegendHtml() + cwStatCaption(ST.cmp.res);
+}
+
+/* ── The sweep plots ───────────────────────────────────────────────────
+   Both plots share one x axis: log2 of the seven swept ratios, so that
+   1/2 and 2 sit equally far from 1.  CW_RATIOS is the order PA.cmpStages
+   ran them in, and cwSeriesFor reads its result back in that same order. */
+var CW_RATIOS = [0.25, 1 / 3, 0.5, 1, 2, 3, 4];
+var CW_RLABELS = ['1/4', '1/3', '1/2', '1', '2', '3', '4'];
+function cwLogTicks() { return CW_RATIOS.map(function (r) { return Math.log2(r); }); }
+function cwLabelForLog(v) {
+  var best = 0, bd = Infinity, ticks = cwLogTicks();
+  ticks.forEach(function (t, i) { var d = Math.abs(t - v); if (d < bd) { bd = d; best = i; } });
+  return CW_RLABELS[best];
+}
+function cwSeriesFor(res, key, isAlpha) {
+  return res.sweep.map(function (r) {
+    var c = r[key], num = isAlpha ? c.nul : c.alt, w = PA.wilson(num, r.m);
+    return { ratio: r.ratio, val: num / r.m, lo: w.lo, hi: w.hi };
+  });
+}
+function cwHeadPoint(res, key, isAlpha) {
+  var h = res.head, c = h[key], num = isAlpha ? c.nul : c.alt, w = PA.wilson(num, h.m);
+  return { val: num / h.m, lo: w.lo, hi: w.hi };
+}
+/* One test's band: its 95% Wilson interval at each of the seven ratios,
+   joined by straight segments.  Between two swept ratios the band is only a
+   join, not an estimate, which is why the markers stay on the line. */
+function cwDrawBand(fr, series, color) {
+  var top = [], bot = [];
+  series.forEach(function (pt) {
+    var x = fr.X(Math.log2(pt.ratio));
+    top.push([x, fr.Y(pt.hi)]); bot.unshift([x, fr.Y(pt.lo)]);
+  });
+  return '<path d="' + polyPath(top.concat(bot)) + 'Z" fill="' + color + '" opacity="0.2"/>';
+}
+/* One test's sweep over its band: a line through the points (dashed for
+   pooled, solid for Welch) and a marker at each point (hollow square for
+   pooled, filled circle for Welch); the second cue that keeps the pair
+   distinguishable without relying on hue. */
+function cwDrawTest(fr, series, color, dashed, hollow) {
+  var s = '', pts = [];
+  series.forEach(function (pt) { pts.push([fr.X(Math.log2(pt.ratio)), fr.Y(pt.val)]); });
+  s += '<path d="' + polyPath(pts) + '" fill="none" stroke="' + color + '" stroke-width="2"' +
+       (dashed ? ' stroke-dasharray="6 4"' : '') + '/>';
+  pts.forEach(function (p) {
+    s += hollow ?
+      ('<rect x="' + N(p[0] - 4, 6) + '" y="' + N(p[1] - 4, 6) + '" width="8" height="8" fill="' +
+       C.bg + '" stroke="' + color + '" stroke-width="1.6"/>') :
+      ('<circle cx="' + N(p[0], 6) + '" cy="' + N(p[1], 6) + '" r="4.2" fill="' + color + '"/>');
+  });
+  return s;
+}
+/* The headline result, drawn larger at the current ratio so a reader can
+   see how the sweep's continuous line relates to the single dataset the
+   cards above describe. */
+function cwDrawHead(fr, curLog, head, color, hollow) {
+  var x = fr.X(curLog), y = fr.Y(head.val);
+  var s = svLine(x, fr.Y(head.lo), x, fr.Y(head.hi), 'stroke:' + color + ';stroke-width:2.2');
+  s += hollow ?
+    ('<rect x="' + N(x - 6.5, 6) + '" y="' + N(y - 6.5, 6) + '" width="13" height="13" fill="' +
+     C.bg + '" stroke="' + color + '" stroke-width="2.2"/>') :
+    ('<circle cx="' + N(x, 6) + '" cy="' + N(y, 6) + '" r="6.5" fill="' + color +
+     '" stroke="#fff" stroke-width="1.5"/>');
+  return s;
+}
+/* Each sweep plot carries its own legend inside the frame.  The curves can
+   reach any corner as the settings change (power nears 1, and the pooled α
+   climbs at either end of the ratio axis), and so the legend goes to the
+   corner holding the fewest of the plot's marks, trying the top right
+   first.  occupied lists the marks' pixel positions. */
+function cwInPlotLegend(fr, isAlpha, occupied, showSel) {
+  var rows = [['band', C.pooled, true, true, 'pooled t test'],
+              ['band', C.welch, false, false, 'Welch’s t test']];
+  if (isAlpha) rows.push(['line', C.muted, true, false, 'nominal α']);
+  if (showSel) rows.push(['sel', C.text, false, false, 'selected ratio']);
+  var bw = 118, rh = 15, bh = rows.length * rh + 8, pad = 6;
+  var corners = [[fr.mL + fr.iw - pad - bw, fr.mT + pad], [fr.mL + pad, fr.mT + pad],
+                 [fr.mL + fr.iw - pad - bw, fr.mT + fr.ih - pad - bh], [fr.mL + pad, fr.mT + fr.ih - pad - bh]];
+  var best = corners[0], bestHits = Infinity;
+  corners.forEach(function (c) {
+    var hits = 0;
+    occupied.forEach(function (q) {
+      if (q[0] > c[0] - 4 && q[0] < c[0] + bw + 4 && q[1] > c[1] - 4 && q[1] < c[1] + bh + 4) hits++;
+    });
+    if (hits < bestHits) { bestHits = hits; best = c; }
+  });
+  var x0 = best[0], y0 = best[1];
+  var out = '<rect x="' + N(x0, 6) + '" y="' + N(y0, 6) + '" width="' + bw + '" height="' + bh +
+    '" rx="4" style="fill:' + C.bg + ';stroke:' + C.grid + ';stroke-width:1;opacity:0.94"/>';
+  rows.forEach(function (r, i) {
+    var cy = y0 + 4 + rh * i + rh / 2, lx = x0 + 6;
+    if (r[0] === 'band')
+      out += '<rect x="' + N(lx, 6) + '" y="' + N(cy - 5, 6) + '" width="28" height="10" fill="' + r[1] +
+             '" opacity="0.2"/>';
+    if (r[0] === 'sel')
+      out += svLine(lx + 14, cy - 6, lx + 14, cy + 6, 'stroke:' + r[1] + ';stroke-width:1;stroke-dasharray:2 3;opacity:0.5');
+    else
+      out += svLine(lx, cy, lx + 28, cy, 'stroke:' + r[1] + ';stroke-width:' + (r[0] === 'band' ? 2 : 1.3) +
+                    (r[2] ? ';stroke-dasharray:' + (r[0] === 'band' ? '6 4' : '5 4') : ''));
+    if (r[0] === 'band')
+      out += r[3] ? ('<rect x="' + N(lx + 10, 6) + '" y="' + N(cy - 4, 6) + '" width="8" height="8" fill="' +
+                     C.bg + '" stroke="' + r[1] + '" stroke-width="1.6"/>')
+                  : ('<circle cx="' + N(lx + 14, 6) + '" cy="' + N(cy, 6) + '" r="4" fill="' + r[1] + '"/>');
+    out += svTxt(lx + 34, cy + 3.5, r[4], FONT + ';font-size:10.5px;fill:' + C.text, 'start');
+  });
+  return out;
+}
+var CW = { a: null, p: null };  /* last-drawn geometry, for the hover readout */
+function renderCwPlotOne(svgId, isAlpha) {
+  var svg = $(svgId);
+  var gm = plotGeom(svg, 460, 300, 1.15, 380);
+  var W = gm.W, H = gm.H, res = ST.cmp.res;
+  var yhi = 1;
+  if (isAlpha) {
+    yhi = 0.3;
+    if (res) {
+      var his = [ST.cmp.alpha];
+      res.sweep.forEach(function (r) {
+        his.push(PA.wilson(r.pool.nul, r.m).hi, PA.wilson(r.welch.nul, r.m).hi);
+      });
+      his.push(PA.wilson(res.head.pool.nul, res.head.m).hi, PA.wilson(res.head.welch.nul, res.head.m).hi);
+      var maxHi = Math.max.apply(null, his);
+      while (yhi < maxHi + 1e-9) yhi = Math.round((yhi + 0.05) * 100) / 100;
+    }
+  }
+  var fr = frame(W, H, gm.narrow ? 40 : 46, 12, 14, gm.narrow ? 46 : 38, -2, 2, 0, yhi);
+  var yticks = isAlpha ? niceTicks(0, yhi, gm.narrow ? 4 : 6) : [0, 0.2, 0.4, 0.6, 0.8, 1];
+  var s = drawAxes(fr, cwLogTicks(), yticks, mathSvg('σ_B/σ_A'), isAlpha ? 'actual α' : 'power',
+                   cwLabelForLog, function (v) { return N(v, isAlpha ? 3 : 2); });
+  if (isAlpha) {
+    s += svLine(fr.mL, fr.Y(ST.cmp.alpha), fr.mL + fr.iw, fr.Y(ST.cmp.alpha),
+                'stroke:' + C.muted + ';stroke-width:1.3;stroke-dasharray:5 4');
+  }
+  var curLog = Math.log2(ST.cmp.sigmaB / ST.cmp.sigmaA);
+  var inRange = curLog >= -2 - 1e-9 && curLog <= 2 + 1e-9;
+  var points = [];
+  if (res) {
+    var poolSeries = cwSeriesFor(res, 'pool', isAlpha), welchSeries = cwSeriesFor(res, 'welch', isAlpha);
+    /* Both bands first, so that neither covers the other test's line. */
+    s += cwDrawBand(fr, poolSeries, C.pooled) + cwDrawBand(fr, welchSeries, C.welch);
+    s += cwDrawTest(fr, poolSeries, C.pooled, true, true);
+    s += cwDrawTest(fr, welchSeries, C.welch, false, false);
+    if (inRange) {
+      s += svLine(fr.X(curLog), fr.mT, fr.X(curLog), fr.mT + fr.ih,
+                  'stroke:' + C.text + ';stroke-width:1;stroke-dasharray:2 3;opacity:0.5');
+      s += cwDrawHead(fr, curLog, cwHeadPoint(res, 'pool', isAlpha), C.pooled, true);
+      s += cwDrawHead(fr, curLog, cwHeadPoint(res, 'welch', isAlpha), C.welch, false);
+    }
+    poolSeries.forEach(function (ps, i) {
+      points.push({ x: fr.X(Math.log2(ps.ratio)), label: CW_RLABELS[i],
+                    pool: ps.val, welch: welchSeries[i].val });
+    });
+  }
+  /* The marks a legend must not cover: each series' line and band edges,
+     sampled between the swept ratios, the headline markers, and the
+     nominal-α line. */
+  var occupied = [];
+  if (res) {
+    [poolSeries, welchSeries].forEach(function (ser) {
+      for (var k = 0; k + 1 < ser.length; k++) {
+        for (var t = 0; t <= 8; t++) {
+          var f = t / 8, xx = fr.X(Math.log2(ser[k].ratio) * (1 - f) + Math.log2(ser[k + 1].ratio) * f);
+          ['val', 'lo', 'hi'].forEach(function (fld) {
+            occupied.push([xx, fr.Y(ser[k][fld] * (1 - f) + ser[k + 1][fld] * f)]);
+          });
+        }
+      }
+    });
+    if (inRange) {
+      ['pool', 'welch'].forEach(function (key) {
+        occupied.push([fr.X(curLog), fr.Y(cwHeadPoint(res, key, isAlpha).val)]);
+      });
+    }
+  }
+  if (isAlpha) {
+    for (var q = 0; q <= 20; q++) occupied.push([fr.mL + fr.iw * q / 20, fr.Y(ST.cmp.alpha)]);
+  }
+  s += cwInPlotLegend(fr, isAlpha, occupied, !!res && inRange);
+  var hp = svgId === 'cw-plot-a' ? 'cw-hov-a' : 'cw-hov-p';
+  var bw = gm.narrow ? 152 : 170, bh = 40;
+  s += '<g id="' + hp + '" style="display:none;pointer-events:none">' +
+       '<line id="' + hp + '-x" x1="0" y1="0" x2="0" y2="0" style="stroke:' + C.muted +
+       ';stroke-width:1;stroke-dasharray:2 3"/>' +
+       '<rect id="' + hp + '-r" width="' + bw + '" height="' + bh + '" rx="5" style="fill:#fff;' +
+       'stroke:' + C.grid + ';stroke-width:1.2;opacity:.96"/>' +
+       '<text id="' + hp + '-t" style="' + MONO + ';font-size:' + (gm.narrow ? 9.5 : 10.5) +
+       'px;fill:' + C.text + '"></text></g>';
+  svg.innerHTML = s;
+  var state = { W: W, H: H, fr: fr, narrow: gm.narrow, points: points, hp: hp };
+  if (svgId === 'cw-plot-a') CW.a = state; else CW.p = state;
+}
+function cwCaption(isAlpha, res) {
+  if (!res) return 'Results appear once the first run finishes, in about three seconds.';
+  var curRatio = ST.cmp.sigmaB / ST.cmp.sigmaA;
+  var inRange = curRatio >= 0.25 - 1e-9 && curRatio <= 4 + 1e-9;
+  var base = isAlpha ?
+    'Actual α (the rejection rate on a true null) for the pooled test (dashed line, hollow ' +
+    'squares) and Welch’s test (solid line, filled circles). Each shaded band joins that ' +
+    'test’s 95% Wilson intervals at the seven swept ratios; between two ratios the band is a ' +
+    'straight join, not an estimate. The larger markers on the dotted line are the headline run ' +
+    'at the selected ratio. Hover with a mouse, or touch and hold, ' +
+    'near a ratio to read both tests’ values there.' :
+    'Power for the same two tests across σ_B/σ_A, each with its band of 95% Wilson intervals ' +
+    'joined across the swept ratios. Hover with a mouse, or touch and hold, near a ratio to read ' +
+    'both tests’ values there.';
+  if (!inRange)
+    base += ' The current ratio σ_B/σ_A = ' + N(curRatio, 3) + ' falls outside the sweep’s ' +
+      'range and so is not marked on the chart.';
+  return mathHtml(base);
+}
+function renderCwPlots() {
+  renderCwPlotOne('cw-plot-a', true);
+  renderCwPlotOne('cw-plot-p', false);
+  $('cw-cap-a').innerHTML = cwCaption(true, ST.cmp.res);
+  $('cw-cap-p').innerHTML = cwCaption(false, ST.cmp.res);
+}
+function renderCwAll() {
+  renderCwDataPlot();
+  $('cw-data-cap').innerHTML = cwDataCaption();
+  cwCardsHtml(ST.cmp.res);
+  $('cw-verdict').innerHTML = mathHtml(cwVerdictText(ST.cmp.res));
+  renderCwStatPlots();
+  renderCwPlots();
+}
+
+/* Read-only hover/tap: the whole plot is the hit area (there is nothing to
+   drag), and so it snaps to whichever of the seven ratios is nearest the
+   pointer.  Touch mirrors the OC chart's hold-then-read gesture: a finger
+   reads immediately, and only after it has held still for a moment does a
+   further slide stay claimed by the chart instead of scrolling the page. */
+function cwNearest(state, px) {
+  var best = 0, bd = Infinity;
+  state.points.forEach(function (pt, i) { var d = Math.abs(pt.x - px); if (d < bd) { bd = d; best = i; } });
+  return state.points[best];
+}
+function wireCwPlot(svgId, getState) {
+  var svg = $(svgId);
+  var holdTimer = null, probing = false, down = null;
+  function cancelHold() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } }
+  function toVBxy(cx, cy) {
+    var r = svg.getBoundingClientRect(), st = getState();
+    var W = st ? st.W : 460, H = st ? st.H : 300;
+    return { px: (cx - r.left) * W / (r.width || W), py: (cy - r.top) * H / (r.height || H) };
+  }
+  function inPlot(q) {
+    var st = getState();
+    if (!st) return false;
+    var fr = st.fr;
+    return q.px >= fr.mL && q.px <= fr.mL + fr.iw && q.py >= fr.mT && q.py <= fr.mT + fr.ih;
+  }
+  function hide() {
+    var st = getState();
+    if (st) { var g = $(st.hp); if (g) g.style.display = 'none'; }
+  }
+  function show(q) {
+    var st = getState();
+    if (!st || !st.points.length || !inPlot(q)) { hide(); return; }
+    var pt = cwNearest(st, q.px), g = $(st.hp);
+    if (!g) return;
+    g.style.display = '';
+    var hx = $(st.hp + '-x');
+    hx.setAttribute('x1', pt.x); hx.setAttribute('x2', pt.x);
+    hx.setAttribute('y1', st.fr.mT); hx.setAttribute('y2', st.fr.mT + st.fr.ih);
+    var bw = st.narrow ? 152 : 170, bh = 40;
+    var rx = Math.min(Math.max(pt.x - bw / 2, st.fr.mL + 2), st.fr.mL + st.fr.iw - bw - 2);
+    var ry = st.fr.mT + 4;
+    var hr = $(st.hp + '-r'); hr.setAttribute('x', rx); hr.setAttribute('y', ry);
+    $(st.hp + '-t').innerHTML =
+      '<tspan x="' + N(rx + 8, 6) + '" y="' + N(ry + 15, 6) + '">ratio ' + pt.label + '</tspan>' +
+      '<tspan x="' + N(rx + 8, 6) + '" y="' + N(ry + 28, 6) + '">pooled ' + N(pt.pool, 4) +
+      '  ·  Welch ' + N(pt.welch, 4) + '</tspan>';
+  }
+  /* Only the hold gesture claims the page's scroll; a plain swipe is never
+     intercepted, and so it scrolls exactly as it would over any other plot. */
+  svg.addEventListener('touchmove', function (ev) { if (probing) ev.preventDefault(); }, { passive: false });
+  svg.addEventListener('pointerdown', function (ev) {
+    var q = toVBxy(ev.clientX, ev.clientY);
+    down = { cx: ev.clientX, cy: ev.clientY };
+    cancelHold(); probing = false;
+    if (ev.pointerType === 'mouse') { show(q); return; }
+    if (inPlot(q)) {
+      show(q);
+      holdTimer = setTimeout(function () { holdTimer = null; probing = true; }, OC_HOLD_MS);
+    }
+  });
+  svg.addEventListener('pointermove', function (ev) {
+    var q = toVBxy(ev.clientX, ev.clientY);
+    if (holdTimer && down &&
+        Math.abs(ev.clientX - down.cx) + Math.abs(ev.clientY - down.cy) > OC_HOLD_SLOP)
+      cancelHold();
+    if (ev.pointerType === 'mouse') { show(q); return; }
+    if (down) show(q);
+  });
+  ['pointerup', 'pointercancel'].forEach(function (evName) {
+    svg.addEventListener(evName, function (ev) {
+      cancelHold(); probing = false; down = null;
+      if (ev.pointerType !== 'mouse') hide();
+    });
+  });
+  svg.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') hide(); });
+}
+
+/* ── Change plumbing ───────────────────────────────────────────────── */
+var cwTimer = null, cwAutoRan = false;
+function cwReadNumber(id, def, lo, hi) {
+  var v = Number($(id).value);
+  if (!Number.isFinite(v)) v = def;
+  if (lo !== undefined) v = Math.max(lo, v);
+  if (hi !== undefined) v = Math.min(hi, v);
+  return v;
+}
+function cwScheduleRun() {
+  clearTimeout(cwTimer);
+  cwTimer = setTimeout(runCwJob, 400);
+}
+function cwControlsChanged() {
+  ST.cmp.dmu = cwReadNumber('cw-dmu', 1);
+  ST.cmp.sigmaA = cwReadNumber('cw-sA', 2, 1e-6); $('cw-sA').value = N(ST.cmp.sigmaA, 4);
+  ST.cmp.sigmaB = cwReadNumber('cw-sB', 1, 1e-6); $('cw-sB').value = N(ST.cmp.sigmaB, 4);
+  cwRenderNbRead();
+  cwScheduleRun();
+}
+/* n_A and r each get their own handler because "hold the total fixed"
+   changes what the OTHER one does: moving r under a held total recomputes
+   n_A instead of leaving it alone, and typing n_A directly re-records the
+   total that r will be held to from here on. */
+function cwNAChanged() {
+  ST.cmp.nA = Math.max(2, Math.floor(cwReadNumber('cw-nA', 10, 2))); $('cw-nA').value = ST.cmp.nA;
+  if (ST.cmp.holdTotal) ST.cmp.total = ST.cmp.nA + PA.groupB(ST.cmp.nA, { r: ST.cmp.r });
+  cwRenderNbRead();
+  cwScheduleRun();
+}
+function cwRChanged() {
+  ST.cmp.r = cwReadNumber('cw-r', 2.5, 0.1, 10); $('cw-r').value = N(ST.cmp.r, 4);
+  if (ST.cmp.holdTotal && ST.cmp.total) {
+    ST.cmp.nA = cwBestNAForTotal(ST.cmp.r, ST.cmp.total);
+    $('cw-nA').value = ST.cmp.nA;
+  }
+  cwRenderNbRead();
+  cwScheduleRun();
+}
+function cwHoldTotalChanged() {
+  ST.cmp.holdTotal = $('cw-holdtotal').checked;
+  if (ST.cmp.holdTotal) ST.cmp.total = ST.cmp.nA + PA.groupB(ST.cmp.nA, { r: ST.cmp.r });
+  cwRenderNbRead();
+}
+function cwFreshSeed() {
+  var mix = PA.MRG32k3a((Date.now() ^ (performance.now() * 1000)) >>> 0);
+  return Math.floor(mix() * 2147483647);
+}
+/* The seed line names the seed behind the results on screen, which is not
+   the box's value once a fresh seed has been queued for the next run. */
+function cwSeedMsg() {
+  var msg = '';
+  if (ST.cmp.res && ST.cmp.resSeed !== undefined) {
+    msg = 'These results used seed ' + ST.cmp.resSeed + '.';
+    if (ST.cmp.seed !== ST.cmp.resSeed) msg += ' The next run will use seed ' + ST.cmp.seed + '.';
+  }
+  $('cw-seed-msg').textContent = msg;
+}
+function runCwJob() {
+  var ratios = CW_RATIOS, mSweep = 2500, seedUsed = ST.cmp.seed;
+  var paramsUsed = { dmu: ST.cmp.dmu, sigmaA: ST.cmp.sigmaA, sigmaB: ST.cmp.sigmaB,
+                      nA: ST.cmp.nA, r: ST.cmp.r };
+  var msg = { job: 'cmp', params: cwParams(), n: ST.cmp.nA, alpha: ST.cmp.alpha,
+              sided: cwSidedCore(), m: ST.cmp.m, mSweep: mSweep, seed: ST.cmp.seed, ratios: ratios };
+  $('cw-prog-wrap').style.display = 'flex';
+  setProg('cw-prog', 'cw-prog-txt', 0, ST.cmp.m + mSweep * ratios.length, 'replications');
+  startJob(msg,
+    function (p) { setProg('cw-prog', 'cw-prog-txt', p.done, p.of, 'replications'); },
+    function (d) {
+      $('cw-prog-wrap').style.display = 'none';
+      ST.cmp.res = d.res;
+      ST.cmp.resSeed = seedUsed;
+      ST.cmp.resParams = paramsUsed;
+      ST.cmp.statScale = cwComputeStatScale(d.res);
+      if ($('cw-newseed').checked) {
+        ST.cmp.seed = cwFreshSeed();
+        $('cw-seed').value = String(ST.cmp.seed);
+      }
+      cwSeedMsg();
+      renderCwAll();
+    });
+}
+
 /* ── Paired & pilot tab ────────────────────────────────────────────── */
 function pairedState() {
   return { s1: Number($('pr-s1').value), s2: Number($('pr-s2').value),
@@ -4555,8 +5918,8 @@ function renderPaired() {
   html += card('power of ' + st.n + ' pairs', N(pw, 4), 'paired t, two-sided α = ' + N(ST.alpha, 3));
   html += card('pairs for power ' + N(st.target, 3), Number.isFinite(nStar) ? String(nStar) : '—',
                Number.isFinite(n0) ? 'vs ' + n0 + ' pairs at ρ = 0' : '');
-  html += card(lit('σ') + ' of a pair mean ½(X+X′)', N(sMean, 5),
-               'the antithetic view: a SUM wants ρ < 0');
+  html += card(lit('σ') + ' of a pair mean', N(sMean, 5),
+               'the mean ½(X + X′), which negative ρ shrinks: the antithetic-variates view');
   $('pr-cards').innerHTML = html;
 
   var gm = plotGeom($('pr-plot'), 460, 280, 0.92, 380);
@@ -4794,8 +6157,6 @@ function settingsChanged() {
   syncRunBtn();
   ST.seed = parseSeed($('seed').value);
   renderSided();
-  renderAlpha();
-  renderOCStruct();
   if (ST.mode === 'n') renderSolve();
   renderNVPlot();
   renderCritPanel();
@@ -4819,9 +6180,16 @@ function renderEffectRead() {
     $('effect-read').textContent = 'Difference from the null: p₁ − p₀ = ' +
       N(curParams().p1 - curParams().p0, 4);
   } else {
-    var elbl = t.effect.label;
-    $('effect-read').innerHTML = mathHtml(elbl.charAt(0).toUpperCase() + elbl.slice(1)) + ' = ' +
-      N(curEffect(), 4);
+    var elbl = t.effect.label, p = curParams();
+    var html = mathHtml(elbl.charAt(0).toUpperCase() + elbl.slice(1)) + ' = ' + N(curEffect(), 4);
+    if (t.id === 'tw')
+      html += mathHtml(', where σ̄ = √((σ_A² + σ_B²)/2) = ' + N(PA.rmsSigma(p), 4));
+    /* A two-group design is two sizes, and the n control sets only the first. */
+    if (t.twoGroup) {
+      var n = curN(), nb = PA.groupB(n, p);
+      html += mathHtml('. Group sizes n_A = ' + n + ' and n_B = ' + nb + ' (total ' + (n + nb) + ').');
+    }
+    $('effect-read').innerHTML = html;
   }
   $('test-desc').textContent = t.short;
 }
@@ -4829,12 +6197,10 @@ function renderEffectRead() {
 function switchTest(id) {
   ST.test = id;
   $('test-select').value = id;
-  $('oc-test').value = id;
   ST.solved = null;
   renderParams();
   renderNControls();
   if (ST.mode === 'n') renderSolve();
-  seedOCLookup();   /* keep the OC lookup in step with the new test */
   settingsChanged();
 }
 
@@ -4876,9 +6242,15 @@ function renderVisibleTab() {
   if (curTab === 'curves' && TAB_DIRTY.curves) { renderCurves(); TAB_DIRTY.curves = false; }
   if (curTab === 'oc' && TAB_DIRTY.oc) { renderOC(); TAB_DIRTY.oc = false; }
   if (curTab === 'paired') renderPaired();
+  if (curTab === 'welch' && geomStale($('cw-data-plot'), 940)) renderCwDataPlot();
+  if (curTab === 'welch' && geomStale($('cw-stat-pool'), 460)) renderCwStatPlots();
+  if (curTab === 'welch' && geomStale($('cw-plot-a'), 460)) renderCwPlots();
   /* The gamma-regression demo runs itself the first time the tab is opened so
      that the panel is never a blank form. */
   if (curTab === 'adv' && !adAutoRan) { adAutoRan = true; runLogit(); }
+  /* Likewise the pooled-vs.-Welch tab, whose cards and plots otherwise sit
+     on the placeholder dashes drawn at page load. */
+  if (curTab === 'welch' && !cwAutoRan) { cwAutoRan = true; runCwJob(); }
   /* Opening another tab can cancel an in-flight tab-① run; coming back
      with stale results and auto-run on, the run refires. */
   if (curTab === 'explore' && $('mc-auto').checked && ST.m <= 50000 &&
@@ -4903,36 +6275,45 @@ document.addEventListener('DOMContentLoaded', function () {
     settingsChanged();
   }
   $('alpha-sel').addEventListener('change', function () { setAlpha(Number(this.value)); });
-  /* The OC tab's box takes any level in range: an entry outside it is
-     pulled to the nearer end, and one that is not a number is undone. */
-  $('oc-alpha').addEventListener('change', function () {
-    var v = Number(this.value);
-    if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(ST.alpha, 4); return; }
-    /* Rounded to the four figures the boxes show, so the level on screen
-       is the level in use. */
-    setAlpha(Number(N(Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, v)), 4)));
-  });
-  Array.prototype.forEach.call($('oc-alpha-seg').children, function (b) {
-    b.addEventListener('click', function () { setAlpha(Number(b.dataset.alpha)); });
-  });
-  ['sided-seg', 'oc-sided-seg'].forEach(function (id) {
-    Array.prototype.forEach.call($(id).children, function (b) {
-      b.addEventListener('click', function () {
-        var sd = b.dataset.sided;
-        /* The OC tab's single one-sided choice keeps a direction already
-           chosen, and otherwise takes the one the effect on tab ① points. */
-        if (sd === 'one') {
-          if (ST.sided !== 'two') return;
-          sd = curEffect() < (curTest().effect.zero || 0) ? 'left' : 'right';
-        }
-        ST.sided = sd;
-        if (ST.mode === 'n') renderSolve();
-        settingsChanged();
-      });
+  Array.prototype.forEach.call($('sided-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      ST.sided = b.dataset.sided;
+      if (ST.mode === 'n') renderSolve();
+      settingsChanged();
     });
   });
-  $('oc-test').addEventListener('change', function () { switchTest(this.value); });
-  $('oc-struct-in').addEventListener('change', function () { readOCStruct(this); });
+
+  /* The OC chart tab's own controls.  Its α box takes any level in range:
+     an entry outside it is pulled to the nearer end, one that is not a
+     number is undone, and the rest is rounded to the four figures the box
+     shows, so that the level on screen is the level in use. */
+  $('oc-alpha').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(ST.oc.alpha, 4); return; }
+    ST.oc.alpha = Number(N(Math.min(ALPHA_MAX, Math.max(ALPHA_MIN, v)), 4));
+    ocSettingsChanged();
+  });
+  Array.prototype.forEach.call($('oc-alpha-seg').children, function (b) {
+    b.addEventListener('click', function () { ST.oc.alpha = Number(b.dataset.alpha); ocSettingsChanged(); });
+  });
+  /* The single one-sided choice of a symmetric test keeps a direction
+     already chosen; the magnitude chart is the same for either. */
+  Array.prototype.forEach.call($('oc-sided-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      var sd = b.dataset.sided;
+      if (sd === 'one') {
+        if (ST.oc.sided !== 'two') return;
+        sd = 'right';
+      }
+      ST.oc.sided = sd;
+      ocSettingsChanged();
+    });
+  });
+  $('oc-test').addEventListener('change', function () {
+    ST.oc.test = this.value;
+    seedOCLookup();
+    ocSettingsChanged();
+  });
   Array.prototype.forEach.call($('mode-seg').children, function (b) {
     b.addEventListener('click', function () {
       ST.mode = b.dataset.mode;
@@ -5061,6 +6442,57 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   $('ad-run').addEventListener('click', runLogit);
 
+  /* ── Pooled vs. Welch tab ──────────────────────────────────────────── */
+  ['cw-dmu', 'cw-sA', 'cw-sB'].forEach(function (id) {
+    $(id).addEventListener('change', cwControlsChanged);
+  });
+  $('cw-nA').addEventListener('change', cwNAChanged);
+  $('cw-r').addEventListener('change', cwRChanged);
+  $('cw-holdtotal').addEventListener('change', cwHoldTotalChanged);
+  $('cw-alpha').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(ST.cmp.alpha, 4); return; }
+    ST.cmp.alpha = Number(N(Math.min(0.2, Math.max(0.001, v)), 4));
+    renderCwAlpha();
+    cwScheduleRun();
+  });
+  Array.prototype.forEach.call($('cw-alpha-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      ST.cmp.alpha = Number(b.dataset.alpha);
+      renderCwAlpha();
+      cwScheduleRun();
+    });
+  });
+  Array.prototype.forEach.call($('cw-sided-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      ST.cmp.sided = b.dataset.sided;
+      Array.prototype.forEach.call($('cw-sided-seg').children, function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      cwScheduleRun();
+    });
+  });
+  $('cw-m').addEventListener('change', function () { ST.cmp.m = Number(this.value); cwScheduleRun(); });
+  $('cw-seed').addEventListener('change', function () {
+    ST.cmp.seed = parseSeed(this.value);
+    this.value = String(ST.cmp.seed);
+    cwScheduleRun();
+  });
+  $('cw-seed-new').addEventListener('click', function () {
+    ST.cmp.seed = cwFreshSeed();
+    $('cw-seed').value = String(ST.cmp.seed);
+    cwScheduleRun();
+  });
+  wireCwPlot('cw-plot-a', function () { return CW.a; });
+  wireCwPlot('cw-plot-p', function () { return CW.p; });
+  /* Reserve the cards', verdict's, and plots' full height with placeholder
+     dashes and bare axes before the tab is ever opened, so the first real
+     run that follows changes numbers in place rather than the page's
+     height. */
+  cwRenderNbRead();
+  renderCwAlpha();
+  renderCwAll();
+
   Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
     b.addEventListener('click', function (e) { e.preventDefault(); showTab(b.dataset.tab); });
   });
@@ -5081,12 +6513,14 @@ document.addEventListener('DOMContentLoaded', function () {
       TAB_DIRTY.curves = TAB_DIRTY.oc = true;
       if (curTab === 'explore') { renderNVPlot(); renderTrace(); }
       if (curTab === 'adv') redrawAdTrace();
+      if (curTab === 'welch') { renderCwDataPlot(); renderCwStatPlots(); renderCwPlots(); }
       renderVisibleTab();
     }, 160);
   });
 
   /* Open on something moving rather than a blank page */
   seedOCLookup();
+  renderOCControls();
   settingsChanged();
 
   /* An incoming #id link opens straight to that tab instead of the default. */
