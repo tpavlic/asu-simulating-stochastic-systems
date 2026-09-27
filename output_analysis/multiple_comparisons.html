@@ -110,6 +110,13 @@ nav.picker { margin: 4px 0 16px; }
 .ctrl-grp-lbl { font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
                 color: var(--muted); margin: 2px 0 6px; }
 .ctrl-grp-lbl .tip { text-decoration-color: var(--muted); }
+/* Both control groups and the run row share one card, the experiment's
+   whole setup, with the group labels dividing it the way the picker card's
+   labels divide the pills; the run row sits last, under a rule, because
+   running is the last step of setting up. */
+.ctrl-card .ctrl-row + .ctrl-grp-lbl { margin-top: 8px; }
+.ctrl-card .ctrl-row:not(.par-row) { margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ctrl-card .ctrl-row:last-child { margin-bottom: 0; }
 /* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
    the WCAG 2.5.8 floor. The rows are already taller than this, and so nothing moves. */
 .ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap;
@@ -502,67 +509,69 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ①: many designs against one target ──────────────────────── -->
   <section id="tab-looks" class="tp active">
     <p class="lede">Designs 1 through K are K candidate <span class="tip" tabindex="0" data-tip="One design measured on K response variables, each with its own target, where the family-wise problem is identical and MANOVA is the one-shot tool; the tab treats the K-designs case.">designs</span> of one system, each simulated R times and judged against one performance target, and the question is whether any design beats the target (the same question ANOVA asks of the designs against each other). Test K designs against one target, and you have made K decisions from one data set. Each test is wrong α of the time on its own, and the chance that at least one of them is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one wrong rejection. It grows with the number of comparisons even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval. Tab ②, Designs Against Each Other, compares the designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of designs tested, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="looks-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="looksKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
-        <input class="par-inp" id="looks-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="looksRChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual test would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
-        <select id="looks-alpha" onchange="looksAlphaChanged()">
-          <option value="0.01">0.01</option>
-          <option value="0.05" selected>0.05</option>
-          <option value="0.1">0.10</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-theta0"><span class="tip" tabindex="0" data-tip="The one value every design's interval is tested against. Drag the dashed line in the figure below instead of typing here if you would rather move it by eye. Arrow keys move it by 0.1; hold Shift for 1.">Target θ₀</span></label>
-        <input class="par-inp" id="looks-theta0" type="text" inputmode="decimal" value="10" autocomplete="off" spellcheck="false" data-post onchange="looksTheta0Changed()">
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-interval level</span></label>
-        <select id="looks-level" data-post onchange="looksLevelChanged()">
-          <option value="raw" selected>1 − α (no correction)</option>
-          <option value="bonf">1 − α/K (Bonferroni)</option>
-        </select>
-      </span>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="looks-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design exactly at the target, and so any rejection there is false; the other settings move one, two, or every design away from it by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
-        <select id="looks-cfg" onchange="looksCfgChanged()">
-          <option value="all" selected>All equal</option>
-          <option value="one">One design better by δ</option>
-          <option value="two">Two designs better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the target under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="looks-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="looksDeltaChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="looks-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="looks-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="looksSigmaChanged()">
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="looks-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="looks-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('looks')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('looks');}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="looks-newseed" checked> <span class="tip">New seed after each run</span>
-        </label>
-      </span>
-      <button class="btn-run" id="looks-run" onclick="runOne('looks')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="clearHist('looks')">Clear history</button>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of designs tested, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="looks-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="looksKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="looks-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="looksRChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual test would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
+          <select id="looks-alpha" onchange="looksAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-theta0"><span class="tip" tabindex="0" data-tip="The one value every design's interval is tested against. Drag the dashed line in the figure below instead of typing here if you would rather move it by eye. Arrow keys move it by 0.1; hold Shift for 1.">Target θ₀</span></label>
+          <input class="par-inp" id="looks-theta0" type="text" inputmode="decimal" value="10" autocomplete="off" spellcheck="false" data-post onchange="looksTheta0Changed()">
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-interval level</span></label>
+          <select id="looks-level" data-post onchange="looksLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/K (Bonferroni)</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="looks-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design exactly at the target, and so any rejection there is false; the other settings move one, two, or every design away from it by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
+          <select id="looks-cfg" onchange="looksCfgChanged()">
+            <option value="all" selected>All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two">Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the target under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="looks-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="looksDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="looks-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="looksSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="looks-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="looks-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('looks')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('looks');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="looks-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="looks-run" onclick="runOne('looks')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('looks')">Clear history</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd" id="looks-fig-title">Five candidate designs against one target (bigger is better)</div>
@@ -613,73 +622,75 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ②: comparing designs ────────────────────────────────────── -->
   <section id="tab-pairs" class="tp">
     <p class="lede">Comparing designs means intervals on differences: a benchmark against every other design gives K − 1 of them, and every pair gives K(K − 1)/2. The intervals share data, and so the independent-comparisons formula is no longer exact, but the <span class="tip" tabindex="0" data-tip="The union bound C&middot;α_j on the family-wise error rate. It holds no matter how the comparisons correlate with each other, unlike the independent-comparisons formula, which needs the comparisons to share no data.">Bonferroni bound</span> needs no independence at all, which is why it is the textbook's choice when designs are run with <span class="tip" tabindex="0" data-tip="Draws each replication's own random component once and shares it across every design's r-th replication (an internal correlation of 0.8), the way giving every design the same random-number stream would. The two designs being compared then move together across replications, and so an interval on their difference comes from paired data instead of from two independent samples.">common random numbers</span>.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="pairs-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="pairs-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="pairsKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="pairs-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; its degrees of freedom are 2R − 2 for independently sampled designs or R − 1 once common random numbers pair the differences. Arrow keys move it by 1.">Replications R</span></label>
-        <input class="par-inp" id="pairs-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="pairsRChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="pairs-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
-        <select id="pairs-alpha" onchange="pairsAlphaChanged()">
-          <option value="0.01">0.01</option>
-          <option value="0.05" selected>0.05</option>
-          <option value="0.1">0.10</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="pairs-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
-        <select id="pairs-mode" onchange="pairsModeChanged()">
-          <option value="bench" selected>Against design 1</option>
-          <option value="all">All pairs</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison level</span></label>
-        <select id="pairs-level" data-post onchange="pairsLevelChanged()">
-          <option value="raw" selected>1 − α (no correction)</option>
-          <option value="bonf">1 − α/C (Bonferroni)</option>
-        </select>
-      </span>
-      <label class="ctrl-chk ctrl-pair-wide" data-tip="Shares a random component across every design's replication r (correlation 0.8) instead of drawing each design independently, and so switches the difference intervals from pooled two-sample t (2R − 2 degrees of freedom) to paired t on the differences themselves (R − 1 degrees of freedom)." data-tip-press>
-        <input type="checkbox" id="pairs-crn" onchange="pairsCrnChanged()"> <span class="tip">Common random numbers (paired intervals)</span>
-      </label>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="pairs-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero and any rejection is false; the other settings move one, two, or every design away from the rest by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
-        <select id="pairs-cfg" onchange="pairsCfgChanged()">
-          <option value="all" selected>All equal</option>
-          <option value="one">One design better by δ</option>
-          <option value="two">Two designs better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="pairs-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="pairs-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="pairsDeltaChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="pairs-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="pairs-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="pairsSigmaChanged()">
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="pairs-seed" type="text" inputmode="numeric" value="13579" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('pairs')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('pairs');}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="pairs-newseed" checked> <span class="tip">New seed after each run</span>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="pairs-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="pairsKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; its degrees of freedom are 2R − 2 for independently sampled designs or R − 1 once common random numbers pair the differences. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="pairs-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="pairsRChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
+          <select id="pairs-alpha" onchange="pairsAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="pairs-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
+          <select id="pairs-mode" onchange="pairsModeChanged()">
+            <option value="bench" selected>Against design 1</option>
+            <option value="all">All pairs</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison level</span></label>
+          <select id="pairs-level" data-post onchange="pairsLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/C (Bonferroni)</option>
+          </select>
+        </span>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Shares a random component across every design's replication r (correlation 0.8) instead of drawing each design independently, and so switches the difference intervals from pooled two-sample t (2R − 2 degrees of freedom) to paired t on the differences themselves (R − 1 degrees of freedom)." data-tip-press>
+          <input type="checkbox" id="pairs-crn" onchange="pairsCrnChanged()"> <span class="tip">Common random numbers (paired intervals)</span>
         </label>
-      </span>
-      <button class="btn-run" id="pairs-run" onclick="runOne('pairs')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="clearHist('pairs')">Clear history</button>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="pairs-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero and any rejection is false; the other settings move one, two, or every design away from the rest by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
+          <select id="pairs-cfg" onchange="pairsCfgChanged()">
+            <option value="all" selected>All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two">Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="pairs-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="pairsDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="pairs-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="pairsSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="pairs-seed" type="text" inputmode="numeric" value="13579" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('pairs')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('pairs');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="pairs-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="pairs-run" onclick="runOne('pairs')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('pairs')">Clear history</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Differences between designs (bigger is better)</div>
@@ -731,71 +742,73 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ③: power loss ───────────────────────────────────────────── -->
   <section id="tab-power" class="tp">
     <p class="lede">A correction that makes false rejections rarer also makes true ones rarer. Plant a real difference and watch how often each rule finds it. <span class="tip" tabindex="0" data-tip="Sorts the C raw p-values from smallest to largest and tests each in turn against a threshold that loosens as it goes, α/(C − m) at the m-th smallest (m counted from zero). The first comparison that fails to clear its own threshold, and every one sorted after it, are kept; nothing past that point is tested. Because later thresholds are looser than Bonferroni's flat α/C, a comparison can be rejected under Holm's rule even where Bonferroni would have kept it.">Holm's step-down</span> keeps the same family-wise guarantee as Bonferroni and gives some of the <span class="tip" tabindex="0" data-tip="The chance that a comparison whose true difference is not zero is correctly declared significant. A correction that shrinks the family-wise error rate does so by demanding stronger evidence per comparison, and so it also shrinks this chance for any one real difference.">power</span> back, and because it works on the sorted p-values rather than on the intervals, this is the tab where p-values get a column of their own. Holm's first threshold is Bonferroni's, and so it helps only once more than one comparison is real. At every pair among ten designs, 45 comparisons, each Bonferroni interval is about 1.8 times as wide as the uncorrected one, and only large differences are still detected; that loss is what motivates a one-shot test such as tab ⑤, ANOVA and Post Hoc Tests.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="power-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="power-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="powerKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="power-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; every comparison here is the pooled two-sample t at 2R − 2 degrees of freedom. Arrow keys move it by 1.">Replications R</span></label>
-        <input class="par-inp" id="power-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="powerRChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="power-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the height of none's flat curve in the plot below.">Significance α</span></label>
-        <select id="power-alpha" onchange="powerAlphaChanged()">
-          <option value="0.01">0.01</option>
-          <option value="0.05" selected>0.05</option>
-          <option value="0.1">0.10</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="power-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
-        <select id="power-mode" onchange="powerModeChanged()">
-          <option value="bench" selected>Against design 1</option>
-          <option value="all">All pairs</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="power-rule"><span class="tip" tabindex="0" data-tip="Which rule judges the comparisons drawn below: no correction, the Bonferroni bound, or Holm's step-down. It drives which column is highlighted in the cards, the Holm table, and the height of the history strip.">Rule</span></label>
-        <select id="power-rule" data-post onchange="powerRuleChanged()">
-          <option value="none">None</option>
-          <option value="bonf" selected>Bonferroni</option>
-          <option value="holm">Holm's step-down</option>
-        </select>
-      </span>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="power-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero; the default moves two designs away from the rest by δ, planting two real differences for the rules to find. ('Better' here means a larger true mean.)">Configuration</span></label>
-        <select id="power-cfg" onchange="powerCfgChanged()">
-          <option value="all">All equal</option>
-          <option value="one">One design better by δ</option>
-          <option value="two" selected>Two designs better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="power-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal; under the default configuration, this is the real difference planted for the rules to detect. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="power-delta" type="text" inputmode="decimal" value="2.5" autocomplete="off" spellcheck="false" onchange="powerDeltaChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="power-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="power-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="powerSigmaChanged()">
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="power-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="power-seed" type="text" inputmode="numeric" value="24680" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('power')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('power');}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="power-newseed" checked> <span class="tip">New seed after each run</span>
-        </label>
-      </span>
-      <button class="btn-run" id="power-run" onclick="runOne('power')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-rejection rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="clearHist('power')">Clear history</button>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="power-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="powerKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; every comparison here is the pooled two-sample t at 2R − 2 degrees of freedom. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="power-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="powerRChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the height of none's flat curve in the plot below.">Significance α</span></label>
+          <select id="power-alpha" onchange="powerAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="power-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
+          <select id="power-mode" onchange="powerModeChanged()">
+            <option value="bench" selected>Against design 1</option>
+            <option value="all">All pairs</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="power-rule"><span class="tip" tabindex="0" data-tip="Which rule judges the comparisons drawn below: no correction, the Bonferroni bound, or Holm's step-down. It drives which column is highlighted in the cards, the Holm table, and the height of the history strip.">Rule</span></label>
+          <select id="power-rule" data-post onchange="powerRuleChanged()">
+            <option value="none">None</option>
+            <option value="bonf" selected>Bonferroni</option>
+            <option value="holm">Holm's step-down</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="power-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero; the default moves two designs away from the rest by δ, planting two real differences for the rules to find. ('Better' here means a larger true mean.)">Configuration</span></label>
+          <select id="power-cfg" onchange="powerCfgChanged()">
+            <option value="all">All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two" selected>Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal; under the default configuration, this is the real difference planted for the rules to detect. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="power-delta" type="text" inputmode="decimal" value="2.5" autocomplete="off" spellcheck="false" onchange="powerDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="power-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="powerSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="power-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="power-seed" type="text" inputmode="numeric" value="24680" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('power')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('power');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="power-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="power-run" onclick="runOne('power')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-rejection rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('power')">Clear history</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Differences between designs, at the Bonferroni level (bigger is better)</div>
@@ -865,70 +878,72 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ④: pick the winner ──────────────────────────────────────── -->
   <section id="tab-winner" class="tp">
     <p class="lede">Simulate K designs, pick the one with the best sample mean, and report its ordinary confidence interval. The interval was built for a design chosen in advance, not for the winner of a race, and the winner's sample mean is <span class="tip" tabindex="0" data-tip="The minimum, or the maximum when bigger is better, of K sample means is pulled toward the tail by chance alone, even when every design truly shares the same mean. Picking it and then reporting an ordinary interval built as if that design had been chosen in advance ignores exactly that pull.">the extreme of K draws</span>. Watch its interval miss far more often than α, and see <span class="tip" tabindex="0" data-tip="Widens the winner's own interval to 1 − α/K, the same correction the earlier tabs use to hold a family of K comparisons at level α.">the Bonferroni level</span> put the coverage back.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="winner-K"><span class="tip" tabindex="0" data-tip="The number of designs simulated, and so the number of sample means the winner is picked from. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="winner-K" type="text" inputmode="numeric" value="8" autocomplete="off" spellcheck="false" onchange="winnerKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="winner-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
-        <input class="par-inp" id="winner-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="winnerRChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="winner-alpha"><span class="tip" tabindex="0" data-tip="The significance level the winner's interval would use with no correction.">Significance α</span></label>
-        <select id="winner-alpha" onchange="winnerAlphaChanged()">
-          <option value="0.01">0.01</option>
-          <option value="0.05" selected>0.05</option>
-          <option value="0.1">0.10</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="winner-dir"><span class="tip" tabindex="0" data-tip="Which sample mean wins: the smallest, or the largest. A configuration other than All equal moves its design toward being the winner in this same direction.">Direction</span></label>
-        <select id="winner-dir" onchange="winnerDirChanged()">
-          <option value="min">Smaller is better</option>
-          <option value="max" selected>Bigger is better</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's interval level</span></label>
-        <select id="winner-level" data-post onchange="winnerLevelChanged()">
-          <option value="raw" selected>1 − α (no correction)</option>
-          <option value="bonf">1 − α/K (Bonferroni)</option>
-        </select>
-      </span>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="winner-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so the winner is picked from tied designs and its bias comes from selection alone; the other settings move one, two, or every design away from the rest by δ, and so the winner is usually the one actually moved.">Configuration</span></label>
-        <select id="winner-cfg" onchange="winnerCfgChanged()">
-          <option value="all" selected>All equal</option>
-          <option value="one">One design better by δ</option>
-          <option value="two">Two designs better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="winner-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="winner-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="winnerDeltaChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="winner-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="winner-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="winnerSigmaChanged()">
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="winner-newseed" checked> <span class="tip">New seed after each run</span>
-        </label>
-      </span>
-      <button class="btn-run" id="winner-run" onclick="runOne('winner')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="winner-run100" onclick="runBatch('winner')" data-tip="Runs 100 families back to back from consecutive seeds. The winner's observed coverage below should settle near the known-σ reference under the raw level, and rise back toward 1 − α/2 under the Bonferroni level." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="clearHist('winner')">Clear history</button>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-K"><span class="tip" tabindex="0" data-tip="The number of designs simulated, and so the number of sample means the winner is picked from. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="winner-K" type="text" inputmode="numeric" value="8" autocomplete="off" spellcheck="false" onchange="winnerKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="winner-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="winnerRChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-alpha"><span class="tip" tabindex="0" data-tip="The significance level the winner's interval would use with no correction.">Significance α</span></label>
+          <select id="winner-alpha" onchange="winnerAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-dir"><span class="tip" tabindex="0" data-tip="Which sample mean wins: the smallest, or the largest. A configuration other than All equal moves its design toward being the winner in this same direction.">Direction</span></label>
+          <select id="winner-dir" onchange="winnerDirChanged()">
+            <option value="min">Smaller is better</option>
+            <option value="max" selected>Bigger is better</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's interval level</span></label>
+          <select id="winner-level" data-post onchange="winnerLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/K (Bonferroni)</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so the winner is picked from tied designs and its bias comes from selection alone; the other settings move one, two, or every design away from the rest by δ, and so the winner is usually the one actually moved.">Configuration</span></label>
+          <select id="winner-cfg" onchange="winnerCfgChanged()">
+            <option value="all" selected>All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two">Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="winner-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="winnerDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="winner-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="winnerSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="winner-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="winner-run" onclick="runOne('winner')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="winner-run100" onclick="runBatch('winner')" data-tip="Runs 100 families back to back from consecutive seeds. The winner's observed coverage below should settle near the known-σ reference under the raw level, and rise back toward 1 − α/2 under the Bonferroni level." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('winner')">Clear history</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Designs and the winner</div>
@@ -969,64 +984,66 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ⑤: anova and post hoc ───────────────────────────────────── -->
   <section id="tab-anova" class="tp">
     <p class="lede">One-way ANOVA's logic runs in two steps: the F test asks whether any design differs, and a post hoc test asks which. The F test holds α without a correction, but it does not say which designs differ, and each post hoc test here is a single critical difference on the sorted means: Tukey's honestly significant difference from the <span class="tip" tabindex="0" data-tip="The distribution of the largest minus the smallest of K independent sample means, in units of their common standard error. Tukey's honestly significant difference is this distribution's own 1 − α quantile, and so it judges every pair with the one correction built for comparing every pair at once.">studentized range</span>, Fisher's least significant difference run only after a significant F, and Bonferroni's t at α/C. Bonferroni-corrected pairwise intervals (the ones tab ②, Designs Against Each Other, builds) are themselves a legitimate post hoc test, which is why they sit beside Tukey's and Fisher's here.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="anova-K"><span class="tip" tabindex="0" data-tip="The number of designs entered into the one-way ANOVA, and so the number of groups the F test compares and the number of rows in the K &times; R data table. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="anova-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="anovaKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="anova-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design, equal across every design so the pooled variance and the post-hoc rules can share one critical difference. Arrow keys move it by 1.">Replications R</span></label>
-        <input class="par-inp" id="anova-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="anovaRChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="anova-alpha"><span class="tip" tabindex="0" data-tip="The significance level the F test and every post-hoc rule use. It sets the studentized range, LSD, and Bonferroni critical differences together, and so the three stay comparable.">Significance α</span></label>
-        <select id="anova-alpha" onchange="anovaAlphaChanged()">
-          <option value="0.01">0.01</option>
-          <option value="0.05" selected>0.05</option>
-          <option value="0.1">0.10</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself does not reject), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
-        <select id="anova-rule" data-post onchange="anovaRuleChanged()">
-          <option value="tukey" selected>Tukey's HSD</option>
-          <option value="lsd">Fisher's protected LSD</option>
-          <option value="bonf">Bonferroni</option>
-        </select>
-      </span>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="anova-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every pair null; the default moves the last two designs δ above the rest ('better' here means a larger true mean), which leaves a null pair between the two moved designs and three null pairs among the other three, and that is what lets protected LSD's failure show up here.">Configuration</span></label>
-        <select id="anova-cfg" onchange="anovaCfgChanged()">
-          <option value="all">All equal</option>
-          <option value="one">One design better by δ</option>
-          <option value="two" selected>Two designs better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="anova-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="anova-delta" type="text" inputmode="decimal" value="3" autocomplete="off" spellcheck="false" onchange="anovaDeltaChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="anova-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="anova-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="anovaSigmaChanged()">
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="anova-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="anova-seed" type="text" inputmode="numeric" value="15935" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('anova')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('anova');}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="anova-newseed" checked> <span class="tip">New seed after each run</span>
-        </label>
-      </span>
-      <button class="btn-run" id="anova-run" onclick="runOne('anova')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="anova-run100" onclick="runBatch('anova')" data-tip="Runs 100 families back to back from consecutive seeds. Watch protected LSD's family-wise rate settle above α, whereas Tukey's and Bonferroni's stay at or below it." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="clearHist('anova')">Clear history</button>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-K"><span class="tip" tabindex="0" data-tip="The number of designs entered into the one-way ANOVA, and so the number of groups the F test compares and the number of rows in the K &times; R data table. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="anova-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="anovaKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design, equal across every design so the pooled variance and the post-hoc rules can share one critical difference. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="anova-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="anovaRChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-alpha"><span class="tip" tabindex="0" data-tip="The significance level the F test and every post-hoc rule use. It sets the studentized range, LSD, and Bonferroni critical differences together, and so the three stay comparable.">Significance α</span></label>
+          <select id="anova-alpha" onchange="anovaAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself does not reject), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
+          <select id="anova-rule" data-post onchange="anovaRuleChanged()">
+            <option value="tukey" selected>Tukey's HSD</option>
+            <option value="lsd">Fisher's protected LSD</option>
+            <option value="bonf">Bonferroni</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="anova-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every pair null; the default moves the last two designs δ above the rest ('better' here means a larger true mean), which leaves a null pair between the two moved designs and three null pairs among the other three, and that is what lets protected LSD's failure show up here.">Configuration</span></label>
+          <select id="anova-cfg" onchange="anovaCfgChanged()">
+            <option value="all">All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two" selected>Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="anova-delta" type="text" inputmode="decimal" value="3" autocomplete="off" spellcheck="false" onchange="anovaDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="anova-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="anovaSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="anova-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="anova-seed" type="text" inputmode="numeric" value="15935" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('anova')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('anova');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="anova-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="anova-run" onclick="runOne('anova')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="anova-run100" onclick="runBatch('anova')" data-tip="Runs 100 families back to back from consecutive seeds. Watch protected LSD's family-wise rate settle above α, whereas Tukey's and Bonferroni's stay at or below it." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('anova')">Clear history</button>
+      </div>
     </div>
     <div class="viz-row">
       <div class="sec stats-panel">
@@ -1110,69 +1127,71 @@ svg.fig { display: block; width: 100%; height: auto; }
   <!-- ── TAB ⑥: selecting the best ───────────────────────────────────── -->
   <section id="tab-best" class="tp">
     <p class="lede">A fixed-sample test cannot add replications where they turn out to be needed. This two-stage procedure can. A pilot stage of R₀ replications per design <span class="tip" tabindex="0" data-tip="Every design's sample mean is compared against every other's, with each pair's gap shrunk by a threshold built from their sample variances; a design survives when it cannot yet be ruled out as the best or as within ε of it. The t here is a Šidák-style correction over the K − 1 comparisons against each design, which behaves like a Bonferroni correction at α/2 split K − 1 ways; the textbook writes it as t at upper-tail probability 1 − (1 − α/2)^{1/(K−1)}.">screens out</span> designs that are clearly worse, a second stage adds replications only to the survivors, as many as each one's variance and <span class="tip" tabindex="0" data-tip="The practically significant difference ε, sometimes called the indifference zone: how close two designs' true means may sit before the procedure treats them as effectively tied.">the practically significant difference ε</span> call for, and the survivor with the best mean is selected. With probability at least 1 − α the selection is the best design or one within ε of it.</p>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-K"><span class="tip" tabindex="0" data-tip="The number of candidate designs simulated, and so the number of designs the procedure screens and selects among. Arrow keys move it by 1.">Designs K</span></label>
-        <input class="par-inp" id="best-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="bestKChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-R0"><span class="tip" tabindex="0" data-tip="First-stage replications drawn from every design before screening. Rinott's integral is defined for any R₀ ≥ 2; this widget floors it at 5, and the textbook recommends at least 10. Arrow keys move it by 1.">First-stage R₀</span></label>
-        <input class="par-inp" id="best-R0" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="bestR0Changed()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-eps"><span class="tip" tabindex="0" data-tip="The practically significant difference ε, sometimes called the indifference zone: how close two designs' true means may sit before the procedure treats them as effectively tied. Arrow keys move it by 0.1.">Indifference ε</span></label>
-        <input class="par-inp" id="best-eps" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="bestEpsChanged()">
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-conf"><span class="tip" tabindex="0" data-tip="The confidence level 1 − α the selection is guaranteed to meet.">Confidence 1&nbsp;−&nbsp;α</span></label>
-        <select id="best-conf" onchange="bestConfChanged()">
-          <option value="0.9">0.90</option>
-          <option value="0.95" selected>0.95</option>
-        </select>
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="best-dir"><span class="tip" tabindex="0" data-tip="Which overall sample mean is best: the smallest, or the largest. A configuration other than All equal moves the true best design toward this same direction.">Direction</span></label>
-        <select id="best-dir" onchange="bestDirChanged()">
-          <option value="min">Smaller is better</option>
-          <option value="max" selected>Bigger is better</option>
-        </select>
-      </span>
-    </div>
-    <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-    <div class="ctrl-row par-row">
-      <span class="ctrl-pair ctrl-pair-wide">
-        <label class="ctrl-lbl" for="best-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every selection correct by definition; One design better plants a single best design δ ahead of the rest, with δ locked to ε so the guarantee is exactly at its hardest; Evenly spaced fans every design out in equal steps and lets δ range independently of ε.">Configuration</span></label>
-        <select id="best-cfg" onchange="bestCfgChanged()">
-          <option value="all">All equal</option>
-          <option value="one" selected>One design better by δ</option>
-          <option value="spread">Evenly spaced across δ</option>
-        </select>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-delta"><span class="tip" tabindex="0" data-tip="How far the best design sits ahead of the rest under Evenly spaced. Locked to ε under One design better, the configuration in which the guarantee is tightest. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-        <input class="par-inp" id="best-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="bestDeltaChanged()" disabled>
-      </span>
-      <span class="ctrl-pair">
-        <label class="ctrl-lbl" for="best-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-        <input class="par-inp" id="best-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="bestSigmaChanged()">
-      </span>
-      <span class="ctrl-pair ctrl-pair-wide">
-        <span class="ctrl-note" id="best-delta-note">δ = ε: the slippage configuration</span>
-      </span>
-    </div>
-    <div class="ctrl-row">
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="best-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-        <input class="seed-inp" id="best-seed" type="text" inputmode="numeric" value="26317" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('best')" onkeydown="if(event.key==='Enter'){event.preventDefault();bestRun();}">
-        <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-          <input type="checkbox" id="best-newseed" checked> <span class="tip">New seed after each run</span>
-        </label>
-      </span>
-      <button class="btn-run" id="best-run" onclick="bestRun()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-      <button class="btn-run2" id="best-step" onclick="bestStep()" data-tip="Advances through the procedure's own stages one at a time: first stage, screening, second-stage sizes, second stage, and selection. Starts a new run at the first stage once the previous one reaches selection." data-tip-press><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Step</button>
-      <button class="btn-run2" id="best-run100" onclick="bestRunBatch()" data-tip="Runs 100 two-stage procedures back to back from consecutive seeds. Watch the probability of correct selection below settle at or above 1 − α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-      <button class="btn-clear" onclick="bestClear()">Clear history</button>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-K"><span class="tip" tabindex="0" data-tip="The number of candidate designs simulated, and so the number of designs the procedure screens and selects among. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="best-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="bestKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-R0"><span class="tip" tabindex="0" data-tip="First-stage replications drawn from every design before screening. Rinott's integral is defined for any R₀ ≥ 2; this widget floors it at 5, and the textbook recommends at least 10. Arrow keys move it by 1.">First-stage R₀</span></label>
+          <input class="par-inp" id="best-R0" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="bestR0Changed()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-eps"><span class="tip" tabindex="0" data-tip="The practically significant difference ε, sometimes called the indifference zone: how close two designs' true means may sit before the procedure treats them as effectively tied. Arrow keys move it by 0.1.">Indifference ε</span></label>
+          <input class="par-inp" id="best-eps" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="bestEpsChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-conf"><span class="tip" tabindex="0" data-tip="The confidence level 1 − α the selection is guaranteed to meet.">Confidence 1&nbsp;−&nbsp;α</span></label>
+          <select id="best-conf" onchange="bestConfChanged()">
+            <option value="0.9">0.90</option>
+            <option value="0.95" selected>0.95</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="best-dir"><span class="tip" tabindex="0" data-tip="Which overall sample mean is best: the smallest, or the largest. A configuration other than All equal moves the true best design toward this same direction.">Direction</span></label>
+          <select id="best-dir" onchange="bestDirChanged()">
+            <option value="min">Smaller is better</option>
+            <option value="max" selected>Bigger is better</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="best-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every selection correct by definition; One design better plants a single best design δ ahead of the rest, with δ locked to ε so the guarantee is exactly at its hardest; Evenly spaced fans every design out in equal steps and lets δ range independently of ε.">Configuration</span></label>
+          <select id="best-cfg" onchange="bestCfgChanged()">
+            <option value="all">All equal</option>
+            <option value="one" selected>One design better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-delta"><span class="tip" tabindex="0" data-tip="How far the best design sits ahead of the rest under Evenly spaced. Locked to ε under One design better, the configuration in which the guarantee is tightest. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="best-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="bestDeltaChanged()" disabled>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="best-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="best-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="bestSigmaChanged()">
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <span class="ctrl-note" id="best-delta-note">δ = ε: the slippage configuration</span>
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="best-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="best-seed" type="text" inputmode="numeric" value="26317" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('best')" onkeydown="if(event.key==='Enter'){event.preventDefault();bestRun();}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="best-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="best-run" onclick="bestRun()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="best-step" onclick="bestStep()" data-tip="Advances through the procedure's own stages one at a time: first stage, screening, second-stage sizes, second stage, and selection. Starts a new run at the first stage once the previous one reaches selection." data-tip-press><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Step</button>
+        <button class="btn-run2" id="best-run100" onclick="bestRunBatch()" data-tip="Runs 100 two-stage procedures back to back from consecutive seeds. Watch the probability of correct selection below settle at or above 1 − α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="bestClear()">Clear history</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd">First- and second-stage replications</div>
