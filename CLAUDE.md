@@ -560,10 +560,12 @@ directory holds a single widget its name is the natural tag (`prng`, or a trimme
 `tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let earlier
 commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
 explorer's tag and `mcx` is the examples widget's. `input_modeling/` also now holds two: `analyzer`
-is `input_analyzer.html`'s tag and `models` is `prob_models.html`'s. Reuse whatever a widget has
-been tagged before – `git log --oneline -- prng/` shows it – and keep the tag short: the whole
-subject line should stay at 72 characters or fewer. This is not Conventional Commits, as there is
-no `feat:`/`fix:` type and the tag names a widget rather than a kind of change.
+is `input_analyzer.html`'s tag and `models` is `prob_models.html`'s. `output_analysis/` also now
+holds two: `ci` is `ci_explorer.html`'s tag and `compare` is `multiple_comparisons.html`'s. Reuse
+whatever a widget has been tagged before – `git log --oneline -- prng/` shows it – and keep the
+tag short: the whole subject line should stay at 72 characters or fewer. This is not Conventional
+Commits, as there is no `feat:`/`fix:` type and the tag names a widget rather than a kind of
+change.
 
 **Omit the tag when the subject already says where the work is**, either because it names its target
 ("Add mobile-friendliness rules to CLAUDE.md") or because it describes a sweep ("Change the color
@@ -836,6 +838,76 @@ better.
      that the verify script pins, and so adding a function means deriving its four moments, not
      only its formula. The `bowl` entry is the deliberate counterexample on which neither
      technique helps and must stay non-monotone with zero covariance.)*
+- `output_analysis/multiple_comparisons.html` *(the multiple-comparisons problem taught by
+  simulation: seven pages share one family-drawing engine over K simulated designs
+  of one system, each replicated R times, with bigger is better as the default direction and every
+  page's controls split into what the experimenter chooses and what is true of the designs but
+  hidden. Navigation is the grouped pill picker (as in the distribution gallery), the seven pages
+  in two groups, "The multiple comparisons problem" and "One-shot and sequential alternatives",
+  collapsing to a select on narrow screens, with page ① the landing page and the shared situation
+  stated once in the header's subtitle. ① Many Designs Against One Target tests
+  every design against a single target θ₀ and tracks the family-wise error rate against the
+  uncorrected and Bonferroni-corrected bounds, with each interval colored by capture and a glyph for
+  its decision; ② Designs Against Each Other runs the same test against a benchmark design or over
+  every pair, with common random numbers optional; ③ Power Under Correction plants a real difference
+  and judges the same raw p-values three ways at once (none, Bonferroni, and Holm's step-down) to
+  show the power Bonferroni gives up and Holm partly recovers, with the interval width ratio as a
+  card; ④ Reporting the Winner reports the ordinary interval of whichever design's sample mean is
+  best and shows its coverage falling below its nominal level; ⑤ ANOVA and Post Hoc Tests runs
+  one-way ANOVA and judges every pair by Tukey's HSD, Fisher's protected LSD, and Bonferroni side
+  by side, with a compact-letter display, a pairwise matrix sized to the means plot beside it, and a
+  toggle to order the designs by sample mean; and ⑥ Selecting the Best in Two Stages animates the
+  textbook's ranking-and-selection procedure stage by stage: a first-stage screen, second-stage
+  sizing from Rinott's constant, the added replications, and the final selection; and ⑦ Simulation
+  Optimization closes the arc with no simulated data: a stepped flowchart of the adaptive
+  search loop (propose, simulate, estimate, judge, update, report), the metaheuristic and
+  response-surface families that drive it, where ranking and selection fits inside it, and what
+  the noise does to a reported best. Every history
+  strip names what a column counts and its caption carries the family-level tally with its
+  reference. Commit tag `compare`. Conventions relied on by code outside the file, which any later
+  edit has to preserve:*
+  1. *Everything between the `MCP-CORE-BEGIN` / `MCP-CORE-END` sentinels is pure numerics with no
+     DOM access, and the block must not contain the words "window" or "document".
+     `output_analysis/verify_multiple_comparisons.mjs` slices that block out of the HTML and runs
+     it in Node.*
+  2. *`verify_multiple_comparisons.mjs` is not shipped with the widget and is not linked from the
+     site. Run it (`node output_analysis/verify_multiple_comparisons.mjs`, about two and a half
+     minutes at the default `MCP_CALIB_REPS` of 4000) after touching anything in the core. It checks
+     the special functions, the noncentral t distribution, the studentized range, and Rinott's
+     constant against exact identities and the book's own tables; the one-sample family's
+     family-wise error rate and joint coverage under the global null; the pairwise family's
+     Bonferroni family-wise error and per-interval capture in the benchmark and all-pairs modes,
+     paired and unpaired, and that pairing under common random numbers narrows the interval; the
+     three correction rules' power and family-wise error against their noncentral-t and
+     Holm-threshold references; the winner's known-σ coverage, its Bonferroni-level coverage, and
+     its selection bias against σ/√R · E[max of K]; the compact letter display against brute force
+     and the three post-hoc rules' family-wise error and power under the full and a partial null;
+     and the two-stage procedure against the textbook's own worked example (the screening t, Table
+     12.4's W matrix, the survivors, and the rounded second-stage sizes) and its 1 − α
+     correct-selection guarantee across four (K, R₀, confidence) settings.*
+  3. *A knob is a sampling knob (K, R, σ, δ, α, the configuration, and whatever else changes which
+     data would be drawn) or a post-processing knob, marked `data-post` in the markup (θ₀ and the
+     interval level on tab ①, the interval level on tabs ②/④, the correction rule on tab ③, and the
+     post-hoc rule and the sort-by-mean toggle on tab ⑤): a post-processing change re-derives every already-drawn family from
+     its own stored seed and sampling parameters rather than drawing new data, and so it neither
+     logs a new run nor clears the history. A sampling-knob change instead opens a new segment on
+     the next run, marked with a divider; every plot's axis is sized once from that segment's own
+     sampling parameters and held fixed for every run added to it, rather than being fixed globally
+     or recomputed run by run.*
+  4. *The compact letter display (tab ⑤) is the maximal windows of the sorted sample means whose
+     spread stays within the selected rule's critical difference: designs sharing a letter are not
+     declared different from one another under that rule, and a window nested entirely inside an
+     already-recorded one adds no letter of its own.*
+  5. *Tab ⑥'s procedure is the textbook's own (Banks, Carson, Nelson, and Nicol, 5th ed., section
+     12.2.2): Rinott's constant is found by solving Rinott's integral numerically rather than by a
+     lookup table, and is pinned against both Table A.12 and the book's own worked example. `dir`
+     ('min' or 'max') sets which sample mean is better; a `cfg` other than all-equal moves one
+     design (`one`), two together (`two`, where offered), or fans every design out in equal steps
+     (`spread`), by `delta` in the direction `dir` favors, and locking δ to ε on tab ⑥'s `one`
+     configuration puts the 1 − α guarantee at its hardest point. The strip's current column stays
+     in the history mid-Step (`pending`, not yet resolved) so the column count and the axis never
+     change once the run's outcome is revealed, but its own bar is drawn only once stage 4 reveals
+     whether the selection was correct.)*
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.
