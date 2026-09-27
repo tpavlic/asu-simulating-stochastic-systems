@@ -72,14 +72,15 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .wh-copy a:hover { text-decoration:underline; }
 .wh-title { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
 .wh-sub   { font-size: 0.875rem; color: var(--muted); margin-top: 3px; }
-/* The page picker: a nav of pill buttons standing in for a plain tab row
-   that could not carry a title and a one-line question for each of seven
-   destinations, in two groups. A group's
+/* The page picker: a bordered card (.sec) of pill buttons, standing in for
+   a plain tab row that could not carry a title and a one-line question for
+   each of seven destinations, in two groups; the card's own edge separates
+   the picker from the page it opens. A group's
    row never wraps (flex-wrap: nowrap on .pill-row, flex: 1 1 0 on the pills
    themselves): with a two-line pill, letting the row wrap would blur the
    two-groups-in-two-rows layout the tab strip had, and so a pill instead
    shrinks to share its row and lets its own subtitle wrap onto more lines. */
-.picker { margin: 4px 0 14px; }
+nav.picker { margin: 4px 0 16px; }
 .picker-group + .picker-group { margin-top: 8px; }
 .picker-lbl {
   font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
@@ -465,7 +466,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="wh-sub">K candidate designs of one system, each simulated R times, are judged on one performance measure where bigger is better. Run many tests on that family, watch the family-wise error rate climb, and see what a correction, a post-hoc test, and a two-stage selection procedure each do about it.</div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
-  <nav class="picker" aria-label="Pages">
+  <nav class="picker sec" aria-label="Pages">
     <div class="picker-group">
       <div class="picker-lbl">The multiple comparisons problem</div>
       <div class="pill-row">
@@ -2889,10 +2890,12 @@ function designsPlot(svgEl, items, opts) {
   var W = opts.full ? fullCardWidth(svgEl) : figWidth(svgEl), K = items.length;
   var pL = 46, pR = (typeof opts.target === 'number') ? 30 : 16, pT = 14;
   var pB = opts.glyph ? 36 : 30;
-  // No floor on colW: a floor would let K columns claim more than the frame's
-  // own inner width, pushing the rightmost designs' marks and intervals past
-  // the drawn rect and out of the viewBox instead of just narrowing to fit.
-  var colW = Math.min(90, (W - pL - pR) / K), cW = colW * K, cH = 190;
+  // The K columns share the frame's whole inner width, however few they
+  // are, so the frame always spans its card. No floor on colW: a floor
+  // would let K columns claim more than the frame's own inner width,
+  // pushing the rightmost designs' marks and intervals past the drawn rect
+  // and out of the viewBox instead of just narrowing to fit.
+  var colW = (W - pL - pR) / K, cW = colW * K, cH = 190;
   // Below this width a design-index label crowds its neighbors; thin them to
   // every other one, always keeping the first and the last so the row's ends
   // stay labeled whatever K is.
