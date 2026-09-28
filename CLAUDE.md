@@ -845,10 +845,11 @@ better.
   hidden. Navigation is the grouped pill picker (as in the distribution gallery), the seven pages
   in two groups, "The multiple comparisons problem" and "One-shot and sequential alternatives",
   collapsing to a select on narrow screens, with page ① the landing page and the shared situation
-  stated once in the header's subtitle. ① Many Designs Against One Target tests
-  every design against a single target θ₀ and tracks the family-wise error rate against the
-  uncorrected and Bonferroni-corrected bounds, with each interval colored by capture and a glyph for
-  its decision; ② Designs Against Each Other runs the same test against a benchmark design or over
+  stated once in the header's subtitle. ① One Design Against K Requirements simulates
+  the null, one design judged on K responses each with its true mean exactly at its own target (drawn
+  as deviations from target in standard-deviation units, so one axis serves them all), so every flag
+  is a false alarm, and tracks the family-wise error rate against the uncorrected and
+  Bonferroni-corrected bounds, naming Hotelling's T² and MANOVA as the one-shot versions; ② Designs Against Each Other runs the same test against a benchmark design or over
   every pair, with common random numbers optional; ③ Power Under Correction plants a real difference
   and judges the same raw p-values three ways at once (none, Bonferroni, and Holm's step-down) to
   show the power Bonferroni gives up and Holm partly recovers, with the interval width ratio as a
@@ -886,8 +887,8 @@ better.
      12.4's W matrix, the survivors, and the rounded second-stage sizes) and its 1 − α
      correct-selection guarantee across four (K, R₀, confidence) settings.*
   3. *A knob is a sampling knob (K, R, σ, δ, α, the configuration, and whatever else changes which
-     data would be drawn) or a post-processing knob, marked `data-post` in the markup (θ₀ and the
-     interval level on tab ①, the interval level on tabs ②/④, the correction rule on tab ③, and the
+     data would be drawn) or a post-processing knob, marked `data-post` in the markup (the
+     interval level on tabs ①, ②, and ④, the correction rule on tab ③, and the
      post-hoc rule and the sort-by-mean toggle on tab ⑤): a post-processing change re-derives every already-drawn family from
      its own stored seed and sampling parameters rather than drawing new data, and so it neither
      logs a new run nor clears the history. A sampling-knob change instead opens a new segment on

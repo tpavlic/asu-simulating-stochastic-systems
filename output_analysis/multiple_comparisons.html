@@ -110,6 +110,9 @@ nav.picker { margin: 4px 0 16px; }
 .ctrl-grp-lbl { font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
                 color: var(--muted); margin: 2px 0 6px; }
 .ctrl-grp-lbl .tip { text-decoration-color: var(--muted); }
+/* A fact about the simulated designs that is fixed on this tab, shown where
+   its control would otherwise sit. */
+.ctrl-static { font-size: .84rem; color: var(--text); padding: 4px 0; }
 /* Both control groups and the run row share one card, the experiment's
    whole setup, with the group labels dividing it the way the picker card's
    labels divide the pills; the run row sits last, under a rule, because
@@ -477,7 +480,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="picker-group">
       <div class="picker-lbl">The multiple comparisons problem</div>
       <div class="pill-row">
-        <a class="tab pill active" data-tab="looks" href="#looks" onclick="showTab('looks',this);return false;"><span class="pill-title">① Many Designs Against One Target</span><span class="pill-sub">K intervals against a performance standard; the family-wise error rate and the Bonferroni correction</span></a>
+        <a class="tab pill active" data-tab="looks" href="#looks" onclick="showTab('looks',this);return false;"><span class="pill-title">① One Design Against K Requirements</span><span class="pill-sub">One design judged on K requirements at once; the family-wise error rate and the Bonferroni correction</span></a>
         <a class="tab pill" data-tab="pairs" href="#pairs" onclick="showTab('pairs',this);return false;"><span class="pill-title">② Designs Against Each Other</span><span class="pill-sub">A benchmark design or every pair; dependence and common random numbers</span></a>
         <a class="tab pill" data-tab="power" href="#power" onclick="showTab('power',this);return false;"><span class="pill-title">③ Power Under Correction</span><span class="pill-sub">What Bonferroni gives up and what Holm recovers</span></a>
         <a class="tab pill" data-tab="winner" href="#winner" onclick="showTab('winner',this);return false;"><span class="pill-title">④ Reporting the Winner</span><span class="pill-sub">Selection bias in the best design's own interval</span></a>
@@ -494,7 +497,7 @@ svg.fig { display: block; width: 100%; height: auto; }
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select page">
     <optgroup label="The multiple comparisons problem">
-      <option value="looks" selected>① Many Designs Against One Target</option>
+      <option value="looks" selected>① One Design Against K Requirements</option>
       <option value="pairs">② Designs Against Each Other</option>
       <option value="power">③ Power Under Correction</option>
       <option value="winner">④ Reporting the Winner</option>
@@ -506,18 +509,18 @@ svg.fig { display: block; width: 100%; height: auto; }
     </optgroup>
   </select>
 
-  <!-- ── TAB ①: many designs against one target ──────────────────────── -->
+  <!-- ── TAB ①: one design against K requirements ──────────────────────── -->
   <section id="tab-looks" class="tp active">
-    <p class="lede">Designs 1 through K are K candidate <span class="tip" tabindex="0" data-tip="One design measured on K response variables, each with its own target, where the family-wise problem is identical and MANOVA is the one-shot tool; the tab treats the K-designs case.">designs</span> of one system, each simulated R times and judged against one performance target, and the question is whether any design beats the target (the same question ANOVA asks of the designs against each other). Test K designs against one target, and you have made K decisions from one data set. Each test is wrong α of the time on its own, and the chance that at least one of them is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one wrong rejection. It grows with the number of comparisons even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval. Tab ②, Designs Against Each Other, compares the designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
+    <p class="lede"><strong>This tab simulates the null hypothesis of one system design that meets all K of its performance requirements</strong>, and it estimates how often the design will be falsely reported as missing at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The K-designs framing, K candidate designs each tested against one target, has the same arithmetic; tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own target, and the report is one yes or no: does the design meet every requirement? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its target, and so every flag is a false alarm; the fraction of runs in which the design is reported as missing a requirement is the family's Type-I error rate. Judge K requirements at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a requirement flagged as missed when the design meets it exactly. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the design meets the requirement, and a false alarm is a Type-I error. It grows with the number of requirements even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval. Had the question been which of K separate designs miss a target, each judged and acted on alone, each verdict would carry its own α and no family correction would be wanted; a family matters only when one decision rests on all K tests, as it does here and wherever designs are compared with each other. The one-shot version of this tab is <span class="tip" tabindex="0" data-tip="The multivariate one-sample t test: one statistic for whether the design's K true means all sit at their targets, in place of K separate intervals.">Hotelling's T²</span>, which judges all K requirements in one statistic; with several designs instead of one it becomes MANOVA, which stands to tab ⑤'s ANOVA as Hotelling's T² stands to this tab. Tab ②, Designs Against Each Other, compares designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
     <div class="sec ctrl-card">
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of designs tested, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
+          <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of requirements the design is judged on, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Requirements K</span></label>
           <input class="par-inp" id="looks-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="looksKChanged()">
         </span>
         <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
+          <label class="ctrl-lbl" for="looks-R"><span class="tip" tabindex="0" data-tip="Replications of the design, each yielding all K responses. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
           <input class="par-inp" id="looks-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="looksRChanged()">
         </span>
         <span class="ctrl-pair">
@@ -528,10 +531,6 @@ svg.fig { display: block; width: 100%; height: auto; }
             <option value="0.1">0.10</option>
           </select>
         </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-theta0"><span class="tip" tabindex="0" data-tip="The one value every design's interval is tested against. Drag the dashed line in the figure below instead of typing here if you would rather move it by eye. Arrow keys move it by 0.1; hold Shift for 1.">Target θ₀</span></label>
-          <input class="par-inp" id="looks-theta0" type="text" inputmode="decimal" value="10" autocomplete="off" spellcheck="false" data-post onchange="looksTheta0Changed()">
-        </span>
         <span class="ctrl-pair ctrl-pair-wide">
           <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-interval level</span></label>
           <select id="looks-level" data-post onchange="looksLevelChanged()">
@@ -540,24 +539,11 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
       </div>
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the system being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated design, hidden from the experimenter</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="looks-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design exactly at the target, and so any rejection there is false; the other settings move one, two, or every design away from it by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
-          <select id="looks-cfg" onchange="looksCfgChanged()">
-            <option value="all" selected>All equal</option>
-            <option value="one">One design better by δ</option>
-            <option value="two">Two designs better by δ</option>
-            <option value="spread">Evenly spaced across δ</option>
-          </select>
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the target under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-          <input class="par-inp" id="looks-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="looksDeltaChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-          <input class="par-inp" id="looks-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="looksSigmaChanged()">
+          <span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="Every response's true mean is its own target, so the null hypothesis is true for all K requirements and any flag is a false alarm. Each response is plotted as its deviation from its target in units of that response's standard deviation, which is why one axis serves responses with different units and why no σ control appears here. The other tabs let designs differ.">True mean of every response</span></span>
+          <span class="ctrl-static">exactly its target</span>
         </span>
       </div>
       <div class="ctrl-row">
@@ -569,14 +555,14 @@ svg.fig { display: block; width: 100%; height: auto; }
           </label>
         </span>
         <button class="btn-run" id="looks-run" onclick="runOne('looks')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-        <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('looks')">Clear history</button>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd" id="looks-fig-title">Five candidate designs against one target (bigger is better)</div>
       <div class="fig-note" id="looks-level-line"></div>
-      <svg class="fig" id="looks-fig" role="img" aria-label="One vertical interval per design over the design index, each design's true mean shown as a teal tick, and each design's own interval and mean dot colored teal with a filled dot when it captures its true mean and red, dashed, with a hollow dot when it misses, tested against a draggable dashed target line"></svg>
+      <svg class="fig" id="looks-fig" role="img" aria-label="One vertical interval per requirement, each response's deviation from its own target in units of its standard deviation, against a dashed line at zero that is every target and every true mean; each interval and its mean dot red, dashed, with a hollow dot when it excludes the target (a false alarm) and gray when it contains it"></svg>
       <div class="leg" id="looks-fig-leg"></div>
       <div class="fig-note" id="looks-fig-cap"></div>
     </div>
@@ -590,7 +576,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="sc-val" id="looks-c-alphaj">—</div>
       </div>
       <div class="sc sc-wide">
-        <div class="sc-lbl">Families with any false rejection</div>
+        <div class="sc-lbl">Runs with any false alarm</div>
         <div class="sc-val" id="looks-c-anyfalse">—</div>
       </div>
       <div class="sc">
@@ -602,13 +588,13 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="sc-val" id="looks-c-bonfbound">—</div>
       </div>
       <div class="sc sc-wide">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="≥ 1 − α under Bonferroni.">Families with every interval capturing its mean</span></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="≥ 1 − α under Bonferroni.">Runs with no false alarm</span></div>
         <div class="sc-val" id="looks-c-allcap">—</div>
       </div>
     </div>
     <div class="sec">
-      <div class="sec-hd">Rejections per family, run by run</div>
-      <svg class="hsv" id="looks-strip" role="img" aria-label="One column per family run, its height equal to the number of rejections in that family, colored red when at least one rejection is false and indigo otherwise"></svg>
+      <div class="sec-hd">False alarms per run of the design</div>
+      <svg class="hsv" id="looks-strip" role="img" aria-label="One column per run of the design, its height equal to the number of requirements flagged in that run, every one a false alarm, colored red when there is at least one and indigo otherwise"></svg>
       <div class="fig-note" id="looks-strip-cap"></div>
     </div>
     <div class="sec">
@@ -662,7 +648,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="pairs-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero and any rejection is false; the other settings move one, two, or every design away from the rest by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
+          <label class="ctrl-lbl" for="pairs-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so every true difference is zero and any flag is a false alarm; the other settings move one, two, or every design away from the rest by δ. ('Better' here means a larger true mean.)">Configuration</span></label>
           <select id="pairs-cfg" onchange="pairsCfgChanged()">
             <option value="all" selected>All equal</option>
             <option value="one">One design better by δ</option>
@@ -688,14 +674,14 @@ svg.fig { display: block; width: 100%; height: auto; }
           </label>
         </span>
         <button class="btn-run" id="pairs-run" onclick="runOne('pairs')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-        <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-rejection rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('pairs')">Clear history</button>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Differences between designs (bigger is better)</div>
       <div class="fig-note" id="pairs-level-line"></div>
-      <svg class="fig" id="pairs-fig" role="img" aria-label="One horizontal interval per comparison, centered on zero, each comparison's true difference shown as a teal tick and its sample difference as a dot colored by whether the interval captures that difference, with a decision glyph marking whether the interval excludes zero"></svg>
+      <svg class="fig" id="pairs-fig" role="img" aria-label="One horizontal interval per comparison, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero"></svg>
       <div class="leg" id="pairs-fig-leg"></div>
       <div class="fig-note" id="pairs-fig-cap"></div>
       <div id="pairs-table"></div>
@@ -710,7 +696,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="sc-val" id="pairs-c-alphaj">—</div>
       </div>
       <div class="sc sc-wide">
-        <div class="sc-lbl">Families with any false rejection</div>
+        <div class="sc-lbl">Families with any false alarm</div>
         <div class="sc-val" id="pairs-c-anyfalse">—</div>
       </div>
       <div class="sc">
@@ -728,7 +714,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="sec">
       <div class="sec-hd">Comparisons declared different, run by run</div>
-      <svg class="hsv" id="pairs-strip" role="img" aria-label="One column per family run, its height equal to the number of rejections in that family, colored red when at least one rejection is false and indigo otherwise"></svg>
+      <svg class="hsv" id="pairs-strip" role="img" aria-label="One column per family run, its height equal to the number of designs flagged in that family, colored red when at least one flag is a false alarm and indigo otherwise"></svg>
       <div class="fig-note" id="pairs-strip-cap"></div>
     </div>
     <div class="sec">
@@ -741,7 +727,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ③: power loss ───────────────────────────────────────────── -->
   <section id="tab-power" class="tp">
-    <p class="lede">A correction that makes false rejections rarer also makes true ones rarer. Plant a real difference and watch how often each rule finds it. <span class="tip" tabindex="0" data-tip="Sorts the C raw p-values from smallest to largest and tests each in turn against a threshold that loosens as it goes, α/(C − m) at the m-th smallest (m counted from zero). The first comparison that fails to clear its own threshold, and every one sorted after it, are kept; nothing past that point is tested. Because later thresholds are looser than Bonferroni's flat α/C, a comparison can be rejected under Holm's rule even where Bonferroni would have kept it.">Holm's step-down</span> keeps the same family-wise guarantee as Bonferroni and gives some of the <span class="tip" tabindex="0" data-tip="The chance that a comparison whose true difference is not zero is correctly declared significant. A correction that shrinks the family-wise error rate does so by demanding stronger evidence per comparison, and so it also shrinks this chance for any one real difference.">power</span> back, and because it works on the sorted p-values rather than on the intervals, this is the tab where p-values get a column of their own. Holm's first threshold is Bonferroni's, and so it helps only once more than one comparison is real. At every pair among ten designs, 45 comparisons, each Bonferroni interval is about 1.8 times as wide as the uncorrected one, and only large differences are still detected; that loss is what motivates a one-shot test such as tab ⑤, ANOVA and Post Hoc Tests.</p>
+    <p class="lede">A correction that makes false alarms rarer also makes true detections rarer. Plant a real difference and watch how often each rule finds it. <span class="tip" tabindex="0" data-tip="Sorts the C raw p-values from smallest to largest and tests each in turn against a threshold that loosens as it goes, α/(C − m) at the m-th smallest (m counted from zero). The first comparison that fails to clear its own threshold, and every one sorted after it, are kept; nothing past that point is tested. Because later thresholds are looser than Bonferroni's flat α/C, a comparison can be flagged under Holm's rule even where Bonferroni would have kept it.">Holm's step-down</span> keeps the same family-wise guarantee as Bonferroni and gives some of the <span class="tip" tabindex="0" data-tip="The chance that a comparison whose true difference is not zero is correctly declared significant. A correction that shrinks the family-wise error rate does so by demanding stronger evidence per comparison, and so it also shrinks this chance for any one real difference.">power</span> back, and because it works on the sorted p-values rather than on the intervals, this is the tab where p-values get a column of their own. Holm's first threshold is Bonferroni's, and so it helps only once more than one comparison is real. At every pair among ten designs, 45 comparisons, each Bonferroni interval is about 1.8 times as wide as the uncorrected one, and only large differences are still detected; that loss is what motivates a one-shot test such as tab ⑤, ANOVA and Post Hoc Tests.</p>
     <div class="sec ctrl-card">
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
       <div class="ctrl-row par-row">
@@ -806,14 +792,14 @@ svg.fig { display: block; width: 100%; height: auto; }
           </label>
         </span>
         <button class="btn-run" id="power-run" onclick="runOne('power')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-        <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-rejection rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-alarm rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('power')">Clear history</button>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Differences between designs, at the Bonferroni level (bigger is better)</div>
       <div class="fig-note" id="power-level-line"></div>
-      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the Bonferroni level, centered on zero, each comparison's true difference shown as a teal tick and its sample difference as a dot colored by whether the interval captures that difference, with a decision glyph marking whether the interval excludes zero"></svg>
+      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the Bonferroni level, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero"></svg>
       <div class="leg" id="power-fig-leg"></div>
       <div class="fig-note" id="power-fig-cap"></div>
       <div id="power-table"></div>
@@ -864,7 +850,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
     <div class="sec">
       <div class="sec-hd">True detections per family, run by run</div>
-      <svg class="hsv" id="power-strip" role="img" aria-label="One column per family run, its height equal to the number of true detections under the selected rule, colored red when that family also carries a false rejection and indigo otherwise"></svg>
+      <svg class="hsv" id="power-strip" role="img" aria-label="One column per family run, its height equal to the number of true detections under the selected rule, colored red when that family also carries a false alarm and indigo otherwise"></svg>
       <div class="fig-note" id="power-strip-cap"></div>
     </div>
     <div class="sec">
@@ -983,7 +969,7 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ⑤: anova and post hoc ───────────────────────────────────── -->
   <section id="tab-anova" class="tp">
-    <p class="lede">One-way ANOVA's logic runs in two steps: the F test asks whether any design differs, and a post hoc test asks which. The F test holds α without a correction, but it does not say which designs differ, and each post hoc test here is a single critical difference on the sorted means: Tukey's honestly significant difference from the <span class="tip" tabindex="0" data-tip="The distribution of the largest minus the smallest of K independent sample means, in units of their common standard error. Tukey's honestly significant difference is this distribution's own 1 − α quantile, and so it judges every pair with the one correction built for comparing every pair at once.">studentized range</span>, Fisher's least significant difference run only after a significant F, and Bonferroni's t at α/C. Bonferroni-corrected pairwise intervals (the ones tab ②, Designs Against Each Other, builds) are themselves a legitimate post hoc test, which is why they sit beside Tukey's and Fisher's here.</p>
+    <p class="lede">One-way ANOVA's logic runs in two steps: the F test asks whether any design differs, and a post hoc test asks which. The F test holds α without a correction, but it does not say which designs differ, and each post hoc test here is a single critical difference on the sorted means: Tukey's honestly significant difference from the <span class="tip" tabindex="0" data-tip="The distribution of the largest minus the smallest of K independent sample means, in units of their common standard error. Tukey's honestly significant difference is this distribution's own 1 − α quantile, and so it judges every pair with the one correction built for comparing every pair at once.">studentized range</span>, Fisher's least significant difference run only after a significant F, and Bonferroni's t at α/C. Bonferroni-corrected pairwise intervals (the ones tab ②, Designs Against Each Other, builds) are themselves a legitimate post hoc test, which is why they sit beside Tukey's and Fisher's here. With K responses in place of one, ANOVA becomes MANOVA, the way tab ①'s K one-sample intervals become Hotelling's T².</p>
     <div class="sec ctrl-card">
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
       <div class="ctrl-row par-row">
@@ -1004,7 +990,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself does not reject), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
+          <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself flags no difference), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
           <select id="anova-rule" data-post onchange="anovaRuleChanged()">
             <option value="tukey" selected>Tukey's HSD</option>
             <option value="lsd">Fisher's protected LSD</option>
@@ -1089,7 +1075,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="sc-val" id="anova-c-cd-bonf">—</div>
       </div>
       <div class="sc" id="anova-cell-fwer-tukey">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Families in this segment carrying at least one declared pair whose two designs truly share a mean, out of every family that has such a null pair to falsely reject.">Family-wise error rate (null pairs)</span> <span class="sc-aside">&middot; Tukey</span></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Families in this segment carrying at least one declared pair whose two designs truly share a mean, out of every family that has such a null pair to flag by mistake.">Family-wise error rate (null pairs)</span> <span class="sc-aside">&middot; Tukey</span></div>
         <div class="sc-val" id="anova-c-fwer-tukey">—</div>
       </div>
       <div class="sc" id="anova-cell-fwer-lsd">
@@ -1116,11 +1102,11 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="fig-note" id="anova-protected-cap"></div>
     <div class="sec">
       <div class="sec-hd">Pairs declared different, run by run</div>
-      <svg class="hsv" id="anova-strip" role="img" aria-label="One column per family run, its height equal to the number of pairs declared different under the selected post-hoc rule, colored red when at least one of those declared pairs is a false rejection and indigo otherwise"></svg>
+      <svg class="hsv" id="anova-strip" role="img" aria-label="One column per family run, its height equal to the number of pairs declared different under the selected post-hoc rule, colored red when at least one of those declared pairs is a false alarm and indigo otherwise"></svg>
       <div class="fig-note" id="anova-strip-cap"></div>
     </div>
     <p class="exp-note">Tukey's honestly significant difference and Bonferroni's t both judge every pair at once, and the two critical-difference cards above show the gain is real but modest: Tukey's is the smaller of the two, never the larger, but rarely by much.</p>
-    <p class="exp-note">Fisher's <span class="tip" tabindex="0" data-tip="Fisher's least significant difference is only applied after the omnibus F test rejects; a family whose F test does not reject declares no pair different, whatever the raw mean gaps look like.">protected</span> LSD holds the family-wise error rate at α only when there are exactly three designs (Hayter, 1986); with five, and with the last two designs planted δ above the rest by default, F almost always rejects, and so the protection does nothing and the four null pairs (three among the unmoved designs and one between the two moved ones) are each tested at a bare α. Watch its family-wise error rate above settle well past α, whereas Tukey's and Bonferroni's do not.</p>
+    <p class="exp-note">Fisher's <span class="tip" tabindex="0" data-tip="Fisher's least significant difference is only applied after the omnibus F test flags a difference; a family whose F test flags none declares no pair different, whatever the raw mean gaps look like.">protected</span> LSD holds the family-wise error rate at α only when there are exactly three designs (Hayter, 1986); with five, and with the last two designs planted δ above the rest by default, F almost always flags a difference, and so the protection does nothing and the four null pairs (three among the unmoved designs and one between the two moved ones) are each tested at a bare α. Watch its family-wise error rate above settle well past α, whereas Tukey's and Bonferroni's do not.</p>
     <p class="exp-note">ANOVA and all three post-hoc rules here assume every design is sampled independently of every other, an assumption common random numbers break by design: each rule pools a within-design variance across designs that no longer vary independently, Bonferroni's rule included. Under common random numbers, a comparison instead falls back to the paired interval at α/C that tab ② builds, where the Bonferroni inequality still holds because it needs no independence at all. When every comparison is against one benchmark design rather than among all of them, Dunnett's test is the exact many-versus-one counterpart of Tukey's rule here.</p>
   </section>
 
@@ -1278,7 +1264,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     <p class="exp-note">Ranking and selection fits into the loop in two places. Page ⑥'s two-stage procedure is the clean-up step, deciding among the search's finalists with a stated guarantee once the search itself has narrowed the field; a lighter screening rule can also sit inside the loop, stopping replications on a candidate that is already clearly worse than the others.</p>
     <div class="sec-hd" style="margin-top:18px">Two consequences of random simulation output</div>
     <p class="exp-note">The search never sees a candidate's true expected performance. Every value it compares is a sample mean from a finite number of replications. The candidate with the largest sample mean is partly the candidate that happened to draw favorably, and so its sample mean overstates its true performance, as page ④ shows for a fixed set of designs. This is why the loop's last step re-estimates the chosen candidate on fresh replications before reporting it: a sample mean and interval computed from new replications are not biased by the selection that picked the candidate.</p>
-    <p class="exp-note">Every comparison the search makes is one more hypothesis test, and a search makes thousands of them. If the rule were simply to move to any candidate whose interval excludes the current best's at α = 0.05, then one comparison in twenty between two equally good candidates would move the search to the wrong one. Pages ①–③ measure exactly this accumulation of false rejections. The search rules above therefore do not decide each comparison once: they keep replicating candidates that are close and drop only candidates that are clearly worse.</p>
+    <p class="exp-note">Every comparison the search makes is one more hypothesis test, and a search makes thousands of them. If the rule were simply to move to any candidate whose interval excludes the current best's at α = 0.05, then one comparison in twenty between two equally good candidates would move the search to the wrong one. Pages ①–③ measure exactly this accumulation of false alarms. The search rules above therefore do not decide each comparison once: they keep replicating candidates that are close and drop only candidates that are clearly worse.</p>
     <div class="sec-hd" style="margin-top:18px">How this differs from the rest of this widget</div>
     <p class="exp-note">Pages ①–⑤ compare a fixed set of designs against fixed samples from each. Page ⑥ adds replications adaptively but still to a fixed set of designs chosen in advance. This page searches an open set: the design space itself is not enumerated, and the statistical tools built on the earlier pages (confidence intervals, corrections, and a screening rule) appear here again, now as components inside a search loop rather than as the whole procedure.</p>
   </section>
@@ -2781,8 +2767,9 @@ function arrowMark(x, y, dir, color) {
 // One horizontal row per comparison, x fixed at -span..+span. A row whose
 // interval runs past the frame is clipped to the edge and given a small
 // arrowhead there, rather than being left to overflow the plot or hidden
-// entirely. captured/reject read the same way a card would: capture colors
-// the interval (teal held, red dashed and hollow when it misses); reject
+// entirely. reject and falseRej color the interval by the decision and its
+// correctness (red dashed and hollow for a false alarm, indigo for a
+// detection, gray when kept); reject
 // draws the decision glyph (filled square) at the row's right, independent of
 // capture because the two coincide under the null and separate once they do
 // not. Below a 560px container, labelOf is asked for a shorter label.
@@ -2817,16 +2804,21 @@ function forestPlot(svgEl, items, opts) {
     var estV = it.diff !== undefined ? it.diff : it.mean;
     var loClipped = it.lo < -span, hiClipped = it.hi > span;
     var lo = clip(it.lo), hi = clip(it.hi);
-    var col = it.captured ? C.truth : C.miss;
-    var dash = it.captured ? '' : ' stroke-dasharray="4,2.5"';
+    // Color says what the test decided and whether that was right: red,
+    // dashed, and hollow for a false alarm, indigo for a detection, gray when
+    // the comparison was kept. The teal tick is the truth either way.
+    var falseAlarm = it.reject && it.falseRej;
+    var col = falseAlarm ? C.miss : (it.reject ? C.ok : C.muted);
+    var dash = falseAlarm ? ' stroke-dasharray="4,2.5"' : '';
     h += '<line x1="' + xP(lo) + '" y1="' + cy + '" x2="' + xP(hi) + '" y2="' + cy + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
     if (loClipped) h += arrowMark(xP(lo), cy, -1, col);
     if (hiClipped) h += arrowMark(xP(hi), cy, 1, col);
-    h += '<line x1="' + xP(clip(truth)) + '" y1="' + (cy - 6) + '" x2="' + xP(clip(truth)) + '" y2="' + (cy + 6) + '" stroke="' + C.truth + '" stroke-width="2"/>';
     var mx = xP(clip(estV));
-    h += it.captured
+    h += !falseAlarm
       ? '<circle cx="' + mx + '" cy="' + cy + '" r="4" fill="' + col + '"/>'
       : '<circle cx="' + mx + '" cy="' + cy + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
+    // The truth tick is drawn after the dot so the dot never hides it.
+    h += '<line x1="' + xP(clip(truth)) + '" y1="' + (cy - 8) + '" x2="' + xP(clip(truth)) + '" y2="' + (cy + 8) + '" stroke="' + C.truth + '" stroke-width="2.5"/>';
     if (opts.glyph) {
       var gx = pL + cW + 10, gy = cy - 4;
       h += it.reject
@@ -2880,9 +2872,12 @@ function bindLineDrag(svgEl, onDrag) {
   svgEl.addEventListener('pointerup', end); svgEl.addEventListener('pointercancel', end);
 }
 // Vertical intervals over design index 1..K on a fixed opts.ySpan. Each
-// design's truth is a teal tick; its own interval and mean dot are colored by
-// capture, the same reading the forest plots use: teal and filled when
-// item.captured, red, dashed, and hollow when it is not. opts.neutral is for
+// design's truth is a teal bar. With opts.decision (tab (1)) the interval and
+// mean dot are colored by the test's decision and its correctness, the same
+// reading the forest plots use: red, dashed, and hollow for a false alarm,
+// indigo for a detection, gray when kept. Without it (tab (4)) they are
+// colored by capture: teal and filled when item.captured, red, dashed, and
+// hollow when it is not. opts.neutral is for
 // a bar that is not a confidence interval on the true mean at all (tab (5)'s
 // critical-difference bars around the sample means): it treats every
 // interval as neither captured nor missed and draws it muted instead.
@@ -2908,7 +2903,9 @@ function designsPlot(svgEl, items, opts) {
   // the full card width instead of the narrower, sidebar-sized figWidth cap.
   var W = opts.full ? fullCardWidth(svgEl) : figWidth(svgEl), K = items.length;
   var pL = 46, pR = (typeof opts.target === 'number') ? 30 : 16, pT = 14;
-  var pB = opts.glyph ? 36 : 30;
+  // A second label line (item.sub, a requirement's target) needs its own room.
+  var hasSub = items.some(function (it) { return it.sub; });
+  var pB = (opts.glyph ? 36 : 30) + (hasSub ? 12 : 0);
   // The K columns share the frame's whole inner width, however few they
   // are, so the frame always spans its card. No floor on colW: a floor
   // would let K columns claim more than the frame's own inner width,
@@ -2919,6 +2916,9 @@ function designsPlot(svgEl, items, opts) {
   // every other one, always keeping the first and the last so the row's ends
   // stay labeled whatever K is.
   var denseX = colW < 34;
+  // Named columns (item.label) switch to their short forms all together, so a
+  // row never mixes full names with abbreviations.
+  var namesFit = items.every(function (it) { return !it.label || textWidthPx(it.label, 10, FF_MONO) + 6 <= colW; });
   var labelY = pT + cH + (opts.glyph ? 26 : 16);
   var yLo = opts.ySpan[0], yHi = opts.ySpan[1];
   var yP = function (v) { return pT + cH - (v - yLo) / (yHi - yLo) * cH; };
@@ -2937,19 +2937,26 @@ function designsPlot(svgEl, items, opts) {
   items.forEach(function (it, i) {
     var cx = pL + (i + 0.5) * colW;
     if (opts.focus === i) h += '<rect x="' + (pL + i * colW) + '" y="' + pT + '" width="' + colW + '" height="' + cH + '" fill="' + C.accentWash + '"/>';
-    h += '<line x1="' + (cx - 7) + '" y1="' + yP(it.truth) + '" x2="' + (cx + 7) + '" y2="' + yP(it.truth) + '" stroke="' + C.truth + '" stroke-width="2"/>';
     var isWinnerTab = opts.winnerIdx != null, isWinner = isWinnerTab && i === opts.winnerIdx;
     var muted = opts.neutral || (isWinnerTab && !isWinner);
-    var col = muted ? C.estMuted : (it.captured ? C.truth : C.miss);
-    var dash = (!muted && !it.captured) ? ' stroke-dasharray="4,2.5"' : '';
+    // Under opts.decision the color says what the test decided and whether
+    // that was right (a false alarm, a detection, or kept); otherwise it says
+    // whether the interval captured the truth, which is tab (4)'s question.
+    var falseAlarm = opts.decision ? (it.reject && it.falseRej) : !it.captured;
+    var col = muted ? C.estMuted : (opts.decision ? (falseAlarm ? C.miss : (it.reject ? C.ok : C.muted)) : (it.captured ? C.truth : C.miss));
+    var dash = (!muted && falseAlarm) ? ' stroke-dasharray="4,2.5"' : '';
     h += '<line x1="' + cx + '" y1="' + yP(it.lo) + '" x2="' + cx + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
     h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.hi) + '" x2="' + (cx + 6) + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"/>';
     h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.lo) + '" x2="' + (cx + 6) + '" y2="' + yP(it.lo) + '" stroke="' + col + '" stroke-width="1.8"/>';
     var ym = yP(it.mean);
-    h += (muted || it.captured)
+    h += (muted || !falseAlarm)
       ? '<circle cx="' + cx + '" cy="' + ym + '" r="4" fill="' + col + '"/>'
       : '<circle cx="' + cx + '" cy="' + ym + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
     if (isWinner) h += '<circle cx="' + cx + '" cy="' + ym + '" r="7.5" fill="none" stroke="' + C.est + '" stroke-width="2"/>';
+    // The truth bar is drawn last so the mean dot, which often sits on it,
+    // never hides it. A caller whose truths all sit on the target line
+    // (opts.truthMark false) draws none: the line already shows them.
+    if (opts.truthMark !== false) h += '<line x1="' + (cx - 9) + '" y1="' + yP(it.truth) + '" x2="' + (cx + 9) + '" y2="' + yP(it.truth) + '" stroke="' + C.truth + '" stroke-width="2.5"/>';
     if (opts.letters && opts.letters[i]) {
       h += '<text x="' + cx + '" y="' + (yP(it.hi) - 8) + '" text-anchor="middle" fill="' + C.text + '" font-size="10" font-weight="700" font-family="' + FF_SANS + '">' + opts.letters[i] + '</text>';
     }
@@ -2965,9 +2972,13 @@ function designsPlot(svgEl, items, opts) {
       // without crowding its neighbor's own label; a two-digit design
       // number needs several pixels more than a one-digit one, and so this is
       // measured per label rather than guessed from one flat column width.
-      var full = 'Design ' + num, short = 'D' + num;
-      var lbl = (textWidthPx(full, 10, FF_MONO) + 6 <= colW) ? full : short;
+      var full = it.label || ('Design ' + num), short = it.short || ('D' + num);
+      var fits = it.label ? namesFit : (textWidthPx(full, 10, FF_MONO) + 6 <= colW);
+      var lbl = fits ? full : short;
       h += '<text x="' + cx + '" y="' + labelY + '" text-anchor="middle" fill="' + C.muted + '" font-size="10" font-family="' + FF_MONO + '">' + lbl + '</text>';
+      if (it.sub && fits && textWidthPx(it.sub, 9, FF_MONO) + 6 <= colW) {
+        h += '<text x="' + cx + '" y="' + (labelY + 12) + '" text-anchor="middle" fill="' + C.muted + '" font-size="9" font-family="' + FF_MONO + '">' + it.sub + '</text>';
+      }
     }
   });
 
@@ -2978,7 +2989,7 @@ function designsPlot(svgEl, items, opts) {
     // there is still a comfortable drag target past where the line is drawn.
     var ty = yP(opts.target), frameEnd = pL + cW, cantEnd = frameEnd + 22;
     h += '<line x1="' + pL + '" y1="' + ty + '" x2="' + frameEnd + '" y2="' + ty + '" stroke="' + C.text + '" stroke-width="1.5" stroke-dasharray="5,3"/>';
-    h += '<line class="hist-handle" x1="' + pL + '" y1="' + ty + '" x2="' + cantEnd + '" y2="' + ty + '" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>';
+    if (opts.onTarget) h += '<line class="hist-handle" x1="' + pL + '" y1="' + ty + '" x2="' + cantEnd + '" y2="' + ty + '" stroke="transparent" stroke-width="24" pointer-events="stroke" aria-hidden="true"/>';
     frame = { pT: pT, cH: cH, yMin: yLo, yMax: yHi };
   }
   var SH = pT + cH + pB;
@@ -3117,7 +3128,7 @@ function swSquare(fill, stroke, ring) {
 }
 function pairMatrixLegendHtml() {
   return legendHtml([
-    { sw: swSquare(C.miss), label: 'declared different, truly equal (false rejection)' },
+    { sw: swSquare(C.miss), label: 'declared different, truly equal (false alarm)' },
     { sw: swSquare(C.ok), label: 'declared different, truly different (true detection)' },
     { sw: swSquare(C.bg, C.border), label: 'not declared different' },
     { sw: swSquare(C.bg, C.border, true), label: 'ring: the pair truly differs' }
@@ -3131,6 +3142,10 @@ function pairMatrixLegendHtml() {
 // line or dot.
 function legSwatch(inner) { return '<svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true">' + inner + '</svg>'; }
 function swLine(color, dash) { return legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + color + '" stroke-width="2"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + '/>'); }
+function swDecision(color, hollow) {
+  return legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + color + '" stroke-width="1.8"' + (hollow ? ' stroke-dasharray="4,2.5"' : '') + '/>'
+    + (hollow ? '<circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + color + '" stroke-width="2"/>' : '<circle cx="12" cy="6" r="4" fill="' + color + '"/>'));
+}
 function swDot(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="' + color + '"/>'); }
 function swDotHollow(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="#fff" stroke="' + color + '" stroke-width="2"/>'); }
 function legendHtml(items) { return items.map(function (it) { return '<span>' + it.sw + it.label + '</span>'; }).join(''); }
@@ -3288,58 +3303,77 @@ function setCard(id, html) { var el = $(id); if (el) el.innerHTML = html; }
 });
 
 // ── Tab ①: Many Designs Against One Target ───────────────────────────────
-// Every design gets its own one-sample interval tested against a single
-// target theta0; a rejection is false exactly when a design's own true mean
-// already sits at that target because then only sampling error could have
-// excluded it. K, R, sigma, delta, alpha, and the configuration are sampling
-// knobs (a change draws a divider on the next run); theta0 and the
-// per-interval level are post-processing knobs that re-derive every family
-// already drawn.
+// One design judged on K requirements: each response gets its own one-sample
+// interval tested against its own target, and every response's true mean is
+// that target, so this tab simulates the null, every flag is a false alarm,
+// and the fraction of runs with any flag is the family's Type-I error rate.
+// Each response is simulated as its deviation from its target in units of
+// its own standard deviation, so the K responses share one axis with every
+// target at zero and sigma is 1 by construction. K, R, and alpha are
+// sampling knobs (a change draws a divider on the next run); the per-interval
+// level is a post-processing knob that re-derives every run already drawn.
+var LOOKS_THETA0 = 0;
+// The requirements a design can be judged on, in the order K takes them: a
+// response name, its short form for a narrow column, and its target with
+// units, which the plot prints under the name where the column is wide
+// enough. The targets are labels only: every response is drawn as its
+// deviation from its own target.
+var LOOKS_RESPONSES = [
+  { name: 'Mean wait', sub: 'target 4 min' },
+  { name: 'Utilization', sub: 'target 80%' },
+  { name: 'Fill rate', sub: 'target 95%' },
+  { name: 'Throughput', sub: 'target 120/h' },
+  { name: 'System time', sub: 'target 12 min' },
+  { name: 'Inventory', sub: 'target 40' },
+  { name: 'Stockouts', sub: 'target 2/month' },
+  { name: 'Cycle time', sub: 'target 30 min' },
+  { name: 'On-time rate', sub: 'target 90%' },
+  { name: 'Unit cost', sub: 'target $12' }
+];
+function looksDecorate(items) {
+  return items.map(function (it, i) {
+    var r = LOOKS_RESPONSES[i] || { name: 'Response ' + (i + 1), sub: '' };
+    return Object.assign({}, it, { label: r.name, short: 'R' + (i + 1), sub: r.sub });
+  });
+}
 function looksKChanged() { clampParam('looks-K', 2, 10, 0); onSamplingChange('looks'); }
 function looksRChanged() { clampParam('looks-R', 5, 50, 0); onSamplingChange('looks'); }
-function looksSigmaChanged() { clampParam('looks-sigma', 0.5, 5, 1); onSamplingChange('looks'); }
-function looksDeltaChanged() { clampParam('looks-delta', 0, 5, 1); onSamplingChange('looks'); }
-function looksCfgChanged() { onSamplingChange('looks'); }
 function looksAlphaChanged() { onSamplingChange('looks'); }
-function looksTheta0Changed() { clampParam('looks-theta0', -1e6, 1e6, 1); rederive('looks'); }
 function looksLevelChanged() { rederive('looks'); }
 registerSpinner('looks-K', { min: 2, max: 10, step: 1, decimals: 0 }, function () { onSamplingChange('looks'); });
 registerSpinner('looks-R', { min: 5, max: 50, step: 1, decimals: 0 }, function () { onSamplingChange('looks'); });
-registerSpinner('looks-sigma', { min: 0.5, max: 5, step: 0.1, shiftStep: 1, decimals: 1 }, function () { onSamplingChange('looks'); });
-registerSpinner('looks-delta', { min: 0, max: 5, step: 0.1, shiftStep: 1, decimals: 1 }, function () { onSamplingChange('looks'); });
-registerSpinner('looks-theta0', { min: -1e6, max: 1e6, step: 0.1, shiftStep: 1, decimals: 1 }, function () { rederive('looks'); });
 
 // The half-span every family's figure is drawn on: wide enough that an
 // interval built at up to the 0.9975 quantile of its own t distribution
-// stays inside the frame alongside a shift of delta from the common true
-// mean theta = 10. Depends only on the sampling parameters of the current
-// segment, and so it holds fixed across a whole batch and only moves when a
-// run's own K, R, sigma, delta, or configuration actually changes.
+// stays inside the frame around the common target at zero, in units of each
+// response's own standard deviation. Depends only on the sampling
+// parameters of the current segment, and so it holds fixed across a whole
+// batch and only moves when a run's own R actually changes.
 function looksYSpan(sp) {
-  var s = sp.delta + 4 * sp.sigma / Math.sqrt(sp.R) * MCP.tQuantile(0.9975, sp.R - 1);
-  return [10 - s, 10 + s];
+  var s = 4 / Math.sqrt(sp.R) * MCP.tQuantile(0.9975, sp.R - 1);
+  return [LOOKS_THETA0 - s, LOOKS_THETA0 + s];
 }
 // The number word a live K spells out in the figure's own title, for K from
 // 2 through 10 (this tab's whole range); a K outside that range (never
 // reachable through the control's own clamp) falls back to the digit.
-var NUM_WORDS = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten' };
+var NUM_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' };
 function looksDesignsTitle(K) {
-  return (NUM_WORDS[K] || String(K)) + ' candidate designs against one target (bigger is better)';
+  return 'One design on ' + (NUM_WORDS[K] || String(K)) + ' requirements, every true mean at its target';
 }
 function looksFigCaption(el, runIdx, rec, theta0) {
   // A standing sentence, unchanged by any run, states what the figure holds:
   // K candidate designs of one system, each tested against the one target.
-  var standing = 'Designs 1 through K are K candidate designs of one system, tested against the one target θ₀.';
+  var standing = 'Each column is one of the design\'s K requirements: the response\'s deviation from its own target, in units of that response\'s standard deviation, with every true mean exactly at its target.';
   var body;
   if (!rec) {
-    body = 'Run an experiment to draw a family of designs against the target.';
+    body = 'Run an experiment to simulate the design and judge it on every requirement.';
   } else {
-    body = 'Run ' + runIdx + ': <strong>' + rec.nReject + ' of ' + rec.C + '</strong> intervals exclude θ₀ = '
-      + theta0.toFixed(1) + (rec.anyFalse ? ', including a false rejection.' : '.');
+    body = 'Run ' + runIdx + ': <strong>' + rec.nReject + ' of ' + rec.C + '</strong> intervals exclude their targets'
+      + (rec.nReject ? ', every one a false alarm.' : '.');
   }
   el.innerHTML = standing + ' ' + body;
-  reserveCapHeight(el, [standing + ' Run an experiment to draw a family of designs against the target.',
-    standing + ' Run 100: <strong>10 of 10</strong> intervals exclude θ₀ = -999.9, including a false rejection.'], true);
+  reserveCapHeight(el, [standing + ' Run an experiment to simulate the design and judge it on every requirement.',
+    standing + ' Run 100: <strong>10 of 10</strong> intervals exclude their targets, every one a false alarm.'], true);
 }
 // Every strip caption opens with a fixed sentence (unchanged by any run)
 // naming what a column counts and what turns it red, and then a family-level
@@ -3400,34 +3434,27 @@ function intervalLevelLine(el, alphaJ, corrected, denomSym) {
   reserveCapHeight(el, ['95.0% (1 − α) confidence intervals shown.', '99.9% (1 − α/' + denomSym + ') confidence intervals shown.'], true);
 }
 // A fixed legend for the designs plot's own marks, none of which depend on
-// the data a family produces: the true-mean tick and the two capture colors
-// an interval and its mean dot can carry.
+// the data a family produces: the target line, which is also every design's
+// true mean, and the two states an interval and its mean dot can be in.
 function looksFigLegendHtml() {
-  var tick = legSwatch('<line x1="12" y1="2" x2="12" y2="10" stroke="' + C.truth + '" stroke-width="2"/>');
-  var hitDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.truth + '" stroke-width="1.8"/><circle cx="12" cy="6" r="4" fill="' + C.truth + '"/>');
-  var missDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.miss + '" stroke-width="1.8" stroke-dasharray="4,2.5"/><circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + C.miss + '" stroke-width="2"/>');
-  var full = legSwatch('<rect x="8" y="2" width="8" height="8" fill="' + C.text + '"/>');
-  var hollow = legSwatch('<rect x="8" y="2" width="8" height="8" fill="none" stroke="' + C.text + '" stroke-width="1.4"/>');
   return legendHtml([
-    { sw: tick, label: 'true mean' },
-    { sw: hitDot, label: 'interval captures its true mean' },
-    { sw: missDot, label: 'interval misses its true mean' },
-    { sw: full, label: 'excludes the target (filled)' },
-    { sw: hollow, label: 'contains the target (hollow)' }
+    { sw: swLine(C.text, '5,3'), label: 'target of every requirement, and every true mean' },
+    { sw: swDecision(C.miss, true), label: 'false alarm: the interval excludes the target' },
+    { sw: swDecision(C.muted, false), label: 'kept: the interval contains the target' }
   ]);
 }
 
 TABS.looks = {
   sampling: function () {
     return {
-      K: Number($('looks-K').value), R: Number($('looks-R').value), sigma: Number($('looks-sigma').value),
-      cfg: $('looks-cfg').value, delta: Number($('looks-delta').value), alpha: Number($('looks-alpha').value),
+      K: Number($('looks-K').value), R: Number($('looks-R').value), sigma: 1,
+      cfg: 'all', delta: 0, alpha: Number($('looks-alpha').value),
       dir: 'max', crn: false
     };
   },
-  post: function () { return { level: $('looks-level').value, theta0: Number($('looks-theta0').value) }; },
+  post: function () { return { level: $('looks-level').value, theta0: LOOKS_THETA0 }; },
   derive: function (seed, sp, post) {
-    var means = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
+    var means = MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: sp.crn }).Y;
     var rec = MCP.oneSampleFamily(Y, { alpha: sp.alpha, level: post.level, theta0: post.theta0, means: means });
     rec.means = means;
@@ -3443,47 +3470,35 @@ TABS.looks = {
     var nC = sp.K, alphaJ = post.level === 'bonf' ? sp.alpha / nC : sp.alpha;
     var nSeg = runs.length, nAnyFalse = 0, nAllCap = 0;
     runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; if (r.rec.allCaptured) nAllCap++; });
-    // The independent-comparisons formula is only ever exact for the null
-    // comparisons (a real difference cannot inflate a false-rejection rate),
-    // and so it is evaluated at their count rather than at every design K --
-    // under a non-null configuration those are not the same number.
-    var meansNow = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
-    var nNull = meansNow.filter(function (m) { return m === post.theta0; }).length;
 
     intervalLevelLine($('looks-level-line'), alphaJ, post.level === 'bonf', 'K');
     $('looks-fig-title').textContent = looksDesignsTitle(sp.K);
 
     var latest = runs.length ? runs[runs.length - 1] : null;
-    var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).map(function (t) {
+    var items = looksDecorate(latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir).map(function (t) {
       return { truth: t, lo: t, hi: t, mean: t, captured: true };
-    });
-    designsPlot($('looks-fig'), items, {
-      ySpan: span, target: post.theta0, full: true, glyph: true,
-      onTarget: function (v) {
-        $('looks-theta0').value = (Math.round(v * 10) / 10).toFixed(1);
-        rederive('looks');
-      }
-    });
+    }));
+    designsPlot($('looks-fig'), items, { ySpan: span, target: post.theta0, full: true, decision: true, truthMark: false });
     $('looks-fig-leg').innerHTML = looksFigLegendHtml();
     looksFigCaption($('looks-fig-cap'), all.length, latest ? latest.rec : null, post.theta0);
 
     var stripRes = stripPlot($('looks-strip'), runs, {
-      yMax: sp.K, yLabel: 'rejections',
+      yMax: sp.K, yLabel: 'flagged',
       value: function (rec) { return rec.nReject; },
       bad: function (rec) { return rec.anyFalse; }
     });
     var looksRefText = post.level === 'bonf'
       ? 'at most ' + (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '% by the Bonferroni bound'
-      : (nNull > 0 ? (MCP.fwerIndep(alphaJ, nNull) * 100).toFixed(1) + '% expected if the null comparisons were independent' : 'no null comparisons in this configuration');
+      : (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '% expected if the null comparisons were independent';
     stripTallyCaption($('looks-strip-cap'),
-      'Each column is one family; its height counts the intervals that exclude θ₀, and red means at least one of them is a false rejection.',
-      stripRes, nSeg, nAnyFalse, 'families', 'had at least one false rejection', looksRefText,
+      'Each column is one run of the design; its height counts the requirements whose interval excludes its target, every one a false alarm because every true mean is its target, and red marks a run with at least one.',
+      stripRes, nSeg, nAnyFalse, 'runs', 'had at least one false alarm', looksRefText,
       ['99.9% expected if the null comparisons were independent', 'at most 99.9% by the Bonferroni bound']);
 
     setCard('looks-c-C', String(nC));
     setCard('looks-c-alphaj', alphaJ.toFixed(4));
     setCard('looks-c-anyfalse', rateText(nAnyFalse, nSeg));
-    setCard('looks-c-indep', nNull > 0 ? (MCP.fwerIndep(alphaJ, nNull) * 100).toFixed(1) + '%' : '—');
+    setCard('looks-c-indep', (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '%');
     setCard('looks-c-bonfbound', (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '%');
     setCard('looks-c-allcap', rateText(nAllCap, nSeg));
 
@@ -3555,26 +3570,25 @@ function pairsFigCaption(el, runIdx, rec) {
     el.innerHTML = 'Run an experiment to draw intervals for the differences between designs.';
   } else {
     el.innerHTML = 'Run ' + runIdx + ': <strong>' + rec.nReject + ' of ' + rec.C + '</strong> intervals exclude zero'
-      + (rec.anyFalse ? ', including a false rejection.' : '.');
+      + (rec.anyFalse ? ', including a false alarm.' : '.');
   }
   reserveCapHeight(el, ['Run an experiment to draw intervals for the differences between designs.',
-    'Run 100: <strong>45 of 45</strong> intervals exclude zero, including a false rejection.'], true);
+    'Run 100: <strong>45 of 45</strong> intervals exclude zero, including a false alarm.'], true);
 }
 // A fixed legend for the forest plot's own marks because none of them depend
 // on the data a family produces: the true-difference tick, the two capture
 // colors an estimate can carry, and the two decision glyphs.
 function pairsFigLegendHtml() {
-  var tick = legSwatch('<line x1="12" y1="2" x2="12" y2="10" stroke="' + C.truth + '" stroke-width="2"/>');
-  var hitDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.truth + '" stroke-width="1.8"/><circle cx="12" cy="6" r="4" fill="' + C.truth + '"/>');
-  var missDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.miss + '" stroke-width="1.8" stroke-dasharray="4,2.5"/><circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + C.miss + '" stroke-width="2"/>');
+  var tick = legSwatch('<line x1="12" y1="1" x2="12" y2="11" stroke="' + C.truth + '" stroke-width="2.5"/>');
   var full = legSwatch('<rect x="8" y="2" width="8" height="8" fill="' + C.text + '"/>');
   var hollow = legSwatch('<rect x="8" y="2" width="8" height="8" fill="none" stroke="' + C.text + '" stroke-width="1.4"/>');
   return legendHtml([
     { sw: tick, label: 'true difference between the two designs' },
-    { sw: hitDot, label: 'interval captures its true difference' },
-    { sw: missDot, label: 'interval misses its true difference' },
-    { sw: full, label: 'decision: excludes zero (reject)' },
-    { sw: hollow, label: 'decision: contains zero (keep)' }
+    { sw: swDecision(C.miss, true), label: 'false alarm: the interval excludes zero, but the true difference is zero' },
+    { sw: swDecision(C.ok, false), label: 'detection: the interval excludes zero, and the true difference is not zero' },
+    { sw: swDecision(C.muted, false), label: 'kept: the interval contains zero' },
+    { sw: full, label: 'excludes zero (filled)' },
+    { sw: hollow, label: 'contains zero (hollow)' }
   ]);
 }
 function fmtPValue(p) { return p < 0.001 ? '<0.001' : p.toFixed(3); }
@@ -3586,7 +3600,7 @@ function pairsTableCols() {
     { key: 'lo', label: 'Interval', fmt: function (v, r) { return r.placeholder ? '—' : (v.toFixed(2) + ' to ' + r.hi.toFixed(2)); } },
     { key: 'p', label: 'Raw p', fmt: function (v, r) { return r.placeholder ? '—' : fmtPValue(v); } },
     { key: 'pBonf', label: 'Bonferroni p', fmt: function (v, r) { return r.placeholder ? '—' : fmtPValue(v); } },
-    { key: 'reject', label: 'Decision', fmt: function (v, r) { return r.placeholder ? '—' : (v ? 'reject' : 'keep'); } }
+    { key: 'reject', label: 'Decision', fmt: function (v, r) { return r.placeholder ? '—' : (v ? 'flagged' : 'kept'); } }
   ];
 }
 
@@ -3651,8 +3665,8 @@ TABS.pairs = {
       ? 'at most ' + (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '% by the Bonferroni bound'
       : (nNullC > 0 ? (MCP.fwerIndep(alphaJ, nNullC) * 100).toFixed(1) + '% expected if the null comparisons were independent' : 'no null comparisons in this configuration');
     stripTallyCaption($('pairs-strip-cap'),
-      'Each column is one family; its height counts the intervals that exclude zero, and red means at least one of them is a false rejection.',
-      stripRes, nSeg, nAnyFalse, 'families', 'had at least one false rejection', pairsRefText,
+      'Each column is one family; its height counts the intervals that exclude zero, and red means at least one of them is a false alarm.',
+      stripRes, nSeg, nAnyFalse, 'families', 'had at least one false alarm', pairsRefText,
       ['99.9% expected if the null comparisons were independent', 'at most 99.9% by the Bonferroni bound']);
 
     var obs = nSeg > 0 ? MCP.wilson(nAnyFalse, nSeg, 0.95) : null;
@@ -3835,8 +3849,8 @@ TABS.power = {
       : (post.rule === 'bonf' ? 'at most ' + (sp.alpha * 100).toFixed(1) + '% by the Bonferroni bound'
                                : 'at most ' + (sp.alpha * 100).toFixed(1) + '% by Holm\'s guarantee');
     stripTallyCaption($('power-strip-cap'),
-      'Each column is one family; its height counts the true detections under the selected rule, and red means the family also has a false rejection.',
-      stripRes, nSeg, powerNBad, 'families', 'had at least one false rejection under the selected rule', powerRefText,
+      'Each column is one family; its height counts the true detections under the selected rule, and red means the family also has a false alarm.',
+      stripRes, nSeg, powerNBad, 'families', 'had at least one false alarm under the selected rule', powerRefText,
       ['99.9% expected if the comparisons were independent', 'at most 99.9% by the Bonferroni bound', 'at most 99.9% by Holm\'s guarantee']);
 
     var obsBonf = powDen > 0 ? MCP.wilson(powNum.bonf, powDen, 0.95) : null;
@@ -3899,7 +3913,7 @@ function winnerExpectedTruth(sp) {
 // carry, the orange ring marking this family's pick, and the muted color
 // every other design gets because only the winner's interval is judged.
 function winnerFigLegendHtml() {
-  var tick = legSwatch('<line x1="12" y1="2" x2="12" y2="10" stroke="' + C.truth + '" stroke-width="2"/>');
+  var tick = legSwatch('<line x1="3" y1="6" x2="21" y2="6" stroke="' + C.truth + '" stroke-width="2.5"/>');
   var hitDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.truth + '" stroke-width="1.8"/><circle cx="12" cy="6" r="4" fill="' + C.truth + '"/>');
   var missDot = legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + C.miss + '" stroke-width="1.8" stroke-dasharray="4,2.5"/><circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + C.miss + '" stroke-width="2"/>');
   var ring = legSwatch('<circle cx="12" cy="6" r="5" fill="none" stroke="' + C.est + '" stroke-width="2"/>');
@@ -4040,17 +4054,17 @@ function anovaFigCaption(el, runIdx, rec, rule) {
   } else {
     var r = rec.rules[rule];
     el.innerHTML = 'Run ' + runIdx + ': <strong>' + r.nSig + ' of ' + rec.C + '</strong> pairs are declared different under '
-      + name + (r.anyFalse ? ', including a false rejection.' : '.');
+      + name + (r.anyFalse ? ', including a false alarm.' : '.');
   }
   reserveCapHeight(el, ["Run an experiment to draw a family and judge it under Fisher's protected LSD.",
-    'Run 100: <strong>45 of 45</strong> pairs are declared different under Fisher\'s protected LSD, including a false rejection.'], true);
+    'Run 100: <strong>45 of 45</strong> pairs are declared different under Fisher\'s protected LSD, including a false alarm.'], true);
 }
 // The reserved line under the cards: protected LSD's one distinguishing
 // behavior, switching off every declaration when F itself does not reject.
 // Reserved at this height whether or not it is showing, and so the strip
 // section below it never shifts between rules or between runs.
 function anovaProtectedCaption(el, rec, rule) {
-  var msg = 'Protected LSD is switched off on this family: the F test did not reject, and so no pair is declared different.';
+  var msg = 'Protected LSD is switched off on this family: the F test flagged no difference, and so no pair is declared different.';
   el.innerHTML = (rec && rule === 'lsd' && rec.rules.lsd.protectedOff) ? msg : '';
   reserveCapHeight(el, msg, true);
 }
@@ -4148,8 +4162,8 @@ TABS.anova = {
     var anovaRefText = rule === 'lsd' ? 'not guaranteed under protected LSD'
       : 'at most ' + (sp.alpha * 100).toFixed(1) + '% by ' + (rule === 'tukey' ? 'Tukey\'s guarantee' : 'the Bonferroni bound');
     stripTallyCaption($('anova-strip-cap'),
-      'Each column is one family; its height counts the pairs declared different under the selected rule, and red means at least one of them is a false rejection.',
-      stripRes, runs.length, fwerNum[rule], 'families', 'had at least one false rejection among the null pairs', anovaRefText,
+      'Each column is one family; its height counts the pairs declared different under the selected rule, and red means at least one of them is a false alarm.',
+      stripRes, runs.length, fwerNum[rule], 'families', 'had at least one false alarm among the null pairs', anovaRefText,
       ['at most 99.9% by Tukey\'s guarantee', 'at most 99.9% by the Bonferroni bound', 'not guaranteed under protected LSD']);
   }
 };
