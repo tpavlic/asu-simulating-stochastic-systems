@@ -312,6 +312,16 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    tab's own vocabulary rather than as emphasis; the tooltip behind it is the
    page's shared one, which reaches a keyboard and a finger as well as a mouse. */
 .lede .tip { font-weight: 700; }
+/* Collapsible notes at the foot of a tab: an extension a reader can open
+   after the tab has made its point, closed by default so the page above
+   stays short. Same box as the input analyzer's "?" notes. */
+details.why { border: 1.5px solid var(--border); border-radius: 7px; background: var(--chart-bg); margin-top: 10px; }
+details.why > summary { cursor: pointer; padding: 7px 11px; font-size: .8rem; font-weight: 600; color: var(--accent); list-style: none; display: flex; align-items: center; gap: 7px; }
+details.why > summary::-webkit-details-marker { display: none; }
+details.why > summary::before { content: '?'; flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .68rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+details.why[open] > summary { border-bottom: 1px solid var(--border); }
+details.why .why-body { padding: 9px 11px 10px 33px; font-size: .81rem; color: var(--text); line-height: 1.6; }
+details.why .why-body p + p { margin-top: 7px; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
 /* Digits of equal width wherever a number is written into text that reserves its
@@ -511,7 +521,8 @@ svg.fig { display: block; width: 100%; height: auto; }
 
   <!-- ── TAB ①: one design against K requirements ──────────────────────── -->
   <section id="tab-looks" class="tp active">
-    <p class="lede"><strong>This tab simulates the null hypothesis of one system design that meets all K of its performance requirements</strong>, and it estimates how often the design will be falsely reported as missing at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The K-designs framing, K candidate designs each tested against one target, has the same arithmetic; tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own target, and the report is one yes or no: does the design meet every requirement? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its target, and so every flag is a false alarm; the fraction of runs in which the design is reported as missing a requirement is the family's Type-I error rate. Judge K requirements at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a requirement flagged as missed when the design meets it exactly. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the design meets the requirement, and a false alarm is a Type-I error. It grows with the number of requirements even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval. Had the question been which of K separate designs miss a target, each judged and acted on alone, each verdict would carry its own α and no family correction would be wanted; a family matters only when one decision rests on all K tests, as it does here and wherever designs are compared with each other. The one-shot version of this tab is <span class="tip" tabindex="0" data-tip="The multivariate one-sample t test: one statistic for whether the design's K true means all sit at their targets, in place of K separate intervals.">Hotelling's T²</span>, which judges all K requirements in one statistic; with several designs instead of one it becomes MANOVA, which stands to tab ⑤'s ANOVA as Hotelling's T² stands to this tab. Tab ②, Designs Against Each Other, compares designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
+    <p class="lede"><strong>This tab simulates the null hypothesis of one system design that meets all K of its performance requirements</strong>, and it estimates how often the design will be falsely reported as missing at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The K-designs framing, K candidate designs each tested against one target, has the same arithmetic; tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own target, and the report is one yes or no: does the design meet every requirement? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its target, and so every flag is a false alarm; the fraction of runs in which the design is reported as missing a requirement is the family's Type-I error rate.</p>
+    <p class="lede">Judge K requirements at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a requirement flagged as missed when the design meets it exactly. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the design meets the requirement, and a false alarm is a Type-I error. It grows with the number of requirements even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval.</p>
     <div class="sec ctrl-card">
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
       <div class="ctrl-row par-row">
@@ -603,6 +614,19 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="leg" id="looks-fwer-leg"></div>
       <div class="fig-note" id="looks-fwer-cap"></div>
     </div>
+    <details class="why">
+      <summary>When K tests are not a family</summary>
+      <div class="why-body">
+        <p>Had the question been which of K separate designs miss a target, each judged and acted on alone, each verdict would carry its own α and no family correction would be wanted: the expected number of wrong verdicts would be αK, and shrinking every test to α/K would only trade false alarms for missed detections. A family matters only when one decision rests on all K tests, as it does here, where the report is a single yes or no, and wherever designs are compared with each other.</p>
+      </div>
+    </details>
+    <details class="why">
+      <summary>Hotelling's T², MANOVA, and where the other tabs go</summary>
+      <div class="why-body">
+        <p>The one-shot version of this tab is <span class="tip" tabindex="0" data-tip="The multivariate one-sample t test: one statistic for whether the design's K true means all sit at their targets, in place of K separate intervals.">Hotelling's T²</span>, which judges all K requirements in one statistic; with several designs instead of one it becomes MANOVA, which stands to tab ⑤'s ANOVA as Hotelling's T² stands to this tab.</p>
+        <p>Tab ②, Designs Against Each Other, compares designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ── TAB ②: comparing designs ────────────────────────────────────── -->
