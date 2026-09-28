@@ -846,8 +846,8 @@ better.
   in two groups, "The multiple comparisons problem" and "One-shot and sequential alternatives",
   collapsing to a select on narrow screens, with page ① the landing page and the shared situation
   stated once in the header's subtitle. ① One Design Against K Requirements simulates
-  the null, one design judged on K responses each with its true mean exactly at its own target (drawn
-  as deviations from target in standard-deviation units, so one axis serves them all), so every flag
+  the null, one design judged on K responses each with its true mean exactly at its own target (one
+  small panel per response, on its own scale in its own units), so every flag
   is a false alarm, and tracks the family-wise error rate against the uncorrected and
   Bonferroni-corrected bounds, naming Hotelling's T² and MANOVA as the one-shot versions; ② Designs Against Each Other runs the same test against a benchmark design or over
   every pair, with common random numbers optional; ③ Power Under Correction plants a real difference

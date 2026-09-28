@@ -110,9 +110,6 @@ nav.picker { margin: 4px 0 16px; }
 .ctrl-grp-lbl { font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
                 color: var(--muted); margin: 2px 0 6px; }
 .ctrl-grp-lbl .tip { text-decoration-color: var(--muted); }
-/* A fact about the simulated designs that is fixed on this tab, shown where
-   its control would otherwise sit. */
-.ctrl-static { font-size: .84rem; color: var(--text); padding: 4px 0; }
 /* Both control groups and the run row share one card, the experiment's
    whole setup, with the group labels dividing it the way the picker card's
    labels divide the pills; the run row sits last, under a rule, because
@@ -248,6 +245,8 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* minmax(0,1fr), not 1fr: the stat values are nowrap, and so an auto minimum would
    give the columns a large min-content width and push the page into h-scroll. */
 .sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
+/* A pair of cards stays a pair at every width. */
+.sg.sg-two { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
 /* Stacked layout, still wide: cards read better as two rows of four than four of
    two here. A tab whose cards carry long values (a bracketed interval, for
    instance) may need its own opt-out of this four-across layout once it exists. */
@@ -524,7 +523,6 @@ svg.fig { display: block; width: 100%; height: auto; }
     <p class="lede"><strong>This tab simulates the null hypothesis of one system design that meets all K of its performance requirements</strong>, and it estimates how often the design will be falsely reported as missing at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The K-designs framing, K candidate designs each tested against one target, has the same arithmetic; tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own target, and the report is one yes or no: does the design meet every requirement? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its target, and so every flag is a false alarm; the fraction of runs in which the design is reported as missing a requirement is the family's Type-I error rate.</p>
     <p class="lede">Judge K requirements at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a requirement flagged as missed when the design meets it exactly. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the design meets the requirement, and a false alarm is a Type-I error. It grows with the number of requirements even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval.</p>
     <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of requirements the design is judged on, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Requirements K</span></label>
@@ -543,18 +541,11 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-interval level</span></label>
+          <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The confidence level of every requirement's interval: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-requirement confidence level</span></label>
           <select id="looks-level" data-post onchange="looksLevelChanged()">
             <option value="raw" selected>1 − α (no correction)</option>
             <option value="bonf">1 − α/K (Bonferroni)</option>
           </select>
-        </span>
-      </div>
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the system being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated design, hidden from the experimenter</span></div>
-      <div class="ctrl-row par-row">
-        <span class="ctrl-pair ctrl-pair-wide">
-          <span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="Every response's true mean is its own target, so the null hypothesis is true for all K requirements and any flag is a false alarm. Each response is plotted as its deviation from its target in units of that response's standard deviation, which is why one axis serves responses with different units and why no σ control appears here. The other tabs let designs differ.">True mean of every response</span></span>
-          <span class="ctrl-static">exactly its target</span>
         </span>
       </div>
       <div class="ctrl-row">
@@ -573,34 +564,18 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="sec">
       <div class="sec-hd" id="looks-fig-title">Five candidate designs against one target (bigger is better)</div>
       <div class="fig-note" id="looks-level-line"></div>
-      <svg class="fig" id="looks-fig" role="img" aria-label="One vertical interval per requirement, each response's deviation from its own target in units of its standard deviation, against a dashed line at zero that is every target and every true mean; each interval and its mean dot red, dashed, with a hollow dot when it excludes the target (a false alarm) and gray when it contains it"></svg>
+      <svg class="fig" id="looks-fig" role="img" aria-label="One small panel per requirement, each on its own scale in its own units with its target as a dashed line; the design's interval for that response is red, dashed, with a hollow dot when it excludes the target (a false alarm) and gray when it contains it"></svg>
       <div class="leg" id="looks-fig-leg"></div>
       <div class="fig-note" id="looks-fig-cap"></div>
     </div>
-    <div class="sg">
+    <div class="sg sg-two">
       <div class="sc">
-        <div class="sc-lbl">Comparisons C</div>
-        <div class="sc-val" id="looks-c-C">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl">Per-interval <span class="sym">α<sub>j</sub></span></div>
-        <div class="sc-val" id="looks-c-alphaj">—</div>
-      </div>
-      <div class="sc sc-wide">
-        <div class="sc-lbl">Runs with any false alarm</div>
-        <div class="sc-val" id="looks-c-anyfalse">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl">If the null comparisons were independent: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>C</sup></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="α_j is the level of each requirement's own test: α with no correction, α/K under Bonferroni. The K responses are simulated independently, so this prediction is exact, and under Bonferroni it stays at or below α.">Predicted family-wise error rate</span>: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>K</sup></div>
         <div class="sc-val" id="looks-c-indep">—</div>
       </div>
       <div class="sc">
-        <div class="sc-lbl">Bonferroni bound <span class="sym">C&middot;α<sub>j</sub></span></div>
-        <div class="sc-val" id="looks-c-bonfbound">—</div>
-      </div>
-      <div class="sc sc-wide">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="≥ 1 − α under Bonferroni.">Runs with no false alarm</span></div>
-        <div class="sc-val" id="looks-c-allcap">—</div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The observed family-wise error rate: the fraction of runs in which the design was falsely reported as missing at least one requirement, with a 95% Wilson interval.">Runs with at least one false alarm</span></div>
+        <div class="sc-val" id="looks-c-anyfalse">—</div>
       </div>
     </div>
     <div class="sec">
@@ -659,7 +634,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison level</span></label>
+          <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison confidence level</span></label>
           <select id="pairs-level" data-post onchange="pairsLevelChanged()">
             <option value="raw" selected>1 − α (no correction)</option>
             <option value="bonf">1 − α/C (Bonferroni)</option>
@@ -915,7 +890,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's interval level</span></label>
+          <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's confidence level</span></label>
           <select id="winner-level" data-post onchange="winnerLevelChanged()">
             <option value="raw" selected>1 − α (no correction)</option>
             <option value="bonf">1 − α/K (Bonferroni)</option>
@@ -2927,9 +2902,7 @@ function designsPlot(svgEl, items, opts) {
   // the full card width instead of the narrower, sidebar-sized figWidth cap.
   var W = opts.full ? fullCardWidth(svgEl) : figWidth(svgEl), K = items.length;
   var pL = 46, pR = (typeof opts.target === 'number') ? 30 : 16, pT = 14;
-  // A second label line (item.sub, a requirement's target) needs its own room.
-  var hasSub = items.some(function (it) { return it.sub; });
-  var pB = (opts.glyph ? 36 : 30) + (hasSub ? 12 : 0);
+  var pB = opts.glyph ? 36 : 30;
   // The K columns share the frame's whole inner width, however few they
   // are, so the frame always spans its card. No floor on colW: a floor
   // would let K columns claim more than the frame's own inner width,
@@ -2940,9 +2913,6 @@ function designsPlot(svgEl, items, opts) {
   // every other one, always keeping the first and the last so the row's ends
   // stay labeled whatever K is.
   var denseX = colW < 34;
-  // Named columns (item.label) switch to their short forms all together, so a
-  // row never mixes full names with abbreviations.
-  var namesFit = items.every(function (it) { return !it.label || textWidthPx(it.label, 10, FF_MONO) + 6 <= colW; });
   var labelY = pT + cH + (opts.glyph ? 26 : 16);
   var yLo = opts.ySpan[0], yHi = opts.ySpan[1];
   var yP = function (v) { return pT + cH - (v - yLo) / (yHi - yLo) * cH; };
@@ -2996,13 +2966,9 @@ function designsPlot(svgEl, items, opts) {
       // without crowding its neighbor's own label; a two-digit design
       // number needs several pixels more than a one-digit one, and so this is
       // measured per label rather than guessed from one flat column width.
-      var full = it.label || ('Design ' + num), short = it.short || ('D' + num);
-      var fits = it.label ? namesFit : (textWidthPx(full, 10, FF_MONO) + 6 <= colW);
-      var lbl = fits ? full : short;
+      var full = 'Design ' + num, short = 'D' + num;
+      var lbl = (textWidthPx(full, 10, FF_MONO) + 6 <= colW) ? full : short;
       h += '<text x="' + cx + '" y="' + labelY + '" text-anchor="middle" fill="' + C.muted + '" font-size="10" font-family="' + FF_MONO + '">' + lbl + '</text>';
-      if (it.sub && fits && textWidthPx(it.sub, 9, FF_MONO) + 6 <= colW) {
-        h += '<text x="' + cx + '" y="' + (labelY + 12) + '" text-anchor="middle" fill="' + C.muted + '" font-size="9" font-family="' + FF_MONO + '">' + it.sub + '</text>';
-      }
     }
   });
 
@@ -3337,28 +3303,80 @@ function setCard(id, html) { var el = $(id); if (el) el.innerHTML = html; }
 // sampling knobs (a change draws a divider on the next run); the per-interval
 // level is a post-processing knob that re-derives every run already drawn.
 var LOOKS_THETA0 = 0;
-// The requirements a design can be judged on, in the order K takes them: a
-// response name, its short form for a narrow column, and its target with
-// units, which the plot prints under the name where the column is wide
-// enough. The targets are labels only: every response is drawn as its
-// deviation from its own target.
+// The requirements a design can be judged on, in the order K takes them,
+// each with its own target and standard deviation in its own units. The
+// simulation draws every response as its deviation from its target in units
+// of its standard deviation; the plot maps that back onto each response's
+// own scale, so the panels show different measurements on different axes
+// while the decisions, which depend only on the standardized values, stay
+// exactly what the core computed.
 var LOOKS_RESPONSES = [
-  { name: 'Mean wait', sub: 'target 4 min' },
-  { name: 'Utilization', sub: 'target 80%' },
-  { name: 'Fill rate', sub: 'target 95%' },
-  { name: 'Throughput', sub: 'target 120/h' },
-  { name: 'System time', sub: 'target 12 min' },
-  { name: 'Inventory', sub: 'target 40' },
-  { name: 'Stockouts', sub: 'target 2/month' },
-  { name: 'Cycle time', sub: 'target 30 min' },
-  { name: 'On-time rate', sub: 'target 90%' },
-  { name: 'Unit cost', sub: 'target $12' }
+  { name: 'Mean wait (min)', target: 4, sigma: 0.8 },
+  { name: 'Utilization (%)', target: 80, sigma: 4 },
+  { name: 'Fill rate (%)', target: 95, sigma: 2 },
+  { name: 'Throughput (/h)', target: 120, sigma: 10 },
+  { name: 'System time (min)', target: 12, sigma: 2 },
+  { name: 'Inventory (units)', target: 40, sigma: 6 },
+  { name: 'Stockouts (/month)', target: 2, sigma: 0.5 },
+  { name: 'Cycle time (min)', target: 30, sigma: 5 },
+  { name: 'On-time rate (%)', target: 90, sigma: 3 },
+  { name: 'Unit cost ($)', target: 12, sigma: 1.5 }
 ];
-function looksDecorate(items) {
-  return items.map(function (it, i) {
-    var r = LOOKS_RESPONSES[i] || { name: 'Response ' + (i + 1), sub: '' };
-    return Object.assign({}, it, { label: r.name, short: 'R' + (i + 1), sub: r.sub });
+// The largest of 1, 2, 2.5, or 5 times a power of ten that is at most x.
+function niceStepBelow(x) {
+  var mag = Math.pow(10, Math.floor(Math.log10(x))), best = mag;
+  [1, 2, 2.5, 5].forEach(function (k) { if (k * mag <= x + 1e-9) best = k * mag; });
+  return best;
+}
+// One small panel per requirement, each on its own scale: a titled frame
+// whose axis is centered on the requirement's target (three ticks, the
+// target's in bold), the target as a dashed line across the frame, and the
+// design's interval for that response standing in the middle, colored by
+// the decision as designsPlot colors its intervals (red, dashed, and hollow
+// for a false alarm, gray when kept). Panels fill the figure's width in as
+// many rows as a minimum panel width allows, balanced so no row is nearly
+// empty. opts.spanStd is the half-span in standard deviations every panel
+// shares, so intervals of equal standardized width look equally tall.
+function requirementsPlot(svgEl, items, opts) {
+  var W = fullCardWidth(svgEl), K = items.length;
+  var minPanelW = 118, gap = 10;
+  var perRow = Math.max(1, Math.min(K, Math.floor((W + gap) / (minPanelW + gap))));
+  var rows = Math.ceil(K / perRow); perRow = Math.ceil(K / rows);
+  var panelW = (W - gap * (perRow - 1)) / perRow;
+  var pL = 40, pR = 6, pT = 20, cH = 130, pB = 8, rowGap = 14;
+  var panelH = pT + cH + pB, plotW = panelW - pL - pR, s = opts.spanStd;
+  var h = '';
+  items.forEach(function (it, i) {
+    var r = opts.responses[i] || { name: 'Response ' + (i + 1), target: 0, sigma: 1 };
+    var row = Math.floor(i / perRow), col = i % perRow;
+    var x0 = col * (panelW + gap), y0 = row * (panelH + rowGap);
+    var yLo = r.target - s * r.sigma, yHi = r.target + s * r.sigma;
+    var yP = function (v) { return y0 + pT + cH - (v - yLo) / (yHi - yLo) * cH; };
+    var units = function (d) { return r.target + d * r.sigma; };
+    h += '<rect x="' + (x0 + pL) + '" y="' + (y0 + pT) + '" width="' + plotW + '" height="' + cH + '" fill="' + C.bg + '" rx="3"/>';
+    h += '<text x="' + (x0 + pL + plotW / 2) + '" y="' + (y0 + 11) + '" text-anchor="middle" fill="' + C.text + '" font-size="10.5" font-weight="600" font-family="' + FF_SANS + '">' + r.name + '</text>';
+    var step = niceStepBelow(0.75 * s * r.sigma), dec = stepDecimals(step);
+    [r.target - step, r.target, r.target + step].forEach(function (v, k) {
+      var ty = yP(v), isTarget = k === 1;
+      h += '<line x1="' + (x0 + pL - 4) + '" y1="' + ty + '" x2="' + (x0 + pL) + '" y2="' + ty + '" stroke="#bbb" stroke-width="1"/>';
+      h += '<text x="' + (x0 + pL - 7) + '" y="' + (ty + 3.5) + '" text-anchor="end" fill="' + (isTarget ? C.text : C.muted) + '" font-size="9.5"' + (isTarget ? ' font-weight="700"' : '') + ' font-family="' + FF_MONO + '">' + v.toFixed(dec) + '</text>';
+    });
+    h += '<line x1="' + (x0 + pL) + '" y1="' + (y0 + pT) + '" x2="' + (x0 + pL) + '" y2="' + (y0 + pT + cH) + '" stroke="#ccc" stroke-width="1"/>';
+    var ty0 = yP(r.target);
+    h += '<line x1="' + (x0 + pL) + '" y1="' + ty0 + '" x2="' + (x0 + pL + plotW) + '" y2="' + ty0 + '" stroke="' + C.text + '" stroke-width="1.5" stroke-dasharray="5,3"/>';
+    var cx = x0 + pL + plotW / 2;
+    var falseAlarm = it.reject && it.falseRej;
+    var col = falseAlarm ? C.miss : C.muted;
+    var dash = falseAlarm ? ' stroke-dasharray="4,2.5"' : '';
+    var lo = yP(units(it.lo)), hi = yP(units(it.hi)), ym = yP(units(it.mean));
+    h += '<line x1="' + cx + '" y1="' + lo + '" x2="' + cx + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
+    h += '<line x1="' + (cx - 6) + '" y1="' + hi + '" x2="' + (cx + 6) + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"/>';
+    h += '<line x1="' + (cx - 6) + '" y1="' + lo + '" x2="' + (cx + 6) + '" y2="' + lo + '" stroke="' + col + '" stroke-width="1.8"/>';
+    h += falseAlarm
+      ? '<circle cx="' + cx + '" cy="' + ym + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>'
+      : '<circle cx="' + cx + '" cy="' + ym + '" r="4" fill="' + col + '"/>';
   });
+  svgSet(svgEl, W, rows * panelH + (rows - 1) * rowGap, h);
 }
 function looksKChanged() { clampParam('looks-K', 2, 10, 0); onSamplingChange('looks'); }
 function looksRChanged() { clampParam('looks-R', 5, 50, 0); onSamplingChange('looks'); }
@@ -3387,7 +3405,7 @@ function looksDesignsTitle(K) {
 function looksFigCaption(el, runIdx, rec, theta0) {
   // A standing sentence, unchanged by any run, states what the figure holds:
   // K candidate designs of one system, each tested against the one target.
-  var standing = 'Each column is one of the design\'s K requirements: the response\'s deviation from its own target, in units of that response\'s standard deviation, with every true mean exactly at its target.';
+  var standing = 'Each panel is one of the design\'s K requirements on its own scale, its target the dashed line, and every true mean exactly at its target.';
   var body;
   if (!rec) {
     body = 'Run an experiment to simulate the design and judge it on every requirement.';
@@ -3462,7 +3480,7 @@ function intervalLevelLine(el, alphaJ, corrected, denomSym) {
 // true mean, and the two states an interval and its mean dot can be in.
 function looksFigLegendHtml() {
   return legendHtml([
-    { sw: swLine(C.text, '5,3'), label: 'target of every requirement, and every true mean' },
+    { sw: swLine(C.text, '5,3'), label: 'the requirement\'s target, which is also its true mean' },
     { sw: swDecision(C.miss, true), label: 'false alarm: the interval excludes the target' },
     { sw: swDecision(C.muted, false), label: 'kept: the interval contains the target' }
   ]);
@@ -3492,17 +3510,17 @@ TABS.looks = {
     TABS.looks.ySpan = span;
 
     var nC = sp.K, alphaJ = post.level === 'bonf' ? sp.alpha / nC : sp.alpha;
-    var nSeg = runs.length, nAnyFalse = 0, nAllCap = 0;
-    runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; if (r.rec.allCaptured) nAllCap++; });
+    var nSeg = runs.length, nAnyFalse = 0;
+    runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; });
 
     intervalLevelLine($('looks-level-line'), alphaJ, post.level === 'bonf', 'K');
     $('looks-fig-title').textContent = looksDesignsTitle(sp.K);
 
     var latest = runs.length ? runs[runs.length - 1] : null;
-    var items = looksDecorate(latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir).map(function (t) {
-      return { truth: t, lo: t, hi: t, mean: t, captured: true };
-    }));
-    designsPlot($('looks-fig'), items, { ySpan: span, target: post.theta0, full: true, decision: true, truthMark: false });
+    var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir).map(function (t) {
+      return { truth: t, lo: t, hi: t, mean: t, captured: true, reject: false, falseRej: false };
+    });
+    requirementsPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES });
     $('looks-fig-leg').innerHTML = looksFigLegendHtml();
     looksFigCaption($('looks-fig-cap'), all.length, latest ? latest.rec : null, post.theta0);
 
@@ -3513,18 +3531,14 @@ TABS.looks = {
     });
     var looksRefText = post.level === 'bonf'
       ? 'at most ' + (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '% by the Bonferroni bound'
-      : (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '% expected if the null comparisons were independent';
+      : (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '% predicted';
     stripTallyCaption($('looks-strip-cap'),
       'Each column is one run of the design; its height counts the requirements whose interval excludes its target, every one a false alarm because every true mean is its target, and red marks a run with at least one.',
       stripRes, nSeg, nAnyFalse, 'runs', 'had at least one false alarm', looksRefText,
-      ['99.9% expected if the null comparisons were independent', 'at most 99.9% by the Bonferroni bound']);
+      ['99.9% predicted', 'at most 99.9% by the Bonferroni bound']);
 
-    setCard('looks-c-C', String(nC));
-    setCard('looks-c-alphaj', alphaJ.toFixed(4));
     setCard('looks-c-anyfalse', rateText(nAnyFalse, nSeg));
     setCard('looks-c-indep', (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '%');
-    setCard('looks-c-bonfbound', (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '%');
-    setCard('looks-c-allcap', rateText(nAllCap, nSeg));
 
     var obs = nSeg > 0 ? MCP.wilson(nAnyFalse, nSeg, 0.95) : null;
     var legEl = $('looks-fwer-leg');
