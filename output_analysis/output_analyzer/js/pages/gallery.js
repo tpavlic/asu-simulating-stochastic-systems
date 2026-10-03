@@ -113,8 +113,8 @@ export function render(root) {
 
   let b = block(root, 'Histogram (fraction of observations)');
   const h = hist(waits, 20);
-  let fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)', yLabel: 'Fraction' });
-  fig.render(f => histogram(f, h, { fraction: true }));
+  let fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)', yLabel: 'Frequency' });
+  fig.render(f => histogram(f, h));
   exportButtons(b.box, fig, 'histogram');
   legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'observations' }]);
 

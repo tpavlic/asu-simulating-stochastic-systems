@@ -9,6 +9,9 @@
 // is shown only while that section is open, and the shell fills the page's
 // <div data-subnav> with one link per section, lists the open page's sections
 // under its sidebar item, and adds them to the <select> as indented options.
+// A page that cannot fill one of its sections for the data it shows says so
+// through setSectionAvailable, which hides that section's strip button and
+// grays its sidebar sub-item and <select> option.
 
 let onShowCb = null;
 let current = null;
@@ -17,6 +20,9 @@ let currentSec = null;
 // which a link naming only the page reopens.
 const SECTIONS = new Map();
 const lastSection = new Map();
+// The sections of each page that the current data cannot fill, with the
+// reason shown on their grayed links: page id → Map(section id → tip).
+const SECTIONS_OFF = new Map();
 
 /**
  * Whether `name` is a page this document actually carries, or a page and one
@@ -61,6 +67,66 @@ export function isDisabled(name) {
 }
 
 /**
+ * Whether a section of a divided page is marked unavailable for the current
+ * data (see setSectionAvailable).
+ * @param {string} page
+ * @param {string} sec
+ */
+export function isSectionDisabled(page, sec) {
+  const off = SECTIONS_OFF.get(page);
+  return !!off && off.has(sec);
+}
+
+// The first section of `page` that is available, or its first section.
+function firstAvailable(page) {
+  const list = SECTIONS.get(page);
+  if (!list) return null;
+  const s = list.find(x => !isSectionDisabled(page, x.id)) || list[0];
+  return s.id;
+}
+
+// A page's <select> option, and its sections' options, are disabled while
+// the page is, and a section's also while the section is.
+function syncOptions(page) {
+  const sel = document.getElementById('tab-select');
+  if (!sel) return;
+  const pageOff = isDisabled(page);
+  sel.querySelectorAll('option[value="' + page + '"], option[value^="' + page + '/"]').forEach(o => {
+    const sec = o.value.split('/')[1];
+    o.disabled = pageOff || (sec ? isSectionDisabled(page, sec) : false);
+  });
+}
+
+/**
+ * Marks the sections of a divided page available or not for the data it
+ * currently shows. An unavailable section's button in the page's own strip is
+ * hidden, so the page offers only what applies, and its sidebar sub-item and
+ * <select> option are grayed and inert with a tooltip saying why, so the
+ * navigation keeps its shape. An open section that becomes unavailable
+ * gives way to the first available one.
+ * @param {string} page
+ * @param {Object<string, string|null>} off section id → why it is unavailable,
+ *   or null (or absent) when it is available
+ */
+export function setSectionAvailable(page, off) {
+  const list = SECTIONS.get(page);
+  if (!list) return;
+  const map = new Map();
+  for (const s of list) { const tip = off ? off[s.id] : null; if (tip) map.set(s.id, String(tip)); }
+  SECTIONS_OFF.set(page, map);
+  const root = document.getElementById('tab-' + page);
+  if (root) root.querySelectorAll('.subtab[data-section]').forEach(a => { a.hidden = map.has(a.getAttribute('data-section')); });
+  document.querySelectorAll('.tab-subs[data-subs-for="' + page + '"] .tab-sub[data-section]').forEach(a => {
+    const tip = map.get(a.getAttribute('data-section'));
+    a.classList.toggle('disabled', !!tip);
+    if (tip) { a.setAttribute('aria-disabled', 'true'); a.setAttribute('data-tip', tip); }
+    else { a.removeAttribute('aria-disabled'); a.removeAttribute('data-tip'); }
+  });
+  syncOptions(page);
+  if (current === page && currentSec && map.has(currentSec)) showTab(page + '/' + firstAvailable(page));
+}
+
+/**
  * Marks pages available or not: the page link is grayed and inert, the
  * matching <select> options (the page's and its sections') disabled, and a
  * tooltip on the link says why. A page that is open when it becomes
@@ -70,7 +136,6 @@ export function isDisabled(name) {
  * @param {string} [tip] shown on the page link while disabled
  */
 export function setAvailable(names, disabled, tip) {
-  const sel = document.getElementById('tab-select');
   for (const name of names) {
     const a = document.querySelector('.tab[data-tab="' + name + '"]');
     if (a) {
@@ -78,7 +143,7 @@ export function setAvailable(names, disabled, tip) {
       if (disabled) { a.setAttribute('aria-disabled', 'true'); if (tip) a.setAttribute('data-tip', tip); }
       else { a.removeAttribute('aria-disabled'); a.removeAttribute('data-tip'); }
     }
-    if (sel) sel.querySelectorAll('option[value="' + name + '"], option[value^="' + name + '/"]').forEach(o => { o.disabled = disabled; });
+    syncOptions(name);
   }
 }
 
@@ -157,7 +222,12 @@ export function showTab(name) {
   if (isDisabled(page)) return;
   const list = SECTIONS.get(page);
   let sec = null;
-  if (list) sec = parts[1] || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
+  if (list) {
+    sec = parts[1] || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
+    // A section the data cannot fill is not opened; its first available
+    // neighbor is, and a link naming it lands there.
+    if (isSectionDisabled(page, sec)) sec = firstAvailable(page);
+  }
   activate(page, sec);
   // replaceState, not pushState: the address bar always names the page a
   // copied link would open, without a history entry per page visited.
@@ -263,6 +333,8 @@ export function initTabs(opts = {}) {
     const name = a.getAttribute('href').slice(1);
     if (!validTab(name)) return;
     e.preventDefault();
+    // A grayed section link opens its tooltip instead, and the page stays put.
+    if (a.getAttribute('aria-disabled') === 'true') return;
     const sectionLink = a.classList.contains('subtab') || a.classList.contains('tab-sub');
     showTab(name);
     if (sectionLink) revealTop(visibleSubnav());

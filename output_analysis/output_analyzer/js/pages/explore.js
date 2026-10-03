@@ -1,25 +1,30 @@
 // The Summary and Plots page: one dataset's counts and descriptives, its raw
 // table, and the plots that make sense for its statistic type. Plots of the
 // replication estimates describe what the inference pages work on; plots of
-// one replication's observations show how values move within a run. The
-// results fall into five sections shown one at a time under the dataset
-// picker, and a section with no plot for the data's kind says so.
+// one replication's observations show how values move within a run, and a
+// normal quantile–quantile plot with the Shapiro–Wilk test checks the
+// assumption the inference pages' intervals rest on. The results fall into
+// five sections shown one at a time under the dataset picker; a section with
+// no plot for the data's kind is hidden from the page's strip and grayed in
+// the navigation.
 
 import * as state from '../state.js';
 import { repEstimates, datasetSummary, observations } from '../data/model.js';
 import {
-  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, pearson, mean
+  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
 import { tInterval } from '../stats/intervals.js';
+import { shapiroWilk, normalQQ } from '../stats/normality.js';
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
-  dotPlot, intervals, scatter, lagPlot, correlogram, svgEl, tok, extent
+  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
 } from '../ui/plots.js';
 import {
   card, cardRow, datasetSelect, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
 } from '../ui/widgets.js';
-import { num, esc, intl, plural, pct, dash } from '../ui/format.js';
+import { num, esc, intl, plural, pct, pValue, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { setSectionAvailable } from '../ui/tabs.js';
 
 /** The page's hash id. */
 export const id = 'explore';
@@ -31,8 +36,13 @@ export const sections = [
   { id: 'dist', label: 'Distribution' },
   { id: 'run', label: 'Within a run' },
   { id: 'reps', label: 'Replications' },
-  { id: 'compare', label: 'Compare' }
+  { id: 'normality', label: 'Normality' }
 ];
+
+/** The Shapiro–Wilk test covers at most this many values. */
+const SW_MAX = 5000;
+/** A quantile–quantile plot of pooled observations shows at most this many points. */
+const QQ_CAP = 2000;
 
 const RAW_CAP = 2000;
 const FOREST_CAP = 60;
@@ -51,6 +61,7 @@ let mounted = [];
 /** The sections that draw one replication, rebuilt when the replication changes. */
 let repSections = [];
 let ciSection = null;
+let normSection = null;
 let shownId = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -81,17 +92,11 @@ export function render(root) {
         '<div id="ex-s-run"></div>' +
       '</div>' +
       '<div data-section="reps" id="ex-s-reps"></div>' +
-      '<div data-section="compare">' +
-        '<div class="sec ctrl-card"><div class="ctrl-row">' +
-          '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-cmp"><span class="tip" tabindex="0" data-tip="A second dataset with the same number of replications. Its replication estimates are plotted against this dataset’s, matched by position.">Compare with</span></label><select id="ex-cmp"></select></span>' +
-        '</div></div>' +
-        '<div id="ex-s-compare"></div>' +
-      '</div>' +
+      '<div data-section="normality" id="ex-s-normality"></div>' +
     '</div>';
 
   els = {
     ds: root.querySelector('#ex-ds'),
-    cmp: root.querySelector('#ex-cmp'),
     repWrap: root.querySelector('#ex-rep-wrap'),
     lvl: root.querySelector('#ex-lvl'),
     results: root.querySelector('#ex-results'),
@@ -104,7 +109,6 @@ export function render(root) {
     if (els.ds.value) state.select(els.ds.value);
     if (visible()) renderAll(); else shownId = null;
   });
-  els.cmp.addEventListener('change', () => { state.setPick(id, 'compare', els.cmp.value || null); if (visible()) renderAll(); });
   levelSelect(els.lvl);
   applyStored();
 
@@ -115,7 +119,11 @@ export function render(root) {
       els.ds.dispatchEvent(new Event('change'));
     }
   });
-  state.on('settings', () => { if (visible() && ciSection) ciSection.rebuild(); });
+  state.on('settings', () => {
+    if (!visible()) return;
+    if (ciSection) ciSection.rebuild();
+    if (normSection) normSection.rebuild();
+  });
 }
 
 /** Called each time the page is shown. */
@@ -246,6 +254,7 @@ function releaseAll() {
   mounted = [];
   repSections = [];
   ciSection = null;
+  normSection = null;
 }
 
 // Brings back the horizontal-axis choice (kept with the session); the other
@@ -253,18 +262,6 @@ function releaseAll() {
 function applyStored() {
   const x = state.getPick(id, 'axis');
   if (x === 'index' || x === 'time') xMode = x;
-}
-
-// The comparison dataset stays as it was while it still qualifies; failing
-// that, the one the reader last chose (kept with the session) when it does.
-function fillCompare(ds) {
-  const want = state.getPick(id, 'compare');
-  const R = ds ? ds.reps.length : 0;
-  const list = ds ? state.datasets.filter(d => d.id !== ds.id && d.reps.length === R && R >= 2) : [];
-  const prev = list.some(d => d.id === els.cmp.value) ? els.cmp.value : want;
-  els.cmp.innerHTML = '<option value="">none</option>' + list.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + '</option>').join('');
-  els.cmp.value = list.some(d => d.id === prev) ? prev : '';
-  els.cmp.disabled = !list.length;
 }
 
 function fillRepControl(ds) {
@@ -310,9 +307,9 @@ function renderAll() {
     pooled = state.getPick(id, 'pooled:' + ds.id) === true;
   }
   shownId = ds ? ds.id : null;
-  fillCompare(ds);
   fillRepControl(ds);
   if (!ds) {
+    setSectionAvailable(id, null);
     const msg = '<p>No dataset is loaded. Open <a href="#import">Import</a> to load a file, paste data, or open an example.</p>';
     for (const k in B) B[k].appendChild(notice('info', msg));
     box.style.minHeight = '';
@@ -325,40 +322,36 @@ function renderAll() {
   const R = ds.reps.length;
   const ctx = { ds, est, estF, R };
   const estimates = n => (n === 0 ? 'none' : n === 1 ? 'one' : intl(n));
+  const tooFew = (what, need) => what + ' need at least ' + need + ' ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.';
+
+  // What the data cannot fill is left out of the page and grayed in the
+  // navigation, with the reason on the grayed item.
+  const off = {
+    dist: ds.kind === 'tally' || estF.length >= 2 ? null : tooFew('Distribution plots', 'two'),
+    run: ds.kind !== 'reps' ? null : 'Within-run plots need observations inside a replication; this dataset holds one value per replication.',
+    reps: estF.length >= 2 ? null : tooFew('The dot plot and the interval plot', 'two'),
+    normality: ds.kind === 'tally' || estF.length >= 3 ? null : tooFew('The normality check', 'three')
+  };
+  setSectionAvailable(id, off);
 
   mount(B.summary, api => buildSummary(api, ctx));
   B.summary.appendChild(el('div', 'ex-raw')).appendChild(rawTable(ds));
 
-  if (ds.kind === 'tally' || estF.length >= 2) mount(B.dist, api => buildDistribution(api, ctx));
+  if (!off.dist) mount(B.dist, api => buildDistribution(api, ctx));
   if (estF.length >= 5) mount(B.dist, api => buildBox(api, ctx));
-  if (!B.dist.firstChild) {
-    emptyLine(B.dist, 'Distribution plots need at least two ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.');
-  }
 
-  if (ds.kind !== 'reps') {
+  if (!off.run) {
     repSections.push(mount(B.run, api => buildSequence(api, ctx)));
     repSections.push(mount(B.run, api => buildRunning(api, ctx)));
-  } else {
-    emptyLine(B.run, 'Within-run plots need observations inside a replication; this dataset holds one value per replication.');
   }
   if (ds.kind === 'tally') repSections.push(mount(B.run, api => buildLag(api, ctx)));
 
-  if (estF.length >= 2) {
+  if (!off.reps) {
     mount(B.reps, api => buildDots(api, ctx));
     ciSection = mount(B.reps, api => buildIntervals(api, ctx));
-  } else {
-    emptyLine(B.reps, 'The dot plot and the interval plot need at least two ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.');
   }
 
-  const other = els.cmp.value ? state.get(els.cmp.value) : null;
-  if (other) mount(B.compare, api => buildScatter(api, ctx, other));
-  else if (els.cmp.disabled) {
-    emptyLine(B.compare, R >= 2
-      ? 'A scatter plot needs a second loaded dataset with the same number of replications as this one, ' + intl(R) + '; none is loaded.'
-      : 'A scatter plot pairs replication estimates, and this dataset has only one replication.');
-  } else {
-    emptyLine(B.compare, 'Choose a dataset under Compare with to plot its replication estimates against this dataset’s, matched by position.');
-  }
+  if (!off.normality) normSection = mount(B.normality, api => buildNormality(api, ctx));
 
   registerTips(rootEl);
   box.style.minHeight = '';
@@ -379,10 +372,13 @@ function storeResult(ds, est) {
   });
   const sm = datasetSummary(ds);
   const e = sm.est;
+  const tables = [{ name: 'replication summary', headers, rows }];
+  const sw = shapiroOf(est);
+  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication estimates', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
   state.setResult('explore', {
     title: 'Summary of ' + ds.name,
     provenance: { dataset: ds.name },
-    tables: [{ name: 'replication summary', headers, rows }],
+    tables,
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
       (e ? '; mean of the ' + esc(estimateWord(ds)) + ' ' + num(e.mean) + ', sd ' + num(e.sd) : '') + '.</p>'
@@ -488,16 +484,16 @@ function buildDistribution(api, { ds, estF }) {
   const pair = el('div', 'ex-pair');
   sec.appendChild(pair);
   const base = slug(ds.name) + (usePooled ? '-observations' : '-estimates');
-  figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Fraction', ariaLabel: 'Histogram of the ' + what },
-    f => histogram(f, histBins(values), { fraction: true }),
+  figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
+    f => histogram(f, histBins(values)),
     [{ swatch: 'bar', color: '--est', label: esc(what) }]);
   figure(api, pair, base + '-ecdf', { height: 260, narrowHeight: 260, xLabel, ariaLabel: 'Empirical cdf of the ' + what },
     f => ecdf(f, ecdfOf(values)),
     [{ swatch: 'line', color: '--est', label: 'empirical cdf' }]);
   if (usePooled) {
-    caption(sec, 'Each bar is the fraction of the ' + intl(values.length) + ' pooled observations in its bin, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
+    caption(sec, 'Each bar counts the pooled observations in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
   } else {
-    caption(sec, 'Each bar is the fraction of the ' + intl(values.length) + ' ' + esc(what) + ' in its bin, and the cdf rises by 1/R at each one. These estimates, one per replication, are the values every interval on the other pages is built from.');
+    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These estimates, one per replication, are the values every interval on the other pages is built from.');
   }
 }
 
@@ -583,13 +579,14 @@ function buildRunning(api, { ds, est }) {
         if (Number.isFinite(final)) {
           const y = Math.round(f.sy(final) * 10) / 10;
           svgEl('line', { x1: 0, x2: f.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4' }, f.inner);
+          f.series.push({ kind: 'hline', y: final, dash: true, color: tok('--truth'), label: 'final value' });
         }
         f.readout(dx => {
           let k = -1;
           for (let i = 0; i < s.xs.length && s.xs[i] <= dx; i++) k = i;
           return k < 0 ? null : ['t = ' + num(s.xs[k]), 'time-weighted mean ' + num(s.ys[k])];
         });
-        sequence(f, s.ys, { xs: s.xs, width: 1.8 });
+        sequence(f, s.ys, { xs: s.xs, width: 1.8, label: 'running time-weighted mean' });
       }, legendItems);
     caption(sec, 'At each record time t, the time-weighted mean of the state from the start of the run to t. Its final value, ' + num(final) + ', is replication ' + esc(rep.id) + '’s estimate.');
   } else {
@@ -669,20 +666,77 @@ function buildIntervals(api, { ds, estF }) {
   caption(sec, cap);
 }
 
-function buildScatter(api, { ds, est }, other) {
+// The Shapiro–Wilk test of a set of estimates, or null where it is not
+// defined: fewer than three finite values, more than the test covers, or every
+// value the same.
+function shapiroOf(est) {
+  const v = finite(est);
+  if (v.length < 3 || v.length > SW_MAX) return null;
+  try { return shapiroWilk(v); } catch (e) { return null; }
+}
+
+// ── Normality ───────────────────────────────────────────────────────────
+
+function buildNormality(api, { ds, estF }) {
   const sec = api.sec;
-  const oest = repEstimates(other);
-  const xs = [], ys = [];
-  for (let i = 0; i < Math.min(est.length, oest.length); i++) {
-    if (Number.isFinite(est[i]) && Number.isFinite(oest[i])) { xs.push(est[i]); ys.push(oest[i]); }
+  const forced = ds.kind === 'tally' && estF.length < 3;
+  const usePooled = ds.kind === 'tally' && (pooled || forced);
+  const level = state.settings.level, alpha = 1 - level;
+  sec.appendChild(el('div', 'sec-hd', 'Normal quantile–quantile (Q–Q) plot'));
+  if (ds.kind === 'tally') {
+    const row = el('div', 'ctrl-row ex-tight');
+    row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled-qq"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
+      (forced ? '<span class="ctrl-note">With fewer than three replications there is no test of the estimates, and so the plot shows the observations.</span>' : '');
+    sec.appendChild(row);
+    row.querySelector('#ex-pooled-qq').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
-  sec.appendChild(el('div', 'sec-hd', 'Scatter against ' + esc(other.name)));
-  const r = xs.length >= 2 ? pearson(xs, ys) : NaN;
-  figure(api, sec, slug(ds.name) + '-vs-' + slug(other.name) + '-scatter',
-    { height: 300, narrowHeight: 320, xLabel: ds.name + ' estimate', yLabel: other.name + ' estimate', ariaLabel: 'Scatter of replication estimates' },
-    f => scatter(f, xs, ys),
-    [{ swatch: 'dot', color: '--est', label: 'one replication of each, matched by position' }]);
-  caption(sec, 'Pearson’s r = ' + num(r, 3) + ' over ' + plural(xs.length, 'pair') + ' of replication estimates, the first replication of one dataset matched with the first of the other, and so on. A strong positive r is what common random numbers produce when both datasets used the same streams in the same order.');
+  let values = usePooled ? finite(observations(ds)) : estF;
+  const what = usePooled ? 'pooled observations' : estimateWord(ds);
+  const total = values.length;
+  // Of many pooled observations, every k-th order statistic is plotted; the
+  // quartile line is still fitted to all of them.
+  let thinned = false;
+  const qAll = total >= 2 ? normalQQ(values) : null;
+  let q = qAll;
+  if (qAll && total > QQ_CAP) {
+    const idx = [];
+    for (let i = 0; i < QQ_CAP; i++) idx.push(Math.round(i * (total - 1) / (QQ_CAP - 1)));
+    q = { theoretical: Float64Array.from(idx, i => qAll.theoretical[i]), sample: Float64Array.from(idx, i => qAll.sample[i]), slope: qAll.slope, intercept: qAll.intercept };
+    thinned = true;
+  }
+  if (!q) { emptyLine(sec, 'This dataset holds fewer than two values.'); return; }
+  const yLabel = usePooled ? ds.response : estimateAxis(ds);
+  figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-estimates') + '-qq',
+    { height: 320, narrowHeight: 300, xLabel: 'Standard normal quantile', yLabel, ariaLabel: 'Normal quantile–quantile plot of the ' + what },
+    f => qqPlot(f, q),
+    [{ swatch: 'dot', color: '--est', label: esc(what) + ', sorted, against the normal quantile at each one’s plotting position' },
+     { swatch: 'dash', color: '--truth', label: 'line through the first and third quartiles' }]);
+
+  const sw = usePooled ? null : shapiroOf(values);
+  if (!usePooled) {
+    const okN = total >= 3 && total <= SW_MAX;
+    const verdict = !sw ? dash : sw.p < alpha ? 'rejects normality' : 'no evidence against it';
+    const note = !sw ? (okN ? 'every value is the same' : total < 3 ? 'needs at least three values' : 'defined for at most ' + intl(SW_MAX) + ' values') : 'at α = ' + num(alpha, 2);
+    sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'Shapiro–Wilk test of the ' + esc(what)));
+    sec.appendChild(cardRow([
+      card('<span class="sym">n</span>', intl(total)),
+      card('<span class="sym">W</span>', sw ? num(sw.W, 4) : dash, 'ranges from 0 to 1, and 1 means the sorted values lie on the line'),
+      card('<span class="sym">p</span>-value', sw ? pValue(sw.p) : dash, 'the probability of a W this small or smaller if the values were normal'),
+      (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict', esc(verdict), esc(note)))
+    ]));
+  }
+
+  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end a heavier lower tail; an S through the line marks lighter tails.' : '';
+  if (usePooled) {
+    caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles' + (thinned ? ', with ' + intl(QQ_CAP) + ' of the ' + intl(total) + ' plotted, evenly spaced through the sorted order' : '') + '; the line passes through the quartiles.' + tailHint +
+      ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication estimates are and the observations are not.');
+  } else {
+    const n = total;
+    const rob = n >= 30 ? 'With ' + intl(n) + ' replications, the t intervals on the inference pages are robust to the departure a sample this size can reveal, as long as no single replication stands far from the rest.'
+      : 'The t intervals on the inference pages tolerate a mildly non-normal, roughly symmetric shape at this many replications; a strongly skewed shape or an outlying replication widens or shifts them, and more replications are the remedy.';
+    caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles; the line passes through the quartiles.' + tailHint +
+      ' ' + rob + ' The chi-square interval on a variance and the F ratio of two variances are not robust at any size: they lean on normality itself, and a rejection here is a reason to read them with doubt.');
+  }
 }
 
 export default { id, title, sections, render, onShow };

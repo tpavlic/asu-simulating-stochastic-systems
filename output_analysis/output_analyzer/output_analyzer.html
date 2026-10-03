@@ -189,6 +189,10 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
              border-left: 1.5px solid transparent; }
   .tab-sub:hover { color: var(--accent); text-decoration: none; }
   .tab-sub.active { color: var(--accent); font-weight: 600; border-left-color: var(--accent); }
+  /* A section the shown dataset cannot fill: grayed and inert, with the
+     tooltip saying what the data lack. */
+  .tab-sub.disabled { opacity: .45; cursor: not-allowed; }
+  .tab-sub.disabled:hover { color: var(--muted); }
 }
 
 /* The loaded datasets, one chip each, under the navigation on every page. */
@@ -14674,6 +14678,445 @@ export function buildDatasets(sniffed, mapping) {
   return { datasets, issues };
 }
 </script>
+<script type="text/plain" data-module="js/io/scripts.js">
+// A figure as a script that redraws it: MATLAB, R (base graphics), or Python
+// (matplotlib), with the plotted data embedded, so a reader can open the
+// figure in the tool they know and restyle it there. Pure functions, no DOM.
+//
+// A figure spec is
+//   { name, title, xLabel, yLabel, xlim, ylim, xTicks, yTicks, series }
+// where `name` is an identifier (letters, digits, underscores), `xlim` and
+// `ylim` are [lo, hi] or null, `xTicks`/`yTicks` are { at, labels } for a
+// categorical axis or null, and `series` is a list of records drawn in order:
+//   { kind: 'points',   x, y, label?, color, hollow?, marker?: 'o'|'d' }
+//   { kind: 'line',     x, y, label?, color, dash?: boolean|'dotted', width? }
+//   { kind: 'step',     x, y, label?, color, dash? }   value y[i] holds from x[i] to x[i+1]
+//   { kind: 'bars',     edges, heights, label?, color }
+//   { kind: 'hline',    y, label?, color, dash? }
+//   { kind: 'vline',    x, label?, color, dash? }
+//   { kind: 'segments', x0, y0, x1, y1, label?, color, dash?, width? }
+//   { kind: 'band',     x, lo, hi, label?, color }
+//   { kind: 'span',     x0, x1, label?, color }        a shaded vertical stretch
+//   { kind: 'rects',    x0, y0, x1, y1, label?, color }
+//   { kind: 'text',     x, y, text, color, anchor?: 'start'|'middle'|'end' }
+// `color` is a CSS hex color. A record with a label appears in the legend.
+
+const WRAP = 92;
+
+function hexRgb(c) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim());
+  if (!m) return [0.33, 0.33, 0.33];
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255].map(x => x / 255);
+}
+
+function hex(c) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim());
+  return m ? '#' + m[1].toUpperCase() : '#555555';
+}
+
+// Typographic characters that a script file is better off without.
+function plain(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u00a0/g, ' ').replace(/\u2212/g, '-').replace(/\u00b7/g, '-').replace(/\u2026/g, '...')
+    .replace(/[\r\n]+/g, ' ');
+}
+
+function numToken(v, nan) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return nan;
+  return String(v);
+}
+
+// Numbers joined by ", " and wrapped to WRAP columns, each continuation line
+// prefixed by `cont` (MATLAB needs an ellipsis before a line break inside
+// brackets).
+function joinNums(a, nan, indent, cont) {
+  const parts = Array.from(a, v => numToken(v, nan));
+  const lines = [];
+  let line = '';
+  for (const p of parts) {
+    if (line && line.length + p.length + 2 > WRAP) { lines.push(line + ','); line = ''; }
+    line += (line ? ', ' : '') + p;
+  }
+  lines.push(line);
+  return lines.join(cont + '\n' + indent);
+}
+
+function sanitizeName(name) {
+  let s = String(name || 'figure').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'figure';
+  if (!/^[A-Za-z]/.test(s)) s = 'fig_' + s;
+  return s.slice(0, 60);
+}
+
+function dashOf(rec) { return rec.dash === 'dotted' ? 'dotted' : rec.dash ? 'dashed' : 'solid'; }
+
+const SERIES_KINDS = new Set(['points', 'line', 'step', 'bars', 'hline', 'vline', 'segments', 'band', 'span', 'rects', 'text']);
+
+/**
+ * Checks a spec's shape, returning it with its name sanitized, or throwing.
+ * @param {object} spec
+ */
+export function normalizeSpec(spec) {
+  if (!spec || typeof spec !== 'object') throw new TypeError('a figure spec is required');
+  const out = Object.assign({}, spec);
+  out.name = sanitizeName(spec.name);
+  out.series = Array.isArray(spec.series) ? spec.series.filter(r => r && SERIES_KINDS.has(r.kind)) : [];
+  if (!isLim(out.xlim)) out.xlim = autoLim(out.series, 'x');
+  if (!isLim(out.ylim)) out.ylim = autoLim(out.series, 'y');
+  // Tick positions ascend, with their labels carried along (MATLAB insists).
+  for (const k of ['xTicks', 'yTicks']) {
+    const t = out[k];
+    if (!t || !Array.isArray(t.at)) { out[k] = null; continue; }
+    const order = t.at.map((v, i) => i).sort((i, j) => t.at[i] - t.at[j]);
+    out[k] = { at: order.map(i => t.at[i]), labels: order.map(i => String(t.labels && t.labels[i] != null ? t.labels[i] : '')) };
+  }
+  return out;
+}
+
+function isLim(l) { return Array.isArray(l) && l.length === 2 && Number.isFinite(l[0]) && Number.isFinite(l[1]) && l[1] > l[0]; }
+
+// The range of every value a series puts on one axis, padded a little, or
+// [0, 1] when nothing lands there.
+function autoLim(series, axis) {
+  let lo = Infinity, hi = -Infinity;
+  const take = a => { if (a == null) return; for (const v of (typeof a === 'number' ? [a] : a)) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+  for (const r of series) {
+    if (axis === 'x') { take(r.x); take(r.edges); take(r.x0); take(r.x1); }
+    else { take(r.y); take(r.heights); take(r.y0); take(r.y1); take(r.lo); take(r.hi); if (r.kind === 'bars') take(0); }
+  }
+  if (!(hi > lo)) return Number.isFinite(lo) ? [lo - 1, lo + 1] : [0, 1];
+  const pad = (hi - lo) * 0.05;
+  return [lo - pad, hi + pad];
+}
+
+// ── MATLAB ───────────────────────────────────────────────────────────────
+
+function mStr(s) { return "'" + plain(s).replace(/'/g, "''") + "'"; }
+function mVec(a) { return '[' + joinNums(a, 'NaN', '    ', ' ...') + ']'; }
+function mRgb(c) { return '[' + hexRgb(c).map(v => v.toFixed(4)).join(' ') + ']'; }
+function mStyle(rec) { return dashOf(rec) === 'dotted' ? ':' : dashOf(rec) === 'dashed' ? '--' : '-'; }
+function mName(rec, i) { return rec.label ? ", 'DisplayName', " + mStr(rec.label) : ", 'HandleVisibility', 'off'"; }
+
+/**
+ * The figure as a MATLAB script.
+ * @param {object} spec
+ * @returns {string}
+ */
+export function matlabScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('% ' + plain(s.title || s.name));
+  L.push('% Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('% script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  L.push("fig = figure('Color', 'w');");
+  L.push("ax = axes(fig); hold(ax, 'on'); box(ax, 'on'); grid(ax, 'on');");
+  if (s.xlim) L.push('xlim(ax, ' + mVec(s.xlim) + ');');
+  if (s.ylim) L.push('ylim(ax, ' + mVec(s.ylim) + ');');
+  L.push('');
+  let legendItems = 0;
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = mRgb(rec.color);
+    if (rec.label) legendItems++;
+    switch (rec.kind) {
+      case 'points':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('y' + k + ' = ' + mVec(rec.y) + ';');
+        L.push("plot(ax, x" + k + ', y' + k + ", 'LineStyle', 'none', 'Marker', '" + (rec.marker === 'd' ? 'd' : 'o') + "', 'MarkerSize', 5, ...");
+        L.push("    'MarkerEdgeColor', " + c + ", 'MarkerFaceColor', " + (rec.hollow ? "'none'" : c) + mName(rec) + ');');
+        break;
+      case 'line':
+      case 'step':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('y' + k + ' = ' + mVec(rec.y) + ';');
+        L.push((rec.kind === 'step' ? 'stairs' : 'plot') + '(ax, x' + k + ', y' + k + ", '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', " + (rec.width || 1.5) + mName(rec) + ');');
+        break;
+      case 'bars':
+        L.push('edges' + k + ' = ' + mVec(rec.edges) + ';');
+        L.push('counts' + k + ' = ' + mVec(rec.heights) + ';');
+        L.push("histogram(ax, 'BinEdges', edges" + k + ", 'BinCounts', counts" + k + ", 'FaceColor', " + c + ", 'FaceAlpha', 0.35, 'EdgeColor', " + c + mName(rec) + ');');
+        break;
+      case 'hline':
+        L.push('plot(ax, xlim(ax), [' + numToken(rec.y, 'NaN') + ' ' + numToken(rec.y, 'NaN') + "], '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'vline':
+        L.push('plot(ax, [' + numToken(rec.x, 'NaN') + ' ' + numToken(rec.x, 'NaN') + "], ylim(ax), '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'segments':
+        L.push('x0_' + k + ' = ' + mVec(rec.x0) + ';');
+        L.push('x1_' + k + ' = ' + mVec(rec.x1) + ';');
+        L.push('y0_' + k + ' = ' + mVec(rec.y0) + ';');
+        L.push('y1_' + k + ' = ' + mVec(rec.y1) + ';');
+        L.push('h' + k + ' = plot(ax, [x0_' + k + '; x1_' + k + '], [y0_' + k + '; y1_' + k + "], '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', " + (rec.width || 1.5) + ');');
+        L.push("set(h" + k + ", 'HandleVisibility', 'off');");
+        if (rec.label) L.push("if ~isempty(h" + k + "), set(h" + k + "(1), 'HandleVisibility', 'on', 'DisplayName', " + mStr(rec.label) + '); end');
+        break;
+      case 'band':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('lo' + k + ' = ' + mVec(rec.lo) + ';');
+        L.push('hi' + k + ' = ' + mVec(rec.hi) + ';');
+        L.push('fill(ax, [x' + k + ', fliplr(x' + k + ')], [lo' + k + ', fliplr(hi' + k + ')], ' + c + ", 'FaceAlpha', 0.25, 'EdgeColor', 'none'" + mName(rec) + ');');
+        break;
+      case 'span':
+        L.push('yl' + k + ' = ylim(ax);');
+        L.push('fill(ax, [' + [rec.x0, rec.x1, rec.x1, rec.x0].map(v => numToken(v, 'NaN')).join(' ') + '], [yl' + k + '(1) yl' + k + '(1) yl' + k + '(2) yl' + k + '(2)], ' + c + ", 'FaceAlpha', 0.15, 'EdgeColor', 'none'" + mName(rec) + ');');
+        break;
+      case 'rects':
+        L.push('x0_' + k + ' = ' + mVec(rec.x0) + ';');
+        L.push('x1_' + k + ' = ' + mVec(rec.x1) + ';');
+        L.push('y0_' + k + ' = ' + mVec(rec.y0) + ';');
+        L.push('y1_' + k + ' = ' + mVec(rec.y1) + ';');
+        L.push('patch(ax, [x0_' + k + '; x1_' + k + '; x1_' + k + '; x0_' + k + '], [y0_' + k + '; y0_' + k + '; y1_' + k + '; y1_' + k + '], ' + c + ", 'FaceAlpha', 0.25, 'EdgeColor', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const ha = rec.anchor === 'end' ? 'right' : rec.anchor === 'middle' ? 'center' : 'left';
+        L.push('text(ax, ' + mVec(xs) + ', ' + mVec(ys) + ', {' + Array.from(ts, mStr).join(', ') + "}, 'Color', " + c + ", 'HorizontalAlignment', '" + ha + "', 'FontWeight', 'bold', 'Interpreter', 'none');");
+        break;
+      }
+      default: break;
+    }
+  });
+  L.push('');
+  if (s.xTicks) { L.push('xticks(ax, ' + mVec(s.xTicks.at) + ');'); L.push('xticklabels(ax, {' + s.xTicks.labels.map(mStr).join(', ') + '});'); }
+  if (s.yTicks) { L.push('yticks(ax, ' + mVec(s.yTicks.at) + ');'); L.push('yticklabels(ax, {' + s.yTicks.labels.map(mStr).join(', ') + '});'); }
+  // Labels are literal text: an underscore in a response name is not a subscript.
+  L.push("set(ax, 'TickLabelInterpreter', 'none');");
+  if (s.xLabel) L.push('xlabel(ax, ' + mStr(s.xLabel) + ", 'Interpreter', 'none');");
+  if (s.yLabel) L.push('ylabel(ax, ' + mStr(s.yLabel) + ", 'Interpreter', 'none');");
+  if (s.title) L.push('title(ax, ' + mStr(s.title) + ", 'Interpreter', 'none');");
+  if (legendItems) L.push("legend(ax, 'show', 'Location', 'best', 'Interpreter', 'none');");
+  L.push("hold(ax, 'off');");
+  L.push('% savefig(fig, ' + mStr(s.name + '.fig') + ');');
+  return L.join('\n') + '\n';
+}
+
+// ── R ────────────────────────────────────────────────────────────────────
+
+function rStr(s) { return '"' + plain(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function rVec(a) { return 'c(' + joinNums(a, 'NA', '  ', '') + ')'; }
+function rLty(rec) { return dashOf(rec) === 'dotted' ? 3 : dashOf(rec) === 'dashed' ? 2 : 1; }
+
+/**
+ * The figure as an R script using base graphics.
+ * @param {object} spec
+ * @returns {string}
+ */
+export function rScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('# ' + plain(s.title || s.name));
+  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  const leg = { labels: [], col: [], pch: [], lty: [], lwd: [], fill: [] };
+  const addLeg = (rec, pch, lty, fill) => {
+    if (!rec.label) return;
+    leg.labels.push(rStr(rec.label)); leg.col.push(rStr(hex(rec.color)));
+    leg.pch.push(pch); leg.lty.push(lty); leg.lwd.push(rec.width || 1.5); leg.fill.push(fill ? 'adjustcolor(' + rStr(hex(rec.color)) + ', 0.35)' : 'NA');
+  };
+  // The data first, so the axes can be sized before anything is drawn.
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    if (rec.kind === 'points' || rec.kind === 'line' || rec.kind === 'step') { L.push('x' + k + ' <- ' + rVec(rec.x)); L.push('y' + k + ' <- ' + rVec(rec.y)); }
+    else if (rec.kind === 'bars') { L.push('edges' + k + ' <- ' + rVec(rec.edges)); L.push('counts' + k + ' <- ' + rVec(rec.heights)); }
+    else if (rec.kind === 'segments' || rec.kind === 'rects') { L.push('x0_' + k + ' <- ' + rVec(rec.x0)); L.push('x1_' + k + ' <- ' + rVec(rec.x1)); L.push('y0_' + k + ' <- ' + rVec(rec.y0)); L.push('y1_' + k + ' <- ' + rVec(rec.y1)); }
+    else if (rec.kind === 'band') { L.push('x' + k + ' <- ' + rVec(rec.x)); L.push('lo' + k + ' <- ' + rVec(rec.lo)); L.push('hi' + k + ' <- ' + rVec(rec.hi)); }
+  });
+  L.push('');
+  // A categorical axis gets a margin wide enough for its labels.
+  if (s.yTicks) L.push('par(mar = c(4.5, ' + (4.5 + 0.45 * Math.max(0, ...s.yTicks.labels.map(l => plain(l).length))).toFixed(1) + ', 3.5, 1))');
+  else L.push('par(mar = c(4.5, 4.5, 3.5, 1))');
+  L.push('plot(NA, xlim = ' + rVec(s.xlim) + ', ylim = ' + rVec(s.ylim) +
+    ', xlab = ' + rStr(s.xLabel) + ', ylab = ' + rStr(s.yLabel) + ', main = ' + rStr(s.title) +
+    (s.xTicks ? ', xaxt = "n"' : '') + (s.yTicks ? ', yaxt = "n"' : '') + ', las = 1)');
+  L.push('grid(col = "gray85", lty = 1)');
+  if (s.xTicks) L.push('axis(1, at = ' + rVec(s.xTicks.at) + ', labels = c(' + s.xTicks.labels.map(rStr).join(', ') + '))');
+  if (s.yTicks) L.push('axis(2, at = ' + rVec(s.yTicks.at) + ', labels = c(' + s.yTicks.labels.map(rStr).join(', ') + '), las = 1)');
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = rStr(hex(rec.color));
+    switch (rec.kind) {
+      case 'points': {
+        const pch = rec.marker === 'd' ? (rec.hollow ? 5 : 23) : (rec.hollow ? 21 : 19);
+        L.push('points(x' + k + ', y' + k + ', pch = ' + pch + ', col = ' + c + (rec.hollow ? ', bg = "white"' : pch === 23 ? ', bg = "white"' : '') + ', cex = 0.9)');
+        addLeg(rec, pch, 'NA', false);
+        break;
+      }
+      case 'line':
+      case 'step':
+        L.push('lines(x' + k + ', y' + k + (rec.kind === 'step' ? ', type = "s"' : '') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = ' + (rec.width || 1.5) + ')');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'bars':
+        L.push('rect(head(edges' + k + ', -1), 0, tail(edges' + k + ', -1), counts' + k + ', col = adjustcolor(' + c + ', 0.35), border = ' + c + ')');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'hline':
+        L.push('abline(h = ' + numToken(rec.y, 'NA') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = 1.5)');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'vline':
+        L.push('abline(v = ' + numToken(rec.x, 'NA') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = 1.5)');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'segments':
+        L.push('segments(x0_' + k + ', y0_' + k + ', x1_' + k + ', y1_' + k + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = ' + (rec.width || 1.5) + ')');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'band':
+        L.push('polygon(c(x' + k + ', rev(x' + k + ')), c(lo' + k + ', rev(hi' + k + ')), col = adjustcolor(' + c + ', 0.25), border = NA)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'span':
+        L.push('rect(' + numToken(rec.x0, 'NA') + ', par("usr")[3], ' + numToken(rec.x1, 'NA') + ', par("usr")[4], col = adjustcolor(' + c + ', 0.15), border = NA)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'rects':
+        L.push('rect(x0_' + k + ', y0_' + k + ', x1_' + k + ', y1_' + k + ', col = adjustcolor(' + c + ', 0.25), border = ' + c + ', lwd = 1.5)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const adj = rec.anchor === 'end' ? 1 : rec.anchor === 'middle' ? 0.5 : 0;
+        L.push('text(' + rVec(xs) + ', ' + rVec(ys) + ', labels = c(' + Array.from(ts, rStr).join(', ') + '), col = ' + c + ', adj = c(' + adj + ', 0.5), font = 2)');
+        break;
+      }
+      default: break;
+    }
+  });
+  if (leg.labels.length) {
+    L.push('legend("topright", legend = c(' + leg.labels.join(', ') + '), col = c(' + leg.col.join(', ') + '),');
+    L.push('       pch = c(' + leg.pch.join(', ') + '), lty = c(' + leg.lty.join(', ') + '), lwd = c(' + leg.lwd.join(', ') + '),');
+    L.push('       fill = c(' + leg.fill.join(', ') + '), border = NA, bty = "n", pt.bg = "white")');
+  }
+  L.push('# dev.copy(pdf, ' + rStr(s.name + '.pdf') + '); dev.off()');
+  return L.join('\n') + '\n';
+}
+
+// ── Python ───────────────────────────────────────────────────────────────
+
+function pyStr(s) { return '"' + plain(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function pyVec(a) { return 'np.array([' + joinNums(a, 'np.nan', '    ', '') + '])'; }
+function pyLs(rec) { return dashOf(rec) === 'dotted' ? ':' : dashOf(rec) === 'dashed' ? '--' : '-'; }
+function pyLabel(rec) { return rec.label ? ', label=' + pyStr(rec.label) : ''; }
+
+/**
+ * The figure as a Python script using matplotlib.
+ * @param {object} spec
+ * @returns {string}
+ */
+export function pythonScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('# ' + plain(s.title || s.name));
+  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  L.push('import numpy as np');
+  L.push('import matplotlib.pyplot as plt');
+  if (s.series.some(r => r.kind === 'rects')) L.push('from matplotlib.patches import Rectangle');
+  L.push('');
+  L.push('fig, ax = plt.subplots(figsize=(8, 4.5))');
+  L.push('ax.grid(True, color="0.85", linewidth=0.8)');
+  L.push('ax.set_axisbelow(True)');
+  L.push('');
+  let legendItems = 0;
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = pyStr(hex(rec.color));
+    if (rec.label) legendItems++;
+    switch (rec.kind) {
+      case 'points':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('y' + k + ' = ' + pyVec(rec.y));
+        L.push('ax.plot(x' + k + ', y' + k + ', linestyle="none", marker=' + (rec.marker === 'd' ? '"D"' : '"o"') + ', markersize=5, color=' + c + (rec.hollow ? ', markerfacecolor="white"' : '') + pyLabel(rec) + ')');
+        break;
+      case 'line':
+      case 'step':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('y' + k + ' = ' + pyVec(rec.y));
+        L.push('ax.' + (rec.kind === 'step' ? 'step' : 'plot') + '(x' + k + ', y' + k + (rec.kind === 'step' ? ', where="post"' : '') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=' + (rec.width || 1.5) + pyLabel(rec) + ')');
+        break;
+      case 'bars':
+        L.push('edges' + k + ' = ' + pyVec(rec.edges));
+        L.push('counts' + k + ' = ' + pyVec(rec.heights));
+        L.push('ax.bar(edges' + k + '[:-1], counts' + k + ', width=np.diff(edges' + k + '), align="edge", color=' + c + ', alpha=0.35, edgecolor=' + c + ', linewidth=1' + pyLabel(rec) + ')');
+        break;
+      case 'hline':
+        L.push('ax.axhline(' + numToken(rec.y, 'np.nan') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=1.5' + pyLabel(rec) + ')');
+        break;
+      case 'vline':
+        L.push('ax.axvline(' + numToken(rec.x, 'np.nan') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=1.5' + pyLabel(rec) + ')');
+        break;
+      case 'segments':
+        L.push('x0_' + k + ' = ' + pyVec(rec.x0));
+        L.push('x1_' + k + ' = ' + pyVec(rec.x1));
+        L.push('y0_' + k + ' = ' + pyVec(rec.y0));
+        L.push('y1_' + k + ' = ' + pyVec(rec.y1));
+        L.push('for j in range(len(x0_' + k + ')):');
+        L.push('    ax.plot([x0_' + k + '[j], x1_' + k + '[j]], [y0_' + k + '[j], y1_' + k + '[j]], linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=' + (rec.width || 1.5) + (rec.label ? ', label=' + pyStr(rec.label) + ' if j == 0 else None' : '') + ')');
+        break;
+      case 'band':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('lo' + k + ' = ' + pyVec(rec.lo));
+        L.push('hi' + k + ' = ' + pyVec(rec.hi));
+        L.push('ax.fill_between(x' + k + ', lo' + k + ', hi' + k + ', color=' + c + ', alpha=0.25, linewidth=0' + pyLabel(rec) + ')');
+        break;
+      case 'span':
+        L.push('ax.axvspan(' + numToken(rec.x0, 'np.nan') + ', ' + numToken(rec.x1, 'np.nan') + ', color=' + c + ', alpha=0.15, linewidth=0' + pyLabel(rec) + ')');
+        break;
+      case 'rects':
+        L.push('x0_' + k + ' = ' + pyVec(rec.x0));
+        L.push('x1_' + k + ' = ' + pyVec(rec.x1));
+        L.push('y0_' + k + ' = ' + pyVec(rec.y0));
+        L.push('y1_' + k + ' = ' + pyVec(rec.y1));
+        L.push('for j in range(len(x0_' + k + ')):');
+        L.push('    ax.add_patch(Rectangle((x0_' + k + '[j], y0_' + k + '[j]), x1_' + k + '[j] - x0_' + k + '[j], y1_' + k + '[j] - y0_' + k + '[j], facecolor=' + c + ', alpha=0.25, edgecolor=' + c + ', linewidth=1.5' + (rec.label ? ', label=' + pyStr(rec.label) + ' if j == 0 else None' : '') + '))');
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const ha = rec.anchor === 'end' ? 'right' : rec.anchor === 'middle' ? 'center' : 'left';
+        L.push('for xt, yt, st in zip(' + pyVec(xs) + ', ' + pyVec(ys) + ', [' + Array.from(ts, pyStr).join(', ') + ']):');
+        L.push('    ax.text(xt, yt, st, color=' + c + ', ha="' + ha + '", va="center", fontweight="bold")');
+        break;
+      }
+      default: break;
+    }
+  });
+  L.push('');
+  if (s.xlim) L.push('ax.set_xlim(' + numToken(s.xlim[0], 'None') + ', ' + numToken(s.xlim[1], 'None') + ')');
+  if (s.ylim) L.push('ax.set_ylim(' + numToken(s.ylim[0], 'None') + ', ' + numToken(s.ylim[1], 'None') + ')');
+  if (s.xTicks) { L.push('ax.set_xticks(' + pyVec(s.xTicks.at) + ')'); L.push('ax.set_xticklabels([' + s.xTicks.labels.map(pyStr).join(', ') + '])'); }
+  if (s.yTicks) { L.push('ax.set_yticks(' + pyVec(s.yTicks.at) + ')'); L.push('ax.set_yticklabels([' + s.yTicks.labels.map(pyStr).join(', ') + '])'); }
+  if (s.xLabel) L.push('ax.set_xlabel(' + pyStr(s.xLabel) + ')');
+  if (s.yLabel) L.push('ax.set_ylabel(' + pyStr(s.yLabel) + ')');
+  if (s.title) L.push('ax.set_title(' + pyStr(s.title) + ')');
+  if (legendItems) L.push('ax.legend()');
+  L.push('fig.tight_layout()');
+  L.push('# fig.savefig(' + pyStr(s.name + '.png') + ', dpi=200)');
+  L.push('plt.show()');
+  return L.join('\n') + '\n';
+}
+
+/** The three writers by file extension. */
+export const SCRIPT_WRITERS = {
+  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab' },
+  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r' },
+  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python' }
+};
+
+export { sanitizeName };
+</script>
 <script type="text/plain" data-module="js/main.js">
 // Boot: renders every page into its section, wires the page navigation and
 // the URL hash, installs the tooltips, keeps the dataset strip under the
@@ -14813,25 +15256,30 @@ else boot();
 // The Summary and Plots page: one dataset's counts and descriptives, its raw
 // table, and the plots that make sense for its statistic type. Plots of the
 // replication estimates describe what the inference pages work on; plots of
-// one replication's observations show how values move within a run. The
-// results fall into five sections shown one at a time under the dataset
-// picker, and a section with no plot for the data's kind says so.
+// one replication's observations show how values move within a run, and a
+// normal quantile–quantile plot with the Shapiro–Wilk test checks the
+// assumption the inference pages' intervals rest on. The results fall into
+// five sections shown one at a time under the dataset picker; a section with
+// no plot for the data's kind is hidden from the page's strip and grayed in
+// the navigation.
 
 import * as state from '../state.js';
 import { repEstimates, datasetSummary, observations } from '../data/model.js';
 import {
-  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, pearson, mean
+  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
 import { tInterval } from '../stats/intervals.js';
+import { shapiroWilk, normalQQ } from '../stats/normality.js';
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
-  dotPlot, intervals, scatter, lagPlot, correlogram, svgEl, tok, extent
+  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
 } from '../ui/plots.js';
 import {
   card, cardRow, datasetSelect, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
 } from '../ui/widgets.js';
-import { num, esc, intl, plural, pct, dash } from '../ui/format.js';
+import { num, esc, intl, plural, pct, pValue, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { setSectionAvailable } from '../ui/tabs.js';
 
 /** The page's hash id. */
 export const id = 'explore';
@@ -14843,8 +15291,13 @@ export const sections = [
   { id: 'dist', label: 'Distribution' },
   { id: 'run', label: 'Within a run' },
   { id: 'reps', label: 'Replications' },
-  { id: 'compare', label: 'Compare' }
+  { id: 'normality', label: 'Normality' }
 ];
+
+/** The Shapiro–Wilk test covers at most this many values. */
+const SW_MAX = 5000;
+/** A quantile–quantile plot of pooled observations shows at most this many points. */
+const QQ_CAP = 2000;
 
 const RAW_CAP = 2000;
 const FOREST_CAP = 60;
@@ -14863,6 +15316,7 @@ let mounted = [];
 /** The sections that draw one replication, rebuilt when the replication changes. */
 let repSections = [];
 let ciSection = null;
+let normSection = null;
 let shownId = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -14893,17 +15347,11 @@ export function render(root) {
         '<div id="ex-s-run"></div>' +
       '</div>' +
       '<div data-section="reps" id="ex-s-reps"></div>' +
-      '<div data-section="compare">' +
-        '<div class="sec ctrl-card"><div class="ctrl-row">' +
-          '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-cmp"><span class="tip" tabindex="0" data-tip="A second dataset with the same number of replications. Its replication estimates are plotted against this dataset’s, matched by position.">Compare with</span></label><select id="ex-cmp"></select></span>' +
-        '</div></div>' +
-        '<div id="ex-s-compare"></div>' +
-      '</div>' +
+      '<div data-section="normality" id="ex-s-normality"></div>' +
     '</div>';
 
   els = {
     ds: root.querySelector('#ex-ds'),
-    cmp: root.querySelector('#ex-cmp'),
     repWrap: root.querySelector('#ex-rep-wrap'),
     lvl: root.querySelector('#ex-lvl'),
     results: root.querySelector('#ex-results'),
@@ -14916,7 +15364,6 @@ export function render(root) {
     if (els.ds.value) state.select(els.ds.value);
     if (visible()) renderAll(); else shownId = null;
   });
-  els.cmp.addEventListener('change', () => { state.setPick(id, 'compare', els.cmp.value || null); if (visible()) renderAll(); });
   levelSelect(els.lvl);
   applyStored();
 
@@ -14927,7 +15374,11 @@ export function render(root) {
       els.ds.dispatchEvent(new Event('change'));
     }
   });
-  state.on('settings', () => { if (visible() && ciSection) ciSection.rebuild(); });
+  state.on('settings', () => {
+    if (!visible()) return;
+    if (ciSection) ciSection.rebuild();
+    if (normSection) normSection.rebuild();
+  });
 }
 
 /** Called each time the page is shown. */
@@ -15058,6 +15509,7 @@ function releaseAll() {
   mounted = [];
   repSections = [];
   ciSection = null;
+  normSection = null;
 }
 
 // Brings back the horizontal-axis choice (kept with the session); the other
@@ -15065,18 +15517,6 @@ function releaseAll() {
 function applyStored() {
   const x = state.getPick(id, 'axis');
   if (x === 'index' || x === 'time') xMode = x;
-}
-
-// The comparison dataset stays as it was while it still qualifies; failing
-// that, the one the reader last chose (kept with the session) when it does.
-function fillCompare(ds) {
-  const want = state.getPick(id, 'compare');
-  const R = ds ? ds.reps.length : 0;
-  const list = ds ? state.datasets.filter(d => d.id !== ds.id && d.reps.length === R && R >= 2) : [];
-  const prev = list.some(d => d.id === els.cmp.value) ? els.cmp.value : want;
-  els.cmp.innerHTML = '<option value="">none</option>' + list.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + '</option>').join('');
-  els.cmp.value = list.some(d => d.id === prev) ? prev : '';
-  els.cmp.disabled = !list.length;
 }
 
 function fillRepControl(ds) {
@@ -15122,9 +15562,9 @@ function renderAll() {
     pooled = state.getPick(id, 'pooled:' + ds.id) === true;
   }
   shownId = ds ? ds.id : null;
-  fillCompare(ds);
   fillRepControl(ds);
   if (!ds) {
+    setSectionAvailable(id, null);
     const msg = '<p>No dataset is loaded. Open <a href="#import">Import</a> to load a file, paste data, or open an example.</p>';
     for (const k in B) B[k].appendChild(notice('info', msg));
     box.style.minHeight = '';
@@ -15137,40 +15577,36 @@ function renderAll() {
   const R = ds.reps.length;
   const ctx = { ds, est, estF, R };
   const estimates = n => (n === 0 ? 'none' : n === 1 ? 'one' : intl(n));
+  const tooFew = (what, need) => what + ' need at least ' + need + ' ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.';
+
+  // What the data cannot fill is left out of the page and grayed in the
+  // navigation, with the reason on the grayed item.
+  const off = {
+    dist: ds.kind === 'tally' || estF.length >= 2 ? null : tooFew('Distribution plots', 'two'),
+    run: ds.kind !== 'reps' ? null : 'Within-run plots need observations inside a replication; this dataset holds one value per replication.',
+    reps: estF.length >= 2 ? null : tooFew('The dot plot and the interval plot', 'two'),
+    normality: ds.kind === 'tally' || estF.length >= 3 ? null : tooFew('The normality check', 'three')
+  };
+  setSectionAvailable(id, off);
 
   mount(B.summary, api => buildSummary(api, ctx));
   B.summary.appendChild(el('div', 'ex-raw')).appendChild(rawTable(ds));
 
-  if (ds.kind === 'tally' || estF.length >= 2) mount(B.dist, api => buildDistribution(api, ctx));
+  if (!off.dist) mount(B.dist, api => buildDistribution(api, ctx));
   if (estF.length >= 5) mount(B.dist, api => buildBox(api, ctx));
-  if (!B.dist.firstChild) {
-    emptyLine(B.dist, 'Distribution plots need at least two ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.');
-  }
 
-  if (ds.kind !== 'reps') {
+  if (!off.run) {
     repSections.push(mount(B.run, api => buildSequence(api, ctx)));
     repSections.push(mount(B.run, api => buildRunning(api, ctx)));
-  } else {
-    emptyLine(B.run, 'Within-run plots need observations inside a replication; this dataset holds one value per replication.');
   }
   if (ds.kind === 'tally') repSections.push(mount(B.run, api => buildLag(api, ctx)));
 
-  if (estF.length >= 2) {
+  if (!off.reps) {
     mount(B.reps, api => buildDots(api, ctx));
     ciSection = mount(B.reps, api => buildIntervals(api, ctx));
-  } else {
-    emptyLine(B.reps, 'The dot plot and the interval plot need at least two ' + estimateWord(ds) + '; this dataset has ' + estimates(estF.length) + '.');
   }
 
-  const other = els.cmp.value ? state.get(els.cmp.value) : null;
-  if (other) mount(B.compare, api => buildScatter(api, ctx, other));
-  else if (els.cmp.disabled) {
-    emptyLine(B.compare, R >= 2
-      ? 'A scatter plot needs a second loaded dataset with the same number of replications as this one, ' + intl(R) + '; none is loaded.'
-      : 'A scatter plot pairs replication estimates, and this dataset has only one replication.');
-  } else {
-    emptyLine(B.compare, 'Choose a dataset under Compare with to plot its replication estimates against this dataset’s, matched by position.');
-  }
+  if (!off.normality) normSection = mount(B.normality, api => buildNormality(api, ctx));
 
   registerTips(rootEl);
   box.style.minHeight = '';
@@ -15191,10 +15627,13 @@ function storeResult(ds, est) {
   });
   const sm = datasetSummary(ds);
   const e = sm.est;
+  const tables = [{ name: 'replication summary', headers, rows }];
+  const sw = shapiroOf(est);
+  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication estimates', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
   state.setResult('explore', {
     title: 'Summary of ' + ds.name,
     provenance: { dataset: ds.name },
-    tables: [{ name: 'replication summary', headers, rows }],
+    tables,
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
       (e ? '; mean of the ' + esc(estimateWord(ds)) + ' ' + num(e.mean) + ', sd ' + num(e.sd) : '') + '.</p>'
@@ -15300,16 +15739,16 @@ function buildDistribution(api, { ds, estF }) {
   const pair = el('div', 'ex-pair');
   sec.appendChild(pair);
   const base = slug(ds.name) + (usePooled ? '-observations' : '-estimates');
-  figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Fraction', ariaLabel: 'Histogram of the ' + what },
-    f => histogram(f, histBins(values), { fraction: true }),
+  figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
+    f => histogram(f, histBins(values)),
     [{ swatch: 'bar', color: '--est', label: esc(what) }]);
   figure(api, pair, base + '-ecdf', { height: 260, narrowHeight: 260, xLabel, ariaLabel: 'Empirical cdf of the ' + what },
     f => ecdf(f, ecdfOf(values)),
     [{ swatch: 'line', color: '--est', label: 'empirical cdf' }]);
   if (usePooled) {
-    caption(sec, 'Each bar is the fraction of the ' + intl(values.length) + ' pooled observations in its bin, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
+    caption(sec, 'Each bar counts the pooled observations in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
   } else {
-    caption(sec, 'Each bar is the fraction of the ' + intl(values.length) + ' ' + esc(what) + ' in its bin, and the cdf rises by 1/R at each one. These estimates, one per replication, are the values every interval on the other pages is built from.');
+    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These estimates, one per replication, are the values every interval on the other pages is built from.');
   }
 }
 
@@ -15395,13 +15834,14 @@ function buildRunning(api, { ds, est }) {
         if (Number.isFinite(final)) {
           const y = Math.round(f.sy(final) * 10) / 10;
           svgEl('line', { x1: 0, x2: f.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4' }, f.inner);
+          f.series.push({ kind: 'hline', y: final, dash: true, color: tok('--truth'), label: 'final value' });
         }
         f.readout(dx => {
           let k = -1;
           for (let i = 0; i < s.xs.length && s.xs[i] <= dx; i++) k = i;
           return k < 0 ? null : ['t = ' + num(s.xs[k]), 'time-weighted mean ' + num(s.ys[k])];
         });
-        sequence(f, s.ys, { xs: s.xs, width: 1.8 });
+        sequence(f, s.ys, { xs: s.xs, width: 1.8, label: 'running time-weighted mean' });
       }, legendItems);
     caption(sec, 'At each record time t, the time-weighted mean of the state from the start of the run to t. Its final value, ' + num(final) + ', is replication ' + esc(rep.id) + '’s estimate.');
   } else {
@@ -15481,20 +15921,77 @@ function buildIntervals(api, { ds, estF }) {
   caption(sec, cap);
 }
 
-function buildScatter(api, { ds, est }, other) {
+// The Shapiro–Wilk test of a set of estimates, or null where it is not
+// defined: fewer than three finite values, more than the test covers, or every
+// value the same.
+function shapiroOf(est) {
+  const v = finite(est);
+  if (v.length < 3 || v.length > SW_MAX) return null;
+  try { return shapiroWilk(v); } catch (e) { return null; }
+}
+
+// ── Normality ───────────────────────────────────────────────────────────
+
+function buildNormality(api, { ds, estF }) {
   const sec = api.sec;
-  const oest = repEstimates(other);
-  const xs = [], ys = [];
-  for (let i = 0; i < Math.min(est.length, oest.length); i++) {
-    if (Number.isFinite(est[i]) && Number.isFinite(oest[i])) { xs.push(est[i]); ys.push(oest[i]); }
+  const forced = ds.kind === 'tally' && estF.length < 3;
+  const usePooled = ds.kind === 'tally' && (pooled || forced);
+  const level = state.settings.level, alpha = 1 - level;
+  sec.appendChild(el('div', 'sec-hd', 'Normal quantile–quantile (Q–Q) plot'));
+  if (ds.kind === 'tally') {
+    const row = el('div', 'ctrl-row ex-tight');
+    row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled-qq"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
+      (forced ? '<span class="ctrl-note">With fewer than three replications there is no test of the estimates, and so the plot shows the observations.</span>' : '');
+    sec.appendChild(row);
+    row.querySelector('#ex-pooled-qq').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
-  sec.appendChild(el('div', 'sec-hd', 'Scatter against ' + esc(other.name)));
-  const r = xs.length >= 2 ? pearson(xs, ys) : NaN;
-  figure(api, sec, slug(ds.name) + '-vs-' + slug(other.name) + '-scatter',
-    { height: 300, narrowHeight: 320, xLabel: ds.name + ' estimate', yLabel: other.name + ' estimate', ariaLabel: 'Scatter of replication estimates' },
-    f => scatter(f, xs, ys),
-    [{ swatch: 'dot', color: '--est', label: 'one replication of each, matched by position' }]);
-  caption(sec, 'Pearson’s r = ' + num(r, 3) + ' over ' + plural(xs.length, 'pair') + ' of replication estimates, the first replication of one dataset matched with the first of the other, and so on. A strong positive r is what common random numbers produce when both datasets used the same streams in the same order.');
+  let values = usePooled ? finite(observations(ds)) : estF;
+  const what = usePooled ? 'pooled observations' : estimateWord(ds);
+  const total = values.length;
+  // Of many pooled observations, every k-th order statistic is plotted; the
+  // quartile line is still fitted to all of them.
+  let thinned = false;
+  const qAll = total >= 2 ? normalQQ(values) : null;
+  let q = qAll;
+  if (qAll && total > QQ_CAP) {
+    const idx = [];
+    for (let i = 0; i < QQ_CAP; i++) idx.push(Math.round(i * (total - 1) / (QQ_CAP - 1)));
+    q = { theoretical: Float64Array.from(idx, i => qAll.theoretical[i]), sample: Float64Array.from(idx, i => qAll.sample[i]), slope: qAll.slope, intercept: qAll.intercept };
+    thinned = true;
+  }
+  if (!q) { emptyLine(sec, 'This dataset holds fewer than two values.'); return; }
+  const yLabel = usePooled ? ds.response : estimateAxis(ds);
+  figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-estimates') + '-qq',
+    { height: 320, narrowHeight: 300, xLabel: 'Standard normal quantile', yLabel, ariaLabel: 'Normal quantile–quantile plot of the ' + what },
+    f => qqPlot(f, q),
+    [{ swatch: 'dot', color: '--est', label: esc(what) + ', sorted, against the normal quantile at each one’s plotting position' },
+     { swatch: 'dash', color: '--truth', label: 'line through the first and third quartiles' }]);
+
+  const sw = usePooled ? null : shapiroOf(values);
+  if (!usePooled) {
+    const okN = total >= 3 && total <= SW_MAX;
+    const verdict = !sw ? dash : sw.p < alpha ? 'rejects normality' : 'no evidence against it';
+    const note = !sw ? (okN ? 'every value is the same' : total < 3 ? 'needs at least three values' : 'defined for at most ' + intl(SW_MAX) + ' values') : 'at α = ' + num(alpha, 2);
+    sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'Shapiro–Wilk test of the ' + esc(what)));
+    sec.appendChild(cardRow([
+      card('<span class="sym">n</span>', intl(total)),
+      card('<span class="sym">W</span>', sw ? num(sw.W, 4) : dash, 'ranges from 0 to 1, and 1 means the sorted values lie on the line'),
+      card('<span class="sym">p</span>-value', sw ? pValue(sw.p) : dash, 'the probability of a W this small or smaller if the values were normal'),
+      (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict', esc(verdict), esc(note)))
+    ]));
+  }
+
+  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end a heavier lower tail; an S through the line marks lighter tails.' : '';
+  if (usePooled) {
+    caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles' + (thinned ? ', with ' + intl(QQ_CAP) + ' of the ' + intl(total) + ' plotted, evenly spaced through the sorted order' : '') + '; the line passes through the quartiles.' + tailHint +
+      ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication estimates are and the observations are not.');
+  } else {
+    const n = total;
+    const rob = n >= 30 ? 'With ' + intl(n) + ' replications, the t intervals on the inference pages are robust to the departure a sample this size can reveal, as long as no single replication stands far from the rest.'
+      : 'The t intervals on the inference pages tolerate a mildly non-normal, roughly symmetric shape at this many replications; a strongly skewed shape or an outlying replication widens or shifts them, and more replications are the remedy.';
+    caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles; the line passes through the quartiles.' + tailHint +
+      ' ' + rob + ' The chi-square interval on a variance and the F ratio of two variances are not robust at any size: they lean on normality itself, and a rejection here is a reason to read them with doubt.');
+  }
 }
 
 export default { id, title, sections, render, onShow };
@@ -16205,8 +16702,8 @@ export function render(root) {
 
   let b = block(root, 'Histogram (fraction of observations)');
   const h = hist(waits, 20);
-  let fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)', yLabel: 'Fraction' });
-  fig.render(f => histogram(f, h, { fraction: true }));
+  let fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)', yLabel: 'Frequency' });
+  fig.render(f => histogram(f, h));
   exportButtons(b.box, fig, 'histogram');
   legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'observations' }]);
 
@@ -17677,6 +18174,11 @@ function drawFigure(d) {
       svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2.5 }, g);
       for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 6, y2: y + 6, stroke: c, 'stroke-width': 2 }, g);
       svgEl('circle', { cx: xm, cy: y, r: 4.2, fill: c }, g);
+      // In the exported figure the interval sits one row under the dots.
+      const yi = f.yRange[0] - 1;
+      f.yRange = [yi - 1, f.yRange[1]];
+      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: pct(level, 0) + ' interval on the mean' },
+        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: 'mean of the replication estimates' });
       f.readout((dx, dy, px, py) => {
         if (py >= fullH - band) {
           return [pct(level, 0) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];
@@ -17724,7 +18226,7 @@ import { repEstimates, canInfer } from '../data/model.js';
 import { simultaneousMeans, bonferroniFamily, anova, posthoc, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { subsetSelection } from '../stats/select.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, svgEl, tok, extent } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -17885,14 +18387,21 @@ function meanRows(fig, rows) {
   fig.axes({ y: false });
   const rowH = fig.ih / n;
   const cOk = tok('--ok'), cMuted = tok('--muted'), cCard = tok('--card'), cText = tok('--text'), cBorder = tok('--border');
+  const ry = recordRows(fig, rows.map(r => r.label));
+  const keep = { kind: 'points', x: [], y: [], color: cOk, label: 'survives the screen' };
+  const gone = { kind: 'points', x: [], y: [], color: cMuted, hollow: true, label: 'eliminated by the screen' };
   rows.forEach((r, i) => {
     const cy = (i + 0.5) * rowH;
     svgEl('line', { x1: 0, x2: fig.iw, y1: cy, y2: cy, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
     if (r.keep) svgEl('circle', { cx: sx(r.value), cy, r: 5.5, fill: cOk }, fig.inner);
     else svgEl('circle', { cx: sx(r.value), cy, r: 5, fill: cCard, stroke: cMuted, 'stroke-width': 2 }, fig.inner);
+    const rec = r.keep ? keep : gone;
+    rec.x.push(r.value); rec.y.push(ry(i));
     const t = svgEl('text', { x: -10, y: cy + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep ? cText : cMuted }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
   });
+  if (keep.x.length) fig.series.push(keep);
+  if (gone.x.length) fig.series.push(gone);
   fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
@@ -17952,6 +18461,14 @@ function designRows(fig, rows, pairs) {
   const rowH = fig.ih / n;
   const cy = i => Math.round((i + 0.5) * rowH * 10) / 10;
   const cEst = tok('--est'), cBorder = tok('--border'), cText = tok('--text'), cAcc = tok('--accent'), cMiss = tok('--miss');
+  // For the script exports, the letters and brackets sit inside a widened x
+  // range rather than in the margin.
+  const ry = recordRows(fig, rows.map(r => r.label));
+  const [dx0, dx1] = sx.domain, span = dx1 - dx0;
+  fig.xRange = [dx0, dx1 + span * (0.12 + 0.03 * cols)];
+  const segs = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, label: 'interval' };
+  const means = { kind: 'points', x: [], y: [], color: cEst, label: 'mean' };
+  const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
   rows.forEach((r, i) => {
     const y = cy(i);
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
@@ -17960,21 +18477,31 @@ function designRows(fig, rows, pairs) {
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: cEst, 'stroke-width': 2 }, g);
     for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: cEst, 'stroke-width': 2 }, g);
     svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: cEst }, g);
+    const yy = ry(i);
+    segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
+    means.x.push(r.mean); means.y.push(yy);
     const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
       const lt = svgEl('text', { x: fig.iw + 10, y: y + 4, 'font-size': lfs, 'font-weight': 700, fill: cAcc, class: 'm-letter',
         'font-family': "'IBM Plex Mono', Menlo, monospace", 'letter-spacing': '0.06em' }, fig.inner);
       lt.textContent = r.letter;
+      letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
     }
   });
+  fig.series.push(segs, means);
+  if (letters.text.length) fig.series.push(letters);
   const x0 = fig.iw + 10 + letW + 6;
   const tick = Math.max(2, Math.min(5, colW - 1.5));
+  const brackets = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cMiss, label: 'declared different' };
   for (const p of placed) {
     const x = x0 + p.col * colW + tick;
     const ya = cy(p.a), yb = cy(p.b);
     svgEl('path', { d: 'M' + (x - tick) + ' ' + ya + 'H' + x + 'V' + yb + 'H' + (x - tick), fill: 'none', stroke: cMiss, 'stroke-width': 1.6, class: 'm-bracket' }, fig.inner);
+    const bx = dx1 + span * (0.11 + 0.03 * p.col), bt = span * 0.012, ra = ry(p.a), rb = ry(p.b);
+    brackets.x0.push(bx - bt, bx, bx); brackets.x1.push(bx, bx, bx - bt); brackets.y0.push(ra, ra, rb); brackets.y1.push(ra, rb, rb);
   }
+  if (placed.length) fig.series.push(brackets);
   fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
@@ -19811,7 +20338,7 @@ import { repEstimates, repIds, canInfer } from '../data/model.js';
 import { welch, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch } from '../stats/compare.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, scatter, svgEl, tok, extent } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, scatter, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -19985,12 +20512,17 @@ function strips(fig, rows, o = {}) {
   fig.axes({ y: false });
   const rowH = fig.ih / n;
   const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cMuted = tok('--muted'), cBorder = tok('--border');
+  const ry = recordRows(fig, rows.map(r => r.label));
   if (o.ref !== undefined && o.ref !== null) {
     const x = sx(o.ref);
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cMuted, 'stroke-width': 1.5, 'stroke-dasharray': '5,4' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: cMuted, label: 'reference' });
   }
   const rad = fig.narrow ? 4 : 4.5;
   const placed = [];
+  const dotsRec = { kind: 'points', x: [], y: [], color: cEst, label: 'one replication estimate' };
+  const intRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cTruth, label: 'interval' };
+  const meanRec = { kind: 'points', x: [], y: [], color: cTruth, label: 'mean' };
   rows.forEach((row, ri) => {
     const top = ri * rowH;
     if (ri > 0) svgEl('line', { x1: 0, x2: fig.iw, y1: top, y2: top, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
@@ -20010,13 +20542,18 @@ function strips(fig, rows, o = {}) {
     }
     const gap = maxLevel ? Math.min(2 * rad + 1, (rowH * 0.32 - rad) / maxLevel) : 0;
     const g = svgEl('g', { class: 'm-dots' }, fig.inner);
+    const yRow = ry(ri), yGap = maxLevel ? Math.min(0.08, 0.3 / maxLevel) : 0;
     for (const i of idx) {
       const cx = sx(row.values[i]), cy = cyDots - level[i] * gap;
       svgEl('circle', { cx, cy, r: rad, fill: cEst, 'fill-opacity': 0.75, stroke: cCard, 'stroke-width': 1 }, g);
       placed.push({ cx, cy, text: row.label + ', replication ' + row.names[i] + ': ' + num(row.values[i]) });
+      dotsRec.x.push(row.values[i]); dotsRec.y.push(yRow + 0.1 + level[i] * yGap);
     }
     if (Number.isFinite(row.lo) && Number.isFinite(row.hi)) {
       const x0 = sx(row.lo), x1 = sx(row.hi);
+      const yi = yRow - 0.3;
+      intRec.x0.push(row.lo, row.lo, row.hi); intRec.x1.push(row.hi, row.lo, row.hi); intRec.y0.push(yi, yi - 0.08, yi - 0.08); intRec.y1.push(yi, yi + 0.08, yi + 0.08);
+      meanRec.x.push(row.mean); meanRec.y.push(yi);
       const gi = svgEl('g', { class: 'm-int' }, fig.inner);
       svgEl('line', { x1: x0, x2: x1, y1: cyInt, y2: cyInt, stroke: cTruth, 'stroke-width': 2 }, gi);
       for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cyInt - 5, y2: cyInt + 5, stroke: cTruth, 'stroke-width': 2 }, gi);
@@ -20025,6 +20562,8 @@ function strips(fig, rows, o = {}) {
     const t = svgEl('text', { x: -10, y: top + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
     t.textContent = clip(row.label, lw - 6, fs);
   });
+  fig.series.push(dotsRec);
+  if (intRec.x0.length) fig.series.push(intRec, meanRec);
   fig.readout((dx, dy, px, py) => {
     let best = null, bd = Infinity;
     for (const p of placed) { const d = Math.hypot(p.cx - px, p.cy - py); if (d < bd) { bd = d; best = p; } }
@@ -20460,6 +20999,12 @@ function pairsByRep(fig, P) {
   const gLink = svgEl('g', { class: 'm-pair-link' }, fig.inner);
   const gB = svgEl('g', { class: 'm-pair-b' }, fig.inner);
   const gA = svgEl('g', { class: 'm-pair-a' }, fig.inner);
+  const ks = Array.from({ length: n }, (_, k) => k + 1);
+  fig.cats = { axis: 'x', at: ks, labels: P.names.map(String) };
+  fig.series.push(
+    { kind: 'segments', x0: ks, x1: ks, y0: Array.from(P.a), y1: Array.from(P.b), color: cPair, dash: true, label: 'difference A - B' },
+    { kind: 'points', x: ks, y: Array.from(P.a), color: cEst, label: 'design A' },
+    { kind: 'points', x: ks, y: Array.from(P.b), color: cEst, hollow: true, label: 'design B' });
   for (let k = 0; k < n; k++) {
     const px = sx(k + 1), ya = sy(P.a[k]), yb = sy(P.b[k]);
     // The segment runs between the two dots' rims, and so it never shows
@@ -20507,11 +21052,19 @@ function pairsAsSlopes(fig, P) {
   const along = k => s0 !== 0 && Math.sign(P.a[k] - P.b[k]) === s0;
   const gAgainst = svgEl('g', { class: 'm-slope-against' }, fig.inner);
   const gAlong = svgEl('g', { class: 'm-slope-along' }, fig.inner);
+  fig.cats = { axis: 'x', at: [0.25, 0.75], labels: [P.labA, P.labB] };
+  const recAlong = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, label: 'pair, difference with the sign of the mean difference' };
+  const recAgainst = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, dash: true, label: 'pair, difference of the other sign' };
   for (let k = 0; k < n; k++) {
     const ok = along(k);
     svgEl('line', { x1: xa, y1: sy(P.a[k]), x2: xb, y2: sy(P.b[k]), stroke: cEst, 'stroke-width': 1.6, 'stroke-opacity': 0.8,
       'stroke-dasharray': ok ? null : '5,4' }, ok ? gAlong : gAgainst);
+    const rec = ok ? recAlong : recAgainst;
+    rec.x0.push(0.25); rec.x1.push(0.75); rec.y0.push(P.a[k]); rec.y1.push(P.b[k]);
   }
+  if (recAlong.x0.length) fig.series.push(recAlong);
+  if (recAgainst.x0.length) fig.series.push(recAgainst);
+  fig.series.push({ kind: 'segments', x0: [0.21, 0.71], x1: [0.29, 0.79], y0: [mA, mB], y1: [mA, mB], color: cTruth, width: 4, label: 'mean of each column' });
   const gm = svgEl('g', { class: 'm-slope-mean' }, fig.inner);
   const bar = fig.narrow ? 16 : 22;
   [[xa, mA, -1], [xb, mB, 1]].forEach(([x, m, side]) => {
@@ -20707,7 +21260,8 @@ function renderPaired(res, notes, d, level) {
       const sx = fg.sx, sy = fg.sy;
       const a = Math.max(sx.domain[0], sy.domain[0]), b = Math.min(sx.domain[1], sy.domain[1]);
       svgEl('line', { x1: sx(a), y1: sy(a), x2: sx(b), y2: sy(b), stroke: tok('--muted'), 'stroke-width': 1.5, 'stroke-dasharray': '5,4' }, fg.inner);
-      scatter(fg, x, y);
+      fg.series.push({ kind: 'line', x: [a, b], y: [a, b], dash: true, color: tok('--muted'), label: 'A = B' });
+      scatter(fg, x, y, { label: 'one replication pair (A, B)' });
       fg.readout((dx, dy, px, py) => {
         let best = -1, bd = Infinity;
         for (let i = 0; i < x.length; i++) { const dd = Math.hypot(sx(x[i]) - px, sy(y[i]) - py); if (dd < bd) { bd = dd; best = i; } }
@@ -21079,18 +21633,23 @@ function drawScatter(d, cr, level) {
   const fitted = cr && Number.isFinite(cr.p) && cr.p < alpha && d.x.length >= 3 ? regressionLine(d.x, d.y, level) : null;
   fig.render(f => {
     // The axes are drawn here rather than by scatter, to carry the datasets' names.
-    scatter(f, d.x, d.y, { axes: false });
+    scatter(f, d.x, d.y, { axes: false, label: 'one replication pair (A, B)' });
     f.axes({ xLabel: xl, yLabel: yl });
     if (!fitted) return;
     const [x0, x1] = f.sx.domain, [y0, y1] = f.sy.domain;
     const clampY = v => Math.max(y0, Math.min(y1, v));
     const K = 60, up = [], down = [], mid = [];
+    const gx = [], gLo = [], gHi = [], gFit = [];
     for (let i = 0; i <= K; i++) {
       const xv = x0 + (x1 - x0) * i / K, b = fitted.band(xv);
       up.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.hi)).toFixed(1));
       down.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.lo)).toFixed(1));
       mid.push((i ? 'L' : 'M') + f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.fit)).toFixed(1));
+      gx.push(xv); gLo.push(b.lo); gHi.push(b.hi); gFit.push(b.fit);
     }
+    // Band first and line second, so the points stay on top in the exports too.
+    f.series.unshift({ kind: 'band', x: gx, lo: gLo, hi: gHi, color: tok('--truth'), label: pct(level, 0) + ' confidence band for the mean of B' },
+      { kind: 'line', x: [x0, x1], y: [gFit[0], gFit[K]], color: tok('--truth'), width: 2, label: 'least-squares line of B on A' });
     // Band first, then the line, then the points stay on top: the scatter
     // group already exists, so the two are inserted before it.
     const pts = f.inner.querySelector('.m-scatter');
@@ -22576,6 +23135,148 @@ export function regressionLine(x, y, level = 0.95) {
   return { n, slope, intercept, s, df, t, xbar, sxx, r2, band };
 }
 </script>
+<script type="text/plain" data-module="js/stats/normality.js">
+// Checks of normality for the replication estimates: the Shapiro–Wilk test
+// and the pieces of a normal quantile–quantile plot. Pure functions, no DOM.
+
+import { normInv, normCdf } from './special.js';
+import { sortedCopy, quantile } from './descriptive.js';
+
+// Royston's approximation (Applied Statistics algorithm AS R94, 1995) to the
+// Shapiro–Wilk coefficients and to the distribution of W, as R's
+// shapiro.test computes them: the coefficients from the expected normal order
+// statistics at the Blom positions (i − 3/8)/(n + 1/4), corrected at the two
+// extremes by polynomials in 1/√n, and the significance from a normalizing
+// transformation of W whose mean and spread are polynomials in n (n ≤ 11) or
+// in log n.
+const C1 = [0, 0.221157, -0.147981, -2.07119, 4.434685, -2.706056];
+const C2 = [0, 0.042981, -0.293762, -1.752461, 5.682633, -3.582633];
+const C3 = [0.544, -0.39978, 0.025054, -6.714e-4];
+const C4 = [1.3822, -0.77857, 0.062767, -0.0020322];
+const C5 = [-1.5861, -0.31082, -0.083751, 0.0038915];
+const C6 = [-0.4803, -0.082676, 0.0030302];
+const G = [-2.273, 0.459];
+
+function poly(cc, x) {
+  let v = 0;
+  for (let i = cc.length - 1; i >= 0; i--) v = v * x + cc[i];
+  return v;
+}
+
+/**
+ * The Shapiro–Wilk coefficients a₁ … a_{⌊n/2⌋} for the upper half of the
+ * sorted sample (the lower half takes their negatives, and the middle value of
+ * an odd n weighs nothing).
+ * @param {number} n 3 or more
+ * @returns {Float64Array}
+ */
+export function shapiroCoefficients(n) {
+  if (!(Number.isInteger(n) && n >= 3)) throw new RangeError('n must be at least 3');
+  const nn2 = Math.floor(n / 2);
+  const a = new Float64Array(nn2);
+  if (n === 3) { a[0] = Math.SQRT1_2; return a; }
+  const an25 = n + 0.25;
+  const m = new Float64Array(nn2);
+  let summ2 = 0;
+  for (let i = 0; i < nn2; i++) { m[i] = normInv((i + 1 - 0.375) / an25); summ2 += m[i] * m[i]; }
+  summ2 *= 2;
+  const ssumm2 = Math.sqrt(summ2), rsn = 1 / Math.sqrt(n);
+  const a1 = poly(C1, rsn) - m[0] / ssumm2;
+  let i1, fac;
+  if (n > 5) {
+    const a2 = -m[1] / ssumm2 + poly(C2, rsn);
+    fac = Math.sqrt((summ2 - 2 * m[0] * m[0] - 2 * m[1] * m[1]) / (1 - 2 * a1 * a1 - 2 * a2 * a2));
+    a[1] = a2;
+    i1 = 2;
+  } else {
+    fac = Math.sqrt((summ2 - 2 * m[0] * m[0]) / (1 - 2 * a1 * a1));
+    i1 = 1;
+  }
+  a[0] = a1;
+  // m is negative on this half, and so the coefficients come out positive.
+  for (let i = i1; i < nn2; i++) a[i] = -m[i] / fac;
+  return a;
+}
+
+/**
+ * The Shapiro–Wilk test of normality. W is the squared correlation between the
+ * sorted sample and the Shapiro–Wilk coefficients, 1 for a perfectly normal
+ * shape and smaller for any other; the p-value is Royston's approximation,
+ * valid from n = 3 up to about 5000.
+ * @param {ArrayLike<number>} x the sample (3 ≤ n ≤ 5000)
+ * @returns {{ W: number, p: number, n: number }}
+ */
+export function shapiroWilk(x) {
+  const s = sortedCopy(x), n = s.length;
+  if (n < 3) throw new RangeError('the Shapiro–Wilk test needs at least 3 values');
+  if (n > 5000) throw new RangeError('the Shapiro–Wilk test is defined for at most 5000 values');
+  const range = s[n - 1] - s[0];
+  if (!(range > 0)) throw new RangeError('every value is the same');
+  const a = shapiroCoefficients(n), nn2 = a.length;
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += s[i];
+  mean /= n;
+  let num = 0, den = 0;
+  for (let i = 0; i < nn2; i++) num += a[i] * (s[n - 1 - i] - s[i]);
+  for (let i = 0; i < n; i++) den += (s[i] - mean) * (s[i] - mean);
+  let W = num * num / den;
+  if (W > 1) W = 1;
+  let p;
+  if (n === 3) {
+    // Exact for n = 3.
+    p = Math.max(0, (6 / Math.PI) * (Math.asin(Math.sqrt(W)) - Math.PI / 3));
+  } else {
+    const w1 = 1 - W;
+    let y = Math.log(w1), m, sd;
+    if (n <= 11) {
+      const gamma = poly(G, n);
+      if (y >= gamma) return { W, p: 1e-99, n };
+      y = -Math.log(gamma - y);
+      m = poly(C3, n);
+      sd = Math.exp(poly(C4, n));
+    } else {
+      const ln = Math.log(n);
+      m = poly(C5, ln);
+      sd = Math.exp(poly(C6, ln));
+    }
+    p = 1 - normCdf((y - m) / sd);
+  }
+  return { W, p, n };
+}
+
+/**
+ * The plotting positions a normal quantile–quantile plot uses, as R's ppoints:
+ * (i − a)/(n + 1 − 2a) with a = 3/8 for n ≤ 10 and 1/2 otherwise.
+ * @param {number} n
+ * @returns {Float64Array}
+ */
+export function plottingPositions(n) {
+  const a = n <= 10 ? 3 / 8 : 0.5;
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) out[i] = (i + 1 - a) / (n + 1 - 2 * a);
+  return out;
+}
+
+/**
+ * A normal quantile–quantile plot's pieces: the sorted sample against the
+ * standard normal quantiles at the plotting positions, and the line through
+ * the first and third quartiles (R's qqline), whose slope estimates the
+ * standard deviation and whose intercept the mean of a normal sample.
+ * @param {ArrayLike<number>} x the sample (2 or more values)
+ * @returns {{ theoretical: Float64Array, sample: Float64Array, slope: number, intercept: number }}
+ */
+export function normalQQ(x) {
+  const s = sortedCopy(x), n = s.length;
+  if (n < 2) throw new RangeError('a quantile–quantile plot needs at least 2 values');
+  const pp = plottingPositions(n);
+  const theoretical = new Float64Array(n);
+  for (let i = 0; i < n; i++) theoretical[i] = normInv(pp[i]);
+  const q1 = quantile(s, 0.25), q3 = quantile(s, 0.75);
+  const z1 = normInv(0.25), z3 = normInv(0.75);
+  const slope = (q3 - q1) / (z3 - z1);
+  return { theoretical, sample: s, slope, intercept: q1 - slope * z1 };
+}
+</script>
 <script type="text/plain" data-module="js/stats/select.js">
 // Selecting the best design: a subset-selection screen with an indifference
 // zone δ, and the replication counts a Rinott second stage would need to pick
@@ -23909,6 +24610,7 @@ function trimExp(s) {
 // decimateMinMax) import cleanly under Node for the tests.
 
 import { num, esc } from './format.js';
+import { SCRIPT_WRITERS, sanitizeName } from '../io/scripts.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const DESIGN_W = 940;
@@ -24262,7 +24964,11 @@ export function makeFigure(container, opts = {}) {
   hookReadoutDismiss();
   const o = Object.assign({ width: DESIGN_W, height: 300, xLabel: '', yLabel: '', title: '' }, opts);
   o.margin = Object.assign({ l: 58, r: 16, t: o.title ? 30 : 14, b: 44 }, opts.margin || {});
-  const fig = { container, opts: o, sx: null, sy: null, drawFn: o.draw || null, readoutFn: null, axesDrawn: false };
+  const fig = { container, opts: o, sx: null, sy: null, drawFn: o.draw || null, readoutFn: null, axesDrawn: false,
+    // What the marks drew, as data, for the script exports (see figureSpec):
+    // the series records, a categorical axis, and axis ranges for a figure
+    // that draws rows rather than setting a y scale.
+    series: [], cats: null, xRange: null, yRange: null, axisLabels: null };
 
   const wrap = document.createElement('div');
   wrap.className = 'fig-wrap';
@@ -24329,6 +25035,7 @@ export function makeFigure(container, opts = {}) {
     const { grid, axes, bg } = fig.layers;
     grid.textContent = ''; axes.textContent = ''; bg.textContent = '';
     fig.axesDrawn = true;
+    fig.axisLabels = { x: ao.xLabel !== undefined ? ao.xLabel : o.xLabel, y: ao.yLabel !== undefined ? ao.yLabel : o.yLabel };
     const cMuted = tok('--muted'), cBorder = tok('--border'), cText = tok('--text');
     svgEl('rect', { x: 0, y: 0, width: fig.iw, height: fig.ih, fill: tok('--chart-bg') }, bg);
     const fs = 11;
@@ -24378,6 +25085,7 @@ export function makeFigure(container, opts = {}) {
   fig.clear = () => {
     for (const k in fig.layers) fig.layers[k].textContent = '';
     fig.sx = null; fig.sy = null; fig.readoutFn = null; fig.onPlotClick = null; fig.axesDrawn = false;
+    fig.series = []; fig.cats = null; fig.xRange = null; fig.yRange = null; fig.axisLabels = null;
   };
   fig.render = (fn) => { fig.drawFn = fn; fig.redraw(); return fig; };
   fig.redraw = () => {
@@ -24500,8 +25208,9 @@ export function histogram(fig, h, o = {}) {
   const ys = Array.from(h.counts, c => o.fraction ? (total > 0 ? c / total : 0) : c);
   const sx = fig.sx || fig.x([h.edges[0], h.edges[k]]);
   const sy = fig.sy || fig.y([0, Math.max(...ys, o.fraction ? 0.01 : 1) * 1.06], { nice: true });
-  ensureAxes(fig, o, { yLabel: o.fraction ? (fig.opts.yLabel || 'Fraction') : (fig.opts.yLabel || 'Count') });
+  ensureAxes(fig, o, { yLabel: o.fraction ? (fig.opts.yLabel || 'Fraction') : (fig.opts.yLabel || 'Frequency'), yInteger: !o.fraction });
   const c = col(o.color, '--est');
+  fig.series.push({ kind: 'bars', edges: Array.from(h.edges), heights: ys, color: c });
   const g = svgEl('g', { class: 'm-hist' }, fig.inner);
   for (let i = 0; i < k; i++) {
     const x0 = sx(h.edges[i]), x1 = sx(h.edges[i + 1]), y = sy(ys[i]);
@@ -24535,6 +25244,7 @@ export function ecdf(fig, e, o = {}) {
     d += 'H' + r1(i + 1 < n ? sx(e.x[i + 1]) : sx(sx.domain[1]));
   }
   svgEl('path', { d, fill: 'none', stroke: col(o.color, '--est'), 'stroke-width': 1.8, 'stroke-linejoin': 'miter', class: 'm-ecdf' }, fig.inner);
+  fig.series.push({ kind: 'step', x: [sx.domain[0], ...Array.from(e.x), sx.domain[1]], y: [0, ...Array.from(e.p), e.p[n - 1]], label: 'empirical cdf', color: col(o.color, '--est') });
   if (!fig.readoutFn) fig.readout(dx => {
     let lo2 = 0, hi2 = n;
     while (lo2 < hi2) { const mid = (lo2 + hi2) >> 1; if (e.x[mid] <= dx) lo2 = mid + 1; else hi2 = mid; }
@@ -24569,8 +25279,21 @@ export function boxPlot(fig, stats, o = {}) {
   ensureAxes(fig, o, { y: false });
   const c = col(o.color, '--est'), pale = tok('--est-pale'), cT = tok('--truth'), card = tok('--card');
   const rowH = fig.ih / rows.length;
+  const ry = recordRows(fig, hasLabels ? labels : rows.map(() => ''));
+  const rec = { whisk: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, label: 'whiskers to 1.5 IQR' },
+    box: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: 'box from q1 to q3' },
+    med: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, width: 3, label: 'median' },
+    out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: 'outlier' },
+    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: 'mean' } };
   rows.forEach((r, i) => {
     const s = r.stats, cy = (i + 0.5) * rowH, bh = Math.min(34, rowH * 0.5);
+    const yy = ry(i);
+    rec.whisk.x0.push(s.whiskerLo, s.q3, s.whiskerLo, s.whiskerHi); rec.whisk.x1.push(s.q1, s.whiskerHi, s.whiskerLo, s.whiskerHi);
+    rec.whisk.y0.push(yy, yy, yy - 0.12, yy - 0.12); rec.whisk.y1.push(yy, yy, yy + 0.12, yy + 0.12);
+    rec.box.x0.push(s.q1); rec.box.x1.push(s.q3); rec.box.y0.push(yy - 0.25); rec.box.y1.push(yy + 0.25);
+    rec.med.x0.push(s.median); rec.med.x1.push(s.median); rec.med.y0.push(yy - 0.25); rec.med.y1.push(yy + 0.25);
+    for (const v of (s.outliers || [])) { rec.out.x.push(v); rec.out.y.push(yy); }
+    if (Number.isFinite(s.mean)) { rec.mean.x.push(s.mean); rec.mean.y.push(yy); }
     const g = svgEl('g', { class: 'm-box' }, fig.inner);
     svgEl('line', { x1: r1(sx(s.whiskerLo)), x2: r1(sx(s.q1)), y1: r1(cy), y2: r1(cy), stroke: c, 'stroke-width': 1.5 }, g);
     svgEl('line', { x1: r1(sx(s.q3)), x2: r1(sx(s.whiskerHi)), y1: r1(cy), y2: r1(cy), stroke: c, 'stroke-width': 1.5 }, g);
@@ -24584,6 +25307,9 @@ export function boxPlot(fig, stats, o = {}) {
     }
     if (hasLabels) text(fig.layers.axes, -10, cy + 4, clipLabel(r.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: tok('--text') });
   });
+  fig.series.push(rec.whisk, rec.box, rec.med);
+  if (rec.out.x.length) fig.series.push(rec.out);
+  if (rec.mean.x.length) fig.series.push(rec.mean);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.min(rows.length - 1, Math.max(0, Math.floor(py / rowH)));
     const s = rows[i].stats;
@@ -24596,6 +25322,7 @@ export function boxPlot(fig, stats, o = {}) {
 /** Alias of boxPlot. */
 export const box = boxPlot;
 
+function xMin0(sx) { return sx.domain[0]; }
 function seriesXs(n, xs) {
   if (xs) return xs;
   const a = new Float64Array(n);
@@ -24623,6 +25350,7 @@ export function sequence(fig, ys, o = {}) {
   if (!fig.sy) fig.y(extent(ys), { pad: 0.04, nice: true });
   ensureAxes(fig, o, { xLabel: fig.opts.xLabel || (o.xs ? 'Time' : 'Observation') });
   drawSeries(fig, xs, ys, { stroke: col(o.color, '--est'), 'stroke-width': o.width || 1.1 }, 'm-seq');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(ys), color: col(o.color, '--est'), width: 1, label: o.label });
   if (!fig.readoutFn) fig.readout(dx => {
     const i = nearestIndex(xs, dx);
     return i < 0 ? null : [(o.xs ? 't = ' : 'i = ') + num(xs[i]), 'value ' + num(ys[i])];
@@ -24659,8 +25387,10 @@ export function runningMean(fig, ys, o = {}) {
   if (Number.isFinite(final)) {
     const y = r1(fig.sy(final));
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: col(o.refColor, '--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'hline', y: final, dash: true, color: col(o.refColor, '--truth'), label: 'final value' });
   }
   drawSeries(fig, xs, rm, { stroke: col(o.color, '--est'), 'stroke-width': 1.8 }, 'm-runmean');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(rm), color: col(o.color, '--est'), label: 'running mean' });
   if (!fig.readoutFn) fig.readout(dx => {
     const i = nearestIndex(xs, dx);
     return i < 0 ? null : [(o.xs ? 't = ' : 'i = ') + num(xs[i]), 'running mean ' + num(rm[i])];
@@ -24698,15 +25428,19 @@ export function dotPlot(fig, values, o = {}) {
   const cy = fig.ih / 2;
   const gap = maxLevel ? Math.min(2 * r + 1, (fig.ih / 2 - r - 2) / maxLevel) : 0;
   const c = col(o.color, '--est'), card = tok('--card');
+  fig.cats = { axis: 'y', at: [], labels: [] };
+  fig.yRange = [-(maxLevel + 1), maxLevel + 1];
   if (o.mean) {
     let s = 0; for (const i of idx) s += values[i];
     const m = s / Math.max(1, idx.length);
     const mx = r1(sx(m));
     svgEl('line', { x1: mx, x2: mx, y1: 6, y2: fig.ih - 6, stroke: tok('--truth'), 'stroke-width': 2, class: 'm-mean' }, fig.inner);
     text(fig.inner, mx + 5, 16, 'mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
+    fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'mean ' + num(m) });
   }
   const g = svgEl('g', { class: 'm-dots' }, fig.inner);
   for (const i of idx) svgEl('circle', { cx: r1(sx(values[i])), cy: r1(cy - level[i] * gap), r, fill: c, 'fill-opacity': 0.85, stroke: card, 'stroke-width': 1 }, g);
+  fig.series.push({ kind: 'points', x: idx.map(i => values[i]), y: idx.map(i => level[i]), color: c, label: o.label || 'one value' });
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
     for (const i of idx) { const d = Math.hypot(sx(values[i]) - px, cy - level[i] * gap - py); if (d < bd) { bd = d; best = i; } }
@@ -24736,14 +25470,24 @@ export function intervals(fig, items, o = {}) {
   const sx = fig.sx || fig.x([lo, hi], { pad: 0.05, nice: true });
   ensureAxes(fig, o, { y: false });
   const rowH = fig.ih / Math.max(1, n);
+  const ry = recordRows(fig, items.map(it => it.label));
   if (o.ref !== undefined && o.ref !== null && Number.isFinite(o.ref)) {
     const x = r1(sx(o.ref));
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '5,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: tok('--truth'), label: 'reference' });
   }
   const cMiss = tok('--miss'), card = tok('--card'), cText = tok('--text');
+  const recOf = new Map();
   items.forEach((it, i) => {
     const cy = r1((i + 0.5) * rowH);
     const c = it.flagged ? cMiss : col(it.color, '--est');
+    const key = (it.flagged ? 'f' : 'p') + c;
+    if (!recOf.has(key)) recOf.set(key, {
+      seg: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, dash: !!it.flagged, label: it.flagged ? 'interval (flagged)' : 'interval' },
+      dot: { kind: 'points', x: [], y: [], color: c, hollow: !!it.flagged, label: it.flagged ? 'center (flagged)' : 'center' } });
+    const rr = recOf.get(key), yy = ry(i), cc = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
+    rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
+    rr.dot.x.push(cc); rr.dot.y.push(yy);
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
     const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi));
     const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
@@ -24753,6 +25497,7 @@ export function intervals(fig, items, o = {}) {
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
   });
+  for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
@@ -24780,6 +25525,7 @@ export function scatter(fig, xs, ys, o = {}) {
     if (!Number.isFinite(xs[i]) || !Number.isFinite(ys[i])) continue;
     svgEl('circle', { cx: r1(sx(xs[i])), cy: r1(sy(ys[i])), r }, g);
   }
+  fig.series.push({ kind: 'points', x: Array.from(xs).slice(0, n), y: Array.from(ys).slice(0, n), color: c, label: o.label });
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
     for (let i = 0; i < n; i++) { const d = Math.hypot(sx(xs[i]) - px, sy(ys[i]) - py); if (d < bd) { bd = d; best = i; } }
@@ -24804,7 +25550,35 @@ export function lagPlot(fig, xs, ys, o = {}) {
   ensureAxes(fig, o);
   const [d0, d1] = fig.sx.domain;
   svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
-  scatter(fig, xs, ys, Object.assign({}, o, { axes: false }));
+  fig.series.push({ kind: 'line', x: [d0, d1], y: [d0, d1], dash: true, color: tok('--truth'), label: 'identity line' });
+  scatter(fig, xs, ys, Object.assign({}, o, { axes: false, label: o.label || 'one pair' }));
+}
+
+/**
+ * A normal quantile–quantile plot: the sorted sample against the standard
+ * normal quantiles at its plotting positions, with the line through the
+ * quartiles drawn across the plot. Points along the line say the sample's
+ * shape is normal; a curve away from it at either end says which tail is
+ * heavier or lighter than a normal's.
+ * @param {Figure} fig
+ * @param {{ theoretical: ArrayLike<number>, sample: ArrayLike<number>, slope: number, intercept: number }} q
+ * @param {{ color?: string, axes?: boolean }} [o]
+ */
+export function qqPlot(fig, q, o = {}) {
+  const n = Math.min(q.theoretical.length, q.sample.length);
+  if (!fig.sx) fig.x(extent(q.theoretical), { pad: 0.08, nice: true });
+  if (!fig.sy) fig.y(extent(q.sample), { pad: 0.08, nice: true });
+  ensureAxes(fig, o);
+  const [d0, d1] = fig.sx.domain;
+  svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(q.intercept + q.slope * d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(q.intercept + q.slope * d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+  fig.series.push({ kind: 'line', x: [d0, d1], y: [q.intercept + q.slope * d0, q.intercept + q.slope * d1], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  scatter(fig, q.theoretical, q.sample, Object.assign({}, o, { axes: false, r: n > 400 ? 2 : 3.2, label: o.label || 'sorted values' }));
+  fig.readout((dx, dy, px, py) => {
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.hypot(fig.sx(q.theoretical[i]) - px, fig.sy(q.sample[i]) - py); if (d < bd) { bd = d; best = i; } }
+    if (best < 0 || bd > 16) return null;
+    return ['order statistic ' + (best + 1) + ' of ' + n, 'z ' + num(q.theoretical[best], 3) + ', value ' + num(q.sample[best])];
+  });
 }
 
 /**
@@ -24836,12 +25610,17 @@ export function correlogram(fig, r, o = {}) {
   const sx = fig.sx, sy = fig.sy, c = col(o.color, '--est');
   const y0 = r1(sy(0));
   svgEl('line', { x1: 0, x2: fig.iw, y1: y0, y2: y0, stroke: tok('--muted'), 'stroke-width': 1 }, fig.inner);
+  fig.series.push({ kind: 'hline', y: 0, color: tok('--muted') });
   if (Number.isFinite(band)) {
     for (const b of [band, -band]) {
       const y = r1(sy(b));
       svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.4, 'stroke-dasharray': '5,4', class: 'm-band' }, fig.inner);
+      fig.series.push({ kind: 'hline', y: b, dash: true, color: tok('--truth'), label: b > 0 ? 'band for an independent series' : undefined });
     }
   }
+  const stems = { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, label: 'autocorrelation at each lag' };
+  for (let k = from; k <= L; k++) if (Number.isFinite(r[k])) { stems.x0.push(k * step); stems.x1.push(k * step); stems.y0.push(0); stems.y1.push(r[k]); }
+  fig.series.push(stems);
   const g = svgEl('g', { class: 'm-acf' }, fig.inner);
   const dots = L - from <= 120;
   const rad = L > 60 ? 2 : 3;
@@ -24864,6 +25643,7 @@ export function correlogram(fig, r, o = {}) {
     const x = r1(sx(Math.min(d1, Math.max(d0, o.marker.at))));
     const gm = svgEl('g', { class: 'm-marker' }, fig.inner);
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: mc, 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, gm);
+    fig.series.push({ kind: 'vline', x: o.marker.at, dash: true, color: mc, label: o.marker.label || 'marker' });
     const s = (o.marker.label || '') + (past ? ' (past the axis) →' : '');
     if (s) {
       const fs = 11.5, w = estTextWidth(s, fs) + 8;
@@ -24906,14 +25686,19 @@ export function welchPlot(fig, d) {
   const sx = fig.sx, sy = fig.sy;
   // The band sits under every series, and place() sets its width.
   const shade = d.shade ? svgEl('rect', { x: 0, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
-  if (d.raw) drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw');
-  if (d.cumulative) drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum');
+  const shadeRec = d.shade ? { kind: 'span', x0: sx.domain[0], x1: sx.domain[0], color: tok('--muted'), label: 'excluded by the cut' } : null;
+  if (shadeRec) fig.series.push(shadeRec);
+  if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
+  if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
   if (d.smooth) {
     // A white halo under the smoothed line keeps it legible where it crosses
     // the dense raw series.
     drawSeries(fig, xs, d.smooth, { stroke: tok('--card'), 'stroke-width': 4.5, opacity: 0.85 }, 'm-halo');
     drawSeries(fig, xs, d.smooth, { stroke: tok('--est'), 'stroke-width': 2.2 }, 'm-smooth');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.smooth), color: tok('--est'), width: 2, label: 'moving average' });
   }
+  const cutRec = { kind: 'vline', x: xMin0(sx), dash: true, color: tok('--text'), label: 'cut' };
+  fig.series.push(cutRec);
   const [xMin, xMax] = sx.domain;
   const step = d.step || (n > 1 ? Math.abs(xs[1] - xs[0]) : (xMax - xMin) / 100) || 1;
   const clamp = v => Math.min(xMax, Math.max(xMin, v));
@@ -24941,6 +25726,9 @@ export function welchPlot(fig, d) {
     const x = r1(sx(cut));
     for (const ln of [vis, hit]) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); }
     if (shade) shade.setAttribute('width', Math.max(0, x));
+    // The exported figure carries the cut where it stands now.
+    cutRec.x = cut;
+    if (shadeRec) shadeRec.x1 = cut;
     const s = fmtCut(cut);
     lbl.textContent = s;
     const w = estTextWidth(s, 11.5) + 8;
@@ -25021,9 +25809,11 @@ export function batchPlot(fig, d) {
   const sx = fig.sx, sy = fig.sy;
   const cut = d.excludeTo;
   const cM = tok('--muted');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.ys), color: tok('--est'), width: 1, label: 'series' });
   if (Number.isFinite(cut) && xs.length && cut > xs[0]) {
     const xc = Math.min(fig.iw, Math.max(0, sx(cut)));
     svgEl('rect', { x: 0, y: 0, width: r1(xc), height: fig.ih, fill: cM, 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner);
+    fig.series.push({ kind: 'span', x0: sx.domain[0], x1: cut, color: cM, label: 'excluded by truncation' });
     // The two pieces meet at the cut, where the line is interpolated, and so
     // the series reads as one line changing color.
     const n = xs.length;
@@ -25045,10 +25835,14 @@ export function batchPlot(fig, d) {
     s.setAttribute('stroke-opacity', 0.9);
   }
   const gB = svgEl('g', { class: 'm-bounds' }, fig.inner);
+  const [yb0, yb1] = sy.domain;
+  const bounds = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cM, dash: 'dotted', width: 1, label: 'batch boundary' };
   for (let i = 0; i < d.boundaries.length; i++) {
     const x = r1(sx(d.boundaries[i]));
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cM, 'stroke-width': 1, 'stroke-dasharray': '2,3' }, gB);
+    bounds.x0.push(d.boundaries[i]); bounds.x1.push(d.boundaries[i]); bounds.y0.push(yb0); bounds.y1.push(yb1);
   }
+  fig.series.push(bounds);
   if (d.joins && d.joins.length) {
     const cJ = tok('--accent');
     let dj = '';
@@ -25057,14 +25851,18 @@ export function batchPlot(fig, d) {
       if (x >= 0 && x <= fig.iw) dj += 'M' + x + ',0V' + r1(fig.ih);
     }
     svgEl('path', { d: dj, stroke: cJ, 'stroke-width': 1.4, 'stroke-dasharray': '1.5,3', fill: 'none', class: 'm-joins' }, fig.inner);
+    fig.series.push({ kind: 'segments', x0: Array.from(d.joins), x1: Array.from(d.joins), y0: Array.from(d.joins, () => yb0), y1: Array.from(d.joins, () => yb1), color: cJ, dash: 'dotted', width: 1, label: 'join between replications' });
   }
   const gM = svgEl('g', { class: 'm-bmeans' }, fig.inner);
   const cOk = tok('--ok'), card = tok('--card');
+  const meansRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cOk, width: 3, label: 'batch mean' };
   for (let i = 0; i < d.means.length; i++) {
     const x0 = r1(sx(d.boundaries[i])), x1 = r1(sx(d.boundaries[i + 1])), y = r1(sy(d.means[i]));
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: card, 'stroke-width': 6 }, gM);
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: cOk, 'stroke-width': 3 }, gM);
+    meansRec.x0.push(d.boundaries[i]); meansRec.x1.push(d.boundaries[i + 1]); meansRec.y0.push(d.means[i]); meansRec.y1.push(d.means[i]);
   }
+  fig.series.push(meansRec);
   if (!fig.readoutFn) fig.readout(dx => {
     for (let i = 0; i < d.means.length; i++) {
       if (dx >= d.boundaries[i] && dx <= d.boundaries[i + 1]) return ['batch ' + (i + 1), 'mean ' + num(d.means[i])];
@@ -25207,9 +26005,57 @@ export function exportButtons(container, fig, baseName) {
   };
   mk('SVG', 'Download this figure as SVG', () => download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
+  for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
+    mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
+      // The file is named as the script's own language allows: MATLAB runs a
+      // script by its file name, which must be an identifier.
+      const spec = figureSpec(fig, name);
+      download(sanitizeName(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
+    });
+  }
   if (fig.wrap && fig.wrap.parentNode === container) container.insertBefore(row, fig.wrap);
   else container.insertBefore(row, container.firstChild);
   return row;
+}
+
+/**
+ * Records that a figure draws `labels.length` rows from the top down, for the
+ * script exports: row i sits at y = n − i, the y axis is categorical with the
+ * labels, and the y range runs from 0.5 to n + 0.5.
+ * @param {Figure} fig
+ * @param {string[]} labels
+ * @returns {(i: number) => number} the y value of row i
+ */
+export function recordRows(fig, labels) {
+  const n = labels.length;
+  fig.cats = { axis: 'y', at: labels.map((_, i) => n - i), labels: labels.map(l => String(l == null ? '' : l)) };
+  fig.yRange = [0.5, n + 0.5];
+  return i => n - i;
+}
+
+/**
+ * The figure as data for the script writers (see io/scripts.js): its title
+ * and axis labels, its axis ranges, a categorical axis when the marks set
+ * one, and every series the marks recorded while drawing.
+ * @param {Figure} fig
+ * @param {string} [name] the file base name
+ * @returns {object}
+ */
+export function figureSpec(fig, name) {
+  const o = fig.opts, lab = fig.axisLabels || {};
+  const xlim = fig.xRange || (fig.sx ? fig.sx.domain.slice() : null);
+  const ylim = fig.yRange || (fig.sy ? fig.sy.domain.slice() : null);
+  const cats = fig.cats;
+  return {
+    name: name || o.title || o.ariaLabel || 'figure',
+    title: o.title || o.ariaLabel || '',
+    xLabel: lab.x !== undefined ? lab.x : o.xLabel,
+    yLabel: lab.y !== undefined ? lab.y : o.yLabel,
+    xlim, ylim,
+    xTicks: cats && cats.axis === 'x' ? { at: cats.at.slice(), labels: cats.labels.slice() } : null,
+    yTicks: cats && cats.axis === 'y' ? { at: cats.at.slice(), labels: cats.labels.slice() } : null,
+    series: fig.series.slice()
+  };
 }
 
 /** Escapes text for HTML labels passed to legend(). */
@@ -25614,6 +26460,9 @@ export function removeKey(key) {
 // is shown only while that section is open, and the shell fills the page's
 // <div data-subnav> with one link per section, lists the open page's sections
 // under its sidebar item, and adds them to the <select> as indented options.
+// A page that cannot fill one of its sections for the data it shows says so
+// through setSectionAvailable, which hides that section's strip button and
+// grays its sidebar sub-item and <select> option.
 
 let onShowCb = null;
 let current = null;
@@ -25622,6 +26471,9 @@ let currentSec = null;
 // which a link naming only the page reopens.
 const SECTIONS = new Map();
 const lastSection = new Map();
+// The sections of each page that the current data cannot fill, with the
+// reason shown on their grayed links: page id → Map(section id → tip).
+const SECTIONS_OFF = new Map();
 
 /**
  * Whether `name` is a page this document actually carries, or a page and one
@@ -25666,6 +26518,66 @@ export function isDisabled(name) {
 }
 
 /**
+ * Whether a section of a divided page is marked unavailable for the current
+ * data (see setSectionAvailable).
+ * @param {string} page
+ * @param {string} sec
+ */
+export function isSectionDisabled(page, sec) {
+  const off = SECTIONS_OFF.get(page);
+  return !!off && off.has(sec);
+}
+
+// The first section of `page` that is available, or its first section.
+function firstAvailable(page) {
+  const list = SECTIONS.get(page);
+  if (!list) return null;
+  const s = list.find(x => !isSectionDisabled(page, x.id)) || list[0];
+  return s.id;
+}
+
+// A page's <select> option, and its sections' options, are disabled while
+// the page is, and a section's also while the section is.
+function syncOptions(page) {
+  const sel = document.getElementById('tab-select');
+  if (!sel) return;
+  const pageOff = isDisabled(page);
+  sel.querySelectorAll('option[value="' + page + '"], option[value^="' + page + '/"]').forEach(o => {
+    const sec = o.value.split('/')[1];
+    o.disabled = pageOff || (sec ? isSectionDisabled(page, sec) : false);
+  });
+}
+
+/**
+ * Marks the sections of a divided page available or not for the data it
+ * currently shows. An unavailable section's button in the page's own strip is
+ * hidden, so the page offers only what applies, and its sidebar sub-item and
+ * <select> option are grayed and inert with a tooltip saying why, so the
+ * navigation keeps its shape. An open section that becomes unavailable
+ * gives way to the first available one.
+ * @param {string} page
+ * @param {Object<string, string|null>} off section id → why it is unavailable,
+ *   or null (or absent) when it is available
+ */
+export function setSectionAvailable(page, off) {
+  const list = SECTIONS.get(page);
+  if (!list) return;
+  const map = new Map();
+  for (const s of list) { const tip = off ? off[s.id] : null; if (tip) map.set(s.id, String(tip)); }
+  SECTIONS_OFF.set(page, map);
+  const root = document.getElementById('tab-' + page);
+  if (root) root.querySelectorAll('.subtab[data-section]').forEach(a => { a.hidden = map.has(a.getAttribute('data-section')); });
+  document.querySelectorAll('.tab-subs[data-subs-for="' + page + '"] .tab-sub[data-section]').forEach(a => {
+    const tip = map.get(a.getAttribute('data-section'));
+    a.classList.toggle('disabled', !!tip);
+    if (tip) { a.setAttribute('aria-disabled', 'true'); a.setAttribute('data-tip', tip); }
+    else { a.removeAttribute('aria-disabled'); a.removeAttribute('data-tip'); }
+  });
+  syncOptions(page);
+  if (current === page && currentSec && map.has(currentSec)) showTab(page + '/' + firstAvailable(page));
+}
+
+/**
  * Marks pages available or not: the page link is grayed and inert, the
  * matching <select> options (the page's and its sections') disabled, and a
  * tooltip on the link says why. A page that is open when it becomes
@@ -25675,7 +26587,6 @@ export function isDisabled(name) {
  * @param {string} [tip] shown on the page link while disabled
  */
 export function setAvailable(names, disabled, tip) {
-  const sel = document.getElementById('tab-select');
   for (const name of names) {
     const a = document.querySelector('.tab[data-tab="' + name + '"]');
     if (a) {
@@ -25683,7 +26594,7 @@ export function setAvailable(names, disabled, tip) {
       if (disabled) { a.setAttribute('aria-disabled', 'true'); if (tip) a.setAttribute('data-tip', tip); }
       else { a.removeAttribute('aria-disabled'); a.removeAttribute('data-tip'); }
     }
-    if (sel) sel.querySelectorAll('option[value="' + name + '"], option[value^="' + name + '/"]').forEach(o => { o.disabled = disabled; });
+    syncOptions(name);
   }
 }
 
@@ -25762,7 +26673,12 @@ export function showTab(name) {
   if (isDisabled(page)) return;
   const list = SECTIONS.get(page);
   let sec = null;
-  if (list) sec = parts[1] || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
+  if (list) {
+    sec = parts[1] || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
+    // A section the data cannot fill is not opened; its first available
+    // neighbor is, and a link naming it lands there.
+    if (isSectionDisabled(page, sec)) sec = firstAvailable(page);
+  }
   activate(page, sec);
   // replaceState, not pushState: the address bar always names the page a
   // copied link would open, without a history entry per page visited.
@@ -25868,6 +26784,8 @@ export function initTabs(opts = {}) {
     const name = a.getAttribute('href').slice(1);
     if (!validTab(name)) return;
     e.preventDefault();
+    // A grayed section link opens its tooltip instead, and the page stays put.
+    if (a.getAttribute('aria-disabled') === 'true') return;
     const sectionLink = a.classList.contains('subtab') || a.classList.contains('tab-sub');
     showTab(name);
     if (sectionLink) revealTop(visibleSubnav());

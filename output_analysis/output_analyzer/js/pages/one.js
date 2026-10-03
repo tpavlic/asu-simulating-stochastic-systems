@@ -632,6 +632,11 @@ function drawFigure(d) {
       svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2.5 }, g);
       for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 6, y2: y + 6, stroke: c, 'stroke-width': 2 }, g);
       svgEl('circle', { cx: xm, cy: y, r: 4.2, fill: c }, g);
+      // In the exported figure the interval sits one row under the dots.
+      const yi = f.yRange[0] - 1;
+      f.yRange = [yi - 1, f.yRange[1]];
+      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: pct(level, 0) + ' interval on the mean' },
+        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: 'mean of the replication estimates' });
       f.readout((dx, dy, px, py) => {
         if (py >= fullH - band) {
           return [pct(level, 0) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];

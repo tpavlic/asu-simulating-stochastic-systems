@@ -177,18 +177,23 @@ function drawScatter(d, cr, level) {
   const fitted = cr && Number.isFinite(cr.p) && cr.p < alpha && d.x.length >= 3 ? regressionLine(d.x, d.y, level) : null;
   fig.render(f => {
     // The axes are drawn here rather than by scatter, to carry the datasets' names.
-    scatter(f, d.x, d.y, { axes: false });
+    scatter(f, d.x, d.y, { axes: false, label: 'one replication pair (A, B)' });
     f.axes({ xLabel: xl, yLabel: yl });
     if (!fitted) return;
     const [x0, x1] = f.sx.domain, [y0, y1] = f.sy.domain;
     const clampY = v => Math.max(y0, Math.min(y1, v));
     const K = 60, up = [], down = [], mid = [];
+    const gx = [], gLo = [], gHi = [], gFit = [];
     for (let i = 0; i <= K; i++) {
       const xv = x0 + (x1 - x0) * i / K, b = fitted.band(xv);
       up.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.hi)).toFixed(1));
       down.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.lo)).toFixed(1));
       mid.push((i ? 'L' : 'M') + f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.fit)).toFixed(1));
+      gx.push(xv); gLo.push(b.lo); gHi.push(b.hi); gFit.push(b.fit);
     }
+    // Band first and line second, so the points stay on top in the exports too.
+    f.series.unshift({ kind: 'band', x: gx, lo: gLo, hi: gHi, color: tok('--truth'), label: pct(level, 0) + ' confidence band for the mean of B' },
+      { kind: 'line', x: [x0, x1], y: [gFit[0], gFit[K]], color: tok('--truth'), width: 2, label: 'least-squares line of B on A' });
     // Band first, then the line, then the points stay on top: the scatter
     // group already exists, so the two are inserted before it.
     const pts = f.inner.querySelector('.m-scatter');

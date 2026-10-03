@@ -10,7 +10,7 @@ import { repEstimates, repIds, canInfer } from '../data/model.js';
 import { welch, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch } from '../stats/compare.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, scatter, svgEl, tok, extent } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, scatter, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -184,12 +184,17 @@ function strips(fig, rows, o = {}) {
   fig.axes({ y: false });
   const rowH = fig.ih / n;
   const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cMuted = tok('--muted'), cBorder = tok('--border');
+  const ry = recordRows(fig, rows.map(r => r.label));
   if (o.ref !== undefined && o.ref !== null) {
     const x = sx(o.ref);
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cMuted, 'stroke-width': 1.5, 'stroke-dasharray': '5,4' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: cMuted, label: 'reference' });
   }
   const rad = fig.narrow ? 4 : 4.5;
   const placed = [];
+  const dotsRec = { kind: 'points', x: [], y: [], color: cEst, label: 'one replication estimate' };
+  const intRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cTruth, label: 'interval' };
+  const meanRec = { kind: 'points', x: [], y: [], color: cTruth, label: 'mean' };
   rows.forEach((row, ri) => {
     const top = ri * rowH;
     if (ri > 0) svgEl('line', { x1: 0, x2: fig.iw, y1: top, y2: top, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
@@ -209,13 +214,18 @@ function strips(fig, rows, o = {}) {
     }
     const gap = maxLevel ? Math.min(2 * rad + 1, (rowH * 0.32 - rad) / maxLevel) : 0;
     const g = svgEl('g', { class: 'm-dots' }, fig.inner);
+    const yRow = ry(ri), yGap = maxLevel ? Math.min(0.08, 0.3 / maxLevel) : 0;
     for (const i of idx) {
       const cx = sx(row.values[i]), cy = cyDots - level[i] * gap;
       svgEl('circle', { cx, cy, r: rad, fill: cEst, 'fill-opacity': 0.75, stroke: cCard, 'stroke-width': 1 }, g);
       placed.push({ cx, cy, text: row.label + ', replication ' + row.names[i] + ': ' + num(row.values[i]) });
+      dotsRec.x.push(row.values[i]); dotsRec.y.push(yRow + 0.1 + level[i] * yGap);
     }
     if (Number.isFinite(row.lo) && Number.isFinite(row.hi)) {
       const x0 = sx(row.lo), x1 = sx(row.hi);
+      const yi = yRow - 0.3;
+      intRec.x0.push(row.lo, row.lo, row.hi); intRec.x1.push(row.hi, row.lo, row.hi); intRec.y0.push(yi, yi - 0.08, yi - 0.08); intRec.y1.push(yi, yi + 0.08, yi + 0.08);
+      meanRec.x.push(row.mean); meanRec.y.push(yi);
       const gi = svgEl('g', { class: 'm-int' }, fig.inner);
       svgEl('line', { x1: x0, x2: x1, y1: cyInt, y2: cyInt, stroke: cTruth, 'stroke-width': 2 }, gi);
       for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cyInt - 5, y2: cyInt + 5, stroke: cTruth, 'stroke-width': 2 }, gi);
@@ -224,6 +234,8 @@ function strips(fig, rows, o = {}) {
     const t = svgEl('text', { x: -10, y: top + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
     t.textContent = clip(row.label, lw - 6, fs);
   });
+  fig.series.push(dotsRec);
+  if (intRec.x0.length) fig.series.push(intRec, meanRec);
   fig.readout((dx, dy, px, py) => {
     let best = null, bd = Infinity;
     for (const p of placed) { const d = Math.hypot(p.cx - px, p.cy - py); if (d < bd) { bd = d; best = p; } }
@@ -659,6 +671,12 @@ function pairsByRep(fig, P) {
   const gLink = svgEl('g', { class: 'm-pair-link' }, fig.inner);
   const gB = svgEl('g', { class: 'm-pair-b' }, fig.inner);
   const gA = svgEl('g', { class: 'm-pair-a' }, fig.inner);
+  const ks = Array.from({ length: n }, (_, k) => k + 1);
+  fig.cats = { axis: 'x', at: ks, labels: P.names.map(String) };
+  fig.series.push(
+    { kind: 'segments', x0: ks, x1: ks, y0: Array.from(P.a), y1: Array.from(P.b), color: cPair, dash: true, label: 'difference A - B' },
+    { kind: 'points', x: ks, y: Array.from(P.a), color: cEst, label: 'design A' },
+    { kind: 'points', x: ks, y: Array.from(P.b), color: cEst, hollow: true, label: 'design B' });
   for (let k = 0; k < n; k++) {
     const px = sx(k + 1), ya = sy(P.a[k]), yb = sy(P.b[k]);
     // The segment runs between the two dots' rims, and so it never shows
@@ -706,11 +724,19 @@ function pairsAsSlopes(fig, P) {
   const along = k => s0 !== 0 && Math.sign(P.a[k] - P.b[k]) === s0;
   const gAgainst = svgEl('g', { class: 'm-slope-against' }, fig.inner);
   const gAlong = svgEl('g', { class: 'm-slope-along' }, fig.inner);
+  fig.cats = { axis: 'x', at: [0.25, 0.75], labels: [P.labA, P.labB] };
+  const recAlong = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, label: 'pair, difference with the sign of the mean difference' };
+  const recAgainst = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, dash: true, label: 'pair, difference of the other sign' };
   for (let k = 0; k < n; k++) {
     const ok = along(k);
     svgEl('line', { x1: xa, y1: sy(P.a[k]), x2: xb, y2: sy(P.b[k]), stroke: cEst, 'stroke-width': 1.6, 'stroke-opacity': 0.8,
       'stroke-dasharray': ok ? null : '5,4' }, ok ? gAlong : gAgainst);
+    const rec = ok ? recAlong : recAgainst;
+    rec.x0.push(0.25); rec.x1.push(0.75); rec.y0.push(P.a[k]); rec.y1.push(P.b[k]);
   }
+  if (recAlong.x0.length) fig.series.push(recAlong);
+  if (recAgainst.x0.length) fig.series.push(recAgainst);
+  fig.series.push({ kind: 'segments', x0: [0.21, 0.71], x1: [0.29, 0.79], y0: [mA, mB], y1: [mA, mB], color: cTruth, width: 4, label: 'mean of each column' });
   const gm = svgEl('g', { class: 'm-slope-mean' }, fig.inner);
   const bar = fig.narrow ? 16 : 22;
   [[xa, mA, -1], [xb, mB, 1]].forEach(([x, m, side]) => {
@@ -906,7 +932,8 @@ function renderPaired(res, notes, d, level) {
       const sx = fg.sx, sy = fg.sy;
       const a = Math.max(sx.domain[0], sy.domain[0]), b = Math.min(sx.domain[1], sy.domain[1]);
       svgEl('line', { x1: sx(a), y1: sy(a), x2: sx(b), y2: sy(b), stroke: tok('--muted'), 'stroke-width': 1.5, 'stroke-dasharray': '5,4' }, fg.inner);
-      scatter(fg, x, y);
+      fg.series.push({ kind: 'line', x: [a, b], y: [a, b], dash: true, color: tok('--muted'), label: 'A = B' });
+      scatter(fg, x, y, { label: 'one replication pair (A, B)' });
       fg.readout((dx, dy, px, py) => {
         let best = -1, bd = Infinity;
         for (let i = 0; i < x.length; i++) { const dd = Math.hypot(sx(x[i]) - px, sy(y[i]) - py); if (dd < bd) { bd = dd; best = i; } }

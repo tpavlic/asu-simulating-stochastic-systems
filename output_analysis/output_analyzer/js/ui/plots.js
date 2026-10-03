@@ -17,6 +17,7 @@
 // decimateMinMax) import cleanly under Node for the tests.
 
 import { num, esc } from './format.js';
+import { SCRIPT_WRITERS, sanitizeName } from '../io/scripts.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const DESIGN_W = 940;
@@ -370,7 +371,11 @@ export function makeFigure(container, opts = {}) {
   hookReadoutDismiss();
   const o = Object.assign({ width: DESIGN_W, height: 300, xLabel: '', yLabel: '', title: '' }, opts);
   o.margin = Object.assign({ l: 58, r: 16, t: o.title ? 30 : 14, b: 44 }, opts.margin || {});
-  const fig = { container, opts: o, sx: null, sy: null, drawFn: o.draw || null, readoutFn: null, axesDrawn: false };
+  const fig = { container, opts: o, sx: null, sy: null, drawFn: o.draw || null, readoutFn: null, axesDrawn: false,
+    // What the marks drew, as data, for the script exports (see figureSpec):
+    // the series records, a categorical axis, and axis ranges for a figure
+    // that draws rows rather than setting a y scale.
+    series: [], cats: null, xRange: null, yRange: null, axisLabels: null };
 
   const wrap = document.createElement('div');
   wrap.className = 'fig-wrap';
@@ -437,6 +442,7 @@ export function makeFigure(container, opts = {}) {
     const { grid, axes, bg } = fig.layers;
     grid.textContent = ''; axes.textContent = ''; bg.textContent = '';
     fig.axesDrawn = true;
+    fig.axisLabels = { x: ao.xLabel !== undefined ? ao.xLabel : o.xLabel, y: ao.yLabel !== undefined ? ao.yLabel : o.yLabel };
     const cMuted = tok('--muted'), cBorder = tok('--border'), cText = tok('--text');
     svgEl('rect', { x: 0, y: 0, width: fig.iw, height: fig.ih, fill: tok('--chart-bg') }, bg);
     const fs = 11;
@@ -486,6 +492,7 @@ export function makeFigure(container, opts = {}) {
   fig.clear = () => {
     for (const k in fig.layers) fig.layers[k].textContent = '';
     fig.sx = null; fig.sy = null; fig.readoutFn = null; fig.onPlotClick = null; fig.axesDrawn = false;
+    fig.series = []; fig.cats = null; fig.xRange = null; fig.yRange = null; fig.axisLabels = null;
   };
   fig.render = (fn) => { fig.drawFn = fn; fig.redraw(); return fig; };
   fig.redraw = () => {
@@ -608,8 +615,9 @@ export function histogram(fig, h, o = {}) {
   const ys = Array.from(h.counts, c => o.fraction ? (total > 0 ? c / total : 0) : c);
   const sx = fig.sx || fig.x([h.edges[0], h.edges[k]]);
   const sy = fig.sy || fig.y([0, Math.max(...ys, o.fraction ? 0.01 : 1) * 1.06], { nice: true });
-  ensureAxes(fig, o, { yLabel: o.fraction ? (fig.opts.yLabel || 'Fraction') : (fig.opts.yLabel || 'Count') });
+  ensureAxes(fig, o, { yLabel: o.fraction ? (fig.opts.yLabel || 'Fraction') : (fig.opts.yLabel || 'Frequency'), yInteger: !o.fraction });
   const c = col(o.color, '--est');
+  fig.series.push({ kind: 'bars', edges: Array.from(h.edges), heights: ys, color: c });
   const g = svgEl('g', { class: 'm-hist' }, fig.inner);
   for (let i = 0; i < k; i++) {
     const x0 = sx(h.edges[i]), x1 = sx(h.edges[i + 1]), y = sy(ys[i]);
@@ -643,6 +651,7 @@ export function ecdf(fig, e, o = {}) {
     d += 'H' + r1(i + 1 < n ? sx(e.x[i + 1]) : sx(sx.domain[1]));
   }
   svgEl('path', { d, fill: 'none', stroke: col(o.color, '--est'), 'stroke-width': 1.8, 'stroke-linejoin': 'miter', class: 'm-ecdf' }, fig.inner);
+  fig.series.push({ kind: 'step', x: [sx.domain[0], ...Array.from(e.x), sx.domain[1]], y: [0, ...Array.from(e.p), e.p[n - 1]], label: 'empirical cdf', color: col(o.color, '--est') });
   if (!fig.readoutFn) fig.readout(dx => {
     let lo2 = 0, hi2 = n;
     while (lo2 < hi2) { const mid = (lo2 + hi2) >> 1; if (e.x[mid] <= dx) lo2 = mid + 1; else hi2 = mid; }
@@ -677,8 +686,21 @@ export function boxPlot(fig, stats, o = {}) {
   ensureAxes(fig, o, { y: false });
   const c = col(o.color, '--est'), pale = tok('--est-pale'), cT = tok('--truth'), card = tok('--card');
   const rowH = fig.ih / rows.length;
+  const ry = recordRows(fig, hasLabels ? labels : rows.map(() => ''));
+  const rec = { whisk: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, label: 'whiskers to 1.5 IQR' },
+    box: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: 'box from q1 to q3' },
+    med: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, width: 3, label: 'median' },
+    out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: 'outlier' },
+    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: 'mean' } };
   rows.forEach((r, i) => {
     const s = r.stats, cy = (i + 0.5) * rowH, bh = Math.min(34, rowH * 0.5);
+    const yy = ry(i);
+    rec.whisk.x0.push(s.whiskerLo, s.q3, s.whiskerLo, s.whiskerHi); rec.whisk.x1.push(s.q1, s.whiskerHi, s.whiskerLo, s.whiskerHi);
+    rec.whisk.y0.push(yy, yy, yy - 0.12, yy - 0.12); rec.whisk.y1.push(yy, yy, yy + 0.12, yy + 0.12);
+    rec.box.x0.push(s.q1); rec.box.x1.push(s.q3); rec.box.y0.push(yy - 0.25); rec.box.y1.push(yy + 0.25);
+    rec.med.x0.push(s.median); rec.med.x1.push(s.median); rec.med.y0.push(yy - 0.25); rec.med.y1.push(yy + 0.25);
+    for (const v of (s.outliers || [])) { rec.out.x.push(v); rec.out.y.push(yy); }
+    if (Number.isFinite(s.mean)) { rec.mean.x.push(s.mean); rec.mean.y.push(yy); }
     const g = svgEl('g', { class: 'm-box' }, fig.inner);
     svgEl('line', { x1: r1(sx(s.whiskerLo)), x2: r1(sx(s.q1)), y1: r1(cy), y2: r1(cy), stroke: c, 'stroke-width': 1.5 }, g);
     svgEl('line', { x1: r1(sx(s.q3)), x2: r1(sx(s.whiskerHi)), y1: r1(cy), y2: r1(cy), stroke: c, 'stroke-width': 1.5 }, g);
@@ -692,6 +714,9 @@ export function boxPlot(fig, stats, o = {}) {
     }
     if (hasLabels) text(fig.layers.axes, -10, cy + 4, clipLabel(r.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: tok('--text') });
   });
+  fig.series.push(rec.whisk, rec.box, rec.med);
+  if (rec.out.x.length) fig.series.push(rec.out);
+  if (rec.mean.x.length) fig.series.push(rec.mean);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.min(rows.length - 1, Math.max(0, Math.floor(py / rowH)));
     const s = rows[i].stats;
@@ -704,6 +729,7 @@ export function boxPlot(fig, stats, o = {}) {
 /** Alias of boxPlot. */
 export const box = boxPlot;
 
+function xMin0(sx) { return sx.domain[0]; }
 function seriesXs(n, xs) {
   if (xs) return xs;
   const a = new Float64Array(n);
@@ -731,6 +757,7 @@ export function sequence(fig, ys, o = {}) {
   if (!fig.sy) fig.y(extent(ys), { pad: 0.04, nice: true });
   ensureAxes(fig, o, { xLabel: fig.opts.xLabel || (o.xs ? 'Time' : 'Observation') });
   drawSeries(fig, xs, ys, { stroke: col(o.color, '--est'), 'stroke-width': o.width || 1.1 }, 'm-seq');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(ys), color: col(o.color, '--est'), width: 1, label: o.label });
   if (!fig.readoutFn) fig.readout(dx => {
     const i = nearestIndex(xs, dx);
     return i < 0 ? null : [(o.xs ? 't = ' : 'i = ') + num(xs[i]), 'value ' + num(ys[i])];
@@ -767,8 +794,10 @@ export function runningMean(fig, ys, o = {}) {
   if (Number.isFinite(final)) {
     const y = r1(fig.sy(final));
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: col(o.refColor, '--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'hline', y: final, dash: true, color: col(o.refColor, '--truth'), label: 'final value' });
   }
   drawSeries(fig, xs, rm, { stroke: col(o.color, '--est'), 'stroke-width': 1.8 }, 'm-runmean');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(rm), color: col(o.color, '--est'), label: 'running mean' });
   if (!fig.readoutFn) fig.readout(dx => {
     const i = nearestIndex(xs, dx);
     return i < 0 ? null : [(o.xs ? 't = ' : 'i = ') + num(xs[i]), 'running mean ' + num(rm[i])];
@@ -806,15 +835,19 @@ export function dotPlot(fig, values, o = {}) {
   const cy = fig.ih / 2;
   const gap = maxLevel ? Math.min(2 * r + 1, (fig.ih / 2 - r - 2) / maxLevel) : 0;
   const c = col(o.color, '--est'), card = tok('--card');
+  fig.cats = { axis: 'y', at: [], labels: [] };
+  fig.yRange = [-(maxLevel + 1), maxLevel + 1];
   if (o.mean) {
     let s = 0; for (const i of idx) s += values[i];
     const m = s / Math.max(1, idx.length);
     const mx = r1(sx(m));
     svgEl('line', { x1: mx, x2: mx, y1: 6, y2: fig.ih - 6, stroke: tok('--truth'), 'stroke-width': 2, class: 'm-mean' }, fig.inner);
     text(fig.inner, mx + 5, 16, 'mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
+    fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'mean ' + num(m) });
   }
   const g = svgEl('g', { class: 'm-dots' }, fig.inner);
   for (const i of idx) svgEl('circle', { cx: r1(sx(values[i])), cy: r1(cy - level[i] * gap), r, fill: c, 'fill-opacity': 0.85, stroke: card, 'stroke-width': 1 }, g);
+  fig.series.push({ kind: 'points', x: idx.map(i => values[i]), y: idx.map(i => level[i]), color: c, label: o.label || 'one value' });
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
     for (const i of idx) { const d = Math.hypot(sx(values[i]) - px, cy - level[i] * gap - py); if (d < bd) { bd = d; best = i; } }
@@ -844,14 +877,24 @@ export function intervals(fig, items, o = {}) {
   const sx = fig.sx || fig.x([lo, hi], { pad: 0.05, nice: true });
   ensureAxes(fig, o, { y: false });
   const rowH = fig.ih / Math.max(1, n);
+  const ry = recordRows(fig, items.map(it => it.label));
   if (o.ref !== undefined && o.ref !== null && Number.isFinite(o.ref)) {
     const x = r1(sx(o.ref));
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '5,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: tok('--truth'), label: 'reference' });
   }
   const cMiss = tok('--miss'), card = tok('--card'), cText = tok('--text');
+  const recOf = new Map();
   items.forEach((it, i) => {
     const cy = r1((i + 0.5) * rowH);
     const c = it.flagged ? cMiss : col(it.color, '--est');
+    const key = (it.flagged ? 'f' : 'p') + c;
+    if (!recOf.has(key)) recOf.set(key, {
+      seg: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, dash: !!it.flagged, label: it.flagged ? 'interval (flagged)' : 'interval' },
+      dot: { kind: 'points', x: [], y: [], color: c, hollow: !!it.flagged, label: it.flagged ? 'center (flagged)' : 'center' } });
+    const rr = recOf.get(key), yy = ry(i), cc = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
+    rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
+    rr.dot.x.push(cc); rr.dot.y.push(yy);
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
     const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi));
     const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
@@ -861,6 +904,7 @@ export function intervals(fig, items, o = {}) {
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
   });
+  for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
@@ -888,6 +932,7 @@ export function scatter(fig, xs, ys, o = {}) {
     if (!Number.isFinite(xs[i]) || !Number.isFinite(ys[i])) continue;
     svgEl('circle', { cx: r1(sx(xs[i])), cy: r1(sy(ys[i])), r }, g);
   }
+  fig.series.push({ kind: 'points', x: Array.from(xs).slice(0, n), y: Array.from(ys).slice(0, n), color: c, label: o.label });
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
     for (let i = 0; i < n; i++) { const d = Math.hypot(sx(xs[i]) - px, sy(ys[i]) - py); if (d < bd) { bd = d; best = i; } }
@@ -912,7 +957,35 @@ export function lagPlot(fig, xs, ys, o = {}) {
   ensureAxes(fig, o);
   const [d0, d1] = fig.sx.domain;
   svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
-  scatter(fig, xs, ys, Object.assign({}, o, { axes: false }));
+  fig.series.push({ kind: 'line', x: [d0, d1], y: [d0, d1], dash: true, color: tok('--truth'), label: 'identity line' });
+  scatter(fig, xs, ys, Object.assign({}, o, { axes: false, label: o.label || 'one pair' }));
+}
+
+/**
+ * A normal quantile–quantile plot: the sorted sample against the standard
+ * normal quantiles at its plotting positions, with the line through the
+ * quartiles drawn across the plot. Points along the line say the sample's
+ * shape is normal; a curve away from it at either end says which tail is
+ * heavier or lighter than a normal's.
+ * @param {Figure} fig
+ * @param {{ theoretical: ArrayLike<number>, sample: ArrayLike<number>, slope: number, intercept: number }} q
+ * @param {{ color?: string, axes?: boolean }} [o]
+ */
+export function qqPlot(fig, q, o = {}) {
+  const n = Math.min(q.theoretical.length, q.sample.length);
+  if (!fig.sx) fig.x(extent(q.theoretical), { pad: 0.08, nice: true });
+  if (!fig.sy) fig.y(extent(q.sample), { pad: 0.08, nice: true });
+  ensureAxes(fig, o);
+  const [d0, d1] = fig.sx.domain;
+  svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(q.intercept + q.slope * d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(q.intercept + q.slope * d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+  fig.series.push({ kind: 'line', x: [d0, d1], y: [q.intercept + q.slope * d0, q.intercept + q.slope * d1], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  scatter(fig, q.theoretical, q.sample, Object.assign({}, o, { axes: false, r: n > 400 ? 2 : 3.2, label: o.label || 'sorted values' }));
+  fig.readout((dx, dy, px, py) => {
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.hypot(fig.sx(q.theoretical[i]) - px, fig.sy(q.sample[i]) - py); if (d < bd) { bd = d; best = i; } }
+    if (best < 0 || bd > 16) return null;
+    return ['order statistic ' + (best + 1) + ' of ' + n, 'z ' + num(q.theoretical[best], 3) + ', value ' + num(q.sample[best])];
+  });
 }
 
 /**
@@ -944,12 +1017,17 @@ export function correlogram(fig, r, o = {}) {
   const sx = fig.sx, sy = fig.sy, c = col(o.color, '--est');
   const y0 = r1(sy(0));
   svgEl('line', { x1: 0, x2: fig.iw, y1: y0, y2: y0, stroke: tok('--muted'), 'stroke-width': 1 }, fig.inner);
+  fig.series.push({ kind: 'hline', y: 0, color: tok('--muted') });
   if (Number.isFinite(band)) {
     for (const b of [band, -band]) {
       const y = r1(sy(b));
       svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.4, 'stroke-dasharray': '5,4', class: 'm-band' }, fig.inner);
+      fig.series.push({ kind: 'hline', y: b, dash: true, color: tok('--truth'), label: b > 0 ? 'band for an independent series' : undefined });
     }
   }
+  const stems = { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, label: 'autocorrelation at each lag' };
+  for (let k = from; k <= L; k++) if (Number.isFinite(r[k])) { stems.x0.push(k * step); stems.x1.push(k * step); stems.y0.push(0); stems.y1.push(r[k]); }
+  fig.series.push(stems);
   const g = svgEl('g', { class: 'm-acf' }, fig.inner);
   const dots = L - from <= 120;
   const rad = L > 60 ? 2 : 3;
@@ -972,6 +1050,7 @@ export function correlogram(fig, r, o = {}) {
     const x = r1(sx(Math.min(d1, Math.max(d0, o.marker.at))));
     const gm = svgEl('g', { class: 'm-marker' }, fig.inner);
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: mc, 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, gm);
+    fig.series.push({ kind: 'vline', x: o.marker.at, dash: true, color: mc, label: o.marker.label || 'marker' });
     const s = (o.marker.label || '') + (past ? ' (past the axis) →' : '');
     if (s) {
       const fs = 11.5, w = estTextWidth(s, fs) + 8;
@@ -1014,14 +1093,19 @@ export function welchPlot(fig, d) {
   const sx = fig.sx, sy = fig.sy;
   // The band sits under every series, and place() sets its width.
   const shade = d.shade ? svgEl('rect', { x: 0, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
-  if (d.raw) drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw');
-  if (d.cumulative) drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum');
+  const shadeRec = d.shade ? { kind: 'span', x0: sx.domain[0], x1: sx.domain[0], color: tok('--muted'), label: 'excluded by the cut' } : null;
+  if (shadeRec) fig.series.push(shadeRec);
+  if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
+  if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
   if (d.smooth) {
     // A white halo under the smoothed line keeps it legible where it crosses
     // the dense raw series.
     drawSeries(fig, xs, d.smooth, { stroke: tok('--card'), 'stroke-width': 4.5, opacity: 0.85 }, 'm-halo');
     drawSeries(fig, xs, d.smooth, { stroke: tok('--est'), 'stroke-width': 2.2 }, 'm-smooth');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.smooth), color: tok('--est'), width: 2, label: 'moving average' });
   }
+  const cutRec = { kind: 'vline', x: xMin0(sx), dash: true, color: tok('--text'), label: 'cut' };
+  fig.series.push(cutRec);
   const [xMin, xMax] = sx.domain;
   const step = d.step || (n > 1 ? Math.abs(xs[1] - xs[0]) : (xMax - xMin) / 100) || 1;
   const clamp = v => Math.min(xMax, Math.max(xMin, v));
@@ -1049,6 +1133,9 @@ export function welchPlot(fig, d) {
     const x = r1(sx(cut));
     for (const ln of [vis, hit]) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); }
     if (shade) shade.setAttribute('width', Math.max(0, x));
+    // The exported figure carries the cut where it stands now.
+    cutRec.x = cut;
+    if (shadeRec) shadeRec.x1 = cut;
     const s = fmtCut(cut);
     lbl.textContent = s;
     const w = estTextWidth(s, 11.5) + 8;
@@ -1129,9 +1216,11 @@ export function batchPlot(fig, d) {
   const sx = fig.sx, sy = fig.sy;
   const cut = d.excludeTo;
   const cM = tok('--muted');
+  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.ys), color: tok('--est'), width: 1, label: 'series' });
   if (Number.isFinite(cut) && xs.length && cut > xs[0]) {
     const xc = Math.min(fig.iw, Math.max(0, sx(cut)));
     svgEl('rect', { x: 0, y: 0, width: r1(xc), height: fig.ih, fill: cM, 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner);
+    fig.series.push({ kind: 'span', x0: sx.domain[0], x1: cut, color: cM, label: 'excluded by truncation' });
     // The two pieces meet at the cut, where the line is interpolated, and so
     // the series reads as one line changing color.
     const n = xs.length;
@@ -1153,10 +1242,14 @@ export function batchPlot(fig, d) {
     s.setAttribute('stroke-opacity', 0.9);
   }
   const gB = svgEl('g', { class: 'm-bounds' }, fig.inner);
+  const [yb0, yb1] = sy.domain;
+  const bounds = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cM, dash: 'dotted', width: 1, label: 'batch boundary' };
   for (let i = 0; i < d.boundaries.length; i++) {
     const x = r1(sx(d.boundaries[i]));
     svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cM, 'stroke-width': 1, 'stroke-dasharray': '2,3' }, gB);
+    bounds.x0.push(d.boundaries[i]); bounds.x1.push(d.boundaries[i]); bounds.y0.push(yb0); bounds.y1.push(yb1);
   }
+  fig.series.push(bounds);
   if (d.joins && d.joins.length) {
     const cJ = tok('--accent');
     let dj = '';
@@ -1165,14 +1258,18 @@ export function batchPlot(fig, d) {
       if (x >= 0 && x <= fig.iw) dj += 'M' + x + ',0V' + r1(fig.ih);
     }
     svgEl('path', { d: dj, stroke: cJ, 'stroke-width': 1.4, 'stroke-dasharray': '1.5,3', fill: 'none', class: 'm-joins' }, fig.inner);
+    fig.series.push({ kind: 'segments', x0: Array.from(d.joins), x1: Array.from(d.joins), y0: Array.from(d.joins, () => yb0), y1: Array.from(d.joins, () => yb1), color: cJ, dash: 'dotted', width: 1, label: 'join between replications' });
   }
   const gM = svgEl('g', { class: 'm-bmeans' }, fig.inner);
   const cOk = tok('--ok'), card = tok('--card');
+  const meansRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cOk, width: 3, label: 'batch mean' };
   for (let i = 0; i < d.means.length; i++) {
     const x0 = r1(sx(d.boundaries[i])), x1 = r1(sx(d.boundaries[i + 1])), y = r1(sy(d.means[i]));
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: card, 'stroke-width': 6 }, gM);
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: cOk, 'stroke-width': 3 }, gM);
+    meansRec.x0.push(d.boundaries[i]); meansRec.x1.push(d.boundaries[i + 1]); meansRec.y0.push(d.means[i]); meansRec.y1.push(d.means[i]);
   }
+  fig.series.push(meansRec);
   if (!fig.readoutFn) fig.readout(dx => {
     for (let i = 0; i < d.means.length; i++) {
       if (dx >= d.boundaries[i] && dx <= d.boundaries[i + 1]) return ['batch ' + (i + 1), 'mean ' + num(d.means[i])];
@@ -1315,9 +1412,57 @@ export function exportButtons(container, fig, baseName) {
   };
   mk('SVG', 'Download this figure as SVG', () => download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
+  for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
+    mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
+      // The file is named as the script's own language allows: MATLAB runs a
+      // script by its file name, which must be an identifier.
+      const spec = figureSpec(fig, name);
+      download(sanitizeName(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
+    });
+  }
   if (fig.wrap && fig.wrap.parentNode === container) container.insertBefore(row, fig.wrap);
   else container.insertBefore(row, container.firstChild);
   return row;
+}
+
+/**
+ * Records that a figure draws `labels.length` rows from the top down, for the
+ * script exports: row i sits at y = n − i, the y axis is categorical with the
+ * labels, and the y range runs from 0.5 to n + 0.5.
+ * @param {Figure} fig
+ * @param {string[]} labels
+ * @returns {(i: number) => number} the y value of row i
+ */
+export function recordRows(fig, labels) {
+  const n = labels.length;
+  fig.cats = { axis: 'y', at: labels.map((_, i) => n - i), labels: labels.map(l => String(l == null ? '' : l)) };
+  fig.yRange = [0.5, n + 0.5];
+  return i => n - i;
+}
+
+/**
+ * The figure as data for the script writers (see io/scripts.js): its title
+ * and axis labels, its axis ranges, a categorical axis when the marks set
+ * one, and every series the marks recorded while drawing.
+ * @param {Figure} fig
+ * @param {string} [name] the file base name
+ * @returns {object}
+ */
+export function figureSpec(fig, name) {
+  const o = fig.opts, lab = fig.axisLabels || {};
+  const xlim = fig.xRange || (fig.sx ? fig.sx.domain.slice() : null);
+  const ylim = fig.yRange || (fig.sy ? fig.sy.domain.slice() : null);
+  const cats = fig.cats;
+  return {
+    name: name || o.title || o.ariaLabel || 'figure',
+    title: o.title || o.ariaLabel || '',
+    xLabel: lab.x !== undefined ? lab.x : o.xLabel,
+    yLabel: lab.y !== undefined ? lab.y : o.yLabel,
+    xlim, ylim,
+    xTicks: cats && cats.axis === 'x' ? { at: cats.at.slice(), labels: cats.labels.slice() } : null,
+    yTicks: cats && cats.axis === 'y' ? { at: cats.at.slice(), labels: cats.labels.slice() } : null,
+    series: fig.series.slice()
+  };
 }
 
 /** Escapes text for HTML labels passed to legend(). */

@@ -13,7 +13,7 @@ import { repEstimates, canInfer } from '../data/model.js';
 import { simultaneousMeans, bonferroniFamily, anova, posthoc, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { subsetSelection } from '../stats/select.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, svgEl, tok, extent } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -174,14 +174,21 @@ function meanRows(fig, rows) {
   fig.axes({ y: false });
   const rowH = fig.ih / n;
   const cOk = tok('--ok'), cMuted = tok('--muted'), cCard = tok('--card'), cText = tok('--text'), cBorder = tok('--border');
+  const ry = recordRows(fig, rows.map(r => r.label));
+  const keep = { kind: 'points', x: [], y: [], color: cOk, label: 'survives the screen' };
+  const gone = { kind: 'points', x: [], y: [], color: cMuted, hollow: true, label: 'eliminated by the screen' };
   rows.forEach((r, i) => {
     const cy = (i + 0.5) * rowH;
     svgEl('line', { x1: 0, x2: fig.iw, y1: cy, y2: cy, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
     if (r.keep) svgEl('circle', { cx: sx(r.value), cy, r: 5.5, fill: cOk }, fig.inner);
     else svgEl('circle', { cx: sx(r.value), cy, r: 5, fill: cCard, stroke: cMuted, 'stroke-width': 2 }, fig.inner);
+    const rec = r.keep ? keep : gone;
+    rec.x.push(r.value); rec.y.push(ry(i));
     const t = svgEl('text', { x: -10, y: cy + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep ? cText : cMuted }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
   });
+  if (keep.x.length) fig.series.push(keep);
+  if (gone.x.length) fig.series.push(gone);
   fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
@@ -241,6 +248,14 @@ function designRows(fig, rows, pairs) {
   const rowH = fig.ih / n;
   const cy = i => Math.round((i + 0.5) * rowH * 10) / 10;
   const cEst = tok('--est'), cBorder = tok('--border'), cText = tok('--text'), cAcc = tok('--accent'), cMiss = tok('--miss');
+  // For the script exports, the letters and brackets sit inside a widened x
+  // range rather than in the margin.
+  const ry = recordRows(fig, rows.map(r => r.label));
+  const [dx0, dx1] = sx.domain, span = dx1 - dx0;
+  fig.xRange = [dx0, dx1 + span * (0.12 + 0.03 * cols)];
+  const segs = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, label: 'interval' };
+  const means = { kind: 'points', x: [], y: [], color: cEst, label: 'mean' };
+  const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
   rows.forEach((r, i) => {
     const y = cy(i);
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
@@ -249,21 +264,31 @@ function designRows(fig, rows, pairs) {
     svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: cEst, 'stroke-width': 2 }, g);
     for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: cEst, 'stroke-width': 2 }, g);
     svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: cEst }, g);
+    const yy = ry(i);
+    segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
+    means.x.push(r.mean); means.y.push(yy);
     const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
       const lt = svgEl('text', { x: fig.iw + 10, y: y + 4, 'font-size': lfs, 'font-weight': 700, fill: cAcc, class: 'm-letter',
         'font-family': "'IBM Plex Mono', Menlo, monospace", 'letter-spacing': '0.06em' }, fig.inner);
       lt.textContent = r.letter;
+      letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
     }
   });
+  fig.series.push(segs, means);
+  if (letters.text.length) fig.series.push(letters);
   const x0 = fig.iw + 10 + letW + 6;
   const tick = Math.max(2, Math.min(5, colW - 1.5));
+  const brackets = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cMiss, label: 'declared different' };
   for (const p of placed) {
     const x = x0 + p.col * colW + tick;
     const ya = cy(p.a), yb = cy(p.b);
     svgEl('path', { d: 'M' + (x - tick) + ' ' + ya + 'H' + x + 'V' + yb + 'H' + (x - tick), fill: 'none', stroke: cMiss, 'stroke-width': 1.6, class: 'm-bracket' }, fig.inner);
+    const bx = dx1 + span * (0.11 + 0.03 * p.col), bt = span * 0.012, ra = ry(p.a), rb = ry(p.b);
+    brackets.x0.push(bx - bt, bx, bx); brackets.x1.push(bx, bx, bx - bt); brackets.y0.push(ra, ra, rb); brackets.y1.push(ra, rb, rb);
   }
+  if (placed.length) fig.series.push(brackets);
   fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
