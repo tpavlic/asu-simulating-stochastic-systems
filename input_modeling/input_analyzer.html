@@ -218,22 +218,18 @@ textarea.data-in:focus { border-style: solid; }
 .gen-msg.bad { color: var(--accent); font-weight: 600; }
 .gen-msg strong { color: var(--accent); }
 
-/* ── Plot download ───────────────────────────────────────────────────────
-   Clicking a plot downloads it.  The affordance is a badge that fades in on
-   hover rather than a button parked beside every chart: there are six of
-   them on this page, and six export buttons would compete with the content
-   they belong to.  The section notes say the option exists because a
-   hover-only affordance is invisible on a touch screen and unfindable if
-   you are not already looking for it. */
-svg.plot { cursor: pointer; }
-.dl-badge { position: absolute; top: 6px; right: 8px; font-size: .68rem; font-weight: 700;
-            color: var(--accent); background: var(--card); border: 1.5px solid var(--border);
-            border-radius: 5px; padding: 2px 7px; opacity: 0; transition: opacity .15s;
-            pointer-events: none; z-index: 2; }
-.plot-card:hover .dl-badge, .plot-card:focus-within .dl-badge { opacity: 1; }
-.dl-badge.done { background: var(--accent); color: #fff; border-color: var(--accent); opacity: 1; }
-/* Touch has no hover; there the badge simply stays visible. */
-@media (hover: none) { .dl-badge { opacity: 1; } }
+/* ── Plot toolbar and probe ────────────────────────────────────────────
+   The row of small buttons above each plot saves it as an SVG or a PNG, or
+   as a MATLAB, R, or Python script that redraws it from its data. The plot
+   itself is a probe: the pointer over it (or a finger on it) draws a
+   crosshair with dashed projections onto both axes and the values there. */
+svg.plot { cursor: crosshair; }
+.fig-tools { display: flex; justify-content: flex-end; gap: 6px; margin: -2px 0 4px; }
+.btn-mini { font-family: 'Outfit', system-ui, sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .04em;
+            min-height: 24px; min-width: 40px; padding: 2px 9px; background: transparent; color: var(--muted);
+            border: 1.5px solid var(--border); border-radius: 5px; cursor: pointer; }
+.btn-mini:hover { color: var(--accent); border-color: var(--accent); }
+.btn-mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── Stat cards ──────────────────────────────────────────────────────── */
 .sg { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px,1fr)); gap: 8px; }
@@ -736,7 +732,9 @@ footer a:hover { text-decoration: underline; }
     <div class="plot-cap" style="text-align:left;margin-top:2px">
       Two views of the same fit, each next to the test built on it: the histogram is what the
       chi-square test compares bin by bin, and the largest gap between the two curves on the right
-      is exactly the Kolmogorov&ndash;Smirnov statistic. <strong>Click any plot to download it.</strong>
+      is exactly the Kolmogorov&ndash;Smirnov statistic. <strong>The buttons above each plot save it as
+      an SVG or a PNG, or as a MATLAB, R, or Python script that redraws it from its data, and the
+      pointer over a plot (or a finger on it) reads values off both axes.</strong>
     </div>
 
     <div class="plot-wrap" style="margin-top:13px">
@@ -931,7 +929,8 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="plot-cap" style="text-align:left;margin-top:6px">
       Both compare your data against the fitted model point by point; a perfect fit puts every
-      point on the diagonal. Click either to download it.
+      point on the diagonal. The buttons above each save it as an image or as a script that
+      redraws it in MATLAB, R, or Python, and the pointer over it reads values off both axes.
     </div>
 
     <details class="why" open>
@@ -1181,7 +1180,9 @@ footer a:hover { text-decoration: underline; }
           moment it happened. It is the only view here that shows the raw events rather than a
           summary of them, and it is worth looking at before anything else&mdash;a burst appears
           as a dark clot of overlapping ticks, and a lull as a visible gap, both directly under the
-          stretch of curve they produced. Click any plot on this page to download it.
+          stretch of curve they produced. The buttons above each plot save it as an image or as a
+          script that redraws it in MATLAB, R, or Python, and the pointer over a plot (or a finger
+          on it) reads values off both axes.
         </div>
         <div id="nonstat-out" style="margin-top:10px"></div>
       </div>
@@ -4827,12 +4828,25 @@ function Plot(W, H, m) {
   var mT = m.t === undefined ? 12 : m.t, mB = m.b === undefined ? 44 : m.b;
   var pw = W - mL - mR, ph = H - mT - mB;
   var g = [], xlo = 0, xhi = 1, ylo = 0, yhi = 1;
+  /* What the plot draws, as data, for the script downloads: one record per
+     mark (consecutive segments and rectangles of one color merge), the axis
+     labels, and the legend's labels, which svg() attaches to the records
+     of the same color and kind. */
+  var recs = [], legendItems = [], xlab = '', ylab = '', fmtX = null, fmtY = null;
+  function last(kind, color, extra) {
+    var r = recs.length ? recs[recs.length - 1] : null;
+    if (!r || r.kind !== kind || r.color !== color) return null;
+    for (var k in extra) if (r[k] !== extra[k]) return null;
+    return r;
+  }
   var api = {
     W: W, H: H, mL: mL, mR: mR, mT: mT, mB: mB, pw: pw, ph: ph,
     domain: function (a, b, c, d) { xlo = a; xhi = b; ylo = c; yhi = d; return api; },
     X: function (v) { return mL + (v - xlo) / (xhi - xlo) * pw; },
     Y: function (v) { return mT + ph - (v - ylo) / (yhi - ylo) * ph; },
     add: function (s) { g.push(s); return api; },
+    /* A record for something drawn through add() rather than a mark. */
+    record: function (r) { recs.push(r); return api; },
 
     frame: function () {
       g.push('<rect x="' + mL + '" y="' + mT + '" width="' + pw + '" height="' + ph +
@@ -4842,6 +4856,7 @@ function Plot(W, H, m) {
     /* Gridlines and tick labels on both axes.  fx and fy format a tick. */
     axes: function (xt, yt, fx, fy, xDy) {
       var i, t;
+      fmtX = fx; fmtY = fy;
       xDy = xDy === undefined ? 14 : xDy;
       for (i = 0; i < xt.length; i++) {
         t = xt[i];
@@ -4884,22 +4899,28 @@ function Plot(W, H, m) {
              (mT + ph / 2) + ')">' + esc(text) + '</text>');
       return api;
     },
-    labels: function (xlab, ylab) {
+    labels: function (xl, yl) {
+      xlab = xl; ylab = yl;
       g.push('<text x="' + (mL + pw / 2) + '" y="' + (H - 7) + '" text-anchor="middle" ' +
-             'font-size="11.5" fill="var(--text)">' + esc(xlab) + '</text>');
+             'font-size="11.5" fill="var(--text)">' + esc(xl) + '</text>');
       g.push('<text x="12" y="' + (mT + ph / 2) + '" text-anchor="middle" font-size="11.5" ' +
              'fill="var(--text)" transform="rotate(-90 12 ' + (mT + ph / 2) + ')">' +
-             esc(ylab) + '</text>');
+             esc(yl) + '</text>');
       return api;
     },
     line: function (pts, color, width, dash) {
       if (!pts.length) return api;
+      recs.push({ kind: 'line', x: pts.map(function (p) { return p[0]; }), y: pts.map(function (p) { return p[1]; }),
+                  color: color, width: width, dash: !!dash });
       var d = 'M' + pts.map(function (p) { return api.X(p[0]).toFixed(1) + ' ' + api.Y(p[1]).toFixed(1); }).join('L');
       g.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + width +
              (dash ? '" stroke-dasharray="' + dash : '') + '" stroke-linejoin="round"/>');
       return api;
     },
     seg: function (x1, y1, x2, y2, color, width, dash) {
+      var r = last('segments', color, { width: width, dash: !!dash });
+      if (!r) { r = { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: color, width: width, dash: !!dash }; recs.push(r); }
+      r.x0.push(x1); r.y0.push(y1); r.x1.push(x2); r.y1.push(y2);
       g.push('<line x1="' + api.X(x1).toFixed(1) + '" y1="' + api.Y(y1).toFixed(1) +
              '" x2="' + api.X(x2).toFixed(1) + '" y2="' + api.Y(y2).toFixed(1) +
              '" stroke="' + color + '" stroke-width="' + width +
@@ -4907,6 +4928,7 @@ function Plot(W, H, m) {
       return api;
     },
     dots: function (pts, color, r) {
+      recs.push({ kind: 'points', x: pts.map(function (p) { return p[0]; }), y: pts.map(function (p) { return p[1]; }), color: color, hollow: true });
       var s = [];
       for (var i = 0; i < pts.length; i++) {
         if (!Number.isFinite(pts[i][0]) || !Number.isFinite(pts[i][1])) continue;
@@ -4917,6 +4939,12 @@ function Plot(W, H, m) {
       return api;
     },
     rect: function (x1, y1, x2, y2, fill, stroke) {
+      /* A background rectangle (the chart's own ground) is not data. */
+      if (fill !== 'var(--chart-bg)') {
+        var rr = last('rects', stroke || fill, { fill: fill });
+        if (!rr) { rr = { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: stroke || fill, fill: fill }; recs.push(rr); }
+        rr.x0.push(Math.min(x1, x2)); rr.x1.push(Math.max(x1, x2)); rr.y0.push(Math.min(y1, y2)); rr.y1.push(Math.max(y1, y2));
+      }
       var a = api.X(x1), b = api.X(x2), c = api.Y(y1), d = api.Y(y2);
       g.push('<rect x="' + Math.min(a, b).toFixed(1) + '" y="' + Math.min(c, d).toFixed(1) +
              '" width="' + Math.abs(b - a).toFixed(1) + '" height="' + Math.abs(d - c).toFixed(1) +
@@ -4925,6 +4953,7 @@ function Plot(W, H, m) {
     },
     text: function (x, y, s, opt) {
       opt = opt || {};
+      if (!opt.raw) recs.push({ kind: 'text', x: [x], y: [y], text: [s], color: opt.fill || 'var(--muted)', anchor: opt.anchor || 'start' });
       g.push('<text x="' + (opt.raw ? x : api.X(x)) + '" y="' + (opt.raw ? y : api.Y(y)) +
              '" text-anchor="' + (opt.anchor || 'start') + '" font-size="' + (opt.size || 10) +
              '" fill="' + (opt.fill || 'var(--muted)') + '"' +
@@ -4936,6 +4965,7 @@ function Plot(W, H, m) {
     legend: function (x, y, items) {
       for (var i = 0; i < items.length; i++) {
         var it = items[i], yy = y + i * 14;
+        legendItems.push(it);
         if (it.mark === 'line')
           g.push('<line x1="' + x + '" y1="' + yy + '" x2="' + (x + 20) + '" y2="' + yy +
                  '" stroke="' + it.color + '" stroke-width="' + (it.width || 2) + '"' +
@@ -4952,12 +4982,29 @@ function Plot(W, H, m) {
       return api;
     },
     svg: function (title, aria) {
+      /* The legend's labels go to the first record of the same color and
+         kind, and the spec is filed under the title, which the toolbar's
+         script buttons look up from the drawn <svg>'s own <title>. */
+      var kindsOf = { box: ['rects', 'bars'], line: ['line', 'step', 'segments'], dot: ['points'] };
+      for (var i = 0; i < legendItems.length; i++) {
+        var it = legendItems[i], kinds = kindsOf[it.mark] || kindsOf.box;
+        for (var j = 0; j < recs.length; j++) {
+          var rc = recs[j];
+          if (rc.label || kinds.indexOf(rc.kind) < 0) continue;
+          if (rc.color === it.color || rc.color === it.stroke || rc.fill === it.color) { rc.label = it.label; break; }
+        }
+      }
+      PLOT_SPECS[title] = { name: 'input-analyzer-' + title, title: title, xLabel: xlab, yLabel: ylab,
+                            xlim: [xlo, xhi], ylim: [ylo, yhi], series: recs, by: 'the Input Analyzer',
+                            frame: { W: W, H: H, l: mL, t: mT, w: pw, h: ph }, fmtX: fmtX, fmtY: fmtY };
       return '<svg class="plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' +
              esc(aria || title) + '"><title>' + esc(title) + '</title>' + g.join('') + '</svg>';
     }
   };
   return api;
 }
+/* The data behind every drawn plot, by the plot's title (see Plot.svg). */
+var PLOT_SPECS = {};
 
 /* 1-2-5 tick selection: the largest step of the form 1, 2, or 5 times a
    power of ten that still leaves at least `target` intervals. */
@@ -6674,31 +6721,45 @@ function resolveVars(el) {
   for (i = 0; i < el.children.length; i++) resolveVars(el.children[i]);
 }
 
-function exportPlot(svg, name, badge) {
+/* The plot as a standalone SVG document: the page's color tokens resolved
+   to literals, the font stack written on, and an opaque page-colored ground. */
+function standaloneSvg(svg) {
   var vb = (svg.getAttribute('viewBox') || '0 0 400 300').split(/\s+/).map(Number);
   var W = vb[2], H = vb[3];
+  var clone = svg.cloneNode(true);
+  var probe = clone.querySelector('.probe');
+  if (probe) probe.remove();
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', W);
+  clone.setAttribute('height', H);
+  clone.setAttribute('style', "font-family:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif");
+  resolveVars(clone);
+  var bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('x', 0); bg.setAttribute('y', 0);
+  bg.setAttribute('width', W); bg.setAttribute('height', H);
+  bg.setAttribute('fill', cssToken('--card') || '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+  return { W: W, H: H, text: '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone) };
+}
+function downloadBlob(name, blob) {
+  var u = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(u); }, 1000);
+}
+function exportSvg(svg, name) {
+  downloadBlob(name, new Blob([standaloneSvg(svg).text], { type: 'image/svg+xml;charset=utf-8' }));
+}
+function exportPlot(svg, name) {
+  var doc = standaloneSvg(svg), W = doc.W, H = doc.H;
   /* Render at the display's own pixel density, so a plot saved on a phone
      is as sharp as the phone can show and one saved on an ordinary monitor
      is not needlessly large. Floored at 2 so a low-density screen still
      produces something worth putting in a report, and capped at 3 so a
      large plot cannot turn into a 20-megapixel file. */
   var SCALE = Math.max(2, Math.min(3, Math.round(window.devicePixelRatio || 1)));
-  var clone = svg.cloneNode(true);
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  clone.setAttribute('width', W);
-  clone.setAttribute('height', H);
-  clone.setAttribute('style', "font-family:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif");
-  resolveVars(clone);
-  /* An opaque page-colored ground, so the PNG is not transparent where the
-     page happened to be white. */
-  var bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  bg.setAttribute('x', 0); bg.setAttribute('y', 0);
-  bg.setAttribute('width', W); bg.setAttribute('height', H);
-  bg.setAttribute('fill', cssToken('--card') || '#ffffff');
-  clone.insertBefore(bg, clone.firstChild);
-
-  var src = new XMLSerializer().serializeToString(clone);
-  var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+  var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc.text);
   var img = new Image();
   img.onload = function () {
     var cv = document.createElement('canvas');
@@ -6708,60 +6769,578 @@ function exportPlot(svg, name, badge) {
     ctx.fillStyle = cssToken('--card') || '#ffffff';
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    cv.toBlob(function (blob) {
-      if (!blob) { flashBadge(badge, 'Could not save'); return; }
-      var u = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = u; a.download = name;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(u); }, 1000);
-      flashBadge(badge, 'Saved');
-    }, 'image/png');
+    cv.toBlob(function (blob) { if (blob) downloadBlob(name, blob); }, 'image/png');
   };
-  img.onerror = function () { flashBadge(badge, 'Could not save'); };
   img.src = url;
 }
-function flashBadge(badge, text) {
-  if (!badge) return;
-  var was = badge.textContent;
-  badge.textContent = text;
-  badge.classList.add('done');
-  setTimeout(function () { badge.textContent = was; badge.classList.remove('done'); }, 1400);
-}
 
-/* Called after every render that replaces a plot's host element.  Fitting
-   the handler once at load would not survive innerHTML, so it is
-   re-attached, and the badge is created here rather than in the markup so
-   a plot that failed to draw never advertises a download. */
+/* Called after every render that replaces a plot's host element. The
+   toolbar above the plot is created once per card and finds the current
+   <svg> at click time, and so it survives the host's redraws; it is removed
+   when the card has no plot. The probe is attached to each new <svg>. */
 function armPlotDownloads() {
   var cards = document.querySelectorAll('.plot-card');
   for (var i = 0; i < cards.length; i++) {
     var card = cards[i];
     var svg = card.querySelector('svg.plot');
-    var badge = card.querySelector('.dl-badge');
-    if (!svg) { if (badge) badge.remove(); continue; }
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'dl-badge';
-      badge.textContent = '⤓ Click to save';
-      card.appendChild(badge);
-    }
-    if (svg.dataset.armed) continue;
-    svg.dataset.armed = '1';
-    svg.addEventListener('click', function () {
-      var c = this.closest('.plot-card');
-      exportPlot(this, plotFileName(this), c && c.querySelector('.dl-badge'));
-    });
+    var tools = card.querySelector('.fig-tools');
+    if (!svg) { if (tools) tools.remove(); continue; }
+    if (!tools) plotToolbar(card);
+    if (!svg.dataset.armed) { svg.dataset.armed = '1'; armProbe(svg); }
   }
 }
+/* The SVG, PNG, M, R, and PY buttons above a plot. */
+function plotToolbar(card) {
+  var row = document.createElement('div');
+  row.className = 'fig-tools';
+  var hd = card.querySelector('.plot-hd');
+  if (hd) hd.insertAdjacentElement('afterend', row); else card.insertBefore(row, card.firstChild);
+  function mk(label, desc, fn) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn-mini'; b.textContent = label;
+    b.setAttribute('aria-label', desc);
+    b.addEventListener('click', function () {
+      var svg = card.querySelector('svg.plot');
+      if (svg) fn(svg);
+    });
+    row.appendChild(b);
+  }
+  mk('SVG', 'Download this plot as SVG', function (svg) { exportSvg(svg, plotFileName(svg, 'svg')); });
+  mk('PNG', 'Download this plot as PNG', function (svg) { exportPlot(svg, plotFileName(svg, 'png')); });
+  var W = FIG_SCRIPTS.SCRIPT_WRITERS;
+  Object.keys(W).forEach(function (ext) {
+    mk(W[ext].label, 'Download a ' + W[ext].name + ' script that redraws this plot from its data', function (svg) {
+      var t = svg.querySelector('title');
+      var spec = t && PLOT_SPECS[t.textContent];
+      if (!spec) return;
+      downloadBlob(W[ext].file(spec.name) + '.' + ext, new Blob([W[ext].write(resolvedSpec(spec))], { type: W[ext].mime + ';charset=utf-8' }));
+    });
+  });
+}
+/* The spec with every var(--token) color resolved to the literal it stands
+   for, as the image exports do, since a script cannot read the page's theme. */
+function resolvedSpec(spec) {
+  var out = {};
+  Object.keys(spec).forEach(function (k) { out[k] = spec[k]; });
+  out.series = spec.series.map(function (r) {
+    var c = {};
+    Object.keys(r).forEach(function (k) { c[k] = r[k]; });
+    var m = /^var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)$/.exec(String(c.color || ''));
+    if (m) c.color = cssToken(m[1]) || m[2] || '#555555';
+    return c;
+  });
+  return out;
+}
+
+/* ── The probe ──────────────────────────────────────────────────────
+   A crosshair that follows the pointer inside the plot's frame, with a
+   dashed projection down to the x axis and across to the y axis and the
+   value read off each, so the picture can be interrogated without a
+   table. A mouse moves it and takes it away on leaving; a finger places
+   it with a tap and it stays until a tap elsewhere, and a swipe across
+   the plot still scrolls the page, because nothing here calls
+   preventDefault. */
+var PROBED = [];
+function armProbe(svg) {
+  var t = svg.querySelector('title');
+  var spec = t && PLOT_SPECS[t.textContent];
+  if (!spec || !spec.frame) return;
+  var F = spec.frame, NS = 'http://www.w3.org/2000/svg';
+  var g = null;
+  function hide() { if (g) { g.remove(); g = null; } }
+  function fmt4(v) { return Number.isFinite(v) ? Number(v.toPrecision(4)).toString() : ''; }
+  function show(e) {
+    var ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    var pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    var px = pt.x, py = pt.y;
+    if (px < F.l || px > F.l + F.w || py < F.t || py > F.t + F.h) { hide(); return; }
+    var xv = spec.xlim[0] + (px - F.l) / F.w * (spec.xlim[1] - spec.xlim[0]);
+    var yv = spec.ylim[1] - (py - F.t) / F.h * (spec.ylim[1] - spec.ylim[0]);
+    /* Four significant figures, rather than the tick labels' rounding; a
+       clock-time axis keeps its clock format. */
+    var xs = (typeof fmtTime === 'function' && spec.fmtX === fmtTime ? fmtTime : fmt4)(xv), ys = fmt4(yv);
+    hide();
+    g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'probe');
+    g.setAttribute('pointer-events', 'none');
+    var cM = 'var(--muted)', cT = 'var(--text)', cC = 'var(--card)', cB = 'var(--border)';
+    var parts = [];
+    parts.push('<line x1="' + px.toFixed(1) + '" y1="' + py.toFixed(1) + '" x2="' + px.toFixed(1) + '" y2="' + (F.t + F.h) + '" stroke="' + cM + '" stroke-width="1" stroke-dasharray="3 3"/>');
+    parts.push('<line x1="' + F.l + '" y1="' + py.toFixed(1) + '" x2="' + px.toFixed(1) + '" y2="' + py.toFixed(1) + '" stroke="' + cM + '" stroke-width="1" stroke-dasharray="3 3"/>');
+    parts.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3" fill="none" stroke="' + cT + '" stroke-width="1.2"/>');
+    /* The x value sits on the axis under the projection and the y value
+       beside the axis at the projection's height, each in a small box
+       kept inside the frame. */
+    var fs = 10, wx = xs.length * fs * 0.6 + 8, wy = ys.length * fs * 0.6 + 8;
+    var bx = Math.max(F.l, Math.min(F.l + F.w - wx, px - wx / 2)), by = F.t + F.h - 16;
+    var lx = F.l + 2, ly = Math.max(F.t, Math.min(F.t + F.h - 15, py - 7.5));
+    parts.push('<rect x="' + bx.toFixed(1) + '" y="' + by + '" width="' + wx.toFixed(1) + '" height="14" rx="3" fill="' + cC + '" stroke="' + cB + '" stroke-width="1"/>');
+    parts.push('<text x="' + (bx + wx / 2).toFixed(1) + '" y="' + (by + 10.5) + '" text-anchor="middle" font-size="' + fs + '" fill="' + cT + '">' + esc(xs) + '</text>');
+    parts.push('<rect x="' + lx + '" y="' + ly.toFixed(1) + '" width="' + wy.toFixed(1) + '" height="14" rx="3" fill="' + cC + '" stroke="' + cB + '" stroke-width="1"/>');
+    parts.push('<text x="' + (lx + 4) + '" y="' + (ly + 10.5).toFixed(1) + '" font-size="' + fs + '" fill="' + cT + '">' + esc(ys) + '</text>');
+    g.innerHTML = parts.join('');
+    svg.appendChild(g);
+  }
+  svg.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse' || e.buttons === 0) show(e); });
+  svg.addEventListener('pointerdown', function (e) { if (e.pointerType !== 'mouse') show(e); });
+  svg.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hide(); });
+  PROBED.push({ svg: svg, hide: hide });
+}
+/* A tap elsewhere on the page takes away a probe a finger left in place. */
+document.addEventListener('pointerdown', function (e) {
+  for (var i = PROBED.length - 1; i >= 0; i--) {
+    if (!PROBED[i].svg.isConnected) { PROBED.splice(i, 1); continue; }
+    if (!PROBED[i].svg.contains(e.target)) PROBED[i].hide();
+  }
+});
+
 /* A name taken from the plot's own <title>, so six downloads do not all
    land in the same folder called plot.png. */
-function plotFileName(svg) {
+function plotFileName(svg, ext) {
   var t = svg.querySelector('title');
   var base = (t ? t.textContent : 'plot').toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-  return 'input-analyzer-' + (base || 'plot') + '.png';
+  return 'input-analyzer-' + (base || 'plot') + '.' + (ext || 'png');
 }
+
+/* ── Figure scripts ───────────────────────────────────────────────
+   A figure as a script that redraws it from the data embedded in it:
+   MATLAB, base-graphics R, or matplotlib Python. A figure spec is
+     { name, title, xLabel, yLabel, xlim, ylim, xTicks, yTicks, series }
+   where `series` is a list of records drawn in order, each one of
+   points, line, step, bars, hline, vline, segments, band, span, rects, or
+   text, with the data as plain arrays and `color` a CSS hex color; a
+   record with a label appears in the legend. The Plot builder above
+   records these as it draws. This block is kept identical, apart from
+   the application's name and the module exports, to the script writers
+   of the output-analysis tool in this repository.
+   ────────────────────────────────────────────────────────────────── */
+var FIG_SCRIPTS = (function () {
+const WRAP = 92;
+
+function hexRgb(c) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim());
+  if (!m) return [0.33, 0.33, 0.33];
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255].map(x => x / 255);
+}
+
+function hex(c) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim());
+  return m ? '#' + m[1].toUpperCase() : '#555555';
+}
+
+// Typographic characters that a script file is better off without.
+function plain(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u2013\u2014]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+    .replace(/\u00a0/g, ' ').replace(/\u2212/g, '-').replace(/\u00b7/g, '-').replace(/\u2026/g, '...')
+    .replace(/[\r\n]+/g, ' ');
+}
+
+function numToken(v, nan) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return nan;
+  return String(v);
+}
+
+// Numbers joined by ", " and wrapped to WRAP columns, each continuation line
+// prefixed by `cont` (MATLAB needs an ellipsis before a line break inside
+// brackets).
+function joinNums(a, nan, indent, cont) {
+  const parts = Array.from(a, v => numToken(v, nan));
+  const lines = [];
+  let line = '';
+  for (const p of parts) {
+    if (line && line.length + p.length + 2 > WRAP) { lines.push(line + ','); line = ''; }
+    line += (line ? ', ' : '') + p;
+  }
+  lines.push(line);
+  return lines.join(cont + '\n' + indent);
+}
+
+// A MATLAB script runs by its file name, which must be an identifier.
+function sanitizeName(name) {
+  let s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'figure';
+  if (!/^[a-z]/.test(s)) s = 'fig_' + s;
+  return s.slice(0, 60);
+}
+
+// R and Python scripts take the same hyphenated name as the figure's images.
+function kebabName(name) {
+  const s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (s || 'figure').slice(0, 60);
+}
+
+function dashOf(rec) { return rec.dash === 'dotted' ? 'dotted' : rec.dash ? 'dashed' : 'solid'; }
+
+const SERIES_KINDS = new Set(['points', 'line', 'step', 'bars', 'hline', 'vline', 'segments', 'band', 'span', 'rects', 'text']);
+
+/**
+ * Checks a spec's shape, returning it with its name sanitized, or throwing.
+ * @param {object} spec
+ */
+function normalizeSpec(spec) {
+  if (!spec || typeof spec !== 'object') throw new TypeError('a figure spec is required');
+  const out = Object.assign({}, spec);
+  out.name = sanitizeName(spec.name);
+  out.file = kebabName(spec.name);
+  out.by = spec.by || 'the Input Analyzer';
+  out.series = Array.isArray(spec.series) ? spec.series.filter(r => r && SERIES_KINDS.has(r.kind)) : [];
+  if (!isLim(out.xlim)) out.xlim = autoLim(out.series, 'x');
+  if (!isLim(out.ylim)) out.ylim = autoLim(out.series, 'y');
+  // Tick positions ascend, with their labels carried along (MATLAB insists).
+  for (const k of ['xTicks', 'yTicks']) {
+    const t = out[k];
+    if (!t || !Array.isArray(t.at)) { out[k] = null; continue; }
+    const order = t.at.map((v, i) => i).sort((i, j) => t.at[i] - t.at[j]);
+    out[k] = { at: order.map(i => t.at[i]), labels: order.map(i => String(t.labels && t.labels[i] != null ? t.labels[i] : '')) };
+  }
+  return out;
+}
+
+function isLim(l) { return Array.isArray(l) && l.length === 2 && Number.isFinite(l[0]) && Number.isFinite(l[1]) && l[1] > l[0]; }
+
+// The range of every value a series puts on one axis, padded a little, or
+// [0, 1] when nothing lands there.
+function autoLim(series, axis) {
+  let lo = Infinity, hi = -Infinity;
+  const take = a => { if (a == null) return; for (const v of (typeof a === 'number' ? [a] : a)) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+  for (const r of series) {
+    if (axis === 'x') { take(r.x); take(r.edges); take(r.x0); take(r.x1); }
+    else { take(r.y); take(r.heights); take(r.y0); take(r.y1); take(r.lo); take(r.hi); if (r.kind === 'bars') take(0); }
+  }
+  if (!(hi > lo)) return Number.isFinite(lo) ? [lo - 1, lo + 1] : [0, 1];
+  const pad = (hi - lo) * 0.05;
+  return [lo - pad, hi + pad];
+}
+
+// ── MATLAB ───────────────────────────────────────────────────────────────
+
+function mStr(s) { return "'" + plain(s).replace(/'/g, "''") + "'"; }
+function mVec(a) { return '[' + joinNums(a, 'NaN', '    ', ' ...') + ']'; }
+function mRgb(c) { return '[' + hexRgb(c).map(v => v.toFixed(4)).join(' ') + ']'; }
+function mStyle(rec) { return dashOf(rec) === 'dotted' ? ':' : dashOf(rec) === 'dashed' ? '--' : '-'; }
+function mName(rec, i) { return rec.label ? ", 'DisplayName', " + mStr(rec.label) : ", 'HandleVisibility', 'off'"; }
+
+/**
+ * The figure as a MATLAB script.
+ * @param {object} spec
+ * @returns {string}
+ */
+function matlabScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('% ' + plain(s.title || s.name));
+  L.push('% Written by ' + plain(s.by) + '. The data are embedded below, and so this');
+  L.push('% script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  L.push("fig = figure('Color', 'w');");
+  L.push("ax = axes(fig); hold(ax, 'on'); box(ax, 'on'); grid(ax, 'on');");
+  if (s.xlim) L.push('xlim(ax, ' + mVec(s.xlim) + ');');
+  if (s.ylim) L.push('ylim(ax, ' + mVec(s.ylim) + ');');
+  L.push('');
+  let legendItems = 0;
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = mRgb(rec.color);
+    if (rec.label) legendItems++;
+    switch (rec.kind) {
+      case 'points':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('y' + k + ' = ' + mVec(rec.y) + ';');
+        L.push("plot(ax, x" + k + ', y' + k + ", 'LineStyle', 'none', 'Marker', '" + (rec.marker === 'd' ? 'd' : 'o') + "', 'MarkerSize', 5, ...");
+        L.push("    'MarkerEdgeColor', " + c + ", 'MarkerFaceColor', " + (rec.hollow ? "'none'" : c) + mName(rec) + ');');
+        break;
+      case 'line':
+      case 'step':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('y' + k + ' = ' + mVec(rec.y) + ';');
+        L.push((rec.kind === 'step' ? 'stairs' : 'plot') + '(ax, x' + k + ', y' + k + ", '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', " + (rec.width || 1.5) + mName(rec) + ');');
+        break;
+      case 'bars':
+        L.push('edges' + k + ' = ' + mVec(rec.edges) + ';');
+        L.push('counts' + k + ' = ' + mVec(rec.heights) + ';');
+        L.push("histogram(ax, 'BinEdges', edges" + k + ", 'BinCounts', counts" + k + ", 'FaceColor', " + c + ", 'FaceAlpha', 0.35, 'EdgeColor', " + c + mName(rec) + ');');
+        break;
+      case 'hline':
+        L.push('plot(ax, xlim(ax), [' + numToken(rec.y, 'NaN') + ' ' + numToken(rec.y, 'NaN') + "], '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'vline':
+        L.push('plot(ax, [' + numToken(rec.x, 'NaN') + ' ' + numToken(rec.x, 'NaN') + "], ylim(ax), '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'segments':
+        L.push('x0_' + k + ' = ' + mVec(rec.x0) + ';');
+        L.push('x1_' + k + ' = ' + mVec(rec.x1) + ';');
+        L.push('y0_' + k + ' = ' + mVec(rec.y0) + ';');
+        L.push('y1_' + k + ' = ' + mVec(rec.y1) + ';');
+        L.push('h' + k + ' = plot(ax, [x0_' + k + '; x1_' + k + '], [y0_' + k + '; y1_' + k + "], '" + mStyle(rec) + "', 'Color', " + c + ", 'LineWidth', " + (rec.width || 1.5) + ');');
+        L.push("set(h" + k + ", 'HandleVisibility', 'off');");
+        if (rec.label) L.push("if ~isempty(h" + k + "), set(h" + k + "(1), 'HandleVisibility', 'on', 'DisplayName', " + mStr(rec.label) + '); end');
+        break;
+      case 'band':
+        L.push('x' + k + ' = ' + mVec(rec.x) + ';');
+        L.push('lo' + k + ' = ' + mVec(rec.lo) + ';');
+        L.push('hi' + k + ' = ' + mVec(rec.hi) + ';');
+        L.push('fill(ax, [x' + k + ', fliplr(x' + k + ')], [lo' + k + ', fliplr(hi' + k + ')], ' + c + ", 'FaceAlpha', 0.25, 'EdgeColor', 'none'" + mName(rec) + ');');
+        break;
+      case 'span':
+        L.push('yl' + k + ' = ylim(ax);');
+        L.push('fill(ax, [' + [rec.x0, rec.x1, rec.x1, rec.x0].map(v => numToken(v, 'NaN')).join(' ') + '], [yl' + k + '(1) yl' + k + '(1) yl' + k + '(2) yl' + k + '(2)], ' + c + ", 'FaceAlpha', 0.15, 'EdgeColor', 'none'" + mName(rec) + ');');
+        break;
+      case 'rects':
+        L.push('x0_' + k + ' = ' + mVec(rec.x0) + ';');
+        L.push('x1_' + k + ' = ' + mVec(rec.x1) + ';');
+        L.push('y0_' + k + ' = ' + mVec(rec.y0) + ';');
+        L.push('y1_' + k + ' = ' + mVec(rec.y1) + ';');
+        L.push('patch(ax, [x0_' + k + '; x1_' + k + '; x1_' + k + '; x0_' + k + '], [y0_' + k + '; y0_' + k + '; y1_' + k + '; y1_' + k + '], ' + c + ", 'FaceAlpha', 0.25, 'EdgeColor', " + c + ", 'LineWidth', 1.5" + mName(rec) + ');');
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const ha = rec.anchor === 'end' ? 'right' : rec.anchor === 'middle' ? 'center' : 'left';
+        L.push('text(ax, ' + mVec(xs) + ', ' + mVec(ys) + ', {' + Array.from(ts, mStr).join(', ') + "}, 'Color', " + c + ", 'HorizontalAlignment', '" + ha + "', 'FontWeight', 'bold', 'Interpreter', 'none');");
+        break;
+      }
+      default: break;
+    }
+  });
+  L.push('');
+  if (s.xTicks) { L.push('xticks(ax, ' + mVec(s.xTicks.at) + ');'); L.push('xticklabels(ax, {' + s.xTicks.labels.map(mStr).join(', ') + '});'); }
+  if (s.yTicks) { L.push('yticks(ax, ' + mVec(s.yTicks.at) + ');'); L.push('yticklabels(ax, {' + s.yTicks.labels.map(mStr).join(', ') + '});'); }
+  // Labels are literal text: an underscore in a response name is not a subscript.
+  L.push("set(ax, 'TickLabelInterpreter', 'none');");
+  if (s.xLabel) L.push('xlabel(ax, ' + mStr(s.xLabel) + ", 'Interpreter', 'none');");
+  if (s.yLabel) L.push('ylabel(ax, ' + mStr(s.yLabel) + ", 'Interpreter', 'none');");
+  if (s.title) L.push('title(ax, ' + mStr(s.title) + ", 'Interpreter', 'none');");
+  if (legendItems) L.push("legend(ax, 'show', 'Location', 'best', 'Interpreter', 'none');");
+  L.push("hold(ax, 'off');");
+  L.push('% savefig(fig, ' + mStr(s.name + '.fig') + ');');
+  return L.join('\n') + '\n';
+}
+
+// ── R ────────────────────────────────────────────────────────────────────
+
+function rStr(s) { return '"' + plain(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function rVec(a) { return 'c(' + joinNums(a, 'NA', '  ', '') + ')'; }
+function rLty(rec) { return dashOf(rec) === 'dotted' ? 3 : dashOf(rec) === 'dashed' ? 2 : 1; }
+
+/**
+ * The figure as an R script using base graphics.
+ * @param {object} spec
+ * @returns {string}
+ */
+function rScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('# ' + plain(s.title || s.name));
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
+  L.push('# script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  const leg = { labels: [], col: [], pch: [], lty: [], lwd: [], fill: [] };
+  const addLeg = (rec, pch, lty, fill) => {
+    if (!rec.label) return;
+    leg.labels.push(rStr(rec.label)); leg.col.push(rStr(hex(rec.color)));
+    leg.pch.push(pch); leg.lty.push(lty); leg.lwd.push(rec.width || 1.5); leg.fill.push(fill ? 'adjustcolor(' + rStr(hex(rec.color)) + ', 0.35)' : 'NA');
+  };
+  // The data first, so the axes can be sized before anything is drawn.
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    if (rec.kind === 'points' || rec.kind === 'line' || rec.kind === 'step') { L.push('x' + k + ' <- ' + rVec(rec.x)); L.push('y' + k + ' <- ' + rVec(rec.y)); }
+    else if (rec.kind === 'bars') { L.push('edges' + k + ' <- ' + rVec(rec.edges)); L.push('counts' + k + ' <- ' + rVec(rec.heights)); }
+    else if (rec.kind === 'segments' || rec.kind === 'rects') { L.push('x0_' + k + ' <- ' + rVec(rec.x0)); L.push('x1_' + k + ' <- ' + rVec(rec.x1)); L.push('y0_' + k + ' <- ' + rVec(rec.y0)); L.push('y1_' + k + ' <- ' + rVec(rec.y1)); }
+    else if (rec.kind === 'band') { L.push('x' + k + ' <- ' + rVec(rec.x)); L.push('lo' + k + ' <- ' + rVec(rec.lo)); L.push('hi' + k + ' <- ' + rVec(rec.hi)); }
+  });
+  L.push('');
+  // A categorical axis gets a margin wide enough for its labels.
+  if (s.yTicks) L.push('par(mar = c(4.5, ' + (4.5 + 0.45 * Math.max(0, ...s.yTicks.labels.map(l => plain(l).length))).toFixed(1) + ', 3.5, 1))');
+  else L.push('par(mar = c(4.5, 4.5, 3.5, 1))');
+  L.push('plot(NA, xlim = ' + rVec(s.xlim) + ', ylim = ' + rVec(s.ylim) +
+    ', xlab = ' + rStr(s.xLabel) + ', ylab = ' + rStr(s.yLabel) + ', main = ' + rStr(s.title) +
+    (s.xTicks ? ', xaxt = "n"' : '') + (s.yTicks ? ', yaxt = "n"' : '') + ', las = 1)');
+  L.push('grid(col = "gray85", lty = 1)');
+  if (s.xTicks) L.push('axis(1, at = ' + rVec(s.xTicks.at) + ', labels = c(' + s.xTicks.labels.map(rStr).join(', ') + '))');
+  if (s.yTicks) L.push('axis(2, at = ' + rVec(s.yTicks.at) + ', labels = c(' + s.yTicks.labels.map(rStr).join(', ') + '), las = 1)');
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = rStr(hex(rec.color));
+    switch (rec.kind) {
+      case 'points': {
+        const pch = rec.marker === 'd' ? (rec.hollow ? 5 : 23) : (rec.hollow ? 21 : 19);
+        L.push('points(x' + k + ', y' + k + ', pch = ' + pch + ', col = ' + c + (rec.hollow ? ', bg = "white"' : pch === 23 ? ', bg = "white"' : '') + ', cex = 0.9)');
+        addLeg(rec, pch, 'NA', false);
+        break;
+      }
+      case 'line':
+      case 'step':
+        L.push('lines(x' + k + ', y' + k + (rec.kind === 'step' ? ', type = "s"' : '') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = ' + (rec.width || 1.5) + ')');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'bars':
+        L.push('rect(head(edges' + k + ', -1), 0, tail(edges' + k + ', -1), counts' + k + ', col = adjustcolor(' + c + ', 0.35), border = ' + c + ')');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'hline':
+        L.push('abline(h = ' + numToken(rec.y, 'NA') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = 1.5)');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'vline':
+        L.push('abline(v = ' + numToken(rec.x, 'NA') + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = 1.5)');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'segments':
+        L.push('segments(x0_' + k + ', y0_' + k + ', x1_' + k + ', y1_' + k + ', col = ' + c + ', lty = ' + rLty(rec) + ', lwd = ' + (rec.width || 1.5) + ')');
+        addLeg(rec, 'NA', rLty(rec), false);
+        break;
+      case 'band':
+        L.push('polygon(c(x' + k + ', rev(x' + k + ')), c(lo' + k + ', rev(hi' + k + ')), col = adjustcolor(' + c + ', 0.25), border = NA)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'span':
+        L.push('rect(' + numToken(rec.x0, 'NA') + ', par("usr")[3], ' + numToken(rec.x1, 'NA') + ', par("usr")[4], col = adjustcolor(' + c + ', 0.15), border = NA)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'rects':
+        L.push('rect(x0_' + k + ', y0_' + k + ', x1_' + k + ', y1_' + k + ', col = adjustcolor(' + c + ', 0.25), border = ' + c + ', lwd = 1.5)');
+        addLeg(rec, 'NA', 'NA', true);
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const adj = rec.anchor === 'end' ? 1 : rec.anchor === 'middle' ? 0.5 : 0;
+        L.push('text(' + rVec(xs) + ', ' + rVec(ys) + ', labels = c(' + Array.from(ts, rStr).join(', ') + '), col = ' + c + ', adj = c(' + adj + ', 0.5), font = 2)');
+        break;
+      }
+      default: break;
+    }
+  });
+  if (leg.labels.length) {
+    L.push('legend("topright", legend = c(' + leg.labels.join(', ') + '), col = c(' + leg.col.join(', ') + '),');
+    L.push('       pch = c(' + leg.pch.join(', ') + '), lty = c(' + leg.lty.join(', ') + '), lwd = c(' + leg.lwd.join(', ') + '),');
+    L.push('       fill = c(' + leg.fill.join(', ') + '), border = NA, bty = "n", pt.bg = "white")');
+  }
+  L.push('# dev.copy(pdf, ' + rStr(s.file + '.pdf') + '); dev.off()');
+  return L.join('\n') + '\n';
+}
+
+// ── Python ───────────────────────────────────────────────────────────────
+
+function pyStr(s) { return '"' + plain(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function pyVec(a) { return 'np.array([' + joinNums(a, 'np.nan', '    ', '') + '])'; }
+function pyLs(rec) { return dashOf(rec) === 'dotted' ? ':' : dashOf(rec) === 'dashed' ? '--' : '-'; }
+function pyLabel(rec) { return rec.label ? ', label=' + pyStr(rec.label) : ''; }
+
+/**
+ * The figure as a Python script using matplotlib.
+ * @param {object} spec
+ * @returns {string}
+ */
+function pythonScript(spec) {
+  const s = normalizeSpec(spec);
+  const L = [];
+  L.push('# ' + plain(s.title || s.name));
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
+  L.push('# script stands alone; edit the plotting calls to restyle the figure.');
+  L.push('');
+  L.push('import numpy as np');
+  L.push('import matplotlib.pyplot as plt');
+  if (s.series.some(r => r.kind === 'rects')) L.push('from matplotlib.patches import Rectangle');
+  L.push('');
+  L.push('fig, ax = plt.subplots(figsize=(8, 4.5))');
+  L.push('ax.grid(True, color="0.85", linewidth=0.8)');
+  L.push('ax.set_axisbelow(True)');
+  L.push('');
+  let legendItems = 0;
+  s.series.forEach((rec, i) => {
+    const k = i + 1;
+    const c = pyStr(hex(rec.color));
+    if (rec.label) legendItems++;
+    switch (rec.kind) {
+      case 'points':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('y' + k + ' = ' + pyVec(rec.y));
+        L.push('ax.plot(x' + k + ', y' + k + ', linestyle="none", marker=' + (rec.marker === 'd' ? '"D"' : '"o"') + ', markersize=5, color=' + c + (rec.hollow ? ', markerfacecolor="white"' : '') + pyLabel(rec) + ')');
+        break;
+      case 'line':
+      case 'step':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('y' + k + ' = ' + pyVec(rec.y));
+        L.push('ax.' + (rec.kind === 'step' ? 'step' : 'plot') + '(x' + k + ', y' + k + (rec.kind === 'step' ? ', where="post"' : '') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=' + (rec.width || 1.5) + pyLabel(rec) + ')');
+        break;
+      case 'bars':
+        L.push('edges' + k + ' = ' + pyVec(rec.edges));
+        L.push('counts' + k + ' = ' + pyVec(rec.heights));
+        L.push('ax.bar(edges' + k + '[:-1], counts' + k + ', width=np.diff(edges' + k + '), align="edge", color=' + c + ', alpha=0.35, edgecolor=' + c + ', linewidth=1' + pyLabel(rec) + ')');
+        break;
+      case 'hline':
+        L.push('ax.axhline(' + numToken(rec.y, 'np.nan') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=1.5' + pyLabel(rec) + ')');
+        break;
+      case 'vline':
+        L.push('ax.axvline(' + numToken(rec.x, 'np.nan') + ', linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=1.5' + pyLabel(rec) + ')');
+        break;
+      case 'segments':
+        L.push('x0_' + k + ' = ' + pyVec(rec.x0));
+        L.push('x1_' + k + ' = ' + pyVec(rec.x1));
+        L.push('y0_' + k + ' = ' + pyVec(rec.y0));
+        L.push('y1_' + k + ' = ' + pyVec(rec.y1));
+        L.push('for j in range(len(x0_' + k + ')):');
+        L.push('    ax.plot([x0_' + k + '[j], x1_' + k + '[j]], [y0_' + k + '[j], y1_' + k + '[j]], linestyle="' + pyLs(rec) + '", color=' + c + ', linewidth=' + (rec.width || 1.5) + (rec.label ? ', label=' + pyStr(rec.label) + ' if j == 0 else None' : '') + ')');
+        break;
+      case 'band':
+        L.push('x' + k + ' = ' + pyVec(rec.x));
+        L.push('lo' + k + ' = ' + pyVec(rec.lo));
+        L.push('hi' + k + ' = ' + pyVec(rec.hi));
+        L.push('ax.fill_between(x' + k + ', lo' + k + ', hi' + k + ', color=' + c + ', alpha=0.25, linewidth=0' + pyLabel(rec) + ')');
+        break;
+      case 'span':
+        L.push('ax.axvspan(' + numToken(rec.x0, 'np.nan') + ', ' + numToken(rec.x1, 'np.nan') + ', color=' + c + ', alpha=0.15, linewidth=0' + pyLabel(rec) + ')');
+        break;
+      case 'rects':
+        L.push('x0_' + k + ' = ' + pyVec(rec.x0));
+        L.push('x1_' + k + ' = ' + pyVec(rec.x1));
+        L.push('y0_' + k + ' = ' + pyVec(rec.y0));
+        L.push('y1_' + k + ' = ' + pyVec(rec.y1));
+        L.push('for j in range(len(x0_' + k + ')):');
+        L.push('    ax.add_patch(Rectangle((x0_' + k + '[j], y0_' + k + '[j]), x1_' + k + '[j] - x0_' + k + '[j], y1_' + k + '[j] - y0_' + k + '[j], facecolor=' + c + ', alpha=0.25, edgecolor=' + c + ', linewidth=1.5' + (rec.label ? ', label=' + pyStr(rec.label) + ' if j == 0 else None' : '') + '))');
+        break;
+      case 'text': {
+        const xs = Array.isArray(rec.x) || ArrayBuffer.isView(rec.x) ? rec.x : [rec.x];
+        const ys = Array.isArray(rec.y) || ArrayBuffer.isView(rec.y) ? rec.y : [rec.y];
+        const ts = Array.isArray(rec.text) ? rec.text : [rec.text];
+        const ha = rec.anchor === 'end' ? 'right' : rec.anchor === 'middle' ? 'center' : 'left';
+        L.push('for xt, yt, st in zip(' + pyVec(xs) + ', ' + pyVec(ys) + ', [' + Array.from(ts, pyStr).join(', ') + ']):');
+        L.push('    ax.text(xt, yt, st, color=' + c + ', ha="' + ha + '", va="center", fontweight="bold")');
+        break;
+      }
+      default: break;
+    }
+  });
+  L.push('');
+  if (s.xlim) L.push('ax.set_xlim(' + numToken(s.xlim[0], 'None') + ', ' + numToken(s.xlim[1], 'None') + ')');
+  if (s.ylim) L.push('ax.set_ylim(' + numToken(s.ylim[0], 'None') + ', ' + numToken(s.ylim[1], 'None') + ')');
+  if (s.xTicks) { L.push('ax.set_xticks(' + pyVec(s.xTicks.at) + ')'); L.push('ax.set_xticklabels([' + s.xTicks.labels.map(pyStr).join(', ') + '])'); }
+  if (s.yTicks) { L.push('ax.set_yticks(' + pyVec(s.yTicks.at) + ')'); L.push('ax.set_yticklabels([' + s.yTicks.labels.map(pyStr).join(', ') + '])'); }
+  if (s.xLabel) L.push('ax.set_xlabel(' + pyStr(s.xLabel) + ')');
+  if (s.yLabel) L.push('ax.set_ylabel(' + pyStr(s.yLabel) + ')');
+  if (s.title) L.push('ax.set_title(' + pyStr(s.title) + ')');
+  if (legendItems) L.push('ax.legend()');
+  L.push('fig.tight_layout()');
+  L.push('# fig.savefig(' + pyStr(s.file + '.png') + ', dpi=200)');
+  L.push('plt.show()');
+  return L.join('\n') + '\n';
+}
+
+/** The three writers by file extension, each with its file-name rule. */
+const SCRIPT_WRITERS = {
+  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab', file: sanitizeName },
+  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r', file: kebabName },
+  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python', file: kebabName }
+};
+return { matlabScript: matlabScript, rScript: rScript, pythonScript: pythonScript, sanitizeName: sanitizeName, kebabName: kebabName, SCRIPT_WRITERS: SCRIPT_WRITERS };
+})();
 
 /* ── CSV downloads ─────────────────────────────────────────────────
    A blob URL and a synthetic click, which works from file:// as well as
@@ -7238,6 +7817,8 @@ function drawCumulative() {
              '" stroke="var(--obs)" stroke-width="1" stroke-opacity="0.45"/>');
   }
   P.add(rug.join(''));
+  P.record({ kind: 'segments', x0: t.slice(), x1: t.slice(), y0: t.map(function () { return rugBot; }), y1: t.map(function () { return rugTop; }),
+             color: 'var(--obs)', width: 1, label: 'one tick per arrival' });
 
   /* Constant-rate reference: the straight line the count would follow. */
   P.seg(t0, 0, t1, n, 'var(--alt)', 1.8, '6 4');
