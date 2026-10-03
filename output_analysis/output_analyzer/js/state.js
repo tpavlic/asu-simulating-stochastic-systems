@@ -181,6 +181,7 @@ export function getPick(pageId, key) {
  * @param {PageResult|null} result
  */
 export function setResult(pageId, result) {
+  if (result && typeof result === 'object' && !(result.computedAt instanceof Date)) result.computedAt = new Date();
   results[pageId] = result;
   emit('results', { pageId });
 }

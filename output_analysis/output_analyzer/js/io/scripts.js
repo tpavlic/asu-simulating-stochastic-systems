@@ -19,6 +19,7 @@
 //   { kind: 'rects',    x0, y0, x1, y1, label?, color }
 //   { kind: 'text',     x, y, text, color, anchor?: 'start'|'middle'|'end' }
 // `color` is a CSS hex color. A record with a label appears in the legend.
+// `by` names the application in the scripts' header comment.
 
 const WRAP = 92;
 
@@ -62,11 +63,18 @@ function joinNums(a, nan, indent, cont) {
   return lines.join(cont + '\n' + indent);
 }
 
+// A MATLAB script runs by its file name, which must be an identifier.
 function sanitizeName(name) {
-  let s = String(name || 'figure').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  let s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
   if (!s) s = 'figure';
-  if (!/^[A-Za-z]/.test(s)) s = 'fig_' + s;
+  if (!/^[a-z]/.test(s)) s = 'fig_' + s;
   return s.slice(0, 60);
+}
+
+// R and Python scripts take the same hyphenated name as the figure's images.
+function kebabName(name) {
+  const s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (s || 'figure').slice(0, 60);
 }
 
 function dashOf(rec) { return rec.dash === 'dotted' ? 'dotted' : rec.dash ? 'dashed' : 'solid'; }
@@ -81,6 +89,8 @@ export function normalizeSpec(spec) {
   if (!spec || typeof spec !== 'object') throw new TypeError('a figure spec is required');
   const out = Object.assign({}, spec);
   out.name = sanitizeName(spec.name);
+  out.file = kebabName(spec.name);
+  out.by = spec.by || 'the Output Analyzer';
   out.series = Array.isArray(spec.series) ? spec.series.filter(r => r && SERIES_KINDS.has(r.kind)) : [];
   if (!isLim(out.xlim)) out.xlim = autoLim(out.series, 'x');
   if (!isLim(out.ylim)) out.ylim = autoLim(out.series, 'y');
@@ -127,7 +137,7 @@ export function matlabScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('% ' + plain(s.title || s.name));
-  L.push('% Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('% Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('% script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   L.push("fig = figure('Color', 'w');");
@@ -230,7 +240,7 @@ export function rScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('# ' + plain(s.title || s.name));
-  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('# script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   const leg = { labels: [], col: [], pch: [], lty: [], lwd: [], fill: [] };
@@ -316,7 +326,7 @@ export function rScript(spec) {
     L.push('       pch = c(' + leg.pch.join(', ') + '), lty = c(' + leg.lty.join(', ') + '), lwd = c(' + leg.lwd.join(', ') + '),');
     L.push('       fill = c(' + leg.fill.join(', ') + '), border = NA, bty = "n", pt.bg = "white")');
   }
-  L.push('# dev.copy(pdf, ' + rStr(s.name + '.pdf') + '); dev.off()');
+  L.push('# dev.copy(pdf, ' + rStr(s.file + '.pdf') + '); dev.off()');
   return L.join('\n') + '\n';
 }
 
@@ -336,7 +346,7 @@ export function pythonScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('# ' + plain(s.title || s.name));
-  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('# script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   L.push('import numpy as np');
@@ -422,16 +432,16 @@ export function pythonScript(spec) {
   if (s.title) L.push('ax.set_title(' + pyStr(s.title) + ')');
   if (legendItems) L.push('ax.legend()');
   L.push('fig.tight_layout()');
-  L.push('# fig.savefig(' + pyStr(s.name + '.png') + ', dpi=200)');
+  L.push('# fig.savefig(' + pyStr(s.file + '.png') + ', dpi=200)');
   L.push('plt.show()');
   return L.join('\n') + '\n';
 }
 
-/** The three writers by file extension. */
+/** The three writers by file extension, each with its file-name rule. */
 export const SCRIPT_WRITERS = {
-  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab' },
-  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r' },
-  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python' }
+  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab', file: sanitizeName },
+  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r', file: kebabName },
+  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python', file: kebabName }
 };
 
-export { sanitizeName };
+export { sanitizeName, kebabName };

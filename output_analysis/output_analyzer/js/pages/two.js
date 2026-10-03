@@ -11,6 +11,7 @@ import { welch, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWe
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, scatter, recordRows, svgEl, tok, extent } from '../ui/plots.js';
+import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -367,7 +368,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -1083,6 +1084,7 @@ export function render(root) {
   state.on('selection', () => { if (visible()) schedule(); });
   state.on('settings', () => { if (visible()) schedule(); });
   update();
+  installExportRow(root, id, { extra: () => pairedPilotFile(state.get(selA.value), state.get(selB.value)) });
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept

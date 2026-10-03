@@ -19,7 +19,8 @@ import * as twoPage from './pages/two.js';
 import * as severalPage from './pages/several.js';
 import * as variancePage from './pages/variance.js';
 import * as steadyPage from './pages/steady.js';
-import * as exportPage from './pages/export.js';
+import * as reportPage from './pages/report.js';
+import * as storagePage from './pages/storage.js';
 import * as galleryPage from './pages/gallery.js';
 
 // A page module may export its id, title, render, and onShow by name, or as
@@ -38,7 +39,7 @@ function pageOf(mod) {
   };
 }
 
-const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, exportPage, galleryPage].map(pageOf);
+const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, galleryPage].map(pageOf);
 const BY_ID = new Map(PAGES.map(p => [p.id, p]));
 
 function renderDataStrip() {
@@ -63,7 +64,7 @@ function renderDataStrip() {
 // with the tooltip saying what is missing, and goes gray again if a removal
 // takes the requirement away while that page is open.
 const GATES = [
-  { pages: ['explore', 'one', 'variance', 'export'],
+  { pages: ['explore', 'one', 'variance', 'report'],
     ok: () => state.datasets.length > 0,
     tip: 'Load a file or an example on the Import page first.' },
   { pages: ['two', 'several'],

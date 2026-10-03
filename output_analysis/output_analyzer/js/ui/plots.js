@@ -17,7 +17,7 @@
 // decimateMinMax) import cleanly under Node for the tests.
 
 import { num, esc } from './format.js';
-import { SCRIPT_WRITERS, sanitizeName } from '../io/scripts.js';
+import { SCRIPT_WRITERS } from '../io/scripts.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const DESIGN_W = 940;
@@ -976,9 +976,19 @@ export function qqPlot(fig, q, o = {}) {
   if (!fig.sx) fig.x(extent(q.theoretical), { pad: 0.08, nice: true });
   if (!fig.sy) fig.y(extent(q.sample), { pad: 0.08, nice: true });
   ensureAxes(fig, o);
-  const [d0, d1] = fig.sx.domain;
-  svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(q.intercept + q.slope * d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(q.intercept + q.slope * d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
-  fig.series.push({ kind: 'line', x: [d0, d1], y: [q.intercept + q.slope * d0, q.intercept + q.slope * d1], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  // The line runs across the plotting area and stops at its edges: where it
+  // would leave the y range it is cut at the x where it crosses the edge.
+  const [d0, d1] = fig.sx.domain, [e0, e1] = fig.sy.domain;
+  let xa = d0, xb = d1;
+  if (q.slope !== 0) {
+    const xs = [(Math.min(e0, e1) - q.intercept) / q.slope, (Math.max(e0, e1) - q.intercept) / q.slope].sort((a, b) => a - b);
+    xa = Math.max(d0, xs[0]); xb = Math.min(d1, xs[1]);
+  }
+  if (xb > xa) {
+    const ya = q.intercept + q.slope * xa, yb = q.intercept + q.slope * xb;
+    svgEl('line', { x1: r1(fig.sx(xa)), y1: r1(fig.sy(ya)), x2: r1(fig.sx(xb)), y2: r1(fig.sy(yb)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'line', x: [xa, xb], y: [ya, yb], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  }
   scatter(fig, q.theoretical, q.sample, Object.assign({}, o, { axes: false, r: n > 400 ? 2 : 3.2, label: o.label || 'sorted values' }));
   fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
@@ -1414,10 +1424,10 @@ export function exportButtons(container, fig, baseName) {
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
   for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
     mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
-      // The file is named as the script's own language allows: MATLAB runs a
-      // script by its file name, which must be an identifier.
+      // Each language names the file its own way: MATLAB runs a script by
+      // its file name, which must be an identifier.
       const spec = figureSpec(fig, name);
-      download(sanitizeName(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
+      download(w.file(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
     });
   }
   if (fig.wrap && fig.wrap.parentNode === container) container.insertBefore(row, fig.wrap);

@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { matlabScript, rScript, pythonScript, normalizeSpec, sanitizeName } from '../js/io/scripts.js';
+import { matlabScript, rScript, pythonScript, normalizeSpec, sanitizeName, kebabName, SCRIPT_WRITERS } from '../js/io/scripts.js';
 
 const spec = {
   name: 'queue days – estimates/histogram',
@@ -40,8 +40,12 @@ test('normalizeSpec cleans the name, drops unknown kinds, and fills missing limi
   const n = normalizeSpec(spec);
   assert.equal(n.name, 'queue_days_estimates_histogram');
   assert.equal(n.series.length, spec.series.length - 1);
-  assert.equal(sanitizeName('1st-figure'), 'fig_1st_figure');
+  assert.equal(sanitizeName('1st-Figure'), 'fig_1st_figure');
   assert.equal(sanitizeName(''), 'figure');
+  assert.equal(kebabName('Queue days – estimates/Histogram'), 'queue-days-estimates-histogram');
+  assert.equal(SCRIPT_WRITERS.m.file('a b'), 'a_b');
+  assert.equal(SCRIPT_WRITERS.R.file('a b'), 'a-b');
+  assert.equal(SCRIPT_WRITERS.py.file('a b'), 'a-b');
   const rows = normalizeSpec({ name: 'r', yTicks: { at: [3, 2, 1], labels: ['top', 'mid', 'low'] }, series: [] });
   assert.deepEqual(rows.yTicks, { at: [1, 2, 3], labels: ['low', 'mid', 'top'] });
   const auto = normalizeSpec({ name: 'a', series: [{ kind: 'points', x: [1, 3], y: [2, 2] }] });
@@ -57,9 +61,11 @@ test('each script carries the data, the labels, and the save hint', () => {
     assert.ok(s.includes('Replication mean of avg_wait'));
     assert.ok(s.includes('empirical cdf'));
     assert.ok(s.includes('1, 2, 3, ' + nan + ', 5'), 'NaN spelled ' + nan);
-    assert.ok(s.includes('queue_days_estimates_histogram.'));
-    assert.ok(!/[–’]/.test(s), 'typographic characters are replaced');
+    assert.ok(!/[\u2013\u2019]/.test(s), 'typographic characters are replaced');
   }
+  assert.ok(m.includes('queue_days_estimates_histogram.fig'));
+  assert.ok(r.includes('queue-days-estimates-histogram.pdf'));
+  assert.ok(py.includes('queue-days-estimates-histogram.png'));
   assert.ok(m.includes("'design \"two\"'") && m.includes("'it''s 3'"));
   assert.ok(r.includes('"design \\"two\\""') && r.includes('"it\'s 3"'));
   assert.ok(py.includes('"design \\"two\\""'));

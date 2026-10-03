@@ -25,6 +25,7 @@ import {
 import { num, esc, intl, plural, pct, pValue, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { setSectionAvailable } from '../ui/tabs.js';
+import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
 
 /** The page's hash id. */
 export const id = 'explore';
@@ -124,6 +125,9 @@ export function render(root) {
     if (ciSection) ciSection.rebuild();
     if (normSection) normSection.rebuild();
   });
+  // The replication summary is among the data files, and so only the test
+  // table is offered from the results.
+  installExportRow(root, id, { tables: t => !/^replication summary$/i.test(t.name), extra: () => datasetFiles(current()), help: DATA_FILES_HELP });
 }
 
 /** Called each time the page is shown. */

@@ -14,6 +14,7 @@ import { simultaneousMeans, bonferroniFamily, anova, posthoc, planHalfWidthBonfe
 import { subsetSelection } from '../stats/select.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -405,7 +406,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -937,6 +938,7 @@ export function render(root) {
   state.on('settings', () => { if (visible()) schedule(); });
   autoCheck();
   update();
+  installExportRow(root, id);
 }
 
 // Brings back the settings the reader made on this page (kept with the

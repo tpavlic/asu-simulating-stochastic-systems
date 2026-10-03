@@ -11,6 +11,7 @@ import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -330,6 +331,7 @@ export function render(rootEl) {
   refreshSelect();
   resetFor(current());
   update();
+  installExportRow(root, id);
   registerTips(root);
 }
 

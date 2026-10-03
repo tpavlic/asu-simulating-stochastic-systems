@@ -415,6 +415,28 @@ footer a:hover { text-decoration: underline; }
 .xp-pair-row select { min-width: 0; }
 .xp-status { font-size: .86rem; margin: 0 0 4px; }
 @media (prefers-reduced-motion: reduce) { .xp-btn { transition: none; } }
+.xp-row { margin-top: 4px; }
+.xp-row .xp-note[hidden] { display: none; }
+.rp-tools { margin: 0 0 13px; }
+.rp-prov { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 1px 12px; font-size: .76rem; color: var(--muted); margin: 0 0 8px; }
+.rp-prov dt { font-weight: 600; } .rp-prov dd { margin: 0; overflow-wrap: anywhere; }
+.rp-sum { font-size: .86rem; line-height: 1.5; } .rp-sum p { margin: 4px 0; }
+.rp-tbl { margin-top: 8px; }
+.rp-sec .scroll-box { max-height: none; }
+.ss-list { margin: 6px 0 0; padding-left: 18px; font-size: .84rem; line-height: 1.6; }
+/* Printing: the open page as shown, without the navigation, the dataset
+   strip, the figure toolbars, or the export rows. */
+@media print {
+  .pnav, .tab-select, .data-strip, .store-note, .subnav, .tab-subs, .fig-tools, .xp-row, .no-print,
+  #course-nav-footer { display: none !important; }
+  .oa-layout { display: block; }
+  body { background: #fff; padding: 0; }
+  .sec { break-inside: avoid; }
+  .scroll-box { max-height: none; overflow: visible; }
+  /* A wide table shrinks to the page rather than running off it. */
+  .ptab { font-size: 7.5pt; table-layout: auto; }
+  .ptab th, .ptab td { white-space: normal; overflow-wrap: anywhere; padding: 2pt 4pt; }
+}
 /* Replications and Variance pages */
 .rv-cap { font-size: .8rem; color: var(--muted); line-height: 1.5; margin-top: 8px; min-height: 3em; }
 .rv-line { font-size: .86rem; margin: 0 0 6px; min-height: 1.5em; overflow-wrap: anywhere; }
@@ -574,10 +596,11 @@ footer a:hover { text-decoration: underline; }
         <a class="tab" data-tab="steady" href="#steady"><span class="tab-n">⑦</span> <span class="tab-t">Steady State</span></a>
       </div>
     </div>
-    <div class="tab-group" role="group" aria-labelledby="pg-results">
-      <span class="tab-group-lbl" id="pg-results">Results</span>
+    <div class="tab-group" role="group" aria-labelledby="pg-session">
+      <span class="tab-group-lbl" id="pg-session">Session</span>
       <div class="tab-group-items">
-        <a class="tab" data-tab="export" href="#export"><span class="tab-n">⑧</span> <span class="tab-t">Export</span></a>
+        <a class="tab" data-tab="report" href="#report"><span class="tab-n">⑧</span> <span class="tab-t">Report</span></a>
+        <a class="tab" data-tab="storage" href="#storage"><span class="tab-n">⑨</span> <span class="tab-t">Storage</span></a>
       </div>
     </div>
   </nav>
@@ -594,8 +617,9 @@ footer a:hover { text-decoration: underline; }
       <option value="variance">⑥ Variance and Correlation</option>
       <option value="steady">⑦ Steady State</option>
     </optgroup>
-    <optgroup label="Results">
-      <option value="export">⑧ Export</option>
+    <optgroup label="Session">
+      <option value="report">⑧ Report</option>
+      <option value="storage">⑨ Storage</option>
     </optgroup>
   </select>
   <div id="data-strip" class="data-strip" aria-live="polite"><span class="ds-empty">No data loaded yet. Open <a href="#import">Import</a> to load a file or an example.</span></div>
@@ -608,7 +632,8 @@ footer a:hover { text-decoration: underline; }
   <section class="tp" id="tab-several" aria-label="Several Systems"></section>
   <section class="tp" id="tab-variance" aria-label="Variance and Correlation"></section>
   <section class="tp" id="tab-steady" aria-label="Steady State"></section>
-  <section class="tp" id="tab-export" aria-label="Export"></section>
+  <section class="tp" id="tab-report" aria-label="Report"></section>
+  <section class="tp" id="tab-storage" aria-label="Storage"></section>
   <section class="tp" id="tab-gallery" aria-label="Plot Gallery"></section>
   </div>
   </div>
@@ -14700,6 +14725,7 @@ export function buildDatasets(sniffed, mapping) {
 //   { kind: 'rects',    x0, y0, x1, y1, label?, color }
 //   { kind: 'text',     x, y, text, color, anchor?: 'start'|'middle'|'end' }
 // `color` is a CSS hex color. A record with a label appears in the legend.
+// `by` names the application in the scripts' header comment.
 
 const WRAP = 92;
 
@@ -14743,11 +14769,18 @@ function joinNums(a, nan, indent, cont) {
   return lines.join(cont + '\n' + indent);
 }
 
+// A MATLAB script runs by its file name, which must be an identifier.
 function sanitizeName(name) {
-  let s = String(name || 'figure').replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  let s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
   if (!s) s = 'figure';
-  if (!/^[A-Za-z]/.test(s)) s = 'fig_' + s;
+  if (!/^[a-z]/.test(s)) s = 'fig_' + s;
   return s.slice(0, 60);
+}
+
+// R and Python scripts take the same hyphenated name as the figure's images.
+function kebabName(name) {
+  const s = String(name || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (s || 'figure').slice(0, 60);
 }
 
 function dashOf(rec) { return rec.dash === 'dotted' ? 'dotted' : rec.dash ? 'dashed' : 'solid'; }
@@ -14762,6 +14795,8 @@ export function normalizeSpec(spec) {
   if (!spec || typeof spec !== 'object') throw new TypeError('a figure spec is required');
   const out = Object.assign({}, spec);
   out.name = sanitizeName(spec.name);
+  out.file = kebabName(spec.name);
+  out.by = spec.by || 'the Output Analyzer';
   out.series = Array.isArray(spec.series) ? spec.series.filter(r => r && SERIES_KINDS.has(r.kind)) : [];
   if (!isLim(out.xlim)) out.xlim = autoLim(out.series, 'x');
   if (!isLim(out.ylim)) out.ylim = autoLim(out.series, 'y');
@@ -14808,7 +14843,7 @@ export function matlabScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('% ' + plain(s.title || s.name));
-  L.push('% Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('% Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('% script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   L.push("fig = figure('Color', 'w');");
@@ -14911,7 +14946,7 @@ export function rScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('# ' + plain(s.title || s.name));
-  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('# script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   const leg = { labels: [], col: [], pch: [], lty: [], lwd: [], fill: [] };
@@ -14997,7 +15032,7 @@ export function rScript(spec) {
     L.push('       pch = c(' + leg.pch.join(', ') + '), lty = c(' + leg.lty.join(', ') + '), lwd = c(' + leg.lwd.join(', ') + '),');
     L.push('       fill = c(' + leg.fill.join(', ') + '), border = NA, bty = "n", pt.bg = "white")');
   }
-  L.push('# dev.copy(pdf, ' + rStr(s.name + '.pdf') + '); dev.off()');
+  L.push('# dev.copy(pdf, ' + rStr(s.file + '.pdf') + '); dev.off()');
   return L.join('\n') + '\n';
 }
 
@@ -15017,7 +15052,7 @@ export function pythonScript(spec) {
   const s = normalizeSpec(spec);
   const L = [];
   L.push('# ' + plain(s.title || s.name));
-  L.push('# Written by the Output Analyzer. The data are embedded below, and so this');
+  L.push('# Written by ' + plain(s.by) + '. The data are embedded below, and so this');
   L.push('# script stands alone; edit the plotting calls to restyle the figure.');
   L.push('');
   L.push('import numpy as np');
@@ -15103,19 +15138,19 @@ export function pythonScript(spec) {
   if (s.title) L.push('ax.set_title(' + pyStr(s.title) + ')');
   if (legendItems) L.push('ax.legend()');
   L.push('fig.tight_layout()');
-  L.push('# fig.savefig(' + pyStr(s.name + '.png') + ', dpi=200)');
+  L.push('# fig.savefig(' + pyStr(s.file + '.png') + ', dpi=200)');
   L.push('plt.show()');
   return L.join('\n') + '\n';
 }
 
-/** The three writers by file extension. */
+/** The three writers by file extension, each with its file-name rule. */
 export const SCRIPT_WRITERS = {
-  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab' },
-  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r' },
-  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python' }
+  m: { label: 'M', name: 'MATLAB', write: matlabScript, mime: 'text/x-matlab', file: sanitizeName },
+  R: { label: 'R', name: 'R', write: rScript, mime: 'text/x-r', file: kebabName },
+  py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python', file: kebabName }
 };
 
-export { sanitizeName };
+export { sanitizeName, kebabName };
 </script>
 <script type="text/plain" data-module="js/main.js">
 // Boot: renders every page into its section, wires the page navigation and
@@ -15139,7 +15174,8 @@ import * as twoPage from './pages/two.js';
 import * as severalPage from './pages/several.js';
 import * as variancePage from './pages/variance.js';
 import * as steadyPage from './pages/steady.js';
-import * as exportPage from './pages/export.js';
+import * as reportPage from './pages/report.js';
+import * as storagePage from './pages/storage.js';
 import * as galleryPage from './pages/gallery.js';
 
 // A page module may export its id, title, render, and onShow by name, or as
@@ -15158,7 +15194,7 @@ function pageOf(mod) {
   };
 }
 
-const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, exportPage, galleryPage].map(pageOf);
+const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, galleryPage].map(pageOf);
 const BY_ID = new Map(PAGES.map(p => [p.id, p]));
 
 function renderDataStrip() {
@@ -15183,7 +15219,7 @@ function renderDataStrip() {
 // with the tooltip saying what is missing, and goes gray again if a removal
 // takes the requirement away while that page is open.
 const GATES = [
-  { pages: ['explore', 'one', 'variance', 'export'],
+  { pages: ['explore', 'one', 'variance', 'report'],
     ok: () => state.datasets.length > 0,
     tip: 'Load a file or an example on the Import page first.' },
   { pages: ['two', 'several'],
@@ -15280,6 +15316,7 @@ import {
 import { num, esc, intl, plural, pct, pValue, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { setSectionAvailable } from '../ui/tabs.js';
+import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
 
 /** The page's hash id. */
 export const id = 'explore';
@@ -15379,6 +15416,9 @@ export function render(root) {
     if (ciSection) ciSection.rebuild();
     if (normSection) normSection.rebuild();
   });
+  // The replication summary is among the data files, and so only the test
+  // table is offered from the results.
+  installExportRow(root, id, { tables: t => !/^replication summary$/i.test(t.name), extra: () => datasetFiles(current()), help: DATA_FILES_HELP });
 }
 
 /** Called each time the page is shown. */
@@ -15995,596 +16035,6 @@ function buildNormality(api, { ds, estF }) {
 }
 
 export default { id, title, sections, render, onShow };
-</script>
-<script type="text/plain" data-module="js/pages/export.js">
-// The Export page: CSV files of the loaded data (the observations, one row
-// per replication, and the pilot-ready columns a sample-size planner reads),
-// CSV files of every result an analysis page has computed, a printable
-// summary in a new window or as plain text, and the session-restore status.
-// Every CSV starts with `#` lines carrying the choices that produced it.
-
-import * as state from '../state.js';
-import { repEstimates, repIds, canInfer, datasetSummary } from '../data/model.js';
-import {
-  observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText
-} from '../io/export.js';
-import { matchPairs } from '../stats/compare.js';
-import { KIND_LABEL, datasetSelect, details } from '../ui/widgets.js';
-import { registerTips } from '../ui/tooltip.js';
-import { esc, intl, num, plural } from '../ui/format.js';
-import { sessionStatus, forgetSession, MAX_CHARS } from '../ui/session.js';
-
-// A table name follows "Download" mid-sentence, and so its first letter is
-// lowered unless the first word is an acronym (ANOVA) or a person's name.
-function lowerFirst(s) {
-  s = String(s);
-  if (/^(Pearson|Welch|Tukey|Bonferroni|Dunnett|Fisher|Rinott)\b/.test(s)) return s;
-  return /^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
-}
-
-/** The page's hash id. */
-export const id = 'export';
-/** The page's title. */
-export const title = 'Export';
-
-// Results are listed in the order the pages appear in the navigation; a page
-// not named here follows, in the order its result arrived.
-const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'variance', 'steady'];
-
-const ESTIMATE_LABEL = {
-  tally: 'replication mean',
-  time: 'time-weighted replication mean',
-  reps: 'one value per replication'
-};
-
-const PILOT_TIP = 'One bare numeric column of replication estimates, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
-const PAIRED_TIP = 'Two matched columns, read as a paired pilot.';
-const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
-
-let el = null;               // the page's live elements
-let pairA = null, pairB = null;
-const seenAt = new Map();    // page id -> when its current result arrived
-
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-function stamp(d) {
-  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
-    pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-}
-
-function slug(s) {
-  const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return (t || 'data').slice(0, 60);
-}
-
-function truncationText(ds) {
-  const tr = ds.derivedFrom && ds.derivedFrom.truncate;
-  if (!tr) return undefined;
-  const what = ds.kind === 'time' ? 'records' : 'observations';
-  return tr.by === 'time'
-    ? what + ' before time ' + tr.at + ' removed'
-    : 'first ' + tr.at + ' ' + what + ' of each replication removed';
-}
-
-function derivedName(ds) {
-  if (!ds.derivedFrom) return undefined;
-  const parent = state.get(ds.derivedFrom.id);
-  return parent ? parent.name : ds.derivedFrom.id;
-}
-
-function finiteCount(ds) {
-  let n = 0;
-  for (const v of repEstimates(ds)) if (Number.isFinite(v)) n++;
-  return n;
-}
-
-// The `#` lines every data file carries: what the dataset is, where it came
-// from, and how it was derived when it was truncated.
-function dsProvenance(ds, extra) {
-  const p = {
-    dataset: ds.name,
-    kind: KIND_LABEL[ds.kind] || ds.kind,
-    response: ds.response,
-    replications: ds.reps.length
-  };
-  if (ds.source && ds.source.file) p['source file'] = ds.source.file;
-  if (ds.derivedFrom) {
-    p['derived from'] = derivedName(ds);
-    p.truncation = truncationText(ds);
-  }
-  Object.assign(p, extra || {});
-  p.exported = stamp(new Date());
-  return p;
-}
-
-// ── Data card ─────────────────────────────────────────────────────────
-
-function dataButtons(ds) {
-  const pilotOk = finiteCount(ds) >= 2;
-  const b = [];
-  b.push('<button type="button" class="xp-btn" data-act="obs">Observations CSV</button>');
-  if (ds.kind !== 'time') {
-    b.push('<button type="button" class="xp-btn" data-act="obs1" data-tip="' + esc(ONECOL_TIP) + '" data-tip-press>Observations, one column</button>');
-  }
-  b.push('<button type="button" class="xp-btn" data-act="reps">Replication summary CSV</button>');
-  b.push('<button type="button" class="xp-btn" data-act="pilot"' + (pilotOk ? '' : ' disabled') +
-    ' data-tip="' + esc(PILOT_TIP) + '" data-tip-press>Pilot-ready CSV</button>');
-  return b.join('');
-}
-
-function renderDataList() {
-  const list = el.dataList;
-  if (!state.datasets.length) {
-    list.innerHTML = '<p class="muted-line">No data loaded. Load a file, paste data, or open an example on the <a href="#import">Import</a> page.</p>';
-    return;
-  }
-  list.innerHTML = state.datasets.map(ds => {
-    const meta = [KIND_LABEL[ds.kind] || ds.kind, 'R = ' + intl(ds.reps.length)];
-    if (ds.derivedFrom) meta.push('derived from ' + derivedName(ds));
-    const noPilot = finiteCount(ds) < 2
-      ? '<span class="xp-prov">A pilot needs at least two replication estimates, and this dataset has ' + intl(finiteCount(ds)) + '.</span>'
-      : '';
-    return '<div class="xp-item" data-ds="' + esc(ds.id) + '">' +
-      '<div class="xp-id"><span class="xp-name">' + esc(ds.name) + '</span><span class="xp-meta">' + esc(meta.join(' · ')) + '</span></div>' +
-      '<div class="xp-btns">' + dataButtons(ds) + '</div>' + noPilot + '</div>';
-  }).join('');
-}
-
-function onDataClick(ev) {
-  const btn = ev.target.closest('button[data-act]');
-  if (!btn || btn.disabled) return;
-  const row = btn.closest('[data-ds]');
-  const ds = row && state.get(row.getAttribute('data-ds'));
-  if (!ds) return;
-  const base = slug(ds.name);
-  const act = btn.getAttribute('data-act');
-  if (act === 'obs') {
-    downloadText(base + '_observations.csv', observationsCsv(ds, dsProvenance(ds), { full: true }));
-  } else if (act === 'obs1') {
-    downloadText(base + '_observations_column.csv', observationsCsv(ds, dsProvenance(ds)));
-  } else if (act === 'reps') {
-    downloadText(base + '_replications.csv', repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] })));
-  } else if (act === 'pilot') {
-    downloadText(base + '_pilot.csv', pilotCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind], form: 'pilot data, one column' })));
-  }
-}
-
-// The replications of A and B matched by id, keeping only the pairs where
-// both estimates are finite, as the two vectors the paired pilot writes.
-function pairedVectors(a, b) {
-  const m = matchPairs(repIds(a), repIds(b), 'id');
-  const ea = repEstimates(a), eb = repEstimates(b);
-  const xa = [], xb = [];
-  let missing = 0;
-  for (const [i, j] of m.pairs) {
-    if (Number.isFinite(ea[i]) && Number.isFinite(eb[j])) { xa.push(ea[i]); xb.push(eb[j]); } else missing++;
-  }
-  return { xa: Float64Array.from(xa), xb: Float64Array.from(xb), unmatchedA: m.unmatchedA.length, unmatchedB: m.unmatchedB.length, missing };
-}
-
-function pairState() {
-  const a = state.get(pairA ? pairA.value() : '');
-  const b = state.get(pairB ? pairB.value() : '');
-  if (!a || !b) return { ok: false, msg: state.datasets.length ? 'Choose two datasets with at least two replication estimates each.' : '' };
-  if (a.id === b.id) return { ok: false, msg: 'Choose two different datasets.' };
-  const v = pairedVectors(a, b);
-  const unmatched = v.unmatchedA + v.unmatchedB;
-  let msg = plural(v.xa.length, 'pair') + ' matched by replication id';
-  if (unmatched) msg += '; ' + plural(unmatched, 'replication') + ' without a partner left out (' + intl(v.unmatchedA) + ' in A, ' + intl(v.unmatchedB) + ' in B)';
-  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing estimate left out';
-  msg += '.';
-  if (v.xa.length < 2) return { ok: false, msg: msg + ' A paired pilot needs at least two pairs.' };
-  return { ok: true, msg, a, b, v };
-}
-
-function refreshPair() {
-  const s = pairState();
-  el.pairBtn.disabled = !s.ok;
-  el.pairNote.textContent = s.msg;
-}
-
-function downloadPaired() {
-  const s = pairState();
-  if (!s.ok) return;
-  const { a, b, v } = s;
-  const prov = {
-    'dataset A': a.name,
-    'dataset B': b.name,
-    kind: a.kind === b.kind ? (KIND_LABEL[a.kind] || a.kind) : (KIND_LABEL[a.kind] || a.kind) + ' (A), ' + (KIND_LABEL[b.kind] || b.kind) + ' (B)',
-    estimate: a.kind === b.kind ? ESTIMATE_LABEL[a.kind] : ESTIMATE_LABEL[a.kind] + ' (A), ' + ESTIMATE_LABEL[b.kind] + ' (B)',
-    'matched by': 'replication id',
-    pairs: v.xa.length,
-    'unmatched replications': v.unmatchedA + v.unmatchedB + ' (' + v.unmatchedA + ' in A, ' + v.unmatchedB + ' in B)'
-  };
-  if (v.missing) prov['pairs with a missing estimate'] = v.missing;
-  if (a.derivedFrom) { prov['A derived from'] = derivedName(a); prov['A truncation'] = truncationText(a); }
-  if (b.derivedFrom) { prov['B derived from'] = derivedName(b); prov['B truncation'] = truncationText(b); }
-  prov.form = 'pilot data, two matched columns';
-  prov.exported = stamp(new Date());
-  downloadText('paired_pilot_' + slug(a.name) + '_vs_' + slug(b.name) + '.csv', pilotCsv([v.xa, v.xb], prov));
-}
-
-// ── Results card ──────────────────────────────────────────────────────
-
-function currentResults() {
-  const keys = Object.keys(state.results).filter(k => state.results[k]);
-  keys.sort((x, y) => {
-    const ix = PAGE_ORDER.indexOf(x), iy = PAGE_ORDER.indexOf(y);
-    return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
-  });
-  return keys.map(k => ({ pageId: k, r: state.results[k], at: seenAt.get(k) || null }));
-}
-
-function resultProvenance(item, table) {
-  const p = {};
-  if (table) p.table = table.name;
-  p.result = item.r.title;
-  if (item.at) p.computed = stamp(item.at);
-  Object.assign(p, item.r.provenance || {});
-  return p;
-}
-
-function tableBlock(item, t) {
-  return tableCsv(t.headers || [], t.rows || [], resultProvenance(item, t));
-}
-
-function provText(prov) {
-  return Object.entries(prov || {}).filter(([, v]) => v !== undefined)
-    .map(([k, v]) => k + ': ' + (Array.isArray(v) ? v.join(', ') : String(v))).join(' · ');
-}
-
-function renderResults() {
-  const items = currentResults();
-  el.allBtn.disabled = !items.some(it => (it.r.tables || []).length);
-  el.printBtn.disabled = !state.datasets.length && !items.length;
-  el.copyBtn.disabled = el.printBtn.disabled;
-  if (!items.length) {
-    el.resList.innerHTML = '<p class="muted-line">No results yet. Each analysis page adds its tables here as soon as it computes them.</p>';
-    return;
-  }
-  el.resList.innerHTML = items.map(it => {
-    const tables = it.r.tables || [];
-    const btns = tables.map((t, i) => '<button type="button" class="xp-btn" data-page="' + esc(it.pageId) + '" data-table="' + i + '">Download ' + esc(lowerFirst(t.name)) + '</button>').join('');
-    const when = it.at ? 'computed ' + it.at.toLocaleTimeString() : '';
-    const prov = provText(it.r.provenance);
-    return '<div class="xp-item">' +
-      '<div class="xp-id"><span class="xp-name">' + esc(it.r.title) + '</span>' + (when ? '<span class="xp-meta">' + esc(when) + '</span>' : '') + '</div>' +
-      '<div class="xp-btns">' + (btns || '<span class="xp-meta">No tables</span>') + '</div>' +
-      (prov ? '<span class="xp-prov">' + esc(prov) + '</span>' : '') + '</div>';
-  }).join('');
-}
-
-function onResultClick(ev) {
-  const btn = ev.target.closest('button[data-page]');
-  if (!btn) return;
-  const pageId = btn.getAttribute('data-page');
-  const r = state.results[pageId];
-  const t = r && r.tables && r.tables[Number(btn.getAttribute('data-table'))];
-  if (!t) return;
-  const item = { pageId, r, at: seenAt.get(pageId) || null };
-  const body = provenanceLines({ exported: stamp(new Date()) }).join('\n') + '\n' + tableBlock(item, t);
-  downloadText(slug(pageId) + '_' + slug(t.name) + '.csv', body);
-}
-
-function downloadAll() {
-  const blocks = [];
-  for (const it of currentResults()) for (const t of it.r.tables || []) blocks.push(tableBlock(it, t));
-  if (!blocks.length) return;
-  const head = provenanceLines({ exported: stamp(new Date()), tables: blocks.length }).join('\n') + '\n';
-  downloadText('output_analyzer_results.csv', head + '\n' + blocks.join('\n'));
-}
-
-// ── Printable summary ─────────────────────────────────────────────────
-
-function datasetRows() {
-  return state.datasets.map(ds => {
-    const s = datasetSummary(ds);
-    return [
-      ds.name,
-      KIND_LABEL[ds.kind] || ds.kind,
-      s.nReps,
-      s.nObs,
-      s.est ? num(s.est.mean, 5) : '–',
-      ds.derivedFrom ? derivedName(ds) + ' (' + truncationText(ds) + ')' : ''
-    ];
-  });
-}
-const DATASET_HEADERS = ['Dataset', 'Kind', 'Replications', 'Observations', 'Mean of estimates', 'Derived from'];
-
-function htmlTable(headers, rows) {
-  return '<table><thead><tr>' + headers.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
-    rows.map(r => '<tr>' + r.map(c => '<td>' + esc(typeof c === 'number' ? num(c, 6) : (c == null ? '' : c)) + '</td>').join('') + '</tr>').join('') +
-    '</tbody></table>';
-}
-
-function provList(prov) {
-  const rows = Object.entries(prov).filter(([, v]) => v !== undefined);
-  if (!rows.length) return '';
-  return '<dl class="prov">' + rows.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(Array.isArray(v) ? v.join(', ') : String(v)) + '</dd>').join('') + '</dl>';
-}
-
-function summaryBodyHtml(now) {
-  let h = '<h1>Output Analyzer summary</h1><p class="date">' + esc(stamp(now)) + '</p>';
-  h += '<h2>Loaded datasets</h2>';
-  h += state.datasets.length ? htmlTable(DATASET_HEADERS, datasetRows()) : '<p>No data loaded.</p>';
-  const items = currentResults();
-  for (const it of items) {
-    h += '<section class="res"><h2>' + esc(it.r.title) + '</h2>';
-    const prov = Object.assign(it.at ? { computed: stamp(it.at) } : {}, it.r.provenance || {});
-    h += provList(prov);
-    if (it.r.summaryHtml) h += '<div class="sum">' + it.r.summaryHtml + '</div>';
-    else for (const t of it.r.tables || []) h += '<h3>' + esc(t.name) + '</h3>' + htmlTable(t.headers || [], t.rows || []);
-    h += '</section>';
-  }
-  if (!items.length) h += '<p>No analysis results yet.</p>';
-  return h;
-}
-
-const PRINT_CSS = [
-  'html, body { background: #fff; color: #000; }',
-  'body { font: 11pt/1.4 "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 18mm 16mm; max-width: 180mm; }',
-  '* { color: #000 !important; background: transparent !important; box-shadow: none !important; }',
-  'h1 { font-size: 16pt; margin: 0 0 2pt; } h2 { font-size: 13pt; margin: 16pt 0 4pt; } h3 { font-size: 11pt; margin: 10pt 0 3pt; }',
-  '.date { margin: 0 0 8pt; }',
-  'table { border-collapse: collapse; margin: 4pt 0 8pt; font-size: 10pt; }',
-  'th, td { border: 0.5pt solid #000; padding: 2pt 6pt; text-align: left; vertical-align: top; }',
-  'th { font-weight: 700; }',
-  'dl.prov { display: grid; grid-template-columns: max-content 1fr; gap: 0 10pt; font-size: 9pt; margin: 0 0 6pt; }',
-  'dl.prov dt { font-weight: 700; } dl.prov dd { margin: 0; }',
-  'section.res { break-inside: avoid-page; }',
-  '.tools { margin: 0 0 12pt; } .tools button { font: inherit; padding: 4pt 12pt; cursor: pointer; }',
-  '@media print { .tools { display: none; } body { margin: 0; } }'
-].join('\n');
-
-function openPrintable() {
-  const now = new Date();
-  const w = window.open('', '_blank');
-  if (!w) {
-    el.printNote.textContent = 'The browser blocked the new window. Allow pop-ups for this page, or copy the summary as text instead.';
-    return;
-  }
-  el.printNote.textContent = '';
-  const doc = w.document;
-  doc.open();
-  doc.write('<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
-    '<title>Output Analyzer summary</title><style>' + PRINT_CSS + '</style></head><body>' +
-    '<div class="tools"><button type="button" id="print-btn">Print</button></div>' +
-    summaryBodyHtml(now) + '</body></html>');
-  doc.close();
-  const b = doc.getElementById('print-btn');
-  if (b) b.addEventListener('click', () => w.print());
-}
-
-// Plain text from summary markup: one line per block, table rows as
-// tab-separated cells, and so a pasted table lands in spreadsheet columns.
-function htmlToText(html) {
-  const doc = new DOMParser().parseFromString('<!DOCTYPE html><body>' + html + '</body>', 'text/html');
-  const lines = [];
-  let cur = '';
-  const BLOCK = /^(P|DIV|SECTION|H[1-6]|LI|UL|OL|TABLE|THEAD|TBODY|DL|DT|DD|CAPTION|FIGURE|FIGCAPTION|BLOCKQUOTE|PRE)$/;
-  const flush = () => { const t = cur.replace(/[ \t \r\n]+/g, ' ').trim(); if (t) lines.push(t); cur = ''; };
-  const walk = n => {
-    if (n.nodeType === 3) { cur += n.nodeValue; return; }
-    if (n.nodeType !== 1) return;
-    const tag = n.tagName;
-    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'svg' || tag === 'SVG') return;
-    if (tag === 'BR') { flush(); return; }
-    if (tag === 'TR') {
-      flush();
-      lines.push(Array.from(n.children).map(c => c.textContent.replace(/\s+/g, ' ').trim()).join('\t'));
-      return;
-    }
-    const block = BLOCK.test(tag);
-    if (block) flush();
-    for (const c of n.childNodes) walk(c);
-    if (block) flush();
-  };
-  walk(doc.body);
-  flush();
-  return lines.join('\n');
-}
-
-function textTable(headers, rows) {
-  const cell = c => (typeof c === 'number' ? num(c, 6) : (c == null ? '' : String(c)));
-  return [headers.map(cell).join('\t')].concat(rows.map(r => r.map(cell).join('\t'))).join('\n');
-}
-
-function summaryText(now) {
-  const out = ['Output Analyzer summary', stamp(now), '', 'Loaded datasets'];
-  out.push(state.datasets.length ? textTable(DATASET_HEADERS, datasetRows()) : 'No data loaded.');
-  const items = currentResults();
-  for (const it of items) {
-    out.push('', it.r.title);
-    const prov = Object.assign(it.at ? { computed: stamp(it.at) } : {}, it.r.provenance || {});
-    for (const [k, v] of Object.entries(prov)) if (v !== undefined) out.push(k + ': ' + (Array.isArray(v) ? v.join(', ') : String(v)));
-    if (it.r.summaryHtml) out.push(htmlToText(it.r.summaryHtml));
-    else for (const t of it.r.tables || []) out.push('', t.name, textTable(t.headers || [], t.rows || []));
-  }
-  if (!items.length) out.push('', 'No analysis results yet.');
-  return out.join('\n') + '\n';
-}
-
-async function writeClipboard(text) {
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (err) {
-    // A denied permission or an unfocused document; the fallback below
-    // copies through a selection instead.
-  }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.top = '-1000px';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    ta.remove();
-    return ok;
-  } catch (err) {
-    return false;
-  }
-}
-
-let copyTimer = null;
-async function copySummary() {
-  const btn = el.copyBtn;
-  const ok = await writeClipboard(summaryText(new Date()));
-  // Holding the width keeps the shorter label from pulling the row in.
-  btn.style.minWidth = btn.offsetWidth + 'px';
-  btn.textContent = ok ? 'Copied' : 'Copy failed';
-  clearTimeout(copyTimer);
-  copyTimer = setTimeout(() => { btn.textContent = 'Copy summary as text'; btn.style.minWidth = ''; }, 2000);
-}
-
-// ── Session card ──────────────────────────────────────────────────────
-
-function sizeText(chars) {
-  if (chars >= 1024 * 1024) return (chars / (1024 * 1024)).toFixed(1) + ' MB';
-  return Math.max(1, Math.round(chars / 1024)) + ' KB';
-}
-
-function renderSession() {
-  const s = sessionStatus();
-  el.sessStatus.textContent = s.available
-    ? 'Session restore is on: data stays in this browser until you forget it.'
-    : 'Session restore is unavailable in this context: data stays in memory until the page is closed.';
-  const lines = [];
-  if (s.restored) lines.push('Restored ' + plural(s.restored, 'dataset') + ' from the last visit.');
-  if (s.dropped) lines.push(plural(s.dropped, 'stored dataset', 'stored datasets') + ' could not be read and ' + (s.dropped === 1 ? 'was' : 'were') + ' dropped.');
-  if (s.skipped === 'too-large') {
-    lines.push('The loaded data come to ' + sizeText(s.chars) + ', over the ' + sizeText(MAX_CHARS) + ' that session restore keeps, and so they will not come back after a reload.');
-  } else if (s.skipped === 'write-failed') {
-    lines.push('The browser refused to store this session (its storage is full or blocked), and so it will not come back after a reload.');
-  } else if (s.available && s.saved && state.datasets.length) {
-    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ' and the confidence level, ' + sizeText(s.chars) + '.');
-  } else if (s.available) {
-    lines.push('Nothing is stored: no data are loaded.');
-  }
-  el.sessSize.textContent = lines.join(' ');
-  el.forgetBtn.disabled = !state.datasets.length && !s.saved;
-}
-
-/**
- * Renders the page into its section.
- * @param {HTMLElement} root
- */
-export function render(root) {
-  root.innerHTML =
-    '<h2>' + title + '</h2>' +
-    '<p class="lede">Download the loaded data, their replication summaries, and every result table as CSV files, or open a printable summary of the analyses. Every file starts with <code>#</code> lines that record the choices behind it (the dataset, the confidence level, any truncation, and the number of comparisons adjusted for) so that a result can be traced back to its data and settings.</p>' +
-
-    '<div class="sec"><div class="sec-hd">Data</div>' +
-    '<p class="exp-note">One row per loaded dataset. A pilot-ready file holds one numeric column of replication estimates, which a sample-size planner reads as pilot data.</p>' +
-    '<div class="xp-list" id="xp-data"></div>' +
-    '<div class="xp-pair">' +
-    '<div class="ctrl-grp-lbl">Paired pilot</div>' +
-    '<div class="ctrl-row xp-pair-row">' +
-    '<span class="ctrl-pair"><label class="ctrl-lbl" for="xp-pa">A</label><select id="xp-pa"></select></span>' +
-    '<span class="ctrl-pair"><label class="ctrl-lbl" for="xp-pb">B</label><select id="xp-pb"></select></span>' +
-    '<button type="button" class="xp-btn" id="xp-pair-btn" data-tip="' + esc(PAIRED_TIP) + '" data-tip-press>Paired pilot CSV</button>' +
-    '</div>' +
-    '<p class="muted-line" id="xp-pair-note" aria-live="polite"></p>' +
-    '</div></div>' +
-
-    '<div class="sec"><div class="sec-hd">Results</div>' +
-    '<p class="exp-note">The latest result of each analysis page, with one file per table. The combined file holds every table, each after a <code># table:</code> line and its own <code>#</code> lines.</p>' +
-    '<div class="xp-list" id="xp-res"></div>' +
-    '<div class="xp-btns xp-all"><button type="button" class="btn-run2" id="xp-all">Download all results (one CSV)</button></div>' +
-    '</div>' +
-
-    '<div class="sec"><div class="sec-hd">Printable summary</div>' +
-    '<p class="exp-note">The loaded datasets and every result on one plain page, each result preceded by the choices that produced it.</p>' +
-    '<div class="xp-btns"><button type="button" class="btn-run2" id="xp-print">Open printable summary</button>' +
-    '<button type="button" class="btn-run2" id="xp-copy">Copy summary as text</button></div>' +
-    '<p class="muted-line" id="xp-print-note" aria-live="polite"></p>' +
-    '</div>' +
-
-    '<div class="sec"><div class="sec-hd">Session</div>' +
-    '<p class="xp-status" id="xp-sess"></p>' +
-    '<p class="muted-line" id="xp-sess-size" aria-live="polite"></p>' +
-    '<div class="xp-btns"><button type="button" class="btn-clear" id="xp-forget">Forget this session</button></div>' +
-    '</div>' +
-
-    '<p class="exp-note">Plots are exported from their own SVG and PNG buttons, above each figure&rsquo;s top-right corner.</p>';
-
-  const q = s => root.querySelector(s);
-  el = {
-    root,
-    dataList: q('#xp-data'),
-    pairBtn: q('#xp-pair-btn'),
-    pairNote: q('#xp-pair-note'),
-    resList: q('#xp-res'),
-    allBtn: q('#xp-all'),
-    printBtn: q('#xp-print'),
-    copyBtn: q('#xp-copy'),
-    printNote: q('#xp-print-note'),
-    sessStatus: q('#xp-sess'),
-    sessSize: q('#xp-sess-size'),
-    forgetBtn: q('#xp-forget')
-  };
-  el.dataList.insertAdjacentElement('afterend', details('What each data file holds',
-    '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times, because each value counts in proportion to how long it holds.</p>' +
-    '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
-    '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its estimate (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
-    '<p><strong>Pilot-ready CSV</strong>: one column of replication estimates under the header <code>mean</code>. <strong>Paired pilot CSV</strong>: two columns, <code>mean_A</code> and <code>mean_B</code>, holding the estimates of replications with the same id in both datasets, as common random numbers would pair them. A replication without a partner is left out, and the count left out is in the file&rsquo;s <code>#</code> lines.</p>'));
-
-  const pilotFilter = ds => canInfer(ds).ok;
-  pairA = datasetSelect(q('#xp-pa'), { filter: pilotFilter });
-  pairB = datasetSelect(q('#xp-pb'), { filter: pilotFilter });
-  // Start B on a different dataset from A when there is one.
-  const choosePairDefaults = () => {
-    const opts = Array.from(q('#xp-pb').options).filter(o => o.value);
-    if (q('#xp-pb').value === q('#xp-pa').value && opts.length > 1) {
-      const other = opts.find(o => o.value !== q('#xp-pa').value);
-      if (other) { q('#xp-pb').value = other.value; q('#xp-pb').dispatchEvent(new Event('change', { bubbles: true })); }
-    }
-  };
-  q('#xp-pa').addEventListener('change', refreshPair);
-  q('#xp-pb').addEventListener('change', refreshPair);
-
-  el.dataList.addEventListener('click', onDataClick);
-  el.pairBtn.addEventListener('click', downloadPaired);
-  el.resList.addEventListener('click', onResultClick);
-  el.allBtn.addEventListener('click', downloadAll);
-  el.printBtn.addEventListener('click', openPrintable);
-  el.copyBtn.addEventListener('click', copySummary);
-  el.forgetBtn.addEventListener('click', () => { forgetSession(); refreshAll(); });
-
-  state.on('datasets', () => { choosePairDefaults(); refreshAll(); });
-  state.on('results', ({ pageId } = {}) => {
-    if (pageId) {
-      if (state.results[pageId]) seenAt.set(pageId, (state.results[pageId].computedAt instanceof Date) ? state.results[pageId].computedAt : new Date());
-      else seenAt.delete(pageId);
-    }
-    renderResults();
-  });
-  state.on('session', renderSession);
-
-  choosePairDefaults();
-  refreshAll();
-}
-
-function refreshAll() {
-  if (!el) return;
-  renderDataList();
-  refreshPair();
-  renderResults();
-  renderSession();
-  registerTips(el.root);
-}
-
-/** Called each time the page is shown. */
-export function onShow() {
-  refreshAll();
-}
-
-export default { id, title, render, onShow };
 </script>
 <script type="text/plain" data-module="js/pages/gallery.js">
 // A page reachable only at #gallery that draws every plot type and every
@@ -17553,6 +17003,7 @@ import { summary } from '../stats/descriptive.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, esc, dash } from '../ui/format.js';
 
@@ -17719,7 +17170,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -17837,6 +17288,7 @@ export function render(rootEl) {
   });
 
   draw();
+  installExportRow(root, id);
   registerTips(root);
 }
 
@@ -18008,7 +17460,7 @@ function draw() {
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti, ds, pooled });
 
-  // Results for the Export page.
+  // The page's result, for its export row and the Report page.
   const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
   const intervalRows = [
     ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['se', s.se], ['min', s.min], ['q1', s.q1],
@@ -18210,6 +17662,221 @@ export function onShow() {
 
 export default { id, title, render, onShow };
 </script>
+<script type="text/plain" data-module="js/pages/report.js">
+// The Report page: the loaded datasets and the latest result of every
+// analysis page on one page, each result preceded by the choices that
+// produced it, with buttons to print it (the print stylesheet drops the
+// navigation), copy it as text, or download every result table as one CSV.
+
+import * as state from '../state.js';
+import { datasetSummary } from '../data/model.js';
+import { provenanceLines, downloadText } from '../io/export.js';
+import { KIND_LABEL } from '../ui/widgets.js';
+import { esc, num } from '../ui/format.js';
+import { stamp, truncationText, derivedName, tableBlock } from '../ui/exportrow.js';
+
+/** The page's hash id. */
+export const id = 'report';
+/** The page's title. */
+export const title = 'Report';
+
+// Results are listed in the order the pages appear in the navigation; a page
+// not named here follows, in the order its result arrived.
+const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'variance', 'steady'];
+
+let el = null;
+
+function currentResults() {
+  const keys = Object.keys(state.results).filter(k => state.results[k]);
+  keys.sort((x, y) => {
+    const ix = PAGE_ORDER.indexOf(x), iy = PAGE_ORDER.indexOf(y);
+    return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
+  });
+  return keys.map(k => ({ pageId: k, r: state.results[k] }));
+}
+
+function datasetRows() {
+  return state.datasets.map(ds => {
+    const s = datasetSummary(ds);
+    return [
+      ds.name,
+      KIND_LABEL[ds.kind] || ds.kind,
+      s.nReps,
+      s.nObs,
+      s.est ? num(s.est.mean, 5) : '–',
+      ds.derivedFrom ? derivedName(ds) + ' (' + truncationText(ds) + ')' : ''
+    ];
+  });
+}
+const DATASET_HEADERS = ['Dataset', 'Kind', 'Replications', 'Observations', 'Mean of estimates', 'Derived from'];
+
+function htmlTable(headers, rows) {
+  return '<div class="scroll-box"><table class="ptab"><thead><tr>' + headers.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => '<td>' + esc(typeof c === 'number' ? num(c, 6) : (c == null ? '' : c)) + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table></div>';
+}
+
+function provEntries(r) {
+  const p = r.computedAt instanceof Date ? { computed: stamp(r.computedAt) } : {};
+  Object.assign(p, r.provenance || {});
+  return Object.entries(p).filter(([, v]) => v !== undefined).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)]);
+}
+
+function provList(r) {
+  const rows = provEntries(r);
+  if (!rows.length) return '';
+  return '<dl class="rp-prov">' + rows.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>';
+}
+
+function summaryHtml(now) {
+  let h = '<div class="sec rp-sec"><div class="sec-hd">Loaded datasets</div><p class="muted-line">' + esc(stamp(now)) + '</p>';
+  h += state.datasets.length ? htmlTable(DATASET_HEADERS, datasetRows()) : '<p class="muted-line">No data loaded.</p>';
+  h += '</div>';
+  const items = currentResults();
+  for (const it of items) {
+    h += '<div class="sec rp-sec"><div class="sec-hd">' + esc(it.r.title) + '</div>';
+    h += provList(it.r);
+    if (it.r.summaryHtml) h += '<div class="rp-sum">' + it.r.summaryHtml + '</div>';
+    for (const t of it.r.tables || []) h += '<div class="ctrl-grp-lbl rp-tbl">' + esc(t.name) + '</div>' + htmlTable(t.headers || [], t.rows || []);
+    h += '</div>';
+  }
+  if (!items.length) h += '<div class="sec rp-sec"><p class="muted-line">No analysis results yet. Each analysis page adds its result here as soon as it computes one.</p></div>';
+  return h;
+}
+
+// Plain text from summary markup: one line per block, table rows as
+// tab-separated cells, and so a pasted table lands in spreadsheet columns.
+function htmlToText(html) {
+  const doc = new DOMParser().parseFromString('<!DOCTYPE html><body>' + html + '</body>', 'text/html');
+  const lines = [];
+  let cur = '';
+  const BLOCK = /^(P|DIV|SECTION|H[1-6]|LI|UL|OL|TABLE|THEAD|TBODY|DL|DT|DD|CAPTION|FIGURE|FIGCAPTION|BLOCKQUOTE|PRE)$/;
+  const flush = () => { const t = cur.replace(/[ \t \r\n]+/g, ' ').trim(); if (t) lines.push(t); cur = ''; };
+  const walk = n => {
+    if (n.nodeType === 3) { cur += n.nodeValue; return; }
+    if (n.nodeType !== 1) return;
+    const tag = n.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'svg' || tag === 'SVG') return;
+    if (tag === 'BR') { flush(); return; }
+    if (tag === 'TR') {
+      flush();
+      lines.push(Array.from(n.children).map(c => c.textContent.replace(/\s+/g, ' ').trim()).join('\t'));
+      return;
+    }
+    const block = BLOCK.test(tag);
+    if (block) flush();
+    for (const c of n.childNodes) walk(c);
+    if (block) flush();
+  };
+  walk(doc.body);
+  flush();
+  return lines.join('\n');
+}
+
+function textTable(headers, rows) {
+  const cell = c => (typeof c === 'number' ? num(c, 6) : (c == null ? '' : String(c)));
+  return [headers.map(cell).join('\t')].concat(rows.map(r => r.map(cell).join('\t'))).join('\n');
+}
+
+function summaryText(now) {
+  const out = ['Output Analyzer report', stamp(now), '', 'Loaded datasets'];
+  out.push(state.datasets.length ? textTable(DATASET_HEADERS, datasetRows()) : 'No data loaded.');
+  const items = currentResults();
+  for (const it of items) {
+    out.push('', it.r.title);
+    for (const [k, v] of provEntries(it.r)) out.push(k + ': ' + v);
+    if (it.r.summaryHtml) out.push(htmlToText(it.r.summaryHtml));
+    for (const t of it.r.tables || []) out.push('', t.name, textTable(t.headers || [], t.rows || []));
+  }
+  if (!items.length) out.push('', 'No analysis results yet.');
+  return out.join('\n') + '\n';
+}
+
+async function writeClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {
+    // A denied permission or an unfocused document; the fallback below
+    // copies through a selection instead.
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (err) {
+    return false;
+  }
+}
+
+let copyTimer = null;
+async function copySummary() {
+  const btn = el.copyBtn;
+  const ok = await writeClipboard(summaryText(new Date()));
+  // Holding the width keeps the shorter label from pulling the row in.
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  btn.textContent = ok ? 'Copied' : 'Copy failed';
+  clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => { btn.textContent = 'Copy as text'; btn.style.minWidth = ''; }, 2000);
+}
+
+function downloadAll() {
+  const blocks = [];
+  for (const it of currentResults()) for (const t of it.r.tables || []) blocks.push(tableBlock(it.pageId, it.r, t));
+  if (!blocks.length) return;
+  const head = provenanceLines({ exported: stamp(new Date()), tables: blocks.length }).join('\n') + '\n';
+  downloadText('output_analyzer_results.csv', head + '\n' + blocks.join('\n'));
+}
+
+function refresh() {
+  if (!el) return;
+  const items = currentResults();
+  el.body.innerHTML = summaryHtml(new Date());
+  el.allBtn.disabled = !items.some(it => (it.r.tables || []).length);
+  const empty = !state.datasets.length && !items.length;
+  el.printBtn.disabled = empty;
+  el.copyBtn.disabled = empty;
+}
+
+/**
+ * Renders the page into its section.
+ * @param {HTMLElement} root
+ */
+export function render(root) {
+  root.innerHTML =
+    '<h2>' + title + '</h2>' +
+    '<p class="lede">The loaded datasets and the latest result of every analysis page, each result under the choices that produced it. Print it as a record of the session, copy it as text for a document, or download every result table as one CSV file whose <code>#</code> lines carry the same choices. Each analysis page also exports its own tables from the row at its foot.</p>' +
+    '<div class="xp-btns rp-tools no-print">' +
+      '<button type="button" class="btn-run2" id="rp-print">Print</button>' +
+      '<button type="button" class="btn-run2" id="rp-copy">Copy as text</button>' +
+      '<button type="button" class="btn-run2" id="rp-all">Download all results (one CSV)</button>' +
+    '</div>' +
+    '<div id="rp-body"></div>';
+  const q = s => root.querySelector(s);
+  el = { root, body: q('#rp-body'), printBtn: q('#rp-print'), copyBtn: q('#rp-copy'), allBtn: q('#rp-all') };
+  el.printBtn.addEventListener('click', () => window.print());
+  el.copyBtn.addEventListener('click', copySummary);
+  el.allBtn.addEventListener('click', downloadAll);
+  state.on('datasets', refresh);
+  state.on('results', refresh);
+  refresh();
+}
+
+/** Called each time the page is shown. */
+export function onShow() { refresh(); }
+
+export default { id, title, render, onShow };
+</script>
 <script type="text/plain" data-module="js/pages/several.js">
 // The Several Systems page: k designs compared at once on their replication
 // estimates. Five results, each its own card and its own section, shown one
@@ -18227,6 +17894,7 @@ import { simultaneousMeans, bonferroniFamily, anova, posthoc, planHalfWidthBonfe
 import { subsetSelection } from '../stats/select.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -18618,7 +18286,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -19150,6 +18818,7 @@ export function render(root) {
   state.on('settings', () => { if (visible()) schedule(); });
   autoCheck();
   update();
+  installExportRow(root, id);
 }
 
 // Brings back the settings the reader made on this page (kept with the
@@ -19223,6 +18892,7 @@ import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -19542,6 +19212,7 @@ export function render(rootEl) {
   refreshSelect();
   resetFor(current());
   update();
+  installExportRow(root, id);
   registerTips(root);
 }
 
@@ -20325,6 +19996,84 @@ function storeResult(ds, src, res, rows) {
 
 export default { id, title, sections, render, onShow, onShowSection };
 </script>
+<script type="text/plain" data-module="js/pages/storage.js">
+// The Storage page: what this browser keeps between visits (the loaded
+// datasets, the confidence level, and every control's setting), whether it
+// could be stored, and the button that forgets it all.
+
+import * as state from '../state.js';
+import { KIND_LABEL } from '../ui/widgets.js';
+import { esc, intl, plural } from '../ui/format.js';
+import { sessionStatus, forgetSession, MAX_CHARS } from '../ui/session.js';
+
+/** The page's hash id. */
+export const id = 'storage';
+/** The page's title. */
+export const title = 'Storage';
+
+let el = null;
+
+function sizeText(chars) {
+  if (chars >= 1024 * 1024) return (chars / (1024 * 1024)).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(chars / 1024)) + ' KB';
+}
+
+function refresh() {
+  if (!el) return;
+  const s = sessionStatus();
+  el.status.textContent = s.available
+    ? 'Session restore is on: the data and settings stay in this browser until you forget them.'
+    : 'Session restore is unavailable in this context: the data stay in memory until the page is closed.';
+  const lines = [];
+  if (s.restored) lines.push('Restored ' + plural(s.restored, 'dataset') + ' from the last visit.');
+  if (s.dropped) lines.push(plural(s.dropped, 'stored dataset', 'stored datasets') + ' could not be read and ' + (s.dropped === 1 ? 'was' : 'were') + ' dropped.');
+  if (s.skipped === 'too-large') {
+    lines.push('The loaded data come to ' + sizeText(s.chars) + ', over the ' + sizeText(MAX_CHARS) + ' that session restore keeps, and so they will not come back after a reload.');
+  } else if (s.skipped === 'write-failed') {
+    lines.push('The browser refused to store this session (its storage is full or blocked), and so it will not come back after a reload.');
+  } else if (s.available && s.saved && state.datasets.length) {
+    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ', the confidence level, and every control’s setting, ' + sizeText(s.chars) + ' in all.');
+  } else if (s.available) {
+    lines.push('Nothing is stored: no data are loaded.');
+  }
+  el.size.textContent = lines.join(' ');
+  el.list.innerHTML = state.datasets.length
+    ? '<ul class="ss-list">' + state.datasets.map(ds => '<li><span class="xp-name">' + esc(ds.name) + '</span> <span class="xp-meta">' +
+        esc((KIND_LABEL[ds.kind] || ds.kind) + ' · R = ' + intl(ds.reps.length)) + '</span></li>').join('') + '</ul>'
+    : '<p class="muted-line">No data loaded. Load a file, paste data, or open an example on the <a href="#import">Import</a> page.</p>';
+  el.forget.disabled = !state.datasets.length && !s.saved;
+}
+
+/**
+ * Renders the page into its section.
+ * @param {HTMLElement} root
+ */
+export function render(root) {
+  root.innerHTML =
+    '<h2>' + title + '</h2>' +
+    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, and the setting of every control on every page. Nothing is sent anywhere. Forgetting the session clears all of it and starts over.</p>' +
+    '<div class="sec"><div class="sec-hd">Stored in this browser</div>' +
+      '<p class="xp-status" id="ss-status"></p>' +
+      '<p class="muted-line" id="ss-size" aria-live="polite"></p>' +
+      '<div id="ss-list"></div>' +
+    '</div>' +
+    '<div class="sec"><div class="sec-hd">Start over</div>' +
+      '<p class="exp-note">Removes every loaded dataset and every stored setting from this browser. Files on disk are untouched; what was exported stays exported.</p>' +
+      '<div class="xp-btns"><button type="button" class="btn-clear" id="ss-forget">Forget this session</button></div>' +
+    '</div>';
+  const q = s => root.querySelector(s);
+  el = { root, status: q('#ss-status'), size: q('#ss-size'), list: q('#ss-list'), forget: q('#ss-forget') };
+  el.forget.addEventListener('click', () => { forgetSession(); refresh(); });
+  state.on('datasets', refresh);
+  state.on('session', refresh);
+  refresh();
+}
+
+/** Called each time the page is shown. */
+export function onShow() { refresh(); }
+
+export default { id, title, render, onShow };
+</script>
 <script type="text/plain" data-module="js/pages/two.js">
 // The Two Systems page: compares two designs on their replication estimates,
 // by Welch's procedure when the replications are independent and by the
@@ -20339,6 +20088,7 @@ import { welch, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWe
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, scatter, recordRows, svgEl, tok, extent } from '../ui/plots.js';
+import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
 import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
@@ -20695,7 +20445,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -21411,6 +21161,7 @@ export function render(root) {
   state.on('selection', () => { if (visible()) schedule(); });
   state.on('settings', () => { if (visible()) schedule(); });
   update();
+  installExportRow(root, id, { extra: () => pairedPilotFile(state.get(selA.value), state.get(selB.value)) });
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept
@@ -21465,6 +21216,7 @@ import { repEstimates, canInfer } from '../data/model.js';
 import { varianceInterval, fRatio, correlation, regressionLine } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, pValue, esc, dash } from '../ui/format.js';
 
@@ -21590,6 +21342,7 @@ export function render(rootEl) {
   });
 
   draw();
+  installExportRow(root, id);
   registerTips(root);
 }
 
@@ -22001,6 +21754,7 @@ export function getPick(pageId, key) {
  * @param {PageResult|null} result
  */
 export function setResult(pageId, result) {
+  if (result && typeof result === 'object' && !(result.computedAt instanceof Date)) result.computedAt = new Date();
   results[pageId] = result;
   emit('results', { pageId });
 }
@@ -24477,6 +24231,257 @@ export function resampleTimeWeighted(t, v, start, end, steps) {
   return { step, edges, values };
 }
 </script>
+<script type="text/plain" data-module="js/ui/exportrow.js">
+// The export row at the foot of a page: one button per result table the page
+// has computed (a CSV with `#` provenance lines), any files the page adds
+// (the data files on Summary and Plots, the paired pilot on Two Systems), and
+// a Print button that prints the page as shown, without the navigation. The
+// row follows the page's results as they change.
+
+import * as state from '../state.js';
+import { repEstimates, repIds } from '../data/model.js';
+import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText } from '../io/export.js';
+import { matchPairs } from '../stats/compare.js';
+import { KIND_LABEL, details } from './widgets.js';
+import { registerTips } from './tooltip.js';
+import { esc, intl, plural } from './format.js';
+
+const ESTIMATE_LABEL = {
+  tally: 'replication mean',
+  time: 'time-weighted replication mean',
+  reps: 'one value per replication'
+};
+
+const PILOT_TIP = 'One bare numeric column of replication estimates, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
+const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the estimates of replications with the same id in both datasets, as common random numbers would pair them.';
+const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+/**
+ * A timestamp for provenance lines, local time to the second.
+ * @param {Date} d
+ * @returns {string}
+ */
+export function stamp(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+    pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
+/**
+ * A file-name slug of a title.
+ * @param {string} s
+ * @returns {string}
+ */
+export function slug(s) {
+  const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (t || 'data').slice(0, 60);
+}
+
+/** The truncation a derived dataset carries, as a sentence fragment. */
+export function truncationText(ds) {
+  const tr = ds.derivedFrom && ds.derivedFrom.truncate;
+  if (!tr) return undefined;
+  const what = ds.kind === 'time' ? 'records' : 'observations';
+  return tr.by === 'time'
+    ? what + ' before time ' + tr.at + ' removed'
+    : 'first ' + tr.at + ' ' + what + ' of each replication removed';
+}
+
+/** The name of the dataset a derived one came from. */
+export function derivedName(ds) {
+  if (!ds.derivedFrom) return undefined;
+  const parent = state.get(ds.derivedFrom.id);
+  return parent ? parent.name : ds.derivedFrom.id;
+}
+
+function finiteCount(ds) {
+  let n = 0;
+  for (const v of repEstimates(ds)) if (Number.isFinite(v)) n++;
+  return n;
+}
+
+// The `#` lines every data file carries: what the dataset is, where it came
+// from, and how it was derived when it was truncated.
+function dsProvenance(ds, extra) {
+  const p = {
+    dataset: ds.name,
+    kind: KIND_LABEL[ds.kind] || ds.kind,
+    response: ds.response,
+    replications: ds.reps.length
+  };
+  if (ds.source && ds.source.file) p['source file'] = ds.source.file;
+  if (ds.derivedFrom) {
+    p['derived from'] = derivedName(ds);
+    p.truncation = truncationText(ds);
+  }
+  Object.assign(p, extra || {});
+  p.exported = stamp(new Date());
+  return p;
+}
+
+/**
+ * The data files of one dataset, as button descriptors for an export row.
+ * @param {object|null} ds
+ * @returns {{label: string, tip?: string, disabled?: boolean, run: () => void}[]}
+ */
+export function datasetFiles(ds) {
+  if (!ds) return [];
+  const base = slug(ds.name);
+  const pilotOk = finiteCount(ds) >= 2;
+  const out = [
+    { label: 'Observations CSV', run: () => downloadText(base + '_observations.csv', observationsCsv(ds, dsProvenance(ds), { full: true })) }
+  ];
+  if (ds.kind !== 'time') {
+    out.push({ label: 'Observations, one column', tip: ONECOL_TIP, run: () => downloadText(base + '_observations_column.csv', observationsCsv(ds, dsProvenance(ds))) });
+  }
+  out.push({ label: 'Replication summary CSV', run: () => downloadText(base + '_replications.csv', repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] }))) });
+  out.push({
+    label: 'Pilot-ready CSV', tip: PILOT_TIP, disabled: !pilotOk,
+    note: pilotOk ? '' : 'A pilot needs at least two replication estimates, and this dataset has ' + intl(finiteCount(ds)) + '.',
+    run: () => downloadText(base + '_pilot.csv', pilotCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind], form: 'pilot data, one column' })))
+  });
+  return out;
+}
+
+/** The explanation of the data files, for a details block under the row. */
+export const DATA_FILES_HELP =
+  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times, because each value counts in proportion to how long it holds.</p>' +
+  '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
+  '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its estimate (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
+  '<p><strong>Pilot-ready CSV</strong>: one column of replication estimates under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
+
+// The replications of A and B matched by id, keeping only the pairs where
+// both estimates are finite, as the two vectors the paired pilot writes.
+function pairedVectors(a, b) {
+  const m = matchPairs(repIds(a), repIds(b), 'id');
+  const ea = repEstimates(a), eb = repEstimates(b);
+  const xa = [], xb = [];
+  let missing = 0;
+  for (const [i, j] of m.pairs) {
+    if (Number.isFinite(ea[i]) && Number.isFinite(eb[j])) { xa.push(ea[i]); xb.push(eb[j]); } else missing++;
+  }
+  return { xa: Float64Array.from(xa), xb: Float64Array.from(xb), unmatchedA: m.unmatchedA.length, unmatchedB: m.unmatchedB.length, missing };
+}
+
+/**
+ * The paired-pilot file of two datasets, as one button descriptor (disabled,
+ * with the reason as its note, when the pair cannot be formed).
+ * @param {object|null} a
+ * @param {object|null} b
+ */
+export function pairedPilotFile(a, b) {
+  if (!a || !b || a.id === b.id) return [];
+  const v = pairedVectors(a, b);
+  const unmatched = v.unmatchedA + v.unmatchedB;
+  let msg = plural(v.xa.length, 'pair') + ' matched by replication id';
+  if (unmatched) msg += '; ' + plural(unmatched, 'replication') + ' without a partner left out';
+  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing estimate left out';
+  msg += '.';
+  const ok = v.xa.length >= 2;
+  return [{
+    label: 'Paired pilot CSV', tip: PAIRED_TIP, disabled: !ok, note: ok ? '' : msg + ' A paired pilot needs at least two pairs.',
+    run: () => {
+      const prov = {
+        'dataset A': a.name,
+        'dataset B': b.name,
+        kind: a.kind === b.kind ? (KIND_LABEL[a.kind] || a.kind) : (KIND_LABEL[a.kind] || a.kind) + ' (A), ' + (KIND_LABEL[b.kind] || b.kind) + ' (B)',
+        estimate: a.kind === b.kind ? ESTIMATE_LABEL[a.kind] : ESTIMATE_LABEL[a.kind] + ' (A), ' + ESTIMATE_LABEL[b.kind] + ' (B)',
+        'matched by': 'replication id',
+        pairs: v.xa.length,
+        'unmatched replications': v.unmatchedA + v.unmatchedB + ' (' + v.unmatchedA + ' in A, ' + v.unmatchedB + ' in B)'
+      };
+      if (v.missing) prov['pairs with a missing estimate'] = v.missing;
+      if (a.derivedFrom) { prov['A derived from'] = derivedName(a); prov['A truncation'] = truncationText(a); }
+      if (b.derivedFrom) { prov['B derived from'] = derivedName(b); prov['B truncation'] = truncationText(b); }
+      prov.form = 'pilot data, two matched columns';
+      prov.exported = stamp(new Date());
+      downloadText('paired_pilot_' + slug(a.name) + '_vs_' + slug(b.name) + '.csv', pilotCsv([v.xa, v.xb], prov));
+    }
+  }];
+}
+
+// A table name follows "Download" mid-sentence, and so its first letter is
+// lowered unless the first word is an acronym (ANOVA) or a person's name.
+function lowerFirst(s) {
+  s = String(s);
+  if (/^(Pearson|Welch|Tukey|Bonferroni|Dunnett|Fisher|Rinott|Shapiro)\b/.test(s)) return s;
+  return /^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+}
+
+/**
+ * The `#` lines of one result table: the table, the result, when it was
+ * computed, and every choice the page recorded.
+ * @param {string} pageId
+ * @param {object} r the page's result
+ * @param {object} [table]
+ */
+export function resultProvenance(pageId, r, table) {
+  const p = {};
+  if (table) p.table = table.name;
+  p.result = r.title;
+  if (r.computedAt instanceof Date) p.computed = stamp(r.computedAt);
+  Object.assign(p, r.provenance || {});
+  return p;
+}
+
+/** One result table as CSV text with its provenance lines. */
+export function tableBlock(pageId, r, t) {
+  return tableCsv(t.headers || [], t.rows || [], resultProvenance(pageId, r, t));
+}
+
+/**
+ * Installs the export row at the end of a page.
+ * @param {HTMLElement} root the page's section
+ * @param {string} pageId the page whose results the row offers
+ * @param {{ extra?: () => {label: string, tip?: string, disabled?: boolean, note?: string, run: () => void}[],
+ *   tables?: (t: object) => boolean, help?: string, printLabel?: string }} [opts] `extra` returns the
+ *   page's own files, evaluated at every refresh; `tables` keeps only the result tables it
+ *   accepts; `help` is HTML for a details block under the row
+ * @returns {{ refresh: () => void }}
+ */
+export function installExportRow(root, pageId, opts = {}) {
+  const row = document.createElement('div');
+  row.className = 'sec xp-row';
+  row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-btns" id="xp-' + pageId + '"></div><p class="muted-line xp-note" aria-live="polite"></p>';
+  if (opts.help) row.appendChild(details('What each data file holds', opts.help));
+  root.appendChild(row);
+  const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
+  let items = [];
+
+  function refresh() {
+    items = [];
+    const r = state.results[pageId];
+    for (const t of (r && r.tables) || []) {
+      if (opts.tables && !opts.tables(t)) continue;
+      items.push({ label: 'Download ' + lowerFirst(t.name), run: () => {
+        const body = provenanceLines({ exported: stamp(new Date()) }).join('\n') + '\n' + tableBlock(pageId, r, t);
+        downloadText(slug(pageId) + '_' + slug(t.name) + '.csv', body);
+      } });
+    }
+    if (opts.extra) items.push(...opts.extra());
+    items.push({ label: opts.printLabel || 'Print this page', print: true, run: () => window.print() });
+    btns.innerHTML = items.map((it, i) =>
+      '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
+      (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
+    const notes = items.filter(it => it.note).map(it => it.note);
+    note.textContent = notes.join(' ');
+    note.hidden = !notes.length;
+    registerTips(row);
+  }
+  btns.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-i]');
+    if (!b || b.disabled) return;
+    const it = items[Number(b.getAttribute('data-i'))];
+    if (it) it.run();
+  });
+  state.on('results', ({ pageId: p } = {}) => { if (!p || p === pageId) refresh(); });
+  state.on('datasets', refresh);
+  state.on('selection', refresh);
+  refresh();
+  return { refresh };
+}
+</script>
 <script type="text/plain" data-module="js/ui/format.js">
 // Number formatting for the page: cards, tables, readouts, and tick labels.
 // Pure functions with no DOM access, and so the tests import them directly.
@@ -24610,7 +24615,7 @@ function trimExp(s) {
 // decimateMinMax) import cleanly under Node for the tests.
 
 import { num, esc } from './format.js';
-import { SCRIPT_WRITERS, sanitizeName } from '../io/scripts.js';
+import { SCRIPT_WRITERS } from '../io/scripts.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const DESIGN_W = 940;
@@ -25569,9 +25574,19 @@ export function qqPlot(fig, q, o = {}) {
   if (!fig.sx) fig.x(extent(q.theoretical), { pad: 0.08, nice: true });
   if (!fig.sy) fig.y(extent(q.sample), { pad: 0.08, nice: true });
   ensureAxes(fig, o);
-  const [d0, d1] = fig.sx.domain;
-  svgEl('line', { x1: r1(fig.sx(d0)), y1: r1(fig.sy(q.intercept + q.slope * d0)), x2: r1(fig.sx(d1)), y2: r1(fig.sy(q.intercept + q.slope * d1)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
-  fig.series.push({ kind: 'line', x: [d0, d1], y: [q.intercept + q.slope * d0, q.intercept + q.slope * d1], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  // The line runs across the plotting area and stops at its edges: where it
+  // would leave the y range it is cut at the x where it crosses the edge.
+  const [d0, d1] = fig.sx.domain, [e0, e1] = fig.sy.domain;
+  let xa = d0, xb = d1;
+  if (q.slope !== 0) {
+    const xs = [(Math.min(e0, e1) - q.intercept) / q.slope, (Math.max(e0, e1) - q.intercept) / q.slope].sort((a, b) => a - b);
+    xa = Math.max(d0, xs[0]); xb = Math.min(d1, xs[1]);
+  }
+  if (xb > xa) {
+    const ya = q.intercept + q.slope * xa, yb = q.intercept + q.slope * xb;
+    svgEl('line', { x1: r1(fig.sx(xa)), y1: r1(fig.sy(ya)), x2: r1(fig.sx(xb)), y2: r1(fig.sy(yb)), stroke: tok('--truth'), 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'line', x: [xa, xb], y: [ya, yb], dash: true, color: tok('--truth'), label: 'line through the quartiles' });
+  }
   scatter(fig, q.theoretical, q.sample, Object.assign({}, o, { axes: false, r: n > 400 ? 2 : 3.2, label: o.label || 'sorted values' }));
   fig.readout((dx, dy, px, py) => {
     let best = -1, bd = Infinity;
@@ -26007,10 +26022,10 @@ export function exportButtons(container, fig, baseName) {
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
   for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
     mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
-      // The file is named as the script's own language allows: MATLAB runs a
-      // script by its file name, which must be an identifier.
+      // Each language names the file its own way: MATLAB runs a script by
+      // its file name, which must be an identifier.
       const spec = figureSpec(fig, name);
-      download(sanitizeName(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
+      download(w.file(spec.name) + '.' + ext, new Blob([w.write(spec)], { type: w.mime + ';charset=utf-8' }));
     });
   }
   if (fig.wrap && fig.wrap.parentNode === container) container.insertBefore(row, fig.wrap);

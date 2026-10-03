@@ -11,6 +11,7 @@ import { summary } from '../stats/descriptive.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, esc, dash } from '../ui/format.js';
 
@@ -177,7 +178,7 @@ function syncPlanMode(sec, mode) {
   });
 }
 
-// One row of the Planning table for the Export page.
+// One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
   const has = n != null;
   return [mode, target, has ? n : '', has ? at : '', has ? Math.max(0, n - R) : ''];
@@ -295,6 +296,7 @@ export function render(rootEl) {
   });
 
   draw();
+  installExportRow(root, id);
   registerTips(root);
 }
 
@@ -466,7 +468,7 @@ function draw() {
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti, ds, pooled });
 
-  // Results for the Export page.
+  // The page's result, for its export row and the Report page.
   const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
   const intervalRows = [
     ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['se', s.se], ['min', s.min], ['q1', s.q1],

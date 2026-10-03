@@ -1,0 +1,249 @@
+// The export row at the foot of a page: one button per result table the page
+// has computed (a CSV with `#` provenance lines), any files the page adds
+// (the data files on Summary and Plots, the paired pilot on Two Systems), and
+// a Print button that prints the page as shown, without the navigation. The
+// row follows the page's results as they change.
+
+import * as state from '../state.js';
+import { repEstimates, repIds } from '../data/model.js';
+import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText } from '../io/export.js';
+import { matchPairs } from '../stats/compare.js';
+import { KIND_LABEL, details } from './widgets.js';
+import { registerTips } from './tooltip.js';
+import { esc, intl, plural } from './format.js';
+
+const ESTIMATE_LABEL = {
+  tally: 'replication mean',
+  time: 'time-weighted replication mean',
+  reps: 'one value per replication'
+};
+
+const PILOT_TIP = 'One bare numeric column of replication estimates, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
+const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the estimates of replications with the same id in both datasets, as common random numbers would pair them.';
+const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+/**
+ * A timestamp for provenance lines, local time to the second.
+ * @param {Date} d
+ * @returns {string}
+ */
+export function stamp(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' +
+    pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+
+/**
+ * A file-name slug of a title.
+ * @param {string} s
+ * @returns {string}
+ */
+export function slug(s) {
+  const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (t || 'data').slice(0, 60);
+}
+
+/** The truncation a derived dataset carries, as a sentence fragment. */
+export function truncationText(ds) {
+  const tr = ds.derivedFrom && ds.derivedFrom.truncate;
+  if (!tr) return undefined;
+  const what = ds.kind === 'time' ? 'records' : 'observations';
+  return tr.by === 'time'
+    ? what + ' before time ' + tr.at + ' removed'
+    : 'first ' + tr.at + ' ' + what + ' of each replication removed';
+}
+
+/** The name of the dataset a derived one came from. */
+export function derivedName(ds) {
+  if (!ds.derivedFrom) return undefined;
+  const parent = state.get(ds.derivedFrom.id);
+  return parent ? parent.name : ds.derivedFrom.id;
+}
+
+function finiteCount(ds) {
+  let n = 0;
+  for (const v of repEstimates(ds)) if (Number.isFinite(v)) n++;
+  return n;
+}
+
+// The `#` lines every data file carries: what the dataset is, where it came
+// from, and how it was derived when it was truncated.
+function dsProvenance(ds, extra) {
+  const p = {
+    dataset: ds.name,
+    kind: KIND_LABEL[ds.kind] || ds.kind,
+    response: ds.response,
+    replications: ds.reps.length
+  };
+  if (ds.source && ds.source.file) p['source file'] = ds.source.file;
+  if (ds.derivedFrom) {
+    p['derived from'] = derivedName(ds);
+    p.truncation = truncationText(ds);
+  }
+  Object.assign(p, extra || {});
+  p.exported = stamp(new Date());
+  return p;
+}
+
+/**
+ * The data files of one dataset, as button descriptors for an export row.
+ * @param {object|null} ds
+ * @returns {{label: string, tip?: string, disabled?: boolean, run: () => void}[]}
+ */
+export function datasetFiles(ds) {
+  if (!ds) return [];
+  const base = slug(ds.name);
+  const pilotOk = finiteCount(ds) >= 2;
+  const out = [
+    { label: 'Observations CSV', run: () => downloadText(base + '_observations.csv', observationsCsv(ds, dsProvenance(ds), { full: true })) }
+  ];
+  if (ds.kind !== 'time') {
+    out.push({ label: 'Observations, one column', tip: ONECOL_TIP, run: () => downloadText(base + '_observations_column.csv', observationsCsv(ds, dsProvenance(ds))) });
+  }
+  out.push({ label: 'Replication summary CSV', run: () => downloadText(base + '_replications.csv', repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] }))) });
+  out.push({
+    label: 'Pilot-ready CSV', tip: PILOT_TIP, disabled: !pilotOk,
+    note: pilotOk ? '' : 'A pilot needs at least two replication estimates, and this dataset has ' + intl(finiteCount(ds)) + '.',
+    run: () => downloadText(base + '_pilot.csv', pilotCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind], form: 'pilot data, one column' })))
+  });
+  return out;
+}
+
+/** The explanation of the data files, for a details block under the row. */
+export const DATA_FILES_HELP =
+  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times, because each value counts in proportion to how long it holds.</p>' +
+  '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
+  '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its estimate (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
+  '<p><strong>Pilot-ready CSV</strong>: one column of replication estimates under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
+
+// The replications of A and B matched by id, keeping only the pairs where
+// both estimates are finite, as the two vectors the paired pilot writes.
+function pairedVectors(a, b) {
+  const m = matchPairs(repIds(a), repIds(b), 'id');
+  const ea = repEstimates(a), eb = repEstimates(b);
+  const xa = [], xb = [];
+  let missing = 0;
+  for (const [i, j] of m.pairs) {
+    if (Number.isFinite(ea[i]) && Number.isFinite(eb[j])) { xa.push(ea[i]); xb.push(eb[j]); } else missing++;
+  }
+  return { xa: Float64Array.from(xa), xb: Float64Array.from(xb), unmatchedA: m.unmatchedA.length, unmatchedB: m.unmatchedB.length, missing };
+}
+
+/**
+ * The paired-pilot file of two datasets, as one button descriptor (disabled,
+ * with the reason as its note, when the pair cannot be formed).
+ * @param {object|null} a
+ * @param {object|null} b
+ */
+export function pairedPilotFile(a, b) {
+  if (!a || !b || a.id === b.id) return [];
+  const v = pairedVectors(a, b);
+  const unmatched = v.unmatchedA + v.unmatchedB;
+  let msg = plural(v.xa.length, 'pair') + ' matched by replication id';
+  if (unmatched) msg += '; ' + plural(unmatched, 'replication') + ' without a partner left out';
+  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing estimate left out';
+  msg += '.';
+  const ok = v.xa.length >= 2;
+  return [{
+    label: 'Paired pilot CSV', tip: PAIRED_TIP, disabled: !ok, note: ok ? '' : msg + ' A paired pilot needs at least two pairs.',
+    run: () => {
+      const prov = {
+        'dataset A': a.name,
+        'dataset B': b.name,
+        kind: a.kind === b.kind ? (KIND_LABEL[a.kind] || a.kind) : (KIND_LABEL[a.kind] || a.kind) + ' (A), ' + (KIND_LABEL[b.kind] || b.kind) + ' (B)',
+        estimate: a.kind === b.kind ? ESTIMATE_LABEL[a.kind] : ESTIMATE_LABEL[a.kind] + ' (A), ' + ESTIMATE_LABEL[b.kind] + ' (B)',
+        'matched by': 'replication id',
+        pairs: v.xa.length,
+        'unmatched replications': v.unmatchedA + v.unmatchedB + ' (' + v.unmatchedA + ' in A, ' + v.unmatchedB + ' in B)'
+      };
+      if (v.missing) prov['pairs with a missing estimate'] = v.missing;
+      if (a.derivedFrom) { prov['A derived from'] = derivedName(a); prov['A truncation'] = truncationText(a); }
+      if (b.derivedFrom) { prov['B derived from'] = derivedName(b); prov['B truncation'] = truncationText(b); }
+      prov.form = 'pilot data, two matched columns';
+      prov.exported = stamp(new Date());
+      downloadText('paired_pilot_' + slug(a.name) + '_vs_' + slug(b.name) + '.csv', pilotCsv([v.xa, v.xb], prov));
+    }
+  }];
+}
+
+// A table name follows "Download" mid-sentence, and so its first letter is
+// lowered unless the first word is an acronym (ANOVA) or a person's name.
+function lowerFirst(s) {
+  s = String(s);
+  if (/^(Pearson|Welch|Tukey|Bonferroni|Dunnett|Fisher|Rinott|Shapiro)\b/.test(s)) return s;
+  return /^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s;
+}
+
+/**
+ * The `#` lines of one result table: the table, the result, when it was
+ * computed, and every choice the page recorded.
+ * @param {string} pageId
+ * @param {object} r the page's result
+ * @param {object} [table]
+ */
+export function resultProvenance(pageId, r, table) {
+  const p = {};
+  if (table) p.table = table.name;
+  p.result = r.title;
+  if (r.computedAt instanceof Date) p.computed = stamp(r.computedAt);
+  Object.assign(p, r.provenance || {});
+  return p;
+}
+
+/** One result table as CSV text with its provenance lines. */
+export function tableBlock(pageId, r, t) {
+  return tableCsv(t.headers || [], t.rows || [], resultProvenance(pageId, r, t));
+}
+
+/**
+ * Installs the export row at the end of a page.
+ * @param {HTMLElement} root the page's section
+ * @param {string} pageId the page whose results the row offers
+ * @param {{ extra?: () => {label: string, tip?: string, disabled?: boolean, note?: string, run: () => void}[],
+ *   tables?: (t: object) => boolean, help?: string, printLabel?: string }} [opts] `extra` returns the
+ *   page's own files, evaluated at every refresh; `tables` keeps only the result tables it
+ *   accepts; `help` is HTML for a details block under the row
+ * @returns {{ refresh: () => void }}
+ */
+export function installExportRow(root, pageId, opts = {}) {
+  const row = document.createElement('div');
+  row.className = 'sec xp-row';
+  row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-btns" id="xp-' + pageId + '"></div><p class="muted-line xp-note" aria-live="polite"></p>';
+  if (opts.help) row.appendChild(details('What each data file holds', opts.help));
+  root.appendChild(row);
+  const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
+  let items = [];
+
+  function refresh() {
+    items = [];
+    const r = state.results[pageId];
+    for (const t of (r && r.tables) || []) {
+      if (opts.tables && !opts.tables(t)) continue;
+      items.push({ label: 'Download ' + lowerFirst(t.name), run: () => {
+        const body = provenanceLines({ exported: stamp(new Date()) }).join('\n') + '\n' + tableBlock(pageId, r, t);
+        downloadText(slug(pageId) + '_' + slug(t.name) + '.csv', body);
+      } });
+    }
+    if (opts.extra) items.push(...opts.extra());
+    items.push({ label: opts.printLabel || 'Print this page', print: true, run: () => window.print() });
+    btns.innerHTML = items.map((it, i) =>
+      '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
+      (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
+    const notes = items.filter(it => it.note).map(it => it.note);
+    note.textContent = notes.join(' ');
+    note.hidden = !notes.length;
+    registerTips(row);
+  }
+  btns.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-i]');
+    if (!b || b.disabled) return;
+    const it = items[Number(b.getAttribute('data-i'))];
+    if (it) it.run();
+  });
+  state.on('results', ({ pageId: p } = {}) => { if (!p || p === pageId) refresh(); });
+  state.on('datasets', refresh);
+  state.on('selection', refresh);
+  refresh();
+  return { refresh };
+}

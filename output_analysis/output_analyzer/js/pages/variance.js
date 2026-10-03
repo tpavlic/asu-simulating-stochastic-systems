@@ -9,6 +9,7 @@ import { repEstimates, canInfer } from '../data/model.js';
 import { varianceInterval, fRatio, correlation, regressionLine } from '../stats/intervals.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, pValue, esc, dash } from '../ui/format.js';
 
@@ -134,6 +135,7 @@ export function render(rootEl) {
   });
 
   draw();
+  installExportRow(root, id);
   registerTips(root);
 }
 
