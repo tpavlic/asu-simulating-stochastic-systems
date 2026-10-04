@@ -9,6 +9,7 @@ import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -43,6 +44,10 @@ let resultBase = null;
 // The override is remembered per dataset, and so ticking it on one dataset
 // never silently applies to the next one chosen.
 const override = new Set();
+// 't' for the t interval on the mean, 'np' for the Wilcoxon signed-rank
+// interval on the pseudo-median.
+let proc = 't';
+const NP_PLAN = 'The planning card sizes the t interval. Under normal data the Wilcoxon interval needs about 5% more replications for the same width (its efficiency relative to the t is 3/π), and under heavy tails it needs fewer.';
 
 // An interval or a pair of numbers takes a full row on a phone rather than
 // being cut short, before and after a result arrives alike.
@@ -201,17 +206,26 @@ export function render(rootEl) {
     '<div class="ctrl-row">' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-ds">Dataset</label><select id="rp-ds"></select></span>' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-lvl">Confidence level</label><select id="rp-lvl"></select></span>' +
+    '</div>' +
+    '<div class="ctrl-row">' +
+      '<span class="ctrl-lbl" id="rp-proc-lbl"><span class="tip" tabindex="0" data-tip="t interval: on the mean, assuming the replication estimates are normal, which averages nearly always are. Nonparametric: the Wilcoxon signed-rank interval on the pseudo-median, the Hodges–Lehmann estimate; it needs no normality and keeps its level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
+      '<span class="seg" role="group" aria-labelledby="rp-proc-lbl">' +
+        '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t interval</button>' +
+        '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
+      '</span>' +
     '</div>';
   root.appendChild(ctrl);
 
   // Results.
   const res = el('div', 'sec');
-  res.appendChild(el('div', 'sec-hd', 'Interval on the mean'));
+  const resHd = el('div', 'sec-hd', 'Interval on the mean');
+  res.appendChild(resHd);
   const unitBox = el('div');
   const warnBox = el('div');
   const ovrBox = el('div');
   const row1 = el('div'), row2 = el('div'), row3 = el('div');
-  res.append(unitBox, warnBox, ovrBox, row1, row2, row3);
+  const npNote = el('p', 'rv-cap');
+  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, npNote);
   res.appendChild(details('What the half-width means',
     '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R estimates and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>The confidence level describes the procedure, not this one interval: across many repetitions of the whole experiment, each with fresh replications, about that fraction of the intervals formed this way would contain the true mean. A given interval either contains it or does not.</p>' +
@@ -249,7 +263,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { ctrl, unitBox, warnBox, ovrBox, row1, row2, row3, leg, cap, planSec,
+  els = { ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, leg, cap, planSec,
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -266,6 +280,13 @@ export function render(rootEl) {
     if (state.selected() === before && visible()) draw();
   });
   levelSelect(els.lvl);
+  ctrl.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => {
+    if (proc === b.dataset.proc) return;
+    proc = b.dataset.proc;
+    state.setPick(id, 'proc', proc);
+    syncProc();
+    draw();
+  }));
   for (const b of els.segs) {
     b.addEventListener('click', () => {
       if (plan.target === b.dataset.target) return;
@@ -304,9 +325,14 @@ export function render(rootEl) {
 // wherever they are valid, and says whether the target field needs
 // rebuilding. Every one is recorded when the reader changes it, and so
 // applying them again changes nothing except after a reload.
+function syncProc() {
+  if (els) els.ctrl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+}
+
 function applyStored() {
   const get = k => state.getPick(id, k);
   let rebuild = false;
+  if (get('proc') === 't' || get('proc') === 'np') { proc = get('proc'); syncProc(); }
   if (get('planMode') === 'hw' || get('planMode') === 'power') plan.mode = get('planMode');
   if ((get('targetType') === 'absolute' || get('targetType') === 'relative') && get('targetType') !== plan.target) {
     plan.target = get('targetType');
@@ -451,6 +477,13 @@ function draw() {
 
   const s = summary(x);
   const ti = tInterval(x, level);
+  // The Wilcoxon interval is offered on replication estimates; the pooled
+  // observations keep the t interval, whose false independence is the point.
+  const np = proc === 'np' && !pooled;
+  if (proc === 'np' && pooled) els.warnBox.appendChild(notice('info', 'The Wilcoxon interval is offered on replication estimates; the pooled observations use the t interval.'));
+  const sr = np ? signedRank(x, { level }) : null;
+  els.resHd.textContent = np ? 'Interval on the pseudo-median (Wilcoxon signed-rank)' : 'Interval on the mean';
+  els.npNote.textContent = np ? NP_PLAN : '';
   const note = pooled ? POOLED : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
@@ -460,35 +493,51 @@ function draw() {
   ]));
   els.row2.replaceChildren(cardRow([card('Q1', num(s.q1), note), card('Median', num(s.median), note), card('Q3', num(s.q3), note)]));
   const tNote = tSub(level, ti.df) + ' = ' + num(ti.t);
-  els.row3.replaceChildren(cardRow([
-    wide(card(pct(level, 0) + ' interval', '[' + num(ti.lo) + ', ' + num(ti.hi) + ']', note)),
-    card('Half-width', num(ti.hw), pooled ? POOLED + '; ' + tNote : tNote),
-    wide(card('Mean ± half-width', num(ti.mean) + ' ± ' + num(ti.hw), note))
-  ]));
+  if (np) {
+    const basis = sr.exact ? 'exact distribution' : 'normal approximation';
+    els.row3.replaceChildren(cardRow([
+      wide(card(pct(level, 0) + ' interval for the pseudo-median', '[' + num(sr.lo) + ', ' + num(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
+      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of estimates, each estimate paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
+      wide(card('Basis', basis, sr.exact ? 'signed-rank distribution of n = ' + intl(s.n) : 'with continuity correction' + (sr.ties ? ', ties present' : '')))
+    ]));
+  } else {
+    els.row3.replaceChildren(cardRow([
+      wide(card(pct(level, 0) + ' interval', '[' + num(ti.lo) + ', ' + num(ti.hi) + ']', note)),
+      card('Half-width', num(ti.hw), pooled ? POOLED + '; ' + tNote : tNote),
+      wide(card('Mean ± half-width', num(ti.mean) + ' ± ' + num(ti.hw), note))
+    ]));
+  }
 
-  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti, ds, pooled });
+  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np });
 
   // The page's result, for its export row and the Report page.
   const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
-  const intervalRows = [
+  const intervalRows = np ? [
+    ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['min', s.min], ['q1', s.q1], ['median', s.median], ['q3', s.q3], ['max', s.max],
+    ['pseudo-median (Hodges-Lehmann)', sr.estimate], ['lower', sr.lo], ['upper', sr.hi],
+    ['level', sr.exact ? sr.achieved : level], ['basis', sr.exact ? 'exact signed-rank distribution' : 'normal approximation']
+  ] : [
     ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['se', s.se], ['min', s.min], ['q1', s.q1],
     ['median', s.median], ['q3', s.q3], ['max', s.max], ['df', ti.df], ['t quantile', ti.t],
     ['half-width', ti.hw], ['lower', ti.lo], ['upper', ti.hi]
   ];
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication estimates', headers: ['replication', 'estimate'], rows: estRows });
-  tables.push({ name: 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
   // Planning works on replication estimates only.
   finish({
-    title: 'Interval on the mean: ' + ds.name,
+    title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
     provenance: {
       dataset: ds.name,
       'confidence level': pct(level, 0),
+      procedure: np ? 'Wilcoxon signed-rank (nonparametric)' : 't interval',
       'unit of inference': pooled ? 'pooled observations (override)' : 'replication means'
     },
     tables,
-    summaryHtml: '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + pct(level, 0) +
-      ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>'
+    summaryHtml: np
+      ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + pct(level, 0) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications).</p>'
+      : '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + pct(level, 0) +
+        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>'
   }, pooled ? 'Planning counts replications, and so it uses the replication estimates; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
@@ -614,7 +663,8 @@ function drawFigure(d) {
     els.cap.textContent = 'Choose a dataset to see its replication estimates.';
     return;
   }
-  const { values, labels, ti, ds, pooled } = d;
+  const { values, labels, ti, ds, pooled, np } = d;
+  const intName = np ? ' Wilcoxon interval on the pseudo-median' : ' interval on the mean';
   const hasInt = ti && Number.isFinite(ti.lo);
   const band = hasInt ? 28 : 0;
   fig.render(f => {
@@ -637,11 +687,11 @@ function drawFigure(d) {
       // In the exported figure the interval sits one row under the dots.
       const yi = f.yRange[0] - 1;
       f.yRange = [yi - 1, f.yRange[1]];
-      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: pct(level, 0) + ' interval on the mean' },
-        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: 'mean of the replication estimates' });
+      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: pct(level, 0) + intName },
+        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: np ? 'pseudo-median of the replication estimates' : 'mean of the replication estimates' });
       f.readout((dx, dy, px, py) => {
         if (py >= fullH - band) {
-          return [pct(level, 0) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];
+          return [pct(level, 0) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', np ? 'pseudo-median ' + num(ti.mean) : 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];
         }
         return dotFn ? dotFn(dx, dy, px, py) : null;
       });
@@ -651,10 +701,12 @@ function drawFigure(d) {
     { swatch: 'dot', color: cEst, label: pooled ? 'one observation' : 'one replication estimate' },
     { swatch: 'line', color: cTruth, label: pooled ? 'mean of the pooled observations' : 'mean of the replication estimates' }
   ];
-  if (hasInt) items.push({ swatch: 'interval', color: cTruth, label: pct(level, 0) + ' interval on the mean' });
+  if (hasInt) items.push({ swatch: 'interval', color: cTruth, label: pct(level, 0) + intName });
   legend(els.leg, items);
   if (pooled) {
     els.cap.textContent = 'Each dot is one observation from the pooled replications, and the bar under them is the interval that treats them as independent; its narrowness reflects the false assumption, not real precision.';
+  } else if (hasInt && np) {
+    els.cap.textContent = 'Each dot is one replication’s estimate, and the bar under them is the ' + pct(level, 0) + ' Wilcoxon signed-rank interval on the pseudo-median, with the Hodges–Lehmann estimate as its dot; it needs no normality, and under heavy tails it is the interval to report.';
   } else if (hasInt) {
     els.cap.textContent = 'Each dot is one replication’s estimate, and the bar under them is the ' + pct(level, 0) + ' t interval on the mean, which is far narrower than the spread of the dots because it describes the mean, not a single replication.';
   } else {

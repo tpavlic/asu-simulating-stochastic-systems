@@ -171,6 +171,107 @@ D,10,2.3796
 `
   },
   {
+    id: "six-designs",
+    title: "Six designs: screen for the best",
+    file: "six_designs.csv",
+    kind: "reps",
+    format: "columns",
+    description: "Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null},
+    text: `design,replication,avg_wait
+A,1,10.3814
+A,2,7.1211
+A,3,9.3813
+A,4,2.1426
+A,5,6.9927
+A,6,2.2837
+A,7,3.3051
+A,8,7.1742
+A,9,11.9451
+A,10,6.3578
+A,11,16.3209
+A,12,11.417
+A,13,6.6432
+A,14,4.886
+A,15,5.6455
+B,1,5.3791
+B,2,10.8401
+B,3,2.5939
+B,4,3.512
+B,5,5.3505
+B,6,2.09
+B,7,9.6364
+B,8,6.1664
+B,9,4.9222
+B,10,4.955
+B,11,3.1259
+B,12,7.4991
+B,13,4.0031
+B,14,2.8642
+B,15,3.5588
+C,1,1.8661
+C,2,2.5425
+C,3,3.9169
+C,4,2.6182
+C,5,3.1795
+C,6,3.2256
+C,7,1.6193
+C,8,3.1977
+C,9,2.6583
+C,10,2.7154
+C,11,4.1917
+C,12,1.754
+C,13,2.3613
+C,14,3.4668
+C,15,1.8167
+D,1,3.6802
+D,2,2.0948
+D,3,1.5073
+D,4,3.5353
+D,5,2.135
+D,6,1.5112
+D,7,1.0974
+D,8,2.0621
+D,9,2.4011
+D,10,2.8993
+D,11,1.5693
+D,12,1.4656
+D,13,4.1378
+D,14,1.7709
+D,15,1.8934
+E,1,1.5737
+E,2,1.2395
+E,3,0.9943
+E,4,2.8171
+E,5,1.6014
+E,6,1.0526
+E,7,1.0989
+E,8,1.603
+E,9,0.7008
+E,10,1.55
+E,11,0.9008
+E,12,0.9016
+E,13,0.5676
+E,14,0.9813
+E,15,0.9208
+F,1,1.0335
+F,2,0.8251
+F,3,1.3458
+F,4,1.1399
+F,5,0.5816
+F,6,0.5309
+F,7,0.7786
+F,8,1.1993
+F,9,0.5156
+F,10,0.6909
+F,11,0.7593
+F,12,0.6207
+F,13,0.959
+F,14,0.8744
+F,15,0.8066
+`
+  },
+  {
     id: "transient",
     title: "Transient waits: warm-up",
     file: "transient_waits.txt",

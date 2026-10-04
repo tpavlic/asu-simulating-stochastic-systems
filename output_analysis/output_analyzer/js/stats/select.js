@@ -18,7 +18,7 @@ function variance(a) {
 
 function refusal(reason, k) {
   return { ok: false, reason, k, n: null, means: null, s2: null, alpha0: null, alpha1: null,
-           t: null, W: null, survivors: null, best: null, h: null, N: null, additional: null,
+           t: null, W: null, cutoff: null, survivors: null, best: null, h: null, N: null, additional: null,
            note: reason };
 }
 
@@ -63,15 +63,19 @@ export function subsetSelection(groups, { alpha, delta, dir }) {
   const better = dir === 'min' ? (a, b) => a < b : (a, b) => a > b;
   let best = 0;
   for (let i = 1; i < k; i++) if (better(means[i], means[best])) best = i;
-  const survivors = new Array(k);
+  // The cutoff is the value a design's mean had to reach to survive: the
+  // tightest of the other designs' means less their allowances max(0, W − δ)
+  // (or plus them, when smaller is better).
+  const survivors = new Array(k), cutoff = new Array(k);
   for (let i = 0; i < k; i++) {
-    let keep = true;
-    for (let j = 0; j < k && keep; j++) {
+    let c = dir === 'min' ? Infinity : -Infinity;
+    for (let j = 0; j < k; j++) {
       if (j === i) continue;
       const slack = Math.max(0, W[i][j] - delta);
-      keep = dir === 'min' ? means[i] <= means[j] + slack : means[i] >= means[j] - slack;
+      c = dir === 'min' ? Math.min(c, means[j] + slack) : Math.max(c, means[j] - slack);
     }
-    survivors[i] = keep;
+    cutoff[i] = c;
+    survivors[i] = dir === 'min' ? means[i] <= c : means[i] >= c;
   }
   const h = rinottH(n0, k, 1 - alpha1);
   const N = new Array(k), additional = new Array(k);
@@ -87,5 +91,5 @@ export function subsetSelection(groups, { alpha, delta, dir }) {
     ? `One design survives the screen, and it is the best within δ = ${delta} at ${pct} confidence.`
     : `${count} designs survive the screen: none of them can be ruled out as the best within δ = ${delta}. ` +
       `A second stage that brings each survivor to N replications selects the best at ${pct} confidence.`;
-  return { ok: true, k, n, means, s2, alpha0, alpha1, t, W, survivors, best, h, N, additional, note };
+  return { ok: true, k, n, means, s2, alpha0, alpha1, t, W, cutoff, survivors, best, h, N, additional, note };
 }

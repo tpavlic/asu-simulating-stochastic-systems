@@ -10,8 +10,9 @@
 
 import * as state from '../state.js';
 import { repEstimates, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, anova, posthoc, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { simultaneousMeans, bonferroniFamily, anova, posthoc, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { subsetSelection } from '../stats/select.js';
+import { kruskalWallis, dunn, signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -28,7 +29,8 @@ export const sections = [
   { id: 'diffs', label: 'Differences' },
   { id: 'plan', label: 'Replications' },
   { id: 'anova', label: 'ANOVA and post hoc' },
-  { id: 'subset', label: 'Best subset' }
+  { id: 'nonparam', label: 'Nonparametric' },
+  { id: 'subset', label: 'Screen for the best' }
 ];
 
 const RULES = {
@@ -45,6 +47,8 @@ let ctrlSel = null;
 let dir = 'max';
 let diffMode = 'pairs';
 let rule = 'tukey';
+// How Dunn's pairwise p-values are adjusted: 'bonferroni' or 'holm'.
+let adjust = 'bonferroni';
 let controlId = null;
 // The indifference zone: null follows the default (10% of the pooled sd),
 // a number is the reader's own value.
@@ -166,37 +170,6 @@ function clip(s, maxW, size) {
  * @param {Object} fig a plots.js figure
  * @param {{label: string, full?: string, value: number, keep: boolean}[]} rows
  */
-function meanRows(fig, rows) {
-  const fs = 11.5, n = rows.length;
-  const longest = Math.max(...rows.map(r => r.label.length)) * fs * 0.56;
-  const lw = Math.min(Math.floor(fig.w * (fig.narrow ? 0.34 : 0.28)), Math.ceil(longest) + 14);
-  fig.setMargin({ l: lw + 8 });
-  const sx = fig.x(extent(rows.map(r => r.value)), { pad: 0.08, nice: true });
-  fig.axes({ y: false });
-  const rowH = fig.ih / n;
-  const cOk = tok('--ok'), cMuted = tok('--muted'), cCard = tok('--card'), cText = tok('--text'), cBorder = tok('--border');
-  const ry = recordRows(fig, rows.map(r => r.label));
-  const keep = { kind: 'points', x: [], y: [], color: cOk, label: 'survives the screen' };
-  const gone = { kind: 'points', x: [], y: [], color: cMuted, hollow: true, label: 'eliminated by the screen' };
-  rows.forEach((r, i) => {
-    const cy = (i + 0.5) * rowH;
-    svgEl('line', { x1: 0, x2: fig.iw, y1: cy, y2: cy, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
-    if (r.keep) svgEl('circle', { cx: sx(r.value), cy, r: 5.5, fill: cOk }, fig.inner);
-    else svgEl('circle', { cx: sx(r.value), cy, r: 5, fill: cCard, stroke: cMuted, 'stroke-width': 2 }, fig.inner);
-    const rec = r.keep ? keep : gone;
-    rec.x.push(r.value); rec.y.push(ry(i));
-    const t = svgEl('text', { x: -10, y: cy + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep ? cText : cMuted }, fig.layers.axes);
-    t.textContent = clip(r.label, lw - 6, fs);
-  });
-  if (keep.x.length) fig.series.push(keep);
-  if (gone.x.length) fig.series.push(gone);
-  fig.readout((dx, dy, px, py) => {
-    const i = Math.floor(py / rowH);
-    if (i < 0 || i >= n) return null;
-    return [rows[i].full || rows[i].label, 'mean ' + num(rows[i].value), rows[i].keep ? 'survives the screen' : 'eliminated by the screen'];
-  });
-}
-
 /**
  * Places brackets in columns so that none overlaps another: shortest span
  * first, each in the first column where it meets no bracket already there.
@@ -249,26 +222,35 @@ function designRows(fig, rows, pairs) {
   const rowH = fig.ih / n;
   const cy = i => Math.round((i + 0.5) * rowH * 10) / 10;
   const cEst = tok('--est'), cBorder = tok('--border'), cText = tok('--text'), cAcc = tok('--accent'), cMiss = tok('--miss');
+  const cOk = tok('--ok'), cMuted = tok('--muted');
   // For the script exports, the letters and brackets sit inside a widened x
   // range rather than in the margin.
   const ry = recordRows(fig, rows.map(r => r.label));
   const [dx0, dx1] = sx.domain, span = dx1 - dx0;
   fig.xRange = [dx0, dx1 + span * (0.12 + 0.03 * cols)];
-  const segs = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cEst, label: 'interval' };
-  const means = { kind: 'points', x: [], y: [], color: cEst, label: 'mean' };
+  // A row with `keep` set is colored by whether it survives a screen; the
+  // records are kept per color so that each group exports as one series.
+  const recs = new Map();
+  const recFor = (c, what) => {
+    if (!recs.has(c)) recs.set(c, { segs: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, label: what + ' interval' },
+                                   means: { kind: 'points', x: [], y: [], color: c, label: what + ' mean' } });
+    return recs.get(c);
+  };
   const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
   rows.forEach((r, i) => {
     const y = cy(i);
+    const c = r.keep === undefined ? cEst : r.keep ? cOk : cMuted;
+    const { segs, means } = recFor(c, r.keep === undefined ? '' : r.keep ? 'surviving' : 'eliminated');
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
     const g = svgEl('g', { class: 'm-int' }, fig.inner);
     const x0 = sx(r.lo), x1 = sx(r.hi);
-    svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: cEst, 'stroke-width': 2 }, g);
-    for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: cEst, 'stroke-width': 2 }, g);
-    svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: cEst }, g);
+    svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, g);
+    for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
+    svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
     const yy = ry(i);
     segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
     means.x.push(r.mean); means.y.push(yy);
-    const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
+    const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep === false ? cMuted : cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
       const lt = svgEl('text', { x: fig.iw + 10, y: y + 4, 'font-size': lfs, 'font-weight': 700, fill: cAcc, class: 'm-letter',
@@ -277,7 +259,7 @@ function designRows(fig, rows, pairs) {
       letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
     }
   });
-  fig.series.push(segs, means);
+  for (const r of recs.values()) { r.segs.label = r.segs.label.trim(); r.means.label = r.means.label.trim(); fig.series.push(r.segs, r.means); }
   if (letters.text.length) fig.series.push(letters);
   const x0 = fig.iw + 10 + letW + 6;
   const tick = Math.max(2, Math.min(5, colW - 1.5));
@@ -294,7 +276,9 @@ function designRows(fig, rows, pairs) {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
     const r = rows[i];
-    return [r.full, 'mean ' + num(r.mean), 'interval ' + interval(r.lo, r.hi)];
+    const out = [r.full, 'mean ' + num(r.mean), 'interval ' + interval(r.lo, r.hi)];
+    if (r.note) out.push(r.note);
+    return out;
   });
 }
 
@@ -444,6 +428,7 @@ function ensureEpsSpinner(step) {
 function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
+  rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
   const rs = rootEl.querySelector('#sev-rule');
   if (rs.value !== rule) rs.value = rule;
 
@@ -521,7 +506,7 @@ function update() {
   const k = list.length;
   const short = shortNames(list);
   const unit = rootEl.querySelector('#sev-unit');
-  const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
+  const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc', 'np'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
   bodies.forEach(b => { b.innerHTML = ''; });
 
   numberChecklist(list);
@@ -530,7 +515,7 @@ function update() {
   if (k < 2) {
     unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> check two or more designs above.';
     const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : 'Check two or more designs above to compare them.';
-    bodies.slice(0, 4).forEach(b => b.appendChild(para('muted-line cmp-empty', msg)));
+    [0, 1, 2, 3, 5].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
     resultBase = null;
     planCtx = { msg: 'Check two or more designs above to plan replications.' };
     drawPlan();
@@ -621,6 +606,14 @@ function update() {
     const rejects = av.p < alpha;
     b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, p = ' + pValue(av.p) + ': ' +
       (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
+    // The pooled procedures assume one variance across designs; Levene's test
+    // checks that without assuming normality, which the F ratio of two
+    // variances would.
+    const lv = levene(groups);
+    const lvTxt = 'Levene’s test of equal variances (Brown–Forsythe, centered on the medians): F = ' + num(lv.F) + ' on ' + lv.df1 + ' and ' + lv.df2 + ' degrees of freedom, p = ' + pValue(lv.p) + '. ';
+    if (lv.p < alpha) b.appendChild(notice('warn', lvTxt + 'The spreads differ at this level, and every pooled procedure below assumes they do not. The Bonferroni differences, built on Welch intervals, are the safer choice.'));
+    else b.appendChild(para('cmp-lead', lvTxt + 'No evidence at this level that the spreads differ, which is what pooling the variance below assumes.'));
+    tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
     b = bodies[4];
     let critTxt;
     if (rule === 'tukey') critTxt = 'Tukey–Kramer: the studentized range quantile is q = ' + num(ph.crit) + ' (k = ' + k + ', ' + av.dfw + ' df), and each pair’s critical difference is q·SE/√2.';
@@ -654,7 +647,8 @@ function update() {
         (ph.letters
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
-        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' mean down.');
+        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' mean down.' +
+        ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
     const legItems = [];
@@ -677,21 +671,17 @@ function update() {
       ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p], ['within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, av.dfb + av.dfw, '', '', '']] });
     tables.push({ name: 'Post-hoc: ' + RULES[rule], headers: ['pair', 'difference', 'se', 'critical value', 'critical difference', 'lower', 'upper', 'different'],
       rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, ph.crit, p.hw, p.lo, p.hi, p.flagged ? 'yes' : 'no']) });
+    // The letters are read off the design plot; the table exists only as an
+    // export, where nothing can be hovered.
     if (ph.letters) {
       const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
-      b.appendChild(para('cmp-lead', 'Compact letter display, best mean first (' + (dir === 'min' ? 'smaller' : 'bigger') + ' is better). Designs that share a letter are not declared different under this rule.'));
-      const lt = table(['Design', 'Mean', 'Letters'], order.map(i => [badge(i) + ' ' + esc(short[i]), num(av.means[i]), '<span class="cmp-letters">' + esc(ph.letters[i]) + '</span>']));
-      lt.classList.add('cmp-letter-tab');
-      b.appendChild(lt);
       tables.push({ name: 'Compact letter display: ' + RULES[rule], headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
-    } else {
-      b.appendChild(para('cmp-lead', 'Dunnett’s procedure compares each design with the control, ' + esc(short[ctrlIdx]) + ', and not with each other, and so it has no letter display.'));
     }
-    summary.push('ANOVA: F = ' + num(av.F) + ', p = ' + pValue(av.p) + '. ' + RULES[rule] + ': ' +
+    summary.push('Levene: p = ' + pValue(lv.p) + '. ANOVA: F = ' + num(av.F) + ', p = ' + pValue(av.p) + '. ' + RULES[rule] + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   }
 
-  // Best subset.
+  // The screen for the best.
   const eps = epsSpin ? epsSpin.get() : NaN;
   const ss = subsetSelection(groups, { alpha, delta: eps, dir });
   {
@@ -708,20 +698,70 @@ function update() {
         : 'These designs cannot be distinguished from the best within ε on this data: ' + short.filter((_, i) => ss.survivors[i]).join(', ') +
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
+      const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
+      const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: '', keep: ss.survivors[i],
+        note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-best-subset',
-        fg => meanRows(fg, list.map((d, i) => ({ label: numLabel(i, short), full: d.name, value: ss.means[i], keep: ss.survivors[i] }))),
-        [nSurv ? { swatch: 'dot', color: '--ok', label: 'survives the screen' } : null,
-          nSurv < k ? { swatch: 'hollow', color: '--muted', label: 'eliminated by the screen' } : null].filter(Boolean),
-        'Each design’s sample mean; the best sample mean is ' + esc(best) + ' (' + (dir === 'min' ? 'smallest' : 'largest') + '). A design is eliminated when another design’s mean beats it by more than the screen’s allowance.');
+        fg => designRows(fg, rowsS, []),
+        [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
+          nSurv < k ? { swatch: 'interval', color: '--muted', label: 'eliminated by the screen' } : null].filter(Boolean),
+        'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section. ' +
+        'The screen compares the means: a design is eliminated when another design’s mean beats it by more than the screen allows for the two designs’ spread, and the designs still in color cannot be ruled out as the best within ε at this confidence. ' +
+        'Whether a design survives is read from its color, never from whether intervals overlap.');
       const rows = list.map((_, i) => [badge(i) + ' ' + esc(short[i]), intl(ss.n[i]), num(ss.means[i]), num(Math.sqrt(ss.s2[i])),
         ss.survivors[i] ? '<span class="cmp-ok">yes</span>' : 'no', ss.N[i] === null ? dash : intl(ss.N[i]), ss.additional[i] === null ? dash : intl(ss.additional[i])]);
       b.appendChild(table(['Design', 'R', 'Mean', 's', 'Survives?', 'N needed', 'Additional replications'], rows, i => (ss.survivors[i] ? '' : 'cmp-mute')));
       b.appendChild(para('exp-note', 'N is the total number of replications Rinott’s second stage needs for each survivor, max(R, ⌈(h·s/ε)²⌉) with h = ' + num(ss.h) +
         '; the screen’s t = ' + num(ss.t) + '. A smaller ε asks for more replications, in proportion to 1/ε².'));
-      tables.push({ name: 'Best subset', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
+      tables.push({ name: 'Screen for the best', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
         rows: list.map((d, i) => [d.name, ss.n[i], ss.means[i], Math.sqrt(ss.s2[i]), ss.survivors[i] ? 'yes' : 'no', ss.N[i] === null ? '' : ss.N[i], ss.additional[i] === null ? '' : ss.additional[i]]) });
       summary.push(verdict);
     }
+  }
+
+  // Kruskal–Wallis and Dunn.
+  {
+    const b = bodies[5];
+    const kwr = kruskalWallis(groups);
+    const dn = dunn(groups, { alpha, adjust });
+    b.appendChild(para('cmp-lead', 'The analysis of variance and its post-hoc rules compare means on the assumption that the replication estimates are normal with one variance across designs. ' +
+      'These rank procedures assume neither: they pool every estimate, rank the lot, and ask whether some designs tend to sit higher than others. They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
+    b.appendChild(cardRow([
+      card('H', num(kwr.H), 'Kruskal–Wallis statistic' + (kwr.ties ? ', tie-corrected' : '')),
+      card('df', intl(kwr.df), 'k − 1'),
+      card('p', pValue(kwr.p), 'chi-square approximation')
+    ]));
+    b.appendChild(para('cmp-verdict', 'H = ' + num(kwr.H) + ' on ' + kwr.df + ' degrees of freedom, p = ' + pValue(kwr.p) + ': ' +
+      (kwr.p < alpha ? 'the designs do not all share one distribution at this level.' : 'insufficient evidence at this level that the designs differ.')));
+    const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
+    b.appendChild(para('cmp-lead', 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (kwr.ties ? ', tie-corrected' : '') + '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
+      ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the Kruskal–Wallis test to reject.'));
+    // Each design's pseudo-median with its Wilcoxon interval, best first,
+    // carrying Dunn's letters and brackets.
+    const hl = groups.map(g => signedRank(g, { level }));
+    const orderN = list.map((_, i) => i).sort((x, y) => dir === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
+    const posN = [];
+    orderN.forEach((i, r) => { posN[i] = r; });
+    const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
+    const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
+    b.appendChild(para('sev-fig-title', 'Designs, best first, with Dunn’s letter groups and the pairs declared different'));
+    const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
+    if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by Dunn’s test (bracket)' });
+    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-dunn-groups',
+      fg => designRows(fg, rowsN, pairsN), legN,
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its estimates), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'The letters and brackets come from Dunn’s test on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
+    const labN = p => pairLabel(p.i, p.j);
+    const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
+    const rowsD = dn.pairs.map(p => ['<span class="sev-pair">' + esc(labN(p)) + '</span>', '<span class="sev-full">' + esc(fullN(p)) + '</span>', num(p.diff), num(p.se), num(p.z), pValue(p.p), pValue(p.pAdj),
+      p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
+    b.appendChild(table(['Pair', 'Designs', 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
+    tables.push({ name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
+    tables.push({ name: 'Pairwise rank comparisons (Dunn, ' + adjName + ')', headers: ['pair', 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
+      rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
+    tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
+      rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
+    summary.push('Kruskal–Wallis: H = ' + num(kwr.H) + ', p = ' + pValue(kwr.p) + '. Dunn (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   }
 
   const units = Array.from(new Set(list.map(d => d.unit || '')));
@@ -738,6 +778,7 @@ function update() {
       'comparisons adjusted for': fam.C,
       'difference family': diffMode === 'pairs' ? 'all pairs' : 'versus control',
       'post-hoc rule': RULES[rule],
+      'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
       'indifference zone': Number.isFinite(eps) ? eps : ''
     },
@@ -808,7 +849,7 @@ function drawPlan() {
     pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power });
     cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha }) : NaN;
     pwNote = pp.n != null
-      ? 'This is the F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Best subset card are a third way to set replications, by selection. ' +
+      ? 'This is the F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best card are a third way to set replications, by selection. ' +
         'An estimate conditional on the current pooled sample standard deviation, √MSW = ' + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
       : esc(pp.reason);
   }
@@ -842,7 +883,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two or more designs at once on their replication estimates: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
-    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best.</p>' +
+    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams; replications run under common random numbers across designs are pairs, and a pair is compared on the Two Systems page.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +
       '<div id="sev-list"></div>' +
@@ -878,7 +919,14 @@ export function render(root) {
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div></div>' +
-    '<div class="sec" data-section="subset"><div class="sec-hd">Best subset</div><div id="sev-subset-body"></div></div>';
+    '<div class="sec" data-section="nonparam"><div class="sec-hd">Kruskal–Wallis test and Dunn’s pairwise comparisons</div>' +
+      '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How Dunn’s pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
+          '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
+          '<button type="button" class="seg-btn" data-adj="holm" aria-pressed="false">Holm</button>' +
+        '</span></div>' +
+      '<div id="sev-np-body"></div></div>' +
+    '<div class="sec" data-section="subset"><div class="sec-hd">Screen for the best</div><div id="sev-subset-body"></div></div>';
 
   const planSec = root.querySelector('#sev-plan');
   planSec.innerHTML = planMarkup('sev',
@@ -930,6 +978,7 @@ export function render(root) {
   root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
+  root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
   applyStored();
 
   const visible = () => root.classList.contains('active');
@@ -950,6 +999,7 @@ function applyStored() {
   if (Object.prototype.hasOwnProperty.call(RULES, get('rule'))) rule = get('rule');
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
+  if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
   if (typeof get('control') === 'string') controlId = get('control');
   const e = get('eps');
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;

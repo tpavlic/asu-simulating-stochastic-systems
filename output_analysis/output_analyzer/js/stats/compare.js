@@ -19,6 +19,12 @@ function variance(a) {
   for (let i = 0; i < n; i++) { const d = a[i] - m; s += d * d; }
   return s / (n - 1);
 }
+function median(a) {
+  const v = Float64Array.from(a).sort();
+  const n = v.length;
+  return n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
+}
+
 function pearson(x, y) {
   const mx = mean(x), my = mean(y);
   let sxy = 0, sxx = 0, syy = 0;
@@ -193,6 +199,25 @@ export function anova(groups) {
   const F = msb / msw;
   const p = Number.isFinite(F) ? 1 - fCdf(F, dfb, dfw) : (F === Infinity ? 0 : NaN);
   return { k, N, n, means, grandMean, ssb, ssw, sst: ssb + ssw, dfb, dfw, msb, msw, F, p };
+}
+
+/**
+ * Levene's test of equal variances across groups: the one-way ANOVA of the
+ * absolute deviations from each group's center. Centered on the medians it is
+ * Brown and Forsythe's form, which keeps its level under skewed and
+ * heavy-tailed data and is R's car::leveneTest default; centered on the means
+ * it is Levene's original. Unlike the F ratio of two variances, it needs no
+ * normality and takes any number of groups.
+ * @param {(number[]|Float64Array)[]} groups
+ * @param {{center?: 'median'|'mean'}} [opts]
+ * @returns {{k: number, N: number, center: string, centers: number[], F: number, df1: number, df2: number, p: number}}
+ */
+export function levene(groups, { center = 'median' } = {}) {
+  const k = groups.length;
+  const centers = groups.map(g => (center === 'mean' ? mean(g) : median(g)));
+  const dev = groups.map((g, i) => Float64Array.from(g, v => Math.abs(v - centers[i])));
+  const av = anova(dev);
+  return { k, N: av.N, center, centers, F: av.F, df1: av.dfb, df2: av.dfw, p: av.p };
 }
 
 /**

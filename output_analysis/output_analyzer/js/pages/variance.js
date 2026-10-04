@@ -7,6 +7,7 @@
 import * as state from '../state.js';
 import { repEstimates, canInfer } from '../data/model.js';
 import { varianceInterval, fRatio, correlation, regressionLine } from '../stats/intervals.js';
+import { levene } from '../stats/compare.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -19,7 +20,7 @@ export const id = 'variance';
 export const title = 'Variance and Correlation';
 
 const NORMALITY = 'These intervals assume the replication estimates are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.';
-const NORMALITY_F = 'The F ratio and its interval assume both sets of replication estimates are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows.';
+const NORMALITY_F = 'The F ratio and its interval assume both sets of replication estimates are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test does not assume normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form), and it is the usual check before a procedure that pools variances.';
 const CORR_NOTE = 'Zero correlation is not independence, and simulation output is routinely correlated within a run; this r describes the pairing of replication estimates across the two datasets, which is what a paired comparison relies on.';
 
 let root = null;
@@ -89,7 +90,9 @@ export function render(rootEl) {
   const fSec = el('div', 'sec');
   fSec.appendChild(el('div', 'sec-hd', 'Ratio of variances (A over B)'));
   const fMsg = el('p', 'rv-line'), fRow1 = el('div'), fRow2 = el('div'), fVerdict = el('p', 'rv-verdict');
-  fSec.append(fMsg, fRow1, fRow2, fVerdict, notice('warn', NORMALITY_F));
+  const bfHead = el('p', 'rv-line', 'Levene’s test of equal variances (Brown–Forsythe, centered on the medians), which does not assume normality:');
+  const bfRow = el('div'), bfVerdict = el('p', 'rv-verdict');
+  fSec.append(fMsg, fRow1, fRow2, fVerdict, bfHead, bfRow, bfVerdict, notice('warn', NORMALITY_F));
   root.appendChild(fSec);
 
   // Correlation.
@@ -102,7 +105,7 @@ export function render(rootEl) {
   fig = makeFigure(figBox, { height: 320, narrowHeight: 340, xLabel: 'Dataset A estimate', yLabel: 'Dataset B estimate', ariaLabel: 'Scatter plot of the paired replication estimates' });
   exportButtons(figBox, fig, 'correlation-scatter');
 
-  els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, cMsg, cRow1, cRow2, leg, cap,
+  els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, bfRow, bfVerdict, cMsg, cRow1, cRow2, leg, cap,
           a: ctrl.querySelector('#va-a'), b: ctrl.querySelector('#va-b'), lvl: ctrl.querySelector('#va-lvl') };
 
   pickA = datasetSelect(els.a, { value: state.selected() || undefined, remember: { page: id, key: 'a' } });
@@ -153,6 +156,8 @@ function placeholderF(level) {
   els.fRow1.replaceChildren(cardRow([card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;')]));
   els.fRow2.replaceChildren(cardRow([card(pct(level, 0) + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), '[' + dash + ', ' + dash + ']', '&nbsp;')]));
   els.fVerdict.innerHTML = '&nbsp;';
+  els.bfRow.replaceChildren(cardRow([card(S('F'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p'), dash, '&nbsp;')]));
+  els.bfVerdict.innerHTML = '&nbsp;';
 }
 
 function placeholderCorr(level) {
@@ -288,6 +293,18 @@ function draw() {
       ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi],
       ['interval contains 1', contains ? 'yes' : 'no']
     ] });
+    const lv = levene([finite(a), finite(b)]);
+    els.bfRow.replaceChildren(cardRow([
+      card(S('F'), num(lv.F), 'ANOVA of |estimate − median|'),
+      card(S('df1'), intl(lv.df1), 'k − 1'),
+      card(S('df2'), intl(lv.df2), 'R<sub>A</sub> + R<sub>B</sub> − 2'),
+      card(S('p'), pValue(lv.p), 'against equal spreads')
+    ]));
+    const alpha = 1 - level;
+    els.bfVerdict.innerHTML = lv.p < alpha
+      ? 'Levene rejects at α = ' + num(alpha, 2) + ': the spreads differ, without assuming normality.'
+      : 'Levene does not reject at α = ' + num(alpha, 2) + ': no evidence that the spreads differ.';
+    tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
   } else {
     placeholderF(level);
   }

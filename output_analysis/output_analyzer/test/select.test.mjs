@@ -34,6 +34,17 @@ for (const dir of ['max', 'min']) {
     s.s2.forEach((v, i) => close(v, ref.s2[i], 1e-12, `s2 ${i}`));
     for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) close(s.W[i][j], ref.W[i][j], 1e-9, `W ${i},${j}`);
     assert.deepEqual(s.survivors, ref.survivors);
+    // The cutoff is the tightest neighbor bound, and clearing it is survival.
+    for (let i = 0; i < 4; i++) {
+      let c = dir === 'min' ? Infinity : -Infinity;
+      for (let j = 0; j < 4; j++) {
+        if (j === i) continue;
+        const slack = Math.max(0, s.W[i][j] - REF.delta);
+        c = dir === 'min' ? Math.min(c, s.means[j] + slack) : Math.max(c, s.means[j] - slack);
+      }
+      close(s.cutoff[i], c, 1e-12, `cutoff ${i}`);
+      assert.equal(s.survivors[i], dir === 'min' ? s.means[i] <= c : s.means[i] >= c, `cutoff decides ${i}`);
+    }
     assert.equal(s.best, ref.best);
     assert.ok(s.survivors[s.best], 'the sample best always survives');
     // h is Rinott's constant at n0 = min n, k, and 1 − α1.
@@ -73,7 +84,7 @@ test('every survivor at a wide indifference zone also survives at a narrow one',
 });
 
 test('subsetSelection refuses k < 2, delta ≤ 0, and n < 2', () => {
-  const nullFields = ['n', 'means', 's2', 'alpha0', 'alpha1', 't', 'W', 'survivors', 'best', 'h', 'N', 'additional'];
+  const nullFields = ['n', 'means', 's2', 'alpha0', 'alpha1', 't', 'W', 'cutoff', 'survivors', 'best', 'h', 'N', 'additional'];
   for (const [groups, opts] of [
     [[G[0]], { alpha: 0.05, delta: 1, dir: 'max' }],
     [G, { alpha: 0.05, delta: 0, dir: 'max' }],

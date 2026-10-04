@@ -20,6 +20,7 @@
 //   two_designs_independent.csv  designs A (0.8) and B (0.75), 15 days each, independent streams
 //   two_designs_crn.csv        the same designs with the same streams reused for both
 //   four_designs.csv           designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, independent
+//   six_designs.csv            designs A..F (0.90, 0.88, 0.80, 0.75, 0.65, 0.60), 15 days each, independent
 //   transient_waits.txt        10 replications of the first 300 waits at rho = 0.9
 //   steady_state_long.csv      one run of 5000 waits at rho = 0.8
 //   queue_length.txt           5 replications of 600 minutes of the number in queue at rho = 0.8
@@ -42,6 +43,7 @@ const SEEDS = {
   indepB: 47000,
   crn: 59000,
   four: [61000, 67000, 73000, 79000],
+  six: [110000, 116000, 122000, 128000, 134000, 140000],
   transient: 83000,
   steady: 97001,
   queueLength: 101000
@@ -204,6 +206,13 @@ function entries() {
       description: 'Average wait over an 8-hour day for four versions of a queue with mean service times 0.80, 0.78, 0.75, and 0.70 minute, with 10 independent days each. Use it for one-way analysis of variance, all-pairs comparisons, and picking the best design.',
       text: designsCsv([A('A', 0.8, SEEDS.four[0]), A('B', 0.78, SEEDS.four[1]), A('C', 0.75, SEEDS.four[2]), A('D', 0.7, SEEDS.four[3])], 10),
       mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Four designs' }
+    },
+    {
+      id: 'six-designs', title: 'Six designs: screen for the best', file: 'six_designs.csv',
+      kind: 'reps', format: 'columns',
+      description: 'Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.',
+      text: designsCsv([A('A', 0.9, SEEDS.six[0]), A('B', 0.88, SEEDS.six[1]), A('C', 0.8, SEEDS.six[2]), A('D', 0.75, SEEDS.six[3]), A('E', 0.65, SEEDS.six[4]), A('F', 0.6, SEEDS.six[5])], 15),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Six designs' }
     },
     {
       id: 'transient', title: 'Transient waits: warm-up', file: 'transient_waits.txt',
