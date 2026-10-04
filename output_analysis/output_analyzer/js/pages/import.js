@@ -23,8 +23,8 @@ const FORMAT_LABEL = {
 };
 
 const KINDS = [
-  { kind: 'tally', label: 'Observations within replications', tip: 'Each value is one observation, such as one customer’s wait. A replication’s estimate is the plain mean of its observations.' },
-  { kind: 'time', label: 'Time-persistent state', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s estimate is the time-weighted mean.' },
+  { kind: 'tally', label: 'Observations within replications', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
+  { kind: 'time', label: 'Time-persistent state', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s outcome is the time-weighted mean.' },
   { kind: 'reps', label: 'One value per replication', tip: 'Each value is already one replication’s summary, such as one day’s average wait.' }
 ];
 
@@ -120,9 +120,9 @@ export function render(root) {
   };
 
   root.querySelector('#im-why').appendChild(details('Why the statistic type matters',
-    '<p>A tally records one value per event, such as each customer’s wait, and a replication’s estimate is the plain mean of its observations.</p>' +
-    '<p>A time-persistent state, such as the number in queue, is recorded only when it changes, and each value holds until the next record. Its replication estimate is the time-weighted mean, in which each value counts in proportion to how long it held. Averaging the recorded values instead would count a spike that lasted a second the same as a plateau that lasted an hour.</p>' +
-    '<p>One value per replication is a file that already holds one summary per run. Whatever the statistic type, the replication estimates are the unit of inference: observations within one run are correlated with their neighbors, whereas the estimates from independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
+    '<p>A tally records one value per event, such as each customer’s wait, and a replication’s outcome is the plain mean of its observations.</p>' +
+    '<p>A time-persistent state, such as the number in queue, is recorded only when it changes, and each value holds until the next record. Its replication outcome is the time-weighted mean, in which each value counts in proportion to how long it held. Averaging the recorded values instead would count a spike that lasted a second the same as a plateau that lasted an hour.</p>' +
+    '<p>One value per replication is a file that already holds one summary per run. Whatever the statistic type, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the estimates from independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
 
   // Drop zone: files, or text dragged from another window.
   const drop = els.drop;

@@ -445,3 +445,41 @@ export function friedmanPairs(groups, { alpha, adjust = 'bonferroni' }) {
   const letters = letterGroups(k, pairs.filter(pr => pr.flagged).map(pr => [pr.i, pr.j]));
   return { k, C, adjust, pairs, letters, fr };
 }
+
+// ── Bonferroni families of Wilcoxon intervals ─────────────────────────────
+
+/**
+ * The Bonferroni family of differences done with rank procedures: every
+ * pair i < j (C = k(k − 1)/2) or every design against a control (C = k − 1),
+ * each on its own Wilcoxon rank-sum interval for the shift, or, when the
+ * groups are aligned block by block, its own signed-rank interval on the
+ * paired differences, at level 1 − α/C. A comparison is flagged when its
+ * interval excludes 0, and pAdj = min(1, C·p).
+ * @param {(number[]|Float64Array)[]} groups
+ * @param {{mode: 'pairs'|'control', control?: number, level: number, paired?: boolean}} opts
+ * @returns {{C: number, perLevel: number, paired: boolean, comparisons: {i: number, j: number, diff: number,
+ *   stat: number, lo: number, hi: number, p: number, pAdj: number, flagged: boolean, exact: boolean, achieved: number}[]}}
+ */
+export function bonferroniFamilyRank(groups, { mode, control = 0, level, paired = false }) {
+  const k = groups.length, list = [];
+  if (mode === 'control') {
+    for (let i = 0; i < k; i++) if (i !== control) list.push([i, control]);
+  } else {
+    for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) list.push([i, j]);
+  }
+  const C = list.length, perLevel = 1 - (1 - level) / C;
+  const comparisons = list.map(([i, j]) => {
+    let r, stat;
+    if (paired) {
+      const d = Array.from(groups[i], (v, q) => v - groups[j][q]);
+      r = signedRank(d, { level: perLevel });
+      stat = r.V;
+    } else {
+      r = rankSum(groups[i], groups[j], { level: perLevel });
+      stat = r.W;
+    }
+    return { i, j, diff: r.estimate, stat, lo: r.lo, hi: r.hi, p: r.p, pAdj: Math.min(1, C * r.p),
+             flagged: r.lo > 0 || r.hi < 0, exact: r.exact, achieved: r.achieved };
+  });
+  return { C, perLevel, paired, comparisons };
+}

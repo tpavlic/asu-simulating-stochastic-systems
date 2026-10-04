@@ -18,8 +18,8 @@ const ESTIMATE_LABEL = {
   reps: 'one value per replication'
 };
 
-const PILOT_TIP = 'One bare numeric column of replication estimates, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
-const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the estimates of replications with the same id in both datasets, as common random numbers would pair them.';
+const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
+const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -104,7 +104,7 @@ export function datasetFiles(ds) {
   out.push({ label: 'Replication summary CSV', run: () => downloadText(base + '_replications.csv', repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] }))) });
   out.push({
     label: 'Pilot-ready CSV', tip: PILOT_TIP, disabled: !pilotOk,
-    note: pilotOk ? '' : 'A pilot needs at least two replication estimates, and this dataset has ' + intl(finiteCount(ds)) + '.',
+    note: pilotOk ? '' : 'A pilot needs at least two replication outcomes, and this dataset has ' + intl(finiteCount(ds)) + '.',
     run: () => downloadText(base + '_pilot.csv', pilotCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind], form: 'pilot data, one column' })))
   });
   return out;
@@ -112,10 +112,10 @@ export function datasetFiles(ds) {
 
 /** The explanation of the data files, for a details block under the row. */
 export const DATA_FILES_HELP =
-  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times, because each value counts in proportion to how long it holds.</p>' +
+  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
   '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
-  '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its estimate (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
-  '<p><strong>Pilot-ready CSV</strong>: one column of replication estimates under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
+  '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
+  '<p><strong>Pilot-ready CSV</strong>: one column of replication outcomes under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
 
 // The replications of A and B matched by id, keeping only the pairs where
 // both estimates are finite, as the two vectors the paired pilot writes.
@@ -142,7 +142,7 @@ export function pairedPilotFile(a, b) {
   const unmatched = v.unmatchedA + v.unmatchedB;
   let msg = plural(v.xa.length, 'pair') + ' matched by replication id';
   if (unmatched) msg += '; ' + plural(unmatched, 'replication') + ' without a partner left out';
-  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing estimate left out';
+  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing outcome left out';
   msg += '.';
   const ok = v.xa.length >= 2;
   return [{
@@ -157,7 +157,7 @@ export function pairedPilotFile(a, b) {
         pairs: v.xa.length,
         'unmatched replications': v.unmatchedA + v.unmatchedB + ' (' + v.unmatchedA + ' in A, ' + v.unmatchedB + ' in B)'
       };
-      if (v.missing) prov['pairs with a missing estimate'] = v.missing;
+      if (v.missing) prov['pairs with a missing outcome'] = v.missing;
       if (a.derivedFrom) { prov['A derived from'] = derivedName(a); prov['A truncation'] = truncationText(a); }
       if (b.derivedFrom) { prov['B derived from'] = derivedName(b); prov['B truncation'] = truncationText(b); }
       prov.form = 'pilot data, two matched columns';

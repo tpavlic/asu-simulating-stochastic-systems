@@ -43,7 +43,7 @@ function datasetRows() {
     ];
   });
 }
-const DATASET_HEADERS = ['Dataset', 'Kind', 'Replications', 'Observations', 'Mean of estimates', 'Derived from'];
+const DATASET_HEADERS = ['Dataset', 'Kind', 'Replications', 'Observations', 'Mean of outcomes', 'Derived from'];
 
 function htmlTable(headers, rows) {
   return '<div class="scroll-box"><table class="ptab"><thead><tr>' + headers.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +

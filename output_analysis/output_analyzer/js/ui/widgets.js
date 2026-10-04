@@ -243,7 +243,7 @@ export function unitLine(ds) {
   for (const r of ds.reps || []) nObs += r.v ? r.v.length : 0;
   let detail;
   if (ds.kind === 'reps') detail = 'one value per replication';
-  else if (ds.kind === 'time') detail = 'time-weighted replication means of ' + plural(nObs, 'record');
+  else if (ds.kind === 'time') detail = 'replication time averages of ' + plural(nObs, 'record');
   else detail = 'replication means of ' + plural(nObs, 'observation');
   if (R === 1 && ds.kind !== 'reps') detail += '; one replication gives one estimate, and an interval needs at least two';
   el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> R = ' + plural(R, 'replication') + ' (' + esc(detail) + ')';
@@ -292,8 +292,10 @@ export function issueList(issues) {
  * @returns {() => void} a function that unbinds it
  */
 export function levelSelect(selectEl) {
-  selectEl.innerHTML = state.LEVELS.map(l => '<option value="' + l + '">' + pct(l, 0) + '</option>').join('') +
-    '<option value="custom">Custom…</option>';
+  // The option for the current level is marked selected as it is built, and
+  // so the picker shows it even before the first sync.
+  selectEl.innerHTML = state.LEVELS.map(l => '<option value="' + l + '"' + (!state.settings.custom && Math.abs(l - state.settings.level) < 1e-9 ? ' selected' : '') + '>' + pct(l, 0) + '</option>').join('') +
+    '<option value="custom"' + (state.settings.custom ? ' selected' : '') + '>Custom…</option>';
   // The custom entry opens a stated level and a Bonferroni count beside the
   // picker, with the per-interval level they give written out.
   const box = document.createElement('span');
@@ -305,7 +307,15 @@ export function levelSelect(selectEl) {
   const base = box.querySelector('.lvl-base'), cnt = box.querySelector('.lvl-c'), note = box.querySelector('.lvl-note');
   const sync = () => {
     const st = state.settings;
-    selectEl.value = st.custom ? 'custom' : String(st.level);
+    const want = st.custom ? 'custom' : String(st.level);
+    selectEl.value = want;
+    if (selectEl.value !== want) {
+      // A value that did not take (a level stored with more digits than the
+      // option carries) is matched to the nearest option by number.
+      const opts = Array.from(selectEl.options);
+      const hit = opts.findIndex(o => o.value !== 'custom' && Math.abs(Number(o.value) - st.level) < 1e-9);
+      selectEl.selectedIndex = hit >= 0 ? hit : opts.findIndex(o => o.value === 'custom');
+    }
     box.style.display = st.custom ? '' : 'none';
     if (st.custom) {
       if (document.activeElement !== base) base.value = String(Math.round(st.base * 10000) / 100);

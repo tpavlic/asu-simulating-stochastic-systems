@@ -199,7 +199,7 @@ export function render(rootEl) {
   root.innerHTML = '';
   root.appendChild(el('h2', null, title));
   root.appendChild(el('p', 'lede',
-    'Estimate one system’s mean from its replications: the interval on the mean, the replication estimates themselves, and how many replications a target half-width or a target power needs.'));
+    'Estimate one system’s mean from its replications: the interval on the mean, the replication outcomes themselves, and how many replications a target half-width or a target power needs.'));
 
   // Controls.
   const ctrl = el('div', 'sec ctrl-card');
@@ -209,7 +209,7 @@ export function render(rootEl) {
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-lvl">Confidence level</label><select id="rp-lvl"></select></span>' +
     '</div>' +
     '<div class="ctrl-row">' +
-      '<span class="ctrl-lbl" id="rp-proc-lbl"><span class="tip" tabindex="0" data-tip="t interval: on the mean, assuming the replication estimates are normal, which averages nearly always are. Nonparametric: the Wilcoxon signed-rank interval on the pseudo-median, the Hodges–Lehmann estimate; it needs no normality and keeps its level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
+      '<span class="ctrl-lbl" id="rp-proc-lbl"><span class="tip" tabindex="0" data-tip="t interval: on the mean, assuming the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon signed-rank interval on the pseudo-median, the Hodges–Lehmann estimate; it needs no normality and keeps its level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
       '<span class="seg" role="group" aria-labelledby="rp-proc-lbl">' +
         '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t interval</button>' +
         '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
@@ -225,30 +225,31 @@ export function render(rootEl) {
   const warnBox = el('div');
   const ovrBox = el('div');
   const row1 = el('div'), row2 = el('div'), row3 = el('div');
-  const npNote = el('p', 'rv-cap');
+  const npNote = el('p', 'exp-note');
+  npNote.hidden = true;
   const checks = el('div');
   res.append(unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks);
   res.appendChild(details('What the half-width means',
-    '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R estimates and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
+    '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R outcomes and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>An interval is a test turned around: the ' + lvl(state.settings.level) + ' interval holds exactly the values a two-sided t test at α = ' + num(1 - state.settings.level, 3) + ' would not reject, and so reading whether it contains a value is that test. This holds for every interval in this tool unless its page says otherwise.</p>' +
     '<p>The confidence level describes the procedure, not this one interval: across many repetitions of the whole experiment, each with fresh replications, about that fraction of the intervals formed this way would contain the true mean. A given interval either contains it or does not.</p>' +
     '<p>The half-width shrinks with √R, and so halving it takes about four times as many replications. Dividing it by the absolute value of the mean gives the relative half-width, the precision as a fraction of the quantity estimated.</p>'));
   res.appendChild(details('Why replications are the unit of inference',
-    '<p>Each replication runs the model from its own independent random numbers, and so the replication estimates are independent and identically distributed: exactly the sample the t interval assumes.</p>' +
+    '<p>Each replication runs the model from its own independent random numbers, and so the replication outcomes are independent and identically distributed: exactly the sample the t interval assumes.</p>' +
     '<p>Observations inside one replication are not independent. A customer who waits a long time is usually followed by another who waits a long time because both meet the same queue. Correlated observations carry less information than the same number of independent ones, and the formula s / √n, applied to them, understates the standard error, usually by a wide margin.</p>' +
-    '<p>A replication estimate is an average over a whole run, and averages are close to normally distributed even when the observations are skewed, which is why the t interval on replication estimates holds up well at moderate R.</p>'));
+    '<p>A replication outcome is an average over a whole run, and averages are close to normally distributed even when the observations are skewed, which is why the t interval on replication outcomes holds up well at moderate R.</p>'));
   root.appendChild(res);
 
   // Figure.
   const figSec = el('div', 'sec');
-  figSec.appendChild(el('div', 'sec-hd', 'Replication estimates'));
+  figSec.appendChild(el('div', 'sec-hd', 'Replication outcomes'));
   const figBox = el('div');
   const leg = el('div');
   const cap = el('p', 'rv-cap');
   figSec.append(figBox, leg, cap);
   root.appendChild(figSec);
-  fig = makeFigure(figBox, { height: 160, narrowHeight: 180, margin: { t: 10, b: 42 }, xLabel: 'Replication estimate', ariaLabel: 'Replication estimates with the interval on their mean' });
-  exportButtons(figBox, fig, 'replication-estimates');
+  fig = makeFigure(figBox, { height: 160, narrowHeight: 180, margin: { t: 10, b: 42 }, xLabel: 'Replication outcome', ariaLabel: 'Replication outcomes with the interval on their mean' });
+  exportButtons(figBox, fig, 'replication-outcomes');
 
   // Planning.
   const planSec = el('div', 'sec plan-card');
@@ -469,33 +470,34 @@ function draw() {
   if (!pooled && !inf.ok) {
     placeholderRows();
     drawFigure({ values: est, labels, ti: null, ds, pooled: false });
-    finish(null, 'Planning needs at least two replication estimates.');
+    finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
   if (x.length < 2) {
     placeholderRows(pooled ? POOLED : '');
     drawFigure({ values: x, labels: null, ti: null, ds, pooled });
-    finish(null, 'Planning needs at least two replication estimates.');
+    finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
 
   const s = summary(x);
   const ti = tInterval(x, level);
-  // The Wilcoxon interval is offered on replication estimates; the pooled
+  // The Wilcoxon interval is offered on replication outcomes; the pooled
   // observations keep the t interval, whose false independence is the point.
   const np = proc === 'np' && !pooled;
-  if (proc === 'np' && pooled) els.warnBox.appendChild(notice('info', 'The Wilcoxon interval is offered on replication estimates; the pooled observations use the t interval.'));
+  if (proc === 'np' && pooled) els.warnBox.appendChild(notice('info', 'The Wilcoxon interval is offered on replication outcomes; the pooled observations use the t interval.'));
   const sr = np ? signedRank(x, { level }) : null;
   els.resHd.textContent = np ? 'Interval on the pseudo-median (Wilcoxon signed-rank)' : 'Interval on the mean';
   els.npNote.textContent = np ? NP_PLAN : '';
+  els.npNote.hidden = !np;
   // The pooled override's own warning says what is wrong with it; the
-  // checks run on replication estimates only.
-  els.checks.replaceChildren(...(pooled ? [] : [assumptionChecks({ sets: [{ name: 'the replication estimates', values: x }], alpha: 1 - state.settings.base,
+  // checks run on replication outcomes only.
+  els.checks.replaceChildren(...(pooled ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x }], alpha: 1 - state.settings.base,
     declared: 'between replications cannot be checked from the data; it holds when each replication ran on its own random streams.' })]));
   const note = pooled ? POOLED : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
-    card(nLabel, intl(s.n), pooled ? POOLED : 'replication estimates'),
+    card(nLabel, intl(s.n), pooled ? POOLED : 'replication outcomes'),
     card('Mean', num(s.mean), note), card('Sd', num(s.sd), note), card('Se', num(s.se), note),
     card('Min', num(s.min), note), card('Max', num(s.max), note)
   ]));
@@ -530,9 +532,9 @@ function draw() {
     ['half-width', ti.hw], ['lower', ti.lo], ['upper', ti.hi]
   ];
   const tables = [];
-  if (!pooled) tables.push({ name: 'Replication estimates', headers: ['replication', 'estimate'], rows: estRows });
+  if (!pooled) tables.push({ name: 'Replication outcomes', headers: ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
-  // Planning works on replication estimates only.
+  // Planning works on replication outcomes only.
   finish({
     title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
     provenance: {
@@ -546,7 +548,7 @@ function draw() {
       ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications).</p>'
       : '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + lvl(level) +
         ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>'
-  }, pooled ? 'Planning counts replications, and so it uses the replication estimates; it is off while the pooled observations are in use.' : { ds, s, level });
+  }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
 // Records the page's result without its planning table, and what the plan
@@ -636,7 +638,7 @@ function overrideBlock(ds, on, oneRep) {
   }
   const box = notice('warn',
     'The observations within a replication are serially correlated: a long wait tends to follow a long wait. ' +
-    'An interval that treats them as independent is usually far too narrow, because it counts each observation as new information. ' +
+    'An interval that treats them as independent is usually far too narrow because it counts each observation as new information. ' +
     'For one long run, the right tool is batch means on the Steady State page: cut the warm-up, split the rest of the run into long batches, and form the interval from the batch means.');
   const body = box.querySelector('.notice-body');
   const p = el('p', 'rv-ovr-in');
@@ -646,7 +648,7 @@ function overrideBlock(ds, on, oneRep) {
 }
 
 function axisLabel(ds, pooled) {
-  if (!ds) return 'Replication estimate';
+  if (!ds) return 'Replication outcome';
   const r = ds.response || 'value';
   if (pooled) return 'Observation of ' + r;
   if (ds.kind === 'reps') return r + ' per replication';
@@ -661,14 +663,14 @@ function drawFigure(d) {
     fig.render(f => {
       f.x([0, 1]);
       f.axes({ y: false, xLabel: axisLabel(d && d.ds, false), xFormat: () => '' });
-      svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication estimates to show.';
+      svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication outcomes to show.';
     });
     legend(els.leg, [
-      { swatch: 'dot', color: cEst, label: 'one replication estimate' },
-      { swatch: 'line', color: cTruth, label: 'mean of the replication estimates' },
+      { swatch: 'dot', color: cEst, label: 'one replication outcome' },
+      { swatch: 'line', color: cTruth, label: 'mean of the replication outcomes' },
       { swatch: 'interval', color: cTruth, label: lvl(level) + ' interval on the mean' }
     ]);
-    els.cap.textContent = 'Choose a dataset to see its replication estimates.';
+    els.cap.textContent = 'Choose a dataset to see its replication outcomes.';
     return;
   }
   const { values, labels, ti, ds, pooled, np } = d;
@@ -676,12 +678,16 @@ function drawFigure(d) {
   const hasInt = ti && Number.isFinite(ti.lo);
   const band = hasInt ? 28 : 0;
   fig.render(f => {
+    // Many pooled observations stack into a dot histogram, which needs room.
+    f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
     f.x(hasInt ? extent(values, [ti.lo, ti.hi]) : extent(values), { pad: 0.06, nice: true });
     f.axes({ y: false, xLabel: axisLabel(ds, pooled) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;
     f.ih = fullH - band;
-    dotPlot(f, values, { labels: labels || undefined, mean: true, r: values.length > 300 ? 2 : undefined, axes: false });
+    // One replication gives one outcome, and a mean line through it would
+    // pretend to an average across replications that does not exist.
+    dotPlot(f, values, { labels: labels || undefined, mean: values.length > 1, r: values.length > 300 ? 2 : undefined, axes: false });
     f.ih = fullH;
     const dotFn = f.readoutFn;
     if (hasInt) {
@@ -696,7 +702,7 @@ function drawFigure(d) {
       const yi = f.yRange[0] - 1;
       f.yRange = [yi - 1, f.yRange[1]];
       f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: lvl(level) + intName },
-        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: np ? 'pseudo-median of the replication estimates' : 'mean of the replication estimates' });
+        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: np ? 'pseudo-median of the replication outcomes' : 'mean of the replication outcomes' });
       f.readout((dx, dy, px, py) => {
         if (py >= fullH - band) {
           return [lvl(level) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', np ? 'pseudo-median ' + num(ti.mean) : 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];
@@ -705,20 +711,20 @@ function drawFigure(d) {
       });
     }
   });
-  const items = [
-    { swatch: 'dot', color: cEst, label: pooled ? 'one observation' : 'one replication estimate' },
-    { swatch: 'line', color: cTruth, label: pooled ? 'mean of the pooled observations' : 'mean of the replication estimates' }
-  ];
+  const items = [{ swatch: 'dot', color: cEst, label: pooled ? 'one observation' : 'one replication outcome' }];
+  if (values.length > 1) items.push({ swatch: 'line', color: cTruth, label: pooled ? 'mean of the pooled observations' : 'mean of the replication outcomes' });
   if (hasInt) items.push({ swatch: 'interval', color: cTruth, label: lvl(level) + intName });
   legend(els.leg, items);
   if (pooled) {
-    els.cap.textContent = 'Each dot is one observation from the pooled replications, and the bar under them is the interval that treats them as independent; its narrowness reflects the false assumption, not real precision.';
+    els.cap.textContent = 'Each dot is one observation from the pooled replications, stacked upward where they crowd, and the bar under them is the interval that treats them as independent; its narrowness reflects the false assumption, not real precision.';
   } else if (hasInt && np) {
-    els.cap.textContent = 'Each dot is one replication’s estimate, and the bar under them is the ' + lvl(level) + ' Wilcoxon signed-rank interval on the pseudo-median, with the Hodges–Lehmann estimate as its dot; it needs no normality, and under heavy tails it is the interval to report.';
+    els.cap.textContent = 'Each dot is one replication’s outcome, and the bar under them is the ' + lvl(level) + ' Wilcoxon signed-rank interval on the pseudo-median, with the Hodges–Lehmann estimate as its dot; it needs no normality, and under heavy tails it is the interval to report.';
   } else if (hasInt) {
-    els.cap.textContent = 'Each dot is one replication’s estimate, and the bar under them is the ' + lvl(level) + ' t interval on the mean, which is far narrower than the spread of the dots because it describes the mean, not a single replication.';
+    els.cap.textContent = 'Each dot is one replication’s outcome, and the bar under them is the ' + lvl(level) + ' t interval on the mean, which is far narrower than the spread of the dots because it describes the mean, not a single replication.';
   } else {
-    els.cap.textContent = 'Each dot is one replication’s estimate; an interval needs at least two of them.';
+    els.cap.textContent = values.length === 1
+      ? 'This dataset holds one replication, and so one outcome: the mean of that run’s observations. One outcome is a number, not a sample; nothing can be inferred from it, and an interval needs at least two replications.'
+      : 'Each dot is one replication’s outcome; an interval needs at least two of them.';
   }
 }
 

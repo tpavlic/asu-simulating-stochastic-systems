@@ -84,7 +84,7 @@ export function saveSession() {
   const payload = {
     version: 1,
     savedAt: new Date().toISOString(),
-    settings: { level: state.settings.level },
+    settings: { level: state.settings.level, base: state.settings.base, bonfC: state.settings.bonfC, custom: state.settings.custom },
     selected: state.selected(),
     picks: state.picks,
     datasets: state.datasets.map(serializeDataset)
@@ -244,7 +244,11 @@ export function restoreSession() {
           restored++;
         }
       }
-      if (stored.settings && typeof stored.settings === 'object') state.setLevel(stored.settings.level);
+      if (stored.settings && typeof stored.settings === 'object') {
+        const st = stored.settings;
+        if (st.custom && Number.isFinite(st.base)) state.setCustomLevel(st.base, Number.isFinite(st.bonfC) ? st.bonfC : 1);
+        else state.setLevel(st.level);
+      }
       if (isStr(stored.selected)) state.select(stored.selected);
       // The datasets arrive one at a time, and a page answering the first
       // ones (a picker falling back to the first dataset, a page following the

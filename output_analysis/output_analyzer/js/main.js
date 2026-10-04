@@ -21,6 +21,7 @@ import * as variancePage from './pages/variance.js';
 import * as steadyPage from './pages/steady.js';
 import * as reportPage from './pages/report.js';
 import * as storagePage from './pages/storage.js';
+import * as referencesPage from './pages/references.js';
 import * as galleryPage from './pages/gallery.js';
 
 // A page module may export its id, title, render, and onShow by name, or as
@@ -39,7 +40,7 @@ function pageOf(mod) {
   };
 }
 
-const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, galleryPage].map(pageOf);
+const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, referencesPage, galleryPage].map(pageOf);
 const BY_ID = new Map(PAGES.map(p => [p.id, p]));
 
 function renderDataStrip() {

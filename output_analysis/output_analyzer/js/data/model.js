@@ -1,5 +1,5 @@
 // The dataset model: replications of tally, time-persistent, or
-// replication-level output, the replication estimates every inference page
+// replication-level output, the replication outcomes every inference page
 // works on, and truncation into derived datasets. Pure functions, no DOM.
 
 /** @typedef {{ id: string|number, t: Float64Array|null, v: Float64Array }} Replication */
@@ -156,7 +156,7 @@ export function observations(ds) {
 
 /**
  * Counts and descriptives for the summary card. `est` summarizes the finite
- * replication estimates and is null when there are none. `tRange` spans the
+ * replication outcomes and is null when there are none. `tRange` spans the
  * recorded times and is null when no replication carries times.
  * @param {Dataset} ds
  * @returns {{ kind: string, nObs: number, nReps: number,
@@ -267,7 +267,7 @@ export function truncateDataset(ds, { by, at }) {
 }
 
 /**
- * Whether the replication estimates support an interval or a test: at least
+ * Whether the replication outcomes support an interval or a test: at least
  * two replications must yield an estimate. The reason, when refused, is a
  * sentence for the page to show.
  * @param {Dataset} ds
@@ -280,14 +280,14 @@ export function canInfer(ds) {
     const n = ds.reps[0].v.length;
     return {
       ok: false,
-      reason: 'This dataset has one replication, which gives one estimate. Its ' + n.toLocaleString('en-US') +
+      reason: 'This dataset has one replication, which gives one outcome. Its ' + n.toLocaleString('en-US') +
         (n === 1 ? ' observation comes' : ' observations come') +
-        ' from a single run and are not independent replications. An interval or a test needs at least two replication estimates; for one long run, batch means is the alternative.'
+        ' from a single run and are not independent replications. An interval or a test needs at least two replication outcomes; for one long run, batch means is the alternative.'
     };
   }
   return {
     ok: false,
-    reason: 'An interval or a test needs at least two replication estimates, and this dataset has ' +
+    reason: 'An interval or a test needs at least two replication outcomes, and this dataset has ' +
       nEst + '.'
   };
 }

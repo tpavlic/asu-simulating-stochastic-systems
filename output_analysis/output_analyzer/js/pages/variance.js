@@ -1,8 +1,8 @@
 // The Variance and Correlation page: the chi-square interval for one
 // dataset's variance and standard deviation, the F test and interval for the
 // ratio of two datasets' variances, and the Pearson correlation of two
-// datasets' replication estimates paired by position, with its scatter plot.
-// All three work on replication estimates and all three lean on normality.
+// datasets' replication outcomes paired by position, with its scatter plot.
+// All three work on replication outcomes and all three lean on normality.
 
 import * as state from '../state.js';
 import { repEstimates, canInfer } from '../data/model.js';
@@ -20,9 +20,9 @@ export const id = 'variance';
 /** The page's title. */
 export const title = 'Variance and Correlation';
 
-const NORMALITY = 'These intervals assume the replication estimates are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.';
-const NORMALITY_F = 'The F ratio and its interval assume both sets of replication estimates are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test does not assume normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form), and it is the usual check before a procedure that pools variances.';
-const CORR_NOTE = 'Zero correlation is not independence, and simulation output is routinely correlated within a run; this r describes the pairing of replication estimates across the two datasets, which is what a paired comparison relies on.';
+const NORMALITY = 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.';
+const NORMALITY_F = 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test does not assume normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form), and it is the usual check before a procedure that pools variances.';
+const CORR_NOTE = 'Zero correlation is not independence, and simulation output is routinely correlated within a run; this r describes the pairing of replication outcomes across the two datasets, which is what a paired comparison relies on.';
 
 let root = null;
 let els = null;
@@ -63,8 +63,8 @@ export function render(rootEl) {
   root.innerHTML = '';
   root.appendChild(el('h2', null, title));
   root.appendChild(el('p', 'lede',
-    'Three procedures on replication estimates: a chi-square interval for the variance of one dataset, an F test comparing the variances of two, and Pearson\u2019s r between two datasets paired replication by replication, which measures how the two designs move together across replications and is not the autocorrelation of a series over time (that correlogram is on the Steady State page). ' +
-    'All three are more fragile than the t interval for a mean, because they depend on the estimates being normally distributed.'));
+    'Three procedures on replication outcomes: a chi-square interval for the variance of one dataset, an F test comparing the variances of two, and Pearson\u2019s r between two datasets paired replication by replication, which measures how the two designs move together across replications and is not the autocorrelation of a series over time (that correlogram is on the Steady State page). ' +
+    'All three are more fragile than the t interval for a mean because they depend on the outcomes being normally distributed.'));
 
   const ctrl = el('div', 'sec ctrl-card');
   ctrl.innerHTML =
@@ -73,7 +73,7 @@ export function render(rootEl) {
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="va-b">Dataset B</label><select id="va-b"></select></span>' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="va-lvl">Confidence level</label><select id="va-lvl"></select></span>' +
     '</div>' +
-    '<p class="ctrl-note">Dataset B is optional; choosing it adds the F ratio of the two variances and Pearson\u2019s r between the paired replication estimates.</p>';
+    '<p class="ctrl-note">Dataset B is optional; choosing it adds the F ratio of the two variances and Pearson\u2019s r between the paired replication outcomes.</p>';
   root.appendChild(ctrl);
 
   // Variance of A.
@@ -82,9 +82,9 @@ export function render(rootEl) {
   const vUnit = el('div'), vWarn = el('div'), vRow1 = el('div'), vRow2 = el('div');
   vSec.append(vUnit, vWarn, vRow1, vRow2, notice('warn', NORMALITY));
   vSec.appendChild(details('Why the variance interval is fragile',
-    '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal estimates and for no other distribution.</p>' +
+    '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
-    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication estimates are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
+    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
   root.appendChild(vSec);
 
   // F ratio.
@@ -98,12 +98,12 @@ export function render(rootEl) {
 
   // Correlation.
   const cSec = el('div', 'sec');
-  cSec.appendChild(el('div', 'sec-hd', 'Correlation between the replication estimates of A and B (Pearson\u2019s r)'));
+  cSec.appendChild(el('div', 'sec-hd', 'Correlation between the replication outcomes of A and B (Pearson\u2019s r)'));
   const cMsg = el('div', 'rv-msg'), cRow1 = el('div'), cRow2 = el('div');
   const figBox = el('div'), leg = el('div'), cap = el('p', 'rv-cap');
   cSec.append(cMsg, cRow1, cRow2, figBox, leg, cap, notice('info', CORR_NOTE));
   root.appendChild(cSec);
-  fig = makeFigure(figBox, { height: 320, narrowHeight: 340, xLabel: 'Dataset A estimate', yLabel: 'Dataset B estimate', ariaLabel: 'Scatter plot of the paired replication estimates' });
+  fig = makeFigure(figBox, { height: 320, narrowHeight: 340, xLabel: 'Dataset A outcome', yLabel: 'Dataset B outcome', ariaLabel: 'Scatter plot of the paired replication outcomes' });
   exportButtons(figBox, fig, 'correlation-scatter');
 
   els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, bfRow, bfVerdict, fChecks, cMsg, cRow1, cRow2, leg, cap,
@@ -171,11 +171,11 @@ function drawScatter(d, cr, level) {
   if (!d) {
     fig.render(f => {
       f.x([0, 1]); f.y([0, 1]);
-      f.axes({ xLabel: 'Dataset A estimate', yLabel: 'Dataset B estimate', xFormat: () => '', yFormat: () => '' });
+      f.axes({ xLabel: 'Dataset A outcome', yLabel: 'Dataset B outcome', xFormat: () => '', yFormat: () => '' });
       svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No pairs to show.';
     });
     legend(els.leg, [{ swatch: 'dot', color: '--est', label: 'one replication pair (A, B)' }]);
-    els.cap.textContent = 'The scatter plot appears when A and B have the same number of replication estimates.';
+    els.cap.textContent = 'The scatter plot appears when A and B have the same number of replication outcomes.';
     return;
   }
   const xl = 'A: ' + d.a.name, yl = 'B: ' + d.b.name;
@@ -218,9 +218,9 @@ function drawScatter(d, cr, level) {
   legend(els.leg, items);
   els.cap.textContent = fitted
     ? 'Each point pairs replication i of A with replication i of B. The test of zero correlation rejects at α = ' + num(alpha, 2) +
-      ', so the least-squares line B = ' + num(fitted.intercept) + ' + ' + num(fitted.slope) + '·A is drawn with the ' + lvl(level) +
+      ', and so the least-squares line B = ' + num(fitted.intercept) + ' + ' + num(fitted.slope) + '·A is drawn with the ' + lvl(level) +
       ' confidence band for the mean of B at each A (residual standard deviation ' + num(fitted.s) + ' on ' + fitted.df + ' degrees of freedom); the line describes the association in this sample, not a prediction for a new run.'
-    : 'Each point pairs replication i of A with replication i of B; points that rise together from left to right show positive correlation. No line is drawn because the test of zero correlation does not reject at α = ' + num(alpha, 2) + ', so a fitted trend would describe noise.';
+    : 'Each point pairs replication i of A with replication i of B; points that rise together from left to right show positive correlation. No line is drawn because the test of zero correlation does not reject at α = ' + num(alpha, 2) + ', and so a fitted trend would describe noise.';
 }
 
 /** Redraws the page from the current state. */
@@ -244,7 +244,7 @@ function draw() {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     const L = lvl(level);
     els.vRow1.replaceChildren(cardRow([
-      card('R (<span class="sym">df</span>)', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication estimates'),
+      card('R (<span class="sym">df</span>)', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
       card(S('s²'), num(vi.s2), 'sample variance'),
       card(S('s'), num(vi.s), 'sample standard deviation')
     ]));
@@ -269,9 +269,9 @@ function draw() {
   } else if (!a) {
     els.fMsg.textContent = 'Choose dataset A as well.';
   } else if (!canInfer(b).ok) {
-    els.fMsg.textContent = 'Dataset B has fewer than two replication estimates, and so its variance cannot be estimated.';
+    els.fMsg.textContent = 'Dataset B has fewer than two replication outcomes, and so its variance cannot be estimated.';
   } else if (!vi) {
-    els.fMsg.textContent = 'Dataset A has fewer than two replication estimates, and so its variance cannot be estimated.';
+    els.fMsg.textContent = 'Dataset A has fewer than two replication outcomes, and so its variance cannot be estimated.';
   } else {
     fr = fRatio(finite(a), finite(b), level);
     els.fMsg.textContent = a.id === b.id
@@ -297,7 +297,7 @@ function draw() {
     ] });
     const lv = levene([finite(a), finite(b)]);
     els.bfRow.replaceChildren(cardRow([
-      card(S('F'), num(lv.F), 'ANOVA of |estimate − median|'),
+      card(S('F'), num(lv.F), 'ANOVA of |outcome − median|'),
       card(S('df1'), intl(lv.df1), 'k − 1'),
       card(S('df2'), intl(lv.df2), 'R<sub>A</sub> + R<sub>B</sub> − 2'),
       card(S('p'), pValue(lv.p), 'against equal spreads')
@@ -329,17 +329,17 @@ function draw() {
       for (let i = 0; i < ea.length; i++) {
         if (Number.isFinite(ea[i]) && Number.isFinite(eb[i])) { x.push(ea[i]); y.push(eb[i]); } else dropped++;
       }
-      if (dropped) els.cMsg.appendChild(notice('info', esc(intl(dropped)) + (dropped === 1 ? ' pair was' : ' pairs were') + ' left out because a replication has no estimate.'));
+      if (dropped) els.cMsg.appendChild(notice('info', esc(intl(dropped)) + (dropped === 1 ? ' pair was' : ' pairs were') + ' left out because a replication has no outcome.'));
       if (x.length >= 3) {
         cr = correlation(x, y, level);
         pair = { a, b, x, y };
         if (cr.note) els.cMsg.appendChild(notice('info', esc(cr.note)));
       } else {
-        els.cMsg.appendChild(notice('warn', 'The test of zero correlation needs at least 3 pairs of replication estimates.'));
+        els.cMsg.appendChild(notice('warn', 'The test of zero correlation needs at least 3 pairs of replication outcomes.'));
       }
     }
   } else {
-    els.cMsg.appendChild(el('p', 'rv-line', 'Choose datasets A and B to see Pearson\u2019s r between their replication estimates.'));
+    els.cMsg.appendChild(el('p', 'rv-line', 'Choose datasets A and B to see Pearson\u2019s r between their replication outcomes.'));
   }
   if (cr) {
     els.cRow1.replaceChildren(cardRow([

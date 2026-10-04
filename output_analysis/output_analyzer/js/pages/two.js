@@ -1,4 +1,4 @@
-// The Two Systems page: compares two designs on their replication estimates,
+// The Two Systems page: compares two designs on their replication outcomes,
 // by Welch's procedure when the replications are independent and by the
 // paired t when they were run under common random numbers. Pairing is a
 // switch the reader sets; the page never infers it from equal sample sizes.
@@ -48,7 +48,7 @@ let resultBase = null;
 const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 
-// The finite replication estimates of a dataset with their ids, and the ids
+// The finite replication outcomes of a dataset with their ids, and the ids
 // of the replications that gave no estimate.
 function estimatesOf(ds) {
   const est = repEstimates(ds), ids = repIds(ds);
@@ -108,7 +108,7 @@ function listIds(ids) {
 
 function kindWord(ds) {
   if (ds.kind === 'reps') return 'replication values';
-  if (ds.kind === 'time') return 'time-weighted replication means';
+  if (ds.kind === 'time') return 'replication time averages';
   return 'replication means';
 }
 
@@ -119,7 +119,7 @@ function unitLineTwo(dsA, dsB, nA, nB) {
   if (!dsA || !dsB) {
     // The placeholder has the shape of the filled line, and so the banner
     // keeps its height when the datasets arrive.
-    el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> R<sub>A</sub> = ' + dash + ' and R<sub>B</sub> = ' + dash + ' replication estimates';
+    el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> R<sub>A</sub> = ' + dash + ' and R<sub>B</sub> = ' + dash + ' replication outcomes';
     return el;
   }
   const same = kindWord(dsA) === kindWord(dsB);
@@ -171,7 +171,7 @@ function clip(s, maxW, size) {
 }
 
 /**
- * Rows of replication estimates, one row per design: the dots of the row's
+ * Rows of replication outcomes, one row per design: the dots of the row's
  * values stacked to avoid overlap, and under them the row's mean with its
  * interval. An optional dashed reference line marks `ref`.
  * @param {Object} fig a plots.js figure
@@ -198,7 +198,7 @@ function strips(fig, rows, o = {}) {
   }
   const rad = fig.narrow ? 4 : 4.5;
   const placed = [];
-  const dotsRec = { kind: 'points', x: [], y: [], color: cEst, label: 'one replication estimate' };
+  const dotsRec = { kind: 'points', x: [], y: [], color: cEst, label: 'one replication outcome' };
   const intRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cTruth, label: 'interval' };
   const meanRec = { kind: 'points', x: [], y: [], color: cTruth, label: 'mean' };
   rows.forEach((row, ri) => {
@@ -399,7 +399,7 @@ function showExcluded() {
   if (!out.length) return;
   const items = out.map(d => '<b>' + esc(d.name) + '</b>: ' + esc(canInfer(d).reason)).join('<br>');
   box.appendChild(notice('warn', (out.length === 1 ? 'One dataset is' : out.length + ' datasets are') +
-    ' not offered here, because a comparison needs at least two replication estimates per design.<br>' + items));
+    ' not offered here because a comparison needs at least two replication outcomes per design.<br>' + items));
 }
 
 function schedule() {
@@ -422,11 +422,11 @@ function update() {
   const notes = [];
   const eligible = state.datasets.filter(d => canInfer(d).ok).length;
   if (eligible < 2) notes.push(notice('warn', eligible === 1
-    ? 'Only one dataset has replication estimates to compare. Load a second dataset on the Import page.'
-    : 'No loaded dataset has at least two replication estimates to compare.'));
+    ? 'Only one dataset has replication outcomes to compare. Load a second dataset on the Import page.'
+    : 'No loaded dataset has at least two replication outcomes to compare.'));
   else if (dsA && dsB && dsA.id === dsB.id) notes.push(notice('warn', 'Design A and design B are the same dataset. Choose two different datasets to compare.'));
   for (const [e, tag] of [[eA, 'A'], [eB, 'B']]) {
-    if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no estimate and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
+    if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no outcome and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
   }
   const ready = dsA && dsB && dsA.id !== dsB.id;
 
@@ -559,10 +559,10 @@ function renderIndependent(res, notes, d, level) {
       oneLine(card('Median A', v(mA && mA.median), d ? esc(d.dsA.name) : 'design A')),
       oneLine(card('Median B', v(mB && mB.median), d ? esc(d.dsB.name) : 'design B')),
       card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate of how far A sits above B: the median of every difference between one A estimate and one B estimate.">Shift A − B</span>', v(rs && rs.estimate), 'Hodges–Lehmann'),
-      card('<span class="tip" tabindex="0" data-tip="The Mann–Whitney count: the number of (A, B) pairs in which the A estimate is the larger, R_A·R_B/2 when the two designs are alike.">W</span>', v(rs && rs.W), 'Mann–Whitney count'),
+      card('<span class="tip" tabindex="0" data-tip="The Mann–Whitney count: the number of (A, B) pairs in which the A outcome is the larger, R_A·R_B/2 when the two designs are alike.">W</span>', v(rs && rs.W), 'Mann–Whitney count'),
       card('Two-sided p', rs ? pValue(rs.p) : dash, rs ? npBasis(rs) : 'Wilcoxon rank-sum test'),
       wide(card(L + ' interval for the shift', rs ? interval(rs.lo, rs.hi) : dash, rs ? npLevelNote(rs, L) : 'Hodges–Lehmann')),
-      card('R<sub>A</sub>, R<sub>B</sub>', w ? intl(w.n1) + ', ' + intl(w.n2) : dash, 'replication estimates')
+      card('R<sub>A</sub>, R<sub>B</sub>', w ? intl(w.n1) + ', ' + intl(w.n2) : dash, 'replication outcomes')
     ]));
   } else {
     s.appendChild(cardRow([
@@ -590,10 +590,10 @@ function renderIndependent(res, notes, d, level) {
   if (d) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v }, { name: 'B', values: d.eB.v }], alpha: 1 - state.settings.base,
     declared: 'between the two designs cannot be checked from the data; it is what the Independent setting declares.' }));
 
-  const f = sec('Replication estimates and the difference');
+  const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
   const box1 = figBox(f);
-  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: d ? 'Replication estimate of ' + d.dsA.response : 'Replication estimate' });
+  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: d ? 'Replication outcome of ' + d.dsA.response : 'Replication outcome' });
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   const box2 = figBox(f);
@@ -617,10 +617,10 @@ function renderIndependent(res, notes, d, level) {
     fig1.render(fg => emptyFrame(fg, 'Choose two datasets'));
     fig2.render(fg => { fg.setHeight(8 + 40 + 36); emptyFrame(fg, ''); });
   }
-  exportButtons(box1, fig1, 'two-systems-estimates');
+  exportButtons(box1, fig1, 'two-systems-outcomes');
   exportButtons(box2, fig2, 'two-systems-difference');
   legend(leg1, [
-    { swatch: 'dot', color: '--est', label: 'one replication’s estimate' },
+    { swatch: 'dot', color: '--est', label: 'one replication’s outcome' },
     { swatch: 'interval', color: '--truth', label: np ? 'design pseudo-median with its own ' + ownName : 'design mean with its own ' + ownName }
   ]);
   const diffName = np ? L + ' Wilcoxon interval for the shift A − B' : L + ' Welch interval for A − B';
@@ -631,9 +631,9 @@ function renderIndependent(res, notes, d, level) {
     { swatch: 'dash', color: '--truth', label: 'zero difference' }
   ]);
   f.appendChild(caption(np
-    ? 'The top plot shows every replication estimate of each design, with each design’s pseudo-median (the Hodges–Lehmann estimate) and its own ' + L +
+    ? 'The top plot shows every replication outcome of each design, with each design’s pseudo-median (the Hodges–Lehmann estimate) and its own ' + L +
       ' Wilcoxon signed-rank interval under its dots. The bottom plot is the Hodges–Lehmann shift between the designs with its ' + L + ' rank-sum interval, drawn against zero; an interval that excludes zero is drawn red and dashed.'
-    : 'The top plot shows every replication estimate of each design, with each design’s mean and its own ' + L +
+    : 'The top plot shows every replication outcome of each design, with each design’s mean and its own ' + L +
       ' t interval under its dots. The bottom plot is the Welch interval for the difference of the means, drawn against zero; an interval that excludes zero is drawn red and dashed.'));
 
   if (!w) {
@@ -830,7 +830,7 @@ function sharedSentence(r, sdD, sdA, sdB) {
   }
   if (r > 0.5) {
     return ' The two move up and down together across replications' + rr +
-      ', and pairing removes that shared variation from the differences, although here the differences still vary as much as the less variable design’s estimates do.';
+      ', and pairing removes that shared variation from the differences, although here the differences still vary as much as the less variable design’s outcomes do.';
   }
   if (r >= 0) {
     return ' Here the two share little variation across replications' + rr + ', and so pairing removes little of it from the differences.';
@@ -856,7 +856,7 @@ function pairViews(parent, P) {
     '</span>';
   block.appendChild(row);
   const box = figBox(block);
-  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: 'Replication estimate' });
+  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: 'Replication outcome' });
   const stack = (cls) => {
     const s = document.createElement('div');
     s.style.display = 'grid';
@@ -891,7 +891,7 @@ function pairViews(parent, P) {
     !P || k < P.a.length ? { swatch: 'dash', color: '--est', label: 'pair against the overall direction' } : null,
     { swatch: 'line', color: '--truth', label: 'mean of each design' }
   ].filter(Boolean));
-  let capRep = 'Each replication shows both designs’ estimates and the difference between them.';
+  let capRep = 'Each replication shows both designs’ outcomes and the difference between them.';
   let capSlope = 'Each line is one replication; when most lines slope the same way, the pairs agree on the direction of the difference, and the paired test is picking up that agreement.';
   if (P) {
     capRep += sharedSentence(P.r, P.sdD, sampleSd(P.a), sampleSd(P.b));
@@ -947,7 +947,7 @@ function renderPaired(res, notes, d, level) {
   const s = sec(np ? 'Wilcoxon signed-rank comparison of the matched pairs' : 'Paired comparison of A and B');
   res.appendChild(s);
   const v = (val, f = num) => (pr ? f(val) : dash);
-  const rCard = card('<span class="tip" tabindex="0" data-tip="The correlation between the A and B estimates across the matched pairs. Common random numbers aim to make it large and positive.">Correlation r</span>', v(pr && pr.r), 'what common random numbers induce');
+  const rCard = card('<span class="tip" tabindex="0" data-tip="The correlation between the A and B outcomes across the matched pairs. Common random numbers aim to make it large and positive.">Correlation r</span>', v(pr && pr.r), 'what common random numbers induce');
   s.appendChild(cardRow(np ? [
     card('Pairs n', pr ? intl(pr.n) : dash),
     card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate for paired data: the median of the pairwise averages of the differences A − B.">Pseudo-median of A − B</span>', v(sr && sr.estimate), 'Hodges–Lehmann'),
@@ -1053,7 +1053,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Compare two designs on their replication estimates. Replications run on independent random streams are compared with Welch’s procedure. ' +
+    '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with Welch’s procedure. ' +
     'Replications run under common random numbers are compared as pairs, and pairing is something you declare with the switch below: the page never infers it from equal numbers of replications.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
@@ -1077,7 +1077,7 @@ export function render(root) {
         '<span class="ctrl-note" id="two-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: Welch’s test for independent replications, the paired t for pairs; both assume the replication estimates are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
+        '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: Welch’s test for independent replications, the paired t for pairs; both assume the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
         '<span class="seg" role="group" aria-labelledby="two-proc-lbl">' +
           '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
           '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
@@ -1106,13 +1106,13 @@ export function render(root) {
   const powSel = planSec.querySelector('#two-plan-pow');
   powSel.addEventListener('change', () => { plan.power = Number(powSel.value); state.setPick(id, 'power', plan.power); drawPlan(); });
   const why = details('Independent or paired?',
-    '<p>Pairing reduces the variance of the difference when corresponding replications are positively correlated. With correlation ρ between paired estimates, ' +
+    '<p>Pairing reduces the variance of the difference when corresponding replications are positively correlated. With correlation ρ between paired outcomes, ' +
     'Var(D̄) = (σ<sub>A</sub>² + σ<sub>B</sub>² − 2ρσ<sub>A</sub>σ<sub>B</sub>)/n, and so the larger ρ is, the narrower the paired interval.</p>' +
     '<p>Which analysis applies is fixed by how the replications were run, not by the data. Replications run under common random numbers are pairs, and they are compared as pairs whatever r turns out to be: Welch’s procedure assumes two independent samples, and these are not. ' +
     'The correlation card then reports how much the pairing gained, not whether to pair. Replications run on independent streams are two independent samples; matching them by position pairs nothing, gives r near 0, and gives up degrees of freedom.</p>' +
     '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so when the pairs share no variation its interval is a little wider than an independent analysis of the same numbers would give. ' +
     'That is the reason not to pair independent runs, not a reason to unpair correlated ones.</p>' +
-    '<p>Common random numbers drive replication i of both designs with the same random inputs, which makes the two estimates positively correlated by design. That is why such runs are analyzed as pairs.</p>');
+    '<p>Common random numbers drive replication i of both designs with the same random inputs, which makes the two outcomes positively correlated by design. That is why such runs are analyzed as pairs.</p>');
   // The note on pairing sits in the configuration card, under the switch it explains.
   root.querySelector('.ctrl-card').appendChild(why);
   root.appendChild(planSec);

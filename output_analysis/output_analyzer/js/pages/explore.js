@@ -1,6 +1,6 @@
 // The Summary and Plots page: one dataset's counts and descriptives, its raw
 // table, and the plots that make sense for its statistic type. Plots of the
-// replication estimates describe what the inference pages work on; plots of
+// replication outcomes describe what the inference pages work on; plots of
 // one replication's observations show how values move within a run, and a
 // normal quantile–quantile plot with the Shapiro–Wilk test checks the
 // assumption the inference pages' intervals rest on. The results fall into
@@ -15,12 +15,13 @@ import {
 } from '../stats/descriptive.js';
 import { tInterval } from '../stats/intervals.js';
 import { shapiroWilk, normalQQ } from '../stats/normality.js';
+import { levene } from '../stats/compare.js';
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
 } from '../ui/widgets.js';
 import { num, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -37,7 +38,8 @@ export const sections = [
   { id: 'dist', label: 'Distribution' },
   { id: 'run', label: 'Within a run' },
   { id: 'reps', label: 'Replications' },
-  { id: 'normality', label: 'Normality' }
+  { id: 'normality', label: 'Normality' },
+  { id: 'spread', label: 'Equal variances' }
 ];
 
 /** The Shapiro–Wilk test covers at most this many values. */
@@ -63,6 +65,8 @@ let mounted = [];
 let repSections = [];
 let ciSection = null;
 let normSection = null;
+let spreadSection = null;
+let lastLevene = null;
 let shownId = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -77,7 +81,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">See what one dataset holds before you analyze it: its counts, the descriptives of its replication estimates, and the plots that suit its statistic type. The plots of a single replication show how observations move within one run, and the inference pages use only the replication estimates.</p>' +
+    '<p class="lede">See what one dataset holds before you analyze it: its counts, the descriptives of its replication outcomes, and the plots that suit its statistic type. The plots of a single replication show how observations move within one run, and the inference pages use only the replication outcomes.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-ds">Dataset</label><select id="ex-ds"></select></span>' +
@@ -94,6 +98,7 @@ export function render(root) {
       '</div>' +
       '<div data-section="reps" id="ex-s-reps"></div>' +
       '<div data-section="normality" id="ex-s-normality"></div>' +
+      '<div data-section="spread" id="ex-s-spread"></div>' +
     '</div>';
 
   els = {
@@ -124,6 +129,7 @@ export function render(root) {
     if (!visible()) return;
     if (ciSection) ciSection.rebuild();
     if (normSection) normSection.rebuild();
+    if (spreadSection) spreadSection.rebuild();
   });
   // The replication summary is among the data files, and so only the test
   // table is offered from the results.
@@ -187,6 +193,14 @@ function figure(api, parent, name, opts, draw, legendItems) {
 
 function caption(parent, html) { parent.appendChild(el('p', 'ex-cap', html)); }
 
+// A small results table; cells are markup already escaped by the caller.
+function table(headers, rows) {
+  const box = el('div', 'scroll-box');
+  box.innerHTML = '<table class="ptab"><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+  return box;
+}
+
 function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'data'; }
 
 // ── Data helpers ────────────────────────────────────────────────────────
@@ -241,7 +255,7 @@ function runningTimeMean(r, endTime) {
 
 function estimateWord(ds) {
   if (ds.kind === 'reps') return 'replication values';
-  if (ds.kind === 'time') return 'time-weighted replication means';
+  if (ds.kind === 'time') return 'replication time averages';
   return 'replication means';
 }
 
@@ -304,7 +318,7 @@ function renderAll() {
   const B = els.body;
   for (const k in B) B[k].innerHTML = '';
   // A newly shown dataset starts at its first replication with the
-  // replication estimates, unless the reader chose otherwise for it before.
+  // replication outcomes, unless the reader chose otherwise for it before.
   if (ds && shownId !== ds.id) {
     const r = state.getPick(id, 'rep:' + ds.id);
     repIndex = Number.isInteger(r) && r >= 1 ? Math.min(r, ds.reps.length) : 1;
@@ -334,7 +348,8 @@ function renderAll() {
     dist: ds.kind === 'tally' || estF.length >= 2 ? null : tooFew('Distribution plots', 'two'),
     run: ds.kind !== 'reps' ? null : 'Within-run plots need observations inside a replication; this dataset holds one value per replication.',
     reps: estF.length >= 2 ? null : tooFew('The dot plot and the interval plot', 'two'),
-    normality: ds.kind === 'tally' || estF.length >= 3 ? null : tooFew('The normality check', 'three')
+    normality: ds.kind === 'tally' || estF.length >= 3 ? null : tooFew('The normality check', 'three'),
+    spread: spreadable().length >= 2 ? null : 'The equal-variance test compares two or more datasets with at least two replication outcomes each. Load another dataset on the Import page.'
   };
   setSectionAvailable(id, off);
 
@@ -356,6 +371,8 @@ function renderAll() {
   }
 
   if (!off.normality) normSection = mount(B.normality, api => buildNormality(api, ctx));
+  lastLevene = null;
+  if (!off.spread) spreadSection = mount(B.spread, api => buildSpread(api, ctx));
 
   registerTips(rootEl);
   box.style.minHeight = '';
@@ -378,7 +395,8 @@ function storeResult(ds, est) {
   const e = sm.est;
   const tables = [{ name: 'replication summary', headers, rows }];
   const sw = shapiroOf(est);
-  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication estimates', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
+  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
+  if (lastLevene) tables.push({ name: 'Equal-variance test (Levene)', headers: ['datasets', 'F', 'df1', 'df2', 'p'], rows: [[lastLevene.names.join('; '), lastLevene.F, lastLevene.df1, lastLevene.df2, lastLevene.p]] });
   state.setResult('explore', {
     title: 'Summary of ' + ds.name,
     provenance: { dataset: ds.name },
@@ -468,7 +486,7 @@ function rawTable(ds) {
   return d;
 }
 
-// ── Distribution of the estimates ───────────────────────────────────────
+// ── Distribution of the outcomes ───────────────────────────────────────
 
 function buildDistribution(api, { ds, estF }) {
   const sec = api.sec;
@@ -478,7 +496,7 @@ function buildDistribution(api, { ds, estF }) {
   if (ds.kind === 'tally') {
     const row = el('div', 'ctrl-row ex-tight');
     row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
-      (forced ? '<span class="ctrl-note">With one replication there is one estimate, and so these plots show the observations.</span>' : '');
+      (forced ? '<span class="ctrl-note">With one replication there is one outcome, and so these plots show the observations.</span>' : '');
     sec.appendChild(row);
     row.querySelector('#ex-pooled').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
@@ -487,7 +505,7 @@ function buildDistribution(api, { ds, estF }) {
   const xLabel = usePooled ? ds.response : estimateAxis(ds);
   const pair = el('div', 'ex-pair');
   sec.appendChild(pair);
-  const base = slug(ds.name) + (usePooled ? '-observations' : '-estimates');
+  const base = slug(ds.name) + (usePooled ? '-observations' : '-outcomes');
   figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
     f => histogram(f, histBins(values)),
     [{ swatch: 'bar', color: '--est', label: esc(what) }]);
@@ -508,9 +526,9 @@ function buildBox(api, { ds, estF }) {
   figure(api, sec, slug(ds.name) + '-boxplot', { height: 'auto', margin: { t: 8, b: 44, l: 16 }, xLabel: estimateAxis(ds), ariaLabel: 'Box plot of the ' + estimateWord(ds) },
     f => boxPlot(f, st),
     [{ swatch: 'bar', color: '--est', label: 'box from q1 to q3, median line, whiskers to 1.5 IQR' }]
-      .concat(st.outliers.length ? [{ swatch: 'hollow', color: '--est', label: 'estimate beyond a whisker' }] : [])
+      .concat(st.outliers.length ? [{ swatch: 'hollow', color: '--est', label: 'outcome beyond a whisker' }] : [])
       .concat([{ swatch: 'diamond', color: '--truth', label: 'mean' }]));
-  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' estimates with the median inside it, and each whisker reaches the most extreme estimate within 1.5 box widths of the box.');
+  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' outcomes with the median inside it, and each whisker reaches the most extreme estimate within 1.5 box widths of the box.');
 }
 
 // ── One replication ─────────────────────────────────────────────────────
@@ -553,7 +571,7 @@ function buildSequence(api, { ds }) {
       [{ swatch: 'line', color: '--est', label: 'state, held until the next record' }]);
     caption(sec, 'Each value holds from its record time until the next record' +
       (ds.endTime != null ? ', and the last until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
-      ' The replication’s estimate weights each value by how long it held.');
+      ' The replication’s outcome weights each value by how long it held.');
   } else {
     const useT = rep.t && xMode === 'time';
     figure(api, sec, name, { height: 240, narrowHeight: 260, xLabel: useT ? 'Time' : 'Observation number', yLabel: ds.response, ariaLabel: 'Observations in order, replication ' + rep.id },
@@ -570,7 +588,7 @@ function buildRunning(api, { ds, est }) {
   sec.appendChild(el('div', 'sec-hd', (time ? 'Running time-weighted mean' : 'Running mean') + ', replication ' + esc(rep.id)));
   const name = slug(ds.name) + '-rep-' + slug(rep.id) + '-running-mean';
   const legendItems = [{ swatch: 'line', color: '--est', label: time ? 'time-weighted mean from the start to t' : 'running mean' },
-    { swatch: 'dash', color: '--truth', label: 'final value, the replication’s estimate' }];
+    { swatch: 'dash', color: '--truth', label: 'final value, the replication’s outcome' }];
   if (time) {
     const s = runningTimeMean(rep, ds.endTime);
     const final = s.ys.length ? s.ys[s.ys.length - 1] : NaN;
@@ -592,12 +610,12 @@ function buildRunning(api, { ds, est }) {
         });
         sequence(f, s.ys, { xs: s.xs, width: 1.8, label: 'running time-weighted mean' });
       }, legendItems);
-    caption(sec, 'At each record time t, the time-weighted mean of the state from the start of the run to t. Its final value, ' + num(final) + ', is replication ' + esc(rep.id) + '’s estimate.');
+    caption(sec, 'At each record time t, the time-weighted mean of the state from the start of the run to t. Its final value, ' + num(final) + ', is replication ' + esc(rep.id) + '’s outcome.');
   } else {
     const useT = rep.t && xMode === 'time';
     figure(api, sec, name, { height: 240, narrowHeight: 260, xLabel: useT ? 'Time' : 'Observation number', yLabel: 'Running mean', ariaLabel: 'Running mean, replication ' + rep.id },
       f => runningMean(f, rep.v, useT ? { xs: rep.t } : {}), legendItems);
-    caption(sec, 'The running mean after observation i is the average of the first i observations. Its final value, ' + num(est[repIndex - 1]) + ', is replication ' + esc(rep.id) + '’s estimate.');
+    caption(sec, 'The running mean after observation i is the average of the first i observations. Its final value, ' + num(est[repIndex - 1]) + ', is replication ' + esc(rep.id) + '’s outcome.');
   }
 }
 
@@ -635,7 +653,7 @@ function buildDots(api, { ds, est, estF }) {
   const vals = Array.from(est);
   figure(api, sec, slug(ds.name) + '-dotplot', { height: 140, narrowHeight: 160, margin: { t: 8, b: 44 }, xLabel: estimateAxis(ds), ariaLabel: 'Dot plot of the ' + estimateWord(ds) },
     f => dotPlot(f, vals, { labels, mean: true }),
-    [{ swatch: 'dot', color: '--est', label: 'one replication’s estimate' }, { swatch: 'line', color: '--truth', label: 'mean of the estimates' }]);
+    [{ swatch: 'dot', color: '--est', label: 'one replication’s outcome' }, { swatch: 'line', color: '--truth', label: 'mean of the outcomes' }]);
   caption(sec, 'Each dot is one of the ' + intl(estF.length) + ' ' + esc(estimateWord(ds)) + ', and their spread around the mean, ' + num(mean(estF)) + ', is the variation an interval over replications measures.');
 }
 
@@ -658,7 +676,7 @@ function buildIntervals(api, { ds, estF }) {
   }
   const legendItems = [{ swatch: 'interval', color: '--truth', label: 'interval over the ' + esc(estimateWord(ds)) }];
   if (shown) legendItems.push({ swatch: 'interval', color: '--est', label: 'one replication’s own interval over its observations' });
-  legendItems.push({ swatch: 'dash', color: '--truth', label: 'mean of the estimates' });
+  legendItems.push({ swatch: 'dash', color: '--truth', label: 'mean of the outcomes' });
   figure(api, sec, slug(ds.name) + '-intervals', { height: 'auto', margin: { t: 8, b: 44 }, xLabel: estimateAxis(ds), ariaLabel: 'Confidence intervals' },
     f => intervals(f, items, { ref: all.mean }), legendItems);
   let cap = (shown ? 'The top row is the ' : 'The row is the ') + lvl(level) + ' t interval over the ' + intl(estF.length) + ' ' + esc(estimateWord(ds)) +
@@ -690,7 +708,7 @@ function buildNormality(api, { ds, estF }) {
   if (ds.kind === 'tally') {
     const row = el('div', 'ctrl-row ex-tight');
     row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled-qq"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
-      (forced ? '<span class="ctrl-note">With fewer than three replications there is no test of the estimates, and so the plot shows the observations.</span>' : '');
+      (forced ? '<span class="ctrl-note">With fewer than three replications there is no test of the outcomes, and so the plot shows the observations.</span>' : '');
     sec.appendChild(row);
     row.querySelector('#ex-pooled-qq').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
@@ -710,7 +728,7 @@ function buildNormality(api, { ds, estF }) {
   }
   if (!q) { emptyLine(sec, 'This dataset holds fewer than two values.'); return; }
   const yLabel = usePooled ? ds.response : estimateAxis(ds);
-  figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-estimates') + '-qq',
+  figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-outcomes') + '-qq',
     { height: 320, narrowHeight: 300, xLabel: 'Standard normal quantile', yLabel, ariaLabel: 'Normal quantile–quantile plot of the ' + what },
     f => qqPlot(f, q),
     [{ swatch: 'dot', color: '--est', label: esc(what) + ', sorted, against the normal quantile at each one’s plotting position' },
@@ -733,7 +751,7 @@ function buildNormality(api, { ds, estF }) {
   const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end a heavier lower tail; an S through the line marks lighter tails.' : '';
   if (usePooled) {
     caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles' + (thinned ? ', with ' + intl(QQ_CAP) + ' of the ' + intl(total) + ' plotted, evenly spaced through the sorted order' : '') + '; the line passes through the quartiles.' + tailHint +
-      ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication estimates are and the observations are not.');
+      ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication outcomes are and the observations are not.');
   } else {
     const n = total;
     const rob = n >= 30 ? 'With ' + intl(n) + ' replications, the t intervals on the inference pages are robust to the departure a sample this size can reveal, as long as no single replication stands far from the rest.'
@@ -741,6 +759,45 @@ function buildNormality(api, { ds, estF }) {
     caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles; the line passes through the quartiles.' + tailHint +
       ' ' + rob + ' The chi-square interval on a variance and the F ratio of two variances are not robust at any size: they lean on normality itself, and a rejection here is a reason to read them with doubt.');
   }
+}
+
+// ── Equal variances ─────────────────────────────────────────────────────
+
+// The datasets the equal-variance test can take: at least two replication outcomes each.
+function spreadable() {
+  return state.datasets.filter(d => finite(repEstimates(d)).length >= 2);
+}
+
+function buildSpread(api, { ds }) {
+  const sec = api.sec;
+  const level = state.settings.base, alpha = 1 - level;
+  sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
+  sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
+  const eligible = spreadable();
+  const stored = state.getPick(id, 'spread');
+  const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
+  const initial = want.length >= 2 ? want : eligible.map(d => d.id);
+  const host = el('div');
+  sec.appendChild(host);
+  const list = datasetChecklist(host, { filter: d => finite(repEstimates(d)).length >= 2, checked: initial,
+    onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); } });
+  const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
+  if (chosen.length < 2) { emptyLine(sec, 'Tick two or more datasets to compare their spreads.'); return; }
+  const groups = chosen.map(d => finite(repEstimates(d)));
+  const lv = levene(groups);
+  lastLevene = { names: chosen.map(d => d.name), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
+  const rejects = lv.p < alpha;
+  sec.appendChild(cardRow([
+    card('<span class="sym">F</span>', num(lv.F, 4), 'ANOVA of |outcome − median|'),
+    card('<span class="sym">df</span>', intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
+    card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
+    (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict', rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+  ]));
+  const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
+  sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
+  caption(sec, rejects
+    ? 'At this level the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Bonferroni differences, which take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications the test has little power, and so this is a check, not a proof.');
 }
 
 export default { id, title, sections, render, onShow };

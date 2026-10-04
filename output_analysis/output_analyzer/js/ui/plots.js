@@ -821,22 +821,25 @@ export function dotPlot(fig, values, o = {}) {
   const r = o.r || (fig.narrow ? 4 : 4.5);
   const idx = Array.from({ length: n }, (_, i) => i).filter(i => Number.isFinite(values[i])).sort((a, b) => values[a] - values[b]);
   // Each dot takes the level nearest the center line (0, +1, −1, +2, ...)
-  // whose last dot sits at least one diameter to its left.
+  // whose last dot sits at least one diameter to its left. Past a few
+  // hundred values the dots stack upward from a baseline instead, which
+  // reads as a dot histogram rather than a mirrored smear.
+  const sym = n <= 300;
   const lastX = new Map(), level = new Array(n).fill(0);
   let maxLevel = 0;
   for (const i of idx) {
     const px = sx(values[i]);
     for (let j = 0; ; j++) {
-      const L = j === 0 ? 0 : (j % 2 ? (j + 1) / 2 : -j / 2);
+      const L = sym ? (j === 0 ? 0 : (j % 2 ? (j + 1) / 2 : -j / 2)) : j;
       const prev = lastX.get(L);
       if (prev === undefined || px - prev >= 2 * r + 0.5) { lastX.set(L, px); level[i] = L; maxLevel = Math.max(maxLevel, Math.abs(L)); break; }
     }
   }
-  const cy = fig.ih / 2;
-  const gap = maxLevel ? Math.min(2 * r + 1, (fig.ih / 2 - r - 2) / maxLevel) : 0;
+  const cy = sym ? fig.ih / 2 : fig.ih - r - 2;
+  const gap = maxLevel ? Math.min(2 * r + 1, (sym ? fig.ih / 2 - r - 2 : fig.ih - 2 * r - 8) / maxLevel) : 0;
   const c = col(o.color, '--est'), card = tok('--card');
   fig.cats = { axis: 'y', at: [], labels: [] };
-  fig.yRange = [-(maxLevel + 1), maxLevel + 1];
+  fig.yRange = sym ? [-(maxLevel + 1), maxLevel + 1] : [-1, maxLevel + 1];
   if (o.mean) {
     let s = 0; for (const i of idx) s += values[i];
     const m = s / Math.max(1, idx.length);

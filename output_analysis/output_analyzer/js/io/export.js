@@ -111,7 +111,7 @@ function estimateVector(x) {
 }
 
 /**
- * Replication estimates in the form a pilot-data box reads: `#` lines, a
+ * Replication outcomes in the form a pilot-data box reads: `#` lines, a
  * header, and one number per line. Given one dataset (or vector), one column
  * headed `mean` holding its finite estimates. Given a pair `[a, b]` of
  * datasets or vectors already matched by the caller, two columns headed

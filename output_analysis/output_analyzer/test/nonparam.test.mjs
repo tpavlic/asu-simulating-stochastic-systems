@@ -103,3 +103,24 @@ test('signedRank drops zeros and reports them, and uses the approximation under 
   assert.equal(r.nUsed, 4);
   assert.equal(r.exact, false);
 });
+
+import { bonferroniFamilyRank } from '../js/stats/nonparam.js';
+
+test('bonferroniFamilyRank is the per-pair Wilcoxon interval at 1 − α/C, independent and paired', () => {
+  const G = REF.kw.four.groups.map(g => g.slice(0, 7));   // equal lengths for the paired case
+  const fam = bonferroniFamilyRank(G, { mode: 'pairs', level: 0.95 });
+  assert.equal(fam.C, 6);
+  close(fam.perLevel, 1 - 0.05 / 6, 1e-12, 'per level');
+  const r01 = rankSum(G[0], G[1], { level: fam.perLevel });
+  close(fam.comparisons[0].diff, r01.estimate, 1e-12, 'estimate');
+  close(fam.comparisons[0].lo, r01.lo, 1e-12, 'lower');
+  close(fam.comparisons[0].p, r01.p, 1e-12, 'p');
+  assert.equal(fam.comparisons[0].flagged, r01.lo > 0 || r01.hi < 0);
+  const ctl = bonferroniFamilyRank(G, { mode: 'control', control: 2, level: 0.95 });
+  assert.equal(ctl.C, 3);
+  assert.ok(ctl.comparisons.every(c => c.j === 2 && c.i !== 2));
+  const pr = bonferroniFamilyRank(G, { mode: 'pairs', level: 0.95, paired: true });
+  const s01 = signedRank(G[0].map((v, q) => v - G[1][q]), { level: pr.perLevel });
+  close(pr.comparisons[0].diff, s01.estimate, 1e-12, 'paired estimate');
+  close(pr.comparisons[0].stat, s01.V, 1e-12, 'V');
+});

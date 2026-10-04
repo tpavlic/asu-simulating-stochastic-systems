@@ -13,7 +13,7 @@ import { repEstimates, repIds, canInfer } from '../data/model.js';
 import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
-import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank } from '../stats/nonparam.js';
+import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -31,7 +31,6 @@ export const sections = [
   { id: 'diffs', label: 'Bonferroni differences' },
   { id: 'plan', label: 'Replications' },
   { id: 'anova', label: 'ANOVA and post hoc' },
-  { id: 'nonparam', label: 'Nonparametric' },
   { id: 'subset', label: 'Screen for the best' }
 ];
 
@@ -51,6 +50,9 @@ let diffMode = 'pairs';
 let rule = 'tukey';
 // How Dunn's pairwise p-values are adjusted: 'bonferroni' or 'holm'.
 let adjust = 'bonferroni';
+// 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
+let proc = 't';
+const NP_PLAN = 'The planning card sizes the t procedures. Under normal data the rank procedures need about 5% more replications for the same power (their efficiency relative to the t is 3/π), and under heavy tails they need fewer.';
 // 'independent' or 'paired': whether replication i of every design shared its
 // random inputs (common random numbers across designs), making it a block.
 let pairMode = 'independent';
@@ -470,6 +472,10 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
   rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
+  rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+  // The post-hoc rule serves the t procedures, the adjustment the rank ones.
+  rootEl.querySelector('#sev-rule-host').style.display = proc === 'np' ? 'none' : '';
+  rootEl.querySelector('#sev-adj-row').style.display = proc === 'np' ? '' : 'none';
   rootEl.querySelector('#sev-match-row').style.display = pairMode === 'paired' ? '' : 'none';
   const rs = rootEl.querySelector('#sev-rule');
   if (rs.value !== rule) rs.value = rule;
@@ -532,7 +538,7 @@ function showExcluded() {
   if (!out.length) return;
   const items = out.map(d => '<b>' + esc(d.name) + '</b>: ' + esc(canInfer(d).reason)).join('<br>');
   box.appendChild(notice('warn', (out.length === 1 ? 'One dataset is' : out.length + ' datasets are') +
-    ' not offered here, because a comparison needs at least two replication estimates per design.<br>' + items));
+    ' not offered here because a comparison needs at least two replication outcomes per design.<br>' + items));
 }
 
 function schedule() {
@@ -574,7 +580,7 @@ function update() {
   const k = list.length;
   const short = shortNames(list);
   const unit = rootEl.querySelector('#sev-unit');
-  const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc', 'np'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
+  const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
   bodies.forEach(b => { b.innerHTML = ''; });
 
   numberChecklist(list);
@@ -583,14 +589,14 @@ function update() {
   if (k < 2 || (paired && match.blocks.length < 2)) {
     unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : 'too few replications matched across the designs.');
     const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : k < 2 ? 'Check two or more designs above to compare them.' : 'Pairing needs at least two replications matched across every design.';
-    [0, 1, 2, 3, 5].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
+    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
     resultBase = null;
     planCtx = { msg: 'Check two or more designs above to plan replications.' };
     drawPlan();
     return;
   }
   const ns = groups.map(g => g.length);
-  const kw = list.every(d => d.kind === 'reps') ? 'replication values' : list.every(d => d.kind === 'time') ? 'time-weighted replication means' : 'replication estimates';
+  const kw = list.every(d => d.kind === 'reps') ? 'replication values' : list.every(d => d.kind === 'time') ? 'replication time averages' : 'replication outcomes';
   unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (paired
     ? 'R = ' + intl(ns[0]) + ' ' + kw + ' paired across the ' + k + ' designs (common random numbers)'
     : ns.every(n => n === ns[0])
@@ -610,6 +616,8 @@ function update() {
 
   const ctrlIdx = Math.max(0, list.findIndex(d => d.id === controlId));
   const L = levelPct(level), aTxt = num(alpha, 2);
+  const np = proc === 'np';
+  rootEl.querySelector('#sev-plan-np').textContent = np ? NP_PLAN : '';
   const tables = [];
   const summary = [];
 
@@ -617,6 +625,25 @@ function update() {
   const sm = simultaneousMeans(groups, level);
   {
     const b = bodies[0];
+    if (np) {
+    const hl = groups.map(g => signedRank(g, { level: sm.perLevel }));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
+    b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
+      ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
+      fg => {
+        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi)]);
+        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate })), { rowPx: 30 });
+      },
+      [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval' }],
+      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
+      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.');
+    const basis = r => (r.exact ? 'exact' : 'normal approx.');
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)]);
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'], rows));
+    tables.push({ name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'],
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)]) });
+    } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
@@ -632,6 +659,7 @@ function update() {
     b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'], rows));
     tables.push({ name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
       rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi]) });
+      }
   }
 
   // Bonferroni family of differences.
@@ -639,6 +667,39 @@ function update() {
   const famName = paired ? 'paired t interval' : 'Welch interval';
   {
     const b = bodies[1];
+    if (np) {
+    const famR = bonferroniFamilyRank(groups, { mode: diffMode, control: ctrlIdx, level, paired });
+    const rName = paired ? 'Wilcoxon signed-rank interval' : 'Wilcoxon rank-sum interval';
+    b.appendChild(para('cmp-banner', 'C = ' + famR.C + ' comparison' + (famR.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(famR.perLevel)));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand with ranks: every pair’s own ' + rName + ' for the shift in location at level 1 − α/C, ' +
+      (paired ? 'on the paired differences within each replication' : 'on the two designs’ outcomes') + '; each interval contains 0 exactly when that pair’s Wilcoxon test at α/C does not reject.'));
+    if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
+    const lab = c => pairLabel(c.i, c.j);
+    const full = c => list[c.i].name + ' − ' + list[c.j].name;
+    const anyFlag = famR.comparisons.some(c => c.flagged), anyPlain = famR.comparisons.some(c => !c.flagged);
+    const legItems = [];
+    if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: rName + ' at ' + levelPct(famR.perLevel) + ', contains 0' });
+    if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: rName + ' at ' + levelPct(famR.perLevel) + ', excludes 0' });
+    legItems.push({ swatch: 'dash', color: '--truth', label: 'zero shift' });
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + list[0].response }, 'several-rank-differences',
+      fg => {
+        const cs = famR.comparisons;
+        rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
+        intervals(fg, cs.map(c => ({ label: lab(c), lo: c.lo, hi: c.hi, center: c.diff, flagged: c.flagged })), { ref: 0, rowPx: 28 });
+      },
+      legItems,
+      'Each row is one pair’s Hodges–Lehmann shift with its ' + rName + ' at ' + levelPct(famR.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
+    const statName = paired ? 'V' : 'W';
+    const rows = famR.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi), pValue(c.p), pValue(c.pAdj),
+      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
+    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval', 'p', 'Adjusted p', 'Basis', 'Flag'], rows));
+    b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
+      (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
+    tables.push({ name: 'Bonferroni rank differences', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
+      rows: famR.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi, c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0']) });
+    const nf = famR.comparisons.filter(c => c.flagged).length;
+    summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
+    } else {
     b.appendChild(para('cmp-banner', 'C = ' + fam.C + ' comparison' + (fam.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(fam.perLevel)));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand: every pair’s own ' + famName + ' at level 1 − α/C, with no pooled variance and no analysis of variance in front; each interval contains 0 exactly when that pair’s t test at α/C does not reject. The Bonferroni rule in the ANOVA section is the other kind: the same α/C, on the pooled variance.'));
     if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
@@ -666,13 +727,15 @@ function update() {
       rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
+      }
   }
 
   // ANOVA and post-hoc.
   const ph = posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
   const totalDf = paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
-  {
+  rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : 'Analysis of variance and post-hoc tests';
+  if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
     const atab = table(['Source', 'SS', 'df', 'MS', 'F', 'p'], [
@@ -749,7 +812,7 @@ function update() {
       legItems,
       'Each row is a difference of means ± its critical difference under ' + RULES[rule] + '. ' +
       (rule === 'lsd' && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
-      'These procedures assume normal replication estimates with equal variances across designs; when the variances clearly differ, the Welch intervals above are the safer choice.');
+      'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, the Welch intervals above are the safer choice.');
     const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se), num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'Critical difference', 'Interval', 'Different?'], rows));
     tables.push({ name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
@@ -766,9 +829,63 @@ function update() {
     }
     summary.push('Levene: p = ' + pValue(lv.p) + '. ANOVA: F = ' + num(av.F) + ', p = ' + pValue(av.p) + '. ' + RULES[rule] + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
+  } else {
+    const b = bodies[2];
+    const kwr = paired ? null : kruskalWallis(groups);
+    const fr = paired ? friedman(groups) : null;
+    const dn = paired ? friedmanPairs(groups, { alpha, adjust }) : dunn(groups, { alpha, adjust });
+    const omni = paired ? { stat: fr.chi2, df: fr.df, p: fr.p, ties: fr.ties } : { stat: kwr.H, df: kwr.df, p: kwr.p, ties: kwr.ties };
+    b.appendChild(para('cmp-lead', 'The analysis of variance and its post-hoc rules compare means on the assumption that the replication outcomes are normal with one variance across designs. ' +
+      (paired
+        ? 'These rank procedures assume neither: Friedman’s test ranks the k designs within each replication, where common random numbers make the comparison fair, and asks whether some designs tend to rank higher than others.'
+        : 'These rank procedures assume neither: they pool every outcome, rank the lot, and ask whether some designs tend to sit higher than others.') +
+      ' They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
+    b.appendChild(cardRow([
+      card(paired ? 'χ²' : 'H', num(omni.stat), (paired ? 'Friedman statistic' : 'Kruskal–Wallis statistic') + (omni.ties ? ', tie-corrected' : '')),
+      card('df', intl(omni.df), 'k − 1'),
+      card('p', pValue(omni.p), 'chi-square approximation')
+    ]));
+    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, p = ' + pValue(omni.p) + ': ' +
+      (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
+    const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
+    const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
+    b.appendChild(para('cmp-lead', (paired
+      ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
+      : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
+      '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
+      ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the omnibus test to reject.'));
+    // Each design's pseudo-median with its Wilcoxon interval, best first,
+    // carrying Dunn's letters and brackets.
+    const hl = groups.map(g => signedRank(g, { level }));
+    const orderN = list.map((_, i) => i).sort((x, y) => dir === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
+    const posN = [];
+    orderN.forEach((i, r) => { posN[i] = r; });
+    const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
+    const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
+    b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
+    const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
+    if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
+    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
+      fg => designRows(fg, rowsN, pairsN), legN,
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
+    const labN = p => pairLabel(p.i, p.j);
+    const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
+    const rowsD = dn.pairs.map(p => ['<span class="sev-pair">' + esc(labN(p)) + '</span>', '<span class="sev-full">' + esc(fullN(p)) + '</span>', num(p.diff), num(p.se), num(p.z), pValue(p.p), pValue(p.pAdj),
+      p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
+    b.appendChild(table(['Pair', 'Designs', paired ? 'Rank-sum difference' : 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
+    tables.push(paired ? { name: 'Rank test (Friedman)', headers: ['chi-square', 'df', 'p'], rows: [[fr.chi2, fr.df, fr.p]] }
+      : { name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
+    tables.push({ name: 'Pairwise rank comparisons (' + (paired ? 'Friedman' : 'Dunn') + ', ' + adjName + ')', headers: ['pair', paired ? 'rank sum difference' : 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
+      rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
+    tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
+      rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
+    summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', p = ' + pValue(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
+  
   }
 
   // The screen for the best.
+  if (np) bodies[3].appendChild(para('cmp-lead', 'The screen is a procedure on sample means and standard deviations, and it has no rank version here; it is shown unchanged.'));
   const eps = epsSpin ? epsSpin.get() : NaN;
   const ss = subsetSelection(groups, { alpha, delta: eps, dir });
   {
@@ -806,62 +923,6 @@ function update() {
     }
   }
 
-  // Kruskal–Wallis and Dunn.
-  {
-    const b = bodies[5];
-    rootEl.querySelector('#sev-np-hd').textContent = paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons';
-    const kwr = paired ? null : kruskalWallis(groups);
-    const fr = paired ? friedman(groups) : null;
-    const dn = paired ? friedmanPairs(groups, { alpha, adjust }) : dunn(groups, { alpha, adjust });
-    const omni = paired ? { stat: fr.chi2, df: fr.df, p: fr.p, ties: fr.ties } : { stat: kwr.H, df: kwr.df, p: kwr.p, ties: kwr.ties };
-    b.appendChild(para('cmp-lead', 'The analysis of variance and its post-hoc rules compare means on the assumption that the replication estimates are normal with one variance across designs. ' +
-      (paired
-        ? 'These rank procedures assume neither: Friedman’s test ranks the k designs within each replication, where common random numbers make the comparison fair, and asks whether some designs tend to rank higher than others.'
-        : 'These rank procedures assume neither: they pool every estimate, rank the lot, and ask whether some designs tend to sit higher than others.') +
-      ' They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
-    b.appendChild(cardRow([
-      card(paired ? 'χ²' : 'H', num(omni.stat), (paired ? 'Friedman statistic' : 'Kruskal–Wallis statistic') + (omni.ties ? ', tie-corrected' : '')),
-      card('df', intl(omni.df), 'k − 1'),
-      card('p', pValue(omni.p), 'chi-square approximation')
-    ]));
-    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, p = ' + pValue(omni.p) + ': ' +
-      (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
-    const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
-    const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
-    b.appendChild(para('cmp-lead', (paired
-      ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
-      : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
-      '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
-      ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the omnibus test to reject.'));
-    // Each design's pseudo-median with its Wilcoxon interval, best first,
-    // carrying Dunn's letters and brackets.
-    const hl = groups.map(g => signedRank(g, { level }));
-    const orderN = list.map((_, i) => i).sort((x, y) => dir === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
-    const posN = [];
-    orderN.forEach((i, r) => { posN[i] = r; });
-    const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
-    const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
-    b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
-    const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
-    if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
-    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
-      fg => designRows(fg, rowsN, pairsN), legN,
-      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its estimates), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
-      'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
-    const labN = p => pairLabel(p.i, p.j);
-    const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
-    const rowsD = dn.pairs.map(p => ['<span class="sev-pair">' + esc(labN(p)) + '</span>', '<span class="sev-full">' + esc(fullN(p)) + '</span>', num(p.diff), num(p.se), num(p.z), pValue(p.p), pValue(p.pAdj),
-      p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
-    b.appendChild(table(['Pair', 'Designs', paired ? 'Rank-sum difference' : 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
-    tables.push(paired ? { name: 'Rank test (Friedman)', headers: ['chi-square', 'df', 'p'], rows: [[fr.chi2, fr.df, fr.p]] }
-      : { name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
-    tables.push({ name: 'Pairwise rank comparisons (' + (paired ? 'Friedman' : 'Dunn') + ', ' + adjName + ')', headers: ['pair', paired ? 'rank sum difference' : 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
-      rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
-    tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
-      rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
-    summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', p = ' + pValue(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
-  }
-
   const units = Array.from(new Set(list.map(d => d.unit || '')));
   // Under pairing the half-width plan works on the standard deviations of
   // the paired differences, and the power plan on the blocked F test.
@@ -878,7 +939,8 @@ function update() {
       direction: dir === 'min' ? 'smaller is better' : 'bigger is better',
       'comparisons adjusted for': fam.C,
       'difference family': diffMode === 'pairs' ? 'all pairs' : 'versus control',
-      'post-hoc rule': RULES[rule],
+      procedure: np ? 'nonparametric (Wilcoxon, ' + (paired ? 'Friedman' : 'Kruskal–Wallis and Dunn') + ')' : 't procedures',
+      'post-hoc rule': np ? 'not applicable' : RULES[rule],
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
@@ -992,7 +1054,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Compare two or more designs at once on their replication estimates: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
+    '<p class="lede">Compare two or more designs at once on their replication outcomes: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
     'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams unless the switch below says the replications are paired across designs (common random numbers): then the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +
@@ -1025,6 +1087,13 @@ export function render(root) {
         '</span>' +
         '<span class="ctrl-note" id="sev-match-note"></span>' +
       '</div>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl" id="sev-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: intervals on means by the t distribution, the analysis of variance, and its post-hoc rules, all assuming normal replication outcomes. Nonparametric: the same sub-items by ranks, with Wilcoxon intervals on pseudo-medians and shifts, Kruskal–Wallis or Friedman in place of the analysis of variance, and Dunn’s or Friedman’s pairwise comparisons in place of the post-hoc rules; they need no normality and keep their level under heavy tails. The screen for the best has no rank version and is shown unchanged.">Procedure</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-proc-lbl">' +
+          '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
+          '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
+        '</span>' +
+      '</div>' +
       '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
       '<div id="sev-mixed"></div>' +
@@ -1042,17 +1111,15 @@ export function render(root) {
       '</div>' +
       '<div id="sev-diffs-body"></div></div>' +
     '<div class="sec plan-card" id="sev-plan" data-section="plan"></div>' +
-    '<div class="sec" data-section="anova"><div class="sec-hd">Analysis of variance and post-hoc tests</div>' +
-      '<div id="sev-anova-body"></div>' +
-      '<div id="sev-rule-host"></div>' +
-      '<div id="sev-posthoc-body"></div></div>' +
-    '<div class="sec" data-section="nonparam"><div class="sec-hd" id="sev-np-hd">Kruskal–Wallis test and Dunn’s pairwise comparisons</div>' +
-      '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How Dunn’s pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
+    '<div class="sec" data-section="anova"><div class="sec-hd" id="sev-anova-hd">Analysis of variance and post-hoc tests</div>' +
+      '<div class="ctrl-row" id="sev-adj-row" style="display:none"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How the pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-adj="holm" aria-pressed="false">Holm</button>' +
         '</span></div>' +
-      '<div id="sev-np-body"></div></div>' +
+      '<div id="sev-anova-body"></div>' +
+      '<div id="sev-rule-host"></div>' +
+      '<div id="sev-posthoc-body"></div></div>' +
     '<div class="sec" data-section="subset"><div class="sec-hd">Screen for the best</div><div id="sev-subset-body"></div></div>';
 
   const planSec = root.querySelector('#sev-plan');
@@ -1064,6 +1131,7 @@ export function render(root) {
     '</div>',
     powerControls('sev', 'Shift to detect δ',
       'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean.'));
+  planSec.appendChild(para('exp-note', '')).id = 'sev-plan-np';
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
     if (plan.mode === b.dataset.plan) return;
@@ -1092,18 +1160,6 @@ export function render(root) {
     '<p>For each survivor, Rinott’s second stage needs N<sub>i</sub> = max(R<sub>i</sub>, ⌈(h·s<sub>i</sub>/ε)²⌉) replications in all, with h from Rinott’s integral at 1 − α/2. ' +
     'Running them and picking the best second-stage mean selects a design within ε of the best with the stated confidence.</p>'));
 
-  // The references stand outside the sections, and so they show whichever one is open.
-  root.appendChild(details('References',
-    '<p>Bonferroni families of intervals and the two-stage screen for the best: J. Banks, J. S. Carson, B. L. Nelson, and D. M. Nicol, <i>Discrete-Event System Simulation</i>, 5th ed. (Pearson, 2010), chapter 12; ' +
-    'B. L. Nelson, J. Swann, D. Goldsman, and W. Song, “Simple procedures for selecting the best simulated system when the number of alternatives is large,” <i>Operations Research</i> 49 (2001) 950–963; ' +
-    'Y. Rinott, “On two-stage selection procedures and related probability-inequalities,” <i>Communications in Statistics</i> A7 (1978) 799–811.</p>' +
-    '<p>Post-hoc comparisons: J. W. Tukey, “Comparing individual means in the analysis of variance,” <i>Biometrics</i> 5 (1949) 99–114, with C. Y. Kramer’s extension to unequal sizes (<i>Biometrics</i> 12, 1956); ' +
-    'C. W. Dunnett, “A multiple comparison procedure for comparing several treatments with a control,” <i>JASA</i> 50 (1955) 1096–1121; ' +
-    'J. C. Hsu, <i>Multiple Comparisons: Theory and Methods</i> (Chapman and Hall, 1996); S. Holm, “A simple sequentially rejective multiple test procedure,” <i>Scandinavian Journal of Statistics</i> 6 (1979) 65–70.</p>' +
-    '<p>Rank procedures: W. H. Kruskal and W. A. Wallis, <i>JASA</i> 47 (1952) 583–621; M. Friedman, <i>JASA</i> 32 (1937) 675–701; O. J. Dunn, “Multiple comparisons using rank sums,” <i>Technometrics</i> 6 (1964) 241–252; ' +
-    'S. Siegel and N. J. Castellan, <i>Nonparametric Statistics for the Behavioral Sciences</i>, 2nd ed. (McGraw-Hill, 1988); J. L. Hodges and E. L. Lehmann, “Estimates of location based on rank tests,” <i>Annals of Mathematical Statistics</i> 34 (1963) 598–611.</p>' +
-    '<p>Checks: M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>JASA</i> 69 (1974) 364–367; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551.</p>'));
-
   // The checked set is recorded only when the reader checks or unchecks a
   // design; the checklist's own updates as datasets come and go are not.
   checklist = datasetChecklist(root.querySelector('#sev-list'), {
@@ -1120,6 +1176,7 @@ export function render(root) {
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
   root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => { pairMode = b.dataset.pair; state.setPick(id, 'pairing', pairMode); schedule(); }));
+  root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
 
@@ -1143,6 +1200,7 @@ function applyStored() {
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
   if (get('pairing') === 'independent' || get('pairing') === 'paired') pairMode = get('pairing');
+  if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   const e = get('eps');
