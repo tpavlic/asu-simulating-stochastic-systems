@@ -379,3 +379,69 @@ export function dunn(groups, { alpha, adjust = 'bonferroni' }) {
   const letters = letterGroups(k, pairs.filter(pr => pr.flagged).map(pr => [pr.i, pr.j]));
   return { k, C, adjust, pairs, letters, kw };
 }
+
+// ── Friedman ──────────────────────────────────────────────────────────────
+
+/**
+ * Friedman's rank test for k designs run under common random numbers, the
+ * replication being the block: each block's k values are ranked among
+ * themselves, and the test asks whether the designs' rank sums differ. The
+ * groups are aligned block by block, all of one length. The tie correction
+ * is R's friedman.test's.
+ * @param {(number[]|Float64Array)[]} groups
+ * @returns {{k: number, R: number, rankSums: number[], meanRanks: number[], chi2: number, df: number, p: number, ties: boolean}}
+ */
+export function friedman(groups) {
+  const k = groups.length, R = groups[0].length;
+  if (!groups.every(g => g.length === R)) throw new RangeError('friedman: every design needs the same number of blocks');
+  const rankSums = new Array(k).fill(0);
+  let tieTerm = 0, anyTies = false;
+  for (let r = 0; r < R; r++) {
+    const { ranks, ties } = midranks(groups.map(g => g[r]));
+    for (let i = 0; i < k; i++) rankSums[i] += ranks[i];
+    if (ties.length) anyTies = true;
+    tieTerm += tieSum(ties);
+  }
+  let num = 0;
+  for (let i = 0; i < k; i++) { const d = rankSums[i] - R * (k + 1) / 2; num += d * d; }
+  const chi2 = 12 * num / (R * k * (k + 1) - tieTerm / (k - 1));
+  const df = k - 1;
+  return { k, R, rankSums, meanRanks: rankSums.map(v => v / R), chi2, df, p: 1 - chi2Cdf(chi2, df), ties: anyTies };
+}
+
+/**
+ * Pairwise comparisons after Friedman's test, each pair's difference of rank
+ * sums standardized by √(R·k·(k + 1)/6) (Siegel and Castellan's procedure),
+ * with the p-values adjusted by Bonferroni or Holm. A pair is flagged when
+ * its adjusted p is below α; letters is the compact letter display.
+ * @param {(number[]|Float64Array)[]} groups
+ * @param {{alpha: number, adjust?: 'bonferroni'|'holm'}} opts
+ * @returns {{k: number, C: number, adjust: string, pairs: {i: number, j: number, diff: number, se: number, z: number, p: number, pAdj: number, flagged: boolean}[], letters: string[], fr: object}}
+ */
+export function friedmanPairs(groups, { alpha, adjust = 'bonferroni' }) {
+  const fr = friedman(groups);
+  const { k, R } = fr;
+  const se = Math.sqrt(R * k * (k + 1) / 6);
+  const pairs = [];
+  for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+    const diff = fr.rankSums[i] - fr.rankSums[j];
+    const z = diff / se;
+    const p = 2 * (1 - normCdf(Math.abs(z)));
+    pairs.push({ i, j, diff, se, z, p, pAdj: NaN, flagged: false });
+  }
+  const C = pairs.length;
+  if (adjust === 'holm') {
+    const order = pairs.map((_, i) => i).sort((a, b) => pairs[a].p - pairs[b].p);
+    let running = 0;
+    order.forEach((idx, rank) => {
+      const adj = Math.min(1, (C - rank) * pairs[idx].p);
+      running = Math.max(running, adj);
+      pairs[idx].pAdj = running;
+    });
+  } else {
+    for (const pr of pairs) pr.pAdj = Math.min(1, C * pr.p);
+  }
+  for (const pr of pairs) pr.flagged = pr.pAdj < alpha;
+  const letters = letterGroups(k, pairs.filter(pr => pr.flagged).map(pr => [pr.i, pr.j]));
+  return { k, C, adjust, pairs, letters, fr };
+}

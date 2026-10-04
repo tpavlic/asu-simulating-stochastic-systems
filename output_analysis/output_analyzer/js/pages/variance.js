@@ -11,8 +11,9 @@ import { levene } from '../stats/compare.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
+import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
-import { num, intl, pct, pValue, esc, dash } from '../ui/format.js';
+import { num, intl, pct, pValue, esc, dash, lvl } from '../ui/format.js';
 
 /** The page's hash id. */
 export const id = 'variance';
@@ -91,8 +92,8 @@ export function render(rootEl) {
   fSec.appendChild(el('div', 'sec-hd', 'Ratio of variances (A over B)'));
   const fMsg = el('p', 'rv-line'), fRow1 = el('div'), fRow2 = el('div'), fVerdict = el('p', 'rv-verdict');
   const bfHead = el('p', 'rv-line', 'Levene’s test of equal variances (Brown–Forsythe, centered on the medians), which does not assume normality:');
-  const bfRow = el('div'), bfVerdict = el('p', 'rv-verdict');
-  fSec.append(fMsg, fRow1, fRow2, fVerdict, bfHead, bfRow, bfVerdict, notice('warn', NORMALITY_F));
+  const bfRow = el('div'), bfVerdict = el('p', 'rv-verdict'), fChecks = el('div');
+  fSec.append(fMsg, fRow1, fRow2, fVerdict, bfHead, bfRow, bfVerdict, fChecks, notice('warn', NORMALITY_F));
   root.appendChild(fSec);
 
   // Correlation.
@@ -105,7 +106,7 @@ export function render(rootEl) {
   fig = makeFigure(figBox, { height: 320, narrowHeight: 340, xLabel: 'Dataset A estimate', yLabel: 'Dataset B estimate', ariaLabel: 'Scatter plot of the paired replication estimates' });
   exportButtons(figBox, fig, 'correlation-scatter');
 
-  els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, bfRow, bfVerdict, cMsg, cRow1, cRow2, leg, cap,
+  els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, bfRow, bfVerdict, fChecks, cMsg, cRow1, cRow2, leg, cap,
           a: ctrl.querySelector('#va-a'), b: ctrl.querySelector('#va-b'), lvl: ctrl.querySelector('#va-lvl') };
 
   pickA = datasetSelect(els.a, { value: state.selected() || undefined, remember: { page: id, key: 'a' } });
@@ -143,7 +144,7 @@ export function render(rootEl) {
 }
 
 function placeholderVariance(level) {
-  const L = pct(level, 0);
+  const L = lvl(level);
   els.vRow1.replaceChildren(cardRow([card('R (<span class="sym">df</span>)', dash, '&nbsp;'), card(S('s²'), dash, '&nbsp;'), card(S('s'), dash, '&nbsp;')]));
   els.vRow2.replaceChildren(cardRow([
     wide(card(L + ' interval for ' + S('σ²'), '[' + dash + ', ' + dash + ']', '&nbsp;')),
@@ -154,15 +155,16 @@ function placeholderVariance(level) {
 
 function placeholderF(level) {
   els.fRow1.replaceChildren(cardRow([card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;')]));
-  els.fRow2.replaceChildren(cardRow([card(pct(level, 0) + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), '[' + dash + ', ' + dash + ']', '&nbsp;')]));
+  els.fRow2.replaceChildren(cardRow([card(lvl(level) + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), '[' + dash + ', ' + dash + ']', '&nbsp;')]));
   els.fVerdict.innerHTML = '&nbsp;';
   els.bfRow.replaceChildren(cardRow([card(S('F'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p'), dash, '&nbsp;')]));
   els.bfVerdict.innerHTML = '&nbsp;';
+  els.fChecks.replaceChildren();
 }
 
 function placeholderCorr(level) {
   els.cRow1.replaceChildren(cardRow([card(S('r'), dash, '&nbsp;'), card(S('n') + ' (pairs)', dash, '&nbsp;'), card(S('t'), dash, '&nbsp;')]));
-  els.cRow2.replaceChildren(cardRow([card(S('df'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;'), wide(card(pct(level, 0) + ' Fisher-z interval for ' + S('ρ'), '[' + dash + ', ' + dash + ']', '&nbsp;'))]));
+  els.cRow2.replaceChildren(cardRow([card(S('df'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;'), wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + dash + ', ' + dash + ']', '&nbsp;'))]));
 }
 
 function drawScatter(d, cr, level) {
@@ -199,7 +201,7 @@ function drawScatter(d, cr, level) {
       gx.push(xv); gLo.push(b.lo); gHi.push(b.hi); gFit.push(b.fit);
     }
     // Band first and line second, so the points stay on top in the exports too.
-    f.series.unshift({ kind: 'band', x: gx, lo: gLo, hi: gHi, color: tok('--truth'), label: pct(level, 0) + ' confidence band for the mean of B' },
+    f.series.unshift({ kind: 'band', x: gx, lo: gLo, hi: gHi, color: tok('--truth'), label: lvl(level) + ' confidence band for the mean of B' },
       { kind: 'line', x: [x0, x1], y: [gFit[0], gFit[K]], color: tok('--truth'), width: 2, label: 'least-squares line of B on A' });
     // Band first, then the line, then the points stay on top: the scatter
     // group already exists, so the two are inserted before it.
@@ -211,12 +213,12 @@ function drawScatter(d, cr, level) {
   const items = [{ swatch: 'dot', color: '--est', label: 'one replication pair (A, B)' }];
   if (fitted) {
     items.push({ swatch: 'line', color: '--truth', label: 'least-squares line of B on A' });
-    items.push({ swatch: 'shade', color: '--truth', label: pct(level, 0) + ' confidence band for the mean of B at each A' });
+    items.push({ swatch: 'shade', color: '--truth', label: lvl(level) + ' confidence band for the mean of B at each A' });
   }
   legend(els.leg, items);
   els.cap.textContent = fitted
     ? 'Each point pairs replication i of A with replication i of B. The test of zero correlation rejects at α = ' + num(alpha, 2) +
-      ', so the least-squares line B = ' + num(fitted.intercept) + ' + ' + num(fitted.slope) + '·A is drawn with the ' + pct(level, 0) +
+      ', so the least-squares line B = ' + num(fitted.intercept) + ' + ' + num(fitted.slope) + '·A is drawn with the ' + lvl(level) +
       ' confidence band for the mean of B at each A (residual standard deviation ' + num(fitted.s) + ' on ' + fitted.df + ' degrees of freedom); the line describes the association in this sample, not a prediction for a new run.'
     : 'Each point pairs replication i of A with replication i of B; points that rise together from left to right show positive correlation. No line is drawn because the test of zero correlation does not reject at α = ' + num(alpha, 2) + ', so a fitted trend would describe noise.';
 }
@@ -240,7 +242,7 @@ function draw() {
   }
   if (vi) {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
-    const L = pct(level, 0);
+    const L = lvl(level);
     els.vRow1.replaceChildren(cardRow([
       card('R (<span class="sym">df</span>)', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication estimates'),
       card(S('s²'), num(vi.s2), 'sample variance'),
@@ -277,7 +279,7 @@ function draw() {
       : 'A: ' + a.name + ' (s = ' + num(fr.s1) + '); B: ' + b.name + ' (s = ' + num(fr.s2) + ').';
   }
   if (fr) {
-    const L = pct(level, 0);
+    const L = lvl(level);
     els.fRow1.replaceChildren(cardRow([
       card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), num(fr.F), 'ratio of sample variances'),
       card(S('df1'), intl(fr.df1), 'R<sub>A</sub> − 1'),
@@ -305,6 +307,8 @@ function draw() {
       ? 'Levene rejects at α = ' + num(alpha, 2) + ': the spreads differ, without assuming normality.'
       : 'Levene does not reject at α = ' + num(alpha, 2) + ': no evidence that the spreads differ.';
     tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
+    els.fChecks.replaceChildren(assumptionChecks({ sets: [{ name: 'A', values: finite(a) }, { name: 'B', values: finite(b) }], alpha: 1 - state.settings.base,
+      declared: 'between the two datasets cannot be checked from the data.' }));
   } else {
     placeholderF(level);
   }
@@ -346,7 +350,7 @@ function draw() {
     els.cRow2.replaceChildren(cardRow([
       card(S('df'), intl(cr.df), 'n − 2'),
       card(S('p') + ' (two-sided)', pValue(cr.p), 'against ρ = 0'),
-      wide(card(pct(level, 0) + ' Fisher-z interval for ' + S('ρ'), '[' + num(cr.lo) + ', ' + num(cr.hi) + ']', 'tanh(atanh r ± z / √(n − 3))'))
+      wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + num(cr.lo) + ', ' + num(cr.hi) + ']', 'tanh(atanh r ± z / √(n − 3))'))
     ]));
     tables.push({ name: 'Pearson correlation of A and B', headers: ['statistic', 'value'], rows: [
       ['r', cr.r], ['n', cr.n], ['t', cr.t], ['df', cr.df], ['p (two-sided)', cr.p], ['lower', cr.lo], ['upper', cr.hi]
@@ -362,10 +366,10 @@ function draw() {
     provenance: {
       'dataset A': a.name,
       'dataset B': b ? b.name : 'none',
-      'confidence level': pct(level, 0)
+      'confidence level': lvl(level)
     },
     tables,
-    summaryHtml: (vi ? '<p>' + esc(a.name) + ': s² = ' + num(vi.s2) + ', ' + pct(level, 0) + ' interval for σ² [' + num(vi.lo2) + ', ' + num(vi.hi2) + '].</p>' : '') +
+    summaryHtml: (vi ? '<p>' + esc(a.name) + ': s² = ' + num(vi.s2) + ', ' + lvl(level) + ' interval for σ² [' + num(vi.lo2) + ', ' + num(vi.hi2) + '].</p>' : '') +
       (fr ? '<p>F = ' + num(fr.F) + ' on (' + fr.df1 + ', ' + fr.df2 + ') df, p = ' + pValue(fr.p) + ', interval for σ²<sub>A</sub>/σ²<sub>B</sub> [' + num(fr.lo) + ', ' + num(fr.hi) + '].</p>' : '') +
       (cr ? '<p>r = ' + num(cr.r) + ' over ' + cr.n + ' pairs, p = ' + pValue(cr.p) + ', interval [' + num(cr.lo) + ', ' + num(cr.hi) + '].</p>' : '')
   });

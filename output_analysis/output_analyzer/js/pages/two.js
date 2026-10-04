@@ -14,7 +14,8 @@ import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
-import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
+import { assumptionChecks } from '../ui/checks.js';
+import { num, pValue, pct, esc, plural, intl, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -586,6 +587,8 @@ function renderIndependent(res, notes, d, level) {
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
+  if (d) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v }, { name: 'B', values: d.eB.v }], alpha: 1 - state.settings.base,
+    declared: 'between the two designs cannot be checked from the data; it is what the Independent setting declares.' }));
 
   const f = sec('Replication estimates and the difference');
   res.appendChild(f);
@@ -972,6 +975,8 @@ function renderPaired(res, notes, d, level) {
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
+  if (pr) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
+    declared: 'between pairs cannot be checked from the data; the pairing within each replication is what the Paired setting declares.' }));
 
   const f = sec('Paired differences');
   res.appendChild(f);
@@ -1032,7 +1037,7 @@ function renderPaired(res, notes, d, level) {
 function provenance(d, level, paired, by, unmatched) {
   return {
     datasets: 'A: ' + d.dsA.name + '; B: ' + d.dsB.name,
-    'confidence level': pct(level, 0),
+    'confidence level': lvl(level),
     procedure: proc === 'np' ? (paired ? 'Wilcoxon signed-rank (nonparametric)' : 'Wilcoxon rank-sum (nonparametric)') : (paired ? 'paired t' : 'Welch t'),
     paired: paired ? 'yes' : 'no',
     'matched by': paired ? (by === 'id' ? 'replication id' : 'position') : 'not applicable',

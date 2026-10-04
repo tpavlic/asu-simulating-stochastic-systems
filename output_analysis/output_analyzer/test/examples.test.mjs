@@ -17,7 +17,7 @@ test('regenerated files match the committed ones byte for byte', () => {
   try {
     execFileSync('node', [GEN, '--out', tmp]);
     const files = fs.readdirSync(path.join(tmp, 'data'));
-    assert.equal(files.length, 8);
+    assert.equal(files.length, 9);
     for (const f of files) {
       assert.ok(fs.readFileSync(path.join(tmp, 'data', f)).equals(fs.readFileSync(path.join(ROOT, 'data', f))), f);
     }
@@ -29,7 +29,7 @@ test('regenerated files match the committed ones byte for byte', () => {
 });
 
 test('each entry carries its data file text and a mapping with a kind', () => {
-  assert.equal(EXAMPLES.length, 8);
+  assert.equal(EXAMPLES.length, 9);
   for (const e of EXAMPLES) {
     assert.equal(e.text, fs.readFileSync(path.join(ROOT, 'data', e.file), 'utf8'), e.file);
     assert.ok(['tally', 'time', 'reps'].includes(e.mapping.kind), e.id);

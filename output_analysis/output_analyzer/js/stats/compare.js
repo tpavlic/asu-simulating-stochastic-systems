@@ -106,6 +106,47 @@ export function matchPairs(idsA, idsB, by) {
 }
 
 /**
+ * Matches replications across k designs into complete blocks: by position
+ * (block r is replication r of every design, up to the shortest design) or by
+ * id (a block is an id present in every design, taking the first occurrence
+ * in each). Every replication left out is listed per design.
+ * @param {(string|number)[][]} idsList one id list per design
+ * @param {'id'|'position'} by
+ * @returns {{blocks: number[][], unmatched: number[][], keys: (string|number)[]}}
+ *   blocks[b][d] is the index into design d; keys[b] names the block
+ */
+export function matchBlocks(idsList, by) {
+  const k = idsList.length;
+  const blocks = [], keys = [];
+  const unmatched = idsList.map(() => []);
+  if (by === 'position') {
+    const m = Math.min(...idsList.map(a => a.length));
+    for (let r = 0; r < m; r++) { blocks.push(idsList.map(() => r)); keys.push(r + 1); }
+    idsList.forEach((ids, d) => { for (let r = m; r < ids.length; r++) unmatched[d].push(r); });
+    return { blocks, unmatched, keys };
+  }
+  if (by !== 'id') throw new RangeError("matchBlocks: by must be 'id' or 'position'");
+  const first = idsList.map(ids => {
+    const m = new Map();
+    ids.forEach((v, i) => { const key = String(v); if (!m.has(key)) m.set(key, i); });
+    return m;
+  });
+  const used = idsList.map(ids => new Uint8Array(ids.length));
+  const seen = new Set();
+  idsList[0].forEach((v, i0) => {
+    const key = String(v);
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (!first.every(m => m.has(key))) return;
+    const row = first.map(m => m.get(key));
+    blocks.push(row); keys.push(v);
+    row.forEach((i, d) => { used[d][i] = 1; });
+  });
+  idsList.forEach((ids, d) => { for (let i = 0; i < ids.length; i++) if (!used[d][i]) unmatched[d].push(i); });
+  return { blocks, unmatched, keys };
+}
+
+/**
  * Paired t procedure on d = x − y, as R's t.test(x, y, paired = TRUE).
  * x and y must already be matched and of equal length.
  * @param {number[]|Float64Array} x
@@ -156,7 +197,7 @@ export function simultaneousMeans(groups, level) {
  *   se: number, df: number, hw: number, lo: number, hi: number, t: number, p: number,
  *   pAdj: number, flagged: boolean}[]}}
  */
-export function bonferroniFamily(groups, { mode, control = 0, level }) {
+export function bonferroniFamily(groups, { mode, control = 0, level, paired = false }) {
   const k = groups.length, list = [];
   if (mode === 'control') {
     for (let i = 0; i < k; i++) if (i !== control) list.push([i, control]);
@@ -165,6 +206,13 @@ export function bonferroniFamily(groups, { mode, control = 0, level }) {
   }
   const C = list.length, perLevel = 1 - (1 - level) / C;
   const comparisons = list.map(([i, j]) => {
+    if (paired) {
+      // The groups are already aligned block by block, and each pair's
+      // interval is the paired t on its differences.
+      const w = pairedT(groups[i], groups[j], perLevel);
+      return { i, j, diff: w.meanD, se: w.se, df: w.df, hw: w.hw, lo: w.lo, hi: w.hi, t: w.t, p: w.p, r: w.r,
+               pAdj: Math.min(1, C * w.p), flagged: w.lo > 0 || w.hi < 0 };
+    }
     const w = welch(groups[i], groups[j], perLevel);
     return { i, j, diff: w.diff, se: w.se, df: w.df, hw: w.hw, lo: w.lo, hi: w.hi, t: w.t, p: w.p,
              pAdj: Math.min(1, C * w.p), flagged: w.lo > 0 || w.hi < 0 };
@@ -221,6 +269,41 @@ export function levene(groups, { center = 'median' } = {}) {
 }
 
 /**
+ * The randomized complete block analysis of variance for k designs run under
+ * common random numbers, the replication being the block: groups aligned
+ * block by block, all of one length R, as R's summary(aov(y ~ g + block)).
+ * The fields msw and dfw hold the residual mean square and its degrees of
+ * freedom, so that the post-hoc rules read a blocked table like a one-way one.
+ * @param {(number[]|Float64Array)[]} groups
+ * @returns {{blocked: true, k: number, R: number, N: number, n: number[], means: number[],
+ *   blockMeans: number[], grandMean: number, ssb: number, ssblk: number, ssw: number, sst: number,
+ *   dfb: number, dfblk: number, dfw: number, msb: number, msblk: number, msw: number,
+ *   F: number, p: number, Fblock: number, pBlock: number}}
+ */
+export function anovaBlocked(groups) {
+  const k = groups.length;
+  const R = groups[0].length;
+  if (!groups.every(g => g.length === R)) throw new RangeError('anovaBlocked: every design needs the same number of blocks');
+  const N = k * R;
+  const means = groups.map(mean);
+  const blockMeans = new Array(R).fill(0);
+  let total = 0;
+  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { blockMeans[r] += groups[i][r] / k; total += groups[i][r]; }
+  const grandMean = total / N;
+  let ssb = 0, ssblk = 0, sst = 0;
+  for (let i = 0; i < k; i++) { const d = means[i] - grandMean; ssb += R * d * d; }
+  for (let r = 0; r < R; r++) { const d = blockMeans[r] - grandMean; ssblk += k * d * d; }
+  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { const e = groups[i][r] - grandMean; sst += e * e; }
+  const ssw = Math.max(0, sst - ssb - ssblk);
+  const dfb = k - 1, dfblk = R - 1, dfw = (k - 1) * (R - 1);
+  const msb = ssb / dfb, msblk = ssblk / dfblk, msw = ssw / dfw;
+  const F = msb / msw, Fblock = msblk / msw;
+  const pOf = (f, d1) => (Number.isFinite(f) ? 1 - fCdf(f, d1, dfw) : (f === Infinity ? 0 : NaN));
+  return { blocked: true, k, R, N, n: groups.map(() => R), means, blockMeans, grandMean, ssb, ssblk, ssw, sst,
+           dfb, dfblk, dfw, msb, msblk, msw, F, p: pOf(F, dfb), Fblock, pBlock: pOf(Fblock, dfblk) };
+}
+
+/**
  * Post-hoc comparisons after one-way ANOVA, all on the pooled mean square
  * within (msw) and its dfw degrees of freedom. For every rule the reported se
  * is sqrt(msw (1/n_i + 1/n_j)), the standard error of mean_i − mean_j, and
@@ -245,8 +328,8 @@ export function levene(groups, { center = 'median' } = {}) {
  *   hw: number, lo: number, hi: number, flagged: boolean}[], letters: string[]|null,
  *   note: string, anova: object}}
  */
-export function posthoc(groups, { rule, alpha, control = 0 }) {
-  const a = anova(groups);
+export function posthoc(groups, { rule, alpha, control = 0, blocked = false }) {
+  const a = blocked ? anovaBlocked(groups) : anova(groups);
   const { k, n, means, msw, dfw } = a;
   const list = [];
   if (rule === 'dunnett') {
@@ -534,8 +617,10 @@ export function planHalfWidthBonferroni({ sds, level = 0.95, mode, control = 0, 
  * @param {{n: number, k: number, sigma: number, delta: number, alpha: number}} o
  * @returns {number}
  */
-export function powerAnova({ n, k, sigma, delta, alpha }) {
-  const d1 = k - 1, d2 = k * (n - 1);
+export function powerAnova({ n, k, sigma, delta, alpha, blocked = false }) {
+  // With the replication as a block the residual loses the block's degrees
+  // of freedom, and sigma is the residual standard deviation.
+  const d1 = k - 1, d2 = blocked ? (k - 1) * (n - 1) : k * (n - 1);
   const lambda = n * delta * delta * (k - 1) / (k * sigma * sigma);
   return 1 - ncfCdf(fQuantile(1 - alpha, d1, d2), d1, d2, lambda);
 }
@@ -549,14 +634,14 @@ export function powerAnova({ n, k, sigma, delta, alpha }) {
  * @param {{k: number, sigma: number, delta: number, alpha: number, power: number}} o
  * @returns {{n: number|null, powerAtN: number, lambda: number, reason?: string}}
  */
-export function planPowerAnova({ k, sigma, delta, alpha, power }) {
+export function planPowerAnova({ k, sigma, delta, alpha, power, blocked = false }) {
   const fail = reason => ({ n: null, powerAtN: NaN, lambda: NaN, reason });
   if (!(Number.isInteger(k) && k >= 2)) return fail('At least two designs are needed.');
   const bad = powerInputProblem([sigma], delta, alpha, power);
   if (bad) return fail(bad);
   const guess = (normInv(1 - alpha / 2) + normInv(power)) ** 2 * sigma * sigma * k / ((k - 1) * delta * delta);
   if (!(guess <= PLAN_CAP)) return fail(TOO_MANY);
-  const at = n => powerAnova({ n, k, sigma, delta, alpha });
+  const at = n => powerAnova({ n, k, sigma, delta, alpha, blocked });
   const { n } = smallestN(m => at(m) >= power, guess, 2, PLAN_CAP);
   if (n === null) return fail(TOO_MANY);
   return { n, powerAtN: at(n), lambda: n * delta * delta * (k - 1) / (k * sigma * sigma) };

@@ -22,7 +22,7 @@ import {
 import {
   card, cardRow, datasetSelect, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
 } from '../ui/widgets.js';
-import { num, esc, intl, plural, pct, pValue, dash } from '../ui/format.js';
+import { num, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { setSectionAvailable } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
@@ -642,7 +642,7 @@ function buildDots(api, { ds, est, estF }) {
 function buildIntervals(api, { ds, estF }) {
   const sec = api.sec;
   const level = state.settings.level;
-  sec.appendChild(el('div', 'sec-hd', 'Confidence intervals, ' + pct(level, 0)));
+  sec.appendChild(el('div', 'sec-hd', 'Confidence intervals, ' + lvl(level)));
   const all = tInterval(estF, level);
   const items = [{ label: 'all replications', lo: all.lo, hi: all.hi, center: all.mean, color: '--truth' }];
   let shown = 0, eligible = 0;
@@ -661,7 +661,7 @@ function buildIntervals(api, { ds, estF }) {
   legendItems.push({ swatch: 'dash', color: '--truth', label: 'mean of the estimates' });
   figure(api, sec, slug(ds.name) + '-intervals', { height: 'auto', margin: { t: 8, b: 44 }, xLabel: estimateAxis(ds), ariaLabel: 'Confidence intervals' },
     f => intervals(f, items, { ref: all.mean }), legendItems);
-  let cap = (shown ? 'The top row is the ' : 'The row is the ') + pct(level, 0) + ' t interval over the ' + intl(estF.length) + ' ' + esc(estimateWord(ds)) +
+  let cap = (shown ? 'The top row is the ' : 'The row is the ') + lvl(level) + ' t interval over the ' + intl(estF.length) + ' ' + esc(estimateWord(ds)) +
     ', mean ± t<sub>' + num(1 - (1 - level) / 2, 3) + ', ' + intl(all.df) + '</sub> · s/√R = ' + num(all.mean) + ' ± ' + num(all.hw) + '.';
   if (shown) {
     cap += ' The rows below it are each replication’s own interval over its observations. They describe the variation within one run and are not the inference: the observations in a run are correlated, which makes these intervals too narrow, and each one is about that run alone.';

@@ -10,7 +10,11 @@
 export const datasets = [];
 
 /** Settings shared by every page. `level` is 0.90, 0.95, or 0.99. */
-export const settings = { level: 0.95 };
+// `level` is the per-interval level every page reads. `base` is the level
+// the reader stated and `bonfC` the Bonferroni count it is divided by:
+// level = 1 − (1 − base)/bonfC, so that C hand-made statements hold jointly
+// at `base`. Pages that already divide α by a family size read `base`.
+export const settings = { level: 0.95, base: 0.95, bonfC: 1, custom: false };
 
 /** The confidence levels the page offers. */
 export const LEVELS = [0.90, 0.95, 0.99];
@@ -126,9 +130,34 @@ export function setLevel(level) {
   const v = Number(level);
   const hit = LEVELS.find(l => Math.abs(l - v) < 1e-9);
   if (hit === undefined) return false;
-  if (settings.level !== hit) {
+  if (settings.level !== hit || settings.custom) {
     settings.level = hit;
+    settings.base = hit;
+    settings.bonfC = 1;
+    settings.custom = false;
     emit('settings', { level: hit });
+  }
+  return true;
+}
+
+/**
+ * Sets a custom confidence level: the stated level `base` (between 0.5 and
+ * 0.9999) divided among `bonfC` Bonferroni statements, so that every page
+ * reads 1 − (1 − base)/bonfC. Emits 'settings'.
+ * @param {number} base
+ * @param {number} [bonfC]
+ * @returns {boolean} whether the values were accepted
+ */
+export function setCustomLevel(base, bonfC = 1) {
+  const b = Number(base), C = Math.round(Number(bonfC));
+  if (!(b >= 0.5 && b <= 0.9999) || !(C >= 1 && C <= 10000)) return false;
+  const level = 1 - (1 - b) / C;
+  if (settings.level !== level || settings.base !== b || settings.bonfC !== C || !settings.custom) {
+    settings.level = level;
+    settings.base = b;
+    settings.bonfC = C;
+    settings.custom = true;
+    emit('settings', { level });
   }
   return true;
 }
@@ -187,5 +216,5 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setResult, setPick, getPick };
 export default state;

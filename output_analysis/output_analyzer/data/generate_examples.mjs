@@ -21,6 +21,7 @@
 //   two_designs_crn.csv        the same designs with the same streams reused for both
 //   four_designs.csv           designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, independent
 //   six_designs.csv            designs A..F (0.90, 0.88, 0.80, 0.75, 0.65, 0.60), 15 days each, independent
+//   four_designs_crn.csv       designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, one stream set reused for all four
 //   transient_waits.txt        10 replications of the first 300 waits at rho = 0.9
 //   steady_state_long.csv      one run of 5000 waits at rho = 0.8
 //   queue_length.txt           5 replications of 600 minutes of the number in queue at rho = 0.8
@@ -44,6 +45,7 @@ const SEEDS = {
   crn: 59000,
   four: [61000, 67000, 73000, 79000],
   six: [110000, 116000, 122000, 128000, 134000, 140000],
+  fourCrn: 150000,
   transient: 83000,
   steady: 97001,
   queueLength: 101000
@@ -213,6 +215,13 @@ function entries() {
       description: 'Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.',
       text: designsCsv([A('A', 0.9, SEEDS.six[0]), A('B', 0.88, SEEDS.six[1]), A('C', 0.8, SEEDS.six[2]), A('D', 0.75, SEEDS.six[3]), A('E', 0.65, SEEDS.six[4]), A('F', 0.6, SEEDS.six[5])], 15),
       mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Six designs' }
+    },
+    {
+      id: 'four-crn', title: 'Four designs: common random numbers', file: 'four_designs_crn.csv',
+      kind: 'reps', format: 'columns',
+      description: 'The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs. Use it with the replications declared paired across designs on the Several Systems page: the replication effect the designs share comes out as a block, and the differences become paired intervals.',
+      text: designsCsv([A('A', 0.8, SEEDS.fourCrn), A('B', 0.78, SEEDS.fourCrn), A('C', 0.75, SEEDS.fourCrn), A('D', 0.7, SEEDS.fourCrn)], 10),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Four designs, CRN' }
     },
     {
       id: 'transient', title: 'Transient waits: warm-up', file: 'transient_waits.txt',

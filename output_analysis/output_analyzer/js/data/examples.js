@@ -272,6 +272,57 @@ F,15,0.8066
 `
   },
   {
+    id: "four-crn",
+    title: "Four designs: common random numbers",
+    file: "four_designs_crn.csv",
+    kind: "reps",
+    format: "columns",
+    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs. Use it with the replications declared paired across designs on the Several Systems page: the replication effect the designs share comes out as a block, and the differences become paired intervals.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null},
+    text: `design,replication,avg_wait
+A,1,2.2815
+A,2,3.1706
+A,3,4.5721
+A,4,3.5867
+A,5,3.2543
+A,6,3.8259
+A,7,1.6731
+A,8,4.2152
+A,9,2.556
+A,10,2.9206
+B,1,1.9713
+B,2,2.8694
+B,3,3.7011
+B,4,3.1913
+B,5,2.8084
+B,6,3.4976
+B,7,1.5398
+B,8,3.4553
+B,9,2.272
+B,10,2.5208
+C,1,1.6506
+C,2,2.4298
+C,3,3.0006
+C,4,2.6421
+C,5,2.2224
+C,6,3.035
+C,7,1.3578
+C,8,2.4191
+C,9,1.9062
+C,10,2.0495
+D,1,1.2626
+D,2,1.7657
+D,3,2.0753
+D,4,2.0011
+D,5,1.6609
+D,6,2.3491
+D,7,1.0876
+D,8,1.3911
+D,9,1.525
+D,10,1.4099
+`
+  },
+  {
     id: "transient",
     title: "Transient waits: warm-up",
     file: "transient_waits.txt",

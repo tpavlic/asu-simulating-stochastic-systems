@@ -3,7 +3,7 @@
 // the rejected-row list, the confidence-level picker, and callouts.
 
 import * as state from '../state.js';
-import { esc, intl, plural, pct } from './format.js';
+import { esc, intl, plural, pct, lvl } from './format.js';
 
 /** How each dataset kind is named on the page. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -292,12 +292,48 @@ export function issueList(issues) {
  * @returns {() => void} a function that unbinds it
  */
 export function levelSelect(selectEl) {
-  selectEl.innerHTML = state.LEVELS.map(l => '<option value="' + l + '">' + pct(l, 0) + '</option>').join('');
-  const sync = () => { selectEl.value = String(state.settings.level); };
+  selectEl.innerHTML = state.LEVELS.map(l => '<option value="' + l + '">' + pct(l, 0) + '</option>').join('') +
+    '<option value="custom">Custom…</option>';
+  // The custom entry opens a stated level and a Bonferroni count beside the
+  // picker, with the per-interval level they give written out.
+  const box = document.createElement('span');
+  box.className = 'lvl-custom';
+  box.innerHTML = '<label class="lvl-lbl">level <input type="number" class="par-inp lvl-base" min="50" max="99.99" step="0.1" inputmode="decimal" aria-label="Stated confidence level, percent">%</label>' +
+    '<label class="lvl-lbl"><span class="tip" tabindex="0" data-tip="The number of statements to hold jointly at the stated level. Each interval is then formed at 1 − α/C, the Bonferroni inequality done by hand. Set 1 for a single interval.">C</span> <input type="number" class="par-inp lvl-c" min="1" max="10000" step="1" inputmode="numeric" aria-label="Bonferroni count"></label>' +
+    '<span class="ctrl-note lvl-note"></span>';
+  selectEl.insertAdjacentElement('afterend', box);
+  const base = box.querySelector('.lvl-base'), cnt = box.querySelector('.lvl-c'), note = box.querySelector('.lvl-note');
+  const sync = () => {
+    const st = state.settings;
+    selectEl.value = st.custom ? 'custom' : String(st.level);
+    box.style.display = st.custom ? '' : 'none';
+    if (st.custom) {
+      if (document.activeElement !== base) base.value = String(Math.round(st.base * 10000) / 100);
+      if (document.activeElement !== cnt) cnt.value = String(st.bonfC);
+      note.textContent = st.bonfC > 1
+        ? 'α = ' + trimNum(1 - st.base) + ' over C = ' + st.bonfC + ' gives ' + lvl(st.level) + ' per interval'
+        : 'every interval at ' + lvl(st.level);
+    }
+  };
+  const apply = () => {
+    const b = Number(base.value) / 100, C = Number(cnt.value);
+    if (!state.setCustomLevel(b, C)) sync();
+  };
+  selectEl.addEventListener('change', () => {
+    if (selectEl.value === 'custom') {
+      const st = state.settings;
+      state.setCustomLevel(st.custom ? st.base : st.level, st.custom ? st.bonfC : 1);
+    } else {
+      state.setLevel(Number(selectEl.value));
+    }
+  });
+  base.addEventListener('change', apply);
+  cnt.addEventListener('change', apply);
   sync();
-  selectEl.addEventListener('change', () => state.setLevel(Number(selectEl.value)));
   return state.on('settings', sync);
 }
+
+function trimNum(v) { return String(Number(v.toFixed(4))); }
 
 /**
  * A callout block: 'warn' for a caution (an ochre rule and a "!" badge) or

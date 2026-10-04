@@ -9,14 +9,16 @@
 // would ask for. Every result is computed whichever section is open.
 
 import * as state from '../state.js';
-import { repEstimates, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, anova, posthoc, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { repEstimates, repIds, canInfer } from '../data/model.js';
+import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
-import { kruskalWallis, dunn, signedRank } from '../stats/nonparam.js';
+import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
-import { num, pValue, pct, esc, plural, intl, dash } from '../ui/format.js';
+import { assumptionChecks } from '../ui/checks.js';
+import { num, pValue, pct, esc, plural, intl, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -25,8 +27,8 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Means' },
-  { id: 'diffs', label: 'Differences' },
+  { id: 'means', label: 'Bonferroni means' },
+  { id: 'diffs', label: 'Bonferroni differences' },
   { id: 'plan', label: 'Replications' },
   { id: 'anova', label: 'ANOVA and post hoc' },
   { id: 'nonparam', label: 'Nonparametric' },
@@ -36,19 +38,24 @@ export const sections = [
 const RULES = {
   tukey: 'Tukey’s HSD',
   lsd: 'Fisher’s LSD (protected)',
-  bonferroni: 'Bonferroni',
+  bonferroni: 'Bonferroni (pooled variance)',
   dunnett: 'Dunnett vs control'
 };
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 let rootEl = null;
 let checklist = null;
-let ctrlSel = null;
+let ctrlSels = [];
 let dir = 'max';
 let diffMode = 'pairs';
 let rule = 'tukey';
 // How Dunn's pairwise p-values are adjusted: 'bonferroni' or 'holm'.
 let adjust = 'bonferroni';
+// 'independent' or 'paired': whether replication i of every design shared its
+// random inputs (common random numbers across designs), making it a block.
+let pairMode = 'independent';
+// The reader's own choice of how blocks are matched, or null for the default.
+let matchChoice = null;
 let controlId = null;
 // The indifference zone: null follows the default (10% of the pooled sd),
 // a number is the reader's own value.
@@ -94,6 +101,34 @@ function round2(v) {
 
 function finiteOf(ds) {
   return Float64Array.from(Array.from(repEstimates(ds)).filter(Number.isFinite));
+}
+
+// The ids of the replications whose estimates are finite, in step with finiteOf.
+function finiteIds(ds) {
+  const est = repEstimates(ds), ids = repIds(ds);
+  return Array.from(ids).filter((_, i) => Number.isFinite(est[i]));
+}
+
+function idsDistinct(ids) { return new Set(ids.map(String)).size === ids.length; }
+function idsArePositions(ids) { return ids.every((v, i) => String(v) === String(i + 1)); }
+
+// How the blocks are matched by default: by replication id when every
+// design carries distinct ids and most of them appear in every design, and
+// by position otherwise, with the reason.
+function defaultMatchK(idsList) {
+  if (!idsList.every(idsDistinct)) {
+    return { by: 'position', why: 'Matched by position by default: at least one design repeats a replication id, and so the ids cannot identify a replication.' };
+  }
+  const sets = idsList.map(ids => new Set(ids.map(String)));
+  const shared = idsList[0].filter(v => sets.every(st => st.has(String(v)))).length;
+  const minLen = Math.min(...idsList.map(ids => ids.length));
+  if (shared * 2 < minLen) {
+    return { by: 'position', why: 'Matched by position by default: fewer than half of the replication ids appear in every design.' };
+  }
+  if (idsList.every(idsArePositions)) {
+    return { by: 'id', why: 'Matched by replication id by default. Every design numbers its replications 1, 2, 3, …, and so matching by position gives the same blocks.' };
+  }
+  return { by: 'id', why: 'Matched by replication id by default: every design carries distinct ids, and ' + plural(shared, 'id appears', 'ids appear') + ' in all of them.' };
 }
 
 function sec(heading) {
@@ -222,7 +257,7 @@ function designRows(fig, rows, pairs) {
   const rowH = fig.ih / n;
   const cy = i => Math.round((i + 0.5) * rowH * 10) / 10;
   const cEst = tok('--est'), cBorder = tok('--border'), cText = tok('--text'), cAcc = tok('--accent'), cMiss = tok('--miss');
-  const cOk = tok('--ok'), cMuted = tok('--muted');
+  const cOk = tok('--ok'), cMuted = tok('--muted'), cCard = tok('--card');
   // For the script exports, the letters and brackets sit inside a widened x
   // range rather than in the margin.
   const ry = recordRows(fig, rows.map(r => r.label));
@@ -232,8 +267,11 @@ function designRows(fig, rows, pairs) {
   // records are kept per color so that each group exports as one series.
   const recs = new Map();
   const recFor = (c, what) => {
-    if (!recs.has(c)) recs.set(c, { segs: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, label: what + ' interval' },
-                                   means: { kind: 'points', x: [], y: [], color: c, label: what + ' mean' } });
+    if (!recs.has(c)) {
+      const gone = what === 'eliminated';
+      recs.set(c, { segs: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, dash: gone, label: what + ' interval' },
+                    means: { kind: 'points', x: [], y: [], color: c, hollow: gone, label: what + ' mean' } });
+    }
     return recs.get(c);
   };
   const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
@@ -244,16 +282,18 @@ function designRows(fig, rows, pairs) {
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
     const g = svgEl('g', { class: 'm-int' }, fig.inner);
     const x0 = sx(r.lo), x1 = sx(r.hi);
-    svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, g);
+    const gone = r.keep === false;
+    svgEl('line', Object.assign({ x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, gone ? { 'stroke-dasharray': '5,4' } : {}), g);
     for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
-    svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
+    if (gone) svgEl('circle', { cx: sx(r.mean), cy: y, r: 4, fill: cCard, stroke: c, 'stroke-width': 2 }, g);
+    else svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
     const yy = ry(i);
     segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
     means.x.push(r.mean); means.y.push(yy);
     const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep === false ? cMuted : cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
-      const lt = svgEl('text', { x: fig.iw + 10, y: y + 4, 'font-size': lfs, 'font-weight': 700, fill: cAcc, class: 'm-letter',
+      const lt = svgEl('text', { x: fig.iw + 10, y: y + 4, 'font-size': lfs, 'font-weight': 700, fill: r.letterColor || cAcc, class: 'm-letter',
         'font-family': "'IBM Plex Mono', Menlo, monospace", 'letter-spacing': '0.06em' }, fig.inner);
       lt.textContent = r.letter;
       letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
@@ -429,17 +469,24 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
   rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
+  rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
+  rootEl.querySelector('#sev-match-row').style.display = pairMode === 'paired' ? '' : 'none';
   const rs = rootEl.querySelector('#sev-rule');
   if (rs.value !== rule) rs.value = rule;
 
   // The control picker offers the checked designs.
   if (!list.some(d => d.id === controlId)) controlId = list.length ? list[0].id : null;
   const short = shortNames(list);
-  ctrlSel.innerHTML = list.length
-    ? list.map((d, i) => '<option value="' + esc(d.id) + '">' + esc(short[i]) + '</option>').join('')
-    : '<option value="">Check two or more designs</option>';
-  ctrlSel.value = controlId || '';
-  ctrlSel.disabled = !list.length;
+  for (const sel of ctrlSels) {
+    sel.innerHTML = list.length
+      ? list.map((d, i) => '<option value="' + esc(d.id) + '">' + esc(short[i]) + '</option>').join('')
+      : '<option value="">Check two or more designs</option>';
+    sel.value = controlId || '';
+    sel.disabled = !list.length;
+  }
+  // The picker shows only beside the control that uses it.
+  rootEl.querySelector('#sev-ctrl-diff').style.display = diffMode === 'control' ? '' : 'none';
+  rootEl.querySelector('#sev-ctrl-rule').style.display = rule === 'dunnett' ? '' : 'none';
 
   // The indifference zone, its units, and where its default comes from.
   const note = rootEl.querySelector('#sev-eps-note');
@@ -499,10 +546,31 @@ function schedule() {
 function update() {
   if (!rootEl) return;
   const list = checkedList();
-  const groups = list.map(finiteOf);
+  let groups = list.map(finiteOf);
+  // Under common random numbers across designs the replications are matched
+  // into complete blocks, and every procedure runs on the aligned groups.
+  const paired = pairMode === 'paired';
+  let match = null;
+  const pairNote = rootEl.querySelector('#sev-pairnote');
+  pairNote.innerHTML = '';
+  if (paired && list.length >= 2) {
+    const ids = list.map(finiteIds);
+    const def = defaultMatchK(ids);
+    const by = matchChoice || def.by;
+    match = Object.assign(matchBlocks(ids, by), { by, why: matchChoice && matchChoice !== def.by
+      ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
+      : def.why });
+    groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
+    const names = shortNames(list);
+    const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
+    if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
+    if (match.blocks.length < 2) pairNote.appendChild(notice('warn', 'A paired comparison needs at least two replications matched across every design, and ' + (match.blocks.length === 1 ? 'only one was' : 'none were') + '. Try matching by position, or check the replication ids.'));
+  }
+  rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
+  rootEl.querySelector('#sev-match-note').textContent = match ? match.why : '';
   syncControls(list, groups);
   showExcluded();
-  const level = state.settings.level, alpha = 1 - level;
+  const level = state.settings.base, alpha = 1 - level;
   const k = list.length;
   const short = shortNames(list);
   const unit = rootEl.querySelector('#sev-unit');
@@ -512,9 +580,9 @@ function update() {
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
   key.innerHTML = list.map((d, i) => '<span class="sev-key-it">' + badge(i) + ' ' + esc(d.name) + '</span>').join(' ');
-  if (k < 2) {
-    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> check two or more designs above.';
-    const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : 'Check two or more designs above to compare them.';
+  if (k < 2 || (paired && match.blocks.length < 2)) {
+    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : 'too few replications matched across the designs.');
+    const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : k < 2 ? 'Check two or more designs above to compare them.' : 'Pairing needs at least two replications matched across every design.';
     [0, 1, 2, 3, 5].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
     resultBase = null;
     planCtx = { msg: 'Check two or more designs above to plan replications.' };
@@ -523,13 +591,18 @@ function update() {
   }
   const ns = groups.map(g => g.length);
   const kw = list.every(d => d.kind === 'reps') ? 'replication values' : list.every(d => d.kind === 'time') ? 'time-weighted replication means' : 'replication estimates';
-  unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (ns.every(n => n === ns[0])
-    ? 'R = ' + intl(ns[0]) + ' ' + kw + ' for each of the ' + k + ' designs'
-    : 'R = ' + ns.map(intl).join(', ') + ' ' + kw + ' for ' + esc(short.join(', ')) + ', in that order');
+  unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (paired
+    ? 'R = ' + intl(ns[0]) + ' ' + kw + ' paired across the ' + k + ' designs (common random numbers)'
+    : ns.every(n => n === ns[0])
+      ? 'R = ' + intl(ns[0]) + ' ' + kw + ' for each of the ' + k + ' designs'
+      : 'R = ' + ns.map(intl).join(', ') + ' ' + kw + ' for ' + esc(short.join(', ')) + ', in that order');
 
   const responses = Array.from(new Set(list.map(d => d.response)));
   const mixed = rootEl.querySelector('#sev-mixed');
   mixed.innerHTML = '';
+  if (state.settings.bonfC > 1) {
+    mixed.appendChild(notice('info', 'The custom Bonferroni count C = ' + intl(state.settings.bonfC) + ' set with the confidence level is not applied on this page, which divides α by its own family sizes; the stated ' + levelPct(level) + ' level is used.'));
+  }
   if (responses.length > 1) {
     mixed.appendChild(notice('warn', 'The checked datasets report different responses (' + esc(responses.join(', ')) +
       '). Every comparison below treats them as one response on one axis, which only makes sense when they measure the same quantity in the same units.'));
@@ -544,6 +617,7 @@ function update() {
   const sm = simultaneousMeans(groups, level);
   {
     const b = bodies[0];
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
@@ -561,17 +635,19 @@ function update() {
   }
 
   // Bonferroni family of differences.
-  const fam = bonferroniFamily(groups, { mode: diffMode, control: ctrlIdx, level });
+  const fam = bonferroniFamily(groups, { mode: diffMode, control: ctrlIdx, level, paired });
+  const famName = paired ? 'paired t interval' : 'Welch interval';
   {
     const b = bodies[1];
     b.appendChild(para('cmp-banner', 'C = ' + fam.C + ' comparison' + (fam.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(fam.perLevel)));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand: every pair’s own ' + famName + ' at level 1 − α/C, with no pooled variance and no analysis of variance in front; each interval contains 0 exactly when that pair’s t test at α/C does not reject. The Bonferroni rule in the ANOVA section is the other kind: the same α/C, on the pooled variance.'));
     if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
     const lab = c => pairLabel(c.i, c.j);
     const full = c => list[c.i].name + ' − ' + list[c.j].name;
     const anyFlag = fam.comparisons.some(c => c.flagged), anyPlain = fam.comparisons.some(c => !c.flagged);
     const legItems = [];
-    if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: 'Welch interval at ' + levelPct(fam.perLevel) + ', contains 0' });
-    if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: 'Welch interval at ' + levelPct(fam.perLevel) + ', excludes 0' });
+    if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: famName + ' at ' + levelPct(fam.perLevel) + ', contains 0' });
+    if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: famName + ' at ' + levelPct(fam.perLevel) + ', excludes 0' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + list[0].response }, 'several-differences',
       fg => {
@@ -580,7 +656,7 @@ function update() {
         intervals(fg, cs.map(c => ({ label: lab(c), lo: c.lo, hi: c.hi, center: c.diff, flagged: c.flagged })), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is one difference of means with its Welch interval at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
+      'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
     const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), num(c.t), pValue(c.p), pValue(c.pAdj),
       c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
@@ -593,15 +669,18 @@ function update() {
   }
 
   // ANOVA and post-hoc.
-  const ph = posthoc(groups, { rule, alpha, control: ctrlIdx });
+  const ph = posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
+  const totalDf = paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
   {
     let b = bodies[2];
+    if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
     const atab = table(['Source', 'SS', 'df', 'MS', 'F', 'p'], [
       ['Between designs', num(av.ssb), intl(av.dfb), num(av.msb), num(av.F), pValue(av.p)],
-      ['Within designs', num(av.ssw), intl(av.dfw), num(av.msw), '', ''],
-      ['Total', num(av.sst), intl(av.dfb + av.dfw), '', '', '']
-    ]);
+      paired ? ['Between replications (blocks)', num(av.ssblk), intl(av.dfblk), num(av.msblk), num(av.Fblock), pValue(av.pBlock)] : null,
+      [paired ? 'Residual' : 'Within designs', num(av.ssw), intl(av.dfw), num(av.msw), '', ''],
+      ['Total', num(av.sst), intl(totalDf), '', '', '']
+    ].filter(Boolean));
     b.appendChild(atab);
     const rejects = av.p < alpha;
     b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, p = ' + pValue(av.p) + ': ' +
@@ -614,13 +693,19 @@ function update() {
     if (lv.p < alpha) b.appendChild(notice('warn', lvTxt + 'The spreads differ at this level, and every pooled procedure below assumes they do not. The Bonferroni differences, built on Welch intervals, are the safer choice.'));
     else b.appendChild(para('cmp-lead', lvTxt + 'No evidence at this level that the spreads differ, which is what pooling the variance below assumes.'));
     tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
+    // The residuals, with the design means and, under pairing, the block
+    // effects removed, are what the F test and the post-hoc rules take as normal.
+    const resid = [];
+    groups.forEach((g, i) => { for (let r = 0; r < g.length; r++) resid.push(g[r] - av.means[i] - (paired ? av.blockMeans[r] - av.grandMean : 0)); });
+    b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha,
+      declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     b = bodies[4];
     let critTxt;
     if (rule === 'tukey') critTxt = 'Tukey–Kramer: the studentized range quantile is q = ' + num(ph.crit) + ' (k = ' + k + ', ' + av.dfw + ' df), and each pair’s critical difference is q·SE/√2.';
     else if (rule === 'lsd') critTxt = 'Fisher’s LSD: t = ' + num(ph.crit) + ' at 1 − α/2 on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
     else if (rule === 'bonferroni') critTxt = 'Bonferroni: t = ' + num(ph.crit) + ' at 1 − α/(2C) with C = ' + ph.pairs.length + ' on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
     else critTxt = 'Dunnett: each design against the control, ' + esc(short[ctrlIdx]) + ', with the two-sided critical value d = ' + num(ph.crit) + ' on ' + av.dfw + ' df; each pair’s critical difference is d·SE.';
-    b.appendChild(para('cmp-lead', critTxt + ' SE = √(MSW (1/R<sub>i</sub> + 1/R<sub>j</sub>)) uses the pooled mean square within.'));
+    b.appendChild(para('cmp-lead', critTxt + (paired ? ' SE = √(MSE · 2/R) uses the residual mean square, with the replication effect removed.' : ' SE = √(MSW (1/R<sub>i</sub> + 1/R<sub>j</sub>)) uses the pooled mean square within.')));
     if (rule === 'lsd' && ph.protected === false) b.appendChild(notice('warn', esc(ph.note)));
     else b.appendChild(para('exp-note', esc(ph.note)));
     const lab = p => pairLabel(p.i, p.j);
@@ -667,8 +752,10 @@ function update() {
       'These procedures assume normal replication estimates with equal variances across designs; when the variances clearly differ, the Welch intervals above are the safer choice.');
     const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se), num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'Critical difference', 'Interval', 'Different?'], rows));
-    tables.push({ name: 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
-      ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p], ['within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, av.dfb + av.dfw, '', '', '']] });
+    tables.push({ name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
+      ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p],
+      paired ? ['between replications (blocks)', av.ssblk, av.dfblk, av.msblk, av.Fblock, av.pBlock] : null,
+      [paired ? 'residual' : 'within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, totalDf, '', '', '']].filter(Boolean) });
     tables.push({ name: 'Post-hoc: ' + RULES[rule], headers: ['pair', 'difference', 'se', 'critical value', 'critical difference', 'lower', 'upper', 'different'],
       rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, ph.crit, p.hw, p.lo, p.hi, p.flagged ? 'yes' : 'no']) });
     // The letters are read off the design plot; the table exists only as an
@@ -699,15 +786,15 @@ function update() {
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
       const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
-      const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: '', keep: ss.survivors[i],
+      const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
         note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-best-subset',
         fg => designRows(fg, rowsS, []),
         [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
-          nSurv < k ? { swatch: 'interval', color: '--muted', label: 'eliminated by the screen' } : null].filter(Boolean),
+          nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean),
         'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section. ' +
         'The screen compares the means: a design is eliminated when another design’s mean beats it by more than the screen allows for the two designs’ spread, and the designs still in color cannot be ruled out as the best within ε at this confidence. ' +
-        'Whether a design survives is read from its color, never from whether intervals overlap.');
+        'Whether a design survives is written at the right of its row, drawn solid in color when it does and dashed and hollow in gray when it does not, and never read from whether intervals overlap.');
       const rows = list.map((_, i) => [badge(i) + ' ' + esc(short[i]), intl(ss.n[i]), num(ss.means[i]), num(Math.sqrt(ss.s2[i])),
         ss.survivors[i] ? '<span class="cmp-ok">yes</span>' : 'no', ss.N[i] === null ? dash : intl(ss.N[i]), ss.additional[i] === null ? dash : intl(ss.additional[i])]);
       b.appendChild(table(['Design', 'R', 'Mean', 's', 'Survives?', 'N needed', 'Additional replications'], rows, i => (ss.survivors[i] ? '' : 'cmp-mute')));
@@ -722,20 +809,30 @@ function update() {
   // Kruskal–Wallis and Dunn.
   {
     const b = bodies[5];
-    const kwr = kruskalWallis(groups);
-    const dn = dunn(groups, { alpha, adjust });
+    rootEl.querySelector('#sev-np-hd').textContent = paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons';
+    const kwr = paired ? null : kruskalWallis(groups);
+    const fr = paired ? friedman(groups) : null;
+    const dn = paired ? friedmanPairs(groups, { alpha, adjust }) : dunn(groups, { alpha, adjust });
+    const omni = paired ? { stat: fr.chi2, df: fr.df, p: fr.p, ties: fr.ties } : { stat: kwr.H, df: kwr.df, p: kwr.p, ties: kwr.ties };
     b.appendChild(para('cmp-lead', 'The analysis of variance and its post-hoc rules compare means on the assumption that the replication estimates are normal with one variance across designs. ' +
-      'These rank procedures assume neither: they pool every estimate, rank the lot, and ask whether some designs tend to sit higher than others. They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
+      (paired
+        ? 'These rank procedures assume neither: Friedman’s test ranks the k designs within each replication, where common random numbers make the comparison fair, and asks whether some designs tend to rank higher than others.'
+        : 'These rank procedures assume neither: they pool every estimate, rank the lot, and ask whether some designs tend to sit higher than others.') +
+      ' They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
     b.appendChild(cardRow([
-      card('H', num(kwr.H), 'Kruskal–Wallis statistic' + (kwr.ties ? ', tie-corrected' : '')),
-      card('df', intl(kwr.df), 'k − 1'),
-      card('p', pValue(kwr.p), 'chi-square approximation')
+      card(paired ? 'χ²' : 'H', num(omni.stat), (paired ? 'Friedman statistic' : 'Kruskal–Wallis statistic') + (omni.ties ? ', tie-corrected' : '')),
+      card('df', intl(omni.df), 'k − 1'),
+      card('p', pValue(omni.p), 'chi-square approximation')
     ]));
-    b.appendChild(para('cmp-verdict', 'H = ' + num(kwr.H) + ' on ' + kwr.df + ' degrees of freedom, p = ' + pValue(kwr.p) + ': ' +
-      (kwr.p < alpha ? 'the designs do not all share one distribution at this level.' : 'insufficient evidence at this level that the designs differ.')));
+    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, p = ' + pValue(omni.p) + ': ' +
+      (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
     const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
-    b.appendChild(para('cmp-lead', 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (kwr.ties ? ', tie-corrected' : '') + '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
-      ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the Kruskal–Wallis test to reject.'));
+    const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
+    b.appendChild(para('cmp-lead', (paired
+      ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
+      : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
+      '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
+      ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the omnibus test to reject.'));
     // Each design's pseudo-median with its Wilcoxon interval, best first,
     // carrying Dunn's letters and brackets.
     const hl = groups.map(g => signedRank(g, { level }));
@@ -744,40 +841,45 @@ function update() {
     orderN.forEach((i, r) => { posN[i] = r; });
     const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
     const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
-    b.appendChild(para('sev-fig-title', 'Designs, best first, with Dunn’s letter groups and the pairs declared different'));
+    b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
     const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
-    if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by Dunn’s test (bracket)' });
-    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-dunn-groups',
+    if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
+    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
       fg => designRows(fg, rowsN, pairsN), legN,
       'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its estimates), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
-      'The letters and brackets come from Dunn’s test on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
+      'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
     const labN = p => pairLabel(p.i, p.j);
     const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
     const rowsD = dn.pairs.map(p => ['<span class="sev-pair">' + esc(labN(p)) + '</span>', '<span class="sev-full">' + esc(fullN(p)) + '</span>', num(p.diff), num(p.se), num(p.z), pValue(p.p), pValue(p.pAdj),
       p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
-    b.appendChild(table(['Pair', 'Designs', 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
-    tables.push({ name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
-    tables.push({ name: 'Pairwise rank comparisons (Dunn, ' + adjName + ')', headers: ['pair', 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
+    b.appendChild(table(['Pair', 'Designs', paired ? 'Rank-sum difference' : 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
+    tables.push(paired ? { name: 'Rank test (Friedman)', headers: ['chi-square', 'df', 'p'], rows: [[fr.chi2, fr.df, fr.p]] }
+      : { name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
+    tables.push({ name: 'Pairwise rank comparisons (' + (paired ? 'Friedman' : 'Dunn') + ', ' + adjName + ')', headers: ['pair', paired ? 'rank sum difference' : 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
       rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
     tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
       rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
-    summary.push('Kruskal–Wallis: H = ' + num(kwr.H) + ', p = ' + pValue(kwr.p) + '. Dunn (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
+    summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', p = ' + pValue(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   }
 
   const units = Array.from(new Set(list.map(d => d.unit || '')));
-  planCtx = { key: list.map(d => d.id).join('|'), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
+  // Under pairing the half-width plan works on the standard deviations of
+  // the paired differences, and the power plan on the blocked F test.
+  const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
+  planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
               sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)),
-              sigma: Math.sqrt(av.msw), grandMean: av.grandMean };
+              sigma: Math.sqrt(av.msw), grandMean: av.grandMean, paired, sdDs };
   registerTips(rootEl);
   resultBase = {
     title: 'Several Systems',
     provenance: {
       datasets: list.map(d => d.name).join('; '),
-      'confidence level': pct(level, 0),
+      'confidence level': lvl(level),
       direction: dir === 'min' ? 'smaller is better' : 'bigger is better',
       'comparisons adjusted for': fam.C,
       'difference family': diffMode === 'pairs' ? 'all pairs' : 'versus control',
       'post-hoc rule': RULES[rule],
+      replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
       'indifference zone': Number.isFinite(eps) ? eps : ''
@@ -797,7 +899,7 @@ function drawPlan() {
   const c = planCtx && !planCtx.msg ? planCtx : null;
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Check two or more designs above to plan replications.';
   if (c && c.key !== plan.key) { plan.key = c.key; plan.hwUser = storedTarget('target', c.key); plan.deltaUser = storedTarget('delta', c.key); }
-  const level = state.settings.level, alpha = 1 - level;
+  const level = state.settings.base, alpha = 1 - level;
   const unit = c && c.unit ? ' ' + c.unit : '';
   const unitNote = c && c.unit ? c.unit : 'in the response’s units';
   // Additional replications are counted beyond the largest current count,
@@ -805,7 +907,7 @@ function drawPlan() {
   const R = c ? Math.max(...c.ns) : NaN, Rlo = c ? Math.min(...c.ns) : NaN;
   const same = !c || R === Rlo;
   const rText = same ? 'the current R\u00a0=\u00a0' + intl(R) : 'the largest current R\u00a0=\u00a0' + intl(R);
-  const equalNote = ', with equal replications in each design';
+  const equalNote = c && c.paired ? '' : ', with equal replications in each design';
   const rows = [];
 
   // By half-width, on the Bonferroni differences of the current mode.
@@ -821,7 +923,15 @@ function drawPlan() {
   sec.querySelector('.plan-hw-def').textContent = 'The default' + (c ? ', ' + num(hwDef) + ',' : '') +
     ' is half the widest current half-width; halving a half-width takes about four times the replications.';
   let hp = { n: null, hwAtN: NaN, pair: [] }, hwNote = esc(msg);
-  if (c) {
+  if (c && c.paired) {
+    // The widest paired interval belongs to the pair whose differences vary most.
+    const worst = c.sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
+    const pr = planReplications({ sd: worst.sd, level: 1 - (1 - level) / C, target: hwVal });
+    hp = { n: pr.n, hwAtN: pr.hwAtN, pair: [worst.i, worst.j], reason: 'No replication count meets this target; choose a larger half-width.' };
+    hwNote = hp.n != null
+      ? 'An estimate conditional on the current sample standard deviations of the paired differences, up to ' + num(worst.sd) + ', not a guarantee; a larger pilot can move it either way.'
+      : esc(hp.reason);
+  } else if (c) {
     hp = planHalfWidthBonferroni({ sds: c.sds, level, mode: diffMode, control: c.ctrlIdx, target: hwVal });
     const sMin = Math.min(...c.sds), sMax = Math.max(...c.sds);
     hwNote = hp.n != null
@@ -833,7 +943,7 @@ function drawPlan() {
   const widestPair = hp.n != null ? esc(c.short[hp.pair[0]] + ' − ' + c.short[hp.pair[1]]) : dash;
   fillPane(sec.querySelector('[data-pane="hw"]'),
     'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
-      ' Bonferroni differences (' + esc(family) + ')' + equalNote,
+      ' Bonferroni ' + (c && c.paired ? 'paired ' : '') + 'differences (' + esc(family) + ')' + equalNote,
     planCards('hw', { n: hp.n, at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'widest: ' + widestPair }), hwNote);
   if (c) rows.push(planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', hp.n, hp.hwAtN, R));
 
@@ -846,17 +956,17 @@ function drawPlan() {
   sec.querySelector('.plan-delta-unit').textContent = unitNote;
   let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = esc(msg);
   if (c) {
-    pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power });
-    cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha }) : NaN;
+    pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power, blocked: c.paired });
+    cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
     pwNote = pp.n != null
-      ? 'This is the F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best card are a third way to set replications, by selection. ' +
-        'An estimate conditional on the current pooled sample standard deviation, √MSW = ' + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
+      ? 'This is the ' + (c.paired ? 'blocked ' : '') + 'F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best card are a third way to set replications, by selection. ' +
+        'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
       : esc(pp.reason);
   }
   const dText = 'δ = ' + num(c ? delta : NaN) + unit;
   fillPane(sec.querySelector('[data-pane="power"]'),
     'Replications per design needed to detect one design shifted by ' + esc(dText) + ' from the others with ' + powerPct(plan.power) +
-      ' power, by the one-way ANOVA F test at α = ' + num(alpha) + equalNote,
+      ' power, by the ' + (c && c.paired ? 'blocked' : 'one-way') + ' ANOVA F test at α = ' + num(alpha) + equalNote,
     planCards('power', { n: pp.n, at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
       curNote: same ? 'at R\u00a0=\u00a0' + intl(Rlo) + ' per design' : 'at the smallest current R\u00a0=\u00a0' + intl(Rlo) }), pwNote);
   if (c) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), pp.n, pp.powerAtN, R));
@@ -883,7 +993,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two or more designs at once on their replication estimates: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
-    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams; replications run under common random numbers across designs are pairs, and a pair is compared on the Two Systems page.</p>' +
+    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams unless the switch below says the replications are paired across designs (common random numbers): then the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +
       '<div id="sev-list"></div>' +
@@ -894,32 +1004,49 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-dir="max" aria-pressed="true">bigger is better</button>' +
           '<button type="button" class="seg-btn" data-dir="min" aria-pressed="false">smaller is better</button>' +
         '</span></span>' +
-        '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with in the versus-control differences and in Dunnett’s procedure, usually the current system.">Control</span></label><select id="sev-ctrl"></select></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting. Designs whose means are within ε of the best count as good enough, and the screen and the second stage are sized to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
         '<span class="ctrl-note" id="sev-eps-note"></span>' +
         '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
       '</div>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run on its own random streams. Paired: replication i of every design used the same random inputs (common random numbers across designs), and so each replication is a block. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-pair-lbl">' +
+          '<button type="button" class="seg-btn" data-pair="independent" aria-pressed="true">Independent</button>' +
+          '<button type="button" class="seg-btn" data-pair="paired" aria-pressed="false">Paired across designs</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="ctrl-row" id="sev-match-row" style="display:none">' +
+        '<span class="ctrl-lbl" id="sev-match-lbl">Match by</span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-match-lbl">' +
+          '<button type="button" class="seg-btn" data-match="id" aria-pressed="true">replication id</button>' +
+          '<button type="button" class="seg-btn" data-match="position" aria-pressed="false">position</button>' +
+        '</span>' +
+        '<span class="ctrl-note" id="sev-match-note"></span>' +
+      '</div>' +
+      '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
       '<div id="sev-mixed"></div>' +
     '</div>' +
     '<p class="unit-line" id="sev-unit"></p>' +
     '<p class="sev-key" id="sev-key"></p>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><div class="sec-hd">Means with simultaneous intervals</div><div id="sev-means-body"></div></div>' +
-    '<div class="sec" data-section="diffs"><div class="sec-hd">Differences (Bonferroni)</div>' +
+    '<div class="sec" data-section="means"><div class="sec-hd">Bonferroni means: simultaneous intervals</div><div id="sev-means-body"></div></div>' +
+    '<div class="sec" data-section="diffs"><div class="sec-hd">Bonferroni differences</div>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
         '<button type="button" class="seg-btn" data-diff="control" aria-pressed="false">versus control</button>' +
-      '</span></div>' +
+      '</span>' +
+      '<span class="ctrl-pair" id="sev-ctrl-diff"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with, usually the current system.">Control</span></label><select id="sev-ctrl" data-control></select></span>' +
+      '</div>' +
       '<div id="sev-diffs-body"></div></div>' +
     '<div class="sec plan-card" id="sev-plan" data-section="plan"></div>' +
     '<div class="sec" data-section="anova"><div class="sec-hd">Analysis of variance and post-hoc tests</div>' +
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div></div>' +
-    '<div class="sec" data-section="nonparam"><div class="sec-hd">Kruskal–Wallis test and Dunn’s pairwise comparisons</div>' +
+    '<div class="sec" data-section="nonparam"><div class="sec-hd" id="sev-np-hd">Kruskal–Wallis test and Dunn’s pairwise comparisons</div>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How Dunn’s pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
@@ -952,7 +1079,8 @@ export function render(root) {
   const ruleRow = document.createElement('div');
   ruleRow.className = 'ctrl-row cmp-rule-row';
   ruleRow.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-rule">Post-hoc rule</label><select id="sev-rule">' +
-    Object.keys(RULES).map(r => '<option value="' + r + '">' + RULES[r] + '</option>').join('') + '</select></span>';
+    Object.keys(RULES).map(r => '<option value="' + r + '">' + RULES[r] + '</option>').join('') + '</select></span>' +
+    '<span class="ctrl-pair" id="sev-ctrl-rule"><label class="ctrl-lbl" for="sev-ctrl2"><span class="tip" tabindex="0" data-tip="The design Dunnett’s procedure compares every other design with, usually the current system.">Control</span></label><select id="sev-ctrl2" data-control></select></span>';
   root.querySelector('#sev-rule-host').appendChild(ruleRow);
 
   const subsetSec = root.querySelector('#sev-subset-body').parentNode;
@@ -964,6 +1092,18 @@ export function render(root) {
     '<p>For each survivor, Rinott’s second stage needs N<sub>i</sub> = max(R<sub>i</sub>, ⌈(h·s<sub>i</sub>/ε)²⌉) replications in all, with h from Rinott’s integral at 1 − α/2. ' +
     'Running them and picking the best second-stage mean selects a design within ε of the best with the stated confidence.</p>'));
 
+  // The references stand outside the sections, and so they show whichever one is open.
+  root.appendChild(details('References',
+    '<p>Bonferroni families of intervals and the two-stage screen for the best: J. Banks, J. S. Carson, B. L. Nelson, and D. M. Nicol, <i>Discrete-Event System Simulation</i>, 5th ed. (Pearson, 2010), chapter 12; ' +
+    'B. L. Nelson, J. Swann, D. Goldsman, and W. Song, “Simple procedures for selecting the best simulated system when the number of alternatives is large,” <i>Operations Research</i> 49 (2001) 950–963; ' +
+    'Y. Rinott, “On two-stage selection procedures and related probability-inequalities,” <i>Communications in Statistics</i> A7 (1978) 799–811.</p>' +
+    '<p>Post-hoc comparisons: J. W. Tukey, “Comparing individual means in the analysis of variance,” <i>Biometrics</i> 5 (1949) 99–114, with C. Y. Kramer’s extension to unequal sizes (<i>Biometrics</i> 12, 1956); ' +
+    'C. W. Dunnett, “A multiple comparison procedure for comparing several treatments with a control,” <i>JASA</i> 50 (1955) 1096–1121; ' +
+    'J. C. Hsu, <i>Multiple Comparisons: Theory and Methods</i> (Chapman and Hall, 1996); S. Holm, “A simple sequentially rejective multiple test procedure,” <i>Scandinavian Journal of Statistics</i> 6 (1979) 65–70.</p>' +
+    '<p>Rank procedures: W. H. Kruskal and W. A. Wallis, <i>JASA</i> 47 (1952) 583–621; M. Friedman, <i>JASA</i> 32 (1937) 675–701; O. J. Dunn, “Multiple comparisons using rank sums,” <i>Technometrics</i> 6 (1964) 241–252; ' +
+    'S. Siegel and N. J. Castellan, <i>Nonparametric Statistics for the Behavioral Sciences</i>, 2nd ed. (McGraw-Hill, 1988); J. L. Hodges and E. L. Lehmann, “Estimates of location based on rank tests,” <i>Annals of Mathematical Statistics</i> 34 (1963) 598–611.</p>' +
+    '<p>Checks: M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>JASA</i> 69 (1974) 364–367; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551.</p>'));
+
   // The checked set is recorded only when the reader checks or unchecks a
   // design; the checklist's own updates as datasets come and go are not.
   checklist = datasetChecklist(root.querySelector('#sev-list'), {
@@ -972,13 +1112,15 @@ export function render(root) {
   });
   root.querySelector('#sev-list').addEventListener('change', () => { state.setPick(id, 'checked', checklist.selected()); });
   levelSelect(root.querySelector('#sev-lvl'));
-  ctrlSel = root.querySelector('#sev-ctrl');
-  ctrlSel.addEventListener('change', () => { controlId = ctrlSel.value || null; state.setPick(id, 'control', controlId); schedule(); });
+  ctrlSels = Array.from(root.querySelectorAll('select[data-control]'));
+  for (const sel of ctrlSels) sel.addEventListener('change', () => { controlId = sel.value || null; state.setPick(id, 'control', controlId); schedule(); });
   root.querySelector('#sev-rule').addEventListener('change', e => { rule = e.target.value; state.setPick(id, 'rule', rule); schedule(); });
   root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
+  root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => { pairMode = b.dataset.pair; state.setPick(id, 'pairing', pairMode); schedule(); }));
+  root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
 
   const visible = () => root.classList.contains('active');
@@ -1000,6 +1142,8 @@ function applyStored() {
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
+  if (get('pairing') === 'independent' || get('pairing') === 'paired') pairMode = get('pairing');
+  if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   const e = get('eps');
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;

@@ -49,6 +49,16 @@ export function pct(p, d = 1) {
 }
 
 /**
+ * A confidence level as a percentage with only the decimals it needs:
+ * "95%", "99.5%", "98.75%".
+ * @param {number} level
+ */
+export function lvl(level) {
+  if (level === null || level === undefined || !Number.isFinite(level)) return dash;
+  return trimFixed((level * 100).toFixed(2)) + '%';
+}
+
+/**
  * A p-value: "< 0.001" below one in a thousand, three decimals otherwise.
  * @param {number} p
  * @returns {string}
