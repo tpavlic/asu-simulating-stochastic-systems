@@ -729,6 +729,9 @@ export function boxPlot(fig, stats, o = {}) {
 /** Alias of boxPlot. */
 export const box = boxPlot;
 
+// The most observations drawn as individual dots; longer series are drawn as a thinned line.
+const POINT_CAP = 20000;
+
 function xMin0(sx) { return sx.domain[0]; }
 function seriesXs(n, xs) {
   if (xs) return xs;
@@ -756,8 +759,19 @@ export function sequence(fig, ys, o = {}) {
   if (!fig.sx) fig.x(extent(xs));
   if (!fig.sy) fig.y(extent(ys), { pad: 0.04, nice: true });
   ensureAxes(fig, o, { xLabel: fig.opts.xLabel || (o.xs ? 'Time' : 'Observation') });
-  drawSeries(fig, xs, ys, { stroke: col(o.color, '--est'), 'stroke-width': o.width || 1.1 }, 'm-seq');
-  fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(ys), color: col(o.color, '--est'), width: 1, label: o.label });
+  const c = col(o.color, '--est');
+  // Observations that happened one at a time are drawn as dots, since a
+  // line between them would show values that never occurred; past the
+  // point cap the series falls back to the thinned line.
+  if (o.marks === 'points' && ys.length <= POINT_CAP) {
+    const n = ys.length, r = n > 2000 ? 1.4 : n > 300 ? 2 : 2.8;
+    const g = svgEl('g', { class: 'm-seq-dots' }, fig.inner);
+    for (let i = 0; i < n; i++) svgEl('circle', { cx: r1(fig.sx(xs[i])), cy: r1(fig.sy(ys[i])), r, fill: c, 'fill-opacity': n > 300 ? 0.7 : 0.85 }, g);
+    fig.series.push({ kind: 'points', x: Array.from(xs), y: Array.from(ys), color: c, label: o.label || 'one observation' });
+  } else {
+    drawSeries(fig, xs, ys, { stroke: c, 'stroke-width': o.width || 1.1 }, 'm-seq');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(ys), color: c, width: 1, label: o.label });
+  }
   if (!fig.readoutFn) fig.readout(dx => {
     const i = nearestIndex(xs, dx);
     return i < 0 ? null : [(o.xs ? 't = ' : 'i = ') + num(xs[i]), 'value ' + num(ys[i])];
@@ -1012,11 +1026,15 @@ export function qqPlot(fig, q, o = {}) {
  * series resampled onto equal time intervals); the axis then takes ordinary
  * rather than integer ticks. `marker` draws a dashed vertical line at a
  * value on that axis, with a short label; a value past the axis is drawn at
- * the right edge with its label saying so.
+ * the right edge with its label saying so. `highlight` draws one lag's stem
+ * thicker and its dot larger in the highlight color, and `onPick(k)` is
+ * called with the nearest lag when the plot is clicked or tapped.
  * @param {Figure} fig
  * @param {ArrayLike<number>} r autocorrelations r_0 .. r_L
  * @param {{ band?: number, color?: string, axes?: boolean, from?: number, lagStep?: number,
- *   marker?: { at: number, label?: string, color?: string } }} [o]
+ *   marker?: { at: number, label?: string, color?: string },
+ *   highlight?: { at: number, label?: string, color?: string },
+ *   onPick?: (k: number) => void }} [o]
  */
 export function correlogram(fig, r, o = {}) {
   const L = r.length - 1;
@@ -1031,13 +1049,6 @@ export function correlogram(fig, r, o = {}) {
   const y0 = r1(sy(0));
   svgEl('line', { x1: 0, x2: fig.iw, y1: y0, y2: y0, stroke: tok('--muted'), 'stroke-width': 1 }, fig.inner);
   fig.series.push({ kind: 'hline', y: 0, color: tok('--muted') });
-  if (Number.isFinite(band)) {
-    for (const b of [band, -band]) {
-      const y = r1(sy(b));
-      svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.4, 'stroke-dasharray': '5,4', class: 'm-band' }, fig.inner);
-      fig.series.push({ kind: 'hline', y: b, dash: true, color: tok('--truth'), label: b > 0 ? 'band for an independent series' : undefined });
-    }
-  }
   const stems = { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, label: 'autocorrelation at each lag' };
   for (let k = from; k <= L; k++) if (Number.isFinite(r[k])) { stems.x0.push(k * step); stems.x1.push(k * step); stems.y0.push(0); stems.y1.push(r[k]); }
   fig.series.push(stems);
@@ -1056,6 +1067,15 @@ export function correlogram(fig, r, o = {}) {
   }
   svgEl('path', { d: dStem, stroke: c, 'stroke-width': sw, fill: 'none' }, g);
   if (dots && dDot) svgEl('path', { d: dDot, fill: c }, g);
+  // The band is drawn over the stems: a reference line the stems could
+  // cover would vanish exactly where the reader compares against it.
+  if (Number.isFinite(band)) {
+    for (const b of [band, -band]) {
+      const y = r1(sy(b));
+      svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.4, 'stroke-dasharray': '5,4', class: 'm-band' }, fig.inner);
+      fig.series.push({ kind: 'hline', y: b, dash: true, color: tok('--truth'), label: b > 0 ? 'band for an independent series' : undefined });
+    }
+  }
   if (o.marker && Number.isFinite(o.marker.at)) {
     const mc = col(o.marker.color, '--ok');
     const [d0, d1] = sx.domain;
@@ -1072,11 +1092,30 @@ export function correlogram(fig, r, o = {}) {
       text(gm, lx + 4, 14, s, { 'font-size': fs, fill: mc, 'font-weight': 600 });
     }
   }
+  // The highlighted lag: its stem thicker and its dot larger, in the
+  // highlight color, over the others.
+  if (o.highlight && Number.isFinite(o.highlight.at) && o.highlight.at >= from && o.highlight.at <= L && Number.isFinite(r[o.highlight.at])) {
+    const hk = o.highlight.at, hc = col(o.highlight.color, '--ok');
+    const x = r1(sx(hk * step)), y = r1(sy(r[hk]));
+    const gh = svgEl('g', { class: 'm-acf-hl' }, fig.inner);
+    svgEl('line', { x1: x, x2: x, y1: y0, y2: y, stroke: hc, 'stroke-width': 3 }, gh);
+    svgEl('circle', { cx: x, cy: y, r: 4.5, fill: hc, stroke: tok('--card'), 'stroke-width': 1.2 }, gh);
+    fig.series.push({ kind: 'points', x: [hk * step], y: [r[hk]], color: hc, label: o.highlight.label || 'highlighted lag' });
+  }
   if (!fig.readoutFn) fig.readout(dx => {
     const k = Math.round(dx / step);
     if (k < from || k > L) return null;
-    return ['lag ' + (step === 1 ? k : num(k * step)), 'r = ' + num(r[k], 3)];
+    const lines = ['lag ' + (step === 1 ? k : num(k * step)), 'r = ' + num(r[k], 3)];
+    if (Number.isFinite(band)) lines.push(Math.abs(r[k]) <= band ? 'inside the ±2/√n band' : 'outside the ±2/√n band');
+    return lines;
   });
+  // A tap or click on the plot hands the nearest lag to the caller.
+  if (typeof o.onPick === 'function') fig.onPlotClick = e => {
+    const p = clientToInner(fig, e);
+    if (!p || p.px < 0 || p.px > fig.iw || p.py < 0 || p.py > fig.ih) return;
+    const k = Math.round(sx.invert(p.px) / step);
+    if (k >= from && k <= L) o.onPick(k);
+  };
 }
 
 /**

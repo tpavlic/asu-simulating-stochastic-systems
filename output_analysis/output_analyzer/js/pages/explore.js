@@ -59,6 +59,10 @@ let repIndex = 1;
 let pooled = false;
 /** The horizontal axis of a tally's sequence plots when it carries times. */
 let xMode = 'index';
+/** The largest lag the correlogram shows, the same budget as the Steady State page's. */
+const MAX_LAG = 400;
+/** The lag the lag plot pairs observations at and the correlogram highlights. */
+let lag = 1;
 /** Every mounted result section, so a rebuild can release its figures. */
 let mounted = [];
 /** The sections that draw one replication, rebuilt when the replication changes. */
@@ -191,7 +195,7 @@ function figure(api, parent, name, opts, draw, legendItems) {
   return f;
 }
 
-function caption(parent, html) { parent.appendChild(el('p', 'ex-cap', html)); }
+function caption(parent, html) { const p = el('p', 'ex-cap', html); parent.appendChild(p); return p; }
 
 // A small results table; cells are markup already escaped by the caller.
 function table(headers, rows) {
@@ -280,6 +284,8 @@ function releaseAll() {
 function applyStored() {
   const x = state.getPick(id, 'axis');
   if (x === 'index' || x === 'time') xMode = x;
+  const k = state.getPick(id, 'lag');
+  if (Number.isInteger(k) && k >= 1) lag = k;
 }
 
 function fillRepControl(ds) {
@@ -575,9 +581,9 @@ function buildSequence(api, { ds }) {
   } else {
     const useT = rep.t && xMode === 'time';
     figure(api, sec, name, { height: 240, narrowHeight: 260, xLabel: useT ? 'Time' : 'Observation number', yLabel: ds.response, ariaLabel: 'Observations in order, replication ' + rep.id },
-      f => sequence(f, rep.v, useT ? { xs: rep.t } : {}),
-      [{ swatch: 'thin', color: '--est', label: 'observation' }]);
-    caption(sec, 'The ' + plural(rep.v.length, 'observation') + ' of replication ' + esc(rep.id) + ' in the order the run recorded them. Neighbors tend to sit close together, which is the serial correlation the lag plot and correlogram below measure.');
+      f => sequence(f, rep.v, Object.assign({ marks: 'points' }, useT ? { xs: rep.t } : {})),
+      [rep.v.length <= 20000 ? { swatch: 'dot', color: '--est', label: 'one observation' } : { swatch: 'thin', color: '--est', label: 'observations, as a thinned line' }]);
+    caption(sec, 'The ' + plural(rep.v.length, 'observation') + ' of replication ' + esc(rep.id) + ' in the order the run recorded them, each as its own dot. Neighbors tend to sit close together, which is the serial correlation the lag plot and correlogram below measure.');
   }
 }
 
@@ -624,24 +630,66 @@ function buildLag(api, { ds }) {
   const rep = chosenRep(ds);
   sec.appendChild(el('div', 'sec-hd', 'Lag plot and correlogram, replication ' + esc(rep.id)));
   const n = rep.v.length;
-  const L = Math.min(40, Math.floor(n / 4));
+  const L = Math.min(MAX_LAG, Math.floor(n / 4));
   if (n < 8 || L < 1) {
     sec.appendChild(el('p', 'muted-line', 'Replication ' + esc(rep.id) + ' has ' + plural(n, 'observation') + ', too few for a lag plot or a correlogram.'));
     return;
   }
-  const pair = el('div', 'ex-pair');
-  sec.appendChild(pair);
-  const lp = lagPairs(rep.v, 1);
-  const base = slug(ds.name) + '-rep-' + slug(rep.id);
-  figure(api, pair, base + '-lag-plot', { height: 300, narrowHeight: 300, xLabel: 'Observation i', yLabel: 'Observation i + 1', ariaLabel: 'Lag plot, replication ' + rep.id },
-    f => lagPlot(f, lp.x, lp.y),
-    [{ swatch: 'dot', color: '--est', label: 'consecutive pair' }, { swatch: 'dash', color: '--truth', label: 'identity line' }]);
   const r = acf(rep.v, L);
   const band = 2 / Math.sqrt(n);
-  figure(api, pair, base + '-correlogram', { height: 300, narrowHeight: 300, ariaLabel: 'Correlogram, replication ' + rep.id },
-    f => correlogram(f, r, { band }),
-    [{ swatch: 'line', color: '--est', label: 'autocorrelation at each lag' }, { swatch: 'dash', color: '--truth', label: '±2/√n band, n = ' + intl(n) }]);
-  caption(sec, 'Points that hug the identity line, and autocorrelations outside the ±2/√n band, mark observations correlated with their neighbors. The lag-one autocorrelation here is ' + num(r[1], 3) + '. A t interval over these observations would treat them as independent and come out too narrow.');
+  let k = Math.min(L, Math.max(1, lag));
+  // The lag control: a slider for sweeping and a spinner for a typed value,
+  // both showing the same lag.
+  const row = el('div', 'ctrl-row ex-tight');
+  row.innerHTML = '<span class="ctrl-pair ex-lag-pair"><label class="ctrl-lbl" for="ex-lag"><span class="tip" tabindex="0" data-tip="The lag plot pairs each observation with the one k places later, and the correlogram marks lag k. Drag the slider, type a lag, or tap a stem of the correlogram.">Lag <span class="sym">k</span></span></label>' +
+    '<input type="range" class="ex-lag-rng" id="ex-lag-rng" min="1" max="' + L + '" step="1" value="' + k + '" aria-label="Lag k, as a slider">' +
+    '<input type="text" id="ex-lag" value="' + k + '">' +
+    '<span class="ctrl-note">of up to ' + intl(L) + '</span></span>';
+  sec.appendChild(row);
+  const rng = row.querySelector('#ex-lag-rng');
+  const pair = el('div', 'ex-pair');
+  sec.appendChild(pair);
+  const base = slug(ds.name) + '-rep-' + slug(rep.id);
+  // The lag plot keeps one scale over the whole series, and so the points
+  // move under a fixed frame as the lag changes.
+  const [lo, hi] = extent(rep.v);
+  const lagFig = figure(api, pair, base + '-lag-plot', { height: 300, narrowHeight: 300, xLabel: 'Observation i', yLabel: 'Observation i + ' + k, ariaLabel: 'Lag plot, replication ' + rep.id },
+    f => {
+      const lp = lagPairs(rep.v, k);
+      f.x([lo, hi], { pad: 0.05, nice: true });
+      f.y(f.sx.domain);
+      f.readout((dx, dy, px, py) => {
+        let best = -1, bd = Infinity;
+        for (let i = 0; i < lp.x.length; i++) { const d = Math.hypot(f.sx(lp.x[i]) - px, f.sy(lp.y[i]) - py); if (d < bd) { bd = d; best = i; } }
+        if (best < 0 || bd > 16) return null;
+        return ['observations ' + intl(best + 1) + ' and ' + intl(best + 1 + k), '(' + num(lp.x[best]) + ', ' + num(lp.y[best]) + ')'];
+      });
+      lagPlot(f, lp.x, lp.y, { label: 'one pair, k observations apart' });
+    },
+    [{ swatch: 'dot', color: '--est', label: 'one pair, k observations apart' }, { swatch: 'dash', color: '--truth', label: 'identity line' }]);
+  const acfFig = figure(api, pair, base + '-correlogram', { height: 300, narrowHeight: 300, ariaLabel: 'Correlogram, replication ' + rep.id },
+    f => correlogram(f, r, { band, from: 1, highlight: { at: k, color: '--ok', label: 'lag k' }, onPick: setLag }),
+    [{ swatch: 'line', color: '--est', label: 'autocorrelation at each lag' }, { swatch: 'dash', color: '--truth', label: '±2/√n band, n = ' + intl(n) }, { swatch: 'dot', color: '--ok', label: 'lag k, the lag plot’s lag' }]);
+  const cap = caption(sec, '');
+  const setCap = () => {
+    const inside = Math.abs(r[k]) <= band;
+    cap.innerHTML = 'The lag plot pairs observation i with observation i + ' + intl(k) + '. The autocorrelation at lag ' + intl(k) + ' is ' + num(r[k], 3) + ', from ' + intl(n - k) + ' pairs, ' + (inside ? 'inside' : 'outside') + ' the ±2/√n band. Points that hug the identity line, and autocorrelations outside the band, mark observations correlated with their neighbors. A t interval over these observations would treat them as independent and come out too narrow.';
+  };
+  setCap();
+  const spin = spinner(row.querySelector('#ex-lag'), { min: 1, max: L, step: 1, onChange: v => setLag(v) });
+  rng.addEventListener('input', () => setLag(Number(rng.value)));
+  function setLag(v) {
+    v = Math.min(L, Math.max(1, Math.round(v)));
+    if (!Number.isFinite(v) || v === k) return;
+    k = v; lag = v;
+    state.setPick(id, 'lag', v);
+    rng.value = String(v);
+    spin.set(v, false);
+    lagFig.opts.yLabel = 'Observation i + ' + v;
+    lagFig.redraw();
+    acfFig.redraw();
+    setCap();
+  }
 }
 
 // ── Across replications ─────────────────────────────────────────────────

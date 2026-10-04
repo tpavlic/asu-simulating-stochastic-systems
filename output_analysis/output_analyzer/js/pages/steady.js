@@ -886,9 +886,9 @@ function drawAcf(ds, res) {
   const byTime = !!ds && ds.kind === 'time';
   acfFig.opts.xLabel = byTime ? 'Lag (time units)' : 'Lag (observations)';
   if (!A) {
-    acfFig.render(f => emptyPlot(f, ds ? 'Too few observations after truncation for an autocorrelation' : 'No dataset yet'));
+    acfFig.render(f => emptyPlot(f, ds ? 'Too few observations after truncation for a correlogram' : 'No dataset yet'));
     legend(el.aleg, []);
-    el.acap.textContent = 'Batches should span several times the lag at which the autocorrelation falls inside the band; the dashed vertical line is the current batch size.';
+    el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size.';
     return;
   }
   const marker = res && res.ok ? res.size : null;
@@ -912,7 +912,7 @@ function drawAcf(ds, res) {
   ];
   if (marker != null) items.push({ swatch: 'dash', color: '--ok', label: 'current ' + (byTime ? 'batch length' : 'batch size') });
   legend(el.aleg, items);
-  el.acap.textContent = 'Batches should span several times the lag at which the autocorrelation falls inside the band; the dashed vertical line is the current batch size.' +
+  el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size.' +
     (byTime ? ' The trajectory is first averaged over ' + intl(A.n) + ' equal steps of ' + num(A.step, 4) + ' time units, and the lags are in time units.' : '');
 }
 
