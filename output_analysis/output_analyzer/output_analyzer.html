@@ -565,17 +565,16 @@ footer a:hover { text-decoration: underline; }
 @media (max-width: 480px) { .sc.cmp-span2 { grid-column: 1 / -1; } }
 /* Planning cards */
 .plan-mode-row { margin-bottom: 12px; }
-/* Both panes sit in one grid cell, and so the cell is as tall as the taller
-   pane and switching the mode never moves the page. */
+/* The pane not in use leaves the layout, and so the card is as tall as the
+   pane it shows and carries no reserved space under the shorter one. */
 .plan-stack { display: grid; }
 .plan-stack > .plan-pane { grid-area: 1 / 1; min-width: 0; }
-.plan-pane.is-off { visibility: hidden; }
+.plan-pane.is-off { display: none; }
 /* The two panes' control rows are one height, and so the outputs under them
    line up and do not shift when the mode switches. */
 .plan-pane > .ctrl-row { margin-bottom: 10px; min-height: 34px; }
 .plan-head { font-size: .86rem; margin: 0 0 6px; min-height: 1.5em; overflow-wrap: anywhere; }
 .plan-note { font-size: .82rem; color: var(--muted); line-height: 1.5; margin: 2px 0 8px; min-height: 1.5em; }
-@media (max-width: 600px) { .plan-head { min-height: 4.5em; } .plan-note { min-height: 4.5em; } }
 .plan-card .sc-note sub, .plan-head sub, .plan-note sub { line-height: 0; }
 /* Several Systems: numbering and design plot */
 .sev-num { display: inline-flex; align-items: center; justify-content: center; min-width: 1.55em; height: 1.55em; padding: 0 .3em;
@@ -18926,6 +18925,10 @@ function update() {
 
   // Means with simultaneous intervals.
   const sm = simultaneousMeans(groups, level);
+  // One set per design for the checks lines of the t procedures that take
+  // each design's outcomes as normal, each a dataset the Normality link opens.
+  const designSets = groups.map((g, i) => ({ name: short[i], values: g, dsId: list[i].id }));
+  const INDEP_REPS = 'between replications cannot be checked from the data; it holds when each replication ran on its own random streams.';
   {
     const b = bodies[0];
     if (np) {
@@ -18960,6 +18963,7 @@ function update() {
       ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.');
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)]);
     b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'], rows));
+    b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the Bonferroni means', declared: INDEP_REPS }));
     tables.push({ name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
       rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi]) });
       }
@@ -19026,6 +19030,14 @@ function update() {
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
       'The adjusted p is C·p capped at 1. Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
+    // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
+    b.appendChild(assumptionChecks({
+      sets: paired
+        ? fam.comparisons.map(c => ({ name: 'the differences ' + pairLabel(c.i, c.j), values: Array.from(groups[c.i], (v, r) => v - groups[c.j][r]) }))
+        : designSets,
+      alpha, procedure: 'the Bonferroni differences', linkDs: list[0].id,
+      declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
+        : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     tables.push({ name: 'Bonferroni differences', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
       rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
@@ -19249,6 +19261,8 @@ function update() {
       b.appendChild(table(['Design', 'R', 'Mean', 's', 'Survives?', 'N needed', 'Additional replications'], rows, i => (ss.survivors[i] ? '' : 'cmp-mute')));
       b.appendChild(para('exp-note', 'N is the total number of replications Rinott’s second stage needs for each survivor, max(R, ⌈(h·s/ε)²⌉) with h = ' + num(ss.h) +
         '; the screen’s t = ' + num(ss.t) + '. A smaller ε asks for more replications, in proportion to 1/ε².'));
+      // The screen's allowances and Rinott's sizes are t procedures on each design's own mean and variance.
+      b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the screen', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
       tables.push({ name: 'Screen for the best', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
         rows: list.map((d, i) => [d.name, ss.n[i], ss.means[i], Math.sqrt(ss.s2[i]), ss.survivors[i] ? 'yes' : 'no', ss.N[i] === null ? '' : ss.N[i], ss.additional[i] === null ? '' : ss.additional[i]]) });
       summary.push(verdict);
@@ -19450,7 +19464,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-adj="holm" aria-pressed="false">Holm</button>' +
         '</span></div>' +
-      '<div class="ctrl-row" id="sev-var-row"><span class="ctrl-lbl" id="sev-var-lbl"><span class="tip" tabindex="0" data-tip="Pooled: the classical analysis of variance, one variance across designs, with Tukey, LSD, Bonferroni, and Dunnett post-hoc rules on the pooled mean square. Unequal: Welch’s analysis of variance, each design keeping its own variance, with Games–Howell or Bonferroni on Welch pairs; the choice when the heteroscedasticity check rejects. Pairing has no Welch form, so the switch is withheld under paired replications.">Variances</span></span>' +
+      '<div class="ctrl-row" id="sev-var-row"><span class="ctrl-lbl" id="sev-var-lbl"><span class="tip" tabindex="0" data-tip="Pooled: the classical analysis of variance, one variance across designs, with Tukey, LSD, Bonferroni, and Dunnett post-hoc rules on the pooled mean square. Unequal: Welch’s analysis of variance, each design keeping its own variance, with Games–Howell or Bonferroni on Welch pairs; the choice when the heteroscedasticity check rejects. Pairing has no Welch form, and so the switch is withheld under paired replications.">Variances</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-var-lbl">' +
           '<button type="button" class="seg-btn" data-var="pooled" aria-pressed="true">Pooled (one variance)</button>' +
           '<button type="button" class="seg-btn" data-var="welch" aria-pressed="false">Unequal (Welch)</button>' +
