@@ -10,7 +10,7 @@ import * as state from '../state.js';
 import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
-import { makeFigure, welchPlot, batchPlot, correlogram, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
+import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
@@ -40,7 +40,7 @@ let lumped = false;         // batch every replication joined end to end
 let mode = 'count';         // 'count' | 'size'
 let count = 20;
 let size = null;
-let warmFig = null, batchFig = null, acfFig = null, wp = null;
+let warmFig = null, batchFig = null, acfFig = null, lagFig = null, wp = null;
 let warm = null;            // the aligned averages behind the warm-up plot
 let lastBatch = null;       // the latest batchMeans result (ok or not)
 let spins = {};
@@ -182,7 +182,7 @@ const TIP = {
   w: 'Each point of the moving average is the mean of the 2w + 1 averaged points centered on it, with a shorter symmetric window near the start. A larger w smooths more and blurs where the curve levels off.',
   bins: 'The replications’ observations do not fall at the same instants, and so there is no observation i to average across replications at a given time. The run is split instead into this many equal intervals of simulation time, and each replication is summarized within each one: a time-persistent value by its time average over the bin, tally observations by the mean of those falling in it. The ensemble average is then taken bin by bin, and the moving average runs across bins. More bins give finer time resolution and a noisier curve.',
   align: 'By simulation time, each replication is first summarized in equal intervals of simulation time (the bins), and the cut is a time, which is how a warm-up period is set in simulation software. By observation index, observation i of every replication is averaged with observation i of the others, and the cut is a count of observations.',
-  r1: 'The correlation between each batch mean and the next. Independent batch means would give a value near zero.',
+  r1: 'The sample autocorrelation at lag one: the correlation between each batch mean and the next, a signed correlation (approximately the signed square root of R²). Independent batch means give a value near zero. C is Fishman’s test statistic, r₁ with an end correction scaled by √((b² − 1)/(b − 2)), which is close to standard normal when the batch means are independent, and p is its one-sided p-value for the test of no positive correlation.',
   cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.'
 };
 
@@ -231,7 +231,7 @@ export function render(rootEl) {
       '<div id="ss-wleg"></div>' +
       '<p class="ss-cap">Drag the dashed line to where the moving average has leveled off. The cut is a judgment this plot supports; the page does not compute one.</p>' +
       '<div class="ss-cut-row">' +
-        '<p class="ss-cut-text" id="ss-cut-text" aria-live="polite">Proposed truncation: ' + dash + '</p>' +
+        '<p class="ss-cut-text" id="ss-cut-text" aria-live="polite">Truncation: ' + dash + '</p>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ss-cuta" id="ss-cuta-lbl">Delete the first</label><span id="ss-cuta-h"></span><span class="ctrl-note" id="ss-cuta-unit">observations</span></span>' +
         '<button type="button" class="btn-run" id="ss-apply" disabled>Save truncated set</button>' +
       '</div>' +
@@ -267,6 +267,11 @@ export function render(rootEl) {
       '<div id="ss-afig"></div>' +
       '<div id="ss-aleg"></div>' +
       '<p class="ss-cap" id="ss-acap"></p>' +
+      '<div class="ss-btab-hd ctrl-grp-lbl">Neighboring batch means</div>' +
+      '<div class="ex-pair ss-lag-pair">' +
+        '<div><div id="ss-lfig"></div><div id="ss-lleg"></div></div>' +
+        '<div class="ss-lag-cap" id="ss-lcap"></div>' +
+      '</div>' +
       '<div class="ss-btab-hd ctrl-grp-lbl">The series and its batches</div>' +
       '<div id="ss-bfig"></div>' +
       '<div id="ss-bleg"></div>' +
@@ -276,7 +281,7 @@ export function render(rootEl) {
     '</div>';
 
   for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied',
-    'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns',
+    'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns', 'lfig', 'lleg', 'lcap',
     'afig', 'aleg', 'acap', 'bfig', 'bleg', 'bcap', 'btab']) {
     el[k] = root.querySelector('#ss-' + k);
   }
@@ -301,6 +306,8 @@ export function render(rootEl) {
   exportButtons(el.wfig, warmFig, 'warm-up');
   acfFig = makeFigure(el.afig, { height: 240, narrowHeight: 270, xLabel: 'Lag (observations)', yLabel: 'Autocorrelation' });
   exportButtons(el.afig, acfFig, 'autocorrelation-after-truncation');
+  lagFig = makeFigure(el.lfig, { height: 300, narrowHeight: 300, xLabel: 'Batch mean j', yLabel: 'Batch mean j + 1' });
+  exportButtons(el.lfig, lagFig, 'neighboring-batch-means');
   batchFig = makeFigure(el.bfig, { height: 270, narrowHeight: 310, xLabel: 'Observation', yLabel: 'Value' });
   exportButtons(el.bfig, batchFig, 'batch-means');
 
@@ -677,13 +684,13 @@ function savedFence() {
 }
 
 function cutText(ds) {
-  if (!ds || !warm) return 'Proposed truncation: ' + dash;
+  if (!ds || !warm) return 'Truncation: ' + dash;
   const saved = savedFence();
   if (!(cut > 0)) {
-    return (saved > 0 ? 'Proposed truncation: none, which would keep the whole run. ' : 'Proposed truncation: none. ') +
-      'Drag the dashed line, click the plot where the warm-up ends, or type a value.';
+    return (saved > 0 ? 'Truncation: none, which would keep the whole run. ' : 'Truncation: none yet. ') +
+      'Drag the dashed line to where the warm-up ends, click the plot there, or type a value; the page does not choose a cut for you.';
   }
-  const head = cut === saved ? 'Saved truncation (this dataset’s fence): ' : 'Proposed truncation: ';
+  const head = cut === saved ? 'Saved truncation (this dataset’s fence): ' : 'Truncation: ';
   let body;
   if (align === 'index') {
     let lo = Infinity, hi = 0;
@@ -720,8 +727,8 @@ function applyTruncation() {
   }
   state.add(derived);
   const dropped = ds.reps.length - derived.reps.length;
-  // The proposal is now a saved dataset, and so the dataset it was proposed
-  // on goes back to its own fence the next time it is shown.
+  // The cut is now a saved dataset, and so the dataset it was made on goes
+  // back to its own fence the next time it is shown.
   keep('cut', null);
   dsId = derived.id;
   resetFor(shown());
@@ -771,9 +778,9 @@ function warmLegend(ds) {
     { swatch: 'thin', color: '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
     { swatch: 'line', color: '--est', label: 'moving average over 2<span class="sym">w</span> + 1 = ' + intl(2 * w + 1) + ' points' },
     { swatch: 'dash', color: '--truth', label: R === 1 ? 'cumulative average from the start' : 'cumulative average of the ensemble average, from the start' },
-    { swatch: 'dash', color: '--accent', label: 'proposed cut (drag it, click the plot, or use the arrow keys)' }
+    { swatch: 'dash', color: '--accent', label: 'your cut (drag it, click the plot, or use the arrow keys)' }
   ];
-  if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the proposed cut' });
+  if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the cut' });
   legend(el.wleg, items);
   warmLegendCut = ds && cut > 0;
 }
@@ -814,7 +821,7 @@ function drawWarm(computed) {
       },
       onCutEnd: v => { if (wp) wp.setCut(roundCut(v)); setCut(v, 'plot-end'); }
     });
-    // The proposed cut is drawn in the accent color, matching its legend entry.
+    // The cut is drawn in the accent color, matching its legend entry.
     const g = f.layers.over.querySelector('.m-cut');
     if (g) {
       const accent = tok('--accent');
@@ -970,6 +977,50 @@ function acfData(ds) {
   return val;
 }
 
+/**
+ * Each batch mean against the next: the b − 1 pairs whose correlation is
+ * the lag-one r1 the page screens on. The frame is sized to the means, so
+ * the cloud fills it at any batch count.
+ */
+function drawLag(res) {
+  const items = [{ swatch: 'dot', color: '--est', label: 'one pair of neighboring batch means' }, { swatch: 'dash', color: '--truth', label: 'identity line' }];
+  if (!res || res.b < 3) {
+    lagFig.render(f => emptyPlot(f, res ? 'Too few batches for a lag-one scatter' : 'No batches yet'));
+    legend(el.lleg, items);
+    el.lcap.innerHTML = '<p class="ss-cap">Each point pairs a batch mean with the next one; the correlation of those pairs is the lag-one <span class="sym">r<sub>1</sub></span> in the cards above.</p>';
+    return;
+  }
+  const m = res.means, b = res.b;
+  const xs = Array.from(m).slice(0, b - 1), ys = Array.from(m).slice(1);
+  lagFig.render(f => {
+    f.readout((dx, dy, px, py) => {
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < xs.length; i++) { const d = Math.hypot(f.sx(xs[i]) - px, f.sy(ys[i]) - py); if (d < bd) { bd = d; best = i; } }
+      if (best < 0 || bd > 16) return null;
+      return ['batches ' + intl(best + 1) + ' and ' + intl(best + 2), '(' + num(xs[best]) + ', ' + num(ys[best]) + ')'];
+    });
+    lagPlot(f, xs, ys, { label: 'one pair of neighboring batch means' });
+  });
+  legend(el.lleg, items);
+  const rejects = res.lag1Test.p < 1 - res.level;
+  const hasC = Number.isFinite(res.lag1Test.C);
+  const alpha = pct(1 - res.level, 0);
+  el.lcap.innerHTML =
+    '<div class="ss-stat-line">' +
+      '<div><b><span class="sym">r<sub>1</sub></span> = ' + num(res.lag1) + '</b> from ' + intl(b - 1) + ' pairs</div>' +
+      (hasC
+        ? '<div>Fishman’s <b><span class="sym">C</span> = ' + num(res.lag1Test.C, 3) + '</b></div>' +
+          '<div>one-sided <b>' + pEq(res.lag1Test.p) + '</b></div>' +
+          '<div class="ss-stat-verdict">' + (rejects ? 'autocorrelation detected at the ' + alpha + ' level' : 'no autocorrelation detected at the ' + alpha + ' level') + '</div>'
+        : '<div class="ss-stat-verdict">too few batches for Fishman’s test</div>') +
+    '</div>' +
+    '<p class="ss-cap">Each point pairs a batch mean with the next one, ' + intl(b - 1) + ' pairs from ' + plural(b, 'batch', 'batches') +
+      ', and <span class="sym">r<sub>1</sub></span> is their correlation, the lag-one autocorrelation in the cards above. ' +
+      '<span class="sym">C</span> is Fishman’s test statistic, close to standard normal when the batch means are independent, and <span class="sym">p</span> is its one-sided p-value for the test of no positive correlation. ' +
+      'Points strung along the identity line mean neighboring batches still rise and fall together, and so the batches are too short to count as independent; a round cloud with no slope is what independence looks like. ' +
+      'Fewer, longer batches pull <span class="sym">r<sub>1</sub></span> toward zero but leave fewer points here, which is why the test has little power with few batches.</p>';
+}
+
 function drawAcf(ds, res) {
   const A = ds ? acfData(ds) : null;
   const byTime = !!ds && ds.kind === 'time';
@@ -982,8 +1033,13 @@ function drawAcf(ds, res) {
   }
   const marker = res && res.ok ? res.size : null;
   const sizeText = marker == null ? '' : byTime ? 'batch length ' + num(marker, 4) : 'batch size ' + intl(marker);
+  const xMax = (A.L + 0.6) * A.step;
+  // The marker is draggable while it is on the axis: dropping it sets the
+  // batch size, or, with the batches set by count, the count giving that
+  // size. A size past the axis is drawn at the edge, as before, and typed.
+  const drag = marker != null && marker <= xMax ? batchDrag(ds, byTime, res) : null;
   acfFig.render(f => {
-    f.x([0, (A.L + 0.6) * A.step]);
+    f.x([0, xMax]);
     f.readout(dx => {
       const k = Math.round(dx / A.step);
       if (k < 1 || k > A.L) return null;
@@ -993,16 +1049,70 @@ function drawAcf(ds, res) {
         Math.abs(A.r[k]) <= A.band ? 'inside the ±2/√n band' : 'outside the ±2/√n band'
       ];
     });
-    correlogram(f, A.r, { band: A.band, from: 1, lagStep: A.step, marker: marker == null ? null : { at: marker, label: sizeText, color: '--ok' } });
+    correlogram(f, A.r, { band: A.band, from: 1, lagStep: A.step, marker: marker == null || drag ? null : { at: marker, label: sizeText, color: '--ok' } });
+    if (drag) {
+      dragLine(f, {
+        value: marker, color: '--ok', ariaLabel: byTime ? 'Batch length' : 'Batch size', step: drag.step,
+        label: v => drag.label(v),
+        onEnd: v => drag.apply(v)
+      });
+    }
   });
   const items = [
     { swatch: 'line', color: '--est', label: 'autocorrelation at each lag' },
     { swatch: 'dash', color: '--truth', label: '±2/√n band, n = ' + intl(A.n) }
   ];
-  if (marker != null) items.push({ swatch: 'dash', color: '--ok', label: 'current ' + (byTime ? 'batch length' : 'batch size') });
+  if (marker != null) items.push({ swatch: 'dash', color: '--ok', label: 'current ' + (byTime ? 'batch length' : 'batch size') + (drag ? ' (drag it to change the batches)' : '') });
   legend(el.aleg, items);
-  el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size.' +
+  el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size. ' +
+    (drag
+      ? 'Drag it to set the batch size' + (mode === 'count' ? ', which here sets the number of batches that gives that size' : '') + '.'
+      : 'The batch size lies past the lags shown, and so the line sits at the edge.') +
     (byTime ? ' The trajectory is first averaged over ' + intl(A.n) + ' equal steps of ' + num(A.step, 4) + ' time units, and the lags are in time units.' : '');
+}
+
+/**
+ * How a drag of the correlogram's batch-size line lands: `snap` rounds a
+ * lag to a batch size the controls accept, `label` says what that size
+ * gives, and `apply` sets the size or the count and redraws.
+ */
+function batchDrag(ds, byTime, res) {
+  const k = keptSeries(ds);
+  const nUsed = k ? k.v.length : 0;
+  const span = byTime ? batchSpan(ds) : nUsed;
+  const dec = byTime ? timeDecimals(span) : 0;
+  const unit = byTime ? Math.pow(10, -dec) : 1;
+  // By count, the smallest count is two batches, and so a dragged size stops at half the span.
+  const countFor = v => Math.max(2, Math.floor(span / Math.max(unit, v) + 1e-9));
+  const snap = v => Math.max(unit, Number(v.toFixed(dec)));
+  const sizeText = sz => byTime ? 'batch length ' + num(sz, 4) : 'batch size ' + intl(sz);
+  return {
+    step: byTime ? Math.max(unit, niceStep(span, 200)) : 1,
+    label: v => {
+      // At rest the line names the batches as they are; while it moves, what dropping it there would give.
+      if (Math.abs(v - res.size) < 1e-9) return sizeText(res.size) + (mode === 'count' ? ' (b = ' + intl(res.b) + ')' : '');
+      if (mode !== 'count') return sizeText(snap(v));
+      const b = countFor(v);
+      return 'b = ' + intl(b) + ' batches of ' + sizeText(byTime ? span / b : Math.floor(span / b)).replace(/^batch (size|length) /, '');
+    },
+    apply: v => {
+      if (mode === 'count') {
+        const b = countFor(v);
+        if (b === count) { drawBatch(); return; }
+        count = b;
+        keep('count', b);
+      } else {
+        const sz = snap(v);
+        if (sz === size) { drawBatch(); return; }
+        size = sz;
+        keep('size', sz);
+      }
+      // The spinner shows the new value, and the batches, the correlogram's
+      // line, and the lag-one scatter follow.
+      if (spins.bn) spins.bn.set(mode === 'count' ? count : size, false);
+      drawBatch();
+    }
+  };
 }
 
 function placeholderCards() {
@@ -1018,7 +1128,7 @@ function placeholderCards() {
     card(DF_LABEL, dash, 'b − 1'),
     card(pct(L, 0) + ' interval', dash, 'mean ± half-width'),
     card('Half-width', dash, 't = ' + dash),
-    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), dash, 'C = ' + dash + ', p = ' + dash)
+    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), dash, 'Fishman’s C = ' + dash + ', p = ' + dash)
   ];
 }
 
@@ -1034,7 +1144,7 @@ function resultCards(res, byTime) {
     card(DF_LABEL, intl(res.df), 'b − 1'),
     card(pct(L, 0) + ' interval', '[' + num(res.lo) + ', ' + num(res.hi) + ']', 'mean ± half-width'),
     card('Half-width', num(res.hw), 't<sub>' + fixed(q, 3) + ', ' + res.df + '</sub> = ' + num(res.t)),
-    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p))
+    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'Fishman’s C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p))
   ];
 }
 
@@ -1076,6 +1186,7 @@ function drawBatch() {
     el.bcap.textContent = '';
     emptyTable();
     drawAcf(null, null);
+    drawLag(null);
     state.setResult(id, null);
     return;
   }
@@ -1095,6 +1206,7 @@ function drawBatch() {
   }
   lastBatch = res;
   drawAcf(ds, res);
+  drawLag(res.ok ? res : null);
 
   const resp = ds.response && ds.response !== 'value' ? ds.response : 'value';
   batchFig.opts.xLabel = byTime ? 'Simulation time' : 'Observation';
