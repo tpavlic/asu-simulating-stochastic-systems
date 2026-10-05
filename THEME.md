@@ -208,6 +208,8 @@ and `output_analysis/ci_explorer.html`.
 | Orange `#C2570A` | 4.50:1 | data |
 | Indigo `#3F4C8C` | 8.00:1 | data |
 | Red `#D62828` | 5.01:1 | data: the missed-interval color in the Confidence Interval and Variance Reduction Techniques Explorer |
+| Dark red `#BE2020` | 6.15:1 | small running text that names a failed check, where the data red on a tinted notice background (5.60:1 there) would sit too close to 4.5:1 |
+| Dark gray `#595959` | 7.00:1 | small running text for a statement no test settles, where `--muted` on a tinted background (6.38:1 there) would sit too close to 4.5:1 |
 
 Maroon against orange is 2.08:1 and against crimson `#c0392b` is 1.63:1 – the reason maroon stays
 out of the data palette.

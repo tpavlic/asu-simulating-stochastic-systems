@@ -533,7 +533,12 @@ check all of the following.
 
 - `index.html` — the root landing page; self-contained HTML (no Jekyll/build step)
 - `README.md` — GitHub repo landing page; mirrors the index structure for repo visitors
-- Each demo is a **self-contained, single-file HTML page** with all CSS and JS inlined
+- Each demo is a **self-contained, single-file HTML page** with all CSS and JS inlined. The
+  Output Analyzer in `output_analysis/output_analyzer/` is authored as ES modules under its `js/`
+  directory, but its page is still self-contained: `inline_modules.mjs` embeds every module into
+  the page as inert text, and a small loader in the page turns them into modules at run time, so
+  the page opens from disk and embeds like every sibling (see its entry under "Current sections
+  and demos" for the editing rule)
 - Preview images live alongside their HTML file in the same subdirectory
 - The site is deployed via **GitHub Pages** directly from the `main` branch (no build step)
 - `index-preview.png` is the root page's OG/Twitter card image: a 2×2 montage of the four
@@ -561,7 +566,8 @@ directory holds a single widget its name is the natural tag (`prng`, or a trimme
 commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
 explorer's tag and `mcx` is the examples widget's. `input_modeling/` also now holds two: `analyzer`
 is `input_analyzer.html`'s tag and `models` is `prob_models.html`'s. `output_analysis/` also now
-holds two: `ci` is `ci_explorer.html`'s tag and `compare` is `multiple_comparisons.html`'s. Reuse
+holds three: `ci` is `ci_explorer.html`'s tag, `compare` is `multiple_comparisons.html`'s, and `oa` is
+the multi-file app in its `output_analyzer/` subdirectory. Reuse
 whatever a widget has been tagged before – `git log --oneline -- prng/` shows it – and keep the
 tag short: the whole subject line should stay at 72 characters or fewer. This is not Conventional
 Commits, as there is no `feat:`/`fix:` type and the tag names a widget rather than a kind of
@@ -688,7 +694,15 @@ better.
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
   two tabs, one fitting fourteen candidate distributions to a pasted sample and one estimating a
-  piecewise-constant arrival rate from timestamps. Two conventions in this file are relied on by
+  piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, M,
+  R, and PY buttons above the plot: the `Plot` builder records each mark it draws as data, files
+  the result under the plot's title in `PLOT_SPECS`, and the `FIG_SCRIPTS` block writes a MATLAB,
+  R, or Python script that redraws the plot from that data. That block is a copy of
+  `output_analysis/output_analyzer/js/io/scripts.js` with the exports removed and the
+  application's name changed, and so a change to the writers is made in the module first and
+  copied here. The plot itself is a probe (`armProbe`): the pointer over it, or a tap on it, draws
+  a crosshair with dashed projections onto both axes and the value at each, four significant
+  figures, and a tap elsewhere takes a finger-placed probe away. Two conventions in this file are relied on by
   code outside it, and any later edit has to preserve them:*
   1. *Everything between the `IA-CORE-BEGIN` / `IA-CORE-END` sentinels is pure numerics with no DOM
      access. `input_modeling/verify_input_analyzer.mjs` slices that block out of the HTML and runs
@@ -909,6 +923,168 @@ better.
      in the history mid-Step (`pending`, not yet resolved) so the column count and the axis never
      change once the run's outcome is revealed, but its own bar is drawn only once stage 4 reveals
      whether the selection was correct.)*
+
+- `output_analysis/output_analyzer/output_analyzer.html` *(the Output Analyzer: a browser replacement for the
+  output-analysis utility bundled with a commercial simulation package, and for the comparison and
+  best-scenario parts of its process analyzer, built as one entry page plus native ES modules under
+  its `js/` directory with no build step. Nine pages behind a four-group navigation (Data, Analysis, Session, More information) that is a sticky left sidebar at 1100px and
+  wider, a bracketed one-line tab strip down to 700px (the Canvas column), and a `<select>` below:
+  three pages (② Summary and Plots, ⑤ Several Systems, ⑦ Steady State) carry a second level of
+  sub-sections shown one at a time, routed as `#several/anova` and listed under the page in the
+  sidebar and indented in the select; a section the shown dataset cannot fill is left out of the
+  page's own strip and grayed in the sidebar and the select with a tooltip saying what the data
+  lack: ① Import
+  (loaded datasets first, then the bundled examples, then drag-and-drop, file, and paste; time–value records with a −1 replication
+  delimiter, delimited columns with a mapping dialog that asks tally versus time-persistent rather
+  than guessing, wide files with a response picker, a scenario column splitting into one dataset per
+  design; every rejected row listed with its line number), ② Summary and Plots (descriptives, raw
+  table, nine plot types offered only where meaningful for the data's kind, among them a lag plot at
+  a chosen lag k beside a correlogram to 400 lags with lag k highlighted, the lag set by a slider,
+  a spinner, or a tap on a stem, and a Normality section
+  with the normal quantile–quantile plot and the Shapiro–Wilk test of the replication outcomes, the
+  test withheld on pooled observations because they are not independent, and an Equal variances
+  section running Levene's test across a checklist of loaded datasets), ③ One System (the
+  absolute analysis: t interval on one system's replication outcomes, or the Wilcoxon signed-rank
+  interval on the pseudo-median behind a Procedure switch, the pooled-observations override behind
+  a warning, and a "How many replications" card by target half-width or by target power of the
+  one-sample t test, and the chi-square interval on the variance), ④ Two Systems (the relative analysis: Welch by default, with the
+  pooled-variance t as a Procedure choice whose checks line adds Levene's test; paired
+  only when the reader says so, matched on replication id or position with unmatched replications
+  listed, the choice fixed by how the replications were run and never by the data; a Procedure
+  switch to the Wilcoxon rank-sum or signed-rank test with the Hodges–Lehmann estimate and its
+  interval; in paired mode the differences strip plus a switchable pair view, by replication with
+  filled A and hollow B joined per pair, or as slopes between two columns; replications per design
+  by half-width on the difference or by power), ⑤ Several Systems
+  ("Benchmark comparison", Bonferroni simultaneous means with an optional benchmark drawn as a
+  draggable line that declares each design above or below it when its interval excludes it, and
+  "Pairwise comparisons", Bonferroni differences, all pairs or versus a control, the sections
+  titled by the question asked rather than by the correction, each with a
+  "How many replications" card at its foot sized by a target half-width, as the ANOVA section has
+  one sized by the F test's target power, the rank procedures taking the t plan inflated by π/3;
+  one-way ANOVA opened by
+  Levene's test of equal variances (Brown–Forsythe, median-centered), with Tukey–Kramer, protected
+  LSD, Bonferroni, and Dunnett post-hoc tests and a compact letter display carried on a
+  design-level plot with letters and brackets for the pairs declared different, designs and pairs
+  numbered 1…k throughout, and a Variances switch whose unequal setting runs Welch's analysis of
+  variance with Games–Howell or Bonferroni-on-Welch-pairs post-hoc rules (withheld under pairing,
+  which has no Welch form); a page-wide Procedure switch whose nonparametric setting turns the
+  Bonferroni means and differences into Wilcoxon intervals on pseudo-medians and shifts and the
+  analysis section into the Kruskal–Wallis test (Friedman under pairing) with Dunn's or Friedman's
+  pairwise comparisons under Bonferroni or Holm, drawn as each design's Hodges–Lehmann pseudo-median
+  with its Wilcoxon interval and the letters; and "Screen for the best", the textbook's subset-selection
+  screen with indifference zone ε (its control lives in this section, since nothing else uses it)
+  and Rinott second-stage sizes, drawn as the design plot with the
+  survivors in color and the eliminated designs muted; a "Replications are" switch, independent by
+  default, declares that replication i of every design shared its random inputs, whereupon the
+  replications are matched into blocks by id or by position, the Bonferroni differences become
+  paired t intervals, the analysis of variance blocks on the replication (its own row in the
+  table, the post-hoc rules on the residual mean square), Friedman's test with Siegel–Castellan
+  pairwise comparisons replaces Kruskal–Wallis and Dunn, and planning works on the paired
+  differences and the blocked F test), ⑥ Steady
+  State (Welch moving-average warm-up plot, the ensemble average across replications aligned by
+  time bins (the default wherever the data carry time stamps, since a warm-up period is set in
+  simulation software as a time) or by observation index, with a draggable cut that is never
+  computed for the reader and the excluded stretch shaded; "Save truncated set" producing a derived
+  dataset, which the page then shows as the run it came from with a fence at the saved cut
+  (`truncationView` in `js/data/model.js`), so that the fence can be moved back or forward and saved
+  again, always cutting the original run, and Summary and Plots' Within a run section draws that
+  deleted stretch gray behind the fence; a correlogram of the truncated series with
+  the batch size marked, to choose a batch length that spans several correlation lengths; and batch
+  means on one replication or on all replications concatenated, by observation count or by
+  time-weighted time intervals with Fishman's lag-one test),
+  ⑦ Report (the loaded datasets and every page's latest result on one page, each under the
+  choices that produced it, with Print, Copy as text, and one combined CSV of every table), and
+  ⑧ Storage (what localStorage holds between visits, and "Forget this session"), and ⑨ References
+  (the sources behind every page, grouped by page, with the simulation package's own textbook
+  under "Simulation software"; the only place a book or paper is named, so that no page text
+  ever calls anything "the textbook"). The former Variance and Correlation page is retired: the
+  chi-square interval on one system's variance is an "Interval on the variance" section of One
+  System, the F ratio of two variances a "Variances of A and B" section of Two Systems
+  (independent mode), and the correlation lives only in Two Systems' paired Correlation r card;
+  the hash `#variance` lands on One System. Exporting is
+  otherwise per page: every analysis page ends in an export row (`installExportRow` in
+  `js/ui/exportrow.js`) offering that page's result tables as CSV with `#` provenance lines and a
+  "Print this page" button, Summary and Plots adds the shown dataset's data files (observations,
+  one-column observations, replication summary, and a pilot-ready single column the Power
+  Explorer's pilot box reads as pasted), and Two Systems adds the paired pilot of A and B. The
+  print stylesheet hides the navigation, the dataset strip, the figure toolbars, and the export
+  rows, so printing any page prints what it shows. The confidence level is one shared setting with a
+  "Custom…" entry (a stated level and a Bonferroni count C, applied per interval everywhere;
+  Several Systems reads the stated level, `state.settings.base`, because it divides α by its own
+  family sizes), and every parametric result carries a checks line from `js/ui/checks.js`
+  (Shapiro–Wilk on what the procedure takes as normal, Levene's test where a variance is pooled; flags
+  only, never gates, and a line whose checks all pass says so with a check badge). Every figure carries five download buttons: SVG, PNG, and M, R, and PY, the last
+  three being scripts (MATLAB, base-graphics R, matplotlib Python) that redraw the figure from the
+  data embedded in them; the images and the R and Python scripts share one hyphenated file name,
+  and the MATLAB script takes the underscored identifier its language requires. Commit tag `oa`. Conventions relied on by code outside the page, which any later edit
+  has to preserve:*
+  1. *The `js/` files are the source, and the page embeds a copy of every one of them between its
+     `OA-MODULES-BEGIN` / `OA-MODULES-END` markers as `<script type="text/plain" data-module>`
+     blocks, which the loader after the end marker turns into blob-URL modules with their relative
+     imports rewritten, so the page needs no fetch and opens from `file://`. After editing any
+     module, run `node output_analysis/output_analyzer/inline_modules.mjs` to refresh the page;
+     `test/inline.test.mjs` fails while the page is stale. Never edit the embedded copies by hand,
+     and never put `<script`, `</script`, or `<!--` inside a module (the inliner refuses them).*
+  2. *`js/stats/*` (including `nonparam.js`, whose Wilcoxon procedures use the exact distributions
+     on untied samples under 50 and the classical normal approximation otherwise, where R 4.4 and
+     later compute an exact permutation distribution instead), `js/io/parse.js`, `js/io/scripts.js`, and `js/data/model.js` are pure modules
+     with no DOM access and must not contain the words "window" or "document";
+     `node --test output_analysis/output_analyzer/test/` imports them directly (about one second once
+     matplotlib's font cache is warm). Run it after touching any of them. `test/scripts.test.mjs` also
+     runs a generated R script under `Rscript` and a Python one under matplotlib when those are
+     installed, and skips them otherwise; the MATLAB script is not run by the tests, so after
+     changing `js/io/scripts.js` run one through MATLAB (`matlab -batch`) as well.*
+  3. *Every expected value in `test/` comes from the R scripts in `test/reference/`, which print the
+     JSON beside them; regenerate a JSON only by re-running its R script. Dunnett's critical values
+     are pinned against both a Monte Carlo and a nested `integrate`/`uniroot` solution in R; Rinott's
+     constant against Table A.12 of Banks, Carson, Nelson, and Nicol; the lag-one test's calibration
+     against a Monte Carlo under independence; the Shapiro–Wilk test and the quantile–quantile
+     pieces against `shapiro.test`, `ppoints`, and `qqline`; Levene's test against a by-hand
+     `anova(lm(abs(y − median) ~ g))`; the Wilcoxon procedures against `wilcox.test` with
+     `conf.int = TRUE` (`exact = FALSE` on the tied samples); Kruskal–Wallis against `kruskal.test`
+     and Dunn's z tests against a by-hand base-R computation with `p.adjust`; the blocked ANOVA
+     against `aov(y ~ g + block)` with `TukeyHSD`, the paired Bonferroni family against paired
+     `t.test`, Friedman against `friedman.test`, the blocked F power against `pf`, Welch's
+     analysis of variance against `oneway.test(var.equal = FALSE)`, and Games–Howell against a
+     by-hand `ptukey`/`qtukey` computation on each pair's Welch degrees of freedom.*
+  4. *`js/data/examples.js` is generated by `data/generate_examples.mjs` (a seeded M/M/1 simulator)
+     and must match `data/*` byte for byte; `test/examples.test.mjs` regenerates and compares, so
+     change the generator, never the generated files.*
+  5. *In the page text the per-replication number is a "replication outcome" (a "replication
+     mean", "replication time average", or "replication value" where the kind is known), never a
+     "replication estimate": the outcome is the datum that inference runs across, and the estimate
+     is what the inference produces. The code keeps `repEstimates` as its name for the same array.
+     With one replication the One System figure draws the one outcome alone, with no mean line.*
+  6. *The data model never blurs the three kinds: `tally` (observations within replications),
+     `time` (time-persistent state, always duration-weighted; the last record holds until `endTime`
+     and otherwise for no time), and `reps` (one value per replication). Every inference page works
+     on `repEstimates(ds)`, and a one-replication set is refused by `canInfer` except through the
+     explicit override on page ③.*
+  7. *Pages register results through `state.setResult(pageId, {title, provenance, tables})`, which
+     stamps `computedAt` and which the page's own export row and the Report page read; provenance
+     carries every choice that produced the numbers. Every pill but Import and Storage is grayed
+     and inert until the loaded datasets meet that page's requirement (`GATES` in `js/main.js`):
+     any dataset for ②, ③, and ⑦; two datasets with at least two replication outcomes each
+     for ④ and ⑤; a tally or time-persistent dataset for ⑥. The tooltip on a gray item says what
+     is missing. Page ids are permanent hash slugs (`import, explore, one, two, several,
+     steady, report, storage, references`; the retired `variance` redirects to `one`); ③'s slug is `one`, and a sub-section
+     is `page/section` (`several/means|diffs|anova|subset`, `explore/summary|dist|run|reps|
+     normality|spread`, `steady/warmup|batch`). The hash carries only the page and section, never a
+     setting. A page tells the router which of its sections the shown data cannot fill with
+     `setSectionAvailable(page, {section: reason})` from `js/ui/tabs.js`; a link naming such a
+     section lands on the page's first available one.*
+  8. *Every control's state persists: pages store it with `state.setPick(pageId, key, value)`
+     and read it back with `state.getPick`, the session saves `state.picks` beside the datasets in
+     localStorage, and "Forget this session" clears both. `datasetSelect`'s `remember` option does
+     this for dataset pickers. A stored value is applied only when valid for the current data.*
+  9. *Every mark helper in `js/ui/plots.js`, and every custom drawing in a page, records what it
+     drew as data in `fig.series` using the vocabulary documented at the top of `js/io/scripts.js`
+     (points, line, step, bars, hline, vline, segments, band, span, rects, text), and a figure
+     drawn as rows calls `recordRows(fig, labels)` so the rows become a categorical axis;
+     `figureSpec(fig)` hands that to the three script writers behind the M, R, and PY buttons. A
+     new mark or a new custom drawing must record its series too, or its scripts come out empty.
+     The Input Analyzer carries a copy of the writers (see its entry), which a change here is
+     copied into.*)
 
 Add each new section here as its first demo lands, following the "Adding a new section" procedure
 above.

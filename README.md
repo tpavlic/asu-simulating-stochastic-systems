@@ -26,29 +26,30 @@ below.
 
 | Directory | Description |
 | --- | --- |
-| [`monte_carlo/mc_explorer.html`](monte_carlo/mc_explorer.html) | Interactive explorer for Monte Carlo estimation: dartboard estimation of π, Buffon's needle, area from a walking robot's crossing trails, and Monte Carlo integration, with accumulating 95% confidence intervals |
-| [`monte_carlo/mc_examples.html`](monte_carlo/mc_examples.html) | Six textbook-style Monte Carlo experiments where each replication is a short simulation (an M/M/1 or M/M/2 queueing node, an order-up-to inventory policy, a bearing-replacement policy, a newsvendor, aid drops into a delivery zone, and a stochastic activity network): step through one replication, accumulate a batch, and move a decision knob against a success threshold to watch the output distribution and the probability of success change, with an experiment log of finished batches and their expandable histograms below |
+| [`monte_carlo/mc_explorer.html`](monte_carlo/mc_explorer.html) | Monte Carlo Explorer: estimate π by dartboard sampling and Buffon’s needle, measure a floor area from a robot’s crossing trails, and integrate a function by averaging random draws, watching 95% confidence intervals accumulate around the truth. |
+| [`monte_carlo/mc_examples.html`](monte_carlo/mc_examples.html) | Monte Carlo Simulation Examples: step through six short simulations (a queueing node, an inventory policy, bearing replacement, a newsvendor, aid drops, and an activity network) and accumulate replications to watch the probability of success take shape. |
 
 ### Pseudorandom Number Generation
 
 | Directory | Description |
 | --- | --- |
-| [`prng/`](prng/) | Pseudorandom number generation and watermarking: LCG arithmetic step by step, uniformity (chi-square, K–S) and independence (lattice plots, RANDU's planes) testing, combined LCGs and MRG32k3a with streams and substreams, and then watermarks built in four stages – parameter fingerprints, keyed re-seeding, SynthID-style tournament sampling, and an embedded Markov language model whose marked text a keyed detector reads back |
+| [`prng/`](prng/) | Pseudorandom Number Explorer: step through LCGs, combined generators, and MRG32k3a, test their streams for uniformity and independence, and see how the same determinism watermarks a generator’s output, down to SynthID-style text. |
 
 ### Input Modeling
 
 | Directory | Description |
 | --- | --- |
-| [`input_modeling/input_analyzer.html`](input_modeling/input_analyzer.html) | Fit a distribution to sample data and read off the expression for a simulation model: maximum-likelihood fits of fourteen candidates ranked by AIC and BIC beside Arena's square-error criterion, chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values, Q–Q and P–P diagnostics, a nonhomogeneous-Poisson arrival mode, and export to Arena, Simio, AnyLogic, R, MATLAB, and SciPy |
-| [`input_modeling/prob_models.html`](input_modeling/prob_models.html) | A gallery of nineteen input-modeling distributions, each on its own tab with a live pdf or pmf and cdf plot against three reference settings, formulas and moments, choose-it-when guidance, an animated inverse-transform generator, and, for most, a second construction from other distributions; a Map tab lays out every distribution as a two-group pill picker and four shared family-relationship diagrams show how they connect |
+| [`input_modeling/input_analyzer.html`](input_modeling/input_analyzer.html) | Input Analyzer: paste sample data and fit fourteen candidate distributions by maximum likelihood, compare them by AIC, BIC, and square error, check the fit with bootstrap goodness-of-fit tests, and export the expression for your simulation tool. |
+| [`input_modeling/prob_models.html`](input_modeling/prob_models.html) | Distribution Explorer: browse nineteen input-modeling distributions, each with live pdf and cdf plots, formulas and moments, guidance on when to choose it, and an animated inverse-transform generator. |
 
 ### Output Analysis
 
 | Directory | Description |
 | --- | --- |
-| [`power_analysis/`](power_analysis/) | Statistical power by simulation and by formula: nine tests (t, z, pooled two-sample t at any group-size ratio, Welch's two-sample t, variance, proportion, chi-square GOF, ANOVA, regression slope) drawn as null-vs-alternative sampling distributions with α, β, and the tabled critical values on the plot, a Monte Carlo engine whose rejection counting converges onto the exact noncentral-distribution answer, solve-for-power and solve-for-n in both directions, a live OC chart, a paired-comparison panel connecting correlation to common random numbers and antithetic variates, pilot-data planning, the pooled and Welch tests run side by side on the same simulated data to show when the pooled test's α drifts, and verified MATLAB/R/Python export |
-| [`output_analysis/ci_explorer.html`](output_analysis/ci_explorer.html) | Confidence Interval and Variance Reduction Techniques Explorer: sample a known normal population, form t intervals, and watch about α of them miss the true mean over a hundred runs, with μ, σ, n, and the confidence level adjustable mid-history; then narrow the interval with common random numbers (two-sample and paired intervals), antithetic variates, control variates, and importance sampling, each shown as a plain history over an improved one |
-| [`output_analysis/multiple_comparisons.html`](output_analysis/multiple_comparisons.html) | Multiple Comparisons Explorer: judge one simulated design on K requirements, or K designs against each other, and watch the family-wise error rate climb past α as the comparisons multiply, with the Bonferroni correction pulling it back by widening every interval; further tabs measure the power that correction gives up and how Holm's step-down recovers some of it, show the selection bias in reporting the winner's own interval, run one-way ANOVA with Tukey's HSD and Fisher's LSD side by side, animate the two-stage select-the-best procedure, and close with the adaptive loop of simulation optimization |
+| [`power_analysis/`](power_analysis/) | Power Explorer: pick a hypothesis test and watch the null and alternative sampling distributions separate as n grows, estimate power by Monte Carlo and by formula, and solve for the replications a target power needs. |
+| [`output_analysis/ci_explorer.html`](output_analysis/ci_explorer.html) | Confidence Interval and Variance Reduction Techniques Explorer: build t intervals from samples of a known population and watch about α of them miss the truth, then narrow them with common random numbers, antithetic variates, control variates, and importance sampling. |
+| [`output_analysis/multiple_comparisons.html`](output_analysis/multiple_comparisons.html) | Multiple Comparisons Explorer: watch the family-wise error rate climb as comparisons multiply, see what Bonferroni and Holm give back, and run ANOVA post-hoc tests and a two-stage select-the-best procedure on simulated designs. |
+| [`output_analysis/output_analyzer/`](output_analysis/output_analyzer/) | Output Analyzer: load simulation output and form the right interval: t intervals on replication means, comparisons of two or several designs with post-hoc tests and a best-subset screen, and a steady-state workspace with warm-up truncation and batch means. |
 
 ---
 
