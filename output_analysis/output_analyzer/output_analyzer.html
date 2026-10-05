@@ -217,6 +217,12 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .sec-title { font-size: 1.08rem; font-weight: 700; color: var(--accent); margin: 0 0 3px; line-height: 1.3; }
 .sec-lede { font-size: .84rem; color: var(--muted); line-height: 1.5; margin: 0 0 11px; }
 .subnav-lbl { margin-bottom: 6px; }
+.ctrl-chk { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; font-size: .84rem; cursor: pointer; }
+/* The benchmark row keeps the spinner's height with the spinner hidden, and so toggling it never moves the page. */
+#sev-bench-row { min-height: 34px; align-items: center; }
+/* On a phone the checkbox text already names the field, and so the pair's own
+   label and the units note go, which keeps the spinner on the checkbox's line. */
+@media (max-width: 480px) { #sev-bench-pair .ctrl-lbl, #sev-bench-unit { display: none; } #sev-bench-pair { white-space: nowrap; flex-wrap: nowrap; } #sev-bench { width: 60px; } }
 /* A section's own planning card: an inset box under the results, framed and
    tinted like the help boxes so its heading is not taken for a caption. */
 .plan-sub { margin-top: 16px; padding: 12px 13px 10px; border: 1.5px solid var(--border); border-top: 3px solid var(--accent-tint); border-radius: 7px; background: var(--chart-bg); }
@@ -237,6 +243,8 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
 /* A label never ends one line while its field starts the next. */
 .ctrl-pair { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; max-width: 100%; }
+/* The display rule above would otherwise beat the hidden attribute. */
+.ctrl-pair[hidden] { display: none; }
 .ctrl-note { font-size: .74rem; color: var(--muted); }
 .ref-list { margin: 4px 0 0; padding-left: 20px; font-size: .86rem; line-height: 1.55; }
 .ref-list li + li { margin-top: 7px; }
@@ -478,7 +486,7 @@ footer a:hover { text-decoration: underline; }
 .rv-msg:empty { display: none; }
 /* A tooltip trigger inside a control label clears the 24px touch target. */
 .rv-tip { display: inline-flex; align-items: center; min-height: 24px; }
-#tab-one .sc-note sub, #tab-variance .sc-note sub { line-height: 0; }
+#tab-one .sc-note sub, #tab-two .sc-note sub { line-height: 0; }
 /* Steady State page */
 .ss-cap { font-size: .8rem; color: var(--muted); line-height: 1.5; margin-top: 8px; min-height: 1.5em; }
 .ss-ds-note { margin: -6px 0 0; }
@@ -618,21 +626,20 @@ footer a:hover { text-decoration: underline; }
         <a class="tab" data-tab="one" href="#one"><span class="tab-n">③</span> <span class="tab-t">One System</span></a>
         <a class="tab" data-tab="two" href="#two"><span class="tab-n">④</span> <span class="tab-t">Two Systems</span></a>
         <a class="tab" data-tab="several" href="#several"><span class="tab-n">⑤</span> <span class="tab-t">Several Systems</span></a>
-        <a class="tab" data-tab="variance" href="#variance"><span class="tab-n">⑥</span> <span class="tab-t">Variance and Correlation</span></a>
-        <a class="tab" data-tab="steady" href="#steady"><span class="tab-n">⑦</span> <span class="tab-t">Steady State</span></a>
+        <a class="tab" data-tab="steady" href="#steady"><span class="tab-n">⑥</span> <span class="tab-t">Steady State</span></a>
       </div>
     </div>
     <div class="tab-group" role="group" aria-labelledby="pg-session">
       <span class="tab-group-lbl" id="pg-session">Session</span>
       <div class="tab-group-items">
-        <a class="tab" data-tab="report" href="#report"><span class="tab-n">⑧</span> <span class="tab-t">Report</span></a>
-        <a class="tab" data-tab="storage" href="#storage"><span class="tab-n">⑨</span> <span class="tab-t">Storage</span></a>
+        <a class="tab" data-tab="report" href="#report"><span class="tab-n">⑦</span> <span class="tab-t">Report</span></a>
+        <a class="tab" data-tab="storage" href="#storage"><span class="tab-n">⑧</span> <span class="tab-t">Storage</span></a>
       </div>
     </div>
     <div class="tab-group" role="group" aria-labelledby="pg-more">
       <span class="tab-group-lbl" id="pg-more">More information</span>
       <div class="tab-group-items">
-        <a class="tab" data-tab="references" href="#references"><span class="tab-n">⑩</span> <span class="tab-t">References</span></a>
+        <a class="tab" data-tab="references" href="#references"><span class="tab-n">⑨</span> <span class="tab-t">References</span></a>
       </div>
     </div>
   </nav>
@@ -646,15 +653,14 @@ footer a:hover { text-decoration: underline; }
       <option value="one">③ One System</option>
       <option value="two">④ Two Systems</option>
       <option value="several">⑤ Several Systems</option>
-      <option value="variance">⑥ Variance and Correlation</option>
-      <option value="steady">⑦ Steady State</option>
+      <option value="steady">⑥ Steady State</option>
     </optgroup>
     <optgroup label="Session">
-      <option value="report">⑧ Report</option>
-      <option value="storage">⑨ Storage</option>
+      <option value="report">⑦ Report</option>
+      <option value="storage">⑧ Storage</option>
     </optgroup>
     <optgroup label="More information">
-      <option value="references">⑩ References</option>
+      <option value="references">⑨ References</option>
     </optgroup>
   </select>
   <div id="data-strip" class="data-strip" aria-live="polite"><span class="ds-empty">No data loaded yet. Open <a href="#import">Import</a> to load a file or an example.</span></div>
@@ -665,7 +671,6 @@ footer a:hover { text-decoration: underline; }
   <section class="tp" id="tab-one" aria-label="One System"></section>
   <section class="tp" id="tab-two" aria-label="Two Systems"></section>
   <section class="tp" id="tab-several" aria-label="Several Systems"></section>
-  <section class="tp" id="tab-variance" aria-label="Variance and Correlation"></section>
   <section class="tp" id="tab-steady" aria-label="Steady State"></section>
   <section class="tp" id="tab-report" aria-label="Report"></section>
   <section class="tp" id="tab-storage" aria-label="Storage"></section>
@@ -15360,7 +15365,6 @@ import * as explorePage from './pages/explore.js';
 import * as onePage from './pages/one.js';
 import * as twoPage from './pages/two.js';
 import * as severalPage from './pages/several.js';
-import * as variancePage from './pages/variance.js';
 import * as steadyPage from './pages/steady.js';
 import * as reportPage from './pages/report.js';
 import * as storagePage from './pages/storage.js';
@@ -15383,7 +15387,7 @@ function pageOf(mod) {
   };
 }
 
-const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, referencesPage, galleryPage].map(pageOf);
+const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, steadyPage, reportPage, storagePage, referencesPage, galleryPage].map(pageOf);
 const BY_ID = new Map(PAGES.map(p => [p.id, p]));
 
 function renderDataStrip() {
@@ -15408,7 +15412,7 @@ function renderDataStrip() {
 // with the tooltip saying what is missing, and goes gray again if a removal
 // takes the requirement away while that page is open.
 const GATES = [
-  { pages: ['explore', 'one', 'variance', 'report'],
+  { pages: ['explore', 'one', 'report'],
     ok: () => state.datasets.length > 0,
     tip: 'Load a file or an example on the Import page first.' },
   { pages: ['two', 'several'],
@@ -15458,6 +15462,9 @@ function boot() {
   gatePages();
   state.on('datasets', gatePages);
 
+  // The retired Variance and Correlation page: its interval lives on One
+  // System and its F ratio on Two Systems, and an old link lands on the first.
+  if (/^#variance(\/|$)/.test(location.hash)) history.replaceState(null, '', '#one');
   initTabs({
     defaultTab: 'import',
     sections: Object.fromEntries(PAGES.filter(p => Array.isArray(p.sections) && p.sections.length).map(p => [p.id, p.sections])),
@@ -17294,9 +17301,9 @@ export default { id, title, render, onShow };
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
-import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -17529,6 +17536,20 @@ export function render(rootEl) {
     '<p>A replication outcome is an average over a whole run, and averages are close to normally distributed even when the observations are skewed, which is why the t interval on replication outcomes holds up well at moderate R.</p>'));
   root.appendChild(res);
 
+  // The variance: a chi-square interval on the system's variability as a
+  // performance measure, shown for replication outcomes only.
+  const varSec = el('div', 'sec');
+  varSec.hidden = true;
+  varSec.appendChild(el('div', 'sec-hd', 'Interval on the variance'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too, and matters more.'));
+  const vRow1 = el('div'), vRow2 = el('div');
+  varSec.append(vRow1, vRow2, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
+  varSec.appendChild(details('Why the variance interval is fragile',
+    '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
+    '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
+    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
+  root.appendChild(varSec);
+
   // Figure.
   const figSec = el('div', 'sec');
   figSec.appendChild(el('div', 'sec-hd', 'Replication outcomes'));
@@ -17556,7 +17577,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
+  els = { varSec, vRow1, vRow2, ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -17723,10 +17744,15 @@ function placeholderRows(label) {
 }
 
 /** Redraws the page from the current state. */
+// Card labels are set in capitals; a symbol keeps its own case, and so σ
+// does not turn into Σ.
+function S(html) { return '<span class="sym">' + html + '</span>'; }
+
 function draw() {
   if (!els) return;
   const ds = currentDataset();
   const level = state.settings.level;
+  els.varSec.hidden = true;
 
   els.unitBox.replaceChildren(unitLine(ds));
   els.warnBox.replaceChildren();
@@ -17809,6 +17835,23 @@ function draw() {
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np });
 
+  // The variance interval, on replication outcomes only.
+  const vi = pooled ? null : varianceInterval(x, level);
+  els.varSec.hidden = !vi;
+  if (vi) {
+    const pLo = (1 - level) / 2, pHi = 1 - pLo;
+    els.vRow1.replaceChildren(cardRow([
+      card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
+      card(S('s²'), num(vi.s2), 'sample variance'),
+      card(S('s'), num(vi.s), 'sample standard deviation'),
+      card(S('χ²') + ' quantiles', num(vi.chiLo) + ', ' + num(vi.chiHi), 'χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub>')
+    ]));
+    els.vRow2.replaceChildren(cardRow([
+      wide(card(lvl(level) + ' interval for ' + S('σ²'), '[' + num(vi.lo2) + ', ' + num(vi.hi2) + ']', '(R − 1) s² / χ²')),
+      wide(card(lvl(level) + ' interval for ' + S('σ'), '[' + num(vi.loS) + ', ' + num(vi.hiS) + ']', 'square roots of the σ² interval'))
+    ]));
+  }
+
   // The page's result, for its export row and the Report page.
   const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
   const intervalRows = np ? [
@@ -17823,6 +17866,10 @@ function draw() {
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication outcomes', headers: ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
+    ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
+    ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
+  ] });
   // Planning works on replication outcomes only.
   finish({
     title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
@@ -17906,7 +17953,7 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   } : { 'replication planning': 'off while the pooled observations are in use' });
-  const tables = resultBase.tables.concat(rows.length ? [{ name: 'Planning', headers: PLAN_HEADERS, rows }] : []);
+  const tables = resultBase.tables.concat(rows.length ? [{ name: 'Replications needed', headers: PLAN_HEADERS, rows }] : []);
   state.setResult(id, Object.assign({}, resultBase, { provenance: prov, tables }));
 }
 
@@ -18044,6 +18091,9 @@ const GROUPS = [
     'J. Banks, J. S. Carson, B. L. Nelson, and D. M. Nicol, <i>Discrete-Event System Simulation</i>, 5th ed. (Pearson, 2010), chapters 11 and 12: output analysis for a single system, comparison of system designs, Bonferroni families of intervals, and the two-stage screen for the best.',
     'A. M. Law, <i>Simulation Modeling and Analysis</i>, 5th ed. (McGraw-Hill, 2015), chapters 9 to 11: replications, warm-up, batch means, common random numbers, and the comparison of alternatives.'
   ]],
+  ['Simulation software', [
+    'W. D. Kelton, N. B. Zupick, and N. Ivey, <i>Simulation with Arena</i>, 7th ed. (McGraw-Hill, 2024): the output analyzer and the process analyzer whose comparisons and best-scenario search this tool carries out in the browser.'
+  ]],
   ['One System and Two Systems', [
     'B. L. Welch, “The generalization of “Student’s” problem when several different population variances are involved,” <i>Biometrika</i> 34 (1947) 28–35: the two-sample t procedure with unequal variances and the Welch–Satterthwaite degrees of freedom.',
     'F. Wilcoxon, “Individual comparisons by ranking methods,” <i>Biometrics Bulletin</i> 1 (1945) 80–83; H. B. Mann and D. R. Whitney, “On a test of whether one of two random variables is stochastically larger than the other,” <i>Annals of Mathematical Statistics</i> 18 (1947) 50–60: the signed-rank and rank-sum tests.',
@@ -18058,10 +18108,9 @@ const GROUPS = [
     'O. J. Dunn, “Multiple comparisons using rank sums,” <i>Technometrics</i> 6 (1964) 241–252; S. Siegel and N. J. Castellan, <i>Nonparametric Statistics for the Behavioral Sciences</i>, 2nd ed. (McGraw-Hill, 1988): the pairwise comparisons after Kruskal–Wallis and after Friedman.',
     'B. L. Nelson, J. Swann, D. Goldsman, and W. Song, “Simple procedures for selecting the best simulated system when the number of alternatives is large,” <i>Operations Research</i> 49 (2001) 950–963; Y. Rinott, “On two-stage selection procedures and related probability-inequalities,” <i>Communications in Statistics, Theory and Methods</i> A7 (1978) 799–811: the screen for the best and its second-stage sizes.'
   ]],
-  ['Variance and Correlation, and the checks', [
+  ['The checks', [
     'M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>Journal of the American Statistical Association</i> 69 (1974) 364–367; H. Levene, “Robust tests for equality of variances,” in <i>Contributions to Probability and Statistics</i>, ed. I. Olkin (Stanford University Press, 1960) 278–292.',
     'S. S. Shapiro and M. B. Wilk, “An analysis of variance test for normality (complete samples),” <i>Biometrika</i> 52 (1965) 591–611; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551: the test and the algorithm the Normality section computes it by.',
-    'R. A. Fisher, “On the “probable error” of a coefficient of correlation deduced from a small sample,” <i>Metron</i> 1 (1921) 3–32: the z transformation behind the interval on a correlation.'
   ]],
   ['Steady State', [
     'P. D. Welch, “The statistical analysis of simulation results,” in <i>The Computer Performance Modeling Handbook</i>, ed. S. S. Lavenberg (Academic Press, 1983) 268–328: the moving-average plot for choosing a warm-up.',
@@ -18106,7 +18155,7 @@ export const title = 'Report';
 
 // Results are listed in the order the pages appear in the navigation; a page
 // not named here follows, in the order its result arrived.
-const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'variance', 'steady'];
+const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'steady'];
 
 let el = null;
 
@@ -18319,7 +18368,7 @@ import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -18333,7 +18382,7 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. No comparison is made; a design’s interval is read on its own.' },
+  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other; set a benchmark to test every design against it with the family-wise error held at α.' },
   { id: 'diffs', label: 'Bonferroni differences', tip: 'Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing pooled and no analysis of variance first.' },
   { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
   { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
@@ -18378,6 +18427,12 @@ let controlId = null;
 // The indifference zone: null follows the default (10% of the pooled sd),
 // a number is the reader's own value.
 let epsUser = null;
+// The benchmark the Bonferroni means are tested against: off by default, and
+// its value kept per set of designs (the units differ between sets).
+let benchOn = false;
+let benchVal = null;
+let benchSpin = null;
+let benchStep = null;
 let epsSpin = null;
 let epsStep = null;
 let pending = false;
@@ -18771,6 +18826,58 @@ function ensureEpsSpinner(step) {
   epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, 'eps', v); schedule(); } });
 }
 
+// The benchmark the means (or pseudo-medians) are tested against: the
+// control's state, the flag for each interval, and the pieces of the plot,
+// the table, and the caption that depend on it. Off, every piece is empty.
+function benchmark(items, ds) {
+  const pair = rootEl.querySelector('#sev-bench-pair');
+  const on = benchOn && items.length > 0;
+  rootEl.querySelector('#sev-bench-on').checked = benchOn;
+  pair.hidden = !on;
+  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|');
+  let value = null;
+  if (on) {
+    const centers = items.map(it => it.center);
+    const stored = state.getPick(id, key);
+    if (Number.isFinite(benchVal) && benchSpin && benchSpin.key === key) value = benchVal;
+    else if (typeof stored === 'number' && Number.isFinite(stored)) value = stored;
+    else value = centers.reduce((a, b) => a + b, 0) / centers.length;
+    const span = Math.max(...items.map(it => it.hi)) - Math.min(...items.map(it => it.lo));
+    const step = stepFor(span || Math.abs(value) || 1);
+    // The value is kept at the spinner's own precision, and so the field,
+    // the line, and the verdict all show the same number.
+    value = Number((Math.round(value / step) * step).toFixed(Math.max(0, -Math.floor(Math.log10(step)))));
+    benchVal = value;
+    if (!benchSpin || benchSpin.step !== step || benchSpin.key !== key) {
+      const host = rootEl.querySelector('#sev-bench-host');
+      host.innerHTML = '<input id="sev-bench" type="text" class="par-inp">';
+      const inp = host.querySelector('#sev-bench');
+      inp.value = String(value);
+      benchSpin = { key, step, spin: spinner(inp, { step, min: -1e12, max: 1e12, onChange: v => { benchVal = v; state.setPick(id, key, v); schedule(); } }) };
+    } else benchSpin.spin.set(value, false);
+    rootEl.querySelector('#sev-bench-unit').textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+  }
+  const flag = i => on && (items[i].lo > value || items[i].hi < value);
+  const word = i => (!on ? '' : items[i].lo > value ? 'above the benchmark' : items[i].hi < value ? 'below the benchmark' : 'contains the benchmark');
+  return {
+    on, value: on ? value : null, flag, word,
+    cell: i => (flag(i) ? '<span class="cmp-flag">' + word(i).replace(' the benchmark', '') + '</span>' : 'contains'),
+    // The spinner shows the value as the line moves, and so the line carries no label of its own.
+    line: fg => { if (on) dragLine(fg, { value, step: benchSpin.step, ariaLabel: 'Benchmark', label: null, onMove: v => benchSpin.spin.set(v, false), onEnd: v => { benchVal = v; state.setPick(id, key, v); benchSpin.spin.set(v, false); schedule(); } }); },
+    legend: base => [{ swatch: 'interval', color: '--est', label: base + (on ? ', contains the benchmark' : '') }]
+      .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }, { swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
+    caption: () => (on ? ' A red dashed interval excludes the benchmark, and that design is declared above or below it; with every interval at 1 − α/k, the chance of any false declaration across the k designs is at most α. Drag the dashed line, or type a value, to move the benchmark.' : ''),
+    verdict: short => {
+      const above = items.map((it, i) => i).filter(i => items[i].lo > value), below = items.map((it, i) => i).filter(i => items[i].hi < value);
+      const name = ids => ids.map(i => short[i]).join(', ');
+      if (!above.length && !below.length) return 'No design’s interval excludes the benchmark ' + num(value) + ': none is declared above or below it at this family-wise level.';
+      return 'Against the benchmark ' + num(value) + ': ' + (above.length ? plural(above.length, 'design') + ' above it (' + name(above) + ')' : '') +
+        (above.length && below.length ? ', ' : '') + (below.length ? plural(below.length, 'design') + ' below it (' + name(below) + ')' : '') +
+        ', each declared with the family-wise error held at α.';
+    }
+  };
+}
+
 function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
@@ -18886,7 +18993,10 @@ function update() {
   const short = shortNames(list);
   const unit = rootEl.querySelector('#sev-unit');
   const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
-  bodies.forEach(b => { b.innerHTML = ''; });
+  // Each body keeps its height while it is rebuilt, and so the document never
+  // shrinks under the reader and the scroll position stays where it was.
+  bodies.forEach(b => { const h = b.offsetHeight; if (h) b.style.minHeight = h + 'px'; b.innerHTML = ''; });
+  const release = () => bodies.forEach(b => { b.style.minHeight = ''; });
 
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
@@ -18898,6 +19008,7 @@ function update() {
     resultBase = null;
     planCtx = { msg: 'Check two or more designs above to plan replications.' };
     drawPlan();
+    release();
     return;
   }
   const ns = groups.map(g => g.length);
@@ -18938,36 +19049,44 @@ function update() {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
       fg => {
-        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi)]);
-        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate })), { rowPx: 30 });
+        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
+        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
+        bm.line(fg);
       },
-      [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval' }],
+      bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
       'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
-      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.');
+      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
+    if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
-    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)]);
-    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'], rows));
-    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'],
-      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)]) });
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bm.on ? ['vs benchmark'] : []), rows));
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    if (bm.on) summary.push(bm.verdict(short));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
       fg => {
-        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi)]);
-        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean })), { rowPx: 30 });
+        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
+        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
+        bm.line(fg);
       },
-      [{ swatch: 'interval', color: '--est', label: 'design mean with its ' + levelPct(sm.perLevel) + ' t interval' }],
+      bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
-      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.');
-    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)]);
-    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'], rows));
+      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
+    if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
+    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bm.on ? ['vs benchmark'] : []), rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the Bonferroni means', declared: INDEP_REPS }));
-    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
-      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi]) });
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    if (bm.on) summary.push(bm.verdict(short));
       }
   }
 
@@ -19293,12 +19412,14 @@ function update() {
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
+      benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
       'indifference zone': Number.isFinite(eps) ? eps : ''
     },
     tables,
     summaryHtml: summary.map(s => '<p>' + s + '</p>').join('')
   };
   drawPlan();
+  release();
 }
 
 // Redraws the planning card from the context update() left, and registers
@@ -19458,11 +19579,6 @@ export function render(root) {
         '</span></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting. Designs whose means are within ε of the best count as good enough, and the screen and the second stage are sized to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
-        '<span class="ctrl-note" id="sev-eps-note"></span>' +
-        '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
-      '</div>' +
-      '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run on its own random streams. Paired: replication i of every design used the same random inputs (common random numbers across designs), and so each replication is a block. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-pair-lbl">' +
           '<button type="button" class="seg-btn" data-pair="independent" aria-pressed="true">Independent</button>' +
@@ -19492,7 +19608,10 @@ export function render(root) {
     '<p class="sev-key" id="sev-key"></p>' +
     '<div class="ctrl-grp-lbl subnav-lbl">Analysis</div>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. Nothing is compared here; each interval is read on its own.</p><div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
+    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other here; set a benchmark to test every design against it, with the chance of any false rejection across the k tests held at α.</p>' +
+      '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="A target or requirement for the response, in its units. A design whose interval excludes the benchmark is declared above or below it; the dashed line on the plot can be dragged, and the arrow keys move it when it has focus.">Compare with a benchmark</span></label>' +
+        '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span></div>' +
+      '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
     '<div class="sec" data-section="diffs"><h3 class="sec-title">Bonferroni differences</h3><p class="sec-lede">Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
@@ -19515,7 +19634,13 @@ export function render(root) {
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
-    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p><div id="sev-subset-body"></div></div>';
+    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting, used by the screen and its second stage only. Designs whose means are within ε of the best count as good enough, and the screen and the second-stage sizes are set to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
+        '<span class="ctrl-note" id="sev-eps-note"></span>' +
+        '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
+      '</div>' +
+      '<div id="sev-subset-body"></div></div>';
 
   // Each section's own planning card: the means and the differences are
   // sized by a target half-width, the analysis of variance by a target power.
@@ -19570,6 +19695,7 @@ export function render(root) {
   });
   root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
   root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
+  root.querySelector('#sev-bench-on').addEventListener('change', e => { benchOn = e.target.checked; state.setPick(id, 'benchOn', benchOn); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
@@ -19621,6 +19747,7 @@ function applyStored() {
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
+  if (get('benchOn') === true) benchOn = true;
   const e = get('eps');
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;
   if (PLAN_POWERS.includes(get('power'))) {
@@ -20854,7 +20981,23 @@ export function render(root) {
     '</div>';
   const q = s => root.querySelector(s);
   el = { root, status: q('#ss-status'), size: q('#ss-size'), list: q('#ss-list'), forget: q('#ss-forget') };
-  el.forget.addEventListener('click', () => { forgetSession(); refresh(); });
+  // Two clicks, as on the Import page's Remove all: the first arms the
+  // button and names what the second will do, and three idle seconds disarm it.
+  let armTimer = null;
+  const disarm = () => { el.forget.dataset.armed = ''; el.forget.textContent = 'Forget this session'; };
+  el.forget.addEventListener('click', () => {
+    if (el.forget.dataset.armed === '1') {
+      clearTimeout(armTimer);
+      disarm();
+      forgetSession();
+      refresh();
+      return;
+    }
+    el.forget.dataset.armed = '1';
+    el.forget.textContent = 'Click again to forget ' + (state.datasets.length ? plural(state.datasets.length, 'dataset') + ' and every setting' : 'every stored setting');
+    clearTimeout(armTimer);
+    armTimer = setTimeout(() => { if (el.forget.isConnected) disarm(); }, 3000);
+  });
   state.on('datasets', refresh);
   state.on('session', refresh);
   refresh();
@@ -20878,7 +21021,7 @@ import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
 import { welch, pooledT, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch,
          planHalfWidthPooled, powerPooled, planPowerPooled } from '../stats/compare.js';
-import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { tInterval, fRatio, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
@@ -21416,7 +21559,7 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Planning', headers: PLAN_HEADERS, rows }]) }));
+  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]) }));
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
@@ -21527,6 +21670,30 @@ function renderIndependent(res, notes, d, level) {
     : 'The top plot shows every replication outcome of each design, with each design’s mean and its own ' + L +
       ' t interval under its dots. The bottom plot is the ' + (pooled ? 'pooled-variance t' : 'Welch') + ' interval for the difference of the means, drawn against zero; an interval that excludes zero is drawn red and dashed.'));
 
+  // The variances: the F ratio, an inference on which design is more
+  // variable, with variability as a performance measure of its own.
+  const fr = d ? fRatio(d.eA.v, d.eB.v, level) : null;
+  const vs = sec('Variances of A and B');
+  res.appendChild(vs);
+  vs.appendChild(caption('Which design is more variable: the ratio of the two sample variances with its F interval. The equal-variances assumption of the pooled t is a different question, answered by Levene’s test on the checks line above.'));
+  const vv = (x, f = num) => (fr ? f(x) : dash);
+  vs.appendChild(cardRow([
+    card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), vv(fr && fr.F), 'ratio of sample variances'),
+    card(S('df<sub>1</sub>'), vv(fr && fr.df1, intl), 'R<sub>A</sub> − 1'),
+    card(S('df<sub>2</sub>'), vv(fr && fr.df2, intl), 'R<sub>B</sub> − 1'),
+    card('Two-sided p', fr ? pValue(fr.p) : dash, 'against σ²<sub>A</sub> = σ²<sub>B</sub>'),
+    wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
+  ]));
+  const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
+  const vVerdict = document.createElement('p');
+  vVerdict.className = 'cmp-verdict cmp-res';
+  vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
+    : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+  vs.appendChild(vVerdict);
+  if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
+    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data and is instead assumed when using the F ratio; it is what the Independent setting declares.' }));
+  vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, on the checks line above and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
+
   if (!w) {
     resultBase = null;
     planCtx = { msg: 'Choose two different datasets above to plan replications.' };
@@ -21556,7 +21723,14 @@ function renderIndependent(res, notes, d, level) {
     summaryHtml: '<p>' + tName + ' comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
+  if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fContains ? 'yes' : 'no']
+  ] });
 }
+
+// Card labels are set in capitals; a symbol keeps its own case, and so σ
+// does not turn into Σ.
+function S(html) { return '<span class="sym">' + html + '</span>'; }
 
 // ── Two more views of the matched pairs ───────────────────────────────────
 // Under the paired differences, one figure shows the pairs either column by
@@ -22079,393 +22253,6 @@ function separateB() {
 
 /** Called each time the page is shown. */
 export function onShow() { update(); }
-
-export default { id, title, render, onShow };
-</script>
-<script type="text/plain" data-module="js/pages/variance.js">
-// The Variance and Correlation page: the chi-square interval for one
-// dataset's variance and standard deviation, the F test and interval for the
-// ratio of two datasets' variances, and the Pearson correlation of two
-// datasets' replication outcomes paired by position, with its scatter plot.
-// All three work on replication outcomes and all three lean on normality.
-
-import * as state from '../state.js';
-import { repEstimates, canInfer } from '../data/model.js';
-import { varianceInterval, fRatio, correlation, regressionLine } from '../stats/intervals.js';
-import { levene } from '../stats/compare.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, DF_LABEL } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
-import { installExportRow } from '../ui/exportrow.js';
-import { assumptionChecks } from '../ui/checks.js';
-import { registerTips } from '../ui/tooltip.js';
-import { num, intl, pct, pValue, esc, dash, lvl, pEq } from '../ui/format.js';
-
-/** The page's hash id. */
-export const id = 'variance';
-/** The page's title. */
-export const title = 'Variance and Correlation';
-
-const NORMALITY = 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.';
-const NORMALITY_F = 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test does not assume normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form), and it is the usual check before a procedure that pools variances.';
-const CORR_NOTE = 'Zero correlation is not independence, and simulation output is routinely correlated within a run; this r describes the pairing of replication outcomes across the two datasets, which is what a paired comparison relies on.';
-
-let root = null;
-let els = null;
-let fig = null;
-let pickA = null, pickB = null;
-
-// An interval or a pair of numbers takes a full row on a phone rather than
-// being cut short, before and after a result arrives alike.
-function wide(c) { c.classList.add('sc-wide'); return c; }
-
-function el(tag, cls, html) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (html !== undefined) e.innerHTML = html;
-  return e;
-}
-
-function visible() {
-  return !!root && root.classList.contains('active');
-}
-
-function finite(ds) {
-  return Array.from(repEstimates(ds)).filter(Number.isFinite);
-}
-
-function q(p) { return num(p, 4); }
-
-// Card labels are set in capitals; a symbol keeps its own case, and so σ
-// does not turn into Σ.
-function S(html) { return '<span class="sym">' + html + '</span>'; }
-
-/**
- * Renders the page into its section.
- * @param {HTMLElement} rootEl
- */
-export function render(rootEl) {
-  root = rootEl;
-  root.innerHTML = '';
-  root.appendChild(el('h2', null, title));
-  root.appendChild(el('p', 'lede',
-    'Three procedures on replication outcomes: a chi-square interval for the variance of one dataset, an F test comparing the variances of two, and Pearson\u2019s r between two datasets paired replication by replication, which measures how the two designs move together across replications and is not the autocorrelation of a series over time (that correlogram is on the Steady State page). ' +
-    'All three are more fragile than the t interval for a mean because they depend on the outcomes being normally distributed.'));
-
-  const ctrl = el('div', 'sec ctrl-card');
-  ctrl.innerHTML =
-    '<div class="ctrl-row">' +
-      '<span class="ctrl-pair"><label class="ctrl-lbl" for="va-a">Dataset A</label><select id="va-a"></select></span>' +
-      '<span class="ctrl-pair"><label class="ctrl-lbl" for="va-b">Dataset B</label><select id="va-b"></select></span>' +
-      '<span class="ctrl-pair"><label class="ctrl-lbl" for="va-lvl">Confidence level</label><select id="va-lvl"></select></span>' +
-    '</div>' +
-    '<p class="ctrl-note">Dataset B is optional; choosing it adds the F ratio of the two variances and Pearson\u2019s r between the paired replication outcomes.</p>';
-  root.appendChild(ctrl);
-
-  // Variance of A.
-  const vSec = el('div', 'sec');
-  vSec.appendChild(el('div', 'sec-hd', 'Variance of A'));
-  const vUnit = el('div'), vWarn = el('div'), vRow1 = el('div'), vRow2 = el('div');
-  vSec.append(vUnit, vWarn, vRow1, vRow2, notice('warn', NORMALITY));
-  vSec.appendChild(details('Why the variance interval is fragile',
-    '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
-    '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
-    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
-  root.appendChild(vSec);
-
-  // F ratio.
-  const fSec = el('div', 'sec');
-  fSec.appendChild(el('div', 'sec-hd', 'Ratio of variances (A over B)'));
-  const fMsg = el('p', 'rv-line'), fRow1 = el('div'), fRow2 = el('div'), fVerdict = el('p', 'rv-verdict');
-  const bfHead = el('p', 'rv-line', 'Levene’s test of equal variances (Brown–Forsythe, centered on the medians), which does not assume normality:');
-  const bfRow = el('div'), bfVerdict = el('p', 'rv-verdict'), fChecks = el('div');
-  fSec.append(fMsg, fRow1, fRow2, fVerdict, bfHead, bfRow, bfVerdict, fChecks, notice('warn', NORMALITY_F));
-  root.appendChild(fSec);
-
-  // Correlation.
-  const cSec = el('div', 'sec');
-  cSec.appendChild(el('div', 'sec-hd', 'Correlation between the replication outcomes of A and B (Pearson\u2019s r)'));
-  const cMsg = el('div', 'rv-msg'), cRow1 = el('div'), cRow2 = el('div');
-  const figBox = el('div'), leg = el('div'), cap = el('p', 'rv-cap');
-  cSec.append(cMsg, cRow1, cRow2, figBox, leg, cap, notice('info', CORR_NOTE));
-  root.appendChild(cSec);
-  fig = makeFigure(figBox, { height: 320, narrowHeight: 340, xLabel: 'Dataset A outcome', yLabel: 'Dataset B outcome', ariaLabel: 'Scatter plot of the paired replication outcomes' });
-  exportButtons(figBox, fig, 'correlation-scatter');
-
-  els = { vUnit, vWarn, vRow1, vRow2, fMsg, fRow1, fRow2, fVerdict, bfRow, bfVerdict, fChecks, cMsg, cRow1, cRow2, leg, cap,
-          a: ctrl.querySelector('#va-a'), b: ctrl.querySelector('#va-b'), lvl: ctrl.querySelector('#va-lvl') };
-
-  pickA = datasetSelect(els.a, { value: state.selected() || undefined, remember: { page: id, key: 'a' } });
-  pickB = datasetSelect(els.b, { placeholder: 'none', remember: { page: id, key: 'b' } });
-  els.a.addEventListener('change', ev => {
-    const before = state.selected();
-    if (ev.isTrusted && els.a.value) state.select(els.a.value);
-    if (state.selected() === before && visible()) draw();
-  });
-  els.b.addEventListener('change', () => { if (visible()) draw(); });
-  levelSelect(els.lvl);
-
-  // An import that brings two or more designs from one file fills A and B
-  // with its first two while B is still empty, so the pair is compared without
-  // any clicks; a reader's own choice of B is never overridden.
-  state.on('datasets', ev => {
-    if (!ev || ev.type !== 'add' || els.b.value) return;
-    const added = state.get(ev.id);
-    if (!added || !added.source) return;
-    const fam = state.datasets.filter(d => d.source && d.source.file === added.source.file && canInfer(d).ok);
-    if (fam.length < 2) return;
-    els.a.value = fam[0].id; els.a.dispatchEvent(new Event('change', { bubbles: true }));
-    els.b.value = fam[1].id; els.b.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  state.on('datasets', () => { if (visible()) draw(); });
-  state.on('settings', () => { if (visible()) draw(); });
-  state.on('selection', sel => {
-    if (sel && sel !== els.a.value && state.get(sel)) els.a.value = sel;
-    if (visible()) draw();
-  });
-
-  draw();
-  installExportRow(root, id);
-  registerTips(root);
-}
-
-function placeholderVariance(level) {
-  const L = lvl(level);
-  els.vRow1.replaceChildren(cardRow([card('R (' + DF_LABEL + ')', dash, '&nbsp;'), card(S('s²'), dash, '&nbsp;'), card(S('s'), dash, '&nbsp;')]));
-  els.vRow2.replaceChildren(cardRow([
-    wide(card(L + ' interval for ' + S('σ²'), '[' + dash + ', ' + dash + ']', '&nbsp;')),
-    wide(card(L + ' interval for ' + S('σ'), '[' + dash + ', ' + dash + ']', '&nbsp;')),
-    wide(card(S('χ²') + ' quantiles', dash, '&nbsp;'))
-  ]));
-}
-
-function placeholderF(level) {
-  els.fRow1.replaceChildren(cardRow([card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;')]));
-  els.fRow2.replaceChildren(cardRow([card(lvl(level) + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), '[' + dash + ', ' + dash + ']', '&nbsp;')]));
-  els.fVerdict.innerHTML = '&nbsp;';
-  els.bfRow.replaceChildren(cardRow([card(S('F'), dash, '&nbsp;'), card(S('df1'), dash, '&nbsp;'), card(S('df2'), dash, '&nbsp;'), card(S('p'), dash, '&nbsp;')]));
-  els.bfVerdict.innerHTML = '&nbsp;';
-  els.fChecks.replaceChildren();
-}
-
-function placeholderCorr(level) {
-  els.cRow1.replaceChildren(cardRow([card(S('r'), dash, '&nbsp;'), card(S('n') + ' (pairs)', dash, '&nbsp;'), card(S('t'), dash, '&nbsp;')]));
-  els.cRow2.replaceChildren(cardRow([card(DF_LABEL, dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;'), wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + dash + ', ' + dash + ']', '&nbsp;'))]));
-}
-
-function drawScatter(d, cr, level) {
-  if (!d) {
-    fig.render(f => {
-      f.x([0, 1]); f.y([0, 1]);
-      f.axes({ xLabel: 'Dataset A outcome', yLabel: 'Dataset B outcome', xFormat: () => '', yFormat: () => '' });
-      svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No pairs to show.';
-    });
-    legend(els.leg, [{ swatch: 'dot', color: '--est', label: 'one replication pair (A, B)' }]);
-    els.cap.textContent = 'The scatter plot appears when A and B have the same number of replication outcomes.';
-    return;
-  }
-  const xl = 'A: ' + d.a.name, yl = 'B: ' + d.b.name;
-  // The line is drawn only once the test of zero correlation rejects at the
-  // page's level: a fitted line through points that show no association
-  // would invite reading a trend into noise.
-  const alpha = 1 - level;
-  const fitted = cr && Number.isFinite(cr.p) && cr.p < alpha && d.x.length >= 3 ? regressionLine(d.x, d.y, level) : null;
-  fig.render(f => {
-    // The axes are drawn here rather than by scatter, to carry the datasets' names.
-    scatter(f, d.x, d.y, { axes: false, label: 'one replication pair (A, B)' });
-    f.axes({ xLabel: xl, yLabel: yl });
-    if (!fitted) return;
-    const [x0, x1] = f.sx.domain, [y0, y1] = f.sy.domain;
-    const clampY = v => Math.max(y0, Math.min(y1, v));
-    const K = 60, up = [], down = [], mid = [];
-    const gx = [], gLo = [], gHi = [], gFit = [];
-    for (let i = 0; i <= K; i++) {
-      const xv = x0 + (x1 - x0) * i / K, b = fitted.band(xv);
-      up.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.hi)).toFixed(1));
-      down.push(f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.lo)).toFixed(1));
-      mid.push((i ? 'L' : 'M') + f.sx(xv).toFixed(1) + ',' + f.sy(clampY(b.fit)).toFixed(1));
-      gx.push(xv); gLo.push(b.lo); gHi.push(b.hi); gFit.push(b.fit);
-    }
-    // Band first and line second, so the points stay on top in the exports too.
-    f.series.unshift({ kind: 'band', x: gx, lo: gLo, hi: gHi, color: tok('--truth'), label: lvl(level) + ' confidence band for the mean of B' },
-      { kind: 'line', x: [x0, x1], y: [gFit[0], gFit[K]], color: tok('--truth'), width: 2, label: 'least-squares line of B on A' });
-    // Band first, then the line, then the points stay on top: the scatter
-    // group already exists, so the two are inserted before it.
-    const pts = f.inner.querySelector('.m-scatter');
-    const band = svgEl('path', { d: 'M' + up.join('L') + 'L' + down.reverse().join('L') + 'Z', fill: tok('--band'), stroke: 'none' }, f.inner);
-    const line = svgEl('path', { d: mid.join(''), fill: 'none', stroke: tok('--truth'), 'stroke-width': 2 }, f.inner);
-    if (pts) { f.inner.insertBefore(band, pts); f.inner.insertBefore(line, pts); }
-  });
-  const items = [{ swatch: 'dot', color: '--est', label: 'one replication pair (A, B)' }];
-  if (fitted) {
-    items.push({ swatch: 'line', color: '--truth', label: 'least-squares line of B on A' });
-    items.push({ swatch: 'shade', color: '--truth', label: lvl(level) + ' confidence band for the mean of B at each A' });
-  }
-  legend(els.leg, items);
-  els.cap.textContent = fitted
-    ? 'Each point pairs replication i of A with replication i of B. The test of zero correlation rejects at α = ' + num(alpha, 2) +
-      ', and so the least-squares line B = ' + num(fitted.intercept) + ' + ' + num(fitted.slope) + '·A is drawn with the ' + lvl(level) +
-      ' confidence band for the mean of B at each A (residual standard deviation ' + num(fitted.s) + ' on ' + fitted.df + ' degrees of freedom); the line describes the association in this sample, not a prediction for a new run.'
-    : 'Each point pairs replication i of A with replication i of B; points that rise together from left to right show positive correlation. No line is drawn because the test of zero correlation does not reject at α = ' + num(alpha, 2) + ', and so a fitted trend would describe noise.';
-}
-
-/** Redraws the page from the current state. */
-function draw() {
-  if (!els) return;
-  const level = state.settings.level;
-  const a = els.a.value ? state.get(els.a.value) : null;
-  const b = els.b.value ? state.get(els.b.value) : null;
-  const tables = [];
-
-  // Variance of A.
-  els.vUnit.replaceChildren(unitLine(a));
-  els.vWarn.replaceChildren();
-  let vi = null;
-  if (a) {
-    const inf = canInfer(a);
-    if (!inf.ok) els.vWarn.appendChild(notice('warn', esc(inf.reason)));
-    else vi = varianceInterval(finite(a), level);
-  }
-  if (vi) {
-    const pLo = (1 - level) / 2, pHi = 1 - pLo;
-    const L = lvl(level);
-    els.vRow1.replaceChildren(cardRow([
-      card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
-      card(S('s²'), num(vi.s2), 'sample variance'),
-      card(S('s'), num(vi.s), 'sample standard deviation')
-    ]));
-    els.vRow2.replaceChildren(cardRow([
-      wide(card(L + ' interval for ' + S('σ²'), '[' + num(vi.lo2) + ', ' + num(vi.hi2) + ']', '(R − 1) s² / χ²')),
-      wide(card(L + ' interval for ' + S('σ'), '[' + num(vi.loS) + ', ' + num(vi.hiS) + ']', 'square roots of the σ² interval')),
-      wide(card(S('χ²') + ' quantiles', num(vi.chiLo) + ', ' + num(vi.chiHi),
-        'χ²<sub>' + q(pLo) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + q(pHi) + ', ' + intl(vi.df) + '</sub>'))
-    ]));
-    tables.push({ name: 'Variance of A', headers: ['statistic', 'value'], rows: [
-      ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
-      ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + q(pLo), vi.chiLo], ['chi-square ' + q(pHi), vi.chiHi]
-    ] });
-  } else {
-    placeholderVariance(level);
-  }
-
-  // F ratio.
-  let fr = null;
-  if (!b) {
-    els.fMsg.textContent = 'Choose dataset B to compare the two variances.';
-  } else if (!a) {
-    els.fMsg.textContent = 'Choose dataset A as well.';
-  } else if (!canInfer(b).ok) {
-    els.fMsg.textContent = 'Dataset B has fewer than two replication outcomes, and so its variance cannot be estimated.';
-  } else if (!vi) {
-    els.fMsg.textContent = 'Dataset A has fewer than two replication outcomes, and so its variance cannot be estimated.';
-  } else {
-    fr = fRatio(finite(a), finite(b), level);
-    els.fMsg.textContent = a.id === b.id
-      ? 'A and B are the same dataset, and so the ratio is exactly 1.'
-      : 'A: ' + a.name + ' (s = ' + num(fr.s1) + '); B: ' + b.name + ' (s = ' + num(fr.s2) + ').';
-  }
-  if (fr) {
-    const L = lvl(level);
-    els.fRow1.replaceChildren(cardRow([
-      card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), num(fr.F), 'ratio of sample variances'),
-      card(S('df1'), intl(fr.df1), 'R<sub>A</sub> − 1'),
-      card(S('df2'), intl(fr.df2), 'R<sub>B</sub> − 1'),
-      card(S('p') + ' (two-sided)', pValue(fr.p), 'against σ²<sub>A</sub> = σ²<sub>B</sub>')
-    ]));
-    els.fRow2.replaceChildren(cardRow([card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), '[' + num(fr.lo) + ', ' + num(fr.hi) + ']', 'F divided by the F quantiles')]));
-    const contains = fr.lo <= 1 && 1 <= fr.hi;
-    els.fVerdict.innerHTML = contains
-      ? 'The interval contains 1: insufficient evidence that the variances differ at this level (' + L + ').'
-      : 'The interval excludes 1: the variances differ at this level (' + L + ').';
-    tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
-      ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi],
-      ['interval contains 1', contains ? 'yes' : 'no']
-    ] });
-    const lv = levene([finite(a), finite(b)]);
-    els.bfRow.replaceChildren(cardRow([
-      card(S('F'), num(lv.F), 'ANOVA of |outcome − median|'),
-      card(S('df1'), intl(lv.df1), 'k − 1'),
-      card(S('df2'), intl(lv.df2), 'R<sub>A</sub> + R<sub>B</sub> − 2'),
-      card(S('p'), pValue(lv.p), 'against equal spreads')
-    ]));
-    const alpha = 1 - level;
-    els.bfVerdict.innerHTML = lv.p < alpha
-      ? 'Levene rejects at α = ' + num(alpha, 2) + ': the spreads differ, without assuming normality.'
-      : 'Levene does not reject at α = ' + num(alpha, 2) + ': no evidence that the spreads differ.';
-    tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
-    els.fChecks.replaceChildren(assumptionChecks({ sets: [{ name: 'A', values: finite(a), dsId: a.id }, { name: 'B', values: finite(b), dsId: b.id }], alpha: 1 - state.settings.base,
-      procedure: 'the F ratio', declared: 'between the two datasets cannot be checked from the data and is instead assumed when using the F ratio.' }));
-  } else {
-    placeholderF(level);
-  }
-
-  // Correlation.
-  els.cMsg.replaceChildren();
-  let cr = null, pair = null;
-  if (a && b) {
-    const ea = repEstimates(a), eb = repEstimates(b);
-    if (ea.length !== eb.length) {
-      els.cMsg.appendChild(notice('warn',
-        'A has ' + esc(intl(ea.length)) + ' replications and B has ' + esc(intl(eb.length)) + '. ' +
-        'Correlation pairs replication i of A with replication i of B, and so the two need the same number of replications, with replication i of each run on the same random numbers (common random numbers). ' +
-        'Rerun the shorter one, or drop the extra replications from the longer one before importing it, to make them comparable.'));
-    } else {
-      const x = [], y = [];
-      let dropped = 0;
-      for (let i = 0; i < ea.length; i++) {
-        if (Number.isFinite(ea[i]) && Number.isFinite(eb[i])) { x.push(ea[i]); y.push(eb[i]); } else dropped++;
-      }
-      if (dropped) els.cMsg.appendChild(notice('info', esc(intl(dropped)) + (dropped === 1 ? ' pair was' : ' pairs were') + ' left out because a replication has no outcome.'));
-      if (x.length >= 3) {
-        cr = correlation(x, y, level);
-        pair = { a, b, x, y };
-        if (cr.note) els.cMsg.appendChild(notice('info', esc(cr.note)));
-      } else {
-        els.cMsg.appendChild(notice('warn', 'The test of zero correlation needs at least 3 pairs of replication outcomes.'));
-      }
-    }
-  } else {
-    els.cMsg.appendChild(el('p', 'rv-line', 'Choose datasets A and B to see Pearson\u2019s r between their replication outcomes.'));
-  }
-  if (cr) {
-    els.cRow1.replaceChildren(cardRow([
-      card(S('r'), num(cr.r), 'Pearson correlation'),
-      card(S('n') + ' (pairs)', intl(cr.n), 'replication pairs'),
-      card(S('t'), num(cr.t), 'r √((n − 2) / (1 − r²))')
-    ]));
-    els.cRow2.replaceChildren(cardRow([
-      card(DF_LABEL, intl(cr.df), 'n − 2'),
-      card(S('p') + ' (two-sided)', pValue(cr.p), 'against ρ = 0'),
-      wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + num(cr.lo) + ', ' + num(cr.hi) + ']', 'tanh(atanh r ± z / √(n − 3))'))
-    ]));
-    tables.push({ name: 'Pearson correlation of A and B', headers: ['statistic', 'value'], rows: [
-      ['r', cr.r], ['n', cr.n], ['t', cr.t], ['df', cr.df], ['p (two-sided)', cr.p], ['lower', cr.lo], ['upper', cr.hi]
-    ] });
-  } else {
-    placeholderCorr(level);
-  }
-  drawScatter(pair, cr, level);
-
-  if (!tables.length) { state.setResult(id, null); return; }
-  state.setResult(id, {
-    title: 'Variance and correlation: ' + a.name + (b ? ' and ' + b.name : ''),
-    provenance: {
-      'dataset A': a.name,
-      'dataset B': b ? b.name : 'none',
-      'confidence level': lvl(level)
-    },
-    tables,
-    summaryHtml: (vi ? '<p>' + esc(a.name) + ': s² = ' + num(vi.s2) + ', ' + lvl(level) + ' interval for σ² [' + num(vi.lo2) + ', ' + num(vi.hi2) + '].</p>' : '') +
-      (fr ? '<p>F = ' + num(fr.F) + ' on (' + fr.df1 + ', ' + fr.df2 + ') df, ' + pEq(fr.p) + ', interval for σ²<sub>A</sub>/σ²<sub>B</sub> [' + num(fr.lo) + ', ' + num(fr.hi) + '].</p>' : '') +
-      (cr ? '<p>r = ' + num(cr.r) + ' over ' + cr.n + ' pairs, ' + pEq(cr.p) + ', interval [' + num(cr.lo) + ', ' + num(cr.hi) + '].</p>' : '')
-  });
-}
-
-/** Called each time the page is shown. */
-export function onShow() {
-  if (pickA) pickA.refresh();
-  if (pickB) pickB.refresh();
-  draw();
-}
 
 export default { id, title, render, onShow };
 </script>
@@ -27501,6 +27288,98 @@ export function correlogram(fig, r, o = {}) {
     const k = Math.round(sx.invert(p.px) / step);
     if (k >= from && k <= L) o.onPick(k);
   };
+}
+
+/**
+ * A draggable vertical line over a drawn figure, for a value the reader sets
+ * by hand: a benchmark, a cut, a threshold. The whole line is the grab
+ * target through an invisible 24px-wide stroke, it follows a pointer or
+ * finger, the arrow keys move it by `step` (ten steps with shift), and its
+ * label shows the value as it moves. `onMove` fires on every change and
+ * `onEnd` when a drag or key press finishes. The exported figure carries the
+ * line where it stands. A `label` of null draws no text beside the line, for
+ * a value a control beside the plot shows as it moves.
+ * @param {Figure} fig a figure whose x scale is set
+ * @param {{ value: number, label?: ((v: number) => string)|null, color?: string, ariaLabel?: string,
+ *   step?: number, onMove?: (v: number) => void, onEnd?: (v: number) => void }} d
+ * @returns {{ set: (v: number) => void, get: () => number }}
+ */
+export function dragLine(fig, d) {
+  const sx = fig.sx;
+  const [xMin, xMax] = sx.domain;
+  const step = d.step || (xMax - xMin) / 100 || 1;
+  const clamp = v => Math.min(xMax, Math.max(xMin, v));
+  let v = clamp(d.value);
+  const fmt = d.label === null ? null : (d.label || (x => num(x)));
+  const c = col(d.color, '--text');
+  const rec = { kind: 'vline', x: v, dash: true, color: c, label: d.ariaLabel || 'marker' };
+  fig.series.push(rec);
+  fig.svg.setAttribute('role', 'group');
+  const g = svgEl('g', { class: 'm-drag' }, fig.layers.over);
+  const vis = svgEl('line', { y1: 0, y2: fig.ih, stroke: c, 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, g);
+  const lblBg = fmt ? svgEl('rect', { y: 2, height: 17, rx: 3, fill: tok('--card'), opacity: 0.9 }, g) : null;
+  const lbl = fmt ? svgEl('text', { y: 14, 'font-size': 11.5, fill: c, 'font-weight': 600 }, g) : null;
+  const hit = svgEl('line', {
+    y1: 0, y2: fig.ih, stroke: 'transparent', 'stroke-width': 24, 'pointer-events': 'stroke',
+    class: 'cut-hit', 'data-noexport': '', tabindex: 0, role: 'slider', 'aria-label': d.ariaLabel || 'marker',
+    'aria-valuemin': xMin, 'aria-valuemax': xMax
+  }, g);
+  hit.style.cursor = 'ew-resize';
+  hit.style.touchAction = 'none';
+  hit.style.outline = 'none';
+  function place() {
+    const x = r1(sx(v));
+    for (const ln of [vis, hit]) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); }
+    rec.x = v;
+    const s = fmt ? fmt(v) : num(v);
+    if (fmt) {
+      lbl.textContent = s;
+      const w = estTextWidth(s, 11.5) + 8;
+      const lx = x + 6 + w > fig.iw ? x - 6 - w : x + 6;
+      lbl.setAttribute('x', r1(lx + 4));
+      lblBg.setAttribute('x', r1(lx));
+      lblBg.setAttribute('width', r1(w));
+    }
+    hit.setAttribute('aria-valuenow', v);
+    hit.setAttribute('aria-valuetext', s);
+  }
+  function set(x, end) {
+    v = clamp(x);
+    place();
+    if (d.onMove) d.onMove(v);
+    if (end && d.onEnd) d.onEnd(v);
+  }
+  function hot(on) { vis.setAttribute('stroke-width', on ? 3.2 : 1.8); }
+  place();
+  let dragging = false;
+  hit.addEventListener('pointerenter', () => hot(true));
+  hit.addEventListener('pointerleave', () => { if (!dragging) hot(false); });
+  hit.addEventListener('focus', () => hot(true));
+  hit.addEventListener('blur', () => hot(false));
+  hit.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = true;
+    hot(true);
+    try { hit.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+    hit.focus({ preventScroll: true });
+  });
+  hit.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const p = clientToInner(fig, e);
+    if (p) set(sx.invert(p.px), false);
+  });
+  const end = () => { if (!dragging) return; dragging = false; hot(false); if (d.onEnd) d.onEnd(v); };
+  hit.addEventListener('pointerup', end);
+  hit.addEventListener('pointercancel', end);
+  // Only a gesture that starts on the handle is kept from scrolling the page.
+  hit.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  hit.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    set(v + (e.key === 'ArrowRight' ? 1 : -1) * step * (e.shiftKey ? 10 : 1), true);
+  });
+  return { set: x => { v = clamp(x); place(); }, get: () => v };
 }
 
 /**

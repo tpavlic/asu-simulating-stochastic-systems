@@ -17,7 +17,6 @@ import * as explorePage from './pages/explore.js';
 import * as onePage from './pages/one.js';
 import * as twoPage from './pages/two.js';
 import * as severalPage from './pages/several.js';
-import * as variancePage from './pages/variance.js';
 import * as steadyPage from './pages/steady.js';
 import * as reportPage from './pages/report.js';
 import * as storagePage from './pages/storage.js';
@@ -40,7 +39,7 @@ function pageOf(mod) {
   };
 }
 
-const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, variancePage, steadyPage, reportPage, storagePage, referencesPage, galleryPage].map(pageOf);
+const PAGES = [importPage, explorePage, onePage, twoPage, severalPage, steadyPage, reportPage, storagePage, referencesPage, galleryPage].map(pageOf);
 const BY_ID = new Map(PAGES.map(p => [p.id, p]));
 
 function renderDataStrip() {
@@ -65,7 +64,7 @@ function renderDataStrip() {
 // with the tooltip saying what is missing, and goes gray again if a removal
 // takes the requirement away while that page is open.
 const GATES = [
-  { pages: ['explore', 'one', 'variance', 'report'],
+  { pages: ['explore', 'one', 'report'],
     ok: () => state.datasets.length > 0,
     tip: 'Load a file or an example on the Import page first.' },
   { pages: ['two', 'several'],
@@ -115,6 +114,9 @@ function boot() {
   gatePages();
   state.on('datasets', gatePages);
 
+  // The retired Variance and Correlation page: its interval lives on One
+  // System and its F ratio on Two Systems, and an old link lands on the first.
+  if (/^#variance(\/|$)/.test(location.hash)) history.replaceState(null, '', '#one');
   initTabs({
     defaultTab: 'import',
     sections: Object.fromEntries(PAGES.filter(p => Array.isArray(p.sections) && p.sections.length).map(p => [p.id, p.sections])),

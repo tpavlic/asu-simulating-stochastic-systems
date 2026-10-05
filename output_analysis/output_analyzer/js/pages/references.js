@@ -12,6 +12,9 @@ const GROUPS = [
     'J. Banks, J. S. Carson, B. L. Nelson, and D. M. Nicol, <i>Discrete-Event System Simulation</i>, 5th ed. (Pearson, 2010), chapters 11 and 12: output analysis for a single system, comparison of system designs, Bonferroni families of intervals, and the two-stage screen for the best.',
     'A. M. Law, <i>Simulation Modeling and Analysis</i>, 5th ed. (McGraw-Hill, 2015), chapters 9 to 11: replications, warm-up, batch means, common random numbers, and the comparison of alternatives.'
   ]],
+  ['Simulation software', [
+    'W. D. Kelton, N. B. Zupick, and N. Ivey, <i>Simulation with Arena</i>, 7th ed. (McGraw-Hill, 2024): the output analyzer and the process analyzer whose comparisons and best-scenario search this tool carries out in the browser.'
+  ]],
   ['One System and Two Systems', [
     'B. L. Welch, “The generalization of “Student’s” problem when several different population variances are involved,” <i>Biometrika</i> 34 (1947) 28–35: the two-sample t procedure with unequal variances and the Welch–Satterthwaite degrees of freedom.',
     'F. Wilcoxon, “Individual comparisons by ranking methods,” <i>Biometrics Bulletin</i> 1 (1945) 80–83; H. B. Mann and D. R. Whitney, “On a test of whether one of two random variables is stochastically larger than the other,” <i>Annals of Mathematical Statistics</i> 18 (1947) 50–60: the signed-rank and rank-sum tests.',
@@ -26,10 +29,9 @@ const GROUPS = [
     'O. J. Dunn, “Multiple comparisons using rank sums,” <i>Technometrics</i> 6 (1964) 241–252; S. Siegel and N. J. Castellan, <i>Nonparametric Statistics for the Behavioral Sciences</i>, 2nd ed. (McGraw-Hill, 1988): the pairwise comparisons after Kruskal–Wallis and after Friedman.',
     'B. L. Nelson, J. Swann, D. Goldsman, and W. Song, “Simple procedures for selecting the best simulated system when the number of alternatives is large,” <i>Operations Research</i> 49 (2001) 950–963; Y. Rinott, “On two-stage selection procedures and related probability-inequalities,” <i>Communications in Statistics, Theory and Methods</i> A7 (1978) 799–811: the screen for the best and its second-stage sizes.'
   ]],
-  ['Variance and Correlation, and the checks', [
+  ['The checks', [
     'M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>Journal of the American Statistical Association</i> 69 (1974) 364–367; H. Levene, “Robust tests for equality of variances,” in <i>Contributions to Probability and Statistics</i>, ed. I. Olkin (Stanford University Press, 1960) 278–292.',
     'S. S. Shapiro and M. B. Wilk, “An analysis of variance test for normality (complete samples),” <i>Biometrika</i> 52 (1965) 591–611; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551: the test and the algorithm the Normality section computes it by.',
-    'R. A. Fisher, “On the “probable error” of a coefficient of correlation deduced from a small sample,” <i>Metron</i> 1 (1921) 3–32: the z transformation behind the interval on a correlation.'
   ]],
   ['Steady State', [
     'P. D. Welch, “The statistical analysis of simulation results,” in <i>The Computer Performance Modeling Handbook</i>, ed. S. S. Lavenberg (Academic Press, 1983) 268–328: the moving-average plot for choosing a warm-up.',

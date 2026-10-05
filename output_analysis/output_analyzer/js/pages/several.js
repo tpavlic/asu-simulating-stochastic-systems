@@ -15,7 +15,7 @@ import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -29,7 +29,7 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. No comparison is made; a design’s interval is read on its own.' },
+  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other; set a benchmark to test every design against it with the family-wise error held at α.' },
   { id: 'diffs', label: 'Bonferroni differences', tip: 'Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing pooled and no analysis of variance first.' },
   { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
   { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
@@ -74,6 +74,12 @@ let controlId = null;
 // The indifference zone: null follows the default (10% of the pooled sd),
 // a number is the reader's own value.
 let epsUser = null;
+// The benchmark the Bonferroni means are tested against: off by default, and
+// its value kept per set of designs (the units differ between sets).
+let benchOn = false;
+let benchVal = null;
+let benchSpin = null;
+let benchStep = null;
 let epsSpin = null;
 let epsStep = null;
 let pending = false;
@@ -467,6 +473,58 @@ function ensureEpsSpinner(step) {
   epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, 'eps', v); schedule(); } });
 }
 
+// The benchmark the means (or pseudo-medians) are tested against: the
+// control's state, the flag for each interval, and the pieces of the plot,
+// the table, and the caption that depend on it. Off, every piece is empty.
+function benchmark(items, ds) {
+  const pair = rootEl.querySelector('#sev-bench-pair');
+  const on = benchOn && items.length > 0;
+  rootEl.querySelector('#sev-bench-on').checked = benchOn;
+  pair.hidden = !on;
+  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|');
+  let value = null;
+  if (on) {
+    const centers = items.map(it => it.center);
+    const stored = state.getPick(id, key);
+    if (Number.isFinite(benchVal) && benchSpin && benchSpin.key === key) value = benchVal;
+    else if (typeof stored === 'number' && Number.isFinite(stored)) value = stored;
+    else value = centers.reduce((a, b) => a + b, 0) / centers.length;
+    const span = Math.max(...items.map(it => it.hi)) - Math.min(...items.map(it => it.lo));
+    const step = stepFor(span || Math.abs(value) || 1);
+    // The value is kept at the spinner's own precision, and so the field,
+    // the line, and the verdict all show the same number.
+    value = Number((Math.round(value / step) * step).toFixed(Math.max(0, -Math.floor(Math.log10(step)))));
+    benchVal = value;
+    if (!benchSpin || benchSpin.step !== step || benchSpin.key !== key) {
+      const host = rootEl.querySelector('#sev-bench-host');
+      host.innerHTML = '<input id="sev-bench" type="text" class="par-inp">';
+      const inp = host.querySelector('#sev-bench');
+      inp.value = String(value);
+      benchSpin = { key, step, spin: spinner(inp, { step, min: -1e12, max: 1e12, onChange: v => { benchVal = v; state.setPick(id, key, v); schedule(); } }) };
+    } else benchSpin.spin.set(value, false);
+    rootEl.querySelector('#sev-bench-unit').textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+  }
+  const flag = i => on && (items[i].lo > value || items[i].hi < value);
+  const word = i => (!on ? '' : items[i].lo > value ? 'above the benchmark' : items[i].hi < value ? 'below the benchmark' : 'contains the benchmark');
+  return {
+    on, value: on ? value : null, flag, word,
+    cell: i => (flag(i) ? '<span class="cmp-flag">' + word(i).replace(' the benchmark', '') + '</span>' : 'contains'),
+    // The spinner shows the value as the line moves, and so the line carries no label of its own.
+    line: fg => { if (on) dragLine(fg, { value, step: benchSpin.step, ariaLabel: 'Benchmark', label: null, onMove: v => benchSpin.spin.set(v, false), onEnd: v => { benchVal = v; state.setPick(id, key, v); benchSpin.spin.set(v, false); schedule(); } }); },
+    legend: base => [{ swatch: 'interval', color: '--est', label: base + (on ? ', contains the benchmark' : '') }]
+      .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }, { swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
+    caption: () => (on ? ' A red dashed interval excludes the benchmark, and that design is declared above or below it; with every interval at 1 − α/k, the chance of any false declaration across the k designs is at most α. Drag the dashed line, or type a value, to move the benchmark.' : ''),
+    verdict: short => {
+      const above = items.map((it, i) => i).filter(i => items[i].lo > value), below = items.map((it, i) => i).filter(i => items[i].hi < value);
+      const name = ids => ids.map(i => short[i]).join(', ');
+      if (!above.length && !below.length) return 'No design’s interval excludes the benchmark ' + num(value) + ': none is declared above or below it at this family-wise level.';
+      return 'Against the benchmark ' + num(value) + ': ' + (above.length ? plural(above.length, 'design') + ' above it (' + name(above) + ')' : '') +
+        (above.length && below.length ? ', ' : '') + (below.length ? plural(below.length, 'design') + ' below it (' + name(below) + ')' : '') +
+        ', each declared with the family-wise error held at α.';
+    }
+  };
+}
+
 function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
@@ -582,7 +640,10 @@ function update() {
   const short = shortNames(list);
   const unit = rootEl.querySelector('#sev-unit');
   const bodies = ['means', 'diffs', 'anova', 'subset', 'posthoc'].map(n => rootEl.querySelector('#sev-' + n + '-body'));
-  bodies.forEach(b => { b.innerHTML = ''; });
+  // Each body keeps its height while it is rebuilt, and so the document never
+  // shrinks under the reader and the scroll position stays where it was.
+  bodies.forEach(b => { const h = b.offsetHeight; if (h) b.style.minHeight = h + 'px'; b.innerHTML = ''; });
+  const release = () => bodies.forEach(b => { b.style.minHeight = ''; });
 
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
@@ -594,6 +655,7 @@ function update() {
     resultBase = null;
     planCtx = { msg: 'Check two or more designs above to plan replications.' };
     drawPlan();
+    release();
     return;
   }
   const ns = groups.map(g => g.length);
@@ -634,36 +696,44 @@ function update() {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
       fg => {
-        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi)]);
-        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate })), { rowPx: 30 });
+        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
+        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
+        bm.line(fg);
       },
-      [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval' }],
+      bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
       'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
-      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.');
+      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
+    if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
-    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)]);
-    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'], rows));
-    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'],
-      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)]) });
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bm.on ? ['vs benchmark'] : []), rows));
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    if (bm.on) summary.push(bm.verdict(short));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
       ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
       fg => {
-        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi)]);
-        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean })), { rowPx: 30 });
+        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
+        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
+        bm.line(fg);
       },
-      [{ swatch: 'interval', color: '--est', label: 'design mean with its ' + levelPct(sm.perLevel) + ' t interval' }],
+      bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
-      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.');
-    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)]);
-    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'], rows));
+      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
+    if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
+    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bm.on ? ['vs benchmark'] : []), rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the Bonferroni means', declared: INDEP_REPS }));
-    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
-      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi]) });
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    if (bm.on) summary.push(bm.verdict(short));
       }
   }
 
@@ -989,12 +1059,14 @@ function update() {
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
+      benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
       'indifference zone': Number.isFinite(eps) ? eps : ''
     },
     tables,
     summaryHtml: summary.map(s => '<p>' + s + '</p>').join('')
   };
   drawPlan();
+  release();
 }
 
 // Redraws the planning card from the context update() left, and registers
@@ -1154,11 +1226,6 @@ export function render(root) {
         '</span></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting. Designs whose means are within ε of the best count as good enough, and the screen and the second stage are sized to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
-        '<span class="ctrl-note" id="sev-eps-note"></span>' +
-        '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
-      '</div>' +
-      '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run on its own random streams. Paired: replication i of every design used the same random inputs (common random numbers across designs), and so each replication is a block. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-pair-lbl">' +
           '<button type="button" class="seg-btn" data-pair="independent" aria-pressed="true">Independent</button>' +
@@ -1188,7 +1255,10 @@ export function render(root) {
     '<p class="sev-key" id="sev-key"></p>' +
     '<div class="ctrl-grp-lbl subnav-lbl">Analysis</div>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. Nothing is compared here; each interval is read on its own.</p><div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
+    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other here; set a benchmark to test every design against it, with the chance of any false rejection across the k tests held at α.</p>' +
+      '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="A target or requirement for the response, in its units. A design whose interval excludes the benchmark is declared above or below it; the dashed line on the plot can be dragged, and the arrow keys move it when it has focus.">Compare with a benchmark</span></label>' +
+        '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span></div>' +
+      '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
     '<div class="sec" data-section="diffs"><h3 class="sec-title">Bonferroni differences</h3><p class="sec-lede">Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
@@ -1211,7 +1281,13 @@ export function render(root) {
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
-    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p><div id="sev-subset-body"></div></div>';
+    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting, used by the screen and its second stage only. Designs whose means are within ε of the best count as good enough, and the screen and the second-stage sizes are set to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
+        '<span class="ctrl-note" id="sev-eps-note"></span>' +
+        '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
+      '</div>' +
+      '<div id="sev-subset-body"></div></div>';
 
   // Each section's own planning card: the means and the differences are
   // sized by a target half-width, the analysis of variance by a target power.
@@ -1266,6 +1342,7 @@ export function render(root) {
   });
   root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
   root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
+  root.querySelector('#sev-bench-on').addEventListener('change', e => { benchOn = e.target.checked; state.setPick(id, 'benchOn', benchOn); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
@@ -1317,6 +1394,7 @@ function applyStored() {
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
+  if (get('benchOn') === true) benchOn = true;
   const e = get('eps');
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;
   if (PLAN_POWERS.includes(get('power'))) {

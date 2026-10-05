@@ -8,9 +8,9 @@
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
-import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -243,6 +243,20 @@ export function render(rootEl) {
     '<p>A replication outcome is an average over a whole run, and averages are close to normally distributed even when the observations are skewed, which is why the t interval on replication outcomes holds up well at moderate R.</p>'));
   root.appendChild(res);
 
+  // The variance: a chi-square interval on the system's variability as a
+  // performance measure, shown for replication outcomes only.
+  const varSec = el('div', 'sec');
+  varSec.hidden = true;
+  varSec.appendChild(el('div', 'sec-hd', 'Interval on the variance'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too, and matters more.'));
+  const vRow1 = el('div'), vRow2 = el('div');
+  varSec.append(vRow1, vRow2, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
+  varSec.appendChild(details('Why the variance interval is fragile',
+    '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
+    '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
+    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
+  root.appendChild(varSec);
+
   // Figure.
   const figSec = el('div', 'sec');
   figSec.appendChild(el('div', 'sec-hd', 'Replication outcomes'));
@@ -270,7 +284,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
+  els = { varSec, vRow1, vRow2, ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -437,10 +451,15 @@ function placeholderRows(label) {
 }
 
 /** Redraws the page from the current state. */
+// Card labels are set in capitals; a symbol keeps its own case, and so σ
+// does not turn into Σ.
+function S(html) { return '<span class="sym">' + html + '</span>'; }
+
 function draw() {
   if (!els) return;
   const ds = currentDataset();
   const level = state.settings.level;
+  els.varSec.hidden = true;
 
   els.unitBox.replaceChildren(unitLine(ds));
   els.warnBox.replaceChildren();
@@ -523,6 +542,23 @@ function draw() {
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np });
 
+  // The variance interval, on replication outcomes only.
+  const vi = pooled ? null : varianceInterval(x, level);
+  els.varSec.hidden = !vi;
+  if (vi) {
+    const pLo = (1 - level) / 2, pHi = 1 - pLo;
+    els.vRow1.replaceChildren(cardRow([
+      card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
+      card(S('s²'), num(vi.s2), 'sample variance'),
+      card(S('s'), num(vi.s), 'sample standard deviation'),
+      card(S('χ²') + ' quantiles', num(vi.chiLo) + ', ' + num(vi.chiHi), 'χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub>')
+    ]));
+    els.vRow2.replaceChildren(cardRow([
+      wide(card(lvl(level) + ' interval for ' + S('σ²'), '[' + num(vi.lo2) + ', ' + num(vi.hi2) + ']', '(R − 1) s² / χ²')),
+      wide(card(lvl(level) + ' interval for ' + S('σ'), '[' + num(vi.loS) + ', ' + num(vi.hiS) + ']', 'square roots of the σ² interval'))
+    ]));
+  }
+
   // The page's result, for its export row and the Report page.
   const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
   const intervalRows = np ? [
@@ -537,6 +573,10 @@ function draw() {
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication outcomes', headers: ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
+    ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
+    ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
+  ] });
   // Planning works on replication outcomes only.
   finish({
     title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
@@ -620,7 +660,7 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   } : { 'replication planning': 'off while the pooled observations are in use' });
-  const tables = resultBase.tables.concat(rows.length ? [{ name: 'Planning', headers: PLAN_HEADERS, rows }] : []);
+  const tables = resultBase.tables.concat(rows.length ? [{ name: 'Replications needed', headers: PLAN_HEADERS, rows }] : []);
   state.setResult(id, Object.assign({}, resultBase, { provenance: prov, tables }));
 }
 

@@ -10,7 +10,7 @@ import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
 import { welch, pooledT, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch,
          planHalfWidthPooled, powerPooled, planPowerPooled } from '../stats/compare.js';
-import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { tInterval, fRatio, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
@@ -548,7 +548,7 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Planning', headers: PLAN_HEADERS, rows }]) }));
+  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]) }));
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
@@ -659,6 +659,30 @@ function renderIndependent(res, notes, d, level) {
     : 'The top plot shows every replication outcome of each design, with each design’s mean and its own ' + L +
       ' t interval under its dots. The bottom plot is the ' + (pooled ? 'pooled-variance t' : 'Welch') + ' interval for the difference of the means, drawn against zero; an interval that excludes zero is drawn red and dashed.'));
 
+  // The variances: the F ratio, an inference on which design is more
+  // variable, with variability as a performance measure of its own.
+  const fr = d ? fRatio(d.eA.v, d.eB.v, level) : null;
+  const vs = sec('Variances of A and B');
+  res.appendChild(vs);
+  vs.appendChild(caption('Which design is more variable: the ratio of the two sample variances with its F interval. The equal-variances assumption of the pooled t is a different question, answered by Levene’s test on the checks line above.'));
+  const vv = (x, f = num) => (fr ? f(x) : dash);
+  vs.appendChild(cardRow([
+    card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), vv(fr && fr.F), 'ratio of sample variances'),
+    card(S('df<sub>1</sub>'), vv(fr && fr.df1, intl), 'R<sub>A</sub> − 1'),
+    card(S('df<sub>2</sub>'), vv(fr && fr.df2, intl), 'R<sub>B</sub> − 1'),
+    card('Two-sided p', fr ? pValue(fr.p) : dash, 'against σ²<sub>A</sub> = σ²<sub>B</sub>'),
+    wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
+  ]));
+  const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
+  const vVerdict = document.createElement('p');
+  vVerdict.className = 'cmp-verdict cmp-res';
+  vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
+    : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+  vs.appendChild(vVerdict);
+  if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
+    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data and is instead assumed when using the F ratio; it is what the Independent setting declares.' }));
+  vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, on the checks line above and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
+
   if (!w) {
     resultBase = null;
     planCtx = { msg: 'Choose two different datasets above to plan replications.' };
@@ -688,7 +712,14 @@ function renderIndependent(res, notes, d, level) {
     summaryHtml: '<p>' + tName + ' comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
+  if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fContains ? 'yes' : 'no']
+  ] });
 }
+
+// Card labels are set in capitals; a symbol keeps its own case, and so σ
+// does not turn into Σ.
+function S(html) { return '<span class="sym">' + html + '</span>'; }
 
 // ── Two more views of the matched pairs ───────────────────────────────────
 // Under the paired differences, one figure shows the pairs either column by

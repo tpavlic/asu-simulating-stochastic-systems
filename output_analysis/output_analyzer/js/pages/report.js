@@ -17,7 +17,7 @@ export const title = 'Report';
 
 // Results are listed in the order the pages appear in the navigation; a page
 // not named here follows, in the order its result arrived.
-const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'variance', 'steady'];
+const PAGE_ORDER = ['import', 'explore', 'one', 'two', 'several', 'steady'];
 
 let el = null;
 

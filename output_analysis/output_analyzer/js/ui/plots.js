@@ -1119,6 +1119,98 @@ export function correlogram(fig, r, o = {}) {
 }
 
 /**
+ * A draggable vertical line over a drawn figure, for a value the reader sets
+ * by hand: a benchmark, a cut, a threshold. The whole line is the grab
+ * target through an invisible 24px-wide stroke, it follows a pointer or
+ * finger, the arrow keys move it by `step` (ten steps with shift), and its
+ * label shows the value as it moves. `onMove` fires on every change and
+ * `onEnd` when a drag or key press finishes. The exported figure carries the
+ * line where it stands. A `label` of null draws no text beside the line, for
+ * a value a control beside the plot shows as it moves.
+ * @param {Figure} fig a figure whose x scale is set
+ * @param {{ value: number, label?: ((v: number) => string)|null, color?: string, ariaLabel?: string,
+ *   step?: number, onMove?: (v: number) => void, onEnd?: (v: number) => void }} d
+ * @returns {{ set: (v: number) => void, get: () => number }}
+ */
+export function dragLine(fig, d) {
+  const sx = fig.sx;
+  const [xMin, xMax] = sx.domain;
+  const step = d.step || (xMax - xMin) / 100 || 1;
+  const clamp = v => Math.min(xMax, Math.max(xMin, v));
+  let v = clamp(d.value);
+  const fmt = d.label === null ? null : (d.label || (x => num(x)));
+  const c = col(d.color, '--text');
+  const rec = { kind: 'vline', x: v, dash: true, color: c, label: d.ariaLabel || 'marker' };
+  fig.series.push(rec);
+  fig.svg.setAttribute('role', 'group');
+  const g = svgEl('g', { class: 'm-drag' }, fig.layers.over);
+  const vis = svgEl('line', { y1: 0, y2: fig.ih, stroke: c, 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, g);
+  const lblBg = fmt ? svgEl('rect', { y: 2, height: 17, rx: 3, fill: tok('--card'), opacity: 0.9 }, g) : null;
+  const lbl = fmt ? svgEl('text', { y: 14, 'font-size': 11.5, fill: c, 'font-weight': 600 }, g) : null;
+  const hit = svgEl('line', {
+    y1: 0, y2: fig.ih, stroke: 'transparent', 'stroke-width': 24, 'pointer-events': 'stroke',
+    class: 'cut-hit', 'data-noexport': '', tabindex: 0, role: 'slider', 'aria-label': d.ariaLabel || 'marker',
+    'aria-valuemin': xMin, 'aria-valuemax': xMax
+  }, g);
+  hit.style.cursor = 'ew-resize';
+  hit.style.touchAction = 'none';
+  hit.style.outline = 'none';
+  function place() {
+    const x = r1(sx(v));
+    for (const ln of [vis, hit]) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); }
+    rec.x = v;
+    const s = fmt ? fmt(v) : num(v);
+    if (fmt) {
+      lbl.textContent = s;
+      const w = estTextWidth(s, 11.5) + 8;
+      const lx = x + 6 + w > fig.iw ? x - 6 - w : x + 6;
+      lbl.setAttribute('x', r1(lx + 4));
+      lblBg.setAttribute('x', r1(lx));
+      lblBg.setAttribute('width', r1(w));
+    }
+    hit.setAttribute('aria-valuenow', v);
+    hit.setAttribute('aria-valuetext', s);
+  }
+  function set(x, end) {
+    v = clamp(x);
+    place();
+    if (d.onMove) d.onMove(v);
+    if (end && d.onEnd) d.onEnd(v);
+  }
+  function hot(on) { vis.setAttribute('stroke-width', on ? 3.2 : 1.8); }
+  place();
+  let dragging = false;
+  hit.addEventListener('pointerenter', () => hot(true));
+  hit.addEventListener('pointerleave', () => { if (!dragging) hot(false); });
+  hit.addEventListener('focus', () => hot(true));
+  hit.addEventListener('blur', () => hot(false));
+  hit.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = true;
+    hot(true);
+    try { hit.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+    hit.focus({ preventScroll: true });
+  });
+  hit.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const p = clientToInner(fig, e);
+    if (p) set(sx.invert(p.px), false);
+  });
+  const end = () => { if (!dragging) return; dragging = false; hot(false); if (d.onEnd) d.onEnd(v); };
+  hit.addEventListener('pointerup', end);
+  hit.addEventListener('pointercancel', end);
+  // Only a gesture that starts on the handle is kept from scrolling the page.
+  hit.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  hit.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    set(v + (e.key === 'ArrowRight' ? 1 : -1) * step * (e.shiftKey ? 10 : 1), true);
+  });
+  return { set: x => { v = clamp(x); place(); }, get: () => v };
+}
+
+/**
  * The warm-up plot: the across-replication average (thin, neutral), its
  * moving average (the sampled color), the cumulative average (the reference
  * color, dashed), and a draggable vertical truncation line. The whole line

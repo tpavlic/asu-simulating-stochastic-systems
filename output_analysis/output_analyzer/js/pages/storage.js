@@ -64,7 +64,23 @@ export function render(root) {
     '</div>';
   const q = s => root.querySelector(s);
   el = { root, status: q('#ss-status'), size: q('#ss-size'), list: q('#ss-list'), forget: q('#ss-forget') };
-  el.forget.addEventListener('click', () => { forgetSession(); refresh(); });
+  // Two clicks, as on the Import page's Remove all: the first arms the
+  // button and names what the second will do, and three idle seconds disarm it.
+  let armTimer = null;
+  const disarm = () => { el.forget.dataset.armed = ''; el.forget.textContent = 'Forget this session'; };
+  el.forget.addEventListener('click', () => {
+    if (el.forget.dataset.armed === '1') {
+      clearTimeout(armTimer);
+      disarm();
+      forgetSession();
+      refresh();
+      return;
+    }
+    el.forget.dataset.armed = '1';
+    el.forget.textContent = 'Click again to forget ' + (state.datasets.length ? plural(state.datasets.length, 'dataset') + ' and every setting' : 'every stored setting');
+    clearTimeout(armTimer);
+    armTimer = setTimeout(() => { if (el.forget.isConnected) disarm(); }, 3000);
+  });
   state.on('datasets', refresh);
   state.on('session', refresh);
   refresh();
