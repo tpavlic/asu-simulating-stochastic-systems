@@ -29,8 +29,8 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other; set a benchmark to test every design against it with the family-wise error held at α.' },
-  { id: 'diffs', label: 'Bonferroni differences', tip: 'Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing pooled and no analysis of variance first.' },
+  { id: 'means', label: 'Benchmark comparison', tip: 'Every design against a benchmark at once: each design’s mean with its own interval, all k holding together by the Bonferroni correction (each at level 1 − α/k), which holds the chance of any false rejection at α. Draw the benchmark on the plot, or read the intervals against one you have in mind.' },
+  { id: 'diffs', label: 'Pairwise comparisons', tip: 'Every pair’s difference, or each design against a control, each with its own interval, all holding together by the Bonferroni correction (each at level 1 − α/C): nothing pooled and no analysis of variance first.' },
   { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
   { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
 ];
@@ -74,7 +74,7 @@ let controlId = null;
 // The indifference zone: null follows the default (10% of the pooled sd),
 // a number is the reader's own value.
 let epsUser = null;
-// The benchmark the Bonferroni means are tested against: off by default, and
+// The benchmark the designs' means are tested against: off by default, and
 // its value kept per set of designs (the units differ between sets).
 let benchOn = false;
 let benchVal = null;
@@ -694,8 +694,8 @@ function update() {
     if (np) {
     const hl = groups.map(g => signedRank(g, { level: sm.perLevel }));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
-    b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
-      ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
+    b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
       fg => {
@@ -715,8 +715,8 @@ function update() {
     if (bm.on) summary.push(bm.verdict(short));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
-    b.appendChild(para('cmp-lead', 'k = ' + k + ' intervals, each at 1 − ' + aTxt + '/' + k + ' = ' + levelPct(sm.perLevel) +
-      ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
+    b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
       fg => {
@@ -730,7 +730,7 @@ function update() {
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
     b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bm.on ? ['vs benchmark'] : []), rows));
-    b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the Bonferroni means', declared: INDEP_REPS }));
+    b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the benchmark comparison', declared: INDEP_REPS }));
     tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
       rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
@@ -770,7 +770,7 @@ function update() {
     b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval', 'p', 'Adjusted p', 'Basis', 'Flag'], rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
-    tables.push({ section: 'diffs', name: 'Bonferroni rank differences', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
+    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
       rows: famR.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi, c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = famR.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
@@ -803,10 +803,10 @@ function update() {
       sets: paired
         ? fam.comparisons.map(c => ({ name: 'the differences ' + pairLabel(c.i, c.j), values: Array.from(groups[c.i], (v, r) => v - groups[c.j][r]) }))
         : designSets,
-      alpha, procedure: 'the Bonferroni differences', linkDs: list[0].id,
+      alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
         : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    tables.push({ section: 'diffs', name: 'Bonferroni differences', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
+    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
       rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
@@ -923,7 +923,7 @@ function update() {
       'Each row is a difference of means ± its critical difference under ' + ruleName + '. ' +
       (rule === 'lsd' && !welch && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
       (welch ? 'These procedures assume normal replication outcomes and let each design keep its own variance.'
-        : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Bonferroni differences.'));
+        : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Pairwise comparisons section.'));
     const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se)].concat(welch ? [num(p.df)] : [], [num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']));
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['Critical difference', 'Interval', 'Different?']), rows));
     if (welch) tables.push({ section: 'anova', name: 'Welch ANOVA', headers: ['test', 'F', 'df1', 'df2', 'p'], rows: [['Welch F for equal means', av.F, av.df1, av.df2, av.p]] });
@@ -1119,7 +1119,7 @@ function drawPlan() {
     }
     mText = 'h = ' + num(c ? hwVal : NaN) + unit;
     fillPane(sec,
-      'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' Bonferroni mean intervals above (each at 1 − α/k), with equal replications in each design',
+      'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' mean intervals above (each at 1 − α/k by Bonferroni), with equal replications in each design',
       planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'for the design with s = ' + num(sMax) }), note);
     if (c) tables.push({ section: 'means', name: 'Replications for the means', headers: PLAN_HEADERS, rows: [planRow('by half-width', mText + ' on each of k = ' + k + ' means', inflate(hp.n), hp.hwAtN, R)] });
   }
@@ -1159,7 +1159,7 @@ function drawPlan() {
     const widestPair = hp.n != null ? esc(c.short[hp.pair[0]] + ' − ' + c.short[hp.pair[1]]) : dash;
     fillPane(sec,
       'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
-        ' Bonferroni ' + (c && c.paired ? 'paired ' : '') + 'differences above (' + esc(family) + ')' + equalNote,
+        (c && c.paired ? ' paired ' : ' ') + 'pairwise differences above (each at 1 − α/C by Bonferroni; ' + esc(family) + ')' + equalNote,
       planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'widest: ' + widestPair }), hwNote);
     if (c) tables.push({ section: 'diffs', name: 'Replications for the differences', headers: PLAN_HEADERS, rows: [planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', inflate(hp.n), hp.hwAtN, R)] });
   }
@@ -1255,11 +1255,11 @@ export function render(root) {
     '<p class="sev-key" id="sev-key"></p>' +
     '<div class="ctrl-grp-lbl subnav-lbl">Analysis</div>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. The designs are not compared with each other here; set a benchmark to test every design against it, with the chance of any false rejection across the k tests held at α.</p>' +
-      '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="A target or requirement for the response, in its units. A design whose interval excludes the benchmark is declared above or below it; the dashed line on the plot can be dragged, and the arrow keys move it when it has focus.">Compare with a benchmark</span></label>' +
+    '<div class="sec" data-section="means"><h3 class="sec-title">Benchmark comparison</h3><p class="sec-lede">Every design against a benchmark at once. Each design’s mean comes with its own interval, and the k intervals hold together by the Bonferroni correction, each at level 1 − α/k, which holds the chance of any false rejection across the k tests at α. The designs are not compared with each other here. The benchmark can be drawn on the plot, which marks every interval that excludes it, or kept in mind and read against the intervals.</p>' +
+      '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="The benchmark is a target or requirement for the response, in its units, and the k intervals are built for it whether or not it is drawn. Drawn, it is a dashed line that can be dragged (the arrow keys move it when it has focus), and every design whose interval excludes it is marked above or below it.">Show benchmark on plot</span></label>' +
         '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span></div>' +
       '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
-    '<div class="sec" data-section="diffs"><h3 class="sec-title">Bonferroni differences</h3><p class="sec-lede">Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
+    '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
         '<button type="button" class="seg-btn" data-diff="control" aria-pressed="false">versus control</button>' +

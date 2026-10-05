@@ -1055,7 +1055,7 @@ export function correlogram(fig, r, o = {}) {
   const g = svgEl('g', { class: 'm-acf' }, fig.inner);
   const dots = L - from <= 120;
   const rad = L > 60 ? 2 : 3;
-  // Stems thin out as they crowd together, so neighbors stay apart.
+  // Stems thin out as they crowd together, and so neighbors stay apart.
   const gap = (fig.iw / Math.max(1, L - from + 1));
   const sw = gap >= 6 ? 1.8 : gap >= 3 ? 1.3 : 1;
   let dStem = '', dDot = '';

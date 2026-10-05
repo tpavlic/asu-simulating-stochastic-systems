@@ -103,7 +103,7 @@ export function normPdf(z) { return Math.exp(-0.5 * z * z) / SQRT_2PI; }
 // Comp. 23, 1969), the coefficients and three-branch structure R's pnorm uses,
 // specialized to the lower tail. The studentized-range, Dunnett, and Rinott
 // routines each nest this call inside a double quadrature inside a root
-// finder, so its speed is what makes those answers arrive in milliseconds.
+// finder, and so its speed is what makes those answers arrive in milliseconds.
 const CODY_A = [2.2352520354606839287, 161.02823106855587881, 1067.6894854603709582,
                 18154.981253343561249, 0.065682337918207449113];
 const CODY_B = [47.20258190468824187, 976.09855173777669322, 10260.932208618978205,

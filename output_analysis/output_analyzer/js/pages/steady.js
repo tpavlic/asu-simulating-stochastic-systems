@@ -320,7 +320,7 @@ export function render(rootEl) {
   state.on('selection', id2 => {
     if (!id2 || id2 === dsId || !eligible(state.get(id2))) return;
     dsId = id2;
-    // The picker follows the selection made on another page, and records it.
+    // The picker follows the selection made on another page and records it.
     state.setPick(id, 'ds', dsId);
     resetFor(current());
     refreshSelect();

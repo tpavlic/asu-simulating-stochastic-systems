@@ -100,8 +100,8 @@ function syncOptions(page) {
 /**
  * Marks the sections of a divided page available or not for the data it
  * currently shows. An unavailable section's button in the page's own strip is
- * hidden, so the page offers only what applies, and its sidebar sub-item and
- * <select> option are grayed and inert with a tooltip saying why, so the
+ * hidden, and so the page offers only what applies, and its sidebar sub-item and
+ * <select> option are grayed and inert with a tooltip saying why, and so the
  * navigation keeps its shape. An open section that becomes unavailable
  * gives way to the first available one.
  * @param {string} page
@@ -182,7 +182,7 @@ function activate(page, sec) {
   });
 
   // The open section's containers are shown and the others hidden; the
-  // section links themselves carry data-section too, and are left alone.
+  // section links themselves carry data-section too and are left alone.
   const root = document.getElementById('tab-' + page);
   if (sec && root) {
     root.querySelectorAll('[data-section]:not(.subtab)').forEach(el => { el.hidden = el.getAttribute('data-section') !== sec; });
@@ -357,7 +357,7 @@ export function initTabs(opts = {}) {
   showDefault(defaultTab);
   if (startHash && startHash !== fullName(current, currentSec) && validTab(startHash)) showTab(startHash);
   // A hash that names no page, or a page that is not available yet, is
-  // replaced by the page actually shown, so a copied link never carries a
+  // replaced by the page actually shown, and so a copied link never carries a
   // stale fragment.
   const shown = fullName(current, currentSec);
   if (startHash && startHash !== shown) history.replaceState(null, '', '#' + shown);

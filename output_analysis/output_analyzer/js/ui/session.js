@@ -219,7 +219,7 @@ export function restoreSession() {
   try {
     const stored = available() ? load(SESSION_KEY) : null;
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-      // Picks come back before the datasets, so a picker rebuilding itself on
+      // Picks come back before the datasets, and so a picker rebuilding itself on
       // the 'datasets' events below finds its remembered choice waiting.
       if (stored.picks && typeof stored.picks === 'object' && !Array.isArray(stored.picks)) {
         for (const page of Object.keys(stored.picks)) {

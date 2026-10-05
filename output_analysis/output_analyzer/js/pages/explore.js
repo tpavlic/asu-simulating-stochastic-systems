@@ -63,7 +63,7 @@ let xMode = 'index';
 const MAX_LAG = 400;
 /** The lag the lag plot pairs observations at and the correlogram highlights. */
 let lag = 1;
-/** Every mounted result section, so a rebuild can release its figures. */
+/** Every mounted result section, and so a rebuild can release its figures. */
 let mounted = [];
 /** The sections that draw one replication, rebuilt when the replication changes. */
 let repSections = [];
@@ -844,7 +844,7 @@ function buildSpread(api, { ds }) {
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
   caption(sec, rejects
-    ? 'At this level the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Bonferroni differences, which take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
+    ? 'At this level the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
     : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications the test has little power, and so this is a check, not a proof.');
 }
 

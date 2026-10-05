@@ -163,7 +163,7 @@ export function setCustomLevel(base, bonfC = 1) {
 }
 
 /**
- * The latest result of every analysis page, keyed by page id, so the Export
+ * The latest result of every analysis page, keyed by page id, and so the Export
  * page can write out what the reader has computed. A page stores its result
  * whenever it recomputes and stores null when its inputs no longer allow one.
  * @typedef {{ title: string, provenance: Object<string, string|number>,
@@ -175,7 +175,7 @@ export const results = {};
 
 /**
  * What each page's pickers hold, keyed by page id and then by the picker's
- * own key (a dataset id, a mode name, a list of ids), so a reload brings a
+ * own key (a dataset id, a mode name, a list of ids), and so a reload brings a
  * page back on the datasets it was looking at. Saved with the session.
  * @type {Object<string, Object<string, *>>}
  */

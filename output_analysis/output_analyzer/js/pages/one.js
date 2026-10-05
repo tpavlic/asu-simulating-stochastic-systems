@@ -343,7 +343,7 @@ export function render(rootEl) {
 }
 
 // Brings back the planning settings the reader made (kept with the session)
-// wherever they are valid, and says whether the target field needs
+// wherever they are valid and says whether the target field needs
 // rebuilding. Every one is recorded when the reader changes it, and so
 // applying them again changes nothing except after a reload.
 function syncProc() {
@@ -426,7 +426,7 @@ function ensureAbsDefault(ds) {
   plan.abs = kept !== null ? kept : defaultShift(ds);
 }
 
-// Seeds δ at the default for the chosen dataset, and shows it in its field,
+// Seeds δ at the default for the chosen dataset and shows it in its field,
 // which is empty and disabled while there is nothing to plan from.
 function syncDeltaInput(ds, ready) {
   const key = ds ? ds.id : null;

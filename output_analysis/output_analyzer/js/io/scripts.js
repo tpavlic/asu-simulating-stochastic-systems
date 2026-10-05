@@ -1,5 +1,5 @@
 // A figure as a script that redraws it: MATLAB, R (base graphics), or Python
-// (matplotlib), with the plotted data embedded, so a reader can open the
+// (matplotlib), with the plotted data embedded, and so a reader can open the
 // figure in the tool they know and restyle it there. Pure functions, no DOM.
 //
 // A figure spec is
@@ -249,7 +249,7 @@ export function rScript(spec) {
     leg.labels.push(rStr(rec.label)); leg.col.push(rStr(hex(rec.color)));
     leg.pch.push(pch); leg.lty.push(lty); leg.lwd.push(rec.width || 1.5); leg.fill.push(fill ? 'adjustcolor(' + rStr(hex(rec.color)) + ', 0.35)' : 'NA');
   };
-  // The data first, so the axes can be sized before anything is drawn.
+  // The data first, and so the axes can be sized before anything is drawn.
   s.series.forEach((rec, i) => {
     const k = i + 1;
     if (rec.kind === 'points' || rec.kind === 'line' || rec.kind === 'step') { L.push('x' + k + ' <- ' + rVec(rec.x)); L.push('y' + k + ' <- ' + rVec(rec.y)); }
