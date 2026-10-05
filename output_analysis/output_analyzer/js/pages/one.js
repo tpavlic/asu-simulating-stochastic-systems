@@ -48,7 +48,7 @@ const override = new Set();
 // 't' for the t interval on the mean, 'np' for the Wilcoxon signed-rank
 // interval on the pseudo-median.
 let proc = 't';
-const NP_PLAN = 'The planning card sizes the t interval. Under normal data the Wilcoxon interval needs about 5% more replications for the same width (its efficiency relative to the t is 3/π), and under heavy tails it needs fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedure the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of its efficiency relative to the t under normal data (about 5% more replications); under heavy tails it needs fewer.';
 
 // An interval or a pair of numbers takes a full row on a phone rather than
 // being cut short, before and after a result arrives alike.
@@ -157,9 +157,12 @@ function syncSpin(slot, host, inputId, label, step, value, onChange) {
 // the current count already gives. A null n draws en dashes.
 function planCards(kind, o) {
   const has = o.n != null;
+  // Under a rank procedure the second card holds the t procedure's own n,
+  // the count the shown n was inflated from, in place of the value at n.
   const cards = [
     card(PLAN_N, has ? intl(o.n) : dash, o.nNote),
-    kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
+    o.tN != null ? card('t procedure’s <span class="sym">n</span>', intl(o.tN), 'inflated by π/3 for the rank procedure')
+      : kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
   ];
   const add = has && Number.isFinite(o.R) ? o.n - o.R : NaN;
   cards.push(Number.isFinite(add) && add <= 0
@@ -562,6 +565,10 @@ function finish(base, ctx) {
 
 /** Redraws the planning card from the context draw() left, and registers the result. */
 function drawPlan() {
+  // A rank procedure is sized from the t plan: n times pi/3, rounded up.
+  const npOn = proc === 'np';
+  const inflate = n => (n == null ? null : npOn ? Math.ceil(n * Math.PI / 3) : n);
+  const ranked = n => (npOn && n != null ? n : null);
   if (!els) return;
   syncPlanMode(els.planSec, plan.mode);
   const ctx = planCtx && !planCtx.msg ? planCtx : null;
@@ -587,8 +594,8 @@ function drawPlan() {
   }
   const hText = 'h = ' + num(hp.h) + unit + (relative ? ' (' + num(plan.rel) + '% of the mean)' : '');
   fillPane(els.paneHw, 'Replications needed for a half-width of ' + esc(hText),
-    planCards('hw', { n: hp.n, at: hp.hwAtN, nNote: 'replications in all', atNote: 'if s stays at ' + num(sd), R, rText }), hwNote);
-  if (ctx) rows.push(planRow('by half-width', hText, hp.n, hp.hwAtN, R));
+    planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'replications in all', atNote: 'if s stays at ' + num(sd), R, rText }), hwNote);
+  if (ctx) rows.push(planRow('by half-width', hText, inflate(hp.n), hp.hwAtN, R));
 
   // By power.
   syncDeltaInput(ds, !!ctx);
@@ -602,8 +609,8 @@ function drawPlan() {
   const dText = 'δ = ' + num(ctx ? delta : NaN) + unit;
   fillPane(els.panePw, 'Replications needed to detect a shift of ' + esc(dText) + ' from a reference mean with ' + powerPct(plan.power) +
     ' power, by a two-sided one-sample t test at α = ' + num(alpha),
-    planCards('power', { n: pp.n, at: pp.powerAtN, nNote: 'replications in all', atNote: 'at ' + esc(dText), R, rText, cur, curNote: 'at R\u00a0=\u00a0' + intl(R) }), pwNote);
-  if (ctx) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), pp.n, pp.powerAtN, R));
+    planCards('power', { n: inflate(pp.n), tN: ranked(pp.n), at: pp.powerAtN, nNote: 'replications in all', atNote: 'at ' + esc(dText), R, rText, cur, curNote: 'at R\u00a0=\u00a0' + intl(R) }), pwNote);
+  if (ctx) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), inflate(pp.n), pp.powerAtN, R));
 
   if (!resultBase) { state.setResult(id, null); return; }
   const prov = Object.assign({}, resultBase.provenance, ctx ? {

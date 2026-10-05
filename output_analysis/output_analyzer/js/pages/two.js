@@ -352,9 +352,12 @@ function syncSpin(slot, host, inputId, label, step, value, onChange) {
 // the current count already gives. A null n draws en dashes.
 function planCards(kind, o) {
   const has = o.n != null;
+  // Under a rank procedure the second card holds the t procedure's own n,
+  // the count the shown n was inflated from, in place of the value at n.
   const cards = [
     card(PLAN_N, has ? intl(o.n) : dash, o.nNote),
-    kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
+    o.tN != null ? card('t procedure’s <span class="sym">n</span>', intl(o.tN), 'inflated by π/3 for the rank procedure')
+      : kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
   ];
   const add = has && Number.isFinite(o.R) ? o.n - o.R : NaN;
   cards.push(Number.isFinite(add) && add <= 0
@@ -461,6 +464,10 @@ function update() {
 // Redraws the planning card from the context update() left, and registers
 // the page's result with its planning table.
 function drawPlan() {
+  // A rank procedure is sized from the t plan: n times pi/3, rounded up.
+  const npOn = proc === 'np';
+  const inflate = n => (n == null ? null : npOn ? Math.ceil(n * Math.PI / 3) : n);
+  const ranked = n => (npOn && n != null ? n : null);
   if (!rootEl) return;
   const sec = rootEl.querySelector('#two-plan');
   syncPlanMode(sec, plan.mode);
@@ -503,9 +510,9 @@ function drawPlan() {
   const hText = 'h = ' + num(c ? hwVal : NaN) + unit;
   fillPane(sec.querySelector('[data-pane="hw"]'),
     'Replications per design needed for a half-width of ' + esc(hText) + ' on the ' + (paired ? 'paired' : pooled ? 'pooled t' : 'Welch') + ' interval for A − B' + equalNote,
-    planCards('hw', { n: hp.n, at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText,
+    planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText,
       atNote: paired ? 'if s<sub>D</sub> stays at ' + num(c ? c.sdD : NaN) : 'if s<sub>A</sub> and s<sub>B</sub> hold' }), hwNote);
-  if (c) rows.push(planRow('by half-width', hText, hp.n, hp.hwAtN, R));
+  if (c) rows.push(planRow('by half-width', hText, inflate(hp.n), hp.hwAtN, R));
 
   // By power.
   const m = c ? Math.abs(c.meanA) : NaN;
@@ -528,9 +535,9 @@ function drawPlan() {
   fillPane(sec.querySelector('[data-pane="power"]'),
     'Replications per design needed to detect a difference of ' + esc(dText) + ' with ' + powerPct(plan.power) +
       ' power, by a two-sided ' + (paired ? 'paired t test' : pooled ? 'pooled t test' : 'Welch test') + ' at α = ' + num(alpha) + equalNote,
-    planCards('power', { n: pp.n, at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
+    planCards('power', { n: inflate(pp.n), tN: ranked(pp.n), at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
       curNote: paired ? 'at ' + rText : same ? 'at R\u00a0=\u00a0' + intl(Rlo) + ' per design' : 'at the smaller current R\u00a0=\u00a0' + intl(Rlo) }), pwNote);
-  if (c) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), pp.n, pp.powerAtN, R));
+  if (c) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), inflate(pp.n), pp.powerAtN, R));
 
   if (!resultBase) { state.setResult('two', null); return; }
   const prov = Object.assign({}, resultBase.provenance, {
@@ -545,7 +552,7 @@ function drawPlan() {
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
-const NP_PLAN = 'The planning card sizes the t procedures. Under normal data the Wilcoxon procedures need about 5% more replications for the same power (their efficiency relative to the t is 3/π), and under heavy tails they need fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedures the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of their efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer.';
 
 // What a Wilcoxon result's p-value and interval rest on, for its card notes.
 function npBasis(r) {

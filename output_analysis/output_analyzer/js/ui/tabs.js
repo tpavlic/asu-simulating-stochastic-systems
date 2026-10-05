@@ -117,10 +117,13 @@ export function setSectionAvailable(page, off) {
   const root = document.getElementById('tab-' + page);
   if (root) root.querySelectorAll('.subtab[data-section]').forEach(a => { a.hidden = map.has(a.getAttribute('data-section')); });
   document.querySelectorAll('.tab-subs[data-subs-for="' + page + '"] .tab-sub[data-section]').forEach(a => {
-    const tip = map.get(a.getAttribute('data-section'));
+    const sid = a.getAttribute('data-section');
+    const tip = map.get(sid);
     a.classList.toggle('disabled', !!tip);
+    // An available link keeps the section's own description as its tooltip.
+    const own = (list.find(s => s.id === sid) || {}).tip;
     if (tip) { a.setAttribute('aria-disabled', 'true'); a.setAttribute('data-tip', tip); }
-    else { a.removeAttribute('aria-disabled'); a.removeAttribute('data-tip'); }
+    else { a.removeAttribute('aria-disabled'); if (own) a.setAttribute('data-tip', own); else a.removeAttribute('data-tip'); }
   });
   syncOptions(page);
   if (current === page && currentSec && map.has(currentSec)) showTab(page + '/' + firstAvailable(page));
@@ -223,7 +226,9 @@ export function showTab(name) {
   const list = SECTIONS.get(page);
   let sec = null;
   if (list) {
-    sec = parts[1] || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
+    // A name the page no longer has (an old link) falls back like a missing one.
+    const named = parts[1] && list.some(s => s.id === parts[1]) ? parts[1] : null;
+    sec = named || (list.some(s => s.id === lastSection.get(page)) ? lastSection.get(page) : list[0].id);
     // A section the data cannot fill is not opened; its first available
     // neighbor is, and a link naming it lands there.
     if (isSectionDisabled(page, sec)) sec = firstAvailable(page);
@@ -242,7 +247,8 @@ function buildSections(page, list) {
   const link = document.querySelector('.tab[data-tab="' + page + '"]');
   const pageTitle = link ? (link.querySelector('.tab-t') || link).textContent.trim() : page;
   const root = document.getElementById('tab-' + page);
-  const anchor = (cls, s) => '<a class="' + cls + '" href="#' + page + '/' + s.id + '" data-section="' + s.id + '">' + s.label + '</a>';
+  const tipAttr = s => (s.tip ? ' data-tip="' + String(s.tip).replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' : '');
+  const anchor = (cls, s) => '<a class="' + cls + '" href="#' + page + '/' + s.id + '" data-section="' + s.id + '"' + tipAttr(s) + '>' + s.label + '</a>';
   if (root) {
     root.querySelectorAll('[data-subnav]').forEach(nav => {
       nav.setAttribute('role', 'navigation');
@@ -296,7 +302,7 @@ export function initTabs(opts = {}) {
 
   for (const [page, list] of Object.entries(opts.sections || {})) {
     if (!Array.isArray(list) || !list.length || !document.getElementById('tab-' + page)) continue;
-    SECTIONS.set(page, list.map(s => ({ id: String(s.id), label: String(s.label) })));
+    SECTIONS.set(page, list.map(s => ({ id: String(s.id), label: String(s.label), tip: s.tip ? String(s.tip) : null })));
     buildSections(page, SECTIONS.get(page));
   }
 

@@ -20,6 +20,7 @@ import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
+import { currentSection } from '../ui/tabs.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -28,11 +29,10 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Bonferroni means' },
-  { id: 'diffs', label: 'Bonferroni differences' },
-  { id: 'plan', label: 'Replications' },
-  { id: 'anova', label: 'ANOVA and post hoc' },
-  { id: 'subset', label: 'Screen for the best' }
+  { id: 'means', label: 'Bonferroni means', tip: 'Each design’s mean with its own t interval at level 1 − α/k, and so all k intervals hold at once. No comparison is made; a design’s interval is read on its own.' },
+  { id: 'diffs', label: 'Bonferroni differences', tip: 'Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing pooled and no analysis of variance first.' },
+  { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
+  { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
 ];
 
 const RULES = {
@@ -49,6 +49,7 @@ const WELCH_RULES = {
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 let rootEl = null;
+let exportRow = null;
 let checklist = null;
 let ctrlSels = [];
 let dir = 'max';
@@ -63,7 +64,7 @@ let ruleW = 'gameshowell';
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
-const NP_PLAN = 'The planning card sizes the t procedures. Under normal data the rank procedures need about 5% more replications for the same power (their efficiency relative to the t is 3/π), and under heavy tails they need fewer.';
+const NP_PLAN = 'Under the rank procedures the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer, and the inflation is then conservative.';
 // 'independent' or 'paired': whether replication i of every design shared its
 // random inputs (common random numbers across designs), making it a block.
 let pairMode = 'independent';
@@ -79,7 +80,7 @@ let pending = false;
 // The replication plan. A null target follows its default, which is
 // recomputed from the data; a number is the reader's own value, kept until
 // another set of designs is checked.
-const plan = { mode: 'hw', key: null, hwUser: null, deltaUser: null, power: 0.8, hwSlot: {}, deltaSlot: {} };
+const plan = { key: null, hwUser: null, mhwUser: null, deltaUser: null, power: 0.8, hwSlot: {}, mhwSlot: {}, deltaSlot: {} };
 // What the plan is computed from, or { msg } when it cannot be, and the
 // page's result without its planning table; both are set by update(), and
 // so a planning control redraws only the planning card.
@@ -352,19 +353,12 @@ const PLAN_WHY =
   '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
 
-// The card's markup: its heading, the mode switch, and the two panes, each
-// with its own controls above the shared outputs.
-function planMarkup(p, hwControls, powerControlsHtml) {
+// A section's planning card: its heading, its controls, the outputs, and a
+// line for the rank procedures' note.
+function subPlanMarkup(controlsHtml) {
   return '<div class="sec-hd">How many replications</div>' +
-    '<div class="ctrl-row plan-mode-row"><span class="ctrl-lbl" id="' + p + '-plan-lbl">Set the number</span>' +
-      '<span class="seg" role="group" aria-labelledby="' + p + '-plan-lbl">' +
-        '<button type="button" class="seg-btn" data-plan="hw" aria-pressed="true">by half-width</button>' +
-        '<button type="button" class="seg-btn" data-plan="power" aria-pressed="false">by power</button>' +
-      '</span></div>' +
-    '<div class="plan-stack">' +
-      '<div class="plan-pane" data-pane="hw">' + hwControls + PLAN_OUT + '</div>' +
-      '<div class="plan-pane" data-pane="power">' + powerControlsHtml + PLAN_OUT + '</div>' +
-    '</div>';
+    '<div class="plan-pane">' + controlsHtml + PLAN_OUT + '</div>' +
+    '<p class="exp-note plan-np"></p>';
 }
 
 // The power pane's controls: the shift δ (its field is made by syncSpin)
@@ -416,9 +410,12 @@ function syncSpin(slot, host, inputId, label, step, value, onChange) {
 // the current count already gives. A null n draws en dashes.
 function planCards(kind, o) {
   const has = o.n != null;
+  // Under a rank procedure the second card holds the t procedure's own n,
+  // the count the shown n was inflated from, in place of the value at n.
   const cards = [
     card(PLAN_N, has ? intl(o.n) : dash, o.nNote),
-    kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
+    o.tN != null ? card('t procedure’s <span class="sym">n</span>', intl(o.tN), 'inflated by π/3 for the rank procedure')
+      : kind === 'hw' ? card(PLAN_HW, has ? num(o.at) : dash, o.atNote) : card(PLAN_PW, has ? powerPct(o.at) : dash, o.atNote)
   ];
   const add = has && Number.isFinite(o.R) ? o.n - o.R : NaN;
   cards.push(Number.isFinite(add) && add <= 0
@@ -434,14 +431,6 @@ function fillPane(pane, headHtml, cards, noteHtml) {
   pane.querySelector('.plan-note').innerHTML = noteHtml;
 }
 
-function syncPlanMode(sec, mode) {
-  sec.querySelectorAll('[data-plan]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.plan === mode)));
-  sec.querySelectorAll('.plan-pane').forEach(p => {
-    const off = p.dataset.pane !== mode;
-    p.classList.toggle('is-off', off);
-    p.inert = off;
-  });
-}
 
 // One row of the Planning table, offered by the export row and the Report page.
 function planRow(mode, target, n, at, R) {
@@ -629,7 +618,6 @@ function update() {
   const ctrlIdx = Math.max(0, list.findIndex(d => d.id === controlId));
   const L = levelPct(level), aTxt = num(alpha, 2);
   const np = proc === 'np';
-  rootEl.querySelector('#sev-plan-np').textContent = np ? NP_PLAN : '';
   const tables = [];
   const summary = [];
 
@@ -657,7 +645,7 @@ function update() {
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)]);
     b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'], rows));
-    tables.push({ name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'],
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'],
       rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)]) });
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
@@ -674,7 +662,7 @@ function update() {
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)]);
     b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'], rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the Bonferroni means', declared: INDEP_REPS }));
-    tables.push({ name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'],
       rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi]) });
       }
   }
@@ -712,7 +700,7 @@ function update() {
     b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval', 'p', 'Adjusted p', 'Basis', 'Flag'], rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
-    tables.push({ name: 'Bonferroni rank differences', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
+    tables.push({ section: 'diffs', name: 'Bonferroni rank differences', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
       rows: famR.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi, c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = famR.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
@@ -748,7 +736,7 @@ function update() {
       alpha, procedure: 'the Bonferroni differences', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
         : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    tables.push({ name: 'Bonferroni differences', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
+    tables.push({ section: 'diffs', name: 'Bonferroni differences', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
       rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
@@ -788,7 +776,7 @@ function update() {
     // checks that without assuming normality, which the F ratio of two
     // variances would.
     const lv = levene(groups);
-    tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
+    tables.push({ section: 'anova', name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
     // The residuals, with the design means and, under pairing, the block
     // effects removed, are what the F test and the post-hoc rules take as normal.
     const resid = [];
@@ -868,18 +856,18 @@ function update() {
         : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Bonferroni differences.'));
     const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se)].concat(welch ? [num(p.df)] : [], [num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']));
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['Critical difference', 'Interval', 'Different?']), rows));
-    if (welch) tables.push({ name: 'Welch ANOVA', headers: ['test', 'F', 'df1', 'df2', 'p'], rows: [['Welch F for equal means', av.F, av.df1, av.df2, av.p]] });
-    else tables.push({ name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
+    if (welch) tables.push({ section: 'anova', name: 'Welch ANOVA', headers: ['test', 'F', 'df1', 'df2', 'p'], rows: [['Welch F for equal means', av.F, av.df1, av.df2, av.p]] });
+    else tables.push({ section: 'anova', name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
       ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p],
       paired ? ['between replications (blocks)', av.ssblk, av.dfblk, av.msblk, av.Fblock, av.pBlock] : null,
       [paired ? 'residual' : 'within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, totalDf, '', '', '']].filter(Boolean) });
-    tables.push({ name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 'critical value', 'critical difference', 'lower', 'upper', 'p', 'different'],
+    tables.push({ section: 'anova', name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 'critical value', 'critical difference', 'lower', 'upper', 'p', 'different'],
       rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, welch ? p.df : av.dfw, welch ? p.crit : ph.crit, p.hw, p.lo, p.hi, welch ? p.p : '', p.flagged ? 'yes' : 'no']) });
     // The letters are read off the design plot; the table exists only as an
     // export, where nothing can be hovered.
     if (ph.letters) {
       const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
-      tables.push({ name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
+      tables.push({ section: 'anova', name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
     }
     summary.push('Levene: ' + pEq(lv.p) + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': F = ' + num(av.F) + ', ' + pEq(av.p) + '. ' + ruleName + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
@@ -930,9 +918,9 @@ function update() {
     b.appendChild(table(['Pair', 'Designs', paired ? 'Rank-sum difference' : 'Mean-rank difference', 'SE', 'z', 'p', 'Adjusted p', 'Different?'], rowsD));
     tables.push(paired ? { name: 'Rank test (Friedman)', headers: ['chi-square', 'df', 'p'], rows: [[fr.chi2, fr.df, fr.p]] }
       : { name: 'Rank test (Kruskal-Wallis)', headers: ['H', 'df', 'p'], rows: [[kwr.H, kwr.df, kwr.p]] });
-    tables.push({ name: 'Pairwise rank comparisons (' + (paired ? 'Friedman' : 'Dunn') + ', ' + adjName + ')', headers: ['pair', paired ? 'rank sum difference' : 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
+    tables.push({ section: 'anova', name: 'Pairwise rank comparisons (' + (paired ? 'Friedman' : 'Dunn') + ', ' + adjName + ')', headers: ['pair', paired ? 'rank sum difference' : 'mean rank difference', 'se', 'z', 'p', 'adjusted p', 'different'],
       rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
-    tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
+    tables.push({ section: 'anova', name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
       rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
     summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', ' + pEq(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   
@@ -973,7 +961,7 @@ function update() {
         '; the screen’s t = ' + num(ss.t) + '. A smaller ε asks for more replications, in proportion to 1/ε².'));
       // The screen's allowances and Rinott's sizes are t procedures on each design's own mean and variance.
       b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the screen', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-      tables.push({ name: 'Screen for the best', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
+      tables.push({ section: 'subset', name: 'Screen for the best', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
         rows: list.map((d, i) => [d.name, ss.n[i], ss.means[i], Math.sqrt(ss.s2[i]), ss.survivors[i] ? 'yes' : 'no', ss.N[i] === null ? '' : ss.N[i], ss.additional[i] === null ? '' : ss.additional[i]]) });
       summary.push(verdict);
     }
@@ -984,7 +972,7 @@ function update() {
   // the paired differences, and the power plan on the blocked F test.
   const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
   planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
-              sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)),
+              sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)), meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)),
               sigma: Math.sqrt(av.msw), grandMean: av.grandMean, paired, sdDs };
   registerTips(rootEl);
   resultBase = {
@@ -1013,11 +1001,12 @@ function update() {
 // the page's result with its planning table.
 function drawPlan() {
   if (!rootEl) return;
-  const sec = rootEl.querySelector('#sev-plan');
-  syncPlanMode(sec, plan.mode);
   const c = planCtx && !planCtx.msg ? planCtx : null;
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Check two or more designs above to plan replications.';
-  if (c && c.key !== plan.key) { plan.key = c.key; plan.hwUser = storedTarget('target', c.key); plan.deltaUser = storedTarget('delta', c.key); }
+  if (c && c.key !== plan.key) {
+    plan.key = c.key;
+    plan.hwUser = storedTarget('target', c.key); plan.mhwUser = storedTarget('mtarget', c.key); plan.deltaUser = storedTarget('delta', c.key);
+  }
   const level = state.settings.base, alpha = 1 - level;
   const unit = c && c.unit ? ' ' + c.unit : '';
   const unitNote = c && c.unit ? c.unit : 'in the response’s units';
@@ -1025,82 +1014,122 @@ function drawPlan() {
   // and the power at the current count uses the smallest.
   const R = c ? Math.max(...c.ns) : NaN, Rlo = c ? Math.min(...c.ns) : NaN;
   const same = !c || R === Rlo;
-  const rText = same ? 'the current R\u00a0=\u00a0' + intl(R) : 'the largest current R\u00a0=\u00a0' + intl(R);
+  const rText = same ? 'the current R = ' + intl(R) : 'the largest current R = ' + intl(R);
   const equalNote = c && c.paired ? '' : ', with equal replications in each design';
-  const rows = [];
+  // A rank procedure is sized from the t plan: n times pi/3, rounded up.
+  const npOn = proc === 'np';
+  const inflate = n => (n == null ? null : npOn ? Math.ceil(n * Math.PI / 3) : n);
+  const ranked = n => (npOn && n != null ? n : null);
+  const cards = { means: rootEl.querySelector('#sev-plan-means'), diffs: rootEl.querySelector('#sev-plan-diffs'), anova: rootEl.querySelector('#sev-plan-anova') };
+  for (const k in cards) cards[k].querySelector('.plan-np').textContent = npOn ? NP_PLAN : '';
+  const tables = [];
+  let mText, hText, dText, family, C;
 
-  // By half-width, on the Bonferroni differences of the current mode.
-  const C = c ? (diffMode === 'control' ? c.k - 1 : c.k * (c.k - 1) / 2) : NaN;
-  const family = diffMode === 'control'
-    ? 'each design against the control' + (c ? ', ' + c.short[c.ctrlIdx] : '')
-    : 'all pairs';
-  const hwDef = c ? round2(c.widest / 2) : NaN;
-  const hwVal = c ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
-  syncSpin(plan.hwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-hw', 'Target half-width', stepFor(hwDef), hwVal,
-    v => { plan.hwUser = v; if (plan.key) state.setPick(id, 'target:' + plan.key, v); drawPlan(); });
-  sec.querySelector('.plan-hw-unit').textContent = unitNote;
-  sec.querySelector('.plan-hw-def').textContent = 'The default' + (c ? ', ' + num(hwDef) + ',' : '') +
-    ' is half the widest current half-width; halving a half-width takes about four times the replications.';
-  let hp = { n: null, hwAtN: NaN, pair: [] }, hwNote = esc(msg);
-  if (c && c.paired) {
-    // The widest paired interval belongs to the pair whose differences vary most.
-    const worst = c.sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
-    const pr = planReplications({ sd: worst.sd, level: 1 - (1 - level) / C, target: hwVal });
-    hp = { n: pr.n, hwAtN: pr.hwAtN, pair: [worst.i, worst.j], reason: 'No replication count meets this target; choose a larger half-width.' };
-    hwNote = hp.n != null
-      ? 'An estimate conditional on the current sample standard deviations of the paired differences, up to ' + num(worst.sd) + ', not a guarantee; a larger pilot can move it either way.'
-      : esc(hp.reason);
-  } else if (c) {
-    hp = planHalfWidthBonferroni({ sds: c.sds, level, mode: diffMode, control: c.ctrlIdx, target: hwVal });
-    const sMin = Math.min(...c.sds), sMax = Math.max(...c.sds);
-    hwNote = hp.n != null
-      ? 'An estimate conditional on the current sample standard deviations of the ' + word(c.k) + ' designs, from ' + num(sMin) + ' to ' + num(sMax) +
-        ', not a guarantee; a larger pilot can move it either way.'
-      : esc(hp.reason);
+  // The means: every design's own interval at 1 − α/k; the design with the
+  // largest standard deviation has the widest, and so sets the count.
+  {
+    const sec = cards.means;
+    const k = c ? c.k : NaN;
+    const hwDef = c ? round2(c.meanHw / 2) : NaN;
+    const hwVal = c ? (plan.mhwUser != null ? plan.mhwUser : hwDef) : null;
+    syncSpin(plan.mhwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-mhw', 'Target half-width', stepFor(hwDef), hwVal,
+      v => { plan.mhwUser = v; if (plan.key) state.setPick(id, 'mtarget:' + plan.key, v); drawPlan(); });
+    sec.querySelector('.plan-hw-unit').textContent = unitNote;
+    sec.querySelector('.plan-hw-def').textContent = 'The default' + (c ? ', ' + num(hwDef) + ',' : '') +
+      ' is half the widest current half-width; halving a half-width takes about four times the replications.';
+    let hp = { n: null, hwAtN: NaN }, note = esc(msg);
+    const sMax = c ? Math.max(...c.sds) : NaN;
+    if (c) {
+      hp = planReplications({ sd: sMax, level: 1 - (1 - level) / k, target: hwVal });
+      note = hp.n != null
+        ? 'An estimate conditional on the largest current sample standard deviation, ' + num(sMax) + ', which sets the widest interval; not a guarantee, and a larger pilot can move it either way.'
+        : esc(hp.reason || 'No replication count meets this target; choose a larger half-width.');
+    }
+    mText = 'h = ' + num(c ? hwVal : NaN) + unit;
+    fillPane(sec,
+      'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' Bonferroni mean intervals above (each at 1 − α/k), with equal replications in each design',
+      planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'for the design with s = ' + num(sMax) }), note);
+    if (c) tables.push({ section: 'means', name: 'Replications for the means', headers: PLAN_HEADERS, rows: [planRow('by half-width', mText + ' on each of k = ' + k + ' means', inflate(hp.n), hp.hwAtN, R)] });
   }
-  const hText = 'h = ' + num(c ? hwVal : NaN) + unit;
-  const widestPair = hp.n != null ? esc(c.short[hp.pair[0]] + ' − ' + c.short[hp.pair[1]]) : dash;
-  fillPane(sec.querySelector('[data-pane="hw"]'),
-    'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
-      ' Bonferroni ' + (c && c.paired ? 'paired ' : '') + 'differences (' + esc(family) + ')' + equalNote,
-    planCards('hw', { n: hp.n, at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'widest: ' + widestPair }), hwNote);
-  if (c) rows.push(planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', hp.n, hp.hwAtN, R));
 
-  // By power: the one-way ANOVA F test with one design shifted by δ.
-  const g = c ? Math.abs(c.grandMean) : NaN;
-  const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
-  const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
-  syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
-    v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
-  sec.querySelector('.plan-delta-unit').textContent = unitNote;
-  let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = esc(msg);
-  if (c) {
-    pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power, blocked: c.paired });
-    cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
-    pwNote = pp.n != null
-      ? 'This is the ' + (c.paired ? 'blocked ' : '') + 'F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best card are a third way to set replications, by selection. ' +
-        'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
-      : esc(pp.reason);
+  // The differences: every Bonferroni interval of the current family.
+  {
+    const sec = cards.diffs;
+    C = c ? (diffMode === 'control' ? c.k - 1 : c.k * (c.k - 1) / 2) : NaN;
+    family = diffMode === 'control'
+      ? 'each design against the control' + (c ? ', ' + c.short[c.ctrlIdx] : '')
+      : 'all pairs';
+    const hwDef = c ? round2(c.widest / 2) : NaN;
+    const hwVal = c ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
+    syncSpin(plan.hwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-hw', 'Target half-width', stepFor(hwDef), hwVal,
+      v => { plan.hwUser = v; if (plan.key) state.setPick(id, 'target:' + plan.key, v); drawPlan(); });
+    sec.querySelector('.plan-hw-unit').textContent = unitNote;
+    sec.querySelector('.plan-hw-def').textContent = 'The default' + (c ? ', ' + num(hwDef) + ',' : '') +
+      ' is half the widest current half-width; halving a half-width takes about four times the replications.';
+    let hp = { n: null, hwAtN: NaN, pair: [] }, hwNote = esc(msg);
+    if (c && c.paired) {
+      // The widest paired interval belongs to the pair whose differences vary most.
+      const worst = c.sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
+      const pr = planReplications({ sd: worst.sd, level: 1 - (1 - level) / C, target: hwVal });
+      hp = { n: pr.n, hwAtN: pr.hwAtN, pair: [worst.i, worst.j], reason: 'No replication count meets this target; choose a larger half-width.' };
+      hwNote = hp.n != null
+        ? 'An estimate conditional on the current sample standard deviations of the paired differences, up to ' + num(worst.sd) + ', not a guarantee; a larger pilot can move it either way.'
+        : esc(hp.reason);
+    } else if (c) {
+      hp = planHalfWidthBonferroni({ sds: c.sds, level, mode: diffMode, control: c.ctrlIdx, target: hwVal });
+      const sMin = Math.min(...c.sds), sMax = Math.max(...c.sds);
+      hwNote = hp.n != null
+        ? 'An estimate conditional on the current sample standard deviations of the ' + word(c.k) + ' designs, from ' + num(sMin) + ' to ' + num(sMax) +
+          ', not a guarantee; a larger pilot can move it either way.'
+        : esc(hp.reason);
+    }
+    hText = 'h = ' + num(c ? hwVal : NaN) + unit;
+    const widestPair = hp.n != null ? esc(c.short[hp.pair[0]] + ' − ' + c.short[hp.pair[1]]) : dash;
+    fillPane(sec,
+      'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
+        ' Bonferroni ' + (c && c.paired ? 'paired ' : '') + 'differences above (' + esc(family) + ')' + equalNote,
+      planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'widest: ' + widestPair }), hwNote);
+    if (c) tables.push({ section: 'diffs', name: 'Replications for the differences', headers: PLAN_HEADERS, rows: [planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', inflate(hp.n), hp.hwAtN, R)] });
   }
-  const dText = 'δ = ' + num(c ? delta : NaN) + unit;
-  fillPane(sec.querySelector('[data-pane="power"]'),
-    'Replications per design needed to detect one design shifted by ' + esc(dText) + ' from the others with ' + powerPct(plan.power) +
-      ' power, by the ' + (c && c.paired ? 'blocked' : 'one-way') + ' ANOVA F test at α = ' + num(alpha) + equalNote,
-    planCards('power', { n: pp.n, at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
-      curNote: same ? 'at R\u00a0=\u00a0' + intl(Rlo) + ' per design' : 'at the smallest current R\u00a0=\u00a0' + intl(Rlo) }), pwNote);
-  if (c) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), pp.n, pp.powerAtN, R));
+
+  // The analysis of variance: the F test's power with one design shifted by δ.
+  {
+    const sec = cards.anova;
+    const g = c ? Math.abs(c.grandMean) : NaN;
+    const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
+    const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
+    syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
+      v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
+    sec.querySelector('.plan-delta-unit').textContent = unitNote;
+    let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = esc(msg);
+    if (c) {
+      pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power, blocked: c.paired });
+      cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
+      pwNote = pp.n != null
+        ? 'This is the ' + (c.paired ? 'blocked ' : '') + 'F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best section are a third way to set replications, by selection. ' +
+          'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
+        : esc(pp.reason);
+    }
+    dText = 'δ = ' + num(c ? delta : NaN) + unit;
+    fillPane(sec,
+      'Replications per design needed to detect one design shifted by ' + esc(dText) + ' from the others with ' + powerPct(plan.power) +
+        ' power, by the ' + (c && c.paired ? 'blocked' : 'one-way') + ' ANOVA F test at α = ' + num(alpha) + equalNote,
+      planCards('power', { n: inflate(pp.n), tN: ranked(pp.n), at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
+        curNote: same ? 'at R = ' + intl(Rlo) + ' per design' : 'at the smallest current R = ' + intl(Rlo) }), pwNote);
+    if (c) tables.push({ section: 'anova', name: 'Replications for the F test', headers: PLAN_HEADERS, rows: [planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), inflate(pp.n), pp.powerAtN, R)] });
+  }
 
   if (!resultBase) { state.setResult('several', null); return; }
   const prov = Object.assign({}, resultBase.provenance, {
-    'planning mode shown': plan.mode === 'hw' ? 'by half-width' : 'by power',
-    'planning replications': 'equal per design',
-    'planning half-width target': hText,
+    'planning replications': 'equal per design' + (npOn ? ', the t plan inflated by pi/3 for the rank procedures' : ''),
+    'planning half-width target (means)': mText,
+    'planning half-width target (differences)': hText,
     'planning comparisons': family + ', C = ' + C,
     'planning shift to detect': dText,
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('several', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Planning', headers: PLAN_HEADERS, rows }]) }));
+  state.setResult('several', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat(tables) }));
 }
 
 /**
@@ -1157,18 +1186,18 @@ export function render(root) {
     '</div>' +
     '<p class="unit-line" id="sev-unit"></p>' +
     '<p class="sev-key" id="sev-key"></p>' +
+    '<div class="ctrl-grp-lbl subnav-lbl">Analysis</div>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><div class="sec-hd">Bonferroni means: simultaneous intervals</div><div id="sev-means-body"></div></div>' +
-    '<div class="sec" data-section="diffs"><div class="sec-hd">Bonferroni differences</div>' +
+    '<div class="sec" data-section="means"><h3 class="sec-title">Bonferroni means</h3><p class="sec-lede">Each design’s mean with its own interval at level 1 − α/k, and so all k intervals hold at once. Nothing is compared here; each interval is read on its own.</p><div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
+    '<div class="sec" data-section="diffs"><h3 class="sec-title">Bonferroni differences</h3><p class="sec-lede">Every pair’s difference, or each design against a control, with its own interval at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
         '<button type="button" class="seg-btn" data-diff="control" aria-pressed="false">versus control</button>' +
       '</span>' +
       '<span class="ctrl-pair" id="sev-ctrl-diff"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with, usually the current system.">Control</span></label><select id="sev-ctrl" data-control></select></span>' +
       '</div>' +
-      '<div id="sev-diffs-body"></div></div>' +
-    '<div class="sec plan-card" id="sev-plan" data-section="plan"></div>' +
-    '<div class="sec" data-section="anova"><div class="sec-hd" id="sev-anova-hd">Analysis of variance and post-hoc tests</div>' +
+      '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
+    '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ, and then a post-hoc rule that judges each pair.</p>' +
       '<div class="ctrl-row" id="sev-adj-row" style="display:none"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How the pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
@@ -1181,27 +1210,26 @@ export function render(root) {
         '</span></div>' +
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
-      '<div id="sev-posthoc-body"></div></div>' +
-    '<div class="sec" data-section="subset"><div class="sec-hd">Screen for the best</div><div id="sev-subset-body"></div></div>';
+      '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
+    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p><div id="sev-subset-body"></div></div>';
 
-  const planSec = root.querySelector('#sev-plan');
-  planSec.innerHTML = planMarkup('sev',
-    '<div class="ctrl-row">' +
+  // Each section's own planning card: the means and the differences are
+  // sized by a target half-width, the analysis of variance by a target power.
+  const meansControls = '<div class="ctrl-row">' +
+      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every design’s own interval above to have, in the response’s units. The widest interval belongs to the design with the largest standard deviation, and so that design sets the count.">Target half-width</span></span>' +
+        '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
+      '<span class="ctrl-note plan-hw-def"></span>' +
+    '</div>';
+  root.querySelector('#sev-plan-means').innerHTML = subPlanMarkup(meansControls);
+  root.querySelector('#sev-plan-diffs').innerHTML = subPlanMarkup('<div class="ctrl-row">' +
       '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every difference interval in the Differences card to have, in the response’s units. Bonferroni’s per-comparison level, 1 − α/C, is what makes this plan grow with the number of comparisons C.">Target half-width</span></span>' +
         '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
       '<span class="ctrl-note plan-hw-def"></span>' +
-    '</div>',
-    powerControls('sev', 'Shift to detect δ',
+    '</div>');
+  root.querySelector('#sev-plan-anova').innerHTML = subPlanMarkup(powerControls('sev', 'Shift to detect δ',
       'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean.'));
-  planSec.appendChild(para('exp-note', '')).id = 'sev-plan-np';
-  planSec.appendChild(details('Half-width or power?', PLAN_WHY));
-  planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
-    if (plan.mode === b.dataset.plan) return;
-    plan.mode = b.dataset.plan;
-    state.setPick(id, 'planMode', plan.mode);
-    drawPlan();
-  }));
-  const powSel = planSec.querySelector('#sev-plan-pow');
+  for (const sid of ['diffs', 'anova']) root.querySelector('#sev-plan-' + sid).appendChild(details('Half-width or power?', PLAN_WHY));
+  const powSel = root.querySelector('#sev-plan-pow');
   powSel.addEventListener('change', () => { plan.power = Number(powSel.value); state.setPick(id, 'power', plan.power); drawPlan(); });
 
   // The rule picker sits between the ANOVA table and the post-hoc results,
@@ -1252,7 +1280,8 @@ export function render(root) {
   state.on('settings', () => { if (visible()) schedule(); });
   autoCheck();
   update();
-  installExportRow(root, id);
+  // The export row offers the tables of the section in view, and so it follows the strip.
+  exportRow = installExportRow(root, id, { tables: t => !t.section || t.section === (currentSection() || 'means') });
 }
 
 // Whether the analysis of variance is Welch's: only for independent
@@ -1290,7 +1319,6 @@ function applyStored() {
   if (typeof get('control') === 'string') controlId = get('control');
   const e = get('eps');
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;
-  if (get('planMode') === 'hw' || get('planMode') === 'power') plan.mode = get('planMode');
   if (PLAN_POWERS.includes(get('power'))) {
     plan.power = get('power');
     const sel = rootEl && rootEl.querySelector('#sev-plan-pow');
@@ -1331,6 +1359,8 @@ function autoCheck() {
 }
 
 /** Called each time the page is shown. */
-export function onShow() { update(); }
+export function onShow() { update(); if (exportRow) exportRow.refresh(); }
+/** Called when the shown section changes; the export row offers that section's tables. */
+export function onShowSection() { if (exportRow) exportRow.refresh(); }
 
-export default { id, title, sections, render, onShow };
+export default { id, title, sections, render, onShow, onShowSection };
