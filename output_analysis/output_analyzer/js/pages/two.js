@@ -1,21 +1,23 @@
 // The Two Systems page: compares two designs on their replication outcomes,
-// by Welch's procedure when the replications are independent and by the
-// paired t when they were run under common random numbers. Pairing is a
+// by Welch's or the pooled-variance t procedure when the replications are
+// independent and by the paired t when they were run under common random
+// numbers. Pairing is a
 // switch the reader sets; the page never infers it from equal sample sizes.
 // A card under the comparison plans the replications per design by a target
 // half-width on the difference or by a target power.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
-import { welch, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch } from '../stats/compare.js';
+import { welch, pooledT, matchPairs, pairedT, planHalfWidthWelch, powerWelch, planPowerWelch,
+         planHalfWidthPooled, powerPooled, planPowerPooled } from '../stats/compare.js';
 import { tInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
-import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
-import { num, pValue, pct, esc, plural, intl, dash, lvl } from '../ui/format.js';
+import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -26,8 +28,12 @@ export const title = 'Two Systems';
 let rootEl = null;
 let selA = null, selB = null;
 let mode = 'independent';
-// 't' for the Welch and paired t procedures, 'np' for the Wilcoxon ones.
+// 't' for Welch's and the paired t procedures, 'pooled' for the pooled-variance
+// t (offered only for independent replications; under pairing it reads as
+// 't'), 'np' for the Wilcoxon ones.
 let proc = 't';
+// The procedure in force: pooling has no meaning for pairs.
+function effProc() { return mode === 'paired' && proc === 'pooled' ? 't' : proc; }
 // The match rule the reader chose for the current pair of datasets, or null
 // to follow the default. It is kept per pair, and so choosing another pair
 // starts from that pair's own choice or the default.
@@ -388,7 +394,10 @@ function chosen() {
 
 function syncControls() {
   rootEl.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-  rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+  const ep = effProc();
+  rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === ep)));
+  rootEl.querySelector('[data-proc="t"]').textContent = mode === 'paired' ? 'Paired t' : 'Welch’s t';
+  rootEl.querySelector('[data-proc="pooled"]').classList.toggle('seg-hidden', mode === 'paired');
   rootEl.querySelector('#two-match-row').style.display = mode === 'paired' ? '' : 'none';
 }
 
@@ -462,6 +471,7 @@ function drawPlan() {
   const unit = c && c.dsA.unit ? ' ' + c.dsA.unit : '';
   const unitNote = c && c.dsA.unit ? c.dsA.unit : 'in the response’s units';
   const paired = c ? c.paired : mode === 'paired';
+  const pooled = !!(c && c.pooled);
   // Additional replications are counted beyond the larger of the two current
   // counts, and the power at the current count uses the smaller.
   const R = c ? (paired ? c.nPairs : Math.max(c.nA, c.nB)) : NaN;
@@ -486,12 +496,13 @@ function drawPlan() {
     ' is half the current half-width; halving a half-width takes about four times the replications.';
   let hp = { n: null, hwAtN: NaN }, hwNote = esc(msg);
   if (c) {
-    hp = paired ? planReplications({ sd: c.sdD, level, target: hwVal }) : planHalfWidthWelch({ sd1: c.sd1, sd2: c.sd2, level, target: hwVal });
+    hp = paired ? planReplications({ sd: c.sdD, level, target: hwVal })
+      : (pooled ? planHalfWidthPooled : planHalfWidthWelch)({ sd1: c.sd1, sd2: c.sd2, level, target: hwVal });
     hwNote = hp.n != null ? closing : esc(hp.reason || 'No replication count meets this target; choose a larger half-width.');
   }
   const hText = 'h = ' + num(c ? hwVal : NaN) + unit;
   fillPane(sec.querySelector('[data-pane="hw"]'),
-    'Replications per design needed for a half-width of ' + esc(hText) + ' on the ' + (paired ? 'paired' : 'Welch') + ' interval for A − B' + equalNote,
+    'Replications per design needed for a half-width of ' + esc(hText) + ' on the ' + (paired ? 'paired' : pooled ? 'pooled t' : 'Welch') + ' interval for A − B' + equalNote,
     planCards('hw', { n: hp.n, at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText,
       atNote: paired ? 'if s<sub>D</sub> stays at ' + num(c ? c.sdD : NaN) : 'if s<sub>A</sub> and s<sub>B</sub> hold' }), hwNote);
   if (c) rows.push(planRow('by half-width', hText, hp.n, hp.hwAtN, R));
@@ -506,17 +517,17 @@ function drawPlan() {
   let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = esc(msg);
   if (c) {
     pp = paired ? planPowerOneSample({ sd: c.sdD, delta, alpha, power: plan.power })
-      : planPowerWelch({ sd1: c.sd1, sd2: c.sd2, delta, alpha, power: plan.power });
+      : (pooled ? planPowerPooled : planPowerWelch)({ sd1: c.sd1, sd2: c.sd2, delta, alpha, power: plan.power });
     cur = paired ? (c.sdD > 0 ? powerOneSample({ n: Rlo, sd: c.sdD, delta, alpha }) : NaN)
-      : (c.sd1 > 0 && c.sd2 > 0 ? powerWelch({ n: Rlo, sd1: c.sd1, sd2: c.sd2, delta, alpha }) : NaN);
+      : (c.sd1 > 0 && c.sd2 > 0 ? (pooled ? powerPooled : powerWelch)({ n: Rlo, sd1: c.sd1, sd2: c.sd2, delta, alpha }) : NaN);
     pwNote = pp.n != null
-      ? (paired ? '' : 'Welch’s power here is the noncentral-t approximation at the Welch degrees of freedom. ') + closing
+      ? (paired || pooled ? '' : 'Welch’s power here is the noncentral-t approximation at the Welch degrees of freedom. ') + closing
       : esc(pp.reason);
   }
   const dText = 'δ = ' + num(c ? delta : NaN) + unit;
   fillPane(sec.querySelector('[data-pane="power"]'),
     'Replications per design needed to detect a difference of ' + esc(dText) + ' with ' + powerPct(plan.power) +
-      ' power, by a two-sided ' + (paired ? 'paired t test' : 'Welch test') + ' at α = ' + num(alpha) + equalNote,
+      ' power, by a two-sided ' + (paired ? 'paired t test' : pooled ? 'pooled t test' : 'Welch test') + ' at α = ' + num(alpha) + equalNote,
     planCards('power', { n: pp.n, at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
       curNote: paired ? 'at ' + rText : same ? 'at R\u00a0=\u00a0' + intl(Rlo) + ' per design' : 'at the smaller current R\u00a0=\u00a0' + intl(Rlo) }), pwNote);
   if (c) rows.push(planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), pp.n, pp.powerAtN, R));
@@ -546,11 +557,12 @@ function npLevelNote(r, L) {
 
 function renderIndependent(res, notes, d, level) {
   for (const n of notes) res.appendChild(n);
-  const np = proc === 'np';
-  const w = d ? welch(d.eA.v, d.eB.v, level) : null;
+  const np = proc === 'np', pooled = proc === 'pooled';
+  const w = d ? (pooled ? pooledT(d.eA.v, d.eB.v, level) : welch(d.eA.v, d.eB.v, level)) : null;
   const rs = d && np ? rankSum(d.eA.v, d.eB.v, { level }) : null;
   const L = levelPct(level);
-  const s = sec(np ? 'Wilcoxon rank-sum comparison of A and B' : 'Welch comparison of A and B');
+  const tName = pooled ? 'Pooled-variance t' : 'Welch';
+  const s = sec(np ? 'Wilcoxon rank-sum comparison of A and B' : tName + ' comparison of A and B');
   res.appendChild(s);
   const v = (x, f = num) => (w ? f(x) : dash);
   if (np) {
@@ -569,13 +581,15 @@ function renderIndependent(res, notes, d, level) {
       oneLine(card('Mean A', v(w && w.mean1), d ? esc(d.dsA.name) : 'design A')),
       oneLine(card('Mean B', v(w && w.mean2), d ? esc(d.dsB.name) : 'design B')),
       card('Difference A − B', v(w && w.diff), 'mean A − mean B'),
-      card('Standard error', v(w && w.se), '√(s<sub>A</sub>²/R<sub>A</sub> + s<sub>B</sub>²/R<sub>B</sub>)'),
-      card('<span class="tip" tabindex="0" data-tip="The Welch–Satterthwaite degrees of freedom, which allow the two designs to have different variances.">Welch df</span>', v(w && w.df), 'Welch–Satterthwaite'),
+      pooled ? card('<span class="tip" tabindex="0" data-tip="The pooled standard deviation: the two sample variances averaged with weights R_A − 1 and R_B − 1, the one spread the two designs are taken to share.">Pooled SD s<sub>p</sub></span>', v(w && w.sp), 'from s<sub>A</sub> and s<sub>B</sub>') : null,
+      card('Standard error', v(w && w.se), pooled ? 's<sub>p</sub>√(1/R<sub>A</sub> + 1/R<sub>B</sub>)' : '√(s<sub>A</sub>²/R<sub>A</sub> + s<sub>B</sub>²/R<sub>B</sub>)'),
+      pooled ? card(DF_LABEL, v(w && w.df), 'R<sub>A</sub> + R<sub>B</sub> − 2')
+        : card('<span class="tip" tabindex="0" data-tip="The Welch–Satterthwaite degrees of freedom, which allow the two designs to have different variances.">Welch df</span>', v(w && w.df), 'Welch–Satterthwaite'),
       card('t', v(w && w.t), 'difference/SE'),
-      card('Two-sided p', w ? pValue(w.p) : dash, 'Welch t test'),
+      card('Two-sided p', w ? pValue(w.p) : dash, pooled ? 'pooled t test' : 'Welch t test'),
       wide(card(L + ' interval', w ? interval(w.lo, w.hi) : dash, 'difference ± half-width')),
       card('Half-width', v(w && w.hw), 't quantile × SE')
-    ]));
+    ].filter(Boolean)));
   }
   const shown = np ? rs : w;
   const center = np ? (rs ? rs.estimate : NaN) : (w ? w.diff : NaN);
@@ -587,8 +601,10 @@ function renderIndependent(res, notes, d, level) {
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
-  if (d) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v }, { name: 'B', values: d.eB.v }], alpha: 1 - state.settings.base,
-    declared: 'between the two designs cannot be checked from the data; it is what the Independent setting declares.' }));
+  // The checks follow a parametric result only: the Wilcoxon procedures assume no normality.
+  if (d && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base, pooled,
+    procedure: pooled ? 'the pooled t test' : 'Welch’s test',
+    declared: 'between the two designs cannot be checked from the data and is instead assumed when using ' + (pooled ? 'the pooled t test' : 'Welch’s test') + '; it is what the Independent setting declares.' }));
 
   const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
@@ -623,7 +639,7 @@ function renderIndependent(res, notes, d, level) {
     { swatch: 'dot', color: '--est', label: 'one replication’s outcome' },
     { swatch: 'interval', color: '--truth', label: np ? 'design pseudo-median with its own ' + ownName : 'design mean with its own ' + ownName }
   ]);
-  const diffName = np ? L + ' Wilcoxon interval for the shift A − B' : L + ' Welch interval for A − B';
+  const diffName = np ? L + ' Wilcoxon interval for the shift A − B' : L + ' ' + (pooled ? 'pooled t' : 'Welch') + ' interval for A − B';
   legend(leg2, [
     excludes
       ? { swatch: 'flagged', color: '--miss', label: diffName + ', which excludes 0' }
@@ -634,14 +650,14 @@ function renderIndependent(res, notes, d, level) {
     ? 'The top plot shows every replication outcome of each design, with each design’s pseudo-median (the Hodges–Lehmann estimate) and its own ' + L +
       ' Wilcoxon signed-rank interval under its dots. The bottom plot is the Hodges–Lehmann shift between the designs with its ' + L + ' rank-sum interval, drawn against zero; an interval that excludes zero is drawn red and dashed.'
     : 'The top plot shows every replication outcome of each design, with each design’s mean and its own ' + L +
-      ' t interval under its dots. The bottom plot is the Welch interval for the difference of the means, drawn against zero; an interval that excludes zero is drawn red and dashed.'));
+      ' t interval under its dots. The bottom plot is the ' + (pooled ? 'pooled-variance t' : 'Welch') + ' interval for the difference of the means, drawn against zero; an interval that excludes zero is drawn red and dashed.'));
 
   if (!w) {
     resultBase = null;
     planCtx = { msg: 'Choose two different datasets above to plan replications.' };
     return;
   }
-  planCtx = { paired: false, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
+  planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
               hw: w.hw, meanA: w.mean1, sdA: w.sd1 };
   const prov = provenance(d, level, false, null, null);
   resultBase = np ? {
@@ -653,17 +669,17 @@ function renderIndependent(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, summary(d.eA.v).median, summary(d.eB.v).median, rs.estimate, rs.W, rs.p, rs.lo, rs.hi, rs.exact ? rs.achieved : level, npBasis(rs)]]
     }],
     summaryHtml: '<p>Wilcoxon rank-sum comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): shift A − B = ' + num(rs.estimate) +
-      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', p = ' + pValue(rs.p) + '. ' + esc(verdict.textContent) + '</p>'
+      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', ' + pEq(rs.p) + '. ' + esc(verdict.textContent) + '</p>'
   } : {
-    title: 'Two Systems: Welch comparison',
+    title: 'Two Systems: ' + tName + ' comparison',
     provenance: prov,
     tables: [{
-      name: 'Welch comparison',
-      headers: ['design A', 'design B', 'R_A', 'R_B', 'mean A', 'mean B', 'difference A - B', 'se', 'Welch df', 't', 'p (two-sided)', 'lower', 'upper', 'half-width'],
-      rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, w.mean1, w.mean2, w.diff, w.se, w.df, w.t, w.p, w.lo, w.hi, w.hw]]
+      name: tName + ' comparison',
+      headers: ['design A', 'design B', 'R_A', 'R_B', 'mean A', 'mean B', 'difference A - B'].concat(pooled ? ['pooled sd'] : [], ['se', pooled ? 'df' : 'Welch df', 't', 'p (two-sided)', 'lower', 'upper', 'half-width']),
+      rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, w.mean1, w.mean2, w.diff].concat(pooled ? [w.sp] : [], [w.se, w.df, w.t, w.p, w.lo, w.hi, w.hw])]
     }],
-    summaryHtml: '<p>Welch comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
-      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', p = ' + pValue(w.p) + '. ' + esc(verdict.textContent) + '</p>'
+    summaryHtml: '<p>' + tName + ' comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
+      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
 }
 
@@ -947,7 +963,10 @@ function renderPaired(res, notes, d, level) {
   const s = sec(np ? 'Wilcoxon signed-rank comparison of the matched pairs' : 'Paired comparison of A and B');
   res.appendChild(s);
   const v = (val, f = num) => (pr ? f(val) : dash);
-  const rCard = card('<span class="tip" tabindex="0" data-tip="The correlation between the A and B outcomes across the matched pairs. Common random numbers aim to make it large and positive.">Correlation r</span>', v(pr && pr.r), 'what common random numbers induce');
+  const rNote = !pr ? 'across the pairs' : pr.r > 0 ? 'pairing is reducing the variance of the comparison' : pr.r < 0 ? 'pairing is increasing the variance of the comparison' : 'pairing is neither reducing nor increasing the variance';
+  const rCard = card('<span class="tip" tabindex="0" data-tip="The correlation between the A and B outcomes across the matched pairs. Common random numbers are run to make it positive, which narrows the paired interval; a negative value says the pairing is working against the comparison.">Correlation r</span>', v(pr && pr.r), rNote);
+  // The card's outline says which way the pairing is working, in the colors the checks lines use.
+  if (pr && pr.r !== 0 && Number.isFinite(pr.r)) rCard.classList.add(pr.r > 0 ? 'card-good' : 'card-bad');
   s.appendChild(cardRow(np ? [
     card('Pairs n', pr ? intl(pr.n) : dash),
     card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate for paired data: the median of the pairwise averages of the differences A − B.">Pseudo-median of A − B</span>', v(sr && sr.estimate), 'Hodges–Lehmann'),
@@ -960,7 +979,7 @@ function renderPaired(res, notes, d, level) {
     card('Mean difference', v(pr && pr.meanD), 'mean of A − B'),
     card('SD of differences', v(pr && pr.sdD)),
     card('Standard error', v(pr && pr.se), 's<sub>D</sub>/√n'),
-    card('df', pr ? intl(pr.df) : dash, 'n − 1'),
+    card(DF_LABEL, pr ? intl(pr.df) : dash, 'n − 1'),
     card('t', v(pr && pr.t)),
     card('Two-sided p', pr ? pValue(pr.p) : dash),
     wide(card(L + ' interval', pr ? interval(pr.lo, pr.hi) : dash)),
@@ -975,8 +994,10 @@ function renderPaired(res, notes, d, level) {
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
-  if (pr) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
-    declared: 'between pairs cannot be checked from the data; the pairing within each replication is what the Paired setting declares.' }));
+  if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
+  if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
+    procedure: 'the paired t test',
+    declared: 'between pairs cannot be checked from the data and is instead assumed when using the paired t test; the pairing within each replication is what the Paired setting declares.' }));
 
   const f = sec('Paired differences');
   res.appendChild(f);
@@ -1028,8 +1049,8 @@ function renderPaired(res, notes, d, level) {
       rows: m.pairs.map(([i, j], k) => [String(d.eA.ids[i]), String(d.eB.ids[j]), x[k], y[k], pr.diffs[k]])
     }],
     summaryHtml: '<p>' + (np ? 'Wilcoxon signed-rank comparison' : 'Paired comparison') + ' of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B) over ' + plural(pr.n, 'pair') +
-      (np ? ': pseudo-median of the differences ' + num(sr.estimate) + ', ' + L + ' interval ' + interval(sr.lo, sr.hi) + ', p = ' + pValue(sr.p)
-        : ': mean difference ' + num(pr.meanD) + ', ' + L + ' interval ' + interval(pr.lo, pr.hi) + ', p = ' + pValue(pr.p)) +
+      (np ? ': pseudo-median of the differences ' + num(sr.estimate) + ', ' + L + ' interval ' + interval(sr.lo, sr.hi) + ', ' + pEq(sr.p)
+        : ': mean difference ' + num(pr.meanD) + ', ' + L + ' interval ' + interval(pr.lo, pr.hi) + ', ' + pEq(pr.p)) +
       ', r = ' + num(pr.r, 3) + '. ' + esc(verdict.textContent) + '</p>'
   };
 }
@@ -1038,7 +1059,7 @@ function provenance(d, level, paired, by, unmatched) {
   return {
     datasets: 'A: ' + d.dsA.name + '; B: ' + d.dsB.name,
     'confidence level': lvl(level),
-    procedure: proc === 'np' ? (paired ? 'Wilcoxon signed-rank (nonparametric)' : 'Wilcoxon rank-sum (nonparametric)') : (paired ? 'paired t' : 'Welch t'),
+    procedure: proc === 'np' ? (paired ? 'Wilcoxon signed-rank (nonparametric)' : 'Wilcoxon rank-sum (nonparametric)') : (paired ? 'paired t' : proc === 'pooled' ? 'pooled-variance t' : 'Welch t'),
     paired: paired ? 'yes' : 'no',
     'matched by': paired ? (by === 'id' ? 'replication id' : 'position') : 'not applicable',
     'unmatched replications': paired ? unmatched : 'not applicable'
@@ -1053,7 +1074,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with Welch’s procedure. ' +
+    '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with a two-sample t procedure, Welch’s by default or the pooled-variance t when the two designs are taken to share one variance. ' +
     'Replications run under common random numbers are compared as pairs, and pairing is something you declare with the switch below: the page never infers it from equal numbers of replications.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
@@ -1077,9 +1098,10 @@ export function render(root) {
         '<span class="ctrl-note" id="two-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: Welch’s test for independent replications, the paired t for pairs; both assume the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
+        '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="Pooled t: the two-sample t test that pools the two sample variances into one, on R_A + R_B − 2 degrees of freedom; it assumes the two designs share a variance, which the checks line tests with Levene’s test. Welch’s t: the two-sample t test that keeps the variances apart, on the Welch–Satterthwaite degrees of freedom, safe whether or not they are equal. Paired t: for pairs. All three assume the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
         '<span class="seg" role="group" aria-labelledby="two-proc-lbl">' +
-          '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
+          '<button type="button" class="seg-btn" data-proc="pooled" aria-pressed="false">Pooled t</button>' +
+          '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">Welch’s t</button>' +
           '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
         '</span>' +
       '</div>' +
@@ -1108,8 +1130,8 @@ export function render(root) {
   const why = details('Independent or paired?',
     '<p>Pairing reduces the variance of the difference when corresponding replications are positively correlated. With correlation ρ between paired outcomes, ' +
     'Var(D̄) = (σ<sub>A</sub>² + σ<sub>B</sub>² − 2ρσ<sub>A</sub>σ<sub>B</sub>)/n, and so the larger ρ is, the narrower the paired interval.</p>' +
-    '<p>Which analysis applies is fixed by how the replications were run, not by the data. Replications run under common random numbers are pairs, and they are compared as pairs whatever r turns out to be: Welch’s procedure assumes two independent samples, and these are not. ' +
-    'The correlation card then reports how much the pairing gained, not whether to pair. Replications run on independent streams are two independent samples; matching them by position pairs nothing, gives r near 0, and gives up degrees of freedom.</p>' +
+    '<p>Which analysis applies is fixed by how the replications were run, not by the data. Replications run under common random numbers are pairs, and they are compared as pairs whatever r turns out to be: the two-sample t procedures, Welch’s and the pooled, assume two independent samples, and these are not. ' +
+    'The correlation card then reports how much the pairing gained, not whether to pair; a negative r says the common random numbers did not do their job, which is a reason to look at how the runs were made, not to unpair them. Replications run on independent streams are two independent samples; matching them by position pairs nothing, gives r near 0, and gives up degrees of freedom.</p>' +
     '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so when the pairs share no variation its interval is a little wider than an independent analysis of the same numbers would give. ' +
     'That is the reason not to pair independent runs, not a reason to unpair correlated ones.</p>' +
     '<p>Common random numbers drive replication i of both designs with the same random inputs, which makes the two outcomes positively correlated by design. That is why such runs are analyzed as pairs.</p>');
@@ -1161,7 +1183,7 @@ function storedTarget(name, key) {
 function applyStored() {
   const get = k => state.getPick(id, k);
   if (get('mode') === 'paired' || get('mode') === 'independent') mode = get('mode');
-  if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
+  if (get('proc') === 't' || get('proc') === 'pooled' || get('proc') === 'np') proc = get('proc');
   if (get('planMode') === 'hw' || get('planMode') === 'power') plan.mode = get('planMode');
   if (PLAN_POWERS.includes(get('power'))) {
     plan.power = get('power');

@@ -492,8 +492,8 @@ function draw() {
   els.npNote.hidden = !np;
   // The pooled override's own warning says what is wrong with it; the
   // checks run on replication outcomes only.
-  els.checks.replaceChildren(...(pooled ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x }], alpha: 1 - state.settings.base,
-    declared: 'between replications cannot be checked from the data; it holds when each replication ran on its own random streams.' })]));
+  els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
+    procedure: 'the t interval', declared: 'between replications cannot be checked from the data and is instead assumed when using the t interval; it holds when each replication ran on its own random streams.' })]));
   const note = pooled ? POOLED : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([

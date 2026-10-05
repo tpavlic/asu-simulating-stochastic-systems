@@ -4,7 +4,7 @@
 // and by power. Pure functions, no DOM. Every vector argument may
 // be a number[] or a Float64Array.
 
-import { tCdf, tQuantile, fCdf, fQuantile, normInv, nctCdf, ncfCdf, qtukey, qdunnett, smallestN }
+import { tCdf, tQuantile, fCdf, fQuantile, normInv, nctCdf, ncfCdf, ptukey, qtukey, qdunnett, smallestN }
   from './special.js';
 
 // Small private helpers, kept here so this module stands on special.js alone.
@@ -62,6 +62,32 @@ export function welch(x, y, level) {
   const p = twoSidedP(t, df);
   const hw = tQuantile(1 - (1 - level) / 2, df) * se;
   return { n1, n2, mean1, mean2, sd1: Math.sqrt(v1), sd2: Math.sqrt(v2),
+           diff, se, df, t, p, hw, lo: diff - hw, hi: diff + hw };
+}
+
+/**
+ * The pooled-variance two-sample t procedure for mean(x) − mean(y): the two
+ * sample variances pooled with weights n1 − 1 and n2 − 1, on n1 + n2 − 2
+ * degrees of freedom, as R's t.test(x, y, var.equal = TRUE).
+ * @param {number[]|Float64Array} x
+ * @param {number[]|Float64Array} y
+ * @param {number} level confidence level, e.g. 0.95
+ * @returns {{n1: number, n2: number, mean1: number, mean2: number, sd1: number, sd2: number,
+ *   sp: number, diff: number, se: number, df: number, t: number, p: number, hw: number,
+ *   lo: number, hi: number}}
+ */
+export function pooledT(x, y, level) {
+  const n1 = x.length, n2 = y.length;
+  const mean1 = mean(x), mean2 = mean(y);
+  const v1 = variance(x), v2 = variance(y);
+  const df = n1 + n2 - 2;
+  const sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / df;
+  const se = Math.sqrt(sp2 * (1 / n1 + 1 / n2));
+  const diff = mean1 - mean2;
+  const t = diff / se;
+  const p = twoSidedP(t, df);
+  const hw = tQuantile(1 - (1 - level) / 2, df) * se;
+  return { n1, n2, mean1, mean2, sd1: Math.sqrt(v1), sd2: Math.sqrt(v2), sp: Math.sqrt(sp2),
            diff, se, df, t, p, hw, lo: diff - hw, hi: diff + hw };
 }
 
@@ -247,6 +273,86 @@ export function anova(groups) {
   const F = msb / msw;
   const p = Number.isFinite(F) ? 1 - fCdf(F, dfb, dfw) : (F === Infinity ? 0 : NaN);
   return { k, N, n, means, grandMean, ssb, ssw, sst: ssb + ssw, dfb, dfw, msb, msw, F, p };
+}
+
+/**
+ * Welch's one-way analysis of variance for means under unequal variances
+ * (Welch 1951), as R's oneway.test(var.equal = FALSE): each design's mean is
+ * weighted by R_i / s_i², no variance is pooled, and the F statistic is
+ * referred to an F distribution on k − 1 and an approximate second degrees
+ * of freedom.
+ * @param {ArrayLike<number>[]} groups
+ * @returns {{k: number, n: number[], means: number[], vars: number[], sds: number[],
+ *   grandMean: number, F: number, df1: number, df2: number, p: number}}
+ */
+export function welchAnova(groups) {
+  const k = groups.length;
+  if (k < 2) throw new RangeError('welchAnova: at least two groups are needed');
+  const n = groups.map(g => g.length), means = groups.map(mean), vars = groups.map(variance);
+  if (n.some(m => m < 2) || vars.some(v => !(v > 0))) throw new RangeError('welchAnova: every group needs two or more values with positive spread');
+  const w = vars.map((v, i) => n[i] / v);
+  const W = w.reduce((a, b) => a + b, 0);
+  const grandMean = w.reduce((a, wi, i) => a + wi * means[i], 0) / W;
+  const num = w.reduce((a, wi, i) => a + wi * (means[i] - grandMean) ** 2, 0) / (k - 1);
+  const tmp = w.reduce((a, wi, i) => a + (1 - wi / W) ** 2 / (n[i] - 1), 0) / (k * k - 1);
+  const F = num / (1 + 2 * (k - 2) * tmp);
+  const df1 = k - 1, df2 = 1 / (3 * tmp);
+  const p = Math.min(1, 1 - fCdf(F, df1, df2));
+  return { k, n, means, vars, sds: vars.map(Math.sqrt), grandMean, F, df1, df2, p };
+}
+
+/**
+ * Pairwise comparisons that let every design keep its own variance, for use
+ * with Welch's analysis of variance: each pair's standard error is
+ * sqrt(s_i²/R_i + s_j²/R_j) on its own Welch–Satterthwaite degrees of
+ * freedom. `'gameshowell'` is the Games–Howell procedure, Tukey's rule on
+ * those pairwise quantities (critical difference q · SE / √2, with q the
+ * studentized range quantile for k means on the pair's degrees of freedom,
+ * and p from the studentized range distribution); `'bonferroniWelch'` is
+ * the Bonferroni rule on the pairs' own t intervals at level 1 − α/C.
+ * @param {ArrayLike<number>[]} groups
+ * @param {{rule: 'gameshowell'|'bonferroniWelch', alpha: number}} o
+ * @returns {{rule: string, alpha: number, pairs: {i: number, j: number, diff: number, se: number, df: number,
+ *   crit: number, hw: number, lo: number, hi: number, p: number, flagged: boolean}[],
+ *   letters: string[], note: string, anova: ReturnType<typeof welchAnova>}}
+ */
+export function posthocWelch(groups, { rule, alpha }) {
+  const a = welchAnova(groups);
+  const { k, n, means, vars } = a;
+  const list = [];
+  for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) list.push([i, j]);
+  const C = list.length;
+  const pct = fmtPct(1 - alpha);
+  let note;
+  if (rule === 'gameshowell') {
+    note = C === 1 ? `The Games–Howell interval holds the one difference at about ${pct} confidence.`
+      : `Games–Howell intervals hold all ${C} differences at about ${pct} simultaneous confidence, each on its own degrees of freedom.`;
+  } else if (rule === 'bonferroniWelch') {
+    note = C === 1 ? `With one difference, the Bonferroni interval is the plain Welch interval at ${pct}.`
+      : `Bonferroni intervals at level 1 − α/${C}, each a Welch interval on its own degrees of freedom, hold all ${C} differences at ${pct} or more.`;
+  } else {
+    throw new RangeError(`posthocWelch: unknown rule ${rule}`);
+  }
+  const pairs = list.map(([i, j]) => {
+    const diff = means[i] - means[j];
+    const a1 = vars[i] / n[i], a2 = vars[j] / n[j];
+    const se = Math.sqrt(a1 + a2);
+    const df = (a1 + a2) * (a1 + a2) / (a1 * a1 / (n[i] - 1) + a2 * a2 / (n[j] - 1));
+    let crit, hw, p;
+    if (rule === 'gameshowell') {
+      crit = qtukey(1 - alpha, k, df);
+      hw = crit * Math.SQRT1_2 * se;
+      p = Math.min(1, 1 - ptukey(Math.abs(diff) / (se * Math.SQRT1_2), k, df));
+    } else {
+      crit = tQuantile(1 - alpha / (2 * C), df);
+      hw = crit * se;
+      p = Math.min(1, C * twoSidedP(diff / se, df));
+    }
+    const lo = diff - hw, hi = diff + hw;
+    return { i, j, diff, se, df, crit, hw, lo, hi, p, flagged: lo > 0 || hi < 0 };
+  });
+  const letters = letterGroups(k, pairs.filter(p => p.flagged).map(p => [p.i, p.j]));
+  return { rule, alpha, pairs, letters, note, anova: a };
 }
 
 /**
@@ -497,18 +603,35 @@ export function welchDfEqualN(sd1, sd2, n) {
  * @param {{sd1: number, sd2: number, level?: number, target: number}} o
  * @returns {{n: number|null, hwAtN: number, df: number, reason?: string}}
  */
-export function planHalfWidthWelch({ sd1, sd2, level = 0.95, target }) {
+export function planHalfWidthWelch(o) {
+  return planHalfWidthTwo(o, n => welchDfEqualN(o.sd1, o.sd2, n));
+}
+
+/**
+ * Replications per design for a pooled-variance t interval on the difference of
+ * two means to reach a target half-width. With n replications in each design the
+ * pooled variance is (s₁² + s₂²)/2, the standard error sqrt((s₁² + s₂²)/n) is
+ * Welch's, and only the degrees of freedom differ: 2(n − 1).
+ * @param {{sd1: number, sd2: number, level?: number, target: number}} o
+ * @returns {{n: number|null, hwAtN: number, df: number, reason?: string}}
+ */
+export function planHalfWidthPooled(o) {
+  return planHalfWidthTwo(o, n => 2 * (n - 1));
+}
+
+// The two-sample half-width plan at the degrees of freedom dfAt(n) gives.
+function planHalfWidthTwo({ sd1, sd2, level = 0.95, target }, dfAt) {
   const fail = reason => ({ n: null, hwAtN: NaN, df: NaN, reason });
   if (!positiveSd(sd1) || !positiveSd(sd2)) return fail('Both standard deviations must be positive numbers.');
   if (!(target > 0) || !Number.isFinite(target)) return fail('The target half-width must be a positive number.');
   if (!(level > 0 && level < 1)) return fail('The confidence level must lie strictly between 0 and 1.');
   const p = 1 - (1 - level) / 2, v = sd1 * sd1 + sd2 * sd2;
-  const hwAt = n => tCritical(p, welchDfEqualN(sd1, sd2, n)) * Math.sqrt(v / n);
+  const hwAt = n => tCritical(p, dfAt(n)) * Math.sqrt(v / n);
   const guess = (normInv(p) * Math.sqrt(v) / target) ** 2;
   if (!(guess <= PLAN_CAP)) return fail(TOO_MANY);
   const { n } = smallestN(k => hwAt(k) <= target, guess, 2, PLAN_CAP);
   if (n === null) return fail(TOO_MANY);
-  return { n, hwAtN: hwAt(n), df: welchDfEqualN(sd1, sd2, n) };
+  return { n, hwAtN: hwAt(n), df: dfAt(n) };
 }
 
 /**
@@ -523,7 +646,24 @@ export function planHalfWidthWelch({ sd1, sd2, level = 0.95, target }) {
  * @returns {number}
  */
 export function powerWelch({ n, sd1, sd2, delta, alpha }) {
-  const df = welchDfEqualN(sd1, sd2, n), tq = tCritical(1 - alpha / 2, df);
+  return powerTwo({ n, sd1, sd2, delta, alpha }, welchDfEqualN(sd1, sd2, n));
+}
+
+/**
+ * Two-sided power of the pooled-variance t test of equal means when the true
+ * difference is delta and both designs have n replications, on 2(n − 1) degrees
+ * of freedom with the pooled variance (s₁² + s₂²)/2: exactly R's
+ * power.t.test(type = 'two.sample', strict = TRUE) at sd = sqrt((s₁² + s₂²)/2).
+ * @param {{n: number, sd1: number, sd2: number, delta: number, alpha: number}} o
+ * @returns {number}
+ */
+export function powerPooled({ n, sd1, sd2, delta, alpha }) {
+  return powerTwo({ n, sd1, sd2, delta, alpha }, 2 * (n - 1));
+}
+
+// Two-sided noncentral-t power of a two-sample test on df degrees of freedom.
+function powerTwo({ n, sd1, sd2, delta, alpha }, df) {
+  const tq = tCritical(1 - alpha / 2, df);
   const ncp = delta / Math.sqrt((sd1 * sd1 + sd2 * sd2) / n);
   return 1 - nctCdf(tq, df, ncp) + nctCdf(-tq, df, ncp);
 }
@@ -544,16 +684,31 @@ function powerInputProblem(sds, delta, alpha, power) {
  * @param {{sd1: number, sd2: number, delta: number, alpha: number, power: number}} o
  * @returns {{n: number|null, powerAtN: number, df: number, reason?: string}}
  */
-export function planPowerWelch({ sd1, sd2, delta, alpha, power }) {
+export function planPowerWelch(o) {
+  return planPowerTwo(o, powerWelch, n => welchDfEqualN(o.sd1, o.sd2, n));
+}
+
+/**
+ * Replications per design for the pooled-variance t test to detect a difference
+ * delta with the given power: the smallest n ≥ 2 with powerPooled(n) ≥ power.
+ * @param {{sd1: number, sd2: number, delta: number, alpha: number, power: number}} o
+ * @returns {{n: number|null, powerAtN: number, df: number, reason?: string}}
+ */
+export function planPowerPooled(o) {
+  return planPowerTwo(o, powerPooled, n => 2 * (n - 1));
+}
+
+// The two-sample power plan for the test whose power function is powerFn.
+function planPowerTwo({ sd1, sd2, delta, alpha, power }, powerFn, dfAt) {
   const fail = reason => ({ n: null, powerAtN: NaN, df: NaN, reason });
   const bad = powerInputProblem([sd1, sd2], delta, alpha, power);
   if (bad) return fail(bad);
   const guess = (normInv(1 - alpha / 2) + normInv(power)) ** 2 * (sd1 * sd1 + sd2 * sd2) / (delta * delta);
   if (!(guess <= PLAN_CAP)) return fail(TOO_MANY);
-  const at = n => powerWelch({ n, sd1, sd2, delta, alpha });
+  const at = n => powerFn({ n, sd1, sd2, delta, alpha });
   const { n } = smallestN(k => at(k) >= power, guess, 2, PLAN_CAP);
   if (n === null) return fail(TOO_MANY);
-  return { n, powerAtN: at(n), df: welchDfEqualN(sd1, sd2, n) };
+  return { n, powerAtN: at(n), df: dfAt(n) };
 }
 
 /**

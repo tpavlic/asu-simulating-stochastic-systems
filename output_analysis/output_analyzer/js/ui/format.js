@@ -70,6 +70,17 @@ export function pValue(p) {
 }
 
 /**
+ * A p-value with its name: "p = 0.042", or "p < 0.001" below the shown
+ * precision, so that the two never read "p = < 0.001".
+ * @param {number} p
+ * @returns {string}
+ */
+export function pEq(p) {
+  const s = pValue(p);
+  return s.startsWith('<') ? 'p ' + s : 'p = ' + s;
+}
+
+/**
  * A count with its noun, singular for exactly one: plural(20, 'replication')
  * is "20 replications", and the count carries thousands separators.
  * @param {number} n

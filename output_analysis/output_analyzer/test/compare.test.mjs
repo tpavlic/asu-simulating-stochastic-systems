@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  welch, matchPairs, pairedT, simultaneousMeans, bonferroniFamily, anova, posthoc, letterGroups
+  welch, pooledT, matchPairs, pairedT, simultaneousMeans, bonferroniFamily, anova, posthoc, letterGroups
 } from '../js/stats/compare.js';
 
 const REF = JSON.parse(fs.readFileSync(
@@ -37,6 +37,25 @@ test('welch matches t.test(x, y) at 0.90, 0.95, and 0.99', () => {
     close(w.hw, (w.hi - w.lo) / 2, 1e-12, 'hw');
     assert.equal(w.n1, x.length);
     assert.equal(w.n2, y.length);
+  }
+});
+
+test('pooledT matches t.test(x, y, var.equal = TRUE) at 0.90, 0.95, and 0.99', () => {
+  const { x, y } = REF.two;
+  for (const [level, r] of [[0.90, REF.two.pooled90], [0.95, REF.two.pooled95], [0.99, REF.two.pooled99]]) {
+    const w = pooledT(x, y, level);
+    close(w.t, r.statistic, 1e-10, `t at ${level}`);
+    assert.equal(w.df, r.df);
+    assert.equal(w.df, x.length + y.length - 2);
+    close(w.p, r.p, 1e-9, `p at ${level}`);
+    close(w.lo, r.lo, 1e-9, `lo at ${level}`);
+    close(w.hi, r.hi, 1e-9, `hi at ${level}`);
+    close(w.mean1, r.estimate[0], 1e-12, 'mean1');
+    close(w.mean2, r.estimate[1], 1e-12, 'mean2');
+    const sp2 = ((x.length - 1) * w.sd1 ** 2 + (y.length - 1) * w.sd2 ** 2) / w.df;
+    close(w.sp, Math.sqrt(sp2), 1e-12, 'pooled sd');
+    close(w.se, w.sp * Math.sqrt(1 / x.length + 1 / y.length), 1e-12, 'se');
+    close(w.hw, (w.hi - w.lo) / 2, 1e-12, 'hw');
   }
 });
 

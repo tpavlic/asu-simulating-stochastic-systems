@@ -12,8 +12,8 @@ import { acf } from '../stats/descriptive.js';
 import { truncateDataset } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
-import { spinner, card, levelSelect, details, notice, KIND_LABEL } from '../ui/widgets.js';
-import { num, fixed, pct, pValue, plural, intl, esc, dash } from '../ui/format.js';
+import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
+import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -926,7 +926,7 @@ function placeholderCards() {
     card('Mean of batch means', dash),
     card('SD of batch means', dash),
     card('Standard error', dash, 'sd / √b'),
-    card('Degrees of freedom', dash, 'b − 1'),
+    card(DF_LABEL, dash, 'b − 1'),
     card(pct(L, 0) + ' interval', dash, 'mean ± half-width'),
     card('Half-width', dash, 't = ' + dash),
     card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), dash, 'C = ' + dash + ', p = ' + dash)
@@ -942,10 +942,10 @@ function resultCards(res, byTime) {
     card('Mean of batch means', num(res.mean)),
     card('SD of batch means', num(res.sd)),
     card('Standard error', num(res.se), 'sd / √b'),
-    card('Degrees of freedom', intl(res.df), 'b − 1'),
+    card(DF_LABEL, intl(res.df), 'b − 1'),
     card(pct(L, 0) + ' interval', '[' + num(res.lo) + ', ' + num(res.hi) + ']', 'mean ± half-width'),
     card('Half-width', num(res.hw), 't<sub>' + fixed(q, 3) + ', ' + res.df + '</sub> = ' + num(res.t)),
-    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'C = ' + num(res.lag1Test.C, 3) + ', p = ' + pValue(res.lag1Test.p))
+    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p))
   ];
 }
 
@@ -1101,7 +1101,7 @@ function storeResult(ds, src, res, rows) {
   const summaryHtml = '<p>Batch means on ' + (src.lumped ? plural(src.nReps, 'replication') + ' concatenated, of ' : ds.reps.length > 1 ? 'replication ' + esc(String(rep.id)) + ' of ' : '') + esc(ds.name) +
     ' (truncation ' + esc(truncation) + '): b = ' + res.b + ' batches of ' + num(res.size, 6) + (byTime ? ' time units' : ' observations') +
     ', mean ' + num(res.mean) + ', ' + pct(res.level, 0) + ' interval [' + num(res.lo) + ', ' + num(res.hi) + '] (half-width ' + num(res.hw) + '); lag-one r<sub>1</sub> = ' +
-    num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', p = ' + pValue(res.lag1Test.p) + ').</p>';
+    num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p) + ').</p>';
   state.setResult(id, {
     title: 'Steady state: batch means',
     provenance,

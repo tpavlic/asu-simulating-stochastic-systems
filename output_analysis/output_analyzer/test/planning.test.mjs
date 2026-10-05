@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { nctCdf, ncfCdf, smallestN } from '../js/stats/special.js';
 import { powerOneSample, planPowerOneSample } from '../js/stats/intervals.js';
 import { welchDfEqualN, planHalfWidthWelch, powerWelch, planPowerWelch,
+         planHalfWidthPooled, powerPooled, planPowerPooled,
          planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../js/stats/compare.js';
 
 const ref = JSON.parse(readFileSync(new URL('./reference/planning.json', import.meta.url), 'utf8'));
@@ -76,6 +77,36 @@ test('planPowerWelch at equal sds is the ceiling of R\'s n and brackets the targ
     const below = powerWelch({ n: p.n - 1, sd1: r.sd, sd2: r.sd, delta: r.delta, alpha: r.alpha });
     assert.ok(p.n === 2 || below < r.power);
     assert.equal(p.df, 2 * (p.n - 1));
+  }
+});
+
+test('powerPooled matches power.t.test(type = "two.sample", strict = TRUE) exactly', () => {
+  for (const r of ref.tsPower) close(powerPooled({ n: r.n, sd1: r.sd, sd2: r.sd, delta: r.delta, alpha: r.alpha }), r.power, 1e-6, `n=${r.n}`);
+  // Unequal sds: the pooled test at sd = sqrt((s1² + s2²)/2) is the same power.t.test.
+  for (const r of ref.tsPower) {
+    const s1 = r.sd * 0.6, s2 = Math.sqrt(2 * r.sd * r.sd - s1 * s1);
+    close(powerPooled({ n: r.n, sd1: s1, sd2: s2, delta: r.delta, alpha: r.alpha }), r.power, 1e-6, `n=${r.n}, unequal`);
+  }
+});
+
+test('planPowerPooled is the ceiling of R\'s n on 2(n − 1) degrees of freedom', () => {
+  for (const r of ref.tsPlan) {
+    const p = planPowerPooled({ sd1: r.sd, sd2: r.sd, delta: r.delta, alpha: r.alpha, power: r.power });
+    assert.equal(p.n, Math.ceil(r.nR), `delta=${r.delta}`);
+    assert.ok(p.powerAtN >= r.power);
+    assert.equal(p.df, 2 * (p.n - 1));
+  }
+  assert.equal(planPowerPooled({ sd1: 1, sd2: 1, delta: 0, alpha: 0.05, power: 0.8 }).n, null);
+});
+
+test('planHalfWidthPooled agrees with the Welch plan at equal sds and never asks for more at unequal ones', () => {
+  for (const r of ref.hwPlan) {
+    const p = planHalfWidthPooled({ sd1: r.sd1, sd2: r.sd2, level: r.level, target: r.target });
+    const w = planHalfWidthWelch({ sd1: r.sd1, sd2: r.sd2, level: r.level, target: r.target });
+    assert.equal(p.df, 2 * (p.n - 1));
+    if (r.sd1 === r.sd2) { assert.equal(p.n, w.n); close(p.hwAtN, w.hwAtN, 1e-12, 'hw'); }
+    else assert.ok(p.n <= w.n, 'pooled df is never below the Welch df at equal n');
+    assert.ok(p.hwAtN <= r.target);
   }
 });
 

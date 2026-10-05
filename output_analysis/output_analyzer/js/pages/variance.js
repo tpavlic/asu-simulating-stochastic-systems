@@ -8,12 +8,12 @@ import * as state from '../state.js';
 import { repEstimates, canInfer } from '../data/model.js';
 import { varianceInterval, fRatio, correlation, regressionLine } from '../stats/intervals.js';
 import { levene } from '../stats/compare.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, scatter, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
-import { num, intl, pct, pValue, esc, dash, lvl } from '../ui/format.js';
+import { num, intl, pct, pValue, esc, dash, lvl, pEq } from '../ui/format.js';
 
 /** The page's hash id. */
 export const id = 'variance';
@@ -145,7 +145,7 @@ export function render(rootEl) {
 
 function placeholderVariance(level) {
   const L = lvl(level);
-  els.vRow1.replaceChildren(cardRow([card('R (<span class="sym">df</span>)', dash, '&nbsp;'), card(S('s²'), dash, '&nbsp;'), card(S('s'), dash, '&nbsp;')]));
+  els.vRow1.replaceChildren(cardRow([card('R (' + DF_LABEL + ')', dash, '&nbsp;'), card(S('s²'), dash, '&nbsp;'), card(S('s'), dash, '&nbsp;')]));
   els.vRow2.replaceChildren(cardRow([
     wide(card(L + ' interval for ' + S('σ²'), '[' + dash + ', ' + dash + ']', '&nbsp;')),
     wide(card(L + ' interval for ' + S('σ'), '[' + dash + ', ' + dash + ']', '&nbsp;')),
@@ -164,7 +164,7 @@ function placeholderF(level) {
 
 function placeholderCorr(level) {
   els.cRow1.replaceChildren(cardRow([card(S('r'), dash, '&nbsp;'), card(S('n') + ' (pairs)', dash, '&nbsp;'), card(S('t'), dash, '&nbsp;')]));
-  els.cRow2.replaceChildren(cardRow([card(S('df'), dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;'), wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + dash + ', ' + dash + ']', '&nbsp;'))]));
+  els.cRow2.replaceChildren(cardRow([card(DF_LABEL, dash, '&nbsp;'), card(S('p') + ' (two-sided)', dash, '&nbsp;'), wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + dash + ', ' + dash + ']', '&nbsp;'))]));
 }
 
 function drawScatter(d, cr, level) {
@@ -244,7 +244,7 @@ function draw() {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     const L = lvl(level);
     els.vRow1.replaceChildren(cardRow([
-      card('R (<span class="sym">df</span>)', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
+      card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
       card(S('s²'), num(vi.s2), 'sample variance'),
       card(S('s'), num(vi.s), 'sample standard deviation')
     ]));
@@ -307,8 +307,8 @@ function draw() {
       ? 'Levene rejects at α = ' + num(alpha, 2) + ': the spreads differ, without assuming normality.'
       : 'Levene does not reject at α = ' + num(alpha, 2) + ': no evidence that the spreads differ.';
     tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
-    els.fChecks.replaceChildren(assumptionChecks({ sets: [{ name: 'A', values: finite(a) }, { name: 'B', values: finite(b) }], alpha: 1 - state.settings.base,
-      declared: 'between the two datasets cannot be checked from the data.' }));
+    els.fChecks.replaceChildren(assumptionChecks({ sets: [{ name: 'A', values: finite(a), dsId: a.id }, { name: 'B', values: finite(b), dsId: b.id }], alpha: 1 - state.settings.base,
+      procedure: 'the F ratio', declared: 'between the two datasets cannot be checked from the data and is instead assumed when using the F ratio.' }));
   } else {
     placeholderF(level);
   }
@@ -348,7 +348,7 @@ function draw() {
       card(S('t'), num(cr.t), 'r √((n − 2) / (1 − r²))')
     ]));
     els.cRow2.replaceChildren(cardRow([
-      card(S('df'), intl(cr.df), 'n − 2'),
+      card(DF_LABEL, intl(cr.df), 'n − 2'),
       card(S('p') + ' (two-sided)', pValue(cr.p), 'against ρ = 0'),
       wide(card(lvl(level) + ' Fisher-z interval for ' + S('ρ'), '[' + num(cr.lo) + ', ' + num(cr.hi) + ']', 'tanh(atanh r ± z / √(n − 3))'))
     ]));
@@ -370,8 +370,8 @@ function draw() {
     },
     tables,
     summaryHtml: (vi ? '<p>' + esc(a.name) + ': s² = ' + num(vi.s2) + ', ' + lvl(level) + ' interval for σ² [' + num(vi.lo2) + ', ' + num(vi.hi2) + '].</p>' : '') +
-      (fr ? '<p>F = ' + num(fr.F) + ' on (' + fr.df1 + ', ' + fr.df2 + ') df, p = ' + pValue(fr.p) + ', interval for σ²<sub>A</sub>/σ²<sub>B</sub> [' + num(fr.lo) + ', ' + num(fr.hi) + '].</p>' : '') +
-      (cr ? '<p>r = ' + num(cr.r) + ' over ' + cr.n + ' pairs, p = ' + pValue(cr.p) + ', interval [' + num(cr.lo) + ', ' + num(cr.hi) + '].</p>' : '')
+      (fr ? '<p>F = ' + num(fr.F) + ' on (' + fr.df1 + ', ' + fr.df2 + ') df, ' + pEq(fr.p) + ', interval for σ²<sub>A</sub>/σ²<sub>B</sub> [' + num(fr.lo) + ', ' + num(fr.hi) + '].</p>' : '') +
+      (cr ? '<p>r = ' + num(cr.r) + ' over ' + cr.n + ' pairs, ' + pEq(cr.p) + ', interval [' + num(cr.lo) + ', ' + num(cr.hi) + '].</p>' : '')
   });
 }
 

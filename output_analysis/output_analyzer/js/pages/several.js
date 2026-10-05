@@ -10,15 +10,16 @@
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice } from '../ui/widgets.js';
-import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
+import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL } from '../ui/widgets.js';
+import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot } from '../ui/plots.js';
+import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
-import { num, pValue, pct, esc, plural, intl, dash, lvl } from '../ui/format.js';
+import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -40,6 +41,11 @@ const RULES = {
   bonferroni: 'Bonferroni (pooled variance)',
   dunnett: 'Dunnett vs control'
 };
+// The post-hoc rules under Welch's analysis of variance, where every design keeps its own variance.
+const WELCH_RULES = {
+  gameshowell: 'Games–Howell',
+  bonferroniWelch: 'Bonferroni (Welch pairs)'
+};
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 let rootEl = null;
@@ -48,6 +54,11 @@ let ctrlSels = [];
 let dir = 'max';
 let diffMode = 'pairs';
 let rule = 'tukey';
+// 'pooled' or 'welch': whether the analysis of variance pools one variance across
+// designs or lets each keep its own (Welch's F with Games–Howell pairs). Welch's
+// form exists only for independent replications, and so pairing ignores it.
+let varMode = 'pooled';
+let ruleW = 'gameshowell';
 // How Dunn's pairwise p-values are adjusted: 'bonferroni' or 'holm'.
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
@@ -475,10 +486,11 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
   // The post-hoc rule serves the t procedures, the adjustment the rank ones.
   rootEl.querySelector('#sev-rule-host').style.display = proc === 'np' ? 'none' : '';
+  rootEl.querySelector('#sev-var-row').style.display = proc === 'np' || pairMode === 'paired' ? 'none' : '';
+  rootEl.querySelectorAll('[data-var]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.var === varMode)));
+  fillRuleSelect();
   rootEl.querySelector('#sev-adj-row').style.display = proc === 'np' ? '' : 'none';
   rootEl.querySelector('#sev-match-row').style.display = pairMode === 'paired' ? '' : 'none';
-  const rs = rootEl.querySelector('#sev-rule');
-  if (rs.value !== rule) rs.value = rule;
 
   // The control picker offers the checked designs.
   if (!list.some(d => d.id === controlId)) controlId = list.length ? list[0].id : null;
@@ -492,7 +504,7 @@ function syncControls(list, groups) {
   }
   // The picker shows only beside the control that uses it.
   rootEl.querySelector('#sev-ctrl-diff').style.display = diffMode === 'control' ? '' : 'none';
-  rootEl.querySelector('#sev-ctrl-rule').style.display = rule === 'dunnett' ? '' : 'none';
+  rootEl.querySelector('#sev-ctrl-rule').style.display = rule === 'dunnett' && !welchOn() ? '' : 'none';
 
   // The indifference zone, its units, and where its default comes from.
   const note = rootEl.querySelector('#sev-eps-note');
@@ -731,44 +743,71 @@ function update() {
   }
 
   // ANOVA and post-hoc.
-  const ph = posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const welch = welchOn();
+  const ph = welch ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
-  const totalDf = paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
-  rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : 'Analysis of variance and post-hoc tests';
+  const ruleName = welch ? WELCH_RULES[ruleW] : RULES[rule];
+  const totalDf = welch ? NaN : paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
+  rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : welch ? 'Welch’s analysis of variance and post-hoc tests' : 'Analysis of variance and post-hoc tests';
   if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
-    const atab = table(['Source', 'SS', 'df', 'MS', 'F', 'p'], [
-      ['Between designs', num(av.ssb), intl(av.dfb), num(av.msb), num(av.F), pValue(av.p)],
-      paired ? ['Between replications (blocks)', num(av.ssblk), intl(av.dfblk), num(av.msblk), num(av.Fblock), pValue(av.pBlock)] : null,
-      [paired ? 'Residual' : 'Within designs', num(av.ssw), intl(av.dfw), num(av.msw), '', ''],
-      ['Total', num(av.sst), intl(totalDf), '', '', '']
-    ].filter(Boolean));
-    b.appendChild(atab);
     const rejects = av.p < alpha;
-    b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, p = ' + pValue(av.p) + ': ' +
-      (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
+    if (welch) {
+      b.appendChild(para('cmp-lead', 'Welch’s analysis of variance lets every design keep its own variance: each design’s mean is weighted by R<sub>i</sub>/s<sub>i</sub>², nothing is pooled, and the F statistic is referred to an F distribution whose second degrees of freedom come from the spreads.'));
+      b.appendChild(table(['Test', 'F', 'df<sub>1</sub>', 'df<sub>2</sub>', 'p'], [
+        ['Welch’s F for equal means', num(av.F), intl(av.df1), num(av.df2), pValue(av.p)]
+      ]));
+      b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.df1 + ' and ' + num(av.df2) + ' degrees of freedom, ' + pEq(av.p) + ': ' +
+        (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
+    } else {
+      const atab = table(['Source', 'SS', 'df', 'MS', 'F', 'p'], [
+        ['Between designs', num(av.ssb), intl(av.dfb), num(av.msb), num(av.F), pValue(av.p)],
+        paired ? ['Between replications (blocks)', num(av.ssblk), intl(av.dfblk), num(av.msblk), num(av.Fblock), pValue(av.pBlock)] : null,
+        [paired ? 'Residual' : 'Within designs', num(av.ssw), intl(av.dfw), num(av.msw), '', ''],
+        ['Total', num(av.sst), intl(totalDf), '', '', '']
+      ].filter(Boolean));
+      b.appendChild(atab);
+      b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, ' + pEq(av.p) + ': ' +
+        (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
+    }
     // The pooled procedures assume one variance across designs; Levene's test
     // checks that without assuming normality, which the F ratio of two
     // variances would.
     const lv = levene(groups);
-    const lvTxt = 'Levene’s test of equal variances (Brown–Forsythe, centered on the medians): F = ' + num(lv.F) + ' on ' + lv.df1 + ' and ' + lv.df2 + ' degrees of freedom, p = ' + pValue(lv.p) + '. ';
-    if (lv.p < alpha) b.appendChild(notice('warn', lvTxt + 'The spreads differ at this level, and every pooled procedure below assumes they do not. The Bonferroni differences, built on Welch intervals, are the safer choice.'));
-    else b.appendChild(para('cmp-lead', lvTxt + 'No evidence at this level that the spreads differ, which is what pooling the variance below assumes.'));
     tables.push({ name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
     // The residuals, with the design means and, under pairing, the block
     // effects removed, are what the F test and the post-hoc rules take as normal.
     const resid = [];
     groups.forEach((g, i) => { for (let r = 0; r < g.length; r++) resid.push(g[r] - av.means[i] - (paired ? av.blockMeans[r] - av.grandMean : 0)); });
-    b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha,
-      declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
+    b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha, pooled: !welch, varianceSets: groups, linkDs: list[0].id,
+      alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
+      procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
+    if (welch) b.appendChild(para('exp-note', 'Levene’s test gives ' + pEq(lv.p) + ' here; Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
+    // The residuals' own quantile–quantile plot: the Normality section shows
+    // one design's outcomes at a time, and the F test's assumption is about
+    // all the residuals together.
+    // Kept folded away unless the check rejects, when it opens itself.
+    const swResid = resid.length >= 3 && resid.length <= 5000 ? shapiroWilk(resid) : null;
+    const residBad = !!swResid && swResid.p < alpha;
+    const fold = document.createElement('details');
+    fold.className = 'why' + (residBad ? ' issues' : '');
+    fold.open = residBad;
+    fold.innerHTML = '<summary>Residuals from every checked design, normal quantile–quantile plot' + (residBad ? ' (opened because the check rejected)' : '') + '</summary><div class="why-body"></div>';
+    b.appendChild(fold);
+    figure(fold.querySelector('.why-body'), { height: 280, narrowHeight: 280, xLabel: 'Standard normal quantile', yLabel: 'Residual' }, 'several-residual-qq',
+      fg => qqPlot(fg, normalQQ(resid)),
+      [{ swatch: 'dot', color: '--est', label: 'one residual (an outcome less its design’s mean' + (paired ? ' and its replication’s effect' : '') + ')' }, { swatch: 'dash', color: '--truth', label: 'line through the quartiles' }],
+      'The residuals are what ' + (welch ? 'Welch’s F' : 'the F test') + ' and the post-hoc rules take as normal, and the Shapiro–Wilk check above tests them together. Points that follow the line are consistent with normality; a bend at either end is a heavier or lighter tail. The Normality section of Summary and Plots shows each design’s outcomes on its own.');
     b = bodies[4];
     let critTxt;
-    if (rule === 'tukey') critTxt = 'Tukey–Kramer: the studentized range quantile is q = ' + num(ph.crit) + ' (k = ' + k + ', ' + av.dfw + ' df), and each pair’s critical difference is q·SE/√2.';
+    if (welch && ruleW === 'gameshowell') critTxt = 'Games–Howell: each pair’s critical difference is q·SE<sub>ij</sub>/√2, with q the studentized range quantile (k = ' + k + ') on that pair’s own Welch degrees of freedom.';
+    else if (welch) critTxt = 'Bonferroni on Welch pairs: t at 1 − α/(2C) with C = ' + ph.pairs.length + ' on each pair’s own Welch degrees of freedom, and each pair’s critical difference is t·SE<sub>ij</sub>.';
+    else if (rule === 'tukey') critTxt = 'Tukey–Kramer: the studentized range quantile is q = ' + num(ph.crit) + ' (k = ' + k + ', ' + av.dfw + ' df), and each pair’s critical difference is q·SE/√2.';
     else if (rule === 'lsd') critTxt = 'Fisher’s LSD: t = ' + num(ph.crit) + ' at 1 − α/2 on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
     else if (rule === 'bonferroni') critTxt = 'Bonferroni: t = ' + num(ph.crit) + ' at 1 − α/(2C) with C = ' + ph.pairs.length + ' on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
     else critTxt = 'Dunnett: each design against the control, ' + esc(short[ctrlIdx]) + ', with the two-sided critical value d = ' + num(ph.crit) + ' on ' + av.dfw + ' df; each pair’s critical difference is d·SE.';
-    b.appendChild(para('cmp-lead', critTxt + (paired ? ' SE = √(MSE · 2/R) uses the residual mean square, with the replication effect removed.' : ' SE = √(MSW (1/R<sub>i</sub> + 1/R<sub>j</sub>)) uses the pooled mean square within.')));
+    b.appendChild(para('cmp-lead', critTxt + (welch ? ' SE<sub>ij</sub> = √(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>) uses each design’s own variance.' : paired ? ' SE = √(MSE · 2/R) uses the residual mean square, with the replication effect removed.' : ' SE = √(MSW (1/R<sub>i</sub> + 1/R<sub>j</sub>)) uses the pooled mean square within.')));
     if (rule === 'lsd' && ph.protected === false) b.appendChild(notice('warn', esc(ph.note)));
     else b.appendChild(para('exp-note', esc(ph.note)));
     const lab = p => pairLabel(p.i, p.j);
@@ -776,7 +815,7 @@ function update() {
     const anyFlag = ph.pairs.some(p => p.flagged), anyPlain = ph.pairs.some(p => !p.flagged);
     // Tukey, Bonferroni, and Dunnett do not wait for the F test, and near the
     // boundary they can flag a pair the F test did not detect.
-    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + RULES[rule] + ' asks about each pair on its own, without waiting for F. Near the boundary the two can disagree, as they do here.'));
+    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + ruleName + ' asks about each pair on its own, without waiting for F. Near the boundary the two can disagree, as they do here.'));
 
     // The designs themselves, best first, with their letter groups and a
     // bracket for every pair the rule declares different.
@@ -810,24 +849,26 @@ function update() {
         intervals(fg, ps.map(p => ({ label: lab(p), lo: p.lo, hi: p.hi, center: p.diff, flagged: p.flagged })), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is a difference of means ± its critical difference under ' + RULES[rule] + '. ' +
-      (rule === 'lsd' && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
-      'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, the Welch intervals above are the safer choice.');
-    const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se), num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']);
-    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'Critical difference', 'Interval', 'Different?'], rows));
-    tables.push({ name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
+      'Each row is a difference of means ± its critical difference under ' + ruleName + '. ' +
+      (rule === 'lsd' && !welch && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
+      (welch ? 'These procedures assume normal replication outcomes and let each design keep its own variance.'
+        : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Bonferroni differences.'));
+    const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se)].concat(welch ? [num(p.df)] : [], [num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']));
+    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['Critical difference', 'Interval', 'Different?']), rows));
+    if (welch) tables.push({ name: 'Welch ANOVA', headers: ['test', 'F', 'df1', 'df2', 'p'], rows: [['Welch F for equal means', av.F, av.df1, av.df2, av.p]] });
+    else tables.push({ name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
       ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p],
       paired ? ['between replications (blocks)', av.ssblk, av.dfblk, av.msblk, av.Fblock, av.pBlock] : null,
       [paired ? 'residual' : 'within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, totalDf, '', '', '']].filter(Boolean) });
-    tables.push({ name: 'Post-hoc: ' + RULES[rule], headers: ['pair', 'difference', 'se', 'critical value', 'critical difference', 'lower', 'upper', 'different'],
-      rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, ph.crit, p.hw, p.lo, p.hi, p.flagged ? 'yes' : 'no']) });
+    tables.push({ name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 'critical value', 'critical difference', 'lower', 'upper', 'p', 'different'],
+      rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, welch ? p.df : av.dfw, welch ? p.crit : ph.crit, p.hw, p.lo, p.hi, welch ? p.p : '', p.flagged ? 'yes' : 'no']) });
     // The letters are read off the design plot; the table exists only as an
     // export, where nothing can be hovered.
     if (ph.letters) {
       const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
-      tables.push({ name: 'Compact letter display: ' + RULES[rule], headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
+      tables.push({ name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
     }
-    summary.push('Levene: p = ' + pValue(lv.p) + '. ANOVA: F = ' + num(av.F) + ', p = ' + pValue(av.p) + '. ' + RULES[rule] + ': ' +
+    summary.push('Levene: ' + pEq(lv.p) + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': F = ' + num(av.F) + ', ' + pEq(av.p) + '. ' + ruleName + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   } else {
     const b = bodies[2];
@@ -842,10 +883,10 @@ function update() {
       ' They keep their level under heavy tails and give up little power under normal data, and so they are the place to turn when the Normality section rejects.'));
     b.appendChild(cardRow([
       card(paired ? 'χ²' : 'H', num(omni.stat), (paired ? 'Friedman statistic' : 'Kruskal–Wallis statistic') + (omni.ties ? ', tie-corrected' : '')),
-      card('df', intl(omni.df), 'k − 1'),
+      card(DF_LABEL, intl(omni.df), 'k − 1'),
       card('p', pValue(omni.p), 'chi-square approximation')
     ]));
-    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, p = ' + pValue(omni.p) + ': ' +
+    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, ' + pEq(omni.p) + ': ' +
       (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
     const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
     const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
@@ -880,7 +921,7 @@ function update() {
       rows: dn.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, p.z, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
     tables.push({ name: 'Pseudo-medians with Wilcoxon intervals', headers: ['design', 'pseudo-median', 'lower', 'upper', 'letters'],
       rows: orderN.map(i => [list[i].name, hl[i].estimate, hl[i].lo, hl[i].hi, dn.letters[i]]) });
-    summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', p = ' + pValue(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
+    summary.push((paired ? 'Friedman: χ² = ' : 'Kruskal–Wallis: H = ') + num(omni.stat) + ', ' + pEq(omni.p) + '. ' + (paired ? 'Pairwise' : 'Dunn') + ' (' + adjName + '): ' + plural(dn.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   
   }
 
@@ -940,7 +981,8 @@ function update() {
       'comparisons adjusted for': fam.C,
       'difference family': diffMode === 'pairs' ? 'all pairs' : 'versus control',
       procedure: np ? 'nonparametric (Wilcoxon, ' + (paired ? 'Friedman' : 'Kruskal–Wallis and Dunn') + ')' : 't procedures',
-      'post-hoc rule': np ? 'not applicable' : RULES[rule],
+      'post-hoc rule': np ? 'not applicable' : welch ? WELCH_RULES[ruleW] : RULES[rule],
+      variances: np ? 'not applicable' : welch ? 'unequal (Welch)' : 'pooled',
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
@@ -1117,6 +1159,11 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-adj="holm" aria-pressed="false">Holm</button>' +
         '</span></div>' +
+      '<div class="ctrl-row" id="sev-var-row"><span class="ctrl-lbl" id="sev-var-lbl"><span class="tip" tabindex="0" data-tip="Pooled: the classical analysis of variance, one variance across designs, with Tukey, LSD, Bonferroni, and Dunnett post-hoc rules on the pooled mean square. Unequal: Welch’s analysis of variance, each design keeping its own variance, with Games–Howell or Bonferroni on Welch pairs; the choice when the heteroscedasticity check rejects. Pairing has no Welch form, so the switch is withheld under paired replications.">Variances</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-var-lbl">' +
+          '<button type="button" class="seg-btn" data-var="pooled" aria-pressed="true">Pooled (one variance)</button>' +
+          '<button type="button" class="seg-btn" data-var="welch" aria-pressed="false">Unequal (Welch)</button>' +
+        '</span></div>' +
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div></div>' +
@@ -1170,7 +1217,11 @@ export function render(root) {
   levelSelect(root.querySelector('#sev-lvl'));
   ctrlSels = Array.from(root.querySelectorAll('select[data-control]'));
   for (const sel of ctrlSels) sel.addEventListener('change', () => { controlId = sel.value || null; state.setPick(id, 'control', controlId); schedule(); });
-  root.querySelector('#sev-rule').addEventListener('change', e => { rule = e.target.value; state.setPick(id, 'rule', rule); schedule(); });
+  root.querySelector('#sev-rule').addEventListener('change', e => {
+    if (welchOn()) { ruleW = e.target.value; state.setPick(id, 'ruleW', ruleW); } else { rule = e.target.value; state.setPick(id, 'rule', rule); }
+    schedule();
+  });
+  root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
   root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
@@ -1189,6 +1240,23 @@ export function render(root) {
   installExportRow(root, id);
 }
 
+// Whether the analysis of variance is Welch's: only for independent
+// replications under the t procedures.
+function welchOn() { return varMode === 'welch' && pairMode !== 'paired' && proc !== 'np'; }
+
+// The post-hoc rule picker offers the pooled rules or the Welch ones, as the
+// Variances switch says, and shows the choice in force for that set.
+function fillRuleSelect() {
+  const sel = rootEl.querySelector('#sev-rule');
+  const set = welchOn() ? WELCH_RULES : RULES;
+  const want = Object.keys(set).map(r => r + '=' + set[r]).join('|');
+  if (sel.dataset.set !== want) {
+    sel.innerHTML = Object.keys(set).map(r => '<option value="' + r + '">' + set[r] + '</option>').join('');
+    sel.dataset.set = want;
+  }
+  sel.value = welchOn() ? ruleW : rule;
+}
+
 // Brings back the settings the reader made on this page (kept with the
 // session) wherever they are valid. Every one is recorded when the reader
 // changes it, and so applying them again on each change of the datasets
@@ -1196,6 +1264,8 @@ export function render(root) {
 function applyStored() {
   const get = k => state.getPick(id, k);
   if (Object.prototype.hasOwnProperty.call(RULES, get('rule'))) rule = get('rule');
+  if (Object.prototype.hasOwnProperty.call(WELCH_RULES, get('ruleW'))) ruleW = get('ruleW');
+  if (get('variances') === 'pooled' || get('variances') === 'welch') varMode = get('variances');
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');

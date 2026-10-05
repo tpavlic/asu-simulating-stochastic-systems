@@ -21,7 +21,7 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
 } from '../ui/widgets.js';
 import { num, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -837,7 +837,7 @@ function buildSpread(api, { ds }) {
   const rejects = lv.p < alpha;
   sec.appendChild(cardRow([
     card('<span class="sym">F</span>', num(lv.F, 4), 'ANOVA of |outcome − median|'),
-    card('<span class="sym">df</span>', intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
+    card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
     (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict', rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));

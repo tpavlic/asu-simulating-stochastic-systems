@@ -24,6 +24,9 @@ y <- rnorm(11, mean = 8.9, sd = 2.1)
 welch95 <- tt(t.test(x, y, conf.level = 0.95))
 welch90 <- tt(t.test(x, y, conf.level = 0.90))
 welch99 <- tt(t.test(x, y, conf.level = 0.99))
+pooled95 <- tt(t.test(x, y, var.equal = TRUE, conf.level = 0.95))
+pooled90 <- tt(t.test(x, y, var.equal = TRUE, conf.level = 0.90))
+pooled99 <- tt(t.test(x, y, var.equal = TRUE, conf.level = 0.99))
 
 # Two paired samples sharing a common component, the way common random numbers
 # correlate two designs' replications.
@@ -124,7 +127,8 @@ nfit <- aov(unlist(nullGroups) ~ g)
 ntab <- summary(nfit)[[1]]
 
 out <- list(
-  two = list(x = x, y = y, welch95 = welch95, welch90 = welch90, welch99 = welch99),
+  two = list(x = x, y = y, welch95 = welch95, welch90 = welch90, welch99 = welch99,
+             pooled95 = pooled95, pooled90 = pooled90, pooled99 = pooled99),
   paired = list(x = px, y = py, t95 = paired95, t90 = paired90, r = pr, sdD = psd),
   four = list(
     groups = lapply(groups, arr), sizes = sizes, means = means,

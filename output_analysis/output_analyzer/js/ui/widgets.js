@@ -355,10 +355,15 @@ function trimNum(v) { return String(Number(v.toFixed(4))); }
  */
 export function notice(kind, html) {
   const el = document.createElement('div');
-  const k = kind === 'warn' ? 'warn' : 'info';
+  const k = kind === 'warn' ? 'warn' : kind === 'ok' ? 'ok' : 'info';
   el.className = 'notice notice-' + k;
   el.setAttribute('role', 'note');
-  el.innerHTML = '<span class="notice-badge" aria-hidden="true">' + (k === 'warn' ? '!' : 'i') + '</span><div class="notice-body">' +
-    '<span class="sr-only">' + (k === 'warn' ? 'Warning: ' : 'Note: ') + '</span>' + html + '</div>';
+  const badge = k === 'warn' ? '!' : k === 'ok' ? '✓' : 'i';
+  const said = k === 'warn' ? 'Warning: ' : k === 'ok' ? 'Passed: ' : 'Note: ';
+  el.innerHTML = '<span class="notice-badge" aria-hidden="true">' + badge + '</span><div class="notice-body">' +
+    '<span class="sr-only">' + said + '</span>' + html + '</div>';
   return el;
 }
+
+/** The card label for degrees of freedom: "df", expanded by its tooltip. */
+export const DF_LABEL = '<span class="tip" tabindex="0" data-tip="Degrees of freedom">df</span>';
