@@ -20071,7 +20071,17 @@ function computeWarm(ds) {
   for (let i = 0; i < ybar.length; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w);
   const cum = cumulativeAverage(ybar);
-  return { x, ybar, counts, smooth, cum, xMin, xMax, step, dec, edges, gaps };
+  // Where the runs end in time: equal when an end time is given, and
+  // otherwise each run's last record. Unequal ends matter when aligned by
+  // time, where the late bins average only the runs still going.
+  let endLo = Infinity, endHi = -Infinity;
+  for (const r of ds.reps) {
+    const n = r.t ? r.t.length : 0;
+    const e = ds.kind === 'time' && ds.endTime != null ? ds.endTime : n ? r.t[n - 1] : NaN;
+    if (Number.isFinite(e)) { endLo = Math.min(endLo, e); endHi = Math.max(endHi, e); }
+  }
+  const unequalEnds = align === 'time' && ds.reps.length > 1 && Number.isFinite(endLo) && endHi - endLo > 0.02 * Math.abs(endHi);
+  return { x, ybar, counts, smooth, cum, xMin, xMax, step, dec, edges, gaps, endLo, endHi, unequalEnds };
 }
 
 // ── Markup ────────────────────────────────────────────────────────────────
@@ -20124,6 +20134,7 @@ export function render(rootEl) {
       '</div>' +
       '<p class="ctrl-note ss-align-note" id="ss-align-note"></p>' +
       '<p class="ss-contrib" id="ss-contrib">Replications contributing: ' + dash + '</p>' +
+      '<div id="ss-wwarn"></div>' +
       '<div id="ss-one"></div>' +
       '<div id="ss-wfig"></div>' +
       '<div id="ss-wleg"></div>' +
@@ -20179,7 +20190,7 @@ export function render(rootEl) {
     '</div>';
 
   for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied',
-    'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns', 'lfig', 'lleg', 'lcap',
+    'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns', 'lfig', 'lleg', 'lcap', 'wwarn',
     'afig', 'aleg', 'acap', 'bfig', 'bleg', 'bcap', 'btab']) {
     el[k] = root.querySelector('#ss-' + k);
   }
@@ -20679,6 +20690,7 @@ function warmLegend(ds) {
     { swatch: 'dash', color: '--accent', label: 'your cut (drag it, click the plot, or use the arrow keys)' }
   ];
   if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the cut' });
+  if (ds && warm && warm.unequalEnds) items.push({ swatch: 'dotted', color: '--muted', label: 'end of the shortest run; later bins average fewer runs' });
   legend(el.wleg, items);
   warmLegendCut = ds && cut > 0;
 }
@@ -20691,6 +20703,7 @@ function drawWarm(computed) {
     wp = null;
     warmLegend(ds);
     el.contrib.textContent = 'Replications contributing: ' + dash;
+    el.wwarn.innerHTML = '';
     warmFig.render(f => emptyPlot(f, 'No dataset to plot yet'));
     return;
   }
@@ -20701,6 +20714,14 @@ function drawWarm(computed) {
   warmFig.opts.xLabel = align === 'index' ? 'Observation index' : 'Simulation time (bin centers)';
   warmFig.opts.yLabel = ds.reps.length === 1 ? resp : 'Average ' + resp + ' across replications';
   el.contrib.textContent = contribText(ds, W);
+  el.wwarn.innerHTML = '';
+  if (W.unequalEnds) {
+    const lo = fixed(W.endLo, W.dec), hi = fixed(W.endHi, W.dec);
+    el.wwarn.appendChild(notice('warn', 'The replications end at different times, from ' + lo + ' to ' + hi + ', and so past time ' + lo + ' the ensemble average uses only the runs still going.' +
+      (ds.kind === 'tally'
+        ? ' A run of a fixed number of observations ends late when its arrivals were sparse, and those are the runs with the least congestion, and so the curve falls there for that reason alone. Read it only to time ' + lo + ', or align by observation index.'
+        : ' Read the curve only to time ' + lo + ', or give the dataset an end time on the Import page so that every run covers the same span.')));
+  }
   warmFig.render(f => {
     f.x([W.xMin, W.xMax > W.xMin ? W.xMax : W.xMin + 1]);
     wp = welchPlot(f, {
@@ -20719,6 +20740,15 @@ function drawWarm(computed) {
       },
       onCutEnd: v => { if (wp) wp.setCut(roundCut(v)); setCut(v, 'plot-end'); }
     });
+    // Where the shortest run ends, past which the average thins out.
+    if (W.unequalEnds && W.endLo > W.xMin && W.endLo < W.xMax) {
+      const x = Math.round(f.sx(W.endLo));
+      const cM = tok('--muted');
+      svgEl('line', { x1: x, x2: x, y1: 0, y2: f.ih, stroke: cM, 'stroke-width': 1.5, 'stroke-dasharray': '3,4' }, f.inner);
+      const t = svgEl('text', { x: x - 5, y: f.ih - 6, 'text-anchor': 'end', 'font-size': 11, fill: cM }, f.inner);
+      t.textContent = 'shortest run ends';
+      f.series.push({ kind: 'vline', x: W.endLo, dash: true, color: cM, label: 'end of the shortest run' });
+    }
     // The cut is drawn in the accent color, matching its legend entry.
     const g = f.layers.over.querySelector('.m-cut');
     if (g) {
