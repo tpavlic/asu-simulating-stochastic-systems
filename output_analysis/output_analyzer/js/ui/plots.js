@@ -1235,9 +1235,13 @@ export function welchPlot(fig, d) {
   if (!fig.sy) fig.y(extent(d.raw, d.smooth, d.cumulative), { pad: 0.05, nice: true });
   ensureAxes(fig, d);
   const sx = fig.sx, sy = fig.sy;
+  // The cut rests at `cutMin` when none is given and cannot go below it: the
+  // start of the series, or the earlier cut of a series already truncated.
+  const lo = Number.isFinite(d.cutMin) ? Math.max(sx.domain[0], d.cutMin) : sx.domain[0];
+  const xLo = r1(sx(lo));
   // The band sits under every series, and place() sets its width.
-  const shade = d.shade ? svgEl('rect', { x: 0, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
-  const shadeRec = d.shade ? { kind: 'span', x0: sx.domain[0], x1: sx.domain[0], color: tok('--muted'), label: 'excluded by the cut' } : null;
+  const shade = d.shade ? svgEl('rect', { x: xLo, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
+  const shadeRec = d.shade ? { kind: 'span', x0: lo, x1: lo, color: tok('--muted'), label: 'excluded by the cut' } : null;
   if (shadeRec) fig.series.push(shadeRec);
   if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
   if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
@@ -1252,9 +1256,9 @@ export function welchPlot(fig, d) {
   fig.series.push(cutRec);
   const [xMin, xMax] = sx.domain;
   const step = d.step || (n > 1 ? Math.abs(xs[1] - xs[0]) : (xMax - xMin) / 100) || 1;
-  const clamp = v => Math.min(xMax, Math.max(xMin, v));
-  // With no cut given, the line starts at the left edge: no truncation.
-  let cut = Number.isFinite(d.cut) ? clamp(d.cut) : xMin;
+  const clamp = v => Math.min(xMax, Math.max(lo, v));
+  // With no cut given, the line starts where the series does: no truncation.
+  let cut = Number.isFinite(d.cut) ? clamp(d.cut) : lo;
   const fmtCut = d.cutLabel || (v => 'cut at ' + num(v));
   const cText = tok('--text');
 
@@ -1267,7 +1271,7 @@ export function welchPlot(fig, d) {
   const hit = svgEl('line', {
     y1: 0, y2: fig.ih, stroke: 'transparent', 'stroke-width': 24, 'pointer-events': 'stroke',
     class: 'cut-hit', 'data-noexport': '', tabindex: 0, role: 'slider', 'aria-label': 'Truncation point',
-    'aria-valuemin': xMin, 'aria-valuemax': xMax
+    'aria-valuemin': lo, 'aria-valuemax': xMax
   }, g);
   hit.style.cursor = 'ew-resize';
   hit.style.touchAction = 'none';
@@ -1276,7 +1280,7 @@ export function welchPlot(fig, d) {
   function place() {
     const x = r1(sx(cut));
     for (const ln of [vis, hit]) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); }
-    if (shade) shade.setAttribute('width', Math.max(0, x));
+    if (shade) shade.setAttribute('width', Math.max(0, x - xLo));
     // The exported figure carries the cut where it stands now.
     cutRec.x = cut;
     if (shadeRec) shadeRec.x1 = cut;

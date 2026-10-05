@@ -9,7 +9,7 @@
 import * as state from '../state.js';
 import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
-import { truncateDataset } from '../data/model.js';
+import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
@@ -62,19 +62,56 @@ function keep(name, value) {
   if (dsId) state.setPick(id, name + ':' + dsId, value);
 }
 
-function current() {
+/** The dataset chosen in the picker, or null when none is eligible. */
+function shown() {
   const ds = state.get(dsId);
   return eligible(ds) ? ds : null;
+}
+
+/** The dataset the plots and batches read: the chosen one, or the run it was truncated from (see viewOf). */
+function current() {
+  const ds = shown();
+  return ds ? viewOf(ds).base : null;
+}
+
+/**
+ * How the chosen dataset is shown. A truncated dataset is the run it was cut
+ * from with a fence at the saved cut: the page draws that run (`base`), puts
+ * the cut at the fence, and lets the reader move the fence and save a new
+ * dataset from the same run, so that the fence can go forward or back and
+ * the axis never restarts at the cut. `by` is how it was cut, and the only
+ * alignment it is shown in. A truncated dataset whose source is no longer
+ * loaded, or whose chain of cuts mixes index and time, is shown as it is:
+ * `base` is then the dataset itself and `fence` is 0.
+ * @param {object} ds
+ * @returns {{ base: object, fence: number, by: ('index'|'time')|null }}
+ */
+function viewOf(ds) {
+  return truncationView(ds, state.get);
 }
 
 function hasTimes(ds) {
   return ds.reps.length > 0 && ds.reps.every(r => r.t && r.t.length === r.v.length);
 }
 
-/** The alignments a dataset allows: time-persistent data only by time, tally by index and, with time stamps, by time. */
+/**
+ * The alignments a dataset allows, the default first: time-persistent data
+ * only by time, tally observations by time where they carry time stamps and
+ * otherwise by index. Time is the default because a warm-up period is set
+ * in simulation software as a length of simulation time.
+ */
 function alignsFor(ds) {
+  // A truncated dataset shown with its fence is shown the way it was cut.
+  const v = viewOf(ds);
+  if (v.by) return [v.by];
   if (ds.kind === 'time') return ['time'];
-  return hasTimes(ds) ? ['index', 'time'] : ['index'];
+  return hasTimes(ds) ? ['time', 'index'] : ['index'];
+}
+
+/** The time a dataset's series start at: the cut for one already truncated by time, else zero. */
+function startTime(ds) {
+  const tr = ds.derivedFrom && ds.derivedFrom.truncate;
+  return tr && tr.by === 'time' && Number.isFinite(tr.at) ? tr.at : 0;
 }
 
 /** Decimals for a time cut: about four significant digits of the run length. */
@@ -86,6 +123,8 @@ function timeDecimals(T) {
 function roundCut(v) {
   if (!Number.isFinite(v) || v < 0) return 0;
   if (align === 'index') return Math.round(v);
+  // On a series already truncated by time, a cut at or before its start deletes nothing and so is no cut.
+  if (warm && warm.xMin > 0 && v <= warm.xMin) return 0;
   return Number(v.toFixed(warm ? warm.dec : 2));
 }
 
@@ -114,32 +153,35 @@ function gapAwareAverage(y, half) {
 }
 
 function computeWarm(ds) {
-  let x, ybar, counts, xMax, step, dec, edges = null;
+  // `xMin` is where the series start: zero, or the cut of a truncated dataset
+  // shown on its own because the run it came from is no longer loaded.
+  let x, ybar, counts, xMin = 0, xMax, step, dec, edges = null;
   if (align === 'index') {
     const a = alignByIndex(ds.reps);
     x = new Float64Array(a.L);
     for (let i = 0; i < a.L; i++) x[i] = i + 1;
     ybar = a.ybar; counts = a.counts; xMax = a.L; step = 1; dec = 0;
   } else {
-    const a = alignByTime(ds.reps, ds.kind, nBins, ds.endTime);
+    const a = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, startTime(ds));
     edges = a.edges; x = a.centers; ybar = a.ybar; counts = a.counts;
+    xMin = edges[0];
     xMax = edges[edges.length - 1];
     dec = timeDecimals(xMax);
-    step = Math.max(Math.pow(10, -dec), niceStep(xMax || 1, 100));
+    step = Math.max(Math.pow(10, -dec), niceStep((xMax - xMin) || 1, 100));
   }
   let gaps = 0;
   for (let i = 0; i < ybar.length; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w);
   const cum = cumulativeAverage(ybar);
-  return { x, ybar, counts, smooth, cum, xMax, step, dec, edges, gaps };
+  return { x, ybar, counts, smooth, cum, xMin, xMax, step, dec, edges, gaps };
 }
 
 // ── Markup ────────────────────────────────────────────────────────────────
 
 const TIP = {
   w: 'Each point of the moving average is the mean of the 2w + 1 averaged points centered on it, with a shorter symmetric window near the start. A larger w smooths more and blurs where the curve levels off.',
-  bins: 'The run is split into this many equal intervals of simulation time. A time-persistent value is time-averaged within each bin; tally observations are averaged within the bin they fall in.',
-  align: 'By index, observation i of every replication is averaged with observation i of the others. By time, each replication is summarized in equal intervals of simulation time first.',
+  bins: 'The replications’ observations do not fall at the same instants, and so there is no observation i to average across replications at a given time. The run is split instead into this many equal intervals of simulation time, and each replication is summarized within each one: a time-persistent value by its time average over the bin, tally observations by the mean of those falling in it. The ensemble average is then taken bin by bin, and the moving average runs across bins. More bins give finer time resolution and a noisier curve.',
+  align: 'By simulation time, each replication is first summarized in equal intervals of simulation time (the bins), and the cut is a time, which is how a warm-up period is set in simulation software. By observation index, observation i of every replication is averaged with observation i of the others, and the cut is a count of observations.',
   r1: 'The correlation between each batch mean and the next. Independent batch means would give a value near zero.',
   cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.'
 };
@@ -172,12 +214,12 @@ export function render(rootEl) {
 
     '<div class="sec" id="ss-warm" data-section="warmup">' +
       '<div class="sec-hd">Warm-up and truncation</div>' +
-      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each observation index or time bin, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one, or both.</p>' +
+      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each time bin or observation index, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one, or both.</p>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-grp"><span class="ctrl-lbl">' + tipSpan('Align replications', TIP.align) + '</span>' +
           '<span class="seg" role="group" aria-label="Align replications">' +
-            '<button type="button" class="seg-btn" data-align="index" aria-pressed="true">by observation index</button>' +
-            '<button type="button" class="seg-btn" data-align="time" aria-pressed="false">by simulation time</button>' +
+            '<button type="button" class="seg-btn" data-align="time" aria-pressed="true">by simulation time</button>' +
+            '<button type="button" class="seg-btn" data-align="index" aria-pressed="false">by observation index</button>' +
           '</span></span>' +
         '<span class="ctrl-pair" id="ss-bins-pair" hidden><label class="ctrl-lbl" for="ss-bins">' + tipSpan('Time bins', TIP.bins) + '</label><span id="ss-bins-h"></span></span>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ss-w">' + tipSpan('Moving-average half-window <span class="sym">w</span>', TIP.w) + '</label><span id="ss-w-h"></span></span>' +
@@ -191,7 +233,7 @@ export function render(rootEl) {
       '<div class="ss-cut-row">' +
         '<p class="ss-cut-text" id="ss-cut-text" aria-live="polite">Proposed truncation: ' + dash + '</p>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ss-cuta" id="ss-cuta-lbl">Delete the first</label><span id="ss-cuta-h"></span><span class="ctrl-note" id="ss-cuta-unit">observations</span></span>' +
-        '<button type="button" class="btn-run" id="ss-apply" disabled>Apply truncation</button>' +
+        '<button type="button" class="btn-run" id="ss-apply" disabled>Save truncated set</button>' +
       '</div>' +
       '<p class="ss-applied" id="ss-applied" role="status"></p>' +
     '</div>' +
@@ -246,7 +288,7 @@ export function render(rootEl) {
   warmSec.appendChild(details('Why truncate, and why not compute the cut',
     '<p>A run that starts empty and idle climbs toward its long-run behavior over its first stretch. Averaging those early observations in with the rest pulls the estimate toward the starting state; this is initialization bias, and deleting the warm-up removes it.</p>' +
     '<p>The average across replications is noisy, and the moving average smooths that noise so the trend shows. Place the cut where the moving average has leveled off, and lean toward cutting late: deleting too little leaves the bias in, whereas deleting too much leaves fewer observations.</p>' +
-    '<p>The cumulative average is drawn for contrast. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
+    '<p>The cumulative average is drawn for contrast. With several replications it is the cumulative average of the ensemble average, which is the same curve as the average across replications of each replication’s own cumulative average when the replications are of equal length. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
     '<p>Automatic rules for the cut exist, but each is a rule of thumb that a slow drift or a noisy series can fool. The plot shows what such a rule only summarizes, and so the decision should rest on the plot.</p>'));
   root.querySelector('#ss-batch').appendChild(details('The limits of batching',
     '<p>Batch means treat each batch average as one observation. When the batches are long compared with how far the correlation in the series reaches, the batch means are nearly independent and nearly normal, and the t interval on them is close to right.</p>' +
@@ -268,8 +310,8 @@ export function render(rootEl) {
     const next = el.ds.value;
     if (next === dsId) return;
     dsId = next;
-    resetFor(current());
-    if (current()) { state.select(dsId); state.setPick(id, 'ds', dsId); }
+    resetFor(shown());
+    if (shown()) { state.select(dsId); state.setPick(id, 'ds', dsId); }
     update();
   });
   el.alignBtns.forEach(b => b.addEventListener('click', () => {
@@ -322,14 +364,14 @@ export function render(rootEl) {
     dsId = id2;
     // The picker follows the selection made on another page and records it.
     state.setPick(id, 'ds', dsId);
-    resetFor(current());
+    resetFor(shown());
     refreshSelect();
     if (visible()) update();
   });
   state.on('settings', () => { if (visible()) drawBatch(); });
 
   refreshSelect();
-  resetFor(current());
+  resetFor(shown());
   update();
   installExportRow(root, id);
   registerTips(root);
@@ -391,11 +433,11 @@ function refreshSelect() {
   const want = state.getPick(id, 'ds');
   if (typeof want === 'string' && want !== dsId && ok.some(d => d.id === want)) {
     dsId = want;
-    resetFor(current());
+    resetFor(shown());
   } else if (!ok.some(d => d.id === dsId)) {
     const sel = state.selected();
     const next = ok.some(d => d.id === sel) ? sel : (ok.length ? ok[0].id : '');
-    if (next !== dsId) { dsId = next; resetFor(current()); }
+    if (next !== dsId) { dsId = next; resetFor(shown()); }
   }
   el.ds.innerHTML = '';
   if (!list.length) {
@@ -423,7 +465,8 @@ function refreshSelect() {
 // series is clamped when the warm-up is computed, and a replication beyond R
 // becomes the last one.
 function resetFor(ds) {
-  cut = 0;
+  const v = ds ? viewOf(ds) : null;
+  cut = v ? v.fence : 0;
   repIdx = 0;
   lumped = false;
   mode = 'count';
@@ -436,9 +479,10 @@ function resetFor(ds) {
   if (alignsFor(ds).includes(get('align'))) align = get('align');
   const c = get('cut');
   if (typeof c === 'number' && Number.isFinite(c) && c > 0) cut = c;
+  const base = v.base;
   const r = get('rep');
-  if (Number.isInteger(r) && r >= 1) repIdx = Math.min(r, ds.reps.length) - 1;
-  if (get('lumped') === true && ds.reps.length > 1) lumped = true;
+  if (Number.isInteger(r) && r >= 1) repIdx = Math.min(r, base.reps.length) - 1;
+  if (get('lumped') === true && base.reps.length > 1) lumped = true;
   if (get('batchMode') === 'count' || get('batchMode') === 'size') mode = get('batchMode');
   const n = get('count');
   if (Number.isInteger(n) && n >= 2) count = n;
@@ -448,8 +492,10 @@ function resetFor(ds) {
 
 function clearApplied() { if (el.applied) el.applied.textContent = ''; }
 
-function syncControls(ds) {
-  const allowed = ds ? alignsFor(ds) : [];
+function syncControls(sh) {
+  const allowed = sh ? alignsFor(sh) : [];
+  const v = sh ? viewOf(sh) : null;
+  const ds = v ? v.base : null;
   for (const b of el.alignBtns) {
     const a = b.getAttribute('data-align');
     b.disabled = !allowed.includes(a);
@@ -457,7 +503,8 @@ function syncControls(ds) {
   }
   el['bins-pair'].hidden = !(ds && align === 'time');
   let note = '';
-  if (ds && ds.kind === 'time') note = 'Time-persistent data are aligned by time only: a record’s position says nothing about how long its value holds.';
+  if (v && v.by) note = 'A truncated dataset is shown the way it was cut, by ' + (v.by === 'index' ? 'observation index' : 'simulation time') + '.';
+  else if (ds && ds.kind === 'time') note = 'Time-persistent data are aligned by time only: a record’s position says nothing about how long its value holds.';
   else if (ds && !allowed.includes('time')) note = 'These observations carry no time stamps, and so they are aligned by observation index.';
   el['align-note'].textContent = note;
   el['align-note'].hidden = !note;
@@ -470,7 +517,11 @@ function syncControls(ds) {
     const what = ds.kind === 'time' ? 'records' : 'observations';
     el['ds-note'].textContent = (ds.kind === 'tally' ? 'Tally' : 'Time-persistent') + ' data: ' + plural(R, 'replication') + ' of ' + per + ' ' + what +
       (ds.kind === 'time' ? (ds.endTime != null ? ', each run ending at time ' + num(ds.endTime) : ', with no end time given (the last record of each run holds for no time)') :
-        (hasTimes(ds) ? ', with time stamps' : '')) + '.';
+        (hasTimes(ds) ? ', with time stamps' : '')) + '.' +
+      (v.by
+        ? ' This dataset is “' + ds.name + '” with ' + (v.by === 'index' ? 'the first ' + plural(v.fence, 'observation') + ' of each replication' : 'everything before time ' + fixed(v.fence, timeDecimals(ds.endTime || v.fence))) +
+          ' deleted. The plots show that run with the fence at the saved cut; move the fence either way and save to make another dataset from the same run.'
+        : '');
   } else {
     el['ds-note'].textContent = state.datasets.length
       ? 'Load a tally or time-persistent dataset on the Import page; a dataset of one value per replication has nothing within a run to truncate or batch.'
@@ -597,8 +648,9 @@ function buildBatchSpinner(ds) {
 /** Moves the cut from either spinner, the drag, the keyboard, or a click on the plot. */
 function setCut(v, from) {
   const next = roundCut(v);
-  if (from !== 'a' && spins.cutA) spins.cutA.set(next, false);
-  if (from !== 'b' && spins.cutB) spins.cutB.set(next, false);
+  // The spinner the value was typed into is left alone unless rounding changed it.
+  if ((from !== 'a' || next !== v) && spins.cutA) spins.cutA.set(next, false);
+  if ((from !== 'b' || next !== v) && spins.cutB) spins.cutB.set(next, false);
   if (from !== 'plot' && wp) wp.setCut(next);
   if (next === cut && from !== 'plot-end') return;
   cut = next;
@@ -614,25 +666,47 @@ function setCut(v, from) {
 function syncCutControls() {
   const ds = current();
   el['cut-text'].textContent = cutText(ds);
-  el.apply.disabled = !ds || !(cut > 0);
+  // Nothing to save without a cut, or with the fence where this dataset's already is.
+  el.apply.disabled = !ds || !(cut > 0) || cut === savedFence();
+}
+
+/** The fence the shown dataset was saved with, or 0. */
+function savedFence() {
+  const sh = shown();
+  return sh ? viewOf(sh).fence : 0;
 }
 
 function cutText(ds) {
   if (!ds || !warm) return 'Proposed truncation: ' + dash;
-  if (!(cut > 0)) return 'Proposed truncation: none. Drag the dashed line, click the plot where the warm-up ends, or type a value.';
+  const saved = savedFence();
+  if (!(cut > 0)) {
+    return (saved > 0 ? 'Proposed truncation: none, which would keep the whole run. ' : 'Proposed truncation: none. ') +
+      'Drag the dashed line, click the plot where the warm-up ends, or type a value.';
+  }
+  const head = cut === saved ? 'Saved truncation (this dataset’s fence): ' : 'Proposed truncation: ';
+  let body;
   if (align === 'index') {
     let lo = Infinity, hi = 0;
     for (const r of ds.reps) { lo = Math.min(lo, r.v.length); hi = Math.max(hi, r.v.length); }
     const of = ds.reps.length === 1 ? 'of ' + intl(hi)
       : lo === hi ? 'of ' + intl(hi) + ' per replication' : 'of ' + intl(lo) + '–' + intl(hi) + ' per replication';
-    return 'Proposed truncation: the first ' + plural(cut, 'observation') + ' (' + of + ').';
+    body = 'the first ' + plural(cut, 'observation') + ' (' + of + ').';
+  } else {
+    body = 'the warm-up ends at time ' + fmtCut(cut) + ' of ' + num(warm.xMax) + '.';
   }
-  return 'Proposed truncation: the warm-up ends at time ' + fmtCut(cut) + ' of ' + num(warm.xMax) + '.';
+  if (saved > 0 && cut !== saved) body += ' The saved fence is at ' + fmtCut(saved) + '; saving makes a new dataset from the same run.';
+  return head + body;
 }
 
+/**
+ * Saves the run cut at the fence as a new dataset. The cut is always taken
+ * from the run itself (`current()`), never from an earlier truncation of it,
+ * and so moving the fence back recovers what an earlier cut deleted. The new
+ * dataset is then shown, with its fence where the reader left it.
+ */
 function applyTruncation() {
   const ds = current();
-  if (!ds || !(cut > 0)) return;
+  if (!ds || !(cut > 0) || cut === savedFence()) return;
   let derived;
   try {
     derived = truncateDataset(ds, { by: align, at: cut });
@@ -641,12 +715,21 @@ function applyTruncation() {
     return;
   }
   if (!derived.reps.length) {
-    el.applied.textContent = 'Nothing remains in any replication after this cut, and so no dataset was added.';
+    el.applied.textContent = 'Nothing remains in any replication after this cut, and so no dataset was saved.';
     return;
   }
   state.add(derived);
   const dropped = ds.reps.length - derived.reps.length;
-  el.applied.textContent = 'Added “' + derived.name + '” with ' + plural(derived.reps.length, 'replication') + '; it is now available on every page.' +
+  // The proposal is now a saved dataset, and so the dataset it was proposed
+  // on goes back to its own fence the next time it is shown.
+  keep('cut', null);
+  dsId = derived.id;
+  resetFor(shown());
+  state.setPick(id, 'ds', dsId);
+  state.select(dsId);
+  refreshSelect();
+  update();
+  el.applied.textContent = 'Saved “' + derived.name + '” with ' + plural(derived.reps.length, 'replication') + ' as a new dataset; it is the one shown now, with its fence at ' + fmtCut(cut) + '.' +
     (dropped ? ' ' + plural(dropped, 'replication') + (dropped === 1 ? ' ends' : ' end') + ' before the cut and ' + (dropped === 1 ? 'was' : 'were') + ' left out.' : '');
 }
 
@@ -654,7 +737,7 @@ function applyTruncation() {
 
 function update() {
   const ds = current();
-  syncControls(ds);
+  syncControls(shown());
   warm = ds ? computeWarm(ds) : null;
   if (warm && cut > warm.xMax) cut = roundCut(warm.xMax);
   buildCutSpinners(ds);
@@ -687,7 +770,7 @@ function warmLegend(ds) {
   const items = [
     { swatch: 'thin', color: '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
     { swatch: 'line', color: '--est', label: 'moving average over 2<span class="sym">w</span> + 1 = ' + intl(2 * w + 1) + ' points' },
-    { swatch: 'dash', color: '--truth', label: 'cumulative average from the start' },
+    { swatch: 'dash', color: '--truth', label: R === 1 ? 'cumulative average from the start' : 'cumulative average of the ensemble average, from the start' },
     { swatch: 'dash', color: '--accent', label: 'proposed cut (drag it, click the plot, or use the arrow keys)' }
   ];
   if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the proposed cut' });
@@ -698,23 +781,25 @@ let warmLegendCut = null;
 
 function drawWarm(computed) {
   const ds = current();
-  warmLegend(ds);
   if (!ds) {
+    warm = null;
     wp = null;
+    warmLegend(ds);
     el.contrib.textContent = 'Replications contributing: ' + dash;
     warmFig.render(f => emptyPlot(f, 'No dataset to plot yet'));
     return;
   }
   if (!computed) warm = computeWarm(ds);
   const W = warm;
+  warmLegend(ds);
   const resp = ds.response && ds.response !== 'value' ? ds.response : 'value';
   warmFig.opts.xLabel = align === 'index' ? 'Observation index' : 'Simulation time (bin centers)';
   warmFig.opts.yLabel = ds.reps.length === 1 ? resp : 'Average ' + resp + ' across replications';
   el.contrib.textContent = contribText(ds, W);
   warmFig.render(f => {
-    f.x([0, W.xMax || 1]);
+    f.x([W.xMin, W.xMax > W.xMin ? W.xMax : W.xMin + 1]);
     wp = welchPlot(f, {
-      x: W.x, raw: W.ybar, smooth: W.smooth, cumulative: W.cum, cut, step: W.step, shade: true,
+      x: W.x, raw: W.ybar, smooth: W.smooth, cumulative: W.cum, cut, cutMin: W.xMin, step: W.step, shade: true,
       cutLabel: v => {
         const c = roundCut(v);
         if (!(c > 0)) return 'no cut yet';
@@ -772,6 +857,10 @@ function contribText(ds, W) {
         : 'A replication with no observation in a bin does not contribute to that bin’s average.');
   }
   if (W.gaps) s += ' ' + plural(W.gaps, 'bin holds', 'bins hold') + ' no observation from any replication; the moving average skips ' + (W.gaps === 1 ? 'it' : 'them') + ', and fewer bins would fill ' + (W.gaps === 1 ? 'it' : 'them') + '.';
+  if (align === 'time' && W.edges && W.edges.length > 1) {
+    const B = W.edges.length - 1;
+    s += ' Each of the ' + intl(B) + ' bins spans ' + fixed((W.xMax - W.xMin) / B, W.dec) + ' units of simulation time.';
+  }
   return s;
 }
 
@@ -1071,10 +1160,12 @@ function storeResult(ds, src, res, rows) {
   const rep = src.rep;
   const byTime = res.byTime;
   const truncation = cut > 0 ? 'by ' + (align === 'index' ? 'index' : 'time') + ' at ' + fmtCut(cut).replace(/,/g, '') : 'none';
+  const sh = shown();
   const provenance = {
-    dataset: ds.name,
+    dataset: sh && sh !== ds ? sh.name : ds.name,
     replication: src.lumped ? 'all ' + src.nReps + ', concatenated' : String(rep.id),
     truncation,
+    ...(sh && sh !== ds ? { 'source run': ds.name } : {}),
     'batch count': res.b,
     'batch size': res.size + (byTime ? ' time units' : ' observations'),
     'confidence level': pct(res.level, 0),

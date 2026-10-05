@@ -59,7 +59,7 @@ export function render(root) {
       '<div id="ss-list"></div>' +
     '</div>' +
     '<div class="sec"><div class="sec-hd">Start over</div>' +
-      '<p class="exp-note">Removes every loaded dataset and every stored setting from this browser. Files on disk are untouched; what was exported stays exported.</p>' +
+      '<p class="exp-note">Removes every loaded dataset and every stored setting from this browser and reloads the page, so that every control starts from its default. Files on disk are untouched; what was exported stays exported.</p>' +
       '<div class="xp-btns"><button type="button" class="btn-clear" id="ss-forget">Forget this session</button></div>' +
     '</div>';
   const q = s => root.querySelector(s);
@@ -74,6 +74,11 @@ export function render(root) {
       disarm();
       forgetSession();
       refresh();
+      // A reload is the one sure way to put every page's controls, the
+      // remembered sections, and the confidence level back to their
+      // defaults: each page keeps its state in its own module.
+      try { history.replaceState(null, '', '#storage'); } catch (err) { /* a file:// page may refuse */ }
+      location.reload();
       return;
     }
     el.forget.dataset.armed = '1';

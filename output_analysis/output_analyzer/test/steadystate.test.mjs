@@ -137,6 +137,20 @@ test('alignByTime, time-persistent, two trajectories with no end time (R)', () =
   assert.deepEqual(Array.from(res.counts), R.alignTime.counts);
 });
 
+test('alignByTime from a start time: the bins are the tail of the bins from zero', () => {
+  // Over [0, T] in 8 bins the last 4 bins cover [T/2, T]; from a start of T/2 in 4 bins they must agree.
+  const reps = R.tallyReps.map(r => ({ t: r.t, v: r.v }));
+  const whole = alignByTime(reps, 'tally', 8, null);
+  const T = whole.edges[8];
+  const tail = alignByTime(reps, 'tally', 4, null, T / 2);
+  closeAll(tail.edges, Array.from(whole.edges).slice(4), 1e-12, 'edges');
+  closeAll(tail.ybar, Array.from(whole.ybar).slice(4), 1e-12, 'ybar');
+  assert.deepEqual(Array.from(tail.counts), Array.from(whole.counts).slice(4));
+  // A start at or past the end is ignored, and the bins run from zero again.
+  const back = alignByTime(reps, 'tally', 8, null, T);
+  closeAll(back.edges, whole.edges, 1e-12, 'edges from zero');
+});
+
 test('alignByTime, one bin over [0, endTime] is the whole time-weighted mean (R)', () => {
   const res = alignByTime([{ t: R.traj.t, v: R.traj.v }], 'time', 1, R.traj.endTime);
   close(res.ybar[0], R.traj.twWhole, 1e-12, 'time-weighted mean');

@@ -9,7 +9,7 @@
 // the navigation.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations } from '../data/model.js';
+import { repEstimates, datasetSummary, observations, truncationView } from '../data/model.js';
 import {
   summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
@@ -556,6 +556,40 @@ function axisToggle(api, ds, rep) {
   api.sec.appendChild(row);
 }
 
+/**
+ * For a replication of a truncated dataset whose source run is loaded, the
+ * same replication of the source, with the deleted stretch: `k` observations
+ * were deleted, and the fence stands at time `at` (the cut for a dataset cut
+ * by time, else where the kept records begin). Null otherwise.
+ */
+function fenceFor(ds, rep) {
+  const v = truncationView(ds, state.get);
+  if (!v.by) return null;
+  const src = v.base.reps.find(r => r.id === rep.id);
+  if (!src || src.v.length < rep.v.length) return null;
+  const at = v.by === 'time' ? v.fence : rep.t && rep.t.length ? rep.t[0] : null;
+  return { src, base: v.base, by: v.by, fence: v.fence, k: src.v.length - rep.v.length, at };
+}
+
+/** A band over the stretch a truncation deleted, and the fence as a dashed line, both recorded for the scripts. */
+function fenceBand(f, xTo) {
+  const x = Math.round(Math.max(0, Math.min(f.iw, f.sx(xTo))));
+  svgEl('rect', { x: 0, y: 0, width: x, height: f.ih, fill: tok('--muted'), 'fill-opacity': 0.12, class: 'm-shade' }, f.inner);
+  f.series.push({ kind: 'span', x0: f.sx.domain[0], x1: xTo, color: tok('--muted'), label: 'deleted by the truncation' });
+  svgEl('line', { x1: x, x2: x, y1: 0, y2: f.ih, stroke: tok('--accent'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, f.layers.over);
+  f.series.push({ kind: 'vline', x: xTo, dash: true, color: tok('--accent'), label: 'fence' });
+}
+
+/** Where the warm-up is cut: the pointer a reader looking at one run's transient is after. */
+const CUT_POINTER = ' To delete a warm-up period from this run, go to <a href="#steady/warmup">Warm-up and truncation</a> on the Steady State page.';
+
+function fenceCaption(fc, time) {
+  const where = fc.by === 'time' ? 'time ' + num(fc.fence) : 'observation ' + intl(fc.fence);
+  return ' The gray stretch before the fence at ' + where + ' is what the truncation that made this dataset deleted, drawn from “' + esc(fc.base.name) +
+    '”; it is not part of this dataset' + (time ? '' : ', and the lag plot and correlogram below leave it out') +
+    '. The fence is moved, and a new dataset saved, on the <a href="#steady/warmup">Steady State page</a>.';
+}
+
 function buildSequence(api, { ds }) {
   const sec = api.sec;
   const rep = chosenRep(ds);
@@ -563,27 +597,61 @@ function buildSequence(api, { ds }) {
   sec.appendChild(el('div', 'sec-hd', (time ? 'State over time' : 'Observation sequence') + ', replication ' + esc(rep.id)));
   axisToggle(api, ds, rep);
   const name = slug(ds.name) + '-rep-' + slug(rep.id) + '-sequence';
+  const fc = fenceFor(ds, rep);
   if (time) {
     const s = stepSeries(rep, ds.endTime);
+    const whole = fc && fc.at != null ? stepSeries(fc.src, ds.endTime) : null;
+    const legendItems = [{ swatch: 'line', color: '--est', label: 'state, held until the next record' }];
+    if (whole) legendItems.push({ swatch: 'shade', color: '--muted', label: 'deleted by the truncation, from the source run' }, { swatch: 'dash', color: '--accent', label: 'fence' });
     figure(api, sec, name, { height: 240, narrowHeight: 260, xLabel: 'Time', yLabel: ds.response, ariaLabel: 'State against time, replication ' + rep.id },
       f => {
+        const src = whole ? fc.src : rep;
         f.readout(dx => {
           let k = -1;
-          for (let i = 0; i < rep.t.length && rep.t[i] <= dx; i++) k = i;
-          return k < 0 ? null : ['t = ' + num(dx), 'state ' + num(rep.v[k]) + ' since t = ' + num(rep.t[k])];
+          for (let i = 0; i < src.t.length && src.t[i] <= dx; i++) k = i;
+          if (k < 0) return null;
+          const lines = ['t = ' + num(dx), 'state ' + num(src.v[k]) + ' since t = ' + num(src.t[k])];
+          if (whole && dx < fc.at) lines.push('deleted by the truncation');
+          return lines;
         });
+        if (whole) {
+          f.x(extent(whole.xs));
+          f.y(extent(whole.ys), { pad: 0.04, nice: true });
+          fenceBand(f, fc.at);
+          sequence(f, whole.ys, { xs: whole.xs, width: 1.4, color: '--muted', label: 'state before the fence' });
+        }
         sequence(f, s.ys, { xs: s.xs, width: 1.4 });
-      },
-      [{ swatch: 'line', color: '--est', label: 'state, held until the next record' }]);
+      }, legendItems);
     caption(sec, 'Each value holds from its record time until the next record' +
       (ds.endTime != null ? ', and the last until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
-      ' The replication’s outcome weights each value by how long it held.');
+      ' The replication’s outcome weights each value by how long it held.' + (whole ? fenceCaption(fc, true) : CUT_POINTER));
   } else {
     const useT = rep.t && xMode === 'time';
+    const withFence = fc && fc.k > 0 && (!useT || fc.at != null);
+    const legendItems = [rep.v.length <= 20000 ? { swatch: 'dot', color: '--est', label: 'one observation' } : { swatch: 'thin', color: '--est', label: 'observations, as a thinned line' }];
+    if (withFence) legendItems.push({ swatch: 'shade', color: '--muted', label: 'deleted by the truncation, from the source run' }, { swatch: 'dash', color: '--accent', label: 'fence' });
     figure(api, sec, name, { height: 240, narrowHeight: 260, xLabel: useT ? 'Time' : 'Observation number', yLabel: ds.response, ariaLabel: 'Observations in order, replication ' + rep.id },
-      f => sequence(f, rep.v, Object.assign({ marks: 'points' }, useT ? { xs: rep.t } : {})),
-      [rep.v.length <= 20000 ? { swatch: 'dot', color: '--est', label: 'one observation' } : { swatch: 'thin', color: '--est', label: 'observations, as a thinned line' }]);
-    caption(sec, 'The ' + plural(rep.v.length, 'observation') + ' of replication ' + esc(rep.id) + ' in the order the run recorded them, each as its own dot. Neighbors tend to sit close together, which is the serial correlation the lag plot and correlogram below measure.');
+      f => {
+        if (!withFence) { sequence(f, rep.v, Object.assign({ marks: 'points' }, useT ? { xs: rep.t } : {})); return; }
+        const src = fc.src, k = fc.k, n = src.v.length;
+        const allX = useT ? src.t : Float64Array.from({ length: n }, (_, i) => i + 1);
+        const xTo = useT ? fc.at : k + 0.5;
+        f.x(extent(allX));
+        f.y(extent(src.v), { pad: 0.04, nice: true });
+        f.readout(dx => {
+          let lo = 0, hi = n - 1;
+          while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (allX[mid] < dx) lo = mid; else hi = mid; }
+          const i = Math.abs(allX[lo] - dx) <= Math.abs(allX[hi] - dx) ? lo : hi;
+          const lines = [(useT ? 't = ' : 'i = ') + num(allX[i]), 'value ' + num(src.v[i])];
+          if (i < k) lines.push('deleted by the truncation');
+          return lines;
+        });
+        fenceBand(f, xTo);
+        sequence(f, src.v.slice(0, k), { xs: allX.slice(0, k), marks: 'points', color: '--muted', label: 'deleted by the truncation' });
+        sequence(f, rep.v, { xs: allX.slice(k), marks: 'points' });
+      }, legendItems);
+    caption(sec, 'The ' + plural(rep.v.length, 'observation') + ' of replication ' + esc(rep.id) + ' in the order the run recorded them, each as its own dot. Neighbors tend to sit close together, which is the serial correlation the lag plot and correlogram below measure.' +
+      (withFence ? fenceCaption(fc, false) : CUT_POINTER));
   }
 }
 

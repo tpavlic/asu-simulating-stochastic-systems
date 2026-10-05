@@ -123,11 +123,12 @@ export function alignByIndex(reps) {
  * @param {'time'|'tally'} kind
  * @param {number} nBins
  * @param {number|null} endTime
+ * @param {number} [start=0] the time the bins start from, the cut for a series already truncated by time
  * @returns {{edges: Float64Array, centers: Float64Array, ybar: Float64Array, counts: Int32Array}}
  *   ybar[b] averages the replications that contribute to bin b (NaN when none do), and counts[b]
  *   is how many contribute.
  */
-export function alignByTime(reps, kind, nBins, endTime) {
+export function alignByTime(reps, kind, nBins, endTime, start = 0) {
   let T = endTime;
   if (T == null) {
     T = -Infinity;
@@ -138,8 +139,9 @@ export function alignByTime(reps, kind, nBins, endTime) {
     if (!Number.isFinite(T)) T = 0;
   }
   const B = Math.max(1, Math.floor(nBins));
+  const t0 = Number.isFinite(start) && start < T ? start : 0;
   const edges = new Float64Array(B + 1), centers = new Float64Array(B);
-  for (let b = 0; b <= B; b++) edges[b] = b === B ? T : (T * b) / B;
+  for (let b = 0; b <= B; b++) edges[b] = b === 0 ? t0 : b === B ? T : t0 + ((T - t0) * b) / B;
   for (let b = 0; b < B; b++) centers[b] = 0.5 * (edges[b] + edges[b + 1]);
   const sum = new Float64Array(B), counts = new Int32Array(B);
   for (const r of reps) {

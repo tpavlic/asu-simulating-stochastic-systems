@@ -273,6 +273,31 @@ export function truncateDataset(ds, { by, at }) {
  * @param {Dataset} ds
  * @returns {{ ok: boolean, reason?: string }}
  */
+/**
+ * How a truncated dataset relates to the run it was cut from. The result's
+ * `base` is the nearest loaded ancestor the dataset is a truncation of (the
+ * dataset itself when it is not one, or its source is gone), `fence` the cut
+ * on that run that yields this dataset (0 when base is the dataset itself),
+ * and `by` how it was cut, or null. A chain of cuts is followed while each
+ * link is loaded, keeps the kind, and cuts the same way as the first: index
+ * cuts add up, and time cuts are absolute, so the latest one stands.
+ * @param {object} ds
+ * @param {(id: string) => object|undefined} lookup a dataset by id
+ * @returns {{ base: object, fence: number, by: ('index'|'time')|null }}
+ */
+export function truncationView(ds, lookup) {
+  let base = ds, fence = 0, by = null;
+  while (base.derivedFrom && base.derivedFrom.truncate) {
+    const tr = base.derivedFrom.truncate;
+    const parent = lookup(base.derivedFrom.id);
+    if (!parent || parent.kind !== ds.kind || !(tr.at > 0) || (by && tr.by !== by)) break;
+    by = tr.by;
+    fence = tr.by === 'index' ? fence + Math.floor(tr.at) : Math.max(fence, tr.at);
+    base = parent;
+  }
+  return by ? { base, fence, by } : { base: ds, fence: 0, by: null };
+}
+
 export function canInfer(ds) {
   const nEst = Array.from(repEstimates(ds)).filter(Number.isFinite).length;
   if (nEst >= 2) return { ok: true };
