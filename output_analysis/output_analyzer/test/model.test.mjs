@@ -189,3 +189,20 @@ test('sampleStep and sampleDataset: the last record at or before each time, noth
   assert.throws(() => sampleDataset(ds, { start: 0, step: 0, end: 1 }), /positive/);
   assert.throws(() => sampleDataset(ds, { start: 2, step: 1, end: 1 }), /ends before/);
 });
+
+test('sameData: equal data under different names and ids, unequal otherwise', async () => {
+  const { sameData } = await import('../js/data/model.js');
+  const mk = (f = {}) => makeDataset(Object.assign({ name: 'a', kind: 'time', response: 'q', endTime: null,
+    reps: [{ id: 1, t: [0, 2], v: [0, 1] }, { id: 2, t: [0, 3], v: [1, 0] }] }, f));
+  assert.equal(sameData(mk(), mk({ name: 'b', source: { file: 'x.dat' } })), true);
+  assert.equal(sameData(mk(), mk({ kind: 'tally' })), false);
+  assert.equal(sameData(mk(), mk({ response: 'r' })), false);
+  assert.equal(sameData(mk(), mk({ endTime: 5 })), false);
+  assert.equal(sameData(mk(), mk({ reps: [{ id: 1, t: [0, 2], v: [0, 1] }] })), false);
+  assert.equal(sameData(mk(), mk({ reps: [{ id: 1, t: [0, 2], v: [0, 1] }, { id: 3, t: [0, 3], v: [1, 0] }] })), false);
+  assert.equal(sameData(mk(), mk({ reps: [{ id: 1, t: [0, 2], v: [0, 1] }, { id: 2, t: [0, 3], v: [1, 1] }] })), false);
+  assert.equal(sameData(mk(), mk({ reps: [{ id: 1, t: [0, 2], v: [0, 1] }, { id: 2, t: [0, 3.5], v: [1, 0] }] })), false);
+  const r = mk({ kind: 'reps', reps: [{ id: 1, t: null, v: [NaN] }] });
+  assert.equal(sameData(r, mk({ kind: 'reps', reps: [{ id: 1, t: null, v: [NaN] }] })), true);
+  assert.equal(sameData(r, mk({ kind: 'reps', reps: [{ id: 1, t: [1], v: [NaN] }] })), false);
+});

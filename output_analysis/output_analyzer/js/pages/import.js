@@ -7,6 +7,7 @@
 import * as state from '../state.js';
 import { sniff, buildDatasets } from '../io/parse.js';
 import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
+import { sameData } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num } from '../ui/format.js';
@@ -212,9 +213,8 @@ function loadArena(fileName, bytes) {
     const dat = parseArenaDat(bytes);
     const list = [arenaDataset(dat, { file: fileName })];
     if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
-    for (const ds of list) state.add(ds);
-    state.select(list[0].id);
-    lastImport = { what: fileName, datasets: list, issues: [], notes: collectNotes(list) };
+    const { added, skipped } = addNew(list);
+    lastImport = { what: fileName, datasets: added, skipped, issues: [], notes: collectNotes(added) };
   } catch (err) {
     lastImport = { error: 'The file ' + fileName + ' could not be loaded: ' + err.message };
   }
@@ -275,13 +275,14 @@ function loadExample(exId) {
     const sn = sniff(ex.text, { name: ex.mapping.name });
     const res = buildDatasets(sn, ex.mapping);
     if (!res.datasets.length) throw new Error('The example produced no datasets.');
-    for (const ds of res.datasets) { ds.source.file = ex.file; state.add(ds); }
-    state.select(res.datasets[0].id);
+    for (const ds of res.datasets) ds.source.file = ex.file;
+    const { added, skipped } = addNew(res.datasets);
     lastImport = {
       what: 'the example “' + ex.title + '”',
-      datasets: res.datasets,
+      datasets: added,
+      skipped,
       issues: res.issues,
-      notes: collectNotes(res.datasets)
+      notes: collectNotes(added)
     };
   } catch (err) {
     lastImport = { error: 'The example could not be loaded: ' + err.message };
@@ -293,6 +294,22 @@ function collectNotes(list) {
   const out = [];
   for (const ds of list) for (const n of ds.source.notes) if (!out.includes(n)) out.push(n);
   return out;
+}
+
+// Adds the datasets that are not already loaded with the same data, selects
+// the first of them (or the loaded copy of the first duplicate), and returns
+// what was added and what was skipped for the status box. A file dropped
+// twice, or an example loaded twice, adds nothing the second time.
+function addNew(list) {
+  const added = [], skipped = [];
+  for (const ds of list) {
+    const dup = state.datasets.find(d => sameData(d, ds));
+    if (dup) skipped.push({ name: ds.name, as: dup });
+    else { state.add(ds); added.push(ds); }
+  }
+  if (added.length) state.select(added[0].id);
+  else if (skipped.length) state.select(skipped[0].as.id);
+  return { added, skipped };
 }
 
 // ── The mapping dialog ──────────────────────────────────────────────────
@@ -583,13 +600,13 @@ function accept() {
     return;
   }
   if (!res.datasets.length) return;
-  for (const ds of res.datasets) state.add(ds);
-  state.select(res.datasets[0].id);
+  const { added, skipped } = addNew(res.datasets);
   lastImport = {
     what: pending.fileName === 'pasted data' || pending.fileName === 'dropped text' ? 'the ' + pending.fileName : pending.fileName,
-    datasets: res.datasets,
+    datasets: added,
+    skipped,
     issues: res.issues,
-    notes: collectNotes(res.datasets)
+    notes: collectNotes(added)
   };
   renderStatus();
   nextPending();
@@ -603,9 +620,14 @@ function renderStatus() {
   box.innerHTML = '';
   if (!lastImport) return;
   if (lastImport.error) { box.appendChild(notice('warn', esc(lastImport.error))); return; }
+  const skipped = lastImport.skipped || [];
   const names = lastImport.datasets.map(ds => '<b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + ', R = ' + intl(ds.reps.length) + ')').join(', ');
-  let html = '<p>Added ' + plural(lastImport.datasets.length, 'dataset') + ' from ' + esc(lastImport.what) + ': ' + names + '. Open <a href="#explore">Summary and Plots</a> to look at ' + (lastImport.datasets.length === 1 ? 'it' : 'them') + '.';
-  html += '</p>';
+  let html = lastImport.datasets.length
+    ? '<p>Added ' + plural(lastImport.datasets.length, 'dataset') + ' from ' + esc(lastImport.what) + ': ' + names + '. Open <a href="#explore">Summary and Plots</a> to look at ' + (lastImport.datasets.length === 1 ? 'it' : 'them') + '.</p>'
+    : '<p>Nothing was added from ' + esc(lastImport.what) + '.</p>';
+  for (const sk of skipped) {
+    html += '<p><b>' + esc(sk.name) + '</b> is already loaded' + (sk.as.name === sk.name ? '' : ' as <b>' + esc(sk.as.name) + '</b>') + ', with the same data, and was not added again.</p>';
+  }
   for (const n of lastImport.notes) html += '<p>' + esc(n) + '</p>';
   box.appendChild(notice('info', html));
   if (lastImport.issues.length) {

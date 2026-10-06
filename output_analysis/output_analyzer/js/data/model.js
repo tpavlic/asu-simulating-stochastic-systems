@@ -339,6 +339,31 @@ export function sampleDataset(ds, { start, step, end, max = Infinity }) {
   return { times, columns: ds.reps.map(r => ({ id: r.id, values: sampleStep(r, times) })), capped: n < want };
 }
 
+/**
+ * Whether two datasets hold the same data: the same kind and response, the
+ * same end time, and replication for replication the same id, times, and
+ * values. Names, sources, and ids may differ; a file loaded twice is the case.
+ * @param {Dataset} a
+ * @param {Dataset} b
+ * @returns {boolean}
+ */
+export function sameData(a, b) {
+  if (a.kind !== b.kind || a.response !== b.response || a.reps.length !== b.reps.length) return false;
+  if ((a.endTime == null) !== (b.endTime == null) || (a.endTime != null && a.endTime !== b.endTime)) return false;
+  const eq = (x, y) => {
+    if ((x == null) !== (y == null)) return false;
+    if (x == null) return true;
+    if (x.length !== y.length) return false;
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i] && !(Number.isNaN(x[i]) && Number.isNaN(y[i]))) return false;
+    return true;
+  };
+  for (let r = 0; r < a.reps.length; r++) {
+    const p = a.reps[r], q = b.reps[r];
+    if (String(p.id) !== String(q.id) || !eq(p.t, q.t) || !eq(p.v, q.v)) return false;
+  }
+  return true;
+}
+
 export function canInfer(ds) {
   const nEst = Array.from(repEstimates(ds)).filter(Number.isFinite).length;
   if (nEst >= 2) return { ok: true };
