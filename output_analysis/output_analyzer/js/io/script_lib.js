@@ -159,9 +159,22 @@ end
 // corrections, as the analyzer does. R is told which through wilcox.test's
 // exact argument, because R 4.4 and later would otherwise use an exact
 // distribution under ties too. Python and MATLAB carry the procedure in full,
-// since neither ships the interval.
+// since neither ships the interval. Under the approximation, a few tied
+// values can leave the inverted test short of significance at one end of
+// the range or both: the analyzer then reports that end as undetermined (NaN)
+// and keeps the requested level, where wilcox.test lowers the level until an
+// interval exists, which moves the other end too. R finds the ends by hand
+// in that case.
 
 LIB.R.signedRank = `
+signed_rank_z <- function(x, d) {
+  # The standardized signed-rank statistic of x - d, with the continuity and tie
+  # corrections, as wilcox.test inverts it for the interval.
+  xd <- x - d; xd <- xd[xd != 0]; m <- length(xd)
+  r <- rank(abs(xd)); tt <- table(r)
+  zd <- sum(r[xd > 0]) - m * (m + 1) / 4
+  (zd - sign(zd) * 0.5) / sqrt(m * (m + 1) * (2 * m + 1) / 24 - sum(tt^3 - tt) / 48)
+}
 signed_rank <- function(x, level, mu = 0) {
   n <- length(x); a <- 1 - level; d <- x - mu
   exact <- n < 50 && all(d != 0) && !any(duplicated(abs(d)))
@@ -185,8 +198,24 @@ signed_rank <- function(x, level, mu = 0) {
   # Outcomes that are all equal leave the inverted test nothing to search, and
   # wilcox.test returns no interval; the analyzer reports the common value as both ends.
   if (n > 0 && min(x) == max(x)) { lo <- x[1]; hi <- x[1] }
+  if (!exact && n >= 2 && min(x) < max(x)) {
+    # The approximate test inverted at the requested level: the lower end is the shift at
+    # which the statistic falls to z, the upper end the one at which it falls to -z. When
+    # even the smallest shift (or the largest) leaves the statistic short of that, the end
+    # is undetermined, and the other end is found at this level by the same search.
+    zq <- qnorm(1 - a / 2)
+    zmin <- signed_rank_z(x, min(x)); zmax <- signed_rank_z(x, max(x))
+    if (zmin < zq || zmax > -zq) {
+      end <- function(z0, at) {
+        if (at == z0) return(if (z0 > 0) min(x) else max(x))
+        uniroot(function(dd) signed_rank_z(x, dd) - z0, c(min(x), max(x)), tol = 1e-4)$root
+      }
+      lo <- if (zmin < zq) NaN else end(zq, zmin)
+      hi <- if (zmax > -zq) NaN else end(-zq, zmax)
+    }
+  }
   list(V = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
-       lo = lo, hi = hi, achieved = achieved)
+       lo = lo, hi = hi, achieved = achieved, zeros = sum(d == 0))
 }
 `;
 LIB.py.signedRank = `
@@ -1023,5 +1052,62 @@ r = struct('n', NaN, 'powerAtN', NaN);
 if ~sds_ok(s1, s2) || ~isfinite(delta) || delta == 0 || ~(power > 0 && power < 1) || ~(alpha > 0 && alpha < 1), return; end
 n = smallest_n(@(n) power_two(n, s1, s2, delta, alpha, pooled) >= power, (norminv(1 - alpha / 2) + norminv(power))^2 * (s1^2 + s2^2) / delta^2);
 if ~isnan(n), r = struct('n', n, 'powerAtN', power_two(n, s1, s2, delta, alpha, pooled)); end
+end
+`;
+
+// ── Paired t on matched pairs ────────────────────────────────────────────
+// The paired t test on the differences d = a - b, the interval on their mean,
+// and the correlation of a and b across the pairs. Differences that are all
+// equal leave t.test nothing to work on (it stops; SciPy and MATLAB return
+// NaN), and so the analyzer's values are given by hand there: the mean
+// difference with no width, and t infinite (p = 0), or undefined when every
+// difference is zero. A design whose outcomes are all equal has no
+// correlation with the other, which is NaN in every language.
+
+LIB.R.pairedT = `
+paired_t <- function(a, b, level) {
+  d <- a - b; n <- length(d); m <- mean(d)
+  r <- if (min(a) == max(a) || min(b) == max(b)) NaN else cor(a, b)
+  if (min(d) == max(d)) {
+    t <- if (m != 0) sign(m) * Inf else NaN
+    return(list(n = n, meanD = m, sdD = 0, se = 0, df = n - 1, t = t, p = if (is.nan(t)) NaN else 0,
+                lo = m, hi = m, hw = 0, r = r, diffs = d))
+  }
+  tt <- t.test(a, b, paired = TRUE, conf.level = level)
+  s <- sd(d)
+  list(n = n, meanD = m, sdD = s, se = s / sqrt(n), df = unname(tt$parameter), t = unname(tt$statistic),
+       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, r = r, diffs = d)
+}
+`;
+LIB.py.pairedT = `
+def paired_t(a, b, level):
+    """The paired t test on d = a - b (ttest_rel), the interval on the mean difference, and the
+    correlation of a and b."""
+    a = np.asarray(a, float); b = np.asarray(b, float); d = a - b; n = len(d); m = d.mean()
+    r = np.nan if a.min() == a.max() or b.min() == b.max() else np.corrcoef(a, b)[0, 1]
+    if d.min() == d.max():
+        t = np.sign(m) * np.inf if m != 0 else np.nan
+        return dict(n=n, meanD=m, sdD=0.0, se=0.0, df=n - 1, t=t, p=np.nan if np.isnan(t) else 0.0,
+                    lo=m, hi=m, hw=0.0, r=r, diffs=d)
+    res = stats.ttest_rel(a, b); ci = res.confidence_interval(level); s = d.std(ddof=1)
+    return dict(n=n, meanD=m, sdD=s, se=s / np.sqrt(n), df=res.df, t=res.statistic, p=res.pvalue,
+                lo=ci.low, hi=ci.high, hw=(ci.high - ci.low) / 2, r=r, diffs=d)
+`;
+LIB.m.pairedT = `
+function r = paired_t(a, b, level)
+% The paired t test on d = a - b (ttest on two vectors), the interval on the mean difference,
+% and the correlation of a and b.
+a = a(:); b = b(:); d = a - b; n = numel(d); m = mean(d);
+if min(a) == max(a) || min(b) == max(b), rho = NaN; else, rho = corr(a, b); end
+if min(d) == max(d)
+    if m ~= 0, t = sign(m) * Inf; p = 0; else, t = NaN; p = NaN; end
+    r = struct('n', n, 'meanD', m, 'sdD', 0, 'se', 0, 'df', n - 1, 't', t, 'p', p, ...
+               'lo', m, 'hi', m, 'hw', 0, 'r', rho, 'diffs', d);
+    return;
+end
+[~, p, ci, st] = ttest(a, b, 'Alpha', 1 - level);
+s = std(d);
+r = struct('n', n, 'meanD', m, 'sdD', s, 'se', s / sqrt(n), 'df', st.df, 't', st.tstat, 'p', p, ...
+           'lo', ci(1), 'hi', ci(2), 'hw', (ci(2) - ci(1)) / 2, 'r', rho, 'diffs', d);
 end
 `;

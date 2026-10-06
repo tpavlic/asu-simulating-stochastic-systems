@@ -15,7 +15,7 @@ import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
 import { signedRank, rankSum } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
-import { welch, pooledT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
+import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled } from '../stats/compare.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
@@ -168,10 +168,11 @@ function designBlock(ds, e) {
 }
 
 /**
- * The Two Systems recipe, independent replications.
+ * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
- *   mode: 'independent', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
- *   provenance?: object, plan: null|{ h: number, delta: number, power: number } }} o
+ *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
+ *   provenance?: object, plan: null|{ h: number, delta: number, power: number },
+ *   match?: { by: 'id'|'position', pairs: number[][], unmatchedA: number[], unmatchedB: number[] } }} o
  *   `eA` and `eB` are the finite replication outcomes of each design with their
  *   ids and the ids that gave none, as the page forms them. `title` and
  *   `provenance` are the page's own, copied into the recipe. `base` is the
@@ -182,6 +183,7 @@ function designBlock(ds, e) {
  *   page plans with Welch's t and inflates the counts by pi/3, as here.
  */
 export function twoRecipe(o) {
+  if (o.mode === 'paired') return twoPairedRecipe(o);
   if (o.mode && o.mode !== 'independent') throw new RangeError('twoRecipe: unknown mode ' + o.mode);
   const { dsA, dsB, eA, eB, proc, level, plan } = o;
   const a = Array.from(eA.v), b = Array.from(eB.v);
@@ -249,6 +251,64 @@ export function twoRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
   r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
+  return r;
+}
+
+/**
+ * The Two Systems recipe, paired replications (twoRecipe with mode 'paired').
+ * `match` is what matchPairs(eA.ids, eB.ids, by) returned, with `by`: the
+ * matched index pairs and the indices of the replications left without a
+ * partner. The pooled t has no paired form, and so `proc` 'pooled' reads as
+ * the paired t, as on the page. Under the paired t the page plans with the
+ * one-sample t on the differences; under the signed-rank procedure, with the
+ * same plan inflated by pi/3.
+ */
+function twoPairedRecipe(o) {
+  const { dsA, dsB, eA, eB, match, proc, level, plan } = o;
+  const np = proc === 'np';
+  const x = Array.from(match.pairs, ([i]) => eA.v[i]), y = Array.from(match.pairs, ([, j]) => eB.v[j]);
+  const ids = match.pairs.map(([i, j]) => (match.by === 'id' ? String(eA.ids[i]) : String(eA.ids[i]) + '/' + String(eB.ids[j])));
+  const pr = pairedT(x, y, level);
+  const r = baseRecipe({
+    page: 'two',
+    title: o.title || (np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison'),
+    provenance: o.provenance || {},
+    level
+  });
+  r.pairs = {
+    ids, a: x, b: y, by: match.by,
+    unmatchedA: match.unmatchedA.map(i => String(eA.ids[i])), unmatchedB: match.unmatchedB.map(j => String(eB.ids[j])),
+    droppedA: (eA.dropped || []).map(String), droppedB: (eB.dropped || []).map(String),
+    nameA: dsA.name, nameB: dsB.name, response: dsA.response, unit: dsA.unit,
+    howA: OUTCOME_HOW[dsA.kind] || OUTCOME_HOW.tally, howB: OUTCOME_HOW[dsB.kind] || OUTCOME_HOW.tally
+  };
+  const e = r.expect;
+  e.pairs = pr.n;
+  const diffs = Array.from(pr.diffs);
+  if (np) {
+    const sr = signedRank(diffs, { level });
+    Object.assign(e, { 'pseudo-median of differences': sr.estimate, V: sr.V, 'zero differences dropped': sr.zeros,
+                       'signed-rank p': sr.p, exact: ex(sr.exact), 'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
+    if (sr.exact) e['achieved level'] = sr.achieved;
+  } else {
+    Object.assign(e, { 'mean difference': pr.meanD, 'sd of differences': pr.sdD, se: pr.se, df: pr.df, t: pr.t, p: pr.p,
+                       lower: pr.lo, upper: pr.hi, 'half-width': pr.hw });
+  }
+  e.r = pr.r;
+  // The paired t's checks line tests the differences for normality; the
+  // signed-rank procedure carries no checks line.
+  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs));
+  let planOut = null;
+  if (plan) {
+    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
+      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
+    // The page takes the power at the current pairs whenever s_D is positive,
+    // whatever the sign of delta (the two-sided power is symmetric in it).
+    e['power at current R'] = pr.sdD > 0 ? powerOneSample({ n: pr.n, sd: pr.sdD, delta: plan.delta, alpha: 1 - level }) : NaN;
+    planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
+  }
+  r.two = { mode: 'paired', np, checks: !np, plan: planOut };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }

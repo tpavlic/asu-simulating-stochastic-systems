@@ -16,6 +16,7 @@ import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
+import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -548,7 +549,12 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]) }));
+  // The scripts that regenerate these results are written only when asked
+  // for, from the inputs and settings in force now.
+  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title, base = state.settings.base;
+  const planIn = { h: hwVal, delta, power: plan.power };
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, base, title: recipeTitle, provenance: prov, plan: planIn })) } : undefined;
+  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
@@ -689,7 +695,9 @@ function renderIndependent(res, notes, d, level) {
     return;
   }
   planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
-              hw: w.hw, meanA: w.mean1, sdA: w.sd1 };
+              hw: w.hw, meanA: w.mean1, sdA: w.sd1,
+              // What the regenerate scripts are built from.
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'independent', proc } };
   const prov = provenance(d, level, false, null, null);
   resultBase = np ? {
     title: 'Two Systems: Wilcoxon rank-sum comparison',
@@ -1068,7 +1076,9 @@ function renderPaired(res, notes, d, level) {
   for (const v of d.eA.v) sumA += v;
   const iA = tInterval(d.eA.v, level);
   planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
-              meanA: sumA / d.eA.v.length, sdA: iA.sd };
+              meanA: sumA / d.eA.v.length, sdA: iA.sd,
+              // What the regenerate scripts are built from.
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc() } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
   resultBase = {
     title: np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison',

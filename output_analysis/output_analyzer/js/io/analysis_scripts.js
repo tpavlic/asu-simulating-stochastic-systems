@@ -325,6 +325,7 @@ function shapiroLine(r, L, prefix, v) {
 // parametric comparison carries; the F ratio of the variances; and the
 // replication plan, equal in each design.
 function twoBody(r, L) {
+  if (r.two.mode === 'paired') return twoPairedBody(r, L);
   const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
   const need = ['descriptives'], out = [];
   const pooledLit = L.bool(o.pooled);
@@ -409,6 +410,69 @@ function twoBody(r, L) {
   }
   return { body: out, need };
 }
+
+// Two Systems, paired replications: the paired t on the differences with the
+// correlation across the pairs, or the Wilcoxon signed-rank procedure on the
+// differences; the Shapiro-Wilk check of the differences under the t; and the
+// replication plan, in pairs, from the one-sample t on the differences.
+function twoPairedBody(r, L) {
+  const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const need = ['pairedT'], out = [];
+  out.push(L.sect('Paired comparison of A and B'));
+  out.push(c + 'The differences d = a - b of the matched pairs. r is the correlation of the A and B outcomes');
+  out.push(c + 'across the pairs; common random numbers are run to make it positive, which narrows the comparison.');
+  out.push(L.assign('pr', 'paired_t(a, b, level)'));
+  out.push(rep(L, r, 'pairs', f('pr', 'n')));
+  if (o.np) {
+    need.push('signedRank');
+    out.push(L.sect('Wilcoxon signed-rank comparison of the matched pairs'));
+    out.push(c + 'The pseudo-median of the differences is the Hodges-Lehmann estimate, the median of their pairwise');
+    out.push(c + 'averages. V sums the ranks of the positive differences among the absolute ones; zero differences');
+    out.push(c + 'are dropped before ranking.');
+    out.push(L.assign('sr', 'signed_rank(' + f('pr', 'diffs') + ', level)'));
+    out.push(rep(L, r, 'pseudo-median of differences', f('sr', 'estimate')), rep(L, r, 'V', f('sr', 'V')),
+      rep(L, r, 'zero differences dropped', f('sr', 'zeros')), rep(L, r, 'signed-rank p', f('sr', 'p')));
+    out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
+    out.push(rep(L, r, 'wilcoxon lower', f('sr', 'lo')), rep(L, r, 'wilcoxon upper', f('sr', 'hi')));
+    if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('sr', 'achieved')));
+  } else {
+    for (const [name, k] of [['mean difference', 'meanD'], ['sd of differences', 'sdD'], ['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'],
+      ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('pr', k)));
+  }
+  out.push(rep(L, r, 'r', f('pr', 'r')));
+  if (!o.np) {
+    need.push('shapiro');
+    out.push(L.sect('Checks'));
+    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes.');
+    out.push(shapiroLine(r, L, 'shapiro differences', f('pr', 'diffs')));
+  }
+  if (o.plan) {
+    need.push('planning');
+    const sd = f('pr', 'sdD');
+    out.push(L.sect('Replications needed, in pairs'));
+    out.push(c + 'By half-width: the smallest number of pairs at which the paired t interval\'s half-width, with');
+    out.push(c + 's_D held at its current value, is at most plan_h.');
+    out.push(L.assign('hp', 'plan_half_width(' + sd + ', level, plan_h)'));
+    out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
+    out.push(c + 'By power: the smallest number of pairs at which a two-sided paired t test at alpha detects a');
+    out.push(c + 'difference of plan_delta with probability plan_power.');
+    out.push(L.assign('pp', 'plan_power_t1(' + sd + ', plan_delta, alpha, plan_power)'));
+    out.push(rep(L, r, 'plan delta', 'plan_delta'), rep(L, r, 'plan power target', 'plan_power'), rep(L, r, 'plan n for power', f('pp', 'n')), rep(L, r, 'plan power at n', f('pp', 'powerAtN')));
+    out.push(c + 'The power the current pairs already give against that difference.');
+    if (lang === 'R') out.push('cur <- if (isTRUE(pr$sdD > 0)) power_t1(pr$n, pr$sdD, plan_delta, alpha) else NaN');
+    else if (lang === 'py') out.push('cur = power_t1(pr["n"], pr["sdD"], plan_delta, alpha) if pr["sdD"] > 0 else np.nan');
+    else out.push('cur = NaN;', 'if pr.sdD > 0, cur = power_t1(pr.n, pr.sdD, plan_delta, alpha); end');
+    out.push(rep(L, r, 'power at current R', 'cur'));
+    if (o.np) {
+      out.push(c + 'The rank procedure is sized from the t plan inflated by pi/3, the reciprocal of its efficiency');
+      out.push(c + 'relative to the t under normal data.');
+      const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+      out.push(rep(L, r, 'plan n for half-width (rank)', inf(f('hp', 'n'))), rep(L, r, 'plan n for power (rank)', inf(f('pp', 'n'))));
+    }
+  }
+  return { body: out, need };
+}
+
 BODIES.two = { R: twoBody, py: twoBody, m: twoBody };
 
 function settingsBlock(recipe, L) {
@@ -417,9 +481,29 @@ function settingsBlock(recipe, L) {
   return out;
 }
 
+// The matched pairs of a paired comparison: the pair labels and the A and B
+// outcomes in step, with what was left out and why.
+function pairsBlock(L, r) {
+  const P = r.pairs, c = L.comment, out = [];
+  const what = ascii(P.response) + (P.unit ? ', ' + ascii(P.unit) : '');
+  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + ascii(P.nameA) + ' (A) and b holds ' +
+    ascii(P.nameB) + ' (B), matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
+  out.push(...commentLines(c, 'Each outcome of A is ' + ascii(P.howA) + (P.howA === P.howB ? ', and so is each of B.' : ', and each of B is ' + ascii(P.howB) + '.'), c));
+  const left = (ids, what) => { if (ids.length) out.push(...commentLines(c, what + ' were left out: ' + ids.map(ascii).join(', ') + '.', c)); };
+  left(P.droppedA, 'Replications of A that gave no outcome');
+  left(P.droppedB, 'Replications of B that gave no outcome');
+  left(P.unmatchedA, 'Replications of A with no partner in B');
+  left(P.unmatchedB, 'Replications of B with no partner in A');
+  const numeric = P.ids.every(i => i !== '' && Number.isFinite(Number(i)));
+  out.push(L.assign('pair_id', numeric ? L.vec(P.ids.map(Number)) : L.strs(P.ids)));
+  out.push(L.assign('a', L.vec(P.a)), L.assign('b', L.vec(P.b)));
+  return out;
+}
+
 function dataBlock(recipe, L) {
   const out = [L.sect('Data')];
   if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+  if (recipe.pairs) out.push(...pairsBlock(L, recipe));
   if (recipe.dataA) {
     out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
     out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));

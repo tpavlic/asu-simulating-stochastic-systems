@@ -532,3 +532,140 @@ for (const [proc, label, level] of [['t', 'Welch', 0.95], ['pooled', 'pooled t',
     }
   });
 }
+
+// ── Task 4: Two Systems, paired replications ────────────────────────────
+import { matchPairs } from '../js/stats/compare.js';
+
+const [CRN_A, CRN_B] = example('two-crn');
+// The provenance the page registers for a paired comparison, planning keys included.
+function pairedProv(dsA, dsB, level, proc, by, unmatched, plan) {
+  const prov = { datasets: 'A: ' + dsA.name + '; B: ' + dsB.name, 'confidence level': Math.round(level * 1000) / 10 + '%',
+    procedure: proc === 'np' ? 'Wilcoxon signed-rank (nonparametric)' : 'paired t',
+    paired: 'yes', 'matched by': by === 'id' ? 'replication id' : 'position', 'unmatched replications': unmatched };
+  if (plan) Object.assign(prov, { 'planning mode shown': 'by half-width', 'planning replications': 'equal per design',
+    'planning half-width target': 'h = ' + plan.h, 'planning difference to detect': 'δ = ' + plan.delta,
+    'planning target power': Math.round(plan.power * 100) + '%', 'planning significance level': String(Math.round((1 - level) * 1000) / 1000) });
+  return prov;
+}
+function pairedRecipe(dsA, dsB, proc, by, plan, level = 0.95) {
+  const eA = est(dsA), eB = est(dsB);
+  const m = Object.assign(matchPairs(eA.ids, eB.ids, by), { by });
+  return twoRecipe({ dsA, dsB, eA, eB, mode: 'paired', match: m, proc, level, base: level,
+    provenance: pairedProv(dsA, dsB, level, proc, by, m.unmatchedA.length + m.unmatchedB.length, plan), plan });
+}
+// A pair of reps datasets whose matched differences a - b are `diffs`, with b varied.
+function pairedOf(diffs, b = diffs.map((_, i) => 10 + ((i * 7) % 5) + 0.25 * i)) {
+  return [reps('A', diffs.map((d, i) => b[i] + d)), reps('B', b)];
+}
+
+test('twoRecipe (paired) carries the matched pairs and the paired keys', () => {
+  const r = pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2);
+  assert.equal(r.title, 'Two Systems: paired comparison');
+  assert.equal(r.pairs.a.length, r.expect.pairs);
+  assert.equal(r.provenance.paired, 'yes');
+  for (const k of ['mean difference', 'sd of differences', 'r', 'lower', 'shapiro differences W [optional]', 'plan n for power', 'power at current R']) assert.ok(k in r.expect, k);
+  assert.ok(!('pseudo-median of differences' in r.expect) && !('plan n for power (rank)' in r.expect) && !('R_A' in r.expect));
+  assert.deepEqual(Object.keys(r.settings), ['plan_h', 'plan_delta', 'plan_power']);
+  assert.ok(analysisScript(r, 'R').includes('paired = TRUE'));
+  assert.ok(analysisScript(r, 'py').includes('ttest_rel('));
+  assert.ok(analysisScript(r, 'm').includes('ttest(a, b'));
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
+    assert.ok(s.includes('matched by replication id') && s.includes('pair_id'), lang + ' describes the pairs');
+  }
+  const rn = pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2, 0.9);
+  assert.equal(rn.title, 'Two Systems: Wilcoxon signed-rank paired comparison');
+  assert.ok('pseudo-median of differences' in rn.expect && 'zero differences dropped' in rn.expect && !('t' in rn.expect));
+  assert.ok(!('shapiro differences W [optional]' in rn.expect), 'the signed-rank procedure has no checks line');
+  assert.ok(rn.expect['plan n for power (rank)'] >= rn.expect['plan n for power']);
+  assert.ok(analysisScript(rn, 'R').includes('signed_rank(pr$diffs, level)'));
+  // The pooled t has no paired form: it reads as the paired t, as on the page.
+  assert.deepEqual(pairedRecipe(CRN_A, CRN_B, 'pooled', 'id', null).expect, pairedRecipe(CRN_A, CRN_B, 't', 'id', null).expect);
+});
+
+checkRecipe('Two Systems, paired t on two-crn', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), { smoke: true, also: noWarning });
+checkRecipe('Two Systems, paired signed-rank on two-crn', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2, 0.9), { also: noWarning });
+
+// Unmatched replications on both sides, matched by id.
+{
+  const pA = makeDataset({ name: 'A', response: 'w', kind: 'reps', reps: [[1, 2.0], [2, 2.4], [3, 1.9], [5, 3.1], [6, 2.2]].map(([id, v]) => ({ id, v: [v] })) });
+  const pB = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[1, 1.8], [2, 2.5], [3, 1.5], [4, 2.0], [6, 2.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const r = pairedRecipe(pA, pB, 't', 'id', null);
+  assert.equal(r.expect.pairs, 4);
+  assert.deepEqual(r.pairs.unmatchedA, ['5']);
+  assert.deepEqual(r.pairs.unmatchedB, ['4']);
+  assert.ok(analysisScript(r, 'm').includes('no partner'));
+  checkRecipe('Two Systems, paired with unmatched replications', r, { also: noWarning });
+  // Matched by position instead, each pair is named by both of its ids.
+  const rp = pairedRecipe(pA, pB, 'np', 'position', { h: 0.3, delta: -0.4, power: 0.9 });
+  assert.equal(rp.pairs.ids[3], '5/4');
+  assert.ok(rp.expect['power at current R'] > 0, 'the page takes the power for a negative delta too');
+  checkRecipe('Two Systems, paired signed-rank by position with a negative delta', rp, { also: noWarning });
+}
+
+// A replication of A that gave no outcome is left out before matching, and the scripts say so.
+{
+  const gA = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 3.5] }] });
+  const gB = reps('B', [1.2, 2.2, 2.6, 2.7, 2.4]);
+  const r = pairedRecipe(gA, gB, 't', 'id', PLAN2);
+  assert.equal(r.expect.pairs, 4);
+  assert.deepEqual(r.pairs.droppedA, ['2']);
+  assert.deepEqual(r.pairs.unmatchedB, ['2']);
+  for (const lang of LANGS) assert.ok(analysisScript(r, lang).includes('gave no outcome were left out: 2'), lang + ' names the empty replication');
+  checkRecipe('Two Systems, paired with an empty replication', r, { also: noWarning });
+}
+
+// Degenerate pairs. Differences all equal: the mean difference has no width,
+// t is infinite (p = 0), or undefined when every difference is zero, and the
+// signed-rank interval is the common difference. A design with no spread has
+// no correlation with the other.
+{
+  const cases = [
+    ['differences all equal to 2', ...pairedOf([2, 2, 2, 2, 2])],
+    ['differences all zero', ...pairedOf([0, 0, 0, 0, 0])],
+    ['A constant', reps('A', [5, 5, 5, 5, 5]), reps('B', [3, 4, 6, 2, 5])],
+    ['some differences zero', ...pairedOf([0, 1, 0, -2, 3, 1, 0, 2])]
+  ];
+  for (const [label, dA, dB] of cases) {
+    for (const proc of ['t', 'np']) checkRecipe('Two Systems, paired ' + proc + ', ' + label, pairedRecipe(dA, dB, proc, 'id', PLAN2), { also: noWarning });
+  }
+  const c2 = pairedRecipe(cases[0][1], cases[0][2], 't', 'id', PLAN2).expect;
+  assert.equal(c2.t, Infinity); assert.equal(c2.p, 0); assert.equal(c2['half-width'], 0); assert.equal(c2.lower, 2);
+  assert.ok(Number.isNaN(c2['power at current R']) && Number.isNaN(c2['plan n for power']));
+  assert.ok(!('shapiro differences W [optional]' in c2));
+  const c0 = pairedRecipe(cases[1][1], cases[1][2], 't', 'id', PLAN2).expect;
+  assert.ok(Number.isNaN(c0.t) && Number.isNaN(c0.p)); assert.equal(c0.upper, 0);
+  const n0 = pairedRecipe(cases[1][1], cases[1][2], 'np', 'id', null).expect;
+  assert.ok(Number.isNaN(n0['signed-rank p'])); assert.equal(n0['wilcoxon lower'], 0); assert.equal(n0['zero differences dropped'], 5);
+  const n2 = pairedRecipe(cases[0][1], cases[0][2], 'np', 'id', null).expect;
+  assert.equal(n2['wilcoxon lower'], 2); assert.equal(n2['wilcoxon upper'], 2);
+  assert.ok(Number.isNaN(pairedRecipe(cases[2][1], cases[2][2], 't', 'id', null).expect.r));
+  assert.equal(pairedRecipe(cases[3][1], cases[3][2], 'np', 'id', null).expect['zero differences dropped'], 3);
+}
+
+// A few tied values under the signed-rank approximation, where the inverted
+// test cannot reach significance at one end of the range or at both. The
+// analyzer reports such an end as NaN and keeps the requested level, where R's
+// wilcox.test lowers the level until an interval exists (for 1, 2, 2 it gives
+// [2, 2] at level 0). Pinned on the One System path and on the paired one.
+{
+  const patterns = [
+    ['1, 2, 2', [1, 2, 2], [NaN, NaN]],
+    ['1, 2, 2, 2, 2, 2, 2, 2', [1, 2, 2, 2, 2, 2, 2, 2], [1.5, NaN]],
+    ['1, 1, 1, 1, 1, 1, 1, 2', [1, 1, 1, 1, 1, 1, 1, 2], [NaN, 1.5]]
+  ];
+  const near = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-3);
+  for (const [label, v, [lo, hi]] of patterns) {
+    const ds = reps('tied ' + label, v);
+    const r = oneRecipe({ ds, x: v, ids: v.map((_, i) => i + 1), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
+    assert.equal(r.expect.exact, 0);
+    assert.ok(near(r.expect['wilcoxon lower'], lo) && near(r.expect['wilcoxon upper'], hi), label + ': ' + r.expect['wilcoxon lower'] + ', ' + r.expect['wilcoxon upper']);
+    checkRecipe('One System, Wilcoxon on ' + label + ' (an end out of reach)', r, { also: noWarning });
+    const [pA, pB] = pairedOf(v);
+    const rp = pairedRecipe(pA, pB, 'np', 'id', null);
+    assert.deepEqual(Array.from(rp.pairs.a, (a, i) => a - rp.pairs.b[i]).map(d => Math.round(d * 1e9) / 1e9), v);
+    assert.ok(near(rp.expect['wilcoxon lower'], lo) && near(rp.expect['wilcoxon upper'], hi), 'paired ' + label);
+    checkRecipe('Two Systems, paired signed-rank on differences ' + label + ' (an end out of reach)', rp, { also: noWarning });
+  }
+}

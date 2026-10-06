@@ -14709,6 +14709,7 @@ function shapiroLine(r, L, prefix, v) {
 // parametric comparison carries; the F ratio of the variances; and the
 // replication plan, equal in each design.
 function twoBody(r, L) {
+  if (r.two.mode === 'paired') return twoPairedBody(r, L);
   const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
   const need = ['descriptives'], out = [];
   const pooledLit = L.bool(o.pooled);
@@ -14793,6 +14794,69 @@ function twoBody(r, L) {
   }
   return { body: out, need };
 }
+
+// Two Systems, paired replications: the paired t on the differences with the
+// correlation across the pairs, or the Wilcoxon signed-rank procedure on the
+// differences; the Shapiro-Wilk check of the differences under the t; and the
+// replication plan, in pairs, from the one-sample t on the differences.
+function twoPairedBody(r, L) {
+  const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const need = ['pairedT'], out = [];
+  out.push(L.sect('Paired comparison of A and B'));
+  out.push(c + 'The differences d = a - b of the matched pairs. r is the correlation of the A and B outcomes');
+  out.push(c + 'across the pairs; common random numbers are run to make it positive, which narrows the comparison.');
+  out.push(L.assign('pr', 'paired_t(a, b, level)'));
+  out.push(rep(L, r, 'pairs', f('pr', 'n')));
+  if (o.np) {
+    need.push('signedRank');
+    out.push(L.sect('Wilcoxon signed-rank comparison of the matched pairs'));
+    out.push(c + 'The pseudo-median of the differences is the Hodges-Lehmann estimate, the median of their pairwise');
+    out.push(c + 'averages. V sums the ranks of the positive differences among the absolute ones; zero differences');
+    out.push(c + 'are dropped before ranking.');
+    out.push(L.assign('sr', 'signed_rank(' + f('pr', 'diffs') + ', level)'));
+    out.push(rep(L, r, 'pseudo-median of differences', f('sr', 'estimate')), rep(L, r, 'V', f('sr', 'V')),
+      rep(L, r, 'zero differences dropped', f('sr', 'zeros')), rep(L, r, 'signed-rank p', f('sr', 'p')));
+    out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
+    out.push(rep(L, r, 'wilcoxon lower', f('sr', 'lo')), rep(L, r, 'wilcoxon upper', f('sr', 'hi')));
+    if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('sr', 'achieved')));
+  } else {
+    for (const [name, k] of [['mean difference', 'meanD'], ['sd of differences', 'sdD'], ['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'],
+      ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('pr', k)));
+  }
+  out.push(rep(L, r, 'r', f('pr', 'r')));
+  if (!o.np) {
+    need.push('shapiro');
+    out.push(L.sect('Checks'));
+    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes.');
+    out.push(shapiroLine(r, L, 'shapiro differences', f('pr', 'diffs')));
+  }
+  if (o.plan) {
+    need.push('planning');
+    const sd = f('pr', 'sdD');
+    out.push(L.sect('Replications needed, in pairs'));
+    out.push(c + 'By half-width: the smallest number of pairs at which the paired t interval\'s half-width, with');
+    out.push(c + 's_D held at its current value, is at most plan_h.');
+    out.push(L.assign('hp', 'plan_half_width(' + sd + ', level, plan_h)'));
+    out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
+    out.push(c + 'By power: the smallest number of pairs at which a two-sided paired t test at alpha detects a');
+    out.push(c + 'difference of plan_delta with probability plan_power.');
+    out.push(L.assign('pp', 'plan_power_t1(' + sd + ', plan_delta, alpha, plan_power)'));
+    out.push(rep(L, r, 'plan delta', 'plan_delta'), rep(L, r, 'plan power target', 'plan_power'), rep(L, r, 'plan n for power', f('pp', 'n')), rep(L, r, 'plan power at n', f('pp', 'powerAtN')));
+    out.push(c + 'The power the current pairs already give against that difference.');
+    if (lang === 'R') out.push('cur <- if (isTRUE(pr$sdD > 0)) power_t1(pr$n, pr$sdD, plan_delta, alpha) else NaN');
+    else if (lang === 'py') out.push('cur = power_t1(pr["n"], pr["sdD"], plan_delta, alpha) if pr["sdD"] > 0 else np.nan');
+    else out.push('cur = NaN;', 'if pr.sdD > 0, cur = power_t1(pr.n, pr.sdD, plan_delta, alpha); end');
+    out.push(rep(L, r, 'power at current R', 'cur'));
+    if (o.np) {
+      out.push(c + 'The rank procedure is sized from the t plan inflated by pi/3, the reciprocal of its efficiency');
+      out.push(c + 'relative to the t under normal data.');
+      const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+      out.push(rep(L, r, 'plan n for half-width (rank)', inf(f('hp', 'n'))), rep(L, r, 'plan n for power (rank)', inf(f('pp', 'n'))));
+    }
+  }
+  return { body: out, need };
+}
+
 BODIES.two = { R: twoBody, py: twoBody, m: twoBody };
 
 function settingsBlock(recipe, L) {
@@ -14801,9 +14865,29 @@ function settingsBlock(recipe, L) {
   return out;
 }
 
+// The matched pairs of a paired comparison: the pair labels and the A and B
+// outcomes in step, with what was left out and why.
+function pairsBlock(L, r) {
+  const P = r.pairs, c = L.comment, out = [];
+  const what = ascii(P.response) + (P.unit ? ', ' + ascii(P.unit) : '');
+  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + ascii(P.nameA) + ' (A) and b holds ' +
+    ascii(P.nameB) + ' (B), matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
+  out.push(...commentLines(c, 'Each outcome of A is ' + ascii(P.howA) + (P.howA === P.howB ? ', and so is each of B.' : ', and each of B is ' + ascii(P.howB) + '.'), c));
+  const left = (ids, what) => { if (ids.length) out.push(...commentLines(c, what + ' were left out: ' + ids.map(ascii).join(', ') + '.', c)); };
+  left(P.droppedA, 'Replications of A that gave no outcome');
+  left(P.droppedB, 'Replications of B that gave no outcome');
+  left(P.unmatchedA, 'Replications of A with no partner in B');
+  left(P.unmatchedB, 'Replications of B with no partner in A');
+  const numeric = P.ids.every(i => i !== '' && Number.isFinite(Number(i)));
+  out.push(L.assign('pair_id', numeric ? L.vec(P.ids.map(Number)) : L.strs(P.ids)));
+  out.push(L.assign('a', L.vec(P.a)), L.assign('b', L.vec(P.b)));
+  return out;
+}
+
 function dataBlock(recipe, L) {
   const out = [L.sect('Data')];
   if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+  if (recipe.pairs) out.push(...pairsBlock(L, recipe));
   if (recipe.dataA) {
     out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
     out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
@@ -15804,7 +15888,7 @@ import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
 import { signedRank, rankSum } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
-import { welch, pooledT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
+import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled } from '../stats/compare.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
@@ -15957,10 +16041,11 @@ function designBlock(ds, e) {
 }
 
 /**
- * The Two Systems recipe, independent replications.
+ * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
- *   mode: 'independent', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
- *   provenance?: object, plan: null|{ h: number, delta: number, power: number } }} o
+ *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
+ *   provenance?: object, plan: null|{ h: number, delta: number, power: number },
+ *   match?: { by: 'id'|'position', pairs: number[][], unmatchedA: number[], unmatchedB: number[] } }} o
  *   `eA` and `eB` are the finite replication outcomes of each design with their
  *   ids and the ids that gave none, as the page forms them. `title` and
  *   `provenance` are the page's own, copied into the recipe. `base` is the
@@ -15971,6 +16056,7 @@ function designBlock(ds, e) {
  *   page plans with Welch's t and inflates the counts by pi/3, as here.
  */
 export function twoRecipe(o) {
+  if (o.mode === 'paired') return twoPairedRecipe(o);
   if (o.mode && o.mode !== 'independent') throw new RangeError('twoRecipe: unknown mode ' + o.mode);
   const { dsA, dsB, eA, eB, proc, level, plan } = o;
   const a = Array.from(eA.v), b = Array.from(eB.v);
@@ -16038,6 +16124,64 @@ export function twoRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
   r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
+  return r;
+}
+
+/**
+ * The Two Systems recipe, paired replications (twoRecipe with mode 'paired').
+ * `match` is what matchPairs(eA.ids, eB.ids, by) returned, with `by`: the
+ * matched index pairs and the indices of the replications left without a
+ * partner. The pooled t has no paired form, and so `proc` 'pooled' reads as
+ * the paired t, as on the page. Under the paired t the page plans with the
+ * one-sample t on the differences; under the signed-rank procedure, with the
+ * same plan inflated by pi/3.
+ */
+function twoPairedRecipe(o) {
+  const { dsA, dsB, eA, eB, match, proc, level, plan } = o;
+  const np = proc === 'np';
+  const x = Array.from(match.pairs, ([i]) => eA.v[i]), y = Array.from(match.pairs, ([, j]) => eB.v[j]);
+  const ids = match.pairs.map(([i, j]) => (match.by === 'id' ? String(eA.ids[i]) : String(eA.ids[i]) + '/' + String(eB.ids[j])));
+  const pr = pairedT(x, y, level);
+  const r = baseRecipe({
+    page: 'two',
+    title: o.title || (np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison'),
+    provenance: o.provenance || {},
+    level
+  });
+  r.pairs = {
+    ids, a: x, b: y, by: match.by,
+    unmatchedA: match.unmatchedA.map(i => String(eA.ids[i])), unmatchedB: match.unmatchedB.map(j => String(eB.ids[j])),
+    droppedA: (eA.dropped || []).map(String), droppedB: (eB.dropped || []).map(String),
+    nameA: dsA.name, nameB: dsB.name, response: dsA.response, unit: dsA.unit,
+    howA: OUTCOME_HOW[dsA.kind] || OUTCOME_HOW.tally, howB: OUTCOME_HOW[dsB.kind] || OUTCOME_HOW.tally
+  };
+  const e = r.expect;
+  e.pairs = pr.n;
+  const diffs = Array.from(pr.diffs);
+  if (np) {
+    const sr = signedRank(diffs, { level });
+    Object.assign(e, { 'pseudo-median of differences': sr.estimate, V: sr.V, 'zero differences dropped': sr.zeros,
+                       'signed-rank p': sr.p, exact: ex(sr.exact), 'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
+    if (sr.exact) e['achieved level'] = sr.achieved;
+  } else {
+    Object.assign(e, { 'mean difference': pr.meanD, 'sd of differences': pr.sdD, se: pr.se, df: pr.df, t: pr.t, p: pr.p,
+                       lower: pr.lo, upper: pr.hi, 'half-width': pr.hw });
+  }
+  e.r = pr.r;
+  // The paired t's checks line tests the differences for normality; the
+  // signed-rank procedure carries no checks line.
+  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs));
+  let planOut = null;
+  if (plan) {
+    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
+      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
+    // The page takes the power at the current pairs whenever s_D is positive,
+    // whatever the sign of delta (the two-sided power is symmetric in it).
+    e['power at current R'] = pr.sdD > 0 ? powerOneSample({ n: pr.n, sd: pr.sdD, delta: plan.delta, alpha: 1 - level }) : NaN;
+    planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
+  }
+  r.two = { mode: 'paired', np, checks: !np, plan: planOut };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
@@ -16204,9 +16348,22 @@ end
 // corrections, as the analyzer does. R is told which through wilcox.test's
 // exact argument, because R 4.4 and later would otherwise use an exact
 // distribution under ties too. Python and MATLAB carry the procedure in full,
-// since neither ships the interval.
+// since neither ships the interval. Under the approximation, a few tied
+// values can leave the inverted test short of significance at one end of
+// the range or both: the analyzer then reports that end as undetermined (NaN)
+// and keeps the requested level, where wilcox.test lowers the level until an
+// interval exists, which moves the other end too. R finds the ends by hand
+// in that case.
 
 LIB.R.signedRank = `
+signed_rank_z <- function(x, d) {
+  # The standardized signed-rank statistic of x - d, with the continuity and tie
+  # corrections, as wilcox.test inverts it for the interval.
+  xd <- x - d; xd <- xd[xd != 0]; m <- length(xd)
+  r <- rank(abs(xd)); tt <- table(r)
+  zd <- sum(r[xd > 0]) - m * (m + 1) / 4
+  (zd - sign(zd) * 0.5) / sqrt(m * (m + 1) * (2 * m + 1) / 24 - sum(tt^3 - tt) / 48)
+}
 signed_rank <- function(x, level, mu = 0) {
   n <- length(x); a <- 1 - level; d <- x - mu
   exact <- n < 50 && all(d != 0) && !any(duplicated(abs(d)))
@@ -16230,8 +16387,24 @@ signed_rank <- function(x, level, mu = 0) {
   # Outcomes that are all equal leave the inverted test nothing to search, and
   # wilcox.test returns no interval; the analyzer reports the common value as both ends.
   if (n > 0 && min(x) == max(x)) { lo <- x[1]; hi <- x[1] }
+  if (!exact && n >= 2 && min(x) < max(x)) {
+    # The approximate test inverted at the requested level: the lower end is the shift at
+    # which the statistic falls to z, the upper end the one at which it falls to -z. When
+    # even the smallest shift (or the largest) leaves the statistic short of that, the end
+    # is undetermined, and the other end is found at this level by the same search.
+    zq <- qnorm(1 - a / 2)
+    zmin <- signed_rank_z(x, min(x)); zmax <- signed_rank_z(x, max(x))
+    if (zmin < zq || zmax > -zq) {
+      end <- function(z0, at) {
+        if (at == z0) return(if (z0 > 0) min(x) else max(x))
+        uniroot(function(dd) signed_rank_z(x, dd) - z0, c(min(x), max(x)), tol = 1e-4)$root
+      }
+      lo <- if (zmin < zq) NaN else end(zq, zmin)
+      hi <- if (zmax > -zq) NaN else end(-zq, zmax)
+    }
+  }
   list(V = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
-       lo = lo, hi = hi, achieved = achieved)
+       lo = lo, hi = hi, achieved = achieved, zeros = sum(d == 0))
 }
 `;
 LIB.py.signedRank = `
@@ -17068,6 +17241,63 @@ r = struct('n', NaN, 'powerAtN', NaN);
 if ~sds_ok(s1, s2) || ~isfinite(delta) || delta == 0 || ~(power > 0 && power < 1) || ~(alpha > 0 && alpha < 1), return; end
 n = smallest_n(@(n) power_two(n, s1, s2, delta, alpha, pooled) >= power, (norminv(1 - alpha / 2) + norminv(power))^2 * (s1^2 + s2^2) / delta^2);
 if ~isnan(n), r = struct('n', n, 'powerAtN', power_two(n, s1, s2, delta, alpha, pooled)); end
+end
+`;
+
+// ── Paired t on matched pairs ────────────────────────────────────────────
+// The paired t test on the differences d = a - b, the interval on their mean,
+// and the correlation of a and b across the pairs. Differences that are all
+// equal leave t.test nothing to work on (it stops; SciPy and MATLAB return
+// NaN), and so the analyzer's values are given by hand there: the mean
+// difference with no width, and t infinite (p = 0), or undefined when every
+// difference is zero. A design whose outcomes are all equal has no
+// correlation with the other, which is NaN in every language.
+
+LIB.R.pairedT = `
+paired_t <- function(a, b, level) {
+  d <- a - b; n <- length(d); m <- mean(d)
+  r <- if (min(a) == max(a) || min(b) == max(b)) NaN else cor(a, b)
+  if (min(d) == max(d)) {
+    t <- if (m != 0) sign(m) * Inf else NaN
+    return(list(n = n, meanD = m, sdD = 0, se = 0, df = n - 1, t = t, p = if (is.nan(t)) NaN else 0,
+                lo = m, hi = m, hw = 0, r = r, diffs = d))
+  }
+  tt <- t.test(a, b, paired = TRUE, conf.level = level)
+  s <- sd(d)
+  list(n = n, meanD = m, sdD = s, se = s / sqrt(n), df = unname(tt$parameter), t = unname(tt$statistic),
+       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, r = r, diffs = d)
+}
+`;
+LIB.py.pairedT = `
+def paired_t(a, b, level):
+    """The paired t test on d = a - b (ttest_rel), the interval on the mean difference, and the
+    correlation of a and b."""
+    a = np.asarray(a, float); b = np.asarray(b, float); d = a - b; n = len(d); m = d.mean()
+    r = np.nan if a.min() == a.max() or b.min() == b.max() else np.corrcoef(a, b)[0, 1]
+    if d.min() == d.max():
+        t = np.sign(m) * np.inf if m != 0 else np.nan
+        return dict(n=n, meanD=m, sdD=0.0, se=0.0, df=n - 1, t=t, p=np.nan if np.isnan(t) else 0.0,
+                    lo=m, hi=m, hw=0.0, r=r, diffs=d)
+    res = stats.ttest_rel(a, b); ci = res.confidence_interval(level); s = d.std(ddof=1)
+    return dict(n=n, meanD=m, sdD=s, se=s / np.sqrt(n), df=res.df, t=res.statistic, p=res.pvalue,
+                lo=ci.low, hi=ci.high, hw=(ci.high - ci.low) / 2, r=r, diffs=d)
+`;
+LIB.m.pairedT = `
+function r = paired_t(a, b, level)
+% The paired t test on d = a - b (ttest on two vectors), the interval on the mean difference,
+% and the correlation of a and b.
+a = a(:); b = b(:); d = a - b; n = numel(d); m = mean(d);
+if min(a) == max(a) || min(b) == max(b), rho = NaN; else, rho = corr(a, b); end
+if min(d) == max(d)
+    if m ~= 0, t = sign(m) * Inf; p = 0; else, t = NaN; p = NaN; end
+    r = struct('n', n, 'meanD', m, 'sdD', 0, 'se', 0, 'df', n - 1, 't', t, 'p', p, ...
+               'lo', m, 'hi', m, 'hw', 0, 'r', rho, 'diffs', d);
+    return;
+end
+[~, p, ci, st] = ttest(a, b, 'Alpha', 1 - level);
+s = std(d);
+r = struct('n', n, 'meanD', m, 'sdD', s, 'se', s / sqrt(n), 'df', st.df, 't', st.tstat, 'p', p, ...
+           'lo', ci(1), 'hi', ci(2), 'hw', (ci(2) - ci(1)) / 2, 'r', rho, 'diffs', d);
 end
 `;
 </script>
@@ -23695,6 +23925,7 @@ import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
+import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -24227,7 +24458,12 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]) }));
+  // The scripts that regenerate these results are written only when asked
+  // for, from the inputs and settings in force now.
+  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title, base = state.settings.base;
+  const planIn = { h: hwVal, delta, power: plan.power };
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, base, title: recipeTitle, provenance: prov, plan: planIn })) } : undefined;
+  state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
@@ -24368,7 +24604,9 @@ function renderIndependent(res, notes, d, level) {
     return;
   }
   planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
-              hw: w.hw, meanA: w.mean1, sdA: w.sd1 };
+              hw: w.hw, meanA: w.mean1, sdA: w.sd1,
+              // What the regenerate scripts are built from.
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'independent', proc } };
   const prov = provenance(d, level, false, null, null);
   resultBase = np ? {
     title: 'Two Systems: Wilcoxon rank-sum comparison',
@@ -24747,7 +24985,9 @@ function renderPaired(res, notes, d, level) {
   for (const v of d.eA.v) sumA += v;
   const iA = tInterval(d.eA.v, level);
   planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
-              meanA: sumA / d.eA.v.length, sdA: iA.sd };
+              meanA: sumA / d.eA.v.length, sdA: iA.sd,
+              // What the regenerate scripts are built from.
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc() } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
   resultBase = {
     title: np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison',
