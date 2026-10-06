@@ -328,6 +328,7 @@ function twoBody(r, L) {
   const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
   const need = ['descriptives'], out = [];
   const pooledLit = L.bool(o.pooled);
+  need.push('shapiro');
   out.push(L.sect('Descriptives of the two designs'));
   out.push(L.assign('da', 'describe(a)'), L.assign('db', 'describe(b)'));
   out.push(rep(L, r, 'R_A', f('da', 'n')), rep(L, r, 'R_B', f('db', 'n')), rep(L, r, 'mean A', f('da', 'mean')),
@@ -344,7 +345,7 @@ function twoBody(r, L) {
     out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
     if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
   } else {
-    need.push('twoSample', 'shapiro');
+    need.push('twoSample');
     out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
     out.push(o.pooled
       ? c + 'The two sample variances pooled with weights R_A - 1 and R_B - 1, on R_A + R_B - 2 degrees of freedom.'
@@ -373,6 +374,14 @@ function twoBody(r, L) {
     out.push(c + 'are normal, and unlike the comparison of means it does not become safe as R grows.');
     out.push(L.assign('fr', 'f_ratio(a, b, level)'));
     for (const [name, k] of [['F', 'F'], ['F df1', 'df1'], ['F df2', 'df2'], ['F p', 'p'], ['F lower', 'lo'], ['F upper', 'hi']]) out.push(rep(L, r, name, f('fr', k)));
+    if (!o.np) out.push(c + 'Its normality check is the Shapiro-Wilk check of each design reported above.');
+  }
+  if (o.np) {
+    // The rank procedure assumes no normality, but the F ratio does, and the
+    // page checks it there.
+    out.push(L.sect('Checks on the F ratio'));
+    out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk), which the F ratio assumes.');
+    out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
   }
   if (o.plan) {
     need.push('planning', 'planningTwo');

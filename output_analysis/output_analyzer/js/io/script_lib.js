@@ -561,7 +561,9 @@ two_sample_t <- function(a, b, level, pooled) {
   n1 <- length(a); n2 <- length(b); d <- mean(a) - mean(b)
   sp <- if (pooled) sqrt(((n1 - 1) * var(a) + (n2 - 1) * var(b)) / (n1 + n2 - 2)) else NaN
   if (min(a) == max(a) && min(b) == max(b)) {
-    # Neither design varies: the difference is known exactly (see the note above).
+    # Neither design varies, and t.test stops on such data. The difference is known exactly,
+    # with no width; Welch's t is +/-Inf (p = 0) when the constants differ and 0 (p = 1) when
+    # they are equal, and the pooled t divides by a zero standard error (NaN when equal).
     t <- if (d != 0) sign(d) * Inf else if (pooled) NaN else 0
     return(list(diff = d, se = 0, df = n1 + n2 - 2, t = t, p = if (is.nan(t)) NaN else if (t == 0) 1 else 0,
                 lo = d, hi = d, hw = 0, sp = sp))
@@ -578,7 +580,10 @@ def two_sample_t(a, b, level, pooled):
     d = a.mean() - b.mean()
     sp = np.sqrt(((n1 - 1) * a.var(ddof=1) + (n2 - 1) * b.var(ddof=1)) / (n1 + n2 - 2)) if pooled else np.nan
     if a.min() == a.max() and b.min() == b.max():
-        # Neither design varies: the difference is known exactly (see the note above).
+        # Neither design varies, and ttest_ind would return NaN. The difference is known
+        # exactly, with no width; Welch's t is +/-inf (p = 0) when the constants differ and 0
+        # (p = 1) when they are equal, and the pooled t divides by a zero standard error (NaN
+        # when equal).
         t = np.sign(d) * np.inf if d != 0 else (np.nan if pooled else 0.0)
         p = np.nan if np.isnan(t) else (1.0 if t == 0 else 0.0)
         return dict(diff=d, se=0.0, df=n1 + n2 - 2, t=t, p=p, lo=d, hi=d, hw=0.0, sp=sp)
@@ -603,7 +608,9 @@ function r = two_sample_t(a, b, level, pooled)
 a = a(:); b = b(:); n1 = numel(a); n2 = numel(b); d = mean(a) - mean(b);
 if pooled, sp = sqrt(((n1 - 1) * var(a) + (n2 - 1) * var(b)) / (n1 + n2 - 2)); else, sp = NaN; end
 if min(a) == max(a) && min(b) == max(b)
-    % Neither design varies: the difference is known exactly (see the note above).
+    % Neither design varies, and ttest2 would return NaN. The difference is known exactly,
+    % with no width; Welch's t is +/-Inf (p = 0) when the constants differ and 0 (p = 1) when
+    % they are equal, and the pooled t divides by a zero standard error (NaN when equal).
     if d ~= 0, t = sign(d) * Inf; elseif pooled, t = NaN; else, t = 0; end
     if isnan(t), p = NaN; elseif t == 0, p = 1; else, p = 0; end
     r = struct('diff', d, 'se', 0, 'df', n1 + n2 - 2, 't', t, 'p', p, 'lo', d, 'hi', d, 'hw', 0, 'sp', sp);
@@ -840,7 +847,9 @@ def f_ratio(a, b, level):
     if vb > 0:
         F = va / vb
     else:
-        F = np.inf if va > 0 else np.nan   # see the note above
+        # B has no spread: F is infinite (p = 0, as var.test gives), or undefined when A has
+        # none either.
+        F = np.inf if va > 0 else np.nan
     p = np.nan if np.isnan(F) else min(1.0, 2 * min(stats.f.cdf(F, df1, df2), stats.f.sf(F, df1, df2)))
     return dict(F=F, df1=df1, df2=df2, p=p,
                 lo=F / stats.f.ppf(1 - al / 2, df1, df2), hi=F / stats.f.ppf(al / 2, df1, df2))
@@ -865,7 +874,9 @@ levene_test <- function(groups) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
   if (sum((z - ave(z, g))^2) == 0) {
-    between <- sum((ave(z, g) - mean(z))^2) > 0   # see the note above
+    # The distances do not vary within any group: F is infinite (p = 0) when they differ
+    # between groups, and there is nothing to compare when they do not (every group constant).
+    between <- sum((ave(z, g) - mean(z))^2) > 0
     return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN))
   }
   tab <- anova(lm(z ~ g))
@@ -880,7 +891,9 @@ def levene_test(groups):
     z = [np.abs(g - np.median(g)) for g in groups]
     if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) == 0:
         zbar = np.concatenate(z).mean()
-        between = sum(len(zi) * (zi.mean() - zbar) ** 2 for zi in z) > 0   # see the note above
+        # The distances do not vary within any group: F is infinite (p = 0) when they differ
+        # between groups, and there is nothing to compare when they do not (every group constant).
+        between = sum(len(zi) * (zi.mean() - zbar) ** 2 for zi in z) > 0
         return dict(F=np.inf if between else np.nan, df1=k - 1, df2=N - k, p=0.0 if between else np.nan)
     res = stats.levene(*groups, center="median")
     return dict(F=res.statistic, df1=k - 1, df2=N - k, p=res.pvalue)
@@ -896,7 +909,9 @@ for i = 1:k
     in = g == i; z(in) = abs(y(in) - median(y(in))); zm(in) = mean(z(in));
 end
 if sum((z - zm).^2) == 0
-    between = sum((zm - mean(z)).^2) > 0;   % see the note above
+    % The distances do not vary within any group: F is infinite (p = 0) when they differ
+    % between groups, and there is nothing to compare when they do not (every group constant).
+    between = sum((zm - mean(z)).^2) > 0;
     if between, F = Inf; p = 0; else, F = NaN; p = NaN; end
     r = struct('F', F, 'df1', k - 1, 'df2', N - k, 'p', p); return;
 end

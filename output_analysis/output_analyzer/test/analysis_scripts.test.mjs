@@ -399,6 +399,7 @@ test('twoRecipe (independent) carries both designs, the Welch keys, and the page
   const r = twoRecipe({ dsA: IND_A, dsB: IND_B, eA: est(IND_A), eB: est(IND_B), mode: 'independent', proc: 't', level: 0.95, base: 0.95, provenance: prov, plan: PLAN2 });
   assert.equal(r.page, 'two');
   assert.equal(r.title, 'Two Systems: Welch comparison');
+  for (const lang of LANGS) assert.ok(!/see the note|note above/.test(analysisScript(r, lang)), lang + ' script points at no note it lacks');
   assert.deepEqual(r.provenance, prov);
   assert.notEqual(r.provenance, prov, 'the provenance is copied');
   assert.equal(r.dataA.values.length, 15);
@@ -423,7 +424,9 @@ test('twoRecipe under the pooled t and the rank-sum procedure', () => {
   assert.ok('pooled sd' in rp.expect && 'levene F' in rp.expect && 'levene p' in rp.expect);
   assert.ok(analysisScript(rp, 'R').includes('var.equal = pooled') && analysisScript(rp, 'R').includes('two_sample_t(a, b, level, TRUE)'));
   const rn = twoOf(IND_A, IND_B, 'np', 0.95, PLAN2);
-  assert.ok(!('df' in rn.expect) && !('shapiro A W [optional]' in rn.expect) && !('levene F' in rn.expect));
+  // The page checks normality on the F ratio's line under every procedure, the rank one included.
+  assert.ok(!('df' in rn.expect) && 'shapiro A W [optional]' in rn.expect && 'shapiro B p [optional]' in rn.expect && !('levene F' in rn.expect));
+  for (const lang of LANGS) assert.ok(analysisScript(rn, lang).includes('Checks on the F ratio'), lang + ' checks the F ratio');
   assert.ok(rn.expect['plan n per design for power (rank)'] >= rn.expect['plan n per design for power']);
   const R = analysisScript(rn, 'R');
   assert.ok(R.includes('wilcox.test(a, b') && R.includes('exact = exact, correct = TRUE'));
@@ -478,10 +481,18 @@ for (const [proc, label, level] of [['t', 'Welch', 0.95], ['pooled', 'pooled t',
     ['both constant, different', reps('A', [5, 5, 5, 5]), reps('B', [3, 3, 3])],
     ['both constant, equal', reps('A', [4, 4, 4]), reps('B', [4, 4, 4, 4])]
   ];
+  // Levene's test with nothing to compare prints the page's refusal and no F or p.
+  const leveneRefused = (stdout, lang, stderr) => {
+    noWarning(stdout, lang, stderr);
+    assert.match(stdout, /^levene: no spread within any design to compare$/m, lang + ' prints the refusal');
+    assert.doesNotMatch(stdout, /^levene [Fp]:/m, lang + ' prints no Levene statistic');
+  };
   for (const [label, dA, dB] of cases) {
     for (const proc of ['t', 'pooled', 'np']) {
       const r = twoOf(dA, dB, proc, 0.95, PLAN2);
-      checkRecipe('Two Systems, ' + proc + ', ' + label, r, { also: noWarning });
+      for (const lang of LANGS) assert.ok(!/see the note|note above/.test(analysisScript(r, lang)), lang + ' script points at no note it lacks');
+      const refused = proc === 'pooled' && label.startsWith('both constant');
+      checkRecipe('Two Systems, ' + proc + ', ' + label, r, { also: refused ? leveneRefused : noWarning });
     }
   }
   const w = twoOf(cases[2][1], cases[2][2], 't', 0.95, PLAN2).expect;
@@ -498,4 +509,26 @@ for (const [proc, label, level] of [['t', 'Welch', 0.95], ['pooled', 'pooled t',
   assert.equal(nb['shift lower'], 2); assert.equal(nb['shift upper'], 2);
   const ne = twoOf(cases[3][1], cases[3][2], 'np', 0.95, null).expect;
   assert.ok(Number.isNaN(ne['rank-sum p']));
+}
+
+// Two outcomes per design whose distances from their medians are equal within
+// each design and differ between them: Levene's F is infinite and p is 0.
+{
+  const r = twoOf(reps('A', [1, 3]), reps('B', [2, 6]), 'pooled', 0.95, null);
+  assert.equal(r.expect['levene F'], Infinity);
+  assert.equal(r.expect['levene p'], 0);
+  checkRecipe('Two Systems, pooled, Levene with no spread within either design', r, { also: noWarning });
+}
+
+// The rank procedure on outcomes the Shapiro-Wilk check can test: the F ratio's
+// checks line reports both designs.
+{
+  const r = twoOf(IND_A, IND_B, 'np', 0.9, null);
+  assert.ok('shapiro A W [optional]' in r.expect && 'shapiro B W [optional]' in r.expect);
+  checkRecipe('Two Systems, rank-sum with the F ratio\'s normality checks', r, {
+    also: (stdout, lang, stderr) => {
+      noWarning(stdout, lang, stderr);
+      if (lang !== 'm') assert.match(stdout, /^shapiro A W: .*\(analyzer: /m, lang + ' reports shapiro A W');
+    }
+  });
 }

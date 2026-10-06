@@ -211,12 +211,14 @@ export function twoRecipe(o) {
     Object.assign(e, { difference: w.diff });
     if (pooled) e['pooled sd'] = w.sp;
     Object.assign(e, { se: w.se, df: w.df, t: w.t, p: w.p, lower: w.lo, upper: w.hi, 'half-width': w.hw });
-    Object.assign(e, shapiroExpect('shapiro A ', a), shapiroExpect('shapiro B ', b));
     if (leveneOn) {
       const lv = levene([a, b]);
       if (Number.isFinite(lv.p)) Object.assign(e, { 'levene F': lv.F, 'levene p': lv.p });
     }
   }
+  // The Shapiro-Wilk check of each design shows under every procedure: on the
+  // comparison's checks line for the t procedures, and on the F ratio's always.
+  Object.assign(e, shapiroExpect('shapiro A ', a), shapiroExpect('shapiro B ', b));
   const fratio = a.length >= 2 && b.length >= 2;
   if (fratio) {
     const fr = fRatio(a, b, level);
