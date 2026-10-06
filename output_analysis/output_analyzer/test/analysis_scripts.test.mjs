@@ -669,3 +669,203 @@ checkRecipe('Two Systems, paired signed-rank on two-crn', pairedRecipe(CRN_A, CR
     checkRecipe('Two Systems, paired signed-rank on differences ' + label + ' (an end out of reach)', rp, { also: noWarning });
   }
 }
+
+// ── Task 5: Several Systems, the means and the differences ──────────────
+import { severalRecipe } from '../js/io/recipes.js';
+import { matchBlocks } from '../js/stats/compare.js';
+import { LIB } from '../js/io/script_lib.js';
+
+const FOUR = example('four-designs');
+const FOUR_CRN = example('four-crn');
+const SIX_D = example('six-designs');   // SIX names Task 1's descriptives above
+const SEV_PLAN = { meansH: 0.5, diffsH: 0.6, delta: 0.4, power: 0.8 };
+const SEV_RULES = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s LSD (protected)', bonferroni: 'Bonferroni (pooled variance)', dunnett: 'Dunnett vs control' };
+
+// The provenance several.js registers, planning keys included.
+function sevProv(list, o, match) {
+  const k = list.length, np = o.proc === 'np', C = o.diffMode === 'control' ? k - 1 : k * (k - 1) / 2;
+  const welchOn = o.varMode === 'welch' && !o.paired && !np;
+  return {
+    datasets: list.map(d => d.name).join('; '), 'confidence level': Math.round(o.level * 1000) / 10 + '%',
+    direction: o.dir === 'min' ? 'smaller is better' : 'bigger is better', 'comparisons adjusted for': C,
+    'difference family': o.diffMode === 'pairs' ? 'all pairs' : 'versus control',
+    procedure: np ? 'nonparametric (Wilcoxon, ' + (o.paired ? 'Friedman' : 'Kruskal–Wallis and Dunn') + ')' : 't procedures',
+    'post-hoc rule': np ? 'not applicable' : welchOn ? (o.ruleW === 'gameshowell' ? 'Games–Howell' : 'Bonferroni (Welch pairs)') : SEV_RULES[o.rule],
+    variances: np ? 'not applicable' : welchOn ? 'unequal (Welch)' : 'pooled',
+    replications: o.paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + match.blocks.length + ' blocks)' : 'independent',
+    'Dunn adjustment': o.adjust === 'holm' ? 'Holm' : 'Bonferroni', control: list[o.ctrlIdx].name,
+    benchmark: o.bench != null ? o.bench : 'none', 'indifference zone': o.eps,
+    'planning replications': 'equal per design' + (np ? ', the t plan inflated by pi/3 for the rank procedures' : ''),
+    'planning half-width target (means)': 'h = ' + o.plan.meansH, 'planning half-width target (differences)': 'h = ' + o.plan.diffsH,
+    'planning comparisons': (o.diffMode === 'control' ? 'each design against the control, ' + list[o.ctrlIdx].name : 'all pairs') + ', C = ' + C,
+    'planning shift to detect': 'δ = ' + o.plan.delta, 'planning target power': Math.round(o.plan.power * 100) + '%',
+    'planning significance level': String(Math.round((1 - o.level) * 1000) / 1000)
+  };
+}
+
+/**
+ * The Several Systems recipe of `list` as the page builds it: each design's
+ * finite outcomes, or under pairing the outcomes aligned into blocks matched
+ * by `over.by` (id by default). Later tasks reuse it with their own `over`.
+ */
+function sevRecipe(list, over = {}) {
+  const o = Object.assign({ paired: false, by: 'id', level: 0.95, proc: 't', varMode: 'pooled', rule: 'tukey', ruleW: 'gameshowell',
+    adjust: 'bonferroni', diffMode: 'pairs', ctrlIdx: 0, dir: 'max', bench: null, eps: 0.5, plan: SEV_PLAN }, over);
+  let groups = list.map(d => Float64Array.from(outcomeVector(d).values)), match = null;
+  if (o.paired) {
+    const ids = list.map(d => outcomeVector(d).ids);
+    match = Object.assign(matchBlocks(ids, o.by), { by: o.by });
+    groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
+  }
+  return severalRecipe(Object.assign({}, o, { list, groups, match, title: 'Several Systems', provenance: sevProv(list, o, match) }));
+}
+
+test('severalRecipe carries every design, the family, and the planning keys', () => {
+  const r = sevRecipe(FOUR);
+  assert.equal(r.title, 'Several Systems');
+  assert.equal(r.provenance['difference family'], 'all pairs');
+  assert.equal(r.expect.k, 4);
+  assert.equal(r.expect.C, 6);
+  for (const k of ['design 1 mean', 'design 4 upper', 'design 2 df', 'diff 1-2', 'diff 3-4 adjusted p', 'diff 1-2 excludes 0', 'plan means n',
+    'plan diffs widest pair', 'shapiro design 2 W [optional]']) assert.ok(k in r.expect, k);
+  assert.ok(!('design 1 vs benchmark' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
+  assert.deepEqual(Object.keys(r.groups).sort(), ['by', 'dropped', 'how', 'ids', 'names', 'paired', 'response', 'unit', 'unmatched', 'values']);
+  assert.deepEqual(Object.keys(r.settings), ['control', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.equal(r.several.anova, null); assert.equal(r.several.rank, null); assert.equal(r.several.subset, null);
+  // A pure function of its argument: built twice, the same recipe.
+  assert.deepEqual(JSON.parse(JSON.stringify(sevRecipe(FOUR))), JSON.parse(JSON.stringify(r)));
+  const R = analysisScript(r, 'R');
+  assert.ok(R.includes('groups <- list(') && R.includes('t.test(') && R.includes('rep_ids <- list(') && R.includes('segments('));
+  assert.ok(analysisScript(r, 'py').includes('import matplotlib.pyplot as plt'));
+  assert.ok(analysisScript(r, 'm').includes("plot(fig_mid, 1:k, 'ko'"));
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
+    assert.ok(s.includes('Four designs - A') && s.includes("Tukey's HSD"), lang + ' names the designs and the choices');
+  }
+  // Versus a control, with a benchmark.
+  const rc = sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 });
+  assert.equal(rc.expect.C, 3);
+  assert.ok('diff 1-3' in rc.expect && 'diff 4-3' in rc.expect && !('diff 1-2' in rc.expect));
+  assert.equal(rc.settings.benchmark, 2.4);
+  assert.ok(analysisScript(rc, 'R').includes('abline(v = benchmark'));
+  // Under the rank procedures: pseudo-medians, shifts, and the inflated plans.
+  const rn = sevRecipe(SIX_D, { proc: 'np' });
+  assert.equal(rn.expect.C, 15);
+  for (const k of ['design 6 pseudo-median', 'design 1 exact', 'shift 1-6 stat', 'shift 2-3 exact', 'plan means n (rank)', 'plan diffs n (rank)']) assert.ok(k in rn.expect, k);
+  assert.ok(!('design 1 mean' in rn.expect) && !('shapiro design 1 W [optional]' in rn.expect));
+  assert.ok(analysisScript(rn, 'R').includes('rank_sum(groups[[1]], groups[[2]], per_c)'));
+  // Paired: blocks named by id, paired t intervals, the differences' checks.
+  const rp = sevRecipe(FOUR_CRN, { paired: true });
+  assert.equal(rp.groups.ids.length, 10);
+  assert.ok('shapiro diff 1-2 W [optional]' in rp.expect);
+  assert.ok(analysisScript(rp, 'R').includes('paired_t(groups[[1]], groups[[2]], per_c)'));
+  assert.ok(analysisScript(rp, 'm').includes('block_id = '));
+});
+
+const sevChecks = { also: noWarning };
+checkRecipe('Several Systems, means and all-pairs differences on four-designs', sevRecipe(FOUR), { smoke: true, also: noWarning });
+checkRecipe('Several Systems, versus control with a benchmark, 90%', sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 }), sevChecks);
+checkRecipe('Several Systems, rank procedures on six-designs', sevRecipe(SIX_D, { proc: 'np' }), sevChecks);
+checkRecipe('Several Systems, rank procedures versus control with a benchmark', sevRecipe(FOUR, { proc: 'np', diffMode: 'control', ctrlIdx: 3, bench: 1.9 }), sevChecks);
+checkRecipe('Several Systems, paired on four-crn', sevRecipe(FOUR_CRN, { paired: true }), sevChecks);
+checkRecipe('Several Systems, paired versus control by position, 99%', sevRecipe(FOUR_CRN, { paired: true, by: 'position', diffMode: 'control', ctrlIdx: 3, level: 0.99 }), sevChecks);
+checkRecipe('Several Systems, paired rank procedures versus control', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', diffMode: 'control', ctrlIdx: 1 }), sevChecks);
+checkRecipe('Several Systems, paired rank procedures over all pairs with a benchmark', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', bench: 2.5 }), sevChecks);
+
+// The benchmark's three verdicts appear across these fixtures.
+test('the benchmark fixtures declare designs above, below, and containing it', () => {
+  const words = new Set();
+  for (const r of [sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 }), sevRecipe(FOUR, { proc: 'np', diffMode: 'control', ctrlIdx: 3, bench: 1.9 })]) {
+    for (let i = 1; i <= 4; i++) words.add(r.expect['design ' + i + ' vs benchmark']);
+  }
+  assert.deepEqual([...words].sort(), ['above', 'below', 'contains']);
+});
+
+// Unequal counts, a replication with no outcome, and under pairing a replication with no partner.
+{
+  const A = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 3.5] }] });
+  const B = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[1, 1.2], [2, 2.2], [3, 2.6], [4, 2.7], [5, 2.4], [6, 3.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const Cd = makeDataset({ name: 'C', response: 'w', kind: 'reps', reps: [[1, 0.9], [3, 1.7], [4, 2.1], [5, 1.5], [6, 1.1]].map(([id, v]) => ({ id, v: [v] })) });
+  const r = sevRecipe([A, B, Cd]);
+  assert.deepEqual(r.groups.dropped, [['2'], [], []]);
+  assert.deepEqual(r.expect['design 1 R'], 4);
+  for (const lang of LANGS) assert.ok(analysisScript(r, lang).includes('gave no outcome were left out (design: ids): 1: 2.'), lang);
+  checkRecipe('Several Systems, unequal counts with an empty replication', r, sevChecks);
+  const rp = sevRecipe([A, B, Cd], { paired: true });
+  assert.equal(rp.groups.ids.join(','), '1,3,4,5');
+  assert.deepEqual(rp.groups.unmatched, [[], ['2', '6'], ['6']]);
+  for (const lang of LANGS) assert.ok(analysisScript(rp, lang).includes('no partner in every design were left out (design: ids): 2: 2, 6; 3: 6.'), lang);
+  checkRecipe('Several Systems, paired with an empty and unmatched replications', rp, sevChecks);
+  const rq = sevRecipe([A, B, Cd], { paired: true, by: 'position', proc: 'np' });
+  assert.equal(rq.groups.ids[1], '3/2/3');
+  checkRecipe('Several Systems, paired by position under the rank procedures', rq, sevChecks);
+}
+
+// Designs with no spread (R12). One flat design: its interval is its mean,
+// every Welch comparison with it still runs, and the plan for the
+// differences has no answer, as on the page. Every design flat: the
+// differences are known exactly, Welch's test is decided by whether two
+// constants differ, and the means plan asks for the fewest replications.
+// Under pairing, two designs equal in every block have differences all zero,
+// and their t and p are undefined (the adjusted p too).
+{
+  const flat = makeDataset({ name: 'Flat design', response: 'avg_wait', kind: 'reps', reps: [1, 2, 3, 4, 5].map(id => ({ id, v: [2.5] })) });
+  const r = sevRecipe([FOUR[0], FOUR[1], flat]);
+  assert.equal(r.expect['design 3 lower'], 2.5); assert.equal(r.expect['design 3 upper'], 2.5); assert.equal(r.expect['design 3 sd'], 0);
+  assert.ok(Number.isNaN(r.expect['plan diffs n']) && Number.isNaN(r.expect['plan diffs half-width at n']));
+  assert.equal(r.expect['plan diffs widest pair'], 'none');
+  assert.ok(!('shapiro design 3 W [optional]' in r.expect));
+  checkRecipe('Several Systems, a flat design under the t procedures', r, sevChecks);
+  checkRecipe('Several Systems, a flat design under the rank procedures', sevRecipe([FOUR[0], FOUR[1], flat], { proc: 'np', bench: 2.5 }), sevChecks);
+  const consts = [[5, 5, 5, 5], [3, 3, 3], [5, 5, 5, 5, 5]].map((v, i) => reps('K' + (i + 1), v));
+  const rk = sevRecipe(consts, { bench: 4 });
+  assert.equal(rk.expect['diff 1-2 t'], Infinity); assert.equal(rk.expect['diff 1-3 t'], 0); assert.equal(rk.expect['diff 1-3 p'], 1);
+  assert.equal(rk.expect['plan means n'], 2); assert.equal(rk.expect['plan means half-width at n'], 0);
+  checkRecipe('Several Systems, every design flat', rk, sevChecks);
+  checkRecipe('Several Systems, every design flat under the rank procedures', sevRecipe(consts, { proc: 'np' }), sevChecks);
+  const same = [10.5, 11.2, 9.8, 12.1, 10.9, 11.6];
+  const rz = sevRecipe([reps('P', same), reps('Q', same), reps('S', same.map((v, i) => v + 0.3 + 0.1 * (i % 3)))], { paired: true, diffMode: 'control', ctrlIdx: 0 });
+  assert.ok(Number.isNaN(rz.expect['diff 2-1 t']) && Number.isNaN(rz.expect['diff 2-1 p']) && Number.isNaN(rz.expect['diff 2-1 adjusted p']));
+  checkRecipe('Several Systems, paired designs equal in every block', rz, sevChecks);
+  checkRecipe('Several Systems, paired rank procedures on designs equal in every block', sevRecipe([reps('P', same), reps('Q', same), reps('S', same.map((v, i) => v + 0.3 + 0.1 * (i % 3)))],
+    { paired: true, proc: 'np', diffMode: 'control', ctrlIdx: 0 }), sevChecks);
+}
+
+// Holm's step-down adjustment, which the rank tests' pairwise comparisons
+// offer beside Bonferroni: the snippet against a direct reference, ties and
+// a value capped at 1 included, in every language.
+{
+  const p = [0.01, 0.04, 0.03, 0.04, 0.005, 0.5, 0.2];
+  const holmRef = ps => {
+    const C = ps.length, order = ps.map((v, i) => i).sort((a, b) => ps[a] - ps[b]), out = new Array(C);
+    let run = 0;
+    order.forEach((idx, rank) => { run = Math.max(run, Math.min(1, (C - rank) * ps[idx])); out[idx] = run; });
+    return out;
+  };
+  const want = holmRef(p), bonf = p.map(v => Math.min(1, p.length * v));
+  const body = {
+    R: ['p <- c(' + p.join(', ') + ')', 'h <- adjust_p(p, "holm"); b <- adjust_p(p, "bonferroni")', 'for (i in seq_along(p)) { report(paste("holm", i), h[i]); report(paste("bonferroni", i), b[i]) }'],
+    py: ['p = [' + p.join(', ') + ']', 'h = adjust_p(p, "holm"); b = adjust_p(p, "bonferroni")', 'for i in range(len(p)):', '    report(f"holm {i + 1}", h[i]); report(f"bonferroni {i + 1}", b[i])'],
+    m: ['p = [' + p.join(', ') + '];', "h = adjust_p(p, 'holm'); b = adjust_p(p, 'bonferroni');", "for i = 1:numel(p), report(sprintf('holm %d', i), h(i)); report(sprintf('bonferroni %d', i), b(i)); end"]
+  };
+  for (const lang of ['R', 'py', 'm']) {
+    test('the Holm snippet adjusts as p.adjust does in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
+      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body.py] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body.R] : [...body.m, LIB.m.report, LIB.m.holm];
+      const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+      try {
+        const f = join(dir, lang === 'm' ? 'holm_check.m' : lang === 'R' ? 'holm.R' : 'holm.py');
+        writeFileSync(f, L.join('\n') + '\n');
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000 })
+            : spawnSync('matlab', ['-batch', `cd('${dir}'); holm_check`], { encoding: 'utf8', timeout: 600000 });
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        const rep = parseReport(run.stdout);
+        p.forEach((_, i) => {
+          assert.ok(Math.abs(rep.get('holm ' + (i + 1)) - want[i]) < 1e-12, 'holm ' + (i + 1) + ': ' + rep.get('holm ' + (i + 1)) + ' vs ' + want[i]);
+          assert.ok(Math.abs(rep.get('bonferroni ' + (i + 1)) - bonf[i]) < 1e-12, 'bonferroni ' + (i + 1));
+        });
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+}

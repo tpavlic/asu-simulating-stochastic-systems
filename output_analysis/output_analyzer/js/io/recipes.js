@@ -16,7 +16,8 @@ import { tInterval, varianceInterval, planReplications, powerOneSample, planPowe
 import { signedRank, rankSum } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
-         planPowerWelch, planPowerPooled } from '../stats/compare.js';
+         planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni } from '../stats/compare.js';
+import { bonferroniFamilyRank } from '../stats/nonparam.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -312,3 +313,142 @@ function twoPairedRecipe(o) {
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
+
+// ── Several Systems ──────────────────────────────────────────────────────
+
+/** "i-j" with 1-based design numbers, as the page numbers a pair in its report names. */
+export const pairLabel = (i, j) => (i + 1) + '-' + (j + 1);
+
+// Where an interval stands against the benchmark, in the word the page's
+// table uses: above it, below it, or containing it (an end that is not a
+// number never declares a side).
+const benchWord = (lo, hi, bench) => (lo > bench ? 'above' : hi < bench ? 'below' : 'contains');
+
+/**
+ * The Several Systems recipe: the designs' outcomes, the means (or
+ * pseudo-medians) with simultaneous intervals, the Bonferroni family of
+ * differences (or of rank shifts), and the replication plans for both. The
+ * analysis of variance, the rank tests, and the screen for the best fill
+ * `several.anova`, `several.rank`, and `several.subset`.
+ * @param {{ list: object[], groups: ArrayLike<number>[], paired: boolean,
+ *   match: null|{ by: 'id'|'position', blocks: number[][], unmatched: number[][], keys: any[] },
+ *   level: number, proc: 't'|'np', varMode: 'pooled'|'welch', rule: string, ruleW: string,
+ *   adjust: 'bonferroni'|'holm', diffMode: 'pairs'|'control', ctrlIdx: number, dir: 'min'|'max',
+ *   bench: number|null, eps: number, plan: { meansH: number, diffsH: number, delta: number, power: number },
+ *   title?: string, provenance?: object }} o
+ *   `list` is the checked datasets in order and `groups` the outcomes the page
+ *   computed on: each design's finite replication outcomes, or under pairing
+ *   the outcomes aligned block by block by `match` (matchBlocks's result with
+ *   `by`). `level` is the stated level (state.settings.base), which the page
+ *   divides by its own family sizes. `bench` is the benchmark, or null when
+ *   it is off. `plan` is the planning cards' targets. `title` and
+ *   `provenance` are the page's own, copied into the recipe. A pure function
+ *   of its argument, and so a page can call it lazily.
+ */
+export function severalRecipe(o) {
+  const { list, groups, paired, match, level, proc, diffMode, ctrlIdx, dir, eps, plan } = o;
+  const k = list.length, alpha = 1 - level, np = proc === 'np';
+  const bench = o.bench != null && Number.isFinite(o.bench) ? o.bench : null;
+  const g = groups.map(x => Array.from(x));
+  const r = baseRecipe({ page: 'several', title: o.title || 'Several Systems', provenance: o.provenance || {}, level });
+  // The data: the outcomes the page compared, with the ids they came from and
+  // the replications left out (no outcome, or under pairing no partner in
+  // every design).
+  const ovs = list.map(outcomeVector);
+  const responses = Array.from(new Set(list.map(d => d.response)));
+  const units = Array.from(new Set(list.map(d => d.unit || '')));
+  let ids;
+  if (paired) {
+    // A block matched by id is named by that id; one matched by position, by
+    // the ids of its replications in every design.
+    ids = match.blocks.map((blk, b) => (match.by === 'id' ? String(match.keys[b]) : blk.map((x, d) => String(ovs[d].ids[x])).join('/')));
+  } else ids = ovs.map(ov => ov.ids.map(String));
+  r.groups = {
+    names: list.map(d => d.name), response: responses.join(', '), unit: units.length === 1 ? units[0] : '',
+    values: g, paired, by: paired ? match.by : null, ids,
+    dropped: ovs.map(ov => ov.dropped.map(String)),
+    unmatched: paired ? match.unmatched.map((u, d) => u.map(x => String(ovs[d].ids[x]))) : list.map(() => []),
+    how: list.map(d => OUTCOME_HOW[d.kind] || OUTCOME_HOW.tally)
+  };
+  const e = r.expect;
+  e.k = k;
+
+  // Means (or pseudo-medians) with simultaneous intervals, each at 1 - alpha/k.
+  const sm = simultaneousMeans(g, level);
+  e['per-interval level'] = sm.perLevel;
+  if (np) {
+    g.forEach((x, i) => {
+      const sr = signedRank(x, { level: sm.perLevel }), d = 'design ' + (i + 1) + ' ';
+      Object.assign(e, { [d + 'R']: x.length, [d + 'pseudo-median']: sr.estimate, [d + 'wilcoxon lower']: sr.lo,
+                         [d + 'wilcoxon upper']: sr.hi, [d + 'exact']: ex(sr.exact) });
+      if (bench != null) e[d + 'vs benchmark'] = benchWord(sr.lo, sr.hi, bench);
+    });
+  } else {
+    sm.items.forEach((it, i) => {
+      const d = 'design ' + (i + 1) + ' ';
+      Object.assign(e, { [d + 'R']: it.n, [d + 'mean']: it.mean, [d + 'sd']: it.sd, [d + 'se']: it.se, [d + 'df']: it.df,
+                         [d + 'lower']: it.lo, [d + 'upper']: it.hi });
+      if (bench != null) e[d + 'vs benchmark'] = benchWord(it.lo, it.hi, bench);
+    });
+    // The checks line under the means tests each design's outcomes.
+    g.forEach((x, i) => Object.assign(e, shapiroExpect('shapiro design ' + (i + 1) + ' ', x)));
+  }
+
+  // The Bonferroni family of differences (or of rank shifts), each at 1 - alpha/C.
+  const fam = bonferroniFamily(g, { mode: diffMode, control: ctrlIdx, level, paired });
+  e.C = fam.C;
+  e['per-comparison level'] = fam.perLevel;
+  if (np) {
+    const famR = bonferroniFamilyRank(g, { mode: diffMode, control: ctrlIdx, level, paired });
+    for (const c of famR.comparisons) {
+      const p = 'shift ' + pairLabel(c.i, c.j);
+      Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' p']: c.p,
+                         [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
+    }
+  } else {
+    for (const c of fam.comparisons) {
+      const p = 'diff ' + pairLabel(c.i, c.j);
+      Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' t']: c.t,
+                         [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
+      // Under pairing the checks line tests each pair's differences; otherwise it
+      // repeats the designs' own checks, reported once under the means.
+      if (paired) Object.assign(e, shapiroExpect('shapiro diff ' + pairLabel(c.i, c.j) + ' ', g[c.i].map((v, t) => v - g[c.j][t])));
+    }
+  }
+
+  // The plans: for the means, the design with the largest s at 1 - alpha/k;
+  // for the differences, every Welch interval of the family at 1 - alpha/C,
+  // or under pairing the pair whose differences vary most. The rank
+  // procedures take the t plans inflated by pi/3.
+  const inflate = n => (n == null ? NaN : Math.ceil(n * Math.PI / 3));
+  const sds = sm.items.map(it => it.sd);
+  const hpM = planReplications({ sd: Math.max(...sds), level: 1 - alpha / k, target: plan.meansH });
+  Object.assign(e, { 'plan means half-width target': plan.meansH, 'plan means n': hpM.n == null ? NaN : hpM.n, 'plan means half-width at n': hpM.hwAtN });
+  let hpD;
+  if (paired) {
+    const sdDs = fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) }));
+    const worst = sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
+    const pr = planReplications({ sd: worst.sd, level: 1 - alpha / fam.C, target: plan.diffsH });
+    hpD = { n: pr.n, hwAtN: pr.hwAtN, pair: [worst.i, worst.j] };
+  } else {
+    hpD = planHalfWidthBonferroni({ sds, level, mode: diffMode, control: ctrlIdx, target: plan.diffsH });
+  }
+  Object.assign(e, { 'plan diffs half-width target': plan.diffsH, 'plan diffs n': hpD.n == null ? NaN : hpD.n, 'plan diffs half-width at n': hpD.hwAtN,
+    'plan diffs widest pair': hpD.n == null ? 'none' : pairLabel(hpD.pair[0], hpD.pair[1]) });
+  if (np) { e['plan means n (rank)'] = inflate(hpM.n); e['plan diffs n (rank)'] = inflate(hpD.n); }
+
+  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps,
+    plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
+  r.settings = { control: ctrlIdx + 1, plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH, plan_delta: plan.delta, plan_power: plan.power };
+  if (bench != null) r.settings.benchmark = bench;
+  severalAnova(r, o, g, sm);
+  severalRank(r, o, g);
+  severalSubset(r, o, g);
+  return r;
+}
+
+// The analysis of variance and its post-hoc rules, the rank tests, and the
+// screen for the best: each adds its section's fields to the recipe.
+function severalAnova() {}
+function severalRank() {}
+function severalSubset() {}

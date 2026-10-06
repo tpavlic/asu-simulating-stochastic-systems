@@ -1111,3 +1111,205 @@ r = struct('n', n, 'meanD', m, 'sdD', s, 'se', s / sqrt(n), 'df', st.df, 't', st
            'lo', ci(1), 'hi', ci(2), 'hw', (ci(2) - ci(1)) / 2, 'r', rho, 'diffs', d);
 end
 `;
+
+// ── Simultaneous intervals: each design's own t interval at 1 - alpha/k ──
+// By Bonferroni's inequality the k intervals hold at once with confidence at
+// least the stated level. A design whose outcomes are all equal has no
+// spread: its interval is the mean itself, as the analyzer reports it, and
+// t.test (which stops on constant data) is not called.
+
+LIB.R.simultaneous = `
+simultaneous_means <- function(groups, level) {
+  k <- length(groups); per <- 1 - (1 - level) / k
+  items <- lapply(groups, function(x) {
+    n <- length(x); m <- mean(x)
+    if (min(x) == max(x)) return(list(n = n, mean = m, sd = 0, se = 0, df = n - 1, lo = m, hi = m))
+    tt <- t.test(x, conf.level = per)
+    list(n = n, mean = m, sd = sd(x), se = sd(x) / sqrt(n), df = n - 1, lo = tt$conf.int[1], hi = tt$conf.int[2])
+  })
+  list(k = k, perLevel = per, items = items)
+}
+bench_word <- function(lo, hi, bench) {
+  # Above or below the benchmark when the interval excludes it; an end that is not a number
+  # declares no side.
+  if (isTRUE(lo > bench)) "above" else if (isTRUE(hi < bench)) "below" else "contains"
+}
+`;
+LIB.py.simultaneous = `
+def simultaneous_means(groups, level):
+    """Each design's own t interval at 1 - alpha/k, which hold jointly at the stated level by Bonferroni."""
+    k = len(groups); per = 1 - (1 - level) / k
+    items = []
+    for x in groups:
+        x = np.asarray(x, float); n = len(x); m = x.mean()
+        if x.min() == x.max():
+            # Outcomes that are all equal: the interval is the mean itself.
+            items.append(dict(n=n, mean=m, sd=0.0, se=0.0, df=n - 1, lo=m, hi=m)); continue
+        sd = x.std(ddof=1); se = sd / np.sqrt(n)
+        lo, hi = stats.t.interval(per, n - 1, loc=m, scale=se)
+        items.append(dict(n=n, mean=m, sd=sd, se=se, df=n - 1, lo=lo, hi=hi))
+    return dict(k=k, perLevel=per, items=items)
+
+def bench_word(lo, hi, bench):
+    """Above or below the benchmark when the interval excludes it, and otherwise contains."""
+    return "above" if lo > bench else "below" if hi < bench else "contains"
+`;
+LIB.m.simultaneous = `
+function r = simultaneous_means(groups, level)
+% Each design's own t interval at 1 - alpha/k, which hold jointly at the stated level by Bonferroni.
+k = numel(groups); per = 1 - (1 - level) / k;
+items = cell(1, k);
+for i = 1:k
+    x = groups{i}(:); n = numel(x); m = mean(x);
+    if min(x) == max(x)
+        % Outcomes that are all equal: the interval is the mean itself.
+        items{i} = struct('n', n, 'mean', m, 'sd', 0, 'se', 0, 'df', n - 1, 'lo', m, 'hi', m);
+        continue;
+    end
+    [~, ~, ci] = ttest(x, 0, 'Alpha', 1 - per);
+    items{i} = struct('n', n, 'mean', m, 'sd', std(x), 'se', std(x) / sqrt(n), 'df', n - 1, 'lo', ci(1), 'hi', ci(2));
+end
+r = struct('k', k, 'perLevel', per, 'items', {items});
+end
+
+function w = bench_word(lo, hi, bench)
+% Above or below the benchmark when the interval excludes it, and otherwise contains.
+if lo > bench, w = 'above'; elseif hi < bench, w = 'below'; else, w = 'contains'; end
+end
+`;
+
+// ── Holm's step-down adjustment (R has p.adjust) ─────────────────────────
+
+LIB.R.holm = `
+adjust_p <- function(p, method) p.adjust(p, method = method)   # "bonferroni" or "holm"
+`;
+LIB.py.holm = `
+def adjust_p(p, method):
+    """Bonferroni (C p, capped at 1) or Holm's step-down, as R's p.adjust."""
+    p = np.asarray(p, float); C = len(p)
+    if method == "bonferroni": return np.minimum(1.0, C * p)
+    order = np.argsort(p)
+    # The sorted p-values times C, C - 1, ..., 1, made nondecreasing and capped at 1.
+    stepped = np.minimum(1.0, np.maximum.accumulate((C - np.arange(C)) * p[order]))
+    out = np.empty(C); out[order] = stepped
+    return out
+`;
+LIB.m.holm = `
+function out = adjust_p(p, method)
+% Bonferroni (C p, capped at 1) or Holm's step-down, as R's p.adjust.
+p = p(:)'; C = numel(p);
+if strcmp(method, 'bonferroni'), out = min(1, C * p); return; end
+[ps, order] = sort(p);
+stepped = min(1, cummax((C:-1:1) .* ps));   % the sorted p-values times C, C - 1, ..., 1, made nondecreasing
+out = zeros(1, C); out(order) = stepped;
+end
+`;
+
+// ── Planning for several designs ─────────────────────────────────────────
+// For a family of Welch intervals with n replications in every design, the
+// smallest n at which the widest comparison meets the target. The widest is
+// usually the pair with the largest s_i^2 + s_j^2, but a pair with very
+// unequal standard deviations has fewer degrees of freedom and can be wider at
+// small n, and so every comparison is checked. A standard deviation that is
+// not positive, in any design, has no plan, as on the page. The power of the
+// analysis of variance's F test is here too. These use hw_two from
+// planningTwo and smallest_n from planning.
+
+LIB.R.planningSeveral = `
+plan_half_width_family <- function(sds, level, pairs, h) {
+  # The smallest n per design at which every comparison's Welch interval at 1 - alpha/C is at
+  # most h wide on each side; pairs is a list of c(i, j). Returns n, the half-width at n, and the
+  # widest pair at n.
+  C <- length(pairs); per <- 1 - (1 - level) / C
+  none <- list(n = NaN, hwAtN = NaN, pair = c(NA, NA))
+  if (!isTRUE(is.finite(h) && h > 0) || !all(is.finite(sds) & sds > 0)) return(none)
+  widest <- function(n) {
+    hws <- sapply(pairs, function(p) hw_two(n, sds[p[1]], sds[p[2]], per, FALSE))
+    list(hw = max(hws), pair = pairs[[which.max(hws)]])
+  }
+  smax <- max(sapply(pairs, function(p) sqrt(sds[p[1]]^2 + sds[p[2]]^2)))
+  n <- smallest_n(function(n) widest(n)$hw <= h, (qnorm(1 - (1 - per) / 2) * smax / h)^2)
+  if (is.nan(n)) return(none)
+  w <- widest(n)
+  list(n = n, hwAtN = w$hw, pair = w$pair)
+}
+power_anova <- function(n, k, sigma, delta, alpha, blocked) {
+  # Power of the F test when one of k designs is shifted by delta: lambda = n delta^2 (k - 1) / (k sigma^2).
+  dfw <- if (blocked) (k - 1) * (n - 1) else k * (n - 1)
+  lambda <- n * delta^2 * (k - 1) / (k * sigma^2)
+  pf(qf(1 - alpha, k - 1, dfw), k - 1, dfw, ncp = lambda, lower.tail = FALSE)
+}
+plan_power_anova <- function(k, sigma, delta, alpha, power, blocked) {
+  if (!isTRUE(is.finite(sigma) && sigma > 0) || !isTRUE(is.finite(delta) && delta != 0) ||
+      !isTRUE(power > 0 && power < 1) || !isTRUE(alpha > 0 && alpha < 1)) return(list(n = NaN, powerAtN = NaN))
+  n <- smallest_n(function(n) power_anova(n, k, sigma, delta, alpha, blocked) >= power,
+                  (qnorm(1 - alpha / 2) + qnorm(power))^2 * sigma^2 * k / ((k - 1) * delta^2))
+  list(n = n, powerAtN = if (is.nan(n)) NaN else power_anova(n, k, sigma, delta, alpha, blocked))
+}
+`;
+LIB.py.planningSeveral = `
+def plan_half_width_family(sds, level, pairs, h):
+    """The smallest n per design at which every comparison's Welch interval at 1 - alpha/C is at
+    most h wide on each side; pairs is a list of (i, j). Returns n, the half-width at n, and the
+    widest pair at n."""
+    sds = np.asarray(sds, float); C = len(pairs); per = 1 - (1 - level) / C
+    none = dict(n=np.nan, hwAtN=np.nan, pair=None)
+    if not (np.isfinite(h) and h > 0) or not np.all(np.isfinite(sds) & (sds > 0)): return none
+    def widest(n):
+        hws = [hw_two(n, sds[i], sds[j], per, False) for i, j in pairs]
+        m = int(np.argmax(hws)); return hws[m], pairs[m]
+    smax = max(np.sqrt(sds[i] ** 2 + sds[j] ** 2) for i, j in pairs)
+    n = smallest_n(lambda n: widest(n)[0] <= h, (stats.norm.ppf(1 - (1 - per) / 2) * smax / h) ** 2)
+    if np.isnan(n): return none
+    hw, pair = widest(n)
+    return dict(n=n, hwAtN=hw, pair=pair)
+
+def power_anova(n, k, sigma, delta, alpha, blocked):
+    """Power of the F test when one of k designs is shifted by delta: lambda = n delta^2 (k - 1) / (k sigma^2)."""
+    dfw = (k - 1) * (n - 1) if blocked else k * (n - 1)
+    lam = n * delta ** 2 * (k - 1) / (k * sigma ** 2)
+    return stats.ncf.sf(stats.f.ppf(1 - alpha, k - 1, dfw), k - 1, dfw, lam)
+
+def plan_power_anova(k, sigma, delta, alpha, power, blocked):
+    if (not (np.isfinite(sigma) and sigma > 0) or not (np.isfinite(delta) and delta != 0)
+            or not 0 < power < 1 or not 0 < alpha < 1):
+        return dict(n=np.nan, powerAtN=np.nan)
+    n = smallest_n(lambda n: power_anova(n, k, sigma, delta, alpha, blocked) >= power,
+                   (stats.norm.ppf(1 - alpha / 2) + stats.norm.ppf(power)) ** 2 * sigma ** 2 * k / ((k - 1) * delta ** 2))
+    return dict(n=n, powerAtN=np.nan if np.isnan(n) else power_anova(n, k, sigma, delta, alpha, blocked))
+`;
+LIB.m.planningSeveral = `
+function r = plan_half_width_family(sds, level, pairs, h)
+% The smallest n per design at which every comparison's Welch interval at 1 - alpha/C is at
+% most h wide on each side; pairs is a 2-column matrix of (i, j). Returns n, the half-width at
+% n, and the widest pair at n.
+C = size(pairs, 1); per = 1 - (1 - level) / C;
+r = struct('n', NaN, 'hwAtN', NaN, 'pair', [NaN NaN]);
+if ~(isfinite(h) && h > 0) || ~all(isfinite(sds) & sds > 0), return; end
+smax = max(sqrt(sds(pairs(:, 1)).^2 + sds(pairs(:, 2)).^2));
+n = smallest_n(@(n) widest_hw(n, sds, pairs, per) <= h, (norminv(1 - (1 - per) / 2) * smax / h)^2);
+if isnan(n), return; end
+[hw, m] = widest_hw(n, sds, pairs, per);
+r = struct('n', n, 'hwAtN', hw, 'pair', pairs(m, :));
+end
+
+function [hw, m] = widest_hw(n, sds, pairs, per)
+% The widest comparison's half-width at n, and its row in pairs (the first, on a tie).
+hws = arrayfun(@(q) hw_two(n, sds(pairs(q, 1)), sds(pairs(q, 2)), per, false), 1:size(pairs, 1));
+[hw, m] = max(hws);
+end
+
+function p = power_anova(n, k, sigma, delta, alpha, blocked)
+% Power of the F test when one of k designs is shifted by delta: lambda = n delta^2 (k - 1) / (k sigma^2).
+if blocked, dfw = (k - 1) * (n - 1); else, dfw = k * (n - 1); end
+lambda = n * delta^2 * (k - 1) / (k * sigma^2);
+p = 1 - ncfcdf(finv(1 - alpha, k - 1, dfw), k - 1, dfw, lambda);
+end
+
+function r = plan_power_anova(k, sigma, delta, alpha, power, blocked)
+r = struct('n', NaN, 'powerAtN', NaN);
+if ~(isfinite(sigma) && sigma > 0) || ~(isfinite(delta) && delta ~= 0) || ~(power > 0 && power < 1) || ~(alpha > 0 && alpha < 1), return; end
+n = smallest_n(@(n) power_anova(n, k, sigma, delta, alpha, blocked) >= power, (norminv(1 - alpha / 2) + norminv(power))^2 * sigma^2 * k / ((k - 1) * delta^2));
+if ~isnan(n), r = struct('n', n, 'powerAtN', power_anova(n, k, sigma, delta, alpha, blocked)); end
+end
+`;

@@ -14,6 +14,7 @@
 
 import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
 import { LIB } from './script_lib.js';
+import { pairLabel } from './recipes.js';
 
 const BY = 'the Output Analyzer';
 
@@ -475,6 +476,234 @@ function twoPairedBody(r, L) {
 
 BODIES.two = { R: twoBody, py: twoBody, m: twoBody };
 
+// ── Several Systems ──────────────────────────────────────────────────────
+// The means (or pseudo-medians) with simultaneous intervals and their figure,
+// the Bonferroni family of differences (or of rank shifts), the analysis of
+// variance with its post-hoc rules, the rank tests, the screen for the best,
+// and the replication plans. Each section after the first two is present when
+// its field of recipe.several is.
+
+// A design's outcomes for a 0-based i: groups[[i + 1]], groups[i], groups{i + 1}.
+const GROUP = { R: i => 'groups[[' + (i + 1) + ']]', py: i => 'groups[' + i + ']', m: i => 'groups{' + (i + 1) + '}' };
+// A field of the element at 0-based i of a list: v[[i + 1]]$k, v[i]["k"], v{i + 1}.k.
+const ELEM = { R: (v, i, k) => v + '[[' + (i + 1) + ']]$' + k, py: (v, i, k) => v + '[' + i + ']["' + k + '"]', m: (v, i, k) => v + '{' + (i + 1) + '}.' + k };
+// A field over every element of a list, as a numeric vector.
+const PLUCK = {
+  R: (v, k) => 'sapply(' + v + ', function(e) e$' + k + ')',
+  py: (v, k) => 'np.array([e["' + k + '"] for e in ' + v + '])',
+  m: (v, k) => 'cellfun(@(e) e.' + k + ', ' + v + ')'
+};
+
+/** The comparisons of the family in the page's order: every pair i < j, or every design against the control. */
+function familyPairs(r) {
+  const { k, diffMode, ctrlIdx } = r.several, pairs = [];
+  if (diffMode === 'control') { for (let i = 0; i < k; i++) if (i !== ctrlIdx) pairs.push([i, ctrlIdx]); }
+  else for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) pairs.push([i, j]);
+  return pairs;
+}
+
+function sevBody(r, L) {
+  const need = [], out = [];
+  sevMeans(r, L, out, need);
+  sevFigure(r, L, out);
+  sevDiffs(r, L, out, need);
+  if (r.several.anova) sevAnova(r, L, out, need);
+  if (r.several.rank) sevRank(r, L, out, need);
+  if (r.several.subset) sevSubset(r, L, out, need);
+  sevPlan(r, L, out, need);
+  return { body: out, need };
+}
+function sevAnova() {}
+function sevRank() {}
+function sevSubset() {}
+function sevPlanAnova() {}
+
+function sevMeans(r, L, out, need) {
+  const S = r.several, lang = L.lang, f = FIELD[lang], el = ELEM[lang], c = L.comment;
+  need.push('simultaneous');
+  out.push(L.sect(S.np ? 'Pseudo-medians with simultaneous intervals (Wilcoxon signed-rank)' : 'Means with simultaneous intervals'));
+  out.push(...commentLines(c, 'Each design\'s own ' + (S.np ? 'Wilcoxon signed-rank interval on its pseudo-median (the Hodges-Lehmann estimate, the median of its Walsh averages)' : 't interval on its mean') +
+    ' at 1 - alpha/k, and so all k hold at once with confidence at least level (Bonferroni).' +
+    (S.bench != null ? ' A design is above or below the benchmark when its interval excludes it.' : ''), c));
+  out.push(L.assign('sm', 'simultaneous_means(groups, level)'));
+  out.push(rep(L, r, 'k', 'k'), rep(L, r, 'per-interval level', f('sm', 'perLevel')));
+  if (S.np) {
+    need.push('signedRank');
+    out.push(L.assign('srs', lang === 'R' ? 'lapply(groups, function(x) signed_rank(x, sm$perLevel))'
+      : lang === 'py' ? '[signed_rank(x, sm["perLevel"]) for x in groups]'
+        : "cellfun(@(x) signed_rank(x, sm.perLevel), groups, 'UniformOutput', false)"));
+  }
+  for (let i = 0; i < S.k; i++) {
+    const d = 'design ' + (i + 1) + ' ';
+    out.push(rep(L, r, d + 'R', el(f('sm', 'items'), i, 'n')));
+    const lo = S.np ? el('srs', i, 'lo') : el(f('sm', 'items'), i, 'lo'), hi = S.np ? el('srs', i, 'hi') : el(f('sm', 'items'), i, 'hi');
+    if (S.np) {
+      out.push(rep(L, r, d + 'pseudo-median', el('srs', i, 'estimate')), rep(L, r, d + 'wilcoxon lower', lo), rep(L, r, d + 'wilcoxon upper', hi));
+      out.push(repYesNo(L, r, d + 'exact', el('srs', i, 'exact')));
+    } else {
+      for (const k of ['mean', 'sd', 'se', 'df']) out.push(rep(L, r, d + k, el(f('sm', 'items'), i, k)));
+      out.push(rep(L, r, d + 'lower', lo), rep(L, r, d + 'upper', hi));
+    }
+    if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
+  }
+  if (!S.np) {
+    need.push('shapiro');
+    out.push(c + 'The checks: the t intervals take each design\'s outcomes as normal (Shapiro-Wilk).');
+    for (let i = 0; i < S.k; i++) out.push(shapiroLine(r, L, 'shapiro design ' + (i + 1), GROUP[lang](i)));
+  }
+}
+
+// The figure of the means section: each design's interval as a horizontal
+// segment with its mean (or pseudo-median) as a point, the benchmark as a
+// dashed line, and the designs numbered down the side. An end the procedure
+// leaves unbounded is drawn to the edge of the plot, and one it leaves
+// undetermined is not drawn. The figure prints no report lines.
+function sevFigure(r, L, out) {
+  const S = r.several, lang = L.lang, c = L.comment;
+  const src = S.np ? 'srs' : (lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items');
+  const mid = S.np ? 'estimate' : 'mean';
+  const what = S.np ? 'Pseudo-median' : 'Mean';
+  const xlab = what + ' of ' + ascii(r.groups.response);
+  const title = (S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals';
+  const B = S.bench != null;
+  out.push(L.sect('Figure: each design\'s simultaneous interval'));
+  out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
+  out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
+  if (lang === 'R') {
+    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
+      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
+      'fig_lo[is.infinite(fig_lo) & fig_lo < 0] <- xr[1]; fig_hi[is.infinite(fig_hi) & fig_hi > 0] <- xr[2]',
+      'plot(fig_mid, seq_len(k), xlim = xr, ylim = c(k + 0.5, 0.5), yaxt = "n", pch = 19, xlab = ' + L.str(xlab) + ', ylab = "design",',
+      '     main = ' + L.str(title) + ')',
+      'segments(fig_lo, seq_len(k), fig_hi, seq_len(k), lwd = 2)',
+      'axis(2, at = seq_len(k), labels = seq_len(k), las = 1)');
+    if (B) out.push('abline(v = benchmark, lty = 2)');
+  } else if (lang === 'py') {
+    out.push('try:',
+      '    import matplotlib',
+      '    import matplotlib.pyplot as plt',
+      '    fig_all = np.concatenate([fig_lo, fig_hi, fig_mid' + (B ? ', [benchmark]' : '') + '])',
+      '    fin = fig_all[np.isfinite(fig_all)]; xr = [fin.min(), fin.max()]',
+      '    if xr[0] == xr[1]: xr = [xr[0] - 1, xr[1] + 1]',
+      '    fig_lo = np.where(fig_lo == -np.inf, xr[0], fig_lo); fig_hi = np.where(fig_hi == np.inf, xr[1], fig_hi)',
+      '    ys = np.arange(1, k + 1)',
+      '    fig, ax = plt.subplots(figsize=(7, 1.5 + 0.4 * k))',
+      '    ax.hlines(ys, fig_lo, fig_hi, linewidth=2)',
+      '    ax.plot(fig_mid, ys, "o", color="black")');
+    if (B) out.push('    ax.axvline(benchmark, linestyle="--", color="black")');
+    out.push('    ax.set_ylim(k + 0.5, 0.5); ax.set_yticks(ys)',
+      '    ax.set_xlabel(' + L.str(xlab) + '); ax.set_ylabel("design"); ax.set_title(' + L.str(title) + ')',
+      '    fig.tight_layout()',
+      '    if matplotlib.get_backend().lower() != "agg":   # a backend that only writes files cannot show it',
+      '        plt.show()',
+      'except ImportError:',
+      '    print("matplotlib is not installed; the figure is skipped")');
+  } else {
+    out.push('fig_all = [fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + '];',
+      'xr = [min(fig_all(isfinite(fig_all))), max(fig_all(isfinite(fig_all)))]; if xr(1) == xr(2), xr = xr + [-1, 1]; end',
+      'fig_lo(fig_lo == -Inf) = xr(1); fig_hi(fig_hi == Inf) = xr(2);',
+      'figure; hold on;',
+      "plot([fig_lo; fig_hi], [1:k; 1:k], 'k-', 'LineWidth', 2);",
+      "plot(fig_mid, 1:k, 'ko', 'MarkerFaceColor', 'k');");
+    if (B) out.push("xline(benchmark, '--');");
+    out.push("xlim(xr + [-1, 1] * 0.04 * diff(xr)); ylim([0.5, k + 0.5]); set(gca, 'YDir', 'reverse', 'YTick', 1:k);",
+      'xlabel(' + L.str(xlab) + ", 'Interpreter', 'none'); ylabel('design'); title(" + L.str(title) + ", 'Interpreter', 'none'); hold off;");
+  }
+}
+
+function sevDiffs(r, L, out, need) {
+  const S = r.several, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
+  const pairs = familyPairs(r);
+  out.push(L.sect(S.np ? 'Pairwise rank comparisons (Bonferroni)' : 'Pairwise comparisons (Bonferroni)'));
+  const each = S.np ? (S.paired ? 'Wilcoxon signed-rank interval on the pseudo-median of the paired differences' : 'Wilcoxon rank-sum interval on the shift (the Hodges-Lehmann estimate)')
+    : (S.paired ? 'paired t interval on the differences within each block' : 'Welch interval');
+  out.push(...commentLines(c, 'Every comparison\'s own ' + each + ' at 1 - alpha/C, for ' +
+    (S.diffMode === 'control' ? 'each design against the control, design ' + (S.ctrlIdx + 1) : 'every pair of designs') +
+    '. The adjusted p is C p capped at 1, and a comparison whose interval excludes 0 is declared different.', c));
+  out.push(L.assign('C', String(pairs.length)), L.assign('per_c', '1 - alpha / C'));
+  out.push(rep(L, r, 'C', 'C'), rep(L, r, 'per-comparison level', 'per_c'));
+  const adj = p => (lang === 'R' ? 'min(1, C * ' + p + ')' : lang === 'py' ? 'np.minimum(1, C * ' + p + ')' : "min(1, C * " + p + ", 'includenan')");
+  const excl = (lo, hi) => (lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0');
+  if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk line after each checks.');
+  else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
+  for (const [i, j] of pairs) {
+    const lab = pairLabel(i, j);
+    if (S.np) {
+      need.push('signedRank');   // the rank-sum snippet also needs its midranks and bisection
+      if (!S.paired) need.push('rankSum');
+      const p = 'shift ' + lab;
+      out.push(L.assign('cmp', S.paired ? 'signed_rank(' + g(i) + ' - ' + g(j) + ', per_c)' : 'rank_sum(' + g(i) + ', ' + g(j) + ', per_c)'));
+      out.push(rep(L, r, p, f('cmp', 'estimate')), rep(L, r, p + ' stat', f('cmp', S.paired ? 'V' : 'W')), rep(L, r, p + ' lower', f('cmp', 'lo')), rep(L, r, p + ' upper', f('cmp', 'hi')));
+      out.push(rep(L, r, p + ' p', f('cmp', 'p')), rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))));
+      out.push(repYesNo(L, r, p + ' exact', f('cmp', 'exact')), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
+    } else {
+      need.push(S.paired ? 'pairedT' : 'twoSample');
+      const p = 'diff ' + lab;
+      out.push(L.assign('cmp', S.paired ? 'paired_t(' + g(i) + ', ' + g(j) + ', per_c)' : 'two_sample_t(' + g(i) + ', ' + g(j) + ', per_c, ' + L.bool(false) + ')'));
+      out.push(rep(L, r, p, f('cmp', S.paired ? 'meanD' : 'diff')));
+      for (const [name, k] of [['se', 'se'], ['df', 'df'], ['lower', 'lo'], ['upper', 'hi'], ['t', 't'], ['p', 'p']]) out.push(rep(L, r, p + ' ' + name, f('cmp', k)));
+      out.push(rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
+      if (S.paired) {
+        need.push('shapiro');
+        out.push(shapiroLine(r, L, 'shapiro diff ' + lab, f('cmp', 'diffs')));
+      }
+    }
+  }
+}
+
+function sevPlan(r, L, out, need) {
+  const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
+  need.push('planning', 'planningTwo', 'planningSeveral');
+  const pairs = familyPairs(r);
+  out.push(L.sect('Replications per design needed, equal in each design'));
+  out.push(...commentLines(c, 'For the means: the smallest R per design at which every interval at 1 - alpha/k has half-width at most ' +
+    'plan_means_h. The widest belongs to the design with the largest s, held at its current value.', c));
+  out.push(L.assign('sds', PLUCK[lang](lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items', 'sd')));
+  out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
+  out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
+  const pairLit = lang === 'R' ? 'list(' + pairs.map(([i, j]) => 'c(' + (i + 1) + ', ' + (j + 1) + ')').join(', ') + ')'
+    : lang === 'py' ? '[' + pairs.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
+      : '[' + pairs.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']';
+  out.push(c + 'The comparisons of the family, as pairs of design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
+  out.push(L.assign('family_pairs', pairLit));
+  if (S.paired) {
+    out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval at 1 - alpha/C has ' +
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value.', c));
+    if (lang === 'R') {
+      out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
+        'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
+        'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[which.max(sd_d)]], collapse = "-")');
+    } else if (lang === 'py') {
+      out.push('sd_d = np.array([np.std(groups[i] - groups[j], ddof=1) for i, j in family_pairs])',
+        'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
+        'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[int(np.argmax(sd_d))])');
+    } else {
+      out.push('sd_d = arrayfun(@(q) std(groups{family_pairs(q, 1)} - groups{family_pairs(q, 2)}), 1:size(family_pairs, 1));',
+        'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h);',
+        "[~, worst] = max(sd_d);",
+        "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
+    }
+  } else {
+    out.push(...commentLines(c, 'For the differences: the smallest R per design at which every Welch interval of the family, at ' +
+      '1 - alpha/C, has half-width at most plan_diffs_h, with each design\'s s held at its current value.', c));
+    out.push(L.assign('hpd', 'plan_half_width_family(sds, level, family_pairs, plan_diffs_h)'));
+    if (lang === 'R') out.push('widest <- if (is.nan(hpd$n)) "none" else paste(hpd$pair, collapse = "-")');
+    else if (lang === 'py') out.push('widest = "none" if hpd["pair"] is None else "-".join(str(v + 1) for v in hpd["pair"])');
+    else out.push("if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', hpd.pair); end");
+  }
+  out.push(rep(L, r, 'plan diffs half-width target', 'plan_diffs_h'), rep(L, r, 'plan diffs n', f('hpd', 'n')), rep(L, r, 'plan diffs half-width at n', f('hpd', 'hwAtN')),
+    rep(L, r, 'plan diffs widest pair', 'widest'));
+  if (S.anovaPlan) sevPlanAnova(r, L, out, need);
+  if (S.np) {
+    const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+    out.push(c + 'The rank procedures are sized from the t plans inflated by pi/3, the reciprocal of their efficiency');
+    out.push(c + 'relative to the t under normal data.');
+    out.push(rep(L, r, 'plan means n (rank)', inf(f('hpm', 'n'))), rep(L, r, 'plan diffs n (rank)', inf(f('hpd', 'n'))));
+  }
+}
+
+BODIES.several = { R: sevBody, py: sevBody, m: sevBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
@@ -508,6 +737,41 @@ function dataBlock(recipe, L) {
     out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
     out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
   }
+  if (recipe.groups) out.push(...groupsBlock(L, recipe));
+  return out;
+}
+
+// Ids as a literal: numbers when every one reads as a number, strings otherwise.
+function idsLit(L, ids) {
+  return ids.every(i => i !== '' && Number.isFinite(Number(i))) ? L.vec(ids.map(Number)) : L.strs(ids.map(String));
+}
+
+// The designs of Several Systems: their names, numbered as on the page, and
+// each design's replication outcomes, with what was left out and why. Under
+// pairing the outcomes are aligned block by block.
+function groupsBlock(L, r) {
+  const G = r.groups, c = L.comment, out = [];
+  const what = ascii(G.response) + (G.unit ? ', ' + ascii(G.unit) : '');
+  out.push(...commentLines(c, 'The designs, numbered as on the page; groups holds each design\'s replication outcomes (' + what + ').', c));
+  G.names.forEach((n, i) => out.push(...commentLines(c + '  ' + (i + 1) + ': ', ascii(n) + ', each outcome ' + ascii(G.how[i]) + '.', c + '     ')));
+  const left = (lists, why) => {
+    const parts = lists.map((d, i) => (d.length ? (i + 1) + ': ' + d.map(ascii).join(', ') : null)).filter(Boolean);
+    if (parts.length) out.push(...commentLines(c, why + ' were left out (design: ids): ' + parts.join('; ') + '.', c));
+  };
+  left(G.dropped, 'Replications that gave no outcome');
+  if (G.paired) {
+    left(G.unmatched, 'Replications with no partner in every design');
+    out.push(...commentLines(c, 'The replications are paired across the designs (common random numbers), matched by ' +
+      (G.by === 'id' ? 'replication id' : 'position, each block named by its replication ids in every design') +
+      ': element b of every design belongs to block b, and block_id names it.', c));
+    out.push(L.assign('block_id', idsLit(L, G.ids)));
+  } else {
+    out.push(c + 'rep_ids holds the ids of each design\'s replications, in step with its outcomes.');
+    out.push(L.assign('rep_ids', L.list(G.ids.map(ids => idsLit(L, ids)))));
+  }
+  out.push(L.assign('design_names', L.strs(G.names)));
+  out.push(L.assign('groups', L.list(G.values.map(v => L.vec(v)))));
+  out.push(L.assign('k', String(G.names.length)));
   return out;
 }
 
