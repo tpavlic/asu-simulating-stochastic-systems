@@ -60,6 +60,17 @@ test('fRatio matches var.test in both tails', () => {
   close(s.hi, ref.fSwap.ci[1], 1e-10, 'swapped hi');
 });
 
+test('fRatio on sets with no spread gives what var.test gives', () => {
+  // var.test(c(3.1, 2.9, 4.2), c(5, 5, 5)): F = Inf, p = 0, interval [Inf, Inf];
+  // with both sets constant, F, p, and the interval are all NaN; with x constant, all 0.
+  const inf = I.fRatio([3.1, 2.9, 4.2], [5, 5, 5], 0.95);
+  assert.equal(inf.F, Infinity); assert.equal(inf.p, 0); assert.equal(inf.lo, Infinity); assert.equal(inf.hi, Infinity);
+  const nan = I.fRatio([5, 5, 5], [3, 3], 0.95);
+  for (const k of ['F', 'p', 'lo', 'hi']) assert.ok(Number.isNaN(nan[k]), k);
+  const zero = I.fRatio([5, 5, 5], [3.1, 2.9, 4.2], 0.95);
+  for (const k of ['F', 'p', 'lo', 'hi']) assert.equal(zero[k], 0, k);
+});
+
 test('correlation matches cor.test, and n < 4 has no interval', () => {
   for (const L of ref.levels) {
     const r = I.correlation(ref.u, ref.w, L.level);

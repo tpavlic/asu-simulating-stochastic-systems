@@ -14697,6 +14697,95 @@ function oneBody(r, L) {
 }
 BODIES.one = { R: oneBody, py: oneBody, m: oneBody };
 
+// The Shapiro-Wilk check of one design's outcomes, reported as '<prefix> W' and '<prefix> p'.
+function shapiroLine(r, L, prefix, v) {
+  const w = lit(L, r.expect[prefix + ' W [optional]']), p = lit(L, r.expect[prefix + ' p [optional]']);
+  return L.lang === 'm' ? 'shapiro_check(' + L.str(prefix) + ', ' + v + ', alpha, ' + w + ', ' + p + ');'
+    : 'shapiro_check(' + L.str(prefix) + ', ' + v + ', ' + w + ', ' + p + ')';
+}
+
+// Two Systems, independent replications: descriptives of both designs; the
+// Welch, pooled-variance t, or Wilcoxon rank-sum comparison; the checks a
+// parametric comparison carries; the F ratio of the variances; and the
+// replication plan, equal in each design.
+function twoBody(r, L) {
+  const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const need = ['descriptives'], out = [];
+  const pooledLit = L.bool(o.pooled);
+  out.push(L.sect('Descriptives of the two designs'));
+  out.push(L.assign('da', 'describe(a)'), L.assign('db', 'describe(b)'));
+  out.push(rep(L, r, 'R_A', f('da', 'n')), rep(L, r, 'R_B', f('db', 'n')), rep(L, r, 'mean A', f('da', 'mean')),
+    rep(L, r, 'mean B', f('db', 'mean')), rep(L, r, 'sd A', f('da', 'sd')), rep(L, r, 'sd B', f('db', 'sd')));
+  if (o.np) {
+    need.push('signedRank', 'rankSum');
+    out.push(L.sect('Wilcoxon rank-sum comparison of A and B'));
+    out.push(c + 'The shift A - B is the Hodges-Lehmann estimate, the median of every difference between an');
+    out.push(c + 'A outcome and a B outcome. W counts the (A, B) pairs in which the A outcome is the larger.');
+    out.push(L.assign('rs', 'rank_sum(a, b, level)'));
+    out.push(rep(L, r, 'median A', f('da', 'median')), rep(L, r, 'median B', f('db', 'median')));
+    out.push(rep(L, r, 'shift', f('rs', 'estimate')), rep(L, r, 'W', f('rs', 'W')), rep(L, r, 'rank-sum p', f('rs', 'p')));
+    out.push(repYesNo(L, r, 'exact', f('rs', 'exact')));
+    out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
+    if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
+  } else {
+    need.push('twoSample', 'shapiro');
+    out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
+    out.push(o.pooled
+      ? c + 'The two sample variances pooled with weights R_A - 1 and R_B - 1, on R_A + R_B - 2 degrees of freedom.'
+      : c + 'Welch\'s t, which lets the two designs have different variances (Welch-Satterthwaite df).');
+    out.push(L.assign('w', 'two_sample_t(a, b, level, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'difference', f('w', 'diff')));
+    if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
+    for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
+    out.push(L.sect('Checks'));
+    out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk)' + (o.levene ? ', and equal variances' : '') + '.');
+    out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
+    if (o.levene) {
+      need.push('levene');
+      out.push(L.assign('lv', 'levene_test(' + L.list(['a', 'b']) + ')'));
+      const F = rep(L, r, 'levene F', f('lv', 'F')), P = rep(L, r, 'levene p', f('lv', 'p'));
+      const none = 'levene: no spread within any design to compare';
+      if (lang === 'R') out.push('if (is.nan(lv$p)) cat("' + none + '\\n") else { ' + F + '; ' + P + ' }');
+      else if (lang === 'py') out.push('if np.isnan(lv["p"]):', '    print("' + none + '")', 'else:', '    ' + F, '    ' + P);
+      else out.push('if isnan(lv.p)', "    fprintf('" + none + "\\n');", 'else', '    ' + F, '    ' + P, 'end');
+    }
+  }
+  if (o.fratio) {
+    need.push('fRatio');
+    out.push(L.sect('Variances of A and B (F ratio)'));
+    out.push(c + 'F = s_A^2 / s_B^2 with its interval on sigma_A^2 / sigma_B^2. It assumes both designs\' outcomes');
+    out.push(c + 'are normal, and unlike the comparison of means it does not become safe as R grows.');
+    out.push(L.assign('fr', 'f_ratio(a, b, level)'));
+    for (const [name, k] of [['F', 'F'], ['F df1', 'df1'], ['F df2', 'df2'], ['F p', 'p'], ['F lower', 'lo'], ['F upper', 'hi']]) out.push(rep(L, r, name, f('fr', k)));
+  }
+  if (o.plan) {
+    need.push('planning', 'planningTwo');
+    const sds = f('da', 'sd') + ', ' + f('db', 'sd');
+    out.push(L.sect('Replications needed, equal in each design'));
+    out.push(c + 'By half-width: the smallest R per design at which the ' + (o.pooled ? 'pooled t' : 'Welch') + ' interval on A - B, with');
+    out.push(c + 's_A and s_B held at their current values, has half-width at most plan_h.');
+    out.push(L.assign('hp', 'plan_half_width_two(' + sds + ', level, plan_h, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n per design for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
+    out.push(c + 'By power: the smallest R per design at which a two-sided ' + (o.pooled ? 'pooled t' : 'Welch') + ' test at alpha detects a');
+    out.push(c + 'difference of plan_delta with probability plan_power.');
+    out.push(L.assign('pp', 'plan_power_two(' + sds + ', plan_delta, alpha, plan_power, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'plan delta', 'plan_delta'), rep(L, r, 'plan power target', 'plan_power'), rep(L, r, 'plan n per design for power', f('pp', 'n')), rep(L, r, 'plan power at n', f('pp', 'powerAtN')));
+    out.push(c + 'The power the current replications already give, at the smaller of the two counts.');
+    if (lang === 'R') out.push('cur <- if (sds_ok(da$sd, db$sd)) power_two(min(da$n, db$n), da$sd, db$sd, plan_delta, alpha, ' + pooledLit + ') else NaN');
+    else if (lang === 'py') out.push('cur = power_two(min(da["n"], db["n"]), da["sd"], db["sd"], plan_delta, alpha, ' + pooledLit + ') if sds_ok(da["sd"], db["sd"]) else np.nan');
+    else out.push('cur = NaN;', 'if sds_ok(da.sd, db.sd), cur = power_two(min(da.n, db.n), da.sd, db.sd, plan_delta, alpha, ' + pooledLit + '); end');
+    out.push(rep(L, r, 'power at current R', 'cur'));
+    if (o.np) {
+      out.push(c + 'The rank procedure is sized from the t plan inflated by pi/3, the reciprocal of its efficiency');
+      out.push(c + 'relative to the t under normal data.');
+      const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+      out.push(rep(L, r, 'plan n per design for half-width (rank)', inf(f('hp', 'n'))), rep(L, r, 'plan n per design for power (rank)', inf(f('pp', 'n'))));
+    }
+  }
+  return { body: out, need };
+}
+BODIES.two = { R: twoBody, py: twoBody, m: twoBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
@@ -14706,6 +14795,10 @@ function settingsBlock(recipe, L) {
 function dataBlock(recipe, L) {
   const out = [L.sect('Data')];
   if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+  if (recipe.dataA) {
+    out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
+    out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
+  }
   return out;
 }
 
@@ -15699,9 +15792,11 @@ export function buildDatasets(sniffed, mapping) {
 
 import { repEstimates, repIds } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
-import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
-import { signedRank } from '../stats/nonparam.js';
+import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
+import { signedRank, rankSum } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
+import { welch, pooledT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
+         planPowerWelch, planPowerPooled } from '../stats/compare.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -15841,6 +15936,98 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   }
   r.one = { pooled, np, interval, variance, checks, plan: planOut };
   r.settings = planOut ? { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power } : {};
+  return r;
+}
+
+// ── Two Systems ──────────────────────────────────────────────────────────
+
+/** A data block for one design, from the page's {v, ids, dropped}. */
+function designBlock(ds, e) {
+  return { name: ds.name, response: ds.response, unit: ds.unit, ids: e.ids, values: Array.from(e.v),
+           dropped: e.dropped, how: OUTCOME_HOW[ds.kind] || OUTCOME_HOW.tally };
+}
+
+/**
+ * The Two Systems recipe, independent replications.
+ * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
+ *   mode: 'independent', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
+ *   provenance?: object, plan: null|{ h: number, delta: number, power: number } }} o
+ *   `eA` and `eB` are the finite replication outcomes of each design with their
+ *   ids and the ids that gave none, as the page forms them. `title` and
+ *   `provenance` are the page's own, copied into the recipe. `base` is the
+ *   stated level the checks line judges by; it changes the line's verdict but
+ *   not W or p, and so the recipe does not need it. `plan` is the planning
+ *   card's resolved target half-width, difference to detect, and target power,
+ *   or null when the page has no plan to show. Under the rank procedure the
+ *   page plans with Welch's t and inflates the counts by pi/3, as here.
+ */
+export function twoRecipe(o) {
+  if (o.mode && o.mode !== 'independent') throw new RangeError('twoRecipe: unknown mode ' + o.mode);
+  const { dsA, dsB, eA, eB, proc, level, plan } = o;
+  const a = Array.from(eA.v), b = Array.from(eB.v);
+  const np = proc === 'np', pooled = proc === 'pooled';
+  const alpha = 1 - level;
+  const w = pooled ? pooledT(a, b, level) : welch(a, b, level);
+  const tName = pooled ? 'Pooled-variance t' : 'Welch';
+  const r = baseRecipe({
+    page: 'two',
+    title: o.title || 'Two Systems: ' + (np ? 'Wilcoxon rank-sum' : tName) + ' comparison',
+    provenance: o.provenance || {},
+    level
+  });
+  r.dataA = designBlock(dsA, eA);
+  r.dataB = designBlock(dsB, eB);
+  const e = r.expect;
+  Object.assign(e, { R_A: w.n1, R_B: w.n2, 'mean A': w.mean1, 'mean B': w.mean2, 'sd A': w.sd1, 'sd B': w.sd2 });
+  // Levene's test joins the checks line under the pooled t only, and only when
+  // each design has two outcomes; a test with no spread to compare reports none.
+  const leveneOn = !np && pooled && a.length >= 2 && b.length >= 2;
+  if (np) {
+    const rs = rankSum(a, b, { level });
+    Object.assign(e, { 'median A': summary(a).median, 'median B': summary(b).median, shift: rs.estimate, W: rs.W,
+                       'rank-sum p': rs.p, exact: ex(rs.exact), 'shift lower': rs.lo, 'shift upper': rs.hi });
+    if (rs.exact) e['achieved level'] = rs.achieved;
+  } else {
+    Object.assign(e, { difference: w.diff });
+    if (pooled) e['pooled sd'] = w.sp;
+    Object.assign(e, { se: w.se, df: w.df, t: w.t, p: w.p, lower: w.lo, upper: w.hi, 'half-width': w.hw });
+    Object.assign(e, shapiroExpect('shapiro A ', a), shapiroExpect('shapiro B ', b));
+    if (leveneOn) {
+      const lv = levene([a, b]);
+      if (Number.isFinite(lv.p)) Object.assign(e, { 'levene F': lv.F, 'levene p': lv.p });
+    }
+  }
+  const fratio = a.length >= 2 && b.length >= 2;
+  if (fratio) {
+    const fr = fRatio(a, b, level);
+    Object.assign(e, { F: fr.F, 'F df1': fr.df1, 'F df2': fr.df2, 'F p': fr.p, 'F lower': fr.lo, 'F upper': fr.hi });
+  }
+  let planOut = null;
+  if (plan) {
+    const hp = (pooled ? planHalfWidthPooled : planHalfWidthWelch)({ sd1: w.sd1, sd2: w.sd2, level, target: plan.h });
+    const pp = (pooled ? planPowerPooled : planPowerWelch)({ sd1: w.sd1, sd2: w.sd2, delta: plan.delta, alpha, power: plan.power });
+    // The power the current replications give is taken at the smaller of the two counts.
+    const Rlo = Math.min(w.n1, w.n2);
+    const cur = w.sd1 > 0 && w.sd2 > 0 ? (pooled ? powerPooled : powerWelch)({ n: Rlo, sd1: w.sd1, sd2: w.sd2, delta: plan.delta, alpha }) : NaN;
+    const inflate = n => (n == null ? NaN : Math.ceil(n * Math.PI / 3));
+    Object.assign(e, {
+      'plan half-width target': plan.h,
+      'plan n per design for half-width': hp.n == null ? NaN : hp.n,
+      'plan half-width at n': hp.hwAtN,
+      'plan delta': plan.delta,
+      'plan power target': plan.power,
+      'plan n per design for power': pp.n == null ? NaN : pp.n,
+      'plan power at n': pp.powerAtN,
+      'power at current R': cur
+    });
+    if (np) {
+      e['plan n per design for half-width (rank)'] = inflate(hp.n);
+      e['plan n per design for power (rank)'] = inflate(pp.n);
+    }
+    planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
+  }
+  r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
 </script>
@@ -16391,6 +16578,470 @@ r = struct('n', NaN, 'powerAtN', NaN);
 if ~isfinite(delta) || delta == 0 || ~isfinite(sd) || ~(sd > 0) || ~(power > 0 && power < 1) || ~(alpha > 0 && alpha < 1), return; end
 n = smallest_n(@(n) power_t1(n, sd, delta, alpha) >= power, ((norminv(1 - alpha / 2) + norminv(power)) * sd / delta)^2);
 if ~isnan(n), r = struct('n', n, 'powerAtN', power_t1(n, sd, delta, alpha)); end
+end
+`;
+
+// ── Two-sample t: Welch's or the pooled-variance t ───────────────────────
+// Two designs that are each constant leave nothing for t.test (which stops)
+// or SciPy (which returns NaN) to work on. The difference is then known
+// exactly, and the analyzer reports it with no width: Welch's test is decided
+// by whether the two constants differ (t = 0 and p = 1 when they are equal),
+// and the pooled t divides the difference by a zero standard error, which is
+// undefined when the constants are equal.
+
+LIB.R.twoSample = `
+two_sample_t <- function(a, b, level, pooled) {
+  # Welch's t (var.equal = FALSE) or the pooled-variance t (var.equal = TRUE) on mean(a) - mean(b).
+  n1 <- length(a); n2 <- length(b); d <- mean(a) - mean(b)
+  sp <- if (pooled) sqrt(((n1 - 1) * var(a) + (n2 - 1) * var(b)) / (n1 + n2 - 2)) else NaN
+  if (min(a) == max(a) && min(b) == max(b)) {
+    # Neither design varies: the difference is known exactly (see the note above).
+    t <- if (d != 0) sign(d) * Inf else if (pooled) NaN else 0
+    return(list(diff = d, se = 0, df = n1 + n2 - 2, t = t, p = if (is.nan(t)) NaN else if (t == 0) 1 else 0,
+                lo = d, hi = d, hw = 0, sp = sp))
+  }
+  tt <- t.test(a, b, conf.level = level, var.equal = pooled)
+  list(diff = d, se = unname(tt$stderr), df = unname(tt$parameter), t = unname(tt$statistic),
+       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, sp = sp)
+}
+`;
+LIB.py.twoSample = `
+def two_sample_t(a, b, level, pooled):
+    """Welch's t (equal_var=False) or the pooled-variance t (equal_var=True) on mean(a) - mean(b)."""
+    a = np.asarray(a, float); b = np.asarray(b, float); n1, n2 = len(a), len(b)
+    d = a.mean() - b.mean()
+    sp = np.sqrt(((n1 - 1) * a.var(ddof=1) + (n2 - 1) * b.var(ddof=1)) / (n1 + n2 - 2)) if pooled else np.nan
+    if a.min() == a.max() and b.min() == b.max():
+        # Neither design varies: the difference is known exactly (see the note above).
+        t = np.sign(d) * np.inf if d != 0 else (np.nan if pooled else 0.0)
+        p = np.nan if np.isnan(t) else (1.0 if t == 0 else 0.0)
+        return dict(diff=d, se=0.0, df=n1 + n2 - 2, t=t, p=p, lo=d, hi=d, hw=0.0, sp=sp)
+    va, vb = a.var(ddof=1) / n1, b.var(ddof=1) / n2
+    se = sp * np.sqrt(1 / n1 + 1 / n2) if pooled else np.sqrt(va + vb)
+    if a.min() == a.max() or b.min() == b.max():
+        # One design constant: ttest_ind warns of precision loss on a sample whose values
+        # are all equal, although nothing is lost, and so the test is formed from its
+        # definition here (the same numbers ttest_ind returns).
+        df = n1 + n2 - 2 if pooled else (va + vb) ** 2 / (va ** 2 / (n1 - 1) + vb ** 2 / (n2 - 1))
+        t = d / se; hw = stats.t.ppf(1 - (1 - level) / 2, df) * se
+        return dict(diff=d, se=se, df=df, t=t, p=min(1.0, 2 * stats.t.sf(abs(t), df)),
+                    lo=d - hw, hi=d + hw, hw=hw, sp=sp)
+    res = stats.ttest_ind(a, b, equal_var=pooled)
+    ci = res.confidence_interval(level)
+    return dict(diff=d, se=se, df=res.df, t=res.statistic, p=res.pvalue,
+                lo=ci.low, hi=ci.high, hw=(ci.high - ci.low) / 2, sp=sp)
+`;
+LIB.m.twoSample = `
+function r = two_sample_t(a, b, level, pooled)
+% Welch's t ('unequal') or the pooled-variance t ('equal') on mean(a) - mean(b).
+a = a(:); b = b(:); n1 = numel(a); n2 = numel(b); d = mean(a) - mean(b);
+if pooled, sp = sqrt(((n1 - 1) * var(a) + (n2 - 1) * var(b)) / (n1 + n2 - 2)); else, sp = NaN; end
+if min(a) == max(a) && min(b) == max(b)
+    % Neither design varies: the difference is known exactly (see the note above).
+    if d ~= 0, t = sign(d) * Inf; elseif pooled, t = NaN; else, t = 0; end
+    if isnan(t), p = NaN; elseif t == 0, p = 1; else, p = 0; end
+    r = struct('diff', d, 'se', 0, 'df', n1 + n2 - 2, 't', t, 'p', p, 'lo', d, 'hi', d, 'hw', 0, 'sp', sp);
+    return;
+end
+if pooled, vt = 'equal'; else, vt = 'unequal'; end
+[~, p, ci, st] = ttest2(a, b, 'Alpha', 1 - level, 'Vartype', vt);
+if pooled, se = sp * sqrt(1 / n1 + 1 / n2); else, se = sqrt(var(a) / n1 + var(b) / n2); end
+r = struct('diff', d, 'se', se, 'df', st.df, 't', st.tstat, 'p', p, ...
+           'lo', ci(1), 'hi', ci(2), 'hw', (ci(2) - ci(1)) / 2, 'sp', sp);
+end
+`;
+
+// ── Wilcoxon rank-sum with the Hodges-Lehmann shift and its interval ─────
+// The exact distribution is used when both samples are under 50 and no
+// value is tied, and otherwise the normal approximation with continuity and
+// tie corrections, as the analyzer does; R is told which through
+// wilcox.test's exact argument. Two cases need care. When each design is
+// constant, every shifted sample is one tie, the inverted test has nothing
+// to search, and the analyzer reports the one possible shift as both ends
+// (wilcox.test stops there). And when even the largest possible shift
+// leaves the approximate test short of significance, as with a few tied
+// outcomes, the analyzer reports no interval end where wilcox.test reports
+// the end of the range of shifts. Python and MATLAB carry the procedure in
+// full, since neither ships the interval; MATLAB's ranksum gives the p-value
+// only. These need the signedRank helpers for midranks and bisection.
+
+LIB.R.rankSum = `
+rank_sum_z <- function(a, b, d) {
+  # The standardized rank-sum statistic of a - d against b, with the continuity and tie
+  # corrections, as wilcox.test inverts it for the interval.
+  nx <- length(a); ny <- length(b); N <- nx + ny
+  r <- rank(c(a - d, b)); tt <- table(r)
+  dz <- sum(r[seq_len(nx)]) - nx * (nx + 1) / 2 - nx * ny / 2
+  (dz - sign(dz) * 0.5) / sqrt(nx * ny / 12 * ((N + 1) - sum(tt^3 - tt) / (N * (N - 1))))
+}
+rank_sum <- function(a, b, level) {
+  nx <- length(a); ny <- length(b); al <- 1 - level
+  exact <- nx < 50 && ny < 50 && !any(duplicated(c(a, b)))
+  flat <- min(a) == max(a) && min(b) == max(b)
+  wt <- suppressWarnings(wilcox.test(a, b, conf.int = !flat, conf.level = level,
+                                     exact = exact, correct = TRUE))
+  # The shift is the median of every difference between an A outcome and a B outcome,
+  # the Hodges-Lehmann estimate. Under the normal approximation, wilcox.test reports
+  # instead a root of its score equation, which can differ from the median in the
+  # third decimal, and so the median is computed here.
+  est <- median(outer(a, b, "-"))
+  lo <- min(a) - max(b); hi <- lo   # each design constant: the one possible shift
+  achieved <- NaN
+  if (!flat) { lo <- wt$conf.int[1]; hi <- wt$conf.int[2] }
+  if (exact) {
+    # The level the exact interval achieves, as wilcox.test forms it (older versions
+    # of R do not attach it to the interval).
+    qu <- qwilcox(al / 2, nx, ny)
+    if (pwilcox(qu, nx, ny) <= al / 2 + 10 * .Machine$double.eps) qu <- qu + 1
+    achieved <- if (qu == 0) 1 else 1 - 2 * pwilcox(qu - 1, nx, ny)
+  } else if (!flat) {
+    # An end the approximate test never reaches is left undetermined, as the analyzer does.
+    zq <- qnorm(1 - al / 2)
+    if (rank_sum_z(a, b, min(a) - max(b)) < zq) lo <- NaN
+    if (rank_sum_z(a, b, max(a) - min(b)) > -zq) hi <- NaN
+  }
+  list(W = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
+       lo = lo, hi = hi, achieved = achieved)
+}
+`;
+LIB.py.rankSum = `
+def _wilcox_cdf(m, n):
+    """P(U <= u) for u = 0..mn, the Mann-Whitney U of untied samples of sizes m and n: the
+    counts are the coefficients of a Gaussian binomial, built one value of the first sample
+    at a time."""
+    mx = m * n
+    c = np.zeros(mx + 1); c[0] = 1.0
+    for i in range(1, m + 1):
+        d = c.copy()
+        d[n + i:] -= c[:mx + 1 - (n + i)]   # times (1 - q^(n+i))
+        for r in range(i):                   # divided by (1 - q^i): a running sum with stride i
+            d[r::i] = np.cumsum(d[r::i])
+        c = d
+    return np.cumsum(c) / c.sum()
+
+def _rs_z(a, b, dd, zq):
+    """The corrected standardized rank-sum statistic of a - dd against b, less zq."""
+    nx, ny = len(a), len(b); N = nx + ny
+    rr, tt = _midranks(np.concatenate([a - dd, b]))
+    Wd = rr[:nx].sum() - nx * (nx + 1) / 2
+    mean = nx * ny / 2; tie = float(np.sum(tt ** 3 - tt))
+    sigma = np.sqrt(nx * ny / 12 * ((N + 1) - tie / (N * (N - 1))))
+    if sigma == 0: return np.nan   # every value tied: no statistic to form
+    corr = 0.0 if zq == 0 else np.sign(Wd - mean) * 0.5
+    return (Wd - mean - corr) / sigma - zq
+
+def rank_sum(a, b, level):
+    """Wilcoxon rank-sum test with the Hodges-Lehmann shift (the median of the a - b
+    differences) and its interval, as R's wilcox.test(a, b, conf.int=True)."""
+    a = np.asarray(a, float); b = np.asarray(b, float); nx, ny = len(a), len(b); N = nx + ny
+    alpha = 1 - level
+    r, ties = _midranks(np.concatenate([a, b]))
+    W = float(r[:nx].sum() - nx * (nx + 1) / 2)
+    exact = bool(nx < 50 and ny < 50 and len(ties) == 0)
+    cdf = _wilcox_cdf(nx, ny) if exact else None
+    if exact:
+        p = 1 - cdf[int(W) - 1] if W > nx * ny / 2 else cdf[int(W)]
+        p = min(1.0, 2 * p)
+    else:
+        mean = nx * ny / 2; tie = float(np.sum(ties ** 3 - ties))
+        sigma = np.sqrt(nx * ny / 12 * ((N + 1) - tie / (N * (N - 1))))
+        if sigma == 0:
+            p = np.nan   # every value tied: no test to make
+        else:
+            z = (W - mean - np.sign(W - mean) * 0.5) / sigma
+            p = 2 * min(stats.norm.cdf(z), stats.norm.sf(z))
+    diffs = np.sort((a[:, None] - b[None, :]).ravel())
+    est = float(np.median(diffs))
+    if exact:
+        # The order statistics of the differences, stepping the quantile up when it sits
+        # exactly on the tail probability, as wilcox.test does.
+        qu = int(np.searchsorted(cdf, alpha / 2 * (1 - 1e-12)))
+        if cdf[qu] <= alpha / 2 + 10 * np.finfo(float).eps: qu += 1
+        if qu == 0:
+            lo, hi, ach = -np.inf, np.inf, 0.0
+        else:
+            ql = nx * ny - qu
+            ach = 2 * cdf[qu - 1]; lo = diffs[qu - 1]; hi = diffs[ql]
+    elif a.min() == a.max() and b.min() == b.max():
+        # Each design constant: the one possible shift is both ends.
+        lo = hi = float(a[0] - b[0]); ach = alpha
+    else:
+        # The approximate test inverted: the shifts at which the statistic meets +/-z. An
+        # end the statistic never reaches is left undetermined (NaN).
+        zq = stats.norm.ppf(1 - alpha / 2)
+        lo = _bisect(lambda dd: _rs_z(a, b, dd, zq), a.min() - b.max(), a.max() - b.min(), 1e-4)
+        hi = _bisect(lambda dd: _rs_z(a, b, dd, -zq), a.min() - b.max(), a.max() - b.min(), 1e-4)
+        ach = alpha
+    return dict(W=W, p=p, exact=exact, estimate=est, lo=lo, hi=hi,
+                achieved=(1 - ach) if np.isfinite(ach) else np.nan)
+`;
+LIB.m.rankSum = `
+function cdf = wilcox_cdf(m, n)
+% P(U <= u) for u = 0..mn, the Mann-Whitney U of untied samples of sizes m and n (the
+% coefficients of a Gaussian binomial, built one value of the first sample at a time).
+mx = m * n; c = zeros(1, mx + 1); c(1) = 1;
+for i = 1:m
+    d = c;
+    d(n+i+1:end) = d(n+i+1:end) - c(1:mx+1-(n+i));   % times (1 - q^(n+i))
+    for u = i:mx                                      % divided by (1 - q^i)
+        d(u+1) = d(u+1) + d(u-i+1);
+    end
+    c = d;
+end
+cdf = cumsum(c) / sum(c);
+end
+
+function s = rs_z(a, b, dd, zq)
+% The corrected standardized rank-sum statistic of a - dd against b, less zq.
+nx = numel(a); ny = numel(b); N = nx + ny;
+[rr, tt] = midranks([a - dd, b]);
+Wd = sum(rr(1:nx)) - nx * (nx + 1) / 2;
+mn = nx * ny / 2; tie = sum(tt.^3 - tt);
+sigma = sqrt(nx * ny / 12 * ((N + 1) - tie / (N * (N - 1))));
+if sigma == 0, s = NaN; return; end   % every value tied: no statistic to form
+if zq == 0, corr = 0; else, corr = sign(Wd - mn) * 0.5; end
+s = (Wd - mn - corr) / sigma - zq;
+end
+
+function r = rank_sum(a, b, level)
+% Wilcoxon rank-sum test with the Hodges-Lehmann shift (the median of the a - b
+% differences) and its interval, as R's wilcox.test(a, b, conf.int = TRUE). MATLAB's
+% ranksum gives the p-value only.
+a = a(:)'; b = b(:)'; nx = numel(a); ny = numel(b); N = nx + ny; alpha = 1 - level;
+[rk, ties] = midranks([a b]);
+W = sum(rk(1:nx)) - nx * (nx + 1) / 2;
+exact = nx < 50 && ny < 50 && isempty(ties);
+if exact
+    cdf = wilcox_cdf(nx, ny);
+    if W > nx * ny / 2, p = 1 - cdf(W); else, p = cdf(W + 1); end
+    p = min(1, 2 * p);
+else
+    mn = nx * ny / 2; tie = sum(ties.^3 - ties);
+    sigma = sqrt(nx * ny / 12 * ((N + 1) - tie / (N * (N - 1))));
+    if sigma == 0
+        p = NaN;   % every value tied: no test to make
+    else
+        z = (W - mn - sign(W - mn) * 0.5) / sigma;
+        p = 2 * min(normcdf(z), normcdf(-z));
+    end
+end
+diffs = sort(reshape(a' - b, 1, []));
+est = median(diffs);
+if exact
+    % The order statistics of the differences, stepping the quantile up when it sits
+    % exactly on the tail probability, as wilcox.test does.
+    qu = find(cdf >= alpha / 2 * (1 - 1e-12), 1) - 1;
+    if cdf(qu + 1) <= alpha / 2 + 10 * eps, qu = qu + 1; end
+    if qu == 0
+        lo = -Inf; hi = Inf; ach = 0;
+    else
+        ql = nx * ny - qu;
+        ach = 2 * cdf(qu); lo = diffs(qu); hi = diffs(ql + 1);
+    end
+elseif min(a) == max(a) && min(b) == max(b)
+    % Each design constant: the one possible shift is both ends.
+    lo = a(1) - b(1); hi = lo; ach = alpha;
+else
+    % The approximate test inverted: the shifts at which the statistic meets +/-z. An end
+    % the statistic never reaches is left undetermined (NaN).
+    zq = norminv(1 - alpha / 2);
+    lo = bisect_root(@(dd) rs_z(a, b, dd, zq), min(a) - max(b), max(a) - min(b), 1e-4);
+    hi = bisect_root(@(dd) rs_z(a, b, dd, -zq), min(a) - max(b), max(a) - min(b), 1e-4);
+    ach = alpha;
+end
+if isfinite(ach), ach = 1 - ach; end
+r = struct('W', W, 'p', p, 'exact', exact, 'estimate', est, 'lo', lo, 'hi', hi, 'achieved', ach);
+end
+`;
+
+// ── F ratio of two variances ─────────────────────────────────────────────
+// A B with no spread makes F infinite (p = 0, as var.test reports), and two
+// sets with no spread make it undefined.
+
+LIB.R.fRatio = `
+f_ratio <- function(a, b, level) {
+  vt <- var.test(a, b, conf.level = level)
+  list(F = unname(vt$statistic), df1 = unname(vt$parameter[1]), df2 = unname(vt$parameter[2]),
+       p = vt$p.value, lo = vt$conf.int[1], hi = vt$conf.int[2])
+}
+`;
+LIB.py.fRatio = `
+def f_ratio(a, b, level):
+    """F = s_a^2 / s_b^2 on (n_a - 1, n_b - 1) degrees of freedom, the two-sided p, and the
+    interval [F / F_{1-a/2}, F / F_{a/2}], as R's var.test."""
+    a = np.asarray(a, float); b = np.asarray(b, float); df1, df2 = len(a) - 1, len(b) - 1
+    va, vb = a.var(ddof=1), b.var(ddof=1); al = 1 - level
+    if vb > 0:
+        F = va / vb
+    else:
+        F = np.inf if va > 0 else np.nan   # see the note above
+    p = np.nan if np.isnan(F) else min(1.0, 2 * min(stats.f.cdf(F, df1, df2), stats.f.sf(F, df1, df2)))
+    return dict(F=F, df1=df1, df2=df2, p=p,
+                lo=F / stats.f.ppf(1 - al / 2, df1, df2), hi=F / stats.f.ppf(al / 2, df1, df2))
+`;
+LIB.m.fRatio = `
+function r = f_ratio(a, b, level)
+% F = s_a^2 / s_b^2 with its two-sided p and interval, as vartest2 (and R's var.test).
+[~, p, ci, st] = vartest2(a(:), b(:), 'Alpha', 1 - level);
+r = struct('F', st.fstat, 'df1', st.df1, 'df2', st.df2, 'p', p, 'lo', ci(1), 'hi', ci(2));
+end
+`;
+
+// ── Levene's test, median-centered (Brown-Forsythe) ──────────────────────
+// The one-way analysis of variance of each value's distance from its own
+// group's median. Distances that do not vary within any group make F
+// infinite (p = 0) when they differ between groups, as the analyzer reports,
+// and leave nothing to compare when they do not, as when every group is
+// constant.
+
+LIB.R.levene = `
+levene_test <- function(groups) {
+  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
+  z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
+  if (sum((z - ave(z, g))^2) == 0) {
+    between <- sum((ave(z, g) - mean(z))^2) > 0   # see the note above
+    return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN))
+  }
+  tab <- anova(lm(z ~ g))
+  list(F = tab[["F value"]][1], df1 = tab$Df[1], df2 = tab$Df[2], p = tab[["Pr(>F)"]][1])
+}
+`;
+LIB.py.levene = `
+def levene_test(groups):
+    """Brown and Forsythe's form of Levene's test: scipy's levene with center='median'."""
+    groups = [np.asarray(g, float) for g in groups]
+    k = len(groups); N = sum(len(g) for g in groups)
+    z = [np.abs(g - np.median(g)) for g in groups]
+    if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) == 0:
+        zbar = np.concatenate(z).mean()
+        between = sum(len(zi) * (zi.mean() - zbar) ** 2 for zi in z) > 0   # see the note above
+        return dict(F=np.inf if between else np.nan, df1=k - 1, df2=N - k, p=0.0 if between else np.nan)
+    res = stats.levene(*groups, center="median")
+    return dict(F=res.statistic, df1=k - 1, df2=N - k, p=res.pvalue)
+`;
+LIB.m.levene = `
+function r = levene_test(groups)
+% Brown and Forsythe's form of Levene's test: vartestn with 'BrownForsythe'.
+k = numel(groups);
+y = cell2mat(cellfun(@(v) v(:), groups(:), 'UniformOutput', false));
+g = repelem((1:k)', cellfun(@numel, groups(:)));
+N = numel(y); z = zeros(N, 1); zm = zeros(N, 1);
+for i = 1:k
+    in = g == i; z(in) = abs(y(in) - median(y(in))); zm(in) = mean(z(in));
+end
+if sum((z - zm).^2) == 0
+    between = sum((zm - mean(z)).^2) > 0;   % see the note above
+    if between, F = Inf; p = 0; else, F = NaN; p = NaN; end
+    r = struct('F', F, 'df1', k - 1, 'df2', N - k, 'p', p); return;
+end
+[p, st] = vartestn(y, g, 'TestType', 'BrownForsythe', 'Display', 'off');
+r = struct('F', st.fstat, 'df1', st.df(1), 'df2', st.df(2), 'p', p);
+end
+`;
+
+// ── Planning for two designs with equal replications per design ──────────
+// The standard error with n replications in each design is
+// sqrt((s1^2 + s2^2) / n); the two tests differ only in the degrees of
+// freedom, 2(n - 1) for the pooled t and the Welch-Satterthwaite value
+// otherwise. A standard deviation that is not positive, a target that is not
+// positive, or a difference of zero has no plan, which the scripts print as
+// NaN. These use smallest_n from the planning snippet.
+
+LIB.R.planningTwo = `
+welch_df_equal <- function(s1, s2, n) (s1^2 + s2^2)^2 / (s1^4 + s2^4) * (n - 1)
+hw_two <- function(n, s1, s2, level, pooled) {
+  df <- if (pooled) 2 * (n - 1) else welch_df_equal(s1, s2, n)
+  qt(1 - (1 - level) / 2, df) * sqrt((s1^2 + s2^2) / n)
+}
+sds_ok <- function(s1, s2) isTRUE(is.finite(s1) && is.finite(s2) && s1 > 0 && s2 > 0)
+plan_half_width_two <- function(s1, s2, level, h, pooled) {
+  if (!sds_ok(s1, s2) || !isTRUE(is.finite(h) && h > 0)) return(list(n = NaN, hwAtN = NaN))
+  n <- smallest_n(function(n) hw_two(n, s1, s2, level, pooled) <= h,
+                  (qnorm(1 - (1 - level) / 2) * sqrt(s1^2 + s2^2) / h)^2)
+  list(n = n, hwAtN = if (is.na(n)) NaN else hw_two(n, s1, s2, level, pooled))
+}
+power_two <- function(n, s1, s2, delta, alpha, pooled) {
+  # Two-sided power with both tails counted: for the pooled t this is power.t.test(type =
+  # "two.sample", strict = TRUE) at sd = sqrt((s1^2 + s2^2) / 2), and for Welch's test the
+  # noncentral-t approximation at the Welch degrees of freedom.
+  df <- if (pooled) 2 * (n - 1) else welch_df_equal(s1, s2, n)
+  q <- qt(1 - alpha / 2, df); ncp <- delta / sqrt((s1^2 + s2^2) / n)
+  pt(q, df, ncp, lower.tail = FALSE) + pt(-q, df, ncp)
+}
+plan_power_two <- function(s1, s2, delta, alpha, power, pooled) {
+  if (!sds_ok(s1, s2) || !isTRUE(is.finite(delta) && delta != 0) || !isTRUE(power > 0 && power < 1) ||
+      !isTRUE(alpha > 0 && alpha < 1)) return(list(n = NaN, powerAtN = NaN))
+  n <- smallest_n(function(n) power_two(n, s1, s2, delta, alpha, pooled) >= power,
+                  (qnorm(1 - alpha / 2) + qnorm(power))^2 * (s1^2 + s2^2) / delta^2)
+  list(n = n, powerAtN = if (is.na(n)) NaN else power_two(n, s1, s2, delta, alpha, pooled))
+}
+`;
+LIB.py.planningTwo = `
+def welch_df_equal(s1, s2, n):
+    return (s1 ** 2 + s2 ** 2) ** 2 / (s1 ** 4 + s2 ** 4) * (n - 1)
+
+def hw_two(n, s1, s2, level, pooled):
+    df = 2 * (n - 1) if pooled else welch_df_equal(s1, s2, n)
+    return stats.t.ppf(1 - (1 - level) / 2, df) * np.sqrt((s1 ** 2 + s2 ** 2) / n)
+
+def sds_ok(s1, s2):
+    return bool(np.isfinite(s1) and np.isfinite(s2) and s1 > 0 and s2 > 0)
+
+def plan_half_width_two(s1, s2, level, h, pooled):
+    if not sds_ok(s1, s2) or not (np.isfinite(h) and h > 0): return dict(n=np.nan, hwAtN=np.nan)
+    n = smallest_n(lambda n: hw_two(n, s1, s2, level, pooled) <= h,
+                   (stats.norm.ppf(1 - (1 - level) / 2) * np.sqrt(s1 ** 2 + s2 ** 2) / h) ** 2)
+    return dict(n=n, hwAtN=np.nan if np.isnan(n) else hw_two(n, s1, s2, level, pooled))
+
+def power_two(n, s1, s2, delta, alpha, pooled):
+    """Two-sided power with both tails counted: the pooled t exactly, Welch's test by the
+    noncentral-t approximation at the Welch degrees of freedom."""
+    df = 2 * (n - 1) if pooled else welch_df_equal(s1, s2, n)
+    q = stats.t.ppf(1 - alpha / 2, df); ncp = delta / np.sqrt((s1 ** 2 + s2 ** 2) / n)
+    return stats.nct.sf(q, df, ncp) + stats.nct.cdf(-q, df, ncp)
+
+def plan_power_two(s1, s2, delta, alpha, power, pooled):
+    if (not sds_ok(s1, s2) or not np.isfinite(delta) or delta == 0 or not 0 < power < 1
+            or not 0 < alpha < 1):
+        return dict(n=np.nan, powerAtN=np.nan)
+    n = smallest_n(lambda n: power_two(n, s1, s2, delta, alpha, pooled) >= power,
+                   (stats.norm.ppf(1 - alpha / 2) + stats.norm.ppf(power)) ** 2 * (s1 ** 2 + s2 ** 2) / delta ** 2)
+    return dict(n=n, powerAtN=np.nan if np.isnan(n) else power_two(n, s1, s2, delta, alpha, pooled))
+`;
+LIB.m.planningTwo = `
+function df = welch_df_equal(s1, s2, n)
+df = (s1^2 + s2^2)^2 / (s1^4 + s2^4) * (n - 1);
+end
+
+function h = hw_two(n, s1, s2, level, pooled)
+if pooled, df = 2 * (n - 1); else, df = welch_df_equal(s1, s2, n); end
+h = tinv(1 - (1 - level) / 2, df) * sqrt((s1^2 + s2^2) / n);
+end
+
+function ok = sds_ok(s1, s2)
+ok = isfinite(s1) && isfinite(s2) && s1 > 0 && s2 > 0;
+end
+
+function r = plan_half_width_two(s1, s2, level, h, pooled)
+r = struct('n', NaN, 'hwAtN', NaN);
+if ~sds_ok(s1, s2) || ~(isfinite(h) && h > 0), return; end
+n = smallest_n(@(n) hw_two(n, s1, s2, level, pooled) <= h, (norminv(1 - (1 - level) / 2) * sqrt(s1^2 + s2^2) / h)^2);
+if ~isnan(n), r = struct('n', n, 'hwAtN', hw_two(n, s1, s2, level, pooled)); end
+end
+
+function p = power_two(n, s1, s2, delta, alpha, pooled)
+% Two-sided power with both tails counted: the pooled t exactly (sampsizepwr agrees),
+% Welch's test by the noncentral-t approximation at the Welch degrees of freedom.
+if pooled, df = 2 * (n - 1); else, df = welch_df_equal(s1, s2, n); end
+q = tinv(1 - alpha / 2, df); ncp = delta / sqrt((s1^2 + s2^2) / n);
+p = 1 - nctcdf(q, df, ncp) + nctcdf(-q, df, ncp);
+end
+
+function r = plan_power_two(s1, s2, delta, alpha, power, pooled)
+r = struct('n', NaN, 'powerAtN', NaN);
+if ~sds_ok(s1, s2) || ~isfinite(delta) || delta == 0 || ~(power > 0 && power < 1) || ~(alpha > 0 && alpha < 1), return; end
+n = smallest_n(@(n) power_two(n, s1, s2, delta, alpha, pooled) >= power, (norminv(1 - alpha / 2) + norminv(power))^2 * (s1^2 + s2^2) / delta^2);
+if ~isnan(n), r = struct('n', n, 'powerAtN', power_two(n, s1, s2, delta, alpha, pooled)); end
 end
 `;
 </script>
@@ -25753,7 +26404,10 @@ export function fRatio(x, y, level = 0.95) {
     return { n1, n2, s1: NaN, s2: NaN, F: NaN, df1, df2, p: NaN, lo: NaN, hi: NaN };
   }
   const v1 = variance(x), v2 = variance(y), F = v1 / v2, a = 1 - level;
-  const p = Math.min(1, 2 * Math.min(fCdf(F, df1, df2), fUpper(F, df1, df2)));
+  // A y with no spread makes F infinite, which var.test reports with p = 0, and
+  // two sets with no spread make it 0/0, with no p at all.
+  const p = F === Infinity ? 0 : Number.isNaN(F) ? NaN
+    : Math.min(1, 2 * Math.min(fCdf(F, df1, df2), fUpper(F, df1, df2)));
   const lo = F / fQuantile(1 - a / 2, df1, df2), hi = F / fQuantile(a / 2, df1, df2);
   return { n1, n2, s1: Math.sqrt(v1), s2: Math.sqrt(v2), F, df1, df2, p, lo, hi };
 }

@@ -112,7 +112,10 @@ export function fRatio(x, y, level = 0.95) {
     return { n1, n2, s1: NaN, s2: NaN, F: NaN, df1, df2, p: NaN, lo: NaN, hi: NaN };
   }
   const v1 = variance(x), v2 = variance(y), F = v1 / v2, a = 1 - level;
-  const p = Math.min(1, 2 * Math.min(fCdf(F, df1, df2), fUpper(F, df1, df2)));
+  // A y with no spread makes F infinite, which var.test reports with p = 0, and
+  // two sets with no spread make it 0/0, with no p at all.
+  const p = F === Infinity ? 0 : Number.isNaN(F) ? NaN
+    : Math.min(1, 2 * Math.min(fCdf(F, df1, df2), fUpper(F, df1, df2)));
   const lo = F / fQuantile(1 - a / 2, df1, df2), hi = F / fQuantile(a / 2, df1, df2);
   return { n1, n2, s1: Math.sqrt(v1), s2: Math.sqrt(v2), F, df1, df2, p, lo, hi };
 }

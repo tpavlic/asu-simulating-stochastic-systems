@@ -12,7 +12,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analysisScript, parseReport, scriptFileName, ascii, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
-import { baseRecipe, outcomeVector, oneRecipe } from '../js/io/recipes.js';
+import { baseRecipe, outcomeVector, oneRecipe, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
 import { EXAMPLES } from '../js/data/examples.js';
@@ -369,4 +369,133 @@ for (const c of [5, 0]) {
   const r = oneRecipe({ ds, x: [-2, -1, 0, 1, 2], ids: [1, 2, 3, 4, 5], pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: PLAN });
   assert.ok(Number.isNaN(r.expect['plan n for half-width']));
   checkRecipe('One System with a plan that has no answer', r);
+}
+
+// ── Task 3: Two Systems, independent replications ───────────────────────
+
+// The page's {v, ids, dropped} for one design.
+const est = ds => { const o = outcomeVector(ds); return { v: Float64Array.from(o.values), ids: o.ids, dropped: o.dropped }; };
+const [IND_A, IND_B] = example('two-independent');
+const PLAN2 = { h: 0.4, delta: 0.5, power: 0.8 };
+// The provenance the page registers for an independent comparison, planning keys included.
+function twoProv(dsA, dsB, level, proc, plan) {
+  const prov = { datasets: 'A: ' + dsA.name + '; B: ' + dsB.name, 'confidence level': Math.round(level * 1000) / 10 + '%',
+    procedure: proc === 'np' ? 'Wilcoxon rank-sum (nonparametric)' : proc === 'pooled' ? 'pooled-variance t' : 'Welch t',
+    paired: 'no', 'matched by': 'not applicable', 'unmatched replications': 'not applicable' };
+  if (plan) Object.assign(prov, { 'planning mode shown': 'by half-width', 'planning replications': 'equal per design',
+    'planning half-width target': 'h = ' + plan.h, 'planning difference to detect': 'δ = ' + plan.delta,
+    'planning target power': Math.round(plan.power * 100) + '%', 'planning significance level': String(Math.round((1 - level) * 1000) / 1000) });
+  return prov;
+}
+function twoOf(dsA, dsB, proc, level, plan) {
+  return twoRecipe({ dsA, dsB, eA: est(dsA), eB: est(dsB), mode: 'independent', proc, level, base: level,
+    provenance: twoProv(dsA, dsB, level, proc, plan), plan });
+}
+const reps = (name, vals) => makeDataset({ name, response: 'w', kind: 'reps', reps: vals.map((v, i) => ({ id: i + 1, v: [v] })) });
+const noWarning = (stdout, lang, stderr) => assert.ok(!/warning/i.test(stdout + stderr), lang + ' prints no warning:\n' + stdout + stderr);
+
+test('twoRecipe (independent) carries both designs, the Welch keys, and the page\'s provenance', () => {
+  const prov = twoProv(IND_A, IND_B, 0.95, 't', PLAN2);
+  const r = twoRecipe({ dsA: IND_A, dsB: IND_B, eA: est(IND_A), eB: est(IND_B), mode: 'independent', proc: 't', level: 0.95, base: 0.95, provenance: prov, plan: PLAN2 });
+  assert.equal(r.page, 'two');
+  assert.equal(r.title, 'Two Systems: Welch comparison');
+  assert.deepEqual(r.provenance, prov);
+  assert.notEqual(r.provenance, prov, 'the provenance is copied');
+  assert.equal(r.dataA.values.length, 15);
+  assert.equal(r.dataB.values.length, 15);
+  for (const k of ['R_A', 'difference', 'df', 'p', 'half-width', 'F', 'F upper', 'shapiro A W [optional]', 'plan n per design for power', 'power at current R']) assert.ok(k in r.expect, k);
+  assert.ok(!('pooled sd' in r.expect) && !('levene F' in r.expect) && !('plan n per design for power (rank)' in r.expect));
+  assert.deepEqual(Object.keys(r.settings), ['plan_h', 'plan_delta', 'plan_power']);
+  assert.ok(analysisScript(r, 'R').includes('t.test(a, b'));
+  assert.ok(analysisScript(r, 'py').includes('ttest_ind('));
+  assert.ok(analysisScript(r, 'm').includes('ttest2('));
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
+    assert.ok(s.includes('Design A.') && s.includes('Design B.'), lang + ' names both designs');
+    assert.ok(s.includes('planning difference to detect: delta = 0.5'), lang + ' provenance folded to ASCII');
+  }
+  assert.throws(() => twoRecipe({ dsA: IND_A, dsB: IND_B, eA: est(IND_A), eB: est(IND_B), mode: 'sideways', proc: 't', level: 0.95, plan: null }), RangeError);
+});
+
+test('twoRecipe under the pooled t and the rank-sum procedure', () => {
+  const rp = twoOf(IND_A, IND_B, 'pooled', 0.99, PLAN2);
+  assert.ok('pooled sd' in rp.expect && 'levene F' in rp.expect && 'levene p' in rp.expect);
+  assert.ok(analysisScript(rp, 'R').includes('var.equal = pooled') && analysisScript(rp, 'R').includes('two_sample_t(a, b, level, TRUE)'));
+  const rn = twoOf(IND_A, IND_B, 'np', 0.95, PLAN2);
+  assert.ok(!('df' in rn.expect) && !('shapiro A W [optional]' in rn.expect) && !('levene F' in rn.expect));
+  assert.ok(rn.expect['plan n per design for power (rank)'] >= rn.expect['plan n per design for power']);
+  const R = analysisScript(rn, 'R');
+  assert.ok(R.includes('wilcox.test(a, b') && R.includes('exact = exact, correct = TRUE'));
+});
+
+for (const [proc, label, level] of [['t', 'Welch', 0.95], ['pooled', 'pooled t', 0.99], ['np', 'rank-sum', 0.95]]) {
+  checkRecipe('Two Systems, independent, ' + label, twoOf(IND_A, IND_B, proc, level, PLAN2), { smoke: proc === 't', also: noWarning });
+}
+
+// Unequal counts and a dropped replication on one side, with Levene's test under the pooled t.
+{
+  const gA = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 2.5] }] });
+  const gB = reps('B', [3.1, 2.9, 4.2]);
+  const r = twoOf(gA, gB, 'pooled', 0.9, null);
+  assert.equal(r.expect.R_A, 4);
+  assert.deepEqual(r.dataA.dropped, [2]);
+  assert.ok(analysisScript(r, 'R').includes('left out: 2'));
+  assert.ok('levene p' in r.expect);
+  checkRecipe('Two Systems, independent, unequal counts with a dropped replication', r, { also: noWarning });
+}
+
+// The rank-sum procedure on untied samples (exact, with an achieved level) and
+// on a few tied ones, where the approximate test never reaches significance
+// and the analyzer reports no interval ends.
+{
+  const rx = twoOf(reps('A', [2.1, 3.4, 1.9, 2.8, 3.9, 2.2]), reps('B', [1.2, 2.0, 1.7, 2.5, 1.1]), 'np', 0.9, PLAN2);
+  assert.equal(rx.expect.exact, 1);
+  assert.ok('achieved level' in rx.expect);
+  checkRecipe('Two Systems, rank-sum, exact', rx, { also: noWarning });
+  const rt = twoOf(reps('A', [1, 2, 2]), reps('B', [3, 3, 4]), 'np', 0.95, null);
+  assert.equal(rt.expect.exact, 0);
+  assert.ok(Number.isNaN(rt.expect['shift lower']) && Number.isNaN(rt.expect['shift upper']));
+  checkRecipe('Two Systems, rank-sum on three tied outcomes each (no interval)', rt, { also: noWarning });
+  // Exact with too few outcomes for any interval at 95%: the whole line, achieved level 1.
+  const r2 = twoOf(reps('A', [1, 3]), reps('B', [2, 2.5]), 'np', 0.95, null);
+  assert.equal(r2.expect['shift lower'], -Infinity);
+  assert.equal(r2.expect['achieved level'], 1);
+  checkRecipe('Two Systems, rank-sum on two outcomes each (unbounded interval)', r2, { also: noWarning });
+}
+
+// Designs with no spread. One constant design: every procedure runs, the F
+// ratio is 0 or infinite, and the plans have no answer. Both constant: the
+// difference is known exactly; Welch's test is decided by whether the
+// constants differ, the pooled t is undefined when they are equal, the F
+// ratio is undefined, Levene's test has nothing to compare, and the rank-sum
+// interval is the one possible shift.
+{
+  const varied = [3.1, 2.9, 4.2, 3.6, 3.3];
+  const cases = [
+    ['A constant', reps('A', [5, 5, 5, 5]), reps('B', varied)],
+    ['B constant', reps('A', varied), reps('B', [5, 5, 5, 5])],
+    ['both constant, different', reps('A', [5, 5, 5, 5]), reps('B', [3, 3, 3])],
+    ['both constant, equal', reps('A', [4, 4, 4]), reps('B', [4, 4, 4, 4])]
+  ];
+  for (const [label, dA, dB] of cases) {
+    for (const proc of ['t', 'pooled', 'np']) {
+      const r = twoOf(dA, dB, proc, 0.95, PLAN2);
+      checkRecipe('Two Systems, ' + proc + ', ' + label, r, { also: noWarning });
+    }
+  }
+  const w = twoOf(cases[2][1], cases[2][2], 't', 0.95, PLAN2).expect;
+  assert.equal(w.t, Infinity); assert.equal(w.p, 0); assert.equal(w.df, 5); assert.equal(w['half-width'], 0);
+  assert.ok(Number.isNaN(w.F) && Number.isNaN(w['F p']));
+  assert.ok(Number.isNaN(w['plan n per design for half-width']) && Number.isNaN(w['power at current R']));
+  const we = twoOf(cases[3][1], cases[3][2], 't', 0.95, null).expect;
+  assert.equal(we.t, 0); assert.equal(we.p, 1);
+  const pe = twoOf(cases[3][1], cases[3][2], 'pooled', 0.95, null).expect;
+  assert.ok(Number.isNaN(pe.t) && Number.isNaN(pe.p) && !('levene F' in pe));
+  const fb = twoOf(cases[1][1], cases[1][2], 't', 0.95, null).expect;
+  assert.equal(fb.F, Infinity); assert.equal(fb['F p'], 0); assert.equal(fb['F upper'], Infinity);
+  const nb = twoOf(cases[2][1], cases[2][2], 'np', 0.95, null).expect;
+  assert.equal(nb['shift lower'], 2); assert.equal(nb['shift upper'], 2);
+  const ne = twoOf(cases[3][1], cases[3][2], 'np', 0.95, null).expect;
+  assert.ok(Number.isNaN(ne['rank-sum p']));
 }

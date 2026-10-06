@@ -313,6 +313,95 @@ function oneBody(r, L) {
 }
 BODIES.one = { R: oneBody, py: oneBody, m: oneBody };
 
+// The Shapiro-Wilk check of one design's outcomes, reported as '<prefix> W' and '<prefix> p'.
+function shapiroLine(r, L, prefix, v) {
+  const w = lit(L, r.expect[prefix + ' W [optional]']), p = lit(L, r.expect[prefix + ' p [optional]']);
+  return L.lang === 'm' ? 'shapiro_check(' + L.str(prefix) + ', ' + v + ', alpha, ' + w + ', ' + p + ');'
+    : 'shapiro_check(' + L.str(prefix) + ', ' + v + ', ' + w + ', ' + p + ')';
+}
+
+// Two Systems, independent replications: descriptives of both designs; the
+// Welch, pooled-variance t, or Wilcoxon rank-sum comparison; the checks a
+// parametric comparison carries; the F ratio of the variances; and the
+// replication plan, equal in each design.
+function twoBody(r, L) {
+  const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const need = ['descriptives'], out = [];
+  const pooledLit = L.bool(o.pooled);
+  out.push(L.sect('Descriptives of the two designs'));
+  out.push(L.assign('da', 'describe(a)'), L.assign('db', 'describe(b)'));
+  out.push(rep(L, r, 'R_A', f('da', 'n')), rep(L, r, 'R_B', f('db', 'n')), rep(L, r, 'mean A', f('da', 'mean')),
+    rep(L, r, 'mean B', f('db', 'mean')), rep(L, r, 'sd A', f('da', 'sd')), rep(L, r, 'sd B', f('db', 'sd')));
+  if (o.np) {
+    need.push('signedRank', 'rankSum');
+    out.push(L.sect('Wilcoxon rank-sum comparison of A and B'));
+    out.push(c + 'The shift A - B is the Hodges-Lehmann estimate, the median of every difference between an');
+    out.push(c + 'A outcome and a B outcome. W counts the (A, B) pairs in which the A outcome is the larger.');
+    out.push(L.assign('rs', 'rank_sum(a, b, level)'));
+    out.push(rep(L, r, 'median A', f('da', 'median')), rep(L, r, 'median B', f('db', 'median')));
+    out.push(rep(L, r, 'shift', f('rs', 'estimate')), rep(L, r, 'W', f('rs', 'W')), rep(L, r, 'rank-sum p', f('rs', 'p')));
+    out.push(repYesNo(L, r, 'exact', f('rs', 'exact')));
+    out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
+    if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
+  } else {
+    need.push('twoSample', 'shapiro');
+    out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
+    out.push(o.pooled
+      ? c + 'The two sample variances pooled with weights R_A - 1 and R_B - 1, on R_A + R_B - 2 degrees of freedom.'
+      : c + 'Welch\'s t, which lets the two designs have different variances (Welch-Satterthwaite df).');
+    out.push(L.assign('w', 'two_sample_t(a, b, level, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'difference', f('w', 'diff')));
+    if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
+    for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
+    out.push(L.sect('Checks'));
+    out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk)' + (o.levene ? ', and equal variances' : '') + '.');
+    out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
+    if (o.levene) {
+      need.push('levene');
+      out.push(L.assign('lv', 'levene_test(' + L.list(['a', 'b']) + ')'));
+      const F = rep(L, r, 'levene F', f('lv', 'F')), P = rep(L, r, 'levene p', f('lv', 'p'));
+      const none = 'levene: no spread within any design to compare';
+      if (lang === 'R') out.push('if (is.nan(lv$p)) cat("' + none + '\\n") else { ' + F + '; ' + P + ' }');
+      else if (lang === 'py') out.push('if np.isnan(lv["p"]):', '    print("' + none + '")', 'else:', '    ' + F, '    ' + P);
+      else out.push('if isnan(lv.p)', "    fprintf('" + none + "\\n');", 'else', '    ' + F, '    ' + P, 'end');
+    }
+  }
+  if (o.fratio) {
+    need.push('fRatio');
+    out.push(L.sect('Variances of A and B (F ratio)'));
+    out.push(c + 'F = s_A^2 / s_B^2 with its interval on sigma_A^2 / sigma_B^2. It assumes both designs\' outcomes');
+    out.push(c + 'are normal, and unlike the comparison of means it does not become safe as R grows.');
+    out.push(L.assign('fr', 'f_ratio(a, b, level)'));
+    for (const [name, k] of [['F', 'F'], ['F df1', 'df1'], ['F df2', 'df2'], ['F p', 'p'], ['F lower', 'lo'], ['F upper', 'hi']]) out.push(rep(L, r, name, f('fr', k)));
+  }
+  if (o.plan) {
+    need.push('planning', 'planningTwo');
+    const sds = f('da', 'sd') + ', ' + f('db', 'sd');
+    out.push(L.sect('Replications needed, equal in each design'));
+    out.push(c + 'By half-width: the smallest R per design at which the ' + (o.pooled ? 'pooled t' : 'Welch') + ' interval on A - B, with');
+    out.push(c + 's_A and s_B held at their current values, has half-width at most plan_h.');
+    out.push(L.assign('hp', 'plan_half_width_two(' + sds + ', level, plan_h, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n per design for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
+    out.push(c + 'By power: the smallest R per design at which a two-sided ' + (o.pooled ? 'pooled t' : 'Welch') + ' test at alpha detects a');
+    out.push(c + 'difference of plan_delta with probability plan_power.');
+    out.push(L.assign('pp', 'plan_power_two(' + sds + ', plan_delta, alpha, plan_power, ' + pooledLit + ')'));
+    out.push(rep(L, r, 'plan delta', 'plan_delta'), rep(L, r, 'plan power target', 'plan_power'), rep(L, r, 'plan n per design for power', f('pp', 'n')), rep(L, r, 'plan power at n', f('pp', 'powerAtN')));
+    out.push(c + 'The power the current replications already give, at the smaller of the two counts.');
+    if (lang === 'R') out.push('cur <- if (sds_ok(da$sd, db$sd)) power_two(min(da$n, db$n), da$sd, db$sd, plan_delta, alpha, ' + pooledLit + ') else NaN');
+    else if (lang === 'py') out.push('cur = power_two(min(da["n"], db["n"]), da["sd"], db["sd"], plan_delta, alpha, ' + pooledLit + ') if sds_ok(da["sd"], db["sd"]) else np.nan');
+    else out.push('cur = NaN;', 'if sds_ok(da.sd, db.sd), cur = power_two(min(da.n, db.n), da.sd, db.sd, plan_delta, alpha, ' + pooledLit + '); end');
+    out.push(rep(L, r, 'power at current R', 'cur'));
+    if (o.np) {
+      out.push(c + 'The rank procedure is sized from the t plan inflated by pi/3, the reciprocal of its efficiency');
+      out.push(c + 'relative to the t under normal data.');
+      const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+      out.push(rep(L, r, 'plan n per design for half-width (rank)', inf(f('hp', 'n'))), rep(L, r, 'plan n per design for power (rank)', inf(f('pp', 'n'))));
+    }
+  }
+  return { body: out, need };
+}
+BODIES.two = { R: twoBody, py: twoBody, m: twoBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
@@ -322,6 +411,10 @@ function settingsBlock(recipe, L) {
 function dataBlock(recipe, L) {
   const out = [L.sect('Data')];
   if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+  if (recipe.dataA) {
+    out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
+    out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
+  }
   return out;
 }
 
