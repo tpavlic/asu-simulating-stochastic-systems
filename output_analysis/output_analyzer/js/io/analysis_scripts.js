@@ -98,7 +98,7 @@ const LANG = {
     bool: b => (b ? 'true' : 'false'), nan: 'NaN', inf: 'Inf',
     list: items => '{' + items.join(', ') + '}',
     prelude: () => ['format long g'],
-    requires: 'MATLAB with the Statistics and Machine Learning Toolbox. A Shapiro-Wilk check, where the page makes one, runs only when a swtest function is on the path (MathWorks ships none; one is on the File Exchange).'
+    requires: 'MATLAB with the Statistics and Machine Learning Toolbox. A Shapiro-Wilk check, where the page makes one, runs only when a swtest function is on the path (the toolbox has one from R2026b; for earlier releases, one is on the File Exchange).'
   }
 };
 
@@ -228,31 +228,90 @@ export function vectorBlock(L, { ids, values, dropped, how, name, response, unit
 // BODIES[page][lang] returns { body: string[], need: string[] }, `need`
 // naming LIB snippets. The keys are 'R' (both R dialects), 'py', and 'm'.
 
-export const BODIES = {
-  one: {
-    R: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesR(r, L) }),
-    py: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesPy(r, L) }),
-    m: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesM(r, L) })
-  }
-};
+export const BODIES = {};
 
 const DESC_KEYS = ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max'];
 
-function oneDescriptivesR(r, L) {
-  const out = [L.sect('Descriptives of the replication outcomes'), 'd <- describe(x)'];
-  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd$' + k));
-  return out;
+/** Field access per language: d$k, d["k"], d.k. */
+export const FIELD = { R: (v, k) => v + '$' + k, py: (v, k) => v + '["' + k + '"]', m: (v, k) => v + '.' + k };
+
+/** The Descriptives section on the vector `v`, with `describe()` from LIB's descriptives. */
+export function descriptives(r, L, v, out) {
+  out.push(L.sect('Descriptives of the ' + (r.data.pooled ? 'pooled observations' : 'replication outcomes')));
+  out.push(L.assign('d', 'describe(' + v + ')'));
+  for (const k of DESC_KEYS) out.push(rep(L, r, k, FIELD[L.lang]('d', k)));
 }
-function oneDescriptivesPy(r, L) {
-  const out = [L.sect('Descriptives of the replication outcomes'), 'd = describe(x)'];
-  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd["' + k + '"]'));
-  return out;
+
+/**
+ * A report call for a yes/no result: the script's logical beside the
+ * analyzer's, which the expect map holds as 1 or 0.
+ */
+export function repYesNo(L, recipe, name, expr) {
+  const want = recipe.expect[name];
+  const call = 'report(' + L.str(ascii(name)) + ', ' + expr + (want === 0 || want === 1 ? ', ' + L.bool(want === 1) : '') + ')';
+  return L.lang === 'm' ? call + ';' : call;
 }
-function oneDescriptivesM(r, L) {
-  const out = [L.sect('Descriptives of the replication outcomes'), 'd = describe(x);'];
-  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd.' + k));
-  return out;
+
+// One System: descriptives, the t interval or the Wilcoxon signed-rank
+// interval, the Shapiro-Wilk check, the chi-square interval on the variance,
+// and the replication plan.
+function oneBody(r, L) {
+  const o = r.one, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const need = ['descriptives'], out = [];
+  descriptives(r, L, 'x', out);
+  if (o.interval && o.np) {
+    need.push('signedRank');
+    out.push(L.sect('Interval on the pseudo-median (Wilcoxon signed-rank)'));
+    out.push(L.assign('sr', 'signed_rank(x, level)'));
+    out.push(rep(L, r, 'pseudo-median', f('sr', 'estimate')), rep(L, r, 'V', f('sr', 'V')), rep(L, r, 'signed-rank p', f('sr', 'p')));
+    out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
+    out.push(rep(L, r, 'wilcoxon lower', f('sr', 'lo')), rep(L, r, 'wilcoxon upper', f('sr', 'hi')));
+    if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('sr', 'achieved')));
+  } else if (o.interval) {
+    need.push('tInterval');
+    out.push(L.sect('Interval on the mean (t)'));
+    out.push(L.assign('ti', 't_interval(x, level)'));
+    for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
+  }
+  if (o.checks) {
+    need.push('shapiro');
+    out.push(L.sect('Normality check on the replication outcomes'));
+    const w = lit(L, r.expect['shapiro W [optional]']), p = lit(L, r.expect['shapiro p [optional]']);
+    out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+  }
+  if (o.variance) {
+    need.push('varianceInterval');
+    out.push(L.sect('Interval on the variance (chi-square)'));
+    out.push(L.assign('vi', 'variance_interval(x, level)'));
+    for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
+      ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
+  }
+  if (o.plan) {
+    need.push('planning');
+    out.push(L.sect('Replications needed'));
+    out.push(c + 'By half-width: the smallest R at which the t interval\'s half-width, with s held at its current');
+    out.push(c + 'value, is at most plan_h' + (o.plan.relative ? ' (' + o.plan.rel + '% of the current mean)' : '') + '.');
+    out.push(L.assign('hp', 'plan_half_width(' + f('d', 'sd') + ', level, plan_h)'));
+    out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
+    out.push(c + 'By power: the smallest R at which a two-sided one-sample t test at alpha detects a shift of');
+    out.push(c + 'plan_delta with probability plan_power.');
+    out.push(L.assign('pp', 'plan_power_t1(' + f('d', 'sd') + ', plan_delta, alpha, plan_power)'));
+    out.push(rep(L, r, 'plan delta', 'plan_delta'), rep(L, r, 'plan power target', 'plan_power'), rep(L, r, 'plan n for power', f('pp', 'n')), rep(L, r, 'plan power at n', f('pp', 'powerAtN')));
+    out.push(c + 'The power the current replications already give against that shift.');
+    if (lang === 'R') out.push('cur <- if (isTRUE(d$sd > 0 && plan_delta > 0)) power_t1(d$n, d$sd, plan_delta, alpha) else NaN');
+    else if (lang === 'py') out.push('cur = power_t1(d["n"], d["sd"], plan_delta, alpha) if d["sd"] > 0 and plan_delta > 0 else np.nan');
+    else out.push('cur = NaN;', 'if d.sd > 0 && plan_delta > 0, cur = power_t1(d.n, d.sd, plan_delta, alpha); end');
+    out.push(rep(L, r, 'power at current R', 'cur'));
+    if (o.np) {
+      out.push(c + 'The rank procedure is sized from the t plan inflated by pi/3, the reciprocal of its efficiency');
+      out.push(c + 'relative to the t under normal data.');
+      const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
+      out.push(rep(L, r, 'plan n for half-width (rank)', inf(f('hp', 'n'))), rep(L, r, 'plan n for power (rank)', inf(f('pp', 'n'))));
+    }
+  }
+  return { body: out, need };
 }
+BODIES.one = { R: oneBody, py: oneBody, m: oneBody };
 
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];

@@ -13,6 +13,7 @@ import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
+import { oneRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, esc, dash, lvl } from '../ui/format.js';
@@ -590,7 +591,9 @@ function draw() {
     summaryHtml: np
       ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications).</p>'
       : '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + lvl(level) +
-        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>'
+        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>',
+    // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
+    recipeIn: { ds, x, ids: pooled ? null : estIds, pooled, proc }
   }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
@@ -661,7 +664,13 @@ function drawPlan() {
     'planning significance level': num(alpha)
   } : { 'replication planning': 'off while the pooled observations are in use' });
   const tables = resultBase.tables.concat(rows.length ? [{ name: 'Replications needed', headers: PLAN_HEADERS, rows }] : []);
-  state.setResult(id, Object.assign({}, resultBase, { provenance: prov, tables }));
+  // The scripts that regenerate these results are written only when asked
+  // for, from the inputs and settings in force now.
+  const { recipeIn, ...result } = resultBase;
+  const base = state.settings.base;
+  const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
+  const regen = { tooBig: false, build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
+  state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
 
 // The pooled-observations override. It is a full warning with its checkbox

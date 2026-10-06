@@ -12,7 +12,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analysisScript, parseReport, scriptFileName, ascii, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
-import { baseRecipe, outcomeVector } from '../js/io/recipes.js';
+import { baseRecipe, outcomeVector, oneRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
 import { EXAMPLES } from '../js/data/examples.js';
@@ -77,7 +77,7 @@ export function compareReport(report, expect, lang) {
   const bad = [];
   for (const [rawKey, want] of Object.entries(expect)) {
     // "[optional]" marks a line only MATLAB may leave out (the Shapiro-Wilk
-    // check, which needs a function MathWorks does not ship).
+    // check, whose swtest the toolbox has only from R2026b).
     const optional = / \[optional\]$/.test(rawKey) && lang === 'm';
     const key = rawKey.replace(/ \[optional\]$/, '');
     if (!report.has(key)) { if (!optional) bad.push(`${key}: missing`); continue; }
@@ -133,10 +133,20 @@ const SINGLE = makeDataset({ name: 'One day', response: 'avg_wait', unit: 'min',
 const GAPPY = makeDataset({ name: 'Gappy', response: 'wait', kind: 'tally',
   reps: [{ id: 'a', v: [1, 2, 3] }, { id: 'b', v: [] }, { id: 'c', v: [4, 6] }] });
 
+// The One System recipe of a dataset's replication outcomes, as the page
+// builds it with planning off, under a given title.
 function descRecipe(title, ds) {
-  const r = baseRecipe({ page: 'one', title, provenance: { dataset: ds.name, 'confidence level': '95%' }, level: 0.95 });
-  r.data = Object.assign({ name: ds.name, response: ds.response, unit: ds.unit }, outcomeVector(ds));
-  return r;
+  const o = outcomeVector(ds);
+  return oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, base: 0.95, title,
+    provenance: { dataset: ds.name, 'confidence level': '95%' }, plan: null });
+}
+
+// The descriptives every Task 1 smoke fixture pins, checked against the recipe's own.
+function assertDescriptives(r, want) {
+  for (const [k, v] of Object.entries(want)) {
+    if (Number.isNaN(v)) assert.ok(Number.isNaN(r.expect[k]), k);
+    else assert.ok(Math.abs(r.expect[k] - v) <= 1e-9 * Math.max(1, Math.abs(v)), k + ': ' + r.expect[k] + ' vs ' + v);
+  }
 }
 
 test('parseReport reads report lines and ignores the rest', () => {
@@ -223,23 +233,27 @@ test('a replication with no outcome is left out of the data and named in a comme
   assert.ok(m.includes("rep_id = {'a', 'c'};") && m.includes('x = [2, 5];'));
 });
 
+const SIX = { n: 6, mean: 3.25, sd: 0.5612486080, se: 0.2291287847, min: 2.5, q1: 2.875, median: 3.25, q3: 3.625, max: 4 };
+
 {
   const r = descRecipe('Descriptives smoke', AWKWARD);
-  r.expect = { n: 6, mean: 3.25, sd: 0.5612486080, se: 0.2291287847, min: 2.5, q1: 2.875, median: 3.25, q3: 3.625, max: 4 };
-  checkRecipe('descriptives of an awkwardly named dataset', r, { smoke: true });
+  assertDescriptives(r, SIX);
+  checkRecipe('One System on an awkwardly named dataset', r, { smoke: true });
 }
 
 {
   const r = descRecipe('Descriptives of an accented name', ACCENTED);
-  r.expect = { n: 6, mean: 3.25, sd: 0.5612486080, se: 0.2291287847, min: 2.5, q1: 2.875, median: 3.25, q3: 3.625, max: 4 };
-  checkRecipe('descriptives of an accented, micro-sign dataset', r, { smoke: true });
+  assertDescriptives(r, SIX);
+  checkRecipe('One System on an accented, micro-sign dataset', r, { smoke: true });
 }
 
 {
   // One outcome: sd and se are NaN, printed "NaN" beside an analyzer value of
-  // NaN, and the quartiles are the value itself, in every language.
+  // NaN, and the quartiles are the value itself, in every language. With no
+  // spread to estimate, the recipe holds the descriptives only.
   const r = descRecipe('Descriptives of one outcome', SINGLE);
-  r.expect = { n: 1, mean: 3.5, sd: NaN, se: NaN, min: 3.5, q1: 3.5, median: 3.5, q3: 3.5, max: 3.5 };
+  assertDescriptives(r, { n: 1, mean: 3.5, sd: NaN, se: NaN, min: 3.5, q1: 3.5, median: 3.5, q3: 3.5, max: 3.5 });
+  assert.deepEqual(Object.keys(r.expect), ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max']);
   checkRecipe('descriptives of one replication outcome', r, {
     smoke: true,
     also: (stdout, lang) => {
@@ -248,4 +262,96 @@ test('a replication with no outcome is left out of the data and named in a comme
       assert.match(stdout, /^q1: 3\.5 {3}\(analyzer: 3\.5\)$/m, lang + ' quartile of one value');
     }
   });
+}
+
+// ── Task 2: One System ──────────────────────────────────────────────────
+
+const QUEUE = example('queue-reps')[0];   // 20 replication values of avg_wait
+const PLAN = { relative: true, rel: 10, abs: null, delta: 0.3, power: 0.8 };
+const queueX = () => QUEUE.reps.map(p => p.v[0]);
+const queueIds = () => QUEUE.reps.map(p => p.id);
+// The provenance the page registers, which the recipe copies.
+const oneProv = (ds, level, proc) => ({ dataset: ds.name, 'confidence level': Math.round(level * 1000) / 10 + '%',
+  procedure: proc === 'np' ? 'Wilcoxon signed-rank (nonparametric)' : 't interval', 'unit of inference': 'replication means' });
+
+test('oneRecipe carries the data, the choices, and every expect key of the t path', () => {
+  const prov = oneProv(QUEUE, 0.95, 't');
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: prov, plan: PLAN });
+  assert.equal(r.page, 'one');
+  assert.equal(r.title, 'Interval on the mean: ' + QUEUE.name);
+  assert.deepEqual(r.provenance, prov);
+  assert.notEqual(r.provenance, prov, 'the provenance is copied');
+  assert.equal(r.data.values.length, 20);
+  for (const k of ['n', 'mean', 'df', 't quantile', 'lower', 'upper', 'shapiro W [optional]', 's2', 'sd upper', 'plan n for half-width', 'plan n for power', 'power at current R']) assert.ok(k in r.expect, k);
+  assert.ok(!('pseudo-median' in r.expect));
+  assert.ok(!('plan n for power (rank)' in r.expect));
+  assert.ok(r.expect['plan half-width target'] > 0);
+  assert.deepEqual(Object.keys(r.settings), ['plan_h', 'plan_delta', 'plan_power']);
+  const s = analysisScript(r, 'R');
+  assert.ok(s.includes('t.test('), 'R uses t.test');
+  assert.ok(s.includes('shapiro.test('), 'R uses shapiro.test');
+  for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
+});
+
+test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-inflated plans', () => {
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, base: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'), plan: PLAN });
+  assert.equal(r.title, 'Interval on the pseudo-median: ' + QUEUE.name);
+  assert.equal(r.expect.exact, 1);
+  assert.ok('achieved level' in r.expect && !('df' in r.expect) && !('shapiro W [optional]' in r.expect));
+  assert.ok(r.expect['plan n for power (rank)'] >= r.expect['plan n for power']);
+  const R = analysisScript(r, 'R');
+  assert.ok(R.includes('wilcox.test(') && R.includes('exact = exact, correct = TRUE'));
+});
+
+{
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(QUEUE, 0.95, 't'), plan: PLAN });
+  checkRecipe('One System, t interval on queue-reps', r, { smoke: true });
+  const rn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.90, base: 0.90, provenance: oneProv(QUEUE, 0.9, 'np'),
+    plan: { relative: false, rel: 10, abs: 0.25, delta: 0.5, power: 0.9 } });
+  checkRecipe('One System, Wilcoxon on queue-reps (exact)', rn);
+}
+
+// Review Focus 1: a replication that gave no outcome is left out and named.
+{
+  const ds = makeDataset({ name: 'gappy', response: 'wait', kind: 'tally', reps: [{ id: 1, v: [1, 2, 3] }, { id: 2, v: [] }, { id: 3, v: [2, 2, 5] }, { id: 4, v: [4] }] });
+  const o = outcomeVector(ds);
+  assert.deepEqual(o.dropped, [2]);
+  const r = oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: null });
+  assert.equal(r.expect.n, 3);
+  assert.ok(analysisScript(r, 'py').includes('left out: 2'));
+  checkRecipe('One System on a dataset with an empty replication', r);
+}
+
+// Review Focus 2: ties and n >= 50 put the Wilcoxon interval on the normal approximation.
+{
+  const tied = makeDataset({ name: 'tied', response: 'v', kind: 'reps', reps: [3, 3, 4, 5, 5, 5, 6, 7, 7, 9].map((v, i) => ({ id: i + 1, v: [v] })) });
+  const r = oneRecipe({ ds: tied, x: tied.reps.map(p => p.v[0]), ids: tied.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(tied, 0.95, 'np'), plan: null });
+  assert.equal(r.expect.exact, 0);
+  checkRecipe('One System, Wilcoxon with ties (normal approximation)', r);
+  // Sixty distinct outcomes, so that only n >= 50 sends the procedure to the approximation.
+  const vals = Array.from({ length: 60 }, (_, i) => Math.round(1e6 * (5 + 2 * Math.sin(i * 1.7) + 0.003 * i)) / 1e6);
+  assert.equal(new Set(vals).size, 60);
+  const big = makeDataset({ name: 'sixty', response: 'v', kind: 'reps', reps: vals.map((v, i) => ({ id: i + 1, v: [v] })) });
+  const rb = oneRecipe({ ds: big, x: vals, ids: big.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(big, 0.95, 'np'), plan: null });
+  assert.equal(rb.expect.exact, 0);
+  checkRecipe('One System, Wilcoxon on sixty untied outcomes (normal approximation)', rb);
+}
+
+// The pooled override: the observations themselves, no variance, no plan, no check.
+{
+  const ds = makeDataset({ name: 'pooled', response: 'wait', kind: 'tally', reps: [{ id: 1, v: [1.5, 2.5, 3.5] }, { id: 2, v: [2, 2.2, 5.1, 0.4] }] });
+  const prov = Object.assign(oneProv(ds, 0.99, 't'), { 'unit of inference': 'pooled observations (override)' });
+  const r = oneRecipe({ ds, x: [1.5, 2.5, 3.5, 2, 2.2, 5.1, 0.4], ids: null, pooled: true, proc: 't', level: 0.99, base: 0.99, provenance: prov, plan: PLAN });
+  assert.equal(r.expect.n, 7);
+  assert.ok(!('s2' in r.expect) && !('plan n for power' in r.expect) && !('shapiro W [optional]' in r.expect));
+  assert.ok(analysisScript(r, 'm').includes('pooled across its replications'));
+  checkRecipe('One System on pooled observations', r);
+}
+
+// A plan with no answer: a relative target on a zero mean, printed NaN in every language.
+{
+  const ds = makeDataset({ name: 'centered', response: 'v', kind: 'reps', reps: [-2, -1, 0, 1, 2].map((v, i) => ({ id: i + 1, v: [v] })) });
+  const r = oneRecipe({ ds, x: [-2, -1, 0, 1, 2], ids: [1, 2, 3, 4, 5], pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: PLAN });
+  assert.ok(Number.isNaN(r.expect['plan n for half-width']));
+  checkRecipe('One System with a plan that has no answer', r);
 }
