@@ -166,9 +166,12 @@ export function setCustomLevel(base, bonfC = 1) {
  * The latest result of every analysis page, keyed by page id, and so the Export
  * page can write out what the reader has computed. A page stores its result
  * whenever it recomputes and stores null when its inputs no longer allow one.
+ * A result's `regen`, where the page offers scripts that regenerate its
+ * results, builds the recipe (see js/io/recipes.js) on demand; it holds a
+ * function, and so it lives only in memory, never in the saved session.
  * @typedef {{ title: string, provenance: Object<string, string|number>,
  *   tables: {name: string, headers: string[], rows: (string|number)[][]}[],
- *   summaryHtml?: string }} PageResult
+ *   summaryHtml?: string, regen?: { build: () => object, tooBig: boolean } }} PageResult
  * @type {Object<string, PageResult|null>}
  */
 export const results = {};

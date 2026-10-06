@@ -444,4 +444,4 @@ export const SCRIPT_WRITERS = {
   py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python', file: kebabName }
 };
 
-export { sanitizeName, kebabName };
+export { sanitizeName, kebabName, plain, joinNums };

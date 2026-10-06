@@ -455,6 +455,12 @@ footer a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .xp-btn { transition: none; } }
 .xp-row { margin-top: 4px; }
 .xp-row .xp-note[hidden] { display: none; }
+.xp-regen { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.xp-regen[hidden] { display: none; }
+.xp-regen-lbl { font-size: .85rem; color: var(--muted); }
+.xp-regen .xp-regen-note { flex-basis: 100%; margin: 0; }
+.xp-regen .xp-regen-note[hidden] { display: none; }
+.xp-regen details.why { flex-basis: 100%; margin-top: 4px; }
 .rp-tools { margin: 0 0 13px; }
 .rp-prov { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 1px 12px; font-size: .76rem; color: var(--muted); margin: 0 0 8px; }
 .rp-prov dt { font-weight: 600; } .rp-prov dd { margin: 0; overflow-wrap: anywhere; }
@@ -14375,6 +14381,324 @@ export function canInfer(ds) {
   };
 }
 </script>
+<script type="text/plain" data-module="js/io/analysis_scripts.js">
+// The "Regenerate these results in" scripts: a recipe (see recipes.js)
+// becomes a MATLAB, R, or Python script holding the data the page analyzed,
+// the choices it made, and code that recomputes every number the page shows,
+// printing each beside the analyzer's own value. Pure functions, no DOM.
+//
+// A script is assembled from: a header comment (title, stamp, choices,
+// requirements), the report helper, the helpers the body needs (MATLAB puts
+// these after the body as local functions), a Settings block, a Data block,
+// and the page's body. BODIES[page][lang] builds the body and names the
+// helpers it needs from script_lib.js.
+//
+// Every script is 7-bit ASCII: each string that reaches one (a title, a
+// dataset name, a provenance value, a report name) goes through ascii().
+
+import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
+import { LIB } from './script_lib.js';
+
+const BY = 'the Output Analyzer';
+
+// ── ASCII folding ────────────────────────────────────────────────────────
+
+// Greek letters by name; the capitals are added below with capitalized names.
+const GREEK = {
+  'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'δ': 'delta', 'ε': 'epsilon', 'ϵ': 'epsilon', 'ζ': 'zeta',
+  'η': 'eta', 'θ': 'theta', 'ι': 'iota', 'κ': 'kappa', 'λ': 'lambda', 'μ': 'mu', 'ν': 'nu', 'ξ': 'xi',
+  'ο': 'omicron', 'π': 'pi', 'ρ': 'rho', 'σ': 'sigma', 'ς': 'sigma', 'τ': 'tau', 'υ': 'upsilon',
+  'φ': 'phi', 'ϕ': 'phi', 'χ': 'chi', 'ψ': 'psi', 'ω': 'omega'
+};
+for (const [k, v] of Object.entries(GREEK)) {
+  const K = k.toUpperCase();
+  if (K !== k && !GREEK[K]) GREEK[K] = v[0].toUpperCase() + v.slice(1);
+}
+
+// Symbols and letters folded before canonical decomposition: NFKD would split
+// some of them into an ASCII character and a combining mark (the "not equal"
+// sign into "=" and a slash overlay, which the mark strip would then leave as
+// "="), turn the micro sign into a mu, and the superscripts into bare digits.
+const SYMBOL = {
+  '≤': '<=', '≥': '>=', '≠': '!=', '≈': '~', '±': '+/-', '×': 'x', '÷': '/', '⁄': '/', '√': 'sqrt',
+  '∞': 'infinity', '→': '->', '←': '<-', '°': ' deg', '•': '-', '′': "'", '″': '"',
+  '\u00b5': 'u', '¹': '^1', '²': '^2', '³': '^3',
+  'ß': 'ss', 'æ': 'ae', 'Æ': 'AE', 'œ': 'oe', 'Œ': 'OE', 'ø': 'o', 'Ø': 'O', 'ł': 'l', 'Ł': 'L',
+  'đ': 'd', 'Đ': 'D', 'ð': 'd', 'Ð': 'D', 'þ': 'th', 'Þ': 'Th'
+};
+
+/**
+ * A string as 7-bit ASCII for a script: plain() first (dashes, curly quotes,
+ * the minus sign, line breaks), then the symbols above to their ASCII
+ * spellings (the micro sign to "u", a superscript 2 to "^2"), accents dropped
+ * by canonical decomposition, Greek letters to their names, control
+ * characters to spaces, and anything else to "?".
+ * @param {*} s
+ * @returns {string}
+ */
+export function ascii(s) {
+  return plain(s)
+    .replace(/[^\x00-\x7f]/gu, c => (Object.prototype.hasOwnProperty.call(SYMBOL, c) ? SYMBOL[c] : c))
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0370-\u03ff]/g, c => GREEK[c] || c)
+    .replace(/[^\x00-\x7f]/gu, '?')
+    .replace(/[\x00-\x1f\x7f]/g, ' ');
+}
+
+// ── Per-language syntax ──────────────────────────────────────────────────
+
+function dq(s) { return '"' + ascii(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function sq(s) { return "'" + ascii(s).replace(/'/g, "''") + "'"; }
+
+const LANG = {
+  R: {
+    lang: 'R', comment: '# ', sect: s => '\n## ' + s + ' ----',
+    str: dq,
+    vec: a => (a.length ? 'c(' + joinNums(a, 'NaN', '  ', '') + ')' : 'numeric(0)'),
+    strs: a => (a.length ? 'c(' + a.map(dq).join(', ') + ')' : 'character(0)'),
+    assign: (n, e) => n + ' <- ' + e,
+    bool: b => (b ? 'TRUE' : 'FALSE'), nan: 'NaN', inf: 'Inf',
+    list: items => 'list(' + items.join(', ') + ')',
+    prelude: () => ['options(digits = 10)'],
+    requires: 'R with its stats package (no other packages).'
+  },
+  py: {
+    lang: 'py', comment: '# ', sect: s => '\n# ---- ' + s + ' ----',
+    str: dq,
+    vec: a => 'np.array([' + joinNums(a, 'np.nan', '    ', '') + '])',
+    strs: a => '[' + a.map(dq).join(', ') + ']',
+    assign: (n, e) => n + ' = ' + e,
+    bool: b => (b ? 'True' : 'False'), nan: 'np.nan', inf: 'np.inf',
+    list: items => '[' + items.join(', ') + ']',
+    prelude: () => ['import numpy as np', 'from scipy import stats', 'from scipy import integrate, optimize', 'np.set_printoptions(precision=10)'],
+    requires: 'Python 3 with NumPy and SciPy 1.11 or later (Matplotlib, if installed, draws any figure).'
+  },
+  m: {
+    lang: 'm', comment: '% ', sect: s => '\n%% ' + s,
+    str: sq,
+    vec: a => (a.length ? '[' + joinNums(a, 'NaN', '    ', ' ...') + ']' : '[]'),
+    strs: a => '{' + a.map(sq).join(', ') + '}',
+    assign: (n, e) => n + ' = ' + e + ';',
+    bool: b => (b ? 'true' : 'false'), nan: 'NaN', inf: 'Inf',
+    list: items => '{' + items.join(', ') + '}',
+    prelude: () => ['format long g'],
+    requires: 'MATLAB with the Statistics and Machine Learning Toolbox. A Shapiro-Wilk check, where the page makes one, runs only when a swtest function is on the path (MathWorks ships none; one is on the File Exchange).'
+  }
+};
+
+/** The writers by language key, with the button label and the file-name rule. */
+export const ANALYSIS_WRITERS = {
+  m: { label: 'MATLAB', name: 'MATLAB', ext: 'm', mime: 'text/x-matlab' },
+  R: { label: 'Base R', name: 'base R', ext: 'R', mime: 'text/x-r' },
+  tidy: { label: 'Tidy R', name: 'R with the tidyverse', ext: 'R', mime: 'text/x-r', suffix: '-tidy' },
+  py: { label: 'Python', name: 'Python', ext: 'py', mime: 'text/x-python' }
+};
+
+// Tidy R is the R syntax with the tidyverse loaded. Its bodies are the Base R
+// ones until the emitters consult L.tidy for the tibble, dplyr, broom, and
+// ggplot2 forms. Both dialects report L.lang === 'R' and share LIB.R.
+LANG.tidy = Object.assign({}, LANG.R, {
+  tidy: true,
+  prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })', 'options(digits = 10)'],
+  requires: 'R with tibble, dplyr, tidyr, broom, and ggplot2.'
+});
+LANG.R.tidy = false;
+
+/**
+ * The file name of a recipe's script in one language: the title in kebab
+ * case with "-analysis" (and "-tidy" for Tidy R) for R and Python, and an
+ * identifier ending in "_analysis" for MATLAB, which runs a script by name.
+ * @param {object} recipe
+ * @param {'m'|'R'|'tidy'|'py'} lang
+ */
+export function scriptFileName(recipe, lang) {
+  const w = ANALYSIS_WRITERS[lang];
+  if (!w) throw new RangeError('scriptFileName: unknown language ' + lang);
+  const base = ascii(recipe.title || recipe.page || 'analysis');
+  if (lang === 'm') return sanitizeName(base).slice(0, 50).replace(/_+$/, '') + '_analysis.m';
+  return kebabName(base).slice(0, 50).replace(/-+$/, '') + '-analysis' + (w.suffix || '') + '.' + w.ext;
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function stamp(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
+/** A value as a literal of the language: a string, a boolean, NaN for a missing number, or the number. */
+export function lit(L, v) {
+  if (typeof v === 'string') return L.str(v);
+  if (typeof v === 'boolean') return L.bool(v);
+  if (v == null || Number.isNaN(v)) return L.nan;
+  if (v === Infinity) return L.inf;
+  if (v === -Infinity) return '-' + L.inf;
+  return String(v);
+}
+
+/**
+ * A report call for `name` with expression `expr`, carrying the analyzer's
+ * value from the recipe's expect map (under `name` or `name [optional]`); a
+ * null expect value, or none, leaves the analyzer column out.
+ */
+export function rep(L, recipe, name, expr) {
+  const key = ascii(name);
+  const has = k => Object.prototype.hasOwnProperty.call(recipe.expect, k);
+  const want = has(key) ? recipe.expect[key] : has(key + ' [optional]') ? recipe.expect[key + ' [optional]'] : undefined;
+  const a = want !== undefined && want !== null ? ', ' + lit(L, want) : '';
+  const call = 'report(' + L.str(key) + ', ' + expr + a + ')';
+  return L.lang === 'm' ? call + ';' : call;
+}
+
+// ── Header, settings, data ───────────────────────────────────────────────
+
+// A comment of one or more lines broken at spaces before column `width`: the
+// first line starts with `first`, and every later one with `cont`.
+function commentLines(first, text, cont, width = 92) {
+  const out = [];
+  let line = first, fresh = true;
+  for (const w of String(text).split(/ +/)) {
+    if (!w) continue;
+    if (!fresh && line.length + 1 + w.length > width) { out.push(line); line = cont; fresh = true; }
+    line += (fresh ? '' : ' ') + w;
+    fresh = false;
+  }
+  out.push(line);
+  return out;
+}
+
+function header(recipe, L) {
+  const c = L.comment;
+  const out = [c + ascii(recipe.title)];
+  out.push(c + 'Written by ' + BY + ' on ' + stamp(new Date()) + '. It regenerates the page\'s results from the');
+  out.push(c + 'data below. Edit the settings and rerun.');
+  out.push(c.trim());
+  out.push(c + 'Choices on the page:');
+  for (const [k, v] of Object.entries(recipe.provenance || {})) {
+    if (v === undefined || v === null || v === '') continue;
+    out.push(...commentLines(c + '  ', ascii(k) + ': ' + ascii(Array.isArray(v) ? v.join(', ') : String(v)), c + '    '));
+  }
+  out.push(...commentLines(c, 'Requires: ' + L.requires, c + '  '));
+  return out;
+}
+
+/**
+ * One data vector with its ids, the sentence saying how it was formed, and
+ * the ids left out, as lines of the language.
+ * @param {object} L the language
+ * @param {{ids?: Array, values: number[], dropped?: Array, how: string, name: string, response: string, unit?: string, pooled?: boolean}} d
+ * @param {string} varName the vector's variable
+ * @param {string} [idName] the ids' variable, or none to leave the ids out
+ */
+export function vectorBlock(L, { ids, values, dropped, how, name, response, unit, pooled }, varName, idName) {
+  const c = L.comment;
+  const out = [];
+  const what = ascii(name) + ' (' + ascii(response) + (unit ? ', ' + ascii(unit) : '') + ')';
+  if (pooled) {
+    out.push(c + 'Every observation of ' + what + ', pooled across its replications');
+    out.push(c + '(the override on the page; these are not independent).');
+  } else {
+    out.push(c + 'Replication outcomes of ' + what + ':');
+    out.push(c + 'one value per replication, ' + ascii(how) + '.');
+  }
+  if (dropped && dropped.length) out.push(c + 'Replications that gave no outcome were left out: ' + dropped.map(ascii).join(', ') + '.');
+  if (ids && idName) {
+    const numeric = ids.every(i => i !== '' && Number.isFinite(Number(i)));
+    out.push(L.assign(idName, numeric ? L.vec(ids.map(Number)) : L.strs(ids.map(String))));
+  }
+  out.push(L.assign(varName, L.vec(values)));
+  return out;
+}
+
+// ── Page bodies ──────────────────────────────────────────────────────────
+// BODIES[page][lang] returns { body: string[], need: string[] }, `need`
+// naming LIB snippets. The keys are 'R' (both R dialects), 'py', and 'm'.
+
+export const BODIES = {
+  one: {
+    R: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesR(r, L) }),
+    py: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesPy(r, L) }),
+    m: (r, L) => ({ need: ['descriptives'], body: oneDescriptivesM(r, L) })
+  }
+};
+
+const DESC_KEYS = ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max'];
+
+function oneDescriptivesR(r, L) {
+  const out = [L.sect('Descriptives of the replication outcomes'), 'd <- describe(x)'];
+  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd$' + k));
+  return out;
+}
+function oneDescriptivesPy(r, L) {
+  const out = [L.sect('Descriptives of the replication outcomes'), 'd = describe(x)'];
+  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd["' + k + '"]'));
+  return out;
+}
+function oneDescriptivesM(r, L) {
+  const out = [L.sect('Descriptives of the replication outcomes'), 'd = describe(x);'];
+  for (const k of DESC_KEYS) out.push(rep(L, r, k, 'd.' + k));
+  return out;
+}
+
+function settingsBlock(recipe, L) {
+  const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];
+  for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
+  return out;
+}
+
+function dataBlock(recipe, L) {
+  const out = [L.sect('Data')];
+  if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+  return out;
+}
+
+/**
+ * The script of a recipe in one language.
+ * @param {object} recipe
+ * @param {'m'|'R'|'tidy'|'py'} lang
+ * @returns {string}
+ */
+export function analysisScript(recipe, lang) {
+  const L = Object.prototype.hasOwnProperty.call(LANG, lang) ? LANG[lang] : null;
+  if (!L) throw new RangeError('analysisScript: unknown language ' + lang);
+  const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
+  if (!page || !page[L.lang]) throw new RangeError('analysisScript: unknown page ' + recipe.page);
+  const snippets = LIB[L.lang];   // both R dialects share LIB.R
+  const { body, need } = page[L.lang](recipe, L);
+  const helpers = Array.from(new Set(need || [])).map(k => {
+    const s = snippets[k];
+    if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
+    return s.trim();
+  });
+  const lines = header(recipe, L);
+  lines.push('', ...L.prelude());
+  if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
+  lines.push(...settingsBlock(recipe, L), ...dataBlock(recipe, L), ...body);
+  if (lang === 'm') lines.push('', '%% Local functions', LIB.m.report.trim(), '', ...helpers.flatMap(h => [h, '']));
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '') + '\n';
+}
+
+/**
+ * The report lines of a script's output: name to number (yes/no to 1/0, NaN
+ * and Inf in any case to NaN and Infinity) or string. A report line is
+ * "name: value", optionally followed by "   (analyzer: value)"; the name is
+ * everything before the first colon and space.
+ * @param {string} text
+ * @returns {Map<string, number|string>}
+ */
+export function parseReport(text) {
+  const out = new Map();
+  for (const raw of String(text).split(/\r?\n/)) {
+    const m = /^(.+?): (.*)$/.exec(raw);
+    if (!m) continue;
+    const v = m[2].replace(/\s+\(analyzer: .*\)$/, '').trim();
+    if (v === 'yes') out.set(m[1], 1);
+    else if (v === 'no') out.set(m[1], 0);
+    else if (/^[-+]?(nan|inf)$/i.test(v)) out.set(m[1], /nan/i.test(v) ? NaN : v[0] === '-' ? -Infinity : Infinity);
+    else if (/^[-+]?(\d+\.?\d*([eE][-+]?\d+)?|\.\d+([eE][-+]?\d+)?)$/.test(v)) out.set(m[1], Number(v));
+    else out.set(m[1], v);
+  }
+  return out;
+}
+</script>
 <script type="text/plain" data-module="js/io/arena.js">
 // Reading the binary .dat files that Arena writes for its Output Analyzer
 // (file version ARENA_40_OUT1), and the .flt and .fst files the Output
@@ -15301,6 +15625,178 @@ export function buildDatasets(sniffed, mapping) {
   return { datasets, issues };
 }
 </script>
+<script type="text/plain" data-module="js/io/recipes.js">
+// Recipes for the "Regenerate these results in" scripts: one pure builder per
+// page, taking the inputs the page computed with, running the same js/stats
+// functions the page ran, and returning a plain object the writers in
+// analysis_scripts.js turn into a script. A recipe carries the data, every
+// choice, and `expect`, the analyzer's own value under each report name, so
+// that the script can print its value beside the analyzer's and the tests can
+// compare them.
+//
+// A page does not build its recipe when it computes: it registers
+// `regen: { build: () => recipe, tooBig }` with its result, and the export
+// row calls build() only when a script is asked for.
+
+import { repEstimates, repIds } from '../data/model.js';
+
+/** The sentence that says how a replication outcome was formed, per kind. */
+export const OUTCOME_HOW = {
+  tally: 'the mean of the replication\'s observations',
+  time: 'the time-weighted mean of the replication\'s state (each value counted for the time it held)',
+  reps: 'the replication\'s single reported value'
+};
+
+/**
+ * A page's recipe before its sections: the title, the provenance the page
+ * registers (copied), the per-interval level, alpha, and an empty expect map.
+ * @param {{page: string, title: string, provenance: object, level: number}} o
+ */
+export function baseRecipe({ page, title, provenance, level }) {
+  return { page, title, provenance: Object.assign({}, provenance), level, alpha: 1 - level, expect: {} };
+}
+
+/**
+ * The finite replication outcomes of a dataset with their ids, the ids that
+ * gave none, and the sentence saying how each outcome was formed.
+ * @param {import('../data/model.js').Dataset} ds
+ * @returns {{ids: (string|number)[], values: number[], dropped: (string|number)[], how: string}}
+ */
+export function outcomeVector(ds) {
+  const est = repEstimates(ds), ids = repIds(ds);
+  const values = [], kept = [], dropped = [];
+  for (let i = 0; i < est.length; i++) {
+    if (Number.isFinite(est[i])) { values.push(est[i]); kept.push(ids[i]); } else dropped.push(ids[i]);
+  }
+  return { ids: kept, values, dropped, how: OUTCOME_HOW[ds.kind] || OUTCOME_HOW.tally };
+}
+
+/**
+ * A value for an expect map: a number as it is (NaN and +/-Infinity pass
+ * through), a boolean as 1 or 0, and anything else unchanged.
+ * @param {*} v
+ */
+export function ex(v) { return typeof v === 'number' ? v : (v === true ? 1 : v === false ? 0 : v); }
+</script>
+<script type="text/plain" data-module="js/io/script_lib.js">
+// Literal R, Python, and MATLAB code the "Regenerate these results in" scripts
+// are assembled from: the report helper every script carries, and the
+// statistical functions each language lacks. Pure text; the writers in
+// analysis_scripts.js choose which to include. Each snippet defines the
+// functions its key names and nothing else, so that a body emitter can list
+// what it needs and get exactly that.
+//
+// The report line format is the contract with test/analysis_scripts.test.mjs:
+//   name: value   (analyzer: value)
+// with %.10g for numbers, yes/no for booleans, NaN for a missing number in
+// every language, and the string itself otherwise.
+//
+// The snippets are template literals, and so none of them may contain a
+// backtick or a dollar sign followed by a brace. Both R dialects (base and
+// tidy) share LIB.R.
+
+export const LIB = { R: {}, py: {}, m: {} };
+
+// ── report ───────────────────────────────────────────────────────────────
+
+LIB.R.report = `
+report <- function(name, value, analyzer = NULL) {
+  fmt <- function(v) {
+    if (length(v) == 0 || (length(v) == 1 && is.na(v))) return("NaN")
+    if (is.logical(v)) return(if (isTRUE(v)) "yes" else "no")
+    if (is.numeric(v)) return(sprintf("%.10g", as.numeric(v)))
+    as.character(v)
+  }
+  cat(sprintf("%s: %s%s\\n", name, fmt(value),
+              if (is.null(analyzer)) "" else sprintf("   (analyzer: %s)", fmt(analyzer))))
+}
+`;
+
+LIB.py.report = `
+def report(name, value, analyzer=None):
+    """Prints one result as 'name: value   (analyzer: value)'."""
+    def fmt(v):
+        if v is None:
+            return "NaN"
+        if isinstance(v, (bool, np.bool_)):
+            return "yes" if v else "no"
+        if isinstance(v, (int, float, np.integer, np.floating)):
+            v = float(v)
+            if np.isnan(v):
+                return "NaN"
+            if np.isinf(v):
+                return "Inf" if v > 0 else "-Inf"
+            return f"{v:.10g}"
+        return str(v)
+    tail = "" if analyzer is None else f"   (analyzer: {fmt(analyzer)})"
+    print(f"{name}: {fmt(value)}{tail}")
+`;
+
+LIB.m.report = `
+function report(name, value, analyzer)
+% Prints one result as "name: value   (analyzer: value)".
+tail = '';
+if nargin >= 3
+    tail = sprintf('   (analyzer: %s)', report_fmt(analyzer));
+end
+fprintf('%s: %s%s\\n', name, report_fmt(value), tail);
+end
+
+function s = report_fmt(v)
+% One value as a report line prints it: %.10g for a number, yes/no for a
+% logical, NaN for a missing number, and the text itself otherwise.
+if isempty(v) && ~ischar(v) && ~isstring(v)
+    s = 'NaN';
+elseif islogical(v)
+    s = 'no'; if v, s = 'yes'; end
+elseif isnumeric(v)
+    s = sprintf('%.10g', v);
+else
+    s = char(v);
+end
+end
+`;
+
+// ── descriptives: n, mean, sd, se, min, quartiles (R's type 7), max ───────
+// One outcome has no spread to estimate: its sd and se are NaN, and each of
+// its quartiles is the value itself, identically in all three languages.
+
+LIB.R.descriptives = `
+describe <- function(x) {
+  n <- length(x)
+  s <- if (n > 1) sd(x) else NaN   # one outcome has no spread to estimate
+  q <- quantile(x, c(0.25, 0.5, 0.75), type = 7, names = FALSE)
+  list(n = n, mean = mean(x), sd = s, se = s / sqrt(n),
+       min = min(x), q1 = q[1], median = q[2], q3 = q[3], max = max(x))
+}
+`;
+
+LIB.py.descriptives = `
+def describe(x):
+    """n, mean, sd (n - 1), se, min, quartiles by linear interpolation (R's type 7), max."""
+    x = np.asarray(x, float)
+    q1, med, q3 = np.quantile(x, [0.25, 0.5, 0.75])   # numpy's default is R's type 7
+    sd = x.std(ddof=1) if len(x) > 1 else float("nan")   # one outcome has no spread to estimate
+    return dict(n=len(x), mean=x.mean(), sd=sd, se=sd / np.sqrt(len(x)), min=x.min(),
+                q1=q1, median=med, q3=q3, max=x.max())
+`;
+
+LIB.m.descriptives = `
+function d = describe(x)
+% n, mean, sd (n - 1), se, min, quartiles by linear interpolation (R's type 7), max.
+x = x(:); n = numel(x); s = sort(x);
+if n > 1
+    sd = std(x);
+    q = @(p) interp1(0:n-1, s, (n - 1) * p);   % R's type 7: h = (n - 1) p
+else
+    sd = NaN;   % one outcome has no spread to estimate
+    q = @(p) s(1);
+end
+d = struct('n', n, 'mean', mean(x), 'sd', sd, 'se', sd / sqrt(n), 'min', s(1), ...
+           'q1', q(0.25), 'median', q(0.5), 'q3', q(0.75), 'max', s(n));
+end
+`;
+</script>
 <script type="text/plain" data-module="js/io/scripts.js">
 // A figure as a script that redraws it: MATLAB, R (base graphics), or Python
 // (matplotlib), with the plotted data embedded, and so a reader can open the
@@ -15748,7 +16244,7 @@ export const SCRIPT_WRITERS = {
   py: { label: 'PY', name: 'Python', write: pythonScript, mime: 'text/x-python', file: kebabName }
 };
 
-export { sanitizeName, kebabName };
+export { sanitizeName, kebabName, plain, joinNums };
 </script>
 <script type="text/plain" data-module="js/main.js">
 // Boot: renders every page into its section, wires the page navigation and
@@ -23314,9 +23810,12 @@ export function setCustomLevel(base, bonfC = 1) {
  * The latest result of every analysis page, keyed by page id, and so the Export
  * page can write out what the reader has computed. A page stores its result
  * whenever it recomputes and stores null when its inputs no longer allow one.
+ * A result's `regen`, where the page offers scripts that regenerate its
+ * results, builds the recipe (see js/io/recipes.js) on demand; it holds a
+ * function, and so it lives only in memory, never in the saved session.
  * @typedef {{ title: string, provenance: Object<string, string|number>,
  *   tables: {name: string, headers: string[], rows: (string|number)[][]}[],
- *   summaryHtml?: string }} PageResult
+ *   summaryHtml?: string, regen?: { build: () => object, tooBig: boolean } }} PageResult
  * @type {Object<string, PageResult|null>}
  */
 export const results = {};
@@ -26693,11 +27192,15 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
 // has computed (a CSV with `#` provenance lines), any files the page adds
 // (the data files on Summary and Plots, the paired pilot on Two Systems), and
 // a Print button that prints the page as shown, without the navigation. The
-// row follows the page's results as they change.
+// row follows the page's results as they change. When the page's result
+// carries `regen: { build, tooBig }`, a second line offers the scripts that
+// regenerate its results in MATLAB, Base R, Tidy R, and Python; the recipe is
+// built only when one of those buttons is pressed.
 
 import * as state from '../state.js';
 import { repEstimates, repIds } from '../data/model.js';
 import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText } from '../io/export.js';
+import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
@@ -26711,6 +27214,18 @@ const ESTIMATE_LABEL = {
 
 const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
 const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
+const REGEN_TIP = {
+  m: 'A MATLAB script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
+  R: 'An R script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Base R and its stats package only.',
+  tidy: 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and any figure with ggplot2. Needs tibble, dplyr, tidyr, broom, and ggplot2.',
+  py: 'A Python script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs NumPy and SciPy 1.11 or later.'
+};
+const REGEN_HELP =
+  '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
+  'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
+  '<p>A script embeds replication outcomes on the inference pages and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
+const REGEN_TOO_BIG = 'The data on this page run past 200,000 numbers, which is more than a script should carry; export the data files instead.';
+
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -26901,9 +27416,18 @@ export function installExportRow(root, pageId, opts = {}) {
   const row = document.createElement('div');
   row.className = 'sec xp-row';
   row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-btns" id="xp-' + pageId + '"></div><p class="muted-line xp-note" aria-live="polite"></p>';
+  // The regenerate line, hidden until the page's result carries a recipe;
+  // its explanation sits inside it and hides with it.
+  const regen = document.createElement('div');
+  regen.className = 'xp-regen';
+  regen.hidden = true;
+  regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
+  regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
+  row.appendChild(regen);
   if (opts.help) row.appendChild(details('What each data file holds', opts.help));
   root.appendChild(row);
   const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
+  const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');
   let items = [];
 
   function refresh() {
@@ -26918,6 +27442,15 @@ export function installExportRow(root, pageId, opts = {}) {
     }
     if (opts.extra) items.push(...opts.extra());
     items.push({ label: opts.printLabel || 'Print this page', print: true, run: () => window.print() });
+    const rg = r && r.regen;
+    regen.hidden = !rg;
+    if (rg) {
+      const big = !!rg.tooBig;
+      regenBtns.innerHTML = Object.entries(ANALYSIS_WRITERS).map(([k, w]) =>
+        '<button type="button" class="xp-btn" data-lang="' + k + '"' + (big ? ' disabled' : '') + ' data-tip="' + esc(REGEN_TIP[k]) + '" data-tip-press>' + esc(w.label) + '</button>').join('');
+      regenNote.textContent = big ? REGEN_TOO_BIG : '';
+      regenNote.hidden = !big;
+    }
     btns.innerHTML = items.map((it, i) =>
       '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
       (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
@@ -26931,6 +27464,23 @@ export function installExportRow(root, pageId, opts = {}) {
     if (!b || b.disabled) return;
     const it = items[Number(b.getAttribute('data-i'))];
     if (it) it.run();
+  });
+  // The recipe is built here, once per press, from the inputs the page
+  // captured when it registered its result.
+  regenBtns.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-lang]');
+    const r = state.results[pageId];
+    if (!b || b.disabled || !r || !r.regen || r.regen.tooBig) return;
+    const lang = b.getAttribute('data-lang');
+    try {
+      const recipe = r.regen.build();
+      downloadText(scriptFileName(recipe, lang), analysisScript(recipe, lang), ANALYSIS_WRITERS[lang].mime + ';charset=utf-8');
+      regenNote.textContent = '';
+      regenNote.hidden = true;
+    } catch (err) {
+      regenNote.textContent = 'The script could not be written: ' + (err && err.message ? err.message : String(err));
+      regenNote.hidden = false;
+    }
   });
   state.on('results', ({ pageId: p } = {}) => { if (!p || p === pageId) refresh(); });
   state.on('datasets', refresh);

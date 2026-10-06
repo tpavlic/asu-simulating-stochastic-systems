@@ -2,11 +2,15 @@
 // has computed (a CSV with `#` provenance lines), any files the page adds
 // (the data files on Summary and Plots, the paired pilot on Two Systems), and
 // a Print button that prints the page as shown, without the navigation. The
-// row follows the page's results as they change.
+// row follows the page's results as they change. When the page's result
+// carries `regen: { build, tooBig }`, a second line offers the scripts that
+// regenerate its results in MATLAB, Base R, Tidy R, and Python; the recipe is
+// built only when one of those buttons is pressed.
 
 import * as state from '../state.js';
 import { repEstimates, repIds } from '../data/model.js';
 import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText } from '../io/export.js';
+import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
@@ -20,6 +24,18 @@ const ESTIMATE_LABEL = {
 
 const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
 const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
+const REGEN_TIP = {
+  m: 'A MATLAB script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
+  R: 'An R script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Base R and its stats package only.',
+  tidy: 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and any figure with ggplot2. Needs tibble, dplyr, tidyr, broom, and ggplot2.',
+  py: 'A Python script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs NumPy and SciPy 1.11 or later.'
+};
+const REGEN_HELP =
+  '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
+  'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
+  '<p>A script embeds replication outcomes on the inference pages and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
+const REGEN_TOO_BIG = 'The data on this page run past 200,000 numbers, which is more than a script should carry; export the data files instead.';
+
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -210,9 +226,18 @@ export function installExportRow(root, pageId, opts = {}) {
   const row = document.createElement('div');
   row.className = 'sec xp-row';
   row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-btns" id="xp-' + pageId + '"></div><p class="muted-line xp-note" aria-live="polite"></p>';
+  // The regenerate line, hidden until the page's result carries a recipe;
+  // its explanation sits inside it and hides with it.
+  const regen = document.createElement('div');
+  regen.className = 'xp-regen';
+  regen.hidden = true;
+  regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
+  regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
+  row.appendChild(regen);
   if (opts.help) row.appendChild(details('What each data file holds', opts.help));
   root.appendChild(row);
   const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
+  const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');
   let items = [];
 
   function refresh() {
@@ -227,6 +252,15 @@ export function installExportRow(root, pageId, opts = {}) {
     }
     if (opts.extra) items.push(...opts.extra());
     items.push({ label: opts.printLabel || 'Print this page', print: true, run: () => window.print() });
+    const rg = r && r.regen;
+    regen.hidden = !rg;
+    if (rg) {
+      const big = !!rg.tooBig;
+      regenBtns.innerHTML = Object.entries(ANALYSIS_WRITERS).map(([k, w]) =>
+        '<button type="button" class="xp-btn" data-lang="' + k + '"' + (big ? ' disabled' : '') + ' data-tip="' + esc(REGEN_TIP[k]) + '" data-tip-press>' + esc(w.label) + '</button>').join('');
+      regenNote.textContent = big ? REGEN_TOO_BIG : '';
+      regenNote.hidden = !big;
+    }
     btns.innerHTML = items.map((it, i) =>
       '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
       (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
@@ -240,6 +274,23 @@ export function installExportRow(root, pageId, opts = {}) {
     if (!b || b.disabled) return;
     const it = items[Number(b.getAttribute('data-i'))];
     if (it) it.run();
+  });
+  // The recipe is built here, once per press, from the inputs the page
+  // captured when it registered its result.
+  regenBtns.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-lang]');
+    const r = state.results[pageId];
+    if (!b || b.disabled || !r || !r.regen || r.regen.tooBig) return;
+    const lang = b.getAttribute('data-lang');
+    try {
+      const recipe = r.regen.build();
+      downloadText(scriptFileName(recipe, lang), analysisScript(recipe, lang), ANALYSIS_WRITERS[lang].mime + ';charset=utf-8');
+      regenNote.textContent = '';
+      regenNote.hidden = true;
+    } catch (err) {
+      regenNote.textContent = 'The script could not be written: ' + (err && err.message ? err.message : String(err));
+      regenNote.hidden = false;
+    }
   });
   state.on('results', ({ pageId: p } = {}) => { if (!p || p === pageId) refresh(); });
   state.on('datasets', refresh);
