@@ -39,7 +39,7 @@ export function example(id) {
   return buildDatasets(sn, ex.mapping).datasets;
 }
 
-/** Writes the script, runs it, and returns the parsed report (or throws with the output). */
+/** Writes the script, runs it, and returns the parsed report and both output streams (or throws with the output). */
 export function runScript(recipe, lang) {
   const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
   const name = scriptFileName(recipe, lang);
@@ -53,7 +53,7 @@ export function runScript(recipe, lang) {
     else r = spawnSync('matlab', ['-batch', `cd('${dir}'); run('${name}')`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
     if (r.error) throw new Error(`${lang} script did not finish (${name}): ${r.error.message}\n${r.stdout || ''}\n${r.stderr || ''}`);
     if (r.status !== 0) throw new Error(`${lang} script failed (${name}):\n${r.stdout}\n${r.stderr}`);
-    return { report: parseReport(r.stdout), stdout: r.stdout, file: f };
+    return { report: parseReport(r.stdout), stdout: r.stdout, stderr: r.stderr || '', file: f };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -104,15 +104,15 @@ function skipFor(lang, smoke) {
 
 /**
  * Runs one recipe through every installed language and compares. `smoke`
- * runs even without OA_SCRIPTS=1; `also(stdout, lang)` makes further checks
- * on a run's raw output.
+ * runs even without OA_SCRIPTS=1; `also(stdout, lang, stderr)` makes further
+ * checks on a run's raw output.
  */
 export function checkRecipe(name, recipe, { smoke = false, also = null } = {}) {
   for (const lang of LANGS) {
     test(`${name} regenerates in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
-      const { report, stdout } = runScript(recipe, lang);
+      const { report, stdout, stderr } = runScript(recipe, lang);
       compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang);
-      if (also) also(stdout, lang);
+      if (also) also(stdout, lang, stderr);
     });
   }
 }
@@ -335,6 +335,21 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
   const rb = oneRecipe({ ds: big, x: vals, ids: big.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(big, 0.95, 'np'), plan: null });
   assert.equal(rb.expect.exact, 0);
   checkRecipe('One System, Wilcoxon on sixty untied outcomes (normal approximation)', rb);
+}
+
+// Outcomes that are all equal, nonzero and zero: the Wilcoxon interval is the
+// common value at both ends in every language, with no warning printed.
+for (const c of [5, 0]) {
+  const ds = makeDataset({ name: 'constant ' + c, response: 'v', kind: 'reps', reps: [1, 2, 3, 4, 5, 6].map(id => ({ id, v: [c] })) });
+  const x = ds.reps.map(p => p.v[0]);
+  const r = oneRecipe({ ds, x, ids: ds.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
+  assert.equal(r.expect['wilcoxon lower'], c);
+  assert.equal(r.expect['wilcoxon upper'], c);
+  assert.equal(r.expect.exact, 0);
+  if (c === 0) assert.ok(Number.isNaN(r.expect['signed-rank p']));
+  checkRecipe('One System, Wilcoxon on outcomes all equal to ' + c, r, {
+    also: (stdout, lang, stderr) => assert.ok(!/warning/i.test(stdout + stderr), lang + ' prints no warning:\n' + stderr)
+  });
 }
 
 // The pooled override: the observations themselves, no variance, no plan, no check.

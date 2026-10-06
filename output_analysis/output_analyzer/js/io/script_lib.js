@@ -181,8 +181,12 @@ signed_rank <- function(x, level, mu = 0) {
     if (psignrank(qu, n) <= a / 2 + 10 * .Machine$double.eps) qu <- qu + 1
     achieved <- if (qu == 0) 1 else 1 - 2 * psignrank(qu - 1, n)
   }
+  lo <- wt$conf.int[1]; hi <- wt$conf.int[2]
+  # Outcomes that are all equal leave the inverted test nothing to search, and
+  # wilcox.test returns no interval; the analyzer reports the common value as both ends.
+  if (n > 0 && min(x) == max(x)) { lo <- x[1]; hi <- x[1] }
   list(V = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
-       lo = wt$conf.int[1], hi = wt$conf.int[2], achieved = achieved)
+       lo = lo, hi = hi, achieved = achieved)
 }
 `;
 LIB.py.signedRank = `
@@ -219,6 +223,7 @@ def _sr_z(x, dd, zq):
     rr, tt = _midranks(np.abs(dx)); Vd = rr[dx > 0].sum()
     mean = mm * (mm + 1) / 4; tie = float(np.sum(tt ** 3 - tt))
     sigma = np.sqrt(mm * (mm + 1) * (2 * mm + 1) / 24 - tie / 48)
+    if sigma == 0: return np.nan   # every difference is zero: no statistic to form
     corr = 0.0 if zq == 0 else np.sign(Vd - mean) * 0.5
     return (Vd - mean - corr) / sigma - zq
 
@@ -241,7 +246,8 @@ def signed_rank(x, level, mu=0.0):
         sigma = np.sqrt(m * (m + 1) * (2 * m + 1) / 24 - tie / 48)
         z = (V - mean - np.sign(V - mean) * 0.5) / sigma
         p = 2 * min(stats.norm.cdf(z), stats.norm.sf(z))
-    w = np.sort([(x[i] + x[j]) / 2 for i in range(n) for j in range(i, n)])
+    i, j = np.triu_indices(n)
+    w = np.sort((x[i] + x[j]) / 2)   # the Walsh averages, each value paired with itself as well
     est = float(np.median(w)) if n else np.nan
     lo = hi = ach = np.nan
     if n and exact:
@@ -255,6 +261,9 @@ def signed_rank(x, level, mu=0.0):
         else:
             ql = n * (n + 1) // 2 - qu
             ach = 2 * cdf[qu - 1]; lo = w[qu - 1]; hi = w[ql]
+    elif n >= 2 and x.min() == x.max():
+        # Outcomes that are all equal: the interval is the common value at both ends.
+        lo = hi = float(x[0]); ach = alpha
     elif n >= 2:
         # The approximate test inverted: the shifts at which the statistic meets +/-z.
         zq = stats.norm.ppf(1 - alpha / 2)
@@ -303,6 +312,7 @@ dx = x - dd; dx = dx(dx ~= 0); mm = numel(dx);
 [rr, tt] = midranks(abs(dx)); Vd = sum(rr(dx > 0));
 mn = mm * (mm + 1) / 4; tie = sum(tt.^3 - tt);
 sigma = sqrt(mm * (mm + 1) * (2 * mm + 1) / 24 - tie / 48);
+if sigma == 0, s = NaN; return; end   % every difference is zero: no statistic to form
 if zq == 0, corr = 0; else, corr = sign(Vd - mn) * 0.5; end
 s = (Vd - mn - corr) / sigma - zq;
 end
@@ -344,6 +354,9 @@ if n > 0 && exact
         ql = n * (n + 1) / 2 - qu;
         ach = 2 * cdf(qu); lo = w(qu); hi = w(ql + 1);
     end
+elseif n >= 2 && min(x) == max(x)
+    % Outcomes that are all equal: the interval is the common value at both ends.
+    lo = x(1); hi = x(1); ach = alpha;
 elseif n >= 2
     % The approximate test inverted: the shifts at which the statistic meets +/-z.
     zq = norminv(1 - alpha / 2);
