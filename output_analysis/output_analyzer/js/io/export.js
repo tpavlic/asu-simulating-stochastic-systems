@@ -79,7 +79,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
 
 /**
  * A time-persistent dataset sampled on a time grid (see `sampleDataset`):
- * a time column, then one column per replication headed by its id, with an
+ * a time column and then one column per replication headed by its id, with an
  * empty field where nothing holds.
  * @param {import('../data/model.js').Dataset} ds
  * @param {{ times: number[], columns: { id: string|number, values: (number|null)[] }[] }} sample

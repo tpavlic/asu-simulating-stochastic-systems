@@ -31,8 +31,8 @@ export const title = 'Several Systems';
 export const sections = [
   { id: 'means', label: 'Benchmark comparison', tip: 'Every design against a benchmark at once: each design’s mean with its own interval, all k holding together by the Bonferroni correction (each at level 1 − α/k), which holds the chance of any false rejection at α. Draw the benchmark on the plot, or read the intervals against one you have in mind.' },
   { id: 'diffs', label: 'Pairwise comparisons', tip: 'Every pair’s difference, or each design against a control, each with its own interval, all holding together by the Bonferroni correction (each at level 1 − α/C): nothing pooled and no analysis of variance first.' },
-  { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
-  { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
+  { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
+  { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.' }
 ];
 
 const RULES = {
@@ -64,7 +64,7 @@ let ruleW = 'gameshowell';
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
-const NP_PLAN = 'Under the rank procedures the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer, and the inflation is then conservative.';
+const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
 // 'independent' or 'paired': whether replication i of every design shared its
 // random inputs (common random numbers across designs), making it a block.
 let pairMode = 'independent';
@@ -99,6 +99,11 @@ const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 const word = k => (k < WORDS.length ? WORDS[k] : intl(k));
 const allOf = k => (k === 2 ? 'both' : 'all ' + word(k));
+// A list in running text: "A and B", "A, B, and C".
+const andList = xs => (xs.length < 3 ? xs.join(' and ') : xs.slice(0, -1).join(', ') + ', and ' + xs[xs.length - 1]);
+// Each post-hoc rule as a sentence names it.
+const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', dunnett: 'Dunnett’s procedure' };
+const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs' };
 
 // Display names: when every name shares one "prefix · " part (the datasets a
 // scenario column split one file into), only the part after it is shown.
@@ -198,7 +203,7 @@ function figure(parent, opts, name, draw, legendItems, captionHtml) {
 
 // Each checked design's number, 1 to k in checklist order, as a small badge.
 const badge = i => '<span class="sev-num">' + (i + 1) + '</span>';
-// A design's row label: its number, then its short name when there is room
+// A design's row label: its number and then its short name when there is room
 // (a long label is cut from the end, and so the number always shows).
 const numLabel = (i, short) => (i + 1) + ' ' + short[i];
 // A difference's row label, by number: "1 − 2".
@@ -228,7 +233,7 @@ function clip(s, maxW, size) {
 /**
  * Places brackets in columns so that none overlaps another: shortest span
  * first, each in the first column where it meets no bracket already there.
- * Two brackets that share an end row count as meeting, since their ticks
+ * Two brackets that share an end row count as meeting because their ticks
  * would join into one line. Longer spans therefore sit outside the shorter
  * ones they contain.
  * @param {number[][]} pairs [top row, bottom row] with top < bottom
@@ -693,7 +698,7 @@ function update() {
     const b = bodies[0];
     if (np) {
     const hl = groups.map(g => signedRank(g, { level: sm.perLevel }));
-    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s outcomes.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
@@ -704,7 +709,7 @@ function update() {
         bm.line(fg);
       },
       bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
-      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
+      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
@@ -714,7 +719,7 @@ function update() {
       rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
-    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
@@ -725,7 +730,7 @@ function update() {
         bm.line(fg);
       },
       bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
-      'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
+      'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
@@ -813,14 +818,23 @@ function update() {
       }
   }
 
-  // ANOVA and post-hoc.
+  // ANOVA and post-hoc. Welch's analysis weights each design by R/s², and so
+  // a design with fewer than two outcomes or with no spread leaves it
+  // undefined; the section then says which designs, and the planning card
+  // below still takes the pooled analysis's variance.
   const welch = welchOn();
-  const ph = welch ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const flat = groups.map(g => g.length < 2 || Math.min(...g) === Math.max(...g));
+  const welchBad = welch ? list.filter((d, i) => flat[i]).map(d => d.name) : [];
+  const ph = welch && !welchBad.length ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
   const ruleName = welch ? WELCH_RULES[ruleW] : RULES[rule];
   const totalDf = welch ? NaN : paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
   rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : welch ? 'Welch’s analysis of variance and post-hoc tests' : 'Analysis of variance and post-hoc tests';
-  if (!np) {
+  if (!np && welchBad.length) {
+    bodies[2].appendChild(notice('warn', 'Welch’s analysis of variance weights each design by R<sub>i</sub>/s<sub>i</sub>², and so it needs at least two outcomes with some spread in every design; ' +
+      esc(andList(welchBad)) + (welchBad.length === 1 ? ' has' : ' have') + ' none. Choose equal variances above, or leave ' + (welchBad.length === 1 ? 'that design' : 'those designs') + ' out of the checklist.'));
+    summary.push('Welch ANOVA: not defined, because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
+  } else if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
     const rejects = av.p < alpha;
@@ -886,7 +900,7 @@ function update() {
     const anyFlag = ph.pairs.some(p => p.flagged), anyPlain = ph.pairs.some(p => !p.flagged);
     // Tukey, Bonferroni, and Dunnett do not wait for the F test, and near the
     // boundary they can flag a pair the F test did not detect.
-    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + ruleName + ' asks about each pair on its own, without waiting for F. Near the boundary the two can disagree, as they do here.'));
+    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + (welch ? WELCH_RULE_PROSE[ruleW] : RULE_PROSE[rule]) + (!welch && rule === 'dunnett' ? ' asks about each design against the control' : ' asks about each pair') + ' on its own, without waiting for F. Near the boundary, the two can disagree, as they do here.'));
 
     // The designs themselves, best first, with their letter groups and a
     // bracket for every pair the rule declares different.
@@ -920,7 +934,7 @@ function update() {
         intervals(fg, ps.map(p => ({ label: lab(p), lo: p.lo, hi: p.hi, center: p.diff, flagged: p.flagged })), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is a difference of means ± its critical difference under ' + ruleName + '. ' +
+      'Each row is a difference of means ± its critical difference under ' + (welch ? WELCH_RULE_PROSE[ruleW] : RULE_PROSE[rule]) + '. ' +
       (rule === 'lsd' && !welch && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
       (welch ? 'These procedures assume normal replication outcomes and let each design keep its own variance.'
         : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Pairwise comparisons section.'));
@@ -957,14 +971,14 @@ function update() {
       card(DF_LABEL, intl(omni.df), 'k − 1'),
       card('p', pValue(omni.p), 'chi-square approximation')
     ]));
-    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, ' + pEq(omni.p) + ': ' +
+    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + plural(omni.df, 'degree') + ' of freedom, ' + pEq(omni.p) + ': ' +
       (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
     const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
     const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
     b.appendChild(para('cmp-lead', (paired
       ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
       : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
-      '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
+      (dn.C === 1 ? '; the one p-value is adjusted by ' : '; the ' + dn.C + ' p-values are adjusted by ') + adjName +
       ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the omnibus test to reject.'));
     // Each design's pseudo-median with its Wilcoxon interval, best first,
     // carrying Dunn's letters and brackets.
@@ -1011,7 +1025,7 @@ function update() {
       const nSurv = ss.survivors.filter(Boolean).length;
       const verdict = nSurv === 1
         ? 'Design ' + short[ss.survivors.indexOf(true)] + ' is selected as the best within ε at this confidence.'
-        : 'These designs cannot be distinguished from the best within ε on this data: ' + short.filter((_, i) => ss.survivors[i]).join(', ') +
+        : 'These designs cannot be distinguished from the best within ε on these data: ' + andList(short.filter((_, i) => ss.survivors[i])) +
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
       const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
@@ -1267,7 +1281,7 @@ export function render(root) {
       '<span class="ctrl-pair" id="sev-ctrl-diff"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with, usually the current system.">Control</span></label><select id="sev-ctrl" data-control></select></span>' +
       '</div>' +
       '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
-    '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ, and then a post-hoc rule that judges each pair.</p>' +
+    '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ and then a post-hoc rule that judges each pair.</p>' +
       '<div class="ctrl-row" id="sev-adj-row" style="display:none"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How the pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
@@ -1281,7 +1295,7 @@ export function render(root) {
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
-    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p>' +
+    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.</p>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting, used by the screen and its second stage only. Designs whose means are within ε of the best count as good enough, and the screen and the second-stage sizes are set to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
         '<span class="ctrl-note" id="sev-eps-note"></span>' +
@@ -1298,7 +1312,7 @@ export function render(root) {
     '</div>';
   root.querySelector('#sev-plan-means').innerHTML = subPlanMarkup(meansControls);
   root.querySelector('#sev-plan-diffs').innerHTML = subPlanMarkup('<div class="ctrl-row">' +
-      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every difference interval in the Differences card to have, in the response’s units. Bonferroni’s per-comparison level, 1 − α/C, is what makes this plan grow with the number of comparisons C.">Target half-width</span></span>' +
+      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every difference interval in the Pairwise comparisons section to have, in the response’s units. Bonferroni’s per-comparison level, 1 − α/C, is what makes this plan grow with the number of comparisons C.">Target half-width</span></span>' +
         '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>');
@@ -1319,10 +1333,10 @@ export function render(root) {
 
   const subsetSec = root.querySelector('#sev-subset-body').parentNode;
   subsetSec.appendChild(details('How the screen works',
-    '<p>The screen compares every design with every other. For designs i and j it forms an allowance W<sub>ij</sub> = t·√(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>), ' +
+    '<p>The screen compares every design with every other. For designs i and j, it forms an allowance W<sub>ij</sub> = t·√(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>), ' +
     'where t is the t quantile at (1 − α/2)<sup>1/(k−1)</sup> on R<sub>0</sub> − 1 degrees of freedom and R<sub>0</sub> is the smallest number of replications among the designs.</p>' +
     '<p>When bigger is better, design i survives when Ȳ<sub>i</sub> ≥ Ȳ<sub>j</sub> − max(0, W<sub>ij</sub> − ε) for every other design j: no design beats it by more than the noise allowance less the indifference zone. ' +
-    'When smaller is better the inequality is mirrored. The survivors contain the best design, or one within ε of it, with probability at least 1 − α/2.</p>' +
+    'When smaller is better, the inequality is mirrored. The survivors contain the best design, or one within ε of it, with probability at least 1 − α/2.</p>' +
     '<p>For each survivor, Rinott’s second stage needs N<sub>i</sub> = max(R<sub>i</sub>, ⌈(h·s<sub>i</sub>/ε)²⌉) replications in all, with h from Rinott’s integral at 1 − α/2. ' +
     'Running them and picking the best second-stage mean selects a design within ε of the best with the stated confidence.</p>'));
 

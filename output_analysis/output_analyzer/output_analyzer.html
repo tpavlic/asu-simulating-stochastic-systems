@@ -503,6 +503,14 @@ footer a:hover { text-decoration: underline; }
 /* Import and Explore pages */
 .im-block + .im-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .im-row { margin-bottom: 4px; }
+.im-kinds { list-style: none; margin: -4px 0 13px; padding: 0; font-size: .88rem; line-height: 1.5; }
+.im-kinds li { margin: 0 0 5px; padding-left: 1em; text-indent: -1em; }
+.im-kinds .kind-badge { text-indent: 0; margin-right: 4px; }
+.im-fmts { font-size: .8rem; margin: 2px 0 6px; }
+#im-formats:focus { outline: none; }
+#im-formats { scroll-margin-top: 16px; }
+.im-fmts li { margin-bottom: 4px; }
+.im-kinds code, .lede code, .ctrl-note code { font-family: 'IBM Plex Mono', monospace; font-size: .82em; }
 .im-drop { border: 2px dashed var(--border); border-radius: 8px; padding: 16px 14px; text-align: center; background: var(--chart-bg); transition: .15s; }
 .im-drop.is-over { border-color: var(--accent); background: var(--accent-wash); }
 .im-drop-lbl { font-size: .92rem; font-weight: 600; margin-bottom: 8px; }
@@ -728,7 +736,7 @@ if (window.self !== window.top) {
 </script>
 <!-- Every module under js/ is embedded below as inert text and loaded by the
      script after the end marker, which turns each one into a blob URL with its
-     relative imports rewritten, so the page needs no fetch at all and opens
+     relative imports rewritten, and so the page needs no fetch at all and opens
      from disk as well as from a server. The js/ files are the editable source:
      after changing one, run `node inline_modules.mjs` in this directory to
      refresh the region between the markers (test/inline.test.mjs fails while
@@ -14264,7 +14272,7 @@ export function truncateDataset(ds, { by, at }) {
  * on that run that yields this dataset (0 when base is the dataset itself),
  * and `by` how it was cut, or null. A chain of cuts is followed while each
  * link is loaded, keeps the kind, and cuts the same way as the first: index
- * cuts add up, and time cuts are absolute, so the latest one stands.
+ * cuts add up, and time cuts are absolute, and so the latest one stands.
  * @param {object} ds
  * @param {(id: string) => object|undefined} lookup a dataset by id
  * @returns {{ base: object, fence: number, by: ('index'|'time')|null }}
@@ -14541,7 +14549,7 @@ function endsNote(reps) {
 /**
  * Build a dataset from a parsed Arena file, treating each file type the way
  * the Output Analyzer does. A time-persistent file becomes a time-persistent
- * dataset: Arena closes every replication with a record at its end, so the
+ * dataset: Arena closes every replication with a record at its end, and so the
  * dataset carries no end time and each replication's last record holds for
  * no time, which makes every time average run over that replication's own
  * run. A counter file records the running count at each increment and is
@@ -14585,8 +14593,8 @@ export function arenaDataset(dat, opts = {}) {
     kind = 'time';
     reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
     notes.push((code === 207
-      ? 'A frequency statistic from an Arena output file, read as time-persistent data: the file holds its expression’s value over time, not the categories. '
-      : 'Time-persistent data from an Arena output file: ') +
+      ? 'A frequency statistic from an Arena output file, read as time-persistent data, because the file holds its expression’s value over time rather than the categories. '
+      : 'Time-persistent data from an Arena output file. ') +
       'Each record is the value from its time until the next record, and the replication’s last record is its closing value at the end of the run, which holds for no time.');
     const e = endsNote(reps); if (e) notes.push(e);
   } else if (code === 206) {
@@ -14641,7 +14649,7 @@ export function arenaFinalCounts(dat, opts = {}) {
   const notes = ['The count each replication of “' + stat + '” ended with, one value per replication. This summary is the page’s own; the Output Analyzer reads a counter only as a running count over time.'];
   const h = headerNote(dat); if (h) notes.push(h);
   return makeDataset({
-    name: opts.name != null ? opts.name : stat + ', final count',
+    name: opts.name != null ? opts.name : stat + ' (final count)',
     response: stat,
     kind: 'reps',
     reps: nonEmpty.map(r => ({ id: r.id, t: null, v: [r.v[r.v.length - 1]] })),
@@ -14732,7 +14740,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
 
 /**
  * A time-persistent dataset sampled on a time grid (see `sampleDataset`):
- * a time column, then one column per replication headed by its id, with an
+ * a time column and then one column per replication headed by its id, with an
  * empty field where nothing holds.
  * @param {import('../data/model.js').Dataset} ds
  * @param {{ times: number[], columns: { id: string|number, values: (number|null)[] }[] }} sample
@@ -16485,7 +16493,7 @@ function buildDistribution(api, { ds, estF }) {
   if (usePooled) {
     caption(sec, 'Each bar counts the pooled observations in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
   } else {
-    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These estimates, one per replication, are the values every interval on the other pages is built from.');
+    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These outcomes, one per replication, are the values every interval on the other pages is built from.');
   }
 }
 
@@ -16498,7 +16506,7 @@ function buildBox(api, { ds, estF }) {
     [{ swatch: 'bar', color: '--est', label: 'box from q1 to q3, median line, whiskers to 1.5 IQR' }]
       .concat(st.outliers.length ? [{ swatch: 'hollow', color: '--est', label: 'outcome beyond a whisker' }] : [])
       .concat([{ swatch: 'diamond', color: '--truth', label: 'mean' }]));
-  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' outcomes with the median inside it, and each whisker reaches the most extreme estimate within 1.5 box widths of the box.');
+  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' outcomes with the median inside it, and each whisker reaches the most extreme outcome within 1.5 box widths of the box.');
 }
 
 // ── One replication ─────────────────────────────────────────────────────
@@ -16551,7 +16559,7 @@ function fenceCaption(fc, time) {
   const where = fc.by === 'time' ? 'time ' + num(fc.fence) : 'observation ' + intl(fc.fence);
   return ' The gray stretch before the fence at ' + where + ' is what the truncation that made this dataset deleted, drawn from “' + esc(fc.base.name) +
     '”; it is not part of this dataset' + (time ? '' : ', and the lag plot and correlogram below leave it out') +
-    '. The fence is moved, and a new dataset saved, on the <a href="#steady/warmup">Steady State page</a>.';
+    '. Move the fence and save a new dataset on the <a href="#steady/warmup">Steady State page</a>.';
 }
 
 function buildSequence(api, { ds }) {
@@ -16587,7 +16595,7 @@ function buildSequence(api, { ds }) {
         sequence(f, s.ys, { xs: s.xs, width: 1.4 });
       }, legendItems);
     caption(sec, 'Each value holds from its record time until the next record' +
-      (ds.endTime != null ? ', and the last until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
+      (ds.endTime != null ? '; the last holds until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
       ' The replication’s outcome weights each value by how long it held.' + (whole ? fenceCaption(fc, true) : CUT_POINTER));
   } else {
     const useT = rep.t && xMode === 'time';
@@ -16705,7 +16713,7 @@ function buildLag(api, { ds }) {
   const cap = caption(sec, '');
   const setCap = () => {
     const inside = Math.abs(r[k]) <= band;
-    cap.innerHTML = 'The lag plot pairs observation i with observation i + ' + intl(k) + '. The autocorrelation at lag ' + intl(k) + ' is ' + num(r[k], 3) + ', from ' + intl(n - k) + ' pairs, ' + (inside ? 'inside' : 'outside') + ' the ±2/√n band. Points that hug the identity line, and autocorrelations outside the band, mark observations correlated with their neighbors. A t interval over these observations would treat them as independent and come out too narrow.';
+    cap.innerHTML = 'The lag plot pairs observation i with observation i + ' + intl(k) + '. The autocorrelation at lag ' + intl(k) + ' is ' + num(r[k], 3) + ', from ' + intl(n - k) + ' pairs, ' + (inside ? 'inside' : 'outside') + ' the ±2/√n band. Points that hug the identity line and autocorrelations outside the band mark observations correlated with their neighbors. A t interval over these observations would treat them as independent and come out too narrow.';
   };
   setCap();
   const spin = spinner(row.querySelector('#ex-lag'), { min: 1, max: L, step: 1, onChange: v => setLag(v) });
@@ -16828,7 +16836,7 @@ function buildNormality(api, { ds, estF }) {
     ]));
   }
 
-  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end a heavier lower tail; an S through the line marks lighter tails.' : '';
+  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end mark a heavier lower tail; an S through the line marks lighter tails.' : '';
   if (usePooled) {
     caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles' + (thinned ? ', with ' + intl(QQ_CAP) + ' of the ' + intl(total) + ' plotted, evenly spaced through the sorted order' : '') + '; the line passes through the quartiles.' + tailHint +
       ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication outcomes are and the observations are not.');
@@ -16852,7 +16860,7 @@ function buildSpread(api, { ds }) {
   const sec = api.sec;
   const level = state.settings.base, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
-  sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
+  sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   const stored = state.getPick(id, 'spread');
   const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
@@ -16876,8 +16884,8 @@ function buildSpread(api, { ds }) {
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
   caption(sec, rejects
-    ? 'At this level the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
-    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications the test has little power, and so this is a check, not a proof.');
+    ? 'At this level, the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.');
 }
 
 export default { id, title, sections, render, onShow };
@@ -16886,7 +16894,8 @@ export default { id, title, sections, render, onShow };
 // A page reachable only at #gallery that draws every plot type and every
 // shared widget from synthetic data, so that the figure builder can be checked in
 // a browser at any width. It has no link in the page navigation and no entry
-// in the page menu.
+// in the page menu, and it draws nothing until it is first shown, and so a
+// visit that never opens it carries none of its figures.
 
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
@@ -16959,7 +16968,13 @@ function block(root, heading, note) {
  * Renders every plot type and shared widget into the gallery section.
  * @param {HTMLElement} root
  */
+let galleryRoot = null, drawn = false;
+
 export function render(root) {
+  galleryRoot = root;
+}
+
+function draw(root) {
   root.innerHTML = '<h2>' + title + '</h2><p class="lede">Every figure type and shared widget, drawn from seeded synthetic data. Hover or tap a plot for its readout; drag the dashed line in the warm-up plot.</p>';
   const u = rng(20261002);
 
@@ -17113,8 +17128,12 @@ export function render(root) {
   legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }, { swatch: 'line', color: '--ok', label: 'batch mean (' + nb + ' batches of ' + size + ')' }, { swatch: 'dash', color: '--muted', label: 'batch boundary' }]);
 }
 
-/** Called each time the gallery is shown. */
-export function onShow() {}
+/** Called each time the gallery is shown; the first time, it draws. */
+export function onShow() {
+  if (drawn || !galleryRoot) return;
+  drawn = true;
+  draw(galleryRoot);
+}
 
 export default { id, title, render, onShow };
 </script>
@@ -17147,9 +17166,9 @@ const FORMAT_LABEL = {
 };
 
 const KINDS = [
-  { kind: 'tally', label: 'Observations within replications', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
-  { kind: 'time', label: 'Time-persistent state', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s outcome is the time-weighted mean.' },
-  { kind: 'reps', label: 'One value per replication', tip: 'Each value is already one replication’s summary, such as one day’s average wait.' }
+  { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
+  { kind: 'time', label: 'Time-persistent', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s outcome is the time-weighted mean.' },
+  { kind: 'reps', label: 'Replication values', tip: 'Each value is already one replication’s summary, such as one day’s average wait.' }
 ];
 
 let rootEl = null;
@@ -17195,7 +17214,13 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes four forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; one bare column of values; and the binary .dat files Arena writes for its Output Analyzer (and the .flt and .fst files that analyzer writes), whose header already says what the values are, so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
+    '<p class="lede">Load a bundled example or your own simulation output from a file or from pasted text. Every dataset holds one of three kinds of values, and its kind decides how a replication’s outcome is computed:</p>' +
+    '<ul class="im-kinds">' +
+      '<li><span class="kind-badge">' + KIND_LABEL.tally + '</span> one observation per event within a run, such as each customer’s wait; a replication’s outcome is the mean of its observations.</li>' +
+      '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> a state recorded each time it changes, such as the number in queue, each value holding until the next record; a replication’s outcome is the time-weighted mean.</li>' +
+      '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> one summary per run, such as each day’s average wait, which is that replication’s outcome.</li>' +
+    '</ul>' +
+    '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
       '<div id="im-list"></div>' +
@@ -17211,12 +17236,21 @@ export function render(root) {
         '</div>' +
         '<p class="im-ex-desc" id="im-ex-desc"></p>' +
       '</div>' +
+      '<div class="im-block" id="im-formats" tabindex="-1">' +
+        '<div class="ctrl-grp-lbl">Text formats</div>' +
+        '<ul class="im-kinds im-fmts">' +
+          '<li><span class="kind-badge">' + KIND_LABEL.tally + '</span> two columns, time and value, with a row whose first value is −1 ending each replication; or columns under a header row, one of them headed <code>rep</code> (or <code>run</code>) to say which replication each row belongs to; or a single column, read as one replication.</li>' +
+          '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> the same two forms as a tally, with the time column required; the dialog takes an end time until which each replication’s last value holds.</li>' +
+          '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> a single column with one value per replication; or columns under a header row, each numeric column a response.</li>' +
+        '</ul>' +
+        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
+      '</div>' +
       '<div class="im-block">' +
         '<div class="ctrl-grp-lbl">From a file</div>' +
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
           '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text, or an Arena Output Analyzer .dat, .flt, or .fst file. Lines starting with # are read as comments.</div>' +
+          '<div class="ctrl-note im-drop-note">Text in one of the formats above, or an Arena Output Analyzer .dat, .flt, or .fst file.</div>' +
         '</div>' +
       '</div>' +
       '<div class="im-block">' +
@@ -17243,10 +17277,21 @@ export function render(root) {
     list: root.querySelector('#im-list')
   };
 
-  root.querySelector('#im-why').appendChild(details('Why the statistic type matters',
-    '<p>A tally records one value per event, such as each customer’s wait, and a replication’s outcome is the plain mean of its observations.</p>' +
-    '<p>A time-persistent state, such as the number in queue, is recorded only when it changes, and each value holds until the next record. Its replication outcome is the time-weighted mean, in which each value counts in proportion to how long it held. Averaging the recorded values instead would count a spike that lasted a second the same as a plateau that lasted an hour.</p>' +
-    '<p>One value per replication is a file that already holds one summary per run. Whatever the statistic type, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the estimates from independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
+  root.querySelector('#im-why').appendChild(details('Why the kind matters',
+    '<p>A time-persistent state is recorded only when it changes, and so its records say nothing about how long each value lasted until their times are read with them. Averaging the recorded values would count a spike that lasted a second the same as a plateau that lasted an hour; the time-weighted mean counts each value in proportion to how long it held.</p>' +
+    '<p>Whatever the kind, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the outcomes of independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
+
+  // The lede's link to the Text formats block scrolls there and moves focus
+  // there; it never changes the hash, which names only the page, and it stops
+  // the click before the page router, which would scroll back to the top.
+  root.querySelector('.im-jump').addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const box = root.querySelector('#im-formats');
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    box.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+    box.focus({ preventScroll: true });
+  });
 
   // Drop zone: files, or text dragged from another window.
   const drop = els.drop;
@@ -17473,7 +17518,7 @@ function mappingProblem() {
       if (j === m.time || j === m.rep || j === m.scenario) return 'The column ' + colName(sn, j) + ' is both a response and a role column.';
     }
   }
-  if (m.kind === 'time' && endTimeValue() === undefined) return 'The end time must be a number, or left blank.';
+  if (m.kind === 'time' && endTimeValue() === undefined) return 'The end time must be a number or left blank.';
   return null;
 }
 
@@ -17555,7 +17600,7 @@ function renderDialog() {
     html += roleSelect('im-time', 'Time column', sn.numericCols, m.time, true, 'The simulation time at which each value was recorded. A time-persistent state needs one; a tally may have one.');
   }
   if (sn.format === 'columns') {
-    html += roleSelect('im-rep', 'Replication column', allCols, m.rep, true, 'The column naming the replication each row belongs to. With none, the rows form one replication, or one replication per row for one value per replication.');
+    html += roleSelect('im-rep', 'Replication column', allCols, m.rep, true, 'The column naming the replication each row belongs to. With none, the rows form one replication; for one value per replication, each row is its own replication.');
     html += roleSelect('im-scen', 'Scenario column', allCols, m.scenario, true, 'The column naming the design or scenario. Each distinct value becomes its own dataset.');
   }
   html += '</div>';
@@ -17933,7 +17978,7 @@ const override = new Set();
 // 't' for the t interval on the mean, 'np' for the Wilcoxon signed-rank
 // interval on the pseudo-median.
 let proc = 't';
-const NP_PLAN = 'Under the Wilcoxon procedure the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of its efficiency relative to the t under normal data (about 5% more replications); under heavy tails it needs fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedure, the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of its efficiency relative to the t under normal data (about 5% more replications); under heavy tails, it needs fewer.';
 
 // An interval or a pair of numbers takes a full row on a phone rather than
 // being cut short, before and after a result arrives alike.
@@ -17975,7 +18020,7 @@ const PLAN_CUR = 'Power at the current R';
 const PLAN_HEADERS = ['mode', 'target', 'n needed', 'half-width or power at n', 'additional replications'];
 const PLAN_WHY =
   '<p>A half-width target sets how precisely a mean, or a difference of means, is estimated. A power target sets how reliably a shift of a given size would be detected by a two-sided test at α = 1 − the confidence level.</p>' +
-  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
+  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
 
 // The card's markup: its heading, the mode switch, and the two panes, each
@@ -18133,13 +18178,13 @@ export function render(rootEl) {
   const varSec = el('div', 'sec');
   varSec.hidden = true;
   varSec.appendChild(el('div', 'sec-hd', 'Interval on the variance'));
-  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too, and matters more.'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
   const vRow1 = el('div'), vRow2 = el('div');
   varSec.append(vRow1, vRow2, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
   varSec.appendChild(details('Why the variance interval is fragile',
     '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
-    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
+    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for outcomes with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
   root.appendChild(varSec);
 
   // Figure.
@@ -18400,7 +18445,7 @@ function draw() {
   // The pooled override's own warning says what is wrong with it; the
   // checks run on replication outcomes only.
   els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
-    procedure: 'the t interval', declared: 'between replications cannot be checked from the data and is instead assumed when using the t interval; it holds when each replication ran on its own random streams.' })]));
+    procedure: 'the t interval', declared: 'between replications cannot be checked from the data, and the t interval assumes it; it holds when each replication ran on its own random streams.' })]));
   const note = pooled ? POOLED : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
@@ -18414,7 +18459,7 @@ function draw() {
     const basis = sr.exact ? 'exact distribution' : 'normal approximation';
     els.row3.replaceChildren(cardRow([
       wide(card(lvl(level) + ' interval for the pseudo-median', '[' + num(sr.lo) + ', ' + num(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
-      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of estimates, each estimate paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
+      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of outcomes, each outcome paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
       wide(card('Basis', basis, sr.exact ? 'signed-rank distribution of n = ' + intl(s.n) : 'with continuity correction' + (sr.ties ? ', ties present' : '')))
     ]));
   } else {
@@ -18976,8 +19021,8 @@ export const title = 'Several Systems';
 export const sections = [
   { id: 'means', label: 'Benchmark comparison', tip: 'Every design against a benchmark at once: each design’s mean with its own interval, all k holding together by the Bonferroni correction (each at level 1 − α/k), which holds the chance of any false rejection at α. Draw the benchmark on the plot, or read the intervals against one you have in mind.' },
   { id: 'diffs', label: 'Pairwise comparisons', tip: 'Every pair’s difference, or each design against a control, each with its own interval, all holding together by the Bonferroni correction (each at level 1 − α/C): nothing pooled and no analysis of variance first.' },
-  { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ, and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
-  { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.' }
+  { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
+  { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.' }
 ];
 
 const RULES = {
@@ -19009,7 +19054,7 @@ let ruleW = 'gameshowell';
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
-const NP_PLAN = 'Under the rank procedures the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer, and the inflation is then conservative.';
+const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
 // 'independent' or 'paired': whether replication i of every design shared its
 // random inputs (common random numbers across designs), making it a block.
 let pairMode = 'independent';
@@ -19044,6 +19089,11 @@ const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 const word = k => (k < WORDS.length ? WORDS[k] : intl(k));
 const allOf = k => (k === 2 ? 'both' : 'all ' + word(k));
+// A list in running text: "A and B", "A, B, and C".
+const andList = xs => (xs.length < 3 ? xs.join(' and ') : xs.slice(0, -1).join(', ') + ', and ' + xs[xs.length - 1]);
+// Each post-hoc rule as a sentence names it.
+const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', dunnett: 'Dunnett’s procedure' };
+const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs' };
 
 // Display names: when every name shares one "prefix · " part (the datasets a
 // scenario column split one file into), only the part after it is shown.
@@ -19143,7 +19193,7 @@ function figure(parent, opts, name, draw, legendItems, captionHtml) {
 
 // Each checked design's number, 1 to k in checklist order, as a small badge.
 const badge = i => '<span class="sev-num">' + (i + 1) + '</span>';
-// A design's row label: its number, then its short name when there is room
+// A design's row label: its number and then its short name when there is room
 // (a long label is cut from the end, and so the number always shows).
 const numLabel = (i, short) => (i + 1) + ' ' + short[i];
 // A difference's row label, by number: "1 − 2".
@@ -19173,7 +19223,7 @@ function clip(s, maxW, size) {
 /**
  * Places brackets in columns so that none overlaps another: shortest span
  * first, each in the first column where it meets no bracket already there.
- * Two brackets that share an end row count as meeting, since their ticks
+ * Two brackets that share an end row count as meeting because their ticks
  * would join into one line. Longer spans therefore sit outside the shorter
  * ones they contain.
  * @param {number[][]} pairs [top row, bottom row] with top < bottom
@@ -19638,7 +19688,7 @@ function update() {
     const b = bodies[0];
     if (np) {
     const hl = groups.map(g => signedRank(g, { level: sm.perLevel }));
-    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s estimates.'));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s outcomes.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
@@ -19649,7 +19699,7 @@ function update() {
         bm.line(fg);
       },
       bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
-      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
+      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
@@ -19659,7 +19709,7 @@ function update() {
       rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
-    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so all ' + k + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
+    b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
@@ -19670,7 +19720,7 @@ function update() {
         bm.line(fg);
       },
       bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
-      'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + k +
+      'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
@@ -19758,14 +19808,23 @@ function update() {
       }
   }
 
-  // ANOVA and post-hoc.
+  // ANOVA and post-hoc. Welch's analysis weights each design by R/s², and so
+  // a design with fewer than two outcomes or with no spread leaves it
+  // undefined; the section then says which designs, and the planning card
+  // below still takes the pooled analysis's variance.
   const welch = welchOn();
-  const ph = welch ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const flat = groups.map(g => g.length < 2 || Math.min(...g) === Math.max(...g));
+  const welchBad = welch ? list.filter((d, i) => flat[i]).map(d => d.name) : [];
+  const ph = welch && !welchBad.length ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
   const ruleName = welch ? WELCH_RULES[ruleW] : RULES[rule];
   const totalDf = welch ? NaN : paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
   rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : welch ? 'Welch’s analysis of variance and post-hoc tests' : 'Analysis of variance and post-hoc tests';
-  if (!np) {
+  if (!np && welchBad.length) {
+    bodies[2].appendChild(notice('warn', 'Welch’s analysis of variance weights each design by R<sub>i</sub>/s<sub>i</sub>², and so it needs at least two outcomes with some spread in every design; ' +
+      esc(andList(welchBad)) + (welchBad.length === 1 ? ' has' : ' have') + ' none. Choose equal variances above, or leave ' + (welchBad.length === 1 ? 'that design' : 'those designs') + ' out of the checklist.'));
+    summary.push('Welch ANOVA: not defined, because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
+  } else if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
     const rejects = av.p < alpha;
@@ -19831,7 +19890,7 @@ function update() {
     const anyFlag = ph.pairs.some(p => p.flagged), anyPlain = ph.pairs.some(p => !p.flagged);
     // Tukey, Bonferroni, and Dunnett do not wait for the F test, and near the
     // boundary they can flag a pair the F test did not detect.
-    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + ruleName + ' asks about each pair on its own, without waiting for F. Near the boundary the two can disagree, as they do here.'));
+    if (!rejects && anyFlag) b.appendChild(para('exp-note', 'The F test and this rule ask different questions: F asks whether any of the means differ, and ' + (welch ? WELCH_RULE_PROSE[ruleW] : RULE_PROSE[rule]) + (!welch && rule === 'dunnett' ? ' asks about each design against the control' : ' asks about each pair') + ' on its own, without waiting for F. Near the boundary, the two can disagree, as they do here.'));
 
     // The designs themselves, best first, with their letter groups and a
     // bracket for every pair the rule declares different.
@@ -19865,7 +19924,7 @@ function update() {
         intervals(fg, ps.map(p => ({ label: lab(p), lo: p.lo, hi: p.hi, center: p.diff, flagged: p.flagged })), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is a difference of means ± its critical difference under ' + ruleName + '. ' +
+      'Each row is a difference of means ± its critical difference under ' + (welch ? WELCH_RULE_PROSE[ruleW] : RULE_PROSE[rule]) + '. ' +
       (rule === 'lsd' && !welch && ph.protected === false ? 'Because the F test did not reject, no pair is declared different, even where an interval excludes 0. ' : 'A red dashed row is a pair the rule declares different. ') +
       (welch ? 'These procedures assume normal replication outcomes and let each design keep its own variance.'
         : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Pairwise comparisons section.'));
@@ -19902,14 +19961,14 @@ function update() {
       card(DF_LABEL, intl(omni.df), 'k − 1'),
       card('p', pValue(omni.p), 'chi-square approximation')
     ]));
-    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + omni.df + ' degrees of freedom, ' + pEq(omni.p) + ': ' +
+    b.appendChild(para('cmp-verdict', (paired ? 'χ² = ' : 'H = ') + num(omni.stat) + ' on ' + plural(omni.df, 'degree') + ' of freedom, ' + pEq(omni.p) + ': ' +
       (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
     const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
     const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
     b.appendChild(para('cmp-lead', (paired
       ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
       : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
-      '; the ' + dn.C + ' p-values are adjusted by ' + adjName +
+      (dn.C === 1 ? '; the one p-value is adjusted by ' : '; the ' + dn.C + ' p-values are adjusted by ') + adjName +
       ', and a pair is declared different when its adjusted p is below α = ' + aTxt + '. Like Tukey’s procedure, it does not wait for the omnibus test to reject.'));
     // Each design's pseudo-median with its Wilcoxon interval, best first,
     // carrying Dunn's letters and brackets.
@@ -19956,7 +20015,7 @@ function update() {
       const nSurv = ss.survivors.filter(Boolean).length;
       const verdict = nSurv === 1
         ? 'Design ' + short[ss.survivors.indexOf(true)] + ' is selected as the best within ε at this confidence.'
-        : 'These designs cannot be distinguished from the best within ε on this data: ' + short.filter((_, i) => ss.survivors[i]).join(', ') +
+        : 'These designs cannot be distinguished from the best within ε on these data: ' + andList(short.filter((_, i) => ss.survivors[i])) +
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
       const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
@@ -20212,7 +20271,7 @@ export function render(root) {
       '<span class="ctrl-pair" id="sev-ctrl-diff"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with, usually the current system.">Control</span></label><select id="sev-ctrl" data-control></select></span>' +
       '</div>' +
       '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
-    '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ, and then a post-hoc rule that judges each pair.</p>' +
+    '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ and then a post-hoc rule that judges each pair.</p>' +
       '<div class="ctrl-row" id="sev-adj-row" style="display:none"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How the pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
           '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
@@ -20226,7 +20285,7 @@ export function render(root) {
       '<div id="sev-anova-body"></div>' +
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
-    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε, and how many more replications a second stage would need to choose among them.</p>' +
+    '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.</p>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting, used by the screen and its second stage only. Designs whose means are within ε of the best count as good enough, and the screen and the second-stage sizes are set to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
         '<span class="ctrl-note" id="sev-eps-note"></span>' +
@@ -20243,7 +20302,7 @@ export function render(root) {
     '</div>';
   root.querySelector('#sev-plan-means').innerHTML = subPlanMarkup(meansControls);
   root.querySelector('#sev-plan-diffs').innerHTML = subPlanMarkup('<div class="ctrl-row">' +
-      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every difference interval in the Differences card to have, in the response’s units. Bonferroni’s per-comparison level, 1 − α/C, is what makes this plan grow with the number of comparisons C.">Target half-width</span></span>' +
+      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like every difference interval in the Pairwise comparisons section to have, in the response’s units. Bonferroni’s per-comparison level, 1 − α/C, is what makes this plan grow with the number of comparisons C.">Target half-width</span></span>' +
         '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>');
@@ -20264,10 +20323,10 @@ export function render(root) {
 
   const subsetSec = root.querySelector('#sev-subset-body').parentNode;
   subsetSec.appendChild(details('How the screen works',
-    '<p>The screen compares every design with every other. For designs i and j it forms an allowance W<sub>ij</sub> = t·√(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>), ' +
+    '<p>The screen compares every design with every other. For designs i and j, it forms an allowance W<sub>ij</sub> = t·√(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>), ' +
     'where t is the t quantile at (1 − α/2)<sup>1/(k−1)</sup> on R<sub>0</sub> − 1 degrees of freedom and R<sub>0</sub> is the smallest number of replications among the designs.</p>' +
     '<p>When bigger is better, design i survives when Ȳ<sub>i</sub> ≥ Ȳ<sub>j</sub> − max(0, W<sub>ij</sub> − ε) for every other design j: no design beats it by more than the noise allowance less the indifference zone. ' +
-    'When smaller is better the inequality is mirrored. The survivors contain the best design, or one within ε of it, with probability at least 1 − α/2.</p>' +
+    'When smaller is better, the inequality is mirrored. The survivors contain the best design, or one within ε of it, with probability at least 1 − α/2.</p>' +
     '<p>For each survivor, Rinott’s second stage needs N<sub>i</sub> = max(R<sub>i</sub>, ⌈(h·s<sub>i</sub>/ε)²⌉) replications in all, with h from Rinott’s integral at 1 − α/2. ' +
     'Running them and picking the best second-stage mean selects a design within ε of the best with the stated confidence.</p>'));
 
@@ -20615,7 +20674,7 @@ export function render(rootEl) {
 
     '<div class="sec" id="ss-warm" data-section="warmup">' +
       '<div class="sec-hd">Warm-up and truncation</div>' +
-      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each time bin or observation index, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one, or both.</p>' +
+      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each time bin or observation index, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one or both.</p>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-grp"><span class="ctrl-lbl">' + tipSpan('Align replications', TIP.align) + '</span>' +
           '<span class="seg" role="group" aria-label="Align replications">' +
@@ -20692,10 +20751,10 @@ export function render(rootEl) {
   el.lumpBtns = Array.from(root.querySelectorAll('[data-lump]'));
 
   const warmSec = root.querySelector('#ss-warm');
-  warmSec.appendChild(details('Why truncate, and why not compute the cut',
+  warmSec.appendChild(details('Why truncate and why not compute the cut',
     '<p>A run that starts empty and idle climbs toward its long-run behavior over its first stretch. Averaging those early observations in with the rest pulls the estimate toward the starting state; this is initialization bias, and deleting the warm-up removes it.</p>' +
     '<p>The average across replications is noisy, and the moving average smooths that noise so the trend shows. Place the cut where the moving average has leveled off, and lean toward cutting late: deleting too little leaves the bias in, whereas deleting too much leaves fewer observations.</p>' +
-    '<p>The cumulative average is drawn for contrast. With several replications it is the cumulative average of the ensemble average, which is the same curve as the average across replications of each replication’s own cumulative average when the replications are of equal length. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
+    '<p>The cumulative average is drawn for contrast. With several replications, it is the cumulative average of the ensemble average, which is the same curve as the average across replications of each replication’s own cumulative average when the replications are of equal length. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
     '<p>Automatic rules for the cut exist, but each is a rule of thumb that a slow drift or a noisy series can fool. The plot shows what such a rule only summarizes, and so the decision should rest on the plot.</p>'));
   root.querySelector('#ss-batch').appendChild(details('The limits of batching',
     '<p>Batch means treat each batch average as one observation. When the batches are long compared with how far the correlation in the series reaches, the batch means are nearly independent and nearly normal, and the t interval on them is close to right.</p>' +
@@ -21212,7 +21271,7 @@ function drawWarm(computed) {
     const lo = fixed(W.endLo, W.dec), hi = fixed(W.endHi, W.dec);
     el.wwarn.appendChild(notice('warn', 'The replications end at different times, from ' + lo + ' to ' + hi + ', and so past time ' + lo + ' the ensemble average uses only the runs still going.' +
       (ds.kind === 'tally'
-        ? ' A run of a fixed number of observations ends late when its arrivals were sparse, and those are the runs with the least congestion, and so the curve falls there for that reason alone. Read it only to time ' + lo + ', or align by observation index.'
+        ? ' A run of a fixed number of observations ends late when its arrivals were sparse, which makes it one of the least congested runs, and so the curve falls there for that reason alone. Read it only to time ' + lo + ', or align by observation index.'
         : ' Read the curve only to time ' + lo + ', or give the dataset an end time on the Import page so that every run covers the same span.')));
   }
   warmFig.render(f => {
@@ -21676,7 +21735,7 @@ function drawBatch() {
     ? 'Each solid segment is one batch’s time average, drawn across its interval of simulation time.'
     : 'Each solid segment is one batch’s mean, drawn across the observations it averages.') +
     (S.excludeTo != null ? ' The shaded stretch before the cut is excluded by truncation and drawn in gray.' : '') +
-    (src.lumped ? ' Each replication’s warm-up was cut before the replications were joined, and the dotted lines mark the joins.' : '') +
+    (src.lumped ? (cut > 0 ? ' Each replication’s warm-up was cut before the replications were joined, and the dotted lines mark the joins.' : ' The dotted lines mark the joins between replications.') : '') +
     (left ? ' The stretch past the last boundary fills no batch and is excluded.' : '');
 
   const rows = res.batches.map((b, k) => byTime
@@ -21794,7 +21853,7 @@ function refresh() {
 export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
+    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
     '<div class="sec"><div class="sec-hd">Stored in this browser</div>' +
       '<p class="xp-status" id="ss-status"></p>' +
       '<p class="muted-line" id="ss-size" aria-live="polite"></p>' +
@@ -22126,7 +22185,7 @@ const PLAN_CUR = 'Power at the current R';
 const PLAN_HEADERS = ['mode', 'target', 'n needed', 'half-width or power at n', 'additional replications'];
 const PLAN_WHY =
   '<p>A half-width target sets how precisely a mean, or a difference of means, is estimated. A power target sets how reliably a shift of a given size would be detected by a two-sided test at α = 1 − the confidence level.</p>' +
-  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
+  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
 
 // The card's markup: its heading, the mode switch, and the two panes, each
@@ -22393,7 +22452,7 @@ function drawPlan() {
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
-const NP_PLAN = 'Under the Wilcoxon procedures the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of their efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedures, the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of their efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer.';
 
 // What a Wilcoxon result's p-value and interval rest on, for its card notes.
 function npBasis(r) {
@@ -22418,7 +22477,7 @@ function renderIndependent(res, notes, d, level) {
     s.appendChild(cardRow([
       oneLine(card('Median A', v(mA && mA.median), d ? esc(d.dsA.name) : 'design A')),
       oneLine(card('Median B', v(mB && mB.median), d ? esc(d.dsB.name) : 'design B')),
-      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate of how far A sits above B: the median of every difference between one A estimate and one B estimate.">Shift A − B</span>', v(rs && rs.estimate), 'Hodges–Lehmann'),
+      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate of how far A sits above B: the median of every difference between one A outcome and one B outcome.">Shift A − B</span>', v(rs && rs.estimate), 'Hodges–Lehmann'),
       card('<span class="tip" tabindex="0" data-tip="The Mann–Whitney count: the number of (A, B) pairs in which the A outcome is the larger, R_A·R_B/2 when the two designs are alike.">W</span>', v(rs && rs.W), 'Mann–Whitney count'),
       card('Two-sided p', rs ? pValue(rs.p) : dash, rs ? npBasis(rs) : 'Wilcoxon rank-sum test'),
       wide(card(L + ' interval for the shift', rs ? interval(rs.lo, rs.hi) : dash, rs ? npLevelNote(rs, L) : 'Hodges–Lehmann')),
@@ -22452,7 +22511,7 @@ function renderIndependent(res, notes, d, level) {
   // The checks follow a parametric result only: the Wilcoxon procedures assume no normality.
   if (d && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base, pooled,
     procedure: pooled ? 'the pooled t test' : 'Welch’s test',
-    declared: 'between the two designs cannot be checked from the data and is instead assumed when using ' + (pooled ? 'the pooled t test' : 'Welch’s test') + '; it is what the Independent setting declares.' }));
+    declared: 'between the two designs cannot be checked from the data, and ' + (pooled ? 'the pooled t test' : 'Welch’s test') + ' assumes it; it is what the Independent setting declares.' }));
 
   const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
@@ -22521,7 +22580,7 @@ function renderIndependent(res, notes, d, level) {
     : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
-    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data and is instead assumed when using the F ratio; it is what the Independent setting declares.' }));
+    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
   vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, on the checks line above and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
 
   if (!w) {
@@ -22537,7 +22596,7 @@ function renderIndependent(res, notes, d, level) {
     provenance: prov,
     tables: [{
       name: 'Rank-sum comparison (Wilcoxon)',
-      headers: ['design A', 'design B', 'R_A', 'R_B', 'median A', 'median B', 'shift A - B (Hodges-Lehmann)', 'W', 'p (two-sided)', 'lower', 'upper', 'level', 'basis'],
+      headers: ['design A', 'design B', 'R_A', 'R_B', 'median A', 'median B', 'shift A − B (Hodges–Lehmann)', 'W', 'p (two-sided)', 'lower', 'upper', 'level', 'basis'],
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, summary(d.eA.v).median, summary(d.eB.v).median, rs.estimate, rs.W, rs.p, rs.lo, rs.hi, rs.exact ? rs.achieved : level, npBasis(rs)]]
     }],
     summaryHtml: '<p>Wilcoxon rank-sum comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): shift A − B = ' + num(rs.estimate) +
@@ -22876,7 +22935,7 @@ function renderPaired(res, notes, d, level) {
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
   if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
     procedure: 'the paired t test',
-    declared: 'between pairs cannot be checked from the data and is instead assumed when using the paired t test; the pairing within each replication is what the Paired setting declares.' }));
+    declared: 'between pairs cannot be checked from the data, and the paired t test assumes it; the pairing within each replication is what the Paired setting declares.' }));
 
   const f = sec('Paired differences');
   res.appendChild(f);
@@ -22916,7 +22975,7 @@ function renderPaired(res, notes, d, level) {
     provenance: provenance(d, level, true, d.match.by, unmatched),
     tables: [np ? {
       name: 'Signed-rank comparison (Wilcoxon)',
-      headers: ['design A', 'design B', 'pairs', 'pseudo-median of A - B (Hodges-Lehmann)', 'V', 'zeros dropped', 'p (two-sided)', 'lower', 'upper', 'level', 'basis', 'r'],
+      headers: ['design A', 'design B', 'pairs', 'pseudo-median of A − B (Hodges–Lehmann)', 'V', 'zeros dropped', 'p (two-sided)', 'lower', 'upper', 'level', 'basis', 'r'],
       rows: [[d.dsA.name, d.dsB.name, pr.n, sr.estimate, sr.V, sr.zeros, sr.p, sr.lo, sr.hi, sr.exact ? sr.achieved : level, npBasis(sr), pr.r]]
     } : {
       name: 'Paired comparison',
@@ -22991,12 +23050,12 @@ export function render(root) {
   const planSec = root.querySelector('#two-plan');
   planSec.innerHTML = planMarkup('two',
     '<div class="ctrl-row">' +
-      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like the interval for the difference A − B to have, in the response’s units. Under common random numbers the paired plan uses the standard deviation of the differences, which is why pairing needs fewer replications when r is large.">Target half-width</span></span>' +
+      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like the interval for the difference A − B to have, in the response’s units. Under common random numbers, the paired plan uses the standard deviation of the differences, which is why pairing needs fewer replications when r is large.">Target half-width</span></span>' +
         '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>',
     powerControls('two', 'Difference to detect δ',
-      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers the paired plan uses the standard deviation of the differences.'));
+      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
     if (plan.mode === b.dataset.plan) return;
@@ -23011,7 +23070,7 @@ export function render(root) {
     'Var(D̄) = (σ<sub>A</sub>² + σ<sub>B</sub>² − 2ρσ<sub>A</sub>σ<sub>B</sub>)/n, and so the larger ρ is, the narrower the paired interval.</p>' +
     '<p>Which analysis applies is fixed by how the replications were run, not by the data. Replications run under common random numbers are pairs, and they are compared as pairs whatever r turns out to be: the two-sample t procedures, Welch’s and the pooled, assume two independent samples, and these are not. ' +
     'The correlation card then reports how much the pairing gained, not whether to pair; a negative r says the common random numbers did not do their job, which is a reason to look at how the runs were made, not to unpair them. Replications run on independent streams are two independent samples; matching them by position pairs nothing, gives r near 0, and gives up degrees of freedom.</p>' +
-    '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so when the pairs share no variation its interval is a little wider than an independent analysis of the same numbers would give. ' +
+    '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so, when the pairs share no variation, its interval is a little wider than an independent analysis of the same numbers would give. ' +
     'That is the reason not to pair independent runs, not a reason to unpair correlated ones.</p>' +
     '<p>Common random numbers drive replication i of both designs with the same random inputs, which makes the two outcomes positively correlated by design. That is why such runs are analyzed as pairs.</p>');
   // The note on pairing sits in the configuration card, under the switch it explains.
@@ -23369,7 +23428,7 @@ export function welch(x, y, level) {
   const se = Math.sqrt(a + b);
   const diff = mean1 - mean2;
   // Two samples with no spread at all leave the Welch–Satterthwaite ratio
-  // 0/0; the difference is then known exactly, so the interval has no width,
+  // 0/0; the difference is then known exactly, and so the interval has no width,
   // and the test is decided by whether the two constants differ.
   if (se === 0) {
     const df = n1 + n2 - 2;
@@ -23812,7 +23871,7 @@ function fmtAlpha(alpha) {
   return String(Number(alpha.toPrecision(6)));
 }
 
-// Label for the g-th letter group: a–z, then A–Z, then a letter with a count.
+// Label for the g-th letter group: a–z, A–Z, and then a letter with a count.
 function letterLabel(g) {
   if (g < 26) return String.fromCharCode(97 + g);
   if (g < 52) return String.fromCharCode(65 + g - 26);
@@ -24516,7 +24575,7 @@ function tCritical(p, df, z) {
  * smallest n ≥ 2 with t_{1−α/2, n−1} · sd / sqrt(n) ≤ h, where h = target, or
  * target · |mean| when relative. The search starts at the normal approximation
  * ceil((z · sd / h)²) and steps, which is valid because the half-width is decreasing
- * in n: up until the inequality holds, then down while it still holds.
+ * in n: up until the inequality holds, and then down while it still holds.
  * @param {{sd: number, level?: number, target: number, relative?: boolean, mean?: number}} o
  * @returns {{n: number|null, hwAtN: number, iterations: number, h: number}} n is null
  *   when h ≤ 0, when sd is not a finite nonnegative number, or when the answer would
@@ -26005,7 +26064,7 @@ export function nctCdf(t, df, ncp) {
  * below some threshold and true from it on (a half-width that shrinks with n, or a
  * power that grows with it). The search starts at a guess, such as a normal
  * approximation, and moves by doubling steps (up while the condition fails, down
- * while it holds) until it brackets the threshold, then bisects. That returns
+ * while it holds) until it brackets the threshold, and then bisects. That returns
  * exactly what stepping one integer at a time would, in a logarithmic number of
  * evaluations even when the guess is far off.
  * @param {(n: number) => boolean} ok monotone condition
@@ -26337,7 +26396,7 @@ function fmt(x) {
 }
 
 /**
- * Batch means on one replication: truncation, then batches, then a t interval on the batch means
+ * Batch means on one replication: truncation, batches, and then a t interval on the batch means
  * with the lag-one autocorrelation and Fishman's test.
  *
  * Truncation: `{by: 'index', at}` drops the first `at` observations; `{by: 'time', at}` drops
@@ -26443,7 +26502,7 @@ export function batchMeans(rep, opts) {
     warnings.push('Only ' + b + ' batches: with fewer than 10 batches, the interval rests on few degrees of freedom and the lag-one test has little power.');
   }
   if (test.flag) {
-    warnings.push('The batch means show significant positive lag-one correlation (C = ' + fmt(test.C) + ', p = ' + fmt(test.p) + '); larger batches are needed before the interval can be trusted.');
+    warnings.push('The batch means show significant positive lag-one correlation (C = ' + fmt(test.C) + ', ' + (test.p < 0.001 ? 'p < 0.001' : 'p = ' + fmt(test.p)) + '); larger batches are needed before the interval can be trusted.');
   }
   if (!byTime && leftover.n > 0) {
     warnings.push('The last ' + leftover.n + (leftover.n === 1 ? ' observation does' : ' observations do') + ' not fill a batch and ' + (leftover.n === 1 ? 'is' : 'are') + ' excluded.');
@@ -26472,7 +26531,7 @@ export function batchMeans(rep, opts) {
  * observation.
  *
  * Time-persistent: each replication's kept trajectory covers [s, E], where s is its first kept
- * record time (the cut time when cut by time, since the state in force there is carried) and E is
+ * record time (the cut time when cut by time, because the state in force there is carried) and E is
  * endTime or, when endTime is null, its last record time. The first trajectory keeps its own times;
  * every later one is shifted so its s lands where the previous one ended, and so the state at a
  * join jumps to the next run's first state. Each entry of `joins` is a join time on that timeline,
@@ -26523,7 +26582,7 @@ export function concatenateReps(reps, kind, truncate, endTime) {
 /**
  * Resamples a time-persistent trajectory onto `steps` equal intervals of [start, end]: each value
  * is the time average of the trajectory over its interval, as alignByTime computes for one bin. A
- * series on equal time steps is what an autocorrelation of time-persistent output needs, since the
+ * series on equal time steps is what an autocorrelation of time-persistent output needs because the
  * records themselves arrive at uneven times.
  * @param {ArrayLike<number>} t record times, ascending
  * @param {ArrayLike<number>} v record values
@@ -26591,7 +26650,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     const n = v.length;
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
-    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, so there is no shape to test')); continue; }
+    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, and so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;
@@ -26744,7 +26803,7 @@ export function datasetFiles(ds) {
 
 /** The explanation of the data files, for a details block under the row. */
 export const DATA_FILES_HELP =
-  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
+  '<p><strong>Observations CSV</strong>: every observation with its replication id and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
   '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
   '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
   '<p><strong>Pilot-ready CSV</strong>: one column of replication outcomes under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
@@ -27777,7 +27836,7 @@ export function sequence(fig, ys, o = {}) {
   if (!fig.sy) fig.y(extent(ys), { pad: 0.04, nice: true });
   ensureAxes(fig, o, { xLabel: fig.opts.xLabel || (o.xs ? 'Time' : 'Observation') });
   const c = col(o.color, '--est');
-  // Observations that happened one at a time are drawn as dots, since a
+  // Observations that happened one at a time are drawn as dots because a
   // line between them would show values that never occurred; past the
   // point cap the series falls back to the thinned line.
   if (o.marks === 'points' && ys.length <= POINT_CAP) {
@@ -28516,7 +28575,7 @@ export function figureToSvgString(fig) {
 
 /**
  * Rasterizes a figure to a PNG blob at `scale` (default devicePixelRatio,
- * so a phone gets a file as sharp as its own screen).
+ * and so a phone gets a file as sharp as its own screen).
  * @param {Figure} fig
  * @param {number} [scale]
  * @returns {Promise<Blob>}
@@ -29674,7 +29733,7 @@ function optionLabel(ds) {
 /**
  * Fills a <select> with the loaded datasets that pass `filter` and keeps it
  * in sync on every 'datasets' event, preserving the chosen dataset while it
- * still exists. When the chosen dataset disappears the select moves to the
+ * still exists. When the chosen dataset disappears, the select moves to the
  * placeholder (or the first dataset) and fires its own 'change' event, and
  * so the page's change handler sees it.
  * @param {HTMLSelectElement} selectEl
@@ -29798,7 +29857,7 @@ export function unitLine(ds) {
   if (ds.kind === 'reps') detail = 'one value per replication';
   else if (ds.kind === 'time') detail = 'replication time averages of ' + plural(nObs, 'record');
   else detail = 'replication means of ' + plural(nObs, 'observation');
-  if (R === 1 && ds.kind !== 'reps') detail += '; one replication gives one estimate, and an interval needs at least two';
+  if (R === 1 && ds.kind !== 'reps') detail += '; one replication gives one outcome, and an interval needs at least two';
   el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> R = ' + plural(R, 'replication') + ' (' + esc(detail) + ')';
   return el;
 }

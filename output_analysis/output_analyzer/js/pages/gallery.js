@@ -1,7 +1,8 @@
 // A page reachable only at #gallery that draws every plot type and every
 // shared widget from synthetic data, so that the figure builder can be checked in
 // a browser at any width. It has no link in the page navigation and no entry
-// in the page menu.
+// in the page menu, and it draws nothing until it is first shown, and so a
+// visit that never opens it carries none of its figures.
 
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
@@ -74,7 +75,13 @@ function block(root, heading, note) {
  * Renders every plot type and shared widget into the gallery section.
  * @param {HTMLElement} root
  */
+let galleryRoot = null, drawn = false;
+
 export function render(root) {
+  galleryRoot = root;
+}
+
+function draw(root) {
   root.innerHTML = '<h2>' + title + '</h2><p class="lede">Every figure type and shared widget, drawn from seeded synthetic data. Hover or tap a plot for its readout; drag the dashed line in the warm-up plot.</p>';
   const u = rng(20261002);
 
@@ -228,7 +235,11 @@ export function render(root) {
   legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }, { swatch: 'line', color: '--ok', label: 'batch mean (' + nb + ' batches of ' + size + ')' }, { swatch: 'dash', color: '--muted', label: 'batch boundary' }]);
 }
 
-/** Called each time the gallery is shown. */
-export function onShow() {}
+/** Called each time the gallery is shown; the first time, it draws. */
+export function onShow() {
+  if (drawn || !galleryRoot) return;
+  drawn = true;
+  draw(galleryRoot);
+}
 
 export default { id, title, render, onShow };

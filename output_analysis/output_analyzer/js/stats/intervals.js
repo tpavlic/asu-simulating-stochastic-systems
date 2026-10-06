@@ -39,7 +39,7 @@ function tCritical(p, df, z) {
  * smallest n ≥ 2 with t_{1−α/2, n−1} · sd / sqrt(n) ≤ h, where h = target, or
  * target · |mean| when relative. The search starts at the normal approximation
  * ceil((z · sd / h)²) and steps, which is valid because the half-width is decreasing
- * in n: up until the inequality holds, then down while it still holds.
+ * in n: up until the inequality holds, and then down while it still holds.
  * @param {{sd: number, level?: number, target: number, relative?: boolean, mean?: number}} o
  * @returns {{n: number|null, hwAtN: number, iterations: number, h: number}} n is null
  *   when h ≤ 0, when sd is not a finite nonnegative number, or when the answer would

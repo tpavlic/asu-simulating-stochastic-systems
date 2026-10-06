@@ -224,7 +224,7 @@ export function render(rootEl) {
 
     '<div class="sec" id="ss-warm" data-section="warmup">' +
       '<div class="sec-hd">Warm-up and truncation</div>' +
-      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each time bin or observation index, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one, or both.</p>' +
+      '<p class="exp-note">The plot averages in two directions. The ensemble average takes, at each time bin or observation index, the mean across the replications, which removes the noise that differs from run to run; the moving average then smooths that curve over time. Read either one or both.</p>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-grp"><span class="ctrl-lbl">' + tipSpan('Align replications', TIP.align) + '</span>' +
           '<span class="seg" role="group" aria-label="Align replications">' +
@@ -301,10 +301,10 @@ export function render(rootEl) {
   el.lumpBtns = Array.from(root.querySelectorAll('[data-lump]'));
 
   const warmSec = root.querySelector('#ss-warm');
-  warmSec.appendChild(details('Why truncate, and why not compute the cut',
+  warmSec.appendChild(details('Why truncate and why not compute the cut',
     '<p>A run that starts empty and idle climbs toward its long-run behavior over its first stretch. Averaging those early observations in with the rest pulls the estimate toward the starting state; this is initialization bias, and deleting the warm-up removes it.</p>' +
     '<p>The average across replications is noisy, and the moving average smooths that noise so the trend shows. Place the cut where the moving average has leveled off, and lean toward cutting late: deleting too little leaves the bias in, whereas deleting too much leaves fewer observations.</p>' +
-    '<p>The cumulative average is drawn for contrast. With several replications it is the cumulative average of the ensemble average, which is the same curve as the average across replications of each replication’s own cumulative average when the replications are of equal length. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
+    '<p>The cumulative average is drawn for contrast. With several replications, it is the cumulative average of the ensemble average, which is the same curve as the average across replications of each replication’s own cumulative average when the replications are of equal length. It carries the early observations along forever and levels off much later than the moving average, which makes it a poor guide to the cut.</p>' +
     '<p>Automatic rules for the cut exist, but each is a rule of thumb that a slow drift or a noisy series can fool. The plot shows what such a rule only summarizes, and so the decision should rest on the plot.</p>'));
   root.querySelector('#ss-batch').appendChild(details('The limits of batching',
     '<p>Batch means treat each batch average as one observation. When the batches are long compared with how far the correlation in the series reaches, the batch means are nearly independent and nearly normal, and the t interval on them is close to right.</p>' +
@@ -821,7 +821,7 @@ function drawWarm(computed) {
     const lo = fixed(W.endLo, W.dec), hi = fixed(W.endHi, W.dec);
     el.wwarn.appendChild(notice('warn', 'The replications end at different times, from ' + lo + ' to ' + hi + ', and so past time ' + lo + ' the ensemble average uses only the runs still going.' +
       (ds.kind === 'tally'
-        ? ' A run of a fixed number of observations ends late when its arrivals were sparse, and those are the runs with the least congestion, and so the curve falls there for that reason alone. Read it only to time ' + lo + ', or align by observation index.'
+        ? ' A run of a fixed number of observations ends late when its arrivals were sparse, which makes it one of the least congested runs, and so the curve falls there for that reason alone. Read it only to time ' + lo + ', or align by observation index.'
         : ' Read the curve only to time ' + lo + ', or give the dataset an end time on the Import page so that every run covers the same span.')));
   }
   warmFig.render(f => {
@@ -1285,7 +1285,7 @@ function drawBatch() {
     ? 'Each solid segment is one batch’s time average, drawn across its interval of simulation time.'
     : 'Each solid segment is one batch’s mean, drawn across the observations it averages.') +
     (S.excludeTo != null ? ' The shaded stretch before the cut is excluded by truncation and drawn in gray.' : '') +
-    (src.lumped ? ' Each replication’s warm-up was cut before the replications were joined, and the dotted lines mark the joins.' : '') +
+    (src.lumped ? (cut > 0 ? ' Each replication’s warm-up was cut before the replications were joined, and the dotted lines mark the joins.' : ' The dotted lines mark the joins between replications.') : '') +
     (left ? ' The stretch past the last boundary fills no batch and is excluded.' : '');
 
   const rows = res.batches.map((b, k) => byTime

@@ -601,7 +601,7 @@ function buildDistribution(api, { ds, estF }) {
   if (usePooled) {
     caption(sec, 'Each bar counts the pooled observations in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
   } else {
-    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These estimates, one per replication, are the values every interval on the other pages is built from.');
+    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These outcomes, one per replication, are the values every interval on the other pages is built from.');
   }
 }
 
@@ -614,7 +614,7 @@ function buildBox(api, { ds, estF }) {
     [{ swatch: 'bar', color: '--est', label: 'box from q1 to q3, median line, whiskers to 1.5 IQR' }]
       .concat(st.outliers.length ? [{ swatch: 'hollow', color: '--est', label: 'outcome beyond a whisker' }] : [])
       .concat([{ swatch: 'diamond', color: '--truth', label: 'mean' }]));
-  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' outcomes with the median inside it, and each whisker reaches the most extreme estimate within 1.5 box widths of the box.');
+  caption(sec, 'The box spans the middle half of the ' + intl(estF.length) + ' outcomes with the median inside it, and each whisker reaches the most extreme outcome within 1.5 box widths of the box.');
 }
 
 // ── One replication ─────────────────────────────────────────────────────
@@ -667,7 +667,7 @@ function fenceCaption(fc, time) {
   const where = fc.by === 'time' ? 'time ' + num(fc.fence) : 'observation ' + intl(fc.fence);
   return ' The gray stretch before the fence at ' + where + ' is what the truncation that made this dataset deleted, drawn from “' + esc(fc.base.name) +
     '”; it is not part of this dataset' + (time ? '' : ', and the lag plot and correlogram below leave it out') +
-    '. The fence is moved, and a new dataset saved, on the <a href="#steady/warmup">Steady State page</a>.';
+    '. Move the fence and save a new dataset on the <a href="#steady/warmup">Steady State page</a>.';
 }
 
 function buildSequence(api, { ds }) {
@@ -703,7 +703,7 @@ function buildSequence(api, { ds }) {
         sequence(f, s.ys, { xs: s.xs, width: 1.4 });
       }, legendItems);
     caption(sec, 'Each value holds from its record time until the next record' +
-      (ds.endTime != null ? ', and the last until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
+      (ds.endTime != null ? '; the last holds until the end time ' + num(ds.endTime) + '.' : '; with no end time given, the last record holds for no time.') +
       ' The replication’s outcome weights each value by how long it held.' + (whole ? fenceCaption(fc, true) : CUT_POINTER));
   } else {
     const useT = rep.t && xMode === 'time';
@@ -821,7 +821,7 @@ function buildLag(api, { ds }) {
   const cap = caption(sec, '');
   const setCap = () => {
     const inside = Math.abs(r[k]) <= band;
-    cap.innerHTML = 'The lag plot pairs observation i with observation i + ' + intl(k) + '. The autocorrelation at lag ' + intl(k) + ' is ' + num(r[k], 3) + ', from ' + intl(n - k) + ' pairs, ' + (inside ? 'inside' : 'outside') + ' the ±2/√n band. Points that hug the identity line, and autocorrelations outside the band, mark observations correlated with their neighbors. A t interval over these observations would treat them as independent and come out too narrow.';
+    cap.innerHTML = 'The lag plot pairs observation i with observation i + ' + intl(k) + '. The autocorrelation at lag ' + intl(k) + ' is ' + num(r[k], 3) + ', from ' + intl(n - k) + ' pairs, ' + (inside ? 'inside' : 'outside') + ' the ±2/√n band. Points that hug the identity line and autocorrelations outside the band mark observations correlated with their neighbors. A t interval over these observations would treat them as independent and come out too narrow.';
   };
   setCap();
   const spin = spinner(row.querySelector('#ex-lag'), { min: 1, max: L, step: 1, onChange: v => setLag(v) });
@@ -944,7 +944,7 @@ function buildNormality(api, { ds, estF }) {
     ]));
   }
 
-  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end a heavier lower tail; an S through the line marks lighter tails.' : '';
+  const tailHint = qAll.sample.length >= 5 ? ' Points that bend above the line at the right end mark a heavier upper tail than a normal’s, and points that bend below it at the left end mark a heavier lower tail; an S through the line marks lighter tails.' : '';
   if (usePooled) {
     caption(sec, 'The sorted ' + esc(what) + ' against the standard normal quantiles' + (thinned ? ', with ' + intl(QQ_CAP) + ' of the ' + intl(total) + ' plotted, evenly spaced through the sorted order' : '') + '; the line passes through the quartiles.' + tailHint +
       ' Pooled observations come from within runs and are correlated with their neighbors, and so no test is reported on them: the Shapiro–Wilk test assumes independent values, which the replication outcomes are and the observations are not.');
@@ -968,7 +968,7 @@ function buildSpread(api, { ds }) {
   const sec = api.sec;
   const level = state.settings.base, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
-  sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each estimate’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
+  sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   const stored = state.getPick(id, 'spread');
   const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
@@ -992,8 +992,8 @@ function buildSpread(api, { ds }) {
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
   caption(sec, rejects
-    ? 'At this level the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
-    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications the test has little power, and so this is a check, not a proof.');
+    ? 'At this level, the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.');
 }
 
 export default { id, title, sections, render, onShow };

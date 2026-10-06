@@ -280,7 +280,7 @@ export function truncateDataset(ds, { by, at }) {
  * on that run that yields this dataset (0 when base is the dataset itself),
  * and `by` how it was cut, or null. A chain of cuts is followed while each
  * link is loaded, keeps the kind, and cuts the same way as the first: index
- * cuts add up, and time cuts are absolute, so the latest one stands.
+ * cuts add up, and time cuts are absolute, and so the latest one stands.
  * @param {object} ds
  * @param {(id: string) => object|undefined} lookup a dataset by id
  * @returns {{ base: object, fence: number, by: ('index'|'time')|null }}

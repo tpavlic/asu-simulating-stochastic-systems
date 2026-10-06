@@ -46,7 +46,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     const n = v.length;
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
-    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, so there is no shape to test')); continue; }
+    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, and so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;

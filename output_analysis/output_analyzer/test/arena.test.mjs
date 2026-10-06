@@ -122,7 +122,7 @@ test('counter1.dat: type 206, the running count as a step function from 0, and t
   assert.ok(ds.source.notes.some(n => /running count/.test(n)));
   const fc = arenaFinalCounts(d, { file: 'counter1.dat' });
   assert.equal(fc.kind, 'reps');
-  assert.equal(fc.name, 'Counter 1, final count');
+  assert.equal(fc.name, 'Counter 1 (final count)');
   assert.deepEqual(vec(repEstimates(fc)), [10, 10, 10]);
   assert.ok(fc.source.notes.some(n => /page’s own/.test(n)));
 });

@@ -760,7 +760,7 @@ export function sequence(fig, ys, o = {}) {
   if (!fig.sy) fig.y(extent(ys), { pad: 0.04, nice: true });
   ensureAxes(fig, o, { xLabel: fig.opts.xLabel || (o.xs ? 'Time' : 'Observation') });
   const c = col(o.color, '--est');
-  // Observations that happened one at a time are drawn as dots, since a
+  // Observations that happened one at a time are drawn as dots because a
   // line between them would show values that never occurred; past the
   // point cap the series falls back to the thinned line.
   if (o.marks === 'points' && ys.length <= POINT_CAP) {
@@ -1499,7 +1499,7 @@ export function figureToSvgString(fig) {
 
 /**
  * Rasterizes a figure to a PNG blob at `scale` (default devicePixelRatio,
- * so a phone gets a file as sharp as its own screen).
+ * and so a phone gets a file as sharp as its own screen).
  * @param {Figure} fig
  * @param {number} [scale]
  * @returns {Promise<Blob>}

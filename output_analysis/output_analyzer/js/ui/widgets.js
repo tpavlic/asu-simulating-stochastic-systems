@@ -121,7 +121,7 @@ function optionLabel(ds) {
 /**
  * Fills a <select> with the loaded datasets that pass `filter` and keeps it
  * in sync on every 'datasets' event, preserving the chosen dataset while it
- * still exists. When the chosen dataset disappears the select moves to the
+ * still exists. When the chosen dataset disappears, the select moves to the
  * placeholder (or the first dataset) and fires its own 'change' event, and
  * so the page's change handler sees it.
  * @param {HTMLSelectElement} selectEl
@@ -245,7 +245,7 @@ export function unitLine(ds) {
   if (ds.kind === 'reps') detail = 'one value per replication';
   else if (ds.kind === 'time') detail = 'replication time averages of ' + plural(nObs, 'record');
   else detail = 'replication means of ' + plural(nObs, 'observation');
-  if (R === 1 && ds.kind !== 'reps') detail += '; one replication gives one estimate, and an interval needs at least two';
+  if (R === 1 && ds.kind !== 'reps') detail += '; one replication gives one outcome, and an interval needs at least two';
   el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> R = ' + plural(R, 'replication') + ' (' + esc(detail) + ')';
   return el;
 }

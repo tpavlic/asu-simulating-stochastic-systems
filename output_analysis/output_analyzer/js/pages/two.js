@@ -285,7 +285,7 @@ const PLAN_CUR = 'Power at the current R';
 const PLAN_HEADERS = ['mode', 'target', 'n needed', 'half-width or power at n', 'additional replications'];
 const PLAN_WHY =
   '<p>A half-width target sets how precisely a mean, or a difference of means, is estimated. A power target sets how reliably a shift of a given size would be detected by a two-sided test at α = 1 − the confidence level.</p>' +
-  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
+  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
 
 // The card's markup: its heading, the mode switch, and the two panes, each
@@ -552,7 +552,7 @@ function drawPlan() {
 }
 
 // The note under a Wilcoxon result on how the planning card relates to it.
-const NP_PLAN = 'Under the Wilcoxon procedures the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of their efficiency relative to the t under normal data (about 5% more replications); under heavy tails they need fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedures, the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of their efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer.';
 
 // What a Wilcoxon result's p-value and interval rest on, for its card notes.
 function npBasis(r) {
@@ -577,7 +577,7 @@ function renderIndependent(res, notes, d, level) {
     s.appendChild(cardRow([
       oneLine(card('Median A', v(mA && mA.median), d ? esc(d.dsA.name) : 'design A')),
       oneLine(card('Median B', v(mB && mB.median), d ? esc(d.dsB.name) : 'design B')),
-      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate of how far A sits above B: the median of every difference between one A estimate and one B estimate.">Shift A − B</span>', v(rs && rs.estimate), 'Hodges–Lehmann'),
+      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate of how far A sits above B: the median of every difference between one A outcome and one B outcome.">Shift A − B</span>', v(rs && rs.estimate), 'Hodges–Lehmann'),
       card('<span class="tip" tabindex="0" data-tip="The Mann–Whitney count: the number of (A, B) pairs in which the A outcome is the larger, R_A·R_B/2 when the two designs are alike.">W</span>', v(rs && rs.W), 'Mann–Whitney count'),
       card('Two-sided p', rs ? pValue(rs.p) : dash, rs ? npBasis(rs) : 'Wilcoxon rank-sum test'),
       wide(card(L + ' interval for the shift', rs ? interval(rs.lo, rs.hi) : dash, rs ? npLevelNote(rs, L) : 'Hodges–Lehmann')),
@@ -611,7 +611,7 @@ function renderIndependent(res, notes, d, level) {
   // The checks follow a parametric result only: the Wilcoxon procedures assume no normality.
   if (d && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base, pooled,
     procedure: pooled ? 'the pooled t test' : 'Welch’s test',
-    declared: 'between the two designs cannot be checked from the data and is instead assumed when using ' + (pooled ? 'the pooled t test' : 'Welch’s test') + '; it is what the Independent setting declares.' }));
+    declared: 'between the two designs cannot be checked from the data, and ' + (pooled ? 'the pooled t test' : 'Welch’s test') + ' assumes it; it is what the Independent setting declares.' }));
 
   const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
@@ -680,7 +680,7 @@ function renderIndependent(res, notes, d, level) {
     : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
-    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data and is instead assumed when using the F ratio; it is what the Independent setting declares.' }));
+    procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
   vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, on the checks line above and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
 
   if (!w) {
@@ -696,7 +696,7 @@ function renderIndependent(res, notes, d, level) {
     provenance: prov,
     tables: [{
       name: 'Rank-sum comparison (Wilcoxon)',
-      headers: ['design A', 'design B', 'R_A', 'R_B', 'median A', 'median B', 'shift A - B (Hodges-Lehmann)', 'W', 'p (two-sided)', 'lower', 'upper', 'level', 'basis'],
+      headers: ['design A', 'design B', 'R_A', 'R_B', 'median A', 'median B', 'shift A − B (Hodges–Lehmann)', 'W', 'p (two-sided)', 'lower', 'upper', 'level', 'basis'],
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, summary(d.eA.v).median, summary(d.eB.v).median, rs.estimate, rs.W, rs.p, rs.lo, rs.hi, rs.exact ? rs.achieved : level, npBasis(rs)]]
     }],
     summaryHtml: '<p>Wilcoxon rank-sum comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): shift A − B = ' + num(rs.estimate) +
@@ -1035,7 +1035,7 @@ function renderPaired(res, notes, d, level) {
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
   if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
     procedure: 'the paired t test',
-    declared: 'between pairs cannot be checked from the data and is instead assumed when using the paired t test; the pairing within each replication is what the Paired setting declares.' }));
+    declared: 'between pairs cannot be checked from the data, and the paired t test assumes it; the pairing within each replication is what the Paired setting declares.' }));
 
   const f = sec('Paired differences');
   res.appendChild(f);
@@ -1075,7 +1075,7 @@ function renderPaired(res, notes, d, level) {
     provenance: provenance(d, level, true, d.match.by, unmatched),
     tables: [np ? {
       name: 'Signed-rank comparison (Wilcoxon)',
-      headers: ['design A', 'design B', 'pairs', 'pseudo-median of A - B (Hodges-Lehmann)', 'V', 'zeros dropped', 'p (two-sided)', 'lower', 'upper', 'level', 'basis', 'r'],
+      headers: ['design A', 'design B', 'pairs', 'pseudo-median of A − B (Hodges–Lehmann)', 'V', 'zeros dropped', 'p (two-sided)', 'lower', 'upper', 'level', 'basis', 'r'],
       rows: [[d.dsA.name, d.dsB.name, pr.n, sr.estimate, sr.V, sr.zeros, sr.p, sr.lo, sr.hi, sr.exact ? sr.achieved : level, npBasis(sr), pr.r]]
     } : {
       name: 'Paired comparison',
@@ -1150,12 +1150,12 @@ export function render(root) {
   const planSec = root.querySelector('#two-plan');
   planSec.innerHTML = planMarkup('two',
     '<div class="ctrl-row">' +
-      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like the interval for the difference A − B to have, in the response’s units. Under common random numbers the paired plan uses the standard deviation of the differences, which is why pairing needs fewer replications when r is large.">Target half-width</span></span>' +
+      '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The half-width you would like the interval for the difference A − B to have, in the response’s units. Under common random numbers, the paired plan uses the standard deviation of the differences, which is why pairing needs fewer replications when r is large.">Target half-width</span></span>' +
         '<span class="plan-hw-host"></span><span class="ctrl-note plan-hw-unit"></span></span>' +
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>',
     powerControls('two', 'Difference to detect δ',
-      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers the paired plan uses the standard deviation of the differences.'));
+      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
     if (plan.mode === b.dataset.plan) return;
@@ -1170,7 +1170,7 @@ export function render(root) {
     'Var(D̄) = (σ<sub>A</sub>² + σ<sub>B</sub>² − 2ρσ<sub>A</sub>σ<sub>B</sub>)/n, and so the larger ρ is, the narrower the paired interval.</p>' +
     '<p>Which analysis applies is fixed by how the replications were run, not by the data. Replications run under common random numbers are pairs, and they are compared as pairs whatever r turns out to be: the two-sample t procedures, Welch’s and the pooled, assume two independent samples, and these are not. ' +
     'The correlation card then reports how much the pairing gained, not whether to pair; a negative r says the common random numbers did not do their job, which is a reason to look at how the runs were made, not to unpair them. Replications run on independent streams are two independent samples; matching them by position pairs nothing, gives r near 0, and gives up degrees of freedom.</p>' +
-    '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so when the pairs share no variation its interval is a little wider than an independent analysis of the same numbers would give. ' +
+    '<p>The paired t uses n − 1 degrees of freedom instead of about 2n − 2, and so, when the pairs share no variation, its interval is a little wider than an independent analysis of the same numbers would give. ' +
     'That is the reason not to pair independent runs, not a reason to unpair correlated ones.</p>' +
     '<p>Common random numbers drive replication i of both designs with the same random inputs, which makes the two outcomes positively correlated by design. That is why such runs are analyzed as pairs.</p>');
   // The note on pairing sits in the configuration card, under the switch it explains.

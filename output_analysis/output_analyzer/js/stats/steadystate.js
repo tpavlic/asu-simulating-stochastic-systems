@@ -293,7 +293,7 @@ function fmt(x) {
 }
 
 /**
- * Batch means on one replication: truncation, then batches, then a t interval on the batch means
+ * Batch means on one replication: truncation, batches, and then a t interval on the batch means
  * with the lag-one autocorrelation and Fishman's test.
  *
  * Truncation: `{by: 'index', at}` drops the first `at` observations; `{by: 'time', at}` drops
@@ -399,7 +399,7 @@ export function batchMeans(rep, opts) {
     warnings.push('Only ' + b + ' batches: with fewer than 10 batches, the interval rests on few degrees of freedom and the lag-one test has little power.');
   }
   if (test.flag) {
-    warnings.push('The batch means show significant positive lag-one correlation (C = ' + fmt(test.C) + ', p = ' + fmt(test.p) + '); larger batches are needed before the interval can be trusted.');
+    warnings.push('The batch means show significant positive lag-one correlation (C = ' + fmt(test.C) + ', ' + (test.p < 0.001 ? 'p < 0.001' : 'p = ' + fmt(test.p)) + '); larger batches are needed before the interval can be trusted.');
   }
   if (!byTime && leftover.n > 0) {
     warnings.push('The last ' + leftover.n + (leftover.n === 1 ? ' observation does' : ' observations do') + ' not fill a batch and ' + (leftover.n === 1 ? 'is' : 'are') + ' excluded.');
@@ -428,7 +428,7 @@ export function batchMeans(rep, opts) {
  * observation.
  *
  * Time-persistent: each replication's kept trajectory covers [s, E], where s is its first kept
- * record time (the cut time when cut by time, since the state in force there is carried) and E is
+ * record time (the cut time when cut by time, because the state in force there is carried) and E is
  * endTime or, when endTime is null, its last record time. The first trajectory keeps its own times;
  * every later one is shifted so its s lands where the previous one ended, and so the state at a
  * join jumps to the next run's first state. Each entry of `joins` is a join time on that timeline,
@@ -479,7 +479,7 @@ export function concatenateReps(reps, kind, truncate, endTime) {
 /**
  * Resamples a time-persistent trajectory onto `steps` equal intervals of [start, end]: each value
  * is the time average of the trajectory over its interval, as alignByTime computes for one bin. A
- * series on equal time steps is what an autocorrelation of time-persistent output needs, since the
+ * series on equal time steps is what an autocorrelation of time-persistent output needs because the
  * records themselves arrive at uneven times.
  * @param {ArrayLike<number>} t record times, ascending
  * @param {ArrayLike<number>} v record values

@@ -26,9 +26,9 @@ const FORMAT_LABEL = {
 };
 
 const KINDS = [
-  { kind: 'tally', label: 'Observations within replications', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
-  { kind: 'time', label: 'Time-persistent state', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s outcome is the time-weighted mean.' },
-  { kind: 'reps', label: 'One value per replication', tip: 'Each value is already one replication’s summary, such as one day’s average wait.' }
+  { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
+  { kind: 'time', label: 'Time-persistent', tip: 'Each value is a state, such as the number in queue, that holds from its time until the next record. A replication’s outcome is the time-weighted mean.' },
+  { kind: 'reps', label: 'Replication values', tip: 'Each value is already one replication’s summary, such as one day’s average wait.' }
 ];
 
 let rootEl = null;
@@ -74,7 +74,13 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes four forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; one bare column of values; and the binary .dat files Arena writes for its Output Analyzer (and the .flt and .fst files that analyzer writes), whose header already says what the values are, so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
+    '<p class="lede">Load a bundled example or your own simulation output from a file or from pasted text. Every dataset holds one of three kinds of values, and its kind decides how a replication’s outcome is computed:</p>' +
+    '<ul class="im-kinds">' +
+      '<li><span class="kind-badge">' + KIND_LABEL.tally + '</span> one observation per event within a run, such as each customer’s wait; a replication’s outcome is the mean of its observations.</li>' +
+      '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> a state recorded each time it changes, such as the number in queue, each value holding until the next record; a replication’s outcome is the time-weighted mean.</li>' +
+      '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> one summary per run, such as each day’s average wait, which is that replication’s outcome.</li>' +
+    '</ul>' +
+    '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
       '<div id="im-list"></div>' +
@@ -90,12 +96,21 @@ export function render(root) {
         '</div>' +
         '<p class="im-ex-desc" id="im-ex-desc"></p>' +
       '</div>' +
+      '<div class="im-block" id="im-formats" tabindex="-1">' +
+        '<div class="ctrl-grp-lbl">Text formats</div>' +
+        '<ul class="im-kinds im-fmts">' +
+          '<li><span class="kind-badge">' + KIND_LABEL.tally + '</span> two columns, time and value, with a row whose first value is −1 ending each replication; or columns under a header row, one of them headed <code>rep</code> (or <code>run</code>) to say which replication each row belongs to; or a single column, read as one replication.</li>' +
+          '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> the same two forms as a tally, with the time column required; the dialog takes an end time until which each replication’s last value holds.</li>' +
+          '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> a single column with one value per replication; or columns under a header row, each numeric column a response.</li>' +
+        '</ul>' +
+        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
+      '</div>' +
       '<div class="im-block">' +
         '<div class="ctrl-grp-lbl">From a file</div>' +
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
           '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text, or an Arena Output Analyzer .dat, .flt, or .fst file. Lines starting with # are read as comments.</div>' +
+          '<div class="ctrl-note im-drop-note">Text in one of the formats above, or an Arena Output Analyzer .dat, .flt, or .fst file.</div>' +
         '</div>' +
       '</div>' +
       '<div class="im-block">' +
@@ -122,10 +137,21 @@ export function render(root) {
     list: root.querySelector('#im-list')
   };
 
-  root.querySelector('#im-why').appendChild(details('Why the statistic type matters',
-    '<p>A tally records one value per event, such as each customer’s wait, and a replication’s outcome is the plain mean of its observations.</p>' +
-    '<p>A time-persistent state, such as the number in queue, is recorded only when it changes, and each value holds until the next record. Its replication outcome is the time-weighted mean, in which each value counts in proportion to how long it held. Averaging the recorded values instead would count a spike that lasted a second the same as a plateau that lasted an hour.</p>' +
-    '<p>One value per replication is a file that already holds one summary per run. Whatever the statistic type, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the estimates from independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
+  root.querySelector('#im-why').appendChild(details('Why the kind matters',
+    '<p>A time-persistent state is recorded only when it changes, and so its records say nothing about how long each value lasted until their times are read with them. Averaging the recorded values would count a spike that lasted a second the same as a plateau that lasted an hour; the time-weighted mean counts each value in proportion to how long it held.</p>' +
+    '<p>Whatever the kind, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the outcomes of independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
+
+  // The lede's link to the Text formats block scrolls there and moves focus
+  // there; it never changes the hash, which names only the page, and it stops
+  // the click before the page router, which would scroll back to the top.
+  root.querySelector('.im-jump').addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const box = root.querySelector('#im-formats');
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    box.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+    box.focus({ preventScroll: true });
+  });
 
   // Drop zone: files, or text dragged from another window.
   const drop = els.drop;
@@ -352,7 +378,7 @@ function mappingProblem() {
       if (j === m.time || j === m.rep || j === m.scenario) return 'The column ' + colName(sn, j) + ' is both a response and a role column.';
     }
   }
-  if (m.kind === 'time' && endTimeValue() === undefined) return 'The end time must be a number, or left blank.';
+  if (m.kind === 'time' && endTimeValue() === undefined) return 'The end time must be a number or left blank.';
   return null;
 }
 
@@ -434,7 +460,7 @@ function renderDialog() {
     html += roleSelect('im-time', 'Time column', sn.numericCols, m.time, true, 'The simulation time at which each value was recorded. A time-persistent state needs one; a tally may have one.');
   }
   if (sn.format === 'columns') {
-    html += roleSelect('im-rep', 'Replication column', allCols, m.rep, true, 'The column naming the replication each row belongs to. With none, the rows form one replication, or one replication per row for one value per replication.');
+    html += roleSelect('im-rep', 'Replication column', allCols, m.rep, true, 'The column naming the replication each row belongs to. With none, the rows form one replication; for one value per replication, each row is its own replication.');
     html += roleSelect('im-scen', 'Scenario column', allCols, m.scenario, true, 'The column naming the design or scenario. Each distinct value becomes its own dataset.');
   }
   html += '</div>';

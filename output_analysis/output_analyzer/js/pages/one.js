@@ -48,7 +48,7 @@ const override = new Set();
 // 't' for the t interval on the mean, 'np' for the Wilcoxon signed-rank
 // interval on the pseudo-median.
 let proc = 't';
-const NP_PLAN = 'Under the Wilcoxon procedure the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of its efficiency relative to the t under normal data (about 5% more replications); under heavy tails it needs fewer.';
+const NP_PLAN = 'Under the Wilcoxon procedure, the planning counts are the t plan inflated by π/3 ≈ 1.047, the reciprocal of its efficiency relative to the t under normal data (about 5% more replications); under heavy tails, it needs fewer.';
 
 // An interval or a pair of numbers takes a full row on a phone rather than
 // being cut short, before and after a result arrives alike.
@@ -90,7 +90,7 @@ const PLAN_CUR = 'Power at the current R';
 const PLAN_HEADERS = ['mode', 'target', 'n needed', 'half-width or power at n', 'additional replications'];
 const PLAN_WHY =
   '<p>A half-width target sets how precisely a mean, or a difference of means, is estimated. A power target sets how reliably a shift of a given size would be detected by a two-sided test at α = 1 − the confidence level.</p>' +
-  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
+  '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
 
 // The card's markup: its heading, the mode switch, and the two panes, each
@@ -248,13 +248,13 @@ export function render(rootEl) {
   const varSec = el('div', 'sec');
   varSec.hidden = true;
   varSec.appendChild(el('div', 'sec-hd', 'Interval on the variance'));
-  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too, and matters more.'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
   const vRow1 = el('div'), vRow2 = el('div');
   varSec.append(vRow1, vRow2, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
   varSec.appendChild(details('Why the variance interval is fragile',
     '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
-    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for estimates with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
+    '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for outcomes with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
   root.appendChild(varSec);
 
   // Figure.
@@ -515,7 +515,7 @@ function draw() {
   // The pooled override's own warning says what is wrong with it; the
   // checks run on replication outcomes only.
   els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
-    procedure: 'the t interval', declared: 'between replications cannot be checked from the data and is instead assumed when using the t interval; it holds when each replication ran on its own random streams.' })]));
+    procedure: 'the t interval', declared: 'between replications cannot be checked from the data, and the t interval assumes it; it holds when each replication ran on its own random streams.' })]));
   const note = pooled ? POOLED : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
@@ -529,7 +529,7 @@ function draw() {
     const basis = sr.exact ? 'exact distribution' : 'normal approximation';
     els.row3.replaceChildren(cardRow([
       wide(card(lvl(level) + ' interval for the pseudo-median', '[' + num(sr.lo) + ', ' + num(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
-      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of estimates, each estimate paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
+      card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of outcomes, each outcome paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
       wide(card('Basis', basis, sr.exact ? 'signed-rank distribution of n = ' + intl(s.n) : 'with continuity correction' + (sr.ties ? ', ties present' : '')))
     ]));
   } else {

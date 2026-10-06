@@ -569,7 +569,7 @@ export function nctCdf(t, df, ncp) {
  * below some threshold and true from it on (a half-width that shrinks with n, or a
  * power that grows with it). The search starts at a guess, such as a normal
  * approximation, and moves by doubling steps (up while the condition fails, down
- * while it holds) until it brackets the threshold, then bisects. That returns
+ * while it holds) until it brackets the threshold, and then bisects. That returns
  * exactly what stepping one integer at a time would, in a logarithmic number of
  * evaluations even when the guess is far off.
  * @param {(n: number) => boolean} ok monotone condition

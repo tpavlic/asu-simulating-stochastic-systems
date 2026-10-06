@@ -171,7 +171,7 @@ function endsNote(reps) {
 /**
  * Build a dataset from a parsed Arena file, treating each file type the way
  * the Output Analyzer does. A time-persistent file becomes a time-persistent
- * dataset: Arena closes every replication with a record at its end, so the
+ * dataset: Arena closes every replication with a record at its end, and so the
  * dataset carries no end time and each replication's last record holds for
  * no time, which makes every time average run over that replication's own
  * run. A counter file records the running count at each increment and is
@@ -215,8 +215,8 @@ export function arenaDataset(dat, opts = {}) {
     kind = 'time';
     reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
     notes.push((code === 207
-      ? 'A frequency statistic from an Arena output file, read as time-persistent data: the file holds its expression’s value over time, not the categories. '
-      : 'Time-persistent data from an Arena output file: ') +
+      ? 'A frequency statistic from an Arena output file, read as time-persistent data, because the file holds its expression’s value over time rather than the categories. '
+      : 'Time-persistent data from an Arena output file. ') +
       'Each record is the value from its time until the next record, and the replication’s last record is its closing value at the end of the run, which holds for no time.');
     const e = endsNote(reps); if (e) notes.push(e);
   } else if (code === 206) {
@@ -271,7 +271,7 @@ export function arenaFinalCounts(dat, opts = {}) {
   const notes = ['The count each replication of “' + stat + '” ended with, one value per replication. This summary is the page’s own; the Output Analyzer reads a counter only as a running count over time.'];
   const h = headerNote(dat); if (h) notes.push(h);
   return makeDataset({
-    name: opts.name != null ? opts.name : stat + ', final count',
+    name: opts.name != null ? opts.name : stat + ' (final count)',
     response: stat,
     kind: 'reps',
     reps: nonEmpty.map(r => ({ id: r.id, t: null, v: [r.v[r.v.length - 1]] })),

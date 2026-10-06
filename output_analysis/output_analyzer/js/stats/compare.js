@@ -58,7 +58,7 @@ export function welch(x, y, level) {
   const se = Math.sqrt(a + b);
   const diff = mean1 - mean2;
   // Two samples with no spread at all leave the Welch–Satterthwaite ratio
-  // 0/0; the difference is then known exactly, so the interval has no width,
+  // 0/0; the difference is then known exactly, and so the interval has no width,
   // and the test is decided by whether the two constants differ.
   if (se === 0) {
     const df = n1 + n2 - 2;
@@ -501,7 +501,7 @@ function fmtAlpha(alpha) {
   return String(Number(alpha.toPrecision(6)));
 }
 
-// Label for the g-th letter group: a–z, then A–Z, then a letter with a count.
+// Label for the g-th letter group: a–z, A–Z, and then a letter with a count.
 function letterLabel(g) {
   if (g < 26) return String.fromCharCode(97 + g);
   if (g < 52) return String.fromCharCode(65 + g - 26);

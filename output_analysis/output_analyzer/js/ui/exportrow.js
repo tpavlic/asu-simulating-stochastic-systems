@@ -112,7 +112,7 @@ export function datasetFiles(ds) {
 
 /** The explanation of the data files, for a details block under the row. */
 export const DATA_FILES_HELP =
-  '<p><strong>Observations CSV</strong>: every observation with its replication id, and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
+  '<p><strong>Observations CSV</strong>: every observation with its replication id and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
   '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
   '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
   '<p><strong>Pilot-ready CSV</strong>: one column of replication outcomes under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
