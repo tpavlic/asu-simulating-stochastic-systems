@@ -298,6 +298,47 @@ export function truncationView(ds, lookup) {
   return by ? { base, fence, by } : { base: ds, fence: 0, by: null };
 }
 
+/**
+ * The state of one time-persistent replication at each of ascending sample
+ * times: the value of the last record at or before the time, and null before
+ * the replication's first record or after its last, where nothing holds.
+ * @param {Replication} rep
+ * @param {ArrayLike<number>} times ascending
+ * @returns {(number|null)[]}
+ */
+export function sampleStep(rep, times) {
+  const t = rep.t, v = rep.v, n = v.length;
+  const out = new Array(times.length).fill(null);
+  if (!t || !n) return out;
+  let i = 0;
+  for (let k = 0; k < times.length; k++) {
+    const s = times[k];
+    if (s < t[0] || s > t[n - 1]) continue;
+    while (i + 1 < n && t[i + 1] <= s) i++;
+    out[k] = v[i];
+  }
+  return out;
+}
+
+/**
+ * A time-persistent dataset sampled on a time grid, every `step` from
+ * `start` up to `end` (included when it falls on the grid), one column per
+ * replication, with at most `max` sample times.
+ * @param {Dataset} ds
+ * @param {{ start: number, step: number, end: number, max?: number }} grid
+ * @returns {{ times: number[], columns: { id: string|number, values: (number|null)[] }[], capped: boolean }}
+ */
+export function sampleDataset(ds, { start, step, end, max = Infinity }) {
+  if (ds.kind !== 'time') throw new Error('Only a time-persistent dataset is sampled on a time grid.');
+  if (!(step > 0)) throw new Error('The sampling step must be positive.');
+  if (!(end >= start)) throw new Error('The grid ends before it starts.');
+  const want = Math.floor((end - start) / step + 1e-9) + 1;
+  const n = Math.min(want, max);
+  const times = [];
+  for (let k = 0; k < n; k++) times.push(start + k * step);
+  return { times, columns: ds.reps.map(r => ({ id: r.id, values: sampleStep(r, times) })), capped: n < want };
+}
+
 export function canInfer(ds) {
   const nEst = Array.from(repEstimates(ds)).filter(Number.isFinite).length;
   if (nEst >= 2) return { ok: true };

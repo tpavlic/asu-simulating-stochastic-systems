@@ -46,6 +46,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     const n = v.length;
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
+    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;
@@ -62,12 +63,16 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
   const vsets = varianceSets ? varianceSets.map(v => Array.from(v).filter(Number.isFinite)) : sets.map(st => Array.from(st.values).filter(Number.isFinite));
   if (pooled && vsets.length >= 2 && vsets.every(v => v.length >= 2)) {
     const lv = levene(vsets);
-    tested = true;
-    const bad = lv.p < alpha;
-    if (bad) warn = true;
-    html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', bad, true) + ' ' + verdict(bad, 'Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
-      (bad ? ' <b>(unequal variances detected)</b>' : '')) +
-      (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
+    if (Number.isFinite(lv.p)) {
+      tested = true;
+      const bad = lv.p < alpha;
+      if (bad) warn = true;
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', bad, true) + ' ' + verdict(bad, 'Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+        (bad ? ' <b>(unequal variances detected)</b>' : '')) +
+        (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
+    } else {
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: no spread within any group to compare') + '.';
+    }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);
   if (!tested) html = '<b>The assumptions could not be checked.</b> ' + html;

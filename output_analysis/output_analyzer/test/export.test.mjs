@@ -117,3 +117,11 @@ test('browser-only functions throw without a DOM', () => {
   assert.throws(() => downloadText('a.csv', 'x'), /browser/);
   assert.throws(() => downloadBlob('a.png', null), /browser/);
 });
+
+test('sampledCsv: a time column, one column per replication, empty where nothing holds', async () => {
+  const { sampledCsv } = await import('../js/io/export.js');
+  const ds = makeDataset({ name: 'q', kind: 'time', reps: [{ id: 1, t: [0, 2], v: [0, 1] }, { id: 'b', t: [1, 3], v: [7, 9] }] });
+  const sample = { times: [0, 1, 2, 3], columns: [{ id: 1, values: [0, 0, 1, null] }, { id: 'b', values: [null, 7, 7, 9] }] };
+  const text = sampledCsv(ds, sample, { dataset: 'q', form: 'sampled' });
+  assert.deepEqual(lines(text), ['# dataset: q', '# form: sampled', 'time,replication_1,replication_b', '0,0,', '1,0,7', '2,1,7', '3,,9']);
+});

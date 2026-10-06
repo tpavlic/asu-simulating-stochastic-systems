@@ -287,3 +287,17 @@ test('letterGroups on small hand cases', () => {
   assert.deepEqual(letterGroups(3, [[0, 2]]), ['a', 'ab', 'b']);
   assert.deepEqual(letterGroups(3, [[0, 1], [0, 2], [1, 2]]), ['a', 'b', 'c']);
 });
+
+test('welch: two samples without spread give an exact difference and a finite result', () => {
+  const same = welch([10.5, 10.5, 10.5], [10.5, 10.5, 10.5], 0.95);
+  assert.equal(same.se, 0);
+  assert.equal(same.df, 4);
+  assert.equal(same.hw, 0);
+  assert.equal(same.t, 0);
+  assert.equal(same.p, 1);
+  assert.deepEqual([same.lo, same.hi], [0, 0]);
+  const apart = welch([10, 10, 10], [7, 7, 7], 0.95);
+  assert.equal(apart.t, Infinity);
+  assert.equal(apart.p, 0);
+  assert.deepEqual([apart.lo, apart.hi], [3, 3]);
+});

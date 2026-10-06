@@ -9,7 +9,8 @@
 // the navigation.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations, truncationView } from '../data/model.js';
+import { repEstimates, datasetSummary, observations, truncationView, sampleDataset } from '../data/model.js';
+import { sampledCsv, downloadText } from '../io/export.js';
 import {
   summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
@@ -18,7 +19,7 @@ import { shapiroWilk, normalQQ } from '../stats/normality.js';
 import { levene } from '../stats/compare.js';
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
-  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
+  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
   card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
@@ -475,21 +476,100 @@ function rawTable(ds) {
   d.addEventListener('toggle', () => {
     if (!d.open || filled) return;
     filled = true;
-    const hasT = ds.reps.some(r => r.t);
-    let total = 0;
-    for (const r of ds.reps) total += r.v.length;
-    const rows = [];
-    outer: for (const r of ds.reps) {
-      for (let i = 0; i < r.v.length; i++) {
-        if (rows.length >= RAW_CAP) break outer;
-        rows.push('<tr><td>' + esc(r.id) + '</td>' + (hasT ? '<td>' + (r.t ? num(r.t[i], 8) : dash) + '</td>' : '') + '<td>' + num(r.v[i], 8) + '</td></tr>');
-      }
-    }
     const body = d.querySelector('.ex-raw-body');
-    body.innerHTML = '<p class="muted-line">' + (total > RAW_CAP ? 'Showing the first ' + intl(RAW_CAP) + ' of ' + intl(total) + ' rows.' : 'All ' + plural(total, 'row') + '.') + '</p>' +
-      '<div class="scroll-box"><table class="ptab"><thead><tr><th>Replication</th>' + (hasT ? '<th>Time</th>' : '') + '<th>Value</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+    if (ds.kind === 'time') timeTable(body, ds);
+    else body.innerHTML = recordedHtml(ds);
   });
   return d;
+}
+
+// Every record as it was read: replication, time where recorded, value.
+function recordedHtml(ds) {
+  const hasT = ds.reps.some(r => r.t);
+  let total = 0;
+  for (const r of ds.reps) total += r.v.length;
+  const rows = [];
+  outer: for (const r of ds.reps) {
+    for (let i = 0; i < r.v.length; i++) {
+      if (rows.length >= RAW_CAP) break outer;
+      rows.push('<tr><td>' + esc(r.id) + '</td>' + (hasT ? '<td>' + (r.t ? num(r.t[i], 8) : dash) + '</td>' : '') + '<td>' + num(r.v[i], 8) + '</td></tr>');
+    }
+  }
+  return '<p class="muted-line">' + (total > RAW_CAP ? 'Showing the first ' + intl(RAW_CAP) + ' of ' + intl(total) + ' rows.' : 'All ' + plural(total, 'row') + '.') + '</p>' +
+    '<div class="scroll-box"><table class="ptab"><thead><tr><th>Replication</th>' + (hasT ? '<th>Time</th>' : '') + '<th>Value</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+}
+
+// A time-persistent dataset, either as recorded or sampled on a time grid
+// with the replications side by side, which shows the step-function
+// convention as numbers: the value holds from its record until the next,
+// and nothing holds before a replication's first record or after its last.
+function timeTable(body, ds) {
+  const firsts = ds.reps.filter(r => r.t && r.t.length).map(r => r.t[0]);
+  const lasts = ds.reps.filter(r => r.t && r.t.length).map(r => r.t[r.t.length - 1]);
+  const tMin = firsts.length ? Math.min(...firsts) : 0, tMax = lasts.length ? Math.max(...lasts) : 1;
+  const span = Math.max(tMax - tMin, 1e-9);
+  const fine = niceStep(span, 200);
+  const dec = Math.max(0, -Math.floor(Math.log10(fine) + 1e-9));
+  const def = { mode: 'recorded', t0: Number(tMin.toFixed(dec)), dt: niceStep(span, 20), t1: Number(tMax.toFixed(dec)) };
+  const saved = state.getPick(id, 'raw:' + ds.id);
+  const g = Object.assign({}, def);
+  if (saved && typeof saved === 'object') {
+    if (saved.mode === 'grid' || saved.mode === 'recorded') g.mode = saved.mode;
+    for (const k of ['t0', 'dt', 't1']) if (Number.isFinite(saved[k])) g[k] = saved[k];
+    if (!(g.dt > 0) || !(g.t1 >= g.t0)) Object.assign(g, { t0: def.t0, dt: def.dt, t1: def.t1 });
+  }
+  const remember = () => state.setPick(id, 'raw:' + ds.id, { mode: g.mode, t0: g.t0, dt: g.dt, t1: g.t1 });
+
+  body.innerHTML =
+    '<div class="ctrl-row ex-raw-ctrl">' +
+      '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-raw-mode"><span class="tip" tabindex="0" data-tip="As recorded lists every record with its time. Sampled on a time grid reads the state at regular times with the replications side by side: each cell is the last record at or before that time, and a blank cell is a time before the replication’s first record or after its last, where nothing holds.">Show</span></label>' +
+        '<select id="ex-raw-mode"><option value="recorded">as recorded</option><option value="grid">sampled on a time grid</option></select></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-t0">From t₀</label><input type="text" id="ex-raw-t0" value="' + g.t0 + '"></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-dt">every Δt</label><input type="text" id="ex-raw-dt" value="' + g.dt + '"></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-t1">to</label><input type="text" id="ex-raw-t1" value="' + g.t1 + '"></span>' +
+      '<button type="button" class="xp-btn ex-raw-grid" id="ex-raw-csv">Download this table as CSV</button>' +
+    '</div>' +
+    '<div id="ex-raw-out"></div>';
+  registerTips(body);
+  const out = body.querySelector('#ex-raw-out');
+  const modeSel = body.querySelector('#ex-raw-mode');
+  modeSel.value = g.mode;
+
+  let sample = null;
+  const draw = () => {
+    body.querySelectorAll('.ex-raw-grid').forEach(e => { e.hidden = g.mode !== 'grid'; });
+    if (g.mode !== 'grid') { sample = null; out.innerHTML = recordedHtml(ds); return; }
+    sample = sampleDataset(ds, { start: g.t0, step: g.dt, end: g.t1, max: RAW_CAP });
+    const head = '<tr><th>Time</th>' + sample.columns.map(c => '<th>r = ' + esc(c.id) + '</th>').join('') + '</tr>';
+    const rows = sample.times.map((t, k) => '<tr><td>' + num(t, 8) + '</td>' +
+      sample.columns.map(c => '<td>' + (c.values[k] == null ? '' : num(c.values[k], 8)) + '</td>').join('') + '</tr>');
+    out.innerHTML = '<p class="muted-line">' + (sample.capped
+        ? 'Showing the first ' + intl(RAW_CAP) + ' sample times; a larger Δt shows the whole range.'
+        : plural(sample.times.length, 'sample time') + '.') +
+      ' Each cell is the state at that time, the last record at or before it; a blank cell is a time before the replication’s first record or after its last, where nothing holds.</p>' +
+      '<div class="scroll-box"><table class="ptab"><thead>' + head + '</thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  };
+  modeSel.addEventListener('change', () => { g.mode = modeSel.value; remember(); draw(); });
+  const spins = {};
+  for (const k of ['t0', 'dt', 't1']) {
+    spins[k] = spinner(body.querySelector('#ex-raw-' + k), {
+      min: k === 'dt' ? fine : -Infinity, step: fine, decimals: dec,
+      onChange: v => {
+        g[k] = v;
+        if (g.t1 < g.t0) { if (k === 't0') g.t1 = spins.t1.set(g.t0, false); else g.t0 = spins.t0.set(g.t1, false); }
+        remember(); draw();
+      }
+    });
+  }
+  body.querySelector('#ex-raw-csv').addEventListener('click', () => {
+    if (!sample) return;
+    downloadText(slug(ds.name) + '_sampled.csv', sampledCsv(ds, sample, {
+      dataset: ds.name, kind: KIND_LABEL[ds.kind], response: ds.response, replications: ds.reps.length,
+      form: 'sampled on a time grid', from: g.t0, 'every': g.dt, to: g.t1,
+      note: 'each cell is the last record at or before its time; an empty field is a time before the replication\u2019s first record or after its last'
+    }));
+  });
+  draw();
 }
 
 // ── Distribution of the outcomes ───────────────────────────────────────

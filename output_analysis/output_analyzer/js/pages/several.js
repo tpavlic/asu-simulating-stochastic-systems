@@ -859,7 +859,7 @@ function update() {
     // one design's outcomes at a time, and the F test's assumption is about
     // all the residuals together.
     // Kept folded away unless the check rejects, when it opens itself.
-    const swResid = resid.length >= 3 && resid.length <= 5000 ? shapiroWilk(resid) : null;
+    const swResid = resid.length >= 3 && resid.length <= 5000 && Math.min(...resid) < Math.max(...resid) ? shapiroWilk(resid) : null;
     const residBad = !!swResid && swResid.p < alpha;
     const fold = document.createElement('details');
     fold.className = 'why' + (residBad ? ' issues' : '');

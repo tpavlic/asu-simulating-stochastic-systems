@@ -78,6 +78,23 @@ export function observationsCsv(ds, provenance, opts = {}) {
 }
 
 /**
+ * A time-persistent dataset sampled on a time grid (see `sampleDataset`):
+ * a time column, then one column per replication headed by its id, with an
+ * empty field where nothing holds.
+ * @param {import('../data/model.js').Dataset} ds
+ * @param {{ times: number[], columns: { id: string|number, values: (number|null)[] }[] }} sample
+ * @param {Record<string, unknown>} [provenance]
+ * @returns {string}
+ */
+export function sampledCsv(ds, sample, provenance) {
+  const rows = [['time'].concat(sample.columns.map(c => 'replication_' + c.id))];
+  for (let k = 0; k < sample.times.length; k++) {
+    rows.push([sample.times[k]].concat(sample.columns.map(c => c.values[k])));
+  }
+  return withProvenance(provenance, rows);
+}
+
+/**
  * One row per replication: id, observation count, and the replication's
  * estimate (time weighted for time-persistent data), plus sd, min, and max
  * for tally data. A one-observation replication has a blank sd.

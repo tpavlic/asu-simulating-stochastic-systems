@@ -165,3 +165,27 @@ test('canInfer needs two replication estimates', () => {
   assert.equal(reps1.ok, false);
   assert.match(reps1.reason, /at least two/);
 });
+
+test('sampleStep and sampleDataset: the last record at or before each time, nothing outside the run', async () => {
+  const { sampleStep, sampleDataset } = await import('../js/data/model.js');
+  // Busy flag: 0 at 0, 1 at 2, 0 at 3.5, closing record 1 at 4.
+  const rep = { id: 1, t: Float64Array.from([0, 2, 3.5, 4]), v: Float64Array.from([0, 1, 0, 1]) };
+  assert.deepEqual(sampleStep(rep, [-1, 0, 1, 2, 3, 3.5, 3.9, 4, 4.5]), [null, 0, 0, 1, 1, 0, 0, 1, null]);
+  assert.deepEqual(sampleStep({ id: 2, t: null, v: Float64Array.from([5]) }, [0, 1]), [null, null]);
+  // A second replication that starts later and ends earlier.
+  const ds = makeDataset({ kind: 'time', reps: [rep, { id: 'b', t: [1, 3], v: [7, 9] }] });
+  const s = sampleDataset(ds, { start: 0, step: 1, end: 4 });
+  assert.deepEqual(s.times, [0, 1, 2, 3, 4]);
+  assert.deepEqual(s.columns.map(c => c.id), [1, 'b']);
+  assert.deepEqual(s.columns[0].values, [0, 0, 1, 1, 1]);
+  assert.deepEqual(s.columns[1].values, [null, 7, 7, 9, null]);
+  assert.equal(s.capped, false);
+  // The end is included when it lands on the grid, and a cap trims the tail.
+  assert.deepEqual(sampleDataset(ds, { start: 0, step: 1.5, end: 4 }).times, [0, 1.5, 3]);
+  const c = sampleDataset(ds, { start: 0, step: 1, end: 4, max: 2 });
+  assert.deepEqual(c.times, [0, 1]);
+  assert.equal(c.capped, true);
+  assert.throws(() => sampleDataset(makeDataset({ kind: 'tally', reps: [] }), { start: 0, step: 1, end: 1 }), /time-persistent/);
+  assert.throws(() => sampleDataset(ds, { start: 0, step: 0, end: 1 }), /positive/);
+  assert.throws(() => sampleDataset(ds, { start: 2, step: 1, end: 1 }), /ends before/);
+});

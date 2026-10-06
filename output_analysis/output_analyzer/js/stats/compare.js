@@ -56,8 +56,16 @@ export function welch(x, y, level) {
   const v1 = variance(x), v2 = variance(y);
   const a = v1 / n1, b = v2 / n2;
   const se = Math.sqrt(a + b);
-  const df = (a + b) * (a + b) / (a * a / (n1 - 1) + b * b / (n2 - 1));
   const diff = mean1 - mean2;
+  // Two samples with no spread at all leave the Welch–Satterthwaite ratio
+  // 0/0; the difference is then known exactly, so the interval has no width,
+  // and the test is decided by whether the two constants differ.
+  if (se === 0) {
+    const df = n1 + n2 - 2;
+    const t = diff === 0 ? 0 : (diff > 0 ? Infinity : -Infinity);
+    return { n1, n2, mean1, mean2, sd1: 0, sd2: 0, diff, se, df, t, p: diff === 0 ? 1 : 0, hw: 0, lo: diff, hi: diff };
+  }
+  const df = (a + b) * (a + b) / (a * a / (n1 - 1) + b * b / (n2 - 1));
   const t = diff / se;
   const p = twoSidedP(t, df);
   const hw = tQuantile(1 - (1 - level) / 2, df) * se;

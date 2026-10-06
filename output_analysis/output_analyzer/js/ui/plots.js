@@ -912,6 +912,9 @@ export function intervals(fig, items, o = {}) {
     const rr = recOf.get(key), yy = ry(i), cc = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
     rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
     rr.dot.x.push(cc); rr.dot.y.push(yy);
+    text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
+    // An interval without finite ends keeps its row and label and draws nothing.
+    if (!Number.isFinite(it.lo) || !Number.isFinite(it.hi)) return;
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
     const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi));
     const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
@@ -919,7 +922,6 @@ export function intervals(fig, items, o = {}) {
     for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
     if (it.flagged) svgEl('circle', { cx: r1(sx(center)), cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
-    text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
   });
   for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {

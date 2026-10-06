@@ -14282,6 +14282,47 @@ export function truncationView(ds, lookup) {
   return by ? { base, fence, by } : { base: ds, fence: 0, by: null };
 }
 
+/**
+ * The state of one time-persistent replication at each of ascending sample
+ * times: the value of the last record at or before the time, and null before
+ * the replication's first record or after its last, where nothing holds.
+ * @param {Replication} rep
+ * @param {ArrayLike<number>} times ascending
+ * @returns {(number|null)[]}
+ */
+export function sampleStep(rep, times) {
+  const t = rep.t, v = rep.v, n = v.length;
+  const out = new Array(times.length).fill(null);
+  if (!t || !n) return out;
+  let i = 0;
+  for (let k = 0; k < times.length; k++) {
+    const s = times[k];
+    if (s < t[0] || s > t[n - 1]) continue;
+    while (i + 1 < n && t[i + 1] <= s) i++;
+    out[k] = v[i];
+  }
+  return out;
+}
+
+/**
+ * A time-persistent dataset sampled on a time grid, every `step` from
+ * `start` up to `end` (included when it falls on the grid), one column per
+ * replication, with at most `max` sample times.
+ * @param {Dataset} ds
+ * @param {{ start: number, step: number, end: number, max?: number }} grid
+ * @returns {{ times: number[], columns: { id: string|number, values: (number|null)[] }[], capped: boolean }}
+ */
+export function sampleDataset(ds, { start, step, end, max = Infinity }) {
+  if (ds.kind !== 'time') throw new Error('Only a time-persistent dataset is sampled on a time grid.');
+  if (!(step > 0)) throw new Error('The sampling step must be positive.');
+  if (!(end >= start)) throw new Error('The grid ends before it starts.');
+  const want = Math.floor((end - start) / step + 1e-9) + 1;
+  const n = Math.min(want, max);
+  const times = [];
+  for (let k = 0; k < n; k++) times.push(start + k * step);
+  return { times, columns: ds.reps.map(r => ({ id: r.id, values: sampleStep(r, times) })), capped: n < want };
+}
+
 export function canInfer(ds) {
   const nEst = Array.from(repEstimates(ds)).filter(Number.isFinite).length;
   if (nEst >= 2) return { ok: true };
@@ -14299,6 +14340,289 @@ export function canInfer(ds) {
     reason: 'An interval or a test needs at least two replication outcomes, and this dataset has ' +
       nEst + '.'
   };
+}
+</script>
+<script type="text/plain" data-module="js/io/arena.js">
+// Reading the binary .dat files that Arena writes for its Output Analyzer
+// (file version ARENA_40_OUT1), and the .flt and .fst files the Output
+// Analyzer's own Batch/Truncate and Moving Average write: a short CRLF text
+// header, one 0x1A byte, and then a flat array of little-endian float64
+// (time, value) pairs, where a pair whose first element is negative ends a
+// replication. The layout, and what the Output Analyzer makes of each file
+// type, were read off files written by Arena 16.20 against a model whose
+// every value was known in advance; the notes in arena/ beside the page
+// record what was seen. Pure functions, no DOM.
+
+import { makeDataset } from '../data/model.js';
+
+/** The statistic kinds the first header line names. */
+export const TYPE_CODES = {
+  201: 'time-persistent',
+  203: 'tally',
+  204: 'output',
+  205: 'written by the Output Analyzer',
+  206: 'counter',
+  207: 'frequency'
+};
+
+/** @typedef {{ typeCode: number, typeName: string, project: string, analyst: string,
+ *   dataFor: string, runDate: string, headerLines: string[],
+ *   reps: { id: number, t: number[], v: number[] }[], closed: boolean,
+ *   padding: number, strayBytes: number }} ArenaDat */
+
+const HEADER_LIMIT = 1024;
+
+/**
+ * Whether the bytes look like an Arena output file: a first line of digits
+ * and a space, a 0x1A within the first kilobyte with a "Data for:" or
+ * "File Version:" line before it, and at least one 16-byte record after it.
+ * The payload need not be whole records: the Output Analyzer's Batch/Truncate
+ * with every replication selected writes a file that ends in stray bytes.
+ * @param {Uint8Array} bytes
+ * @returns {boolean}
+ */
+export function isArenaDat(bytes) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 8) return false;
+  let i = 0;
+  while (i < bytes.length && bytes[i] >= 0x30 && bytes[i] <= 0x39) i++;
+  if (i === 0 || i > 4 || bytes[i] !== 0x20) return false;
+  const sep = bytes.indexOf(0x1a);
+  if (sep < 0 || sep > HEADER_LIMIT) return false;
+  const head = decodeLatin1(bytes.subarray(0, sep));
+  if (!/Data for:|File Version:/.test(head)) return false;
+  return bytes.length - sep - 1 >= 16;
+}
+
+function decodeLatin1(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
+
+/**
+ * The header's fields. The project and analyst sit in two 25-character
+ * fields after "Output file for:" and "by:"; the run date is the ten
+ * characters after "Run date:", and the rest of that line is not relied on.
+ * @param {Uint8Array} bytes the bytes before the 0x1A
+ */
+function parseHeader(bytes) {
+  const lines = decodeLatin1(bytes).split('\r\n').filter(s => s !== '');
+  const out = { lines, typeCode: null, project: '', analyst: '', dataFor: '', runDate: '' };
+  const code = Number(lines[0] != null ? lines[0].trim() : NaN);
+  if (Number.isInteger(code)) out.typeCode = code;
+  for (const ln of lines.slice(1)) {
+    if (ln.startsWith('Output file for:')) {
+      const rest = ln.slice('Output file for:'.length);
+      out.project = rest.slice(0, 25).trim();
+      const tail = rest.slice(25);
+      if (tail.startsWith('by:')) out.analyst = tail.slice(3).trim();
+    } else if (ln.startsWith('Data for:')) {
+      out.dataFor = ln.slice('Data for:'.length).trim();
+    } else if (ln.startsWith('Run date:')) {
+      out.runDate = ln.slice('Run date:'.length, 'Run date:'.length + 10);
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse an Arena output file into its header fields and its replications,
+ * each a list of (time, value) records with the terminators removed. A
+ * terminator (−r, 0) ends replication r; (−r, −1) ends the last one, and
+ * `closed` says whether it was seen. A file cut off before its final
+ * terminator keeps the open replication, except when that open stretch is
+ * nothing but (0, 0) records after a terminator: the Output Analyzer's
+ * Batch/Truncate with every replication selected writes such a file (the
+ * first replication's batches, its terminator, zero-filled records, and a
+ * few stray bytes), and those records are counted in `padding`, not read.
+ * @param {Uint8Array} bytes
+ * @returns {ArenaDat}
+ */
+export function parseArenaDat(bytes) {
+  const sep = bytes.indexOf(0x1a);
+  if (sep < 0) throw new Error('This is not an Arena output file: the header terminator is missing.');
+  const hdr = parseHeader(bytes.subarray(0, sep));
+  const body = bytes.subarray(sep + 1);
+  const n = Math.floor(body.length / 16);
+  const strayBytes = body.length - 16 * n;
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  const reps = [];
+  let t = [], v = [];
+  let closed = false, sawTerminator = false;
+  for (let i = 0; i < n; i++) {
+    const a = view.getFloat64(16 * i, true);
+    const b = view.getFloat64(16 * i + 8, true);
+    if (a < 0) {
+      reps.push({ id: reps.length + 1, t, v });
+      t = []; v = [];
+      closed = b === -1;
+      sawTerminator = true;
+    } else {
+      t.push(a); v.push(b);
+      closed = false;
+    }
+  }
+  let padding = 0;
+  if (t.length) {
+    const blank = sawTerminator && t.every(x => x === 0) && v.every(x => x === 0);
+    if (blank) padding = t.length;
+    else reps.push({ id: reps.length + 1, t, v });
+  }
+  const code = hdr.typeCode;
+  return {
+    typeCode: code,
+    typeName: TYPE_CODES[code] || 'unknown',
+    project: hdr.project,
+    analyst: hdr.analyst,
+    dataFor: hdr.dataFor,
+    runDate: hdr.runDate,
+    headerLines: hdr.lines,
+    reps,
+    closed,
+    padding,
+    strayBytes
+  };
+}
+
+function headerNote(dat) {
+  const from = [];
+  if (dat.project) from.push('project “' + dat.project + '”');
+  if (dat.analyst) from.push('analyst ' + dat.analyst);
+  if (dat.runDate) from.push('run on ' + dat.runDate);
+  return from.length ? 'Header: ' + from.join(', ') + '.' : null;
+}
+
+// A counter whose count falls restarted at Arena's warm-up instant, which
+// the file does not otherwise record.
+function warmupNote(reps) {
+  for (const r of reps) {
+    for (let i = 1; i < r.v.length; i++) {
+      if (r.v[i] < r.v[i - 1]) {
+        return 'The count falls from ' + r.v[i - 1] + ' to ' + r.v[i] + ' between times ' + r.t[i - 1] + ' and ' + r.t[i] +
+          ' in replication ' + r.id + ', which is where a warm-up period cleared the statistics; the records before that are the warm-up’s. To delete them, cut there on the Steady State page.';
+      }
+    }
+  }
+  return null;
+}
+
+function endsNote(reps) {
+  const ends = reps.map(r => r.t[r.t.length - 1]);
+  const lo = Math.min(...ends), hi = Math.max(...ends);
+  return lo === hi ? null :
+    'The replications end at different times (' + lo + ' to ' + hi + '); each one’s time average is taken over its own run, and nothing is held past a run’s last record.';
+}
+
+/**
+ * Build a dataset from a parsed Arena file, treating each file type the way
+ * the Output Analyzer does. A time-persistent file becomes a time-persistent
+ * dataset: Arena closes every replication with a record at its end, so the
+ * dataset carries no end time and each replication's last record holds for
+ * no time, which makes every time average run over that replication's own
+ * run. A counter file records the running count at each increment and is
+ * likewise a time-persistent dataset, with the count 0 from time 0 until the
+ * first increment and the data ending at the last one. A tally file becomes
+ * observations with their time stamps, as does a batch-means file (each
+ * record a batch mean at its batch's midpoint); an output file one value per
+ * replication. The notes say what was read.
+ * @param {ArenaDat} dat
+ * @param {{ file?: string, name?: string }} [opts]
+ * @returns {import('../data/model.js').Dataset}
+ */
+export function arenaDataset(dat, opts = {}) {
+  const code = dat.typeCode;
+  if (!TYPE_CODES[code]) {
+    throw new Error('The file’s type code ' + code + ' is not one this reader knows (201 time-persistent, 203 tally, 204 output, 205 written by the Output Analyzer, 206 counter, 207 frequency).');
+  }
+  const stat = dat.dataFor || 'data';
+  const name = opts.name != null ? opts.name : stat;
+  const notes = [];
+  const R = dat.reps.length;
+  const nonEmpty = dat.reps.filter(r => r.v.length);
+  if (!nonEmpty.length) {
+    throw new Error('The file holds no records for “' + stat + '”: every one of its ' + R + ' replications is empty.');
+  }
+  if (nonEmpty.length < R) {
+    notes.push((R - nonEmpty.length) + ' of the ' + R + ' replications in the file ' +
+      (R - nonEmpty.length === 1 ? 'holds' : 'hold') + ' no records and ' +
+      (R - nonEmpty.length === 1 ? 'was' : 'were') + ' left out.');
+  }
+  if (dat.padding) {
+    notes.push('The file ends in ' + dat.padding + ' empty records and no closing marker, the shape the Output Analyzer’s Batch/Truncate writes when every replication is selected; only the replications before them were read' +
+      (dat.strayBytes ? ', and ' + dat.strayBytes + ' stray bytes at the end were skipped' : '') + '.');
+  } else if (!dat.closed) {
+    notes.push('The file ends without its closing marker; the last replication was kept as read.');
+  }
+  if (!dat.padding && dat.strayBytes) notes.push(dat.strayBytes + ' stray bytes at the end of the file, less than one record, were skipped.');
+
+  let kind, reps;
+  if (code === 201 || code === 207) {
+    kind = 'time';
+    reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
+    notes.push((code === 207
+      ? 'A frequency statistic from an Arena output file, read as time-persistent data: the file holds its expression’s value over time, not the categories. '
+      : 'Time-persistent data from an Arena output file: ') +
+      'Each record is the value from its time until the next record, and the replication’s last record is its closing value at the end of the run, which holds for no time.');
+    const e = endsNote(reps); if (e) notes.push(e);
+  } else if (code === 206) {
+    kind = 'time';
+    reps = nonEmpty.map(r => (r.t[0] > 0
+      ? { id: r.id, t: [0].concat(r.t), v: [0].concat(r.v) }
+      : { id: r.id, t: r.t, v: r.v }));
+    notes.push('A counter from an Arena output file, read as the running count over time: 0 from time 0 until the first increment, each record the count from its time until the next, and the data ending at the last increment. The count each replication ended with is loaded beside it as a second dataset.');
+    const w = warmupNote(nonEmpty); if (w) notes.push(w);
+    const e = endsNote(reps); if (e) notes.push(e);
+  } else if (code === 203) {
+    kind = 'tally';
+    reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
+    notes.push('Observations from an Arena output file, each with the simulation time it was recorded at.');
+  } else if (code === 205) {
+    kind = 'tally';
+    reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
+    notes.push('Written by the Output Analyzer and read as observations: batch means from Batch/Truncate, each at the time of its batch’s middle, or a moving average from Graph, each at the time it forecasts.');
+  } else {
+    kind = 'reps';
+    reps = nonEmpty.map(r => ({ id: r.id, t: null, v: [r.v[0]] }));
+    const extra = nonEmpty.filter(r => r.v.length > 1).length;
+    if (extra) notes.push(extra + (extra === 1 ? ' replication carries' : ' replications carry') + ' more than one output value; the first was kept.');
+    notes.push('One value per replication from an Arena output file.');
+  }
+  const h = headerNote(dat); if (h) notes.push(h);
+
+  return makeDataset({
+    name,
+    response: stat,
+    kind,
+    reps,
+    endTime: null,
+    source: { file: opts.file != null ? opts.file : '', format: 'arena', notes }
+  });
+}
+
+/**
+ * The count each replication of a counter file ended with, as one value per
+ * replication. The Output Analyzer never computes this; it is this page's own
+ * summary, offered because the final count (customers served, parts made) is
+ * what a counter is usually kept for.
+ * @param {ArenaDat} dat a parsed counter (206) file
+ * @param {{ file?: string, name?: string }} [opts]
+ * @returns {import('../data/model.js').Dataset}
+ */
+export function arenaFinalCounts(dat, opts = {}) {
+  if (dat.typeCode !== 206) throw new Error('Final counts are read only from a counter file.');
+  const stat = dat.dataFor || 'data';
+  const nonEmpty = dat.reps.filter(r => r.v.length);
+  if (!nonEmpty.length) throw new Error('The file holds no records for “' + stat + '”.');
+  const notes = ['The count each replication of “' + stat + '” ended with, one value per replication. This summary is the page’s own; the Output Analyzer reads a counter only as a running count over time.'];
+  const h = headerNote(dat); if (h) notes.push(h);
+  return makeDataset({
+    name: opts.name != null ? opts.name : stat + ', final count',
+    response: stat,
+    kind: 'reps',
+    reps: nonEmpty.map(r => ({ id: r.id, t: null, v: [r.v[r.v.length - 1]] })),
+    endTime: null,
+    source: { file: opts.file != null ? opts.file : '', format: 'arena', notes }
+  });
 }
 </script>
 <script type="text/plain" data-module="js/io/export.js">
@@ -14377,6 +14701,23 @@ export function observationsCsv(ds, provenance, opts = {}) {
     for (let i = 0; i < r.v.length; i++) {
       rows.push(hasT ? [r.id, r.t ? r.t[i] : null, r.v[i]] : [r.id, r.v[i]]);
     }
+  }
+  return withProvenance(provenance, rows);
+}
+
+/**
+ * A time-persistent dataset sampled on a time grid (see `sampleDataset`):
+ * a time column, then one column per replication headed by its id, with an
+ * empty field where nothing holds.
+ * @param {import('../data/model.js').Dataset} ds
+ * @param {{ times: number[], columns: { id: string|number, values: (number|null)[] }[] }} sample
+ * @param {Record<string, unknown>} [provenance]
+ * @returns {string}
+ */
+export function sampledCsv(ds, sample, provenance) {
+  const rows = [['time'].concat(sample.columns.map(c => 'replication_' + c.id))];
+  for (let k = 0; k < sample.times.length; k++) {
+    rows.push([sample.times[k]].concat(sample.columns.map(c => c.values[k])));
   }
   return withProvenance(provenance, rows);
 }
@@ -15527,7 +15868,8 @@ else boot();
 // the navigation.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations, truncationView } from '../data/model.js';
+import { repEstimates, datasetSummary, observations, truncationView, sampleDataset } from '../data/model.js';
+import { sampledCsv, downloadText } from '../io/export.js';
 import {
   summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
@@ -15536,7 +15878,7 @@ import { shapiroWilk, normalQQ } from '../stats/normality.js';
 import { levene } from '../stats/compare.js';
 import {
   makeFigure, exportButtons, legend, histogram, ecdf, boxPlot, sequence, runningMean,
-  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent
+  dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
   card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
@@ -15993,21 +16335,100 @@ function rawTable(ds) {
   d.addEventListener('toggle', () => {
     if (!d.open || filled) return;
     filled = true;
-    const hasT = ds.reps.some(r => r.t);
-    let total = 0;
-    for (const r of ds.reps) total += r.v.length;
-    const rows = [];
-    outer: for (const r of ds.reps) {
-      for (let i = 0; i < r.v.length; i++) {
-        if (rows.length >= RAW_CAP) break outer;
-        rows.push('<tr><td>' + esc(r.id) + '</td>' + (hasT ? '<td>' + (r.t ? num(r.t[i], 8) : dash) + '</td>' : '') + '<td>' + num(r.v[i], 8) + '</td></tr>');
-      }
-    }
     const body = d.querySelector('.ex-raw-body');
-    body.innerHTML = '<p class="muted-line">' + (total > RAW_CAP ? 'Showing the first ' + intl(RAW_CAP) + ' of ' + intl(total) + ' rows.' : 'All ' + plural(total, 'row') + '.') + '</p>' +
-      '<div class="scroll-box"><table class="ptab"><thead><tr><th>Replication</th>' + (hasT ? '<th>Time</th>' : '') + '<th>Value</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+    if (ds.kind === 'time') timeTable(body, ds);
+    else body.innerHTML = recordedHtml(ds);
   });
   return d;
+}
+
+// Every record as it was read: replication, time where recorded, value.
+function recordedHtml(ds) {
+  const hasT = ds.reps.some(r => r.t);
+  let total = 0;
+  for (const r of ds.reps) total += r.v.length;
+  const rows = [];
+  outer: for (const r of ds.reps) {
+    for (let i = 0; i < r.v.length; i++) {
+      if (rows.length >= RAW_CAP) break outer;
+      rows.push('<tr><td>' + esc(r.id) + '</td>' + (hasT ? '<td>' + (r.t ? num(r.t[i], 8) : dash) + '</td>' : '') + '<td>' + num(r.v[i], 8) + '</td></tr>');
+    }
+  }
+  return '<p class="muted-line">' + (total > RAW_CAP ? 'Showing the first ' + intl(RAW_CAP) + ' of ' + intl(total) + ' rows.' : 'All ' + plural(total, 'row') + '.') + '</p>' +
+    '<div class="scroll-box"><table class="ptab"><thead><tr><th>Replication</th>' + (hasT ? '<th>Time</th>' : '') + '<th>Value</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+}
+
+// A time-persistent dataset, either as recorded or sampled on a time grid
+// with the replications side by side, which shows the step-function
+// convention as numbers: the value holds from its record until the next,
+// and nothing holds before a replication's first record or after its last.
+function timeTable(body, ds) {
+  const firsts = ds.reps.filter(r => r.t && r.t.length).map(r => r.t[0]);
+  const lasts = ds.reps.filter(r => r.t && r.t.length).map(r => r.t[r.t.length - 1]);
+  const tMin = firsts.length ? Math.min(...firsts) : 0, tMax = lasts.length ? Math.max(...lasts) : 1;
+  const span = Math.max(tMax - tMin, 1e-9);
+  const fine = niceStep(span, 200);
+  const dec = Math.max(0, -Math.floor(Math.log10(fine) + 1e-9));
+  const def = { mode: 'recorded', t0: Number(tMin.toFixed(dec)), dt: niceStep(span, 20), t1: Number(tMax.toFixed(dec)) };
+  const saved = state.getPick(id, 'raw:' + ds.id);
+  const g = Object.assign({}, def);
+  if (saved && typeof saved === 'object') {
+    if (saved.mode === 'grid' || saved.mode === 'recorded') g.mode = saved.mode;
+    for (const k of ['t0', 'dt', 't1']) if (Number.isFinite(saved[k])) g[k] = saved[k];
+    if (!(g.dt > 0) || !(g.t1 >= g.t0)) Object.assign(g, { t0: def.t0, dt: def.dt, t1: def.t1 });
+  }
+  const remember = () => state.setPick(id, 'raw:' + ds.id, { mode: g.mode, t0: g.t0, dt: g.dt, t1: g.t1 });
+
+  body.innerHTML =
+    '<div class="ctrl-row ex-raw-ctrl">' +
+      '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-raw-mode"><span class="tip" tabindex="0" data-tip="As recorded lists every record with its time. Sampled on a time grid reads the state at regular times with the replications side by side: each cell is the last record at or before that time, and a blank cell is a time before the replication’s first record or after its last, where nothing holds.">Show</span></label>' +
+        '<select id="ex-raw-mode"><option value="recorded">as recorded</option><option value="grid">sampled on a time grid</option></select></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-t0">From t₀</label><input type="text" id="ex-raw-t0" value="' + g.t0 + '"></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-dt">every Δt</label><input type="text" id="ex-raw-dt" value="' + g.dt + '"></span>' +
+      '<span class="ctrl-pair ex-raw-grid"><label class="ctrl-lbl" for="ex-raw-t1">to</label><input type="text" id="ex-raw-t1" value="' + g.t1 + '"></span>' +
+      '<button type="button" class="xp-btn ex-raw-grid" id="ex-raw-csv">Download this table as CSV</button>' +
+    '</div>' +
+    '<div id="ex-raw-out"></div>';
+  registerTips(body);
+  const out = body.querySelector('#ex-raw-out');
+  const modeSel = body.querySelector('#ex-raw-mode');
+  modeSel.value = g.mode;
+
+  let sample = null;
+  const draw = () => {
+    body.querySelectorAll('.ex-raw-grid').forEach(e => { e.hidden = g.mode !== 'grid'; });
+    if (g.mode !== 'grid') { sample = null; out.innerHTML = recordedHtml(ds); return; }
+    sample = sampleDataset(ds, { start: g.t0, step: g.dt, end: g.t1, max: RAW_CAP });
+    const head = '<tr><th>Time</th>' + sample.columns.map(c => '<th>r = ' + esc(c.id) + '</th>').join('') + '</tr>';
+    const rows = sample.times.map((t, k) => '<tr><td>' + num(t, 8) + '</td>' +
+      sample.columns.map(c => '<td>' + (c.values[k] == null ? '' : num(c.values[k], 8)) + '</td>').join('') + '</tr>');
+    out.innerHTML = '<p class="muted-line">' + (sample.capped
+        ? 'Showing the first ' + intl(RAW_CAP) + ' sample times; a larger Δt shows the whole range.'
+        : plural(sample.times.length, 'sample time') + '.') +
+      ' Each cell is the state at that time, the last record at or before it; a blank cell is a time before the replication’s first record or after its last, where nothing holds.</p>' +
+      '<div class="scroll-box"><table class="ptab"><thead>' + head + '</thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  };
+  modeSel.addEventListener('change', () => { g.mode = modeSel.value; remember(); draw(); });
+  const spins = {};
+  for (const k of ['t0', 'dt', 't1']) {
+    spins[k] = spinner(body.querySelector('#ex-raw-' + k), {
+      min: k === 'dt' ? fine : -Infinity, step: fine, decimals: dec,
+      onChange: v => {
+        g[k] = v;
+        if (g.t1 < g.t0) { if (k === 't0') g.t1 = spins.t1.set(g.t0, false); else g.t0 = spins.t0.set(g.t1, false); }
+        remember(); draw();
+      }
+    });
+  }
+  body.querySelector('#ex-raw-csv').addEventListener('click', () => {
+    if (!sample) return;
+    downloadText(slug(ds.name) + '_sampled.csv', sampledCsv(ds, sample, {
+      dataset: ds.name, kind: KIND_LABEL[ds.kind], response: ds.response, replications: ds.reps.length,
+      form: 'sampled on a time grid', from: g.t0, 'every': g.dt, to: g.t1,
+      note: 'each cell is the last record at or before its time; an empty field is a time before the replication\u2019s first record or after its last'
+    }));
+  });
+  draw();
 }
 
 // ── Distribution of the outcomes ───────────────────────────────────────
@@ -16681,6 +17102,7 @@ export default { id, title, render, onShow };
 
 import * as state from '../state.js';
 import { sniff, buildDatasets } from '../io/parse.js';
+import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num } from '../ui/format.js';
@@ -16694,7 +17116,8 @@ export const title = 'Import';
 const FORMAT_LABEL = {
   minus1: 'time–value records, with a −1 row ending each replication',
   single: 'one column of values',
-  columns: 'delimited columns'
+  columns: 'delimited columns',
+  arena: 'Arena output file'
 };
 
 const KINDS = [
@@ -16746,7 +17169,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes three forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; and one bare column of values. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
+    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes four forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; one bare column of values; and the binary .dat files Arena writes for its Output Analyzer (and the .flt and .fst files that analyzer writes), whose header already says what the values are, so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
       '<div id="im-list"></div>' +
@@ -16766,8 +17189,8 @@ export function render(root) {
         '<div class="ctrl-grp-lbl">From a file</div>' +
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
-          '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text. Lines starting with # are read as comments.</div>' +
+          '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
+          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text, or an Arena Output Analyzer .dat, .flt, or .fst file. Lines starting with # are read as comments.</div>' +
         '</div>' +
       '</div>' +
       '<div class="im-block">' +
@@ -16856,19 +17279,42 @@ export function onShow() {
 
 // ── Reading input ───────────────────────────────────────────────────────
 
+// Every file is read as bytes first, because an Arena output file is binary
+// after its header and is told apart by its first bytes; anything else is
+// decoded as UTF-8 text and queued for the mapping dialog.
 function readFiles(fileList) {
   const files = Array.from(fileList);
-  Promise.all(files.map(f => f.text().then(text => ({ name: f.name, text }), err => ({ name: f.name, error: err }))))
+  Promise.all(files.map(f => f.arrayBuffer().then(buf => ({ name: f.name, bytes: new Uint8Array(buf) }), err => ({ name: f.name, error: err }))))
     .then(list => {
       for (const it of list) {
         if (it.error) {
           lastImport = { error: 'The file ' + it.name + ' could not be read: ' + (it.error.message || it.error) + '.' };
           renderStatus();
+        } else if (isArenaDat(it.bytes)) {
+          loadArena(it.name, it.bytes);
         } else {
-          enqueue(it.name, it.text);
+          enqueue(it.name, new TextDecoder().decode(it.bytes));
         }
       }
     });
+}
+
+// An Arena output file needs no mapping: its header names the statistic and
+// says whether the records are observations, a state over time, or one
+// value per replication. A counter loads twice, as the running count the
+// Output Analyzer reads and as the final count per replication.
+function loadArena(fileName, bytes) {
+  try {
+    const dat = parseArenaDat(bytes);
+    const list = [arenaDataset(dat, { file: fileName })];
+    if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
+    for (const ds of list) state.add(ds);
+    state.select(list[0].id);
+    lastImport = { what: fileName, datasets: list, issues: [], notes: collectNotes(list) };
+  } catch (err) {
+    lastImport = { error: 'The file ' + fileName + ' could not be loaded: ' + err.message };
+  }
+  renderStatus();
 }
 
 // Queues one text for the mapping dialog and shows it when nothing else is
@@ -19311,7 +19757,7 @@ function update() {
     // one design's outcomes at a time, and the F test's assumption is about
     // all the residuals together.
     // Kept folded away unless the check rejects, when it opens itself.
-    const swResid = resid.length >= 3 && resid.length <= 5000 ? shapiroWilk(resid) : null;
+    const swResid = resid.length >= 3 && resid.length <= 5000 && Math.min(...resid) < Math.max(...resid) ? shapiroWilk(resid) : null;
     const residBad = !!swResid && swResid.p < alpha;
     const fold = document.createElement('details');
     fold.className = 'why' + (residBad ? ' issues' : '');
@@ -22874,8 +23320,16 @@ export function welch(x, y, level) {
   const v1 = variance(x), v2 = variance(y);
   const a = v1 / n1, b = v2 / n2;
   const se = Math.sqrt(a + b);
-  const df = (a + b) * (a + b) / (a * a / (n1 - 1) + b * b / (n2 - 1));
   const diff = mean1 - mean2;
+  // Two samples with no spread at all leave the Welch–Satterthwaite ratio
+  // 0/0; the difference is then known exactly, so the interval has no width,
+  // and the test is decided by whether the two constants differ.
+  if (se === 0) {
+    const df = n1 + n2 - 2;
+    const t = diff === 0 ? 0 : (diff > 0 ? Infinity : -Infinity);
+    return { n1, n2, mean1, mean2, sd1: 0, sd2: 0, diff, se, df, t, p: diff === 0 ? 1 : 0, hw: 0, lo: diff, hi: diff };
+  }
+  const df = (a + b) * (a + b) / (a * a / (n1 - 1) + b * b / (n2 - 1));
   const t = diff / se;
   const p = twoSidedP(t, df);
   const hw = tQuantile(1 - (1 - level) / 2, df) * se;
@@ -26090,6 +26544,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     const n = v.length;
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
+    if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;
@@ -26106,12 +26561,16 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
   const vsets = varianceSets ? varianceSets.map(v => Array.from(v).filter(Number.isFinite)) : sets.map(st => Array.from(st.values).filter(Number.isFinite));
   if (pooled && vsets.length >= 2 && vsets.every(v => v.length >= 2)) {
     const lv = levene(vsets);
-    tested = true;
-    const bad = lv.p < alpha;
-    if (bad) warn = true;
-    html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', bad, true) + ' ' + verdict(bad, 'Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
-      (bad ? ' <b>(unequal variances detected)</b>' : '')) +
-      (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
+    if (Number.isFinite(lv.p)) {
+      tested = true;
+      const bad = lv.p < alpha;
+      if (bad) warn = true;
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', bad, true) + ' ' + verdict(bad, 'Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+        (bad ? ' <b>(unequal variances detected)</b>' : '')) +
+        (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
+    } else {
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: no spread within any group to compare') + '.';
+    }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);
   if (!tested) html = '<b>The assumptions could not be checked.</b> ' + html;
@@ -27423,6 +27882,9 @@ export function intervals(fig, items, o = {}) {
     const rr = recOf.get(key), yy = ry(i), cc = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
     rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
     rr.dot.x.push(cc); rr.dot.y.push(yy);
+    text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
+    // An interval without finite ends keeps its row and label and draws nothing.
+    if (!Number.isFinite(it.lo) || !Number.isFinite(it.hi)) return;
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
     const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi));
     const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
@@ -27430,7 +27892,6 @@ export function intervals(fig, items, o = {}) {
     for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
     if (it.flagged) svgEl('circle', { cx: r1(sx(center)), cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
-    text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
   });
   for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {

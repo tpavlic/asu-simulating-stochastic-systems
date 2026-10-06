@@ -6,6 +6,7 @@
 
 import * as state from '../state.js';
 import { sniff, buildDatasets } from '../io/parse.js';
+import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num } from '../ui/format.js';
@@ -19,7 +20,8 @@ export const title = 'Import';
 const FORMAT_LABEL = {
   minus1: 'time–value records, with a −1 row ending each replication',
   single: 'one column of values',
-  columns: 'delimited columns'
+  columns: 'delimited columns',
+  arena: 'Arena output file'
 };
 
 const KINDS = [
@@ -71,7 +73,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes three forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; and one bare column of values. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
+    '<p class="lede">Load a bundled example, or your own simulation output from a file or from pasted text. The reader takes four forms: two columns of time–value records, where a row whose first value is −1 ends each replication; delimited columns with a header row, which you assign to roles in a dialog before anything loads; one bare column of values; and the binary .dat files Arena writes for its Output Analyzer (and the .flt and .fst files that analyzer writes), whose header already says what the values are, so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
       '<div id="im-list"></div>' +
@@ -91,8 +93,8 @@ export function render(root) {
         '<div class="ctrl-grp-lbl">From a file</div>' +
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
-          '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text. Lines starting with # are read as comments.</div>' +
+          '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
+          '<div class="ctrl-note im-drop-note">Comma-, tab-, semicolon-, or space-delimited text, or an Arena Output Analyzer .dat, .flt, or .fst file. Lines starting with # are read as comments.</div>' +
         '</div>' +
       '</div>' +
       '<div class="im-block">' +
@@ -181,19 +183,42 @@ export function onShow() {
 
 // ── Reading input ───────────────────────────────────────────────────────
 
+// Every file is read as bytes first, because an Arena output file is binary
+// after its header and is told apart by its first bytes; anything else is
+// decoded as UTF-8 text and queued for the mapping dialog.
 function readFiles(fileList) {
   const files = Array.from(fileList);
-  Promise.all(files.map(f => f.text().then(text => ({ name: f.name, text }), err => ({ name: f.name, error: err }))))
+  Promise.all(files.map(f => f.arrayBuffer().then(buf => ({ name: f.name, bytes: new Uint8Array(buf) }), err => ({ name: f.name, error: err }))))
     .then(list => {
       for (const it of list) {
         if (it.error) {
           lastImport = { error: 'The file ' + it.name + ' could not be read: ' + (it.error.message || it.error) + '.' };
           renderStatus();
+        } else if (isArenaDat(it.bytes)) {
+          loadArena(it.name, it.bytes);
         } else {
-          enqueue(it.name, it.text);
+          enqueue(it.name, new TextDecoder().decode(it.bytes));
         }
       }
     });
+}
+
+// An Arena output file needs no mapping: its header names the statistic and
+// says whether the records are observations, a state over time, or one
+// value per replication. A counter loads twice, as the running count the
+// Output Analyzer reads and as the final count per replication.
+function loadArena(fileName, bytes) {
+  try {
+    const dat = parseArenaDat(bytes);
+    const list = [arenaDataset(dat, { file: fileName })];
+    if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
+    for (const ds of list) state.add(ds);
+    state.select(list[0].id);
+    lastImport = { what: fileName, datasets: list, issues: [], notes: collectNotes(list) };
+  } catch (err) {
+    lastImport = { error: 'The file ' + fileName + ' could not be loaded: ' + err.message };
+  }
+  renderStatus();
 }
 
 // Queues one text for the mapping dialog and shows it when nothing else is
