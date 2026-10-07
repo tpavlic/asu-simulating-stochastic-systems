@@ -13,7 +13,15 @@ function mean(a) {
   for (let i = 0; i < a.length; i++) s += a[i];
   return s / a.length;
 }
+// A sample whose values all equal the first (its minimum equals its maximum)
+// has variance exactly 0, not the rounding error two passes can leave.
+function allEqual(a) {
+  if (a.length === 0 || !Number.isFinite(a[0])) return false;
+  for (let i = 1; i < a.length; i++) if (a[i] !== a[0]) return false;
+  return true;
+}
 function variance(a) {
+  if (a.length > 1 && allEqual(a)) return 0;
   const n = a.length, m = mean(a);
   let s = 0;
   for (let i = 0; i < n; i++) { const d = a[i] - m; s += d * d; }
@@ -254,8 +262,33 @@ export function bonferroniFamily(groups, { mode, control = 0, level, paired = fa
   return { C, perLevel, comparisons };
 }
 
+// "No spread within the groups": a within (or residual) sum of squares at or
+// below this fraction of the uncentered sum of squares Σy² is rounding error,
+// and counts as exactly 0. Values that are equal within each group leave a
+// within sum of squares near 1e-30 of Σy², not 0; real spread leaves far more,
+// unless the values vary by less than about one part in a million of their size.
+const NO_SPREAD = 1e-12;
+
+// F and p for a source with sum of squares ss when nothing is left within the
+// groups: infinite (p = 0) when the source has some, and undefined when it too
+// is rounding error against the scale `tiny`.
+function fWithNoSpread(ss, tiny) {
+  return ss > tiny ? { F: Infinity, p: 0 } : { F: NaN, p: NaN };
+}
+
+function sumSq(groups) {
+  let s = 0;
+  for (const g of groups) for (let r = 0; r < g.length; r++) s += g[r] * g[r];
+  return s;
+}
+
 /**
- * One-way analysis of variance, as R's summary(aov(y ~ g)).
+ * One-way analysis of variance, as R's summary(aov(y ~ g)). When the within
+ * sum of squares is at most 1e-12 of Σy² (no spread within any group, up to
+ * rounding), it is taken as exactly 0, and F is infinite with p = 0 when the
+ * between sum of squares exceeds that bound, and undefined (NaN, with the
+ * between sum of squares taken as 0) when it does not; R's aov reports
+ * rounding noise there.
  * @param {(number[]|Float64Array)[]} groups
  * @returns {{k: number, N: number, n: number[], means: number[], grandMean: number,
  *   ssb: number, ssw: number, sst: number, dfb: number, dfw: number, msb: number,
@@ -277,9 +310,17 @@ export function anova(groups) {
     for (let r = 0; r < g.length; r++) { const e = g[r] - means[i]; ssw += e * e; }
   }
   const dfb = k - 1, dfw = N - k;
+  const tiny = NO_SPREAD * sumSq(groups);
+  let F, p;
+  if (dfw > 0 && ssw <= tiny) {
+    ssw = 0;
+    if (!(ssb > tiny)) ssb = 0;
+    ({ F, p } = fWithNoSpread(ssb, tiny));
+  } else {
+    F = (ssb / dfb) / (ssw / dfw);
+    p = Number.isFinite(F) ? 1 - fCdf(F, dfb, dfw) : NaN;
+  }
   const msb = ssb / dfb, msw = ssw / dfw;
-  const F = msb / msw;
-  const p = Number.isFinite(F) ? 1 - fCdf(F, dfb, dfw) : (F === Infinity ? 0 : NaN);
   return { k, N, n, means, grandMean, ssb, ssw, sst: ssb + ssw, dfb, dfw, msb, msw, F, p };
 }
 
@@ -408,13 +449,26 @@ export function anovaBlocked(groups) {
   for (let i = 0; i < k; i++) { const d = means[i] - grandMean; ssb += R * d * d; }
   for (let r = 0; r < R; r++) { const d = blockMeans[r] - grandMean; ssblk += k * d * d; }
   for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { const e = groups[i][r] - grandMean; sst += e * e; }
-  const ssw = Math.max(0, sst - ssb - ssblk);
+  let ssw = Math.max(0, sst - ssb - ssblk);
   const dfb = k - 1, dfblk = R - 1, dfw = (k - 1) * (R - 1);
+  const tiny = NO_SPREAD * sumSq(groups);
+  // Nothing left once the designs and the blocks are removed: the residual
+  // is rounding error, as in anova().
+  const flat = dfw > 0 && ssw <= tiny;
+  if (flat) {
+    ssw = 0;
+    if (!(ssb > tiny)) ssb = 0;
+    if (!(ssblk > tiny)) ssblk = 0;
+  }
   const msb = ssb / dfb, msblk = ssblk / dfblk, msw = ssw / dfw;
-  const F = msb / msw, Fblock = msblk / msw;
-  const pOf = (f, d1) => (Number.isFinite(f) ? 1 - fCdf(f, d1, dfw) : (f === Infinity ? 0 : NaN));
+  const test = (ss, ms, d1) => {
+    if (flat) return fWithNoSpread(ss, tiny);
+    const f = ms / msw;
+    return { F: f, p: Number.isFinite(f) ? 1 - fCdf(f, d1, dfw) : NaN };
+  };
+  const tD = test(ssb, msb, dfb), tB = test(ssblk, msblk, dfblk);
   return { blocked: true, k, R, N, n: groups.map(() => R), means, blockMeans, grandMean, ssb, ssblk, ssw, sst,
-           dfb, dfblk, dfw, msb, msblk, msw, F, p: pOf(F, dfb), Fblock, pBlock: pOf(Fblock, dfblk) };
+           dfb, dfblk, dfw, msb, msblk, msw, F: tD.F, p: tD.p, Fblock: tB.F, pBlock: tB.p };
 }
 
 /**

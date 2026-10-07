@@ -556,8 +556,10 @@ function severalAnova(r, o, g) {
         Object.assign(e, { 'anova F': av.F, 'anova df1': av.dfb, 'anova df2': av.dfw, 'anova p': av.p, 'ss between': av.ssb, 'ss within': av.ssw, 'ms between': av.msb, 'ms within': av.msw });
         if (paired) Object.assign(e, { 'ss blocks': av.ssblk, 'df blocks': av.dfblk, 'block F': av.Fblock, 'block p': av.pBlock });
       }
+      // With no spread left within the designs (ssw taken as 0) every residual is 0;
+      // computed, they would be rounding error.
       const resid = [];
-      g.forEach((x, i) => { for (let t = 0; t < x.length; t++) resid.push(x[t] - av.means[i] - (paired ? av.blockMeans[t] - av.grandMean : 0)); });
+      g.forEach((x, i) => { for (let t = 0; t < x.length; t++) resid.push(av.ssw === 0 ? 0 : x[t] - av.means[i] - (paired ? av.blockMeans[t] - av.grandMean : 0)); });
       Object.assign(e, shapiroExpect('shapiro residuals ', resid));
       e['posthoc rule'] = slug;
       if (!welch) e['posthoc ' + slug + ' critical value'] = ph.crit;

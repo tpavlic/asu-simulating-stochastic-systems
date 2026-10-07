@@ -25,7 +25,7 @@ import {
 import {
   card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
 } from '../ui/widgets.js';
-import { num, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
+import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { setSectionAvailable } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
@@ -978,17 +978,27 @@ function buildSpread(api, { ds, est }) {
   const lv = levene(groups);
   lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
   const rejects = lv.p < alpha;
+  // With no spread left in the distances from the medians, F is infinite when
+  // the distances differ between datasets and undefined when they do not.
+  const undefinedP = Number.isNaN(lv.p);
   sec.appendChild(cardRow([
-    card('<span class="sym">F</span>', num(lv.F, 4), 'ANOVA of |outcome − median|'),
+    card('<span class="sym">F</span>', stat(lv.F, 4), 'ANOVA of |outcome − median|'),
     card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
-    (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict', rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+    (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict',
+      undefinedP ? 'cannot be computed' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
-  caption(sec, rejects
+  const noSpread = lv.F === Infinity
+    ? ' In every dataset, the outcomes all lie at one distance from the median (as two outcomes always do), and so F is infinite.' : '';
+  if (undefinedP) {
+    caption(sec, 'Levene’s test cannot be computed here: every outcome lies at the same distance from its own dataset’s median, as when no dataset varies, and so the distances have no spread to analyze, within the datasets or between them.');
+    return;
+  }
+  caption(sec, (rejects
     ? 'At this level, the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
-    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.');
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.') + noSpread);
 }
 
 export default { id, title, sections, render, onShow };

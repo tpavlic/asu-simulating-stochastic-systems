@@ -25,6 +25,21 @@ export function num(v, sig = 4) {
 }
 
 /**
+ * A test statistic: as num(), except that an infinite value prints as "∞"
+ * (or "-∞"), not as a dash. An F test with no spread left within its groups
+ * has F infinite, which is a result rather than a missing value; NaN still
+ * prints as a dash.
+ * @param {number} v
+ * @param {number} [sig=4]
+ * @returns {string}
+ */
+export function stat(v, sig = 4) {
+  if (v === Infinity) return '∞';
+  if (v === -Infinity) return '-∞';
+  return num(v, sig);
+}
+
+/**
  * A number with exactly `d` decimals (no trimming), or an en dash when not
  * finite. A result that rounds to zero prints without a minus sign.
  * @param {number} v

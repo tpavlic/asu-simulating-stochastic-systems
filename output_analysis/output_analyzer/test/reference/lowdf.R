@@ -4,7 +4,8 @@
 # the repository root:
 #   Rscript output_analysis/output_analyzer/test/reference/lowdf.R > output_analysis/output_analyzer/test/reference/lowdf.json
 # Base R only. R's own qtukey is not used: it returns NaN below 2 degrees of
-# freedom and misses q(0.99, 4, 2) by about 1%. Every value here is a nested
+# freedom and is about 1% or more off at 2 (q(0.99, 4, 2) by 1.2%), several
+# percent with many designs. Every value here is a nested
 # integrate() over s, split at 1 / q and 10 / q so that integrate() sees the
 # stretch where the inner probability rises, and a uniroot() on the result.
 

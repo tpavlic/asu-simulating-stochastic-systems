@@ -7,7 +7,7 @@ import * as state from '../state.js';
 import { datasetSummary } from '../data/model.js';
 import { provenanceLines, downloadText } from '../io/export.js';
 import { KIND_LABEL } from '../ui/widgets.js';
-import { esc, num } from '../ui/format.js';
+import { esc, num, stat } from '../ui/format.js';
 import { stamp, truncationText, derivedName, tableBlock } from '../ui/exportrow.js';
 
 /** The page's hash id. */
@@ -47,7 +47,7 @@ const DATASET_HEADERS = ['Dataset', 'Kind', 'Replications', 'Observations', 'Mea
 
 function htmlTable(headers, rows) {
   return '<div class="scroll-box"><table class="ptab"><thead><tr>' + headers.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
-    rows.map(r => '<tr>' + r.map(c => '<td>' + esc(typeof c === 'number' ? num(c, 6) : (c == null ? '' : c)) + '</td>').join('') + '</tr>').join('') +
+    rows.map(r => '<tr>' + r.map(c => '<td>' + esc(typeof c === 'number' ? stat(c, 6) : (c == null ? '' : c)) + '</td>').join('') + '</tr>').join('') +
     '</tbody></table></div>';
 }
 
@@ -109,7 +109,7 @@ function htmlToText(html) {
 }
 
 function textTable(headers, rows) {
-  const cell = c => (typeof c === 'number' ? num(c, 6) : (c == null ? '' : String(c)));
+  const cell = c => (typeof c === 'number' ? stat(c, 6) : (c == null ? '' : String(c)));
   return [headers.map(cell).join('\t')].concat(rows.map(r => r.map(cell).join('\t'))).join('\n');
 }
 

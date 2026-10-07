@@ -226,9 +226,14 @@ export function cumulativeAverage(ybar) {
 // Lag-one autocorrelation
 // ---------------------------------------------------------------------------------------------
 
-/** Mean and sum of squared deviations of a. */
+/**
+ * Mean and sum of squared deviations of a. Values that are all equal (the
+ * minimum equals the maximum) give exactly 0, not the rounding error the
+ * passes can leave, and so a constant series is recognized as one.
+ */
 function centered(a) {
   const b = a.length;
+  if (b > 0 && Number.isFinite(a[0]) && a.every(v => v === a[0])) return { m: a[0], ss: 0 };
   let m = 0;
   for (let j = 0; j < b; j++) m += a[j];
   m /= b;

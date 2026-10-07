@@ -19,7 +19,7 @@ import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, e
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
-import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
+import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { currentSection } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -842,20 +842,27 @@ function update() {
     if (welch) {
       b.appendChild(para('cmp-lead', 'Welch’s analysis of variance lets every design keep its own variance: each design’s mean is weighted by R<sub>i</sub>/s<sub>i</sub>², nothing is pooled, and the F statistic is referred to an F distribution whose second degrees of freedom come from the spreads.'));
       b.appendChild(table(['Test', 'F', 'df<sub>1</sub>', 'df<sub>2</sub>', 'p'], [
-        ['Welch’s F for equal means', num(av.F), intl(av.df1), num(av.df2), pValue(av.p)]
+        ['Welch’s F for equal means', stat(av.F), intl(av.df1), num(av.df2), pValue(av.p)]
       ]));
-      b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.df1 + ' and ' + num(av.df2) + ' degrees of freedom, ' + pEq(av.p) + ': ' +
+      b.appendChild(para('cmp-verdict', 'F = ' + stat(av.F) + ' on ' + av.df1 + ' and ' + num(av.df2) + ' degrees of freedom, ' + pEq(av.p) + ': ' +
         (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
     } else {
       const atab = table(['Source', 'SS', 'df', 'MS', 'F', 'p'], [
-        ['Between designs', num(av.ssb), intl(av.dfb), num(av.msb), num(av.F), pValue(av.p)],
-        paired ? ['Between replications (blocks)', num(av.ssblk), intl(av.dfblk), num(av.msblk), num(av.Fblock), pValue(av.pBlock)] : null,
+        ['Between designs', num(av.ssb), intl(av.dfb), num(av.msb), stat(av.F), pValue(av.p)],
+        paired ? ['Between replications (blocks)', num(av.ssblk), intl(av.dfblk), num(av.msblk), stat(av.Fblock), pValue(av.pBlock)] : null,
         [paired ? 'Residual' : 'Within designs', num(av.ssw), intl(av.dfw), num(av.msw), '', ''],
         ['Total', num(av.sst), intl(totalDf), '', '', '']
       ].filter(Boolean));
       b.appendChild(atab);
-      b.appendChild(para('cmp-verdict', 'F = ' + num(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, ' + pEq(av.p) + ': ' +
-        (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.')));
+      // With no variation left within the designs (once the blocks are
+      // removed, under pairing), F is infinite when the means differ and
+      // undefined when they do not.
+      const left = paired ? 'No variation is left once the designs and the replications are removed' : 'No design varies within itself';
+      b.appendChild(para('cmp-verdict', Number.isNaN(av.F)
+        ? 'F cannot be computed: ' + left.charAt(0).toLowerCase() + left.slice(1) + ', and the design means are all equal, which leaves no difference to test.'
+        : 'F = ' + stat(av.F) + ' on ' + av.dfb + ' and ' + av.dfw + ' degrees of freedom, ' + pEq(av.p) + ': ' +
+          (rejects ? 'the means are not all equal at this level.' : 'insufficient evidence of a difference among the means at this level.') +
+          (av.F === Infinity ? ' ' + left + ', and so F is infinite.' : '')));
     }
     // The pooled procedures assume one variance across designs; Levene's test
     // checks that without assuming normality, which the F ratio of two
@@ -864,12 +871,15 @@ function update() {
     tables.push({ section: 'anova', name: 'Equal-variance test (Levene)', headers: ['statistic', 'value'], rows: [['F', lv.F], ['df1', lv.df1], ['df2', lv.df2], ['p', lv.p], ['center', 'median']] });
     // The residuals, with the design means and, under pairing, the block
     // effects removed, are what the F test and the post-hoc rules take as normal.
+    // With no spread left within the designs (ssw taken as 0) every residual is
+    // 0; computed, they would be rounding error.
     const resid = [];
-    groups.forEach((g, i) => { for (let r = 0; r < g.length; r++) resid.push(g[r] - av.means[i] - (paired ? av.blockMeans[r] - av.grandMean : 0)); });
+    groups.forEach((g, i) => { for (let r = 0; r < g.length; r++) resid.push(av.ssw === 0 ? 0 : g[r] - av.means[i] - (paired ? av.blockMeans[r] - av.grandMean : 0)); });
     b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha, pooled: !welch, varianceSets: groups, linkDs: list[0].id,
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    if (welch) b.appendChild(para('exp-note', 'Levene’s test gives ' + pEq(lv.p) + ' here; Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
+    const levTxt = Number.isNaN(lv.p) ? 'cannot be computed (no spread within any design to compare)' : pEq(lv.p);
+    if (welch) b.appendChild(para('exp-note', 'Levene’s test ' + (Number.isNaN(lv.p) ? levTxt : 'gives ' + levTxt) + ' here; Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
     // The residuals' own quantile–quantile plot: the Normality section shows
     // one design's outcomes at a time, and the F test's assumption is about
     // all the residuals together.
@@ -954,7 +964,7 @@ function update() {
       const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
       tables.push({ section: 'anova', name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
     }
-    summary.push('Levene: ' + pEq(lv.p) + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': F = ' + num(av.F) + ', ' + pEq(av.p) + '. ' + ruleName + ': ' +
+    summary.push('Levene: ' + levTxt + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': ' + (Number.isNaN(av.F) ? 'F cannot be computed' : 'F = ' + stat(av.F) + ', ' + pEq(av.p)) + '. ' + ruleName + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   } else {
     const b = bodies[2];

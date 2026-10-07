@@ -20,17 +20,37 @@ export function mean(a) {
 }
 
 /**
- * Sample variance with divisor n − 1, by two passes about the mean.
+ * Sample variance with divisor n − 1, by two passes about the mean. A sample
+ * whose values are all equal (its minimum equals its maximum) has variance
+ * exactly 0, rather than the rounding error the passes can leave (0.1 repeated
+ * does not sum to a multiple of 0.1).
  * @param {ArrayLike<number>} a
  * @returns {number} NaN when n < 2
  */
 export function variance(a) {
   const n = a.length;
   if (n < 2) return NaN;
+  if (allEqual(a)) return 0;
   const m = mean(a);
   let ss = 0, c = 0;
   for (let i = 0; i < n; i++) { const d = a[i] - m; ss += d * d; c += d; }
   return (ss - c * c / n) / (n - 1);
+}
+
+/**
+ * True when every value equals the first, that is when the minimum equals the
+ * maximum: a sample with no spread at all. False for an empty sample and when
+ * a value is not finite.
+ * @param {ArrayLike<number>} a
+ * @returns {boolean}
+ */
+export function allEqual(a) {
+  const n = a.length;
+  if (n === 0) return false;
+  const v = a[0];
+  if (!Number.isFinite(v)) return false;
+  for (let i = 1; i < n; i++) if (a[i] !== v) return false;
+  return true;
 }
 
 /**
@@ -201,7 +221,9 @@ export function cumulativeMean(a) { return runningMean(a); }
 /**
  * Sample autocorrelation r_0..r_maxLag as R's acf(): deviations from the sample
  * mean, each lag's sum of products divided by n (not n − k), and every lag divided
- * by the lag-0 value. maxLag is clipped to n − 1.
+ * by the lag-0 value. maxLag is clipped to n − 1. A constant series (minimum
+ * equal to maximum) has no autocorrelation, and every value is NaN; R's acf()
+ * gives the ratio of two rounding errors there.
  * @param {ArrayLike<number>} a
  * @param {number} maxLag
  * @returns {Float64Array} length min(maxLag, n − 1) + 1; r_0 = 1
@@ -210,6 +232,7 @@ export function acf(a, maxLag) {
   const n = a.length;
   if (n === 0) return new Float64Array(0);
   const L = Math.max(0, Math.min(Math.floor(maxLag), n - 1));
+  if (allEqual(a)) return new Float64Array(L + 1).fill(NaN);
   const m = mean(a), d = new Float64Array(n);
   for (let i = 0; i < n; i++) d[i] = a[i] - m;
   const out = new Float64Array(L + 1);

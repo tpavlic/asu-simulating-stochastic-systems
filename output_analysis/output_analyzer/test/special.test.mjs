@@ -52,8 +52,8 @@ test("Rinott's constant matches Table A.12", () => {
 // the old search) and the integrand over s = S/σ rises near s = 1/q. Expected
 // values in reference/lowdf.json come from reference/lowdf.R: nested
 // integrate() split at 1/q and 10/q, and uniroot(). R's own qtukey is not the
-// reference here; it returns NaN below 2 degrees of freedom and misses
-// q(0.99, 4, 2) by about 1%.
+// reference here; it returns NaN below 2 degrees of freedom and is about 1% or
+// more off at 2 (q(0.99, 4, 2) by 1.2%), several percent with many designs.
 const low = JSON.parse(readFileSync(new URL('./reference/lowdf.json', import.meta.url), 'utf8'));
 const rel = (got, want, tol, label) => close(got, want, tol * Math.abs(want), label);
 test('studentized range quantiles on few degrees of freedom match nested integration', () => {
@@ -85,4 +85,12 @@ test("Rinott's constant on a first stage of two replications matches nested inte
 });
 test('quadrature integrates a polynomial exactly', () => {
   close(S.quad(x => x * x * x - 2 * x + 1, -1, 2, 4, 8), (16 / 4 - 4 + 2) - (1 / 4 - 1 - 1), 1e-13, 'cubic');
+});
+test('rootAbove returns NaN at once when f is NaN, and NaN when no root exists', () => {
+  let calls = 0;
+  assert.ok(Number.isNaN(S.rootAbove(() => { calls++; return NaN; }, 20, 1e-7)));
+  assert.equal(calls, 1, 'one evaluation, not sixty doublings');
+  assert.ok(Number.isNaN(S.rootAbove(() => -1, 20, 1e-7)));
+  close(S.rootAbove(x => x - 100, 20, 1e-12), 100, 1e-10, 'root past two doublings');
+  assert.ok(Number.isNaN(S.qtukey(0.95, 3, NaN)));
 });

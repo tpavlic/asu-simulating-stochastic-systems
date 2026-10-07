@@ -143,8 +143,9 @@ function skipFor(lang, smoke) {
  * runs even without OA_SCRIPTS=1; `also(stdout, lang, stderr)` makes further
  * checks on a run's raw output. `notInR` matches the keys that R and Tidy R
  * print but are not held to: those resting on R's own qtukey and ptukey,
- * which are approximate on few degrees of freedom (about 1% off at 2), where
- * the scripts keep them as the idiomatic call and say so in a comment.
+ * which are approximate on few degrees of freedom (about 1% or more off at 2,
+ * several percent with many designs), where the scripts keep them as the
+ * idiomatic call and say so in a comment.
  */
 export function checkRecipe(name, recipe, { smoke = false, also = null, notInR = null } = {}) {
   for (const lang of LANGS) {
@@ -1326,21 +1327,17 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
   checkRecipe('Several Systems, Friedman (Holm) on tied integer outcomes', sevRecipe(tied, { paired: true, proc: 'np', adjust: 'holm' }), sevChecks);
 }
 
-// Two outcomes per design under the t procedures. Levene's F is 0/0 rounding
-// noise here (each design's two distances from its median are equal up to
-// rounding), which the analyzer reports as a number; it is not compared. The
-// pooled analysis has 3 residual degrees of freedom, where R's qtukey is
-// held to its looser tolerance (see tolFor).
+// Two outcomes per design under the t procedures. Each design's two distances
+// from its median are equal up to rounding, and so Levene's test has no spread
+// within any design: F is infinite and p is 0 in every language, where the
+// built-in tests report rounding noise (R's anova() also warns of an
+// essentially perfect fit). The pooled analysis has 3 residual degrees of
+// freedom, where R's qtukey is held to its looser tolerance (see tolFor).
 {
   const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('T' + (i + 1), v));
   const r = sevRecipe(two, { eps: 0.4 });
-  for (const k of ['levene F', 'levene p']) { assert.ok(k in r.expect, k); r.expect[k] = null; }
-  // R says so: anova() on Levene's near-perfect fit warns that its F is unreliable, and that
-  // warning, and only it, is expected.
-  const leveneNoise = /Warning message:\s*In anova\.lm\(lm\(z ~ g\)\) :\s*ANOVA F-tests on an essentially perfect fit are unreliable\s*/;
-  checkRecipe('Several Systems, two replications per design under the t procedures', r, {
-    also: (stdout, lang, stderr) => noWarning(stdout, lang, lang === 'R' || lang === 'tidy' ? stderr.replace(leveneNoise, '') : stderr)
-  });
+  assert.equal(r.expect['levene F'], Infinity); assert.equal(r.expect['levene p'], 0);
+  checkRecipe('Several Systems, two replications per design under the t procedures', r, sevChecks);
 }
 
 // Quantiles past the old search, which stopped at 20 (and at 12 for Rinott's
@@ -2139,4 +2136,66 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   checkCsvMode('Steady State past the cap, time-persistent', st, [tpBig], { timed: true });
   checkCsvMode('Summary and Plots past the cap, tally', ex, [tallyBig], { timed: true });
   checkCsvMode('One System past the cap, pooled observations', one, [tallyBig], { langs: ['R', 'py'], timed: true });
+}
+
+// ── Repeated values and no spread within groups ────────────────────────
+// Values repeated in a way that does not sum exactly (0.1 three times sums to
+// 0.30000000000000004): their variance is exactly 0 in the analyzer and in
+// every script, where NumPy's and MATLAB's var leave rounding error and
+// MATLAB's vartest2 then reports F = 0 for two constant sets. An analysis of
+// variance with no spread within the designs has F infinite (p = 0), or
+// undefined when the between part is rounding error too, where aov, f_oneway,
+// anova1, and anova2 report F near 1e31.
+{
+  const r01 = n => Array(n).fill(0.1), r03 = n => Array(n).fill(0.3), r07 = n => Array(n).fill(0.7);
+  const varied = [3.1, 2.9, 4.2, 3.6, 3.3];
+  // Two Systems: both constant, and one constant against a varied design.
+  for (const proc of ['t', 'pooled', 'np']) {
+    const r = twoOf(reps('A', r01(3)), reps('B', r03(3)), proc, 0.95, PLAN2);
+    if (proc !== 'np') { assert.equal(r.expect.t, -Infinity); assert.equal(r.expect.p, 0); assert.equal(r.expect['half-width'], 0); }
+    assert.ok(Number.isNaN(r.expect.F) && Number.isNaN(r.expect['plan n per design for half-width']));
+    checkRecipe('Two Systems, ' + proc + ', 0.1 and 0.3 each repeated', r, { also: noWarning });
+  }
+  const one = twoOf(reps('A', r07(3)), reps('B', varied), 'pooled', 0.95, PLAN2);
+  assert.equal(one.expect['sd A'], 0); assert.equal(one.expect.F, 0); assert.equal(one.expect['F p'], 0);
+  checkRecipe('Two Systems, pooled, 0.7 repeated against a varied design', one, { also: noWarning });
+  checkRecipe('Two Systems, paired t on 0.1 and 0.3 each repeated', pairedRecipe(reps('A', r01(3)), reps('B', r03(3)), 't', 'id', PLAN2), { also: noWarning });
+  // One System: 0.1 seven times.
+  const flat7 = makeDataset({ name: 'Point one', response: 'v', kind: 'reps', reps: r01(7).map((v, i) => ({ id: i + 1, v: [v] })) });
+  const ro = oneRecipe({ ds: flat7, x: r01(7), ids: flat7.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, base: 0.95,
+    provenance: oneProv(flat7, 0.95, 't'), plan: { relative: false, rel: 10, abs: 0.05, delta: 0.3, power: 0.8 } });
+  assert.equal(ro.expect['half-width'], 0);
+  checkRecipe('One System, t interval on 0.1 repeated seven times', ro, { also: noWarning });
+  // Several Systems: three constant designs, one-way and in blocks, and designs additive in blocks.
+  const consts = [r01(3), r03(3), r07(3)].map((v, i) => reps('C' + (i + 1), v));
+  const rc = sevRecipe(consts, { eps: 0.4 });
+  assert.equal(rc.expect['anova F'], Infinity); assert.equal(rc.expect['anova p'], 0); assert.equal(rc.expect['ms within'], 0);
+  assert.ok(Number.isNaN(rc.expect['levene F']) && Number.isNaN(rc.expect['levene p']));
+  checkRecipe('Several Systems, 0.1, 0.3, and 0.7 each repeated, Tukey', rc, sevChecks);
+  checkRecipe('Several Systems, 0.1, 0.3, and 0.7 each repeated, Dunnett', sevRecipe(consts, { rule: 'dunnett', ctrlIdx: 1 }), sevChecks);
+  const rb = sevRecipe(consts, { paired: true, rule: 'bonferroni' });
+  assert.equal(rb.expect['anova F'], Infinity);
+  checkRecipe('Several Systems, 0.1, 0.3, and 0.7 each repeated, in blocks', rb, sevChecks);
+  // Each design's two outcomes differ by exactly 1, and so the paired differences are exact
+  // constants, while the residual found by subtraction is rounding error (about 1e-15).
+  const additive = [[2.1, 3.1], [2.3, 3.3], [4.3, 5.3]].map((v, i) => reps('D' + (i + 1), v));
+  const ra = sevRecipe(additive, { paired: true });
+  assert.equal(ra.expect['anova F'], Infinity);
+  checkRecipe('Several Systems, designs additive in the blocks', ra, sevChecks);
+  // Summary and Plots: Levene across two datasets whose distances from their medians all agree,
+  // and a dataset of 0.1 repeated.
+  const eqA = reps('E1', [0.1, 0.3]), eqB = reps('E2', [1.1, 1.3]);
+  const re = exRecipe(eqA, exSpread(eqA, eqB));
+  assert.ok(Number.isNaN(re.expect['levene F']));
+  checkRecipe('Summary and Plots, Levene on equal spreads of two outcomes each', re, exChecks);
+  const flat4 = reps('Flat point one', r01(4));
+  const rf = exRecipe(flat4, exSpread(flat4, IND_A));
+  assert.equal(rf.expect['interval half-width'], 0);
+  checkRecipe('Summary and Plots on 0.1 repeated', rf, exChecks);
+  // Steady State: a constant run of 0.1, whose batch means are all equal.
+  const flatRun = makeDataset({ name: 'Flat run', response: 'v', kind: 'tally', reps: [{ id: 1, v: Array(200).fill(0.1) }] });
+  const rs = stRecipe(flatRun, { count: 10 });
+  assert.equal(rs.expect['half-width'], 0);
+  assert.ok(Number.isNaN(rs.expect['fishman C']) && Number.isNaN(rs.expect['acf lag 1']));
+  checkRecipe('Steady State, a constant run of 0.1', rs, stChecks);
 }

@@ -386,13 +386,17 @@ export function solveMonotone(f, lo, hi, tol) {
  * Root of an increasing f with f(0) ≤ 0: the upper end starts at `hi` and
  * doubles until f there is no longer negative, the lower end following it
  * up, and the root is then found between them, to a bracket width of tol
- * times the lower end once that passes 1. NaN when f stays negative through
- * 60 doublings, that is, when no root exists.
+ * times the lower end once that passes 1. NaN in two cases: at once when f
+ * is NaN at an upper end (an argument such as a degrees of freedom is out of
+ * range, and no doubling would help), and when f stays negative through 60
+ * doublings, that is, when no root exists.
  */
 export function rootAbove(f, hi, tol) {
   let lo = 0;
   for (let i = 0; i < 60; i++) {
-    if (f(hi) >= 0) return solveMonotone(f, lo, hi, tol * Math.max(1, lo));
+    const v = f(hi);
+    if (Number.isNaN(v)) return NaN;
+    if (v >= 0) return solveMonotone(f, lo, hi, tol * Math.max(1, lo));
     lo = hi; hi *= 2;
   }
   return NaN;

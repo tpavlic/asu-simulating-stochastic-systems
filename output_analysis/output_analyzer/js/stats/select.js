@@ -9,7 +9,10 @@ function mean(a) {
   for (let i = 0; i < a.length; i++) s += a[i];
   return s / a.length;
 }
+// Exactly 0 for a sample whose values are all equal (its minimum equals its
+// maximum), rather than the rounding error two passes can leave.
 function variance(a) {
+  if (a.length > 1 && a.every(v => v === a[0]) && Number.isFinite(a[0])) return 0;
   const n = a.length, m = mean(a);
   let s = 0;
   for (let i = 0; i < n; i++) { const d = a[i] - m; s += d * d; }

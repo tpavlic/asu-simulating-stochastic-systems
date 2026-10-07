@@ -18,7 +18,7 @@ import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, e
 import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
-import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
+import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -674,7 +674,7 @@ function renderIndependent(res, notes, d, level) {
   vs.appendChild(caption('Which design is more variable: the ratio of the two sample variances with its F interval. The equal-variances assumption of the pooled t is a different question, answered by Levene’s test on the checks line above.'));
   const vv = (x, f = num) => (fr ? f(x) : dash);
   vs.appendChild(cardRow([
-    card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), vv(fr && fr.F), 'ratio of sample variances'),
+    card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), vv(fr && fr.F, stat), 'ratio of sample variances'),
     card(S('df<sub>1</sub>'), vv(fr && fr.df1, intl), 'R<sub>A</sub> − 1'),
     card(S('df<sub>2</sub>'), vv(fr && fr.df2, intl), 'R<sub>B</sub> − 1'),
     card('Two-sided p', fr ? pValue(fr.p) : dash, 'against σ²<sub>A</sub> = σ²<sub>B</sub>'),

@@ -101,6 +101,9 @@ end
 // ── descriptives: n, mean, sd, se, min, quartiles (R's type 7), max ───────
 // One outcome has no spread to estimate: its sd and se are NaN, and each of
 // its quartiles is the value itself, identically in all three languages.
+// Outcomes that are all equal (the minimum equals the maximum) have sd
+// exactly 0, as the analyzer reports it; NumPy's std and MATLAB's std can
+// leave rounding error there (0.1 repeated three times gives about 1.7e-17).
 
 LIB.R.descriptives = `
 describe <- function(x) {
@@ -117,7 +120,10 @@ def describe(x):
     """n, mean, sd (n - 1), se, min, quartiles by linear interpolation (R's type 7), max."""
     x = np.asarray(x, float)
     q1, med, q3 = np.quantile(x, [0.25, 0.5, 0.75])   # numpy's default is R's type 7
-    sd = x.std(ddof=1) if len(x) > 1 else float("nan")   # one outcome has no spread to estimate
+    if len(x) < 2:
+        sd = float("nan")   # one outcome has no spread to estimate
+    else:
+        sd = 0.0 if x.min() == x.max() else x.std(ddof=1)   # all equal: exactly 0
     return dict(n=len(x), mean=x.mean(), sd=sd, se=sd / np.sqrt(len(x)), min=x.min(),
                 q1=q1, median=med, q3=q3, max=x.max())
 `;
@@ -127,7 +133,7 @@ function d = describe(x)
 % n, mean, sd (n - 1), se, min, quartiles by linear interpolation (R's type 7), max.
 x = x(:); n = numel(x); s = sort(x);
 if n > 1
-    sd = std(x);
+    if s(1) == s(n), sd = 0; else, sd = std(x); end   % all equal: exactly 0
     q = @(p) interp1(0:n-1, s, (n - 1) * p);   % R's type 7: h = (n - 1) p
 else
     sd = NaN;   % one outcome has no spread to estimate
@@ -182,7 +188,7 @@ plot_outcomes <- function(data, col, label) {
 LIB.R.tInterval = `
 t_interval <- function(x, level) {
   n <- length(x); df <- n - 1; tq <- qt(1 - (1 - level) / 2, df)
-  if (sd(x) == 0) return(list(df = df, t = tq, hw = 0, lo = mean(x), hi = mean(x), test = NULL))
+  if (min(x) == max(x)) return(list(df = df, t = tq, hw = 0, lo = mean(x), hi = mean(x), test = NULL))
   tt <- t.test(x, conf.level = level)
   # test is t.test's own result (an htest object), kept for anyone who wants it whole.
   list(df = unname(tt$parameter), t = tq, hw = unname(diff(tt$conf.int)) / 2,
@@ -194,9 +200,9 @@ def t_interval(x, level):
     """mean +/- t * s / sqrt(n), as scipy's t.interval."""
     x = np.asarray(x, float); n = len(x); df = n - 1
     tq = stats.t.ppf(1 - (1 - level) / 2, df)
-    se = x.std(ddof=1) / np.sqrt(n)
-    if se == 0:
+    if x.min() == x.max():
         return dict(df=df, t=tq, hw=0.0, lo=x.mean(), hi=x.mean())
+    se = x.std(ddof=1) / np.sqrt(n)
     lo, hi = stats.t.interval(level, df, loc=x.mean(), scale=se)
     return dict(df=df, t=tq, hw=(hi - lo) / 2, lo=lo, hi=hi)
 `;
@@ -204,7 +210,7 @@ LIB.m.tInterval = `
 function r = t_interval(x, level)
 % mean +/- t * s / sqrt(n), as ttest's confidence interval.
 x = x(:); df = numel(x) - 1; tq = tinv(1 - (1 - level) / 2, df);
-if std(x) == 0
+if min(x) == max(x)
     r = struct('df', df, 't', tq, 'hw', 0, 'lo', mean(x), 'hi', mean(x)); return;
 end
 [~, ~, ci, st] = ttest(x, 0, 'Alpha', 1 - level);
@@ -470,7 +476,8 @@ variance_interval <- function(x, level) {
 LIB.py.varianceInterval = `
 def variance_interval(x, level):
     """[(n-1) s^2 / chi2_{1-a/2}, (n-1) s^2 / chi2_{a/2}] on n - 1 degrees of freedom."""
-    x = np.asarray(x, float); df = len(x) - 1; s2 = x.var(ddof=1); a = 1 - level
+    x = np.asarray(x, float); df = len(x) - 1; a = 1 - level
+    s2 = 0.0 if x.min() == x.max() else x.var(ddof=1)   # all equal: exactly 0
     qlo, qhi = stats.chi2.ppf([a / 2, 1 - a / 2], df)
     return dict(s2=s2, chiLo=qlo, chiHi=qhi, lo2=df * s2 / qhi, hi2=df * s2 / qlo,
                 loS=np.sqrt(df * s2 / qhi), hiS=np.sqrt(df * s2 / qlo))
@@ -478,7 +485,8 @@ def variance_interval(x, level):
 LIB.m.varianceInterval = `
 function r = variance_interval(x, level)
 % [(n-1) s^2 / chi2_{1-a/2}, (n-1) s^2 / chi2_{a/2}] on n - 1 degrees of freedom (vartest gives the same).
-x = x(:); df = numel(x) - 1; s2 = var(x); a = 1 - level;
+x = x(:); df = numel(x) - 1; a = 1 - level;
+if min(x) == max(x), s2 = 0; else, s2 = var(x); end   % all equal: exactly 0
 qlo = chi2inv(a / 2, df); qhi = chi2inv(1 - a / 2, df);
 r = struct('s2', s2, 'chiLo', qlo, 'chiHi', qhi, 'lo2', df * s2 / qhi, 'hi2', df * s2 / qlo, ...
            'loS', sqrt(df * s2 / qhi), 'hiS', sqrt(df * s2 / qlo));
@@ -918,7 +926,10 @@ end
 
 // ── F ratio of two variances ─────────────────────────────────────────────
 // A B with no spread makes F infinite (p = 0, as var.test reports), and two
-// sets with no spread make it undefined.
+// sets with no spread make it undefined. A set whose values are all equal
+// (its minimum equals its maximum) has variance exactly 0, which R's var
+// gives but NumPy's var and MATLAB's var can miss by rounding error (vartest2
+// then reports F = 0 for two constant sets), and so Python and MATLAB set it.
 
 LIB.R.fRatio = `
 f_ratio <- function(a, b, level) {
@@ -932,7 +943,8 @@ def f_ratio(a, b, level):
     """F = s_a^2 / s_b^2 on (n_a - 1, n_b - 1) degrees of freedom, the two-sided p, and the
     interval [F / F_{1-a/2}, F / F_{a/2}], as R's var.test."""
     a = np.asarray(a, float); b = np.asarray(b, float); df1, df2 = len(a) - 1, len(b) - 1
-    va, vb = a.var(ddof=1), b.var(ddof=1); al = 1 - level
+    va = 0.0 if a.min() == a.max() else a.var(ddof=1)   # all equal: exactly 0
+    vb = 0.0 if b.min() == b.max() else b.var(ddof=1); al = 1 - level
     if vb > 0:
         F = va / vb
     else:
@@ -946,7 +958,20 @@ def f_ratio(a, b, level):
 LIB.m.fRatio = `
 function r = f_ratio(a, b, level)
 % F = s_a^2 / s_b^2 with its two-sided p and interval, as vartest2 (and R's var.test).
-[~, p, ci, st] = vartest2(a(:), b(:), 'Alpha', 1 - level);
+a = a(:); b = b(:);
+if min(a) == max(a) || min(b) == max(b)
+    % A set whose values are all equal has variance exactly 0, which var can miss by rounding
+    % error. F is then 0, infinite (p = 0), or undefined when both sets are constant.
+    df1 = numel(a) - 1; df2 = numel(b) - 1; al = 1 - level;
+    va = 0; if min(a) < max(a), va = var(a); end
+    vb = 0; if min(b) < max(b), vb = var(b); end
+    F = va / vb;
+    if isnan(F), p = NaN; elseif isinf(F), p = 0; else, p = min(1, 2 * min(fcdf(F, df1, df2), fcdf(F, df1, df2, 'upper'))); end
+    r = struct('F', F, 'df1', df1, 'df2', df2, 'p', p, ...
+               'lo', F / finv(1 - al / 2, df1, df2), 'hi', F / finv(al / 2, df1, df2));
+    return;
+end
+[~, p, ci, st] = vartest2(a, b, 'Alpha', 1 - level);
 r = struct('F', st.fstat, 'df1', st.df1, 'df2', st.df2, 'p', p, 'lo', ci(1), 'hi', ci(2));
 end
 `;
@@ -956,16 +981,21 @@ end
 // group's median. Distances that do not vary within any group make F
 // infinite (p = 0) when they differ between groups, as the analyzer reports,
 // and leave nothing to compare when they do not, as when every group is
-// constant.
+// constant. As in the analyzer, "do not vary" means a within sum of squares
+// at most 1e-12 of the distances' uncentered sum of squares: two outcomes
+// per group lie at distances from their median that are equal only up to
+// rounding, and the built-in tests report that rounding error as an F near
+// 1e30, or as a small F when the between part is rounding error too.
 
 LIB.R.levene = `
 levene_test <- function(groups) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
-  if (sum((z - ave(z, g))^2) == 0) {
+  tiny <- 1e-12 * sum(z^2)   # below this, a sum of squares is rounding error
+  if (sum((z - ave(z, g))^2) <= tiny) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
-    between <- sum((ave(z, g) - mean(z))^2) > 0
+    between <- sum((ave(z, g) - mean(z))^2) > tiny
     return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN, test = NULL))
   }
   tab <- anova(lm(z ~ g))
@@ -978,11 +1008,12 @@ def levene_test(groups):
     groups = [np.asarray(g, float) for g in groups]
     k = len(groups); N = sum(len(g) for g in groups)
     z = [np.abs(g - np.median(g)) for g in groups]
-    if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) == 0:
+    tiny = 1e-12 * sum(float(np.sum(zi ** 2)) for zi in z)   # below this, a sum of squares is rounding error
+    if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) <= tiny:
         zbar = np.concatenate(z).mean()
         # The distances do not vary within any group: F is infinite (p = 0) when they differ
         # between groups, and there is nothing to compare when they do not (every group constant).
-        between = sum(len(zi) * (zi.mean() - zbar) ** 2 for zi in z) > 0
+        between = sum(len(zi) * (zi.mean() - zbar) ** 2 for zi in z) > tiny
         return dict(F=np.inf if between else np.nan, df1=k - 1, df2=N - k, p=0.0 if between else np.nan)
     res = stats.levene(*groups, center="median")
     return dict(F=res.statistic, df1=k - 1, df2=N - k, p=res.pvalue)
@@ -997,10 +1028,11 @@ N = numel(y); z = zeros(N, 1); zm = zeros(N, 1);
 for i = 1:k
     in = g == i; z(in) = abs(y(in) - median(y(in))); zm(in) = mean(z(in));
 end
-if sum((z - zm).^2) == 0
+tiny = 1e-12 * sum(z.^2);   % below this, a sum of squares is rounding error
+if sum((z - zm).^2) <= tiny
     % The distances do not vary within any group: F is infinite (p = 0) when they differ
     % between groups, and there is nothing to compare when they do not (every group constant).
-    between = sum((zm - mean(z)).^2) > 0;
+    between = sum((zm - mean(z)).^2) > tiny;
     if between, F = Inf; p = 0; else, F = NaN; p = NaN; end
     r = struct('F', F, 'df1', k - 1, 'df2', N - k, 'p', p); return;
 end
@@ -1380,7 +1412,10 @@ end
 // varies within itself (or, with blocks, nothing is left once the designs
 // and the blocks are removed), their residual is rounding error or empty,
 // and so the table is written out as the analyzer reports it: F is infinite
-// (p = 0) when the means differ and undefined when they do not.
+// (p = 0) when the means differ and undefined when they do not. As in the
+// analyzer, a sum of squares at most 1e-12 of the outcomes' uncentered sum
+// of squares is rounding error: 0.1, 0.3, and 0.7 each repeated three times
+// leave a residual near 1e-32, which aov turns into an F near 6e31.
 
 LIB.R.anova = `
 anova_table <- function(groups, blocked) {
@@ -1395,10 +1430,11 @@ anova_table <- function(groups, blocked) {
   } else {
     bm <- NULL; ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
   }
-  ratio <- function(a, b) if (b > 0) a / b else if (a > 0) Inf else NaN
+  tiny <- 1e-12 * sum(outcome^2)   # below this, a sum of squares is rounding error
+  no_spread_F <- function(ss) if (ss > tiny) Inf else NaN   # F with nothing left within the designs
   pval <- function(f, d1, d2) if (is.nan(f)) NaN else pf(f, d1, d2, lower.tail = FALSE)
   fit <- NULL
-  if (ssw > 0) {
+  if (ssw > tiny) {
     fit <- if (blocked) aov(outcome ~ design + block) else aov(outcome ~ design)
     tab <- summary(fit)[[1]]   # rows: the designs, the blocks (when blocked), the residuals
     e <- nrow(tab)
@@ -1409,15 +1445,17 @@ anova_table <- function(groups, blocked) {
   } else {
     dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(outcome) - k
     res <- list(ssb = ssb, dfb = dfb, msb = ssb / dfb, ssw = 0, dfw = dfw, msw = 0)
-    res$F <- ratio(res$msb, 0); res$p <- pval(res$F, dfb, dfw)
+    res$F <- no_spread_F(ssb); res$p <- pval(res$F, dfb, dfw)
     if (blocked) {
       res <- c(res, list(ssblk = ssblk, dfblk = R - 1, msblk = ssblk / (R - 1)))
-      res$Fblock <- ratio(res$msblk, 0); res$pBlock <- pval(res$Fblock, R - 1, dfw)
+      res$Fblock <- no_spread_F(ssblk); res$pBlock <- pval(res$Fblock, R - 1, dfw)
     }
   }
   res$means <- means; res$n <- n; res$grandMean <- grand; res$blockMeans <- bm; res$fit <- fit
   # The residuals: each outcome less its design's mean and, with blocks, its replication's effect.
+  # With nothing left within the designs they are all 0 (computed, they would be rounding error).
   res$resid <- unlist(lapply(seq_along(groups), function(i) groups[[i]] - means[i] - (if (blocked) bm - grand else 0)))
+  if (res$ssw == 0) res$resid[] <- 0
   res
 }
 `;
@@ -1428,27 +1466,32 @@ def anova_table(groups, blocked):
     groups = [np.asarray(g, float) for g in groups]; k = len(groups)
     means = np.array([g.mean() for g in groups]); n = np.array([len(g) for g in groups])
     y = np.concatenate(groups); grand = y.mean()
-    ratio = lambda a, b: a / b if b > 0 else (np.inf if a > 0 else np.nan)
+    tiny = 1e-12 * float(np.sum(y ** 2))   # below this, a sum of squares is rounding error
+    no_spread_F = lambda ss: np.inf if ss > tiny else np.nan   # F with nothing left within the designs
     pval = lambda f, d1, d2: np.nan if np.isnan(f) else stats.f.sf(f, d1, d2)
     ssb = float(np.sum(n * (means - grand) ** 2))
     if blocked:
         R = int(n[0]); bm = np.column_stack(groups).mean(axis=1)
         ssblk = float(k * np.sum((bm - grand) ** 2)); ssw = max(0.0, float(np.sum((y - grand) ** 2)) - ssb - ssblk)
+        if ssw <= tiny: ssw = 0.0
         dfb, dfblk, dfw = k - 1, R - 1, (k - 1) * (R - 1)
         msb, msblk, msw = ssb / dfb, ssblk / dfblk, ssw / dfw
-        F, Fb = ratio(msb, msw), ratio(msblk, msw)
-        # The residuals: each outcome less its design's mean and its replication's effect.
+        F, Fb = (msb / msw, msblk / msw) if ssw > 0 else (no_spread_F(ssb), no_spread_F(ssblk))
+        # The residuals: each outcome less its design's mean and its replication's effect; with
+        # nothing left within the designs they are all 0 (computed, they would be rounding error).
         resid = np.concatenate([g - means[i] - (bm - grand) for i, g in enumerate(groups)])
+        if ssw == 0: resid = np.zeros_like(resid)
         return dict(ssb=ssb, dfb=dfb, msb=msb, F=F, p=pval(F, dfb, dfw), ssblk=ssblk, dfblk=dfblk, msblk=msblk,
                     Fblock=Fb, pBlock=pval(Fb, dfblk, dfw), ssw=ssw, dfw=dfw, msw=msw,
                     means=means, n=n, grandMean=grand, blockMeans=bm, resid=resid)
     ssw = float(sum(np.sum((g - g.mean()) ** 2) for g in groups)); dfb, dfw = k - 1, len(y) - k
-    msb, msw = ssb / dfb, ssw / dfw
-    if ssw > 0:
+    if ssw > tiny:
         res = stats.f_oneway(*groups); F, p = float(res.statistic), float(res.pvalue)
     else:
-        F = ratio(msb, msw); p = pval(F, dfb, dfw)
+        ssw = 0.0; F = no_spread_F(ssb); p = pval(F, dfb, dfw)
+    msb, msw = ssb / dfb, ssw / dfw
     resid = np.concatenate([g - means[i] for i, g in enumerate(groups)])
+    if ssw == 0: resid = np.zeros_like(resid)   # nothing left within the designs
     return dict(ssb=ssb, dfb=dfb, msb=msb, F=F, p=p, ssw=ssw, dfw=dfw, msw=msw,
                 means=means, n=n, grandMean=grand, blockMeans=None, resid=resid)
 `;
@@ -1461,6 +1504,7 @@ k = numel(groups);
 means = cellfun(@mean, groups); n = cellfun(@numel, groups);
 y = cell2mat(cellfun(@(v) v(:), groups(:), 'UniformOutput', false));
 grand = mean(y);
+tiny = 1e-12 * sum(y.^2);   % below this, a sum of squares is rounding error
 if blocked
     M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false));   % R-by-k: row = block, column = design
     [~, tab, st] = anova2(M, 1, 'off');
@@ -1468,29 +1512,37 @@ if blocked
     bm = mean(M, 2);
     % The residuals: each outcome less its design's mean and its replication's effect.
     resid = reshape(M - means - (bm - grand), [], 1);
-    [F, p] = f_entry(tab, 2); [Fb, pb] = f_entry(tab, 3);
+    flat = tab{4,2} <= tiny;   % nothing left once the designs and the blocks are removed
+    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    [F, p] = f_entry(tab, 2, flat, tiny); [Fb, pb] = f_entry(tab, 3, flat, tiny);
+    ssw = tab{4,2}; msw = tab{4,4}; if flat, ssw = 0; msw = 0; end
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
-               'ssw', tab{4,2}, 'dfw', tab{4,3}, 'msw', tab{4,4}, 'means', means, 'n', n, 'grandMean', grand, ...
+               'ssw', ssw, 'dfw', tab{4,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', bm', 'resid', resid, 'stats', st);
 else
     g = repelem((1:k)', n(:));
     [~, tab, st] = anova1(y, g, 'off');
     % tab rows: Groups, Error, Total; columns: SS, df, MS, F, p
     resid = y - reshape(means(g), [], 1);
-    [F, p] = f_entry(tab, 2);
+    flat = tab{3,2} <= tiny;   % no design varies within itself
+    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    [F, p] = f_entry(tab, 2, flat, tiny);
+    ssw = tab{3,2}; msw = tab{3,4}; if flat, ssw = 0; msw = 0; end
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
-               'ssw', tab{3,2}, 'dfw', tab{3,3}, 'msw', tab{3,4}, 'means', means, 'n', n, 'grandMean', grand, ...
+               'ssw', ssw, 'dfw', tab{3,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', [], 'resid', resid, 'stats', st);
 end
 end
 
-function [F, p] = f_entry(tab, row)
-% F and p from one row of a table, which leaves F empty when the error mean square is 0: F is
-% then infinite (p = 0) when the row's mean square is positive, and undefined when it is not.
-F = tab{row, 5}; p = tab{row, 6};
-if isempty(F)
-    if tab{row, 4} > 0, F = Inf; p = 0; else, F = NaN; p = NaN; end
+function [F, p] = f_entry(tab, row, flat, tiny)
+% F and p from one row of a table. With nothing left within the designs (flat), the table's F is
+% rounding noise, or empty when the error sum of squares is exactly 0: F is then infinite (p = 0)
+% when the row's sum of squares exceeds tiny, and undefined when it does not.
+if flat
+    if tab{row, 2} > tiny, F = Inf; p = 0; else, F = NaN; p = NaN; end
+else
+    F = tab{row, 5}; p = tab{row, 6};
 end
 end
 `;
@@ -1634,8 +1686,8 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   # pairs: a list of c(i, j); control: the control design, for Dunnett.
   k <- length(groups); C <- length(pairs); scale <- 1
   if (rule == "tukey") {
-    # R's qtukey is approximate on few degrees of freedom (about 1% off at 2), and below 2 it
-    # returns NaN with a warning.
+    # R's qtukey is approximate on few degrees of freedom (about 1% or more off at 2, several
+    # percent with many designs), and below 2 it returns NaN with a warning.
     crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
   } else if (rule == "lsd") {
     crit <- qt(1 - alpha / 2, av$dfw)
@@ -1702,7 +1754,9 @@ if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
 if strcmp(rule, 'dunnett')
     crit = qdunnett(1 - alpha, sqrt(n(pairs(:, 1)) / n(control)), av.dfw);
 elseif strcmp(rule, 'tukey')
-    crit = studrange_inv(1 - alpha, numel(means), av.dfw);   % the studentized range q, with hw = q se / sqrt(2)
+    % The studentized range q, with hw = q se / sqrt(2). multcompare(stats, 'CriticalValueType',
+    % 'tukey-kramer') gives the same intervals except on very few degrees of freedom.
+    crit = studrange_inv(1 - alpha, numel(means), av.dfw);
 else
     types = struct('lsd', 'lsd', 'bonferroni', 'bonferroni');
     st = av.stats; s2 = msw;
@@ -1743,8 +1797,9 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     se <- sqrt(a1 + a2); df <- (a1 + a2)^2 / (a1^2 / (length(xi) - 1) + a2^2 / (length(xj) - 1))
     diff <- mean(xi) - mean(xj)
     if (rule == "gameshowell") {
-      # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% off at 2), and
-      # below 2, as between two designs of 2 replications each, they return NaN with a warning.
+      # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% or more off at 2,
+      # several percent with many designs), and below 2, as between two designs of 2 replications
+      # each, they return NaN with a warning.
       crit <- qtukey(1 - alpha, k, df); hw <- crit * se / sqrt(2)
       pval <- ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE)
     } else {
@@ -2487,9 +2542,11 @@ lump_reps <- function(reps, kind, by, cut_at, end_time) {
 fishman <- function(y) {
   # The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
   # correlation: C is close to N(0, 1) when the batch means are independent (b >= 4).
-  b <- length(y); d <- y - mean(y); ss <- sum(d^2)
-  r1 <- if (b >= 2 && isTRUE(ss > 0)) sum(d[-b] * d[-1]) / ss else NaN
-  if (b < 4 || !isTRUE(ss > 0)) return(list(r1 = r1, C = NaN, p = NaN))
+  # Batch means that are all equal have no correlation to test (their deviations are rounding
+  # error at most).
+  b <- length(y); d <- y - mean(y); ss <- sum(d^2); varies <- b >= 2 && isTRUE(min(y) < max(y))
+  r1 <- if (varies) sum(d[-b] * d[-1]) / ss else NaN
+  if (b < 4 || !varies) return(list(r1 = r1, C = NaN, p = NaN))
   C <- sqrt((b^2 - 1) / (b - 2)) * (r1 + (d[1]^2 + d[b]^2) / (2 * ss))
   # The upper tail is computed directly, which keeps its digits far out; the analyzer forms
   # 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
@@ -2584,8 +2641,11 @@ def fishman(y):
     """The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
     correlation: C is close to N(0, 1) when the batch means are independent (b >= 4)."""
     y = np.asarray(y, float); b = len(y); d = y - y.mean(); ss = float(np.sum(d ** 2))
-    r1 = float(np.sum(d[:-1] * d[1:]) / ss) if b >= 2 and ss > 0 else np.nan
-    if b < 4 or not ss > 0: return dict(r1=r1, C=np.nan, p=np.nan)
+    # Batch means that are all equal have no correlation to test (their deviations are
+    # rounding error at most).
+    varies = b >= 2 and y.min() < y.max()
+    r1 = float(np.sum(d[:-1] * d[1:]) / ss) if varies else np.nan
+    if b < 4 or not varies: return dict(r1=r1, C=np.nan, p=np.nan)
     C = np.sqrt((b ** 2 - 1) / (b - 2)) * (r1 + (d[0] ** 2 + d[-1] ** 2) / (2 * ss))
     # The upper tail is computed directly, which keeps its digits far out; the analyzer forms
     # 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
@@ -2632,7 +2692,8 @@ def batch_means(t, v, kind, end_time, count, size, level, first=0):
         pos = np.searchsorted(edges, t, side="right") - 1
         pos[(pos == b) & (leftover == 0) & (t == edges[b])] = b - 1
         records = np.bincount(pos[(pos >= 0) & (pos < b)], minlength=b)
-    ti = t_interval(means, level); f = fishman(means); sd = means.std(ddof=1)
+    ti = t_interval(means, level); f = fishman(means)
+    sd = 0.0 if means.min() == means.max() else means.std(ddof=1)   # all equal: exactly 0
     return dict(ok=True, b=b, size=m, start=start, nUsed=n, means=means, records=records, leftover=leftover,
                 mean=means.mean(), sd=sd, se=sd / np.sqrt(b), df=b - 1, t=ti["t"], hw=ti["hw"], lo=ti["lo"],
                 hi=ti["hi"], r1=f["r1"], C=f["C"], p=f["p"])
@@ -2685,8 +2746,11 @@ function f = fishman(y)
 % The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
 % correlation: C is close to N(0, 1) when the batch means are independent (b >= 4).
 y = y(:)'; b = numel(y); d = y - mean(y); ss = sum(d.^2);
-r1 = NaN; if b >= 2 && ss > 0, r1 = sum(d(1:end-1) .* d(2:end)) / ss; end
-if b < 4 || ~(ss > 0), f = struct('r1', r1, 'C', NaN, 'p', NaN); return; end
+% Batch means that are all equal have no correlation to test (their deviations are rounding
+% error at most).
+varies = b >= 2 && min(y) < max(y);
+r1 = NaN; if varies, r1 = sum(d(1:end-1) .* d(2:end)) / ss; end
+if b < 4 || ~varies, f = struct('r1', r1, 'C', NaN, 'p', NaN); return; end
 C = sqrt((b^2 - 1) / (b - 2)) * (r1 + (d(1)^2 + d(end)^2) / (2 * ss));
 % The upper tail is computed directly, which keeps its digits far out; the analyzer forms
 % 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
@@ -2733,19 +2797,26 @@ else
     records = accumarray(pos(pos >= 1 & pos <= b)', 1, [b, 1])';
 end
 ti = t_interval(means, level); f = fishman(means);
+if min(means) == max(means), s = 0; else, s = std(means); end   % all equal: exactly 0
 r = struct('ok', true, 'reason', '', 'b', b, 'size', m, 'start', start, 'nUsed', n, 'means', means, ...
-           'records', records, 'leftover', leftover, 'mean', mean(means), 'sd', std(means), ...
-           'se', std(means) / sqrt(b), 'df', b - 1, 't', ti.t, 'hw', ti.hw, 'lo', ti.lo, 'hi', ti.hi, ...
+           'records', records, 'leftover', leftover, 'mean', mean(means), 'sd', s, ...
+           'se', s / sqrt(b), 'df', b - 1, 't', ti.t, 'hw', ti.hw, 'lo', ti.lo, 'hi', ti.hi, ...
            'r1', f.r1, 'C', f.C, 'p', f.p);
 end
 `;
 
 // ── Steady State: the autocorrelation of the kept series ─────────────────
 // The sample autocorrelation as R's acf computes it: deviations from the
-// series mean, each lag's sum of products divided by the lag-0 sum.
+// series mean, each lag's sum of products divided by the lag-0 sum. A
+// constant series (its minimum equals its maximum) has none, and every lag is
+// NaN, as the analyzer reports; acf would divide rounding error by rounding
+// error there (0.1 repeated seven times gives 0.857 at lag 1).
 
 LIB.R.acf = `
-acf_lags <- function(y, L) as.numeric(acf(y, lag.max = L, plot = FALSE)$acf)[-1]
+acf_lags <- function(y, L) {
+  if (min(y) == max(y)) return(rep(NaN, L))   # a constant series has no autocorrelation
+  as.numeric(acf(y, lag.max = L, plot = FALSE)$acf)[-1]
+}
 resample_tw <- function(t, v, a, z, n_steps) {
   # The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time steps,
   # which an autocorrelation needs because the records arrive at uneven times.
@@ -2757,8 +2828,9 @@ resample_tw <- function(t, v, a, z, n_steps) {
 LIB.py.acf = `
 def acf_lags(y, L):
     """r_k = sum (y_i - ybar)(y_(i+k) - ybar) / sum (y_i - ybar)^2 for k = 1..L, as R's acf."""
-    y = np.asarray(y, float); d = y - y.mean(); ss = float(np.sum(d ** 2))
-    if not ss > 0: return np.full(L, np.nan)
+    y = np.asarray(y, float)
+    if y.min() == y.max(): return np.full(L, np.nan)   # a constant series has no autocorrelation
+    d = y - y.mean(); ss = float(np.sum(d ** 2))
     return np.array([float(np.sum(d[:-k] * d[k:]) / ss) for k in range(1, L + 1)])
 
 def resample_tw(t, v, a, z, n_steps):
@@ -2770,7 +2842,9 @@ def resample_tw(t, v, a, z, n_steps):
 LIB.m.acf = `
 function r = acf_lags(y, L)
 % r_k = sum (y_i - ybar)(y_(i+k) - ybar) / sum (y_i - ybar)^2 for k = 1..L, as R's acf.
-y = y(:)'; d = y - mean(y); ss = sum(d.^2);
+y = y(:)';
+if min(y) == max(y), r = NaN(1, L); return; end   % a constant series has no autocorrelation
+d = y - mean(y); ss = sum(d.^2);
 r = arrayfun(@(k) sum(d(1:end-k) .* d(k+1:end)) / ss, 1:L);
 end
 

@@ -4,7 +4,7 @@
 // decimal value, and so no R reference is involved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { num, fixed, pct, pValue, plural, intl, dash, esc } from '../js/ui/format.js';
+import { num, stat, fixed, pct, pValue, plural, intl, dash, esc } from '../js/ui/format.js';
 
 test('dash is the en dash', () => {
   assert.equal(dash, '–');
@@ -79,4 +79,12 @@ test('plural: the count with its noun', () => {
 
 test('esc', () => {
   assert.equal(esc('<a & "b">'), '&lt;a &amp; &quot;b&quot;&gt;');
+});
+
+test('stat prints an infinite statistic as infinity and otherwise as num', () => {
+  assert.equal(stat(Infinity), '∞');
+  assert.equal(stat(-Infinity), '-∞');
+  assert.equal(stat(NaN), dash);
+  assert.equal(stat(3.14159), num(3.14159));
+  assert.equal(stat(1234.5678, 6), num(1234.5678, 6));
 });
