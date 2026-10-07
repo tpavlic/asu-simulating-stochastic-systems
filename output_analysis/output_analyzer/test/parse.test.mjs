@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { splitCells, parseRows, sniff, buildDatasets, wideResponses } from '../js/io/parse.js';
-import { repEstimates } from '../js/data/model.js';
+import { repEstimates, makeDataset } from '../js/data/model.js';
+import { datasetsObservationsCsv } from '../js/io/export.js';
+import { EXAMPLES } from '../js/data/examples.js';
 
 const vec = a => Array.from(a);
 
@@ -201,4 +203,61 @@ test('time data: a decrease in time is an issue and the row is dropped', () => {
   assert.deepEqual(vec(ds.reps[0].v), [0, 1, 2]);
   // rep 1: 0 on [0,2), 1 on [2,3), 2 on [3,5): (0 + 1 + 4)/5 = 1; rep 2: 1 on [0,5) = 1
   assert.deepEqual(vec(repEstimates(ds)), [1, 1]);
+});
+
+// The all-dataset observations file, read back through the delimited-columns
+// path. The importer names each dataset "<file base> · <dataset>" and gives it
+// the response "value", and it drops blank cells, so the round trip holds for
+// a file whose datasets are of one kind and all have, or all lack, times.
+function roundTrip(group, kind, endTime) {
+  const text = datasetsObservationsCsv(group, { exported: '2026-10-07 12:00:00' });
+  const s = sniff(text, { name: 'datasets_observations' });
+  assert.deepEqual(s.issues, []);
+  assert.equal(s.suggested.scenario, 0);
+  const { datasets, issues } = buildDatasets(s, { ...s.suggested, kind, endTime });
+  assert.deepEqual(issues, []);
+  assert.equal(datasets.length, group.length);
+  group.forEach((orig, i) => {
+    const back = datasets[i];
+    const prefix = 'datasets_observations · ';
+    assert.ok(back.name.startsWith(prefix), back.name);
+    assert.equal(back.name.slice(prefix.length), orig.name);
+    assert.equal(back.kind, orig.kind);
+    assert.equal(back.response, 'value');
+    assert.equal(back.endTime, orig.endTime);
+    assert.deepEqual(back.reps.map(r => r.id), orig.reps.map(r => r.id), orig.name);
+    assert.deepEqual(back.reps.map(r => (r.t ? vec(r.t) : null)), orig.reps.map(r => (r.t ? vec(r.t) : null)), orig.name);
+    assert.deepEqual(back.reps.map(r => vec(r.v)), orig.reps.map(r => vec(r.v)), orig.name);
+  });
+}
+
+test('the bundled examples round-trip through the all-dataset observations file', () => {
+  const groups = new Map();
+  for (const ex of EXAMPLES) {
+    const built = buildDatasets(sniff(ex.text, { name: ex.mapping.name }), ex.mapping).datasets;
+    for (const ds of built) {
+      ds.source.file = ex.file;
+      const key = ds.kind + (ds.reps.some(r => r.t) ? ' timed' : ' untimed');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(ds);
+    }
+  }
+  // reps without times (six examples), tally with times (two), time-persistent (one)
+  assert.deepEqual([...groups.keys()].sort(), ['reps untimed', 'tally timed', 'time timed']);
+  assert.equal(groups.get('reps untimed').length, 19);
+  for (const [key, group] of groups) {
+    const ends = new Set(group.map(ds => ds.endTime));
+    assert.equal(ends.size, 1, key);
+    roundTrip(group, group[0].kind, group[0].endTime);
+  }
+});
+
+test('a dataset name with a space and a semicolon survives the round trip', () => {
+  const group = [
+    makeDataset({ name: 'Line 1; shift A', kind: 'tally', reps: [{ id: 1, v: [3, 4] }, { id: 2, v: [5] }] }),
+    makeDataset({ name: 'Line 2, "night"', kind: 'tally', reps: [{ id: 1, v: [6] }] })
+  ];
+  const text = datasetsObservationsCsv(group);
+  assert.match(text, /^"Line 1; shift A",1,3$/m);
+  roundTrip(group, 'tally', null);
 });

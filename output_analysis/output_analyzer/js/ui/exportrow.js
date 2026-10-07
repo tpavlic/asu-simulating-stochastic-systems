@@ -9,7 +9,7 @@
 
 import * as state from '../state.js';
 import { repEstimates, repIds } from '../data/model.js';
-import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText } from '../io/export.js';
+import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
@@ -50,16 +50,6 @@ export function stamp(d) {
     pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
 }
 
-/**
- * A file-name slug of a title.
- * @param {string} s
- * @returns {string}
- */
-export function slug(s) {
-  const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return (t || 'data').slice(0, 60);
-}
-
 /** The truncation a derived dataset carries, as a sentence fragment. */
 export function truncationText(ds) {
   const tr = ds.derivedFrom && ds.derivedFrom.truncate;
@@ -83,15 +73,22 @@ function finiteCount(ds) {
   return n;
 }
 
-// The `#` lines every data file carries: what the dataset is, where it came
-// from, and how it was derived when it was truncated.
-function dsProvenance(ds, extra) {
+/**
+ * The `#` lines every data file carries: what the dataset is, where it came
+ * from, how it was derived when it was truncated, and, for time-persistent
+ * data, the end time until which each replication's last record holds.
+ * @param {object} ds
+ * @param {Record<string, unknown>} [extra]
+ * @returns {Record<string, unknown>}
+ */
+export function dsProvenance(ds, extra) {
   const p = {
     dataset: ds.name,
     kind: KIND_LABEL[ds.kind] || ds.kind,
     response: ds.response,
     replications: ds.reps.length
   };
+  if (ds.kind === 'time') p['end time'] = ds.endTime != null ? ds.endTime : 'none (the last record holds for no time)';
   if (ds.source && ds.source.file) p['source file'] = ds.source.file;
   if (ds.derivedFrom) {
     p['derived from'] = derivedName(ds);

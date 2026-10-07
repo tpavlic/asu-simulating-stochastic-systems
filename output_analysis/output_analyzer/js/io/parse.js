@@ -93,7 +93,7 @@ const ROLE_NAMES = {
   time: ['time', 't', 'clock', 'sim_time', 'simtime'],
   rep: ['rep', 'replication', 'run', 'repl'],
   scenario: ['scenario', 'system', 'design', 'config', 'configuration', 'treatment',
-    'alternative', 'policy']
+    'alternative', 'policy', 'dataset']
 };
 
 /**

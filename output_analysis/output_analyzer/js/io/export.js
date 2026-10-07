@@ -1,6 +1,7 @@
-// Writing results back out: CSV text with `#` provenance lines, and, in the
-// browser only, SVG and PNG figures and file downloads. The CSV writers are
-// pure; the browser functions check for a DOM and throw without one.
+// Writing results back out: CSV text with `#` provenance lines, the slug that
+// file names are built from, and, in the browser only, SVG and PNG figures and
+// file downloads. The CSV writers and the slug are pure; the browser functions
+// check for a DOM and throw without one.
 
 import { repEstimates, observations } from '../data/model.js';
 
@@ -47,6 +48,16 @@ export function provenanceLines(fields) {
 function withProvenance(provenance, rows) {
   const head = provenanceLines(provenance);
   return (head.length ? head.join('\n') + '\n' : '') + toCsv(rows);
+}
+
+/**
+ * A file-name slug of a title.
+ * @param {string} s
+ * @returns {string}
+ */
+export function slug(s) {
+  const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (t || 'data').slice(0, 60);
 }
 
 /**
@@ -121,6 +132,79 @@ export function repSummaryCsv(ds, provenance) {
     rows.push(row);
   });
   return withProvenance(provenance, rows);
+}
+
+// The all-dataset files always quote the dataset name, because a reader that
+// splits on spaces or semicolons as well as commas would otherwise cut a name
+// such as "Queue days" in two. Quoting a field is valid RFC 4180 whether or
+// not it needs it.
+function quotedName(name) {
+  return '"' + String(name).replace(/"/g, '""') + '"';
+}
+
+function namedRows(header, body) {
+  return toCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(csvEscape).join(',') + '\n').join('');
+}
+
+// One provenance line per dataset, ahead of the caller's own fields (such as
+// the export time, which the caller passes so that this stays pure).
+function datasetsProvenance(list, provenance) {
+  const p = {};
+  list.forEach((ds, i) => {
+    const parts = [ds.kind, 'response ' + ds.response];
+    if (ds.source && ds.source.file) parts.push('source ' + ds.source.file);
+    if (ds.kind === 'time') parts.push('end time ' + (ds.endTime != null ? ds.endTime : 'none'));
+    p['dataset ' + (i + 1)] = ds.name + ' (' + parts.join(', ') + ')';
+  });
+  return provenanceLines(Object.assign(p, provenance || {}));
+}
+
+function withDatasetsProvenance(list, provenance, text) {
+  const head = datasetsProvenance(list, provenance);
+  return (head.length ? head.join('\n') + '\n' : '') + text;
+}
+
+/**
+ * Every record of several datasets in one file: the dataset's name, the
+ * replication id, the time when any dataset in the list has time stamps
+ * (blank for a record without one), and the value, one row per record with
+ * the datasets in list order. A replication with no records has no row; the
+ * replications file lists it. The value column is headed `value` because the
+ * datasets' responses may differ.
+ * @param {import('../data/model.js').Dataset[]} list
+ * @param {Record<string, unknown>} [provenance]
+ * @returns {string}
+ */
+export function datasetsObservationsCsv(list, provenance) {
+  const hasT = list.some(ds => ds.reps.some(r => r.t));
+  const header = hasT ? ['dataset', 'replication', 'time', 'value'] : ['dataset', 'replication', 'value'];
+  const body = [];
+  for (const ds of list) {
+    for (const r of ds.reps) {
+      for (let i = 0; i < r.v.length; i++) {
+        body.push([ds.name, hasT ? [r.id, r.t ? r.t[i] : null, r.v[i]] : [r.id, r.v[i]]]);
+      }
+    }
+  }
+  return withDatasetsProvenance(list, provenance, namedRows(header, body));
+}
+
+/**
+ * One row per replication of several datasets: the dataset's name and kind,
+ * the replication id, its observation count, and its replication outcome
+ * (time weighted for time-persistent data), blank for a replication with no
+ * outcome.
+ * @param {import('../data/model.js').Dataset[]} list
+ * @param {Record<string, unknown>} [provenance]
+ * @returns {string}
+ */
+export function datasetsReplicationsCsv(list, provenance) {
+  const body = [];
+  for (const ds of list) {
+    const est = repEstimates(ds);
+    ds.reps.forEach((r, i) => body.push([ds.name, [ds.kind, r.id, r.v.length, est[i]]]));
+  }
+  return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'outcome'], body));
 }
 
 function estimateVector(x) {

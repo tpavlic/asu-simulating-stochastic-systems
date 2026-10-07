@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import { makeDataset } from '../js/data/model.js';
 import {
   csvEscape, toCsv, provenanceLines, observationsCsv, repSummaryCsv, pilotCsv,
-  batchMeansCsv, tableCsv, svgToString, svgToPngBlob, downloadText, downloadBlob
+  batchMeansCsv, tableCsv, svgToString, svgToPngBlob, downloadText, downloadBlob,
+  datasetsObservationsCsv, datasetsReplicationsCsv, slug
 } from '../js/io/export.js';
 
 const lines = text => text.split('\n').filter(l => l !== '');
@@ -124,4 +125,79 @@ test('sampledCsv: a time column, one column per replication, empty where nothing
   const sample = { times: [0, 1, 2, 3], columns: [{ id: 1, values: [0, 0, 1, null] }, { id: 'b', values: [null, 7, 7, 9] }] };
   const text = sampledCsv(ds, sample, { dataset: 'q', form: 'sampled' });
   assert.deepEqual(lines(text), ['# dataset: q', '# form: sampled', 'time,replication_1,replication_b', '0,0,', '1,0,7', '2,1,7', '3,,9']);
+});
+
+// The all-dataset files. Each name below forces a different quoting case: a
+// comma and a quote, a bare word, and a space (which the importer would
+// otherwise split on).
+const allTally = makeDataset({ name: 'Queue, "A"', kind: 'tally', response: 'wait', source: { file: 'queue.csv' },
+  reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }] });
+const allTime = makeDataset({ name: 'Busy', kind: 'time', response: 'busy', endTime: 10,
+  reps: [{ id: 1, t: [0, 4], v: [0, 1] }] });
+const allReps = makeDataset({ name: 'Queue days', kind: 'reps', response: 'avg_wait',
+  reps: [{ id: 1, v: [2.5] }, { id: 2, v: [3] }] });
+const allOpen = makeDataset({ name: 'Open', kind: 'time', response: 'busy',
+  reps: [{ id: 1, t: [0, 2], v: [1, 0] }] });
+const dataRows = text => lines(text).filter(l => !l.startsWith('#'));
+
+test('all-dataset observations: one row per record, names quoted', () => {
+  assert.deepEqual(dataRows(datasetsObservationsCsv([allTally, allTime])), [
+    'dataset,replication,time,value',
+    '"Queue, ""A""",1,,1',
+    '"Queue, ""A""",1,,2',
+    '"Busy",1,0,0',
+    '"Busy",1,4,1'
+  ]);
+});
+
+test('all-dataset observations: no time column when no dataset has times', () => {
+  assert.deepEqual(dataRows(datasetsObservationsCsv([allTally, allReps])), [
+    'dataset,replication,value',
+    '"Queue, ""A""",1,1',
+    '"Queue, ""A""",1,2',
+    '"Queue days",1,2.5',
+    '"Queue days",2,3'
+  ]);
+});
+
+test('all-dataset replications: blank outcome for an empty replication', () => {
+  assert.deepEqual(dataRows(datasetsReplicationsCsv([allTally, allTime])), [
+    'dataset,kind,replication,n_obs,outcome',
+    '"Queue, ""A""",tally,1,2,1.5',
+    '"Queue, ""A""",tally,2,0,',
+    // (0 x 4 + 1 x 6) / 10 = 0.6
+    '"Busy",time,1,2,0.6'
+  ]);
+  const spaced = dataRows(datasetsReplicationsCsv([allReps])).slice(1);
+  assert.deepEqual(spaced, ['"Queue days",reps,1,1,2.5', '"Queue days",reps,2,1,3']);
+  assert.ok(dataRows(datasetsObservationsCsv([allReps])).slice(1).every(l => l.startsWith('"Queue days",')));
+});
+
+test('provenance names every dataset and the time-persistent end time', () => {
+  for (const write of [datasetsObservationsCsv, datasetsReplicationsCsv]) {
+    const head = lines(write([allTally, allTime, allOpen], { exported: '2026-10-07 12:00:00' })).filter(l => l.startsWith('#'));
+    assert.deepEqual(head, [
+      '# dataset 1: Queue, "A" (tally, response wait, source queue.csv)',
+      '# dataset 2: Busy (time, response busy, end time 10)',
+      '# dataset 3: Open (time, response busy, end time none)',
+      '# exported: 2026-10-07 12:00:00'
+    ]);
+    assert.ok(head.some(l => /Busy/.test(l) && /end time 10/.test(l)));
+    assert.ok(head.some(l => /Queue, "A"/.test(l) && /tally/.test(l)));
+  }
+});
+
+test('slug: lower-case words joined by hyphens, at most 60 characters', () => {
+  assert.equal(slug('Queue, "A"'), 'queue-a');
+  assert.equal(slug('Four designs · B'), 'four-designs-b');
+  assert.equal(slug('···'), 'data');
+  assert.equal(slug('x'.repeat(80)).length, 60);
+});
+
+test('a time-persistent data file states its end time', async () => {
+  const { dsProvenance } = await import('../js/ui/exportrow.js');
+  assert.equal(dsProvenance(allTime)['end time'], 10);
+  assert.equal(dsProvenance(allOpen)['end time'], 'none (the last record holds for no time)');
+  assert.ok(!('end time' in dsProvenance(allTally)));
+  assert.match(provenanceLines(dsProvenance(allTime)).join('\n'), /^# end time: 10$/m);
 });
