@@ -209,6 +209,42 @@ export function tableBlock(pageId, r, t) {
   return tableCsv(t.headers || [], t.rows || [], resultProvenance(pageId, r, t));
 }
 
+// The descriptors each container's buttons were last drawn from, for the
+// one click listener the container carries.
+const drawnItems = new WeakMap();
+
+/**
+ * Draws file descriptors (as `datasetFiles` returns them: a label, an
+ * optional tip, `disabled` with a `note` saying why, `print` for the Print
+ * button, and `run`) into `container` as a wrapping row of buttons, with the
+ * notes in a line under them, and registers the buttons' tips. Each call
+ * replaces what the last one drew in the same container.
+ * @param {HTMLElement} container
+ * @param {{label: string, tip?: string, disabled?: boolean, note?: string, print?: boolean, run: () => void}[]} items
+ */
+export function fileButtons(container, items) {
+  let btns = container.querySelector(':scope > .xp-btns');
+  if (!btns) {
+    container.innerHTML = '<div class="xp-btns"></div><p class="muted-line xp-note" aria-live="polite" hidden></p>';
+    btns = container.querySelector(':scope > .xp-btns');
+    btns.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-i]');
+      if (!b || b.disabled) return;
+      const it = (drawnItems.get(container) || [])[Number(b.getAttribute('data-i'))];
+      if (it) it.run();
+    });
+  }
+  const note = container.querySelector(':scope > .xp-note');
+  drawnItems.set(container, items);
+  btns.innerHTML = items.map((it, i) =>
+    '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
+    (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
+  const notes = items.filter(it => it.note).map(it => it.note);
+  note.textContent = notes.join(' ');
+  note.hidden = !notes.length;
+  registerTips(container);
+}
+
 /**
  * Installs the export row at the end of a page.
  * @param {HTMLElement} root the page's section
@@ -222,7 +258,7 @@ export function tableBlock(pageId, r, t) {
 export function installExportRow(root, pageId, opts = {}) {
   const row = document.createElement('div');
   row.className = 'sec xp-row';
-  row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-btns" id="xp-' + pageId + '"></div><p class="muted-line xp-note" aria-live="polite"></p>';
+  row.innerHTML = '<div class="sec-hd">Export</div><div class="xp-files" id="xp-' + pageId + '"></div>';
   // The regenerate line, hidden until the page's result carries a recipe;
   // its explanation sits inside it and hides with it.
   const regen = document.createElement('div');
@@ -234,12 +270,10 @@ export function installExportRow(root, pageId, opts = {}) {
   if (opts.help) row.appendChild(details('What each data file holds', opts.help));
   row.appendChild(regen);
   root.appendChild(row);
-  const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
+  const files = row.querySelector('.xp-files');
   const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');
-  let items = [];
-
   function refresh() {
-    items = [];
+    const items = [];
     const r = state.results[pageId];
     for (const t of (r && r.tables) || []) {
       if (opts.tables && !opts.tables(t)) continue;
@@ -259,20 +293,9 @@ export function installExportRow(root, pageId, opts = {}) {
       regenNote.textContent = big ? REGEN_TOO_BIG : '';
       regenNote.hidden = !big;
     }
-    btns.innerHTML = items.map((it, i) =>
-      '<button type="button" class="' + (it.print ? 'btn-run2' : 'xp-btn') + '" data-i="' + i + '"' + (it.disabled ? ' disabled' : '') +
-      (it.tip ? ' data-tip="' + esc(it.tip) + '" data-tip-press' : '') + '>' + esc(it.label) + '</button>').join('');
-    const notes = items.filter(it => it.note).map(it => it.note);
-    note.textContent = notes.join(' ');
-    note.hidden = !notes.length;
-    registerTips(row);
+    fileButtons(files, items);
+    registerTips(regen);
   }
-  btns.addEventListener('click', ev => {
-    const b = ev.target.closest('button[data-i]');
-    if (!b || b.disabled) return;
-    const it = items[Number(b.getAttribute('data-i'))];
-    if (it) it.run();
-  });
   // The recipe is built here, once per press, from the inputs the page
   // captured when it registered its result.
   regenBtns.addEventListener('click', ev => {

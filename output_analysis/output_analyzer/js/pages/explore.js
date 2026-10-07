@@ -11,7 +11,7 @@
 import * as state from '../state.js';
 import { repEstimates, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
 import { exploreRecipe, exploreTooBig } from '../io/recipes.js';
-import { sampledCsv, downloadText } from '../io/export.js';
+import { sampledCsv, downloadText, slug } from '../io/export.js';
 import {
   summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
 } from '../stats/descriptive.js';
@@ -209,8 +209,6 @@ function table(headers, rows) {
     rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
   return box;
 }
-
-function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'data'; }
 
 // ── Data helpers ────────────────────────────────────────────────────────
 

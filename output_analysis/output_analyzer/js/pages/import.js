@@ -1,8 +1,9 @@
 // The Import page: a drop zone, a file chooser, a paste box, and the bundled
 // examples; the mapping dialog that assigns a file's columns to roles and
 // asks what the values are; and the table of loaded datasets, where each can
-// be renamed or removed. Every dataset enters the application through
-// state.add, and so a restored session goes through the same door.
+// be renamed, exported as CSV, or removed. Every dataset enters the
+// application through state.add, and so a restored session goes through the
+// same door.
 
 import * as state from '../state.js';
 import { sniff, buildDatasets } from '../io/parse.js';
@@ -12,6 +13,8 @@ import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { datasetFiles, fileButtons, stamp, DATA_FILES_HELP } from '../ui/exportrow.js';
+import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
 
 /** The page's hash id. */
 export const id = 'import';
@@ -24,6 +27,9 @@ const FORMAT_LABEL = {
   columns: 'delimited columns',
   arena: 'Arena output file'
 };
+
+const ALL_OBS_TIP = 'Every record of every loaded dataset in one file, one row per record under dataset, replication, time, and value, in the order of the table. The time column is present when some dataset has time stamps.';
+const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind, replication id, observation count, and replication outcome.';
 
 const KINDS = [
   { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
@@ -41,6 +47,8 @@ let pending = null;
 let lastImport = null;
 /** Ids of datasets whose rejected-row list is expanded in the table. */
 const expanded = new Set();
+/** Ids of datasets whose data files are shown in the table. */
+const exportOpen = new Set();
 let removeAllTimer = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -83,6 +91,7 @@ export function render(root) {
     '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
+      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: open its Export row, or use Export all for one file holding every dataset. The combined observations file loads back in through the delimited-columns path, one dataset per name, when its datasets are of one kind and all have, or all lack, time stamps.</p>' +
       '<div id="im-list"></div>' +
     '</div>' +
     '<div id="im-status"></div>' +
@@ -678,20 +687,24 @@ function sourceText(ds) {
 function renderList() {
   const box = els.list;
   if (!box) return;
+  // The control that had focus is found again after the redraw by its
+  // data-focus key, so that a toggle or a name box keeps focus.
   const active = document.activeElement;
-  const focusId = active && active.dataset && active.dataset.dsName ? active.dataset.dsName : null;
+  const focusKey = active && box.contains(active) && active.dataset ? active.dataset.focus || null : null;
   box.innerHTML = '';
   const list = state.datasets;
-  for (const idx of Array.from(expanded)) if (!list.some(d => d.id === idx)) expanded.delete(idx);
+  for (const set of [expanded, exportOpen]) {
+    for (const idx of Array.from(set)) if (!list.some(d => d.id === idx)) set.delete(idx);
+  }
   if (!list.length) {
     box.innerHTML = '<p class="muted-line">No datasets loaded yet. Load a file, paste data, or load an example above.</p>';
     return;
   }
   const wrap = document.createElement('div');
-  wrap.className = 'tab-wrap';
+  wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th>Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -703,12 +716,13 @@ function renderList() {
       '<td><span class="kind-badge">' + esc(KIND_LABEL[ds.kind] || ds.kind) + '</span></td>' +
       '<td>' + intl(ds.reps.length) + '</td>' +
       '<td>' + intl(nObs) + '</td>' +
-      '<td class="im-src">' + esc(sourceText(ds)) + '</td>' +
+      '<td class="im-src">' + esc(sourceText(ds)).replace(/([_.])/g, '$1<wbr>') + '</td>' +
       '<td class="im-rej"></td>' +
+      '<td><button type="button" class="im-link im-xp"></button></td>' +
       '<td><button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
-    inp.dataset.dsName = ds.id;
+    inp.dataset.focus = 'name:' + ds.id;
     inp.addEventListener('change', () => {
       const v = inp.value.trim();
       if (!v) { inp.value = ds.name; return; }
@@ -722,6 +736,7 @@ function renderList() {
       b.className = 'im-link';
       b.textContent = 'Rows rejected: ' + intl(nIss) + (nNotes ? ' · ' + plural(nNotes, 'note') : '');
       b.setAttribute('aria-expanded', String(expanded.has(ds.id)));
+      b.dataset.focus = 'rej:' + ds.id;
       b.addEventListener('click', () => {
         if (expanded.has(ds.id)) expanded.delete(ds.id); else expanded.add(ds.id);
         renderList();
@@ -730,13 +745,22 @@ function renderList() {
     } else {
       rej.textContent = 'none';
     }
-    tr.querySelector('.im-rm').addEventListener('click', () => { expanded.delete(ds.id); state.remove(ds.id); });
+    const xp = tr.querySelector('.im-xp');
+    xp.textContent = 'Export';
+    xp.setAttribute('aria-label', 'Export ' + ds.name);
+    xp.setAttribute('aria-expanded', String(exportOpen.has(ds.id)));
+    xp.dataset.focus = 'xp:' + ds.id;
+    xp.addEventListener('click', () => {
+      if (exportOpen.has(ds.id)) exportOpen.delete(ds.id); else exportOpen.add(ds.id);
+      renderList();
+    });
+    tr.querySelector('.im-rm').addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
     tb.appendChild(tr);
     if (expanded.has(ds.id) && (nIss || nNotes)) {
       const er = document.createElement('tr');
       er.className = 'im-exp-row';
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 8;
       for (const n of ds.source.notes) {
         const p = document.createElement('p');
         p.className = 'muted-line';
@@ -748,6 +772,26 @@ function renderList() {
       td.appendChild(il);
       er.appendChild(td);
       tb.appendChild(er);
+    }
+    // The data files of the dataset, in a box held to the width of the
+    // table's scrolling frame, so that on a narrow screen the buttons wrap
+    // where they can be seen.
+    if (exportOpen.has(ds.id)) {
+      const er = document.createElement('tr');
+      er.className = 'im-exp-row';
+      const td = document.createElement('td');
+      td.colSpan = 8;
+      const inner = document.createElement('div');
+      inner.className = 'im-xp-box';
+      const files = document.createElement('div');
+      files.setAttribute('role', 'group');
+      files.setAttribute('aria-label', 'Data files of ' + ds.name);
+      inner.appendChild(files);
+      inner.appendChild(details('What each data file holds', DATA_FILES_HELP));
+      td.appendChild(inner);
+      er.appendChild(td);
+      tb.appendChild(er);
+      fileButtons(files, datasetFiles(ds));
     }
   }
   tbl.appendChild(tb);
@@ -776,11 +820,26 @@ function renderList() {
       all.textContent = 'Remove all';
     }, 3000);
   });
+  // Every dataset in two files, beside Remove all.
+  const xa = document.createElement('div');
+  xa.className = 'im-xp-all';
+  xa.setAttribute('role', 'group');
+  xa.setAttribute('aria-label', 'Export all datasets');
+  xa.innerHTML = '<span class="im-xp-lbl">Export all</span><div class="im-xp-all-files"></div>';
+  const none = !list.length;
+  const note = none ? 'Load a dataset first.' : '';
+  fileButtons(xa.querySelector('.im-xp-all-files'), [
+    { label: 'Observations CSV', tip: ALL_OBS_TIP, disabled: none, note,
+      run: () => downloadText('datasets_observations.csv', datasetsObservationsCsv(state.datasets, { exported: stamp(new Date()) })) },
+    { label: 'Replications CSV', tip: ALL_REPS_TIP, disabled: none,
+      run: () => downloadText('datasets_replications.csv', datasetsReplicationsCsv(state.datasets, { exported: stamp(new Date()) })) }
+  ]);
+  row.appendChild(xa);
   row.appendChild(all);
   box.appendChild(row);
 
-  if (focusId) {
-    const again = box.querySelector('[data-ds-name="' + focusId + '"]');
+  if (focusKey) {
+    const again = Array.from(box.querySelectorAll('[data-focus]')).find(e => e.dataset.focus === focusKey);
     if (again) again.focus();
   }
 }
