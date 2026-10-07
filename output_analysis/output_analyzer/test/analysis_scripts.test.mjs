@@ -1871,3 +1871,27 @@ test('two datasets whose names slug alike are told apart by name in the comment'
     reps: QLEN.reps.map((rp, i) => ({ id: rp.id, t: Array.from(rp.t).slice(0, lens[i]), v: Array.from(rp.v).slice(0, lens[i]) })) });
   checkCsvRead('Summary and Plots, time-persistent runs with no end time and an empty one', exRecipe(unequal), [unequal]);
 }
+
+// Replication ids that only text keeps: a mostly numeric id column with one
+// text id, and ids such as 007, 01, and 1.0, which a reader that types the
+// column as numbers would turn into 7, 1, and 1 (or a text id into NaN). Every
+// language reads them as text, and so the Summary and Plots report names
+// (rep <id> ...) and the matching by id follow the page.
+{
+  checkCsvRead('Summary and Plots on the comma-named dataset (ids 007, b, 1.0)', exRecipe(QUEUE_COMMA), [QUEUE_COMMA]);
+  checkCsvRead('Steady State on the comma-named dataset, lumped', stRecipe(QUEUE_COMMA, { lumped: true, count: 3 }), [QUEUE_COMMA]);
+  const zeros = makeDataset({ name: 'Zero-padded ids', response: 'w', kind: 'reps',
+    reps: [['007', 2.1], ['01', 2.6], ['12', 1.9], ['1.0', 2.4], ['7', 3.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const rz = exRecipe(zeros);
+  assert.ok('rep 007 n' in rz.expect && 'rep 7 n' in rz.expect && 'rep 1.0 outcome' in rz.expect);
+  checkCsvRead('Summary and Plots with ids 007, 01, 12, 1.0, and 7', rz, [zeros]);
+  const mA = makeDataset({ name: 'Mixed A', response: 'w', kind: 'reps', reps: [[1, 2.0], [2, 2.4], [3, 1.9], ['x', 3.1], [4, 2.2]].map(([id, v]) => ({ id, v: [v] })) });
+  const mB = makeDataset({ name: 'Mixed B', response: 'w', kind: 'reps', reps: [[2, 2.5], [1, 1.8], ['x', 2.6], [4, 2.0], [3, 1.5], [5, 2.2]].map(([id, v]) => ({ id, v: [v] })) });
+  const rm = pairedRecipe(mA, mB, 't', 'id', null);
+  assert.equal(rm.expect.pairs, 5);
+  checkCsvRead('Two Systems, paired by id on mostly numeric ids with one text id', rm, [mA, mB]);
+  const mC = makeDataset({ name: 'Mixed C', response: 'w', kind: 'reps', reps: [['x', 2.9], [4, 1.7], [1, 1.1], [3, 2.3], [2, 2.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const rs = sevRecipe([mA, mB, mC], { paired: true });
+  assert.equal(rs.groups.ids.length, 5);
+  checkCsvRead('Several Systems, paired by id on mostly numeric ids with one text id', rs, [mA, mB, mC]);
+}

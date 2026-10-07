@@ -16111,7 +16111,10 @@ function groupsBlock(L, r) {
 // recipe.csv. Each language reads in its plain idiom: R's read.csv with the
 // replication ids kept as text, Python's csv module (NumPy's genfromtxt fills
 // a blank in a column of whole numbers with -1 and stumbles on a text id after
-// numeric ones), and MATLAB's readtable. A response header such as "busy
+// numeric ones), and MATLAB's readtable with the ids typed as text (left to
+// itself it types a mostly numeric id column as numbers, reading 007 as 7 and
+// a text id among them as NaN). Tidy R wraps R's read in as_tibble(). A
+// response header such as "busy
 // servers" is rewritten by every language, and so the value column of an
 // Observations CSV is taken by position, as its last column. A blank outcome
 // in a Replication summary CSV is a replication that gave none, dropped before
@@ -16121,11 +16124,15 @@ function groupsBlock(L, r) {
 // removing it leaves exactly the line the script would run.
 const READ_MARK = { R: '#   ', py: '#   ', m: '%   ' };
 
-// The reader of one file, as an expression.
-function readExpr(L, file) {
-  if (L.lang === 'R') return 'read.csv(' + L.str(file) + ', comment.char = "#", colClasses = c(replication = "character"))';
-  if (L.lang === 'py') return 'read_csv(' + L.str(file) + ')';
-  return 'readtable(' + L.str(file) + ", 'CommentStyle', '#', 'VariableNamingRule', 'preserve')";
+// The reader of one file, as an expression: `file` is the file's name, or
+// with `raw` an expression of the language that gives it.
+function readExpr(L, file, { raw = false } = {}) {
+  const f = raw ? file : L.str(file);
+  if (L.lang === 'R') {
+    const r = 'read.csv(' + f + ', comment.char = "#", colClasses = c(replication = "character"))';
+    return L.tidy ? 'as_tibble(' + r + ')' : r;
+  }
+  return 'read_csv(' + f + ')';
 }
 
 // Python's reader: the rows of a file as lists of text, after the # lines and
@@ -16139,6 +16146,12 @@ const PY_READ_CSV = [
 
 // Python: each id's outcome at its first row, in the order the ids first
 // appear, which is how the page matches replications by id.
+// MATLAB's reader, as an anonymous function: readtable with the options it
+// detects, the replication column set to text.
+const M_READ_CSV = [
+  "read_csv = @(f) readtable(f, setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped and its ids read as text"
+];
+
 const PY_FIRST_OUTCOMES = [
   'def first_outcomes(rows):   # each id\'s outcome at its first row, in the order the ids first appear',
   '    out = {}',
@@ -16147,7 +16160,6 @@ const PY_FIRST_OUTCOMES = [
 ];
 
 const DROP_NOTE = 'a blank mean (no outcome) is dropped';
-const ID_NOTE = 'ids such as 007 read back as 7';
 
 // One Replication summary CSV read into `v` with its blank outcomes dropped:
 // R and MATLAB keep the table in `v`, and Python keeps its rows.
@@ -16160,7 +16172,7 @@ function readOutcomes(L, v, file) {
 
 // The ids and the outcomes of a table read by readOutcomes.
 function idsOf(L, v) {
-  return L.lang === 'R' ? v + '$replication' : L.lang === 'py' ? '[r[0] for r in ' + v + ']' : 'string(' + v + ".replication)'";
+  return L.lang === 'R' ? v + '$replication' : L.lang === 'py' ? '[r[0] for r in ' + v + ']' : v + ".replication'";
 }
 function outcomesOf(L, v) {
   return L.lang === 'R' ? v + '$mean' : L.lang === 'py' ? 'np.array([float(r[2]) for r in ' + v + '])' : v + ".mean'";
@@ -16177,7 +16189,7 @@ function readOne(L, r, file) {
     return out;
   }
   out.push(...readOutcomes(L, 'd', file));
-  if (r.data.ids) out.push(L.assign('rep_id', idsOf(L, 'd')) + (lang === 'm' ? c + ID_NOTE : ''));
+  if (r.data.ids) out.push(L.assign('rep_id', idsOf(L, 'd')));
   out.push(L.assign('x', outcomesOf(L, 'd')));
   return out;
 }
@@ -16188,7 +16200,7 @@ function readTwo(L, r, fileA, fileB) {
   const lang = L.lang, c = '   ' + L.comment, out = [];
   out.push(...readOutcomes(L, 'da', fileA), ...readOutcomes(L, 'db', fileB));
   if (!r.pairs) {
-    out.push(L.assign('rep_id_a', idsOf(L, 'da')) + (lang === 'm' ? c + ID_NOTE : ''), L.assign('a', outcomesOf(L, 'da')));
+    out.push(L.assign('rep_id_a', idsOf(L, 'da')), L.assign('a', outcomesOf(L, 'da')));
     out.push(L.assign('rep_id_b', idsOf(L, 'db')), L.assign('b', outcomesOf(L, 'db')));
     return out;
   }
@@ -16200,7 +16212,7 @@ function readTwo(L, r, fileA, fileB) {
       out.push(...PY_FIRST_OUTCOMES, 'first_a, first_b = first_outcomes(da), first_outcomes(db)',
         'pair_id = [s for s in first_a if s in first_b]', 'a = np.array([first_a[s] for s in pair_id])', 'b = np.array([first_b[s] for s in pair_id])');
     } else {
-      out.push("id_a = string(da.replication)'; id_b = string(db.replication)';" + c + ID_NOTE,
+      out.push("id_a = da.replication'; id_b = db.replication';",
         "[~, ia] = unique(id_a, 'stable'); ia = ia(ismember(id_a(ia), id_b));" + c + 'each id of A once, where B has it too',
         '[~, jb] = ismember(id_a(ia), id_b);' + c + 'ismember finds the first position of each id in B',
         "pair_id = id_a(ia); a = da.mean(ia)'; b = db.mean(jb)';");
@@ -16213,7 +16225,7 @@ function readTwo(L, r, fileA, fileB) {
       'pair_id = [ra[0] + "/" + rb[0] for ra, rb in zip(da, db)]', 'a = ' + outcomesOf(L, 'da[:m]'), 'b = ' + outcomesOf(L, 'db[:m]'));
   } else {
     out.push('m = min(height(da), height(db));' + c + 'pair the first m outcomes of A and B in order',
-      "pair_id = string(da.replication(1:m))' + \"/\" + string(db.replication(1:m))';" + c + ID_NOTE,
+      "pair_id = da.replication(1:m)' + \"/\" + db.replication(1:m)';",
       "a = da.mean(1:m)'; b = db.mean(1:m)';");
   }
   return out;
@@ -16226,7 +16238,7 @@ function readSeveral(L, r, files) {
   const paired = G.paired, byId = paired && G.by === 'id';
   if (lang === 'R') {
     out.push(L.assign('files', L.strs(files)), L.assign('design_names', L.strs(G.names)),
-      'reads <- lapply(files, function(f) {', '  d <- ' + readExpr(L, 'f').replace('"f"', 'f'),
+      'reads <- lapply(files, function(f) {', '  d <- ' + readExpr(L, 'f', { raw: true }),
       '  d[is.finite(d$mean), ]' + c + DROP_NOTE, '})');
     if (!paired) out.push('rep_ids <- lapply(reads, function(d) d$replication)', 'groups <- lapply(reads, function(d) d$mean)');
     else if (byId) {
@@ -16257,8 +16269,8 @@ function readSeveral(L, r, files) {
     const ids = paired ? 'ids' : 'rep_ids';
     out.push(L.assign('files', L.strs(files)), L.assign('design_names', L.strs(G.names)),
       'k = numel(files);', 'groups = cell(1, k); ' + ids + ' = cell(1, k);', 'for j = 1:k',
-      '    d = ' + readExpr(L, 'f').replace("'f'", 'files{j}') + ';', '    d = d(isfinite(d.mean), :);' + c + DROP_NOTE,
-      '    ' + ids + "{j} = string(d.replication)';" + c + ID_NOTE, "    groups{j} = d.mean';", 'end');
+      '    d = ' + readExpr(L, 'files{j}', { raw: true }) + ';', '    d = d(isfinite(d.mean), :);' + c + DROP_NOTE,
+      '    ' + ids + "{j} = d.replication';", "    groups{j} = d.mean';", 'end');
     if (byId) {
       out.push("[~, i1] = unique(ids{1}, 'stable'); block_id = ids{1}(i1);" + c + 'the first design\'s ids in order, each once',
         'for j = 2:k, block_id = block_id(ismember(block_id, ids{j})); end' + c + 'kept where every design has them',
@@ -16288,8 +16300,10 @@ function readRecords(L, r, obsFile, repFile) {
   if (!('end_time' in settings)) meta.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
   if (lang === 'R') {
     out.push('obs <- ' + readExpr(L, obsFile) + c + cols, 'ids <- ' + readExpr(L, repFile) + '$replication' + c + every, ...meta,
-      'reps <- lapply(ids, function(id) {', '  o <- obs[obs$replication == id, ]',
-      '  list(id = id, t = ' + (timed ? 'as.numeric(o$time)' : 'NULL') + ', v = as.numeric(o[[ncol(o)]]))', '})');
+      'by_rep <- factor(obs$replication, levels = unique(ids))' + c + 'each record\'s replication, in the order of ids',
+      'v_by <- split(as.numeric(obs[[ncol(obs)]]), by_rep)' + c + 'the values, one vector per replication');
+    if (timed) out.push('t_by <- split(as.numeric(obs$time), by_rep)');
+    out.push('reps <- lapply(ids, function(id) list(id = id, t = ' + (timed ? 't_by[[id]]' : 'NULL') + ', v = v_by[[id]]))');
   } else if (lang === 'py') {
     out.push('obs = ' + readExpr(L, obsFile) + c + cols, ...meta, 'by_rep = {}',
       'for r in obs: by_rep.setdefault(r[0], []).append(r)',
@@ -16297,9 +16311,11 @@ function readRecords(L, r, obsFile, repFile) {
       '    reps.append(dict(id=s, t=' + (timed ? 'np.array([float(r[1]) for r in o])' : 'None') + ', v=np.array([float(r[-1]) for r in o])))');
   } else {
     out.push('obs = ' + readExpr(L, obsFile) + ';' + c + cols, 'rl = ' + readExpr(L, repFile) + ';' + c + every, ...meta,
-      'obs_id = string(obs.replication); rl_id = string(rl.replication);' + c + ID_NOTE,
-      "reps = struct('id', {}, 't', {}, 'v', {});", 'for i = 1:numel(rl_id)', '    o = obs(obs_id == rl_id(i), :);',
-      "    reps(i) = struct('id', char(rl_id(i)), 't', " + (timed ? "o.time'" : '[]') + ", 'v', o{:, end}');", 'end');
+      '[~, at] = ismember(obs.replication, rl.replication);' + c + 'each record\'s replication, as its row in rl',
+      '[at, order] = sort(at); obs = obs(order, :);' + c + 'the records grouped by replication, in their order within each',
+      'n = accumarray(at, 1, [height(rl), 1]); last = cumsum(n);' + c + 'how many records each replication holds, and where its last one is',
+      "reps = struct('id', {}, 't', {}, 'v', {});", 'for i = 1:height(rl)', '    o = obs(last(i) - n(i) + 1:last(i), :);',
+      "    reps(i) = struct('id', char(rl.replication(i)), 't', " + (timed ? "o.time'" : '[]') + ", 'v', o{:, end}');", 'end');
   }
   return out;
 }
@@ -16354,10 +16370,12 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
     head = 'the file the Import page saves for ' + ascii(recipe.data.name) + ' (Export, then ' + (recipe.data.pooled ? 'Observations CSV' : 'Replication summary CSV') + ')';
   } else return [];
   if (L.lang === 'py') code = [...PY_READ_CSV, ...code];
+  else if (L.lang === 'm') code = [...M_READ_CSV, ...code];
   const one = new Set(files.map(f => f.file)).size === 1;
   let text = live ? 'The data are read from ' + head + '; run the script from the folder that holds ' + (one ? 'it, or give its full path.' : 'them, or give their full paths.')
     : 'To read the same data from ' + head + ', replace the block above with these lines.';
   if (recipe.records && !live) text += ' The replication summary lists every replication, an empty one included, which the observations file has no row for.';
+  if (L.tidy) text += ' Where readr is installed, readr::read_csv(file, comment = "#", col_types = readr::cols(replication = "c")) reads them too.';
   for (const k of csvClashes(files)) {
     text += ' ' + k.names.map(ascii).join(' and ') + ' both save to ' + k.file + '; save one under another name and change it here.';
   }
