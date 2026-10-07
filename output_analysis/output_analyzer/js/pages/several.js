@@ -96,7 +96,8 @@ let resultBase = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
-const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
+// An infinite end (an unbounded rank interval) shows as ∞, as on the Report page.
+const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 const word = k => (k < WORDS.length ? WORDS[k] : intl(k));
 const allOf = k => (k === 2 ? 'both' : 'all ' + word(k));
@@ -799,7 +800,7 @@ function update() {
       },
       legItems,
       'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
-    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), num(c.t), pValue(c.p), pValue(c.pAdj),
+    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), stat(c.t), pValue(c.p), pValue(c.pAdj),
       c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
@@ -878,8 +879,10 @@ function update() {
     b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha, pooled: !welch, varianceSets: groups, linkDs: list[0].id,
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    const levTxt = Number.isNaN(lv.p) ? 'cannot be computed (no spread within any design to compare)' : pEq(lv.p);
-    if (welch) b.appendChild(para('exp-note', 'Levene’s test ' + (Number.isNaN(lv.p) ? levTxt : 'gives ' + levTxt) + ' here; Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
+    const levNaN = Number.isNaN(lv.p);
+    const levTxt = levNaN ? 'cannot be computed, because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.' : 'Levene’s test gives ' + levTxt + ' here.') +
+      ' Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
     // The residuals' own quantile–quantile plot: the Normality section shows
     // one design's outcomes at a time, and the F test's assumption is about
     // all the residuals together.

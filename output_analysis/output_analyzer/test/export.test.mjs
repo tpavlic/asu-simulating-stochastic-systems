@@ -221,3 +221,9 @@ test('a time-persistent data file states its end time', async () => {
   assert.ok(!('end time' in dsProvenance(allTally)));
   assert.match(provenanceLines(dsProvenance(allTime)).join('\n'), /^# end time: 10$/m);
 });
+
+test('result tables write an infinite number as Inf and NaN as an empty field', () => {
+  const t = tableCsv(['source', 'F', 'p'], [['between', Infinity, 0], ['other', -Infinity, NaN]]);
+  assert.equal(t, 'source,F,p\nbetween,Inf,0\nother,-Inf,\n');
+  assert.equal(csvEscape(Infinity), '', 'data fields are unchanged');
+});

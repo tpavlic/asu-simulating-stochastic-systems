@@ -226,7 +226,8 @@ export function cumulativeMean(a) { return runningMean(a); }
  * gives the ratio of two rounding errors there.
  * @param {ArrayLike<number>} a
  * @param {number} maxLag
- * @returns {Float64Array} length min(maxLag, n − 1) + 1; r_0 = 1
+ * @returns {Float64Array} length min(maxLag, n − 1) + 1; r_0 = 1, except that every
+ *   value, r_0 included, is NaN for a constant series
  */
 export function acf(a, maxLag) {
   const n = a.length;

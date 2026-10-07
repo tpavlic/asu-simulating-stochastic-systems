@@ -52,7 +52,9 @@ let resultBase = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
-const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
+// An end that is infinite (an unbounded rank interval, or the F ratio's when B
+// has no spread) shows as ∞, as on the Report page.
+const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 
 // The finite replication outcomes of a dataset with their ids, and the ids
@@ -599,7 +601,7 @@ function renderIndependent(res, notes, d, level) {
       card('Standard error', v(w && w.se), pooled ? 's<sub>p</sub>√(1/R<sub>A</sub> + 1/R<sub>B</sub>)' : '√(s<sub>A</sub>²/R<sub>A</sub> + s<sub>B</sub>²/R<sub>B</sub>)'),
       pooled ? card(DF_LABEL, v(w && w.df), 'R<sub>A</sub> + R<sub>B</sub> − 2')
         : card('<span class="tip" tabindex="0" data-tip="The Welch–Satterthwaite degrees of freedom, which allow the two designs to have different variances.">Welch df</span>', v(w && w.df), 'Welch–Satterthwaite'),
-      card('t', v(w && w.t), 'difference/SE'),
+      card('t', v(w && w.t, stat), 'difference/SE'),
       card('Two-sided p', w ? pValue(w.p) : dash, pooled ? 'pooled t test' : 'Welch t test'),
       wide(card(L + ' interval', w ? interval(w.lo, w.hi) : dash, 'difference ± half-width')),
       card('Half-width', v(w && w.hw), 't quantile × SE')
@@ -1027,7 +1029,7 @@ function renderPaired(res, notes, d, level) {
     card('SD of differences', v(pr && pr.sdD)),
     card('Standard error', v(pr && pr.se), 's<sub>D</sub>/√n'),
     card(DF_LABEL, pr ? intl(pr.df) : dash, 'n − 1'),
-    card('t', v(pr && pr.t)),
+    card('t', v(pr && pr.t, stat)),
     card('Two-sided p', pr ? pValue(pr.p) : dash),
     wide(card(L + ' interval', pr ? interval(pr.lo, pr.hi) : dash)),
     card('Half-width', v(pr && pr.hw)),

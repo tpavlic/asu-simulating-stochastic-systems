@@ -16,7 +16,7 @@ import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
-import { num, intl, pct, esc, dash, lvl } from '../ui/format.js';
+import { num, stat, intl, pct, esc, dash, lvl } from '../ui/format.js';
 
 /** The page's hash id. */
 export const id = 'one';
@@ -529,7 +529,7 @@ function draw() {
   if (np) {
     const basis = sr.exact ? 'exact distribution' : 'normal approximation';
     els.row3.replaceChildren(cardRow([
-      wide(card(lvl(level) + ' interval for the pseudo-median', '[' + num(sr.lo) + ', ' + num(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
+      wide(card(lvl(level) + ' interval for the pseudo-median', '[' + stat(sr.lo) + ', ' + stat(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
       card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of outcomes, each outcome paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
       wide(card('Basis', basis, sr.exact ? 'signed-rank distribution of n = ' + intl(s.n) : 'with continuity correction' + (sr.ties ? ', ties present' : '')))
     ]));

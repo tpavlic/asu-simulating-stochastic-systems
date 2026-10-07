@@ -982,8 +982,9 @@ end
 // infinite (p = 0) when they differ between groups, as the analyzer reports,
 // and leave nothing to compare when they do not, as when every group is
 // constant. As in the analyzer, "do not vary" means a within sum of squares
-// at most 1e-12 of the distances' uncentered sum of squares: two outcomes
-// per group lie at distances from their median that are equal only up to
+// of the distances at most 1e-24 of the outcomes' own uncentered sum of
+// squares (the distances carry the outcomes' rounding): two outcomes per
+// group lie at distances from their median that are equal only up to
 // rounding, and the built-in tests report that rounding error as an F near
 // 1e30, or as a small F when the between part is rounding error too.
 
@@ -991,7 +992,7 @@ LIB.R.levene = `
 levene_test <- function(groups) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
-  tiny <- 1e-12 * sum(z^2)   # below this, a sum of squares is rounding error
+  tiny <- 1e-24 * sum(y^2)   # below this, a sum of squares is rounding error
   if (sum((z - ave(z, g))^2) <= tiny) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
@@ -1008,7 +1009,7 @@ def levene_test(groups):
     groups = [np.asarray(g, float) for g in groups]
     k = len(groups); N = sum(len(g) for g in groups)
     z = [np.abs(g - np.median(g)) for g in groups]
-    tiny = 1e-12 * sum(float(np.sum(zi ** 2)) for zi in z)   # below this, a sum of squares is rounding error
+    tiny = 1e-24 * sum(float(np.sum(g ** 2)) for g in groups)   # below this, a sum of squares is rounding error
     if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) <= tiny:
         zbar = np.concatenate(z).mean()
         # The distances do not vary within any group: F is infinite (p = 0) when they differ
@@ -1028,7 +1029,7 @@ N = numel(y); z = zeros(N, 1); zm = zeros(N, 1);
 for i = 1:k
     in = g == i; z(in) = abs(y(in) - median(y(in))); zm(in) = mean(z(in));
 end
-tiny = 1e-12 * sum(z.^2);   % below this, a sum of squares is rounding error
+tiny = 1e-24 * sum(y.^2);   % below this, a sum of squares is rounding error
 if sum((z - zm).^2) <= tiny
     % The distances do not vary within any group: F is infinite (p = 0) when they differ
     % between groups, and there is nothing to compare when they do not (every group constant).
@@ -1151,7 +1152,10 @@ end
 // The paired t test on the differences d = a - b, the interval on their mean,
 // and the correlation of a and b across the pairs. Differences that are all
 // equal leave t.test nothing to work on (it stops; SciPy and MATLAB return
-// NaN), and so the analyzer's values are given by hand there: the mean
+// NaN or warn), and so the analyzer's values are given by hand there. As in
+// the analyzer, "all equal" allows the rounding of the subtraction: max(d) -
+// min(d) at most 8 eps times the largest |a| or |b| (0.1 - 0.3 and 0.2 - 0.4
+// differ in their last bit). The hand-written values are the mean
 // difference with no width, and t infinite (p = 0), or undefined when every
 // difference is zero. A design whose outcomes are all equal has no
 // correlation with the other, which is NaN in every language.
@@ -1160,7 +1164,7 @@ LIB.R.pairedT = `
 paired_t <- function(a, b, level) {
   d <- a - b; n <- length(d); m <- mean(d)
   r <- if (min(a) == max(a) || min(b) == max(b)) NaN else cor(a, b)
-  if (min(d) == max(d)) {
+  if (max(d) - min(d) <= 8 * .Machine$double.eps * max(abs(c(a, b)))) {   # equal up to rounding
     t <- if (m != 0) sign(m) * Inf else NaN
     return(list(n = n, meanD = m, sdD = 0, se = 0, df = n - 1, t = t, p = if (is.nan(t)) NaN else 0,
                 lo = m, hi = m, hw = 0, r = r, diffs = d, test = NULL))
@@ -1177,7 +1181,7 @@ def paired_t(a, b, level):
     correlation of a and b."""
     a = np.asarray(a, float); b = np.asarray(b, float); d = a - b; n = len(d); m = d.mean()
     r = np.nan if a.min() == a.max() or b.min() == b.max() else np.corrcoef(a, b)[0, 1]
-    if d.min() == d.max():
+    if np.ptp(d) <= 8 * np.finfo(float).eps * max(np.abs(a).max(), np.abs(b).max()):   # equal up to rounding
         t = np.sign(m) * np.inf if m != 0 else np.nan
         return dict(n=n, meanD=m, sdD=0.0, se=0.0, df=n - 1, t=t, p=np.nan if np.isnan(t) else 0.0,
                     lo=m, hi=m, hw=0.0, r=r, diffs=d)
@@ -1191,7 +1195,7 @@ function r = paired_t(a, b, level)
 % and the correlation of a and b.
 a = a(:); b = b(:); d = a - b; n = numel(d); m = mean(d);
 if min(a) == max(a) || min(b) == max(b), rho = NaN; else, rho = corr(a, b); end
-if min(d) == max(d)
+if max(d) - min(d) <= 8 * eps * max(abs([a; b]))   % equal up to rounding
     if m ~= 0, t = sign(m) * Inf; p = 0; else, t = NaN; p = NaN; end
     r = struct('n', n, 'meanD', m, 'sdD', 0, 'se', 0, 'df', n - 1, 't', t, 'p', p, ...
                'lo', m, 'hi', m, 'hw', 0, 'r', rho, 'diffs', d);
@@ -1413,9 +1417,12 @@ end
 // and the blocks are removed), their residual is rounding error or empty,
 // and so the table is written out as the analyzer reports it: F is infinite
 // (p = 0) when the means differ and undefined when they do not. As in the
-// analyzer, a sum of squares at most 1e-12 of the outcomes' uncentered sum
+// analyzer, a sum of squares at most 1e-24 of the outcomes' uncentered sum
 // of squares is rounding error: 0.1, 0.3, and 0.7 each repeated three times
-// leave a residual near 1e-32, which aov turns into an F near 6e31.
+// leave a residual near 1e-32, which aov turns into an F near 6e31. The
+// residual sum of squares the rule tests is summed directly from each
+// residual: found by subtraction, as anova1 and anova2 find it, it carries
+// error near 1e-16 of the total.
 
 LIB.R.anova = `
 anova_table <- function(groups, blocked) {
@@ -1426,11 +1433,13 @@ anova_table <- function(groups, blocked) {
   ssb <- sum(n * (means - grand)^2)
   if (blocked) {
     R <- n[1]; block <- factor(rep(seq_len(R), k)); bm <- rowMeans(do.call(cbind, groups))
-    ssblk <- k * sum((bm - grand)^2); ssw <- max(0, sum((outcome - grand)^2) - ssb - ssblk)
+    ssblk <- k * sum((bm - grand)^2)
+    # Summed from each residual y - mean_i - mean_r + mean, not found by subtraction.
+    ssw <- sum(sapply(seq_len(k), function(i) sum((groups[[i]] - means[i] - bm + grand)^2)))
   } else {
     bm <- NULL; ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
   }
-  tiny <- 1e-12 * sum(outcome^2)   # below this, a sum of squares is rounding error
+  tiny <- 1e-24 * sum(outcome^2)   # below this, a sum of squares is rounding error
   no_spread_F <- function(ss) if (ss > tiny) Inf else NaN   # F with nothing left within the designs
   pval <- function(f, d1, d2) if (is.nan(f)) NaN else pf(f, d1, d2, lower.tail = FALSE)
   fit <- NULL
@@ -1466,13 +1475,15 @@ def anova_table(groups, blocked):
     groups = [np.asarray(g, float) for g in groups]; k = len(groups)
     means = np.array([g.mean() for g in groups]); n = np.array([len(g) for g in groups])
     y = np.concatenate(groups); grand = y.mean()
-    tiny = 1e-12 * float(np.sum(y ** 2))   # below this, a sum of squares is rounding error
+    tiny = 1e-24 * float(np.sum(y ** 2))   # below this, a sum of squares is rounding error
     no_spread_F = lambda ss: np.inf if ss > tiny else np.nan   # F with nothing left within the designs
     pval = lambda f, d1, d2: np.nan if np.isnan(f) else stats.f.sf(f, d1, d2)
     ssb = float(np.sum(n * (means - grand) ** 2))
     if blocked:
         R = int(n[0]); bm = np.column_stack(groups).mean(axis=1)
-        ssblk = float(k * np.sum((bm - grand) ** 2)); ssw = max(0.0, float(np.sum((y - grand) ** 2)) - ssb - ssblk)
+        ssblk = float(k * np.sum((bm - grand) ** 2))
+        # Summed from each residual y - mean_i - mean_r + mean, not found by subtraction.
+        ssw = float(sum(np.sum((g - means[i] - bm + grand) ** 2) for i, g in enumerate(groups)))
         if ssw <= tiny: ssw = 0.0
         dfb, dfblk, dfw = k - 1, R - 1, (k - 1) * (R - 1)
         msb, msblk, msw = ssb / dfb, ssblk / dfblk, ssw / dfw
@@ -1504,7 +1515,7 @@ k = numel(groups);
 means = cellfun(@mean, groups); n = cellfun(@numel, groups);
 y = cell2mat(cellfun(@(v) v(:), groups(:), 'UniformOutput', false));
 grand = mean(y);
-tiny = 1e-12 * sum(y.^2);   % below this, a sum of squares is rounding error
+tiny = 1e-24 * sum(y.^2);   % below this, a sum of squares is rounding error
 if blocked
     M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false));   % R-by-k: row = block, column = design
     [~, tab, st] = anova2(M, 1, 'off');
@@ -1512,10 +1523,12 @@ if blocked
     bm = mean(M, 2);
     % The residuals: each outcome less its design's mean and its replication's effect.
     resid = reshape(M - means - (bm - grand), [], 1);
-    flat = tab{4,2} <= tiny;   % nothing left once the designs and the blocks are removed
-    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    % anova2 finds the residual sum of squares by subtraction, with error near 1e-16 of the total,
+    % and so the sum the rule tests is taken from the residuals themselves.
+    ssw = sum(resid.^2); flat = ssw <= tiny;   % nothing left once the designs and the blocks are removed
+    if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
     [F, p] = f_entry(tab, 2, flat, tiny); [Fb, pb] = f_entry(tab, 3, flat, tiny);
-    ssw = tab{4,2}; msw = tab{4,4}; if flat, ssw = 0; msw = 0; end
+    msw = ssw / tab{4,3};
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
                'ssw', ssw, 'dfw', tab{4,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
@@ -1525,10 +1538,12 @@ else
     [~, tab, st] = anova1(y, g, 'off');
     % tab rows: Groups, Error, Total; columns: SS, df, MS, F, p
     resid = y - reshape(means(g), [], 1);
-    flat = tab{3,2} <= tiny;   % no design varies within itself
-    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    % anova1 finds the error sum of squares by subtraction, and so the sum the rule tests is
+    % taken from the residuals themselves.
+    ssw = sum(resid.^2); flat = ssw <= tiny;   % no design varies within itself
+    if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
     [F, p] = f_entry(tab, 2, flat, tiny);
-    ssw = tab{3,2}; msw = tab{3,4}; if flat, ssw = 0; msw = 0; end
+    msw = ssw / tab{3,3};
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssw', ssw, 'dfw', tab{3,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', [], 'resid', resid, 'stats', st);

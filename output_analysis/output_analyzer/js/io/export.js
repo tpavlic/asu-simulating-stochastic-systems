@@ -58,6 +58,20 @@ function dataCsv(rows) {
   return rows.map(r => r.map(dataField).join(',') + '\n').join('');
 }
 
+// One field of a result table: as csvEscape writes it, except that an
+// infinite number is written as Inf or -Inf, which R, Python, and MATLAB all
+// read back as infinity. An infinite F (no spread within the groups) is a
+// result, not a missing value; NaN stays an empty field.
+function resultField(v) {
+  if (v === Infinity) return 'Inf';
+  if (v === -Infinity) return '-Inf';
+  return csvEscape(v);
+}
+
+function resultCsv(rows) {
+  return rows.map(r => r.map(resultField).join(',') + '\n').join('');
+}
+
 function withProvenance(provenance, rows, write = toCsv) {
   const head = provenanceLines(provenance);
   return (head.length ? head.join('\n') + '\n' : '') + write(rows);
@@ -263,18 +277,19 @@ export function pilotCsv(x, provenance) {
 export function batchMeansCsv(result, provenance) {
   const rows = [['batch', 'start', 'end', 'n', 'mean']];
   result.batches.forEach((b, i) => rows.push([i + 1, b.start, b.end, b.n, b.mean]));
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, resultCsv);
 }
 
 /**
- * Any result table as CSV after its provenance lines.
+ * Any result table as CSV after its provenance lines. An infinite number is
+ * written as Inf or -Inf, and NaN as an empty field.
  * @param {string[]} headers
  * @param {unknown[][]} rows
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
  */
 export function tableCsv(headers, rows, provenance) {
-  return withProvenance(provenance, [headers, ...rows]);
+  return withProvenance(provenance, [headers, ...rows], resultCsv);
 }
 
 function requireDom(what) {

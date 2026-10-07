@@ -986,19 +986,24 @@ function buildSpread(api, { ds, est }) {
     card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
     (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict',
-      undefinedP ? 'cannot be computed' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'only the ranges differ' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
-  const noSpread = lv.F === Infinity
-    ? ' In every dataset, the outcomes all lie at one distance from the median (as two outcomes always do), and so F is infinite.' : '';
+  // F is infinite when every outcome lies the same distance from its dataset's
+  // median, which two outcomes always do: the test then compares only the
+  // datasets' ranges.
+  if (lv.F === Infinity) {
+    caption(sec, 'Every outcome lies the same distance from its dataset’s median, as two outcomes always do, and so F is infinite. The test then compares one number per dataset, that distance (half the range when there are two outcomes), and so it says little about whether the variances differ; more replications are needed to check the spreads.');
+    return;
+  }
   if (undefinedP) {
-    caption(sec, 'Levene’s test cannot be computed here: every outcome lies at the same distance from its own dataset’s median, as when no dataset varies, and so the distances have no spread to analyze, within the datasets or between them.');
+    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as happens when no dataset varies), and so the distances have no spread to analyze, within the datasets or between them.');
     return;
   }
   caption(sec, (rejects
     ? 'At this level, the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
-    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.') + noSpread);
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.'));
 }
 
 export default { id, title, sections, render, onShow };

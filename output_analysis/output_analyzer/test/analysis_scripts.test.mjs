@@ -2192,6 +2192,30 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   const rf = exRecipe(flat4, exSpread(flat4, IND_A));
   assert.equal(rf.expect['interval half-width'], 0);
   checkRecipe('Summary and Plots on 0.1 repeated', rf, exChecks);
+  // Large offsets: the rule is judged on the outcomes' own sum of squares, and residuals are
+  // summed directly, so neither the distances' nor a subtraction's rounding reads as spread.
+  for (const off of [1e6, 1e9]) {
+    const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('T' + (i + 1), v.map(x => x + off)));
+    const rt = sevRecipe(two, { eps: 0.4 });
+    assert.equal(rt.expect['levene F'], Infinity); assert.equal(rt.expect['levene p'], 0);
+    checkRecipe('Several Systems, two replications per design near ' + off, rt, sevChecks);
+  }
+  const c6 = [0.1, 0.3, 0.7].map((v, i) => reps('M' + (i + 1), Array(3).fill(1e6 + v)));
+  const rc6 = sevRecipe(c6, { eps: 0.4 });
+  assert.equal(rc6.expect['anova F'], Infinity, 'the means near a million differ by 0.2 and 0.4');
+  checkRecipe('Several Systems, constant designs near a million', rc6, sevChecks);
+  const add6 = [[2.1, 3.1], [2.3, 3.3], [4.3, 5.3]].map((v, i) => reps('A' + (i + 1), v.map(x => x + 1e6)));
+  const radd6 = sevRecipe(add6, { paired: true });
+  assert.equal(radd6.expect['anova F'], Infinity); assert.equal(radd6.expect['block F'], Infinity);
+  checkRecipe('Several Systems, designs additive in the blocks near a million', radd6, sevChecks);
+  // Paired differences equal only up to the subtraction's rounding: 0.1 - 0.3, 0.2 - 0.4, 0.5 - 0.7.
+  const pa = reps('PA', [0.1, 0.2, 0.5]), pb = reps('PB', [0.3, 0.4, 0.7]);
+  const rpr = pairedRecipe(pa, pb, 't', 'id', PLAN2);
+  assert.equal(rpr.expect['sd of differences'], 0); assert.equal(rpr.expect.t, -Infinity);
+  checkRecipe('Two Systems, paired t on differences equal up to rounding', rpr, { also: noWarning });
+  const pc = reps('PC', [0.9, 1.4, 0.6]);
+  const rsp = sevRecipe([pa, pb, pc], { paired: true, rule: 'bonferroni' });
+  checkRecipe('Several Systems, paired differences equal up to rounding', rsp, sevChecks);
   // Steady State: a constant run of 0.1, whose batch means are all equal.
   const flatRun = makeDataset({ name: 'Flat run', response: 'v', kind: 'tally', reps: [{ id: 1, v: Array(200).fill(0.1) }] });
   const rs = stRecipe(flatRun, { count: 10 });

@@ -1043,7 +1043,10 @@ export function correlogram(fig, r, o = {}) {
   const from = o.from === undefined ? 0 : o.from;
   const step = o.lagStep > 0 ? o.lagStep : 1;
   const band = Number.isFinite(o.band) ? o.band : NaN;
-  const [rlo] = extent(Array.prototype.slice.call(r, from));
+  // A constant series has no autocorrelation (every r is NaN), and extent then
+  // gives NaN; the axis keeps its usual floor rather than becoming NaN.
+  const [rlo0] = extent(Array.prototype.slice.call(r, from));
+  const rlo = Number.isFinite(rlo0) ? rlo0 : 0;
   if (!fig.sx) fig.x([(from - 0.6) * step, (L + 0.6) * step]);
   if (!fig.sy) fig.y([Math.min(-0.2, rlo, Number.isFinite(band) ? -band * 1.4 : 0), 1], { nice: true });
   ensureAxes(fig, o, { xInteger: step === 1, xLabel: fig.opts.xLabel || 'Lag', yLabel: fig.opts.yLabel || 'Autocorrelation' });

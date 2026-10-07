@@ -15562,22 +15562,24 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
   out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
   if (S.paired) {
+    need.push('pairedT');
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval of family_pairs, at 1 - alpha/C, has ' +
-      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value. ' +
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation (paired_t\'s, which is 0 for differences equal up to rounding) held at its current value. ' +
       'Standard deviations that agree to about twelve digits count as tied, and a tie goes to the first such pair in the family\'s order. ' +
       'The page takes the first largest of its own values, whose last digits can round differently, and so on such a tie it can name a later pair.', c));
     if (lang === 'R') {
-      out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
+      out.push('sd_d <- sapply(family_pairs, function(p) paired_t(groups[[p[1]]], groups[[p[2]]], level)$sdD)',
         'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
         'worst <- which(sd_d >= max(sd_d) * (1 - 1e-12))[1]',
         'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[worst]], collapse = "-")');
     } else if (lang === 'py') {
-      out.push('sd_d = np.array([np.std(groups[i] - groups[j], ddof=1) for i, j in family_pairs])',
+      out.push('sd_d = np.array([paired_t(groups[i], groups[j], level)["sdD"] for i, j in family_pairs])',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
         'worst = int(np.flatnonzero(sd_d >= sd_d.max() * (1 - 1e-12))[0])',
         'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[worst])');
     } else {
-      out.push('sd_d = arrayfun(@(q) std(groups{family_pairs(q, 1)} - groups{family_pairs(q, 2)}), 1:size(family_pairs, 1));',
+      out.push('sd_d = zeros(1, size(family_pairs, 1));',
+        'for q = 1:numel(sd_d), pq = paired_t(groups{family_pairs(q, 1)}, groups{family_pairs(q, 2)}, level); sd_d(q) = pq.sdD; end',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h);',
         'worst = find(sd_d >= max(sd_d) * (1 - 1e-12), 1);',
         "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
@@ -16818,6 +16820,20 @@ function dataCsv(rows) {
   return rows.map(r => r.map(dataField).join(',') + '\n').join('');
 }
 
+// One field of a result table: as csvEscape writes it, except that an
+// infinite number is written as Inf or -Inf, which R, Python, and MATLAB all
+// read back as infinity. An infinite F (no spread within the groups) is a
+// result, not a missing value; NaN stays an empty field.
+function resultField(v) {
+  if (v === Infinity) return 'Inf';
+  if (v === -Infinity) return '-Inf';
+  return csvEscape(v);
+}
+
+function resultCsv(rows) {
+  return rows.map(r => r.map(resultField).join(',') + '\n').join('');
+}
+
 function withProvenance(provenance, rows, write = toCsv) {
   const head = provenanceLines(provenance);
   return (head.length ? head.join('\n') + '\n' : '') + write(rows);
@@ -17023,18 +17039,19 @@ export function pilotCsv(x, provenance) {
 export function batchMeansCsv(result, provenance) {
   const rows = [['batch', 'start', 'end', 'n', 'mean']];
   result.batches.forEach((b, i) => rows.push([i + 1, b.start, b.end, b.n, b.mean]));
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, resultCsv);
 }
 
 /**
- * Any result table as CSV after its provenance lines.
+ * Any result table as CSV after its provenance lines. An infinite number is
+ * written as Inf or -Inf, and NaN as an empty field.
  * @param {string[]} headers
  * @param {unknown[][]} rows
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
  */
 export function tableCsv(headers, rows, provenance) {
-  return withProvenance(provenance, [headers, ...rows]);
+  return withProvenance(provenance, [headers, ...rows], resultCsv);
 }
 
 function requireDom(what) {
@@ -19387,8 +19404,9 @@ end
 // infinite (p = 0) when they differ between groups, as the analyzer reports,
 // and leave nothing to compare when they do not, as when every group is
 // constant. As in the analyzer, "do not vary" means a within sum of squares
-// at most 1e-12 of the distances' uncentered sum of squares: two outcomes
-// per group lie at distances from their median that are equal only up to
+// of the distances at most 1e-24 of the outcomes' own uncentered sum of
+// squares (the distances carry the outcomes' rounding): two outcomes per
+// group lie at distances from their median that are equal only up to
 // rounding, and the built-in tests report that rounding error as an F near
 // 1e30, or as a small F when the between part is rounding error too.
 
@@ -19396,7 +19414,7 @@ LIB.R.levene = `
 levene_test <- function(groups) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
-  tiny <- 1e-12 * sum(z^2)   # below this, a sum of squares is rounding error
+  tiny <- 1e-24 * sum(y^2)   # below this, a sum of squares is rounding error
   if (sum((z - ave(z, g))^2) <= tiny) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
@@ -19413,7 +19431,7 @@ def levene_test(groups):
     groups = [np.asarray(g, float) for g in groups]
     k = len(groups); N = sum(len(g) for g in groups)
     z = [np.abs(g - np.median(g)) for g in groups]
-    tiny = 1e-12 * sum(float(np.sum(zi ** 2)) for zi in z)   # below this, a sum of squares is rounding error
+    tiny = 1e-24 * sum(float(np.sum(g ** 2)) for g in groups)   # below this, a sum of squares is rounding error
     if sum(float(np.sum((zi - zi.mean()) ** 2)) for zi in z) <= tiny:
         zbar = np.concatenate(z).mean()
         # The distances do not vary within any group: F is infinite (p = 0) when they differ
@@ -19433,7 +19451,7 @@ N = numel(y); z = zeros(N, 1); zm = zeros(N, 1);
 for i = 1:k
     in = g == i; z(in) = abs(y(in) - median(y(in))); zm(in) = mean(z(in));
 end
-tiny = 1e-12 * sum(z.^2);   % below this, a sum of squares is rounding error
+tiny = 1e-24 * sum(y.^2);   % below this, a sum of squares is rounding error
 if sum((z - zm).^2) <= tiny
     % The distances do not vary within any group: F is infinite (p = 0) when they differ
     % between groups, and there is nothing to compare when they do not (every group constant).
@@ -19556,7 +19574,10 @@ end
 // The paired t test on the differences d = a - b, the interval on their mean,
 // and the correlation of a and b across the pairs. Differences that are all
 // equal leave t.test nothing to work on (it stops; SciPy and MATLAB return
-// NaN), and so the analyzer's values are given by hand there: the mean
+// NaN or warn), and so the analyzer's values are given by hand there. As in
+// the analyzer, "all equal" allows the rounding of the subtraction: max(d) -
+// min(d) at most 8 eps times the largest |a| or |b| (0.1 - 0.3 and 0.2 - 0.4
+// differ in their last bit). The hand-written values are the mean
 // difference with no width, and t infinite (p = 0), or undefined when every
 // difference is zero. A design whose outcomes are all equal has no
 // correlation with the other, which is NaN in every language.
@@ -19565,7 +19586,7 @@ LIB.R.pairedT = `
 paired_t <- function(a, b, level) {
   d <- a - b; n <- length(d); m <- mean(d)
   r <- if (min(a) == max(a) || min(b) == max(b)) NaN else cor(a, b)
-  if (min(d) == max(d)) {
+  if (max(d) - min(d) <= 8 * .Machine$double.eps * max(abs(c(a, b)))) {   # equal up to rounding
     t <- if (m != 0) sign(m) * Inf else NaN
     return(list(n = n, meanD = m, sdD = 0, se = 0, df = n - 1, t = t, p = if (is.nan(t)) NaN else 0,
                 lo = m, hi = m, hw = 0, r = r, diffs = d, test = NULL))
@@ -19582,7 +19603,7 @@ def paired_t(a, b, level):
     correlation of a and b."""
     a = np.asarray(a, float); b = np.asarray(b, float); d = a - b; n = len(d); m = d.mean()
     r = np.nan if a.min() == a.max() or b.min() == b.max() else np.corrcoef(a, b)[0, 1]
-    if d.min() == d.max():
+    if np.ptp(d) <= 8 * np.finfo(float).eps * max(np.abs(a).max(), np.abs(b).max()):   # equal up to rounding
         t = np.sign(m) * np.inf if m != 0 else np.nan
         return dict(n=n, meanD=m, sdD=0.0, se=0.0, df=n - 1, t=t, p=np.nan if np.isnan(t) else 0.0,
                     lo=m, hi=m, hw=0.0, r=r, diffs=d)
@@ -19596,7 +19617,7 @@ function r = paired_t(a, b, level)
 % and the correlation of a and b.
 a = a(:); b = b(:); d = a - b; n = numel(d); m = mean(d);
 if min(a) == max(a) || min(b) == max(b), rho = NaN; else, rho = corr(a, b); end
-if min(d) == max(d)
+if max(d) - min(d) <= 8 * eps * max(abs([a; b]))   % equal up to rounding
     if m ~= 0, t = sign(m) * Inf; p = 0; else, t = NaN; p = NaN; end
     r = struct('n', n, 'meanD', m, 'sdD', 0, 'se', 0, 'df', n - 1, 't', t, 'p', p, ...
                'lo', m, 'hi', m, 'hw', 0, 'r', rho, 'diffs', d);
@@ -19818,9 +19839,12 @@ end
 // and the blocks are removed), their residual is rounding error or empty,
 // and so the table is written out as the analyzer reports it: F is infinite
 // (p = 0) when the means differ and undefined when they do not. As in the
-// analyzer, a sum of squares at most 1e-12 of the outcomes' uncentered sum
+// analyzer, a sum of squares at most 1e-24 of the outcomes' uncentered sum
 // of squares is rounding error: 0.1, 0.3, and 0.7 each repeated three times
-// leave a residual near 1e-32, which aov turns into an F near 6e31.
+// leave a residual near 1e-32, which aov turns into an F near 6e31. The
+// residual sum of squares the rule tests is summed directly from each
+// residual: found by subtraction, as anova1 and anova2 find it, it carries
+// error near 1e-16 of the total.
 
 LIB.R.anova = `
 anova_table <- function(groups, blocked) {
@@ -19831,11 +19855,13 @@ anova_table <- function(groups, blocked) {
   ssb <- sum(n * (means - grand)^2)
   if (blocked) {
     R <- n[1]; block <- factor(rep(seq_len(R), k)); bm <- rowMeans(do.call(cbind, groups))
-    ssblk <- k * sum((bm - grand)^2); ssw <- max(0, sum((outcome - grand)^2) - ssb - ssblk)
+    ssblk <- k * sum((bm - grand)^2)
+    # Summed from each residual y - mean_i - mean_r + mean, not found by subtraction.
+    ssw <- sum(sapply(seq_len(k), function(i) sum((groups[[i]] - means[i] - bm + grand)^2)))
   } else {
     bm <- NULL; ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
   }
-  tiny <- 1e-12 * sum(outcome^2)   # below this, a sum of squares is rounding error
+  tiny <- 1e-24 * sum(outcome^2)   # below this, a sum of squares is rounding error
   no_spread_F <- function(ss) if (ss > tiny) Inf else NaN   # F with nothing left within the designs
   pval <- function(f, d1, d2) if (is.nan(f)) NaN else pf(f, d1, d2, lower.tail = FALSE)
   fit <- NULL
@@ -19871,13 +19897,15 @@ def anova_table(groups, blocked):
     groups = [np.asarray(g, float) for g in groups]; k = len(groups)
     means = np.array([g.mean() for g in groups]); n = np.array([len(g) for g in groups])
     y = np.concatenate(groups); grand = y.mean()
-    tiny = 1e-12 * float(np.sum(y ** 2))   # below this, a sum of squares is rounding error
+    tiny = 1e-24 * float(np.sum(y ** 2))   # below this, a sum of squares is rounding error
     no_spread_F = lambda ss: np.inf if ss > tiny else np.nan   # F with nothing left within the designs
     pval = lambda f, d1, d2: np.nan if np.isnan(f) else stats.f.sf(f, d1, d2)
     ssb = float(np.sum(n * (means - grand) ** 2))
     if blocked:
         R = int(n[0]); bm = np.column_stack(groups).mean(axis=1)
-        ssblk = float(k * np.sum((bm - grand) ** 2)); ssw = max(0.0, float(np.sum((y - grand) ** 2)) - ssb - ssblk)
+        ssblk = float(k * np.sum((bm - grand) ** 2))
+        # Summed from each residual y - mean_i - mean_r + mean, not found by subtraction.
+        ssw = float(sum(np.sum((g - means[i] - bm + grand) ** 2) for i, g in enumerate(groups)))
         if ssw <= tiny: ssw = 0.0
         dfb, dfblk, dfw = k - 1, R - 1, (k - 1) * (R - 1)
         msb, msblk, msw = ssb / dfb, ssblk / dfblk, ssw / dfw
@@ -19909,7 +19937,7 @@ k = numel(groups);
 means = cellfun(@mean, groups); n = cellfun(@numel, groups);
 y = cell2mat(cellfun(@(v) v(:), groups(:), 'UniformOutput', false));
 grand = mean(y);
-tiny = 1e-12 * sum(y.^2);   % below this, a sum of squares is rounding error
+tiny = 1e-24 * sum(y.^2);   % below this, a sum of squares is rounding error
 if blocked
     M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false));   % R-by-k: row = block, column = design
     [~, tab, st] = anova2(M, 1, 'off');
@@ -19917,10 +19945,12 @@ if blocked
     bm = mean(M, 2);
     % The residuals: each outcome less its design's mean and its replication's effect.
     resid = reshape(M - means - (bm - grand), [], 1);
-    flat = tab{4,2} <= tiny;   % nothing left once the designs and the blocks are removed
-    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    % anova2 finds the residual sum of squares by subtraction, with error near 1e-16 of the total,
+    % and so the sum the rule tests is taken from the residuals themselves.
+    ssw = sum(resid.^2); flat = ssw <= tiny;   % nothing left once the designs and the blocks are removed
+    if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
     [F, p] = f_entry(tab, 2, flat, tiny); [Fb, pb] = f_entry(tab, 3, flat, tiny);
-    ssw = tab{4,2}; msw = tab{4,4}; if flat, ssw = 0; msw = 0; end
+    msw = ssw / tab{4,3};
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
                'ssw', ssw, 'dfw', tab{4,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
@@ -19930,10 +19960,12 @@ else
     [~, tab, st] = anova1(y, g, 'off');
     % tab rows: Groups, Error, Total; columns: SS, df, MS, F, p
     resid = y - reshape(means(g), [], 1);
-    flat = tab{3,2} <= tiny;   % no design varies within itself
-    if flat, resid = zeros(size(resid)); end   % computed, they would be rounding error
+    % anova1 finds the error sum of squares by subtraction, and so the sum the rule tests is
+    % taken from the residuals themselves.
+    ssw = sum(resid.^2); flat = ssw <= tiny;   % no design varies within itself
+    if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
     [F, p] = f_entry(tab, 2, flat, tiny);
-    ssw = tab{3,2}; msw = tab{3,4}; if flat, ssw = 0; msw = 0; end
+    msw = ssw / tab{3,3};
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssw', ssw, 'dfw', tab{3,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', [], 'resid', resid, 'stats', st);
@@ -22838,19 +22870,24 @@ function buildSpread(api, { ds, est }) {
     card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
     (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict',
-      undefinedP ? 'cannot be computed' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'only the ranges differ' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
-  const noSpread = lv.F === Infinity
-    ? ' In every dataset, the outcomes all lie at one distance from the median (as two outcomes always do), and so F is infinite.' : '';
+  // F is infinite when every outcome lies the same distance from its dataset's
+  // median, which two outcomes always do: the test then compares only the
+  // datasets' ranges.
+  if (lv.F === Infinity) {
+    caption(sec, 'Every outcome lies the same distance from its dataset’s median, as two outcomes always do, and so F is infinite. The test then compares one number per dataset, that distance (half the range when there are two outcomes), and so it says little about whether the variances differ; more replications are needed to check the spreads.');
+    return;
+  }
   if (undefinedP) {
-    caption(sec, 'Levene’s test cannot be computed here: every outcome lies at the same distance from its own dataset’s median, as when no dataset varies, and so the distances have no spread to analyze, within the datasets or between them.');
+    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as happens when no dataset varies), and so the distances have no spread to analyze, within the datasets or between them.');
     return;
   }
   caption(sec, (rejects
     ? 'At this level, the spreads differ, and so a procedure that pools them is on shaky ground: on Several Systems prefer the Pairwise comparisons section, whose intervals take each pair’s own spread, or the rank procedures. The test keeps its level under non-normal data, which is why it is used in place of the F ratio of two variances.'
-    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.') + noSpread);
+    : 'No evidence at this level that the spreads differ, which is what pooling a variance across these datasets assumes. With few replications, the test has little power, and so this is a check, not a proof.'));
 }
 
 export default { id, title, sections, render, onShow };
@@ -23970,7 +24007,7 @@ import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
-import { num, intl, pct, esc, dash, lvl } from '../ui/format.js';
+import { num, stat, intl, pct, esc, dash, lvl } from '../ui/format.js';
 
 /** The page's hash id. */
 export const id = 'one';
@@ -24483,7 +24520,7 @@ function draw() {
   if (np) {
     const basis = sr.exact ? 'exact distribution' : 'normal approximation';
     els.row3.replaceChildren(cardRow([
-      wide(card(lvl(level) + ' interval for the pseudo-median', '[' + num(sr.lo) + ', ' + num(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
+      wide(card(lvl(level) + ' interval for the pseudo-median', '[' + stat(sr.lo) + ', ' + stat(sr.hi) + ']', sr.exact && Number.isFinite(sr.achieved) ? 'achieved level ' + pct(sr.achieved, 1) : basis)),
       card('<span class="tip" tabindex="0" data-tip="The Hodges–Lehmann estimate: the median of the averages of every pair of outcomes, each outcome paired with itself as well.">Pseudo-median</span>', num(sr.estimate), 'Hodges–Lehmann'),
       wide(card('Basis', basis, sr.exact ? 'signed-rank distribution of n = ' + intl(s.n) : 'with continuity correction' + (sr.ties ? ', ties present' : '')))
     ]));
@@ -25121,7 +25158,8 @@ let resultBase = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
-const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
+// An infinite end (an unbounded rank interval) shows as ∞, as on the Report page.
+const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 const word = k => (k < WORDS.length ? WORDS[k] : intl(k));
 const allOf = k => (k === 2 ? 'both' : 'all ' + word(k));
@@ -25824,7 +25862,7 @@ function update() {
       },
       legItems,
       'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
-    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), num(c.t), pValue(c.p), pValue(c.pAdj),
+    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), stat(c.t), pValue(c.p), pValue(c.pAdj),
       c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
@@ -25903,8 +25941,10 @@ function update() {
     b.appendChild(assumptionChecks({ sets: [{ name: 'the residuals', values: resid }], alpha, pooled: !welch, varianceSets: groups, linkDs: list[0].id,
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    const levTxt = Number.isNaN(lv.p) ? 'cannot be computed (no spread within any design to compare)' : pEq(lv.p);
-    if (welch) b.appendChild(para('exp-note', 'Levene’s test ' + (Number.isNaN(lv.p) ? levTxt : 'gives ' + levTxt) + ' here; Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
+    const levNaN = Number.isNaN(lv.p);
+    const levTxt = levNaN ? 'cannot be computed, because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.' : 'Levene’s test gives ' + levTxt + ' here.') +
+      ' Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
     // The residuals' own quantile–quantile plot: the Normality section shows
     // one design's outcomes at a time, and the F test's assumption is about
     // all the residuals together.
@@ -28014,7 +28054,9 @@ let resultBase = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
-const interval = (lo, hi) => '[' + num(lo) + ', ' + num(hi) + ']';
+// An end that is infinite (an unbounded rank interval, or the F ratio's when B
+// has no spread) shows as ∞, as on the Report page.
+const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
 const levelPct = level => num(level * 100, 4) + '%';
 
 // The finite replication outcomes of a dataset with their ids, and the ids
@@ -28561,7 +28603,7 @@ function renderIndependent(res, notes, d, level) {
       card('Standard error', v(w && w.se), pooled ? 's<sub>p</sub>√(1/R<sub>A</sub> + 1/R<sub>B</sub>)' : '√(s<sub>A</sub>²/R<sub>A</sub> + s<sub>B</sub>²/R<sub>B</sub>)'),
       pooled ? card(DF_LABEL, v(w && w.df), 'R<sub>A</sub> + R<sub>B</sub> − 2')
         : card('<span class="tip" tabindex="0" data-tip="The Welch–Satterthwaite degrees of freedom, which allow the two designs to have different variances.">Welch df</span>', v(w && w.df), 'Welch–Satterthwaite'),
-      card('t', v(w && w.t), 'difference/SE'),
+      card('t', v(w && w.t, stat), 'difference/SE'),
       card('Two-sided p', w ? pValue(w.p) : dash, pooled ? 'pooled t test' : 'Welch t test'),
       wide(card(L + ' interval', w ? interval(w.lo, w.hi) : dash, 'difference ± half-width')),
       card('Half-width', v(w && w.hw), 't quantile × SE')
@@ -28989,7 +29031,7 @@ function renderPaired(res, notes, d, level) {
     card('SD of differences', v(pr && pr.sdD)),
     card('Standard error', v(pr && pr.se), 's<sub>D</sub>/√n'),
     card(DF_LABEL, pr ? intl(pr.df) : dash, 'n − 1'),
-    card('t', v(pr && pr.t)),
+    card('t', v(pr && pr.t, stat)),
     card('Two-sided p', pr ? pValue(pr.p) : dash),
     wide(card(L + ' interval', pr ? interval(pr.lo, pr.hi) : dash)),
     card('Half-width', v(pr && pr.hw)),
@@ -29648,7 +29690,8 @@ export function pairedT(x, y, level) {
   if (x.length !== y.length) throw new RangeError('pairedT: x and y must have equal length');
   const n = x.length, diffs = new Float64Array(n);
   for (let i = 0; i < n; i++) diffs[i] = x[i] - y[i];
-  const meanD = mean(diffs), sdD = Math.sqrt(variance(diffs));
+  // Differences equal up to the subtraction's rounding have no spread.
+  const meanD = mean(diffs), sdD = constantDifferences(diffs, x, y) ? 0 : Math.sqrt(variance(diffs));
   const se = sdD / Math.sqrt(n), df = n - 1;
   const t = meanD / se;
   const p = twoSidedP(t, df);
@@ -29709,17 +29752,41 @@ export function bonferroniFamily(groups, { mode, control = 0, level, paired = fa
 }
 
 // "No spread within the groups": a within (or residual) sum of squares at or
-// below this fraction of the uncentered sum of squares Σy² is rounding error,
-// and counts as exactly 0. Values that are equal within each group leave a
-// within sum of squares near 1e-30 of Σy², not 0; real spread leaves far more,
-// unless the values vary by less than about one part in a million of their size.
-const NO_SPREAD = 1e-12;
+// below this fraction of the outcomes' uncentered sum of squares Σy² is
+// rounding error, and counts as exactly 0. Values that are equal within each
+// group leave a within sum of squares near 1e-31 of Σy², not 0, as long as it
+// is summed directly from each value's own deviation (a sum of squares found by
+// subtraction carries error near 1e-16 of Σy²); real spread of even one part
+// in a billion of the values' size leaves about 1e-18.
+const NO_SPREAD = 1e-24;
 
 // F and p for a source with sum of squares ss when nothing is left within the
 // groups: infinite (p = 0) when the source has some, and undefined when it too
 // is rounding error against the scale `tiny`.
 function fWithNoSpread(ss, tiny) {
   return ss > tiny ? { F: Infinity, p: 0 } : { F: NaN, p: NaN };
+}
+
+/**
+ * True when paired differences d = x − y are equal up to the rounding of the
+ * subtraction itself: max(d) − min(d) ≤ 8ε · max(|x|, |y|), ε the machine
+ * epsilon. 0.1 − 0.3 and 0.2 − 0.4 differ in the last bit, though both are
+ * −0.2.
+ * @param {ArrayLike<number>} d the differences
+ * @param {ArrayLike<number>} x
+ * @param {ArrayLike<number>} y
+ * @returns {boolean}
+ */
+export function constantDifferences(d, x, y) {
+  if (d.length === 0) return false;
+  let lo = Infinity, hi = -Infinity, big = 0;
+  for (let i = 0; i < d.length; i++) {
+    if (!Number.isFinite(d[i])) return false;
+    if (d[i] < lo) lo = d[i];
+    if (d[i] > hi) hi = d[i];
+    big = Math.max(big, Math.abs(x[i]), Math.abs(y[i]));
+  }
+  return hi - lo <= 8 * Number.EPSILON * big;
 }
 
 function sumSq(groups) {
@@ -29730,17 +29797,20 @@ function sumSq(groups) {
 
 /**
  * One-way analysis of variance, as R's summary(aov(y ~ g)). When the within
- * sum of squares is at most 1e-12 of Σy² (no spread within any group, up to
- * rounding), it is taken as exactly 0, and F is infinite with p = 0 when the
+ * sum of squares is at most 1e-24 of the scale (no spread within any group, up
+ * to rounding), it is taken as exactly 0, and F is infinite with p = 0 when the
  * between sum of squares exceeds that bound, and undefined (NaN, with the
  * between sum of squares taken as 0) when it does not; R's aov reports
- * rounding noise there.
+ * rounding noise there. The scale is Σy² of the groups, or `scale` when given:
+ * Levene's test passes the outcomes' own Σy², because the distances it
+ * analyzes carry the rounding of the outcomes they came from.
  * @param {(number[]|Float64Array)[]} groups
+ * @param {{scale?: number}} [opts]
  * @returns {{k: number, N: number, n: number[], means: number[], grandMean: number,
  *   ssb: number, ssw: number, sst: number, dfb: number, dfw: number, msb: number,
  *   msw: number, F: number, p: number}}
  */
-export function anova(groups) {
+export function anova(groups, { scale = null } = {}) {
   const k = groups.length;
   const n = groups.map(g => g.length);
   const means = groups.map(mean);
@@ -29756,7 +29826,7 @@ export function anova(groups) {
     for (let r = 0; r < g.length; r++) { const e = g[r] - means[i]; ssw += e * e; }
   }
   const dfb = k - 1, dfw = N - k;
-  const tiny = NO_SPREAD * sumSq(groups);
+  const tiny = NO_SPREAD * (scale == null ? sumSq(groups) : scale);
   let F, p;
   if (dfw > 0 && ssw <= tiny) {
     ssw = 0;
@@ -29865,7 +29935,9 @@ export function levene(groups, { center = 'median' } = {}) {
   const k = groups.length;
   const centers = groups.map(g => (center === 'mean' ? mean(g) : median(g)));
   const dev = groups.map((g, i) => Float64Array.from(g, v => Math.abs(v - centers[i])));
-  const av = anova(dev);
+  // "No spread" is judged on the outcomes' scale: each distance carries the
+  // rounding of the outcomes it was taken from, near ε|y| rather than ε|z|.
+  const av = anova(dev, { scale: sumSq(groups) });
   return { k, N: av.N, center, centers, F: av.F, df1: av.dfb, df2: av.dfw, p: av.p };
 }
 
@@ -29891,15 +29963,20 @@ export function anovaBlocked(groups) {
   let total = 0;
   for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { blockMeans[r] += groups[i][r] / k; total += groups[i][r]; }
   const grandMean = total / N;
-  let ssb = 0, ssblk = 0, sst = 0;
+  let ssb = 0, ssblk = 0, sst = 0, ssw = 0;
   for (let i = 0; i < k; i++) { const d = means[i] - grandMean; ssb += R * d * d; }
   for (let r = 0; r < R; r++) { const d = blockMeans[r] - grandMean; ssblk += k * d * d; }
-  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { const e = groups[i][r] - grandMean; sst += e * e; }
-  let ssw = Math.max(0, sst - ssb - ssblk);
+  // The residual sum of squares is summed directly from each residual
+  // y − ȳ_i − ȳ_r + ȳ, not found as sst − ssb − ssblk, whose subtraction
+  // leaves error near 1e-16 of the total and would hide "no spread left".
+  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) {
+    const e = groups[i][r] - grandMean; sst += e * e;
+    const res = groups[i][r] - means[i] - blockMeans[r] + grandMean; ssw += res * res;
+  }
   const dfb = k - 1, dfblk = R - 1, dfw = (k - 1) * (R - 1);
   const tiny = NO_SPREAD * sumSq(groups);
   // Nothing left once the designs and the blocks are removed: the residual
-  // is rounding error, as in anova().
+  // is rounding error, judged as in anova().
   const flat = dfw > 0 && ssw <= tiny;
   if (flat) {
     ssw = 0;
@@ -30539,7 +30616,8 @@ export function cumulativeMean(a) { return runningMean(a); }
  * gives the ratio of two rounding errors there.
  * @param {ArrayLike<number>} a
  * @param {number} maxLag
- * @returns {Float64Array} length min(maxLag, n − 1) + 1; r_0 = 1
+ * @returns {Float64Array} length min(maxLag, n − 1) + 1; r_0 = 1, except that every
+ *   value, r_0 included, is NaN for a constant series
  */
 export function acf(a, maxLag) {
   const n = a.length;
@@ -32893,7 +32971,13 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
   const vsets = varianceSets ? varianceSets.map(v => Array.from(v).filter(Number.isFinite)) : sets.map(st => Array.from(st.values).filter(Number.isFinite));
   if (pooled && vsets.length >= 2 && vsets.every(v => v.length >= 2)) {
     const lv = levene(vsets);
-    if (Number.isFinite(lv.p)) {
+    if (lv.F === Infinity) {
+      // Every value lies the same distance from its group's median, as two values
+      // always do: F is infinite, but the test then compares only the groups'
+      // ranges, which says little about their variances.
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+        ', but every value lies the same distance from its group’s median (as two values always do), and so the test compares one distance per group and says little about the variances') + '.';
+    } else if (Number.isFinite(lv.p)) {
       tested = true;
       const bad = lv.p < alpha;
       if (bad) warn = true;
@@ -32901,7 +32985,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: no spread within any group to compare') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed, because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);
@@ -34494,7 +34578,10 @@ export function correlogram(fig, r, o = {}) {
   const from = o.from === undefined ? 0 : o.from;
   const step = o.lagStep > 0 ? o.lagStep : 1;
   const band = Number.isFinite(o.band) ? o.band : NaN;
-  const [rlo] = extent(Array.prototype.slice.call(r, from));
+  // A constant series has no autocorrelation (every r is NaN), and extent then
+  // gives NaN; the axis keeps its usual floor rather than becoming NaN.
+  const [rlo0] = extent(Array.prototype.slice.call(r, from));
+  const rlo = Number.isFinite(rlo0) ? rlo0 : 0;
   if (!fig.sx) fig.x([(from - 0.6) * step, (L + 0.6) * step]);
   if (!fig.sy) fig.y([Math.min(-0.2, rlo, Number.isFinite(band) ? -band * 1.4 : 0), 1], { nice: true });
   ensureAxes(fig, o, { xInteger: step === 1, xLabel: fig.opts.xLabel || 'Lag', yLabel: fig.opts.yLabel || 'Autocorrelation' });

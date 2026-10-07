@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { variance, sd, acf } from '../js/stats/descriptive.js';
-import { welch, pooledT, pairedT, simultaneousMeans, anova, anovaBlocked, levene, posthoc,
+import { welch, pooledT, pairedT, simultaneousMeans, anova, anovaBlocked, levene, posthoc, constantDifferences,
   planHalfWidthWelch, planHalfWidthBonferroni } from '../js/stats/compare.js';
 import { tInterval, fRatio } from '../js/stats/intervals.js';
 import { subsetSelection } from '../js/stats/select.js';
@@ -54,6 +54,18 @@ test('the paired t on constant differences', () => {
   same(r.t, ref.t, 't'); same(r.p, ref.p, 'p'); assert.equal(r.hw, 0);
 });
 
+test('paired differences equal up to the subtraction\'s rounding are constant', () => {
+  const ref = REF.pairedRounding;
+  assert.equal(ref.constant, true);
+  assert.ok(ref.spread > 0, 'the differences are not bit-equal');
+  assert.equal(constantDifferences(Float64Array.from(ref.d), ref.a, ref.b), true);
+  const r = pairedT(ref.a, ref.b, 0.95);
+  assert.equal(r.sdD, 0); assert.equal(r.hw, 0);
+  same(r.meanD, ref.meanD, 'meanD'); same(r.t, ref.t, 't'); same(r.p, ref.p, 'p');
+  // Real differences, however small against the values, are not.
+  assert.equal(constantDifferences([1e-9, 2e-9], [1, 1], [1 - 1e-9, 1 - 2e-9]), false);
+});
+
 test('the t interval and the simultaneous means on repeated values have no width', () => {
   const ti = tInterval(rep(0.1, 7));
   assert.equal(ti.sd, 0); assert.equal(ti.hw, 0); assert.equal(ti.lo, ti.hi);
@@ -77,20 +89,25 @@ test('the plans for the differences have no answer on repeated values', () => {
 });
 
 test('one-way ANOVA with no spread within the designs: F infinite, or undefined when the means agree', () => {
-  for (const name of ['anovaConstants', 'anovaEqual']) {
+  // Near a million the sums of squares lose about ten digits to cancellation in
+  // both languages, and so they are compared to 1e-8.
+  for (const name of ['anovaConstants', 'anovaEqual', 'anovaConstants1e6']) {
     const ref = REF[name], r = anova(ref.groups);
     assert.ok(Number.isFinite(ref.aovF), name + ': R\'s aov reports a number here');
     assert.equal(r.ssw, 0); assert.equal(r.msw, 0);
-    same(r.ssb, ref.ssb, name + ' ssb'); same(r.F, ref.F, name + ' F'); same(r.p, ref.p, name + ' p');
+    same(r.ssb, ref.ssb, name + ' ssb', 1e-8); same(r.F, ref.F, name + ' F'); same(r.p, ref.p, name + ' p');
     assert.equal(r.dfw, ref.dfw);
   }
+  // Half a unit of spread near a million is real spread.
+  const real = anova(REF.anovaReal1e6.groups);
+  same(real.F, REF.anovaReal1e6.F, 'real F', 1e-8); same(real.p, REF.anovaReal1e6.p, 'real p', 1e-8);
   // The post-hoc rules then have no width.
   const ph = posthoc(REF.anovaConstants.groups, { rule: 'tukey', alpha: 0.05 });
   assert.ok(ph.pairs.every(p => p.hw === 0 && p.flagged));
 });
 
 test('Levene with no spread within any design: F infinite, or undefined when the distances agree', () => {
-  for (const name of ['leveneTwo', 'leveneEqual', 'leveneConstants']) {
+  for (const name of ['leveneTwo', 'leveneTwo1e6', 'leveneTwo1e9', 'leveneEqual', 'leveneConstants']) {
     const ref = REF[name], r = levene(ref.groups);
     same(r.F, ref.F, name + ' F'); same(r.p, ref.p, name + ' p');
     assert.equal(r.df1, ref.dfb); assert.equal(r.df2, ref.dfw);
@@ -101,10 +118,10 @@ test('Levene with no spread within any design: F infinite, or undefined when the
 });
 
 test('the blocked analysis with nothing left after the designs and blocks', () => {
-  for (const name of ['blockedAdditive', 'blockedConstants']) {
+  for (const name of ['blockedAdditive', 'blockedAdditive1e6', 'blockedConstants']) {
     const ref = REF[name], r = anovaBlocked(ref.groups);
     assert.equal(r.ssw, 0);
-    same(r.ssb, ref.ssb, name + ' ssb', 1e-10); same(r.ssblk, ref.ssblk, name + ' ssblk', 1e-10);
+    same(r.ssb, ref.ssb, name + ' ssb', 1e-8); same(r.ssblk, ref.ssblk, name + ' ssblk', 1e-8);
     for (const k of ['F', 'p', 'Fblock', 'pBlock']) same(r[k], ref[k], name + ' ' + k);
   }
 });

@@ -202,7 +202,8 @@ export function pairedT(x, y, level) {
   if (x.length !== y.length) throw new RangeError('pairedT: x and y must have equal length');
   const n = x.length, diffs = new Float64Array(n);
   for (let i = 0; i < n; i++) diffs[i] = x[i] - y[i];
-  const meanD = mean(diffs), sdD = Math.sqrt(variance(diffs));
+  // Differences equal up to the subtraction's rounding have no spread.
+  const meanD = mean(diffs), sdD = constantDifferences(diffs, x, y) ? 0 : Math.sqrt(variance(diffs));
   const se = sdD / Math.sqrt(n), df = n - 1;
   const t = meanD / se;
   const p = twoSidedP(t, df);
@@ -263,17 +264,41 @@ export function bonferroniFamily(groups, { mode, control = 0, level, paired = fa
 }
 
 // "No spread within the groups": a within (or residual) sum of squares at or
-// below this fraction of the uncentered sum of squares Σy² is rounding error,
-// and counts as exactly 0. Values that are equal within each group leave a
-// within sum of squares near 1e-30 of Σy², not 0; real spread leaves far more,
-// unless the values vary by less than about one part in a million of their size.
-const NO_SPREAD = 1e-12;
+// below this fraction of the outcomes' uncentered sum of squares Σy² is
+// rounding error, and counts as exactly 0. Values that are equal within each
+// group leave a within sum of squares near 1e-31 of Σy², not 0, as long as it
+// is summed directly from each value's own deviation (a sum of squares found by
+// subtraction carries error near 1e-16 of Σy²); real spread of even one part
+// in a billion of the values' size leaves about 1e-18.
+const NO_SPREAD = 1e-24;
 
 // F and p for a source with sum of squares ss when nothing is left within the
 // groups: infinite (p = 0) when the source has some, and undefined when it too
 // is rounding error against the scale `tiny`.
 function fWithNoSpread(ss, tiny) {
   return ss > tiny ? { F: Infinity, p: 0 } : { F: NaN, p: NaN };
+}
+
+/**
+ * True when paired differences d = x − y are equal up to the rounding of the
+ * subtraction itself: max(d) − min(d) ≤ 8ε · max(|x|, |y|), ε the machine
+ * epsilon. 0.1 − 0.3 and 0.2 − 0.4 differ in the last bit, though both are
+ * −0.2.
+ * @param {ArrayLike<number>} d the differences
+ * @param {ArrayLike<number>} x
+ * @param {ArrayLike<number>} y
+ * @returns {boolean}
+ */
+export function constantDifferences(d, x, y) {
+  if (d.length === 0) return false;
+  let lo = Infinity, hi = -Infinity, big = 0;
+  for (let i = 0; i < d.length; i++) {
+    if (!Number.isFinite(d[i])) return false;
+    if (d[i] < lo) lo = d[i];
+    if (d[i] > hi) hi = d[i];
+    big = Math.max(big, Math.abs(x[i]), Math.abs(y[i]));
+  }
+  return hi - lo <= 8 * Number.EPSILON * big;
 }
 
 function sumSq(groups) {
@@ -284,17 +309,20 @@ function sumSq(groups) {
 
 /**
  * One-way analysis of variance, as R's summary(aov(y ~ g)). When the within
- * sum of squares is at most 1e-12 of Σy² (no spread within any group, up to
- * rounding), it is taken as exactly 0, and F is infinite with p = 0 when the
+ * sum of squares is at most 1e-24 of the scale (no spread within any group, up
+ * to rounding), it is taken as exactly 0, and F is infinite with p = 0 when the
  * between sum of squares exceeds that bound, and undefined (NaN, with the
  * between sum of squares taken as 0) when it does not; R's aov reports
- * rounding noise there.
+ * rounding noise there. The scale is Σy² of the groups, or `scale` when given:
+ * Levene's test passes the outcomes' own Σy², because the distances it
+ * analyzes carry the rounding of the outcomes they came from.
  * @param {(number[]|Float64Array)[]} groups
+ * @param {{scale?: number}} [opts]
  * @returns {{k: number, N: number, n: number[], means: number[], grandMean: number,
  *   ssb: number, ssw: number, sst: number, dfb: number, dfw: number, msb: number,
  *   msw: number, F: number, p: number}}
  */
-export function anova(groups) {
+export function anova(groups, { scale = null } = {}) {
   const k = groups.length;
   const n = groups.map(g => g.length);
   const means = groups.map(mean);
@@ -310,7 +338,7 @@ export function anova(groups) {
     for (let r = 0; r < g.length; r++) { const e = g[r] - means[i]; ssw += e * e; }
   }
   const dfb = k - 1, dfw = N - k;
-  const tiny = NO_SPREAD * sumSq(groups);
+  const tiny = NO_SPREAD * (scale == null ? sumSq(groups) : scale);
   let F, p;
   if (dfw > 0 && ssw <= tiny) {
     ssw = 0;
@@ -419,7 +447,9 @@ export function levene(groups, { center = 'median' } = {}) {
   const k = groups.length;
   const centers = groups.map(g => (center === 'mean' ? mean(g) : median(g)));
   const dev = groups.map((g, i) => Float64Array.from(g, v => Math.abs(v - centers[i])));
-  const av = anova(dev);
+  // "No spread" is judged on the outcomes' scale: each distance carries the
+  // rounding of the outcomes it was taken from, near ε|y| rather than ε|z|.
+  const av = anova(dev, { scale: sumSq(groups) });
   return { k, N: av.N, center, centers, F: av.F, df1: av.dfb, df2: av.dfw, p: av.p };
 }
 
@@ -445,15 +475,20 @@ export function anovaBlocked(groups) {
   let total = 0;
   for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { blockMeans[r] += groups[i][r] / k; total += groups[i][r]; }
   const grandMean = total / N;
-  let ssb = 0, ssblk = 0, sst = 0;
+  let ssb = 0, ssblk = 0, sst = 0, ssw = 0;
   for (let i = 0; i < k; i++) { const d = means[i] - grandMean; ssb += R * d * d; }
   for (let r = 0; r < R; r++) { const d = blockMeans[r] - grandMean; ssblk += k * d * d; }
-  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) { const e = groups[i][r] - grandMean; sst += e * e; }
-  let ssw = Math.max(0, sst - ssb - ssblk);
+  // The residual sum of squares is summed directly from each residual
+  // y − ȳ_i − ȳ_r + ȳ, not found as sst − ssb − ssblk, whose subtraction
+  // leaves error near 1e-16 of the total and would hide "no spread left".
+  for (let i = 0; i < k; i++) for (let r = 0; r < R; r++) {
+    const e = groups[i][r] - grandMean; sst += e * e;
+    const res = groups[i][r] - means[i] - blockMeans[r] + grandMean; ssw += res * res;
+  }
   const dfb = k - 1, dfblk = R - 1, dfw = (k - 1) * (R - 1);
   const tiny = NO_SPREAD * sumSq(groups);
   // Nothing left once the designs and the blocks are removed: the residual
-  // is rounding error, as in anova().
+  // is rounding error, judged as in anova().
   const flat = dfw > 0 && ssw <= tiny;
   if (flat) {
     ssw = 0;

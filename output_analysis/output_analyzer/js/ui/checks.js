@@ -63,7 +63,13 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
   const vsets = varianceSets ? varianceSets.map(v => Array.from(v).filter(Number.isFinite)) : sets.map(st => Array.from(st.values).filter(Number.isFinite));
   if (pooled && vsets.length >= 2 && vsets.every(v => v.length >= 2)) {
     const lv = levene(vsets);
-    if (Number.isFinite(lv.p)) {
+    if (lv.F === Infinity) {
+      // Every value lies the same distance from its group's median, as two values
+      // always do: F is infinite, but the test then compares only the groups'
+      // ranges, which says little about their variances.
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+        ', but every value lies the same distance from its group’s median (as two values always do), and so the test compares one distance per group and says little about the variances') + '.';
+    } else if (Number.isFinite(lv.p)) {
       tested = true;
       const bad = lv.p < alpha;
       if (bad) warn = true;
@@ -71,7 +77,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: no spread within any group to compare') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed, because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);

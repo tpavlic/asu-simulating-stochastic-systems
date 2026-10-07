@@ -11,11 +11,15 @@
 #   procedure on two constant samples is written out: the difference is known
 #   exactly, t is infinite (p = 0) when the constants differ, and the interval
 #   has no width.
-# - An analysis of variance whose within (or residual) sum of squares is at most
-#   1e-12 of the uncentered sum of squares sum(y^2) has no spread within the
-#   groups: F is infinite (p = 0) when the between sum of squares exceeds that
-#   bound and undefined when it does not. aov() reports rounding noise there,
+# - An analysis of variance whose within (or residual) sum of squares, summed
+#   directly from each residual, is at most 1e-24 of the outcomes' uncentered
+#   sum of squares sum(y^2) has no spread within the groups: F is infinite
+#   (p = 0) when the between sum of squares exceeds that bound and undefined
+#   when it does not. Levene's test applies the rule to the distances from the
+#   medians on the outcomes' own sum(y^2). aov() reports rounding noise there,
 #   which is kept beside each result as aovF.
+# - Paired differences d = a - b are constant when max(d) - min(d) is at most
+#   8 eps times the largest |a| or |b|, the rounding bound of the subtraction.
 
 j <- function(x) {
   if (is.list(x) && !is.null(names(x))) paste0("{", paste(sprintf('"%s":%s', names(x), sapply(x, j)), collapse = ","), "}")
@@ -27,16 +31,16 @@ j <- function(x) {
   else sprintf("%.17g", x)
 }
 
-NO_SPREAD <- 1e-12
+NO_SPREAD <- 1e-24
 
 # The one-way analysis of variance under the rule above.
-oneway <- function(groups) {
+oneway <- function(groups, scale = NULL) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   n <- lengths(groups); means <- sapply(groups, mean); grand <- mean(y)
   ssb <- sum(n * (means - grand)^2)
   ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
   dfb <- length(groups) - 1; dfw <- length(y) - length(groups)
-  tiny <- NO_SPREAD * sum(y^2)
+  tiny <- NO_SPREAD * (if (is.null(scale)) sum(y^2) else scale)
   aovF <- suppressWarnings(summary(aov(y ~ g))[[1]][1, "F value"])
   if (ssw <= tiny) {
     ssw <- 0
@@ -51,18 +55,21 @@ oneway <- function(groups) {
 # Brown and Forsythe's Levene test: the analysis above on |y - median|.
 levene <- function(groups) {
   z <- lapply(groups, function(x) abs(x - median(x)))
-  r <- oneway(z)
+  r <- oneway(z, scale = sum(unlist(groups)^2))
   r$groups <- groups
   r
 }
 
 # The randomized-block analysis (designs by blocks, one outcome per cell) under
-# the rule above, with aov's own sums of squares.
+# the rule above: aov's sums of squares for the designs and the blocks, and the
+# residual sum of squares summed directly from y - mean_i - mean_r + mean.
 blocked <- function(groups) {
   k <- length(groups); R <- length(groups[[1]])
   y <- unlist(groups); design <- factor(rep(seq_len(k), each = R)); block <- factor(rep(seq_len(R), k))
   tab <- suppressWarnings(summary(aov(y ~ design + block))[[1]])
-  ssb <- tab[1, "Sum Sq"]; ssblk <- tab[2, "Sum Sq"]; ssw <- tab[3, "Sum Sq"]
+  ssb <- tab[1, "Sum Sq"]; ssblk <- tab[2, "Sum Sq"]
+  M <- do.call(cbind, groups)   # R-by-k
+  ssw <- sum((M - rep(colMeans(M), each = R) - rowMeans(M) + mean(M))^2)
   dfb <- k - 1; dfblk <- R - 1; dfw <- (k - 1) * (R - 1)
   tiny <- NO_SPREAD * sum(y^2)
   aovF <- tab[1, "F value"]
@@ -96,6 +103,10 @@ out <- list(
                     function(p) list(value = p[1], n = p[2], var = var(reps(p[1], p[2])))),
   welch = constant_t(reps(0.1, 3), reps(0.3, 3), FALSE),
   pooled = constant_t(reps(0.1, 3), reps(0.3, 3), TRUE),
+  # Differences equal only up to the subtraction's rounding: 0.1 - 0.3, 0.2 - 0.4, 0.5 - 0.7.
+  pairedRounding = { a <- c(0.1, 0.2, 0.5); b <- c(0.3, 0.4, 0.7); d <- a - b
+    list(a = a, b = b, d = d, spread = max(d) - min(d), bound = 8 * .Machine$double.eps * max(abs(c(a, b))),
+         constant = (max(d) - min(d)) <= 8 * .Machine$double.eps * max(abs(c(a, b))), meanD = mean(d), t = -Inf, p = 0) },
   # The paired differences of 0.1 and 0.3 repeated, all equal.
   paired = { d <- reps(0.1, 3) - reps(0.3, 3); list(a = reps(0.1, 3), b = reps(0.3, 3), meanD = mean(d), sdD = sd(d), t = -Inf, p = 0) },
   # var.test on two constant samples (F = 0/0) and on a constant against a varied one (F = 0).
@@ -106,11 +117,19 @@ out <- list(
   anovaEqual = oneway(list(reps(0.3, 3), reps(0.3, 4), reps(0.3, 2))),
   # Two outcomes per design: each design's two distances from its median are equal up to rounding.
   leveneTwo = levene(list(c(2.1, 3.4), c(3.9, 4.4), c(2.5, 2.2))),
+  # The same at offsets of a million and a billion, where the distances carry the outcomes' rounding.
+  leveneTwo1e6 = levene(lapply(list(c(2.1, 3.4), c(3.9, 4.4), c(2.5, 2.2)), function(x) x + 1e6)),
+  leveneTwo1e9 = levene(lapply(list(c(2.1, 3.4), c(3.9, 4.4), c(2.5, 2.2)), function(x) x + 1e9)),
+  # Constant designs near a million: their means differ by 0.2 and 0.4, which is real.
+  anovaConstants1e6 = oneway(list(reps(1e6 + 0.1, 3), reps(1e6 + 0.3, 3), reps(1e6 + 0.7, 3))),
+  # Real spread near a million (half a unit) is not "no spread".
+  anovaReal1e6 = oneway(list(1e6 + c(0.1, 0.6), 1e6 + c(0.3, 0.9))),
   # The same distances in both designs: nothing within or between.
   leveneEqual = levene(list(c(0.1, 0.3), c(1.1, 1.3))),
   leveneConstants = levene(list(reps(0.1, 3), reps(0.3, 3), reps(0.7, 3))),
   # Additive in the designs and the blocks: the residual is rounding error.
   blockedAdditive = blocked(list(c(0.1, 0.2), c(0.3, 0.4), c(0.7, 0.8))),
+  blockedAdditive1e6 = blocked(lapply(list(c(2.1, 3.1), c(2.3, 3.3), c(4.3, 5.3)), function(x) x + 1e6)),
   # Each design constant across the blocks: no block effect either.
   blockedConstants = blocked(list(reps(0.1, 2), reps(0.3, 2), reps(0.7, 2))),
   # The lag-one autocorrelation of a constant series is undefined (0/0); R's acf() divides

@@ -1138,22 +1138,24 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
   out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
   if (S.paired) {
+    need.push('pairedT');
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval of family_pairs, at 1 - alpha/C, has ' +
-      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value. ' +
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation (paired_t\'s, which is 0 for differences equal up to rounding) held at its current value. ' +
       'Standard deviations that agree to about twelve digits count as tied, and a tie goes to the first such pair in the family\'s order. ' +
       'The page takes the first largest of its own values, whose last digits can round differently, and so on such a tie it can name a later pair.', c));
     if (lang === 'R') {
-      out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
+      out.push('sd_d <- sapply(family_pairs, function(p) paired_t(groups[[p[1]]], groups[[p[2]]], level)$sdD)',
         'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
         'worst <- which(sd_d >= max(sd_d) * (1 - 1e-12))[1]',
         'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[worst]], collapse = "-")');
     } else if (lang === 'py') {
-      out.push('sd_d = np.array([np.std(groups[i] - groups[j], ddof=1) for i, j in family_pairs])',
+      out.push('sd_d = np.array([paired_t(groups[i], groups[j], level)["sdD"] for i, j in family_pairs])',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
         'worst = int(np.flatnonzero(sd_d >= sd_d.max() * (1 - 1e-12))[0])',
         'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[worst])');
     } else {
-      out.push('sd_d = arrayfun(@(q) std(groups{family_pairs(q, 1)} - groups{family_pairs(q, 2)}), 1:size(family_pairs, 1));',
+      out.push('sd_d = zeros(1, size(family_pairs, 1));',
+        'for q = 1:numel(sd_d), pq = paired_t(groups{family_pairs(q, 1)}, groups{family_pairs(q, 2)}, level); sd_d(q) = pq.sdD; end',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h);',
         'worst = find(sd_d >= max(sd_d) * (1 - 1e-12), 1);',
         "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
