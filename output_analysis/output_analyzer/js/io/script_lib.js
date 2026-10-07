@@ -2321,6 +2321,8 @@ fishman <- function(y) {
   r1 <- if (b >= 2 && isTRUE(ss > 0)) sum(d[-b] * d[-1]) / ss else NaN
   if (b < 4 || !isTRUE(ss > 0)) return(list(r1 = r1, C = NaN, p = NaN))
   C <- sqrt((b^2 - 1) / (b - 2)) * (r1 + (d[1]^2 + d[b]^2) / (2 * ss))
+  # The upper tail is computed directly, which keeps its digits far out; the analyzer forms
+  # 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
   list(r1 = r1, C = C, p = pnorm(C, lower.tail = FALSE))
 }
 batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
@@ -2334,6 +2336,7 @@ batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
   # the batch means, their lag-one autocorrelation, and Fishman's test.
   by_count <- !is.nan(count); n <- length(v)
   no <- function(why) list(ok = FALSE, reason = why)
+  if (by_count == !is.nan(size)) return(no("Give either a batch count or a batch size, not both."))
   if (by_count && !isTRUE(count >= 1)) return(no("The batch count must be at least 1."))
   if (!by_count && !isTRUE(size > 0)) return(no("The batch size must be positive."))
   if (kind == "tally") {
@@ -2413,6 +2416,8 @@ def fishman(y):
     r1 = float(np.sum(d[:-1] * d[1:]) / ss) if b >= 2 and ss > 0 else np.nan
     if b < 4 or not ss > 0: return dict(r1=r1, C=np.nan, p=np.nan)
     C = np.sqrt((b ** 2 - 1) / (b - 2)) * (r1 + (d[0] ** 2 + d[-1] ** 2) / (2 * ss))
+    # The upper tail is computed directly, which keeps its digits far out; the analyzer forms
+    # 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
     return dict(r1=r1, C=C, p=stats.norm.sf(C))
 
 def batch_means(t, v, kind, end_time, count, size, level, first=0):
@@ -2426,6 +2431,7 @@ def batch_means(t, v, kind, end_time, count, size, level, first=0):
     the batch means, their lag-one autocorrelation, and Fishman's test."""
     v = np.asarray(v, float); n = len(v); by_count = not np.isnan(count)
     no = lambda why: dict(ok=False, reason=why)
+    if by_count == (not np.isnan(size)): return no("Give either a batch count or a batch size, not both.")
     if by_count and not count >= 1: return no("The batch count must be at least 1.")
     if not by_count and not size > 0: return no("The batch size must be positive.")
     if kind == "tally":
@@ -2510,6 +2516,8 @@ y = y(:)'; b = numel(y); d = y - mean(y); ss = sum(d.^2);
 r1 = NaN; if b >= 2 && ss > 0, r1 = sum(d(1:end-1) .* d(2:end)) / ss; end
 if b < 4 || ~(ss > 0), f = struct('r1', r1, 'C', NaN, 'p', NaN); return; end
 C = sqrt((b^2 - 1) / (b - 2)) * (r1 + (d(1)^2 + d(end)^2) / (2 * ss));
+% The upper tail is computed directly, which keeps its digits far out; the analyzer forms
+% 1 - Phi(C), and so the two can differ visibly when C is about 6 or more.
 f = struct('r1', r1, 'C', C, 'p', normcdf(C, 'upper'));
 end
 
@@ -2524,6 +2532,7 @@ function r = batch_means(t, v, kind, end_time, count, sz, level, first)
 % the batch means, their lag-one autocorrelation, and Fishman's test.
 v = v(:)'; n = numel(v); by_count = ~isnan(count);
 r = struct('ok', false, 'reason', '');
+if by_count == ~isnan(sz), r.reason = 'Give either a batch count or a batch size, not both.'; return; end
 if by_count && ~(count >= 1), r.reason = 'The batch count must be at least 1.'; return; end
 if ~by_count && ~(sz > 0), r.reason = 'The batch size must be positive.'; return; end
 if strcmp(kind, 'tally')

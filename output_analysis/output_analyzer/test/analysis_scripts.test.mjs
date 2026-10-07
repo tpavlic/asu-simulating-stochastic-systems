@@ -1310,3 +1310,58 @@ test('a run past 200,000 numbers gives no script', () => {
   assert.equal(r.tooBig, true);
   assert.ok(!r.records && !('batches' in r.expect));
 });
+
+// Rscript parses the statement so far after every line it reads, and so a data
+// literal spread over many lines takes time that grows with the square of its
+// length. Every R data block is written as one-line statements, and the Steady
+// State script keeps the analyzer's per-batch values outside any block.
+test('R data blocks are one-line statements', () => {
+  const open = line => {
+    const bare = line.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    let d = 0;
+    for (const ch of bare) { if ('([{'.includes(ch)) d++; else if (')]}'.includes(ch)) d--; }
+    return d;
+  };
+  const queue = example('queue-reps')[0];
+  const recipes = [
+    ['steady, tally', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 })],
+    ['steady, time-persistent', stRecipe(QLEN, { align: 'time', cut: 100, count: 60 })],
+    ['steady, long', stRecipe(LONG)],
+    ['one', descRecipe('Queue days', queue)],
+    ['two, independent', twoOf(IND_A, IND_B, 't', 0.95, PLAN2)],
+    ['two, paired', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2)],
+    ['several', sevRecipe(FOUR)],
+    ['several, paired', sevRecipe(FOUR_CRN, { paired: true })]
+  ];
+  for (const [label, r] of recipes) {
+    for (const lang of ['R', 'tidy']) {
+      const s = analysisScript(r, lang);
+      const data = s.slice(s.indexOf('\n## Data ----'), s.indexOf('\n## ', s.indexOf('\n## Data ----') + 5));
+      const lines = data.split('\n').filter(l => l.trim() && !/^\s*#/.test(l));
+      assert.ok(lines.length > 1, label + ': a data block');
+      for (const l of lines) {
+        assert.equal(open(l), 0, label + ' ' + lang + ': a statement spans lines: ' + l.slice(0, 80));
+        assert.ok(l.length < 4096, label + ': a line under 4 KB');
+      }
+      if (r.page === 'steady') {
+        assert.ok(/\npage_means <- c\(/.test(s), label + ': page_means at top level');
+        for (const l of s.split('\n')) assert.ok(!/^\s+page_(means|records|acf) <- /.test(l), label + ': no analyzer vector inside a block');
+      }
+    }
+  }
+  // A long vector is appended in parts, and a short one stays one statement.
+  const s = analysisScript(stRecipe(LONG), 'R');
+  assert.ok(/\nv_ <- c\(v_, /.test(s) && /\nreps\[\[1\]\] <- list\(id = "1", t = t_, v = v_\)/.test(s));
+  assert.ok(/b_first <- if \(length\(kept\$idx\)\) kept\$idx\[1\] - 1 else NaN/.test(s), 'an empty b_first is NaN');
+});
+
+// Both a batch count and a batch size: the script refuses, as the analyzer does.
+{
+  const r = JSON.parse(JSON.stringify(stRecipe(LONG)));
+  for (const k of Object.keys(r.expect)) if (/^(batch|batches|records used|leftover|mean of|sd of|se$|df$|t quantile|half-width|lower|upper|lag-one|fishman)/.test(k)) delete r.expect[k];
+  r.expect['batch means'] = 'not defined';
+  r.settings.batch_size = 150;
+  checkRecipe('Steady State, a batch count and a batch size both set', r, {
+    also: (stdout, lang, stderr) => { noWarning(stdout, lang, stderr); assert.ok(stdout.includes('Give either a batch count or a batch size, not both.'), lang + ' refuses'); }
+  });
+}

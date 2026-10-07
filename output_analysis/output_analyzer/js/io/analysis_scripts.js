@@ -151,6 +151,51 @@ export function lit(L, v) {
   return String(v);
 }
 
+// Rscript reads a script one line at a time and parses the whole statement so
+// far after every line, and so a vector literal spread over thousands of lines
+// takes time that grows with the square of its length (minutes near the
+// 200,000-number cap). In R a vector longer than a line is therefore written as
+// short complete statements, each on one line: its first part assigned, and
+// every later part appended. Python and MATLAB read the whole file first and
+// keep the one wrapped literal.
+const R_LINE = 92;
+function rChunks(target, tokens, empty) {
+  if (!tokens.length) return [target + ' <- ' + empty];
+  const out = [];
+  let line = target + ' <- c(', n = 0;
+  for (const tok of tokens) {
+    if (n && line.length + tok.length + 3 > R_LINE) { out.push(line + ')'); line = target + ' <- c(' + target + ', '; n = 0; }
+    line += (n ? ', ' : '') + tok;
+    n++;
+  }
+  out.push(line + ')');
+  return out;
+}
+const numTok = v => (typeof v === 'number' && Number.isFinite(v) ? String(v) : 'NaN');
+
+/** Lines assigning a vector of numbers to `target`. */
+export function vecAssign(L, target, values) {
+  return L.lang === 'R' ? rChunks(target, Array.from(values, numTok), 'numeric(0)') : [L.assign(target, L.vec(values))];
+}
+
+/** Lines assigning a vector of strings to `target`. */
+export function strsAssign(L, target, values) {
+  return L.lang === 'R' ? rChunks(target, values.map(v => L.str(v)), 'character(0)') : [L.assign(target, L.strs(values))];
+}
+
+/** Lines assigning ids: numbers when every one reads as a number, strings otherwise. */
+function idsAssign(L, target, ids) {
+  return ids.every(i => i !== '' && Number.isFinite(Number(i))) ? vecAssign(L, target, ids.map(Number)) : strsAssign(L, target, ids.map(String));
+}
+
+/** Lines assigning a list of vectors (R list, Python list, MATLAB cell), each built by `part(L, target, i)`. */
+function listAssign(L, target, n, part, lit) {
+  if (L.lang !== 'R') return [L.assign(target, L.list(Array.from({ length: n }, (_, i) => lit(i))))];
+  const out = [target + ' <- list()'];
+  for (let i = 0; i < n; i++) out.push(...part(L, target + '[[' + (i + 1) + ']]', i));
+  return out;
+}
+
 /**
  * A report call for `name` with expression `expr`, carrying the analyzer's
  * value from the recipe's expect map (under `name` or `name [optional]`); a
@@ -219,9 +264,9 @@ export function vectorBlock(L, { ids, values, dropped, how, name, response, unit
   if (dropped && dropped.length) out.push(c + 'Replications that gave no outcome were left out: ' + dropped.map(ascii).join(', ') + '.');
   if (ids && idName) {
     const numeric = ids.every(i => i !== '' && Number.isFinite(Number(i)));
-    out.push(L.assign(idName, numeric ? L.vec(ids.map(Number)) : L.strs(ids.map(String))));
+    out.push(...(numeric ? vecAssign(L, idName, ids.map(Number)) : strsAssign(L, idName, ids.map(String))));
   }
-  out.push(L.assign(varName, L.vec(values)));
+  out.push(...vecAssign(L, varName, values));
   return out;
 }
 
@@ -920,9 +965,14 @@ function recordsBlock(L, R) {
   out.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
   const tLit = r => (r.t ? L.vec(r.t) : lang === 'R' ? 'NULL' : lang === 'py' ? 'None' : '[]');
   if (lang === 'R') {
-    out.push('reps <- list(');
-    R.reps.forEach((r, i) => out.push('  list(id = ' + L.str(r.id) + ', t = ' + tLit(r) + ', v = ' + L.vec(r.v) + ')' + (i < R.reps.length - 1 ? ',' : '')));
-    out.push(')');
+    // Each replication's vectors are built in t_ and v_ as short statements (see rChunks).
+    out.push('reps <- list()');
+    R.reps.forEach((r, i) => {
+      if (r.t) out.push(...vecAssign(L, 't_', r.t));
+      out.push(...vecAssign(L, 'v_', r.v));
+      out.push('reps[[' + (i + 1) + ']] <- list(id = ' + L.str(r.id) + ', t = ' + (r.t ? 't_' : 'NULL') + ', v = v_)');
+    });
+    if (R.reps.length) out.push('rm(' + (R.reps.some(r => r.t) ? 't_, ' : '') + 'v_)');
   } else if (lang === 'py') {
     out.push('reps = [');
     R.reps.forEach(r => out.push('    dict(id=' + L.str(r.id) + ', t=' + tLit(r) + ', v=' + L.vec(r.v) + '),'));
@@ -937,11 +987,13 @@ function recordsBlock(L, R) {
 // A loop reporting one line per batch (or lag), each beside the analyzer's
 // value where the page had one: `name` is the report name with %d for the
 // number, `count` the script's count, `value(i)` the script's value at loop
-// index i, and `page` the analyzer's values, held in `pageVar`.
-function loopReport(L, out, { name, count, value, page, pageVar, indent = '' }) {
+// index i, and `page` the analyzer's values, held in `pageVar` and assigned in
+// `hoist`.
+function loopReport(L, out, { name, count, value, page, pageVar, indent = '', hoist }) {
   const lang = L.lang;
-  out.push(indent + L.comment + 'The analyzer\'s values, printed beside the script\'s.');
-  out.push(indent + L.assign(pageVar, L.vec(page)));
+  // The analyzer's values go in `hoist`, outside any block, so that R reads
+  // them as short top-level statements (see rChunks).
+  hoist.push(L.comment + 'The analyzer\'s values for ' + pageVar + ', printed beside the script\'s.', ...vecAssign(L, pageVar, page));
   if (lang === 'R') {
     out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i])');
   } else if (lang === 'py') {
@@ -1006,7 +1058,7 @@ function steadyBody(r, L) {
       '  bt <- kept$t; bv <- kept$v; b_end <- kept$t_end; b_first <- 0',
       '} else {',
       '  kept <- truncate_rep(reps[[replication]]$t, reps[[replication]]$v, kind, align, cut)',
-      '  bt <- kept$t; bv <- kept$v; b_first <- kept$idx[1] - 1',
+      '  bt <- kept$t; bv <- kept$v; b_first <- if (length(kept$idx)) kept$idx[1] - 1 else NaN',
       '  b_end <- if (kind == "time" && length(bv)) trajectory_end(bt, end_time) else NaN',
       '}');
   } else if (lang === 'py') {
@@ -1033,14 +1085,15 @@ function steadyBody(r, L) {
   out.push(...commentLines(c, 'The t interval on the batch means at level, their lag-one autocorrelation r1, and Fishman\'s test of no positive correlation, which is one-sided: a large C, with a small p, says neighboring batch means still move together and the batches are too short.', c));
   const nb = S.batchOk ? e.batches : 0;
   const pageOf = key => Array.from({ length: nb }, (_, i) => e['batch ' + (i + 1) + ' ' + key]);
-  out.push(L.assign('bm', 'batch_means(bt, bv, kind, b_end, batch_count, batch_size, level, b_first)'));
+  const hoistB = [];
   const ok = [];
   ok.push(rep(L, r, 'batches', f('bm', 'b')), rep(L, r, 'batch size', f('bm', 'size')), rep(L, r, 'batch start', f('bm', 'start')),
     rep(L, r, 'records used', f('bm', 'nUsed')));
   const elem = (v, k) => (i => (lang === 'py' ? f(v, k) + '[' + i + ']' : lang === 'R' ? f(v, k) + '[' + i + ']' : f(v, k) + '(' + i + ')'));
   const loops = [];
-  loopReport(L, loops, { name: 'batch %d mean', count: f('bm', 'b'), value: elem('bm', 'means'), page: pageOf('mean'), pageVar: 'page_means' });
-  if (time) loopReport(L, loops, { name: 'batch %d records', count: f('bm', 'b'), value: elem('bm', 'records'), page: pageOf('records'), pageVar: 'page_records' });
+  loopReport(L, loops, { name: 'batch %d mean', count: f('bm', 'b'), value: elem('bm', 'means'), page: pageOf('mean'), pageVar: 'page_means', hoist: hoistB });
+  if (time) loopReport(L, loops, { name: 'batch %d records', count: f('bm', 'b'), value: elem('bm', 'records'), page: pageOf('records'), pageVar: 'page_records', hoist: hoistB });
+  out.push(...hoistB, L.assign('bm', 'batch_means(bt, bv, kind, b_end, batch_count, batch_size, level, b_first)'));
   ok.push(...loops);
   ok.push(rep(L, r, time ? 'leftover duration' : 'leftover observations', f('bm', 'leftover')));
   for (const [name, k] of [['mean of batch means', 'mean'], ['sd of batch means', 'sd'], ['se', 'se'], ['df', 'df'], ['t quantile', 't'],
@@ -1092,23 +1145,23 @@ function steadyBody(r, L) {
     (time ? 'The trajectory is first averaged over steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
       : 'It needs at least 8 observations.'), c));
   const tooShort = 'The series after truncation is too short for its autocorrelation.';
-  const report5 = [];
-  loopReport(L, report5, { name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
+  const report5 = [], hoistA = [];
+  loopReport(L, report5, { hoist: hoistA, name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
     value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
   if (lang === 'R') {
-    out.push('max_lag <- 400; steps <- 2000', 'series <- NULL');
+    out.push(...hoistA, 'max_lag <- 400; steps <- 2000', 'series <- NULL');
     if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, steps)', '  if (all(is.finite(s))) series <- s', '}');
     else out.push('if (length(bv) >= 8) series <- bv');
     out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
       'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
   } else if (lang === 'py') {
-    out.push('max_lag = 400; steps = 2000', 'series = None');
+    out.push(...hoistA, 'max_lag = 400; steps = 2000', 'series = None');
     if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, steps)', '    if np.all(np.isfinite(s)): series = s');
     else out.push('if len(bv) >= 8: series = bv');
     out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
       'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
   } else {
-    out.push('max_lag = 400; steps = 2000;', 'series = [];');
+    out.push(...hoistA, 'max_lag = 400; steps = 2000;', 'series = [];');
     if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, steps);', '    if all(isfinite(s)), series = s; end', 'end');
     else out.push('if numel(bv) >= 8, series = bv; end');
     out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
@@ -1141,8 +1194,8 @@ function pairsBlock(L, r) {
   left(P.unmatchedA, 'Replications of A with no partner in B');
   left(P.unmatchedB, 'Replications of B with no partner in A');
   const numeric = P.ids.every(i => i !== '' && Number.isFinite(Number(i)));
-  out.push(L.assign('pair_id', numeric ? L.vec(P.ids.map(Number)) : L.strs(P.ids)));
-  out.push(L.assign('a', L.vec(P.a)), L.assign('b', L.vec(P.b)));
+  out.push(...(numeric ? vecAssign(L, 'pair_id', P.ids.map(Number)) : strsAssign(L, 'pair_id', P.ids)));
+  out.push(...vecAssign(L, 'a', P.a), ...vecAssign(L, 'b', P.b));
   return out;
 }
 
@@ -1182,13 +1235,13 @@ function groupsBlock(L, r) {
     out.push(...commentLines(c, 'The replications are paired across the designs (common random numbers), matched by ' +
       (G.by === 'id' ? 'replication id' : 'position, each block named by its replication ids in every design') +
       ': element b of every design belongs to block b, and block_id names it.', c));
-    out.push(L.assign('block_id', idsLit(L, G.ids)));
+    out.push(...idsAssign(L, 'block_id', G.ids));
   } else {
     out.push(c + 'rep_ids holds the ids of each design\'s replications, in step with its outcomes.');
-    out.push(L.assign('rep_ids', L.list(G.ids.map(ids => idsLit(L, ids)))));
+    out.push(...listAssign(L, 'rep_ids', G.ids.length, (L2, t, i) => idsAssign(L2, t, G.ids[i]), i => idsLit(L, G.ids[i])));
   }
-  out.push(L.assign('design_names', L.strs(G.names)));
-  out.push(L.assign('groups', L.list(G.values.map(v => L.vec(v)))));
+  out.push(...strsAssign(L, 'design_names', G.names));
+  out.push(...listAssign(L, 'groups', G.values.length, (L2, t, i) => vecAssign(L2, t, G.values[i]), i => L.vec(G.values[i])));
   out.push(L.assign('k', String(G.names.length)));
   out.push(L.assign('paired', L.bool(G.paired)));
   return out;

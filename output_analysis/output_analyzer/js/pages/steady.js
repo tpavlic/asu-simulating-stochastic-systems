@@ -44,6 +44,7 @@ let size = null;
 let warmFig = null, batchFig = null, acfFig = null, lagFig = null, wp = null;
 let warm = null;            // the aligned averages behind the warm-up plot
 let lastBatch = null;       // the latest batchMeans result (ok or not)
+let lastStored = null;      // the inputs of the latest registered result, to register it again
 let spins = {};
 let keptCache = null;       // the series after truncation that batching and the autocorrelation use
 let acfCache = null;        // its autocorrelation
@@ -350,8 +351,8 @@ export function render(rootEl) {
   el.apply.addEventListener('click', applyTruncation);
 
   // Spinners that do not depend on the dataset.
-  spins.w = mountSpinner(root.querySelector('#ss-w-h'), 'ss-w', w, { min: 0, max: 200, step: 1, onChange: v => { w = v; state.setPick(id, 'w', v); drawWarm(); } });
-  spins.bins = mountSpinner(root.querySelector('#ss-bins-h'), 'ss-bins', nBins, { min: 10, max: 400, step: 1, onChange: v => { nBins = v; state.setPick(id, 'bins', v); drawWarm(); syncCutControls(); } });
+  spins.w = mountSpinner(root.querySelector('#ss-w-h'), 'ss-w', w, { min: 0, max: 200, step: 1, onChange: v => { w = v; state.setPick(id, 'w', v); drawWarm(); restoreResult(); } });
+  spins.bins = mountSpinner(root.querySelector('#ss-bins-h'), 'ss-bins', nBins, { min: 10, max: 400, step: 1, onChange: v => { nBins = v; state.setPick(id, 'bins', v); drawWarm(); syncCutControls(); restoreResult(); } });
   applyStored();
 
   state.on('datasets', () => { applyStored(); refreshSelect(); if (visible()) update(); });
@@ -1195,6 +1196,7 @@ function drawBatch() {
     emptyTable();
     drawAcf(null, null);
     drawLag(null);
+    lastStored = null;
     state.setResult(id, null);
     return;
   }
@@ -1228,6 +1230,7 @@ function drawBatch() {
     batchLegend(byTime, null, ds, null);
     el.bcap.textContent = '';
     emptyTable();
+    lastStored = null;
     state.setResult(id, null);
     return;
   }
@@ -1273,7 +1276,18 @@ function drawBatch() {
     rows.map(r => '<tr><td>' + r[0] + '</td><td>' + (byTime ? num(r[1], 6) : intl(r[1])) + '</td><td>' + (byTime ? num(r[2], 6) : intl(r[2])) + '</td><td>' + intl(r[3]) + '</td><td>' + num(r[4], 6) + '</td></tr>').join('') +
     '</tbody></table>';
 
+  lastStored = { ds, src, res, rows };
   storeResult(ds, src, res, rows);
+}
+
+/**
+ * Registers the latest batch result again, unchanged, so that its provenance
+ * and the regenerate scripts' recipe pick up a warm-up setting (w or the time
+ * bins) that changed without redrawing the batches.
+ */
+function restoreResult() {
+  const ds = current();
+  if (lastStored && lastStored.ds === ds && lastBatch === lastStored.res) storeResult(ds, lastStored.src, lastStored.res, lastStored.rows);
 }
 
 function storeResult(ds, src, res, rows) {
