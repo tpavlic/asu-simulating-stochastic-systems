@@ -60,10 +60,21 @@ export function runScript(recipe, lang) {
 }
 
 // Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
-// language can only approximate are looser (see the spec, decision 6).
-export function tolFor(key, lang) {
-  if (/^posthoc .*(tukey|games)/i.test(key)) return { rel: 2e-3 };
-  if (/dunnett/i.test(key)) return { rel: lang === 'R' ? 1e-5 : 5e-3 };
+// language can only approximate are looser (see the spec, decision 6). A
+// post-hoc rule's differences, standard errors, and degrees of freedom are
+// exact; what rests on its quantile (the critical value, the half-width, the
+// interval's ends, and a p-value) is held to 1e-5 for the studentized range
+// and Dunnett's quantile in every language (MATLAB's scripts compute Dunnett's
+// value themselves, because multcompare's root search stops at about 1e-4).
+// SciPy's dunnett, which Python uses without blocks and with some spread to
+// compare, finds its critical value by randomized quadrature and is held to 2e-3.
+export function tolFor(key, lang, recipe) {
+  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: 1e-5 };
+  if (/^posthoc dunnett .*(critical value|hw|lower|upper)$/.test(key)) {
+    const A = recipe && recipe.several && recipe.several.anova;
+    const scipy = lang === 'py' && A && !A.blocked && recipe.expect['ms within'] > 0;
+    return { rel: scipy ? 2e-3 : 1e-5 };
+  }
   if (/\bN\b|additional/.test(key)) return { abs: 1 + 1e-9 };
   if (/rinott/.test(key)) return { rel: 1e-4 };
   // A Wilcoxon interval under the normal approximation is a root found to 1e-4,
@@ -73,7 +84,7 @@ export function tolFor(key, lang) {
 }
 
 /** Compares a parsed report with a recipe's expect map; fails with every mismatch listed. */
-export function compareReport(report, expect, lang) {
+export function compareReport(report, expect, lang, recipe) {
   const bad = [];
   for (const [rawKey, want] of Object.entries(expect)) {
     // "[optional]" marks a line only MATLAB may leave out (the Shapiro-Wilk
@@ -87,7 +98,7 @@ export function compareReport(report, expect, lang) {
     if (typeof got !== 'number') { bad.push(`${key}: got ${got}, expected ${want}`); continue; }
     if (Number.isNaN(want) || Number.isNaN(got)) { if (!(Number.isNaN(want) && Number.isNaN(got))) bad.push(`${key}: got ${got}, expected ${want}`); continue; }
     if (!Number.isFinite(want) || !Number.isFinite(got)) { if (got !== want) bad.push(`${key}: got ${got}, expected ${want}`); continue; }
-    const t = tolFor(key, lang);
+    const t = tolFor(key, lang, recipe);
     const err = Math.abs(got - want);
     const ok = t.abs != null ? err <= t.abs : err <= t.rel * Math.max(1, Math.abs(want));
     if (!ok) bad.push(`${key}: got ${got}, expected ${want}`);
@@ -111,7 +122,7 @@ export function checkRecipe(name, recipe, { smoke = false, also = null } = {}) {
   for (const lang of LANGS) {
     test(`${name} regenerates in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
       const { report, stdout, stderr } = runScript(recipe, lang);
-      compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang);
+      compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
       if (also) also(stdout, lang, stderr);
     });
   }
@@ -906,7 +917,8 @@ test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the 
   const rd = sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 });
   assert.ok('posthoc dunnett 3-2 hw' in rd.expect && !('posthoc dunnett 1-3 hw' in rd.expect) && !('letters 1' in rd.expect));
   assert.ok(analysisScript(rd, 'py').includes('posthoc_pooled(groups, av, "dunnett", alpha, posthoc_pairs, control - 1)'));
-  assert.ok(analysisScript(rd, 'py').includes('stats.dunnett('));
+  assert.ok(analysisScript(rd, 'py').includes('stats.dunnett(') && analysisScript(rd, 'py').includes('random_state=np.random.default_rng(1)'));
+  for (const lang of ['R', 'py', 'm']) assert.ok(analysisScript(rd, lang).includes('posthoc_pairs must compare each design with control'), lang + ' guards the Dunnett pairs');
   // LSD on four-designs: the F test does not reject at 5%, and so no pair is declared different.
   const rl = sevRecipe(FOUR, { rule: 'lsd' });
   assert.equal(rl.expect['posthoc lsd protected'], 0);
@@ -947,6 +959,16 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   const B = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[1, 1.2], [2, 2.2], [3, 2.6], [4, 2.7], [5, 2.4], [6, 3.0]].map(([id, v]) => ({ id, v: [v] })) });
   const Cd = makeDataset({ name: 'C', response: 'w', kind: 'reps', reps: [[1, 0.9], [3, 1.7], [4, 2.1], [5, 1.5], [6, 1.1]].map(([id, v]) => ({ id, v: [v] })) });
   checkRecipe('Several Systems, Dunnett with unequal counts', sevRecipe([A, B, Cd], { rule: 'dunnett', ctrlIdx: 1 }), sevChecks);
+}
+
+// Two designs in two blocks: the residual has 1 degree of freedom, and Dunnett's
+// critical value (the t quantile there, about 12.7) lies past the searches'
+// first bracket.
+{
+  const rd = sevRecipe([reps('U', [2.1, 3.4]), reps('V', [2.9, 3.6])], { paired: true, rule: 'dunnett', ctrlIdx: 0 });
+  assert.equal(rd.expect['anova df2'], 1);
+  assert.ok(Math.abs(rd.expect['posthoc dunnett critical value'] - 12.7062047361747) < 1e-6);
+  checkRecipe('Several Systems, blocked Dunnett on 1 residual degree of freedom', rd, sevChecks);
 }
 
 // Review Focus 3: a flat design under Welch's analysis of variance. The page
@@ -1004,4 +1026,27 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
   }
+}
+
+// Dunnett's pairs are written in while its control is a setting: a script whose
+// control is edited without its pairs stops with a message instead of
+// comparing against the wrong design.
+for (const lang of ['R', 'py', 'm']) {
+  test('a Dunnett script stops when control no longer matches its pairs in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
+    const r = sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 });
+    const name = lang === 'm' ? 'dunnett_guard.m' : lang === 'R' ? 'guard.R' : 'guard.py';
+    const from = lang === 'R' ? 'control <- 2\n' : lang === 'py' ? 'control = 2\n' : 'control = 2;\n';
+    const text = analysisScript(r, lang);
+    assert.ok(text.includes(from), 'the settings carry ' + from.trim());
+    const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+    try {
+      const f = join(dir, name);
+      writeFileSync(f, text.replace(from, from.replace('2', '3')));
+      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
+        : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
+          : spawnSync('matlab', ['-batch', `cd('${dir}'); dunnett_guard`], { encoding: 'utf8', timeout: 600000 });
+      assert.notEqual(run.status, 0, 'the script ran to the end');
+      assert.ok((run.stdout + run.stderr).includes('posthoc_pairs must compare each design with control'), run.stdout + run.stderr);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 }
