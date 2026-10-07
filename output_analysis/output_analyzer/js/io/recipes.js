@@ -4,7 +4,8 @@
 // analysis_scripts.js turn into a script. A recipe carries the data, every
 // choice, and `expect`, the analyzer's own value under each report name, so
 // that the script can print its value beside the analyzer's and the tests can
-// compare them.
+// compare them. `csv` names the files the Import page saves with the same
+// data, which the script shows how to read in place of its own data block.
 //
 // A page does not build its recipe when it computes: it registers
 // `regen: { build: () => recipe, tooBig }` with its result, and the export
@@ -22,6 +23,7 @@ import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
          resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { slug } from './export.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -52,6 +54,26 @@ export function outcomeVector(ds) {
     if (Number.isFinite(est[i])) { values.push(est[i]); kept.push(ids[i]); } else dropped.push(ids[i]);
   }
   return { ids: kept, values, dropped, how: OUTCOME_HOW[ds.kind] || OUTCOME_HOW.tally };
+}
+
+/**
+ * The name of a dataset's CSV file as the Import page saves it (Export on the
+ * dataset's row): the Observations CSV, or the Replication summary CSV.
+ * @param {{name: string}} ds
+ * @param {'observations'|'replications'} form
+ * @returns {string}
+ */
+export function csvFileName(ds, form) {
+  return slug(ds.name) + (form === 'observations' ? '_observations.csv' : '_replications.csv');
+}
+
+/**
+ * One entry of `recipe.csv`: a file the data block's contents can be read
+ * from, the dataset it holds, its form, and the part of the block it feeds
+ * ('x', 'a', 'b', 'group <i>', 'records', or 'replication list').
+ */
+export function csvEntry(ds, form, role) {
+  return { dataset: ds.name, file: csvFileName(ds, form), form, role };
 }
 
 /**
@@ -132,6 +154,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   });
   r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: xs,
              dropped: pooled ? [] : o.dropped, how: o.how, pooled };
+  // The pooled observations come from the Observations CSV, the outcomes from the Replication summary CSV.
+  r.csv = [csvEntry(ds, pooled ? 'observations' : 'replications', 'x')];
   const s = summary(xs);
   const e = r.expect;
   Object.assign(e, { n: s.n, mean: s.mean, sd: s.sd, se: s.se, min: s.min, q1: s.q1, median: s.median, q3: s.q3, max: s.max });
@@ -218,6 +242,7 @@ export function twoRecipe(o) {
   });
   r.dataA = designBlock(dsA, eA);
   r.dataB = designBlock(dsB, eB);
+  r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   Object.assign(e, { R_A: w.n1, R_B: w.n2, 'mean A': w.mean1, 'mean B': w.mean2, 'sd A': w.sd1, 'sd B': w.sd2 });
   // Levene's test joins the checks line under the pooled t only, and only when
@@ -302,6 +327,7 @@ function twoPairedRecipe(o) {
     nameA: dsA.name, nameB: dsB.name, response: dsA.response, unit: dsA.unit,
     howA: OUTCOME_HOW[dsA.kind] || OUTCOME_HOW.tally, howB: OUTCOME_HOW[dsB.kind] || OUTCOME_HOW.tally
   };
+  r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   e.pairs = pr.n;
   const diffs = Array.from(pr.diffs);
@@ -388,6 +414,7 @@ export function severalRecipe(o) {
     unmatched: paired ? match.unmatched.map((u, d) => u.map(x => String(ovs[d].ids[x]))) : list.map(() => []),
     how: list.map(d => OUTCOME_HOW[d.kind] || OUTCOME_HOW.tally)
   };
+  r.csv = list.map((d, i) => csvEntry(d, 'replications', 'group ' + (i + 1)));
   const e = r.expect;
   e.k = k;
 
@@ -619,6 +646,15 @@ export function recordCount(ds) {
   return n;
 }
 
+/**
+ * The files the records of a dataset can be read from: the Observations CSV
+ * for the records, and the Replication summary CSV for the list and order of
+ * the replications, because one with no records has no row in the first.
+ */
+function recordsCsv(ds) {
+  return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
+}
+
 /** The records of a dataset as plain arrays, every replication in order (an empty one included). */
 function recordsOf(ds) {
   return { name: ds.name, response: ds.response, unit: ds.unit, kind: ds.kind, endTime: ds.endTime,
@@ -643,6 +679,7 @@ function recordsOf(ds) {
 export function steadyRecipe(o) {
   const { ds, align, nBins, w, cut, repIdx, mode, count, size, level, start } = o;
   const r = baseRecipe({ page: 'steady', title: o.title || 'Steady state: batch means', provenance: o.provenance || {}, level });
+  r.csv = recordsCsv(ds);
   if (recordCount(ds) > MAX_NUMBERS) { r.tooBig = true; return r; }
   r.records = recordsOf(ds);
   const e = r.expect;
@@ -759,6 +796,8 @@ export function exploreTooBig({ ds, spread }) {
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
   const r = baseRecipe({ page: 'explore', title: o.title || 'Summary of ' + ds.name, provenance: o.provenance || { dataset: ds.name }, level });
+  // Levene's groups (other datasets' outcomes) stay embedded and are read from no file.
+  r.csv = recordsCsv(ds);
   if (exploreTooBig({ ds, spread })) { r.tooBig = true; return r; }
   r.records = recordsOf(ds);
   const ov = outcomeVector(ds);

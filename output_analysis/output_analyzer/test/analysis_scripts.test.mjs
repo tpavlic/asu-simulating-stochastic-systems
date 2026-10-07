@@ -53,13 +53,19 @@ export function example(id) {
   return buildDatasets(sn, ex.mapping).datasets;
 }
 
-/** Writes the script, runs it, and returns the parsed report and both output streams (or throws with the output). */
-export function runScript(recipe, lang) {
+/**
+ * Writes the script, runs it, and returns the parsed report and both output
+ * streams (or throws with the output). `text` replaces the script the recipe
+ * gives, and `files` (name to contents) are written beside it, where the
+ * script runs.
+ */
+export function runScript(recipe, lang, { text = null, files = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
   const name = scriptFileName(recipe, lang);
   const f = join(dir, name);
   try {
-    writeFileSync(f, analysisScript(recipe, lang));
+    for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body);
+    writeFileSync(f, text != null ? text : analysisScript(recipe, lang));
     // A hung script fails its test instead of hanging the suite.
     let r;
     if (lang === 'R' || lang === 'tidy') r = spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 });
@@ -1714,3 +1720,154 @@ test('scripts end with their figure, import what they use, and say what the page
   assert.ok(m.includes('linspace(min(x), max(x), nb + 1)') && m.includes('histogram(x, edges)') && !m.includes('qqplot('));
   assert.ok(R.includes('hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE'));
 });
+
+// ── The CSV files that hold the same data ──────────────────────────────
+// Every script shows, beside its data block, the lines that read the same
+// data from the files the Import page saves. The proof writes those files
+// with the page's own writers, uncomments the lines, deletes the embedded
+// data, runs the script, and compares every report line with expect.
+import { csvReadBlock } from '../js/io/analysis_scripts.js';
+import { csvFileName } from '../js/io/recipes.js';
+import { slug, observationsCsv, repSummaryCsv } from '../js/io/export.js';
+import { dsProvenance } from '../js/ui/exportrow.js';
+import { observations } from '../js/data/model.js';
+
+const SECT = { R: '## Data ----', tidy: '## Data ----', py: '# ---- Data ----', m: '%% Data' };
+const MARK = { R: '#   ', tidy: '#   ', py: '#   ', m: '%   ' };
+
+// A dataset's file as the Import page writes it (Export on its row): the
+// Observations CSV in its full form, or the Replication summary CSV.
+function importPageFile(ds, form) {
+  return form === 'observations' ? observationsCsv(ds, dsProvenance(ds), { full: true }) : repSummaryCsv(ds, dsProvenance(ds));
+}
+
+/**
+ * A script with its read lines enabled: the embedded data, everything from
+ * the Data heading to the read block, deleted, and the read block's marked
+ * lines uncommented. Returns the script and the uncommented lines.
+ */
+export function csvModeScript(script, lang) {
+  const c = lang === 'm' ? '%' : '#';
+  const lines = script.split('\n');
+  const d = lines.indexOf(SECT[lang]);
+  const s = lines.findIndex(l => l.startsWith(c + ' To read the same data from '));
+  assert.ok(d >= 0 && s > d + 1, lang + ': a read block after the embedded data');
+  let e = s;
+  while (e < lines.length && lines[e].startsWith(c)) e++;
+  const block = lines.slice(s, e).map(l => (l.startsWith(MARK[lang]) ? l.slice(MARK[lang].length) : l));
+  const code = lines.slice(s, e).filter(l => l.startsWith(MARK[lang])).map(l => l.slice(MARK[lang].length));
+  assert.ok(code.length > 1, lang + ': marked read lines');
+  return { text: [...lines.slice(0, d + 1), ...block, ...lines.slice(e)].join('\n'), code };
+}
+
+/**
+ * Runs a recipe's scripts with the read lines enabled against the files the
+ * Import page writes for `datasets`, in every installed language, and
+ * compares every report line with expect, with no warning printed.
+ */
+function checkCsvRead(name, recipe, datasets, { smoke = false } = {}) {
+  for (const lang of LANGS) {
+    test(`${name} regenerates from its CSV files in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
+      const files = {};
+      for (const f of recipe.csv) {
+        const ds = datasets.find(x => x.name === f.dataset);
+        assert.ok(ds, 'a dataset for ' + f.file);
+        assert.equal(f.file, slug(ds.name) + (f.form === 'observations' ? '_observations.csv' : '_replications.csv'), 'the Import page\'s file name');
+        files[f.file] = importPageFile(ds, f.form);
+      }
+      const { text, code } = csvModeScript(analysisScript(recipe, lang), lang);
+      // What the comment shows is exactly what a script that reads the files runs.
+      const c = lang === 'm' ? '%' : '#';
+      assert.deepEqual(code, csvReadBlock(lang, recipe, { live: true }).filter(l => !l.startsWith(c)));
+      // No embedded data remain.
+      assert.ok(!/^(x|a|b) (<-|=) (c|np\.array|\[)|^reps\[\[1\]\] <- list\(id|^    dict\(id=|^reps\(1\) = struct|^groups\[\[1\]\] <- c|^groups = (\[|\{)\[|^pair_id (<-|=) /m.test(text.slice(0, text.indexOf(c + ' To read'))),
+        lang + ': the embedded data are gone');
+      const { report, stdout, stderr } = runScript(recipe, lang, { text, files });
+      compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
+      noWarning(stdout, lang, stderr);
+    });
+  }
+}
+
+// Review Focus 1 and 2: a name with a comma, quotes, a non-ASCII dash, and a
+// backslash, with ids that only text keeps (007, 1.0) and a replication with
+// no observations, and so no outcome.
+const QUEUE_COMMA = makeDataset({ name: 'Queue, "A" – 1\\2', response: 'busy servers', unit: 'min', kind: 'tally',
+  reps: [{ id: '007', v: [1, 2, 4] }, { id: 'b', v: [] }, { id: 3, v: [4, 5] }, { id: 4, v: [2, 3, 3, 6] }, { id: '1.0', v: [5] }, { id: 6, v: [3.5, 2.5] }] });
+
+test('recipes name the files the Import page saves, built by the same slug', () => {
+  assert.equal(slug(QUEUE_COMMA.name), 'queue-a-1-2');
+  const o = outcomeVector(QUEUE_COMMA);
+  const r1 = oneRecipe({ ds: QUEUE_COMMA, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: null });
+  assert.deepEqual(r1.csv, [{ dataset: QUEUE_COMMA.name, file: 'queue-a-1-2_replications.csv', form: 'replications', role: 'x' }]);
+  const rp = oneRecipe({ ds: QUEUE_COMMA, x: Array.from(QUEUE_COMMA.reps.flatMap(r => Array.from(r.v))), ids: null, pooled: true, proc: 't', level: 0.95, plan: null });
+  assert.deepEqual(rp.csv.map(f => [f.file, f.form]), [['queue-a-1-2_observations.csv', 'observations']]);
+  assert.deepEqual(twoOf(IND_A, IND_B, 't', 0.95, null).csv.map(f => f.role), ['a', 'b']);
+  assert.deepEqual(pairedRecipe(CRN_A, CRN_B, 't', 'id', null).csv.map(f => f.file), [CRN_A, CRN_B].map(d => csvFileName(d, 'replications')));
+  assert.deepEqual(sevRecipe(FOUR).csv.map(f => f.role), ['group 1', 'group 2', 'group 3', 'group 4']);
+  for (const r of [stRecipe(LONG), exRecipe(TRANSIENT, exSpread(TRANSIENT, IND_A))]) {
+    const ds = r.page === 'steady' ? LONG : TRANSIENT;
+    assert.deepEqual(r.csv, [{ dataset: ds.name, file: csvFileName(ds, 'observations'), form: 'observations', role: 'records' },
+      { dataset: ds.name, file: csvFileName(ds, 'replications'), form: 'replications', role: 'replication list' }], 'Levene\'s groups get no entry');
+  }
+  // Every script names its file in each language, and the read lines are all comments.
+  for (const lang of LANGS) {
+    const s = analysisScript(r1, lang);
+    assert.ok(s.includes('queue-a-1-2_replications.csv') && /^[\x00-\x7f]*$/.test(s), lang);
+    const block = csvReadBlock(lang, r1);
+    assert.ok(block.every(l => l.startsWith(lang === 'm' ? '%' : '#')), lang + ': every line a comment');
+    assert.ok(block.join(' ').includes('Queue, "A" - 1\\2'), lang + ': the dataset named in ASCII');
+  }
+});
+
+test('two datasets whose names slug alike are told apart by name in the comment', () => {
+  const twin = makeDataset({ name: 'Queue A 1 2', response: 'w', kind: 'reps', reps: [1, 2, 3].map(id => ({ id, v: [id + 0.5] })) });
+  assert.equal(slug(twin.name), slug(QUEUE_COMMA.name));
+  const r = twoOf(QUEUE_COMMA, twin, 't', 0.95, null);
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang).replace(/\n[#%] /g, ' ');
+    assert.ok(s.includes('Queue, "A" - 1\\2 and Queue A 1 2 both save to queue-a-1-2_replications.csv; save one under another name and change it here.'), lang);
+  }
+  // Two designs from one dataset name no clash.
+  assert.ok(!analysisScript(twoOf(IND_A, IND_A, 't', 0.95, null), 'R').includes('both save to'));
+});
+
+// One fixture per page and per procedure family.
+{
+  const o = outcomeVector(QUEUE_COMMA);
+  checkCsvRead('One System, t, on a comma-named dataset with an empty replication',
+    oneRecipe({ ds: QUEUE_COMMA, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: PLAN }), [QUEUE_COMMA], { smoke: true });
+  const obs = observations(QUEUE_COMMA);
+  checkCsvRead('One System, pooled observations',
+    oneRecipe({ ds: QUEUE_COMMA, x: obs, ids: null, pooled: true, proc: 't', level: 0.95, plan: null }), [QUEUE_COMMA]);
+  checkCsvRead('Two Systems, independent Welch', twoOf(QUEUE_COMMA, IND_B, 't', 0.95, PLAN2), [QUEUE_COMMA, IND_B]);
+  const gA = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 3.5] }, { id: 5, v: [9] }] });
+  const gB = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[3, 2.6], [1, 1.2], [2, 2.2], [4, 2.7], [5, 2.4], [7, 1.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const rid = pairedRecipe(gA, gB, 't', 'id', PLAN2);
+  assert.equal(rid.expect.pairs, 4, 'a duplicate id of A and an id of B with no partner are left out');
+  checkCsvRead('Two Systems, paired t by id with an empty, a duplicated, and unmatched replications', rid, [gA, gB]);
+  checkCsvRead('Two Systems, paired signed-rank by position', pairedRecipe(gA, gB, 'np', 'position', PLAN2, 0.9), [gA, gB]);
+  const A = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 3.5] }] });
+  const B = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[1, 1.2], [2, 2.2], [3, 2.6], [4, 2.7], [5, 2.4], [6, 3.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const Cd = makeDataset({ name: 'C', response: 'w', kind: 'reps', reps: [[6, 1.1], [1, 0.9], [3, 1.7], [4, 2.1], [5, 1.5]].map(([id, v]) => ({ id, v: [v] })) });
+  checkCsvRead('Several Systems, independent, with an empty replication', sevRecipe([A, B, QUEUE_COMMA]), [A, B, QUEUE_COMMA]);
+  const sp = sevRecipe([A, B, Cd], { paired: true });
+  assert.equal(sp.groups.ids.join(','), '1,3,4,5');
+  checkCsvRead('Several Systems, paired by id, with an empty and unmatched replications', sp, [A, B, Cd]);
+  checkCsvRead('Several Systems, paired by position under the rank procedures', sevRecipe([A, B, Cd], { paired: true, by: 'position', proc: 'np' }), [A, B, Cd]);
+  // The records: tally and time-persistent runs, each with an empty replication.
+  const gappyT = makeDataset({ name: 'Transient, one empty', response: 'wait time', kind: 'tally',
+    reps: TRANSIENT.reps.map((r, i) => (i === 1 ? { id: r.id, t: [], v: [] } : { id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  checkCsvRead('Steady State, tally with an empty replication, lumped', stRecipe(gappyT, { lumped: true, cut: 25, count: 15 }), [gappyT]);
+  const gappyQ = makeDataset({ name: 'Queue length, one empty', response: 'number in queue', kind: 'time', endTime: 600,
+    reps: QLEN.reps.map((r, i) => (i === 2 ? { id: r.id, t: [], v: [] } : { id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  checkCsvRead('Steady State, time-persistent with an empty replication, by time', stRecipe(gappyQ, { align: 'time', nBins: 20, lumped: true, cut: 100, count: 12 }), [gappyQ]);
+  const odd = makeDataset({ name: 'Odd tally', response: 'wait', unit: 'min', kind: 'tally',
+    reps: [{ id: 'a', v: [1, 2, 3, 5] }, { id: 'b', v: [] }, { id: 'c', v: [4] }, { id: 'd', v: [4, 6, 7] }] });
+  checkCsvRead('Summary and Plots, tally with an empty and a one-observation replication', exRecipe(odd), [odd], { smoke: true });
+  checkCsvRead('Summary and Plots, replication values with the spread test', exRecipe(IND_A, exSpread(IND_A, IND_B)), [IND_A]);
+  const lens = [300, 0, 760, 410, 848];
+  const unequal = makeDataset({ name: 'Queue length, unequal', response: 'q', kind: 'time',
+    reps: QLEN.reps.map((rp, i) => ({ id: rp.id, t: Array.from(rp.t).slice(0, lens[i]), v: Array.from(rp.v).slice(0, lens[i]) })) });
+  checkCsvRead('Summary and Plots, time-persistent runs with no end time and an empty one', exRecipe(unequal), [unequal]);
+}

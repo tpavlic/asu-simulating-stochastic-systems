@@ -1616,6 +1616,8 @@ function dataBlock(recipe, L) {
   }
   if (recipe.groups) out.push(...groupsBlock(L, recipe));
   if (recipe.records) out.push(...recordsBlock(L, recipe.records));
+  const csv = csvReadBlock(L, recipe, { live: false });
+  if (csv.length) out.push('', ...csv);
   if (L.tidy) out.push(...tidyDataBlock(recipe, L));
   if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
@@ -1680,6 +1682,267 @@ function groupsBlock(L, r) {
   out.push(...listAssign(L, 'groups', G.values.length, (L2, t, i) => vecAssign(L2, t, G.values[i]), i => L.vec(G.values[i])));
   out.push(L.assign('k', String(G.names.length)));
   out.push(L.assign('paired', L.bool(G.paired)));
+  return out;
+}
+
+// ── The CSV files that hold the same data ────────────────────────────────
+// Beside the data block, every script shows the lines that read the same data
+// from the files the Import page saves (Export on a dataset's row), named by
+// recipe.csv. Each language reads in its plain idiom: R's read.csv with the
+// replication ids kept as text, Python's csv module (NumPy's genfromtxt fills
+// a blank in a column of whole numbers with -1 and stumbles on a text id after
+// numeric ones), and MATLAB's readtable. A response header such as "busy
+// servers" is rewritten by every language, and so the value column of an
+// Observations CSV is taken by position, as its last column. A blank outcome
+// in a Replication summary CSV is a replication that gave none, dropped before
+// any matching by id or position, as the page drops it.
+
+// The comment that marks a read line in a script that keeps its own data:
+// removing it leaves exactly the line the script would run.
+const READ_MARK = { R: '#   ', py: '#   ', m: '%   ' };
+
+// The reader of one file, as an expression.
+function readExpr(L, file) {
+  if (L.lang === 'R') return 'read.csv(' + L.str(file) + ', comment.char = "#", colClasses = c(replication = "character"))';
+  if (L.lang === 'py') return 'read_csv(' + L.str(file) + ')';
+  return 'readtable(' + L.str(file) + ", 'CommentStyle', '#', 'VariableNamingRule', 'preserve')";
+}
+
+// Python's reader: the rows of a file as lists of text, after the # lines and
+// the header, which the lines below take by position.
+const PY_READ_CSV = [
+  'import csv',
+  'def read_csv(file):   # the rows of a CSV file the analyzer saved, as text, its # lines and header skipped',
+  '    with open(file, encoding="utf-8", newline="") as fh:',
+  '        return list(csv.reader(s for s in fh if not s.startswith("#")))[1:]'
+];
+
+// Python: each id's outcome at its first row, in the order the ids first
+// appear, which is how the page matches replications by id.
+const PY_FIRST_OUTCOMES = [
+  'def first_outcomes(rows):   # each id\'s outcome at its first row, in the order the ids first appear',
+  '    out = {}',
+  '    for r in rows: out.setdefault(r[0], float(r[2]))',
+  '    return out'
+];
+
+const DROP_NOTE = 'a blank mean (no outcome) is dropped';
+const ID_NOTE = 'ids such as 007 read back as 7';
+
+// One Replication summary CSV read into `v` with its blank outcomes dropped:
+// R and MATLAB keep the table in `v`, and Python keeps its rows.
+function readOutcomes(L, v, file) {
+  const c = '   ' + L.comment;
+  if (L.lang === 'R') return [v + ' <- ' + readExpr(L, file), v + ' <- ' + v + '[is.finite(' + v + '$mean), ]' + c + DROP_NOTE];
+  if (L.lang === 'py') return [v + ' = [r for r in ' + readExpr(L, file) + ' if r[2]]' + c + 'columns replication, n_obs, mean; ' + DROP_NOTE];
+  return [v + ' = ' + readExpr(L, file) + ';', v + ' = ' + v + '(isfinite(' + v + '.mean), :);' + c + DROP_NOTE];
+}
+
+// The ids and the outcomes of a table read by readOutcomes.
+function idsOf(L, v) {
+  return L.lang === 'R' ? v + '$replication' : L.lang === 'py' ? '[r[0] for r in ' + v + ']' : 'string(' + v + ".replication)'";
+}
+function outcomesOf(L, v) {
+  return L.lang === 'R' ? v + '$mean' : L.lang === 'py' ? 'np.array([float(r[2]) for r in ' + v + '])' : v + ".mean'";
+}
+
+// One System: the outcomes (and their ids), or the pooled observations.
+function readOne(L, r, file) {
+  const lang = L.lang, c = '   ' + L.comment, out = [];
+  if (r.data.pooled) {
+    const last = 'the last column holds the values';
+    if (lang === 'R') out.push('obs <- ' + readExpr(L, file), 'x <- as.numeric(obs[[ncol(obs)]])' + c + last);
+    else if (lang === 'py') out.push('x = np.array([float(r[-1]) for r in ' + readExpr(L, file) + '])' + c + last);
+    else out.push('obs = ' + readExpr(L, file) + ';', "x = obs{:, end}';" + c + last);
+    return out;
+  }
+  out.push(...readOutcomes(L, 'd', file));
+  if (r.data.ids) out.push(L.assign('rep_id', idsOf(L, 'd')) + (lang === 'm' ? c + ID_NOTE : ''));
+  out.push(L.assign('x', outcomesOf(L, 'd')));
+  return out;
+}
+
+// Two Systems: each design's outcomes and ids, or the pairs matched as the
+// page matched them, by replication id or by position.
+function readTwo(L, r, fileA, fileB) {
+  const lang = L.lang, c = '   ' + L.comment, out = [];
+  out.push(...readOutcomes(L, 'da', fileA), ...readOutcomes(L, 'db', fileB));
+  if (!r.pairs) {
+    out.push(L.assign('rep_id_a', idsOf(L, 'da')) + (lang === 'm' ? c + ID_NOTE : ''), L.assign('a', outcomesOf(L, 'da')));
+    out.push(L.assign('rep_id_b', idsOf(L, 'db')), L.assign('b', outcomesOf(L, 'db')));
+    return out;
+  }
+  if (r.pairs.by === 'id') {
+    if (lang === 'R') {
+      out.push('keep <- !duplicated(da$replication) & da$replication %in% db$replication' + c + 'each id of A once, where B has it too',
+        'pair_id <- da$replication[keep]', 'a <- da$mean[keep]', 'b <- db$mean[match(pair_id, db$replication)]' + c + 'match finds the first row with the id');
+    } else if (lang === 'py') {
+      out.push(...PY_FIRST_OUTCOMES, 'first_a, first_b = first_outcomes(da), first_outcomes(db)',
+        'pair_id = [s for s in first_a if s in first_b]', 'a = np.array([first_a[s] for s in pair_id])', 'b = np.array([first_b[s] for s in pair_id])');
+    } else {
+      out.push("id_a = string(da.replication)'; id_b = string(db.replication)';" + c + ID_NOTE,
+        "[~, ia] = unique(id_a, 'stable'); ia = ia(ismember(id_a(ia), id_b));" + c + 'each id of A once, where B has it too',
+        '[~, jb] = ismember(id_a(ia), id_b);' + c + 'ismember finds the first position of each id in B',
+        "pair_id = id_a(ia); a = da.mean(ia)'; b = db.mean(jb)';");
+    }
+  } else if (lang === 'R') {
+    out.push('m <- min(nrow(da), nrow(db))' + c + 'pair the first m outcomes of A and B in order',
+      'pair_id <- paste(da$replication[seq_len(m)], db$replication[seq_len(m)], sep = "/")', 'a <- da$mean[seq_len(m)]', 'b <- db$mean[seq_len(m)]');
+  } else if (lang === 'py') {
+    out.push('m = min(len(da), len(db))' + c + 'pair the first m outcomes of A and B in order',
+      'pair_id = [ra[0] + "/" + rb[0] for ra, rb in zip(da, db)]', 'a = ' + outcomesOf(L, 'da[:m]'), 'b = ' + outcomesOf(L, 'db[:m]'));
+  } else {
+    out.push('m = min(height(da), height(db));' + c + 'pair the first m outcomes of A and B in order',
+      "pair_id = string(da.replication(1:m))' + \"/\" + string(db.replication(1:m))';" + c + ID_NOTE,
+      "a = da.mean(1:m)'; b = db.mean(1:m)';");
+  }
+  return out;
+}
+
+// Several Systems: every design's outcomes and ids, or under pairing the
+// blocks matched as the page matched them.
+function readSeveral(L, r, files) {
+  const G = r.groups, lang = L.lang, c = '   ' + L.comment, out = [];
+  const paired = G.paired, byId = paired && G.by === 'id';
+  if (lang === 'R') {
+    out.push(L.assign('files', L.strs(files)), L.assign('design_names', L.strs(G.names)),
+      'reads <- lapply(files, function(f) {', '  d <- ' + readExpr(L, 'f').replace('"f"', 'f'),
+      '  d[is.finite(d$mean), ]' + c + DROP_NOTE, '})');
+    if (!paired) out.push('rep_ids <- lapply(reads, function(d) d$replication)', 'groups <- lapply(reads, function(d) d$mean)');
+    else if (byId) {
+      out.push('block_id <- unique(reads[[1]]$replication)' + c + 'the first design\'s ids in order, each once',
+        'for (d in reads[-1]) block_id <- block_id[block_id %in% d$replication]' + c + 'kept where every design has them',
+        'groups <- lapply(reads, function(d) d$mean[match(block_id, d$replication)])');
+    } else {
+      out.push('m <- min(sapply(reads, nrow))' + c + 'block b holds outcome b of every design, up to the shortest',
+        'block_id <- do.call(paste, c(lapply(reads, function(d) d$replication[seq_len(m)]), sep = "/"))',
+        'groups <- lapply(reads, function(d) d$mean[seq_len(m)])');
+    }
+    out.push('k <- length(groups)', 'paired <- ' + L.bool(paired));
+  } else if (lang === 'py') {
+    out.push(L.assign('files', L.strs(files)), L.assign('design_names', L.strs(G.names)),
+      'reads = [[r for r in read_csv(f) if r[2]] for f in files]' + c + 'columns replication, n_obs, mean; ' + DROP_NOTE);
+    if (!paired) out.push('rep_ids = [[r[0] for r in rows] for rows in reads]', 'groups = [np.array([float(r[2]) for r in rows]) for rows in reads]');
+    else if (byId) {
+      out.push(...PY_FIRST_OUTCOMES, 'firsts = [first_outcomes(rows) for rows in reads]',
+        'block_id = [s for s in firsts[0] if all(s in f for f in firsts)]' + c + 'the first design\'s ids that every design has',
+        'groups = [np.array([f[s] for s in block_id]) for f in firsts]');
+    } else {
+      out.push('m = min(len(rows) for rows in reads)' + c + 'block b holds outcome b of every design, up to the shortest',
+        'block_id = ["/".join(rows[i][0] for rows in reads) for i in range(m)]',
+        'groups = [np.array([float(r[2]) for r in rows[:m]]) for rows in reads]');
+    }
+    out.push('k = len(groups)', 'paired = ' + L.bool(paired));
+  } else {
+    const ids = paired ? 'ids' : 'rep_ids';
+    out.push(L.assign('files', L.strs(files)), L.assign('design_names', L.strs(G.names)),
+      'k = numel(files);', 'groups = cell(1, k); ' + ids + ' = cell(1, k);', 'for j = 1:k',
+      '    d = ' + readExpr(L, 'f').replace("'f'", 'files{j}') + ';', '    d = d(isfinite(d.mean), :);' + c + DROP_NOTE,
+      '    ' + ids + "{j} = string(d.replication)';" + c + ID_NOTE, "    groups{j} = d.mean';", 'end');
+    if (byId) {
+      out.push("[~, i1] = unique(ids{1}, 'stable'); block_id = ids{1}(i1);" + c + 'the first design\'s ids in order, each once',
+        'for j = 2:k, block_id = block_id(ismember(block_id, ids{j})); end' + c + 'kept where every design has them',
+        'for j = 1:k, [~, at] = ismember(block_id, ids{j}); groups{j} = groups{j}(at); end');
+    } else if (paired) {
+      out.push('m = min(cellfun(@numel, groups));' + c + 'block b holds outcome b of every design, up to the shortest',
+        'block_id = ids{1}(1:m); for j = 2:k, block_id = block_id + "/" + ids{j}(1:m); end',
+        'for j = 1:k, groups{j} = groups{j}(1:m); end');
+    }
+    out.push('paired = ' + L.bool(paired) + ';');
+  }
+  return out;
+}
+
+// The records of a run: every replication the Replication summary CSV lists,
+// in its order, with the rows the Observations CSV holds for it (none for an
+// empty one). kind and end_time come with the records unless the Settings
+// block already assigns them.
+function readRecords(L, r, obsFile, repFile) {
+  const R = r.records, lang = L.lang, c = '   ' + L.comment, out = [];
+  const timed = R.reps.some(x => x.t);
+  const cols = timed ? 'columns replication, time, and the values' : 'columns replication and the values';
+  const every = 'every replication in order, an empty one included';
+  const settings = r.settings || {};
+  const meta = [];
+  if (!('kind' in settings)) meta.push(L.assign('kind', L.str(R.kind)));
+  if (!('end_time' in settings)) meta.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
+  if (lang === 'R') {
+    out.push('obs <- ' + readExpr(L, obsFile) + c + cols, 'ids <- ' + readExpr(L, repFile) + '$replication' + c + every, ...meta,
+      'reps <- lapply(ids, function(id) {', '  o <- obs[obs$replication == id, ]',
+      '  list(id = id, t = ' + (timed ? 'as.numeric(o$time)' : 'NULL') + ', v = as.numeric(o[[ncol(o)]]))', '})');
+  } else if (lang === 'py') {
+    out.push('obs = ' + readExpr(L, obsFile) + c + cols, ...meta, 'by_rep = {}',
+      'for r in obs: by_rep.setdefault(r[0], []).append(r)',
+      'reps = []', 'for s in [r[0] for r in ' + readExpr(L, repFile) + ']:' + c + every, '    o = by_rep.get(s, [])',
+      '    reps.append(dict(id=s, t=' + (timed ? 'np.array([float(r[1]) for r in o])' : 'None') + ', v=np.array([float(r[-1]) for r in o])))');
+  } else {
+    out.push('obs = ' + readExpr(L, obsFile) + ';' + c + cols, 'rl = ' + readExpr(L, repFile) + ';' + c + every, ...meta,
+      'obs_id = string(obs.replication); rl_id = string(rl.replication);' + c + ID_NOTE,
+      "reps = struct('id', {}, 't', {}, 'v', {});", 'for i = 1:numel(rl_id)', '    o = obs(obs_id == rl_id(i), :);',
+      "    reps(i) = struct('id', char(rl_id(i)), 't', " + (timed ? "o.time'" : '[]') + ", 'v', o{:, end}');", 'end');
+  }
+  return out;
+}
+
+// The file name, and the dataset it holds where two datasets of a recipe
+// share one file name: their names slug alike, and the Import page would
+// save both under it.
+function csvClashes(entries) {
+  const byFile = new Map();
+  for (const e of entries) {
+    if (!byFile.has(e.file)) byFile.set(e.file, new Set());
+    byFile.get(e.file).add(e.dataset);
+  }
+  return Array.from(byFile).filter(([, names]) => names.size > 1).map(([file, names]) => ({ file, names: Array.from(names) }));
+}
+
+/**
+ * The lines that read a recipe's data from the CSV files the Import page saves
+ * (`recipe.csv`), assigning every name the data block assigns, in the same
+ * order of replications, with blank outcomes dropped and pairs or blocks
+ * matched as the page matched them. With `live: false` every line is a
+ * comment: a few lines saying which files hold the data, and then the read
+ * lines, each behind READ_MARK, whose removal leaves the line itself. With
+ * `live: true` the read lines are code under a comment naming the files.
+ * Empty when the recipe names no file.
+ * @param {object|string} L the language, or its key ('R', 'tidy', 'py', 'm')
+ * @param {object} recipe
+ * @param {{live?: boolean}} [opts]
+ * @returns {string[]}
+ */
+export function csvReadBlock(L, recipe, { live = false } = {}) {
+  if (typeof L === 'string') {
+    if (!Object.prototype.hasOwnProperty.call(LANG, L)) throw new RangeError('csvReadBlock: unknown language ' + L);
+    L = LANG[L];
+  }
+  const files = recipe.csv || [];
+  if (!files.length) return [];
+  const role = k => (files.find(f => f.role === k) || {}).file;
+  const c = L.comment;
+  let code, head;
+  if (recipe.records) {
+    code = readRecords(L, recipe, role('records'), role('replication list'));
+    head = 'the files the Import page saves for ' + ascii(recipe.records.name) + ' (Export, then Observations CSV and Replication summary CSV)';
+  } else if (recipe.groups) {
+    code = readSeveral(L, recipe, recipe.groups.names.map((_, i) => role('group ' + (i + 1))));
+    head = 'the files the Import page saves for the designs (Export on each one\'s row, then Replication summary CSV)';
+  } else if (recipe.dataA || recipe.pairs) {
+    code = readTwo(L, recipe, role('a'), role('b'));
+    head = 'the files the Import page saves for A and B (Export on each one\'s row, then Replication summary CSV)';
+  } else if (recipe.data) {
+    code = readOne(L, recipe, role('x'));
+    head = 'the file the Import page saves for ' + ascii(recipe.data.name) + ' (Export, then ' + (recipe.data.pooled ? 'Observations CSV' : 'Replication summary CSV') + ')';
+  } else return [];
+  if (L.lang === 'py') code = [...PY_READ_CSV, ...code];
+  const one = new Set(files.map(f => f.file)).size === 1;
+  let text = live ? 'The data are read from ' + head + '; run the script from the folder that holds ' + (one ? 'it, or give its full path.' : 'them, or give their full paths.')
+    : 'To read the same data from ' + head + ', replace the block above with these lines.';
+  if (recipe.records && !live) text += ' The replication summary lists every replication, an empty one included, which the observations file has no row for.';
+  for (const k of csvClashes(files)) {
+    text += ' ' + k.names.map(ascii).join(' and ') + ' both save to ' + k.file + '; save one under another name and change it here.';
+  }
+  const out = commentLines(c, text, c);
+  out.push(...(live ? code : code.map(l => READ_MARK[L.lang] + l)));
   return out;
 }
 
