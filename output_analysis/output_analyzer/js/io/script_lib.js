@@ -1314,3 +1314,468 @@ n = smallest_n(@(n) power_anova(n, k, sigma, delta, alpha, blocked) >= power, (n
 if ~isnan(n), r = struct('n', n, 'powerAtN', power_anova(n, k, sigma, delta, alpha, blocked)); end
 end
 `;
+
+// ── One-way and randomized-block analysis of variance ────────────────────
+// The tables come from aov, f_oneway, and anova1 or anova2. When no design
+// varies within itself (or, with blocks, nothing is left once the designs
+// and the blocks are removed), their residual is rounding error or empty,
+// and so the table is written out as the analyzer reports it: F is infinite
+// (p = 0) when the means differ and undefined when they do not.
+
+LIB.R.anova = `
+anova_table <- function(groups, blocked) {
+  # summary(aov(y ~ g)), or with the replication as a block summary(aov(y ~ g + block)).
+  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
+  k <- length(groups); n <- lengths(groups); means <- sapply(groups, mean); grand <- mean(y)
+  ssb <- sum(n * (means - grand)^2)
+  if (blocked) {
+    R <- n[1]; block <- factor(rep(seq_len(R), k)); bm <- rowMeans(do.call(cbind, groups))
+    ssblk <- k * sum((bm - grand)^2); ssw <- max(0, sum((y - grand)^2) - ssb - ssblk)
+  } else {
+    bm <- NULL; ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
+  }
+  ratio <- function(a, b) if (b > 0) a / b else if (a > 0) Inf else NaN
+  pval <- function(f, d1, d2) if (is.nan(f)) NaN else pf(f, d1, d2, lower.tail = FALSE)
+  fit <- NULL
+  if (ssw > 0) {
+    fit <- if (blocked) aov(y ~ g + block) else aov(y ~ g)
+    tab <- summary(fit)[[1]]   # rows: the designs, the blocks (when blocked), the residuals
+    e <- nrow(tab)
+    res <- list(ssb = tab[1, "Sum Sq"], dfb = tab[1, "Df"], msb = tab[1, "Mean Sq"], F = tab[1, "F value"], p = tab[1, "Pr(>F)"],
+                ssw = tab[e, "Sum Sq"], dfw = tab[e, "Df"], msw = tab[e, "Mean Sq"])
+    if (blocked) res <- c(res, list(ssblk = tab[2, "Sum Sq"], dfblk = tab[2, "Df"], msblk = tab[2, "Mean Sq"],
+                                    Fblock = tab[2, "F value"], pBlock = tab[2, "Pr(>F)"]))
+  } else {
+    dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(y) - k
+    res <- list(ssb = ssb, dfb = dfb, msb = ssb / dfb, ssw = 0, dfw = dfw, msw = 0)
+    res$F <- ratio(res$msb, 0); res$p <- pval(res$F, dfb, dfw)
+    if (blocked) {
+      res <- c(res, list(ssblk = ssblk, dfblk = R - 1, msblk = ssblk / (R - 1)))
+      res$Fblock <- ratio(res$msblk, 0); res$pBlock <- pval(res$Fblock, R - 1, dfw)
+    }
+  }
+  res$means <- means; res$n <- n; res$grandMean <- grand; res$blockMeans <- bm; res$fit <- fit
+  # The residuals: each outcome less its design's mean and, with blocks, its replication's effect.
+  res$resid <- unlist(lapply(seq_along(groups), function(i) groups[[i]] - means[i] - (if (blocked) bm - grand else 0)))
+  res
+}
+`;
+LIB.py.anova = `
+def anova_table(groups, blocked):
+    """One-way analysis of variance (scipy's f_oneway for F and p, the sums of squares written
+    out), or with the replication as a block the randomized-block table, written out."""
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups)
+    means = np.array([g.mean() for g in groups]); n = np.array([len(g) for g in groups])
+    y = np.concatenate(groups); grand = y.mean()
+    ratio = lambda a, b: a / b if b > 0 else (np.inf if a > 0 else np.nan)
+    pval = lambda f, d1, d2: np.nan if np.isnan(f) else stats.f.sf(f, d1, d2)
+    ssb = float(np.sum(n * (means - grand) ** 2))
+    if blocked:
+        R = int(n[0]); bm = np.column_stack(groups).mean(axis=1)
+        ssblk = float(k * np.sum((bm - grand) ** 2)); ssw = max(0.0, float(np.sum((y - grand) ** 2)) - ssb - ssblk)
+        dfb, dfblk, dfw = k - 1, R - 1, (k - 1) * (R - 1)
+        msb, msblk, msw = ssb / dfb, ssblk / dfblk, ssw / dfw
+        F, Fb = ratio(msb, msw), ratio(msblk, msw)
+        # The residuals: each outcome less its design's mean and its replication's effect.
+        resid = np.concatenate([g - means[i] - (bm - grand) for i, g in enumerate(groups)])
+        return dict(ssb=ssb, dfb=dfb, msb=msb, F=F, p=pval(F, dfb, dfw), ssblk=ssblk, dfblk=dfblk, msblk=msblk,
+                    Fblock=Fb, pBlock=pval(Fb, dfblk, dfw), ssw=ssw, dfw=dfw, msw=msw,
+                    means=means, n=n, grandMean=grand, blockMeans=bm, resid=resid)
+    ssw = float(sum(np.sum((g - g.mean()) ** 2) for g in groups)); dfb, dfw = k - 1, len(y) - k
+    msb, msw = ssb / dfb, ssw / dfw
+    if ssw > 0:
+        res = stats.f_oneway(*groups); F, p = float(res.statistic), float(res.pvalue)
+    else:
+        F = ratio(msb, msw); p = pval(F, dfb, dfw)
+    resid = np.concatenate([g - means[i] for i, g in enumerate(groups)])
+    return dict(ssb=ssb, dfb=dfb, msb=msb, F=F, p=p, ssw=ssw, dfw=dfw, msw=msw,
+                means=means, n=n, grandMean=grand, blockMeans=None, resid=resid)
+`;
+LIB.m.anova = `
+function r = anova_table(groups, blocked)
+% One-way analysis of variance (anova1), or with the replication as a block the two-way table of
+% anova2 on the R-by-k matrix of outcomes, one observation per cell. The statistics each returns
+% are kept for multcompare.
+k = numel(groups);
+means = cellfun(@mean, groups); n = cellfun(@numel, groups);
+y = cell2mat(cellfun(@(v) v(:), groups(:), 'UniformOutput', false));
+grand = mean(y);
+if blocked
+    M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false));   % R-by-k: row = block, column = design
+    [~, tab, st] = anova2(M, 1, 'off');
+    % tab rows: Columns (the designs), Rows (the blocks), Error, Total; columns: SS, df, MS, F, p
+    bm = mean(M, 2);
+    % The residuals: each outcome less its design's mean and its replication's effect.
+    resid = reshape(M - means - (bm - grand), [], 1);
+    [F, p] = f_entry(tab, 2); [Fb, pb] = f_entry(tab, 3);
+    r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
+               'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
+               'ssw', tab{4,2}, 'dfw', tab{4,3}, 'msw', tab{4,4}, 'means', means, 'n', n, 'grandMean', grand, ...
+               'blockMeans', bm', 'resid', resid, 'stats', st);
+else
+    g = repelem((1:k)', n(:));
+    [~, tab, st] = anova1(y, g, 'off');
+    % tab rows: Groups, Error, Total; columns: SS, df, MS, F, p
+    resid = y - reshape(means(g), [], 1);
+    [F, p] = f_entry(tab, 2);
+    r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
+               'ssw', tab{3,2}, 'dfw', tab{3,3}, 'msw', tab{3,4}, 'means', means, 'n', n, 'grandMean', grand, ...
+               'blockMeans', [], 'resid', resid, 'stats', st);
+end
+end
+
+function [F, p] = f_entry(tab, row)
+% F and p from one row of a table, which leaves F empty when the error mean square is 0: F is
+% then infinite (p = 0) when the row's mean square is positive, and undefined when it is not.
+F = tab{row, 5}; p = tab{row, 6};
+if isempty(F)
+    if tab{row, 4} > 0, F = Inf; p = 0; else, F = NaN; p = NaN; end
+end
+end
+`;
+
+// ── Welch's analysis of variance ─────────────────────────────────────────
+
+LIB.R.welchAnova = `
+welch_anova <- function(groups) {
+  # Welch (1951): each design weighted by R_i / s_i^2, nothing pooled.
+  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
+  ow <- oneway.test(y ~ g, var.equal = FALSE)
+  list(F = unname(ow$statistic), df1 = unname(ow$parameter[1]), df2 = unname(ow$parameter[2]), p = ow$p.value,
+       means = sapply(groups, mean), n = lengths(groups), resid = unlist(lapply(groups, function(x) x - mean(x))))
+}
+`;
+LIB.py.welchAnova = `
+def welch_anova(groups):
+    """Welch (1951): each design weighted by R_i / s_i^2, nothing pooled; R's oneway.test(var.equal=FALSE)."""
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups)
+    n = np.array([len(g) for g in groups]); m = np.array([g.mean() for g in groups]); v = np.array([g.var(ddof=1) for g in groups])
+    w = n / v; W = w.sum(); mu = np.sum(w * m) / W
+    lam = np.sum((1 - w / W) ** 2 / (n - 1))
+    F = (np.sum(w * (m - mu) ** 2) / (k - 1)) / (1 + 2 * (k - 2) / (k ** 2 - 1) * lam)
+    df2 = (k ** 2 - 1) / (3 * lam)
+    resid = np.concatenate([g - m[i] for i, g in enumerate(groups)])
+    return dict(F=F, df1=k - 1, df2=df2, p=stats.f.sf(F, k - 1, df2), means=m, n=n, resid=resid)
+`;
+LIB.m.welchAnova = `
+function r = welch_anova(groups)
+% Welch (1951): each design weighted by R_i / s_i^2, nothing pooled (R's oneway.test(var.equal = FALSE)).
+k = numel(groups);
+n = cellfun(@numel, groups); m = cellfun(@mean, groups); v = cellfun(@var, groups);
+w = n ./ v; W = sum(w); mu = sum(w .* m) / W;
+lambda = sum((1 - w / W).^2 ./ (n - 1));
+F = (sum(w .* (m - mu).^2) / (k - 1)) / (1 + 2 * (k - 2) / (k^2 - 1) * lambda);
+df2 = (k^2 - 1) / (3 * lambda);
+resid = cell2mat(cellfun(@(x) x(:) - mean(x), groups(:), 'UniformOutput', false));
+r = struct('F', F, 'df1', k - 1, 'df2', df2, 'p', fcdf(F, k - 1, df2, 'upper'), 'means', m, 'n', n, 'resid', resid);
+end
+`;
+
+// ── Compact letter display by insert-and-absorb ──────────────────────────
+// Start with one group of every design; for each pair declared different,
+// split every group holding both into one without i and one without j, and
+// drop a group inside another (or equal to one kept already). The surviving
+// groups, ordered by their members, take the letters a to z, then A to Z,
+// then a letter with a count.
+
+LIB.R.letters = `
+letter_label <- function(q) {
+  if (q <= 26) letters[q] else if (q <= 52) LETTERS[q - 26] else paste0(letters[(q - 1) %% 26 + 1], (q - 1) %/% 26)
+}
+letter_groups <- function(k, flagged) {
+  # flagged: a list of c(i, j), the pairs declared different.
+  groups <- list(seq_len(k))
+  for (f in flagged) {
+    nxt <- list()
+    for (g in groups) {
+      if (all(f %in% g)) { nxt[[length(nxt) + 1]] <- setdiff(g, f[1]); nxt[[length(nxt) + 1]] <- setdiff(g, f[2]) }
+      else nxt[[length(nxt) + 1]] <- g
+    }
+    keep <- list()
+    for (g in nxt) {
+      inside <- any(sapply(nxt, function(h) length(h) > length(g) && all(g %in% h)))
+      dup <- any(sapply(keep, function(h) setequal(h, g)))
+      if (!inside && !dup) keep[[length(keep) + 1]] <- g
+    }
+    groups <- keep
+  }
+  groups <- groups[order(sapply(groups, function(g) paste(sprintf("%03d", sort(g)), collapse = "")))]
+  out <- rep("", k)
+  for (q in seq_along(groups)) for (d in groups[[q]]) out[d] <- paste0(out[d], letter_label(q))
+  out
+}
+`;
+LIB.py.letters = `
+def letter_label(q):
+    """The q-th letter, counted from 0: a to z, A to Z, then a letter with a count."""
+    return chr(97 + q) if q < 26 else chr(65 + q - 26) if q < 52 else chr(97 + q % 26) + str(q // 26)
+
+def letter_groups(k, flagged):
+    """flagged: the pairs (i, j) declared different, counted from 0."""
+    groups = [frozenset(range(k))]
+    for i, j in flagged:
+        nxt = []
+        for g in groups:
+            if i in g and j in g: nxt += [g - {i}, g - {j}]
+            else: nxt.append(g)
+        keep = []
+        for g in nxt:
+            if not any(g < h for h in nxt) and g not in keep: keep.append(g)
+        groups = keep
+    groups.sort(key=lambda g: sorted(g))
+    out = [""] * k
+    for q, g in enumerate(groups):
+        for d in g: out[d] += letter_label(q)
+    return out
+`;
+LIB.m.letters = `
+function out = letter_groups(k, flagged)
+% flagged: a 2-column matrix of the pairs (i, j) declared different.
+groups = {1:k};
+for f = 1:size(flagged, 1)
+    i = flagged(f, 1); j = flagged(f, 2); nxt = {};
+    for q = 1:numel(groups)
+        g = groups{q};
+        if ismember(i, g) && ismember(j, g), nxt{end+1} = setdiff(g, i); nxt{end+1} = setdiff(g, j); %#ok<AGROW>
+        else, nxt{end+1} = g; end %#ok<AGROW>
+    end
+    keep = {};
+    for q = 1:numel(nxt)
+        g = nxt{q}; inside = false; dup = false;
+        for s = 1:numel(nxt), h = nxt{s}; if numel(h) > numel(g) && all(ismember(g, h)), inside = true; end, end
+        for s = 1:numel(keep), if isequal(sort(keep{s}), sort(g)), dup = true; end, end
+        if ~inside && ~dup, keep{end+1} = g; end %#ok<AGROW>
+    end
+    groups = keep;
+end
+keys = cellfun(@(g) sprintf('%03d', sort(g)), groups, 'UniformOutput', false);
+[~, order] = sort(keys); groups = groups(order);
+out = repmat({''}, 1, k);
+for q = 1:numel(groups), for d = groups{q}, out{d} = [out{d} letter_label(q)]; end, end
+end
+
+function s = letter_label(q)
+% The q-th letter: a to z, A to Z, then a letter with a count.
+if q <= 26, s = char('a' + q - 1); elseif q <= 52, s = char('A' + q - 27); else, s = sprintf('%c%d', 'a' + mod(q - 1, 26), floor((q - 1) / 26)); end
+end
+`;
+
+// ── Post-hoc rules on the pooled mean square ─────────────────────────────
+// Every rule works on diff = mean_i - mean_j with se = sqrt(msw (1/R_i +
+// 1/R_j)), msw being the pooled mean square within or, with blocks, the
+// residual mean square, on its degrees of freedom. The half-width is the
+// critical value times se, divided by sqrt(2) for Tukey-Kramer, whose
+// critical value is the studentized range q. Fisher's LSD declares nothing
+// unless the F test rejects at alpha.
+
+LIB.R.posthoc = `
+posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
+  # pairs: a list of c(i, j); control: the control design, for Dunnett.
+  k <- length(groups); C <- length(pairs); scale <- 1
+  if (rule == "tukey") {
+    crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
+  } else if (rule == "lsd") {
+    crit <- qt(1 - alpha / 2, av$dfw)
+  } else if (rule == "bonferroni") {
+    crit <- qt(1 - alpha / (2 * C), av$dfw)
+  } else {
+    crit <- qdunnett(1 - alpha, sapply(pairs, function(p) sqrt(av$n[p[1]] / av$n[control])), av$dfw)
+  }
+  protected <- if (rule == "lsd") isTRUE(av$p < alpha) else NA
+  out <- lapply(pairs, function(p) {
+    diff <- av$means[p[1]] - av$means[p[2]]; se <- sqrt(av$msw * (1 / av$n[p[1]] + 1 / av$n[p[2]]))
+    hw <- crit * scale * se
+    list(i = p[1], j = p[2], diff = diff, se = se, hw = hw, lo = diff - hw, hi = diff + hw,
+         flagged = !identical(protected, FALSE) && (diff - hw > 0 || diff + hw < 0))
+  })
+  list(crit = crit, protected = protected, pairs = out)
+}
+`;
+LIB.py.posthoc = `
+def posthoc_pooled(groups, av, rule, alpha, pairs, control):
+    """pairs: the pairs (i, j) counted from 0; control: the control design counted from 0, for
+    Dunnett. Without blocks, Tukey-Kramer's half-widths come from scipy's tukey_hsd and Dunnett's
+    from scipy's dunnett, both on the pooled variance; with blocks, which those functions do not
+    take, the quantiles are applied to the residual mean square directly."""
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups); C = len(pairs)
+    means, n, msw, dfw = av["means"], av["n"], av["msw"], av["dfw"]
+    blocked = av["blockMeans"] is not None
+    I = np.array([i for i, j in pairs]); J = np.array([j for i, j in pairs])
+    diff = means[I] - means[J]; se = np.sqrt(msw * (1 / n[I] + 1 / n[J]))
+    protected = bool(av["p"] < alpha) if rule == "lsd" else None
+    if rule == "tukey":
+        crit = stats.studentized_range.ppf(1 - alpha, k, dfw); hw = crit * se / np.sqrt(2)
+        if not blocked and msw > 0:
+            ci = stats.tukey_hsd(*groups).confidence_interval(1 - alpha)
+            hw = (ci.high[I, J] - ci.low[I, J]) / 2
+    elif rule == "dunnett":
+        if not blocked and msw > 0:
+            ci = stats.dunnett(*[groups[i] for i in I], control=groups[control]).confidence_interval(1 - alpha)
+            hw = (ci.high - ci.low) / 2; crit = hw[0] / se[0]
+        else:
+            crit = qdunnett(1 - alpha, np.sqrt(n[I] / n[control]), dfw); hw = crit * se
+    else:
+        crit = stats.t.ppf(1 - alpha / 2, dfw) if rule == "lsd" else stats.t.ppf(1 - alpha / (2 * C), dfw)
+        hw = crit * se
+    lo, hi = diff - hw, diff + hw
+    flagged = ((lo > 0) | (hi < 0)) & (protected is not False)
+    out = [dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se[q], hw=hw[q], lo=lo[q], hi=hi[q], flagged=bool(flagged[q])) for q in range(C)]
+    return dict(crit=crit, protected=protected, pairs=out)
+`;
+LIB.m.posthoc = `
+function r = posthoc_pooled(~, av, rule, alpha, pairs, control)
+% The designs' outcomes (the first argument) enter only through av, the analysis of variance.
+% pairs: a 2-column matrix of (i, j); control: the control design, for Dunnett. The critical
+% value comes from multcompare on the statistics of anova1 or, with blocks, of anova2 (comparing
+% the column means), read back from the first pair's half-width. With no spread left (msw = 0)
+% every half-width is 0, and the critical value is read with the variance set to 1.
+C = size(pairs, 1); means = av.means; n = av.n; msw = av.msw;
+if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
+types = struct('tukey', 'tukey-kramer', 'lsd', 'lsd', 'bonferroni', 'bonferroni', 'dunnett', 'dunnett');
+st = av.stats; s2 = msw;
+if ~(msw > 0)
+    s2 = 1; if isfield(st, 's'), st.s = 1; else, st.sigmasq = 1; end
+end
+opts = {'CriticalValueType', types.(rule), 'Alpha', alpha, 'Display', 'off'};
+if isfield(st, 'sigmasq'), opts = [opts, {'Estimate', 'column'}]; end
+if strcmp(rule, 'dunnett'), opts = [opts, {'ControlGroup', control}]; end
+c = multcompare(st, opts{:});
+i1 = pairs(1, 1); j1 = pairs(1, 2);
+row = find((c(:, 1) == i1 & c(:, 2) == j1) | (c(:, 1) == j1 & c(:, 2) == i1), 1);
+crit = (c(row, 5) - c(row, 3)) / 2 / sqrt(s2 * (1 / n(i1) + 1 / n(j1)));
+scale = 1;
+if strcmp(rule, 'tukey'), crit = crit * sqrt(2); scale = 1 / sqrt(2); end   % the studentized range q, with hw = q se / sqrt(2)
+out = cell(1, C);
+for q = 1:C
+    i = pairs(q, 1); j = pairs(q, 2);
+    d = means(i) - means(j); se = sqrt(msw * (1 / n(i) + 1 / n(j))); hw = crit * scale * se; lo = d - hw; hi = d + hw;
+    fl = ~isequal(protected, false) && (lo > 0 || hi < 0);
+    out{q} = struct('i', i, 'j', j, 'diff', d, 'se', se, 'hw', hw, 'lo', lo, 'hi', hi, 'flagged', fl);
+end
+r = struct('crit', crit, 'protected', protected, 'pairs', {out});
+end
+`;
+
+// ── Post-hoc rules that keep each design's variance (Welch) ──────────────
+// Games-Howell is the studentized range on each pair's own Welch degrees of
+// freedom; the other rule is Bonferroni on each pair's own Welch t interval
+// at 1 - alpha/C.
+
+LIB.R.posthocWelch = `
+posthoc_welch <- function(groups, rule, alpha, pairs) {
+  k <- length(groups); C <- length(pairs)
+  out <- lapply(pairs, function(p) {
+    xi <- groups[[p[1]]]; xj <- groups[[p[2]]]
+    a1 <- var(xi) / length(xi); a2 <- var(xj) / length(xj)
+    se <- sqrt(a1 + a2); df <- (a1 + a2)^2 / (a1^2 / (length(xi) - 1) + a2^2 / (length(xj) - 1))
+    diff <- mean(xi) - mean(xj)
+    if (rule == "gameshowell") {
+      crit <- qtukey(1 - alpha, k, df); hw <- crit * se / sqrt(2)
+      pval <- ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE)
+    } else {
+      crit <- qt(1 - alpha / (2 * C), df); hw <- crit * se
+      pval <- min(1, C * 2 * pt(-abs(diff / se), df))
+    }
+    list(i = p[1], j = p[2], diff = diff, se = se, df = df, crit = crit, hw = hw, lo = diff - hw, hi = diff + hw, p = pval,
+         flagged = (diff - hw > 0 || diff + hw < 0))
+  })
+  list(pairs = out)
+}
+`;
+LIB.py.posthocWelch = `
+def posthoc_welch(groups, rule, alpha, pairs):
+    """pairs: the pairs (i, j) counted from 0."""
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups); C = len(pairs)
+    n = np.array([len(g) for g in groups]); m = np.array([g.mean() for g in groups]); v = np.array([g.var(ddof=1) for g in groups])
+    I = np.array([i for i, j in pairs]); J = np.array([j for i, j in pairs])
+    a1, a2 = v[I] / n[I], v[J] / n[J]
+    se = np.sqrt(a1 + a2); df = (a1 + a2) ** 2 / (a1 ** 2 / (n[I] - 1) + a2 ** 2 / (n[J] - 1))
+    diff = m[I] - m[J]
+    if rule == "gameshowell":
+        crit = stats.studentized_range.ppf(1 - alpha, k, df); hw = crit * se / np.sqrt(2)
+        p = np.minimum(1, stats.studentized_range.sf(np.abs(diff) / (se / np.sqrt(2)), k, df))
+    else:
+        crit = stats.t.ppf(1 - alpha / (2 * C), df); hw = crit * se
+        p = np.minimum(1, C * 2 * stats.t.sf(np.abs(diff / se), df))
+    lo, hi = diff - hw, diff + hw
+    return dict(pairs=[dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se[q], df=df[q], crit=crit[q], hw=hw[q], lo=lo[q], hi=hi[q],
+                            p=p[q], flagged=bool(lo[q] > 0 or hi[q] < 0)) for q in range(C)])
+`;
+LIB.m.posthocWelch = `
+function r = posthoc_welch(groups, rule, alpha, pairs)
+% pairs: a 2-column matrix of (i, j).
+k = numel(groups); C = size(pairs, 1); out = cell(1, C);
+for q = 1:C
+    i = pairs(q, 1); j = pairs(q, 2); xi = groups{i}(:); xj = groups{j}(:);
+    a1 = var(xi) / numel(xi); a2 = var(xj) / numel(xj);
+    se = sqrt(a1 + a2); df = (a1 + a2)^2 / (a1^2 / (numel(xi) - 1) + a2^2 / (numel(xj) - 1));
+    d = mean(xi) - mean(xj);
+    if strcmp(rule, 'gameshowell')
+        crit = studrange_inv(1 - alpha, k, df); hw = crit * se / sqrt(2);
+        p = 1 - studrange_cdf(abs(d) / (se / sqrt(2)), k, df);
+    else
+        crit = tinv(1 - alpha / (2 * C), df); hw = crit * se;
+        p = min(1, C * 2 * tcdf(-abs(d / se), df));
+    end
+    out{q} = struct('i', i, 'j', j, 'diff', d, 'se', se, 'df', df, 'crit', crit, 'hw', hw, 'lo', d - hw, 'hi', d + hw, 'p', p, ...
+                    'flagged', d - hw > 0 || d + hw < 0);
+end
+r = struct('pairs', {out});
+end
+`;
+
+// ── The studentized range in MATLAB, which has no public ptukey ──────────
+// P(Q <= q) for the range of k standard normal means divided by an
+// independent s on nu degrees of freedom: the density of s = S/sigma times
+// the range probability k int phi(x) [Phi(x + q s) - Phi(x)]^(k-1) dx,
+// integrated over s.
+
+LIB.m.studrange = `
+function p = studrange_cdf(q, k, nu)
+if q <= 0, p = 0; return; end
+dens = @(s) exp(log(2) + (nu / 2) * log(nu / 2) + (nu - 1) .* log(s) - nu .* s.^2 / 2 - gammaln(nu / 2));
+inner = @(s) k * integral(@(x) normpdf(x) .* (normcdf(x + q * s) - normcdf(x)).^(k - 1), -8, 8, 'RelTol', 1e-10, 'AbsTol', 1e-13);
+p = integral(@(s) dens(s) .* arrayfun(inner, s), 0, Inf, 'RelTol', 1e-10, 'AbsTol', 1e-13);
+p = min(1, p);
+end
+
+function q = studrange_inv(p, k, nu)
+q = fzero(@(q) studrange_cdf(q, k, nu) - p, [0.05 50], optimset('TolX', 1e-10));
+end
+`;
+
+// ── Dunnett's critical value, exact for unequal sizes ────────────────────
+// P(max |T_i| <= c) = int f(s) int phi(z) prod_i [Phi(l_i z + c s a_i) -
+// Phi(l_i z - c s a_i)] dz ds, with l_i = sqrt(R_i / R_0) for the control's
+// R_0, a_i = sqrt(1 + l_i^2), and f the density of s = S/sigma on nu degrees
+// of freedom, integrated over the range of s that holds all but 1e-12 of
+// its probability. MATLAB's multcompare has Dunnett's rule built in.
+
+LIB.R.dunnett = `
+pdunnett <- function(cc, lambdas, nu) {
+  a <- sqrt(1 + lambdas^2)
+  dens <- function(s) 2 * nu * s * dchisq(nu * s^2, nu)
+  inner <- function(s) integrate(function(z) {
+    pr <- rep(1, length(z))
+    for (m in seq_along(lambdas)) pr <- pr * (pnorm(lambdas[m] * z + cc * s * a[m]) - pnorm(lambdas[m] * z - cc * s * a[m]))
+    dnorm(z) * pr
+  }, -8, 8, rel.tol = 1e-10)$value
+  lim <- sqrt(qchisq(c(1e-12, 1 - 1e-12), nu) / nu)
+  integrate(function(s) dens(s) * sapply(s, inner), lim[1], lim[2], rel.tol = 1e-9)$value
+}
+qdunnett <- function(p, lambdas, nu) uniroot(function(cc) pdunnett(cc, lambdas, nu) - p, c(0.5, 10), tol = 1e-9)$root
+`;
+LIB.py.dunnett = `
+def pdunnett(c, lambdas, nu):
+    lam = np.asarray(lambdas, float); a = np.sqrt(1 + lam ** 2)
+    z = np.linspace(-8, 8, 3201); phi = stats.norm.pdf(z)
+    def inner(s):
+        lz = np.outer(lam, z); w = (c * s * a)[:, None]
+        return integrate.simpson(phi * np.prod(stats.norm.cdf(lz + w) - stats.norm.cdf(lz - w), axis=0), x=z)
+    dens = lambda s: stats.chi.pdf(s * np.sqrt(nu), nu) * np.sqrt(nu)
+    lo, hi = stats.chi.ppf([1e-12, 1 - 1e-12], nu) / np.sqrt(nu)
+    return integrate.quad(lambda s: dens(s) * inner(s), lo, hi, epsabs=1e-13, epsrel=1e-10, limit=200)[0]
+
+def qdunnett(p, lambdas, nu):
+    return optimize.brentq(lambda c: pdunnett(c, lambdas, nu) - p, 0.5, 10, xtol=1e-10)
+`;

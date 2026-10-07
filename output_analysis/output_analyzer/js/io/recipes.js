@@ -16,7 +16,8 @@ import { tInterval, varianceInterval, planReplications, powerOneSample, planPowe
 import { signedRank, rankSum } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
-         planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni } from '../stats/compare.js';
+         planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
+         posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
@@ -447,7 +448,7 @@ export function severalRecipe(o) {
       ', and is written into the code below; changing control does not change it. The intervals, the checks, and the plans read level' +
       (bench != null ? ', benchmark,' : '') + ' and the plan_ half-width targets; control, plan_delta, and plan_power are read only by the analysis of variance\'s post-hoc rules and plan, where the script has them.'
   ];
-  severalAnova(r, o, g, sm);
+  severalAnova(r, o, g);
   severalRank(r, o, g);
   severalSubset(r, o, g);
   return r;
@@ -455,6 +456,72 @@ export function severalRecipe(o) {
 
 // The analysis of variance and its post-hoc rules, the rank tests, and the
 // screen for the best: each adds its section's fields to the recipe.
-function severalAnova() {}
+
+// The post-hoc rules' names in report keys, which the test harness's
+// tolerances match on.
+const RULE_SLUG = { tukey: 'tukey', lsd: 'lsd', bonferroni: 'bonferroni', dunnett: 'dunnett', gameshowell: 'gameshowell', bonferroniWelch: 'bonferroniwelch' };
+
+/**
+ * The analysis of variance section, as the page computes it: Levene's test,
+ * the one-way or blocked table (or Welch's analysis), the residuals'
+ * Shapiro-Wilk check, the post-hoc rule's pairs and letters, and the F
+ * test's power plan, which the page shows under every procedure. Under the
+ * rank procedures only the plan is added. Welch's analysis needs two
+ * outcomes with some spread in every design; when one has none, the page
+ * shows a warning in place of the whole section.
+ */
+function severalAnova(r, o, g) {
+  const { list, paired, level, proc, varMode, rule, ruleW, ctrlIdx, plan } = o;
+  const alpha = 1 - level, k = g.length, e = r.expect, np = proc === 'np';
+  const welch = varMode === 'welch' && !paired && !np;
+  const flat = g.map(x => x.length < 2 || Math.min(...x) === Math.max(...x));
+  const welchBad = welch ? list.filter((d, i) => flat[i]).map(d => d.name) : [];
+  const welchOk = welch && !welchBad.length;
+  // The page's own post hoc: the Welch rule when Welch's analysis is defined,
+  // and otherwise the pooled rule, whose table gives the plan its sigma.
+  const ph = welchOk ? posthocWelch(g, { rule: ruleW, alpha }) : posthoc(g, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const av = ph.anova;
+  if (!np) {
+    const slug = RULE_SLUG[welch ? ruleW : rule];
+    const section = { welch, welchBad, blocked: paired, rule: welch ? ruleW : rule, ruleSlug: slug, protectedLsd: null, letters: false, pairs: [] };
+    r.several.anova = section;
+    if (welchBad.length) e['welch anova'] = 'not defined';
+    else {
+      const lv = levene(g);
+      Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
+      if (welch) Object.assign(e, { 'welch F': av.F, 'welch df1': av.df1, 'welch df2': av.df2, 'welch p': av.p });
+      else {
+        Object.assign(e, { 'anova F': av.F, 'anova df1': av.dfb, 'anova df2': av.dfw, 'anova p': av.p, 'ss between': av.ssb, 'ss within': av.ssw, 'ms between': av.msb, 'ms within': av.msw });
+        if (paired) Object.assign(e, { 'ss blocks': av.ssblk, 'df blocks': av.dfblk, 'block F': av.Fblock, 'block p': av.pBlock });
+      }
+      const resid = [];
+      g.forEach((x, i) => { for (let t = 0; t < x.length; t++) resid.push(x[t] - av.means[i] - (paired ? av.blockMeans[t] - av.grandMean : 0)); });
+      Object.assign(e, shapiroExpect('shapiro residuals ', resid));
+      e['posthoc rule'] = slug;
+      if (!welch) e['posthoc ' + slug + ' critical value'] = ph.crit;
+      if (!welch && rule === 'lsd') { section.protectedLsd = ph.protected; e['posthoc lsd protected'] = ex(ph.protected); }
+      for (const p of ph.pairs) {
+        const key = 'posthoc ' + slug + ' ' + pairLabel(p.i, p.j);
+        Object.assign(e, { [key + ' diff']: p.diff, [key + ' se']: p.se });
+        if (welch) Object.assign(e, { [key + ' df']: p.df, [key + ' crit']: p.crit });
+        Object.assign(e, { [key + ' hw']: p.hw, [key + ' lower']: p.lo, [key + ' upper']: p.hi });
+        if (welch) e[key + ' p'] = p.p;
+        e[key + ' different'] = ex(p.flagged);
+        section.pairs.push([p.i, p.j]);
+      }
+      if (ph.letters) { section.letters = true; ph.letters.forEach((l, i) => { e['letters ' + (i + 1)] = l; }); }
+    }
+  }
+  // The plan reads sqrt(msw) of the page's table: the pooled one (blocked
+  // under pairing), and under a defined Welch analysis Welch's table, which
+  // has no msw, and so no plan.
+  const sigma = Math.sqrt(av.msw);
+  const pp = planPowerAnova({ k, sigma, delta: plan.delta, alpha, power: plan.power, blocked: paired });
+  const Rlo = Math.min(...g.map(x => x.length));
+  Object.assign(e, { 'plan anova delta': plan.delta, 'plan anova power target': plan.power, 'plan anova n': pp.n == null ? NaN : pp.n, 'plan anova power at n': pp.powerAtN,
+    'power at current R': sigma > 0 ? powerAnova({ n: Rlo, k, sigma, delta: plan.delta, alpha, blocked: paired }) : NaN });
+  if (np) e['plan anova n (rank)'] = pp.n == null ? NaN : Math.ceil(pp.n * Math.PI / 3);
+  r.several.anovaPlan = { blocked: paired, sigmaFrom: welchOk ? 'none' : np || welchBad.length ? 'pooled' : 'anova' };
+}
 function severalRank() {}
 function severalSubset() {}

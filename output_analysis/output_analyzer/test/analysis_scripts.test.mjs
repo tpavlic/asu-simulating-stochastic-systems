@@ -731,7 +731,7 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.ok(!('design 1 vs benchmark' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
   assert.deepEqual(Object.keys(r.groups).sort(), ['by', 'dropped', 'how', 'ids', 'names', 'paired', 'response', 'unit', 'unmatched', 'values']);
   assert.deepEqual(Object.keys(r.settings), ['control', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
-  assert.equal(r.several.anova, null); assert.equal(r.several.rank, null); assert.equal(r.several.subset, null);
+  assert.equal(r.several.rank, null); assert.equal(r.several.subset, null);
   // A pure function of its argument: built twice, the same recipe.
   assert.deepEqual(JSON.parse(JSON.stringify(sevRecipe(FOUR))), JSON.parse(JSON.stringify(r)));
   const R = analysisScript(r, 'R');
@@ -767,9 +767,8 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
     const flat = analysisScript(rc, lang).replace(/\n[#%] /g, ' ');   // the comment's lines joined
     assert.ok(flat.includes('each design against the control, design 3, and is written into') && flat.includes('changing control does not change it'), lang + ' says the family is fixed');
   }
-  // The analysis of variance's rank plan line, once that section sets anovaPlan.
-  const ra = Object.assign({}, rn, { several: Object.assign({}, rn.several, { anovaPlan: true }) });
-  assert.ok(analysisScript(ra, 'R').includes('report("plan anova n (rank)", ceiling(ppa$n * pi / 3)'));
+  // The analysis of variance's rank plan line.
+  assert.ok(analysisScript(rn, 'R').includes('report("plan anova n (rank)", ceiling(ppa$n * pi / 3)'));
 });
 
 const sevChecks = { also: noWarning };
@@ -885,6 +884,123 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
             assert.ok(same(b, bonf[i]), 'bonferroni ' + s + ' ' + (i + 1) + ': ' + b + ' vs ' + bonf[i]);
           });
         });
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+}
+
+// ── Task 6: Several Systems, the analysis of variance and the post-hoc rules ──
+import { letterGroups } from '../js/stats/compare.js';
+
+test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the F plan', () => {
+  const r = sevRecipe(FOUR);
+  for (const k of ['levene p', 'anova F', 'anova p', 'ms within', 'posthoc tukey critical value', 'posthoc tukey 1-2 hw', 'posthoc tukey 3-4 different', 'letters 1',
+    'shapiro residuals W [optional]', 'plan anova n', 'power at current R']) assert.ok(k in r.expect, k);
+  assert.equal(r.expect['posthoc rule'], 'tukey');
+  assert.equal(r.several.anova.ruleSlug, 'tukey');
+  assert.equal(r.several.anovaPlan.sigmaFrom, 'anova');
+  assert.ok(analysisScript(r, 'R').includes('TukeyHSD('));
+  assert.ok(analysisScript(r, 'py').includes('tukey_hsd('));
+  assert.ok(analysisScript(r, 'm').includes('multcompare('));
+  // Dunnett: each design against the control, no letters; the Python call counts the control from 0.
+  const rd = sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 });
+  assert.ok('posthoc dunnett 3-2 hw' in rd.expect && !('posthoc dunnett 1-3 hw' in rd.expect) && !('letters 1' in rd.expect));
+  assert.ok(analysisScript(rd, 'py').includes('posthoc_pooled(groups, av, "dunnett", alpha, posthoc_pairs, control - 1)'));
+  assert.ok(analysisScript(rd, 'py').includes('stats.dunnett('));
+  // LSD on four-designs: the F test does not reject at 5%, and so no pair is declared different.
+  const rl = sevRecipe(FOUR, { rule: 'lsd' });
+  assert.equal(rl.expect['posthoc lsd protected'], 0);
+  assert.ok(Object.keys(rl.expect).filter(k => / different$/.test(k)).every(k => rl.expect[k] === 0));
+  // Welch: per-pair degrees of freedom, critical values, and p; no pooled critical value; no plan.
+  const rw = sevRecipe(FOUR, { varMode: 'welch' });
+  for (const k of ['welch F', 'welch df2', 'posthoc gameshowell 1-2 df', 'posthoc gameshowell 1-2 crit', 'posthoc gameshowell 2-4 p', 'letters 4']) assert.ok(k in rw.expect, k);
+  assert.ok(!('anova F' in rw.expect) && !('posthoc gameshowell critical value' in rw.expect));
+  assert.ok(Number.isNaN(rw.expect['plan anova n']) && Number.isNaN(rw.expect['power at current R']));
+  assert.ok(analysisScript(rw, 'm').includes('function q = studrange_inv('));
+  // Blocked: the blocks' row, and Python's Tukey on the residual mean square, not tukey_hsd.
+  const rb = sevRecipe(FOUR_CRN, { paired: true });
+  for (const k of ['ss blocks', 'df blocks', 'block F', 'block p']) assert.ok(k in rb.expect, k);
+  assert.equal(rb.expect['anova df2'], 27);
+  // The rank procedures report no analysis of variance here (Task 7's rank tests take its place), only the F plan.
+  const rn = sevRecipe(SIX_D, { proc: 'np' });
+  assert.equal(rn.several.anova, null);
+  assert.equal(rn.several.anovaPlan.sigmaFrom, 'pooled');
+  assert.ok('plan anova n (rank)' in rn.expect && !('levene p' in rn.expect));
+  for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(rd, lang)) && /^[\x00-\x7f]*$/.test(analysisScript(rw, lang)), lang + ' script is not ASCII');
+});
+
+for (const rule of ['tukey', 'lsd', 'bonferroni', 'dunnett']) {
+  checkRecipe('Several Systems, one-way ANOVA with ' + rule + ' on four-designs', sevRecipe(FOUR, { rule, ctrlIdx: 1 }), { smoke: rule === 'tukey', also: noWarning });
+}
+checkRecipe('Several Systems, LSD on six-designs at 99%', sevRecipe(SIX_D, { rule: 'lsd', level: 0.99 }), sevChecks);
+for (const ruleW of ['gameshowell', 'bonferroniWelch']) {
+  checkRecipe('Several Systems, Welch ANOVA with ' + ruleW, sevRecipe(FOUR, { varMode: 'welch', ruleW }), sevChecks);
+}
+// Six designs under Games-Howell: pairs declared different, and letters to match.
+checkRecipe('Several Systems, Welch ANOVA with Games-Howell on six-designs', sevRecipe(SIX_D, { varMode: 'welch' }), sevChecks);
+checkRecipe('Several Systems, blocked ANOVA with Tukey on four-crn', sevRecipe(FOUR_CRN, { paired: true }), sevChecks);
+checkRecipe('Several Systems, blocked ANOVA with Dunnett versus design 3', sevRecipe(FOUR_CRN, { paired: true, rule: 'dunnett', ctrlIdx: 2 }), sevChecks);
+checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_CRN, { paired: true, rule: 'lsd' }), sevChecks);
+// Dunnett with unequal counts (an empty replication), where each comparison has its own lambda.
+{
+  const A = makeDataset({ name: 'A', response: 'w', kind: 'tally', reps: [{ id: 1, v: [1, 2] }, { id: 2, v: [] }, { id: 3, v: [2, 4] }, { id: 4, v: [3] }, { id: 5, v: [2.5, 3.5] }] });
+  const B = makeDataset({ name: 'B', response: 'w', kind: 'reps', reps: [[1, 1.2], [2, 2.2], [3, 2.6], [4, 2.7], [5, 2.4], [6, 3.0]].map(([id, v]) => ({ id, v: [v] })) });
+  const Cd = makeDataset({ name: 'C', response: 'w', kind: 'reps', reps: [[1, 0.9], [3, 1.7], [4, 2.1], [5, 1.5], [6, 1.1]].map(([id, v]) => ({ id, v: [v] })) });
+  checkRecipe('Several Systems, Dunnett with unequal counts', sevRecipe([A, B, Cd], { rule: 'dunnett', ctrlIdx: 1 }), sevChecks);
+}
+
+// Review Focus 3: a flat design under Welch's analysis of variance. The page
+// shows a warning in place of the section, and plans the F test on the
+// pooled analysis it falls back to.
+{
+  const flat = makeDataset({ name: 'Flat design', response: 'avg_wait', kind: 'reps', reps: [1, 2, 3, 4, 5].map(id => ({ id, v: [2.5] })) });
+  const r = sevRecipe([FOUR[0], FOUR[1], flat], { varMode: 'welch' });
+  assert.equal(r.expect['welch anova'], 'not defined');
+  assert.ok(!('posthoc gameshowell 1-2 hw' in r.expect) && !('levene p' in r.expect));
+  assert.equal(r.several.anovaPlan.sigmaFrom, 'pooled');
+  assert.ok(Number.isFinite(r.expect['plan anova n']));
+  checkRecipe('Several Systems, Welch ANOVA undefined on a flat design', r, sevChecks);
+  // Every design flat under Bonferroni (pooled): F is infinite, every half-width 0, and the plan has no answer.
+  const consts = [[5, 5, 5, 5], [3, 3, 3], [5, 5, 5, 5, 5]].map((v, i) => reps('K' + (i + 1), v));
+  const rk = sevRecipe(consts, { rule: 'bonferroni' });
+  assert.equal(rk.expect['anova F'], Infinity); assert.equal(rk.expect['anova p'], 0); assert.equal(rk.expect['posthoc bonferroni 1-2 hw'], 0);
+  assert.ok(Number.isNaN(rk.expect['plan anova n']) && Number.isNaN(rk.expect['levene p']));
+  assert.deepEqual([1, 2, 3].map(i => rk.expect['letters ' + i]), ['a', 'b', 'a']);
+  checkRecipe('Several Systems, every design flat under Bonferroni', rk, sevChecks);
+  checkRecipe('Several Systems, every design flat under Dunnett', sevRecipe(consts, { rule: 'dunnett', ctrlIdx: 2 }), sevChecks);
+}
+
+// The letter display past 26 groups and on a chain of overlapping groups,
+// against the analyzer's own letterGroups, in every language.
+{
+  const cases = [
+    { k: 5, flagged: [[0, 1], [1, 2], [3, 4], [0, 4]] },
+    { k: 4, flagged: [] },
+    { k: 30, flagged: [] }
+  ];
+  // Thirty designs, each different from every other: thirty groups of one, past z and Z's start.
+  cases[2].flagged = [];
+  for (let i = 0; i < 30; i++) for (let j = i + 1; j < 30; j++) cases[2].flagged.push([i, j]);
+  const lit = (lang, f) => (lang === 'R' ? 'list(' + f.map(([i, j]) => 'c(' + (i + 1) + ', ' + (j + 1) + ')').join(', ') + ')'
+    : lang === 'py' ? '[' + f.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
+      : f.length ? '[' + f.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']' : 'zeros(0, 2)');
+  for (const lang of ['R', 'py', 'm']) {
+    test('the letter display matches letterGroups in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
+      const body = cases.flatMap((c, s) => (lang === 'R' ? ['cld <- letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for (i in seq_along(cld)) report(paste("case ' + s + '", i), cld[i])']
+        : lang === 'py' ? ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for i, v in enumerate(cld): report(f"case ' + s + ' {i + 1}", v)']
+          : ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ');', "for i = 1:numel(cld), report(sprintf('case " + s + " %d', i), cld{i}); end"]));
+      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.letters, ...body] : lang === 'R' ? [LIB.R.report, LIB.R.letters, ...body] : [...body, LIB.m.report, LIB.m.letters];
+      const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+      try {
+        const f = join(dir, lang === 'm' ? 'letters_check.m' : lang === 'R' ? 'letters.R' : 'letters.py');
+        writeFileSync(f, L.join('\n') + '\n');
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000 })
+            : spawnSync('matlab', ['-batch', `cd('${dir}'); letters_check`], { encoding: 'utf8', timeout: 600000 });
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        noWarning(run.stdout, lang, run.stderr || '');
+        const rep = parseReport(run.stdout);
+        cases.forEach((c, s) => letterGroups(c.k, c.flagged).forEach((want, i) => assert.equal(rep.get('case ' + s + ' ' + (i + 1)), want, 'case ' + s + ' design ' + (i + 1))));
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
   }

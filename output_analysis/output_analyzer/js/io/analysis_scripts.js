@@ -513,10 +513,135 @@ function sevBody(r, L) {
   sevPlan(r, L, out, need);
   return { body: out, need };
 }
-function sevAnova() {}
 function sevRank() {}
 function sevSubset() {}
-function sevPlanAnova() {}
+
+// Pairs of designs as a literal: a list of c(i, j) in R, tuples counted from
+// 0 in Python, and a 2-column matrix in MATLAB.
+function pairsLit(lang, pairs) {
+  return lang === 'R' ? 'list(' + pairs.map(([i, j]) => 'c(' + (i + 1) + ', ' + (j + 1) + ')').join(', ') + ')'
+    : lang === 'py' ? '[' + pairs.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
+      : '[' + pairs.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']';
+}
+
+// The analysis of variance: Levene's test of equal variances, the one-way or
+// blocked table (or Welch's analysis), the Shapiro-Wilk check of the
+// residuals, the post-hoc rule's pairs, and the compact letter display.
+function sevAnova(r, L, out, need) {
+  const S = r.several, A = S.anova, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const slug = A.ruleSlug;
+  if (A.welch && A.welchBad.length) {
+    // The page shows only the warning here: no table, no checks, no post hoc.
+    out.push(L.sect('Welch\'s analysis of variance'));
+    out.push(...commentLines(c, 'Welch\'s analysis weights each design by R_i / s_i^2, and so it needs two outcomes with some spread in every design; ' +
+      ascii(A.welchBad.join(', ')) + ' ' + (A.welchBad.length === 1 ? 'has' : 'have') + ' none.', c));
+    out.push(rep(L, r, 'welch anova', L.str('not defined')));
+    return;
+  }
+  need.push('levene', 'shapiro');
+  out.push(L.sect('Equal variances (Levene, median-centered)'));
+  out.push(c + 'Brown and Forsythe\'s form of Levene\'s test: the analysis of variance of each outcome\'s distance from');
+  out.push(c + 'its design\'s median' + (A.welch ? '. Welch\'s analysis does not assume equal variances, and so it is for reference.' : ', checking the equal variances the pooled analysis assumes.'));
+  out.push(L.assign('lv', 'levene_test(groups)'));
+  out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
+  if (A.welch) {
+    need.push('welchAnova', 'posthocWelch');
+    if (lang === 'm') need.push('studrange');
+    out.push(L.sect('Welch\'s analysis of variance'));
+    out.push(c + 'Each design\'s mean weighted by R_i / s_i^2, nothing pooled' + (lang === 'R' ? ' (oneway.test with var.equal = FALSE).' : ', as R\'s oneway.test(var.equal = FALSE).'));
+    out.push(L.assign('av', 'welch_anova(groups)'));
+    out.push(rep(L, r, 'welch F', f('av', 'F')), rep(L, r, 'welch df1', f('av', 'df1')), rep(L, r, 'welch df2', f('av', 'df2')), rep(L, r, 'welch p', f('av', 'p')));
+  } else {
+    need.push('anova');
+    out.push(L.sect(A.blocked ? 'Analysis of variance with the replication as a block' : 'One-way analysis of variance'));
+    if (A.blocked) out.push(...commentLines(c, 'The replications are paired across the designs, and so each is a block: the variation they share under common random numbers is its own row, and the designs are judged against the residual that remains.', c));
+    out.push(L.assign('av', 'anova_table(groups, paired)'));
+    out.push(rep(L, r, 'anova F', f('av', 'F')), rep(L, r, 'anova df1', f('av', 'dfb')), rep(L, r, 'anova df2', f('av', 'dfw')), rep(L, r, 'anova p', f('av', 'p')));
+    out.push(rep(L, r, 'ss between', f('av', 'ssb')), rep(L, r, 'ss within', f('av', 'ssw')), rep(L, r, 'ms between', f('av', 'msb')), rep(L, r, 'ms within', f('av', 'msw')));
+    if (A.blocked) out.push(rep(L, r, 'ss blocks', f('av', 'ssblk')), rep(L, r, 'df blocks', f('av', 'dfblk')), rep(L, r, 'block F', f('av', 'Fblock')), rep(L, r, 'block p', f('av', 'pBlock')));
+  }
+  out.push(...commentLines(c, 'The residuals (each outcome less its design\'s mean' + (A.blocked ? ' and its replication\'s effect' : '') +
+    ') are what ' + (A.welch ? 'Welch\'s F' : 'the F test') + ' and the post-hoc rules take as normal.', c));
+  out.push(shapiroLine(r, L, 'shapiro residuals', f('av', 'resid')));
+
+  const rules = { tukey: 'Tukey-Kramer', lsd: 'Fisher\'s protected LSD', bonferroni: 'Bonferroni on the pooled variance', dunnett: 'Dunnett against the control',
+    gameshowell: 'Games-Howell', bonferroniwelch: 'Bonferroni on the Welch pairs' };
+  out.push(L.sect('Post-hoc comparisons: ' + rules[slug]));
+  out.push(...commentLines(c, 'Each pair\'s difference of means, mean_i - mean_j, with ' + (A.welch
+    ? 'its own standard error sqrt(s_i^2/R_i + s_j^2/R_j) on its own Welch degrees of freedom'
+    : 'the standard error sqrt(MS (1/R_i + 1/R_j)), where MS is the ' + (A.blocked ? 'residual mean square' : 'pooled mean square within')) +
+    '; a pair whose interval excludes 0 is declared different' + (slug === 'lsd' ? ', but only when the F test rejects at alpha' : '') + '.' +
+    (slug === 'dunnett' ? ' posthoc_pairs holds each design against the control, design ' + (S.ctrlIdx + 1) + '; with another control, change these pairs to match.' : '') +
+    (lang === 'py' ? ' The designs are counted from 0 here.' : ''), c));
+  out.push(L.assign('posthoc_pairs', pairsLit(lang, A.pairs)));
+  out.push(rep(L, r, 'posthoc rule', L.str(slug)));
+  if (A.welch) {
+    out.push(L.assign('ph', 'posthoc_welch(groups, ' + L.str(A.rule) + ', alpha, posthoc_pairs)'));
+  } else {
+    need.push('posthoc');
+    if (lang !== 'm' && A.rule === 'dunnett') need.push('dunnett');
+    // control is numbered from 1, as on the page; the Python helper counts from 0.
+    out.push(L.assign('ph', 'posthoc_pooled(groups, av, ' + L.str(A.rule) + ', alpha, posthoc_pairs, ' + (lang === 'py' ? 'control - 1' : 'control') + ')'));
+    out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
+    if (A.rule === 'lsd') out.push(repYesNo(L, r, 'posthoc lsd protected', f('ph', 'protected')));
+    if (lang === 'R' && A.rule === 'tukey') {
+      out.push(c + 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier).');
+      out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "g", conf.level = 1 - alpha))');
+    }
+  }
+  A.pairs.forEach(([i, j], q) => {
+    const key = 'posthoc ' + slug + ' ' + pairLabel(i, j);
+    const pf = k => ELEM[lang](f('ph', 'pairs'), q, k);
+    out.push(rep(L, r, key + ' diff', pf('diff')), rep(L, r, key + ' se', pf('se')));
+    if (A.welch) out.push(rep(L, r, key + ' df', pf('df')), rep(L, r, key + ' crit', pf('crit')));
+    out.push(rep(L, r, key + ' hw', pf('hw')), rep(L, r, key + ' lower', pf('lo')), rep(L, r, key + ' upper', pf('hi')));
+    if (A.welch) out.push(rep(L, r, key + ' p', pf('p')));
+    out.push(repYesNo(L, r, key + ' different', pf('flagged')));
+  });
+  if (A.letters) {
+    need.push('letters');
+    out.push(c + 'The compact letter display: designs that share a letter are not declared different.');
+    const flagged = lang === 'R' ? 'Filter(Negate(is.null), lapply(ph$pairs, function(p) if (p$flagged) c(p$i, p$j) else NULL))'
+      : lang === 'py' ? '[(p["i"], p["j"]) for p in ph["pairs"] if p["flagged"]]'
+        : "cell2mat(cellfun(@(p) [p.i p.j], ph.pairs(cellfun(@(p) p.flagged, ph.pairs)), 'UniformOutput', false)')";
+    out.push(L.assign('flagged_pairs', flagged));
+    out.push(L.assign('cld', 'letter_groups(k, flagged_pairs)'));
+    for (let i = 0; i < S.k; i++) out.push(rep(L, r, 'letters ' + (i + 1), lang === 'R' ? 'cld[' + (i + 1) + ']' : lang === 'py' ? 'cld[' + i + ']' : 'cld{' + (i + 1) + '}'));
+  }
+}
+
+// The F test's power plan, on the standard deviation the page reads from the
+// pooled analysis of variance (with blocks, the residual one): the table
+// above when it ran, a pooled table run here when the section above ran the
+// rank tests or found Welch's analysis undefined, and none under a defined
+// Welch analysis, which pools nothing.
+function sevPlanAnova(r, L, out, need) {
+  const S = r.several, A = S.anovaPlan, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const what = 'For the ' + (A.blocked ? 'blocked ' : '') + 'F test: the smallest R per design at which the F test at alpha detects one design ' +
+    'shifted by plan_delta from the others, which share a mean, with probability plan_power';
+  const sq = v => (lang === 'py' ? 'np.sqrt(' : 'sqrt(') + f(v, 'msw') + ')';
+  const held = ', on the ' + (A.blocked ? 'residual' : 'pooled') + ' standard deviation held at its current value.';
+  if (A.sigmaFrom === 'none') {
+    out.push(...commentLines(c, what + '. Welch\'s analysis pools no variance, and the page gives no F-test plan under it: sigma is missing, and so is every line that needs it.', c));
+    out.push(L.assign('sigma', L.nan));
+  } else if (A.sigmaFrom === 'anova') {
+    out.push(...commentLines(c, what + held, c));
+    out.push(L.assign('sigma', sq('av')));
+  } else {
+    need.push('anova');
+    out.push(...commentLines(c, what + held + ' The page reads it from the pooled analysis of variance, ' +
+      (S.np ? 'which the rank procedures do not report, and so it is run here.' : 'which it falls back to while Welch\'s analysis is undefined.'), c));
+    out.push(L.assign('av_pooled', 'anova_table(groups, paired)'));
+    out.push(L.assign('sigma', sq('av_pooled')));
+  }
+  out.push(L.assign('ppa', 'plan_power_anova(k, sigma, plan_delta, alpha, plan_power, paired)'));
+  out.push(rep(L, r, 'plan anova delta', 'plan_delta'), rep(L, r, 'plan anova power target', 'plan_power'), rep(L, r, 'plan anova n', f('ppa', 'n')), rep(L, r, 'plan anova power at n', f('ppa', 'powerAtN')));
+  out.push(c + 'The power the current replications already give, at the smallest count.');
+  if (lang === 'R') out.push('cur <- if (isTRUE(sigma > 0)) power_anova(min(lengths(groups)), k, sigma, plan_delta, alpha, paired) else NaN');
+  else if (lang === 'py') out.push('cur = power_anova(min(len(g) for g in groups), k, sigma, plan_delta, alpha, paired) if sigma > 0 else np.nan');
+  else out.push('cur = NaN;', 'if sigma > 0, cur = power_anova(min(cellfun(@numel, groups)), k, sigma, plan_delta, alpha, paired); end');
+  out.push(rep(L, r, 'power at current R', 'cur'));
+}
 
 function sevMeans(r, L, out, need) {
   const S = r.several, lang = L.lang, f = FIELD[lang], el = ELEM[lang], c = L.comment;
@@ -662,11 +787,8 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('sds', PLUCK[lang](lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items', 'sd')));
   out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
   out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
-  const pairLit = lang === 'R' ? 'list(' + pairs.map(([i, j]) => 'c(' + (i + 1) + ', ' + (j + 1) + ')').join(', ') + ')'
-    : lang === 'py' ? '[' + pairs.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
-      : '[' + pairs.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']';
   out.push(c + 'The comparisons of the family, as pairs of design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
-  out.push(L.assign('family_pairs', pairLit));
+  out.push(L.assign('family_pairs', pairsLit(lang, pairs)));
   if (S.paired) {
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval at 1 - alpha/C has ' +
       'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value.', c));
