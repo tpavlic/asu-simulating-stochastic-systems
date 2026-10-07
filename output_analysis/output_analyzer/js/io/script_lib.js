@@ -1833,17 +1833,16 @@ end
 
 LIB.R.kruskal = `
 kruskal_dunn <- function(groups, alpha, adjust, pairs) {
-  # kruskal.test (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
+  # Kruskal-Wallis (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
   k <- length(groups); n <- lengths(groups)
   y <- unlist(groups); g <- factor(rep(seq_len(k), n), levels = seq_len(k))
   r <- rank(y); N <- length(y); tt <- rle(sort(y))$lengths; ties <- sum(tt^3 - tt)
-  if (ties < N^3 - N) {
-    kw <- kruskal.test(y, g); H <- unname(kw$statistic); p <- kw$p.value
-  } else {
-    # Every outcome equal: kruskal.test would divide 0 by 0, and the analyzer reports H uncorrected.
-    H <- 12 / (N * (N + 1)) * sum(tapply(r, g, sum)^2 / n) - 3 * (N + 1)
-    p <- pchisq(H, k - 1, lower.tail = FALSE)
-  }
+  # H from the exact ranks with the tie correction, left uncorrected when every outcome is equal
+  # (no correction is possible there; the analyzer does the same).
+  H <- 12 / (N * (N + 1)) * sum(tapply(r, g, sum)^2 / n) - 3 * (N + 1)
+  if (ties < N^3 - N) H <- H / (1 - ties / (N^3 - N))
+  p <- pchisq(H, k - 1, lower.tail = FALSE)
+  # kw <- kruskal.test(y, g)   # the same H, but it counts ties after rounding to 15 digits, and so can differ when outcomes differ only by rounding
   v <- N * (N + 1) / 12 - ties / (12 * (N - 1))   # the pooled rank variance, tie-corrected
   mr <- as.vector(tapply(r, g, mean))
   out <- lapply(pairs, function(pr) {
@@ -1953,8 +1952,9 @@ def friedman_pairs(groups, alpha, adjust, pairs):
 `;
 LIB.m.friedman = `
 function r = friedman_pairs(groups, alpha, adjust, pairs)
-% Friedman's test written out with the tie correction (MATLAB's friedman omits it), and each pair's
-% difference of rank sums over sqrt(R k (k + 1) / 6), adjusted by Bonferroni or Holm.
+% Friedman's test with the tie correction, written out as in the R and Python forms so that a block
+% tied throughout gives a missing statistic, as in R and the analyzer; and each pair's difference of
+% rank sums over sqrt(R k (k + 1) / 6), adjusted by Bonferroni or Holm.
 M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false)); [R, k] = size(M);   % row = block, column = design
 rk = zeros(R, k); tieTerm = 0;
 for b = 1:R

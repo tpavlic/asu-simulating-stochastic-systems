@@ -15245,19 +15245,22 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('family_pairs', pairsLit(lang, pairs)));
   if (S.paired) {
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval at 1 - alpha/C has ' +
-      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value.', c));
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value; ' +
+      'pairs that tie up to rounding go to the first in the family\'s order, as on the page.', c));
     if (lang === 'R') {
       out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
         'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
-        'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[which.max(sd_d)]], collapse = "-")');
+        'worst <- which(sd_d >= max(sd_d) * (1 - 1e-12))[1]',
+        'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[worst]], collapse = "-")');
     } else if (lang === 'py') {
       out.push('sd_d = np.array([np.std(groups[i] - groups[j], ddof=1) for i, j in family_pairs])',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
-        'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[int(np.argmax(sd_d))])');
+        'worst = int(np.flatnonzero(sd_d >= sd_d.max() * (1 - 1e-12))[0])',
+        'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[worst])');
     } else {
       out.push('sd_d = arrayfun(@(q) std(groups{family_pairs(q, 1)} - groups{family_pairs(q, 2)}), 1:size(family_pairs, 1));',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h);',
-        "[~, worst] = max(sd_d);",
+        'worst = find(sd_d >= max(sd_d) * (1 - 1e-12), 1);',
         "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
     }
   } else {
@@ -18749,17 +18752,16 @@ end
 
 LIB.R.kruskal = `
 kruskal_dunn <- function(groups, alpha, adjust, pairs) {
-  # kruskal.test (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
+  # Kruskal-Wallis (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
   k <- length(groups); n <- lengths(groups)
   y <- unlist(groups); g <- factor(rep(seq_len(k), n), levels = seq_len(k))
   r <- rank(y); N <- length(y); tt <- rle(sort(y))$lengths; ties <- sum(tt^3 - tt)
-  if (ties < N^3 - N) {
-    kw <- kruskal.test(y, g); H <- unname(kw$statistic); p <- kw$p.value
-  } else {
-    # Every outcome equal: kruskal.test would divide 0 by 0, and the analyzer reports H uncorrected.
-    H <- 12 / (N * (N + 1)) * sum(tapply(r, g, sum)^2 / n) - 3 * (N + 1)
-    p <- pchisq(H, k - 1, lower.tail = FALSE)
-  }
+  # H from the exact ranks with the tie correction, left uncorrected when every outcome is equal
+  # (no correction is possible there; the analyzer does the same).
+  H <- 12 / (N * (N + 1)) * sum(tapply(r, g, sum)^2 / n) - 3 * (N + 1)
+  if (ties < N^3 - N) H <- H / (1 - ties / (N^3 - N))
+  p <- pchisq(H, k - 1, lower.tail = FALSE)
+  # kw <- kruskal.test(y, g)   # the same H, but it counts ties after rounding to 15 digits, and so can differ when outcomes differ only by rounding
   v <- N * (N + 1) / 12 - ties / (12 * (N - 1))   # the pooled rank variance, tie-corrected
   mr <- as.vector(tapply(r, g, mean))
   out <- lapply(pairs, function(pr) {
@@ -18869,8 +18871,9 @@ def friedman_pairs(groups, alpha, adjust, pairs):
 `;
 LIB.m.friedman = `
 function r = friedman_pairs(groups, alpha, adjust, pairs)
-% Friedman's test written out with the tie correction (MATLAB's friedman omits it), and each pair's
-% difference of rank sums over sqrt(R k (k + 1) / 6), adjusted by Bonferroni or Holm.
+% Friedman's test with the tie correction, written out as in the R and Python forms so that a block
+% tied throughout gives a missing statistic, as in R and the analyzer; and each pair's difference of
+% rank sums over sqrt(R k (k + 1) / 6), adjusted by Bonferroni or Holm.
 M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false)); [R, k] = size(M);   % row = block, column = design
 rk = zeros(R, k); tieTerm = 0;
 for b = 1:R

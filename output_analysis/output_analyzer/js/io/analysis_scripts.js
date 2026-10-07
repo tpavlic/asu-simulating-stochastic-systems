@@ -861,19 +861,22 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('family_pairs', pairsLit(lang, pairs)));
   if (S.paired) {
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval at 1 - alpha/C has ' +
-      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value.', c));
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value; ' +
+      'pairs that tie up to rounding go to the first in the family\'s order, as on the page.', c));
     if (lang === 'R') {
       out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
         'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
-        'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[which.max(sd_d)]], collapse = "-")');
+        'worst <- which(sd_d >= max(sd_d) * (1 - 1e-12))[1]',
+        'widest <- if (is.nan(hpd$n)) "none" else paste(family_pairs[[worst]], collapse = "-")');
     } else if (lang === 'py') {
       out.push('sd_d = np.array([np.std(groups[i] - groups[j], ddof=1) for i, j in family_pairs])',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
-        'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[int(np.argmax(sd_d))])');
+        'worst = int(np.flatnonzero(sd_d >= sd_d.max() * (1 - 1e-12))[0])',
+        'widest = "none" if np.isnan(hpd["n"]) else "-".join(str(v + 1) for v in family_pairs[worst])');
     } else {
       out.push('sd_d = arrayfun(@(q) std(groups{family_pairs(q, 1)} - groups{family_pairs(q, 2)}), 1:size(family_pairs, 1));',
         'hpd = plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h);',
-        "[~, worst] = max(sd_d);",
+        'worst = find(sd_d >= max(sd_d) * (1 - 1e-12), 1);',
         "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
     }
   } else {

@@ -69,7 +69,10 @@ export function runScript(recipe, lang) {
 // SciPy's dunnett, which Python uses without blocks and with some spread to
 // compare, finds its critical value by randomized quadrature and is held to 2e-3.
 export function tolFor(key, lang, recipe) {
-  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: 1e-5 };
+  // R's qtukey and ptukey are documented as accurate to about 4 digits; at a few
+  // residual degrees of freedom they miss the analyzer's studentized range by up to
+  // about 1.1e-5 relative (3 df), and so R alone is held to 5e-5 on these keys.
+  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: lang === 'R' ? 5e-5 : 1e-5 };
   if (/^posthoc dunnett .*(critical value|hw|lower|upper)$/.test(key)) {
     const A = recipe && recipe.several && recipe.several.anova;
     const scipy = lang === 'py' && A && !A.blocked && recipe.expect['ms within'] > 0;
@@ -79,7 +82,7 @@ export function tolFor(key, lang, recipe) {
   if (/rinott/.test(key)) return { rel: 1e-4 };
   // A Wilcoxon interval under the normal approximation is a root found to 1e-4,
   // by a different root finder in each language.
-  if (/(wilcoxon|shift|pseudo-median of differences).*(lower|upper)/.test(key)) return { rel: 2e-4 };
+  if (/(wilcoxon|shift|pseudo-median of differences|^rank design \d+).*(lower|upper)/.test(key)) return { rel: 2e-4 };
   return { rel: 1e-6 };
 }
 
@@ -1059,7 +1062,8 @@ test('severalRecipe carries the rank tests, the screen, and the letters', () => 
   for (const k of ['kruskal H', 'kruskal p', 'rank pair 1-2 z', 'rank pair 5-6 adjusted p', 'rank pair 1-6 different', 'rank letters 1', 'rank design 3 pseudo-median',
     'rank design 6 upper', 'screen t', 'rinott h', 'design 1 survives', 'design 1 N', 'design 6 additional', 'best design']) assert.ok(k in r.expect, k);
   assert.deepEqual(r.several.rank, { paired: false, adjust: 'holm', pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
-  assert.ok(analysisScript(r, 'R').includes('kruskal.test('));
+  // R counts the ties exactly itself; kruskal.test, which rounds them to 15 digits, is left as a comment.
+  assert.ok(analysisScript(r, 'R').includes('# kw <- kruskal.test(y, g)') && !/^\s*kw <- kruskal\.test/m.test(analysisScript(r, 'R')));
   assert.ok(analysisScript(r, 'R').includes('kruskal_dunn(groups, alpha, "holm", rank_pairs)'));
   assert.ok(analysisScript(r, 'py').includes('stats.kruskal('));
   assert.ok(analysisScript(r, 'm').includes('kruskalwallis('));
@@ -1127,4 +1131,42 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
   }
   checkRecipe('Several Systems, screen undefined at eps = 0', r, sevChecks);
   checkRecipe('Several Systems, screen undefined with no indifference zone set', sevRecipe(FOUR, { eps: NaN, proc: 'np' }), sevChecks);
+}
+
+// Two outcomes equal to 15 significant digits but not exactly: the tie
+// correction must count them as distinct, as the exact ranks do (R's
+// kruskal.test would count them as tied).
+{
+  const near = [[1, 2.5, 3.1, 4.2], [1 + 2 ** -52, 5.5, 6.1, 7.3], [0.4, 0.9, 2.2, 8.8]].map((v, i) => reps('N' + (i + 1), v));
+  const r = sevRecipe(near, { proc: 'np' });
+  assert.equal(r.expect['kruskal H'], 2);
+  checkRecipe('Several Systems, Kruskal-Wallis on outcomes that differ only by rounding', r, sevChecks);
+}
+
+// Integer outcomes with many partial ties, four designs by twelve replications:
+// every Wilcoxon interval, Dunn's and Friedman's tie corrections, and the
+// pseudo-medians take the normal approximation, under Holm.
+{
+  const tied = [0, 1, 2, 3].map(d => reps('Z' + (d + 1), Array.from({ length: 12 }, (_, i) => ((i * 7 + d * 3) % 5) + Math.floor(d / 2) + (i % 3 === 0 ? 1 : 0))));
+  const rk = sevRecipe(tied, { proc: 'np', adjust: 'holm' });
+  assert.ok([1, 2, 3, 4].every(i => rk.expect['design ' + i + ' exact'] === 0));
+  checkRecipe('Several Systems, Kruskal-Wallis and Dunn (Holm) on tied integer outcomes', rk, sevChecks);
+  checkRecipe('Several Systems, Friedman (Holm) on tied integer outcomes', sevRecipe(tied, { paired: true, proc: 'np', adjust: 'holm' }), sevChecks);
+}
+
+// Two outcomes per design under the t procedures. Levene's F is 0/0 rounding
+// noise here (each design's two distances from its median are equal up to
+// rounding), which the analyzer reports as a number; it is not compared. The
+// pooled analysis has 3 residual degrees of freedom, where R's qtukey is
+// held to its looser tolerance (see tolFor).
+{
+  const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('T' + (i + 1), v));
+  const r = sevRecipe(two, { eps: 0.4 });
+  for (const k of ['levene F', 'levene p']) { assert.ok(k in r.expect, k); r.expect[k] = null; }
+  // R says so: anova() on Levene's near-perfect fit warns that its F is unreliable, and that
+  // warning, and only it, is expected.
+  const leveneNoise = /Warning message:\s*In anova\.lm\(lm\(z ~ g\)\) :\s*ANOVA F-tests on an essentially perfect fit are unreliable\s*/;
+  checkRecipe('Several Systems, two replications per design under the t procedures', r, {
+    also: (stdout, lang, stderr) => noWarning(stdout, lang, lang === 'R' || lang === 'tidy' ? stderr.replace(leveneNoise, '') : stderr)
+  });
 }
