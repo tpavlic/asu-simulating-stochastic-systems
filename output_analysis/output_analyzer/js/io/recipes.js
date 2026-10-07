@@ -13,12 +13,13 @@
 import { repEstimates, repIds } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
-import { signedRank, rankSum } from '../stats/nonparam.js';
+import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
          posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
+import { subsetSelection } from '../stats/select.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -523,5 +524,56 @@ function severalAnova(r, o, g) {
   if (np) e['plan anova n (rank)'] = pp.n == null ? NaN : Math.ceil(pp.n * Math.PI / 3);
   r.several.anovaPlan = { blocked: paired, sigmaFrom: welchOk ? 'none' : np || welchBad.length ? 'pooled' : 'anova' };
 }
-function severalRank() {}
-function severalSubset() {}
+
+/**
+ * The rank tests the page shows in place of the analysis of variance under
+ * the rank procedures: Kruskal-Wallis with Dunn's pairwise comparisons, or
+ * under pairing Friedman's test with Siegel and Castellan's, every pair's
+ * p-value adjusted by Bonferroni or Holm, the letters, and each design's
+ * pseudo-median with its own Wilcoxon interval at the stated level.
+ */
+function severalRank(r, o, g) {
+  const { paired, level, proc, adjust } = o;
+  if (proc !== 'np') return;
+  const alpha = 1 - level, e = r.expect;
+  if (paired) {
+    const fr = friedman(g);
+    Object.assign(e, { 'friedman chi2': fr.chi2, 'friedman df': fr.df, 'friedman p': fr.p });
+  } else {
+    const kw = kruskalWallis(g);
+    Object.assign(e, { 'kruskal H': kw.H, 'kruskal df': kw.df, 'kruskal p': kw.p });
+  }
+  const dn = paired ? friedmanPairs(g, { alpha, adjust }) : dunn(g, { alpha, adjust });
+  const pairs = [];
+  for (const p of dn.pairs) {
+    const key = 'rank pair ' + pairLabel(p.i, p.j);
+    Object.assign(e, { [key + ' diff']: p.diff, [key + ' se']: p.se, [key + ' z']: p.z, [key + ' p']: p.p, [key + ' adjusted p']: p.pAdj,
+                       [key + ' different']: ex(p.flagged) });
+    pairs.push([p.i, p.j]);
+  }
+  dn.letters.forEach((l, i) => { e['rank letters ' + (i + 1)] = l; });
+  g.forEach((x, i) => {
+    const sr = signedRank(x, { level }), d = 'rank design ' + (i + 1) + ' ';
+    Object.assign(e, { [d + 'pseudo-median']: sr.estimate, [d + 'lower']: sr.lo, [d + 'upper']: sr.hi });
+  });
+  r.several.rank = { paired, adjust, pairs };
+}
+
+/**
+ * The screen for the best, which the page shows under every procedure: the
+ * subset-selection screen with indifference zone eps and Rinott's
+ * second-stage sizes, or the reason the screen is not defined.
+ */
+function severalSubset(r, o, g) {
+  const { level, dir, eps } = o;
+  const alpha = 1 - level, e = r.expect;
+  const ss = subsetSelection(g, { alpha, delta: eps, dir });
+  r.several.subset = { ok: ss.ok, reason: ss.ok ? '' : ss.reason };
+  if (!ss.ok) { e.screen = 'not defined'; return; }
+  Object.assign(e, { 'screen t': ss.t, 'rinott h': ss.h, 'best design': ss.best + 1 });
+  g.forEach((x, i) => {
+    const d = 'design ' + (i + 1) + ' ';
+    Object.assign(e, { [d + 'survives']: ex(ss.survivors[i]), [d + 'N']: ss.N[i] == null ? NaN : ss.N[i],
+                       [d + 'additional']: ss.additional[i] == null ? NaN : ss.additional[i] });
+  });
+}

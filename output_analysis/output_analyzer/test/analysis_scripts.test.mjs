@@ -742,7 +742,8 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.ok(!('design 1 vs benchmark' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
   assert.deepEqual(Object.keys(r.groups).sort(), ['by', 'dropped', 'how', 'ids', 'names', 'paired', 'response', 'unit', 'unmatched', 'values']);
   assert.deepEqual(Object.keys(r.settings), ['control', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
-  assert.equal(r.several.rank, null); assert.equal(r.several.subset, null);
+  assert.equal(r.several.rank, null);
+  assert.deepEqual(r.several.subset, { ok: true, reason: '' }, 'the screen runs under every procedure');
   // A pure function of its argument: built twice, the same recipe.
   assert.deepEqual(JSON.parse(JSON.stringify(sevRecipe(FOUR))), JSON.parse(JSON.stringify(r)));
   const R = analysisScript(r, 'R');
@@ -881,9 +882,9 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
       try {
         const f = join(dir, lang === 'm' ? 'holm_check.m' : lang === 'R' ? 'holm.R' : 'holm.py');
         writeFileSync(f, L.join('\n') + '\n');
-        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
-          : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000 })
-            : spawnSync('matlab', ['-batch', `cd('${dir}'); holm_check`], { encoding: 'utf8', timeout: 600000 });
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+            : spawnSync('matlab', ['-batch', `cd('${dir}'); holm_check`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
@@ -1016,9 +1017,9 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
       try {
         const f = join(dir, lang === 'm' ? 'letters_check.m' : lang === 'R' ? 'letters.R' : 'letters.py');
         writeFileSync(f, L.join('\n') + '\n');
-        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
-          : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000 })
-            : spawnSync('matlab', ['-batch', `cd('${dir}'); letters_check`], { encoding: 'utf8', timeout: 600000 });
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+            : spawnSync('matlab', ['-batch', `cd('${dir}'); letters_check`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
@@ -1042,11 +1043,88 @@ for (const lang of ['R', 'py', 'm']) {
     try {
       const f = join(dir, name);
       writeFileSync(f, text.replace(from, from.replace('2', '3')));
-      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { encoding: 'utf8', timeout: 120000 })
-        : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
-          : spawnSync('matlab', ['-batch', `cd('${dir}'); dunnett_guard`], { encoding: 'utf8', timeout: 600000 });
+      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+        : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
+          : spawnSync('matlab', ['-batch', `cd('${dir}'); dunnett_guard`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
       assert.notEqual(run.status, 0, 'the script ran to the end');
       assert.ok((run.stdout + run.stderr).includes('posthoc_pairs must compare each design with control'), run.stdout + run.stderr);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+}
+
+// ── Task 7: Several Systems, the rank tests and the screen for the best ──
+
+test('severalRecipe carries the rank tests, the screen, and the letters', () => {
+  const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
+  for (const k of ['kruskal H', 'kruskal p', 'rank pair 1-2 z', 'rank pair 5-6 adjusted p', 'rank pair 1-6 different', 'rank letters 1', 'rank design 3 pseudo-median',
+    'rank design 6 upper', 'screen t', 'rinott h', 'design 1 survives', 'design 1 N', 'design 6 additional', 'best design']) assert.ok(k in r.expect, k);
+  assert.deepEqual(r.several.rank, { paired: false, adjust: 'holm', pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
+  assert.ok(analysisScript(r, 'R').includes('kruskal.test('));
+  assert.ok(analysisScript(r, 'R').includes('kruskal_dunn(groups, alpha, "holm", rank_pairs)'));
+  assert.ok(analysisScript(r, 'py').includes('stats.kruskal('));
+  assert.ok(analysisScript(r, 'm').includes('kruskalwallis('));
+  const rp = sevRecipe(FOUR_CRN, { paired: true, proc: 'np' });
+  assert.ok('friedman chi2' in rp.expect && !('kruskal H' in rp.expect));
+  assert.ok(analysisScript(rp, 'R').includes('friedman.test('));
+  // Under the t procedures: no rank section, but the screen.
+  const rt = sevRecipe(FOUR);
+  assert.equal(rt.several.rank, null);
+  assert.ok(!Object.keys(rt.expect).some(k => /^(rank|kruskal|friedman)/.test(k)) && 'rinott h' in rt.expect);
+  for (const x of [r, rp, rt]) for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(x, lang)), lang + ' script is not ASCII');
+});
+
+checkRecipe('Several Systems, Kruskal-Wallis and Dunn (Holm) on six-designs', sevRecipe(SIX_D, { proc: 'np', adjust: 'holm', eps: 0.3 }), { smoke: true, also: noWarning });
+checkRecipe('Several Systems, Friedman and its pairs on four-crn', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', dir: 'min' }), sevChecks);
+checkRecipe('Several Systems, Friedman with Holm by position', sevRecipe(FOUR_CRN, { paired: true, by: 'position', proc: 'np', adjust: 'holm', level: 0.9 }), sevChecks);
+checkRecipe('Several Systems, the screen for the best, smaller is better', sevRecipe(SIX_D, { dir: 'min', eps: 1.0 }), sevChecks);
+
+// Every outcome equal in every design: no tie correction is possible, and so
+// H is left uncorrected (0, p = 1) and every Dunn z and p is missing; under
+// pairing every block is tied and Friedman's statistic is missing too.
+{
+  const same = ['P', 'Q', 'S'].map(n => reps(n, [4, 4, 4, 4]));
+  const r = sevRecipe(same, { proc: 'np', adjust: 'holm' });
+  assert.ok(Math.abs(r.expect['kruskal H']) < 1e-9 && Math.abs(r.expect['kruskal p'] - 1) < 1e-6);
+  for (const k of ['rank pair 1-2 z', 'rank pair 1-2 p', 'rank pair 2-3 adjusted p']) assert.ok(Number.isNaN(r.expect[k]), k);
+  assert.equal(r.expect['rank pair 1-3 different'], 0);
+  assert.deepEqual([1, 2, 3].map(i => r.expect['rank letters ' + i]), ['a', 'a', 'a']);
+  checkRecipe('Several Systems, Kruskal-Wallis and Dunn on outcomes all equal', r, sevChecks);
+  const rp = sevRecipe(same, { paired: true, proc: 'np' });
+  assert.ok(Number.isNaN(rp.expect['friedman chi2']) && Number.isNaN(rp.expect['friedman p']));
+  assert.equal(rp.expect['rank pair 1-2 p'], 1);
+  checkRecipe('Several Systems, Friedman on blocks tied throughout', rp, sevChecks);
+}
+
+// The screen on small first stages. Three replications each: nu = 2, and
+// Rinott's h near 10.75 at P* = 0.975 for four designs. Two each: the root
+// lies past the analyzer's search, which stops at 12, and so h and every N
+// are missing on the page and in the scripts.
+{
+  const small = [[2.1, 3.4, 2.8], [3.9, 4.4, 3.1], [2.5, 2.2, 3.0], [4.1, 3.6, 4.8]].map((v, i) => reps('S' + (i + 1), v));
+  const r = sevRecipe(small, { eps: 0.4 });
+  assert.ok(Math.abs(r.expect['rinott h'] - 10.7548339283) < 1e-4, String(r.expect['rinott h']));
+  checkRecipe('Several Systems, the screen on three replications per design', r, sevChecks);
+  const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('T' + (i + 1), v));
+  // Under the rank procedures, because on two outcomes per design Levene's F is rounding noise near
+  // 1e30 and the pooled analysis's three residual degrees of freedom put Tukey's quantile where
+  // R's qtukey is good to about 1e-5 only.
+  const r2 = sevRecipe(two, { eps: 0.4, proc: 'np' });
+  assert.ok(Number.isNaN(r2.expect['rinott h']));
+  assert.ok(Object.keys(r2.expect).filter(k => /^design \d+ (N|additional)$/.test(k)).every(k => Number.isNaN(r2.expect[k])));
+  checkRecipe('Several Systems, the screen on two replications per design (no h)', r2, sevChecks);
+}
+
+// The screen refuses an indifference zone of 0 (or one not set), and the
+// script says why in ASCII (R18: the reason names delta).
+{
+  const r = sevRecipe(FOUR, { eps: 0 });
+  assert.equal(r.expect.screen, 'not defined');
+  assert.ok(/δ/.test(r.several.subset.reason));
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
+    assert.ok(s.includes('The indifference zone delta must be positive.'), lang + ' gives the reason');
+  }
+  checkRecipe('Several Systems, screen undefined at eps = 0', r, sevChecks);
+  checkRecipe('Several Systems, screen undefined with no indifference zone set', sevRecipe(FOUR, { eps: NaN, proc: 'np' }), sevChecks);
 }

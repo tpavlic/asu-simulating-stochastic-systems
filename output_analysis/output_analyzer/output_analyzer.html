@@ -14897,8 +14897,78 @@ function sevBody(r, L) {
   sevPlan(r, L, out, need);
   return { body: out, need };
 }
-function sevRank() {}
-function sevSubset() {}
+
+// The rank tests the page shows in place of the analysis of variance under
+// the rank procedures: Kruskal-Wallis and Dunn's pairwise comparisons, or
+// under pairing Friedman's test and Siegel and Castellan's, with the letters
+// and each design's pseudo-median at the stated level.
+function sevRank(r, L, out, need) {
+  const S = r.several, K = S.rank, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
+  need.push('holm', 'signedRank', K.paired ? 'friedman' : 'kruskal', 'letters');
+  const adjName = K.adjust === 'holm' ? 'Holm\'s step-down' : 'Bonferroni';
+  if (K.paired) {
+    out.push(L.sect('Friedman\'s test and its pairwise comparisons'));
+    out.push(...commentLines(c, 'Each replication is a block: its k outcomes are ranked among themselves, and the test asks whether some designs tend to rank higher than others. ' +
+      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by ' + adjName +
+      ', and a pair is declared different when the adjusted p is below alpha.', c));
+  } else {
+    out.push(L.sect('Kruskal-Wallis test and Dunn\'s pairwise comparisons'));
+    out.push(...commentLines(c, 'Every outcome is pooled and ranked, and the test asks whether some designs tend to sit higher than others. ' +
+      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by ' + adjName +
+      ', and a pair is declared different when the adjusted p is below alpha.', c));
+  }
+  out.push(c + 'The pairs, as design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
+  out.push(L.assign('rank_pairs', pairsLit(lang, K.pairs)));
+  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, ' + L.str(K.adjust) + ', rank_pairs)'));
+  if (K.paired) out.push(rep(L, r, 'friedman chi2', f('rk', 'chi2')), rep(L, r, 'friedman df', f('rk', 'df')), rep(L, r, 'friedman p', f('rk', 'p')));
+  else out.push(rep(L, r, 'kruskal H', f('rk', 'H')), rep(L, r, 'kruskal df', f('rk', 'df')), rep(L, r, 'kruskal p', f('rk', 'p')));
+  K.pairs.forEach(([i, j], q) => {
+    const key = 'rank pair ' + pairLabel(i, j);
+    const pf = k => ELEM[lang](f('rk', 'pairs'), q, k);
+    out.push(rep(L, r, key + ' diff', pf('diff')), rep(L, r, key + ' se', pf('se')), rep(L, r, key + ' z', pf('z')), rep(L, r, key + ' p', pf('p')),
+      rep(L, r, key + ' adjusted p', pf('pAdj')), repYesNo(L, r, key + ' different', pf('flagged')));
+  });
+  out.push(c + 'The compact letter display: designs that share a letter are not declared different.');
+  const flagged = lang === 'R' ? 'Filter(Negate(is.null), lapply(rk$pairs, function(p) if (p$flagged) c(p$i, p$j) else NULL))'
+    : lang === 'py' ? '[(p["i"], p["j"]) for p in rk["pairs"] if p["flagged"]]'
+      : "cell2mat(cellfun(@(p) [p.i p.j], rk.pairs(cellfun(@(p) p.flagged, rk.pairs)), 'UniformOutput', false)')";
+  out.push(L.assign('rank_flagged', flagged), L.assign('rank_cld', 'letter_groups(k, rank_flagged)'));
+  for (let i = 0; i < S.k; i++) out.push(rep(L, r, 'rank letters ' + (i + 1), lang === 'R' ? 'rank_cld[' + (i + 1) + ']' : lang === 'py' ? 'rank_cld[' + i + ']' : 'rank_cld{' + (i + 1) + '}'));
+  out.push(...commentLines(c, 'Each design\'s pseudo-median (the Hodges-Lehmann estimate) with its own Wilcoxon signed-rank interval at the stated level, as the page draws them beside the letters.', c));
+  for (let i = 0; i < S.k; i++) {
+    out.push(L.assign('sr', 'signed_rank(' + g(i) + ', level)'));
+    const d = 'rank design ' + (i + 1) + ' ';
+    out.push(rep(L, r, d + 'pseudo-median', f('sr', 'estimate')), rep(L, r, d + 'lower', f('sr', 'lo')), rep(L, r, d + 'upper', f('sr', 'hi')));
+  }
+}
+
+// The screen for the best, under every procedure: the subset-selection
+// screen with indifference zone epsilon and Rinott's second-stage sizes, or
+// the reason the page gives for not running it.
+function sevSubset(r, L, out, need) {
+  const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
+  need.push('subset');
+  out.push(L.sect('Screen for the best'));
+  out.push(...commentLines(c, 'Confidence 1 - alpha is split evenly between the screen and the second-stage sizing, each at 1 - alpha/2. ' +
+    'A design survives when no other design\'s mean beats it by more than max(0, W_ij - epsilon), where W_ij = t sqrt(s_i^2/R_i + s_j^2/R_j) ' +
+    'and t is the screen\'s t quantile; a survivor needs N = max(R, ceiling((h s / epsilon)^2)) replications in all for Rinott\'s second stage, h being Rinott\'s constant. ' +
+    (S.np ? 'The screen works on means and standard deviations under every procedure; it has no rank version. ' : '') +
+    'The best design is reported by its number on the page' + (lang === 'py' ? ', counted from 1.' : '.'), c));
+  out.push(L.assign('epsilon', lit(L, S.eps)), L.assign('direction', L.str(S.dir === 'min' ? 'min' : 'max')));
+  out.push(L.assign('ss', 'subset_selection(groups, alpha, epsilon, direction)'));
+  if (!S.subset.ok) {
+    out.push(...commentLines(c, 'The page does not run the screen: ' + ascii(S.subset.reason), c));
+    if (lang === 'm') out.push("screen_text = 'not defined'; if ss.ok, screen_text = 'defined'; end", rep(L, r, 'screen', 'screen_text'));
+    else out.push(rep(L, r, 'screen', lang === 'R' ? 'if (ss$ok) "defined" else "not defined"' : '"defined" if ss["ok"] else "not defined"'));
+    return;
+  }
+  out.push(rep(L, r, 'screen t', f('ss', 't')), rep(L, r, 'rinott h', f('ss', 'h')), rep(L, r, 'best design', f('ss', 'best') + (lang === 'py' ? ' + 1' : '')));
+  for (let i = 0; i < S.k; i++) {
+    const d = 'design ' + (i + 1) + ' ';
+    const at = k => (lang === 'R' ? 'ss$' + k + '[' + (i + 1) + ']' : lang === 'py' ? 'ss["' + k + '"][' + i + ']' : 'ss.' + k + '(' + (i + 1) + ')');
+    out.push(repYesNo(L, r, d + 'survives', at('survivors')), rep(L, r, d + 'N', at('N')), rep(L, r, d + 'additional', at('additional')));
+  }
+}
 
 // Pairs of designs as a literal: a list of c(i, j) in R, tuples counted from
 // 0 in Python, and a 2-column matrix in MATLAB.
@@ -16278,12 +16348,13 @@ export function buildDatasets(sniffed, mapping) {
 import { repEstimates, repIds } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
-import { signedRank, rankSum } from '../stats/nonparam.js';
+import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
          posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
+import { subsetSelection } from '../stats/select.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -16788,8 +16859,59 @@ function severalAnova(r, o, g) {
   if (np) e['plan anova n (rank)'] = pp.n == null ? NaN : Math.ceil(pp.n * Math.PI / 3);
   r.several.anovaPlan = { blocked: paired, sigmaFrom: welchOk ? 'none' : np || welchBad.length ? 'pooled' : 'anova' };
 }
-function severalRank() {}
-function severalSubset() {}
+
+/**
+ * The rank tests the page shows in place of the analysis of variance under
+ * the rank procedures: Kruskal-Wallis with Dunn's pairwise comparisons, or
+ * under pairing Friedman's test with Siegel and Castellan's, every pair's
+ * p-value adjusted by Bonferroni or Holm, the letters, and each design's
+ * pseudo-median with its own Wilcoxon interval at the stated level.
+ */
+function severalRank(r, o, g) {
+  const { paired, level, proc, adjust } = o;
+  if (proc !== 'np') return;
+  const alpha = 1 - level, e = r.expect;
+  if (paired) {
+    const fr = friedman(g);
+    Object.assign(e, { 'friedman chi2': fr.chi2, 'friedman df': fr.df, 'friedman p': fr.p });
+  } else {
+    const kw = kruskalWallis(g);
+    Object.assign(e, { 'kruskal H': kw.H, 'kruskal df': kw.df, 'kruskal p': kw.p });
+  }
+  const dn = paired ? friedmanPairs(g, { alpha, adjust }) : dunn(g, { alpha, adjust });
+  const pairs = [];
+  for (const p of dn.pairs) {
+    const key = 'rank pair ' + pairLabel(p.i, p.j);
+    Object.assign(e, { [key + ' diff']: p.diff, [key + ' se']: p.se, [key + ' z']: p.z, [key + ' p']: p.p, [key + ' adjusted p']: p.pAdj,
+                       [key + ' different']: ex(p.flagged) });
+    pairs.push([p.i, p.j]);
+  }
+  dn.letters.forEach((l, i) => { e['rank letters ' + (i + 1)] = l; });
+  g.forEach((x, i) => {
+    const sr = signedRank(x, { level }), d = 'rank design ' + (i + 1) + ' ';
+    Object.assign(e, { [d + 'pseudo-median']: sr.estimate, [d + 'lower']: sr.lo, [d + 'upper']: sr.hi });
+  });
+  r.several.rank = { paired, adjust, pairs };
+}
+
+/**
+ * The screen for the best, which the page shows under every procedure: the
+ * subset-selection screen with indifference zone eps and Rinott's
+ * second-stage sizes, or the reason the screen is not defined.
+ */
+function severalSubset(r, o, g) {
+  const { level, dir, eps } = o;
+  const alpha = 1 - level, e = r.expect;
+  const ss = subsetSelection(g, { alpha, delta: eps, dir });
+  r.several.subset = { ok: ss.ok, reason: ss.ok ? '' : ss.reason };
+  if (!ss.ok) { e.screen = 'not defined'; return; }
+  Object.assign(e, { 'screen t': ss.t, 'rinott h': ss.h, 'best design': ss.best + 1 });
+  g.forEach((x, i) => {
+    const d = 'design ' + (i + 1) + ' ';
+    Object.assign(e, { [d + 'survives']: ex(ss.survivors[i]), [d + 'N']: ss.N[i] == null ? NaN : ss.N[i],
+                       [d + 'additional']: ss.additional[i] == null ? NaN : ss.additional[i] });
+  });
+}
 </script>
 <script type="text/plain" data-module="js/io/script_lib.js">
 // Literal R, Python, and MATLAB code the "Regenerate these results in" scripts
@@ -18615,6 +18737,254 @@ function c = qdunnett(p, lambdas, nu)
 hi = 10;
 while pdunnett(hi, lambdas, nu) < p, hi = 2 * hi; end
 c = fzero(@(c) pdunnett(c, lambdas, nu) - p, [0.5 hi], optimset('TolX', 1e-10));
+end
+`;
+
+// ── Kruskal-Wallis and Dunn's pairwise comparisons ───────────────────────
+// Dunn's z for a pair is its difference of mean ranks over
+// sqrt(v (1/R_i + 1/R_j)), where v = N (N + 1)/12 - T/(12 (N - 1)) is the
+// pooled rank variance and T the sum of t^3 - t over the tied groups. When
+// every outcome is equal, no tie correction is possible: the analyzer leaves
+// H uncorrected (0, with p = 1), v is 0, and every z and p is missing.
+
+LIB.R.kruskal = `
+kruskal_dunn <- function(groups, alpha, adjust, pairs) {
+  # kruskal.test (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
+  k <- length(groups); n <- lengths(groups)
+  y <- unlist(groups); g <- factor(rep(seq_len(k), n), levels = seq_len(k))
+  r <- rank(y); N <- length(y); tt <- rle(sort(y))$lengths; ties <- sum(tt^3 - tt)
+  if (ties < N^3 - N) {
+    kw <- kruskal.test(y, g); H <- unname(kw$statistic); p <- kw$p.value
+  } else {
+    # Every outcome equal: kruskal.test would divide 0 by 0, and the analyzer reports H uncorrected.
+    H <- 12 / (N * (N + 1)) * sum(tapply(r, g, sum)^2 / n) - 3 * (N + 1)
+    p <- pchisq(H, k - 1, lower.tail = FALSE)
+  }
+  v <- N * (N + 1) / 12 - ties / (12 * (N - 1))   # the pooled rank variance, tie-corrected
+  mr <- as.vector(tapply(r, g, mean))
+  out <- lapply(pairs, function(pr) {
+    i <- pr[1]; j <- pr[2]
+    se <- sqrt(v * (1 / n[i] + 1 / n[j])); z <- (mr[i] - mr[j]) / se
+    list(i = i, j = j, diff = mr[i] - mr[j], se = se, z = z, p = 2 * pnorm(-abs(z)))
+  })
+  padj <- adjust_p(sapply(out, function(o) o$p), adjust)
+  for (q in seq_along(out)) { out[[q]]$pAdj <- padj[q]; out[[q]]$flagged <- isTRUE(padj[q] < alpha) }
+  list(H = H, df = k - 1, p = p, pairs = out)
+}
+`;
+LIB.py.kruskal = `
+def kruskal_dunn(groups, alpha, adjust, pairs):
+    """scipy's kruskal (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm."""
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups)
+    n = np.array([len(g) for g in groups]); y = np.concatenate(groups); N = len(y)
+    r = stats.rankdata(y); _, counts = np.unique(y, return_counts=True); ties = float(np.sum(counts ** 3 - counts))
+    rank_sums = np.bincount(np.repeat(np.arange(k), n), weights=r, minlength=k)
+    if ties < N ** 3 - N:
+        kw = stats.kruskal(*groups); H, p = float(kw.statistic), float(kw.pvalue)
+    else:
+        # Every outcome equal: scipy's kruskal refuses, and the analyzer reports H uncorrected.
+        H = 12 / (N * (N + 1)) * float(np.sum(rank_sums ** 2 / n)) - 3 * (N + 1); p = float(stats.chi2.sf(H, k - 1))
+    v = N * (N + 1) / 12 - ties / (12 * (N - 1))   # the pooled rank variance, tie-corrected
+    mr = rank_sums / n
+    I = np.array([pr[0] for pr in pairs]); J = np.array([pr[1] for pr in pairs])
+    diff = mr[I] - mr[J]; se = np.sqrt(v * (1 / n[I] + 1 / n[J]))
+    with np.errstate(divide="ignore", invalid="ignore"):   # v is 0 when every outcome is equal
+        z = diff / se
+    pv = 2 * stats.norm.sf(np.abs(z)); padj = adjust_p(pv, adjust)
+    out = [dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se[q], z=z[q], p=pv[q], pAdj=padj[q], flagged=bool(padj[q] < alpha))
+           for q in range(len(pairs))]
+    return dict(H=H, df=k - 1, p=p, pairs=out)
+`;
+LIB.m.kruskal = `
+function r = kruskal_dunn(groups, alpha, adjust, pairs)
+% kruskalwallis (tie-corrected) and Dunn's z for each pair, adjusted by Bonferroni or Holm.
+k = numel(groups); n = cellfun(@numel, groups); y = []; g = [];
+for i = 1:k, y = [y; groups{i}(:)]; g = [g; i * ones(n(i), 1)]; end %#ok<AGROW>
+rk = tiedrank(y); N = numel(y);
+[~, ~, grp] = unique(y); counts = accumarray(grp, 1); ties = sum(counts.^3 - counts);
+rankSums = accumarray(g, rk, [k 1])';
+if ties < N^3 - N
+    [p, tab] = kruskalwallis(y, g, 'off'); H = tab{2, 5};
+else
+    % Every outcome equal: kruskalwallis would divide 0 by 0, and the analyzer reports H uncorrected.
+    H = 12 / (N * (N + 1)) * sum(rankSums.^2 ./ n) - 3 * (N + 1); p = chi2cdf(H, k - 1, 'upper');
+end
+v = N * (N + 1) / 12 - ties / (12 * (N - 1));   % the pooled rank variance, tie-corrected
+mr = rankSums ./ n; I = pairs(:, 1)'; J = pairs(:, 2)';
+d = mr(I) - mr(J); se = sqrt(v * (1 ./ n(I) + 1 ./ n(J))); z = d ./ se;
+ps = 2 * normcdf(-abs(z)); padj = adjust_p(ps, adjust);
+out = cell(1, numel(I));
+for q = 1:numel(I)
+    out{q} = struct('i', I(q), 'j', J(q), 'diff', d(q), 'se', se(q), 'z', z(q), 'p', ps(q), 'pAdj', padj(q), 'flagged', padj(q) < alpha);
+end
+r = struct('H', H, 'df', k - 1, 'p', p, 'pairs', {out});
+end
+`;
+
+// ── Friedman's test and Siegel and Castellan's pairwise comparisons ──────
+// Each block (replication) ranks the k designs among themselves; the
+// statistic is 12 sum (S_j - R (k + 1)/2)^2 / (R k (k + 1) - T/(k - 1)) with
+// S_j the designs' rank sums and T the sum of t^3 - t over the ties within
+// blocks, and a pair's z is its difference of rank sums over
+// sqrt(R k (k + 1)/6). When every block is tied throughout, the statistic is
+// 0/0 and missing, as in R's friedman.test.
+
+LIB.R.friedman = `
+friedman_pairs <- function(groups, alpha, adjust, pairs) {
+  # friedman.test (tie-corrected) and each pair's difference of rank sums over sqrt(R k (k + 1) / 6),
+  # adjusted by Bonferroni or Holm.
+  M <- do.call(cbind, groups)   # row = block (replication), column = design
+  fr <- friedman.test(M)
+  k <- ncol(M); R <- nrow(M)
+  rank_sums <- colSums(t(apply(M, 1, rank)))
+  se <- sqrt(R * k * (k + 1) / 6)
+  out <- lapply(pairs, function(pr) {
+    d <- unname(rank_sums[pr[1]] - rank_sums[pr[2]]); z <- d / se
+    list(i = pr[1], j = pr[2], diff = d, se = se, z = z, p = 2 * pnorm(-abs(z)))
+  })
+  padj <- adjust_p(sapply(out, function(o) o$p), adjust)
+  for (q in seq_along(out)) { out[[q]]$pAdj <- padj[q]; out[[q]]$flagged <- isTRUE(padj[q] < alpha) }
+  list(chi2 = unname(fr$statistic), df = unname(fr$parameter), p = fr$p.value, pairs = out)
+}
+`;
+LIB.py.friedman = `
+def friedman_pairs(groups, alpha, adjust, pairs):
+    """Friedman's test with the tie correction, written out because scipy's friedmanchisquare needs three
+    designs or more, and each pair's difference of rank sums over sqrt(R k (k + 1) / 6), adjusted by
+    Bonferroni or Holm."""
+    M = np.column_stack([np.asarray(g, float) for g in groups]); R, k = M.shape   # row = block, column = design
+    rank_sums = stats.rankdata(M, axis=1).sum(axis=0)
+    tie_term = 0.0
+    for row in M:
+        _, counts = np.unique(row, return_counts=True); tie_term += float(np.sum(counts ** 3 - counts))
+    den = R * k * (k + 1) - tie_term / (k - 1)
+    chi2 = 12 * float(np.sum((rank_sums - R * (k + 1) / 2) ** 2)) / den if den > 0 else np.nan
+    se = np.sqrt(R * k * (k + 1) / 6)
+    I = np.array([pr[0] for pr in pairs]); J = np.array([pr[1] for pr in pairs])
+    diff = rank_sums[I] - rank_sums[J]; z = diff / se
+    pv = 2 * stats.norm.sf(np.abs(z)); padj = adjust_p(pv, adjust)
+    out = [dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se, z=z[q], p=pv[q], pAdj=padj[q], flagged=bool(padj[q] < alpha))
+           for q in range(len(pairs))]
+    return dict(chi2=chi2, df=k - 1, p=float(stats.chi2.sf(chi2, k - 1)), pairs=out)
+`;
+LIB.m.friedman = `
+function r = friedman_pairs(groups, alpha, adjust, pairs)
+% Friedman's test written out with the tie correction (MATLAB's friedman omits it), and each pair's
+% difference of rank sums over sqrt(R k (k + 1) / 6), adjusted by Bonferroni or Holm.
+M = cell2mat(cellfun(@(v) v(:), groups, 'UniformOutput', false)); [R, k] = size(M);   % row = block, column = design
+rk = zeros(R, k); tieTerm = 0;
+for b = 1:R
+    rk(b, :) = tiedrank(M(b, :));
+    [~, ~, grp] = unique(M(b, :)); counts = accumarray(grp(:), 1); tieTerm = tieTerm + sum(counts.^3 - counts);
+end
+rankSums = sum(rk, 1);
+den = R * k * (k + 1) - tieTerm / (k - 1);
+chi2 = NaN;
+if den > 0, chi2 = 12 * sum((rankSums - R * (k + 1) / 2).^2) / den; end
+se = sqrt(R * k * (k + 1) / 6);
+I = pairs(:, 1)'; J = pairs(:, 2)';
+d = rankSums(I) - rankSums(J); z = d / se;
+ps = 2 * normcdf(-abs(z)); padj = adjust_p(ps, adjust);
+out = cell(1, numel(I));
+for q = 1:numel(I)
+    out{q} = struct('i', I(q), 'j', J(q), 'diff', d(q), 'se', se, 'z', z(q), 'p', ps(q), 'pAdj', padj(q), 'flagged', padj(q) < alpha);
+end
+r = struct('chi2', chi2, 'df', k - 1, 'p', chi2cdf(chi2, k - 1, 'upper'), 'pairs', {out});
+end
+`;
+
+// ── Subset selection with Rinott's second-stage sizes ────────────────────
+// The screen runs at 1 - alpha/2 and Rinott's sizing at 1 - alpha/2, and so
+// the whole holds at 1 - alpha. Rinott's h solves
+//   P* = int g(y) [ int g(x) Phi(h / sqrt(nu (1/x + 1/y))) dx ]^(k-1) dy,
+// g the chi-square density on nu = n0 - 1 and n0 the smallest R. The
+// analyzer searches h between 0.5 and 12 and reports none when the root
+// lies outside (a first stage of two replications, for example); the
+// scripts do the same.
+
+LIB.R.subset = `
+rinott_h <- function(n0, k, pstar) {
+  nu <- n0 - 1
+  inner <- function(h, y) integrate(function(x) dchisq(x, nu) * pnorm(h / sqrt(nu * (1 / x + 1 / y))), 0, Inf, rel.tol = 1e-10)$value
+  pcs <- function(h) integrate(function(y) sapply(y, function(yy) inner(h, yy))^(k - 1) * dchisq(y, nu), 0, Inf, rel.tol = 1e-10)$value
+  if (pcs(0.5) > pstar || pcs(12) < pstar) return(NaN)   # outside the analyzer's search
+  uniroot(function(h) pcs(h) - pstar, c(0.5, 12), tol = 1e-8)$root
+}
+subset_selection <- function(groups, alpha, delta, dir) {
+  k <- length(groups); n <- lengths(groups)
+  if (k < 2 || !isTRUE(delta > 0) || any(n < 2)) return(list(ok = FALSE))
+  m <- sapply(groups, mean); s2 <- sapply(groups, var)
+  n0 <- min(n); a0 <- alpha / 2
+  tt <- qt((1 - a0)^(1 / (k - 1)), n0 - 1)
+  W <- tt * sqrt(outer(s2 / n, s2 / n, "+"))
+  slack <- pmax(0, W - delta)
+  # Design i survives when its mean is within the slack of every other design's.
+  mi <- matrix(m, k, k); mj <- t(mi)   # mi[i, j] is design i's mean, mj[i, j] design j's
+  ok <- if (dir == "max") mi >= mj - slack else mi <= mj + slack
+  diag(ok) <- TRUE
+  surv <- apply(ok, 1, all)
+  h <- rinott_h(n0, k, 1 - alpha / 2)
+  N <- ifelse(surv, pmax(n, ceiling((h * sqrt(s2) / delta)^2)), NaN)
+  list(ok = TRUE, t = tt, h = h, best = if (dir == "max") which.max(m) else which.min(m),
+       survivors = surv, N = N, additional = N - n)
+}
+`;
+LIB.py.subset = `
+def rinott_h(n0, k, pstar):
+    from scipy import special   # the plain normal cdf and chi-square density, which quad calls many times
+    nu = n0 - 1
+    lc = -special.gammaln(nu / 2) - (nu / 2) * np.log(2)
+    g = lambda x: np.exp(lc + special.xlogy(nu / 2 - 1, x) - x / 2)   # the chi-square density on nu
+    def inner(h, y):
+        return integrate.quad(lambda x: g(x) * special.ndtr(h / np.sqrt(nu * (1 / x + 1 / y))), 0, np.inf, epsabs=1e-12, epsrel=1e-10)[0]
+    def pcs(h):
+        return integrate.quad(lambda y: inner(h, y) ** (k - 1) * g(y), 0, np.inf, epsabs=1e-12, epsrel=1e-10)[0]
+    if pcs(0.5) > pstar or pcs(12) < pstar: return np.nan   # outside the analyzer's search
+    return optimize.brentq(lambda h: pcs(h) - pstar, 0.5, 12, xtol=1e-8)
+
+def subset_selection(groups, alpha, delta, dir):
+    groups = [np.asarray(g, float) for g in groups]; k = len(groups)
+    n = np.array([len(g) for g in groups])
+    if k < 2 or not (delta > 0) or np.any(n < 2): return dict(ok=False)
+    m = np.array([g.mean() for g in groups]); s2 = np.array([g.var(ddof=1) for g in groups])
+    n0 = int(n.min()); a0 = alpha / 2
+    t = stats.t.ppf((1 - a0) ** (1 / (k - 1)), n0 - 1)
+    W = t * np.sqrt(s2[:, None] / n[:, None] + s2[None, :] / n[None, :])
+    slack = np.maximum(0.0, W - delta)
+    # Design i survives when its mean is within the slack of every other design's.
+    ok = (m[:, None] >= m[None, :] - slack) if dir == "max" else (m[:, None] <= m[None, :] + slack)
+    np.fill_diagonal(ok, True)
+    surv = ok.all(axis=1)
+    h = rinott_h(n0, k, 1 - alpha / 2)
+    N = np.where(surv, np.maximum(n, np.ceil((h * np.sqrt(s2) / delta) ** 2)), np.nan)
+    return dict(ok=True, t=t, h=h, best=int(np.argmax(m) if dir == "max" else np.argmin(m)), survivors=surv, N=N, additional=N - n)
+`;
+LIB.m.subset = `
+function h = rinott_h(n0, k, pstar)
+nu = n0 - 1;
+inner = @(h, y) integral(@(x) chi2pdf(x, nu) .* normcdf(h ./ sqrt(nu * (1 ./ x + 1 / y))), 0, Inf, 'RelTol', 1e-10, 'AbsTol', 1e-12);
+pcs = @(h) integral(@(y) arrayfun(@(yy) inner(h, yy), y).^(k - 1) .* chi2pdf(y, nu), 0, Inf, 'RelTol', 1e-10, 'AbsTol', 1e-12);
+if pcs(0.5) > pstar || pcs(12) < pstar, h = NaN; return; end   % outside the analyzer's search
+h = fzero(@(h) pcs(h) - pstar, [0.5 12], optimset('TolX', 1e-10));
+end
+
+function r = subset_selection(groups, alpha, delta, dir)
+k = numel(groups); n = cellfun(@numel, groups);
+if k < 2 || ~(delta > 0) || any(n < 2), r = struct('ok', false); return; end
+m = cellfun(@mean, groups); s2 = cellfun(@var, groups);
+n0 = min(n); a0 = alpha / 2;
+t = tinv((1 - a0)^(1 / (k - 1)), n0 - 1);
+W = t * sqrt(s2' ./ n' + s2 ./ n);
+slack = max(0, W - delta);
+% Design i survives when its mean is within the slack of every other design's.
+if strcmp(dir, 'max'), ok = m' >= m - slack; else, ok = m' <= m + slack; end
+ok(logical(eye(k))) = true;
+surv = all(ok, 2)';
+h = rinott_h(n0, k, 1 - alpha / 2);
+% A missing h leaves every N missing ('includenan'), as in the analyzer.
+N = nan(1, k); N(surv) = max(n(surv), ceil((h * sqrt(s2(surv)) / delta).^2), 'includenan');
+if strcmp(dir, 'max'), [~, best] = max(m); else, [~, best] = min(m); end
+r = struct('ok', true, 't', t, 'h', h, 'best', best, 'survivors', surv, 'N', N, 'additional', N - n);
 end
 `;
 </script>
@@ -22337,6 +22707,7 @@ import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { currentSection } from '../ui/tabs.js';
+import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -23393,7 +23764,10 @@ function update() {
       'indifference zone': Number.isFinite(eps) ? eps : ''
     },
     tables,
-    summaryHtml: summary.map(s => '<p>' + s + '</p>').join('')
+    summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
+    // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
+    recipeIn: { list, groups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps }
   };
   drawPlan();
   release();
@@ -23426,6 +23800,8 @@ function drawPlan() {
   for (const k in cards) cards[k].querySelector('.plan-np').textContent = npOn ? NP_PLAN : '';
   const tables = [];
   let mText, hText, dText, family, C;
+  // The planning targets in force, which the regenerate scripts carry as settings.
+  let meansH = null, diffsH = null, planDelta = null;
 
   // The means: every design's own interval at 1 − α/k; the design with the
   // largest standard deviation has the widest, and so sets the count.
@@ -23434,6 +23810,7 @@ function drawPlan() {
     const k = c ? c.k : NaN;
     const hwDef = c ? round2(c.meanHw / 2) : NaN;
     const hwVal = c ? (plan.mhwUser != null ? plan.mhwUser : hwDef) : null;
+    meansH = hwVal;
     syncSpin(plan.mhwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-mhw', 'Target half-width', stepFor(hwDef), hwVal,
       v => { plan.mhwUser = v; if (plan.key) state.setPick(id, 'mtarget:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-hw-unit').textContent = unitNote;
@@ -23463,6 +23840,7 @@ function drawPlan() {
       : 'all pairs';
     const hwDef = c ? round2(c.widest / 2) : NaN;
     const hwVal = c ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
+    diffsH = hwVal;
     syncSpin(plan.hwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-hw', 'Target half-width', stepFor(hwDef), hwVal,
       v => { plan.hwUser = v; if (plan.key) state.setPick(id, 'target:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-hw-unit').textContent = unitNote;
@@ -23500,6 +23878,7 @@ function drawPlan() {
     const g = c ? Math.abs(c.grandMean) : NaN;
     const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
     const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
+    planDelta = delta;
     syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
       v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-delta-unit').textContent = unitNote;
@@ -23531,7 +23910,14 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('several', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat(tables) }));
+  // The scripts that regenerate these results are written only when asked
+  // for, from the inputs and settings in force now.
+  const { recipeIn, ...result } = resultBase;
+  const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
+  const regen = recipeIn && c
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })) }
+    : undefined;
+  state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
 }
 
 /**

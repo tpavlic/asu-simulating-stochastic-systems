@@ -513,8 +513,78 @@ function sevBody(r, L) {
   sevPlan(r, L, out, need);
   return { body: out, need };
 }
-function sevRank() {}
-function sevSubset() {}
+
+// The rank tests the page shows in place of the analysis of variance under
+// the rank procedures: Kruskal-Wallis and Dunn's pairwise comparisons, or
+// under pairing Friedman's test and Siegel and Castellan's, with the letters
+// and each design's pseudo-median at the stated level.
+function sevRank(r, L, out, need) {
+  const S = r.several, K = S.rank, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
+  need.push('holm', 'signedRank', K.paired ? 'friedman' : 'kruskal', 'letters');
+  const adjName = K.adjust === 'holm' ? 'Holm\'s step-down' : 'Bonferroni';
+  if (K.paired) {
+    out.push(L.sect('Friedman\'s test and its pairwise comparisons'));
+    out.push(...commentLines(c, 'Each replication is a block: its k outcomes are ranked among themselves, and the test asks whether some designs tend to rank higher than others. ' +
+      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by ' + adjName +
+      ', and a pair is declared different when the adjusted p is below alpha.', c));
+  } else {
+    out.push(L.sect('Kruskal-Wallis test and Dunn\'s pairwise comparisons'));
+    out.push(...commentLines(c, 'Every outcome is pooled and ranked, and the test asks whether some designs tend to sit higher than others. ' +
+      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by ' + adjName +
+      ', and a pair is declared different when the adjusted p is below alpha.', c));
+  }
+  out.push(c + 'The pairs, as design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
+  out.push(L.assign('rank_pairs', pairsLit(lang, K.pairs)));
+  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, ' + L.str(K.adjust) + ', rank_pairs)'));
+  if (K.paired) out.push(rep(L, r, 'friedman chi2', f('rk', 'chi2')), rep(L, r, 'friedman df', f('rk', 'df')), rep(L, r, 'friedman p', f('rk', 'p')));
+  else out.push(rep(L, r, 'kruskal H', f('rk', 'H')), rep(L, r, 'kruskal df', f('rk', 'df')), rep(L, r, 'kruskal p', f('rk', 'p')));
+  K.pairs.forEach(([i, j], q) => {
+    const key = 'rank pair ' + pairLabel(i, j);
+    const pf = k => ELEM[lang](f('rk', 'pairs'), q, k);
+    out.push(rep(L, r, key + ' diff', pf('diff')), rep(L, r, key + ' se', pf('se')), rep(L, r, key + ' z', pf('z')), rep(L, r, key + ' p', pf('p')),
+      rep(L, r, key + ' adjusted p', pf('pAdj')), repYesNo(L, r, key + ' different', pf('flagged')));
+  });
+  out.push(c + 'The compact letter display: designs that share a letter are not declared different.');
+  const flagged = lang === 'R' ? 'Filter(Negate(is.null), lapply(rk$pairs, function(p) if (p$flagged) c(p$i, p$j) else NULL))'
+    : lang === 'py' ? '[(p["i"], p["j"]) for p in rk["pairs"] if p["flagged"]]'
+      : "cell2mat(cellfun(@(p) [p.i p.j], rk.pairs(cellfun(@(p) p.flagged, rk.pairs)), 'UniformOutput', false)')";
+  out.push(L.assign('rank_flagged', flagged), L.assign('rank_cld', 'letter_groups(k, rank_flagged)'));
+  for (let i = 0; i < S.k; i++) out.push(rep(L, r, 'rank letters ' + (i + 1), lang === 'R' ? 'rank_cld[' + (i + 1) + ']' : lang === 'py' ? 'rank_cld[' + i + ']' : 'rank_cld{' + (i + 1) + '}'));
+  out.push(...commentLines(c, 'Each design\'s pseudo-median (the Hodges-Lehmann estimate) with its own Wilcoxon signed-rank interval at the stated level, as the page draws them beside the letters.', c));
+  for (let i = 0; i < S.k; i++) {
+    out.push(L.assign('sr', 'signed_rank(' + g(i) + ', level)'));
+    const d = 'rank design ' + (i + 1) + ' ';
+    out.push(rep(L, r, d + 'pseudo-median', f('sr', 'estimate')), rep(L, r, d + 'lower', f('sr', 'lo')), rep(L, r, d + 'upper', f('sr', 'hi')));
+  }
+}
+
+// The screen for the best, under every procedure: the subset-selection
+// screen with indifference zone epsilon and Rinott's second-stage sizes, or
+// the reason the page gives for not running it.
+function sevSubset(r, L, out, need) {
+  const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
+  need.push('subset');
+  out.push(L.sect('Screen for the best'));
+  out.push(...commentLines(c, 'Confidence 1 - alpha is split evenly between the screen and the second-stage sizing, each at 1 - alpha/2. ' +
+    'A design survives when no other design\'s mean beats it by more than max(0, W_ij - epsilon), where W_ij = t sqrt(s_i^2/R_i + s_j^2/R_j) ' +
+    'and t is the screen\'s t quantile; a survivor needs N = max(R, ceiling((h s / epsilon)^2)) replications in all for Rinott\'s second stage, h being Rinott\'s constant. ' +
+    (S.np ? 'The screen works on means and standard deviations under every procedure; it has no rank version. ' : '') +
+    'The best design is reported by its number on the page' + (lang === 'py' ? ', counted from 1.' : '.'), c));
+  out.push(L.assign('epsilon', lit(L, S.eps)), L.assign('direction', L.str(S.dir === 'min' ? 'min' : 'max')));
+  out.push(L.assign('ss', 'subset_selection(groups, alpha, epsilon, direction)'));
+  if (!S.subset.ok) {
+    out.push(...commentLines(c, 'The page does not run the screen: ' + ascii(S.subset.reason), c));
+    if (lang === 'm') out.push("screen_text = 'not defined'; if ss.ok, screen_text = 'defined'; end", rep(L, r, 'screen', 'screen_text'));
+    else out.push(rep(L, r, 'screen', lang === 'R' ? 'if (ss$ok) "defined" else "not defined"' : '"defined" if ss["ok"] else "not defined"'));
+    return;
+  }
+  out.push(rep(L, r, 'screen t', f('ss', 't')), rep(L, r, 'rinott h', f('ss', 'h')), rep(L, r, 'best design', f('ss', 'best') + (lang === 'py' ? ' + 1' : '')));
+  for (let i = 0; i < S.k; i++) {
+    const d = 'design ' + (i + 1) + ' ';
+    const at = k => (lang === 'R' ? 'ss$' + k + '[' + (i + 1) + ']' : lang === 'py' ? 'ss["' + k + '"][' + i + ']' : 'ss.' + k + '(' + (i + 1) + ')');
+    out.push(repYesNo(L, r, d + 'survives', at('survivors')), rep(L, r, d + 'N', at('N')), rep(L, r, d + 'additional', at('additional')));
+  }
+}
 
 // Pairs of designs as a literal: a list of c(i, j) in R, tuples counted from
 // 0 in Python, and a 2-column matrix in MATLAB.

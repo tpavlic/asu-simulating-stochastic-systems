@@ -21,6 +21,7 @@ import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { currentSection } from '../ui/tabs.js';
+import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
 
 /** The page's hash id. */
@@ -1077,7 +1078,10 @@ function update() {
       'indifference zone': Number.isFinite(eps) ? eps : ''
     },
     tables,
-    summaryHtml: summary.map(s => '<p>' + s + '</p>').join('')
+    summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
+    // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
+    recipeIn: { list, groups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps }
   };
   drawPlan();
   release();
@@ -1110,6 +1114,8 @@ function drawPlan() {
   for (const k in cards) cards[k].querySelector('.plan-np').textContent = npOn ? NP_PLAN : '';
   const tables = [];
   let mText, hText, dText, family, C;
+  // The planning targets in force, which the regenerate scripts carry as settings.
+  let meansH = null, diffsH = null, planDelta = null;
 
   // The means: every design's own interval at 1 − α/k; the design with the
   // largest standard deviation has the widest, and so sets the count.
@@ -1118,6 +1124,7 @@ function drawPlan() {
     const k = c ? c.k : NaN;
     const hwDef = c ? round2(c.meanHw / 2) : NaN;
     const hwVal = c ? (plan.mhwUser != null ? plan.mhwUser : hwDef) : null;
+    meansH = hwVal;
     syncSpin(plan.mhwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-mhw', 'Target half-width', stepFor(hwDef), hwVal,
       v => { plan.mhwUser = v; if (plan.key) state.setPick(id, 'mtarget:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-hw-unit').textContent = unitNote;
@@ -1147,6 +1154,7 @@ function drawPlan() {
       : 'all pairs';
     const hwDef = c ? round2(c.widest / 2) : NaN;
     const hwVal = c ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
+    diffsH = hwVal;
     syncSpin(plan.hwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-hw', 'Target half-width', stepFor(hwDef), hwVal,
       v => { plan.hwUser = v; if (plan.key) state.setPick(id, 'target:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-hw-unit').textContent = unitNote;
@@ -1184,6 +1192,7 @@ function drawPlan() {
     const g = c ? Math.abs(c.grandMean) : NaN;
     const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
     const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
+    planDelta = delta;
     syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
       v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-delta-unit').textContent = unitNote;
@@ -1215,7 +1224,14 @@ function drawPlan() {
     'planning target power': powerPct(plan.power),
     'planning significance level': num(alpha)
   });
-  state.setResult('several', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat(tables) }));
+  // The scripts that regenerate these results are written only when asked
+  // for, from the inputs and settings in force now.
+  const { recipeIn, ...result } = resultBase;
+  const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
+  const regen = recipeIn && c
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })) }
+    : undefined;
+  state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
 }
 
 /**
