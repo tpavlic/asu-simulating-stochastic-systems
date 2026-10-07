@@ -160,8 +160,22 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
   r.one = { pooled, np, interval, variance, checks, plan: planOut };
-  r.settings = planOut ? { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power } : {};
+  // A relative target is carried as the percentage, and the script works out
+  // plan_h from the data's own mean, so that it follows the data if they are edited.
+  r.settings = !planOut ? {}
+    : planOut.relative ? { plan_rel: planOut.rel, plan_delta: planOut.delta, plan_power: planOut.power }
+      : { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power };
   return r;
+}
+
+/**
+ * Whether a One System script would embed more than MAX_NUMBERS numbers:
+ * only under the pooled override, which embeds every observation of a tally
+ * dataset rather than one outcome per replication. Cheap, and copies nothing.
+ * @param {{pooled: boolean, x: ArrayLike<number>}} o the page's recipe inputs
+ */
+export function oneTooBig({ pooled, x }) {
+  return !!pooled && x.length > MAX_NUMBERS;
 }
 
 // ── Two Systems ──────────────────────────────────────────────────────────
@@ -443,13 +457,20 @@ export function severalRecipe(o) {
 
   r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps,
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
-  r.settings = { control: ctrlIdx + 1, plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH, plan_delta: plan.delta, plan_power: plan.power };
+  // Every choice a reader may edit is a setting; the script forms the pairs it
+  // compares from control and family at run time.
+  r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
+    plan_delta: plan.delta, plan_power: plan.power });
+  const dunnett = proc !== 'np' && !(o.varMode === 'welch' && !paired) && o.rule === 'dunnett';
   r.settingsNote = [
-    'The comparison family is fixed to the page\'s choice, ' +
-      (diffMode === 'control' ? 'each design against the control, design ' + (ctrlIdx + 1) : 'every pair of designs') +
-      ', and is written into the code below; changing control does not change it. The intervals, the checks, and the plans read level' +
-      (bench != null ? ', benchmark,' : '') + ' and the plan_ half-width targets; control, plan_delta, and plan_power are read only by the analysis of variance\'s post-hoc rules and plan, where the script has them.'
+    'Edit any of these and rerun. level is the confidence that each family of intervals keeps as a whole. ' +
+      'family chooses the pairwise comparisons: "pairs" compares every pair of designs, and "control" compares each design with the control, ' +
+      'the design numbered control in the list below (numbered from 1, as on the page)' + (dunnett ? ', which Dunnett\'s post-hoc rule also compares every design with' : '') + '. ' +
+      (bench != null ? 'benchmark is the value each design\'s interval is checked against. ' : '') +
+      'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
+      'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
   severalAnova(r, o, g);
   severalRank(r, o, g);

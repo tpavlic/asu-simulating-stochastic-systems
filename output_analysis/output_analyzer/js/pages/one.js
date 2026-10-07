@@ -13,7 +13,7 @@ import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
-import { oneRecipe } from '../io/recipes.js';
+import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, esc, dash, lvl } from '../ui/format.js';
@@ -669,7 +669,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const base = state.settings.base;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
-  const regen = { tooBig: false, build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
+  const regen = { tooBig: oneTooBig(recipeIn), build:() => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
 

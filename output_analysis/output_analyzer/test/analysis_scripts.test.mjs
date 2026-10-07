@@ -3,8 +3,9 @@
 // analyzer's own. The harness here writes a script, runs it where the language
 // is installed, parses its report lines, and compares them with the recipe's
 // `expect` map. R and Python run on every test run when installed (the full
-// matrix under OA_SCRIPTS=1, one smoke script per page otherwise); MATLAB runs
-// under OA_MATLAB=1 only, because its start-up takes about a minute.
+// matrix under OA_SCRIPTS=1, and otherwise only the fixtures marked smoke, a
+// subset on every page); MATLAB runs under OA_MATLAB=1 only, because its
+// start-up takes about a minute.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -12,7 +13,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analysisScript, parseReport, scriptFileName, ascii, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
-import { baseRecipe, outcomeVector, oneRecipe, twoRecipe } from '../js/io/recipes.js';
+import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
 import { EXAMPLES } from '../js/data/examples.js';
@@ -23,12 +24,25 @@ function has(cmd, probeArgs) {
   const r = spawnSync(cmd, probeArgs, { encoding: 'utf8' });
   return !r.error && r.status === 0;
 }
+// The Python scripts need SciPy 1.11 or later (studentized_range.ppf, dunnett,
+// tukey_hsd's intervals); an older one exits with status 3 here.
+const PY_PROBE = 'import re, sys, numpy, scipy; v = tuple(int(re.match(r"\\d+", p).group()) for p in scipy.__version__.split(".")[:2]); sys.exit(0 if v >= (1, 11) else 3)';
+function pyStatus() {
+  const r = spawnSync('python3', ['-c', PY_PROBE], { encoding: 'utf8' });
+  if (r.error || r.status === 1) return 'python3 with NumPy and SciPy is not installed';
+  if (r.status === 3) return 'SciPy is older than 1.11';
+  return r.status === 0 ? true : 'python3 with NumPy and SciPy is not installed';
+}
+const PY = pyStatus();
 export const HAS = {
   R: has('Rscript', ['--version']),
-  tidy: has('Rscript', ['--vanilla', '-e', 'for (p in c("tibble","dplyr","tidyr","broom","ggplot2")) if (!requireNamespace(p, quietly = TRUE)) quit(status = 1)']),
-  py: has('python3', ['-c', 'import numpy, scipy']),
+  tidy: has('Rscript', ['--vanilla', '-e', 'if (getRversion() < "4.1" || packageVersion("dplyr") < "1.1") quit(status = 1); for (p in c("tibble","tidyr","broom","ggplot2")) if (!requireNamespace(p, quietly = TRUE)) quit(status = 1)']),
+  py: PY === true,
   m: process.env.OA_MATLAB === '1' && has('matlab', ['-batch', 'disp(1)'])
 };
+// Why a language cannot run here.
+const MISSING = { R: 'R is not installed', tidy: 'R 4.1 with dplyr 1.1, tibble, tidyr, broom, and ggplot2 is not installed', py: PY,
+  m: process.env.OA_MATLAB === '1' ? 'MATLAB is not installed' : 'MATLAB runs under OA_MATLAB=1 only' };
 const FULL = process.env.OA_SCRIPTS === '1';
 export const LANGS = ['R', 'tidy', 'py', 'm'];
 
@@ -111,7 +125,7 @@ export function compareReport(report, expect, lang, recipe) {
 
 // Why a language's run is skipped, or false to run it.
 function skipFor(lang, smoke) {
-  if (!HAS[lang]) return `${lang} is not installed`;
+  if (!HAS[lang]) return MISSING[lang];
   if (!smoke && !FULL && lang !== 'm') return 'OA_SCRIPTS=1 runs the full matrix';
   return false;
 }
@@ -250,6 +264,18 @@ test('a replication with no outcome is left out of the data and named in a comme
   assert.ok(m.includes("rep_id = {'a', 'c'};") && m.includes('x = [2, 5];'));
 });
 
+// Ids are numbers only when every one prints back exactly as the page shows it.
+test('ids such as 007 or 1.0 stay strings, and plain ones become numbers', () => {
+  const mk = ids => makeDataset({ name: 'ids', response: 'v', kind: 'reps', reps: ids.map((id, i) => ({ id, v: [1 + i] })) });
+  const R = ids => analysisScript(descRecipe('Ids', mk(ids)), 'R');
+  assert.ok(R(['007', '8', '9']).includes('rep_id <- c("007", "8", "9")'));
+  assert.ok(R(['1.0', '2', '3']).includes('rep_id <- c("1.0", "2", "3")'));
+  assert.ok(R(['01', '02', '03']).includes('rep_id <- c("01", "02", "03")'));
+  assert.ok(R(['1', '2', '10']).includes('rep_id <- c(1, 2, 10)'));
+  assert.ok(R([1, 2, 3]).includes('rep_id <- c(1, 2, 3)'));
+  assert.ok(analysisScript(descRecipe('Ids', mk(['007', '8', '9'])), 'm').includes("rep_id = {'007', '8', '9'};"));
+});
+
 const SIX = { n: 6, mean: 3.25, sd: 0.5612486080, se: 0.2291287847, min: 2.5, q1: 2.875, median: 3.25, q3: 3.625, max: 4 };
 
 {
@@ -303,7 +329,16 @@ test('oneRecipe carries the data, the choices, and every expect key of the t pat
   assert.ok(!('pseudo-median' in r.expect));
   assert.ok(!('plan n for power (rank)' in r.expect));
   assert.ok(r.expect['plan half-width target'] > 0);
-  assert.deepEqual(Object.keys(r.settings), ['plan_h', 'plan_delta', 'plan_power']);
+  // A relative target travels as its percentage, and the script works out plan_h from the data's own mean.
+  assert.deepEqual(Object.keys(r.settings), ['plan_rel', 'plan_delta', 'plan_power']);
+  assert.equal(r.settings.plan_rel, 10);
+  assert.ok(analysisScript(r, 'R').includes('plan_h <- plan_rel / 100 * abs(d$mean)'));
+  assert.ok(analysisScript(r, 'py').includes('plan_h = plan_rel / 100 * abs(d["mean"])'));
+  assert.ok(analysisScript(r, 'm').includes('plan_h = plan_rel / 100 * abs(d.mean);'));
+  const ra = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: prov,
+    plan: { relative: false, rel: 10, abs: 0.25, delta: 0.3, power: 0.8 } });
+  assert.deepEqual(ra.settings, { plan_h: 0.25, plan_delta: 0.3, plan_power: 0.8 });
+  assert.ok(!analysisScript(ra, 'R').includes('plan_rel'));
   const s = analysisScript(r, 'R');
   assert.ok(s.includes('t.test('), 'R uses t.test');
   assert.ok(s.includes('shapiro.test('), 'R uses shapiro.test');
@@ -379,6 +414,15 @@ for (const c of [5, 0]) {
   assert.ok(analysisScript(r, 'm').includes('pooled across its replications'));
   checkRecipe('One System on pooled observations', r);
 }
+
+// The pooled override embeds every observation, and so it is held to the
+// 200,000-number cap; replication outcomes are not.
+test('One System under the pooled override past 200,000 numbers gives no script', () => {
+  const many = new Float64Array(MAX_NUMBERS + 1);
+  assert.equal(oneTooBig({ pooled: true, x: many }), true);
+  assert.equal(oneTooBig({ pooled: true, x: many.subarray(0, MAX_NUMBERS) }), false);
+  assert.equal(oneTooBig({ pooled: false, x: many }), false);
+});
 
 // A plan with no answer: a relative target on a zero mean, printed NaN in every language.
 {
@@ -747,7 +791,8 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
     'plan diffs widest pair', 'shapiro design 2 W [optional]']) assert.ok(k in r.expect, k);
   assert.ok(!('design 1 vs benchmark' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
   assert.deepEqual(Object.keys(r.groups).sort(), ['by', 'dropped', 'how', 'ids', 'names', 'paired', 'response', 'unit', 'unmatched', 'values']);
-  assert.deepEqual(Object.keys(r.settings), ['control', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.deepEqual(Object.keys(r.settings), ['control', 'family', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.deepEqual([r.settings.family, r.settings.epsilon, r.settings.direction], ['pairs', 0.5, 'max']);
   assert.equal(r.several.rank, null);
   assert.deepEqual(r.several.subset, { ok: true, reason: '' }, 'the screen runs under every procedure');
   // A pure function of its argument: built twice, the same recipe.
@@ -766,24 +811,34 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.equal(rc.expect.C, 3);
   assert.ok('diff 1-3' in rc.expect && 'diff 4-3' in rc.expect && !('diff 1-2' in rc.expect));
   assert.equal(rc.settings.benchmark, 2.4);
+  assert.deepEqual(Object.keys(rc.settings), ['control', 'family', 'benchmark', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.equal(rc.settings.family, 'control');
   assert.ok(analysisScript(rc, 'R').includes('abline(v = benchmark'));
   // Under the rank procedures: pseudo-medians, shifts, and the inflated plans.
   const rn = sevRecipe(SIX_D, { proc: 'np' });
   assert.equal(rn.expect.C, 15);
   for (const k of ['design 6 pseudo-median', 'design 1 exact', 'shift 1-6 stat', 'shift 2-3 exact', 'plan means n (rank)', 'plan diffs n (rank)']) assert.ok(k in rn.expect, k);
   assert.ok(!('design 1 mean' in rn.expect) && !('shapiro design 1 W [optional]' in rn.expect));
-  assert.ok(analysisScript(rn, 'R').includes('rank_sum(groups[[1]], groups[[2]], per_c)'));
+  assert.ok(analysisScript(rn, 'R').includes('cmp <- rank_sum(groups[[i]], groups[[j]], per_c)'));
   // Paired: blocks named by id, paired t intervals, the differences' checks.
   const rp = sevRecipe(FOUR_CRN, { paired: true });
   assert.equal(rp.groups.ids.length, 10);
   assert.ok('shapiro diff 1-2 W [optional]' in rp.expect);
-  assert.ok(analysisScript(rp, 'R').includes('paired_t(groups[[1]], groups[[2]], per_c)'));
+  assert.ok(analysisScript(rp, 'R').includes('cmp <- paired_t(groups[[i]], groups[[j]], per_c)'));
   assert.ok(analysisScript(rp, 'm').includes('block_id = '));
   // The paired flag the analysis of variance reads, and the note on what the settings change.
   assert.ok(analysisScript(r, 'R').includes('paired <- FALSE') && analysisScript(rp, 'py').includes('paired = True') && analysisScript(rp, 'm').includes('paired = true;'));
   for (const lang of LANGS) {
-    const flat = analysisScript(rc, lang).replace(/\n[#%] /g, ' ');   // the comment's lines joined
-    assert.ok(flat.includes('each design against the control, design 3, and is written into') && flat.includes('changing control does not change it'), lang + ' says the family is fixed');
+    const text = analysisScript(rc, lang), flat = text.replace(/\n[#%] /g, ' ');   // the comment's lines joined
+    assert.ok(flat.includes('family chooses the pairwise comparisons') && flat.includes('benchmark is the value'), lang + ' explains the settings');
+    // Every editable choice is assigned in the Settings block, before the data.
+    const settings = text.slice(0, text.search(/\n(## Data ----|# ---- Data ----|%% Data)\n/));
+    for (const v of ['control', 'family', 'benchmark', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']) {
+      assert.ok(new RegExp('\\n' + v + ' (<-|=) ').test(settings), lang + ': ' + v + ' is a setting');
+      assert.ok(!new RegExp('\\n' + v + ' (<-|=) ').test(text.slice(settings.length)), lang + ': ' + v + ' is assigned once');
+    }
+    // The pairs are formed from the settings, not written in.
+    assert.ok(/family_pairs (<-|=) /.test(text) && !/family_pairs (<-|=) (list\(c\(\d|\[\(\d|\[\d+ \d)/.test(text), lang + ': family_pairs from the settings');
   }
   // The analysis of variance's rank plan line.
   assert.ok(analysisScript(rn, 'R').includes('report("plan anova n (rank)", ceiling(ppa$n * pi / 3)'));
@@ -882,7 +937,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
   });
   const same = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-12);
   for (const lang of ['R', 'py', 'm']) {
-    test('the Holm snippet adjusts as p.adjust does in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
+    test('the Holm snippet adjusts as p.adjust does in ' + lang, { skip: skipFor(lang, false) }, () => {
       const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body('R')] : [...body('m'), LIB.m.report, LIB.m.holm];
       const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
       try {
@@ -924,8 +979,9 @@ test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the 
   const rd = sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 });
   assert.ok('posthoc dunnett 3-2 hw' in rd.expect && !('posthoc dunnett 1-3 hw' in rd.expect) && !('letters 1' in rd.expect));
   assert.ok(analysisScript(rd, 'py').includes('posthoc_pooled(groups, av, "dunnett", alpha, posthoc_pairs, control - 1)'));
+  assert.ok(analysisScript(rd, 'R').includes('posthoc_pairs <- lapply(setdiff(seq_len(k), control), function(i) c(i, control))'));
+  assert.ok(analysisScript(r, 'R').includes('posthoc_pairs <- combn(k, 2, simplify = FALSE)'));
   assert.ok(analysisScript(rd, 'py').includes('stats.dunnett(') && analysisScript(rd, 'py').includes('random_state=np.random.default_rng(1)'));
-  for (const lang of ['R', 'py', 'm']) assert.ok(analysisScript(rd, lang).includes('posthoc_pairs must compare each design with control'), lang + ' guards the Dunnett pairs');
   // LSD on four-designs: the F test does not reject at 5%, and so no pair is declared different.
   const rl = sevRecipe(FOUR, { rule: 'lsd' });
   assert.equal(rl.expect['posthoc lsd protected'], 0);
@@ -1014,7 +1070,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
     : lang === 'py' ? '[' + f.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
       : f.length ? '[' + f.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']' : 'zeros(0, 2)');
   for (const lang of ['R', 'py', 'm']) {
-    test('the letter display matches letterGroups in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
+    test('the letter display matches letterGroups in ' + lang, { skip: skipFor(lang, false) }, () => {
       const body = cases.flatMap((c, s) => (lang === 'R' ? ['cld <- letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for (i in seq_along(cld)) report(paste("case ' + s + '", i), cld[i])']
         : lang === 'py' ? ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for i, v in enumerate(cld): report(f"case ' + s + ' {i + 1}", v)']
           : ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ');', "for i = 1:numel(cld), report(sprintf('case " + s + " %d', i), cld{i}); end"]));
@@ -1035,13 +1091,16 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   }
 }
 
-// Dunnett's pairs are written in while its control is a setting: a script whose
-// control is edited without its pairs stops with a message instead of
-// comparing against the wrong design.
+// control is a setting, and the script forms its comparisons from it: a script
+// whose control is edited from design 2 to design 3 prints the numbers the page
+// gives with design 3 as the control, for Dunnett's rule and for the
+// Bonferroni family against the control, and prints those comparisons without
+// an analyzer column, the page having made none of them.
 for (const lang of ['R', 'py', 'm']) {
-  test('a Dunnett script stops when control no longer matches its pairs in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
-    const r = sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 });
-    const name = lang === 'm' ? 'dunnett_guard.m' : lang === 'R' ? 'guard.R' : 'guard.py';
+  test('editing control alone changes the comparisons to match in ' + lang, { skip: skipFor(lang, false) }, () => {
+    const over = { rule: 'dunnett', diffMode: 'control' };
+    const r = sevRecipe(FOUR, Object.assign({ ctrlIdx: 1 }, over)), r3 = sevRecipe(FOUR, Object.assign({ ctrlIdx: 2 }, over));
+    const name = lang === 'm' ? 'control_edit.m' : lang === 'R' ? 'control_edit.R' : 'control_edit.py';
     const from = lang === 'R' ? 'control <- 2\n' : lang === 'py' ? 'control = 2\n' : 'control = 2;\n';
     const text = analysisScript(r, lang);
     assert.ok(text.includes(from), 'the settings carry ' + from.trim());
@@ -1051,9 +1110,13 @@ for (const lang of ['R', 'py', 'm']) {
       writeFileSync(f, text.replace(from, from.replace('2', '3')));
       const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
         : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
-          : spawnSync('matlab', ['-batch', `cd('${dir}'); dunnett_guard`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
-      assert.notEqual(run.status, 0, 'the script ran to the end');
-      assert.ok((run.stdout + run.stderr).includes('posthoc_pairs must compare each design with control'), run.stdout + run.stderr);
+          : spawnSync('matlab', ['-batch', `cd('${dir}'); control_edit`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      const want = Object.fromEntries(Object.entries(r3.expect).filter(([k]) => /^(posthoc dunnett |diff |C$|per-comparison level$|plan diffs )/.test(k)));
+      assert.ok(Object.keys(want).some(k => k.startsWith('posthoc dunnett 2-3 ')) && Object.keys(want).some(k => k.startsWith('diff 4-3 ')));
+      compareReport(parseReport(run.stdout), want, lang, r3);
+      assert.match(run.stdout, /^posthoc dunnett 1-3 diff: [^(]*$/m, 'a comparison the page did not make prints alone');
+      assert.match(run.stdout, /^diff 4-3 se: [^(]*$/m, 'a comparison the page did not make prints alone');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 }
@@ -1501,11 +1564,11 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     ['two, paired signed-rank', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2), ['print(broom::tidy(sr$test))']],
     ['several, Tukey', sevRecipe(FOUR),
       ['d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), outcome = unlist(groups))',
-        'bind_rows(sm$items)', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
-        'family_tests[["1-2"]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")', 'p <- ggplot(fig_tbl, aes(y = design))']],
+        'bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
+        'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")', 'p <- ggplot(fig_tbl, aes(y = design))']],
     ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))']],
     ['several, Kruskal-Wallis with a benchmark', sevRecipe(SIX_D, { proc: 'np', bench: 2 }),
-      ['bind_rows(lapply(srs, function(s) broom::tidy(s$test)), .id = "design")', 'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
+      ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))', 'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
     ['several, Friedman', sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }),
       ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))', 'print(tibble(design = seq_len(k), survives = ss$survivors']],
     ['steady', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
@@ -1528,4 +1591,37 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     assert.deepEqual(reports(tidy), reports(base), label + ': the same report lines');
     if (r.page === 'one' || r.page === 'two') assert.ok(!tidy.includes('ggplot('), label + ': no figure');
   }
+});
+
+// ── Layout and wording ─────────────────────────────────────────────────
+
+// A figure is the last thing a script does, so that every report line prints
+// before a figure opens on screen; Python imports only the SciPy submodules
+// its code calls; the comments read as English; and the Summary and Plots
+// figure uses the page's bins and plotting positions.
+test('scripts end with their figure, import what they use, and say what the page draws', () => {
+  const sect = { R: /\n## (.*) ----\n/g, tidy: /\n## (.*) ----\n/g, py: /\n# ---- (.*) ----\n/g, m: /\n%% (.*)\n/g };
+  const withFigure = [sevRecipe(FOUR, { bench: 2.4 }), sevRecipe(SIX_D, { proc: 'np' }), stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
+    stRecipe(QLEN, { align: 'time', cut: 100, count: 60 }), exRecipe(TRANSIENT), exRecipe(IND_A, exSpread(IND_A, IND_B))];
+  for (const r of withFigure) {
+    for (const lang of LANGS) {
+      const s = analysisScript(r, lang);
+      const heads = [...s.matchAll(sect[lang])].map(m => m[1]).filter(h => h !== 'Local functions');
+      assert.ok(/^Figure/.test(heads[heads.length - 1]), r.page + ' ' + lang + ': the figure is last, not ' + heads[heads.length - 1]);
+      const tail = lang === 'm' ? s.slice(0, s.indexOf('\n%% Local functions')) : s;
+      assert.ok(!/\breport\(/.test(tail.slice(tail.lastIndexOf('Figure'))), r.page + ' ' + lang + ': no report line after the figure');
+      assert.ok(!/cut at at|before at\b|at time at\b|over steps equal/.test(s), r.page + ' ' + lang + ': comments read as English');
+    }
+  }
+  const imports = r => analysisScript(r, 'py').split('\n').find(l => l.startsWith('from scipy import'));
+  assert.equal(imports(oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: null })), 'from scipy import stats');
+  assert.equal(imports(sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 })), 'from scipy import integrate, optimize, stats');
+  // A replication-value dataset's records are one value per replication, not tally observations.
+  const reps = analysisScript(exRecipe(IND_A), 'R').replace(/\n# /g, ' ');
+  assert.ok(reps.includes('one value v per replication') && !reps.includes('tally observations v'));
+  // The page's histogram bins and quantile-quantile positions, in Python and MATLAB too.
+  const py = analysisScript(exRecipe(TRANSIENT), 'py'), m = analysisScript(exRecipe(TRANSIENT), 'm'), R = analysisScript(exRecipe(TRANSIENT), 'R');
+  assert.ok(py.includes('np.linspace(x.min(), x.max(), nb + 1)') && py.includes('off = 3 / 8 if n_x <= 10 else 0.5') && !py.includes('probplot'));
+  assert.ok(m.includes('linspace(min(x), max(x), nb + 1)') && m.includes('histogram(x, edges)') && !m.includes('qqplot('));
+  assert.ok(R.includes('hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE'));
 });

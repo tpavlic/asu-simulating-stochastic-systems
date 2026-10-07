@@ -33,7 +33,7 @@ const REGEN_TIP = {
 const REGEN_HELP =
   '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
   'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
-  '<p>A script embeds replication outcomes on the inference pages and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
+  '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
 const REGEN_TOO_BIG = 'The data on this page run past 200,000 numbers, which is more than a script should carry; export the data files instead.';
 
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
@@ -233,8 +233,9 @@ export function installExportRow(root, pageId, opts = {}) {
   regen.hidden = true;
   regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
   regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
-  row.appendChild(regen);
+  // The data files' explanation follows the buttons it explains, above the regenerate line.
   if (opts.help) row.appendChild(details('What each data file holds', opts.help));
+  row.appendChild(regen);
   root.appendChild(row);
   const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
   const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');

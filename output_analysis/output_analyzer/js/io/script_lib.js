@@ -53,9 +53,10 @@ def report(name, value, analyzer=None):
 
 LIB.m.report = `
 function report(name, value, analyzer)
-% Prints one result as "name: value   (analyzer: value)".
+% Prints one result as "name: value   (analyzer: value)", or without the analyzer's value
+% when there is none (no third argument, or an empty one).
 tail = '';
-if nargin >= 3
+if nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer))
     tail = sprintf('   (analyzer: %s)', report_fmt(analyzer));
 end
 fprintf('%s: %s%s\\n', name, report_fmt(value), tail);
@@ -73,6 +74,27 @@ elseif isnumeric(v)
 else
     s = char(v);
 end
+end
+`;
+
+// ── The analyzer's value for one pair of designs ─────────────────────────
+// Several Systems forms its pairs at run time and looks up the analyzer's
+// value for each by its position pos among the pairs the page compared: none
+// (NULL, None, or empty, for which report prints no analyzer column) when
+// the page did not compare that pair.
+
+LIB.R.pageAt = `
+page_at <- function(v, pos) if (is.na(pos)) NULL else v[pos]
+`;
+LIB.py.pageAt = `
+def page_at(v, pos):
+    """The analyzer's value at position pos of v, or None when the page had none."""
+    return None if pos is None else v[pos]
+`;
+LIB.m.pageAt = `
+function a = page_at(v, pos)
+% The analyzer's value at position pos of v, or empty when the page had none.
+if isempty(pos), a = []; else, a = v(pos); end
 end
 `;
 
@@ -134,12 +156,15 @@ describe_tbl <- function(data, col) {
 `;
 LIB.R.tidyFigure = `
 plot_outcomes <- function(data, col, label) {
-  # A histogram of one column, with the bins hist() would choose (Sturges' rule), and its normal
-  # quantile-quantile plot with the line through the quartiles, as qqnorm() and qqline() draw them.
+  # A histogram of one column with the page's bins: max(5, ceiling(sqrt(n))) equal-width bins from
+  # the smallest value to the largest (one bin of width 1 when all are equal), each holding its
+  # left edge and the last both edges. Its normal quantile-quantile plot follows, at R's ppoints
+  # positions, with the line through the quartiles, as qqnorm() and qqline() draw them.
   x <- pull(data, {{ col }})
-  breaks <- pretty(range(x), nclass.Sturges(x), min.n = 1)
+  nb <- max(5, ceiling(sqrt(length(x))))
+  breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)
   p1 <- ggplot(data, aes({{ col }})) +
-    geom_histogram(breaks = breaks, closed = "right", fill = "gray80", color = "black") +
+    geom_histogram(breaks = breaks, closed = "left", fill = "gray80", color = "black") +
     labs(x = label, y = "count", title = "Replication outcomes")
   p2 <- ggplot(data, aes(sample = {{ col }})) +
     stat_qq() + stat_qq_line(linetype = "dashed") +
@@ -193,7 +218,7 @@ end
 // corrections, as the analyzer does. R is told which through wilcox.test's
 // exact argument, because R 4.4 and later would otherwise use an exact
 // distribution under ties too. Python and MATLAB carry the procedure in full,
-// since neither ships the interval. Under the approximation, a few tied
+// because neither ships the interval. Under the approximation, a few tied
 // values can leave the inverted test short of significance at one end of
 // the range or both: the analyzer then reports that end as undetermined (NaN)
 // and keeps the requested level, where wilcox.test lowers the level until an
@@ -699,7 +724,7 @@ end
 // leaves the approximate test short of significance, as with a few tied
 // outcomes, the analyzer reports no interval end where wilcox.test reports
 // the end of the range of shifts. Python and MATLAB carry the procedure in
-// full, since neither ships the interval; MATLAB's ranksum gives the p-value
+// full, because neither ships the interval; MATLAB's ranksum gives the p-value
 // only. These need the signedRank helpers for midranks and bisection.
 
 LIB.R.rankSum = `
@@ -1608,7 +1633,6 @@ LIB.R.posthoc = `
 posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   # pairs: a list of c(i, j); control: the control design, for Dunnett.
   k <- length(groups); C <- length(pairs); scale <- 1
-  if (rule == "dunnett" && any(sapply(pairs, function(p) p[2]) != control)) stop("posthoc_pairs must compare each design with control; change them together")
   if (rule == "tukey") {
     # qtukey returns NaN (with a warning) on fewer than 2 degrees of freedom.
     crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
@@ -1641,7 +1665,6 @@ def posthoc_pooled(groups, av, rule, alpha, pairs, control):
     I = np.array([i for i, j in pairs]); J = np.array([j for i, j in pairs])
     diff = means[I] - means[J]; se = np.sqrt(msw * (1 / n[I] + 1 / n[J]))
     protected = bool(av["p"] < alpha) if rule == "lsd" else None
-    if rule == "dunnett" and np.any(J != control): raise ValueError("posthoc_pairs must compare each design with control; change them together")
     if rule == "tukey":
         crit = stats.studentized_range.ppf(1 - alpha, k, dfw); hw = crit * se / np.sqrt(2)
         if not blocked and msw > 0:
@@ -1673,7 +1696,6 @@ function r = posthoc_pooled(~, av, rule, alpha, pairs, control)
 % read with the variance set to 1. multcompare finds Dunnett's value only to within about 1e-4
 % (its root search stops there), and so that one is computed here.
 C = size(pairs, 1); means = av.means; n = av.n; msw = av.msw;
-if strcmp(rule, 'dunnett') && any(pairs(:, 2) ~= control), error('posthoc_pairs must compare each design with control; change them together'); end
 if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
 if strcmp(rule, 'dunnett')
     crit = qdunnett(1 - alpha, sqrt(n(pairs(:, 1)) / n(control)), av.dfw);
@@ -2398,31 +2420,32 @@ end
 // ── Steady State: truncation, joining, batch means, and Fishman's test ───
 
 LIB.R.batchMeans = `
-truncate_rep <- function(t, v, kind, by, at) {
+truncate_rep <- function(t, v, kind, by, cut_at) {
   # The records kept after the warm-up is cut, with idx, each kept record's position in the
-  # original series. By "index" the first 'at' records go. By "time" a tally observation goes when
-  # it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force there
-  # (the last record at or before 'at') becomes its first record, at time 'at', so that every
-  # later average still counts the time from 'at' to the next record. at = 0 cuts nothing.
+  # original series. By index, the first cut_at records go. By time, a tally observation recorded
+  # before cut_at goes, and a time-persistent trajectory is cut there: the state in force at
+  # cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+  # every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+  # nothing.
   idx <- seq_along(v)
-  if (!isTRUE(at > 0)) return(list(t = t, v = v, idx = idx))
-  if (by == "index") keep <- idx > floor(at)
-  else if (kind == "tally") keep <- t >= at
+  if (!isTRUE(cut_at > 0)) return(list(t = t, v = v, idx = idx))
+  if (by == "index") keep <- idx > floor(cut_at)
+  else if (kind == "tally") keep <- t >= cut_at
   else {
-    k <- which(t <= at); after <- which(t > at)
-    if (length(k)) { k <- max(k); return(list(t = c(at, t[after]), v = c(v[k], v[after]), idx = c(k, after))) }
-    keep <- t > at
+    k <- which(t <= cut_at); after <- which(t > cut_at)
+    if (length(k)) { k <- max(k); return(list(t = c(cut_at, t[after]), v = c(v[k], v[after]), idx = c(k, after))) }
+    keep <- t > cut_at
   }
   list(t = t[keep], v = v[keep], idx = idx[keep])
 }
-lump_reps <- function(reps, kind, by, at, end_time) {
+lump_reps <- function(reps, kind, by, cut_at, end_time) {
   # Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
   # run after another; a time-persistent run covers [s, E], s its first kept record and E the end
   # time or its last record, and is shifted to begin where the previous run ended. A replication
   # with nothing left, or covering no time, is skipped.
   t <- numeric(0); v <- numeric(0); t_end <- NaN; n_reps <- 0
   for (r in reps) {
-    k <- truncate_rep(r$t, r$v, kind, by, at)
+    k <- truncate_rep(r$t, r$v, kind, by, cut_at)
     if (!length(k$v)) next
     if (kind == "tally") { v <- c(v, k$v); n_reps <- n_reps + 1; next }
     E <- trajectory_end(k$t, end_time); s <- k$t[1]
@@ -2489,33 +2512,34 @@ batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
 }
 `;
 LIB.py.batchMeans = `
-def truncate_rep(t, v, kind, by, at):
+def truncate_rep(t, v, kind, by, cut_at):
     """The records kept after the warm-up is cut, with idx, each kept record's position (from 0) in
-    the original series. By "index" the first 'at' records go. By "time" a tally observation goes
-    when it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force
-    there (the last record at or before 'at') becomes its first record, at time 'at', so that every
-    later average still counts the time from 'at' to the next record. at = 0 cuts nothing."""
+    the original series. By index, the first cut_at records go. By time, a tally observation
+    recorded before cut_at goes, and a time-persistent trajectory is cut there: the state in force
+    at cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+    every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+    nothing."""
     v = np.asarray(v, float); t = None if t is None else np.asarray(t, float)
     idx = np.arange(len(v))
-    if not at > 0: return t, v, idx
-    if by == "index": keep = idx >= np.floor(at)
-    elif kind == "tally": keep = t >= at
+    if not cut_at > 0: return t, v, idx
+    if by == "index": keep = idx >= np.floor(cut_at)
+    elif kind == "tally": keep = t >= cut_at
     else:
-        before = np.flatnonzero(t <= at); after = np.flatnonzero(t > at)
+        before = np.flatnonzero(t <= cut_at); after = np.flatnonzero(t > cut_at)
         if len(before):
             k = before[-1]
-            return np.append(at, t[after]), np.append(v[k], v[after]), np.append(k, after)
-        keep = t > at
+            return np.append(cut_at, t[after]), np.append(v[k], v[after]), np.append(k, after)
+        keep = t > cut_at
     return (None if t is None else t[keep]), v[keep], idx[keep]
 
-def lump_reps(reps, kind, by, at, end_time):
+def lump_reps(reps, kind, by, cut_at, end_time):
     """Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
     run after another; a time-persistent run covers [s, E], s its first kept record and E the end
     time or its last record, and is shifted to begin where the previous run ended. A replication
     with nothing left, or covering no time, is skipped."""
     ts, vs, t_end, n_reps = [], [], np.nan, 0
     for r in reps:
-        t, v, _ = truncate_rep(r["t"], r["v"], kind, by, at)
+        t, v, _ = truncate_rep(r["t"], r["v"], kind, by, cut_at)
         if len(v) == 0: continue
         if kind == "tally":
             vs.append(v); n_reps += 1; continue
@@ -2585,38 +2609,39 @@ def batch_means(t, v, kind, end_time, count, size, level, first=0):
                 hi=ti["hi"], r1=f["r1"], C=f["C"], p=f["p"])
 `;
 LIB.m.batchMeans = `
-function [t, v, idx] = truncate_rep(t, v, kind, by, at)
+function [t, v, idx] = truncate_rep(t, v, kind, by, cut_at)
 % The records kept after the warm-up is cut, with idx, each kept record's position in the
-% original series. By 'index' the first at records go. By 'time' a tally observation goes when
-% it comes before at, and a time-persistent trajectory is cut at at: the state in force there
-% (the last record at or before at) becomes its first record, at time at, so that every later
-% average still counts the time from at to the next record. at = 0 cuts nothing.
+% original series. By index, the first cut_at records go. By time, a tally observation recorded
+% before cut_at goes, and a time-persistent trajectory is cut there: the state in force at
+% cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+% every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+% nothing.
 v = v(:)'; if ~isempty(t), t = t(:)'; end
 idx = 1:numel(v);
-if ~(at > 0), return; end
+if ~(cut_at > 0), return; end
 if strcmp(by, 'index')
-    keep = idx > floor(at);
+    keep = idx > floor(cut_at);
 elseif strcmp(kind, 'tally')
-    keep = t >= at;
+    keep = t >= cut_at;
 else
-    k = find(t <= at, 1, 'last'); after = find(t > at);
+    k = find(t <= cut_at, 1, 'last'); after = find(t > cut_at);
     if ~isempty(k)
-        t = [at, t(after)]; v = [v(k), v(after)]; idx = [k, after]; return;
+        t = [cut_at, t(after)]; v = [v(k), v(after)]; idx = [k, after]; return;
     end
-    keep = t > at;
+    keep = t > cut_at;
 end
 if ~isempty(t), t = t(keep); end
 v = v(keep); idx = idx(keep);
 end
 
-function r = lump_reps(reps, kind, by, at, end_time)
+function r = lump_reps(reps, kind, by, cut_at, end_time)
 % Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
 % run after another; a time-persistent run covers [s, E], s its first kept record and E the end
 % time or its last record, and is shifted to begin where the previous run ended. A replication
 % with nothing left, or covering no time, is skipped.
 t = []; v = []; t_end = NaN; n_reps = 0;
 for q = 1:numel(reps)
-    [tk, vk] = truncate_rep(reps(q).t, reps(q).v, kind, by, at);
+    [tk, vk] = truncate_rep(reps(q).t, reps(q).v, kind, by, cut_at);
     if isempty(vk), continue; end
     if strcmp(kind, 'tally'), v = [v, vk]; n_reps = n_reps + 1; continue; end %#ok<AGROW>
     E = trajectory_end(tk, end_time); s = tk(1);
@@ -2692,12 +2717,12 @@ end
 
 LIB.R.acf = `
 acf_lags <- function(y, L) as.numeric(acf(y, lag.max = L, plot = FALSE)$acf)[-1]
-resample_tw <- function(t, v, a, z, steps) {
-  # The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+resample_tw <- function(t, v, a, z, n_steps) {
+  # The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time steps,
   # which an autocorrelation needs because the records arrive at uneven times.
-  step <- (z - a) / steps
-  edges <- c(a + (0:(steps - 1)) * step, z)
-  vapply(seq_len(steps), function(i) tw_mean(t, v, z, edges[i], edges[i + 1]), numeric(1))
+  step <- (z - a) / n_steps
+  edges <- c(a + (0:(n_steps - 1)) * step, z)
+  vapply(seq_len(n_steps), function(i) tw_mean(t, v, z, edges[i], edges[i + 1]), numeric(1))
 }
 `;
 LIB.py.acf = `
@@ -2707,11 +2732,11 @@ def acf_lags(y, L):
     if not ss > 0: return np.full(L, np.nan)
     return np.array([float(np.sum(d[:-k] * d[k:]) / ss) for k in range(1, L + 1)])
 
-def resample_tw(t, v, a, z, steps):
-    """The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
-    which an autocorrelation needs because the records arrive at uneven times."""
-    edges = np.append(a + np.arange(steps) * ((z - a) / steps), z)
-    return np.array([tw_mean(t, v, z, edges[i], edges[i + 1]) for i in range(steps)])
+def resample_tw(t, v, a, z, n_steps):
+    """The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time
+    steps, which an autocorrelation needs because the records arrive at uneven times."""
+    edges = np.append(a + np.arange(n_steps) * ((z - a) / n_steps), z)
+    return np.array([tw_mean(t, v, z, edges[i], edges[i + 1]) for i in range(n_steps)])
 `;
 LIB.m.acf = `
 function r = acf_lags(y, L)
@@ -2720,10 +2745,10 @@ y = y(:)'; d = y - mean(y); ss = sum(d.^2);
 r = arrayfun(@(k) sum(d(1:end-k) .* d(k+1:end)) / ss, 1:L);
 end
 
-function out = resample_tw(t, v, a, z, steps)
-% The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+function out = resample_tw(t, v, a, z, n_steps)
+% The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time steps,
 % which an autocorrelation needs because the records arrive at uneven times.
-edges = [a + (0:steps-1) * ((z - a) / steps), z];
-out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:steps);
+edges = [a + (0:n_steps-1) * ((z - a) / n_steps), z];
+out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:n_steps);
 end
 `;

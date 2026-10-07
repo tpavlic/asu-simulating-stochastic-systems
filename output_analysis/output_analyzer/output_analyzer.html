@@ -14493,7 +14493,11 @@ const LANG = {
     assign: (n, e) => n + ' = ' + e,
     bool: b => (b ? 'True' : 'False'), nan: 'np.nan', inf: 'np.inf',
     list: items => '[' + items.join(', ') + ']',
-    prelude: () => ['import numpy as np', 'from scipy import stats', 'from scipy import integrate, optimize', 'np.set_printoptions(precision=10)'],
+    // SciPy's submodules are imported only where the script's code calls them.
+    prelude: code => {
+      const mods = ['integrate', 'optimize', 'stats'].filter(m => new RegExp('\\b' + m + '\\.').test(code));
+      return ['import numpy as np', ...(mods.length ? ['from scipy import ' + mods.join(', ')] : []), 'np.set_printoptions(precision=10)'];
+    },
     requires: 'Python 3 with NumPy and SciPy 1.11 or later (Matplotlib, if installed, draws any figure).'
   },
   m: {
@@ -14525,8 +14529,10 @@ export const ANALYSIS_WRITERS = {
 // ggplot2 in place of base graphics.
 LANG.tidy = Object.assign({}, LANG.R, {
   tidy: true,
-  prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })', 'options(digits = 10)'],
-  requires: 'R with tibble, dplyr, tidyr, broom, and ggplot2.'
+  // pillar.sigfig lets a printed tibble show as many digits as the report lines do.
+  prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })',
+    'options(digits = 10, pillar.sigfig = 7)'],
+  requires: 'R 4.1 or later with tibble, dplyr 1.1 or later, tidyr, broom, and ggplot2.'
 });
 LANG.R.tidy = false;
 
@@ -14592,9 +14598,46 @@ export function strsAssign(L, target, values) {
   return L.lang === 'R' ? rChunks(target, values.map(v => L.str(v)), 'character(0)') : [L.assign(target, L.strs(values))];
 }
 
-/** Lines assigning ids: numbers when every one reads as a number, strings otherwise. */
+/**
+ * Whether ids can be written as numbers: only when every one is a finite
+ * number written plainly, so that it prints back exactly as the page shows it
+ * ("7" can, "007", "1.0", and "1e3" cannot, and stay strings).
+ */
+function numericIds(ids) {
+  return ids.every(i => { const s = String(i), n = Number(s); return Number.isFinite(n) && String(n) === s; });
+}
+
+/** Lines assigning ids: numbers when numericIds allows, strings otherwise. */
 function idsAssign(L, target, ids) {
-  return ids.every(i => i !== '' && Number.isFinite(Number(i))) ? vecAssign(L, target, ids.map(Number)) : strsAssign(L, target, ids.map(String));
+  return numericIds(ids) ? vecAssign(L, target, ids.map(Number)) : strsAssign(L, target, ids.map(String));
+}
+
+/** Ids as a literal: numbers when numericIds allows, strings otherwise. */
+function idsLit(L, ids) {
+  return numericIds(ids) ? L.vec(ids.map(Number)) : L.strs(ids.map(String));
+}
+
+// Literal tokens joined by commas and wrapped before column 92, each later
+// line indented by `indent` and every earlier one ending in `cont`.
+function joinToks(toks, indent, cont) {
+  const lines = [];
+  let line = '';
+  for (const t of toks) {
+    if (line && line.length + t.length + 2 > 92) { lines.push(line + ','); line = ''; }
+    line += (line ? ', ' : '') + t;
+  }
+  lines.push(line);
+  return lines.join(cont + '\n' + indent);
+}
+
+/**
+ * Lines assigning the analyzer's values to `target`, each written by lit():
+ * numbers with NaN and Inf kept, and yes/no values as booleans.
+ */
+function pageAssign(L, target, values) {
+  const toks = values.map(v => lit(L, v));
+  if (L.lang === 'R') return rChunks(target, toks, 'logical(0)');
+  return [L.assign(target, '[' + joinToks(toks, '    ', L.lang === 'm' ? ' ...' : '') + ']')];
 }
 
 /** Lines assigning a list of vectors (R list, Python list, MATLAB cell), each built by `part(L, target, i)`. */
@@ -14671,10 +14714,7 @@ export function vectorBlock(L, { ids, values, dropped, how, name, response, unit
     out.push(c + 'one value per replication, ' + ascii(how) + '.');
   }
   if (dropped && dropped.length) out.push(c + 'Replications that gave no outcome were left out: ' + dropped.map(ascii).join(', ') + '.');
-  if (ids && idName) {
-    const numeric = ids.every(i => i !== '' && Number.isFinite(Number(i)));
-    out.push(...(numeric ? vecAssign(L, idName, ids.map(Number)) : strsAssign(L, idName, ids.map(String))));
-  }
+  if (ids && idName) out.push(...idsAssign(L, idName, ids));
   out.push(...vecAssign(L, varName, values));
   return out;
 }
@@ -14768,7 +14808,10 @@ function oneBody(r, L) {
     need.push('planning');
     out.push(L.sect('Replications needed'));
     out.push(c + 'By half-width: the smallest R at which the t interval\'s half-width, with s held at its current');
-    out.push(c + 'value, is at most plan_h' + (o.plan.relative ? ' (' + o.plan.rel + '% of the current mean)' : '') + '.');
+    if (o.plan.relative) {
+      out.push(c + 'value, is at most plan_h, set here to plan_rel percent of the current mean\'s absolute value.');
+      out.push(L.assign('plan_h', 'plan_rel / 100 * abs(' + f('d', 'mean') + ')'));
+    } else out.push(c + 'value, is at most plan_h.');
     out.push(L.assign('hp', 'plan_half_width(' + f('d', 'sd') + ', level, plan_h)'));
     out.push(rep(L, r, 'plan half-width target', 'plan_h'), rep(L, r, 'plan n for half-width', f('hp', 'n')), rep(L, r, 'plan half-width at n', f('hp', 'hwAtN')));
     out.push(c + 'By power: the smallest R at which a two-sided one-sample t test at alpha detects a shift of');
@@ -14908,7 +14951,7 @@ function twoPairedBody(r, L) {
   if (o.np) {
     need.push('signedRank');
     out.push(L.sect('Wilcoxon signed-rank comparison of the matched pairs'));
-    out.push(c + 'The pseudo-median of the differences is the Hodges-Lehmann estimate, the median of their pairwise');
+    out.push(c + 'The pseudo-median of the differences is the Hodges-Lehmann estimate, the median of their Walsh');
     out.push(c + 'averages. V sums the ranks of the positive differences among the absolute ones; zero differences');
     out.push(c + 'are dropped before ranking.');
     out.push(L.assign('sr', 'signed_rank(' + f('pr', 'diffs') + ', level)'));
@@ -14922,6 +14965,10 @@ function twoPairedBody(r, L) {
       ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('pr', k)));
   }
   out.push(rep(L, r, 'r', f('pr', 'r')));
+  if (L.tidy) {
+    out.push(c + 'The pairs summarised from pairs_tbl by dplyr: how many, and the mean and sd of the differences a - b.');
+    out.push('print(pairs_tbl |> mutate(difference = a - b) |> summarise(pairs = n(), mean = mean(difference), sd = sd(difference)))');
+  }
   if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
   if (!o.np) {
@@ -14985,16 +15032,73 @@ function familyPairs(r) {
   return pairs;
 }
 
+// The figure comes last, so that every report line prints before a figure
+// opens on screen (Python's plt.show waits until it is closed).
 function sevBody(r, L) {
   const need = [], out = [];
   sevMeans(r, L, out, need);
-  sevFigure(r, L, out);
   sevDiffs(r, L, out, need);
   if (r.several.anova) sevAnova(r, L, out, need);
   if (r.several.rank) sevRank(r, L, out, need);
   if (r.several.subset) sevSubset(r, L, out, need);
   sevPlan(r, L, out, need);
+  sevFigure(r, L, out);
   return { body: out, need };
+}
+
+// The pairwise comparisons and the post-hoc pairs are formed at run time from
+// the settings, so that a script whose control or family is edited compares
+// what the edit asks for. Each pair's report lines carry the analyzer's value
+// for that pair when the page compared it, looked up by the pair's label in
+// vectors written out before the loop, and print alone otherwise.
+
+// The pairs of a family as an expression of the settings: each design against
+// the control (control is numbered from 1 in every language), or every pair
+// i < j, in the page's order. Python's pairs count the designs from 0.
+function pairsExpr(lang, byControl) {
+  if (lang === 'R') return byControl ? 'lapply(setdiff(seq_len(k), control), function(i) c(i, control))' : 'combn(k, 2, simplify = FALSE)';
+  if (lang === 'py') return byControl ? '[(i, control - 1) for i in range(k) if i != control - 1]' : '[(i, j) for i in range(k) for j in range(i + 1, k)]';
+  return byControl ? "[setdiff(1:k, control)', repmat(control, k - 1, 1)]" : 'nchoosek(1:k, 2)';
+}
+
+// A report name formed at run time: `prefix`, the pair's label `lab`, and `suffix`.
+function pairName(L, prefix, suffix) {
+  const pre = L.str(prefix + ' '), suf = suffix ? L.str(suffix) : null;
+  if (L.lang === 'R') return 'paste0(' + pre + ', lab' + (suf ? ', ' + suf : '') + ')';
+  if (L.lang === 'py') return pre + ' + lab' + (suf ? ' + ' + suf : '');
+  return '[' + pre + ' lab' + (suf ? ' ' + suf : '') + ']';
+}
+
+// A report call for one pair: the name from pairName, the script's value, and
+// the analyzer's value at position pos of `pageVar` (none when pos is).
+function pairRep(L, prefix, suffix, expr, pageVar) {
+  const call = 'report(' + pairName(L, prefix, suffix) + ', ' + expr + ', page_at(' + pageVar + ', pos))';
+  return L.lang === 'm' ? call + ';' : call;
+}
+
+// The line that sets lab, the pair's label "i-j" with the designs numbered
+// from 1, and pos, its place in `labelsVar` (NA, None, or empty when the page
+// made no such comparison), from 1-based design numbers `i` and `j` (Python's
+// are 0-based and offset by 1 here).
+function pairLabelLine(L, i, j, labelsVar) {
+  if (L.lang === 'R') return 'lab <- paste0(' + i + ', "-", ' + j + '); pos <- match(lab, ' + labelsVar + ')';
+  if (L.lang === 'py') return 'lab = str(' + i + ' + 1) + "-" + str(' + j + ' + 1); pos = ' + labelsVar + '.index(lab) if lab in ' + labelsVar + ' else None';
+  return "lab = sprintf('%d-%d', " + i + ', ' + j + '); pos = find(strcmp(' + labelsVar + ', lab), 1);';
+}
+
+// The analyzer's values for the pairs it compared, one vector per report key,
+// in the order of the labels in `labelsVar`: `items` are [suffix, variable,
+// yes/no], each value read from the expect map under prefix, label, suffix.
+function pageVectors(L, r, out, { prefix, labels, labelsVar, items }) {
+  out.push(...strsAssign(L, labelsVar, labels));
+  for (const [suffix, v, yesno] of items) {
+    const vals = labels.map(lab => {
+      const key = prefix + ' ' + lab + suffix;
+      const w = Object.prototype.hasOwnProperty.call(r.expect, key) ? r.expect[key] : r.expect[key + ' [optional]'];
+      return yesno ? (w === 1 ? true : w === 0 ? false : NaN) : (typeof w === 'number' ? w : NaN);
+    });
+    out.push(...pageAssign(L, v, vals));
+  }
 }
 
 // The rank tests the page shows in place of the analysis of variance under
@@ -15058,7 +15162,6 @@ function sevSubset(r, L, out, need) {
     'and t is the screen\'s t quantile; a survivor needs N = max(R, ceiling((h s / epsilon)^2)) replications in all for Rinott\'s second stage, h being Rinott\'s constant. ' +
     (S.np ? 'The screen works on means and standard deviations under every procedure; it has no rank version. ' : '') +
     'The best design is reported by its number on the page' + (lang === 'py' ? ', counted from 1.' : '.'), c));
-  out.push(L.assign('epsilon', lit(L, S.eps)), L.assign('direction', L.str(S.dir === 'min' ? 'min' : 'max')));
   out.push(L.assign('ss', 'subset_selection(groups, alpha, epsilon, direction)'));
   if (!S.subset.ok) {
     out.push(...commentLines(c, 'The page does not run the screen: ' + ascii(S.subset.reason), c));
@@ -15130,14 +15233,17 @@ function sevAnova(r, L, out, need) {
 
   const rules = { tukey: 'Tukey-Kramer', lsd: 'Fisher\'s protected LSD', bonferroni: 'Bonferroni on the pooled variance', dunnett: 'Dunnett against the control',
     gameshowell: 'Games-Howell', bonferroniwelch: 'Bonferroni on the Welch pairs' };
+  const dunnett = !A.welch && A.rule === 'dunnett';
+  const ind = lang === 'R' ? '  ' : '    ';
+  need.push('pageAt');
   out.push(L.sect('Post-hoc comparisons: ' + rules[slug]));
   out.push(...commentLines(c, 'Each pair\'s difference of means, mean_i - mean_j, with ' + (A.welch
     ? 'its own standard error sqrt(s_i^2/R_i + s_j^2/R_j) on its own Welch degrees of freedom'
     : 'the standard error sqrt(MS (1/R_i + 1/R_j)), where MS is the ' + (A.blocked ? 'residual mean square' : 'pooled mean square within')) +
     '; a pair whose interval excludes 0 is declared different' + (slug === 'lsd' ? ', but only when the F test rejects at alpha' : '') + '.' +
-    (slug === 'dunnett' ? ' posthoc_pairs holds each design against the control, design ' + (S.ctrlIdx + 1) + '; with another control, change these pairs to match.' : '') +
+    (dunnett ? ' posthoc_pairs holds each design against the control, the design numbered control in the settings.' : ' posthoc_pairs holds every pair of designs.') +
     (lang === 'py' ? ' The designs are counted from 0 here.' : ''), c));
-  out.push(L.assign('posthoc_pairs', pairsLit(lang, A.pairs)));
+  out.push(L.assign('posthoc_pairs', pairsExpr(lang, dunnett)));
   out.push(rep(L, r, 'posthoc rule', L.str(slug)));
   if (A.welch) {
     out.push(L.assign('ph', 'posthoc_welch(groups, ' + L.str(A.rule) + ', alpha, posthoc_pairs)'));
@@ -15153,15 +15259,22 @@ function sevAnova(r, L, out, need) {
       out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
     }
   }
-  A.pairs.forEach(([i, j], q) => {
-    const key = 'posthoc ' + slug + ' ' + pairLabel(i, j);
-    const pf = k => ELEM[lang](f('ph', 'pairs'), q, k);
-    out.push(rep(L, r, key + ' diff', pf('diff')), rep(L, r, key + ' se', pf('se')));
-    if (A.welch) out.push(rep(L, r, key + ' df', pf('df')), rep(L, r, key + ' crit', pf('crit')));
-    out.push(rep(L, r, key + ' hw', pf('hw')), rep(L, r, key + ' lower', pf('lo')), rep(L, r, key + ' upper', pf('hi')));
-    if (A.welch) out.push(rep(L, r, key + ' p', pf('p')));
-    out.push(repYesNo(L, r, key + ' different', pf('flagged')));
-  });
+  // Each pair's report keys: [suffix, field, yes/no].
+  const keys = [[' diff', 'diff'], [' se', 'se']];
+  if (A.welch) keys.push([' df', 'df'], [' crit', 'crit']);
+  keys.push([' hw', 'hw'], [' lower', 'lo'], [' upper', 'hi']);
+  if (A.welch) keys.push([' p', 'p']);
+  keys.push([' different', 'flagged', true]);
+  const prefix = 'posthoc ' + slug;
+  const varOf = suffix => 'page_posthoc' + suffix.replace(/ /g, '_');
+  out.push(...commentLines(c, 'The analyzer\'s values for the pairs the page compared, in the order of page_posthoc_pairs, printed beside the script\'s' +
+    (dunnett ? '; a pair the page did not compare (after control is edited) prints alone.' : '.'), c));
+  pageVectors(L, r, out, { prefix, labels: A.pairs.map(([i, j]) => pairLabel(i, j)), labelsVar: 'page_posthoc_pairs', items: keys.map(([suffix, , yesno]) => [suffix, varOf(suffix), !!yesno]) });
+  const field = k => (lang === 'R' ? 'p$' + k : lang === 'py' ? 'p["' + k + '"]' : 'p.' + k);
+  const body = keys.map(([suffix, k]) => pairRep(L, prefix, suffix, field(k), varOf(suffix)));
+  if (lang === 'R') out.push('for (p in ph$pairs) {', ind + pairLabelLine(L, 'p$i', 'p$j', 'page_posthoc_pairs'), ...body.map(x => ind + x), '}');
+  else if (lang === 'py') out.push('for p in ph["pairs"]:', ind + pairLabelLine(L, 'p["i"]', 'p["j"]', 'page_posthoc_pairs'), ...body.map(x => ind + x));
+  else out.push('for row = 1:numel(ph.pairs)', ind + 'p = ph.pairs{row}; ' + pairLabelLine(L, 'p.i', 'p.j', 'page_posthoc_pairs'), ...body.map(x => ind + x), 'end');
   if (L.tidy) {
     out.push(c + 'The pairs above as one tibble, a row per pair (i and j are the design numbers).');
     out.push('print(bind_rows(ph$pairs))');
@@ -15244,11 +15357,12 @@ function sevMeans(r, L, out, need) {
     if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
   }
   if (L.tidy && S.np) {
-    out.push(...commentLines(c, 'Each design\'s signed-rank test as wilcox.test returns it, tidied by broom and bound into one tibble, a row per design. ' + WILCOX_OWN, c));
-    out.push('print(bind_rows(lapply(srs, function(s) broom::tidy(s$test)), .id = "design"))');
+    out.push(...commentLines(c, 'Each design\'s signed-rank test as wilcox.test returns it, tidied by broom and bound into one tibble, a row per design, ' +
+      'after the design\'s number and name from d_tbl. ' + WILCOX_OWN, c));
+    out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test)))))');
   } else if (L.tidy) {
-    out.push(c + 'The intervals above as one tibble, a row per design.');
-    out.push('print(bind_rows(sm$items) |> mutate(design = seq_len(k), .before = 1))');
+    out.push(c + 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl.');
+    out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items)))');
   }
   if (!S.np) {
     need.push('shapiro');
@@ -15331,49 +15445,70 @@ function sevFigure(r, L, out) {
 }
 
 function sevDiffs(r, L, out, need) {
-  const S = r.several, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
-  const pairs = familyPairs(r);
+  const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
+  const labels = familyPairs(r).map(([i, j]) => pairLabel(i, j));
+  const ind = lang === 'R' ? '  ' : '    ';
+  need.push('pageAt');
   out.push(L.sect(S.np ? 'Pairwise rank comparisons (Bonferroni)' : 'Pairwise comparisons (Bonferroni)'));
   const each = S.np ? (S.paired ? 'Wilcoxon signed-rank interval on the pseudo-median of the paired differences' : 'Wilcoxon rank-sum interval on the shift (the Hodges-Lehmann estimate)')
     : (S.paired ? 'paired t interval on the differences within each block' : 'Welch interval');
-  out.push(...commentLines(c, 'Every comparison\'s own ' + each + ' at 1 - alpha/C, for ' +
-    (S.diffMode === 'control' ? 'each design against the control, design ' + (S.ctrlIdx + 1) : 'every pair of designs') +
-    '. The adjusted p is C p capped at 1, and a comparison whose interval excludes 0 is declared different.', c));
-  out.push(L.assign('C', String(pairs.length)), L.assign('per_c', '1 - alpha / C'));
+  out.push(...commentLines(c, 'Every comparison\'s own ' + each + ' at 1 - alpha/C, for the comparisons in family_pairs' +
+    (lang === 'py' ? ' (its designs counted from 0)' : '') + ': each design against the control when family is "control", and every pair of designs when it is "pairs". ' +
+    'The adjusted p is C p capped at 1, and a comparison whose interval excludes 0 is declared different.', c));
+  if (lang === 'R') out.push('family_pairs <- if (family == "control") ' + pairsExpr(lang, true) + ' else ' + pairsExpr(lang, false));
+  else if (lang === 'py') out.push('family_pairs = ' + pairsExpr(lang, true) + ' if family == "control" else ' + pairsExpr(lang, false));
+  else out.push("if strcmp(family, 'control'), family_pairs = " + pairsExpr(lang, true) + '; else, family_pairs = ' + pairsExpr(lang, false) + '; end');
+  out.push(L.assign('C', lang === 'R' ? 'length(family_pairs)' : lang === 'py' ? 'len(family_pairs)' : 'size(family_pairs, 1)'), L.assign('per_c', '1 - alpha / C'));
   out.push(rep(L, r, 'C', 'C'), rep(L, r, 'per-comparison level', 'per_c'));
-  const adj = p => (lang === 'R' ? 'min(1, C * ' + p + ')' : lang === 'py' ? 'np.minimum(1, C * ' + p + ')' : "min(1, C * " + p + ", 'includenan')");
-  const excl = (lo, hi) => (lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0');
+  if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk lines after it check.');
+  else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
+
+  // The report keys of one comparison, in the page's order: [suffix, the
+  // script's value, the variable holding the analyzer's, yes/no].
+  const P = S.np ? 'shift' : 'diff';
+  const adj = lang === 'R' ? 'min(1, C * ' + f('cmp', 'p') + ')' : lang === 'py' ? 'np.minimum(1, C * ' + f('cmp', 'p') + ')' : "min(1, C * " + f('cmp', 'p') + ", 'includenan')";
+  const lo = f('cmp', 'lo'), hi = f('cmp', 'hi');
+  const excl = lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0';
+  const keys = S.np
+    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
+    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
+  const varOf = suffix => 'page_' + P + suffix.replace(/ /g, '_');
+  const items = keys.map(([suffix, , , yesno]) => [suffix, varOf(suffix), !!yesno]);
+  const shapiro = !S.np && S.paired;
+  if (shapiro) items.push([' W', 'page_shapiro_diff_W', false], [' p', 'page_shapiro_diff_p', false]);
+  out.push(...commentLines(c, 'The analyzer\'s values for the comparisons the page made, in the order of page_family_pairs, printed beside the script\'s; ' +
+    'a comparison the page did not make (after family or control is edited) prints alone.', c));
+  pageVectors(L, r, out, { prefix: P, labels, labelsVar: 'page_family_pairs', items: items.slice(0, keys.length) });
+  if (shapiro) pageVectors(L, r, out, { prefix: 'shapiro diff', labels, labelsVar: 'page_family_pairs', items: items.slice(keys.length) });
   if (L.tidy) {
     out.push(...commentLines(c, 'family_tests collects each comparison\'s test object, for the tibble after the last one' +
-      (S.np ? '.' : ' (a comparison of two constant designs has none, since t.test stops there, and is left out).'), c), 'family_tests <- list()');
+      (S.np ? '.' : ' (a comparison of two constant designs has none, because t.test stops there, and is left out).'), c), 'family_tests <- list()');
   }
-  if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk line after each checks.');
-  else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
-  for (const [i, j] of pairs) {
-    const lab = pairLabel(i, j);
-    if (S.np) {
-      need.push('signedRank');   // the rank-sum snippet also needs its midranks and bisection
-      if (!S.paired) need.push('rankSum');
-      const p = 'shift ' + lab;
-      out.push(L.assign('cmp', S.paired ? 'signed_rank(' + g(i) + ' - ' + g(j) + ', per_c)' : 'rank_sum(' + g(i) + ', ' + g(j) + ', per_c)'));
-      out.push(rep(L, r, p, f('cmp', 'estimate')), rep(L, r, p + ' stat', f('cmp', S.paired ? 'V' : 'W')), rep(L, r, p + ' lower', f('cmp', 'lo')), rep(L, r, p + ' upper', f('cmp', 'hi')));
-      out.push(rep(L, r, p + ' p', f('cmp', 'p')), rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))));
-      out.push(repYesNo(L, r, p + ' exact', f('cmp', 'exact')), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
-      if (L.tidy) out.push('family_tests[[' + L.str(lab) + ']] <- cmp$test');
-    } else {
-      need.push(S.paired ? 'pairedT' : 'twoSample');
-      const p = 'diff ' + lab;
-      out.push(L.assign('cmp', S.paired ? 'paired_t(' + g(i) + ', ' + g(j) + ', per_c)' : 'two_sample_t(' + g(i) + ', ' + g(j) + ', per_c, ' + L.bool(false) + ')'));
-      out.push(rep(L, r, p, f('cmp', S.paired ? 'meanD' : 'diff')));
-      for (const [name, k] of [['se', 'se'], ['df', 'df'], ['lower', 'lo'], ['upper', 'hi'], ['t', 't'], ['p', 'p']]) out.push(rep(L, r, p + ' ' + name, f('cmp', k)));
-      out.push(rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
-      if (L.tidy) out.push('family_tests[[' + L.str(lab) + ']] <- cmp$test');
-      if (S.paired) {
-        need.push('shapiro');
-        out.push(shapiroLine(r, L, 'shapiro diff ' + lab, f('cmp', 'diffs')));
-      }
-    }
+
+  // The comparison itself, for designs i and j (Python's counted from 0).
+  const g = v => (lang === 'R' ? 'groups[[' + v + ']]' : lang === 'py' ? 'groups[' + v + ']' : 'groups{' + v + '}');
+  let call;
+  if (S.np) {
+    need.push('signedRank');   // the rank-sum snippet also needs its midranks and bisection
+    if (!S.paired) need.push('rankSum');
+    call = S.paired ? 'signed_rank(' + g('i') + ' - ' + g('j') + ', per_c)' : 'rank_sum(' + g('i') + ', ' + g('j') + ', per_c)';
+  } else {
+    need.push(S.paired ? 'pairedT' : 'twoSample');
+    call = S.paired ? 'paired_t(' + g('i') + ', ' + g('j') + ', per_c)' : 'two_sample_t(' + g('i') + ', ' + g('j') + ', per_c, ' + L.bool(false) + ')';
   }
+  const body = [L.assign('cmp', call)];
+  keys.forEach(([suffix, k, expr]) => body.push(pairRep(L, P, suffix, expr || f('cmp', k), varOf(suffix))));
+  if (shapiro) {
+    need.push('shapiro');
+    const nm = pairName(L, 'shapiro diff', '');
+    body.push(lang === 'm' ? 'shapiro_check(' + nm + ', cmp.diffs, alpha, page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos));'
+      : 'shapiro_check(' + nm + ', ' + f('cmp', 'diffs') + ', page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos))');
+  }
+  if (L.tidy) body.push('family_tests[[lab]] <- cmp$test');
+  if (lang === 'R') out.push('for (p in family_pairs) {', ind + 'i <- p[1]; j <- p[2]; ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), '}');
+  else if (lang === 'py') out.push('for i, j in family_pairs:', ind + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x));
+  else out.push('for row = 1:C', ind + 'i = family_pairs(row, 1); j = family_pairs(row, 2); ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), 'end');
+
   if (L.tidy) {
     out.push(...commentLines(c, 'Every comparison\'s test as ' + (S.np ? 'wilcox.test' : 't.test') + ' returns it, at 1 - alpha/C, tidied by broom and bound into one tibble, a row per pair; its p-values are not adjusted.' +
       (S.np ? ' ' + WILCOX_OWN : ''), c));
@@ -15385,19 +15520,17 @@ function sevDiffs(r, L, out, need) {
 function sevPlan(r, L, out, need) {
   const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
   need.push('planning', 'planningTwo', 'planningSeveral');
-  const pairs = familyPairs(r);
   out.push(L.sect('Replications per design needed, equal in each design'));
   out.push(...commentLines(c, 'For the means: the smallest R per design at which every interval at 1 - alpha/k has half-width at most ' +
     'plan_means_h. The widest belongs to the design with the largest s, held at its current value.', c));
   out.push(L.assign('sds', PLUCK[lang](lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items', 'sd')));
   out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
   out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
-  out.push(c + 'The comparisons of the family, as pairs of design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
-  out.push(L.assign('family_pairs', pairsLit(lang, pairs)));
   if (S.paired) {
-    out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval at 1 - alpha/C has ' +
-      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value; ' +
-      'pairs that tie up to rounding go to the first in the family\'s order, as on the page.', c));
+    out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval of family_pairs, at 1 - alpha/C, has ' +
+      'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation held at its current value. ' +
+      'Standard deviations that agree to about twelve digits count as tied, and a tie goes to the first such pair in the family\'s order. ' +
+      'The page takes the first largest of its own values, whose last digits can round differently, and so on such a tie it can name a later pair.', c));
     if (lang === 'R') {
       out.push('sd_d <- sapply(family_pairs, function(p) sd(groups[[p[1]]] - groups[[p[2]]]))',
         'hpd <- plan_half_width(max(sd_d), 1 - alpha / C, plan_diffs_h)',
@@ -15415,7 +15548,7 @@ function sevPlan(r, L, out, need) {
         "if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', family_pairs(worst, :)); end");
     }
   } else {
-    out.push(...commentLines(c, 'For the differences: the smallest R per design at which every Welch interval of the family, at ' +
+    out.push(...commentLines(c, 'For the differences: the smallest R per design at which every Welch interval of family_pairs, at ' +
       '1 - alpha/C, has half-width at most plan_diffs_h, with each design\'s s held at its current value.', c));
     out.push(L.assign('hpd', 'plan_half_width_family(sds, level, family_pairs, plan_diffs_h)'));
     if (lang === 'R') out.push('widest <- if (is.nan(hpd$n)) "none" else paste(hpd$pair, collapse = "-")');
@@ -15448,7 +15581,9 @@ function recordsBlock(L, R) {
   out.push(...commentLines(c, 'The records of ' + what + ', every replication in order, numbered from 1 as on the page: ' +
     (R.kind === 'time'
       ? 'a time-persistent state, each record the time t it changed and its new value v. A value holds until the next record, and the last until end_time, or for no time when end_time is NaN.'
-      : 'tally observations v' + (timed ? ', each with the time t it was recorded.' : ', with no time stamps (t is empty).')), c));
+      : R.kind === 'reps'
+        ? 'one value v per replication, its outcome, with no time stamps (t is empty).'
+        : 'tally observations v' + (timed ? ', each with the time t it was recorded.' : ', with no time stamps (t is empty).')), c));
   const empty = R.reps.filter(r => !r.v.length).map(r => ascii(r.id));
   if (empty.length) out.push(...commentLines(c, 'Replications holding no records (ids): ' + empty.join(', ') + '.', c));
   out.push(L.assign('kind', L.str(R.kind)));
@@ -15598,7 +15733,38 @@ function steadyBody(r, L) {
     out.push('if ~bm.ok', ind + notOk, ind + "fprintf('%s\\n', bm.reason);", 'else', ...ok.map(x => ind + x), 'end');
   }
 
-  // The figure (R16): no report lines.
+  // The autocorrelation of the kept series.
+  const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
+  out.push(L.sect('Autocorrelation of the series after truncation'));
+  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
+    (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
+      : 'It needs at least 8 observations.'), c));
+  const tooShort = 'The series after truncation is too short for its autocorrelation.';
+  const report5 = [], hoistA = [];
+  loopReport(L, report5, { hoist: hoistA, name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
+    value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
+  if (lang === 'R') {
+    out.push(...hoistA, 'max_lag <- 400; n_steps <- 2000', 'series <- NULL');
+    if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, n_steps)', '  if (all(is.finite(s))) series <- s', '}');
+    else out.push('if (length(bv) >= 8) series <- bv');
+    out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
+      'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
+  } else if (lang === 'py') {
+    out.push(...hoistA, 'max_lag = 400; n_steps = 2000', 'series = None');
+    if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, n_steps)', '    if np.all(np.isfinite(s)): series = s');
+    else out.push('if len(bv) >= 8: series = bv');
+    out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
+      'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
+  } else {
+    out.push(...hoistA, 'max_lag = 400; n_steps = 2000;', 'series = [];');
+    if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, n_steps);', '    if all(isfinite(s)), series = s; end', 'end');
+    else out.push('if numel(bv) >= 8, series = bv; end');
+    out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
+      'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
+  }
+
+  // The figure, drawn last so that every report line prints before a figure opens on screen
+  // (Python's plt.show waits until it is closed); it prints no report lines.
   const ylab = 'Batch mean of ' + ascii(r.records.response);
   out.push(L.sect('Figure: the batch means'));
   out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
@@ -15635,36 +15801,6 @@ function steadyBody(r, L) {
       "    figure; plot(1:bm.b, bm.means, 'ko-', 'MarkerFaceColor', 'k'); yline(bm.mean, '--');",
       "    xlabel('batch'); ylabel(" + L.str(ylab) + ", 'Interpreter', 'none'); title('Batch means');",
       'end');
-  }
-
-  // The autocorrelation of the kept series.
-  const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
-  out.push(L.sect('Autocorrelation of the series after truncation'));
-  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
-    (time ? 'The trajectory is first averaged over steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
-      : 'It needs at least 8 observations.'), c));
-  const tooShort = 'The series after truncation is too short for its autocorrelation.';
-  const report5 = [], hoistA = [];
-  loopReport(L, report5, { hoist: hoistA, name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
-    value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
-  if (lang === 'R') {
-    out.push(...hoistA, 'max_lag <- 400; steps <- 2000', 'series <- NULL');
-    if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, steps)', '  if (all(is.finite(s))) series <- s', '}');
-    else out.push('if (length(bv) >= 8) series <- bv');
-    out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
-      'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
-  } else if (lang === 'py') {
-    out.push(...hoistA, 'max_lag = 400; steps = 2000', 'series = None');
-    if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, steps)', '    if np.all(np.isfinite(s)): series = s');
-    else out.push('if len(bv) >= 8: series = bv');
-    out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
-      'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
-  } else {
-    out.push(...hoistA, 'max_lag = 400; steps = 2000;', 'series = [];');
-    if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, steps);', '    if all(isfinite(s)), series = s; end', 'end');
-    else out.push('if numel(bv) >= 8, series = bv; end');
-    out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
-      'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
   }
   return { body: out, need };
 }
@@ -15795,24 +15931,38 @@ function exploreBody(r, L) {
     if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(z ~ g)) returns it, g being the dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
-  // The figure: no report lines.
+  // The figure: no report lines. Its histogram has the page's bins, and its
+  // quantile-quantile plot the page's plotting positions and quartile line.
   if (X.interval) {
     const xlab = ascii(r.records.response);
     out.push(L.sect('Figure: histogram and normal quantile-quantile plot of the outcomes'));
+    out.push(...commentLines(c, 'As the page draws them: the histogram has max(5, ceiling(sqrt(n))) equal-width bins from the smallest outcome to the largest ' +
+      '(one bin of width 1 when the outcomes are all equal), each holding its left edge and the last both edges. ' +
+      'The quantile-quantile plot has each sorted outcome against the normal quantile at its plotting position, (i-a)/(n+1-2a), ' +
+      'with a = 3/8 for n <= 10 and 1/2 otherwise, as R\'s ppoints, and a dashed line through the first and third quartiles, as R\'s qqline.', c));
     if (L.tidy) {
       need.push('tidyFigure');
       out.push('plot_outcomes(tibble(outcome = x), outcome, ' + L.str(xlab) + ')');
     } else if (lang === 'R') {
-      out.push('par(mfrow = c(1, 2))',
-        'hist(x, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
+      out.push('nb <- max(5, ceiling(sqrt(length(x))))',
+        'breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)',
+        'par(mfrow = c(1, 2))',
+        'hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
         'qqnorm(x, main = "Normal Q-Q plot"); qqline(x, lty = 2)');
     } else if (lang === 'py') {
       out.push('try:',
         '    import warnings',
         '    import matplotlib.pyplot as plt',
+        '    nb = max(5, int(np.ceil(np.sqrt(len(x)))))',
+        '    edges = np.linspace(x.min(), x.max(), nb + 1) if x.max() > x.min() else x[0] + np.array([-0.5, 0.5])',
+        '    n_x = len(x); off = 3 / 8 if n_x <= 10 else 0.5',
+        '    theo = stats.norm.ppf((np.arange(1, n_x + 1) - off) / (n_x + 1 - 2 * off))',
+        '    q1, q3 = np.quantile(x, [0.25, 0.75]); z1, z3 = stats.norm.ppf([0.25, 0.75])',
         '    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9, 4))',
-        '    a1.hist(x, color="gray", edgecolor="black"); a1.set_title("Replication outcomes"); a1.set_xlabel(' + L.str(xlab) + ')',
-        '    stats.probplot(x, plot=a2); a2.set_title("Normal Q-Q plot")',
+        '    a1.hist(x, bins=edges, color="gray", edgecolor="black"); a1.set_title("Replication outcomes"); a1.set_xlabel(' + L.str(xlab) + ')',
+        '    a2.plot(theo, np.sort(x), "o", color="black")',
+        '    a2.axline((z1, q1), slope=(q3 - q1) / (z3 - z1), linestyle="--", color="gray")',
+        '    a2.set_xlabel("Theoretical quantiles"); a2.set_ylabel("Sample quantiles"); a2.set_title("Normal Q-Q plot")',
         '    fig.tight_layout()',
         '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
         '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
@@ -15820,8 +15970,15 @@ function exploreBody(r, L) {
         'except ImportError:',
         '    print("matplotlib is not installed; the figure is skipped")');
     } else {
-      out.push("figure; subplot(1, 2, 1); histogram(x); title('Replication outcomes'); xlabel(" + L.str(xlab) + ", 'Interpreter', 'none');",
-        "subplot(1, 2, 2); qqplot(x); title('Normal Q-Q plot');");
+      out.push('nb = max(5, ceil(sqrt(numel(x))));',
+        'if max(x) > min(x), edges = linspace(min(x), max(x), nb + 1); else, edges = x(1) + [-0.5, 0.5]; end',
+        'n_x = numel(x); off = 0.5; if n_x <= 10, off = 3 / 8; end',
+        'theo = norminv(((1:n_x) - off) / (n_x + 1 - 2 * off));',
+        'z = norminv([0.25, 0.75]); slope = (d.q3 - d.q1) / (z(2) - z(1));   % the type-7 quartiles from describe above',
+        "figure; subplot(1, 2, 1); histogram(x, edges); title('Replication outcomes'); xlabel(" + L.str(xlab) + ", 'Interpreter', 'none');",
+        "subplot(1, 2, 2); plot(theo, sort(x), 'ko'); hold on;",
+        "plot(theo([1, end]), d.q1 + slope * (theo([1, end]) - z(1)), 'k--'); hold off;",
+        "xlabel('Theoretical quantiles'); ylabel('Sample quantiles'); title('Normal Q-Q plot');");
     }
   }
   return { body: out, need };
@@ -15850,8 +16007,7 @@ function pairsBlock(L, r) {
   left(P.droppedB, 'Replications of B that gave no outcome');
   left(P.unmatchedA, 'Replications of A with no partner in B');
   left(P.unmatchedB, 'Replications of B with no partner in A');
-  const numeric = P.ids.every(i => i !== '' && Number.isFinite(Number(i)));
-  out.push(...(numeric ? vecAssign(L, 'pair_id', P.ids.map(Number)) : strsAssign(L, 'pair_id', P.ids)));
+  out.push(...idsAssign(L, 'pair_id', P.ids));
   out.push(...vecAssign(L, 'a', P.a), ...vecAssign(L, 'b', P.b));
   return out;
 }
@@ -15892,15 +16048,12 @@ function tidyDataBlock(recipe, L) {
       (paired ? 'block = rep(block_id, times = k), ' : '') + 'outcome = unlist(groups))');
   }
   if (recipe.records) {
-    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.', c));
-    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
+    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value. ' +
+      'From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).', c));
+    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))',
+      'print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
-}
-
-// Ids as a literal: numbers when every one reads as a number, strings otherwise.
-function idsLit(L, ids) {
-  return ids.every(i => i !== '' && Number.isFinite(Number(i))) ? L.vec(ids.map(Number)) : L.strs(ids.map(String));
 }
 
 // The designs of Several Systems: their names, numbered as on the page, and
@@ -15951,10 +16104,11 @@ export function analysisScript(recipe, lang) {
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
+  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L), ...body];
   const lines = header(recipe, L);
-  lines.push('', ...L.prelude());
+  lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
-  lines.push(...settingsBlock(recipe, L), ...dataBlock(recipe, L), ...body);
+  lines.push(...main);
   if (lang === 'm') lines.push('', '%% Local functions', LIB.m.report.trim(), '', ...helpers.flatMap(h => [h, '']));
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '') + '\n';
 }
@@ -17071,8 +17225,22 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
   r.one = { pooled, np, interval, variance, checks, plan: planOut };
-  r.settings = planOut ? { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power } : {};
+  // A relative target is carried as the percentage, and the script works out
+  // plan_h from the data's own mean, so that it follows the data if they are edited.
+  r.settings = !planOut ? {}
+    : planOut.relative ? { plan_rel: planOut.rel, plan_delta: planOut.delta, plan_power: planOut.power }
+      : { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power };
   return r;
+}
+
+/**
+ * Whether a One System script would embed more than MAX_NUMBERS numbers:
+ * only under the pooled override, which embeds every observation of a tally
+ * dataset rather than one outcome per replication. Cheap, and copies nothing.
+ * @param {{pooled: boolean, x: ArrayLike<number>}} o the page's recipe inputs
+ */
+export function oneTooBig({ pooled, x }) {
+  return !!pooled && x.length > MAX_NUMBERS;
 }
 
 // ── Two Systems ──────────────────────────────────────────────────────────
@@ -17354,13 +17522,20 @@ export function severalRecipe(o) {
 
   r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps,
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
-  r.settings = { control: ctrlIdx + 1, plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH, plan_delta: plan.delta, plan_power: plan.power };
+  // Every choice a reader may edit is a setting; the script forms the pairs it
+  // compares from control and family at run time.
+  r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
+    plan_delta: plan.delta, plan_power: plan.power });
+  const dunnett = proc !== 'np' && !(o.varMode === 'welch' && !paired) && o.rule === 'dunnett';
   r.settingsNote = [
-    'The comparison family is fixed to the page\'s choice, ' +
-      (diffMode === 'control' ? 'each design against the control, design ' + (ctrlIdx + 1) : 'every pair of designs') +
-      ', and is written into the code below; changing control does not change it. The intervals, the checks, and the plans read level' +
-      (bench != null ? ', benchmark,' : '') + ' and the plan_ half-width targets; control, plan_delta, and plan_power are read only by the analysis of variance\'s post-hoc rules and plan, where the script has them.'
+    'Edit any of these and rerun. level is the confidence that each family of intervals keeps as a whole. ' +
+      'family chooses the pairwise comparisons: "pairs" compares every pair of designs, and "control" compares each design with the control, ' +
+      'the design numbered control in the list below (numbered from 1, as on the page)' + (dunnett ? ', which Dunnett\'s post-hoc rule also compares every design with' : '') + '. ' +
+      (bench != null ? 'benchmark is the value each design\'s interval is checked against. ' : '') +
+      'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
+      'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
   severalAnova(r, o, g);
   severalRank(r, o, g);
@@ -17773,9 +17948,10 @@ def report(name, value, analyzer=None):
 
 LIB.m.report = `
 function report(name, value, analyzer)
-% Prints one result as "name: value   (analyzer: value)".
+% Prints one result as "name: value   (analyzer: value)", or without the analyzer's value
+% when there is none (no third argument, or an empty one).
 tail = '';
-if nargin >= 3
+if nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer))
     tail = sprintf('   (analyzer: %s)', report_fmt(analyzer));
 end
 fprintf('%s: %s%s\\n', name, report_fmt(value), tail);
@@ -17793,6 +17969,27 @@ elseif isnumeric(v)
 else
     s = char(v);
 end
+end
+`;
+
+// ── The analyzer's value for one pair of designs ─────────────────────────
+// Several Systems forms its pairs at run time and looks up the analyzer's
+// value for each by its position pos among the pairs the page compared: none
+// (NULL, None, or empty, for which report prints no analyzer column) when
+// the page did not compare that pair.
+
+LIB.R.pageAt = `
+page_at <- function(v, pos) if (is.na(pos)) NULL else v[pos]
+`;
+LIB.py.pageAt = `
+def page_at(v, pos):
+    """The analyzer's value at position pos of v, or None when the page had none."""
+    return None if pos is None else v[pos]
+`;
+LIB.m.pageAt = `
+function a = page_at(v, pos)
+% The analyzer's value at position pos of v, or empty when the page had none.
+if isempty(pos), a = []; else, a = v(pos); end
 end
 `;
 
@@ -17854,12 +18051,15 @@ describe_tbl <- function(data, col) {
 `;
 LIB.R.tidyFigure = `
 plot_outcomes <- function(data, col, label) {
-  # A histogram of one column, with the bins hist() would choose (Sturges' rule), and its normal
-  # quantile-quantile plot with the line through the quartiles, as qqnorm() and qqline() draw them.
+  # A histogram of one column with the page's bins: max(5, ceiling(sqrt(n))) equal-width bins from
+  # the smallest value to the largest (one bin of width 1 when all are equal), each holding its
+  # left edge and the last both edges. Its normal quantile-quantile plot follows, at R's ppoints
+  # positions, with the line through the quartiles, as qqnorm() and qqline() draw them.
   x <- pull(data, {{ col }})
-  breaks <- pretty(range(x), nclass.Sturges(x), min.n = 1)
+  nb <- max(5, ceiling(sqrt(length(x))))
+  breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)
   p1 <- ggplot(data, aes({{ col }})) +
-    geom_histogram(breaks = breaks, closed = "right", fill = "gray80", color = "black") +
+    geom_histogram(breaks = breaks, closed = "left", fill = "gray80", color = "black") +
     labs(x = label, y = "count", title = "Replication outcomes")
   p2 <- ggplot(data, aes(sample = {{ col }})) +
     stat_qq() + stat_qq_line(linetype = "dashed") +
@@ -17913,7 +18113,7 @@ end
 // corrections, as the analyzer does. R is told which through wilcox.test's
 // exact argument, because R 4.4 and later would otherwise use an exact
 // distribution under ties too. Python and MATLAB carry the procedure in full,
-// since neither ships the interval. Under the approximation, a few tied
+// because neither ships the interval. Under the approximation, a few tied
 // values can leave the inverted test short of significance at one end of
 // the range or both: the analyzer then reports that end as undetermined (NaN)
 // and keeps the requested level, where wilcox.test lowers the level until an
@@ -18419,7 +18619,7 @@ end
 // leaves the approximate test short of significance, as with a few tied
 // outcomes, the analyzer reports no interval end where wilcox.test reports
 // the end of the range of shifts. Python and MATLAB carry the procedure in
-// full, since neither ships the interval; MATLAB's ranksum gives the p-value
+// full, because neither ships the interval; MATLAB's ranksum gives the p-value
 // only. These need the signedRank helpers for midranks and bisection.
 
 LIB.R.rankSum = `
@@ -19328,7 +19528,6 @@ LIB.R.posthoc = `
 posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   # pairs: a list of c(i, j); control: the control design, for Dunnett.
   k <- length(groups); C <- length(pairs); scale <- 1
-  if (rule == "dunnett" && any(sapply(pairs, function(p) p[2]) != control)) stop("posthoc_pairs must compare each design with control; change them together")
   if (rule == "tukey") {
     # qtukey returns NaN (with a warning) on fewer than 2 degrees of freedom.
     crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
@@ -19361,7 +19560,6 @@ def posthoc_pooled(groups, av, rule, alpha, pairs, control):
     I = np.array([i for i, j in pairs]); J = np.array([j for i, j in pairs])
     diff = means[I] - means[J]; se = np.sqrt(msw * (1 / n[I] + 1 / n[J]))
     protected = bool(av["p"] < alpha) if rule == "lsd" else None
-    if rule == "dunnett" and np.any(J != control): raise ValueError("posthoc_pairs must compare each design with control; change them together")
     if rule == "tukey":
         crit = stats.studentized_range.ppf(1 - alpha, k, dfw); hw = crit * se / np.sqrt(2)
         if not blocked and msw > 0:
@@ -19393,7 +19591,6 @@ function r = posthoc_pooled(~, av, rule, alpha, pairs, control)
 % read with the variance set to 1. multcompare finds Dunnett's value only to within about 1e-4
 % (its root search stops there), and so that one is computed here.
 C = size(pairs, 1); means = av.means; n = av.n; msw = av.msw;
-if strcmp(rule, 'dunnett') && any(pairs(:, 2) ~= control), error('posthoc_pairs must compare each design with control; change them together'); end
 if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
 if strcmp(rule, 'dunnett')
     crit = qdunnett(1 - alpha, sqrt(n(pairs(:, 1)) / n(control)), av.dfw);
@@ -20118,31 +20315,32 @@ end
 // ── Steady State: truncation, joining, batch means, and Fishman's test ───
 
 LIB.R.batchMeans = `
-truncate_rep <- function(t, v, kind, by, at) {
+truncate_rep <- function(t, v, kind, by, cut_at) {
   # The records kept after the warm-up is cut, with idx, each kept record's position in the
-  # original series. By "index" the first 'at' records go. By "time" a tally observation goes when
-  # it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force there
-  # (the last record at or before 'at') becomes its first record, at time 'at', so that every
-  # later average still counts the time from 'at' to the next record. at = 0 cuts nothing.
+  # original series. By index, the first cut_at records go. By time, a tally observation recorded
+  # before cut_at goes, and a time-persistent trajectory is cut there: the state in force at
+  # cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+  # every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+  # nothing.
   idx <- seq_along(v)
-  if (!isTRUE(at > 0)) return(list(t = t, v = v, idx = idx))
-  if (by == "index") keep <- idx > floor(at)
-  else if (kind == "tally") keep <- t >= at
+  if (!isTRUE(cut_at > 0)) return(list(t = t, v = v, idx = idx))
+  if (by == "index") keep <- idx > floor(cut_at)
+  else if (kind == "tally") keep <- t >= cut_at
   else {
-    k <- which(t <= at); after <- which(t > at)
-    if (length(k)) { k <- max(k); return(list(t = c(at, t[after]), v = c(v[k], v[after]), idx = c(k, after))) }
-    keep <- t > at
+    k <- which(t <= cut_at); after <- which(t > cut_at)
+    if (length(k)) { k <- max(k); return(list(t = c(cut_at, t[after]), v = c(v[k], v[after]), idx = c(k, after))) }
+    keep <- t > cut_at
   }
   list(t = t[keep], v = v[keep], idx = idx[keep])
 }
-lump_reps <- function(reps, kind, by, at, end_time) {
+lump_reps <- function(reps, kind, by, cut_at, end_time) {
   # Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
   # run after another; a time-persistent run covers [s, E], s its first kept record and E the end
   # time or its last record, and is shifted to begin where the previous run ended. A replication
   # with nothing left, or covering no time, is skipped.
   t <- numeric(0); v <- numeric(0); t_end <- NaN; n_reps <- 0
   for (r in reps) {
-    k <- truncate_rep(r$t, r$v, kind, by, at)
+    k <- truncate_rep(r$t, r$v, kind, by, cut_at)
     if (!length(k$v)) next
     if (kind == "tally") { v <- c(v, k$v); n_reps <- n_reps + 1; next }
     E <- trajectory_end(k$t, end_time); s <- k$t[1]
@@ -20209,33 +20407,34 @@ batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
 }
 `;
 LIB.py.batchMeans = `
-def truncate_rep(t, v, kind, by, at):
+def truncate_rep(t, v, kind, by, cut_at):
     """The records kept after the warm-up is cut, with idx, each kept record's position (from 0) in
-    the original series. By "index" the first 'at' records go. By "time" a tally observation goes
-    when it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force
-    there (the last record at or before 'at') becomes its first record, at time 'at', so that every
-    later average still counts the time from 'at' to the next record. at = 0 cuts nothing."""
+    the original series. By index, the first cut_at records go. By time, a tally observation
+    recorded before cut_at goes, and a time-persistent trajectory is cut there: the state in force
+    at cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+    every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+    nothing."""
     v = np.asarray(v, float); t = None if t is None else np.asarray(t, float)
     idx = np.arange(len(v))
-    if not at > 0: return t, v, idx
-    if by == "index": keep = idx >= np.floor(at)
-    elif kind == "tally": keep = t >= at
+    if not cut_at > 0: return t, v, idx
+    if by == "index": keep = idx >= np.floor(cut_at)
+    elif kind == "tally": keep = t >= cut_at
     else:
-        before = np.flatnonzero(t <= at); after = np.flatnonzero(t > at)
+        before = np.flatnonzero(t <= cut_at); after = np.flatnonzero(t > cut_at)
         if len(before):
             k = before[-1]
-            return np.append(at, t[after]), np.append(v[k], v[after]), np.append(k, after)
-        keep = t > at
+            return np.append(cut_at, t[after]), np.append(v[k], v[after]), np.append(k, after)
+        keep = t > cut_at
     return (None if t is None else t[keep]), v[keep], idx[keep]
 
-def lump_reps(reps, kind, by, at, end_time):
+def lump_reps(reps, kind, by, cut_at, end_time):
     """Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
     run after another; a time-persistent run covers [s, E], s its first kept record and E the end
     time or its last record, and is shifted to begin where the previous run ended. A replication
     with nothing left, or covering no time, is skipped."""
     ts, vs, t_end, n_reps = [], [], np.nan, 0
     for r in reps:
-        t, v, _ = truncate_rep(r["t"], r["v"], kind, by, at)
+        t, v, _ = truncate_rep(r["t"], r["v"], kind, by, cut_at)
         if len(v) == 0: continue
         if kind == "tally":
             vs.append(v); n_reps += 1; continue
@@ -20305,38 +20504,39 @@ def batch_means(t, v, kind, end_time, count, size, level, first=0):
                 hi=ti["hi"], r1=f["r1"], C=f["C"], p=f["p"])
 `;
 LIB.m.batchMeans = `
-function [t, v, idx] = truncate_rep(t, v, kind, by, at)
+function [t, v, idx] = truncate_rep(t, v, kind, by, cut_at)
 % The records kept after the warm-up is cut, with idx, each kept record's position in the
-% original series. By 'index' the first at records go. By 'time' a tally observation goes when
-% it comes before at, and a time-persistent trajectory is cut at at: the state in force there
-% (the last record at or before at) becomes its first record, at time at, so that every later
-% average still counts the time from at to the next record. at = 0 cuts nothing.
+% original series. By index, the first cut_at records go. By time, a tally observation recorded
+% before cut_at goes, and a time-persistent trajectory is cut there: the state in force at
+% cut_at (the last record at or before it) becomes its first record, with time cut_at, so that
+% every later average still counts the time from cut_at to the next record. cut_at = 0 cuts
+% nothing.
 v = v(:)'; if ~isempty(t), t = t(:)'; end
 idx = 1:numel(v);
-if ~(at > 0), return; end
+if ~(cut_at > 0), return; end
 if strcmp(by, 'index')
-    keep = idx > floor(at);
+    keep = idx > floor(cut_at);
 elseif strcmp(kind, 'tally')
-    keep = t >= at;
+    keep = t >= cut_at;
 else
-    k = find(t <= at, 1, 'last'); after = find(t > at);
+    k = find(t <= cut_at, 1, 'last'); after = find(t > cut_at);
     if ~isempty(k)
-        t = [at, t(after)]; v = [v(k), v(after)]; idx = [k, after]; return;
+        t = [cut_at, t(after)]; v = [v(k), v(after)]; idx = [k, after]; return;
     end
-    keep = t > at;
+    keep = t > cut_at;
 end
 if ~isempty(t), t = t(keep); end
 v = v(keep); idx = idx(keep);
 end
 
-function r = lump_reps(reps, kind, by, at, end_time)
+function r = lump_reps(reps, kind, by, cut_at, end_time)
 % Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
 % run after another; a time-persistent run covers [s, E], s its first kept record and E the end
 % time or its last record, and is shifted to begin where the previous run ended. A replication
 % with nothing left, or covering no time, is skipped.
 t = []; v = []; t_end = NaN; n_reps = 0;
 for q = 1:numel(reps)
-    [tk, vk] = truncate_rep(reps(q).t, reps(q).v, kind, by, at);
+    [tk, vk] = truncate_rep(reps(q).t, reps(q).v, kind, by, cut_at);
     if isempty(vk), continue; end
     if strcmp(kind, 'tally'), v = [v, vk]; n_reps = n_reps + 1; continue; end %#ok<AGROW>
     E = trajectory_end(tk, end_time); s = tk(1);
@@ -20412,12 +20612,12 @@ end
 
 LIB.R.acf = `
 acf_lags <- function(y, L) as.numeric(acf(y, lag.max = L, plot = FALSE)$acf)[-1]
-resample_tw <- function(t, v, a, z, steps) {
-  # The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+resample_tw <- function(t, v, a, z, n_steps) {
+  # The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time steps,
   # which an autocorrelation needs because the records arrive at uneven times.
-  step <- (z - a) / steps
-  edges <- c(a + (0:(steps - 1)) * step, z)
-  vapply(seq_len(steps), function(i) tw_mean(t, v, z, edges[i], edges[i + 1]), numeric(1))
+  step <- (z - a) / n_steps
+  edges <- c(a + (0:(n_steps - 1)) * step, z)
+  vapply(seq_len(n_steps), function(i) tw_mean(t, v, z, edges[i], edges[i + 1]), numeric(1))
 }
 `;
 LIB.py.acf = `
@@ -20427,11 +20627,11 @@ def acf_lags(y, L):
     if not ss > 0: return np.full(L, np.nan)
     return np.array([float(np.sum(d[:-k] * d[k:]) / ss) for k in range(1, L + 1)])
 
-def resample_tw(t, v, a, z, steps):
-    """The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
-    which an autocorrelation needs because the records arrive at uneven times."""
-    edges = np.append(a + np.arange(steps) * ((z - a) / steps), z)
-    return np.array([tw_mean(t, v, z, edges[i], edges[i + 1]) for i in range(steps)])
+def resample_tw(t, v, a, z, n_steps):
+    """The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time
+    steps, which an autocorrelation needs because the records arrive at uneven times."""
+    edges = np.append(a + np.arange(n_steps) * ((z - a) / n_steps), z)
+    return np.array([tw_mean(t, v, z, edges[i], edges[i + 1]) for i in range(n_steps)])
 `;
 LIB.m.acf = `
 function r = acf_lags(y, L)
@@ -20440,11 +20640,11 @@ y = y(:)'; d = y - mean(y); ss = sum(d.^2);
 r = arrayfun(@(k) sum(d(1:end-k) .* d(k+1:end)) / ss, 1:L);
 end
 
-function out = resample_tw(t, v, a, z, steps)
-% The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+function out = resample_tw(t, v, a, z, n_steps)
+% The trajectory averaged over n_steps equal intervals of [a, z]: a series on equal time steps,
 % which an autocorrelation needs because the records arrive at uneven times.
-edges = [a + (0:steps-1) * ((z - a) / steps), z];
-out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:steps);
+edges = [a + (0:n_steps-1) * ((z - a) / n_steps), z];
+out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:n_steps);
 end
 `;
 </script>
@@ -23085,7 +23285,7 @@ import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
-import { oneRecipe } from '../io/recipes.js';
+import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, intl, pct, esc, dash, lvl } from '../ui/format.js';
@@ -23741,7 +23941,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const base = state.settings.base;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
-  const regen = { tooBig: false, build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
+  const regen = { tooBig: oneTooBig(recipeIn), build:() => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
 
@@ -31934,7 +32134,7 @@ const REGEN_TIP = {
 const REGEN_HELP =
   '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
   'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
-  '<p>A script embeds replication outcomes on the inference pages and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
+  '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
 const REGEN_TOO_BIG = 'The data on this page run past 200,000 numbers, which is more than a script should carry; export the data files instead.';
 
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
@@ -32134,8 +32334,9 @@ export function installExportRow(root, pageId, opts = {}) {
   regen.hidden = true;
   regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
   regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
-  row.appendChild(regen);
+  // The data files' explanation follows the buttons it explains, above the regenerate line.
   if (opts.help) row.appendChild(details('What each data file holds', opts.help));
+  row.appendChild(regen);
   root.appendChild(row);
   const btns = row.querySelector('.xp-btns'), note = row.querySelector('.xp-note');
   const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');
