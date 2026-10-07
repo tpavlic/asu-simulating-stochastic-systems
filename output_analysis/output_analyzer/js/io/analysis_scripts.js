@@ -860,6 +860,7 @@ function sevAnova(r, L, out, need) {
   } else {
     need.push('posthoc');
     if (A.rule === 'dunnett') need.push('dunnett');
+    if (A.rule === 'tukey' && lang === 'm') need.push('studrange');
     // control is numbered from 1, as on the page; the Python helper counts from 0.
     out.push(L.assign('ph', 'posthoc_pooled(groups, av, ' + L.str(A.rule) + ', alpha, posthoc_pairs, ' + (lang === 'py' ? 'control - 1' : 'control') + ')'));
     out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));

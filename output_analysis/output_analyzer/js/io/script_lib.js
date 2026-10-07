@@ -1634,7 +1634,8 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   # pairs: a list of c(i, j); control: the control design, for Dunnett.
   k <- length(groups); C <- length(pairs); scale <- 1
   if (rule == "tukey") {
-    # qtukey returns NaN (with a warning) on fewer than 2 degrees of freedom.
+    # R's qtukey is approximate on few degrees of freedom (about 1% off at 2), and below 2 it
+    # returns NaN with a warning.
     crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
   } else if (rule == "lsd") {
     crit <- qt(1 - alpha / 2, av$dfw)
@@ -1689,18 +1690,21 @@ def posthoc_pooled(groups, av, rule, alpha, pairs, control):
 LIB.m.posthoc = `
 function r = posthoc_pooled(~, av, rule, alpha, pairs, control)
 % The designs' outcomes (the first argument) enter only through av, the analysis of variance.
-% pairs: a 2-column matrix of (i, j); control: the control design, for Dunnett. Tukey-Kramer's,
-% LSD's, and Bonferroni's critical values come from multcompare on the statistics of anova1 or,
-% with blocks, of anova2 (comparing the column means), read back from the first pair's
-% half-width; with no spread left (msw = 0) every half-width is 0, and the critical value is
-% read with the variance set to 1. multcompare finds Dunnett's value only to within about 1e-4
-% (its root search stops there), and so that one is computed here.
+% pairs: a 2-column matrix of (i, j); control: the control design, for Dunnett. LSD's and
+% Bonferroni's critical values come from multcompare on the statistics of anova1 or, with blocks,
+% of anova2 (comparing the column means), read back from the first pair's half-width; with no
+% spread left (msw = 0) every half-width is 0, and the critical value is read with the variance
+% set to 1. multcompare finds Dunnett's value only to within about 1e-4 (its root search stops
+% there), and Tukey-Kramer's studentized range only approximately on few degrees of freedom
+% (about 1e-4 off at 2), and so those two are computed here.
 C = size(pairs, 1); means = av.means; n = av.n; msw = av.msw;
 if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
 if strcmp(rule, 'dunnett')
     crit = qdunnett(1 - alpha, sqrt(n(pairs(:, 1)) / n(control)), av.dfw);
+elseif strcmp(rule, 'tukey')
+    crit = studrange_inv(1 - alpha, numel(means), av.dfw);   % the studentized range q, with hw = q se / sqrt(2)
 else
-    types = struct('tukey', 'tukey-kramer', 'lsd', 'lsd', 'bonferroni', 'bonferroni');
+    types = struct('lsd', 'lsd', 'bonferroni', 'bonferroni');
     st = av.stats; s2 = msw;
     if ~(msw > 0)
         s2 = 1; if isfield(st, 's'), st.s = 1; else, st.sigmasq = 1; end
@@ -1713,7 +1717,7 @@ else
     crit = (c(row, 5) - c(row, 3)) / 2 / sqrt(s2 * (1 / n(i1) + 1 / n(j1)));
 end
 scale = 1;
-if strcmp(rule, 'tukey'), crit = crit * sqrt(2); scale = 1 / sqrt(2); end   % the studentized range q, with hw = q se / sqrt(2)
+if strcmp(rule, 'tukey'), scale = 1 / sqrt(2); end
 out = cell(1, C);
 for q = 1:C
     i = pairs(q, 1); j = pairs(q, 2);
@@ -1739,8 +1743,8 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     se <- sqrt(a1 + a2); df <- (a1 + a2)^2 / (a1^2 / (length(xi) - 1) + a2^2 / (length(xj) - 1))
     diff <- mean(xi) - mean(xj)
     if (rule == "gameshowell") {
-      # qtukey and ptukey return NaN (with a warning) on fewer than 2 degrees of freedom, as
-      # between two designs of 2 replications each.
+      # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% off at 2), and
+      # below 2, as between two designs of 2 replications each, they return NaN with a warning.
       crit <- qtukey(1 - alpha, k, df); hw <- crit * se / sqrt(2)
       pval <- ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE)
     } else {
@@ -2038,19 +2042,29 @@ end
 // ── Subset selection with Rinott's second-stage sizes ────────────────────
 // The screen runs at 1 - alpha/2 and Rinott's sizing at 1 - alpha/2, and so
 // the whole holds at 1 - alpha. Rinott's h solves
-//   P* = int g(y) [ int g(x) Phi(h / sqrt(nu (1/x + 1/y))) dx ]^(k-1) dy,
-// g the chi-square density on nu = n0 - 1 and n0 the smallest R. The
-// analyzer searches h between 0.5 and 12 and reports none when the root
-// lies outside (a first stage of two replications, for example); the
-// scripts do the same.
+//   P* = int g(v) [ int g(u) Phi(h u v / sqrt(u^2 + v^2)) du ]^(k-1) dv,
+// g the density of s = S/sigma on nu = n0 - 1 degrees of freedom and n0 the
+// smallest R (the chi-square form with x = nu u^2 and y = nu v^2). Each
+// integral runs over the range of s that holds all but 2e-12 of its
+// probability, split at 1/h and 10/h: on a first stage of two replications h
+// is 25 or more, and the inner probability rises in a narrow stretch near
+// s = 1/h that an adaptive rule can otherwise miss. The search for h doubles
+// the upper end of its bracket until it holds the root, as the analyzer's does.
 
 LIB.R.subset = `
 rinott_h <- function(n0, k, pstar) {
+  # s = S / sigma has density 2 nu s dchisq(nu s^2, nu), and lim holds all but 2e-12 of it.
   nu <- n0 - 1
-  inner <- function(h, y) integrate(function(x) dchisq(x, nu) * pnorm(h / sqrt(nu * (1 / x + 1 / y))), 0, Inf, rel.tol = 1e-10)$value
-  pcs <- function(h) integrate(function(y) sapply(y, function(yy) inner(h, yy))^(k - 1) * dchisq(y, nu), 0, Inf, rel.tol = 1e-10)$value
-  if (pcs(0.5) > pstar || pcs(12) < pstar) return(NaN)   # outside the analyzer's search
-  uniroot(function(h) pcs(h) - pstar, c(0.5, 12), tol = 1e-8)$root
+  lim <- sqrt(qchisq(c(1e-12, 1 - 1e-12), nu) / nu)
+  over_s <- function(f, h) {
+    # The integral of f(s) against that density, in pieces split at 1/h and 10/h.
+    pts <- sort(c(lim, c(1, 10) / h)); pts <- pts[pts >= lim[1] & pts <= lim[2]]
+    sum(sapply(seq_len(length(pts) - 1), function(i)
+      integrate(function(s) 2 * nu * s * dchisq(nu * s^2, nu) * f(s), pts[i], pts[i + 1], rel.tol = 1e-10)$value))
+  }
+  pcs <- function(h) over_s(function(v) sapply(v, function(vv) over_s(function(u) pnorm(h * u * vv / sqrt(u^2 + vv^2)), h))^(k - 1), h)
+  # The probability rises with h, and so the search extends the bracket upward as far as it must.
+  uniroot(function(h) pcs(h) - pstar, c(0.5, 12), extendInt = "upX", tol = 1e-8)$root
 }
 subset_selection <- function(groups, alpha, delta, dir) {
   k <- length(groups); n <- lengths(groups)
@@ -2073,16 +2087,22 @@ subset_selection <- function(groups, alpha, delta, dir) {
 `;
 LIB.py.subset = `
 def rinott_h(n0, k, pstar):
-    from scipy import special   # the plain normal cdf and chi-square density, which quad calls many times
+    from scipy import special   # the plain normal cdf, which quad calls many times
     nu = n0 - 1
-    lc = -special.gammaln(nu / 2) - (nu / 2) * np.log(2)
-    g = lambda x: np.exp(lc + special.xlogy(nu / 2 - 1, x) - x / 2)   # the chi-square density on nu
-    def inner(h, y):
-        return integrate.quad(lambda x: g(x) * special.ndtr(h / np.sqrt(nu * (1 / x + 1 / y))), 0, np.inf, epsabs=1e-12, epsrel=1e-10)[0]
+    # The density of s = S / sigma on nu degrees of freedom; lo and hi hold all but 2e-12 of it.
+    lc = np.log(2) + (nu / 2) * np.log(nu / 2) - special.gammaln(nu / 2)
+    dens = lambda s: np.exp(lc + (nu - 1) * np.log(s) - nu * s * s / 2)
+    lo, hi = np.sqrt(stats.chi2.ppf([1e-12, 1 - 1e-12], nu) / nu)
+    def over_s(f, h):
+        # The integral of f(s) against that density, told where the inner probability rises.
+        pts = [p for p in (1 / h, 10 / h) if lo < p < hi]
+        return integrate.quad(lambda s: dens(s) * f(s), lo, hi, points=pts, epsabs=1e-12, epsrel=1e-10, limit=200)[0]
     def pcs(h):
-        return integrate.quad(lambda y: inner(h, y) ** (k - 1) * g(y), 0, np.inf, epsabs=1e-12, epsrel=1e-10)[0]
-    if pcs(0.5) > pstar or pcs(12) < pstar: return np.nan   # outside the analyzer's search
-    return optimize.brentq(lambda h: pcs(h) - pstar, 0.5, 12, xtol=1e-8)
+        return over_s(lambda v: over_s(lambda u: special.ndtr(h * u * v / np.sqrt(u * u + v * v)), h) ** (k - 1), h)
+    # The probability rises with h; the bracket's upper end doubles until it holds the root.
+    top = 12.0
+    while pcs(top) < pstar: top *= 2
+    return optimize.brentq(lambda h: pcs(h) - pstar, 0.5, top, xtol=1e-8)
 
 def subset_selection(groups, alpha, delta, dir):
     groups = [np.asarray(g, float) for g in groups]; k = len(groups)
@@ -2104,10 +2124,19 @@ def subset_selection(groups, alpha, delta, dir):
 LIB.m.subset = `
 function h = rinott_h(n0, k, pstar)
 nu = n0 - 1;
-inner = @(h, y) integral(@(x) chi2pdf(x, nu) .* normcdf(h ./ sqrt(nu * (1 ./ x + 1 / y))), 0, Inf, 'RelTol', 1e-10, 'AbsTol', 1e-12);
-pcs = @(h) integral(@(y) arrayfun(@(yy) inner(h, yy), y).^(k - 1) .* chi2pdf(y, nu), 0, Inf, 'RelTol', 1e-10, 'AbsTol', 1e-12);
-if pcs(0.5) > pstar || pcs(12) < pstar, h = NaN; return; end   % outside the analyzer's search
-h = fzero(@(h) pcs(h) - pstar, [0.5 12], optimset('TolX', 1e-10));
+lim = sqrt(chi2inv([1e-12, 1 - 1e-12], nu) / nu);   % holds all but 2e-12 of the density of s = S / sigma
+pcs = @(h) rinott_over_s(@(v) arrayfun(@(vv) rinott_over_s(@(u) normcdf(h * u * vv ./ sqrt(u.^2 + vv^2)), nu, h, lim), v).^(k - 1), nu, h, lim);
+% The probability rises with h; the bracket's upper end doubles until it holds the root.
+top = 12;
+while pcs(top) < pstar, top = 2 * top; end
+h = fzero(@(h) pcs(h) - pstar, [0.5 top], optimset('TolX', 1e-10));
+end
+
+function v = rinott_over_s(f, nu, h, lim)
+% The integral of f(s) against the density of s over lim, told where the inner probability rises.
+dens = @(s) exp(log(2) + (nu / 2) * log(nu / 2) + (nu - 1) .* log(s) - nu .* s.^2 / 2 - gammaln(nu / 2));
+w = [1 10] / h; w = w(w > lim(1) & w < lim(2));
+v = integral(@(s) dens(s) .* f(s), lim(1), lim(2), 'Waypoints', w, 'RelTol', 1e-10, 'AbsTol', 1e-12);
 end
 
 function r = subset_selection(groups, alpha, delta, dir)

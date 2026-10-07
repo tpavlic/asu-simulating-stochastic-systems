@@ -1,9 +1,10 @@
 // Special functions and distribution routines: the numerics every analysis
 // page stands on. Pure functions, no DOM. The gamma, beta, normal, and t
-// routines, the Gauss–Legendre quadrature, the studentized range, and
-// Rinott's constant are the same implementations the sibling widgets in this
-// repository carry; Dunnett's distribution is new here and uses the same
-// nested quadrature as the studentized range.
+// routines and the Gauss–Legendre quadrature are the same implementations the
+// sibling widgets in this repository carry. The studentized range, Dunnett's
+// distribution (new here), and Rinott's constant share one nested quadrature,
+// whose outer rule works in log s (see chiNodes) so that it holds on few
+// degrees of freedom, where each quantile lies far out.
 
 const LANCZOS_G7 = [
   0.99999999999980993, 676.5203681218851, -1259.1392167224028,
@@ -302,19 +303,34 @@ function chiDensityLog(s, nu) {
   return Math.log(2) + 0.5 * nu * Math.log(nu) + (nu - 1) * Math.log(s) - 0.5 * nu * s * s
        - 0.5 * nu * Math.LN2 - logGamma(0.5 * nu);
 }
-// Nodes over s where the chi density has its mass (centered near 1, spread
-// about 1/sqrt(2ν), reaching 12 spreads each way, floored at 0).
-function chiNodes(nu, panels, n) {
-  const sd = 1 / Math.sqrt(2 * nu), a = Math.max(1e-9, 1 - 12 * sd), b = 1 + 12 * sd;
-  const g = gaussLegendre(n), h = (b - a) / panels, S = [], W = [];
+// Nodes over s for integrals against the chi density, as Gauss–Legendre
+// panels in log s. On few degrees of freedom the density keeps its mass down
+// toward 0, and the integrands below rise from 0 to 1 near s = 1/q, which is
+// far below 1 when the quantile q is large; a panel in log s spans the same
+// ratio of s at every scale, and so that rise is resolved wherever it falls.
+// The nodes run from where the density's lower tail holds 1e-12 (from the
+// bound P(S ≤ s) ≤ x^(ν/2) / Γ(ν/2 + 1), x = ν s²/2), or from 12 spreads
+// below 1 when that is higher, to 12 spreads above 1, in panels at most one
+// unit of log s wide.
+const CHI_NODES_MEMO = new Map();
+function chiNodes(nu) {
+  if (CHI_NODES_MEMO.has(nu)) return CHI_NODES_MEMO.get(nu);
+  const sd = 1 / Math.sqrt(2 * nu), half = 0.5 * nu;
+  const tail = Math.sqrt(2 / nu * Math.exp((Math.log(1e-12) + logGamma(half + 1)) / half));
+  const a = Math.log(Math.max(tail, 1 - 12 * sd)), b = Math.log(1 + 12 * sd);
+  const n = 16, panels = Math.max(12, Math.ceil(b - a)), g = gaussLegendre(n), h = (b - a) / panels;
+  const S = [], W = [];
   for (let p = 0; p < panels; p++) {
     const c = a + p * h + 0.5 * h, r = 0.5 * h;
     for (let i = 0; i < n; i++) {
-      const s = c + r * g.x[i];
-      S.push(s); W.push(g.w[i] * r * Math.exp(chiDensityLog(s, nu)));
+      const s = Math.exp(c + r * g.x[i]);
+      S.push(s); W.push(g.w[i] * r * s * Math.exp(chiDensityLog(s, nu)));
     }
   }
-  return { s: S, w: W };
+  if (CHI_NODES_MEMO.size > 64) CHI_NODES_MEMO.clear();
+  const nd = { s: S, w: W };
+  CHI_NODES_MEMO.set(nu, nd);
+  return nd;
 }
 // Nodes over x in [−8, 8] with φ(x) and Φ(x) precomputed: shared by every
 // inner integral over a standard normal below.
@@ -345,7 +361,7 @@ function rangeCdf(r, k, rn) {
 /** Studentized range CDF: P(Q ≤ q) for k means and ν error degrees of freedom. */
 export function ptukey(q, k, nu) {
   if (!(q > 0)) return 0;
-  const nd = chiNodes(nu, 12, 16), rn = rangeNodes();
+  const nd = chiNodes(nu), rn = rangeNodes();
   let s = 0;
   for (let i = 0; i < nd.s.length; i++) s += nd.w[i] * rangeCdf(q * nd.s[i], k, rn);
   return Math.min(1, s);
@@ -366,13 +382,27 @@ export function solveMonotone(f, lo, hi, tol) {
   }
   return c;
 }
+/**
+ * Root of an increasing f with f(0) ≤ 0: the upper end starts at `hi` and
+ * doubles until f there is no longer negative, the lower end following it
+ * up, and the root is then found between them, to a bracket width of tol
+ * times the lower end once that passes 1. NaN when f stays negative through
+ * 60 doublings, that is, when no root exists.
+ */
+export function rootAbove(f, hi, tol) {
+  let lo = 0;
+  for (let i = 0; i < 60; i++) {
+    if (f(hi) >= 0) return solveMonotone(f, lo, hi, tol * Math.max(1, lo));
+    lo = hi; hi *= 2;
+  }
+  return NaN;
+}
 const Q_TUKEY_MEMO = new Map();
-/** Studentized range quantile q with P(Q ≤ q) = p; saturates at 20 if p is unreachable. */
+/** Studentized range quantile q with P(Q ≤ q) = p. */
 export function qtukey(p, k, nu) {
   const key = p + '|' + k + '|' + nu;
   if (Q_TUKEY_MEMO.has(key)) return Q_TUKEY_MEMO.get(key);
-  const f = q => ptukey(q, k, nu) - p;
-  const q = f(20) < 0 ? 20 : solveMonotone(f, 0.05, 20, 1e-7);
+  const q = rootAbove(q => ptukey(q, k, nu) - p, 20, 1e-7);
   Q_TUKEY_MEMO.set(key, q);
   return q;
 }
@@ -396,7 +426,7 @@ export function qtukey(p, k, nu) {
  */
 export function pdunnett(c, lambdas, nu, twoSided) {
   if (!(c > 0)) return 0;
-  const nd = chiNodes(nu, 12, 16), rn = rangeNodes();
+  const nd = chiNodes(nu), rn = rangeNodes();
   const a = lambdas.map(l => Math.sqrt(1 + l * l));
   let outer = 0;
   for (let j = 0; j < nd.s.length; j++) {
@@ -421,8 +451,7 @@ const Q_DUNNETT_MEMO = new Map();
 export function qdunnett(p, lambdas, nu, twoSided) {
   const key = p + '|' + lambdas.join(',') + '|' + nu + '|' + twoSided;
   if (Q_DUNNETT_MEMO.has(key)) return Q_DUNNETT_MEMO.get(key);
-  const f = c => pdunnett(c, lambdas, nu, twoSided) - p;
-  const q = f(20) < 0 ? 20 : solveMonotone(f, 0.05, 20, 1e-7);
+  const q = rootAbove(c => pdunnett(c, lambdas, nu, twoSided) - p, 20, 1e-7);
   Q_DUNNETT_MEMO.set(key, q);
   return q;
 }
@@ -435,7 +464,7 @@ const RINOTT_H_MEMO = new Map();
 export function rinottH(n0, k, pstar) {
   const key = n0 + '|' + k + '|' + pstar;
   if (RINOTT_H_MEMO.has(key)) return RINOTT_H_MEMO.get(key);
-  const nu = n0 - 1, nd = chiNodes(nu, 12, 16), n = nd.s.length;
+  const nu = n0 - 1, nd = chiNodes(nu), n = nd.s.length;
   const UV = new Float64Array(n * n);
   for (let a = 0; a < n; a++) {
     const v = nd.s[a];
@@ -450,7 +479,7 @@ export function rinottH(n0, k, pstar) {
     }
     return outer;
   }
-  const h = solveMonotone(h => pcs(h) - pstar, 0.5, 12, 1e-6);
+  const h = rootAbove(h => pcs(h) - pstar, 12, 1e-6);
   RINOTT_H_MEMO.set(key, h);
   return h;
 }

@@ -85,7 +85,9 @@ export function runScript(recipe, lang, { text = null, files = {} } = {}) {
 // exact; what rests on its quantile (the critical value, the half-width, the
 // interval's ends, and a p-value) is held to 1e-5 for the studentized range
 // and Dunnett's quantile in every language (MATLAB's scripts compute Dunnett's
-// value themselves, because multcompare's root search stops at about 1e-4).
+// value themselves, because multcompare's root search stops at about 1e-4, and
+// Tukey's, because multcompare's studentized range is approximate on few
+// degrees of freedom).
 // SciPy's dunnett, which Python uses without blocks and with some spread to
 // compare, finds its critical value by randomized quadrature and is held to 2e-3.
 export function tolFor(key, lang, recipe) {
@@ -139,13 +141,21 @@ function skipFor(lang, smoke) {
 /**
  * Runs one recipe through every installed language and compares. `smoke`
  * runs even without OA_SCRIPTS=1; `also(stdout, lang, stderr)` makes further
- * checks on a run's raw output.
+ * checks on a run's raw output. `notInR` matches the keys that R and Tidy R
+ * print but are not held to: those resting on R's own qtukey and ptukey,
+ * which are approximate on few degrees of freedom (about 1% off at 2), where
+ * the scripts keep them as the idiomatic call and say so in a comment.
  */
-export function checkRecipe(name, recipe, { smoke = false, also = null } = {}) {
+export function checkRecipe(name, recipe, { smoke = false, also = null, notInR = null } = {}) {
   for (const lang of LANGS) {
     test(`${name} regenerates in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
       const { report, stdout, stderr } = runScript(recipe, lang);
-      compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
+      let expect = recipe.expect;
+      if (notInR && (lang === 'R' || lang === 'tidy')) {
+        expect = Object.assign({}, expect);
+        for (const k of Object.keys(expect)) if (notInR.test(k)) expect[k] = null;
+      }
+      compareReport(report, expect, lang === 'tidy' ? 'R' : lang, recipe);
       // The tidyverse layer of the Tidy R script (its tibbles, broom's tables,
       // and ggplot2's figures) says nothing on stderr, in every fixture.
       if (lang === 'tidy') assert.ok(!/ggplot|geom_|stat_|Removed \d+ rows?|broom|tibble|dplyr|pillar|summarise|Multiple parameters|naming those columns/i.test(stderr), 'the tidyverse is silent:\n' + stderr);
@@ -1075,6 +1085,10 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   assert.equal(rd.expect['anova df2'], 1);
   assert.ok(Math.abs(rd.expect['posthoc dunnett critical value'] - 12.7062047361747) < 1e-6);
   checkRecipe('Several Systems, blocked Dunnett on 1 residual degree of freedom', rd, sevChecks);
+  // At 99% it is 63.657, past 20, where the analyzer's search used to stop.
+  const r99 = sevRecipe([reps('U', [2.1, 3.4]), reps('V', [2.9, 3.6])], { paired: true, rule: 'dunnett', ctrlIdx: 0, level: 0.99 });
+  assert.ok(Math.abs(r99.expect['posthoc dunnett critical value'] - 63.656741162871185) < 1e-6);
+  checkRecipe('Several Systems, blocked Dunnett on 1 residual degree of freedom at 99%', r99, sevChecks);
 }
 
 // Review Focus 3: a flat design under Welch's analysis of variance. The page
@@ -1256,9 +1270,10 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
 }
 
 // The screen on small first stages. Three replications each: nu = 2, and
-// Rinott's h near 10.75 at P* = 0.975 for four designs. Two each: the root
-// lies past the analyzer's search, which stops at 12, and so h and every N
-// are missing on the page and in the scripts.
+// Rinott's h near 10.75 at P* = 0.975 for four designs. Two each: nu = 1,
+// and h near 47.02 for three designs, past the old search, which stopped at
+// 12 and left h and every N missing; the scripts' integrals must resolve the
+// inner probability's rise near s = 1/h there without a warning.
 {
   const small = [[2.1, 3.4, 2.8], [3.9, 4.4, 3.1], [2.5, 2.2, 3.0], [4.1, 3.6, 4.8]].map((v, i) => reps('S' + (i + 1), v));
   const r = sevRecipe(small, { eps: 0.4 });
@@ -1269,9 +1284,10 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
   // 1e30 and the pooled analysis's three residual degrees of freedom put Tukey's quantile where
   // R's qtukey is good to about 1e-5 only.
   const r2 = sevRecipe(two, { eps: 0.4, proc: 'np' });
-  assert.ok(Number.isNaN(r2.expect['rinott h']));
-  assert.ok(Object.keys(r2.expect).filter(k => /^design \d+ (N|additional)$/.test(k)).every(k => Number.isNaN(r2.expect[k])));
-  checkRecipe('Several Systems, the screen on two replications per design (no h)', r2, sevChecks);
+  assert.ok(Math.abs(r2.expect['rinott h'] - 47.018598657983844) < 1e-4, String(r2.expect['rinott h']));
+  const sized = Object.keys(r2.expect).filter(k => /^design \d+ N$/.test(k));
+  assert.ok(sized.length > 0 && sized.every(k => r2.expect[k] > 2), 'every survivor needs more than its two replications');
+  checkRecipe('Several Systems, the screen on two replications per design', r2, sevChecks);
 }
 
 // The screen refuses an indifference zone of 0 (or one not set), and the
@@ -1325,6 +1341,31 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
   checkRecipe('Several Systems, two replications per design under the t procedures', r, {
     also: (stdout, lang, stderr) => noWarning(stdout, lang, lang === 'R' || lang === 'tidy' ? stderr.replace(leveneNoise, '') : stderr)
   });
+}
+
+// Quantiles past the old search, which stopped at 20 (and at 12 for Rinott's
+// h), on few residual degrees of freedom; Dunnett's on 1 is with the blocked
+// fixtures above.
+{
+  // Three designs in two blocks: Tukey on 2 residual degrees of freedom at 99%, where R's qtukey is
+  // about 2e-4 off, and Rinott's h near 236 on a first stage of two replications. Each design's two
+  // outcomes lie at distances from their median that are exact in binary, and so Levene's within
+  // sum of squares is exactly 0 (F infinite) rather than rounding noise.
+  const blk3 = [[2, 3.5], [4, 4.5], [2.5, 2.25]].map((v, i) => reps('B' + (i + 1), v));
+  const rt = sevRecipe(blk3, { paired: true, level: 0.99, eps: 0.4 });
+  assert.equal(rt.expect['anova df2'], 2);
+  assert.equal(rt.expect['levene F'], Infinity);
+  assert.ok(Math.abs(rt.expect['posthoc tukey critical value'] - 19.018935987312428) < 1e-6);
+  assert.ok(rt.expect['rinott h'] > 200);
+  checkRecipe('Several Systems, Tukey on 2 degrees of freedom at 99%, in blocks', rt,
+    Object.assign({ notInR: /^posthoc tukey .*(critical value|hw|lower|upper)$/ }, sevChecks));
+  // Games-Howell at 99% on four designs of three outcomes with very different spreads: each pair's
+  // Welch degrees of freedom lie between 2 and 3.4, and the critical values reach 22.
+  const gh = [[2.1, 3.4, 2.8], [3.9, 4.0, 3.95], [2.5, 2.2, 3.0], [5.1, 3.6, 7.8]].map((v, i) => reps('G' + (i + 1), v));
+  const rg = sevRecipe(gh, { varMode: 'welch', level: 0.99, eps: 0.4 });
+  assert.ok(rg.expect['posthoc gameshowell 2-4 crit'] > 22 && rg.expect['posthoc gameshowell 2-4 df'] < 2.01);
+  checkRecipe('Several Systems, Games-Howell at 99% on 2 to 3.4 degrees of freedom', rg,
+    Object.assign({ notInR: /^posthoc gameshowell .*(crit|hw|lower|upper| p)$/ }, sevChecks));
 }
 
 // ── Task 8: Steady State ───────────────────────────────────────────────
