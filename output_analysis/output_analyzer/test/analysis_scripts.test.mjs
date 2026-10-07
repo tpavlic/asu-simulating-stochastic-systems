@@ -761,6 +761,15 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.ok('shapiro diff 1-2 W [optional]' in rp.expect);
   assert.ok(analysisScript(rp, 'R').includes('paired_t(groups[[1]], groups[[2]], per_c)'));
   assert.ok(analysisScript(rp, 'm').includes('block_id = '));
+  // The paired flag the analysis of variance reads, and the note on what the settings change.
+  assert.ok(analysisScript(r, 'R').includes('paired <- FALSE') && analysisScript(rp, 'py').includes('paired = True') && analysisScript(rp, 'm').includes('paired = true;'));
+  for (const lang of LANGS) {
+    const flat = analysisScript(rc, lang).replace(/\n[#%] /g, ' ');   // the comment's lines joined
+    assert.ok(flat.includes('each design against the control, design 3, and is written into') && flat.includes('changing control does not change it'), lang + ' says the family is fixed');
+  }
+  // The analysis of variance's rank plan line, once that section sets anovaPlan.
+  const ra = Object.assign({}, rn, { several: Object.assign({}, rn.several, { anovaPlan: true }) });
+  assert.ok(analysisScript(ra, 'R').includes('report("plan anova n (rank)", ceiling(ppa$n * pi / 3)'));
 });
 
 const sevChecks = { also: noWarning };
@@ -834,24 +843,30 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
 
 // Holm's step-down adjustment, which the rank tests' pairwise comparisons
 // offer beside Bonferroni: the snippet against a direct reference, ties and
-// a value capped at 1 included, in every language.
+// a value capped at 1 included, in every language. Missing p-values (every
+// outcome equal) stay missing, as in R and the analyzer.
 {
-  const p = [0.01, 0.04, 0.03, 0.04, 0.005, 0.5, 0.2];
+  const sets = [[0.01, 0.04, 0.03, 0.04, 0.005, 0.5, 0.2], [NaN, NaN, NaN]];
   const holmRef = ps => {
     const C = ps.length, order = ps.map((v, i) => i).sort((a, b) => ps[a] - ps[b]), out = new Array(C);
     let run = 0;
     order.forEach((idx, rank) => { run = Math.max(run, Math.min(1, (C - rank) * ps[idx])); out[idx] = run; });
     return out;
   };
-  const want = holmRef(p), bonf = p.map(v => Math.min(1, p.length * v));
-  const body = {
-    R: ['p <- c(' + p.join(', ') + ')', 'h <- adjust_p(p, "holm"); b <- adjust_p(p, "bonferroni")', 'for (i in seq_along(p)) { report(paste("holm", i), h[i]); report(paste("bonferroni", i), b[i]) }'],
-    py: ['p = [' + p.join(', ') + ']', 'h = adjust_p(p, "holm"); b = adjust_p(p, "bonferroni")', 'for i in range(len(p)):', '    report(f"holm {i + 1}", h[i]); report(f"bonferroni {i + 1}", b[i])'],
-    m: ['p = [' + p.join(', ') + '];', "h = adjust_p(p, 'holm'); b = adjust_p(p, 'bonferroni');", "for i = 1:numel(p), report(sprintf('holm %d', i), h(i)); report(sprintf('bonferroni %d', i), b(i)); end"]
-  };
+  const num = (lang, v) => (Number.isNaN(v) ? (lang === 'py' ? 'float("nan")' : 'NaN') : String(v));
+  const body = lang => sets.flatMap((p, s) => {
+    const v = p.map(x => num(lang, x)).join(', ');
+    if (lang === 'R') return ['p <- c(' + v + ')', 'h <- adjust_p(p, "holm"); b <- adjust_p(p, "bonferroni")',
+      'for (i in seq_along(p)) { report(paste("holm ' + s + '", i), h[i]); report(paste("bonferroni ' + s + '", i), b[i]) }'];
+    if (lang === 'py') return ['p = [' + v + ']', 'h = adjust_p(p, "holm"); b = adjust_p(p, "bonferroni")', 'for i in range(len(p)):',
+      '    report(f"holm ' + s + ' {i + 1}", h[i]); report(f"bonferroni ' + s + ' {i + 1}", b[i])'];
+    return ['p = [' + v + '];', "h = adjust_p(p, 'holm'); b = adjust_p(p, 'bonferroni');",
+      "for i = 1:numel(p), report(sprintf('holm " + s + " %d', i), h(i)); report(sprintf('bonferroni " + s + " %d', i), b(i)); end"];
+  });
+  const same = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-12);
   for (const lang of ['R', 'py', 'm']) {
     test('the Holm snippet adjusts as p.adjust does in ' + lang, { skip: !HAS[lang] ? lang + ' is not installed' : (!FULL && lang !== 'm' ? 'OA_SCRIPTS=1 runs the full matrix' : false) }, () => {
-      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body.py] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body.R] : [...body.m, LIB.m.report, LIB.m.holm];
+      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body('R')] : [...body('m'), LIB.m.report, LIB.m.holm];
       const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
       try {
         const f = join(dir, lang === 'm' ? 'holm_check.m' : lang === 'R' ? 'holm.R' : 'holm.py');
@@ -860,10 +875,15 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
           : lang === 'py' ? spawnSync('python3', [f], { encoding: 'utf8', timeout: 120000 })
             : spawnSync('matlab', ['-batch', `cd('${dir}'); holm_check`], { encoding: 'utf8', timeout: 600000 });
         assert.equal(run.status, 0, run.stdout + run.stderr);
+        noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
-        p.forEach((_, i) => {
-          assert.ok(Math.abs(rep.get('holm ' + (i + 1)) - want[i]) < 1e-12, 'holm ' + (i + 1) + ': ' + rep.get('holm ' + (i + 1)) + ' vs ' + want[i]);
-          assert.ok(Math.abs(rep.get('bonferroni ' + (i + 1)) - bonf[i]) < 1e-12, 'bonferroni ' + (i + 1));
+        sets.forEach((p, s) => {
+          const want = holmRef(p), bonf = p.map(v => Math.min(1, p.length * v));
+          p.forEach((_, i) => {
+            const h = rep.get('holm ' + s + ' ' + (i + 1)), b = rep.get('bonferroni ' + s + ' ' + (i + 1));
+            assert.ok(same(h, want[i]), 'holm ' + s + ' ' + (i + 1) + ': ' + h + ' vs ' + want[i]);
+            assert.ok(same(b, bonf[i]), 'bonferroni ' + s + ' ' + (i + 1) + ': ' + b + ' vs ' + bonf[i]);
+          });
         });
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });

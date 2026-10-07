@@ -1198,9 +1198,10 @@ LIB.m.holm = `
 function out = adjust_p(p, method)
 % Bonferroni (C p, capped at 1) or Holm's step-down, as R's p.adjust.
 p = p(:)'; C = numel(p);
-if strcmp(method, 'bonferroni'), out = min(1, C * p); return; end
+% A missing p-value stays missing ('includenan'), as in R and the analyzer.
+if strcmp(method, 'bonferroni'), out = min(1, C * p, 'includenan'); return; end
 [ps, order] = sort(p);
-stepped = min(1, cummax((C:-1:1) .* ps));   % the sorted p-values times C, C - 1, ..., 1, made nondecreasing
+stepped = min(1, cummax((C:-1:1) .* ps, 'includenan'), 'includenan');   % the sorted p-values times C, C - 1, ..., 1, made nondecreasing
 out = zeros(1, C); out(order) = stepped;
 end
 `;

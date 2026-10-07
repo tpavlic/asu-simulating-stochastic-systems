@@ -441,6 +441,12 @@ export function severalRecipe(o) {
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
   r.settings = { control: ctrlIdx + 1, plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH, plan_delta: plan.delta, plan_power: plan.power };
   if (bench != null) r.settings.benchmark = bench;
+  r.settingsNote = [
+    'The comparison family is fixed to the page\'s choice, ' +
+      (diffMode === 'control' ? 'each design against the control, design ' + (ctrlIdx + 1) : 'every pair of designs') +
+      ', and is written into the code below; changing control does not change it. The intervals, the checks, and the plans read level' +
+      (bench != null ? ', benchmark,' : '') + ' and the plan_ half-width targets; control, plan_delta, and plan_power are read only by the analysis of variance\'s post-hoc rules and plan, where the script has them.'
+  ];
   severalAnova(r, o, g, sm);
   severalRank(r, o, g);
   severalSubset(r, o, g);

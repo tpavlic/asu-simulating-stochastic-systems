@@ -14964,7 +14964,7 @@ function sevFigure(r, L, out) {
     if (B) out.push('abline(v = benchmark, lty = 2)');
   } else if (lang === 'py') {
     out.push('try:',
-      '    import matplotlib',
+      '    import warnings',
       '    import matplotlib.pyplot as plt',
       '    fig_all = np.concatenate([fig_lo, fig_hi, fig_mid' + (B ? ', [benchmark]' : '') + '])',
       '    fin = fig_all[np.isfinite(fig_all)]; xr = [fin.min(), fin.max()]',
@@ -14978,7 +14978,8 @@ function sevFigure(r, L, out) {
     out.push('    ax.set_ylim(k + 0.5, 0.5); ax.set_yticks(ys)',
       '    ax.set_xlabel(' + L.str(xlab) + '); ax.set_ylabel("design"); ax.set_title(' + L.str(title) + ')',
       '    fig.tight_layout()',
-      '    if matplotlib.get_backend().lower() != "agg":   # a backend that only writes files cannot show it',
+      '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
+      '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
       '        plt.show()',
       'except ImportError:',
       '    print("matplotlib is not installed; the figure is skipped")');
@@ -15083,13 +15084,17 @@ function sevPlan(r, L, out, need) {
     out.push(c + 'The rank procedures are sized from the t plans inflated by pi/3, the reciprocal of their efficiency');
     out.push(c + 'relative to the t under normal data.');
     out.push(rep(L, r, 'plan means n (rank)', inf(f('hpm', 'n'))), rep(L, r, 'plan diffs n (rank)', inf(f('hpd', 'n'))));
+    if (S.anovaPlan) out.push(rep(L, r, 'plan anova n (rank)', inf(f('ppa', 'n'))));
   }
 }
 
 BODIES.several = { R: sevBody, py: sevBody, m: sevBody };
 
 function settingsBlock(recipe, L) {
-  const out = [L.sect('Settings'), L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level')];
+  const out = [L.sect('Settings')];
+  // A page may say which settings the script reads and which choices are written into its code.
+  for (const note of recipe.settingsNote || []) out.push(...commentLines(L.comment, ascii(note), L.comment));
+  out.push(L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level'));
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
   return out;
 }
@@ -15156,6 +15161,7 @@ function groupsBlock(L, r) {
   out.push(L.assign('design_names', L.strs(G.names)));
   out.push(L.assign('groups', L.list(G.values.map(v => L.vec(v)))));
   out.push(L.assign('k', String(G.names.length)));
+  out.push(L.assign('paired', L.bool(G.paired)));
   return out;
 }
 
@@ -16578,6 +16584,12 @@ export function severalRecipe(o) {
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
   r.settings = { control: ctrlIdx + 1, plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH, plan_delta: plan.delta, plan_power: plan.power };
   if (bench != null) r.settings.benchmark = bench;
+  r.settingsNote = [
+    'The comparison family is fixed to the page\'s choice, ' +
+      (diffMode === 'control' ? 'each design against the control, design ' + (ctrlIdx + 1) : 'every pair of designs') +
+      ', and is written into the code below; changing control does not change it. The intervals, the checks, and the plans read level' +
+      (bench != null ? ', benchmark,' : '') + ' and the plan_ half-width targets; control, plan_delta, and plan_power are read only by the analysis of variance\'s post-hoc rules and plan, where the script has them.'
+  ];
   severalAnova(r, o, g, sm);
   severalRank(r, o, g);
   severalSubset(r, o, g);
@@ -17791,9 +17803,10 @@ LIB.m.holm = `
 function out = adjust_p(p, method)
 % Bonferroni (C p, capped at 1) or Holm's step-down, as R's p.adjust.
 p = p(:)'; C = numel(p);
-if strcmp(method, 'bonferroni'), out = min(1, C * p); return; end
+% A missing p-value stays missing ('includenan'), as in R and the analyzer.
+if strcmp(method, 'bonferroni'), out = min(1, C * p, 'includenan'); return; end
 [ps, order] = sort(p);
-stepped = min(1, cummax((C:-1:1) .* ps));   % the sorted p-values times C, C - 1, ..., 1, made nondecreasing
+stepped = min(1, cummax((C:-1:1) .* ps, 'includenan'), 'includenan');   % the sorted p-values times C, C - 1, ..., 1, made nondecreasing
 out = zeros(1, C); out(order) = stepped;
 end
 `;
