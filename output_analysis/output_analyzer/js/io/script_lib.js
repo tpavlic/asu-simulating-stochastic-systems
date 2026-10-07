@@ -116,6 +116,39 @@ d = struct('n', n, 'mean', mean(x), 'sd', sd, 'se', sd / sqrt(n), 'min', s(1), .
 end
 `;
 
+// ── Tidy R: the descriptives by dplyr, and the outcomes figure by ggplot2 ──
+// Used by the Tidy R script only. describe_tbl gives the same nine numbers
+// as describe(), with sd and se missing (printed NaN) for a single value.
+
+LIB.R.tidyDescriptives = `
+describe_tbl <- function(data, col) {
+  # n, mean, sd, se, min, quartiles (R's type 7), and max of one column of a tibble, by dplyr's
+  # summarise, as a list. One value has no spread to estimate, and its sd and se are missing.
+  data |>
+    summarise(n = n(), mean = mean({{ col }}), sd = sd({{ col }}), se = sd / sqrt(n),
+              min = min({{ col }}), q1 = quantile({{ col }}, 0.25, names = FALSE),
+              median = median({{ col }}), q3 = quantile({{ col }}, 0.75, names = FALSE),
+              max = max({{ col }})) |>
+    as.list()
+}
+`;
+LIB.R.tidyFigure = `
+plot_outcomes <- function(data, col, label) {
+  # A histogram of one column, with the bins hist() would choose (Sturges' rule), and its normal
+  # quantile-quantile plot with the line through the quartiles, as qqnorm() and qqline() draw them.
+  x <- pull(data, {{ col }})
+  breaks <- pretty(range(x), nclass.Sturges(x), min.n = 1)
+  p1 <- ggplot(data, aes({{ col }})) +
+    geom_histogram(breaks = breaks, closed = "right", fill = "gray80", color = "black") +
+    labs(x = label, y = "count", title = "Replication outcomes")
+  p2 <- ggplot(data, aes(sample = {{ col }})) +
+    stat_qq() + stat_qq_line(linetype = "dashed") +
+    labs(x = "theoretical quantiles", y = "sample quantiles", title = "Normal Q-Q plot")
+  print(p1)
+  print(p2)
+}
+`;
+
 // ── t interval on a mean ─────────────────────────────────────────────────
 // Outcomes that are all equal have no spread: the interval is the mean
 // itself, as the analyzer reports it, and t.test (which stops on constant
@@ -124,10 +157,11 @@ end
 LIB.R.tInterval = `
 t_interval <- function(x, level) {
   n <- length(x); df <- n - 1; tq <- qt(1 - (1 - level) / 2, df)
-  if (sd(x) == 0) return(list(df = df, t = tq, hw = 0, lo = mean(x), hi = mean(x)))
+  if (sd(x) == 0) return(list(df = df, t = tq, hw = 0, lo = mean(x), hi = mean(x), test = NULL))
   tt <- t.test(x, conf.level = level)
+  # test is t.test's own result (an htest object), kept for anyone who wants it whole.
   list(df = unname(tt$parameter), t = tq, hw = unname(diff(tt$conf.int)) / 2,
-       lo = tt$conf.int[1], hi = tt$conf.int[2])
+       lo = tt$conf.int[1], hi = tt$conf.int[2], test = tt)
 }
 `;
 LIB.py.tInterval = `
@@ -215,7 +249,7 @@ signed_rank <- function(x, level, mu = 0) {
     }
   }
   list(V = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
-       lo = lo, hi = hi, achieved = achieved, zeros = sum(d == 0))
+       lo = lo, hi = hi, achieved = achieved, zeros = sum(d == 0), test = wt)
 }
 `;
 LIB.py.signedRank = `
@@ -441,6 +475,7 @@ shapiro_check <- function(name, x, analyzerW = NULL, analyzerP = NULL) {
   sw <- shapiro.test(x)
   report(paste(name, "W"), unname(sw$statistic), analyzerW)
   report(paste(name, "p"), sw$p.value, analyzerP)
+  invisible(sw)
 }
 `;
 LIB.py.shapiro = `
@@ -595,11 +630,11 @@ two_sample_t <- function(a, b, level, pooled) {
     # they are equal, and the pooled t divides by a zero standard error (NaN when equal).
     t <- if (d != 0) sign(d) * Inf else if (pooled) NaN else 0
     return(list(diff = d, se = 0, df = n1 + n2 - 2, t = t, p = if (is.nan(t)) NaN else if (t == 0) 1 else 0,
-                lo = d, hi = d, hw = 0, sp = sp))
+                lo = d, hi = d, hw = 0, sp = sp, test = NULL))
   }
   tt <- t.test(a, b, conf.level = level, var.equal = pooled)
   list(diff = d, se = unname(tt$stderr), df = unname(tt$parameter), t = unname(tt$statistic),
-       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, sp = sp)
+       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, sp = sp, test = tt)
 }
 `;
 LIB.py.twoSample = `
@@ -703,7 +738,7 @@ rank_sum <- function(a, b, level) {
     if (rank_sum_z(a, b, max(a) - min(b)) > -zq) hi <- NaN
   }
   list(W = unname(wt$statistic), p = wt$p.value, exact = exact, estimate = est,
-       lo = lo, hi = hi, achieved = achieved)
+       lo = lo, hi = hi, achieved = achieved, test = wt)
 }
 `;
 LIB.py.rankSum = `
@@ -864,7 +899,7 @@ LIB.R.fRatio = `
 f_ratio <- function(a, b, level) {
   vt <- var.test(a, b, conf.level = level)
   list(F = unname(vt$statistic), df1 = unname(vt$parameter[1]), df2 = unname(vt$parameter[2]),
-       p = vt$p.value, lo = vt$conf.int[1], hi = vt$conf.int[2])
+       p = vt$p.value, lo = vt$conf.int[1], hi = vt$conf.int[2], test = vt)
 }
 `;
 LIB.py.fRatio = `
@@ -906,10 +941,10 @@ levene_test <- function(groups) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
     between <- sum((ave(z, g) - mean(z))^2) > 0
-    return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN))
+    return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN, test = NULL))
   }
   tab <- anova(lm(z ~ g))
-  list(F = tab[["F value"]][1], df1 = tab$Df[1], df2 = tab$Df[2], p = tab[["Pr(>F)"]][1])
+  list(F = tab[["F value"]][1], df1 = tab$Df[1], df2 = tab$Df[2], p = tab[["Pr(>F)"]][1], test = tab)
 }
 `;
 LIB.py.levene = `
@@ -1071,12 +1106,12 @@ paired_t <- function(a, b, level) {
   if (min(d) == max(d)) {
     t <- if (m != 0) sign(m) * Inf else NaN
     return(list(n = n, meanD = m, sdD = 0, se = 0, df = n - 1, t = t, p = if (is.nan(t)) NaN else 0,
-                lo = m, hi = m, hw = 0, r = r, diffs = d))
+                lo = m, hi = m, hw = 0, r = r, diffs = d, test = NULL))
   }
   tt <- t.test(a, b, paired = TRUE, conf.level = level)
   s <- sd(d)
   list(n = n, meanD = m, sdD = s, se = s / sqrt(n), df = unname(tt$parameter), t = unname(tt$statistic),
-       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, r = r, diffs = d)
+       p = tt$p.value, lo = tt$conf.int[1], hi = tt$conf.int[2], hw = diff(tt$conf.int) / 2, r = r, diffs = d, test = tt)
 }
 `;
 LIB.py.pairedT = `
@@ -1324,13 +1359,14 @@ end
 
 LIB.R.anova = `
 anova_table <- function(groups, blocked) {
-  # summary(aov(y ~ g)), or with the replication as a block summary(aov(y ~ g + block)).
-  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
-  k <- length(groups); n <- lengths(groups); means <- sapply(groups, mean); grand <- mean(y)
+  # summary(aov(outcome ~ design)), or with the replication as a block
+  # summary(aov(outcome ~ design + block)); fit is aov's own result.
+  outcome <- unlist(groups); design <- factor(rep(seq_along(groups), lengths(groups)))
+  k <- length(groups); n <- lengths(groups); means <- sapply(groups, mean); grand <- mean(outcome)
   ssb <- sum(n * (means - grand)^2)
   if (blocked) {
     R <- n[1]; block <- factor(rep(seq_len(R), k)); bm <- rowMeans(do.call(cbind, groups))
-    ssblk <- k * sum((bm - grand)^2); ssw <- max(0, sum((y - grand)^2) - ssb - ssblk)
+    ssblk <- k * sum((bm - grand)^2); ssw <- max(0, sum((outcome - grand)^2) - ssb - ssblk)
   } else {
     bm <- NULL; ssw <- sum(sapply(groups, function(x) sum((x - mean(x))^2)))
   }
@@ -1338,7 +1374,7 @@ anova_table <- function(groups, blocked) {
   pval <- function(f, d1, d2) if (is.nan(f)) NaN else pf(f, d1, d2, lower.tail = FALSE)
   fit <- NULL
   if (ssw > 0) {
-    fit <- if (blocked) aov(y ~ g + block) else aov(y ~ g)
+    fit <- if (blocked) aov(outcome ~ design + block) else aov(outcome ~ design)
     tab <- summary(fit)[[1]]   # rows: the designs, the blocks (when blocked), the residuals
     e <- nrow(tab)
     res <- list(ssb = tab[1, "Sum Sq"], dfb = tab[1, "Df"], msb = tab[1, "Mean Sq"], F = tab[1, "F value"], p = tab[1, "Pr(>F)"],
@@ -1346,7 +1382,7 @@ anova_table <- function(groups, blocked) {
     if (blocked) res <- c(res, list(ssblk = tab[2, "Sum Sq"], dfblk = tab[2, "Df"], msblk = tab[2, "Mean Sq"],
                                     Fblock = tab[2, "F value"], pBlock = tab[2, "Pr(>F)"]))
   } else {
-    dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(y) - k
+    dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(outcome) - k
     res <- list(ssb = ssb, dfb = dfb, msb = ssb / dfb, ssw = 0, dfw = dfw, msw = 0)
     res$F <- ratio(res$msb, 0); res$p <- pval(res$F, dfb, dfw)
     if (blocked) {
@@ -1442,7 +1478,7 @@ welch_anova <- function(groups) {
   y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
   ow <- oneway.test(y ~ g, var.equal = FALSE)
   list(F = unname(ow$statistic), df1 = unname(ow$parameter[1]), df2 = unname(ow$parameter[2]), p = ow$p.value,
-       means = sapply(groups, mean), n = lengths(groups), resid = unlist(lapply(groups, function(x) x - mean(x))))
+       means = sapply(groups, mean), n = lengths(groups), resid = unlist(lapply(groups, function(x) x - mean(x))), test = ow)
 }
 `;
 LIB.py.welchAnova = `
@@ -1927,7 +1963,7 @@ friedman_pairs <- function(groups, alpha, adjust, pairs) {
   })
   padj <- adjust_p(sapply(out, function(o) o$p), adjust)
   for (q in seq_along(out)) { out[[q]]$pAdj <- padj[q]; out[[q]]$flagged <- isTRUE(padj[q] < alpha) }
-  list(chi2 = unname(fr$statistic), df = unname(fr$parameter), p = fr$p.value, pairs = out)
+  list(chi2 = unname(fr$statistic), df = unname(fr$parameter), p = fr$p.value, pairs = out, test = fr)
 }
 `;
 LIB.py.friedman = `
@@ -2449,7 +2485,7 @@ batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
   ti <- t_interval(means, level); f <- fishman(means)
   list(ok = TRUE, b = b, size = m, start = start, nUsed = n, means = means, records = records,
        leftover = leftover, mean = mean(means), sd = sd(means), se = sd(means) / sqrt(b), df = b - 1,
-       t = ti$t, hw = ti$hw, lo = ti$lo, hi = ti$hi, r1 = f$r1, C = f$C, p = f$p)
+       t = ti$t, hw = ti$hw, lo = ti$lo, hi = ti$hi, r1 = f$r1, C = f$C, p = f$p, test = ti$test)
 }
 `;
 LIB.py.batchMeans = `

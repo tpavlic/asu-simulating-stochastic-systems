@@ -126,6 +126,9 @@ export function checkRecipe(name, recipe, { smoke = false, also = null } = {}) {
     test(`${name} regenerates in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
       const { report, stdout, stderr } = runScript(recipe, lang);
       compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
+      // The tidyverse layer of the Tidy R script (its tibbles, broom's tables,
+      // and ggplot2's figures) says nothing on stderr, in every fixture.
+      if (lang === 'tidy') assert.ok(!/ggplot|geom_|stat_|Removed \d+ rows?|broom|tibble|dplyr|pillar|summarise|Multiple parameters|naming those columns/i.test(stderr), 'the tidyverse is silent:\n' + stderr);
       if (also) also(stdout, lang, stderr);
     });
   }
@@ -1331,7 +1334,10 @@ test('R data blocks are one-line statements', () => {
     ['two, independent', twoOf(IND_A, IND_B, 't', 0.95, PLAN2)],
     ['two, paired', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2)],
     ['several', sevRecipe(FOUR)],
-    ['several, paired', sevRecipe(FOUR_CRN, { paired: true })]
+    ['several, paired', sevRecipe(FOUR_CRN, { paired: true })],
+    ['explore, tally', exploreRecipe({ ds: TRANSIENT, spread: null, level: 0.95, title: 'Summary of ' + TRANSIENT.name, provenance: { dataset: TRANSIENT.name } })],
+    ['explore, with the spread test', exploreRecipe({ ds: IND_A, spread: { names: [IND_A.name, IND_B.name], groups: [IND_A, IND_B].map(d => outcomeVector(d).values) },
+      level: 0.95, title: 'Summary of ' + IND_A.name, provenance: { dataset: IND_A.name } })]
   ];
   for (const [label, r] of recipes) {
     for (const lang of ['R', 'tidy']) {
@@ -1343,6 +1349,8 @@ test('R data blocks are one-line statements', () => {
         assert.equal(open(l), 0, label + ' ' + lang + ': a statement spans lines: ' + l.slice(0, 80));
         assert.ok(l.length < 4096, label + ': a line under 4 KB');
       }
+      // Tidy R adds the same data as a tibble, also one statement on one line.
+      if (lang === 'tidy') assert.ok(lines.some(l => /^(d_tbl|pairs_tbl|records_tbl) <- /.test(l)), label + ': a tibble in the tidy data block');
       if (r.page === 'steady') {
         assert.ok(/\npage_means <- c\(/.test(s), label + ': page_means at top level');
         for (const l of s.split('\n')) assert.ok(!/^\s+page_(means|records|acf) <- /.test(l), label + ': no analyzer vector inside a block');
@@ -1455,4 +1463,69 @@ test('a Summary and Plots dataset past 200,000 numbers gives no script', () => {
   const r = exRecipe(big);
   assert.equal(r.tooBig, true);
   assert.ok(!r.records && !('n' in r.expect));
+});
+
+// ── Task 11: the Tidy R dialect ────────────────────────────────────────
+
+test('the Tidy R script reads its data as a tibble, summarises with dplyr, tidies its tests, and plots with ggplot2', () => {
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: PLAN });
+  const s = analysisScript(r, 'tidy');
+  for (const needle of ['tibble(', 'summarise(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
+  assert.ok(!s.includes('ggplot('), 'One System draws no figure');
+  assert.ok(!analysisScript(r, 'R').includes('tibble('), 'Base R stays base');
+  const sev = analysisScript(sevRecipe(FOUR), 'tidy');
+  assert.ok(sev.includes('tibble(design = '), 'the designs as a long tibble');
+  for (const t of [sev, analysisScript(stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }), 'tidy'), analysisScript(exRecipe(TRANSIENT), 'tidy')]) {
+    assert.ok(t.includes('ggplot('), 'a page with a figure draws it with ggplot2');
+  }
+});
+
+// Every page in both R dialects: the tidy forms appear in Tidy R only, base
+// graphics in Base R only, and both print the same report lines in the same
+// order, which is what lets the harness compare Tidy R's output as it does
+// Base R's.
+test('Tidy R carries each page\'s tidy forms and the same report lines as Base R', () => {
+  const pooledX = TRANSIENT.reps.flatMap(p => Array.from(p.v));
+  const cases = [
+    ['one, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: PLAN }),
+      ['d_tbl <- tibble(rep_id = rep_id, outcome = x)', 'd <- d_tbl |> describe_tbl(outcome)', 'if (!is.null(ti$test)) print(broom::tidy(ti$test))']],
+    ['one, signed-rank', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.95, base: 0.95, plan: PLAN }),
+      ['print(broom::tidy(sr$test))']],
+    ['one, pooled', oneRecipe({ ds: TRANSIENT, x: pooledX, ids: null, pooled: true, proc: 't', level: 0.95, base: 0.95, plan: null }),
+      ['d_tbl <- tibble(observation = x)', 'd <- d_tbl |> describe_tbl(observation)']],
+    ['two, Welch', twoOf(IND_A, IND_B, 't', 0.95, PLAN2),
+      ['d_tbl <- bind_rows(tibble(design = "A", outcome = a), tibble(design = "B", outcome = b))', 'da <- d_tbl |> filter(design == "A") |> describe_tbl(outcome)',
+        'print(broom::tidy(w$test))', 'print(suppressMessages(broom::tidy(fr$test)))']],
+    ['two, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, PLAN2), ['print(broom::tidy(rs$test))']],
+    ['two, paired t', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), ['pairs_tbl <- tibble(pair_id = pair_id, a = a, b = b)', 'print(broom::tidy(pr$test))']],
+    ['two, paired signed-rank', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2), ['print(broom::tidy(sr$test))']],
+    ['several, Tukey', sevRecipe(FOUR),
+      ['d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), outcome = unlist(groups))',
+        'bind_rows(sm$items)', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
+        'family_tests[["1-2"]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")', 'p <- ggplot(fig_tbl, aes(y = design))']],
+    ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))']],
+    ['several, Kruskal-Wallis with a benchmark', sevRecipe(SIX_D, { proc: 'np', bench: 2 }),
+      ['bind_rows(lapply(srs, function(s) broom::tidy(s$test)), .id = "design")', 'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
+    ['several, Friedman', sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }),
+      ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))', 'print(tibble(design = seq_len(k), survives = ss$survivors']],
+    ['steady', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
+      ['records_tbl <- bind_rows(lapply(reps, function(r) tibble(', 'print(broom::tidy(bm$test))', 'ggplot(batch_tbl, aes(batch, mean))']],
+    ['explore', exRecipe(TRANSIENT),
+      ['records_tbl <- bind_rows(', 'out_tbl <- tibble(rep_id = ', 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)', 'po <- records_tbl |> describe_tbl(v)',
+        'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))', 'plot_outcomes(tibble(outcome = x), outcome, ']],
+    ['explore, Levene', exRecipe(IND_A, exSpread(IND_A, IND_B)), ['print(broom::tidy(lv$test))']]
+  ];
+  const tidyMarks = ['tibble(', 'describe_tbl', 'summarise(', 'broom::', 'ggplot', 'bind_rows(', 'library('];
+  const baseGraphics = /(^|[^\w.])(plot|hist|qqnorm|qqline|segments|abline|par)\(/m;
+  const reports = s => s.split('\n').filter(l => /\breport\(/.test(l) && !/^\s*#/.test(l) && !/^report <- function/.test(l)).map(l => l.trim());
+  for (const [label, r, needles] of cases) {
+    const tidy = analysisScript(r, 'tidy'), base = analysisScript(r, 'R');
+    for (const n of needles) assert.ok(tidy.includes(n), label + ': ' + n);
+    for (const m of tidyMarks) assert.ok(!base.includes(m), label + ': Base R has no ' + m);
+    assert.ok(!baseGraphics.test(tidy.split('\n').filter(l => !/^\s*#/.test(l)).join('\n')), label + ': Tidy R draws no base graphics');
+    assert.ok(/^[\x00-\x7f]*$/.test(tidy), label + ': Tidy R is ASCII');
+    assert.ok(!/\$\{|`/.test(tidy), label + ': no template residue');
+    assert.deepEqual(reports(tidy), reports(base), label + ': the same report lines');
+    if (r.page === 'one' || r.page === 'two') assert.ok(!tidy.includes('ggplot('), label + ': no figure');
+  }
 });

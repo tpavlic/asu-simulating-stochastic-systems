@@ -111,9 +111,12 @@ export const ANALYSIS_WRITERS = {
   py: { label: 'Python', name: 'Python', ext: 'py', mime: 'text/x-python' }
 };
 
-// Tidy R is the R syntax with the tidyverse loaded. Its bodies are the Base R
-// ones until the emitters consult L.tidy for the tibble, dplyr, broom, and
-// ggplot2 forms. Both dialects report L.lang === 'R' and share LIB.R.
+// Tidy R is the R syntax with the tidyverse loaded. Both dialects report
+// L.lang === 'R', share LIB.R, and print the same report lines; where L.tidy
+// is set, the emitters add the data as a long tibble beside the vectors, take
+// the descriptives with dplyr, print each test object the script builds
+// through broom::tidy() after its report lines, and draw the figures with
+// ggplot2 in place of base graphics.
 LANG.tidy = Object.assign({}, LANG.R, {
   tidy: true,
   prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })', 'options(digits = 10)'],
@@ -281,12 +284,33 @@ const DESC_KEYS = ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max'];
 /** Field access per language: d$k, d["k"], d.k. */
 export const FIELD = { R: (v, k) => v + '$' + k, py: (v, k) => v + '["' + k + '"]', m: (v, k) => v + '.' + k };
 
-/** The Descriptives section on the vector `v`, with `describe()` from LIB's descriptives. */
-export function descriptives(r, L, v, out) {
+/**
+ * The Descriptives section on the vector `v`, with `describe()` from LIB's
+ * descriptives; in Tidy R, on the column `col` of the tibble d_tbl, with
+ * `describe_tbl()` from LIB's tidyDescriptives.
+ */
+export function descriptives(r, L, v, out, col = 'outcome') {
   out.push(L.sect('Descriptives of the ' + (r.data.pooled ? 'pooled observations' : 'replication outcomes')));
-  out.push(L.assign('d', 'describe(' + v + ')'));
+  out.push(L.tidy ? 'd <- d_tbl |> describe_tbl(' + col + ')' : L.assign('d', 'describe(' + v + ')'));
   for (const k of DESC_KEYS) out.push(rep(L, r, k, FIELD[L.lang]('d', k)));
 }
+
+// The descriptives snippet a body needs: describe() or, in Tidy R, describe_tbl().
+const descNeed = L => (L.tidy ? 'tidyDescriptives' : 'descriptives');
+
+// Tidy R: a test object the script built, printed through broom::tidy() after
+// its report lines, behind the comment `why`. A `maybe` object is NULL where
+// the helper did not call the test (data with no spread), and is then skipped.
+// broom announces on stderr how it names a test's two degrees of freedom
+// (var.test, oneway.test), which `twoDf` silences.
+function tidyTest(out, L, obj, why, maybe = false, twoDf = false) {
+  out.push(...commentLines(L.comment, why, L.comment));
+  const show = twoDf ? 'print(suppressMessages(broom::tidy(' + obj + ')))' : 'print(broom::tidy(' + obj + '))';
+  out.push(maybe ? 'if (!is.null(' + obj + ')) ' + show : show);
+}
+
+// What the tidied wilcox.test result can differ in from the report lines above it.
+const WILCOX_OWN = 'Its estimate is wilcox.test\'s own, which under the normal approximation can differ in the third decimal from the Hodges-Lehmann estimate reported above, and where a few tied values leave an end of the interval undetermined, wilcox.test reports an interval anyway; the report lines follow the analyzer.';
 
 /**
  * A report call for a yes/no result: the script's logical beside the
@@ -303,8 +327,8 @@ export function repYesNo(L, recipe, name, expr) {
 // and the replication plan.
 function oneBody(r, L) {
   const o = r.one, lang = L.lang, f = FIELD[lang], c = L.comment;
-  const need = ['descriptives'], out = [];
-  descriptives(r, L, 'x', out);
+  const need = [descNeed(L)], out = [];
+  descriptives(r, L, 'x', out, r.data.pooled ? 'observation' : 'outcome');
   if (o.interval && o.np) {
     need.push('signedRank');
     out.push(L.sect('Interval on the pseudo-median (Wilcoxon signed-rank)'));
@@ -313,11 +337,13 @@ function oneBody(r, L) {
     out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
     out.push(rep(L, r, 'wilcoxon lower', f('sr', 'lo')), rep(L, r, 'wilcoxon upper', f('sr', 'hi')));
     if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('sr', 'achieved')));
+    if (L.tidy) tidyTest(out, L, 'sr$test', 'The signed-rank test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   } else if (o.interval) {
     need.push('tInterval');
     out.push(L.sect('Interval on the mean (t)'));
     out.push(L.assign('ti', 't_interval(x, level)'));
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
+    if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
   if (o.checks) {
     need.push('shapiro');
@@ -373,11 +399,12 @@ function shapiroLine(r, L, prefix, v) {
 function twoBody(r, L) {
   if (r.two.mode === 'paired') return twoPairedBody(r, L);
   const o = r.two, lang = L.lang, f = FIELD[lang], c = L.comment;
-  const need = ['descriptives'], out = [];
+  const need = [descNeed(L)], out = [];
   const pooledLit = L.bool(o.pooled);
   need.push('shapiro');
   out.push(L.sect('Descriptives of the two designs'));
-  out.push(L.assign('da', 'describe(a)'), L.assign('db', 'describe(b)'));
+  if (L.tidy) out.push('da <- d_tbl |> filter(design == "A") |> describe_tbl(outcome)', 'db <- d_tbl |> filter(design == "B") |> describe_tbl(outcome)');
+  else out.push(L.assign('da', 'describe(a)'), L.assign('db', 'describe(b)'));
   out.push(rep(L, r, 'R_A', f('da', 'n')), rep(L, r, 'R_B', f('db', 'n')), rep(L, r, 'mean A', f('da', 'mean')),
     rep(L, r, 'mean B', f('db', 'mean')), rep(L, r, 'sd A', f('da', 'sd')), rep(L, r, 'sd B', f('db', 'sd')));
   if (o.np) {
@@ -391,6 +418,7 @@ function twoBody(r, L) {
     out.push(repYesNo(L, r, 'exact', f('rs', 'exact')));
     out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
     if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
+    if (L.tidy) tidyTest(out, L, 'rs$test', 'The rank-sum test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   } else {
     need.push('twoSample');
     out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
@@ -401,6 +429,7 @@ function twoBody(r, L) {
     out.push(rep(L, r, 'difference', f('w', 'diff')));
     if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
     for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
+    if (L.tidy) tidyTest(out, L, 'w$test', (o.pooled ? 'The pooled-variance t test' : 'Welch\'s t test') + ' as t.test returns it, tidied by broom into a one-row tibble (none when neither design varies, where t.test stops).', true);
     out.push(L.sect('Checks'));
     out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk)' + (o.levene ? ', and equal variances' : '') + '.');
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
@@ -421,6 +450,7 @@ function twoBody(r, L) {
     out.push(c + 'are normal, and unlike the comparison of means it does not become safe as R grows.');
     out.push(L.assign('fr', 'f_ratio(a, b, level)'));
     for (const [name, k] of [['F', 'F'], ['F df1', 'df1'], ['F df2', 'df2'], ['F p', 'p'], ['F lower', 'lo'], ['F upper', 'hi']]) out.push(rep(L, r, name, f('fr', k)));
+    if (L.tidy) tidyTest(out, L, 'fr$test', 'The F test as var.test returns it, tidied by broom into a one-row tibble, its two degrees of freedom as num.df and den.df.', false, true);
     if (!o.np) out.push(c + 'Its normality check is the Shapiro-Wilk check of each design reported above.');
   }
   if (o.np) {
@@ -486,6 +516,8 @@ function twoPairedBody(r, L) {
       ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('pr', k)));
   }
   out.push(rep(L, r, 'r', f('pr', 'r')));
+  if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
+  else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
   if (!o.np) {
     need.push('shapiro');
     out.push(L.sect('Checks'));
@@ -589,6 +621,11 @@ function sevRank(r, L, out, need) {
     out.push(rep(L, r, key + ' diff', pf('diff')), rep(L, r, key + ' se', pf('se')), rep(L, r, key + ' z', pf('z')), rep(L, r, key + ' p', pf('p')),
       rep(L, r, key + ' adjusted p', pf('pAdj')), repYesNo(L, r, key + ' different', pf('flagged')));
   });
+  if (L.tidy) {
+    if (K.paired) tidyTest(out, L, 'rk$test', 'Friedman\'s test as friedman.test returns it, tidied by broom into a one-row tibble.');
+    out.push(c + 'The pairs above as one tibble, a row per pair (i and j are the design numbers).');
+    out.push('print(bind_rows(rk$pairs))');
+  }
   out.push(c + 'The compact letter display: designs that share a letter are not declared different.');
   const flagged = lang === 'R' ? 'Filter(Negate(is.null), lapply(rk$pairs, function(p) if (p$flagged) c(p$i, p$j) else NULL))'
     : lang === 'py' ? '[(p["i"], p["j"]) for p in rk["pairs"] if p["flagged"]]'
@@ -629,6 +666,10 @@ function sevSubset(r, L, out, need) {
     const at = k => (lang === 'R' ? 'ss$' + k + '[' + (i + 1) + ']' : lang === 'py' ? 'ss["' + k + '"][' + i + ']' : 'ss.' + k + '(' + (i + 1) + ')');
     out.push(repYesNo(L, r, d + 'survives', at('survivors')), rep(L, r, d + 'N', at('N')), rep(L, r, d + 'additional', at('additional')));
   }
+  if (L.tidy) {
+    out.push(c + 'The screen as one tibble, a row per design.');
+    out.push('print(tibble(design = seq_len(k), survives = ss$survivors, N = ss$N, additional = ss$additional))');
+  }
 }
 
 // Pairs of designs as a literal: a list of c(i, j) in R, tuples counted from
@@ -666,6 +707,7 @@ function sevAnova(r, L, out, need) {
     out.push(c + 'Each design\'s mean weighted by R_i / s_i^2, nothing pooled' + (lang === 'R' ? ' (oneway.test with var.equal = FALSE).' : ', as R\'s oneway.test(var.equal = FALSE).'));
     out.push(L.assign('av', 'welch_anova(groups)'));
     out.push(rep(L, r, 'welch F', f('av', 'F')), rep(L, r, 'welch df1', f('av', 'df1')), rep(L, r, 'welch df2', f('av', 'df2')), rep(L, r, 'welch p', f('av', 'p')));
+    if (L.tidy) tidyTest(out, L, 'av$test', 'Welch\'s analysis as oneway.test returns it, tidied by broom into a one-row tibble, its two degrees of freedom as num.df and den.df.', false, true);
   } else {
     need.push('anova');
     out.push(L.sect(A.blocked ? 'Analysis of variance with the replication as a block' : 'One-way analysis of variance'));
@@ -674,6 +716,7 @@ function sevAnova(r, L, out, need) {
     out.push(rep(L, r, 'anova F', f('av', 'F')), rep(L, r, 'anova df1', f('av', 'dfb')), rep(L, r, 'anova df2', f('av', 'dfw')), rep(L, r, 'anova p', f('av', 'p')));
     out.push(rep(L, r, 'ss between', f('av', 'ssb')), rep(L, r, 'ss within', f('av', 'ssw')), rep(L, r, 'ms between', f('av', 'msb')), rep(L, r, 'ms within', f('av', 'msw')));
     if (A.blocked) out.push(rep(L, r, 'ss blocks', f('av', 'ssblk')), rep(L, r, 'df blocks', f('av', 'dfblk')), rep(L, r, 'block F', f('av', 'Fblock')), rep(L, r, 'block p', f('av', 'pBlock')));
+    if (L.tidy) tidyTest(out, L, 'av$fit', 'The table as aov fits it, tidied by broom into a tibble, a row per source (none when nothing varies within the designs, where the table above is written out by hand).', true);
   }
   out.push(...commentLines(c, 'The residuals (each outcome less its design\'s mean' + (A.blocked ? ' and its replication\'s effect' : '') +
     ') are what ' + (A.welch ? 'Welch\'s F' : 'the F test') + ' and the post-hoc rules take as normal.', c));
@@ -699,9 +742,9 @@ function sevAnova(r, L, out, need) {
     out.push(L.assign('ph', 'posthoc_pooled(groups, av, ' + L.str(A.rule) + ', alpha, posthoc_pairs, ' + (lang === 'py' ? 'control - 1' : 'control') + ')'));
     out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
     if (A.rule === 'lsd') out.push(repYesNo(L, r, 'posthoc lsd protected', f('ph', 'protected')));
-    if (lang === 'R' && A.rule === 'tukey') {
+    if (lang === 'R' && A.rule === 'tukey' && !L.tidy) {
       out.push(c + 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier).');
-      out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "g", conf.level = 1 - alpha))');
+      out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
     }
   }
   A.pairs.forEach(([i, j], q) => {
@@ -713,6 +756,14 @@ function sevAnova(r, L, out, need) {
     if (A.welch) out.push(rep(L, r, key + ' p', pf('p')));
     out.push(repYesNo(L, r, key + ' different', pf('flagged')));
   });
+  if (L.tidy) {
+    out.push(c + 'The pairs above as one tibble, a row per pair (i and j are the design numbers).');
+    out.push('print(bind_rows(ph$pairs))');
+    if (!A.welch && A.rule === 'tukey') {
+      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals, tidied by broom (its estimate is the later design less the earlier).', c));
+      out.push('if (av$msw > 0) print(broom::tidy(TukeyHSD(av$fit, "design", conf.level = 1 - alpha)))');
+    }
+  }
   if (A.letters) {
     need.push('letters');
     out.push(c + 'The compact letter display: designs that share a letter are not declared different.');
@@ -786,6 +837,13 @@ function sevMeans(r, L, out, need) {
     }
     if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
   }
+  if (L.tidy && S.np) {
+    out.push(...commentLines(c, 'Each design\'s signed-rank test as wilcox.test returns it, tidied by broom and bound into one tibble, a row per design. ' + WILCOX_OWN, c));
+    out.push('print(bind_rows(lapply(srs, function(s) broom::tidy(s$test)), .id = "design"))');
+  } else if (L.tidy) {
+    out.push(c + 'The intervals above as one tibble, a row per design.');
+    out.push('print(bind_rows(sm$items) |> mutate(design = seq_len(k), .before = 1))');
+  }
   if (!S.np) {
     need.push('shapiro');
     out.push(c + 'The checks: the t intervals take each design\'s outcomes as normal (Shapiro-Wilk).');
@@ -809,7 +867,21 @@ function sevFigure(r, L, out) {
   out.push(L.sect('Figure: each design\'s simultaneous interval'));
   out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
   out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
-  if (lang === 'R') {
+  if (L.tidy) {
+    // ggplot2 warns of every row it drops for a missing value, and so an
+    // undetermined end is filtered out before the segments are drawn.
+    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
+      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
+      'fig_tbl <- tibble(design = seq_len(k), mid = fig_mid, lo = fig_lo, hi = fig_hi) |>',
+      '  mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
+      'p <- ggplot(fig_tbl, aes(y = design)) +',
+      '  geom_segment(aes(x = lo, xend = hi, yend = design), data = filter(fig_tbl, is.finite(lo), is.finite(hi)), linewidth = 1) +',
+      '  geom_point(aes(x = mid), data = filter(fig_tbl, is.finite(mid)), size = 2) +');
+    if (B) out.push('  geom_vline(xintercept = benchmark, linetype = "dashed") +');
+    out.push('  scale_y_reverse(breaks = seq_len(k)) + coord_cartesian(xlim = xr) +',
+      '  labs(x = ' + L.str(xlab) + ', y = "design", title = ' + L.str(title) + ')',
+      'print(p)');
+  } else if (lang === 'R') {
     out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
       'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
       'fig_lo[is.infinite(fig_lo) & fig_lo < 0] <- xr[1]; fig_hi[is.infinite(fig_hi) & fig_hi > 0] <- xr[2]',
@@ -865,6 +937,10 @@ function sevDiffs(r, L, out, need) {
   out.push(rep(L, r, 'C', 'C'), rep(L, r, 'per-comparison level', 'per_c'));
   const adj = p => (lang === 'R' ? 'min(1, C * ' + p + ')' : lang === 'py' ? 'np.minimum(1, C * ' + p + ')' : "min(1, C * " + p + ", 'includenan')");
   const excl = (lo, hi) => (lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0');
+  if (L.tidy) {
+    out.push(...commentLines(c, 'family_tests collects each comparison\'s test object, for the tibble after the last one' +
+      (S.np ? '.' : ' (a comparison of two constant designs has none, since t.test stops there, and is left out).'), c), 'family_tests <- list()');
+  }
   if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk line after each checks.');
   else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
   for (const [i, j] of pairs) {
@@ -877,6 +953,7 @@ function sevDiffs(r, L, out, need) {
       out.push(rep(L, r, p, f('cmp', 'estimate')), rep(L, r, p + ' stat', f('cmp', S.paired ? 'V' : 'W')), rep(L, r, p + ' lower', f('cmp', 'lo')), rep(L, r, p + ' upper', f('cmp', 'hi')));
       out.push(rep(L, r, p + ' p', f('cmp', 'p')), rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))));
       out.push(repYesNo(L, r, p + ' exact', f('cmp', 'exact')), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
+      if (L.tidy) out.push('family_tests[[' + L.str(lab) + ']] <- cmp$test');
     } else {
       need.push(S.paired ? 'pairedT' : 'twoSample');
       const p = 'diff ' + lab;
@@ -884,11 +961,18 @@ function sevDiffs(r, L, out, need) {
       out.push(rep(L, r, p, f('cmp', S.paired ? 'meanD' : 'diff')));
       for (const [name, k] of [['se', 'se'], ['df', 'df'], ['lower', 'lo'], ['upper', 'hi'], ['t', 't'], ['p', 'p']]) out.push(rep(L, r, p + ' ' + name, f('cmp', k)));
       out.push(rep(L, r, p + ' adjusted p', adj(f('cmp', 'p'))), repYesNo(L, r, p + ' excludes 0', excl(f('cmp', 'lo'), f('cmp', 'hi'))));
+      if (L.tidy) out.push('family_tests[[' + L.str(lab) + ']] <- cmp$test');
       if (S.paired) {
         need.push('shapiro');
         out.push(shapiroLine(r, L, 'shapiro diff ' + lab, f('cmp', 'diffs')));
       }
     }
+  }
+  if (L.tidy) {
+    out.push(...commentLines(c, 'Every comparison\'s test as ' + (S.np ? 'wilcox.test' : 't.test') + ' returns it, at 1 - alpha/C, tidied by broom and bound into one tibble, a row per pair; its p-values are not adjusted.' +
+      (S.np ? ' ' + WILCOX_OWN : ''), c));
+    out.push('family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")',
+      'if (nrow(family_tbl)) print(select(family_tbl, pair, any_of(c("estimate", "statistic", "parameter", "p.value", "conf.low", "conf.high"))))');
   }
 }
 
@@ -1098,6 +1182,7 @@ function steadyBody(r, L) {
   ok.push(rep(L, r, time ? 'leftover duration' : 'leftover observations', f('bm', 'leftover')));
   for (const [name, k] of [['mean of batch means', 'mean'], ['sd of batch means', 'sd'], ['se', 'se'], ['df', 'df'], ['t quantile', 't'],
     ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi'], ['lag-one r1', 'r1'], ['fishman C', 'C'], ['fishman p', 'p']]) ok.push(rep(L, r, name, f('bm', k)));
+  if (L.tidy) tidyTest(ok, L, 'bm$test', 'The t test on the batch means as t.test returns it, tidied by broom into a one-row tibble (none when the batch means are all equal, where t.test stops).', true);
   const notOk = rep(L, r, 'batch means', L.str('not defined'));
   if (lang === 'R') {
     out.push('if (!bm$ok) {', ind + notOk, ind + 'cat(bm$reason, "\\n", sep = "")', '} else {', ...ok.map(x => ind + x), '}');
@@ -1111,7 +1196,15 @@ function steadyBody(r, L) {
   const ylab = 'Batch mean of ' + ascii(r.records.response);
   out.push(L.sect('Figure: the batch means'));
   out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
-  if (lang === 'R') {
+  if (L.tidy) {
+    out.push('if (bm$ok) {',
+      '  batch_tbl <- tibble(batch = seq_len(bm$b), mean = bm$means)',
+      '  p <- ggplot(batch_tbl, aes(batch, mean)) + geom_line() + geom_point(size = 2) +',
+      '    geom_hline(yintercept = bm$mean, linetype = "dashed") +',
+      '    labs(x = "batch", y = ' + L.str(ylab) + ', title = "Batch means")',
+      '  print(p)',
+      '}');
+  } else if (lang === 'R') {
     out.push('if (bm$ok) {',
       '  plot(seq_len(bm$b), bm$means, type = "b", pch = 19, xlab = "batch", ylab = ' + L.str(ylab) + ', main = "Batch means")',
       '  abline(h = bm$mean, lty = 2)',
@@ -1189,7 +1282,7 @@ function spreadBlock(L, S) {
 // ticked datasets, and a figure of the outcomes.
 function exploreBody(r, L) {
   const X = r.explore, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
-  const need = ['descriptives', 'timeWeighted', 'explore'], out = [];
+  const need = [descNeed(L), 'timeWeighted', 'explore'], out = [];
   const R = r.records, tally = X.kind === 'tally';
   const ind = lang === 'R' ? '  ' : '    ';
 
@@ -1215,6 +1308,8 @@ function exploreBody(r, L) {
       ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, page_min[i])',
       ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, page_max[i])');
     out.push('}');
+    if (L.tidy) out.push(c + 'The outcomes as a tibble, a row per replication (NaN where a replication gave none).',
+      'out_tbl <- tibble(rep_id = vapply(reps, function(r) r$id, ""), outcome = outcome)');
   } else if (lang === 'py') {
     out.push('for i, r in enumerate(reps):',
       ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]',
@@ -1241,7 +1336,7 @@ function exploreBody(r, L) {
     out.push(L.sect('Descriptives of the replication outcomes'));
     if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + r.outcomes.dropped.map(ascii).join(', ') + '.', c));
     out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
-    out.push(L.assign('d', 'describe(x)'));
+    out.push(L.tidy ? 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)' : L.assign('d', 'describe(x)'));
     for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));
   }
 
@@ -1249,8 +1344,11 @@ function exploreBody(r, L) {
   if (X.pooled) {
     out.push(L.sect('Pooled observations, for description only'));
     out.push(...commentLines(c, 'Every observation of every replication together. They come from within runs and are correlated with their neighbors, and so they carry no standard error and no test here.', c));
-    out.push(L.assign('obs', lang === 'R' ? 'unlist(lapply(reps, function(r) r$v))' : lang === 'py' ? 'np.concatenate([np.asarray(r["v"], float) for r in reps])' : '[reps.v]'));
-    out.push(L.assign('po', 'describe(obs)'));
+    if (L.tidy) out.push('po <- records_tbl |> describe_tbl(v)');
+    else {
+      out.push(L.assign('obs', lang === 'R' ? 'unlist(lapply(reps, function(r) r$v))' : lang === 'py' ? 'np.concatenate([np.asarray(r["v"], float) for r in reps])' : '[reps.v]'));
+      out.push(L.assign('po', 'describe(obs)'));
+    }
     for (const k of DESC_KEYS) if (k !== 'se') out.push(rep(L, r, 'pooled ' + k, f('po', k)));
   }
   if (X.timeTotal) {
@@ -1266,6 +1364,7 @@ function exploreBody(r, L) {
     out.push(L.sect('Confidence interval over the replication outcomes (t)'));
     out.push(L.assign('ti', 't_interval(x, level)'));
     for (const [name, k] of [['interval df', 'df'], ['interval t quantile', 't'], ['interval half-width', 'hw'], ['interval lower', 'lo'], ['interval upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
+    if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
 
   // Normality, on the outcomes only.
@@ -1274,7 +1373,10 @@ function exploreBody(r, L) {
     out.push(L.sect('Normality of the replication outcomes (Shapiro-Wilk)'));
     out.push(...commentLines(c, 'The test assumes independent values, which the replication outcomes are and pooled observations are not, and so it is made on the outcomes only.', c));
     const w = lit(L, e['shapiro W [optional]']), p = lit(L, e['shapiro p [optional]']);
-    out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+    if (L.tidy) {
+      out.push('sw <- shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+      tidyTest(out, L, 'sw', 'The test as shapiro.test returns it, tidied by broom into a one-row tibble (none when the check is not made).', true);
+    } else out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
   }
 
   // Equal variances.
@@ -1284,13 +1386,17 @@ function exploreBody(r, L) {
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
+    if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(z ~ g)) returns it, g being the dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
   // The figure: no report lines.
   if (X.interval) {
     const xlab = ascii(r.records.response);
     out.push(L.sect('Figure: histogram and normal quantile-quantile plot of the outcomes'));
-    if (lang === 'R') {
+    if (L.tidy) {
+      need.push('tidyFigure');
+      out.push('plot_outcomes(tibble(outcome = x), outcome, ' + L.str(xlab) + ')');
+    } else if (lang === 'R') {
       out.push('par(mfrow = c(1, 2))',
         'hist(x, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
         'qqnorm(x, main = "Normal Q-Q plot"); qqline(x, lty = 2)');
@@ -1354,8 +1460,36 @@ function dataBlock(recipe, L) {
   }
   if (recipe.groups) out.push(...groupsBlock(L, recipe));
   if (recipe.records) out.push(...recordsBlock(L, recipe.records));
+  if (L.tidy) out.push(...tidyDataBlock(recipe, L));
   if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
+}
+
+// Tidy R: the same data as a long tibble, one row per value, beside the
+// vectors the helpers take. Each is one statement on one line (see rChunks).
+function tidyDataBlock(recipe, L) {
+  const c = L.comment, out = [''];
+  if (recipe.data) {
+    if (recipe.data.pooled) out.push(c + 'The same observations as a tibble, one row per observation.', 'd_tbl <- tibble(observation = x)');
+    else out.push(c + 'The same outcomes as a tibble, one row per replication.', 'd_tbl <- tibble(rep_id = rep_id, outcome = x)');
+  }
+  if (recipe.pairs) out.push(c + 'The same pairs as a tibble, one row per pair.', 'pairs_tbl <- tibble(pair_id = pair_id, a = a, b = b)');
+  if (recipe.dataA) {
+    out.push(c + 'The same outcomes as one long tibble, one row per replication, design naming A or B.',
+      'd_tbl <- bind_rows(tibble(design = "A", outcome = a), tibble(design = "B", outcome = b))');
+  }
+  if (recipe.groups) {
+    const paired = recipe.groups.paired;
+    out.push(...commentLines(c, 'The same outcomes as one long tibble, one row per replication: design is the design\'s number, name its name' +
+      (paired ? ', and block the block it belongs to.' : '.'), c));
+    out.push('d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), ' +
+      (paired ? 'block = rep(block_id, times = k), ' : '') + 'outcome = unlist(groups))');
+  }
+  if (recipe.records) {
+    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.', c));
+    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
+  }
+  return out.length > 1 ? out : [];
 }
 
 // Ids as a literal: numbers when every one reads as a number, strings otherwise.
