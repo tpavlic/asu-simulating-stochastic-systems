@@ -11,7 +11,7 @@
 // row calls build() only when a script is asked for.
 
 import { repEstimates, repIds } from '../data/model.js';
-import { summary } from '../stats/descriptive.js';
+import { summary, acf } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
 import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
@@ -20,6 +20,8 @@ import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPoole
          posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
+         resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -576,4 +578,125 @@ function severalSubset(r, o, g) {
     Object.assign(e, { [d + 'survives']: ex(ss.survivors[i]), [d + 'N']: ss.N[i] == null ? NaN : ss.N[i],
                        [d + 'additional']: ss.additional[i] == null ? NaN : ss.additional[i] });
   });
+}
+
+// ── Steady State ─────────────────────────────────────────────────────────
+
+/** The most numbers a script embeds; a page whose records run past it offers no script. */
+export const MAX_NUMBERS = 200000;
+
+/**
+ * How many numbers a dataset's records would put in a script: every value,
+ * and every time stamp where there is one. Cheap, and copies nothing.
+ * @param {{reps: {t: ArrayLike<number>|null, v: ArrayLike<number>}[]}} ds
+ */
+export function recordCount(ds) {
+  let n = 0;
+  for (const r of ds.reps) n += r.v.length * (r.t ? 2 : 1);
+  return n;
+}
+
+/** The records of a dataset as plain arrays, every replication in order (an empty one included). */
+function recordsOf(ds) {
+  return { name: ds.name, response: ds.response, unit: ds.unit, kind: ds.kind, endTime: ds.endTime,
+    reps: ds.reps.map(r => ({ id: String(r.id), t: r.t ? Array.from(r.t) : null, v: Array.from(r.v) })) };
+}
+
+/**
+ * The Steady State recipe: the warm-up plot's averages, the batch means on
+ * the series after truncation, and the autocorrelation of that series, each
+ * computed as the page computes it.
+ * @param {{ ds: object, align: 'index'|'time', nBins: number, w: number, cut: number, repIdx: number,
+ *   lumped: boolean, mode: 'count'|'size', count: number, size: number|null, level: number, start: number,
+ *   title?: string, provenance?: object }} o
+ *   `ds` is the run the page batches (the source run of a derived dataset,
+ *   as the page's current() returns it), `start` the time its bins start from
+ *   (the page's startTime(ds)), and the rest the page's settings. `title`
+ *   and `provenance` are the page's own, copied into the recipe. A pure
+ *   function of its argument, and so a page can call it lazily. When the
+ *   records would run past MAX_NUMBERS, the recipe carries `tooBig` and no
+ *   records.
+ */
+export function steadyRecipe(o) {
+  const { ds, align, nBins, w, cut, repIdx, mode, count, size, level, start } = o;
+  const r = baseRecipe({ page: 'steady', title: o.title || 'Steady state: batch means', provenance: o.provenance || {}, level });
+  if (recordCount(ds) > MAX_NUMBERS) { r.tooBig = true; return r; }
+  r.records = recordsOf(ds);
+  const e = r.expect;
+  const kind = ds.kind === 'time' ? 'time' : 'tally';
+  const lumped = !!o.lumped && ds.reps.length > 1;
+
+  // Warm-up: the average across replications, smoothed as the page smooths it.
+  let ybar, edges = null;
+  if (align === 'index') ybar = alignByIndex(ds.reps).ybar;
+  else ({ ybar, edges } = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start));
+  const L = ybar.length, mid = Math.ceil(L / 2);
+  let gaps = 0;
+  for (let i = 0; i < L; i++) if (!Number.isFinite(ybar[i])) gaps++;
+  const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w), cum = cumulativeAverage(ybar);
+  e['warm-up points'] = L;
+  if (L) {
+    Object.assign(e, { 'warm-up ybar at 1': ybar[0], 'warm-up ybar at mid': ybar[mid - 1],
+      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1] });
+  }
+  if (edges) Object.assign(e, { 'warm-up bin width': edges[1] - edges[0], 'warm-up empty bins': gaps });
+
+  // The series batching works on, as the page forms it: one replication passed
+  // whole with the cut, or every replication cut and then joined end to end.
+  const truncate = cut > 0 ? { by: align, at: cut } : null;
+  let src, kept;
+  if (lumped) {
+    kept = concatenateReps(ds.reps, kind, truncate, ds.endTime);
+    src = { rep: { t: kept.t, v: kept.v }, truncate: null, endTime: kept.end };
+  } else {
+    const rep = ds.reps[repIdx] || ds.reps[0];
+    kept = concatenateReps([rep], kind, truncate, ds.endTime);
+    src = { rep, truncate, endTime: ds.endTime };
+  }
+  const opts = { kind, truncate: src.truncate, endTime: src.endTime, level };
+  if (mode === 'count') opts.count = count; else opts.size = size;
+  let res;
+  if (lumped && !src.rep.v.length) res = { ok: false, reason: 'Nothing remains in any replication after this cut.' };
+  else { try { res = batchMeans(src.rep, opts); } catch (err) { res = { ok: false, reason: String(err.message || err) }; } }
+  if (res.ok) {
+    Object.assign(e, { batches: res.b, 'batch size': res.size, 'batch start': res.start, 'records used': res.nUsed });
+    res.batches.forEach((b, i) => {
+      e['batch ' + (i + 1) + ' mean'] = b.mean;
+      if (res.byTime) e['batch ' + (i + 1) + ' records'] = b.n;
+    });
+    if (res.byTime) e['leftover duration'] = res.leftover.duration; else e['leftover observations'] = res.leftover.n;
+    Object.assign(e, { 'mean of batch means': res.mean, 'sd of batch means': res.sd, se: res.se, df: res.df, 't quantile': res.t,
+      'half-width': res.hw, lower: res.lo, upper: res.hi, 'lag-one r1': res.lag1, 'fishman C': res.lag1Test.C, 'fishman p': res.lag1Test.p });
+  } else e['batch means'] = 'not defined';
+
+  // The autocorrelation of the series after truncation, as the page's
+  // correlogram forms it: a time-persistent series is first averaged over
+  // ACF_STEPS equal steps of simulation time and is used only when every step
+  // is covered; a tally series needs at least 8 observations.
+  let series = null;
+  if (kept && kept.v.length) {
+    if (kind === 'time') {
+      const a = kept.t[0], z = kept.end;
+      if (z > a) {
+        const rs = resampleTimeWeighted(kept.t, kept.v, a, z, ACF_STEPS).values;
+        if (Array.prototype.every.call(rs, Number.isFinite)) series = rs;
+      }
+    } else if (kept.v.length >= 8) series = kept.v;
+  }
+  const maxLag = series ? Math.min(ACF_MAX_LAG, Math.floor(series.length / 4)) : 0;
+  if (maxLag >= 1) {
+    const ac = acf(series, maxLag);
+    for (let j = 1; j <= Math.min(5, maxLag); j++) e['acf lag ' + j] = ac[j];
+  }
+
+  r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
+  r.settings = {
+    align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
+    batch_count: mode === 'count' ? count : NaN, batch_size: mode === 'size' ? size : NaN
+  };
+  r.settingsNote = [
+    'align is index (observation i of every replication averaged with observation i of the others, and cut counts the observations deleted from the start of each replication) or time (n_bins equal bins of simulation time from start, and cut is the time the warm-up ends); time-persistent data are aligned by time only. w is the moving average\'s half-width, and cut = 0 deletes nothing.',
+    'When lumped is true, every replication is cut and joined end to end; otherwise the replication in position replication (1 is the first) is batched. Set batch_count to a number of batches, or set it to NaN and batch_size to a batch size (observations, or units of simulation time for time-persistent data).'
+  ];
+  return r;
 }

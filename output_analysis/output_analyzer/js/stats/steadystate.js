@@ -186,6 +186,27 @@ export function movingAverage(ybar, w) {
 }
 
 /**
+ * Welch's moving average over a series with empty (non-finite) entries: the same symmetric span
+ * as movingAverage, averaging only the finite entries in it (NaN when none is finite). The
+ * Steady State page uses it when some time bin holds no observation from any replication, where
+ * movingAverage's running sum would carry the gap to every later point.
+ * @param {ArrayLike<number>} y
+ * @param {number} half the half-width w
+ * @returns {Float64Array}
+ */
+export function gapAwareAverage(y, half) {
+  const L = y.length, out = new Float64Array(L);
+  for (let i = 0; i < L; i++) {
+    if (i > L - 1 - half) { out[i] = NaN; continue; }
+    const h = i < half ? i : half;
+    let s = 0, c = 0;
+    for (let k = i - h; k <= i + h; k++) if (Number.isFinite(y[k])) { s += y[k]; c++; }
+    out[i] = c ? s / c : NaN;
+  }
+  return out;
+}
+
+/**
  * Cumulative average: entry i is the mean of ybar[0..i], skipping NaN entries (NaN until the
  * first finite one).
  * @param {ArrayLike<number>} ybar
@@ -475,6 +496,14 @@ export function concatenateReps(reps, kind, truncate, endTime) {
     nReps,
   };
 }
+
+/**
+ * The correlogram of the series batching works on runs to lag min(ACF_MAX_LAG, n/4), and a
+ * time-persistent series is first averaged over ACF_STEPS equal steps of simulation time (see
+ * resampleTimeWeighted). The Steady State page and its regenerated scripts both read these.
+ */
+export const ACF_MAX_LAG = 400;
+export const ACF_STEPS = 2000;
 
 /**
  * Resamples a time-persistent trajectory onto `steps` equal intervals of [start, end]: each value

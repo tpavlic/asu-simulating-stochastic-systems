@@ -901,6 +901,223 @@ function sevPlan(r, L, out, need) {
 
 BODIES.several = { R: sevBody, py: sevBody, m: sevBody };
 
+// ── Steady State ─────────────────────────────────────────────────────────
+
+// The records of a run as the Data block writes them: every replication in
+// order, numbered from 1 as on the page, each with its id, its times t (empty
+// when the observations carry none), and its values v.
+function recordsBlock(L, R) {
+  const c = L.comment, lang = L.lang, out = [];
+  const what = ascii(R.name) + ' (' + ascii(R.response) + (R.unit ? ', ' + ascii(R.unit) : '') + ')';
+  const timed = R.reps.some(r => r.t);
+  out.push(...commentLines(c, 'The records of ' + what + ', every replication in order, numbered from 1 as on the page: ' +
+    (R.kind === 'time'
+      ? 'a time-persistent state, each record the time t it changed and its new value v. A value holds until the next record, and the last until end_time, or for no time when end_time is NaN.'
+      : 'tally observations v' + (timed ? ', each with the time t it was recorded.' : ', with no time stamps (t is empty).')), c));
+  const empty = R.reps.filter(r => !r.v.length).map(r => ascii(r.id));
+  if (empty.length) out.push(...commentLines(c, 'Replications holding no records (ids): ' + empty.join(', ') + '.', c));
+  out.push(L.assign('kind', L.str(R.kind)));
+  out.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
+  const tLit = r => (r.t ? L.vec(r.t) : lang === 'R' ? 'NULL' : lang === 'py' ? 'None' : '[]');
+  if (lang === 'R') {
+    out.push('reps <- list(');
+    R.reps.forEach((r, i) => out.push('  list(id = ' + L.str(r.id) + ', t = ' + tLit(r) + ', v = ' + L.vec(r.v) + ')' + (i < R.reps.length - 1 ? ',' : '')));
+    out.push(')');
+  } else if (lang === 'py') {
+    out.push('reps = [');
+    R.reps.forEach(r => out.push('    dict(id=' + L.str(r.id) + ', t=' + tLit(r) + ', v=' + L.vec(r.v) + '),'));
+    out.push(']');
+  } else {
+    out.push("reps = struct('id', {}, 't', {}, 'v', {});");
+    R.reps.forEach((r, i) => out.push('reps(' + (i + 1) + ") = struct('id', " + L.str(r.id) + ", 't', " + tLit(r) + ", 'v', " + L.vec(r.v) + ');'));
+  }
+  return out;
+}
+
+// A loop reporting one line per batch (or lag), each beside the analyzer's
+// value where the page had one: `name` is the report name with %d for the
+// number, `count` the script's count, `value(i)` the script's value at loop
+// index i, and `page` the analyzer's values, held in `pageVar`.
+function loopReport(L, out, { name, count, value, page, pageVar, indent = '' }) {
+  const lang = L.lang;
+  out.push(indent + L.comment + 'The analyzer\'s values, printed beside the script\'s.');
+  out.push(indent + L.assign(pageVar, L.vec(page)));
+  if (lang === 'R') {
+    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i])');
+  } else if (lang === 'py') {
+    out.push(indent + 'for i in range(' + count + '):',
+      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None)');
+  } else {
+    out.push(indent + 'for i = 1:' + count,
+      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
+      indent + 'end');
+  }
+}
+
+// Steady State: the warm-up plot's averages, the series after truncation, its
+// batch means with Fishman's test and a figure of them, and the series'
+// autocorrelation. The settings are read at run time, and so a script whose
+// align, cut, lumped, replication, batch_count, or batch_size is edited runs
+// the analysis the page would run with them.
+function steadyBody(r, L) {
+  const S = r.steady, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
+  const need = ['timeWeighted', 'alignment', 'batchMeans', 'tInterval', 'acf'], out = [];
+  const time = S.kind === 'time';
+  const ind = lang === 'py' ? '    ' : lang === 'R' ? '  ' : '    ';
+  const at = (v, i) => (lang === 'py' ? v + '[' + (i === 'mid' ? 'mid - 1' : i === 'end' ? '-1' : i - 1) + ']'
+    : lang === 'R' ? v + '[' + (i === 'end' ? 'L' : i) + ']' : v + '(' + i + ')');
+
+  // Warm-up.
+  out.push(L.sect('Warm-up: the average across replications, smoothed'));
+  out.push(...commentLines(c, 'ybar, the ensemble average, is the mean across the replications at each observation index or time bin; the moving average smooths it, and the cumulative average is the mean of ybar so far. The page draws all three; the first point, the middle one, and the last are reported here.', c));
+  const warmLines = [rep(L, r, 'warm-up ybar at 1', at('ybar', 1)), rep(L, r, 'warm-up ybar at mid', at('ybar', 'mid')),
+    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end'))];
+  if (lang === 'R') {
+    out.push('if (align == "index") {', '  ybar <- align_by_index(reps)', '} else {',
+      '  al <- align_by_time(reps, kind, n_bins, end_time, start)', '  ybar <- al$ybar', '}',
+      'L <- length(ybar); mid <- ceiling(L / 2)', 'smooth <- moving_average(ybar, w); cum <- cumulative_average(ybar)',
+      rep(L, r, 'warm-up points', 'L'), 'if (L > 0) {', ...warmLines.map(x => ind + x), '}',
+      'if (align == "time") {', ind + rep(L, r, 'warm-up bin width', 'al$edges[2] - al$edges[1]'),
+      ind + rep(L, r, 'warm-up empty bins', 'sum(!is.finite(ybar))'), '}');
+  } else if (lang === 'py') {
+    out.push('if align == "index":', '    ybar = align_by_index(reps)', 'else:',
+      '    edges, ybar = align_by_time(reps, kind, n_bins, end_time, start)',
+      'L = len(ybar); mid = int(np.ceil(L / 2))', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar)',
+      rep(L, r, 'warm-up points', 'L'), 'if L > 0:', ...warmLines.map(x => ind + x),
+      'if align == "time":', ind + rep(L, r, 'warm-up bin width', 'edges[1] - edges[0]'),
+      ind + rep(L, r, 'warm-up empty bins', 'int(np.sum(~np.isfinite(ybar)))'));
+  } else {
+    out.push("if strcmp(align, 'index')", '    ybar = align_by_index(reps);', 'else',
+      '    [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start);', 'end',
+      'L = numel(ybar); mid = ceil(L / 2);', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar);',
+      rep(L, r, 'warm-up points', 'L'), 'if L > 0', ...warmLines.map(x => ind + x), 'end',
+      "if strcmp(align, 'time')", ind + rep(L, r, 'warm-up bin width', 'edges(2) - edges(1)'),
+      ind + rep(L, r, 'warm-up empty bins', 'sum(~isfinite(ybar))'), 'end');
+  }
+
+  // The series after truncation.
+  out.push(L.sect('The series batching works on'));
+  out.push(...commentLines(c, 'One replication with its warm-up cut, or, when lumped, every replication cut and then joined end to end. ' +
+    (time ? 'Cut by time, the state in force at the cut becomes the first record, at the cut time, and so the first batch counts the time from the cut to the next record. ' : '') +
+    'b_first is where the kept series starts in the original one (tally, counted from 0), and b_end where the kept trajectory ends.', c));
+  if (lang === 'R') {
+    out.push('if (lumped && length(reps) > 1) {',
+      '  kept <- lump_reps(reps, kind, align, cut, end_time)',
+      '  bt <- kept$t; bv <- kept$v; b_end <- kept$t_end; b_first <- 0',
+      '} else {',
+      '  kept <- truncate_rep(reps[[replication]]$t, reps[[replication]]$v, kind, align, cut)',
+      '  bt <- kept$t; bv <- kept$v; b_first <- kept$idx[1] - 1',
+      '  b_end <- if (kind == "time" && length(bv)) trajectory_end(bt, end_time) else NaN',
+      '}');
+  } else if (lang === 'py') {
+    out.push('if lumped and len(reps) > 1:',
+      '    kept = lump_reps(reps, kind, align, cut, end_time)',
+      '    bt, bv, b_end, b_first = kept["t"], kept["v"], kept["t_end"], 0',
+      'else:',
+      '    bt, bv, idx = truncate_rep(reps[replication - 1]["t"], reps[replication - 1]["v"], kind, align, cut)',
+      '    b_first = int(idx[0]) if len(idx) else np.nan',
+      '    b_end = trajectory_end(bt, end_time) if kind == "time" and len(bv) else np.nan');
+  } else {
+    out.push('if lumped && numel(reps) > 1',
+      '    kept = lump_reps(reps, kind, align, cut, end_time);',
+      '    bt = kept.t; bv = kept.v; b_end = kept.t_end; b_first = 0;',
+      'else',
+      '    [bt, bv, idx] = truncate_rep(reps(replication).t, reps(replication).v, kind, align, cut);',
+      '    b_first = NaN; if ~isempty(idx), b_first = idx(1) - 1; end',
+      "    b_end = NaN; if strcmp(kind, 'time') && ~isempty(bv), b_end = trajectory_end(bt, end_time); end",
+      'end');
+  }
+
+  // Batch means.
+  out.push(L.sect('Batch means'));
+  out.push(...commentLines(c, 'The t interval on the batch means at level, their lag-one autocorrelation r1, and Fishman\'s test of no positive correlation, which is one-sided: a large C, with a small p, says neighboring batch means still move together and the batches are too short.', c));
+  const nb = S.batchOk ? e.batches : 0;
+  const pageOf = key => Array.from({ length: nb }, (_, i) => e['batch ' + (i + 1) + ' ' + key]);
+  out.push(L.assign('bm', 'batch_means(bt, bv, kind, b_end, batch_count, batch_size, level, b_first)'));
+  const ok = [];
+  ok.push(rep(L, r, 'batches', f('bm', 'b')), rep(L, r, 'batch size', f('bm', 'size')), rep(L, r, 'batch start', f('bm', 'start')),
+    rep(L, r, 'records used', f('bm', 'nUsed')));
+  const elem = (v, k) => (i => (lang === 'py' ? f(v, k) + '[' + i + ']' : lang === 'R' ? f(v, k) + '[' + i + ']' : f(v, k) + '(' + i + ')'));
+  const loops = [];
+  loopReport(L, loops, { name: 'batch %d mean', count: f('bm', 'b'), value: elem('bm', 'means'), page: pageOf('mean'), pageVar: 'page_means' });
+  if (time) loopReport(L, loops, { name: 'batch %d records', count: f('bm', 'b'), value: elem('bm', 'records'), page: pageOf('records'), pageVar: 'page_records' });
+  ok.push(...loops);
+  ok.push(rep(L, r, time ? 'leftover duration' : 'leftover observations', f('bm', 'leftover')));
+  for (const [name, k] of [['mean of batch means', 'mean'], ['sd of batch means', 'sd'], ['se', 'se'], ['df', 'df'], ['t quantile', 't'],
+    ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi'], ['lag-one r1', 'r1'], ['fishman C', 'C'], ['fishman p', 'p']]) ok.push(rep(L, r, name, f('bm', k)));
+  const notOk = rep(L, r, 'batch means', L.str('not defined'));
+  if (lang === 'R') {
+    out.push('if (!bm$ok) {', ind + notOk, ind + 'cat(bm$reason, "\\n", sep = "")', '} else {', ...ok.map(x => ind + x), '}');
+  } else if (lang === 'py') {
+    out.push('if not bm["ok"]:', ind + notOk, ind + 'print(bm["reason"])', 'else:', ...ok.map(x => ind + x));
+  } else {
+    out.push('if ~bm.ok', ind + notOk, ind + "fprintf('%s\\n', bm.reason);", 'else', ...ok.map(x => ind + x), 'end');
+  }
+
+  // The figure (R16): no report lines.
+  const ylab = 'Batch mean of ' + ascii(r.records.response);
+  out.push(L.sect('Figure: the batch means'));
+  out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
+  if (lang === 'R') {
+    out.push('if (bm$ok) {',
+      '  plot(seq_len(bm$b), bm$means, type = "b", pch = 19, xlab = "batch", ylab = ' + L.str(ylab) + ', main = "Batch means")',
+      '  abline(h = bm$mean, lty = 2)',
+      '}');
+  } else if (lang === 'py') {
+    out.push('if bm["ok"]:',
+      '    try:',
+      '        import warnings',
+      '        import matplotlib.pyplot as plt',
+      '        fig, ax = plt.subplots(figsize=(7, 3.5))',
+      '        ax.plot(np.arange(1, bm["b"] + 1), bm["means"], "o-", color="black")',
+      '        ax.axhline(bm["mean"], linestyle="--", color="gray")',
+      '        ax.set_xlabel("batch"); ax.set_ylabel(' + L.str(ylab) + '); ax.set_title("Batch means")',
+      '        fig.tight_layout()',
+      '        with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
+      '            warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
+      '            plt.show()',
+      '    except ImportError:',
+      '        print("matplotlib is not installed; the figure is skipped")');
+  } else {
+    out.push('if bm.ok',
+      "    figure; plot(1:bm.b, bm.means, 'ko-', 'MarkerFaceColor', 'k'); yline(bm.mean, '--');",
+      "    xlabel('batch'); ylabel(" + L.str(ylab) + ", 'Interpreter', 'none'); title('Batch means');",
+      'end');
+  }
+
+  // The autocorrelation of the kept series.
+  const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
+  out.push(L.sect('Autocorrelation of the series after truncation'));
+  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
+    (time ? 'The trajectory is first averaged over steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
+      : 'It needs at least 8 observations.'), c));
+  const tooShort = 'The series after truncation is too short for its autocorrelation.';
+  const report5 = [];
+  loopReport(L, report5, { name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
+    value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
+  if (lang === 'R') {
+    out.push('max_lag <- 400; steps <- 2000', 'series <- NULL');
+    if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, steps)', '  if (all(is.finite(s))) series <- s', '}');
+    else out.push('if (length(bv) >= 8) series <- bv');
+    out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
+      'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
+  } else if (lang === 'py') {
+    out.push('max_lag = 400; steps = 2000', 'series = None');
+    if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, steps)', '    if np.all(np.isfinite(s)): series = s');
+    else out.push('if len(bv) >= 8: series = bv');
+    out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
+      'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
+  } else {
+    out.push('max_lag = 400; steps = 2000;', 'series = [];');
+    if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, steps);', '    if all(isfinite(s)), series = s; end', 'end');
+    else out.push('if numel(bv) >= 8, series = bv; end');
+    out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
+      'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
+  }
+  return { body: out, need };
+}
+BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings')];
   // A page may say which settings the script reads and which choices are written into its code.
@@ -938,6 +1155,7 @@ function dataBlock(recipe, L) {
     out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
   }
   if (recipe.groups) out.push(...groupsBlock(L, recipe));
+  if (recipe.records) out.push(...recordsBlock(L, recipe.records));
   return out;
 }
 

@@ -15285,6 +15285,223 @@ function sevPlan(r, L, out, need) {
 
 BODIES.several = { R: sevBody, py: sevBody, m: sevBody };
 
+// ── Steady State ─────────────────────────────────────────────────────────
+
+// The records of a run as the Data block writes them: every replication in
+// order, numbered from 1 as on the page, each with its id, its times t (empty
+// when the observations carry none), and its values v.
+function recordsBlock(L, R) {
+  const c = L.comment, lang = L.lang, out = [];
+  const what = ascii(R.name) + ' (' + ascii(R.response) + (R.unit ? ', ' + ascii(R.unit) : '') + ')';
+  const timed = R.reps.some(r => r.t);
+  out.push(...commentLines(c, 'The records of ' + what + ', every replication in order, numbered from 1 as on the page: ' +
+    (R.kind === 'time'
+      ? 'a time-persistent state, each record the time t it changed and its new value v. A value holds until the next record, and the last until end_time, or for no time when end_time is NaN.'
+      : 'tally observations v' + (timed ? ', each with the time t it was recorded.' : ', with no time stamps (t is empty).')), c));
+  const empty = R.reps.filter(r => !r.v.length).map(r => ascii(r.id));
+  if (empty.length) out.push(...commentLines(c, 'Replications holding no records (ids): ' + empty.join(', ') + '.', c));
+  out.push(L.assign('kind', L.str(R.kind)));
+  out.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
+  const tLit = r => (r.t ? L.vec(r.t) : lang === 'R' ? 'NULL' : lang === 'py' ? 'None' : '[]');
+  if (lang === 'R') {
+    out.push('reps <- list(');
+    R.reps.forEach((r, i) => out.push('  list(id = ' + L.str(r.id) + ', t = ' + tLit(r) + ', v = ' + L.vec(r.v) + ')' + (i < R.reps.length - 1 ? ',' : '')));
+    out.push(')');
+  } else if (lang === 'py') {
+    out.push('reps = [');
+    R.reps.forEach(r => out.push('    dict(id=' + L.str(r.id) + ', t=' + tLit(r) + ', v=' + L.vec(r.v) + '),'));
+    out.push(']');
+  } else {
+    out.push("reps = struct('id', {}, 't', {}, 'v', {});");
+    R.reps.forEach((r, i) => out.push('reps(' + (i + 1) + ") = struct('id', " + L.str(r.id) + ", 't', " + tLit(r) + ", 'v', " + L.vec(r.v) + ');'));
+  }
+  return out;
+}
+
+// A loop reporting one line per batch (or lag), each beside the analyzer's
+// value where the page had one: `name` is the report name with %d for the
+// number, `count` the script's count, `value(i)` the script's value at loop
+// index i, and `page` the analyzer's values, held in `pageVar`.
+function loopReport(L, out, { name, count, value, page, pageVar, indent = '' }) {
+  const lang = L.lang;
+  out.push(indent + L.comment + 'The analyzer\'s values, printed beside the script\'s.');
+  out.push(indent + L.assign(pageVar, L.vec(page)));
+  if (lang === 'R') {
+    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i])');
+  } else if (lang === 'py') {
+    out.push(indent + 'for i in range(' + count + '):',
+      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None)');
+  } else {
+    out.push(indent + 'for i = 1:' + count,
+      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
+      indent + 'end');
+  }
+}
+
+// Steady State: the warm-up plot's averages, the series after truncation, its
+// batch means with Fishman's test and a figure of them, and the series'
+// autocorrelation. The settings are read at run time, and so a script whose
+// align, cut, lumped, replication, batch_count, or batch_size is edited runs
+// the analysis the page would run with them.
+function steadyBody(r, L) {
+  const S = r.steady, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
+  const need = ['timeWeighted', 'alignment', 'batchMeans', 'tInterval', 'acf'], out = [];
+  const time = S.kind === 'time';
+  const ind = lang === 'py' ? '    ' : lang === 'R' ? '  ' : '    ';
+  const at = (v, i) => (lang === 'py' ? v + '[' + (i === 'mid' ? 'mid - 1' : i === 'end' ? '-1' : i - 1) + ']'
+    : lang === 'R' ? v + '[' + (i === 'end' ? 'L' : i) + ']' : v + '(' + i + ')');
+
+  // Warm-up.
+  out.push(L.sect('Warm-up: the average across replications, smoothed'));
+  out.push(...commentLines(c, 'ybar, the ensemble average, is the mean across the replications at each observation index or time bin; the moving average smooths it, and the cumulative average is the mean of ybar so far. The page draws all three; the first point, the middle one, and the last are reported here.', c));
+  const warmLines = [rep(L, r, 'warm-up ybar at 1', at('ybar', 1)), rep(L, r, 'warm-up ybar at mid', at('ybar', 'mid')),
+    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end'))];
+  if (lang === 'R') {
+    out.push('if (align == "index") {', '  ybar <- align_by_index(reps)', '} else {',
+      '  al <- align_by_time(reps, kind, n_bins, end_time, start)', '  ybar <- al$ybar', '}',
+      'L <- length(ybar); mid <- ceiling(L / 2)', 'smooth <- moving_average(ybar, w); cum <- cumulative_average(ybar)',
+      rep(L, r, 'warm-up points', 'L'), 'if (L > 0) {', ...warmLines.map(x => ind + x), '}',
+      'if (align == "time") {', ind + rep(L, r, 'warm-up bin width', 'al$edges[2] - al$edges[1]'),
+      ind + rep(L, r, 'warm-up empty bins', 'sum(!is.finite(ybar))'), '}');
+  } else if (lang === 'py') {
+    out.push('if align == "index":', '    ybar = align_by_index(reps)', 'else:',
+      '    edges, ybar = align_by_time(reps, kind, n_bins, end_time, start)',
+      'L = len(ybar); mid = int(np.ceil(L / 2))', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar)',
+      rep(L, r, 'warm-up points', 'L'), 'if L > 0:', ...warmLines.map(x => ind + x),
+      'if align == "time":', ind + rep(L, r, 'warm-up bin width', 'edges[1] - edges[0]'),
+      ind + rep(L, r, 'warm-up empty bins', 'int(np.sum(~np.isfinite(ybar)))'));
+  } else {
+    out.push("if strcmp(align, 'index')", '    ybar = align_by_index(reps);', 'else',
+      '    [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start);', 'end',
+      'L = numel(ybar); mid = ceil(L / 2);', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar);',
+      rep(L, r, 'warm-up points', 'L'), 'if L > 0', ...warmLines.map(x => ind + x), 'end',
+      "if strcmp(align, 'time')", ind + rep(L, r, 'warm-up bin width', 'edges(2) - edges(1)'),
+      ind + rep(L, r, 'warm-up empty bins', 'sum(~isfinite(ybar))'), 'end');
+  }
+
+  // The series after truncation.
+  out.push(L.sect('The series batching works on'));
+  out.push(...commentLines(c, 'One replication with its warm-up cut, or, when lumped, every replication cut and then joined end to end. ' +
+    (time ? 'Cut by time, the state in force at the cut becomes the first record, at the cut time, and so the first batch counts the time from the cut to the next record. ' : '') +
+    'b_first is where the kept series starts in the original one (tally, counted from 0), and b_end where the kept trajectory ends.', c));
+  if (lang === 'R') {
+    out.push('if (lumped && length(reps) > 1) {',
+      '  kept <- lump_reps(reps, kind, align, cut, end_time)',
+      '  bt <- kept$t; bv <- kept$v; b_end <- kept$t_end; b_first <- 0',
+      '} else {',
+      '  kept <- truncate_rep(reps[[replication]]$t, reps[[replication]]$v, kind, align, cut)',
+      '  bt <- kept$t; bv <- kept$v; b_first <- kept$idx[1] - 1',
+      '  b_end <- if (kind == "time" && length(bv)) trajectory_end(bt, end_time) else NaN',
+      '}');
+  } else if (lang === 'py') {
+    out.push('if lumped and len(reps) > 1:',
+      '    kept = lump_reps(reps, kind, align, cut, end_time)',
+      '    bt, bv, b_end, b_first = kept["t"], kept["v"], kept["t_end"], 0',
+      'else:',
+      '    bt, bv, idx = truncate_rep(reps[replication - 1]["t"], reps[replication - 1]["v"], kind, align, cut)',
+      '    b_first = int(idx[0]) if len(idx) else np.nan',
+      '    b_end = trajectory_end(bt, end_time) if kind == "time" and len(bv) else np.nan');
+  } else {
+    out.push('if lumped && numel(reps) > 1',
+      '    kept = lump_reps(reps, kind, align, cut, end_time);',
+      '    bt = kept.t; bv = kept.v; b_end = kept.t_end; b_first = 0;',
+      'else',
+      '    [bt, bv, idx] = truncate_rep(reps(replication).t, reps(replication).v, kind, align, cut);',
+      '    b_first = NaN; if ~isempty(idx), b_first = idx(1) - 1; end',
+      "    b_end = NaN; if strcmp(kind, 'time') && ~isempty(bv), b_end = trajectory_end(bt, end_time); end",
+      'end');
+  }
+
+  // Batch means.
+  out.push(L.sect('Batch means'));
+  out.push(...commentLines(c, 'The t interval on the batch means at level, their lag-one autocorrelation r1, and Fishman\'s test of no positive correlation, which is one-sided: a large C, with a small p, says neighboring batch means still move together and the batches are too short.', c));
+  const nb = S.batchOk ? e.batches : 0;
+  const pageOf = key => Array.from({ length: nb }, (_, i) => e['batch ' + (i + 1) + ' ' + key]);
+  out.push(L.assign('bm', 'batch_means(bt, bv, kind, b_end, batch_count, batch_size, level, b_first)'));
+  const ok = [];
+  ok.push(rep(L, r, 'batches', f('bm', 'b')), rep(L, r, 'batch size', f('bm', 'size')), rep(L, r, 'batch start', f('bm', 'start')),
+    rep(L, r, 'records used', f('bm', 'nUsed')));
+  const elem = (v, k) => (i => (lang === 'py' ? f(v, k) + '[' + i + ']' : lang === 'R' ? f(v, k) + '[' + i + ']' : f(v, k) + '(' + i + ')'));
+  const loops = [];
+  loopReport(L, loops, { name: 'batch %d mean', count: f('bm', 'b'), value: elem('bm', 'means'), page: pageOf('mean'), pageVar: 'page_means' });
+  if (time) loopReport(L, loops, { name: 'batch %d records', count: f('bm', 'b'), value: elem('bm', 'records'), page: pageOf('records'), pageVar: 'page_records' });
+  ok.push(...loops);
+  ok.push(rep(L, r, time ? 'leftover duration' : 'leftover observations', f('bm', 'leftover')));
+  for (const [name, k] of [['mean of batch means', 'mean'], ['sd of batch means', 'sd'], ['se', 'se'], ['df', 'df'], ['t quantile', 't'],
+    ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi'], ['lag-one r1', 'r1'], ['fishman C', 'C'], ['fishman p', 'p']]) ok.push(rep(L, r, name, f('bm', k)));
+  const notOk = rep(L, r, 'batch means', L.str('not defined'));
+  if (lang === 'R') {
+    out.push('if (!bm$ok) {', ind + notOk, ind + 'cat(bm$reason, "\\n", sep = "")', '} else {', ...ok.map(x => ind + x), '}');
+  } else if (lang === 'py') {
+    out.push('if not bm["ok"]:', ind + notOk, ind + 'print(bm["reason"])', 'else:', ...ok.map(x => ind + x));
+  } else {
+    out.push('if ~bm.ok', ind + notOk, ind + "fprintf('%s\\n', bm.reason);", 'else', ...ok.map(x => ind + x), 'end');
+  }
+
+  // The figure (R16): no report lines.
+  const ylab = 'Batch mean of ' + ascii(r.records.response);
+  out.push(L.sect('Figure: the batch means'));
+  out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
+  if (lang === 'R') {
+    out.push('if (bm$ok) {',
+      '  plot(seq_len(bm$b), bm$means, type = "b", pch = 19, xlab = "batch", ylab = ' + L.str(ylab) + ', main = "Batch means")',
+      '  abline(h = bm$mean, lty = 2)',
+      '}');
+  } else if (lang === 'py') {
+    out.push('if bm["ok"]:',
+      '    try:',
+      '        import warnings',
+      '        import matplotlib.pyplot as plt',
+      '        fig, ax = plt.subplots(figsize=(7, 3.5))',
+      '        ax.plot(np.arange(1, bm["b"] + 1), bm["means"], "o-", color="black")',
+      '        ax.axhline(bm["mean"], linestyle="--", color="gray")',
+      '        ax.set_xlabel("batch"); ax.set_ylabel(' + L.str(ylab) + '); ax.set_title("Batch means")',
+      '        fig.tight_layout()',
+      '        with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
+      '            warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
+      '            plt.show()',
+      '    except ImportError:',
+      '        print("matplotlib is not installed; the figure is skipped")');
+  } else {
+    out.push('if bm.ok',
+      "    figure; plot(1:bm.b, bm.means, 'ko-', 'MarkerFaceColor', 'k'); yline(bm.mean, '--');",
+      "    xlabel('batch'); ylabel(" + L.str(ylab) + ", 'Interpreter', 'none'); title('Batch means');",
+      'end');
+  }
+
+  // The autocorrelation of the kept series.
+  const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
+  out.push(L.sect('Autocorrelation of the series after truncation'));
+  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
+    (time ? 'The trajectory is first averaged over steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
+      : 'It needs at least 8 observations.'), c));
+  const tooShort = 'The series after truncation is too short for its autocorrelation.';
+  const report5 = [];
+  loopReport(L, report5, { name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
+    value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
+  if (lang === 'R') {
+    out.push('max_lag <- 400; steps <- 2000', 'series <- NULL');
+    if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, steps)', '  if (all(is.finite(s))) series <- s', '}');
+    else out.push('if (length(bv) >= 8) series <- bv');
+    out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
+      'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
+  } else if (lang === 'py') {
+    out.push('max_lag = 400; steps = 2000', 'series = None');
+    if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, steps)', '    if np.all(np.isfinite(s)): series = s');
+    else out.push('if len(bv) >= 8: series = bv');
+    out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
+      'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
+  } else {
+    out.push('max_lag = 400; steps = 2000;', 'series = [];');
+    if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, steps);', '    if all(isfinite(s)), series = s; end', 'end');
+    else out.push('if numel(bv) >= 8, series = bv; end');
+    out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
+      'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
+  }
+  return { body: out, need };
+}
+BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings')];
   // A page may say which settings the script reads and which choices are written into its code.
@@ -15322,6 +15539,7 @@ function dataBlock(recipe, L) {
     out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
   }
   if (recipe.groups) out.push(...groupsBlock(L, recipe));
+  if (recipe.records) out.push(...recordsBlock(L, recipe.records));
   return out;
 }
 
@@ -16349,7 +16567,7 @@ export function buildDatasets(sniffed, mapping) {
 // row calls build() only when a script is asked for.
 
 import { repEstimates, repIds } from '../data/model.js';
-import { summary } from '../stats/descriptive.js';
+import { summary, acf } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
 import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
@@ -16358,6 +16576,8 @@ import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPoole
          posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
+         resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -16914,6 +17134,127 @@ function severalSubset(r, o, g) {
     Object.assign(e, { [d + 'survives']: ex(ss.survivors[i]), [d + 'N']: ss.N[i] == null ? NaN : ss.N[i],
                        [d + 'additional']: ss.additional[i] == null ? NaN : ss.additional[i] });
   });
+}
+
+// ── Steady State ─────────────────────────────────────────────────────────
+
+/** The most numbers a script embeds; a page whose records run past it offers no script. */
+export const MAX_NUMBERS = 200000;
+
+/**
+ * How many numbers a dataset's records would put in a script: every value,
+ * and every time stamp where there is one. Cheap, and copies nothing.
+ * @param {{reps: {t: ArrayLike<number>|null, v: ArrayLike<number>}[]}} ds
+ */
+export function recordCount(ds) {
+  let n = 0;
+  for (const r of ds.reps) n += r.v.length * (r.t ? 2 : 1);
+  return n;
+}
+
+/** The records of a dataset as plain arrays, every replication in order (an empty one included). */
+function recordsOf(ds) {
+  return { name: ds.name, response: ds.response, unit: ds.unit, kind: ds.kind, endTime: ds.endTime,
+    reps: ds.reps.map(r => ({ id: String(r.id), t: r.t ? Array.from(r.t) : null, v: Array.from(r.v) })) };
+}
+
+/**
+ * The Steady State recipe: the warm-up plot's averages, the batch means on
+ * the series after truncation, and the autocorrelation of that series, each
+ * computed as the page computes it.
+ * @param {{ ds: object, align: 'index'|'time', nBins: number, w: number, cut: number, repIdx: number,
+ *   lumped: boolean, mode: 'count'|'size', count: number, size: number|null, level: number, start: number,
+ *   title?: string, provenance?: object }} o
+ *   `ds` is the run the page batches (the source run of a derived dataset,
+ *   as the page's current() returns it), `start` the time its bins start from
+ *   (the page's startTime(ds)), and the rest the page's settings. `title`
+ *   and `provenance` are the page's own, copied into the recipe. A pure
+ *   function of its argument, and so a page can call it lazily. When the
+ *   records would run past MAX_NUMBERS, the recipe carries `tooBig` and no
+ *   records.
+ */
+export function steadyRecipe(o) {
+  const { ds, align, nBins, w, cut, repIdx, mode, count, size, level, start } = o;
+  const r = baseRecipe({ page: 'steady', title: o.title || 'Steady state: batch means', provenance: o.provenance || {}, level });
+  if (recordCount(ds) > MAX_NUMBERS) { r.tooBig = true; return r; }
+  r.records = recordsOf(ds);
+  const e = r.expect;
+  const kind = ds.kind === 'time' ? 'time' : 'tally';
+  const lumped = !!o.lumped && ds.reps.length > 1;
+
+  // Warm-up: the average across replications, smoothed as the page smooths it.
+  let ybar, edges = null;
+  if (align === 'index') ybar = alignByIndex(ds.reps).ybar;
+  else ({ ybar, edges } = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start));
+  const L = ybar.length, mid = Math.ceil(L / 2);
+  let gaps = 0;
+  for (let i = 0; i < L; i++) if (!Number.isFinite(ybar[i])) gaps++;
+  const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w), cum = cumulativeAverage(ybar);
+  e['warm-up points'] = L;
+  if (L) {
+    Object.assign(e, { 'warm-up ybar at 1': ybar[0], 'warm-up ybar at mid': ybar[mid - 1],
+      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1] });
+  }
+  if (edges) Object.assign(e, { 'warm-up bin width': edges[1] - edges[0], 'warm-up empty bins': gaps });
+
+  // The series batching works on, as the page forms it: one replication passed
+  // whole with the cut, or every replication cut and then joined end to end.
+  const truncate = cut > 0 ? { by: align, at: cut } : null;
+  let src, kept;
+  if (lumped) {
+    kept = concatenateReps(ds.reps, kind, truncate, ds.endTime);
+    src = { rep: { t: kept.t, v: kept.v }, truncate: null, endTime: kept.end };
+  } else {
+    const rep = ds.reps[repIdx] || ds.reps[0];
+    kept = concatenateReps([rep], kind, truncate, ds.endTime);
+    src = { rep, truncate, endTime: ds.endTime };
+  }
+  const opts = { kind, truncate: src.truncate, endTime: src.endTime, level };
+  if (mode === 'count') opts.count = count; else opts.size = size;
+  let res;
+  if (lumped && !src.rep.v.length) res = { ok: false, reason: 'Nothing remains in any replication after this cut.' };
+  else { try { res = batchMeans(src.rep, opts); } catch (err) { res = { ok: false, reason: String(err.message || err) }; } }
+  if (res.ok) {
+    Object.assign(e, { batches: res.b, 'batch size': res.size, 'batch start': res.start, 'records used': res.nUsed });
+    res.batches.forEach((b, i) => {
+      e['batch ' + (i + 1) + ' mean'] = b.mean;
+      if (res.byTime) e['batch ' + (i + 1) + ' records'] = b.n;
+    });
+    if (res.byTime) e['leftover duration'] = res.leftover.duration; else e['leftover observations'] = res.leftover.n;
+    Object.assign(e, { 'mean of batch means': res.mean, 'sd of batch means': res.sd, se: res.se, df: res.df, 't quantile': res.t,
+      'half-width': res.hw, lower: res.lo, upper: res.hi, 'lag-one r1': res.lag1, 'fishman C': res.lag1Test.C, 'fishman p': res.lag1Test.p });
+  } else e['batch means'] = 'not defined';
+
+  // The autocorrelation of the series after truncation, as the page's
+  // correlogram forms it: a time-persistent series is first averaged over
+  // ACF_STEPS equal steps of simulation time and is used only when every step
+  // is covered; a tally series needs at least 8 observations.
+  let series = null;
+  if (kept && kept.v.length) {
+    if (kind === 'time') {
+      const a = kept.t[0], z = kept.end;
+      if (z > a) {
+        const rs = resampleTimeWeighted(kept.t, kept.v, a, z, ACF_STEPS).values;
+        if (Array.prototype.every.call(rs, Number.isFinite)) series = rs;
+      }
+    } else if (kept.v.length >= 8) series = kept.v;
+  }
+  const maxLag = series ? Math.min(ACF_MAX_LAG, Math.floor(series.length / 4)) : 0;
+  if (maxLag >= 1) {
+    const ac = acf(series, maxLag);
+    for (let j = 1; j <= Math.min(5, maxLag); j++) e['acf lag ' + j] = ac[j];
+  }
+
+  r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
+  r.settings = {
+    align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
+    batch_count: mode === 'count' ? count : NaN, batch_size: mode === 'size' ? size : NaN
+  };
+  r.settingsNote = [
+    'align is index (observation i of every replication averaged with observation i of the others, and cut counts the observations deleted from the start of each replication) or time (n_bins equal bins of simulation time from start, and cut is the time the warm-up ends); time-persistent data are aligned by time only. w is the moving average\'s half-width, and cut = 0 deletes nothing.',
+    'When lumped is true, every replication is cut and joined end to end; otherwise the replication in position replication (1 is the first) is batched. Set batch_count to a number of batches, or set it to NaN and batch_size to a batch size (observations, or units of simulation time for time-persistent data).'
+  ];
+  return r;
 }
 </script>
 <script type="text/plain" data-module="js/io/script_lib.js">
@@ -18988,6 +19329,535 @@ h = rinott_h(n0, k, 1 - alpha / 2);
 N = nan(1, k); N(surv) = max(n(surv), ceil((h * sqrt(s2(surv)) / delta).^2), 'includenan');
 if strcmp(dir, 'max'), [~, best] = max(m); else, [~, best] = min(m); end
 r = struct('ok', true, 't', t, 'h', h, 'best', best, 'survivors', surv, 'N', N, 'additional', N - n);
+end
+`;
+
+// ── Steady State: time-weighted averages of a step function ──────────────
+// A time-persistent record's value holds from its time to the next record's,
+// and the last record's until the end time, or for no time when there is none.
+
+LIB.R.timeWeighted = `
+trajectory_end <- function(t, end_time) if (is.nan(end_time)) t[length(t)] else end_time
+tw_mean <- function(t, v, t_end, lo, hi) {
+  # The time average of the step function over [lo, hi]: each record's value counts for the part
+  # of its holding span (to the next record, the last to t_end) that lies inside [lo, hi].
+  # NaN when the trajectory covers none of [lo, hi].
+  seg_end <- c(t[-1], t_end)
+  ov <- pmax(0, pmin(seg_end, hi) - pmax(t, lo))
+  if (!isTRUE(sum(ov) > 0)) return(NaN)
+  sum(v * ov) / sum(ov)
+}
+`;
+LIB.py.timeWeighted = `
+def trajectory_end(t, end_time):
+    """Where the last record stops holding: the end time, or the last record's own time."""
+    return t[-1] if np.isnan(end_time) else end_time
+
+def tw_mean(t, v, t_end, lo, hi):
+    """The time average of the step function over [lo, hi]: each record's value counts for the part
+    of its holding span (to the next record, the last to t_end) that lies inside [lo, hi].
+    nan when the trajectory covers none of [lo, hi]."""
+    t = np.asarray(t, float); v = np.asarray(v, float)
+    seg_end = np.append(t[1:], t_end)
+    ov = np.maximum(0.0, np.minimum(seg_end, hi) - np.maximum(t, lo))
+    tot = ov.sum()
+    return float(np.sum(v * ov) / tot) if tot > 0 else np.nan
+`;
+LIB.m.timeWeighted = `
+function e = trajectory_end(t, end_time)
+% Where the last record stops holding: the end time, or the last record's own time.
+if isnan(end_time), e = t(end); else, e = end_time; end
+end
+
+function m = tw_mean(t, v, t_end, lo, hi)
+% The time average of the step function over [lo, hi]: each record's value counts for the part
+% of its holding span (to the next record, the last to t_end) that lies inside [lo, hi].
+% NaN when the trajectory covers none of [lo, hi].
+t = t(:)'; v = v(:)';
+seg_end = [t(2:end), t_end];
+ov = max(0, min(seg_end, hi) - max(t, lo));
+if sum(ov) > 0, m = sum(v .* ov) / sum(ov); else, m = NaN; end
+end
+`;
+
+// ── Steady State: the warm-up plot's averages ────────────────────────────
+
+LIB.R.alignment = `
+align_by_index <- function(reps) {
+  # ybar[i] is the mean of observation i over the replications that have one.
+  L <- max(0, vapply(reps, function(r) length(r$v), numeric(1)))
+  M <- matrix(NaN, length(reps), L)
+  for (q in seq_along(reps)) { n <- length(reps[[q]]$v); if (n) M[q, 1:n] <- reps[[q]]$v }
+  colMeans(M, na.rm = TRUE)
+}
+align_by_time <- function(reps, kind, n_bins, end_time, start) {
+  # Equal bins of simulation time from start to T, T the end time or, when there is none, the
+  # latest last record. In each bin a replication gives its time average over the part of the bin
+  # it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
+  # the right (tally); ybar averages the replications that give a value, and is NaN where none does.
+  reps <- Filter(function(r) length(r$t) > 0, reps)
+  t_end <- if (!is.nan(end_time)) end_time else if (length(reps)) max(vapply(reps, function(r) r$t[length(r$t)], numeric(1))) else 0
+  B <- max(1, floor(n_bins))
+  t0 <- if (is.finite(start) && start < t_end) start else 0
+  edges <- c(t0 + (t_end - t0) * (0:(B - 1)) / B, t_end)
+  ybar <- vapply(seq_len(B), function(b) {
+    vals <- vapply(reps, function(r) {
+      if (kind == "time") return(tw_mean(r$t, r$v, trajectory_end(r$t, end_time), edges[b], edges[b + 1]))
+      inb <- r$t >= edges[b] & (r$t < edges[b + 1] | (b == B & r$t <= edges[b + 1]))
+      if (any(inb)) mean(r$v[inb]) else NaN
+    }, numeric(1))
+    vals <- vals[!is.nan(vals)]
+    if (length(vals)) mean(vals) else NaN
+  }, numeric(1))
+  list(edges = edges, ybar = ybar)
+}
+moving_average <- function(y, w) {
+  # Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
+  # on it, h = min(i - 1, w), and so a shorter symmetric span near the start; NaN where the full
+  # span would run past the end. A point with no value (an empty time bin) is skipped.
+  L <- length(y); out <- rep(NaN, L)
+  for (i in seq_len(L)) {
+    if (i > L - w) next
+    h <- min(i - 1, w); s <- y[(i - h):(i + h)]; s <- s[is.finite(s)]
+    if (length(s)) out[i] <- mean(s)
+  }
+  out
+}
+cumulative_average <- function(y) {
+  # The mean of the points so far, skipping any with no value.
+  ok <- is.finite(y); s <- cumsum(ifelse(ok, y, 0)); cnt <- cumsum(ok)
+  ifelse(cnt > 0, s / cnt, NaN)
+}
+`;
+LIB.py.alignment = `
+def align_by_index(reps):
+    """ybar[i] is the mean of observation i over the replications that have one."""
+    L = max([len(r["v"]) for r in reps] + [0])
+    M = np.full((len(reps), L), np.nan)
+    for q, r in enumerate(reps):
+        M[q, :len(r["v"])] = r["v"]
+    return np.nansum(M, axis=0) / np.sum(~np.isnan(M), axis=0)
+
+def align_by_time(reps, kind, n_bins, end_time, start):
+    """Equal bins of simulation time from start to T, T the end time or, when there is none, the
+    latest last record. In each bin a replication gives its time average over the part of the bin
+    it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
+    the right (tally); ybar averages the replications that give a value, and is nan where none does."""
+    reps = [r for r in reps if r["t"] is not None and len(r["t"]) > 0]
+    if not np.isnan(end_time): t_end = end_time
+    else: t_end = max(r["t"][-1] for r in reps) if reps else 0.0
+    B = max(1, int(np.floor(n_bins)))
+    t0 = start if np.isfinite(start) and start < t_end else 0.0
+    edges = np.append(t0 + (t_end - t0) * np.arange(B) / B, t_end)
+    ybar = np.full(B, np.nan)
+    for b in range(B):
+        vals = []
+        for r in reps:
+            t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+            if kind == "time":
+                x = tw_mean(t, v, trajectory_end(t, end_time), edges[b], edges[b + 1])
+            else:
+                inb = (t >= edges[b]) & ((t < edges[b + 1]) | ((b == B - 1) & (t <= edges[b + 1])))
+                x = v[inb].mean() if inb.any() else np.nan
+            if not np.isnan(x): vals.append(x)
+        if vals: ybar[b] = np.mean(vals)
+    return edges, ybar
+
+def moving_average(y, w):
+    """Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
+    on it, h = min(i, w), and so a shorter symmetric span near the start; nan where the full span
+    would run past the end. A point with no value (an empty time bin) is skipped."""
+    y = np.asarray(y, float); L = len(y); out = np.full(L, np.nan)
+    for i in range(L):
+        if i > L - 1 - w: continue
+        h = min(i, w); s = y[i - h:i + h + 1]; s = s[np.isfinite(s)]
+        if len(s): out[i] = s.mean()
+    return out
+
+def cumulative_average(y):
+    """The mean of the points so far, skipping any with no value."""
+    y = np.asarray(y, float); ok = np.isfinite(y)
+    s = np.cumsum(np.where(ok, y, 0.0)); c = np.cumsum(ok)
+    return np.where(c > 0, s / np.maximum(c, 1), np.nan)
+`;
+LIB.m.alignment = `
+function ybar = align_by_index(reps)
+% ybar(i) is the mean of observation i over the replications that have one.
+L = max([0, arrayfun(@(r) numel(r.v), reps)]);
+M = nan(numel(reps), L);
+for q = 1:numel(reps), M(q, 1:numel(reps(q).v)) = reps(q).v; end
+ybar = mean(M, 1, 'omitnan');
+end
+
+function [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start)
+% Equal bins of simulation time from start to T, T the end time or, when there is none, the
+% latest last record. In each bin a replication gives its time average over the part of the bin
+% it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
+% the right (tally); ybar averages the replications that give a value, and is NaN where none does.
+reps = reps(arrayfun(@(r) ~isempty(r.t), reps));
+if ~isnan(end_time), t_end = end_time;
+elseif ~isempty(reps), t_end = max(arrayfun(@(r) r.t(end), reps));
+else, t_end = 0; end
+B = max(1, floor(n_bins));
+if isfinite(start) && start < t_end, t0 = start; else, t0 = 0; end
+edges = [t0 + (t_end - t0) * (0:B-1) / B, t_end];
+ybar = nan(1, B);
+for b = 1:B
+    vals = [];
+    for q = 1:numel(reps)
+        t = reps(q).t(:)'; v = reps(q).v(:)';
+        if strcmp(kind, 'time')
+            x = tw_mean(t, v, trajectory_end(t, end_time), edges(b), edges(b + 1));
+        else
+            inb = t >= edges(b) & (t < edges(b + 1) | (b == B & t <= edges(b + 1)));
+            x = NaN; if any(inb), x = mean(v(inb)); end
+        end
+        if ~isnan(x), vals(end + 1) = x; end %#ok<AGROW>
+    end
+    if ~isempty(vals), ybar(b) = mean(vals); end
+end
+end
+
+function out = moving_average(y, w)
+% Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
+% on it, h = min(i - 1, w), and so a shorter symmetric span near the start; NaN where the full
+% span would run past the end. A point with no value (an empty time bin) is skipped.
+L = numel(y); out = nan(1, L);
+for i = 1:L
+    if i > L - w, continue; end
+    h = min(i - 1, w); s = y(i-h:i+h); s = s(isfinite(s));
+    if ~isempty(s), out(i) = mean(s); end
+end
+end
+
+function out = cumulative_average(y)
+% The mean of the points so far, skipping any with no value.
+ok = isfinite(y); y(~ok) = 0;
+c = cumsum(ok); out = cumsum(y) ./ c; out(c == 0) = NaN;
+end
+`;
+
+// ── Steady State: truncation, joining, batch means, and Fishman's test ───
+
+LIB.R.batchMeans = `
+truncate_rep <- function(t, v, kind, by, at) {
+  # The records kept after the warm-up is cut, with idx, each kept record's position in the
+  # original series. By "index" the first 'at' records go. By "time" a tally observation goes when
+  # it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force there
+  # (the last record at or before 'at') becomes its first record, at time 'at', so that every
+  # later average still counts the time from 'at' to the next record. at = 0 cuts nothing.
+  idx <- seq_along(v)
+  if (!isTRUE(at > 0)) return(list(t = t, v = v, idx = idx))
+  if (by == "index") keep <- idx > floor(at)
+  else if (kind == "tally") keep <- t >= at
+  else {
+    k <- which(t <= at); after <- which(t > at)
+    if (length(k)) { k <- max(k); return(list(t = c(at, t[after]), v = c(v[k], v[after]), idx = c(k, after))) }
+    keep <- t > at
+  }
+  list(t = t[keep], v = v[keep], idx = idx[keep])
+}
+lump_reps <- function(reps, kind, by, at, end_time) {
+  # Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
+  # run after another; a time-persistent run covers [s, E], s its first kept record and E the end
+  # time or its last record, and is shifted to begin where the previous run ended. A replication
+  # with nothing left, or covering no time, is skipped.
+  t <- numeric(0); v <- numeric(0); t_end <- NaN; n_reps <- 0
+  for (r in reps) {
+    k <- truncate_rep(r$t, r$v, kind, by, at)
+    if (!length(k$v)) next
+    if (kind == "tally") { v <- c(v, k$v); n_reps <- n_reps + 1; next }
+    E <- trajectory_end(k$t, end_time); s <- k$t[1]
+    if (!isTRUE(E > s)) next
+    shift <- if (n_reps == 0) 0 else t_end - s
+    t <- c(t, k$t + shift); v <- c(v, k$v); t_end <- E + shift; n_reps <- n_reps + 1
+  }
+  list(t = if (kind == "tally") NULL else t, v = v, t_end = t_end, n_reps = n_reps)
+}
+fishman <- function(y) {
+  # The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
+  # correlation: C is close to N(0, 1) when the batch means are independent (b >= 4).
+  b <- length(y); d <- y - mean(y); ss <- sum(d^2)
+  r1 <- if (b >= 2 && isTRUE(ss > 0)) sum(d[-b] * d[-1]) / ss else NaN
+  if (b < 4 || !isTRUE(ss > 0)) return(list(r1 = r1, C = NaN, p = NaN))
+  C <- sqrt((b^2 - 1) / (b - 2)) * (r1 + (d[1]^2 + d[b]^2) / (2 * ss))
+  list(r1 = r1, C = C, p = pnorm(C, lower.tail = FALSE))
+}
+batch_means <- function(t, v, kind, end_time, count, size, level, first = 0) {
+  # Batches on the kept series, set by count (with size NaN) or by size (with count NaN).
+  # Tally: count batches of floor(n / count) observations, or batches of size observations, one
+  # after another; the leftover at the end is excluded, and 'first' (the position of the first
+  # kept observation in the untruncated series, counted from 0) is where the batches start.
+  # Time-persistent: count equal intervals of [start, T], or intervals of length size, from the
+  # first kept record to T (the end time or the last record), each batch mean the time average
+  # over its interval; the time past the last full interval is excluded. Then the t interval on
+  # the batch means, their lag-one autocorrelation, and Fishman's test.
+  by_count <- !is.nan(count); n <- length(v)
+  no <- function(why) list(ok = FALSE, reason = why)
+  if (by_count && !isTRUE(count >= 1)) return(no("The batch count must be at least 1."))
+  if (!by_count && !isTRUE(size > 0)) return(no("The batch size must be positive."))
+  if (kind == "tally") {
+    if (by_count) { b <- floor(count); m <- floor(n / b) } else { m <- floor(size); b <- if (m > 0) floor(n / m) else 0 }
+    if (m < 1) b <- 0
+    if (b < 2) return(no(paste0("Batch means need at least 2 batches; these settings give ", b, ".")))
+    means <- vapply(seq_len(b), function(k) mean(v[((k - 1) * m + 1):(k * m)]), numeric(1))
+    start <- first; records <- rep(m, b); leftover <- n - b * m
+  } else {
+    if (!n) return(no("No records remain after truncation."))
+    start <- t[1]; t_end <- trajectory_end(t, end_time); span <- t_end - start
+    if (!isTRUE(span > 0)) return(no("The trajectory covers no time after truncation."))
+    # By size, a small relative slack keeps a span that is a whole number of batches, up to
+    # rounding, from losing its last batch.
+    if (by_count) { b <- floor(count); m <- span / b } else { m <- size; b <- floor(span / m + 1e-9) }
+    if (b < 2) return(no(paste0("Batch means need at least 2 batches; these settings give ", b, ".")))
+    edges <- start + (0:b) * m
+    if (by_count) edges[b + 1] <- t_end
+    leftover <- if (by_count) 0 else t_end - start - b * m
+    if (abs(leftover) <= 1e-9 * max(1, abs(span))) leftover <- 0
+    means <- vapply(seq_len(b), function(k) tw_mean(t, v, t_end, edges[k], edges[k + 1]), numeric(1))
+    # The records whose times fall in each interval; a record at the very end counts in the last
+    # batch when no time is left over.
+    pos <- findInterval(t, edges)
+    pos[pos == b + 1 & leftover == 0 & t == edges[b + 1]] <- b
+    records <- tabulate(pos[pos >= 1 & pos <= b], b)
+  }
+  ti <- t_interval(means, level); f <- fishman(means)
+  list(ok = TRUE, b = b, size = m, start = start, nUsed = n, means = means, records = records,
+       leftover = leftover, mean = mean(means), sd = sd(means), se = sd(means) / sqrt(b), df = b - 1,
+       t = ti$t, hw = ti$hw, lo = ti$lo, hi = ti$hi, r1 = f$r1, C = f$C, p = f$p)
+}
+`;
+LIB.py.batchMeans = `
+def truncate_rep(t, v, kind, by, at):
+    """The records kept after the warm-up is cut, with idx, each kept record's position (from 0) in
+    the original series. By "index" the first 'at' records go. By "time" a tally observation goes
+    when it comes before 'at', and a time-persistent trajectory is cut at 'at': the state in force
+    there (the last record at or before 'at') becomes its first record, at time 'at', so that every
+    later average still counts the time from 'at' to the next record. at = 0 cuts nothing."""
+    v = np.asarray(v, float); t = None if t is None else np.asarray(t, float)
+    idx = np.arange(len(v))
+    if not at > 0: return t, v, idx
+    if by == "index": keep = idx >= np.floor(at)
+    elif kind == "tally": keep = t >= at
+    else:
+        before = np.flatnonzero(t <= at); after = np.flatnonzero(t > at)
+        if len(before):
+            k = before[-1]
+            return np.append(at, t[after]), np.append(v[k], v[after]), np.append(k, after)
+        keep = t > at
+    return (None if t is None else t[keep]), v[keep], idx[keep]
+
+def lump_reps(reps, kind, by, at, end_time):
+    """Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
+    run after another; a time-persistent run covers [s, E], s its first kept record and E the end
+    time or its last record, and is shifted to begin where the previous run ended. A replication
+    with nothing left, or covering no time, is skipped."""
+    ts, vs, t_end, n_reps = [], [], np.nan, 0
+    for r in reps:
+        t, v, _ = truncate_rep(r["t"], r["v"], kind, by, at)
+        if len(v) == 0: continue
+        if kind == "tally":
+            vs.append(v); n_reps += 1; continue
+        E = trajectory_end(t, end_time); s = t[0]
+        if not E > s: continue
+        shift = 0.0 if n_reps == 0 else t_end - s
+        ts.append(t + shift); vs.append(v); t_end = E + shift; n_reps += 1
+    v = np.concatenate(vs) if vs else np.array([])
+    t = None if kind == "tally" else (np.concatenate(ts) if ts else np.array([]))
+    return dict(t=t, v=v, t_end=t_end, n_reps=n_reps)
+
+def fishman(y):
+    """The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
+    correlation: C is close to N(0, 1) when the batch means are independent (b >= 4)."""
+    y = np.asarray(y, float); b = len(y); d = y - y.mean(); ss = float(np.sum(d ** 2))
+    r1 = float(np.sum(d[:-1] * d[1:]) / ss) if b >= 2 and ss > 0 else np.nan
+    if b < 4 or not ss > 0: return dict(r1=r1, C=np.nan, p=np.nan)
+    C = np.sqrt((b ** 2 - 1) / (b - 2)) * (r1 + (d[0] ** 2 + d[-1] ** 2) / (2 * ss))
+    return dict(r1=r1, C=C, p=stats.norm.sf(C))
+
+def batch_means(t, v, kind, end_time, count, size, level, first=0):
+    """Batches on the kept series, set by count (with size nan) or by size (with count nan).
+    Tally: count batches of floor(n / count) observations, or batches of size observations, one
+    after another; the leftover at the end is excluded, and 'first' (the position of the first
+    kept observation in the untruncated series, counted from 0) is where the batches start.
+    Time-persistent: count equal intervals of [start, T], or intervals of length size, from the
+    first kept record to T (the end time or the last record), each batch mean the time average
+    over its interval; the time past the last full interval is excluded. Then the t interval on
+    the batch means, their lag-one autocorrelation, and Fishman's test."""
+    v = np.asarray(v, float); n = len(v); by_count = not np.isnan(count)
+    no = lambda why: dict(ok=False, reason=why)
+    if by_count and not count >= 1: return no("The batch count must be at least 1.")
+    if not by_count and not size > 0: return no("The batch size must be positive.")
+    if kind == "tally":
+        if by_count: b = int(np.floor(count)); m = n // b
+        else:
+            m = int(np.floor(size)); b = n // m if m > 0 else 0
+        if m < 1: b = 0
+        if b < 2: return no(f"Batch means need at least 2 batches; these settings give {b}.")
+        means = v[:b * m].reshape(b, m).mean(axis=1)
+        start = first; records = np.full(b, m); leftover = n - b * m
+    else:
+        if n == 0: return no("No records remain after truncation.")
+        t = np.asarray(t, float); start = t[0]; t_end = trajectory_end(t, end_time); span = t_end - start
+        if not span > 0: return no("The trajectory covers no time after truncation.")
+        # By size, a small relative slack keeps a span that is a whole number of batches, up to
+        # rounding, from losing its last batch.
+        if by_count: b = int(np.floor(count)); m = span / b
+        else: m = float(size); b = int(np.floor(span / m + 1e-9))
+        if b < 2: return no(f"Batch means need at least 2 batches; these settings give {b}.")
+        edges = start + np.arange(b + 1) * m
+        if by_count: edges[b] = t_end
+        leftover = 0.0 if by_count else t_end - start - b * m
+        if abs(leftover) <= 1e-9 * max(1.0, abs(span)): leftover = 0.0
+        means = np.array([tw_mean(t, v, t_end, edges[k], edges[k + 1]) for k in range(b)])
+        # The records whose times fall in each interval; a record at the very end counts in the
+        # last batch when no time is left over.
+        pos = np.searchsorted(edges, t, side="right") - 1
+        pos[(pos == b) & (leftover == 0) & (t == edges[b])] = b - 1
+        records = np.bincount(pos[(pos >= 0) & (pos < b)], minlength=b)
+    ti = t_interval(means, level); f = fishman(means); sd = means.std(ddof=1)
+    return dict(ok=True, b=b, size=m, start=start, nUsed=n, means=means, records=records, leftover=leftover,
+                mean=means.mean(), sd=sd, se=sd / np.sqrt(b), df=b - 1, t=ti["t"], hw=ti["hw"], lo=ti["lo"],
+                hi=ti["hi"], r1=f["r1"], C=f["C"], p=f["p"])
+`;
+LIB.m.batchMeans = `
+function [t, v, idx] = truncate_rep(t, v, kind, by, at)
+% The records kept after the warm-up is cut, with idx, each kept record's position in the
+% original series. By 'index' the first at records go. By 'time' a tally observation goes when
+% it comes before at, and a time-persistent trajectory is cut at at: the state in force there
+% (the last record at or before at) becomes its first record, at time at, so that every later
+% average still counts the time from at to the next record. at = 0 cuts nothing.
+v = v(:)'; if ~isempty(t), t = t(:)'; end
+idx = 1:numel(v);
+if ~(at > 0), return; end
+if strcmp(by, 'index')
+    keep = idx > floor(at);
+elseif strcmp(kind, 'tally')
+    keep = t >= at;
+else
+    k = find(t <= at, 1, 'last'); after = find(t > at);
+    if ~isempty(k)
+        t = [at, t(after)]; v = [v(k), v(after)]; idx = [k, after]; return;
+    end
+    keep = t > at;
+end
+if ~isempty(t), t = t(keep); end
+v = v(keep); idx = idx(keep);
+end
+
+function r = lump_reps(reps, kind, by, at, end_time)
+% Every replication cut as truncate_rep cuts it, and joined end to end: tally observations one
+% run after another; a time-persistent run covers [s, E], s its first kept record and E the end
+% time or its last record, and is shifted to begin where the previous run ended. A replication
+% with nothing left, or covering no time, is skipped.
+t = []; v = []; t_end = NaN; n_reps = 0;
+for q = 1:numel(reps)
+    [tk, vk] = truncate_rep(reps(q).t, reps(q).v, kind, by, at);
+    if isempty(vk), continue; end
+    if strcmp(kind, 'tally'), v = [v, vk]; n_reps = n_reps + 1; continue; end %#ok<AGROW>
+    E = trajectory_end(tk, end_time); s = tk(1);
+    if ~(E > s), continue; end
+    if n_reps == 0, shift = 0; else, shift = t_end - s; end
+    t = [t, tk + shift]; v = [v, vk]; t_end = E + shift; n_reps = n_reps + 1; %#ok<AGROW>
+end
+r = struct('t', t, 'v', v, 't_end', t_end, 'n_reps', n_reps);
+end
+
+function f = fishman(y)
+% The lag-one autocorrelation r1 of the batch means, and Fishman's test of no positive
+% correlation: C is close to N(0, 1) when the batch means are independent (b >= 4).
+y = y(:)'; b = numel(y); d = y - mean(y); ss = sum(d.^2);
+r1 = NaN; if b >= 2 && ss > 0, r1 = sum(d(1:end-1) .* d(2:end)) / ss; end
+if b < 4 || ~(ss > 0), f = struct('r1', r1, 'C', NaN, 'p', NaN); return; end
+C = sqrt((b^2 - 1) / (b - 2)) * (r1 + (d(1)^2 + d(end)^2) / (2 * ss));
+f = struct('r1', r1, 'C', C, 'p', normcdf(C, 'upper'));
+end
+
+function r = batch_means(t, v, kind, end_time, count, sz, level, first)
+% Batches on the kept series, set by count (with sz NaN) or by size sz (with count NaN).
+% Tally: count batches of floor(n / count) observations, or batches of sz observations, one
+% after another; the leftover at the end is excluded, and first (the position of the first kept
+% observation in the untruncated series, counted from 0) is where the batches start.
+% Time-persistent: count equal intervals of [start, T], or intervals of length sz, from the
+% first kept record to T (the end time or the last record), each batch mean the time average
+% over its interval; the time past the last full interval is excluded. Then the t interval on
+% the batch means, their lag-one autocorrelation, and Fishman's test.
+v = v(:)'; n = numel(v); by_count = ~isnan(count);
+r = struct('ok', false, 'reason', '');
+if by_count && ~(count >= 1), r.reason = 'The batch count must be at least 1.'; return; end
+if ~by_count && ~(sz > 0), r.reason = 'The batch size must be positive.'; return; end
+if strcmp(kind, 'tally')
+    if by_count, b = floor(count); m = floor(n / b); else, m = floor(sz); b = 0; if m > 0, b = floor(n / m); end; end
+    if m < 1, b = 0; end
+    if b < 2, r.reason = sprintf('Batch means need at least 2 batches; these settings give %d.', b); return; end
+    means = mean(reshape(v(1:b*m), m, b), 1);
+    start = first; records = repmat(m, 1, b); leftover = n - b * m;
+else
+    if n == 0, r.reason = 'No records remain after truncation.'; return; end
+    t = t(:)'; start = t(1); t_end = trajectory_end(t, end_time); span = t_end - start;
+    if ~(span > 0), r.reason = 'The trajectory covers no time after truncation.'; return; end
+    % By size, a small relative slack keeps a span that is a whole number of batches, up to
+    % rounding, from losing its last batch.
+    if by_count, b = floor(count); m = span / b; else, m = sz; b = floor(span / m + 1e-9); end
+    if b < 2, r.reason = sprintf('Batch means need at least 2 batches; these settings give %d.', b); return; end
+    edges = start + (0:b) * m;
+    if by_count, edges(b + 1) = t_end; end
+    leftover = 0; if ~by_count, leftover = t_end - start - b * m; end
+    if abs(leftover) <= 1e-9 * max(1, abs(span)), leftover = 0; end
+    means = arrayfun(@(k) tw_mean(t, v, t_end, edges(k), edges(k + 1)), 1:b);
+    % The records whose times fall in each interval; a record at the very end counts in the last
+    % batch when no time is left over.
+    pos = sum(edges(:) <= t, 1);
+    pos(pos == b + 1 & leftover == 0 & t == edges(b + 1)) = b;
+    records = accumarray(pos(pos >= 1 & pos <= b)', 1, [b, 1])';
+end
+ti = t_interval(means, level); f = fishman(means);
+r = struct('ok', true, 'reason', '', 'b', b, 'size', m, 'start', start, 'nUsed', n, 'means', means, ...
+           'records', records, 'leftover', leftover, 'mean', mean(means), 'sd', std(means), ...
+           'se', std(means) / sqrt(b), 'df', b - 1, 't', ti.t, 'hw', ti.hw, 'lo', ti.lo, 'hi', ti.hi, ...
+           'r1', f.r1, 'C', f.C, 'p', f.p);
+end
+`;
+
+// ── Steady State: the autocorrelation of the kept series ─────────────────
+// The sample autocorrelation as R's acf computes it: deviations from the
+// series mean, each lag's sum of products divided by the lag-0 sum.
+
+LIB.R.acf = `
+acf_lags <- function(y, L) as.numeric(acf(y, lag.max = L, plot = FALSE)$acf)[-1]
+resample_tw <- function(t, v, a, z, steps) {
+  # The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+  # which an autocorrelation needs because the records arrive at uneven times.
+  step <- (z - a) / steps
+  edges <- c(a + (0:(steps - 1)) * step, z)
+  vapply(seq_len(steps), function(i) tw_mean(t, v, z, edges[i], edges[i + 1]), numeric(1))
+}
+`;
+LIB.py.acf = `
+def acf_lags(y, L):
+    """r_k = sum (y_i - ybar)(y_(i+k) - ybar) / sum (y_i - ybar)^2 for k = 1..L, as R's acf."""
+    y = np.asarray(y, float); d = y - y.mean(); ss = float(np.sum(d ** 2))
+    if not ss > 0: return np.full(L, np.nan)
+    return np.array([float(np.sum(d[:-k] * d[k:]) / ss) for k in range(1, L + 1)])
+
+def resample_tw(t, v, a, z, steps):
+    """The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+    which an autocorrelation needs because the records arrive at uneven times."""
+    edges = np.append(a + np.arange(steps) * ((z - a) / steps), z)
+    return np.array([tw_mean(t, v, z, edges[i], edges[i + 1]) for i in range(steps)])
+`;
+LIB.m.acf = `
+function r = acf_lags(y, L)
+% r_k = sum (y_i - ybar)(y_(i+k) - ybar) / sum (y_i - ybar)^2 for k = 1..L, as R's acf.
+y = y(:)'; d = y - mean(y); ss = sum(d.^2);
+r = arrayfun(@(k) sum(d(1:end-k) .* d(k+1:end)) / ss, 1:L);
+end
+
+function out = resample_tw(t, v, a, z, steps)
+% The trajectory averaged over steps equal intervals of [a, z]: a series on equal time steps,
+% which an autocorrelation needs because the records arrive at uneven times.
+edges = [a + (0:steps-1) * ((z - a) / steps), z];
+out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:steps);
 end
 `;
 </script>
@@ -24172,11 +25042,12 @@ export default { id, title, sections, render, onShow, onShowSection };
 // starts at no truncation and moves only when the reader moves it.
 
 import * as state from '../state.js';
-import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
+import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -24211,11 +25082,6 @@ let lastBatch = null;       // the latest batchMeans result (ok or not)
 let spins = {};
 let keptCache = null;       // the series after truncation that batching and the autocorrelation use
 let acfCache = null;        // its autocorrelation
-
-// The autocorrelation runs to lag min(MAX_LAG, n/4); a time-persistent series
-// is first averaged over RESAMPLE_STEPS equal steps of simulation time.
-const MAX_LAG = 400;
-const RESAMPLE_STEPS = 2000;
 
 const eligible = ds => !!ds && (ds.kind === 'tally' || ds.kind === 'time');
 const visible = () => !!root && root.classList.contains('active');
@@ -24298,24 +25164,6 @@ function fmtCut(v) {
 }
 
 // ── Warm-up computation ───────────────────────────────────────────────────
-
-/**
- * Welch's moving average over a series with empty entries: the same
- * symmetric window as movingAverage, averaging only the finite entries in
- * it. Used only when some time bin holds no observation from any
- * replication, where a running sum would carry the gap to every later point.
- */
-function gapAwareAverage(y, half) {
-  const L = y.length, out = new Float64Array(L);
-  for (let i = 0; i < L; i++) {
-    if (i > L - 1 - half) { out[i] = NaN; continue; }
-    const h = i < half ? i : half;
-    let s = 0, c = 0;
-    for (let k = i - h; k <= i + h; k++) if (Number.isFinite(y[k])) { s += y[k]; c++; }
-    out[i] = c ? s / c : NaN;
-  }
-  return out;
-}
 
 function computeWarm(ds) {
   // `xMin` is where the series start: zero, or the cut of a truncated dataset
@@ -25156,14 +26004,14 @@ function acfData(ds) {
     if (ds.kind === 'time') {
       const start = k.t[0], end = k.end;
       if (end > start) {
-        const rs = resampleTimeWeighted(k.t, k.v, start, end, RESAMPLE_STEPS);
+        const rs = resampleTimeWeighted(k.t, k.v, start, end, ACF_STEPS);
         if (Array.prototype.every.call(rs.values, Number.isFinite)) {
-          const n = rs.values.length, L = Math.min(MAX_LAG, Math.floor(n / 4));
+          const n = rs.values.length, L = Math.min(ACF_MAX_LAG, Math.floor(n / 4));
           val = { r: acf(rs.values, L), n, L, step: rs.step, byTime: true };
         }
       }
     } else {
-      const n = k.v.length, L = Math.min(MAX_LAG, Math.floor(n / 4));
+      const n = k.v.length, L = Math.min(ACF_MAX_LAG, Math.floor(n / 4));
       if (n >= 8 && L >= 1) val = { r: acf(k.v, L), n, L, step: 1, byTime: false };
     }
     if (val) val.band = 2 / Math.sqrt(val.n);
@@ -25500,14 +26348,20 @@ function storeResult(ds, src, res, rows) {
     ' (truncation ' + esc(truncation) + '): b = ' + res.b + ' batches of ' + num(res.size, 6) + (byTime ? ' time units' : ' observations') +
     ', mean ' + num(res.mean) + ', ' + pct(res.level, 0) + ' interval [' + num(res.lo) + ', ' + num(res.hi) + '] (half-width ' + num(res.hw) + '); lag-one r<sub>1</sub> = ' +
     num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p) + ').</p>';
+  const title = 'Steady state: batch means';
+  // The regenerate scripts' recipe is built only when a button asks for one,
+  // from the settings as they stand now; whether the records are too many for
+  // a script is a count that copies nothing.
+  const recipeIn = { ds, align, nBins, w, cut, repIdx, lumped: src.lumped, mode, count, size, level: res.level, start: startTime(ds), title, provenance };
   state.setResult(id, {
-    title: 'Steady state: batch means',
+    title,
     provenance,
     tables: [
       { name: 'Batch means', headers: ['batch', byTime ? 'start time' : 'first observation', byTime ? 'end time' : 'last observation', byTime ? 'records' : 'n', 'mean'], rows },
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
-    summaryHtml
+    summaryHtml,
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn) }
   });
 }
 
@@ -30020,6 +30874,27 @@ export function movingAverage(ybar, w) {
 }
 
 /**
+ * Welch's moving average over a series with empty (non-finite) entries: the same symmetric span
+ * as movingAverage, averaging only the finite entries in it (NaN when none is finite). The
+ * Steady State page uses it when some time bin holds no observation from any replication, where
+ * movingAverage's running sum would carry the gap to every later point.
+ * @param {ArrayLike<number>} y
+ * @param {number} half the half-width w
+ * @returns {Float64Array}
+ */
+export function gapAwareAverage(y, half) {
+  const L = y.length, out = new Float64Array(L);
+  for (let i = 0; i < L; i++) {
+    if (i > L - 1 - half) { out[i] = NaN; continue; }
+    const h = i < half ? i : half;
+    let s = 0, c = 0;
+    for (let k = i - h; k <= i + h; k++) if (Number.isFinite(y[k])) { s += y[k]; c++; }
+    out[i] = c ? s / c : NaN;
+  }
+  return out;
+}
+
+/**
  * Cumulative average: entry i is the mean of ybar[0..i], skipping NaN entries (NaN until the
  * first finite one).
  * @param {ArrayLike<number>} ybar
@@ -30309,6 +31184,14 @@ export function concatenateReps(reps, kind, truncate, endTime) {
     nReps,
   };
 }
+
+/**
+ * The correlogram of the series batching works on runs to lag min(ACF_MAX_LAG, n/4), and a
+ * time-persistent series is first averaged over ACF_STEPS equal steps of simulation time (see
+ * resampleTimeWeighted). The Steady State page and its regenerated scripts both read these.
+ */
+export const ACF_MAX_LAG = 400;
+export const ACF_STEPS = 2000;
 
 /**
  * Resamples a time-persistent trajectory onto `steps` equal intervals of [start, end]: each value

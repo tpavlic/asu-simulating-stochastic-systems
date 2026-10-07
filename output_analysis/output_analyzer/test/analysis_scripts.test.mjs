@@ -1170,3 +1170,143 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
     also: (stdout, lang, stderr) => noWarning(stdout, lang, lang === 'R' || lang === 'tidy' ? stderr.replace(leveneNoise, '') : stderr)
   });
 }
+
+// ── Task 8: Steady State ───────────────────────────────────────────────
+import { steadyRecipe, recordCount, MAX_NUMBERS } from '../js/io/recipes.js';
+import { batchMeans } from '../js/stats/steadystate.js';
+import { truncateDataset } from '../js/data/model.js';
+
+const TRANSIENT = example('transient')[0];     // tally, ten replications, time-stamped
+const LONG = example('steady-long')[0];        // tally, one long replication
+const QLEN = example('queue-length')[0];       // time-persistent, five replications ending at 600
+
+const steadyBase = { align: 'index', nBins: 50, w: 5, cut: 0, repIdx: 0, lumped: false, mode: 'count', count: 20, size: null, level: 0.95, start: 0 };
+
+// The provenance the page registers, in its key order (storeResult in steady.js),
+// less the batch results, which the script recomputes.
+function stProv(ds, o) {
+  return {
+    dataset: o.shownName || ds.name,
+    replication: o.lumped && ds.reps.length > 1 ? 'all, concatenated' : String((ds.reps[o.repIdx] || ds.reps[0]).id),
+    truncation: o.cut > 0 ? 'by ' + o.align + ' at ' + o.cut : 'none',
+    'confidence level': Math.round(o.level * 100) + '%',
+    'warm-up alignment': o.align === 'index' ? 'by observation index' : 'by simulation time, ' + o.nBins + ' bins',
+    'moving-average half-window': o.w
+  };
+}
+const stRecipe = (ds, over = {}) => {
+  const o = Object.assign({ ds }, steadyBase, over);
+  return steadyRecipe(Object.assign({ title: 'Steady state: batch means', provenance: stProv(ds, o) }, o));
+};
+const stChecks = { also: noWarning };
+
+test('steadyRecipe carries the records, the warm-up, the batches, and the autocorrelation', () => {
+  const r = stRecipe(LONG);
+  assert.equal(r.records.reps.length, 1);
+  for (const k of ['warm-up points', 'warm-up moving average at mid', 'batches', 'batch 1 mean', 'batch 20 mean', 'half-width', 'fishman C', 'acf lag 1', 'acf lag 5']) assert.ok(k in r.expect, k);
+  assert.equal(r.expect.batches, 20);
+  assert.equal(r.provenance['moving-average half-window'], 5, 'the page\'s own provenance is carried');
+  for (const lang of LANGS) {
+    const s = analysisScript(r, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is ASCII');
+    assert.ok(/fishman/.test(s) && /batch_means\(bt, bv, kind, b_end, batch_count, batch_size, level, b_first\)/.test(s), lang + ' batch means');
+  }
+  // Building is pure: twice gives the same recipe.
+  assert.deepEqual(JSON.parse(JSON.stringify(stRecipe(LONG))), JSON.parse(JSON.stringify(r)));
+});
+
+test('the batch start is the analyzer\'s first kept position, not zero', () => {
+  assert.equal(stRecipe(LONG, { cut: 200 }).expect['batch start'], 200);
+  const byTime = stRecipe(TRANSIENT, { align: 'time', repIdx: 2, cut: 20, count: 8 });
+  assert.ok(byTime.expect['batch start'] > 0);
+  assert.equal(stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }).expect['batch start'], 0, 'a joined series starts at 0');
+  assert.equal(stRecipe(QLEN, { align: 'time', cut: 100, count: 10 }).expect['batch start'], 100, 'a trajectory cut by time starts at the cut');
+});
+
+checkRecipe('Steady State, one long run by count', stRecipe(LONG), { smoke: true, also: noWarning });
+checkRecipe('Steady State, one long run by size after a cut by index, 90%', stRecipe(LONG, { cut: 200, mode: 'size', size: 150, level: 0.9 }), stChecks);
+checkRecipe('Steady State, transient waits lumped after a cut by index', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }), stChecks);
+checkRecipe('Steady State, transient waits aligned by time, replication 3, cut by time', stRecipe(TRANSIENT, { align: 'time', nBins: 40, repIdx: 2, cut: 20, count: 8 }), stChecks);
+checkRecipe('Steady State, transient waits lumped by time, by size', stRecipe(TRANSIENT, { align: 'time', nBins: 60, lumped: true, cut: 30, mode: 'size', size: 75, level: 0.99 }), stChecks);
+
+// Review Focus 4: a time-persistent run cut by time carries the state in force
+// at the cut as its first record, at the cut time, and the first batch's time
+// average counts it. Dropping the records before the cut instead loses the
+// stretch from the cut to the next record and changes the first batch mean,
+// which this fixture would catch.
+{
+  const r = stRecipe(QLEN, { align: 'time', nBins: 30, cut: 100, count: 10 });
+  const rep = QLEN.reps[0];
+  const dropped = { t: rep.t.filter(x => x > 100), v: rep.v.filter((_, i) => rep.t[i] > 100) };
+  const naive = batchMeans(dropped, { kind: 'time', count: 10, endTime: QLEN.endTime, level: 0.95 });
+  assert.ok(Math.abs(naive.batches[0].mean - r.expect['batch 1 mean']) > 1e-3, 'the carried record moves the first batch mean');
+  assert.ok(r.expect['records used'] === dropped.v.length + 1, 'the carried record is counted');
+  checkRecipe('Steady State, time-persistent run cut by time, by count', r, stChecks);
+  checkRecipe('Steady State, time-persistent run cut by time, by size', stRecipe(QLEN, { align: 'time', nBins: 30, repIdx: 3, cut: 100, mode: 'size', size: 47.5 }), stChecks);
+  checkRecipe('Steady State, time-persistent runs lumped after a cut by time, by size', stRecipe(QLEN, { align: 'time', lumped: true, cut: 50, mode: 'size', size: 200 }), stChecks);
+  checkRecipe('Steady State, time-persistent runs lumped after a cut by time, by count', stRecipe(QLEN, { align: 'time', nBins: 80, lumped: true, cut: 75.5, count: 25, level: 0.9 }), stChecks);
+  // The page aligns time-persistent data by time only; the scripts follow the
+  // analyzer's functions by observation index too.
+  checkRecipe('Steady State, time-persistent run aligned and cut by index', stRecipe(QLEN, { align: 'index', repIdx: 1, cut: 40, count: 12 }), stChecks);
+  // A derived dataset shown alone (its source no longer loaded) starts its bins at its own cut.
+  const derived = truncateDataset(QLEN, { by: 'time', at: 100 });
+  const rd = stRecipe(derived, { align: 'time', nBins: 25, start: 100, cut: 150, count: 10 });
+  assert.equal(rd.expect['warm-up bin width'], (600 - 100) / 25);
+  checkRecipe('Steady State, a time-persistent set already truncated at 100, cut again at 150', rd, stChecks);
+}
+
+// Time-persistent replications of unequal length and no end time: each run's
+// last record holds for no time, the late bins average only the runs still
+// going, and the joined run shifts each one to where the previous one ended.
+{
+  const lens = [300, 520, 760, 410, 848];
+  const unequal = makeDataset({ name: 'Queue length, unequal', response: 'q', kind: 'time',
+    reps: QLEN.reps.map((r, i) => ({ id: r.id, t: Array.from(r.t).slice(0, lens[i]), v: Array.from(r.v).slice(0, lens[i]) })) });
+  const ends = unequal.reps.map(r => r.t[r.t.length - 1]);
+  assert.ok(Math.max(...ends) - Math.min(...ends) > 50, 'the runs end at different times');
+  checkRecipe('Steady State, time-persistent runs of unequal length, one run cut by time', stRecipe(unequal, { align: 'time', nBins: 40, repIdx: 2, cut: 60, count: 10 }), stChecks);
+  checkRecipe('Steady State, time-persistent runs of unequal length, lumped by size', stRecipe(unequal, { align: 'time', nBins: 40, lumped: true, cut: 60, mode: 'size', size: 90 }), stChecks);
+}
+
+// An empty replication: the alignment skips it, and joining skips it.
+{
+  const gappyT = makeDataset({ name: 'Transient, one empty', response: TRANSIENT.response, kind: 'tally',
+    reps: TRANSIENT.reps.map((r, i) => (i === 1 ? { id: r.id, t: [], v: [] } : { id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  const ri = stRecipe(gappyT, { lumped: true, cut: 25, count: 15 });
+  assert.equal(ri.records.reps[1].v.length, 0);
+  for (const lang of LANGS) assert.ok(/holding no records \(ids\): 2\./.test(analysisScript(ri, lang)), lang + ' names the empty replication');
+  checkRecipe('Steady State, tally with an empty replication, lumped by index', ri, stChecks);
+  checkRecipe('Steady State, tally with an empty replication, by time', stRecipe(gappyT, { align: 'time', nBins: 45, repIdx: 3, cut: 40, mode: 'size', size: 30 }), stChecks);
+  const gappyQ = makeDataset({ name: 'Queue length, one empty', response: 'q', kind: 'time', endTime: 600,
+    reps: QLEN.reps.map((r, i) => (i === 2 ? { id: r.id, t: [], v: [] } : { id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  checkRecipe('Steady State, time-persistent with an empty replication, lumped by count', stRecipe(gappyQ, { align: 'time', nBins: 20, lumped: true, cut: 100, count: 12 }), stChecks);
+}
+
+// Time bins that no replication reaches: the moving average skips them, as the page's does.
+{
+  const sparse = makeDataset({ name: 'Sparse', response: 'wait', kind: 'tally', reps: [
+    { id: 1, t: [0.5, 1.2, 1.9, 7.5, 8.1, 9.4, 9.9, 12.2, 15.7, 18.3, 19.1], v: [1, 3, 2, 6, 4, 5, 7, 5, 6, 4, 5] },
+    { id: 2, t: [0.2, 1.5, 7.9, 8.8, 13.1, 16.4, 19.8], v: [2, 2, 5, 6, 4, 5, 6] }] });
+  const r = stRecipe(sparse, { align: 'time', nBins: 20, w: 3, count: 3 });
+  assert.ok(r.expect['warm-up empty bins'] > 0, 'some bins are empty');
+  checkRecipe('Steady State, tally aligned by time with empty bins', r, stChecks);
+}
+
+// Settings that give fewer than two batches: the page shows no result, and a
+// script whose settings are edited to such values says the batch means are not defined.
+{
+  const r = stRecipe(LONG, { cut: 4990, count: 20 });
+  assert.equal(r.expect['batch means'], 'not defined');
+  checkRecipe('Steady State, too few observations for the batches', r, stChecks);
+}
+
+// Too many numbers: the recipe carries no records, and the page disables the buttons.
+test('a run past 200,000 numbers gives no script', () => {
+  const big = makeDataset({ name: 'big', response: 'q', kind: 'time', reps: [{ id: 1, t: Array.from({ length: 120000 }, (_, i) => i), v: Array.from({ length: 120000 }, (_, i) => i % 7) }] });
+  assert.equal(MAX_NUMBERS, 200000);
+  assert.ok(recordCount(big) > MAX_NUMBERS);
+  assert.ok(recordCount(LONG) <= MAX_NUMBERS && recordCount(QLEN) <= MAX_NUMBERS);
+  const r = stRecipe(big, { align: 'time' });
+  assert.equal(r.tooBig, true);
+  assert.ok(!r.records && !('batches' in r.expect));
+});

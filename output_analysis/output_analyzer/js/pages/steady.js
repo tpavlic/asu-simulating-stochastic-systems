@@ -7,11 +7,12 @@
 // starts at no truncation and moves only when the reader moves it.
 
 import * as state from '../state.js';
-import { alignByIndex, alignByTime, movingAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
+import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -46,11 +47,6 @@ let lastBatch = null;       // the latest batchMeans result (ok or not)
 let spins = {};
 let keptCache = null;       // the series after truncation that batching and the autocorrelation use
 let acfCache = null;        // its autocorrelation
-
-// The autocorrelation runs to lag min(MAX_LAG, n/4); a time-persistent series
-// is first averaged over RESAMPLE_STEPS equal steps of simulation time.
-const MAX_LAG = 400;
-const RESAMPLE_STEPS = 2000;
 
 const eligible = ds => !!ds && (ds.kind === 'tally' || ds.kind === 'time');
 const visible = () => !!root && root.classList.contains('active');
@@ -133,24 +129,6 @@ function fmtCut(v) {
 }
 
 // ── Warm-up computation ───────────────────────────────────────────────────
-
-/**
- * Welch's moving average over a series with empty entries: the same
- * symmetric window as movingAverage, averaging only the finite entries in
- * it. Used only when some time bin holds no observation from any
- * replication, where a running sum would carry the gap to every later point.
- */
-function gapAwareAverage(y, half) {
-  const L = y.length, out = new Float64Array(L);
-  for (let i = 0; i < L; i++) {
-    if (i > L - 1 - half) { out[i] = NaN; continue; }
-    const h = i < half ? i : half;
-    let s = 0, c = 0;
-    for (let k = i - h; k <= i + h; k++) if (Number.isFinite(y[k])) { s += y[k]; c++; }
-    out[i] = c ? s / c : NaN;
-  }
-  return out;
-}
 
 function computeWarm(ds) {
   // `xMin` is where the series start: zero, or the cut of a truncated dataset
@@ -991,14 +969,14 @@ function acfData(ds) {
     if (ds.kind === 'time') {
       const start = k.t[0], end = k.end;
       if (end > start) {
-        const rs = resampleTimeWeighted(k.t, k.v, start, end, RESAMPLE_STEPS);
+        const rs = resampleTimeWeighted(k.t, k.v, start, end, ACF_STEPS);
         if (Array.prototype.every.call(rs.values, Number.isFinite)) {
-          const n = rs.values.length, L = Math.min(MAX_LAG, Math.floor(n / 4));
+          const n = rs.values.length, L = Math.min(ACF_MAX_LAG, Math.floor(n / 4));
           val = { r: acf(rs.values, L), n, L, step: rs.step, byTime: true };
         }
       }
     } else {
-      const n = k.v.length, L = Math.min(MAX_LAG, Math.floor(n / 4));
+      const n = k.v.length, L = Math.min(ACF_MAX_LAG, Math.floor(n / 4));
       if (n >= 8 && L >= 1) val = { r: acf(k.v, L), n, L, step: 1, byTime: false };
     }
     if (val) val.band = 2 / Math.sqrt(val.n);
@@ -1335,14 +1313,20 @@ function storeResult(ds, src, res, rows) {
     ' (truncation ' + esc(truncation) + '): b = ' + res.b + ' batches of ' + num(res.size, 6) + (byTime ? ' time units' : ' observations') +
     ', mean ' + num(res.mean) + ', ' + pct(res.level, 0) + ' interval [' + num(res.lo) + ', ' + num(res.hi) + '] (half-width ' + num(res.hw) + '); lag-one r<sub>1</sub> = ' +
     num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p) + ').</p>';
+  const title = 'Steady state: batch means';
+  // The regenerate scripts' recipe is built only when a button asks for one,
+  // from the settings as they stand now; whether the records are too many for
+  // a script is a count that copies nothing.
+  const recipeIn = { ds, align, nBins, w, cut, repIdx, lumped: src.lumped, mode, count, size, level: res.level, start: startTime(ds), title, provenance };
   state.setResult(id, {
-    title: 'Steady state: batch means',
+    title,
     provenance,
     tables: [
       { name: 'Batch means', headers: ['batch', byTime ? 'start time' : 'first observation', byTime ? 'end time' : 'last observation', byTime ? 'records' : 'n', 'mean'], rows },
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
-    summaryHtml
+    summaryHtml,
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn) }
   });
 }
 
