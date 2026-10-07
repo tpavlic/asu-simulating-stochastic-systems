@@ -123,7 +123,8 @@ export const ANALYSIS_WRITERS = {
 // ggplot2 in place of base graphics.
 LANG.tidy = Object.assign({}, LANG.R, {
   tidy: true,
-  // pillar.sigfig lets a printed tibble show as many digits as the report lines do.
+  // pillar.sigfig lets a printed tibble show seven significant digits, enough to
+  // recognize each report line's value.
   prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })',
     'options(digits = 10, pillar.sigfig = 7)'],
   requires: 'R 4.1 or later with tibble, dplyr 1.1 or later, tidyr, broom, and ggplot2.'
@@ -702,21 +703,20 @@ function pageVectors(L, r, out, { prefix, labels, labelsVar, items }) {
 function sevRank(r, L, out, need) {
   const S = r.several, K = S.rank, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
   need.push('holm', 'signedRank', K.paired ? 'friedman' : 'kruskal', 'letters');
-  const adjName = K.adjust === 'holm' ? 'Holm\'s step-down' : 'Bonferroni';
   if (K.paired) {
     out.push(L.sect('Friedman\'s test and its pairwise comparisons'));
     out.push(...commentLines(c, 'Each replication is a block: its k outcomes are ranked among themselves, and the test asks whether some designs tend to rank higher than others. ' +
-      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by ' + adjName +
+      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by the rule in rank_adjust (holm or bonferroni)' +
       ', and a pair is declared different when the adjusted p is below alpha.', c));
   } else {
     out.push(L.sect('Kruskal-Wallis test and Dunn\'s pairwise comparisons'));
     out.push(...commentLines(c, 'Every outcome is pooled and ranked, and the test asks whether some designs tend to sit higher than others. ' +
-      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by ' + adjName +
+      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by the rule in rank_adjust (holm or bonferroni)' +
       ', and a pair is declared different when the adjusted p is below alpha.', c));
   }
   out.push(c + 'The pairs, as design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
   out.push(L.assign('rank_pairs', pairsLit(lang, K.pairs)));
-  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, ' + L.str(K.adjust) + ', rank_pairs)'));
+  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, rank_adjust, rank_pairs)'));
   if (K.paired) out.push(rep(L, r, 'friedman chi2', f('rk', 'chi2')), rep(L, r, 'friedman df', f('rk', 'df')), rep(L, r, 'friedman p', f('rk', 'p')));
   else out.push(rep(L, r, 'kruskal H', f('rk', 'H')), rep(L, r, 'kruskal df', f('rk', 'df')), rep(L, r, 'kruskal p', f('rk', 'p')));
   K.pairs.forEach(([i, j], q) => {
@@ -1642,10 +1642,13 @@ function tidyDataBlock(recipe, L) {
       (paired ? 'block = rep(block_id, times = k), ' : '') + 'outcome = unlist(groups))');
   }
   if (recipe.records) {
-    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value. ' +
-      'From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).', c));
-    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))',
-      'print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    // One value per replication has nothing to count and no times, and so its
+    // records get no per-replication summary.
+    const summary = recipe.records.kind !== 'reps';
+    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
+      (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
+    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
+    if (summary) out.push('print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }

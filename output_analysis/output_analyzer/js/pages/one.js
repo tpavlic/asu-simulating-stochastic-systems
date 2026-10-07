@@ -669,7 +669,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const base = state.settings.base;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
-  const regen = { tooBig: oneTooBig(recipeIn), build:() => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
 

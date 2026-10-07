@@ -148,6 +148,33 @@ export function checkRecipe(name, recipe, { smoke = false, also = null } = {}) {
   }
 }
 
+/**
+ * The report lines of a script's output whose names `expect` holds, counted
+ * twice: every such line, and those ending in "(analyzer: ...)". parseReport
+ * strips that column, and so a lookup of the analyzer's value that fails, and
+ * prints the line without it, shows up only here.
+ */
+export function analyzerColumnCounts(stdout, expect) {
+  const names = new Set(Object.keys(expect).map(k => k.replace(/ \[optional\]$/, '')));
+  let lines = 0, withColumn = 0;
+  const bare = [];
+  for (const raw of String(stdout).split(/\r?\n/)) {
+    const m = /^(.+?): (.*)$/.exec(raw);
+    if (!m || !names.has(m[1])) continue;
+    lines++;
+    if (/\s\(analyzer: .*\)$/.test(m[2])) withColumn++;
+    else bare.push(m[1]);
+  }
+  return { lines, withColumn, bare };
+}
+
+/** Asserts that every report line `recipe.expect` names carries the analyzer's value. */
+export function assertAnalyzerColumns(stdout, recipe, lang) {
+  const { lines, withColumn, bare } = analyzerColumnCounts(stdout, recipe.expect);
+  assert.ok(lines > 0, lang + ' printed no report line the recipe names');
+  assert.equal(withColumn, lines, lang + ': report lines with no analyzer column: ' + bare.join('; '));
+}
+
 // ── Task 1: the skeleton ────────────────────────────────────────────────
 
 const AWKWARD = makeDataset({ name: 'Queue "A" – 1\\2', response: 'avg_wait', unit: 'min', kind: 'reps',
@@ -845,8 +872,15 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
 });
 
 const sevChecks = { also: noWarning };
-checkRecipe('Several Systems, means and all-pairs differences on four-designs', sevRecipe(FOUR), { smoke: true, also: noWarning });
-checkRecipe('Several Systems, versus control with a benchmark, 90%', sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 }), sevChecks);
+// The checks of a fixture whose every report line must carry the analyzer's
+// value: the pairs the page compared are looked up by label at run time.
+const sevPinned = r => ({ also: (stdout, lang, stderr) => { noWarning(stdout, lang, stderr); assertAnalyzerColumns(stdout, r, lang); } });
+{
+  const r = sevRecipe(FOUR);
+  checkRecipe('Several Systems, means and all-pairs differences on four-designs', r, Object.assign({ smoke: true }, sevPinned(r)));
+  const rc = sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 });
+  checkRecipe('Several Systems, versus control with a benchmark, 90%', rc, sevPinned(rc));
+}
 checkRecipe('Several Systems, rank procedures on six-designs', sevRecipe(SIX_D, { proc: 'np' }), sevChecks);
 checkRecipe('Several Systems, rank procedures versus control with a benchmark', sevRecipe(FOUR, { proc: 'np', diffMode: 'control', ctrlIdx: 3, bench: 1.9 }), sevChecks);
 checkRecipe('Several Systems, paired on four-crn', sevRecipe(FOUR_CRN, { paired: true }), sevChecks);
@@ -964,6 +998,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
 
 // ── Task 6: Several Systems, the analysis of variance and the post-hoc rules ──
 import { letterGroups } from '../js/stats/compare.js';
+import { dunn } from '../js/stats/nonparam.js';
 
 test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the F plan', () => {
   const r = sevRecipe(FOUR);
@@ -1005,7 +1040,8 @@ test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the 
 });
 
 for (const rule of ['tukey', 'lsd', 'bonferroni', 'dunnett']) {
-  checkRecipe('Several Systems, one-way ANOVA with ' + rule + ' on four-designs', sevRecipe(FOUR, { rule, ctrlIdx: 1 }), { smoke: rule === 'tukey', also: noWarning });
+  const r = sevRecipe(FOUR, { rule, ctrlIdx: 1 });
+  checkRecipe('Several Systems, one-way ANOVA with ' + rule + ' on four-designs', r, Object.assign({ smoke: rule === 'tukey' }, sevPinned(r)));
 }
 checkRecipe('Several Systems, LSD on six-designs at 99%', sevRecipe(SIX_D, { rule: 'lsd', level: 0.99 }), sevChecks);
 for (const ruleW of ['gameshowell', 'bonferroniWelch']) {
@@ -1130,7 +1166,19 @@ test('severalRecipe carries the rank tests, the screen, and the letters', () => 
   assert.deepEqual(r.several.rank, { paired: false, adjust: 'holm', pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
   // R counts the ties exactly itself; kruskal.test, which rounds them to 15 digits, is left as a comment.
   assert.ok(analysisScript(r, 'R').includes('# kw <- kruskal.test(y, g)') && !/^\s*kw <- kruskal\.test/m.test(analysisScript(r, 'R')));
-  assert.ok(analysisScript(r, 'R').includes('kruskal_dunn(groups, alpha, "holm", rank_pairs)'));
+  // The adjustment is a setting, assigned once in the Settings block, and the rank section reads it.
+  for (const lang of LANGS) {
+    const text = analysisScript(r, lang), settings = text.slice(0, text.search(/\n(## Data ----|# ---- Data ----|%% Data)\n/));
+    assert.ok(/\nrank_adjust (<-|=) ["']holm["']/.test(settings), lang + ': rank_adjust is a setting');
+    assert.ok(!/\nrank_adjust (<-|=) /.test(text.slice(settings.length)), lang + ': rank_adjust is assigned once');
+    assert.ok(text.includes('kruskal_dunn(groups, alpha, rank_adjust, rank_pairs)'), lang + ': the rank section reads rank_adjust');
+    assert.ok(!/(kruskal_dunn|friedman_pairs)\(groups, alpha, ["']/.test(text), lang + ': no adjustment written into the call');
+    const flat = text.replace(/\n[#%] /g, ' ');
+    assert.ok(flat.includes('adjusted by the rule in rank_adjust (holm or bonferroni)') && flat.includes('rank_adjust is the rule that adjusts'), lang + ': the comments name the setting');
+  }
+  assert.ok(analysisScript(sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }), 'py').includes('friedman_pairs(groups, alpha, rank_adjust, rank_pairs)'));
+  assert.equal(sevRecipe(SIX_D, { proc: 'np' }).settings.rank_adjust, 'bonferroni');
+  assert.ok(!('rank_adjust' in sevRecipe(FOUR).settings), 'no rank adjustment under the t procedures');
   assert.ok(analysisScript(r, 'py').includes('stats.kruskal('));
   assert.ok(analysisScript(r, 'm').includes('kruskalwallis('));
   const rp = sevRecipe(FOUR_CRN, { paired: true, proc: 'np' });
@@ -1143,8 +1191,43 @@ test('severalRecipe carries the rank tests, the screen, and the letters', () => 
   for (const x of [r, rp, rt]) for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(x, lang)), lang + ' script is not ASCII');
 });
 
-checkRecipe('Several Systems, Kruskal-Wallis and Dunn (Holm) on six-designs', sevRecipe(SIX_D, { proc: 'np', adjust: 'holm', eps: 0.3 }), { smoke: true, also: noWarning });
-checkRecipe('Several Systems, Friedman and its pairs on four-crn', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', dir: 'min' }), sevChecks);
+{
+  const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm', eps: 0.3 });
+  checkRecipe('Several Systems, Kruskal-Wallis and Dunn (Holm) on six-designs', r, Object.assign({ smoke: true }, sevPinned(r)));
+  const rf = sevRecipe(FOUR_CRN, { paired: true, proc: 'np', dir: 'min' });
+  checkRecipe('Several Systems, Friedman and its pairs on four-crn', rf, sevPinned(rf));
+}
+
+// rank_adjust is a setting: a Kruskal-Wallis script written under Holm and
+// edited to "bonferroni" prints Dunn's Bonferroni-adjusted p-values and the
+// pairs they declare different.
+for (const lang of ['R', 'py']) {
+  test('editing rank_adjust to bonferroni changes the adjusted p-values in ' + lang, { skip: skipFor(lang, true) }, () => {
+    const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
+    const groups = SIX_D.map(d => Float64Array.from(outcomeVector(d).values));
+    const dn = dunn(groups, { alpha: 0.05, adjust: 'bonferroni' });
+    assert.ok(dn.pairs.some(p => Math.abs(p.pAdj - r.expect['rank pair ' + (p.i + 1) + '-' + (p.j + 1) + ' adjusted p']) > 1e-6), 'Holm and Bonferroni differ on these data');
+    const from = lang === 'R' ? 'rank_adjust <- "holm"\n' : 'rank_adjust = "holm"\n';
+    const text = analysisScript(r, lang);
+    assert.ok(text.includes(from), 'the settings carry ' + from.trim());
+    const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+    try {
+      const f = join(dir, lang === 'R' ? 'rank_adjust.R' : 'rank_adjust.py');
+      writeFileSync(f, text.replace(from, from.replace('holm', 'bonferroni')));
+      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+        : spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) });
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      noWarning(run.stdout, lang, run.stderr || '');
+      const want = {};
+      for (const p of dn.pairs) {
+        const key = 'rank pair ' + (p.i + 1) + '-' + (p.j + 1);
+        want[key + ' adjusted p'] = p.pAdj;
+        want[key + ' different'] = p.flagged ? 1 : 0;
+      }
+      compareReport(parseReport(run.stdout), want, lang, r);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 checkRecipe('Several Systems, Friedman with Holm by position', sevRecipe(FOUR_CRN, { paired: true, by: 'position', proc: 'np', adjust: 'holm', level: 0.9 }), sevChecks);
 checkRecipe('Several Systems, the screen for the best, smaller is better', sevRecipe(SIX_D, { dir: 'min', eps: 1.0 }), sevChecks);
 
@@ -1470,6 +1553,12 @@ test('exploreRecipe carries the replications, the outcomes, the check, and the s
   }
   // Building is pure: twice gives the same recipe.
   assert.deepEqual(JSON.parse(JSON.stringify(exRecipe(TRANSIENT))), JSON.parse(JSON.stringify(exRecipe(TRANSIENT))));
+  // Tidy R summarises each replication's records for tally and time-persistent
+  // data only: one value per replication has no count or times to show.
+  const summary = 'print(records_tbl |> summarise(records = n()';
+  for (const ds of [TRANSIENT, QLEN]) assert.ok(analysisScript(exRecipe(ds), 'tidy').includes(summary), ds.kind + ': the records summary');
+  const repsTidy = analysisScript(exRecipe(IND_A), 'tidy');
+  assert.ok(repsTidy.includes('records_tbl <- bind_rows(') && !repsTidy.includes(summary) && !repsTidy.includes('dplyr counts each replication'), 'reps: no records summary');
 });
 
 checkRecipe('Summary and Plots on replication values with the spread test', exRecipe(IND_A, exSpread(IND_A, IND_B)), { smoke: true, also: noWarning });

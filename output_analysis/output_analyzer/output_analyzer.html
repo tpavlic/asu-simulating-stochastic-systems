@@ -14529,7 +14529,8 @@ export const ANALYSIS_WRITERS = {
 // ggplot2 in place of base graphics.
 LANG.tidy = Object.assign({}, LANG.R, {
   tidy: true,
-  // pillar.sigfig lets a printed tibble show as many digits as the report lines do.
+  // pillar.sigfig lets a printed tibble show seven significant digits, enough to
+  // recognize each report line's value.
   prelude: () => ['suppressPackageStartupMessages({ library(tibble); library(dplyr); library(tidyr); library(broom); library(ggplot2) })',
     'options(digits = 10, pillar.sigfig = 7)'],
   requires: 'R 4.1 or later with tibble, dplyr 1.1 or later, tidyr, broom, and ggplot2.'
@@ -15108,21 +15109,20 @@ function pageVectors(L, r, out, { prefix, labels, labelsVar, items }) {
 function sevRank(r, L, out, need) {
   const S = r.several, K = S.rank, lang = L.lang, f = FIELD[lang], g = GROUP[lang], c = L.comment;
   need.push('holm', 'signedRank', K.paired ? 'friedman' : 'kruskal', 'letters');
-  const adjName = K.adjust === 'holm' ? 'Holm\'s step-down' : 'Bonferroni';
   if (K.paired) {
     out.push(L.sect('Friedman\'s test and its pairwise comparisons'));
     out.push(...commentLines(c, 'Each replication is a block: its k outcomes are ranked among themselves, and the test asks whether some designs tend to rank higher than others. ' +
-      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by ' + adjName +
+      'Each pair\'s difference of rank sums is standardized by sqrt(R k (k + 1) / 6) (Siegel and Castellan), its p-value adjusted by the rule in rank_adjust (holm or bonferroni)' +
       ', and a pair is declared different when the adjusted p is below alpha.', c));
   } else {
     out.push(L.sect('Kruskal-Wallis test and Dunn\'s pairwise comparisons'));
     out.push(...commentLines(c, 'Every outcome is pooled and ranked, and the test asks whether some designs tend to sit higher than others. ' +
-      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by ' + adjName +
+      'Dunn\'s test compares each pair\'s mean rank with a z statistic on the pooled rank variance, its p-value adjusted by the rule in rank_adjust (holm or bonferroni)' +
       ', and a pair is declared different when the adjusted p is below alpha.', c));
   }
   out.push(c + 'The pairs, as design numbers' + (lang === 'py' ? ' counted from 0' : '') + '.');
   out.push(L.assign('rank_pairs', pairsLit(lang, K.pairs)));
-  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, ' + L.str(K.adjust) + ', rank_pairs)'));
+  out.push(L.assign('rk', (K.paired ? 'friedman_pairs' : 'kruskal_dunn') + '(groups, alpha, rank_adjust, rank_pairs)'));
   if (K.paired) out.push(rep(L, r, 'friedman chi2', f('rk', 'chi2')), rep(L, r, 'friedman df', f('rk', 'df')), rep(L, r, 'friedman p', f('rk', 'p')));
   else out.push(rep(L, r, 'kruskal H', f('rk', 'H')), rep(L, r, 'kruskal df', f('rk', 'df')), rep(L, r, 'kruskal p', f('rk', 'p')));
   K.pairs.forEach(([i, j], q) => {
@@ -16048,10 +16048,13 @@ function tidyDataBlock(recipe, L) {
       (paired ? 'block = rep(block_id, times = k), ' : '') + 'outcome = unlist(groups))');
   }
   if (recipe.records) {
-    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value. ' +
-      'From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).', c));
-    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))',
-      'print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    // One value per replication has nothing to count and no times, and so its
+    // records get no per-replication summary.
+    const summary = recipe.records.kind !== 'reps';
+    out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
+      (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
+    out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
+    if (summary) out.push('print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }
@@ -17526,6 +17529,7 @@ export function severalRecipe(o) {
   // compares from control and family at run time.
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
   const dunnett = proc !== 'np' && !(o.varMode === 'welch' && !paired) && o.rule === 'dunnett';
@@ -17534,6 +17538,7 @@ export function severalRecipe(o) {
       'family chooses the pairwise comparisons: "pairs" compares every pair of designs, and "control" compares each design with the control, ' +
       'the design numbered control in the list below (numbered from 1, as on the page)' + (dunnett ? ', which Dunnett\'s post-hoc rule also compares every design with' : '') + '. ' +
       (bench != null ? 'benchmark is the value each design\'s interval is checked against. ' : '') +
+      (np ? 'rank_adjust is the rule that adjusts the rank tests\' pairwise p-values: "holm" (Holm\'s step-down) or "bonferroni". ' : '') +
       'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
       'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
@@ -23941,7 +23946,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const base = state.settings.base;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
-  const regen = { tooBig: oneTooBig(recipeIn), build:() => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })) };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
 

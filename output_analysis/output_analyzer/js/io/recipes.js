@@ -461,6 +461,7 @@ export function severalRecipe(o) {
   // compares from control and family at run time.
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
   const dunnett = proc !== 'np' && !(o.varMode === 'welch' && !paired) && o.rule === 'dunnett';
@@ -469,6 +470,7 @@ export function severalRecipe(o) {
       'family chooses the pairwise comparisons: "pairs" compares every pair of designs, and "control" compares each design with the control, ' +
       'the design numbered control in the list below (numbered from 1, as on the page)' + (dunnett ? ', which Dunnett\'s post-hoc rule also compares every design with' : '') + '. ' +
       (bench != null ? 'benchmark is the value each design\'s interval is checked against. ' : '') +
+      (np ? 'rank_adjust is the rule that adjusts the rank tests\' pairwise p-values: "holm" (Holm\'s step-down) or "bonferroni". ' : '') +
       'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
       'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
