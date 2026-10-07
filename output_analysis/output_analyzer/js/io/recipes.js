@@ -684,7 +684,7 @@ function recordsOf(ds) {
 // a choice, and which a script that reads its records from a file needs.
 function dataNote(kind) {
   return 'kind and end_time describe the data rather than a choice: kind "' + kind + '" marks ' +
-    (kind === 'time' ? 'a time-persistent state, and end_time is the time until which each replication\'s last record holds (NaN: for no time).'
+    (kind === 'time' ? 'a time-persistent state, and end_time is the time until which each replication\'s last record holds, or NaN when it holds for no time.'
       : (kind === 'reps' ? 'one value per replication' : 'tally observations') + ', and end_time applies to time-persistent data only.');
 }
 

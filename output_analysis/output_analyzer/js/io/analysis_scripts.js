@@ -1978,7 +1978,8 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
   else if (L.lang === 'm') code = [...M_READ_CSV, ...code];
   const names = csvFiles(recipe), one = names.length === 1;
   let text = live
-    ? 'The data are read from ' + listWords(names) + ', the ' + (one ? 'file' : 'files') + ' the Data buttons beside this script\'s button save, as Export on the Import page does. ' +
+    ? 'The data are read from ' + listWords(names) + ', which the Data ' + (one ? 'button beside the script buttons saves (Export on the Import page saves the same file). '
+      : 'buttons beside the script buttons save (Export on the Import page saves the same files). ') +
       'Run the script from the folder that holds ' + (one ? 'that file, or give its full path below.' : 'them, or give their full paths below.')
     : 'To read the same data from ' + head + ', replace the block above with these lines.';
   if (recipe.records && !live) text += ' The replication summary lists every replication, an empty one included, which the observations file has no row for.';

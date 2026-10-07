@@ -14026,6 +14026,9 @@ D,10,1.4099
  *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null
  * }} Dataset */
 
+/** How each dataset kind is named in page text and in a data file's # lines. */
+export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
+
 let idCounter = 0;
 
 /**
@@ -16399,7 +16402,8 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
   else if (L.lang === 'm') code = [...M_READ_CSV, ...code];
   const names = csvFiles(recipe), one = names.length === 1;
   let text = live
-    ? 'The data are read from ' + listWords(names) + ', the ' + (one ? 'file' : 'files') + ' the Data buttons beside this script\'s button save, as Export on the Import page does. ' +
+    ? 'The data are read from ' + listWords(names) + ', which the Data ' + (one ? 'button beside the script buttons saves (Export on the Import page saves the same file). '
+      : 'buttons beside the script buttons save (Export on the Import page saves the same files). ') +
       'Run the script from the folder that holds ' + (one ? 'that file, or give its full path below.' : 'them, or give their full paths below.')
     : 'To read the same data from ' + head + ', replace the block above with these lines.';
   if (recipe.records && !live) text += ' The replication summary lists every replication, an empty one included, which the observations file has no row for.';
@@ -16758,7 +16762,7 @@ export function arenaFinalCounts(dat, opts = {}) {
 // file downloads. The CSV writers and the slug are pure; the browser functions
 // check for a DOM and throw without one.
 
-import { repEstimates, observations } from '../data/model.js';
+import { repEstimates, observations, KIND_LABEL } from '../data/model.js';
 
 /**
  * One CSV field by RFC 4180: a field holding a comma, a double quote, or a
@@ -16800,9 +16804,22 @@ export function provenanceLines(fields) {
   return out;
 }
 
-function withProvenance(provenance, rows) {
+// One field of a data file: as csvEscape writes it, and also quoted when it
+// holds a '#', because R's read.csv(comment.char = "#") ends a line at an
+// unquoted '#' and would cut a replication id such as run#1 short. An
+// unquoted csvEscape field holds no double quote, and so wrapping it is safe.
+function dataField(v) {
+  const s = csvEscape(v);
+  return s[0] !== '"' && s.includes('#') ? '"' + s + '"' : s;
+}
+
+function dataCsv(rows) {
+  return rows.map(r => r.map(dataField).join(',') + '\n').join('');
+}
+
+function withProvenance(provenance, rows, write = toCsv) {
   const head = provenanceLines(provenance);
-  return (head.length ? head.join('\n') + '\n' : '') + toCsv(rows);
+  return (head.length ? head.join('\n') + '\n' : '') + write(rows);
 }
 
 /**
@@ -16831,7 +16848,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
   if (!full) {
     const rows = [[ds.response]];
     for (const x of observations(ds)) rows.push([x]);
-    return withProvenance(provenance, rows);
+    return withProvenance(provenance, rows, dataCsv);
   }
   const hasT = ds.reps.some(r => r.t);
   const rows = [hasT ? ['replication', 'time', ds.response] : ['replication', ds.response]];
@@ -16840,7 +16857,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
       rows.push(hasT ? [r.id, r.t ? r.t[i] : null, r.v[i]] : [r.id, r.v[i]]);
     }
   }
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 /**
@@ -16857,7 +16874,7 @@ export function sampledCsv(ds, sample, provenance) {
   for (let k = 0; k < sample.times.length; k++) {
     rows.push([sample.times[k]].concat(sample.columns.map(c => c.values[k])));
   }
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 /**
@@ -16886,7 +16903,7 @@ export function repSummaryCsv(ds, provenance) {
     }
     rows.push(row);
   });
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 // The all-dataset files always quote the dataset name, because a reader that
@@ -16898,7 +16915,7 @@ function quotedName(name) {
 }
 
 function namedRows(header, body) {
-  return toCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(csvEscape).join(',') + '\n').join('');
+  return dataCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(dataField).join(',') + '\n').join('');
 }
 
 // One provenance line per dataset, ahead of the caller's own fields (such as
@@ -16906,7 +16923,7 @@ function namedRows(header, body) {
 function datasetsProvenance(list, provenance) {
   const p = {};
   list.forEach((ds, i) => {
-    const parts = [ds.kind, 'response ' + ds.response];
+    const parts = [KIND_LABEL[ds.kind] || ds.kind, 'response ' + ds.response];
     if (ds.source && ds.source.file) parts.push('source ' + ds.source.file);
     if (ds.kind === 'time') parts.push('end time ' + (ds.endTime != null ? ds.endTime : 'none'));
     p['dataset ' + (i + 1)] = ds.name + ' (' + parts.join(', ') + ')';
@@ -16924,8 +16941,8 @@ function withDatasetsProvenance(list, provenance, text) {
  * replication id, the time when any dataset in the list has time stamps
  * (blank for a record without one), and the value, one row per record with
  * the datasets in list order. A replication with no records has no row; the
- * replications file lists it. The value column is headed `value` because the
- * datasets' responses may differ.
+ * replications file lists it, but re-importing this file loses it. The value
+ * column is headed `value` because the datasets' responses may differ.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -16945,10 +16962,11 @@ export function datasetsObservationsCsv(list, provenance) {
 }
 
 /**
- * One row per replication of several datasets: the dataset's name and kind,
- * the replication id, its observation count, and its replication outcome
- * (time weighted for time-persistent data), blank for a replication with no
- * outcome.
+ * One row per replication of several datasets: the dataset's name and kind
+ * (the id `tally`, `time`, or `reps`, as the regenerate scripts' `kind`
+ * setting writes it; the # lines give the kind's label), the replication id,
+ * its observation count, and its replication outcome (time weighted for
+ * time-persistent data), blank for a replication with no outcome.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -18166,7 +18184,7 @@ function recordsOf(ds) {
 // a choice, and which a script that reads its records from a file needs.
 function dataNote(kind) {
   return 'kind and end_time describe the data rather than a choice: kind "' + kind + '" marks ' +
-    (kind === 'time' ? 'a time-persistent state, and end_time is the time until which each replication\'s last record holds (NaN: for no time).'
+    (kind === 'time' ? 'a time-persistent state, and end_time is the time until which each replication\'s last record holds, or NaN when it holds for no time.'
       : (kind === 'reps' ? 'one value per replication' : 'tally observations') + ', and end_time applies to time-persistent data only.');
 }
 
@@ -23000,7 +23018,7 @@ const FORMAT_LABEL = {
 };
 
 const ALL_OBS_TIP = 'Every record of every loaded dataset in one file, one row per record under dataset, replication, time, and value, in the order of the table. The time column is present when some dataset has time stamps.';
-const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind, replication id, observation count, and replication outcome.';
+const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind (tally, time, or reps), replication id, observation count, and replication outcome.';
 
 const KINDS = [
   { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
@@ -23062,7 +23080,7 @@ export function render(root) {
     '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
-      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: open its Export row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. The observations file loads back in through the delimited-columns path, one dataset per name, when its datasets are of one kind and all have, or all lack, time stamps.</p>' +
+      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: press Export on its row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. That observations file loads back in as delimited columns, one dataset per name, when its datasets are of one kind, all have or all lack time stamps, and, for time-persistent data, share one end time, which the file’s # lines give. A replication with no records has no row in the file and does not come back.</p>' +
       '<div id="im-list"></div>' +
     '</div>' +
     '<div id="im-status"></div>' +
@@ -23675,7 +23693,7 @@ function renderList() {
   wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th>Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -23689,7 +23707,7 @@ function renderList() {
       '<td>' + intl(nObs) + '</td>' +
       '<td class="im-src">' + esc(sourceText(ds)).replace(/([_.])/g, '$1<wbr>') + '</td>' +
       '<td class="im-rej"></td>' +
-      '<td><button type="button" class="im-link im-xp"></button></td>' +
+      '<td class="no-print"><button type="button" class="im-link im-xp"></button></td>' +
       '<td><button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
@@ -23749,7 +23767,7 @@ function renderList() {
     // where they can be seen.
     if (exportOpen.has(ds.id)) {
       const er = document.createElement('tr');
-      er.className = 'im-exp-row';
+      er.className = 'im-exp-row no-print';
       const td = document.createElement('td');
       td.colSpan = 8;
       const inner = document.createElement('div');
@@ -23793,7 +23811,7 @@ function renderList() {
   });
   // Every dataset in two files, beside Remove all.
   const xa = document.createElement('div');
-  xa.className = 'im-xp-all';
+  xa.className = 'im-xp-all no-print';
   xa.setAttribute('role', 'group');
   xa.setAttribute('aria-label', 'Export all datasets');
   xa.innerHTML = '<span class="im-xp-lbl">Export all</span><div class="im-xp-all-files"></div>';
@@ -23802,7 +23820,7 @@ function renderList() {
   fileButtons(xa.querySelector('.im-xp-all-files'), [
     { label: 'Observations CSV', tip: ALL_OBS_TIP, disabled: none, note,
       run: () => downloadText('datasets_observations.csv', datasetsObservationsCsv(state.datasets, { exported: stamp(new Date()) })) },
-    { label: 'Replications CSV', tip: ALL_REPS_TIP, disabled: none,
+    { label: 'Replication summary CSV', tip: ALL_REPS_TIP, disabled: none,
       run: () => downloadText('datasets_replications.csv', datasetsReplicationsCsv(state.datasets, { exported: stamp(new Date()) })) }
   ]);
   row.appendChild(xa);
@@ -32692,10 +32710,10 @@ const REGEN_TIP = {
 };
 const FROM_EMBEDDED = 'the data embedded in it', FROM_FILES = 'the CSV files the Data buttons save';
 const REGEN_HELP =
-  '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
+  '<p>Each script holds every choice made above and code that recomputes every number shown here, printing each beside the value the page got. It also holds the data this page analyzed, or, where those would run past 200,000 numbers, reads them from CSV files. ' +
   'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
   '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots, and in comments beside them it shows the lines that read the same data from the CSV files Export saves on the Import page. ' +
-  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four saves each file it reads, to be kept in the folder the script runs from.</p>';
+  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four script buttons saves each file the script reads, to be kept in the folder the script runs from.</p>';
 // The note under the line when the scripts read their data from files.
 const regenFilesNote = n => 'These data run past 200,000 numbers, and so each script reads them from the CSV ' + (n === 1
   ? 'file the Data button saves; keep it in one folder with the script.'
@@ -35714,9 +35732,11 @@ function prune() {
 
 import * as state from '../state.js';
 import { esc, intl, plural, pct, lvl } from './format.js';
+import { KIND_LABEL } from '../data/model.js';
 
-/** How each dataset kind is named on the page. */
-export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
+// How each dataset kind is named on the page; the labels live with the data
+// model so that the CSV writers name kinds the same way.
+export { KIND_LABEL };
 
 function decimalsOf(step) {
   for (let d = 0; d <= 8; d++) if (Math.abs(step - Number(step.toFixed(d))) < 1e-9) return d;

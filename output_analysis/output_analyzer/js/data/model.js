@@ -13,6 +13,9 @@
  *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null
  * }} Dataset */
 
+/** How each dataset kind is named in page text and in a data file's # lines. */
+export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
+
 let idCounter = 0;
 
 /**

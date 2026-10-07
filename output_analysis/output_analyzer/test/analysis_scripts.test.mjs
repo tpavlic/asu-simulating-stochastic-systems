@@ -1905,6 +1905,22 @@ test('two datasets whose names slug alike are told apart by name in the comment'
   checkCsvRead('Several Systems, paired by id on mostly numeric ids with one text id', rs, [mA, mB, mC]);
 }
 
+// A '#' inside a replication id or a response name. R's read.csv(comment.char
+// = "#") ends a line at an unquoted '#', which would cut the row short and drop
+// it, and so the data files quote such a field; every language reads it whole.
+{
+  const hashT = makeDataset({ name: 'Runs #2', response: 'wait #', kind: 'tally',
+    reps: [{ id: 'run#1', v: [1, 2, 4] }, { id: 'run#2', v: [] }, { id: '#3', v: [4, 5] }, { id: 'run#4', v: [2, 3, 3, 6] }] });
+  const rh = exRecipe(hashT);
+  assert.ok('rep run#1 n' in rh.expect && 'rep #3 outcome' in rh.expect);
+  checkCsvRead('Summary and Plots with ids run#1 and #3 and a response holding #', rh, [hashT]);
+  const hA = makeDataset({ name: 'Hash A', response: 'w', kind: 'reps', reps: [['run#1', 2.0], ['run#2', 2.4], ['run#3', 1.9], ['run#4', 3.1], ['run#5', 2.2]].map(([id, v]) => ({ id, v: [v] })) });
+  const hB = makeDataset({ name: 'Hash B', response: 'w', kind: 'reps', reps: [['run#2', 2.5], ['run#1', 1.8], ['run#4', 2.6], ['run#5', 2.0], ['run#3', 1.5]].map(([id, v]) => ({ id, v: [v] })) });
+  const rp = pairedRecipe(hA, hB, 't', 'id', null);
+  assert.equal(rp.expect.pairs, 5);
+  checkCsvRead('Two Systems, paired by id on ids run#1 to run#5', rp, [hA, hB]);
+}
+
 // ── CSV mode: scripts that read their data from the CSV files ──────────
 // Past the 200,000-number cap a page's scripts hold no data and read the CSV
 // files its Data buttons save (any recipe can be written this way). The
@@ -2042,6 +2058,9 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   checkCsvMode('One System in CSV mode, t, on a comma-named dataset', oneRecipe({ ds: QUEUE_COMMA, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: PLAN }), [QUEUE_COMMA]);
   checkCsvMode('Two Systems in CSV mode, paired t by id', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), [CRN_A, CRN_B]);
   checkCsvMode('Several Systems in CSV mode, independent', sevRecipe(FOUR), FOUR);
+  const hashR = makeDataset({ name: 'Hash runs', response: 'w', kind: 'reps', reps: [2.0, 2.4, 1.9, 3.1, 2.2].map((v, i) => ({ id: 'run#' + (i + 1), v: [v] })) });
+  const oh = outcomeVector(hashR);
+  checkCsvMode('One System in CSV mode on ids run#1 to run#5', oneRecipe({ ds: hashR, x: oh.values, ids: oh.ids, pooled: false, proc: 't', level: 0.95, plan: PLAN }), [hashR]);
 }
 
 // Over the cap: generated runs of more than 200,000 numbers, whose recipes

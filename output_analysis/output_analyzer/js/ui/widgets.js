@@ -4,9 +4,11 @@
 
 import * as state from '../state.js';
 import { esc, intl, plural, pct, lvl } from './format.js';
+import { KIND_LABEL } from '../data/model.js';
 
-/** How each dataset kind is named on the page. */
-export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
+// How each dataset kind is named on the page; the labels live with the data
+// model so that the CSV writers name kinds the same way.
+export { KIND_LABEL };
 
 function decimalsOf(step) {
   for (let d = 0; d <= 8; d++) if (Math.abs(step - Number(step.toFixed(d))) < 1e-9) return d;

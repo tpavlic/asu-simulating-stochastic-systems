@@ -3,7 +3,7 @@
 // file downloads. The CSV writers and the slug are pure; the browser functions
 // check for a DOM and throw without one.
 
-import { repEstimates, observations } from '../data/model.js';
+import { repEstimates, observations, KIND_LABEL } from '../data/model.js';
 
 /**
  * One CSV field by RFC 4180: a field holding a comma, a double quote, or a
@@ -45,9 +45,22 @@ export function provenanceLines(fields) {
   return out;
 }
 
-function withProvenance(provenance, rows) {
+// One field of a data file: as csvEscape writes it, and also quoted when it
+// holds a '#', because R's read.csv(comment.char = "#") ends a line at an
+// unquoted '#' and would cut a replication id such as run#1 short. An
+// unquoted csvEscape field holds no double quote, and so wrapping it is safe.
+function dataField(v) {
+  const s = csvEscape(v);
+  return s[0] !== '"' && s.includes('#') ? '"' + s + '"' : s;
+}
+
+function dataCsv(rows) {
+  return rows.map(r => r.map(dataField).join(',') + '\n').join('');
+}
+
+function withProvenance(provenance, rows, write = toCsv) {
   const head = provenanceLines(provenance);
-  return (head.length ? head.join('\n') + '\n' : '') + toCsv(rows);
+  return (head.length ? head.join('\n') + '\n' : '') + write(rows);
 }
 
 /**
@@ -76,7 +89,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
   if (!full) {
     const rows = [[ds.response]];
     for (const x of observations(ds)) rows.push([x]);
-    return withProvenance(provenance, rows);
+    return withProvenance(provenance, rows, dataCsv);
   }
   const hasT = ds.reps.some(r => r.t);
   const rows = [hasT ? ['replication', 'time', ds.response] : ['replication', ds.response]];
@@ -85,7 +98,7 @@ export function observationsCsv(ds, provenance, opts = {}) {
       rows.push(hasT ? [r.id, r.t ? r.t[i] : null, r.v[i]] : [r.id, r.v[i]]);
     }
   }
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 /**
@@ -102,7 +115,7 @@ export function sampledCsv(ds, sample, provenance) {
   for (let k = 0; k < sample.times.length; k++) {
     rows.push([sample.times[k]].concat(sample.columns.map(c => c.values[k])));
   }
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 /**
@@ -131,7 +144,7 @@ export function repSummaryCsv(ds, provenance) {
     }
     rows.push(row);
   });
-  return withProvenance(provenance, rows);
+  return withProvenance(provenance, rows, dataCsv);
 }
 
 // The all-dataset files always quote the dataset name, because a reader that
@@ -143,7 +156,7 @@ function quotedName(name) {
 }
 
 function namedRows(header, body) {
-  return toCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(csvEscape).join(',') + '\n').join('');
+  return dataCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(dataField).join(',') + '\n').join('');
 }
 
 // One provenance line per dataset, ahead of the caller's own fields (such as
@@ -151,7 +164,7 @@ function namedRows(header, body) {
 function datasetsProvenance(list, provenance) {
   const p = {};
   list.forEach((ds, i) => {
-    const parts = [ds.kind, 'response ' + ds.response];
+    const parts = [KIND_LABEL[ds.kind] || ds.kind, 'response ' + ds.response];
     if (ds.source && ds.source.file) parts.push('source ' + ds.source.file);
     if (ds.kind === 'time') parts.push('end time ' + (ds.endTime != null ? ds.endTime : 'none'));
     p['dataset ' + (i + 1)] = ds.name + ' (' + parts.join(', ') + ')';
@@ -169,8 +182,8 @@ function withDatasetsProvenance(list, provenance, text) {
  * replication id, the time when any dataset in the list has time stamps
  * (blank for a record without one), and the value, one row per record with
  * the datasets in list order. A replication with no records has no row; the
- * replications file lists it. The value column is headed `value` because the
- * datasets' responses may differ.
+ * replications file lists it, but re-importing this file loses it. The value
+ * column is headed `value` because the datasets' responses may differ.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -190,10 +203,11 @@ export function datasetsObservationsCsv(list, provenance) {
 }
 
 /**
- * One row per replication of several datasets: the dataset's name and kind,
- * the replication id, its observation count, and its replication outcome
- * (time weighted for time-persistent data), blank for a replication with no
- * outcome.
+ * One row per replication of several datasets: the dataset's name and kind
+ * (the id `tally`, `time`, or `reps`, as the regenerate scripts' `kind`
+ * setting writes it; the # lines give the kind's label), the replication id,
+ * its observation count, and its replication outcome (time weighted for
+ * time-persistent data), blank for a replication with no outcome.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}

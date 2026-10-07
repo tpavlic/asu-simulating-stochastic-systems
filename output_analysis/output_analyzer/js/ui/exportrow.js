@@ -37,10 +37,10 @@ const REGEN_TIP = {
 };
 const FROM_EMBEDDED = 'the data embedded in it', FROM_FILES = 'the CSV files the Data buttons save';
 const REGEN_HELP =
-  '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
+  '<p>Each script holds every choice made above and code that recomputes every number shown here, printing each beside the value the page got. It also holds the data this page analyzed, or, where those would run past 200,000 numbers, reads them from CSV files. ' +
   'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
   '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots, and in comments beside them it shows the lines that read the same data from the CSV files Export saves on the Import page. ' +
-  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four saves each file it reads, to be kept in the folder the script runs from.</p>';
+  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four script buttons saves each file the script reads, to be kept in the folder the script runs from.</p>';
 // The note under the line when the scripts read their data from files.
 const regenFilesNote = n => 'These data run past 200,000 numbers, and so each script reads them from the CSV ' + (n === 1
   ? 'file the Data button saves; keep it in one folder with the script.'

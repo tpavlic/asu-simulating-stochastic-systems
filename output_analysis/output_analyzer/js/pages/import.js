@@ -29,7 +29,7 @@ const FORMAT_LABEL = {
 };
 
 const ALL_OBS_TIP = 'Every record of every loaded dataset in one file, one row per record under dataset, replication, time, and value, in the order of the table. The time column is present when some dataset has time stamps.';
-const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind, replication id, observation count, and replication outcome.';
+const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind (tally, time, or reps), replication id, observation count, and replication outcome.';
 
 const KINDS = [
   { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
@@ -91,7 +91,7 @@ export function render(root) {
     '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
-      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: open its Export row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. The observations file loads back in through the delimited-columns path, one dataset per name, when its datasets are of one kind and all have, or all lack, time stamps.</p>' +
+      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: press Export on its row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. That observations file loads back in as delimited columns, one dataset per name, when its datasets are of one kind, all have or all lack time stamps, and, for time-persistent data, share one end time, which the file’s # lines give. A replication with no records has no row in the file and does not come back.</p>' +
       '<div id="im-list"></div>' +
     '</div>' +
     '<div id="im-status"></div>' +
@@ -704,7 +704,7 @@ function renderList() {
   wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th>Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -718,7 +718,7 @@ function renderList() {
       '<td>' + intl(nObs) + '</td>' +
       '<td class="im-src">' + esc(sourceText(ds)).replace(/([_.])/g, '$1<wbr>') + '</td>' +
       '<td class="im-rej"></td>' +
-      '<td><button type="button" class="im-link im-xp"></button></td>' +
+      '<td class="no-print"><button type="button" class="im-link im-xp"></button></td>' +
       '<td><button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
@@ -778,7 +778,7 @@ function renderList() {
     // where they can be seen.
     if (exportOpen.has(ds.id)) {
       const er = document.createElement('tr');
-      er.className = 'im-exp-row';
+      er.className = 'im-exp-row no-print';
       const td = document.createElement('td');
       td.colSpan = 8;
       const inner = document.createElement('div');
@@ -822,7 +822,7 @@ function renderList() {
   });
   // Every dataset in two files, beside Remove all.
   const xa = document.createElement('div');
-  xa.className = 'im-xp-all';
+  xa.className = 'im-xp-all no-print';
   xa.setAttribute('role', 'group');
   xa.setAttribute('aria-label', 'Export all datasets');
   xa.innerHTML = '<span class="im-xp-lbl">Export all</span><div class="im-xp-all-files"></div>';
@@ -831,7 +831,7 @@ function renderList() {
   fileButtons(xa.querySelector('.im-xp-all-files'), [
     { label: 'Observations CSV', tip: ALL_OBS_TIP, disabled: none, note,
       run: () => downloadText('datasets_observations.csv', datasetsObservationsCsv(state.datasets, { exported: stamp(new Date()) })) },
-    { label: 'Replications CSV', tip: ALL_REPS_TIP, disabled: none,
+    { label: 'Replication summary CSV', tip: ALL_REPS_TIP, disabled: none,
       run: () => downloadText('datasets_replications.csv', datasetsReplicationsCsv(state.datasets, { exported: stamp(new Date()) })) }
   ]);
   row.appendChild(xa);

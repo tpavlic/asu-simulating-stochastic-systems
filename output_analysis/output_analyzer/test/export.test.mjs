@@ -9,7 +9,7 @@ import { makeDataset } from '../js/data/model.js';
 import {
   csvEscape, toCsv, provenanceLines, observationsCsv, repSummaryCsv, pilotCsv,
   batchMeansCsv, tableCsv, svgToString, svgToPngBlob, downloadText, downloadBlob,
-  datasetsObservationsCsv, datasetsReplicationsCsv, slug
+  datasetsObservationsCsv, datasetsReplicationsCsv, sampledCsv, slug
 } from '../js/io/export.js';
 
 const lines = text => text.split('\n').filter(l => l !== '');
@@ -178,13 +178,33 @@ test('provenance names every dataset and the time-persistent end time', () => {
     const head = lines(write([allTally, allTime, allOpen], { exported: '2026-10-07 12:00:00' })).filter(l => l.startsWith('#'));
     assert.deepEqual(head, [
       '# dataset 1: Queue, "A" (tally, response wait, source queue.csv)',
-      '# dataset 2: Busy (time, response busy, end time 10)',
-      '# dataset 3: Open (time, response busy, end time none)',
+      '# dataset 2: Busy (time-persistent, response busy, end time 10)',
+      '# dataset 3: Open (time-persistent, response busy, end time none)',
       '# exported: 2026-10-07 12:00:00'
     ]);
     assert.ok(head.some(l => /Busy/.test(l) && /end time 10/.test(l)));
     assert.ok(head.some(l => /Queue, "A"/.test(l) && /tally/.test(l)));
   }
+});
+
+// R's read.csv(comment.char = "#") ends a line at an unquoted '#', and so a
+// data file quotes any field holding one; result tables and csvEscape's
+// other callers are unchanged.
+test('data files quote a field holding #', () => {
+  const hashed = makeDataset({ name: 'Runs #', kind: 'tally', response: 'wait #', endTime: null,
+    reps: [{ id: 'run#1', t: [0, 1], v: [1, 2] }, { id: '#2', t: [0], v: [3] }, { id: 'a,#', t: [], v: [] }] });
+  assert.deepEqual(dataRows(observationsCsv(hashed, {}, { full: true })), [
+    'replication,time,"wait #"', '"run#1",0,1', '"run#1",1,2', '"#2",0,3'
+  ]);
+  assert.deepEqual(dataRows(observationsCsv(hashed)), ['"wait #"', '1', '2', '3']);
+  assert.deepEqual(dataRows(repSummaryCsv(hashed)).map(l => l.split(',')[0]), ['replication', '"run#1"', '"#2"', '"a']);
+  assert.ok(repSummaryCsv(hashed).includes('\n"a,#",0,'), 'a field csvEscape already quotes is quoted once');
+  assert.deepEqual(dataRows(datasetsReplicationsCsv([hashed])).map(l => l.split(',').slice(0, 3).join(',')),
+    ['dataset,kind,replication', '"Runs #",tally,"run#1"', '"Runs #",tally,"#2"', '"Runs #",tally,"a']);
+  assert.ok(dataRows(datasetsObservationsCsv([hashed]))[1].startsWith('"Runs #","run#1",0,1'));
+  assert.deepEqual(dataRows(sampledCsv(hashed, { times: [0], columns: [{ id: 'run#1', values: [1] }] })), ['time,"replication_run#1"', '0,1']);
+  assert.equal(csvEscape('run#1'), 'run#1');
+  assert.equal(tableCsv(['id'], [['run#1']]), 'id\nrun#1\n');
 });
 
 test('slug: lower-case words joined by hyphens, at most 60 characters', () => {
