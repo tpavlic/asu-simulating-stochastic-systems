@@ -3,14 +3,18 @@
 // (the data files on Summary and Plots, the paired pilot on Two Systems), and
 // a Print button that prints the page as shown, without the navigation. The
 // row follows the page's results as they change. When the page's result
-// carries `regen: { build, tooBig }`, a second line offers the scripts that
-// regenerate its results in MATLAB, Base R, Tidy R, and Python; the recipe is
-// built only when one of those buttons is pressed.
+// carries `regen: { build, tooBig, files }`, a second line offers the scripts
+// that regenerate its results in MATLAB, Base R, Tidy R, and Python; the
+// recipe is built only when one of those buttons is pressed. Where the data
+// run past the cap (`tooBig`), the scripts hold no data and read the CSV files
+// `files` names, and the line adds a Data button for each of those files,
+// written from `files` alone without building the recipe.
 
 import * as state from '../state.js';
 import { repEstimates, repIds } from '../data/model.js';
 import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
+import { csvFileName } from '../io/recipes.js';
 import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
@@ -24,17 +28,23 @@ const ESTIMATE_LABEL = {
 
 const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
 const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
+// A script's tip; `from` says where its data come from.
 const REGEN_TIP = {
-  m: 'A MATLAB script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
-  R: 'An R script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Base R and its stats package only.',
-  tidy: 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and any figure with ggplot2. Needs tibble, dplyr, tidyr, broom, and ggplot2.',
-  py: 'A Python script that recomputes every result on this page from the data embedded in it, printing each beside the value shown here. Needs NumPy and SciPy 1.11 or later.'
+  m: from => 'A MATLAB script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
+  R: from => 'An R script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Base R and its stats package only.',
+  tidy: () => 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and any figure with ggplot2. Needs tibble, dplyr, tidyr, broom, and ggplot2.',
+  py: from => 'A Python script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Needs NumPy and SciPy 1.11 or later.'
 };
+const FROM_EMBEDDED = 'the data embedded in it', FROM_FILES = 'the CSV files the Data buttons save';
 const REGEN_HELP =
   '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here, printing each beside the value the page got. ' +
   'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
-  '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots; one whose data would run past 200,000 numbers is not offered: its buttons are disabled, with a note saying why.</p>';
-const REGEN_TOO_BIG = 'The data on this page run past 200,000 numbers, which is more than a script should carry; export the data files instead.';
+  '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots, and in comments beside them it shows the lines that read the same data from the CSV files Export saves on the Import page. ' +
+  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four saves each file it reads, to be kept in the folder the script runs from.</p>';
+// The note under the line when the scripts read their data from files.
+const regenFilesNote = n => 'These data run past 200,000 numbers, and so each script reads them from the CSV ' + (n === 1
+  ? 'file the Data button saves; keep it in one folder with the script.'
+  : 'files the Data buttons save; keep them in one folder with the script.');
 
 const ONECOL_TIP = 'Every observation in one bare column under the response name, the form a distribution-fitting tool reads. The replication boundaries are left out.';
 
@@ -100,6 +110,19 @@ export function dsProvenance(ds, extra) {
 }
 
 /**
+ * The text of one of a dataset's data files, as the Import page writes it: the
+ * Observations CSV in its full form, or the Replication summary CSV. The
+ * regenerate scripts read these, under the names csvFileName gives.
+ * @param {object} ds
+ * @param {'observations'|'replications'} form
+ * @returns {string}
+ */
+export function dataFileText(ds, form) {
+  return form === 'observations' ? observationsCsv(ds, dsProvenance(ds), { full: true })
+    : repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] }));
+}
+
+/**
  * The data files of one dataset, as button descriptors for an export row.
  * @param {object|null} ds
  * @returns {{label: string, tip?: string, disabled?: boolean, run: () => void}[]}
@@ -109,12 +132,12 @@ export function datasetFiles(ds) {
   const base = slug(ds.name);
   const pilotOk = finiteCount(ds) >= 2;
   const out = [
-    { label: 'Observations CSV', run: () => downloadText(base + '_observations.csv', observationsCsv(ds, dsProvenance(ds), { full: true })) }
+    { label: 'Observations CSV', run: () => downloadText(csvFileName(ds, 'observations'), dataFileText(ds, 'observations')) }
   ];
   if (ds.kind !== 'time') {
     out.push({ label: 'Observations, one column', tip: ONECOL_TIP, run: () => downloadText(base + '_observations_column.csv', observationsCsv(ds, dsProvenance(ds))) });
   }
-  out.push({ label: 'Replication summary CSV', run: () => downloadText(base + '_replications.csv', repSummaryCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind] }))) });
+  out.push({ label: 'Replication summary CSV', run: () => downloadText(csvFileName(ds, 'replications'), dataFileText(ds, 'replications')) });
   out.push({
     label: 'Pilot-ready CSV', tip: PILOT_TIP, disabled: !pilotOk,
     note: pilotOk ? '' : 'A pilot needs at least two replication outcomes, and this dataset has ' + intl(finiteCount(ds)) + '.',
@@ -246,6 +269,31 @@ export function fileButtons(container, items) {
 }
 
 /**
+ * The Data buttons of a regenerate line, one per file in `files` (a page's
+ * `regen.files`, `{ ds, form }` entries), each naming the file a CSV-mode
+ * script reads. A dataset listed twice in one form gets one button; two
+ * datasets whose names give one file name are told apart by name.
+ * @param {{ds: object, form: 'observations'|'replications'}[]} files
+ * @returns {{label: string, file: string, tip: string, run: () => void}[]}
+ */
+export function regenDataFiles(files) {
+  const out = [];
+  for (const { ds, form } of files || []) {
+    if (!ds || out.some(f => f.ds === ds && f.form === form)) continue;
+    out.push({ ds, form, file: csvFileName(ds, form) });
+  }
+  const count = new Map();
+  for (const f of out) count.set(f.file, (count.get(f.file) || 0) + 1);
+  return out.map(({ ds, form, file }) => ({
+    file,
+    label: 'Data: ' + file + (count.get(file) > 1 ? ' (' + ds.name + ')' : ''),
+    tip: 'The ' + (form === 'observations' ? 'Observations CSV' : 'Replication summary CSV') + ' of ' + ds.name +
+      ', which the scripts read. Export on its row of the Import page saves the same file.',
+    run: () => downloadText(file, dataFileText(ds, form))
+  }));
+}
+
+/**
  * Installs the export row at the end of a page.
  * @param {HTMLElement} root the page's section
  * @param {string} pageId the page whose results the row offers
@@ -272,6 +320,7 @@ export function installExportRow(root, pageId, opts = {}) {
   root.appendChild(row);
   const files = row.querySelector('.xp-files');
   const regenBtns = regen.querySelector('.xp-regen-btns'), regenNote = regen.querySelector('.xp-regen-note');
+  let dataItems = [];
   function refresh() {
     const items = [];
     const r = state.results[pageId];
@@ -287,27 +336,40 @@ export function installExportRow(root, pageId, opts = {}) {
     const rg = r && r.regen;
     regen.hidden = !rg;
     if (rg) {
+      // Past the cap the scripts read their data from files, and the line
+      // offers each file beside them.
       const big = !!rg.tooBig;
+      dataItems = big ? regenDataFiles(rg.files) : [];
+      const from = big ? FROM_FILES : FROM_EMBEDDED;
       regenBtns.innerHTML = Object.entries(ANALYSIS_WRITERS).map(([k, w]) =>
-        '<button type="button" class="xp-btn" data-lang="' + k + '"' + (big ? ' disabled' : '') + ' data-tip="' + esc(REGEN_TIP[k]) + '" data-tip-press>' + esc(w.label) + '</button>').join('');
-      regenNote.textContent = big ? REGEN_TOO_BIG : '';
+        '<button type="button" class="xp-btn" data-lang="' + k + '" data-tip="' + esc(REGEN_TIP[k](from)) + '" data-tip-press>' + esc(w.label) + '</button>').join('') +
+        dataItems.map((d, i) => '<button type="button" class="xp-btn xp-data" data-file="' + i + '" data-tip="' + esc(d.tip) + '" data-tip-press>' + esc(d.label) + '</button>').join('');
+      regenNote.textContent = big ? regenFilesNote(dataItems.length) : '';
       regenNote.hidden = !big;
     }
     fileButtons(files, items);
     registerTips(regen);
   }
   // The recipe is built here, once per press, from the inputs the page
-  // captured when it registered its result.
+  // captured when it registered its result; a Data button writes its file
+  // without it.
   regenBtns.addEventListener('click', ev => {
-    const b = ev.target.closest('button[data-lang]');
     const r = state.results[pageId];
-    if (!b || b.disabled || !r || !r.regen || r.regen.tooBig) return;
+    const fb = ev.target.closest('button[data-file]');
+    if (fb) {
+      const d = dataItems[Number(fb.getAttribute('data-file'))];
+      if (d) d.run();
+      return;
+    }
+    const b = ev.target.closest('button[data-lang]');
+    if (!b || b.disabled || !r || !r.regen) return;
     const lang = b.getAttribute('data-lang');
+    const big = !!r.regen.tooBig;
     try {
       const recipe = r.regen.build();
-      downloadText(scriptFileName(recipe, lang), analysisScript(recipe, lang), ANALYSIS_WRITERS[lang].mime + ';charset=utf-8');
-      regenNote.textContent = '';
-      regenNote.hidden = true;
+      downloadText(scriptFileName(recipe, lang), analysisScript(recipe, lang, { csv: big }), ANALYSIS_WRITERS[lang].mime + ';charset=utf-8');
+      regenNote.textContent = big ? regenFilesNote(dataItems.length) : '';
+      regenNote.hidden = !big;
     } catch (err) {
       regenNote.textContent = 'The script could not be written: ' + (err && err.message ? err.message : String(err));
       regenNote.hidden = false;

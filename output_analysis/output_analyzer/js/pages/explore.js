@@ -392,14 +392,16 @@ function storeResult(ds, est) {
   if (lastLevene) tables.push({ name: 'Equal-variance test (Levene)', headers: ['datasets', 'F', 'df1', 'df2', 'p'], rows: [[lastLevene.names.join('; '), lastLevene.F, lastLevene.df1, lastLevene.df2, lastLevene.p]] });
   const title = 'Summary of ' + ds.name, provenance = { dataset: ds.name };
   // The regenerate scripts' recipe is built only when a button asks for one,
-  // from the inputs as they stand now.
+  // from the inputs as they stand now; past the cap its scripts read the two
+  // CSV files `files` names.
   const recipeIn = { ds, spread: lastLevene ? { names: lastLevene.names, groups: lastLevene.groups } : null,
     level: state.settings.level, title, provenance };
   state.setResult('explore', {
     title,
     provenance,
     tables,
-    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(recipeIn) },
+    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(recipeIn),
+      files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] },
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
       (e ? '; mean of the ' + esc(estimateWord(ds)) + ' ' + num(e.mean) + ', sd ' + num(e.sd) : '') + '.</p>'

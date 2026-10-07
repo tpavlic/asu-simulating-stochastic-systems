@@ -1229,7 +1229,8 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
   const regen = recipeIn && c
-    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })) }
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })),
+      files: recipeIn.list.map(d => ({ ds: d, form: 'replications' })) }
     : undefined;
   state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
 }

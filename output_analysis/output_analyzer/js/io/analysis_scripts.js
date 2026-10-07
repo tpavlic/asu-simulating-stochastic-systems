@@ -7,7 +7,8 @@
 // requirements), the report helper, the helpers the body needs (MATLAB puts
 // these after the body as local functions), a Settings block, a Data block,
 // and the page's body. BODIES[page][lang] builds the body and names the
-// helpers it needs from script_lib.js.
+// helpers it needs from script_lib.js. In CSV mode the Data block holds no
+// data and reads them from the CSV files the recipe names instead.
 //
 // Every script is 7-bit ASCII: each string that reaches one (a title, a
 // dataset name, a provenance value, a report name) goes through ascii().
@@ -274,19 +275,34 @@ function commentLines(first, text, cont, width = 92) {
   return out;
 }
 
-function header(recipe, L) {
+function header(recipe, L, csv) {
   const c = L.comment;
   const out = [c + ascii(recipe.title)];
   out.push(c + 'Written by ' + BY + ' on ' + stamp(new Date()) + '. It regenerates the page\'s results from the');
-  out.push(c + 'data below. Edit the settings and rerun.');
+  out.push(c + (csv ? 'data it reads below. Edit the settings and rerun.' : 'data below. Edit the settings and rerun.'));
   out.push(c.trim());
   out.push(c + 'Choices on the page:');
   for (const [k, v] of Object.entries(recipe.provenance || {})) {
     if (v === undefined || v === null || v === '') continue;
     out.push(...commentLines(c + '  ', ascii(k) + ': ' + ascii(Array.isArray(v) ? v.join(', ') : String(v)), c + '    '));
   }
-  out.push(...commentLines(c, 'Requires: ' + L.requires, c + '  '));
+  let needs = 'Requires: ' + L.requires;
+  if (csv) {
+    const files = csvFiles(recipe);
+    needs += ' It also needs the data ' + (files.length === 1 ? 'file ' : 'files ') + listWords(files) + ' in the folder it runs from.';
+  }
+  out.push(...commentLines(c, needs, c + '  '));
   return out;
+}
+
+// Words joined as a list: "a", "a and b", "a, b, and c".
+function listWords(a) {
+  return a.length < 3 ? a.join(' and ') : a.slice(0, -1).join(', ') + ', and ' + a[a.length - 1];
+}
+
+// The distinct files a recipe's data are read from, in order.
+function csvFiles(recipe) {
+  return Array.from(new Set((recipe.csv || []).map(f => f.file)));
 }
 
 /**
@@ -1168,10 +1184,10 @@ BODIES.several = { R: sevBody, py: sevBody, m: sevBody };
 // The records of a run as the Data block writes them: every replication in
 // order, numbered from 1 as on the page, each with its id, its times t (empty
 // when the observations carry none), and its values v.
-function recordsBlock(L, R) {
-  const c = L.comment, lang = L.lang, out = [];
+function recordsBlock(L, r) {
+  const R = r.records, c = L.comment, lang = L.lang, out = [];
   const what = ascii(R.name) + ' (' + ascii(R.response) + (R.unit ? ', ' + ascii(R.unit) : '') + ')';
-  const timed = R.reps.some(r => r.t);
+  const timed = R.reps.some(x => x.t);
   out.push(...commentLines(c, 'The records of ' + what + ', every replication in order, numbered from 1 as on the page: ' +
     (R.kind === 'time'
       ? 'a time-persistent state, each record the time t it changed and its new value v. A value holds until the next record, and the last until end_time, or for no time when end_time is NaN.'
@@ -1180,8 +1196,7 @@ function recordsBlock(L, R) {
         : 'tally observations v' + (timed ? ', each with the time t it was recorded.' : ', with no time stamps (t is empty).')), c));
   const empty = R.reps.filter(r => !r.v.length).map(r => ascii(r.id));
   if (empty.length) out.push(...commentLines(c, 'Replications holding no records (ids): ' + empty.join(', ') + '.', c));
-  out.push(L.assign('kind', L.str(R.kind)));
-  out.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
+  out.push(...recordsKindLines(L, r));
   const tLit = r => (r.t ? L.vec(r.t) : lang === 'R' ? 'NULL' : lang === 'py' ? 'None' : '[]');
   if (lang === 'R') {
     // Each replication's vectors are built in t_ and v_ as short statements (see rChunks).
@@ -1426,7 +1441,7 @@ function exploreBody(r, L) {
   out.push(L.sect('Each replication: its observations and its outcome'));
   out.push(...commentLines(c, 'A replication\'s outcome is ' + ascii(r.outcomes.how) + '; a replication with no records gives none (NaN).' +
     (tally ? ' Its sd, min, and max describe its own observations.' : ''), c));
-  const page = k => R.reps.map(rp => e['rep ' + rp.id + ' ' + k]);
+  const page = k => R.ids.map(id => e['rep ' + id + ' ' + k]);
   const cols = tally ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
   out.push(c + 'The analyzer\'s values, in replication order, printed beside the script\'s.');
   for (const k of cols) out.push(...vecAssign(L, 'page_' + k, page(k)));
@@ -1606,18 +1621,23 @@ function pairsBlock(L, r) {
   return out;
 }
 
-function dataBlock(recipe, L) {
+// The Data block: the embedded data with the commented lines that read the
+// same data from their CSV files, or in CSV mode those lines alone, live.
+function dataBlock(recipe, L, csv) {
   const out = [L.sect('Data')];
-  if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
-  if (recipe.pairs) out.push(...pairsBlock(L, recipe));
-  if (recipe.dataA) {
-    out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
-    out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
+  if (csv) out.push(...csvReadBlock(L, recipe, { live: true }));
+  else {
+    if (recipe.data) out.push(...vectorBlock(L, recipe.data, 'x', 'rep_id'));
+    if (recipe.pairs) out.push(...pairsBlock(L, recipe));
+    if (recipe.dataA) {
+      out.push(L.comment + 'Design A.', ...vectorBlock(L, recipe.dataA, 'a', 'rep_id_a'));
+      out.push('', L.comment + 'Design B.', ...vectorBlock(L, recipe.dataB, 'b', 'rep_id_b'));
+    }
+    if (recipe.groups) out.push(...groupsBlock(L, recipe));
+    if (recipe.records) out.push(...recordsBlock(L, recipe));
+    const read = csvReadBlock(L, recipe, { live: false });
+    if (read.length) out.push('', ...read);
   }
-  if (recipe.groups) out.push(...groupsBlock(L, recipe));
-  if (recipe.records) out.push(...recordsBlock(L, recipe.records));
-  const csv = csvReadBlock(L, recipe, { live: false });
-  if (csv.length) out.push('', ...csv);
   if (L.tidy) out.push(...tidyDataBlock(recipe, L));
   if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
@@ -1694,11 +1714,11 @@ function groupsBlock(L, r) {
 // numeric ones), and MATLAB's readtable with the ids typed as text (left to
 // itself it types a mostly numeric id column as numbers, reading 007 as 7 and
 // a text id among them as NaN). Tidy R wraps R's read in as_tibble(). A
-// response header such as "busy
-// servers" is rewritten by every language, and so the value column of an
-// Observations CSV is taken by position, as its last column. A blank outcome
-// in a Replication summary CSV is a replication that gave none, dropped before
-// any matching by id or position, as the page drops it.
+// response header such as "busy servers" is rewritten by every language, and
+// so the value column of an Observations CSV is taken by position, as its last
+// column. A blank outcome in a Replication summary CSV is a replication that
+// gave none, dropped before any matching by id or position, as the page drops
+// it. In CSV mode (past the cap) the same lines run in place of the data.
 
 // The comment that marks a read line in a script that keeps its own data:
 // removing it leaves exactly the line the script would run.
@@ -1724,14 +1744,14 @@ const PY_READ_CSV = [
   '        return list(csv.reader(s for s in fh if not s.startswith("#")))[1:]'
 ];
 
-// Python: each id's outcome at its first row, in the order the ids first
-// appear, which is how the page matches replications by id.
 // MATLAB's reader, as an anonymous function: readtable with the options it
 // detects, the replication column set to text.
 const M_READ_CSV = [
   "read_csv = @(f) readtable(f, setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped and its ids read as text"
 ];
 
+// Python: each id's outcome at its first row, in the order the ids first
+// appear, which is how the page matches replications by id.
 const PY_FIRST_OUTCOMES = [
   'def first_outcomes(rows):   # each id\'s outcome at its first row, in the order the ids first appear',
   '    out = {}',
@@ -1871,13 +1891,10 @@ function readSeveral(L, r, files) {
 // block already assigns them.
 function readRecords(L, r, obsFile, repFile) {
   const R = r.records, lang = L.lang, c = '   ' + L.comment, out = [];
-  const timed = R.reps.some(x => x.t);
+  const timed = R.timed;
   const cols = timed ? 'columns replication, time, and the values' : 'columns replication and the values';
   const every = 'every replication in order, an empty one included';
-  const settings = r.settings || {};
-  const meta = [];
-  if (!('kind' in settings)) meta.push(L.assign('kind', L.str(R.kind)));
-  if (!('end_time' in settings)) meta.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
+  const meta = recordsKindLines(L, r);
   if (lang === 'R') {
     out.push('obs <- ' + readExpr(L, obsFile) + c + cols, 'ids <- ' + readExpr(L, repFile) + '$replication' + c + every, ...meta,
       'by_rep <- factor(obs$replication, levels = unique(ids))' + c + 'each record\'s replication, in the order of ids',
@@ -1897,6 +1914,14 @@ function readRecords(L, r, obsFile, repFile) {
       "reps = struct('id', {}, 't', {}, 'v', {});", 'for i = 1:height(rl)', '    o = obs(last(i) - n(i) + 1:last(i), :);',
       "    reps(i) = struct('id', char(rl.replication(i)), 't', " + (timed ? "o.time'" : '[]') + ", 'v', o{:, end}');", 'end');
   }
+  return out;
+}
+
+// kind and end_time, for a recipe whose Settings block does not assign them.
+function recordsKindLines(L, r) {
+  const R = r.records, settings = r.settings || {}, out = [];
+  if (!('kind' in settings)) out.push(L.assign('kind', L.str(R.kind)));
+  if (!('end_time' in settings)) out.push(L.assign('end_time', R.endTime == null ? L.nan : String(R.endTime)));
   return out;
 }
 
@@ -1951,8 +1976,10 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
   } else return [];
   if (L.lang === 'py') code = [...PY_READ_CSV, ...code];
   else if (L.lang === 'm') code = [...M_READ_CSV, ...code];
-  const one = new Set(files.map(f => f.file)).size === 1;
-  let text = live ? 'The data are read from ' + head + '; run the script from the folder that holds ' + (one ? 'it, or give its full path.' : 'them, or give their full paths.')
+  const names = csvFiles(recipe), one = names.length === 1;
+  let text = live
+    ? 'The data are read from ' + listWords(names) + ', the ' + (one ? 'file' : 'files') + ' the Data buttons beside this script\'s button save, as Export on the Import page does. ' +
+      'Run the script from the folder that holds ' + (one ? 'that file, or give its full path below.' : 'them, or give their full paths below.')
     : 'To read the same data from ' + head + ', replace the block above with these lines.';
   if (recipe.records && !live) text += ' The replication summary lists every replication, an empty one included, which the observations file has no row for.';
   if (L.tidy) text += ' Where readr is installed, readr::read_csv(file, comment = "#", col_types = readr::cols(replication = "c")) reads them too.';
@@ -1965,12 +1992,17 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
 }
 
 /**
- * The script of a recipe in one language.
+ * The script of a recipe in one language. With `csv`, the script holds no
+ * data: its Data block is the live read block, which reads the data from the
+ * CSV files the recipe names (`recipe.csv`) in the folder the script runs
+ * from. A recipe marked `csvOnly` holds no data to embed and is always
+ * written this way.
  * @param {object} recipe
  * @param {'m'|'R'|'tidy'|'py'} lang
+ * @param {{csv?: boolean}} [opts]
  * @returns {string}
  */
-export function analysisScript(recipe, lang) {
+export function analysisScript(recipe, lang, { csv = false } = {}) {
   const L = Object.prototype.hasOwnProperty.call(LANG, lang) ? LANG[lang] : null;
   if (!L) throw new RangeError('analysisScript: unknown language ' + lang);
   const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
@@ -1982,8 +2014,10 @@ export function analysisScript(recipe, lang) {
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
-  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L), ...body];
-  const lines = header(recipe, L);
+  const fromCsv = !!(csv || recipe.csvOnly);
+  if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
+  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...body];
+  const lines = header(recipe, L, fromCsv);
   lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
   lines.push(...main);

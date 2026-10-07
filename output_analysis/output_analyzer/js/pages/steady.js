@@ -1330,7 +1330,8 @@ function storeResult(ds, src, res, rows) {
   const title = 'Steady state: batch means';
   // The regenerate scripts' recipe is built only when a button asks for one,
   // from the settings as they stand now; whether the records are too many for
-  // a script is a count that copies nothing.
+  // a script is a count that copies nothing. Past the cap the scripts read the
+  // run's two CSV files, which `files` names (the source run's, as `ds` is).
   const recipeIn = { ds, align, nBins, w, cut, repIdx, lumped: src.lumped, mode, count, size, level: res.level, start: startTime(ds), title, provenance };
   state.setResult(id, {
     title,
@@ -1340,7 +1341,8 @@ function storeResult(ds, src, res, rows) {
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
     summaryHtml,
-    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn) }
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn),
+      files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] }
   });
 }
 

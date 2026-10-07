@@ -449,8 +449,9 @@ for (const c of [5, 0]) {
 }
 
 // The pooled override embeds every observation, and so it is held to the
-// 200,000-number cap; replication outcomes are not.
-test('One System under the pooled override past 200,000 numbers gives no script', () => {
+// 200,000-number cap, past which its scripts read the Observations CSV;
+// replication outcomes are not held to it.
+test('One System under the pooled override is held to the 200,000-number cap', () => {
   const many = new Float64Array(MAX_NUMBERS + 1);
   assert.equal(oneTooBig({ pooled: true, x: many }), true);
   assert.equal(oneTooBig({ pooled: true, x: many.subarray(0, MAX_NUMBERS) }), false);
@@ -1455,15 +1456,21 @@ checkRecipe('Steady State, transient waits lumped by time, by size', stRecipe(TR
   checkRecipe('Steady State, too few observations for the batches', r, stChecks);
 }
 
-// Too many numbers: the recipe carries no records, and the page disables the buttons.
-test('a run past 200,000 numbers gives no script', () => {
+// Too many numbers: the recipe is full but holds no records, and its scripts
+// read the run's CSV files (the CSV mode section below runs them).
+test('a run past 200,000 numbers gives a full recipe that holds no records', () => {
   const big = makeDataset({ name: 'big', response: 'q', kind: 'time', reps: [{ id: 1, t: Array.from({ length: 120000 }, (_, i) => i), v: Array.from({ length: 120000 }, (_, i) => i % 7) }] });
   assert.equal(MAX_NUMBERS, 200000);
   assert.ok(recordCount(big) > MAX_NUMBERS);
   assert.ok(recordCount(LONG) <= MAX_NUMBERS && recordCount(QLEN) <= MAX_NUMBERS);
   const r = stRecipe(big, { align: 'time' });
-  assert.equal(r.tooBig, true);
-  assert.ok(!r.records && !('batches' in r.expect));
+  assert.equal(r.csvOnly, true);
+  assert.ok(!('tooBig' in r));
+  assert.deepEqual(r.records, { name: 'big', response: 'q', unit: big.unit, kind: 'time', endTime: big.endTime, timed: true, ids: ['1'] });
+  assert.ok('batches' in r.expect && 'acf lag 1' in r.expect && 'warm-up ybar at 1' in r.expect);
+  assert.equal(r.settings.kind, 'time');
+  assert.ok(Number.isNaN(r.settings.end_time), 'no end time is NaN in Settings');
+  assert.ok(!stRecipe(LONG).csvOnly);
 });
 
 // Rscript parses the statement so far after every line it reads, and so a data
@@ -1610,8 +1617,8 @@ checkRecipe('Summary and Plots on replication values', exRecipe(example('queue-r
   checkRecipe('Summary and Plots on constant replication values', r, exChecks);
 }
 
-// Too many numbers: no records, and the page disables the buttons.
-test('a Summary and Plots dataset past 200,000 numbers gives no script', () => {
+// Too many numbers: a full recipe with no records, whose scripts read the CSV files.
+test('a Summary and Plots dataset past 200,000 numbers gives a full recipe that holds no records', () => {
   const big = makeDataset({ name: 'big', response: 'q', kind: 'tally', reps: [{ id: 1, v: Array.from({ length: 200001 }, (_, i) => i % 7) }] });
   assert.ok(exploreTooBig({ ds: big, spread: null }));
   assert.ok(!exploreTooBig({ ds: TRANSIENT, spread: exSpread(TRANSIENT, IND_A) }));
@@ -1619,8 +1626,10 @@ test('a Summary and Plots dataset past 200,000 numbers gives no script', () => {
   const near = makeDataset({ name: 'near', response: 'q', kind: 'tally', reps: [{ id: 1, v: Array.from({ length: MAX_NUMBERS - 10 }, (_, i) => i % 7) }] });
   assert.ok(!exploreTooBig({ ds: near, spread: null }) && exploreTooBig({ ds: near, spread: exSpread(IND_A, IND_B) }));
   const r = exRecipe(big);
-  assert.equal(r.tooBig, true);
-  assert.ok(!r.records && !('n' in r.expect));
+  assert.equal(r.csvOnly, true);
+  assert.ok(!r.records.reps && r.records.ids.length === 1 && r.records.timed === false);
+  assert.ok('n' in r.expect && 'pooled median' in r.expect && 'rep 1 outcome' in r.expect);
+  assert.deepEqual(r.settings, { kind: 'tally', end_time: NaN });
 });
 
 // ── Task 11: the Tidy R dialect ────────────────────────────────────────
@@ -1894,4 +1903,180 @@ test('two datasets whose names slug alike are told apart by name in the comment'
   const rs = sevRecipe([mA, mB, mC], { paired: true });
   assert.equal(rs.groups.ids.length, 5);
   checkCsvRead('Several Systems, paired by id on mostly numeric ids with one text id', rs, [mA, mB, mC]);
+}
+
+// ── CSV mode: scripts that read their data from the CSV files ──────────
+// Past the 200,000-number cap a page's scripts hold no data and read the CSV
+// files its Data buttons save (any recipe can be written this way). The
+// proof writes those files with the buttons' own writer, runs the CSV-mode
+// script beside them, and compares every report line with expect.
+import { dataFileText, regenDataFiles } from '../js/ui/exportrow.js';
+
+// The data literals an embedded script writes, anchored at a line's start, so
+// that the analysis code's own reps[[i]] and the read lines never match.
+const EMBEDDED = {
+  R: [/^x <- c\(/m, /^(a|b|t_|v_) <- c\(/m, /^reps\[\[\d+\]\] <- list\(id = /m, /^groups\[\[\d+\]\] <- c\(/m],
+  py: [/^x = np\.array\(\[(-?\d|np\.nan)/m, /^(a|b) = np\.array\(\[(-?\d|np\.nan)/m, /^    dict\(id=/m, /^groups = \[np\.array\(\[(-?\d|np\.nan)/m],
+  m: [/^x = \[/m, /^(a|b) = \[/m, /^reps\(\d+\) = struct/m, /^groups = \{\[/m]
+};
+EMBEDDED.tidy = EMBEDDED.R;
+const embeddedIn = (script, lang) => EMBEDDED[lang].filter(re => re.test(script)).map(String);
+
+/**
+ * Runs a recipe's CSV-mode scripts beside the files its Data buttons save, in
+ * `langs` where installed, and compares every report line with expect, with no
+ * warning printed. `timed` asserts that each R run (Base and Tidy) finishes
+ * under 60 seconds.
+ */
+function checkCsvMode(name, recipe, datasets, { smoke = false, langs = LANGS, timed = false } = {}) {
+  for (const lang of langs) {
+    test(`${name} reads its CSV files in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
+      const files = {};
+      for (const f of recipe.csv) {
+        const ds = datasets.find(x => x.name === f.dataset);
+        assert.ok(ds, 'a dataset for ' + f.file);
+        files[f.file] = dataFileText(ds, f.form);
+      }
+      const text = analysisScript(recipe, lang, { csv: true });
+      assert.deepEqual(embeddedIn(text, lang), [], lang + ': no embedded data');
+      const t0 = Date.now();
+      const { report, stdout, stderr } = runScript(recipe, lang, { text, files });
+      const secs = (Date.now() - t0) / 1000;
+      if (timed && (lang === 'R' || lang === 'tidy')) assert.ok(secs < 60, lang + ' took ' + secs + ' s');
+      compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
+      noWarning(stdout, lang, stderr);
+    });
+  }
+}
+
+test('a CSV-mode script holds no data, runs the read lines, and names its files', () => {
+  const o = outcomeVector(QUEUE_COMMA);
+  const cases = [
+    stRecipe(QLEN, { align: 'time', cut: 100, count: 10 }),
+    exRecipe(TRANSIENT),
+    exRecipe(IND_A, exSpread(IND_A, IND_B)),
+    oneRecipe({ ds: QUEUE_COMMA, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: null }),
+    oneRecipe({ ds: TRANSIENT, x: observations(TRANSIENT), ids: null, pooled: true, proc: 't', level: 0.95, plan: null }),
+    twoOf(IND_A, IND_B, 't', 0.95, null),
+    pairedRecipe(CRN_A, CRN_B, 't', 'id', null),
+    sevRecipe(FOUR)
+  ];
+  for (const r of cases) {
+    const files = Array.from(new Set(r.csv.map(f => f.file)));
+    for (const lang of LANGS) {
+      const label = r.page + ' ' + lang;
+      const embedded = analysisScript(r, lang), csv = analysisScript(r, lang, { csv: true });
+      // The patterns find the data an embedded script holds, and none in CSV mode.
+      assert.ok(embeddedIn(embedded, lang).length > 0, label + ': the patterns find the embedded data');
+      assert.deepEqual(embeddedIn(csv, lang), [], label + ': no embedded data');
+      // The read lines run as they stand, under the Data heading, and no line is a marked comment.
+      const live = csvReadBlock(lang, r, { live: true });
+      const at = csv.indexOf('\n' + SECT[lang] + '\n');
+      assert.ok(at > 0 && csv.slice(at + SECT[lang].length + 2).startsWith(live.join('\n') + '\n'), label + ': the live read block opens the Data block');
+      const dataBlock = csv.slice(at + 1).split(/\n(?=## |# ---- |%% )/)[0];
+      assert.ok(!dataBlock.split('\n').some(l => l.startsWith(MARK[lang])) && !csv.includes('To read the same data from'), label + ': no commented read lines');
+      // The header says which files the script needs, and from where.
+      const head = csv.slice(0, csv.indexOf('\n\n')).replace(/\n[#%] +/g, ' ');
+      assert.ok(head.includes('It also needs the data file' + (files.length > 1 ? 's ' : ' ')) && head.includes('in the folder it runs from.'), label + ': the Requires line');
+      for (const f of files) assert.ok(head.includes(f), label + ': the header names ' + f);
+      assert.ok(/^[\x00-\x7f]*$/.test(csv) && !/\$\{|`/.test(csv), label + ': ASCII, no template residue');
+      assert.ok(!/setwd\(/.test(csv), label + ': no setwd');
+      // The same report lines in the same order, in both modes.
+      const reports = s => s.split('\n').filter(l => /\breport\(/.test(l) && !/^\s*[#%]/.test(l) && !/^report <- function|^def report|^function report/.test(l)).map(l => l.trim());
+      assert.deepEqual(reports(csv), reports(embedded), label + ': the same report lines');
+    }
+  }
+});
+
+// kind and end_time are settings on Steady State and Summary and Plots, and so
+// a script that reads its records still has them; neither the records block
+// nor the read lines assign them again.
+test('kind and end_time are assigned once, in the Settings block', () => {
+  const gappyQ = makeDataset({ name: 'Q', response: 'q', kind: 'time', endTime: 600, reps: QLEN.reps.map(r => ({ id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  for (const r of [stRecipe(gappyQ, { align: 'time', cut: 100, count: 10 }), exRecipe(gappyQ), exRecipe(TRANSIENT)]) {
+    for (const lang of LANGS) {
+      for (const csv of [false, true]) {
+        const s = analysisScript(r, lang, { csv });
+        const settings = s.slice(s.indexOf('Settings'), s.indexOf('\n' + SECT[lang] + '\n'));
+        const want = r.records.kind === 'time' ? (lang === 'm' ? 'end_time = 600;' : lang === 'py' ? 'end_time = 600' : 'end_time <- 600') : null;
+        if (want) assert.ok(settings.includes('\n' + want + '\n'), r.page + ' ' + lang + ': end_time in Settings');
+        assert.ok(/\nkind (<-|=) ["']/.test(settings), r.page + ' ' + lang + ': kind in Settings');
+        const rest = s.slice(s.indexOf('\n' + SECT[lang] + '\n'));
+        assert.ok(!/\n#?\s*(kind|end_time) (<-|=) /.test(rest), r.page + ' ' + lang + (csv ? ' csv' : '') + ': kind and end_time are not assigned again');
+      }
+    }
+  }
+});
+
+// The Data buttons name exactly the files the scripts read.
+test('the Data buttons save the files the CSV-mode scripts read', () => {
+  const ds = QUEUE_COMMA;
+  const st = stRecipe(ds, { lumped: true, count: 3 });
+  const items = regenDataFiles([{ ds, form: 'observations' }, { ds, form: 'replications' }, { ds, form: 'observations' }]);
+  assert.deepEqual(items.map(d => d.label), st.csv.map(f => 'Data: ' + f.file), 'one button per file, in order, a repeat dropped');
+  assert.deepEqual(items.map(d => d.file), ['queue-a-1-2_observations.csv', 'queue-a-1-2_replications.csv']);
+  // The button's file is the Import page's: the Observations CSV in full and the Replication summary CSV.
+  assert.equal(dataFileText(ds, 'observations').split('\n').filter(l => !l.startsWith('#'))[0], 'replication,busy servers');
+  assert.ok(/^# end time:/m.test(dataFileText(QLEN, 'replications')), 'a time-persistent file states its end time');
+  // Two datasets whose names give one file name are told apart by name.
+  const twin = makeDataset({ name: 'Queue A 1 2', response: 'w', kind: 'reps', reps: [1, 2, 3].map(id => ({ id, v: [id + 0.5] })) });
+  const two = regenDataFiles([{ ds, form: 'replications' }, { ds: twin, form: 'replications' }]);
+  assert.deepEqual(two.map(d => d.label), ['Data: queue-a-1-2_replications.csv (' + ds.name + ')', 'Data: queue-a-1-2_replications.csv (Queue A 1 2)']);
+});
+
+// Review Focus 3: time-persistent data with and without an end time, whose
+// CSV-mode scripts take end_time from Settings and reach the same time
+// averages; and one fixture on every other page.
+{
+  const qEnd = makeDataset({ name: 'Queue length, end 600', response: 'number in queue', kind: 'time', endTime: 600,
+    reps: QLEN.reps.map((r, i) => (i === 2 ? { id: r.id, t: [], v: [] } : { id: r.id, t: Array.from(r.t), v: Array.from(r.v) })) });
+  const lens = [300, 520, 760, 410, 848];
+  const qOpen = makeDataset({ name: 'Queue length, no end time', response: 'q', kind: 'time',
+    reps: QLEN.reps.map((r, i) => ({ id: r.id, t: Array.from(r.t).slice(0, lens[i]), v: Array.from(r.v).slice(0, lens[i]) })) });
+  checkCsvMode('Steady State in CSV mode, time-persistent with an end time', stRecipe(qEnd, { align: 'time', nBins: 30, lumped: true, cut: 100, count: 12 }), [qEnd], { smoke: true });
+  checkCsvMode('Steady State in CSV mode, time-persistent with no end time', stRecipe(qOpen, { align: 'time', nBins: 40, repIdx: 2, cut: 60, count: 10 }), [qOpen]);
+  checkCsvMode('Summary and Plots in CSV mode, time-persistent with an end time', exRecipe(qEnd), [qEnd]);
+  checkCsvMode('Summary and Plots in CSV mode, time-persistent with no end time', exRecipe(qOpen), [qOpen]);
+  checkCsvMode('Summary and Plots in CSV mode, replication values with the spread test', exRecipe(IND_A, exSpread(IND_A, IND_B)), [IND_A]);
+  const o = outcomeVector(QUEUE_COMMA);
+  checkCsvMode('One System in CSV mode, t, on a comma-named dataset', oneRecipe({ ds: QUEUE_COMMA, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: PLAN }), [QUEUE_COMMA]);
+  checkCsvMode('Two Systems in CSV mode, paired t by id', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), [CRN_A, CRN_B]);
+  checkCsvMode('Several Systems in CSV mode, independent', sevRecipe(FOUR), FOUR);
+}
+
+// Over the cap: generated runs of more than 200,000 numbers, whose recipes
+// are csvOnly and whose scripts can only read the files.
+{
+  // A time-persistent state: four replications of 27,600 records (220,800
+  // numbers), each record at a time near its index, ending at a stated time.
+  const n = 27600;
+  const tpBig = makeDataset({ name: 'Big queue length', response: 'number in queue', kind: 'time', endTime: n + 2,
+    reps: [0, 1, 2, 3].map(i => ({ id: i + 1, t: Array.from({ length: n }, (_, j) => j + ((j * 37 + i) % 10) / 20), v: Array.from({ length: n }, (_, j) => ((j * 7 + i * 3) % 13) / 4) })) });
+  // Tally observations: five replications of 44,001 (220,005 numbers), ids
+  // that only text keeps, and an empty replication.
+  const m = 44001;
+  const tallyBig = makeDataset({ name: 'Big waits', response: 'wait time', unit: 'min', kind: 'tally',
+    reps: ['007', '2', '3', '4', '1.0'].map((id, i) => ({ id, v: Array.from({ length: m }, (_, j) => ((j * 31 + i * 17) % 101) / 8 + i / 10) })).concat([{ id: 'e', v: [] }]) });
+  assert.ok(recordCount(tpBig) > MAX_NUMBERS && recordCount(tallyBig) > MAX_NUMBERS);
+  const st = stRecipe(tpBig, { align: 'time', nBins: 40, lumped: true, cut: 1000, count: 20 });
+  const ex = exRecipe(tallyBig);
+  const pooledX = observations(tallyBig);
+  const one = oneRecipe({ ds: tallyBig, x: pooledX, ids: null, pooled: true, proc: 't', level: 0.95, plan: null });
+  test('pages past the cap give csvOnly recipes with every expected value and no data', () => {
+    for (const r of [st, ex, one]) {
+      assert.equal(r.csvOnly, true, r.page);
+      assert.ok(Object.keys(r.expect).length > 10, r.page + ': a full expect map');
+      assert.ok(JSON.stringify(r).length < 20000, r.page + ': the recipe copies no data');
+      for (const lang of LANGS) {
+        const s = analysisScript(r, lang);
+        assert.equal(s, analysisScript(r, lang, { csv: true }), r.page + ' ' + lang + ': a csvOnly recipe is always written in CSV mode');
+        assert.deepEqual(embeddedIn(s, lang), [], r.page + ' ' + lang + ': no embedded data');
+      }
+    }
+    assert.ok(oneTooBig({ pooled: true, x: pooledX }) && one.data.values.length === 0);
+    assert.ok('rep 007 n' in ex.expect && Number.isNaN(ex.expect['rep e outcome']));
+  });
+  checkCsvMode('Steady State past the cap, time-persistent', st, [tpBig], { timed: true });
+  checkCsvMode('Summary and Plots past the cap, tally', ex, [tallyBig], { timed: true });
+  checkCsvMode('One System past the cap, pooled observations', one, [tallyBig], { langs: ['R', 'py'], timed: true });
 }

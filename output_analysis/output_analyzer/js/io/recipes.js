@@ -8,8 +8,12 @@
 // data, which the script shows how to read in place of its own data block.
 //
 // A page does not build its recipe when it computes: it registers
-// `regen: { build: () => recipe, tooBig }` with its result, and the export
-// row calls build() only when a script is asked for.
+// `regen: { build: () => recipe, tooBig, files }` with its result, and the
+// export row calls build() only when a script is asked for. `files` lists the
+// data files the recipe's `csv` names, as `{ ds, form }`, so that the row can
+// offer them without building the recipe. Where the data run past
+// MAX_NUMBERS (`tooBig`), the builder returns a full recipe marked `csvOnly`
+// that holds no data, and its scripts read the data from those files.
 
 import { repEstimates, repIds, datasetSummary, observations, timeWeightedOverall } from '../data/model.js';
 import { summary, acf } from '../stats/descriptive.js';
@@ -141,6 +145,8 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
  *   changes the line's verdict but not W or p, and so the recipe does not
  *   need it. `plan` is the planning card's settings, or null while planning
  *   is off. With fewer than two values only the descriptives are formed.
+ *   Under the override past MAX_NUMBERS observations, the recipe is marked
+ *   `csvOnly` and its data block holds no values.
  */
 export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan }) {
   const xs = Array.from(x);
@@ -152,8 +158,11 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     provenance: provenance || {},
     level
   });
-  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: xs,
+  // Past the cap the recipe holds no data, and its scripts read the CSV file.
+  const csvOnly = oneTooBig({ pooled, x: xs });
+  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: csvOnly ? [] : xs,
              dropped: pooled ? [] : o.dropped, how: o.how, pooled };
+  if (csvOnly) r.csvOnly = true;
   // The pooled observations come from the Observations CSV, the outcomes from the Replication summary CSV.
   r.csv = [csvEntry(ds, pooled ? 'observations' : 'replications', 'x')];
   const s = summary(xs);
@@ -632,7 +641,7 @@ function severalSubset(r, o, g) {
 
 // ── Steady State ─────────────────────────────────────────────────────────
 
-/** The most numbers a script embeds; a page whose records run past it offers no script. */
+/** The most numbers a script embeds; past it, a page's scripts read the data from its CSV files. */
 export const MAX_NUMBERS = 200000;
 
 /**
@@ -655,10 +664,28 @@ function recordsCsv(ds) {
   return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
 }
 
+/**
+ * What a script needs to know of a dataset's records without the records
+ * themselves: its name, response, unit, kind, and end time, whether it carries
+ * time stamps, and the replication ids in order. Copies no record.
+ */
+function recordsMeta(ds) {
+  return { name: ds.name, response: ds.response, unit: ds.unit, kind: ds.kind, endTime: ds.endTime,
+    timed: ds.reps.some(r => r.t), ids: ds.reps.map(r => String(r.id)) };
+}
+
 /** The records of a dataset as plain arrays, every replication in order (an empty one included). */
 function recordsOf(ds) {
-  return { name: ds.name, response: ds.response, unit: ds.unit, kind: ds.kind, endTime: ds.endTime,
-    reps: ds.reps.map(r => ({ id: String(r.id), t: r.t ? Array.from(r.t) : null, v: Array.from(r.v) })) };
+  return Object.assign(recordsMeta(ds), {
+    reps: ds.reps.map(r => ({ id: String(r.id), t: r.t ? Array.from(r.t) : null, v: Array.from(r.v) })) });
+}
+
+// The Settings note on kind and end_time, which describe the data rather than
+// a choice, and which a script that reads its records from a file needs.
+function dataNote(kind) {
+  return 'kind and end_time describe the data rather than a choice: kind "' + kind + '" marks ' +
+    (kind === 'time' ? 'a time-persistent state, and end_time is the time until which each replication\'s last record holds (NaN: for no time).'
+      : (kind === 'reps' ? 'one value per replication' : 'tally observations') + ', and end_time applies to time-persistent data only.');
 }
 
 /**
@@ -673,15 +700,15 @@ function recordsOf(ds) {
  *   (the page's startTime(ds)), and the rest the page's settings. `title`
  *   and `provenance` are the page's own, copied into the recipe. A pure
  *   function of its argument, and so a page can call it lazily. When the
- *   records would run past MAX_NUMBERS, the recipe carries `tooBig` and no
- *   records.
+ *   records would run past MAX_NUMBERS, the recipe is marked `csvOnly` and
+ *   carries the records' description (recordsMeta) without the records.
  */
 export function steadyRecipe(o) {
   const { ds, align, nBins, w, cut, repIdx, mode, count, size, level, start } = o;
   const r = baseRecipe({ page: 'steady', title: o.title || 'Steady state: batch means', provenance: o.provenance || {}, level });
   r.csv = recordsCsv(ds);
-  if (recordCount(ds) > MAX_NUMBERS) { r.tooBig = true; return r; }
-  r.records = recordsOf(ds);
+  if (recordCount(ds) > MAX_NUMBERS) r.csvOnly = true;
+  r.records = r.csvOnly ? recordsMeta(ds) : recordsOf(ds);
   const e = r.expect;
   const kind = ds.kind === 'time' ? 'time' : 'tally';
   const lumped = !!o.lumped && ds.reps.length > 1;
@@ -751,12 +778,14 @@ export function steadyRecipe(o) {
 
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
   r.settings = {
+    kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime,
     align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
     batch_count: mode === 'count' ? count : NaN, batch_size: mode === 'size' ? size : NaN
   };
   r.settingsNote = [
     'align is index (observation i of every replication averaged with observation i of the others, and cut counts the observations deleted from the start of each replication) or time (n_bins equal bins of simulation time from start, and cut is the time the warm-up ends); time-persistent data are aligned by time only. w is the moving average\'s half-width, and cut = 0 deletes nothing.',
-    'When lumped is true, every replication is cut and joined end to end; otherwise the replication in position replication (1 is the first) is batched. Set batch_count to a number of batches, or set it to NaN and batch_size to a batch size (observations, or units of simulation time for time-persistent data).'
+    'When lumped is true, every replication is cut and joined end to end; otherwise the replication in position replication (1 is the first) is batched. Set batch_count to a number of batches, or set it to NaN and batch_size to a batch size (observations, or units of simulation time for time-persistent data).',
+    dataNote(ds.kind)
   ];
   return r;
 }
@@ -791,15 +820,16 @@ export function exploreTooBig({ ds, spread }) {
  *   is the per-interval level of the t interval over the outcomes. `title` and
  *   `provenance` are the page's own, copied into the recipe. A pure function
  *   of its argument, and so a page can call it lazily. When the numbers would
- *   run past MAX_NUMBERS, the recipe carries `tooBig` and no records.
+ *   run past MAX_NUMBERS, the recipe is marked `csvOnly` and carries the
+ *   records' description (recordsMeta) without the records.
  */
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
   const r = baseRecipe({ page: 'explore', title: o.title || 'Summary of ' + ds.name, provenance: o.provenance || { dataset: ds.name }, level });
   // Levene's groups (other datasets' outcomes) stay embedded and are read from no file.
   r.csv = recordsCsv(ds);
-  if (exploreTooBig({ ds, spread })) { r.tooBig = true; return r; }
-  r.records = recordsOf(ds);
+  if (exploreTooBig({ ds, spread })) r.csvOnly = true;
+  r.records = r.csvOnly ? recordsMeta(ds) : recordsOf(ds);
   const ov = outcomeVector(ds);
   r.outcomes = ov;
   const e = r.expect;
@@ -864,6 +894,7 @@ export function exploreRecipe(o) {
     r.spread = { names: spread.names.slice(), groups };
   }
   r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread };
-  r.settings = {};
+  r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
+  r.settingsNote = [dataNote(ds.kind)];
   return r;
 }
