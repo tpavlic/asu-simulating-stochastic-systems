@@ -91,7 +91,7 @@ export function render(root) {
     '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
-      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: open its Export row, or use Export all for one file holding every dataset. The combined observations file loads back in through the delimited-columns path, one dataset per name, when its datasets are of one kind and all have, or all lack, time stamps.</p>' +
+      '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: open its Export row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. The observations file loads back in through the delimited-columns path, one dataset per name, when its datasets are of one kind and all have, or all lack, time stamps.</p>' +
       '<div id="im-list"></div>' +
     '</div>' +
     '<div id="im-status"></div>' +
