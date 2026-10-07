@@ -9,7 +9,8 @@
 // the navigation.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations, truncationView, sampleDataset } from '../data/model.js';
+import { repEstimates, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
+import { exploreRecipe, exploreTooBig } from '../io/recipes.js';
 import { sampledCsv, downloadText } from '../io/export.js';
 import {
   summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
@@ -135,6 +136,9 @@ export function render(root) {
     if (ciSection) ciSection.rebuild();
     if (normSection) normSection.rebuild();
     if (spreadSection) spreadSection.rebuild();
+    // The regenerate scripts' interval is at the new level.
+    const ds = current();
+    if (ds) storeResult(ds, repEstimates(ds));
   });
   // The replication summary is among the data files, and so only the test
   // table is offered from the results.
@@ -212,23 +216,6 @@ function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').re
 
 function finite(a) { return Float64Array.from(Array.from(a).filter(Number.isFinite)); }
 
-// The overall time-weighted mean over every replication: total area under
-// the state over total covered time, each record holding until the next and
-// the last until the end time (for no time without one).
-function timeWeightedOverall(ds) {
-  let area = 0, dur = 0;
-  for (const r of ds.reps) {
-    const n = r.v.length;
-    if (!n) continue;
-    const end = ds.endTime == null ? r.t[n - 1] : ds.endTime;
-    for (let i = 0; i < n; i++) {
-      const a = Math.min(r.t[i], end), b = Math.min(i + 1 < n ? r.t[i + 1] : end, end);
-      if (b > a) { area += (b - a) * r.v[i]; dur += b - a; }
-    }
-  }
-  return { mean: dur > 0 ? area / dur : NaN, duration: dur };
-}
-
 // A time-persistent replication as a step function: each value held from its
 // record time to the next, and the last to the end time when one is given.
 function stepSeries(r, endTime) {
@@ -278,6 +265,7 @@ function releaseAll() {
   repSections = [];
   ciSection = null;
   normSection = null;
+  spreadSection = null;
 }
 
 // Brings back the horizontal-axis choice (kept with the session); the other
@@ -404,10 +392,16 @@ function storeResult(ds, est) {
   const sw = shapiroOf(est);
   if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
   if (lastLevene) tables.push({ name: 'Equal-variance test (Levene)', headers: ['datasets', 'F', 'df1', 'df2', 'p'], rows: [[lastLevene.names.join('; '), lastLevene.F, lastLevene.df1, lastLevene.df2, lastLevene.p]] });
+  const title = 'Summary of ' + ds.name, provenance = { dataset: ds.name };
+  // The regenerate scripts' recipe is built only when a button asks for one,
+  // from the inputs as they stand now.
+  const recipeIn = { ds, spread: lastLevene ? { names: lastLevene.names, groups: lastLevene.groups } : null,
+    level: state.settings.level, title, provenance };
   state.setResult('explore', {
-    title: 'Summary of ' + ds.name,
-    provenance: { dataset: ds.name },
+    title,
+    provenance,
     tables,
+    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(recipeIn) },
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
       (e ? '; mean of the ' + esc(estimateWord(ds)) + ' ' + num(e.mean) + ', sd ' + num(e.sd) : '') + '.</p>'
@@ -964,8 +958,9 @@ function spreadable() {
   return state.datasets.filter(d => finite(repEstimates(d)).length >= 2);
 }
 
-function buildSpread(api, { ds }) {
+function buildSpread(api, { ds, est }) {
   const sec = api.sec;
+  lastLevene = null;
   const level = state.settings.base, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
@@ -976,12 +971,12 @@ function buildSpread(api, { ds }) {
   const host = el('div');
   sec.appendChild(host);
   const list = datasetChecklist(host, { filter: d => finite(repEstimates(d)).length >= 2, checked: initial,
-    onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); } });
+    onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
   if (chosen.length < 2) { emptyLine(sec, 'Tick two or more datasets to compare their spreads.'); return; }
   const groups = chosen.map(d => finite(repEstimates(d)));
   const lv = levene(groups);
-  lastLevene = { names: chosen.map(d => d.name), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
+  lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
   const rejects = lv.p < alpha;
   sec.appendChild(cardRow([
     card('<span class="sym">F</span>', num(lv.F, 4), 'ANOVA of |outcome − median|'),

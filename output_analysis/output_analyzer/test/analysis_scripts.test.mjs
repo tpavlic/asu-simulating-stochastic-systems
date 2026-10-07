@@ -1365,3 +1365,94 @@ test('R data blocks are one-line statements', () => {
     also: (stdout, lang, stderr) => { noWarning(stdout, lang, stderr); assert.ok(stdout.includes('Give either a batch count or a batch size, not both.'), lang + ' refuses'); }
   });
 }
+
+// ── Task 9: Summary and Plots ──────────────────────────────────────────
+import { exploreRecipe, exploreTooBig } from '../js/io/recipes.js';
+
+// The page's inputs: its title and provenance, and the Equal variances
+// section's ticked datasets with their finite replication outcomes.
+const exSpread = (...list) => ({ names: list.map(d => d.name), groups: list.map(d => outcomeVector(d).values) });
+const exRecipe = (ds, spread = null, level = 0.95) =>
+  exploreRecipe({ ds, spread, level, title: 'Summary of ' + ds.name, provenance: { dataset: ds.name } });
+const exChecks = { also: noWarning };
+
+test('exploreRecipe carries the replications, the outcomes, the check, and the spread test', () => {
+  const r = exRecipe(TRANSIENT, exSpread(TRANSIENT, LONG));
+  for (const k of ['replications', 'observations', 'rep 1 n', 'rep 1 outcome', 'rep 1 sd', 'mean', 'q3', 'pooled median',
+    'interval half-width', 'shapiro W [optional]', 'shapiro p [optional]']) assert.ok(k in r.expect, k);
+  assert.ok(!('levene F' in r.expect) && !r.spread && !r.explore.spread, 'one outcome in LONG leaves Levene undefined on that pair');
+  assert.equal(r.provenance.dataset, TRANSIENT.name);
+  const r2 = exRecipe(IND_A, exSpread(IND_A, IND_B));
+  for (const k of ['levene F', 'levene df1', 'levene df2', 'levene p']) assert.ok(k in r2.expect, k);
+  assert.equal(r2.expect['levene df2'], 28);
+  assert.deepEqual(r2.spread.names, [IND_A.name, IND_B.name]);
+  assert.ok(!('rep 1 sd' in r2.expect) && !('pooled n' in r2.expect), 'replication values have no observations to describe');
+  // A single group is no comparison either.
+  assert.ok(!('levene F' in exRecipe(IND_A, exSpread(IND_A)).expect));
+  const q = exRecipe(QLEN);
+  assert.ok('time-weighted mean' in q.expect && 'time covered' in q.expect && !('pooled n' in q.expect));
+  assert.ok(Math.abs(q.expect['time covered'] - 5 * 600) < 1e-9, 'five runs from 0 to 600');
+  for (const lang of LANGS) {
+    const s = analysisScript(r2, lang);
+    assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is ASCII');
+    assert.ok(/levene_test\(spread_groups\)/.test(s) && /shapiro_check\(["']shapiro["'], x, /.test(s), lang + ' Levene and Shapiro-Wilk');
+  }
+  // Building is pure: twice gives the same recipe.
+  assert.deepEqual(JSON.parse(JSON.stringify(exRecipe(TRANSIENT))), JSON.parse(JSON.stringify(exRecipe(TRANSIENT))));
+});
+
+checkRecipe('Summary and Plots on replication values with the spread test', exRecipe(IND_A, exSpread(IND_A, IND_B)), { smoke: true, also: noWarning });
+checkRecipe('Summary and Plots on tally data', exRecipe(TRANSIENT), exChecks);
+checkRecipe('Summary and Plots on tally data at 90%, with three datasets compared', exRecipe(TRANSIENT, exSpread(TRANSIENT, IND_A, IND_B), 0.9), exChecks);
+checkRecipe('Summary and Plots on time-persistent data', exRecipe(QLEN), exChecks);
+checkRecipe('Summary and Plots on replication values', exRecipe(example('queue-reps')[0]), exChecks);
+
+// One long replication: one outcome, and so NaN sd and se, no interval, and
+// no Shapiro-Wilk test; the pooled observations are still described.
+{
+  const r = exRecipe(LONG);
+  assert.ok(Number.isNaN(r.expect.sd) && Number.isNaN(r.expect.se));
+  assert.ok(!('interval df' in r.expect) && !('shapiro W [optional]' in r.expect) && 'pooled sd' in r.expect);
+  checkRecipe('Summary and Plots on one long replication', r, {
+    also: (stdout, lang, stderr) => { noWarning(stdout, lang, stderr); assert.ok(stdout.includes('sd: NaN   (analyzer: NaN)'), lang + ' prints a NaN sd'); }
+  });
+}
+
+// A replication with no records gives no outcome and is named; one with a
+// single observation has no sd of its own.
+{
+  const odd = makeDataset({ name: 'Odd tally', response: 'wait', unit: 'min', kind: 'tally',
+    reps: [{ id: 'a', v: [1, 2, 3, 5] }, { id: 'b', v: [] }, { id: 'c', v: [4] }, { id: 'd', v: [4, 6, 7] }] });
+  const r = exRecipe(odd);
+  assert.ok(Number.isNaN(r.expect['rep b outcome']) && Number.isNaN(r.expect['rep c sd']) && r.expect.n === 3);
+  for (const lang of LANGS) assert.ok(/left out: b\./.test(analysisScript(r, lang)), lang + ' names the replication with no outcome');
+  checkRecipe('Summary and Plots on tally data with an empty and a one-observation replication', r, exChecks);
+  // Time-persistent runs of unequal length with no end time, one of them empty.
+  const lens = [300, 0, 760, 410, 848];
+  const unequal = makeDataset({ name: 'Queue length, unequal', response: 'q', kind: 'time',
+    reps: QLEN.reps.map((rp, i) => ({ id: rp.id, t: Array.from(rp.t).slice(0, lens[i]), v: Array.from(rp.v).slice(0, lens[i]) })) });
+  const ru = exRecipe(unequal);
+  assert.ok(Number.isNaN(ru.expect['rep ' + unequal.reps[1].id + ' outcome']) && ru.expect.n === 4);
+  checkRecipe('Summary and Plots on time-persistent runs of unequal length with no end time', ru, exChecks);
+}
+
+// Constant outcomes: no spread, and so no Shapiro-Wilk test; the interval is the mean itself.
+{
+  const flat = makeDataset({ name: 'Flat', response: 'v', kind: 'reps', reps: [1, 2, 3, 4].map(id => ({ id, v: [2.5] })) });
+  const r = exRecipe(flat, exSpread(flat, IND_A));
+  assert.ok(!('shapiro W [optional]' in r.expect) && r.expect['interval half-width'] === 0 && 'levene p' in r.expect);
+  checkRecipe('Summary and Plots on constant replication values', r, exChecks);
+}
+
+// Too many numbers: no records, and the page disables the buttons.
+test('a Summary and Plots dataset past 200,000 numbers gives no script', () => {
+  const big = makeDataset({ name: 'big', response: 'q', kind: 'tally', reps: [{ id: 1, v: Array.from({ length: 200001 }, (_, i) => i % 7) }] });
+  assert.ok(exploreTooBig({ ds: big, spread: null }));
+  assert.ok(!exploreTooBig({ ds: TRANSIENT, spread: exSpread(TRANSIENT, IND_A) }));
+  // The spread groups count toward the cap too.
+  const near = makeDataset({ name: 'near', response: 'q', kind: 'tally', reps: [{ id: 1, v: Array.from({ length: MAX_NUMBERS - 10 }, (_, i) => i % 7) }] });
+  assert.ok(!exploreTooBig({ ds: near, spread: null }) && exploreTooBig({ ds: near, spread: exSpread(IND_A, IND_B) }));
+  const r = exRecipe(big);
+  assert.equal(r.tooBig, true);
+  assert.ok(!r.records && !('n' in r.expect));
+});

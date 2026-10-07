@@ -2120,6 +2120,88 @@ if sum(ov) > 0, m = sum(v .* ov) / sum(ov); else, m = NaN; end
 end
 `;
 
+// ── Summary and Plots: a replication's outcome, and every replication together ──
+// A replication's outcome is the mean of its observations (tally), the time
+// average of its state from its first record to where its last stops
+// holding (time-persistent), or its one value; a replication with no records
+// gives none (NaN). The time-weighted mean of every replication together is
+// the total area under the state over the total time covered. These use
+// trajectory_end and tw_mean from the timeWeighted snippet.
+
+LIB.R.explore = `
+rep_outcome <- function(r, kind, end_time) {
+  if (!length(r$v)) return(NaN)
+  if (kind == "time") {
+    te <- trajectory_end(r$t, end_time)
+    return(tw_mean(r$t, r$v, te, r$t[1], te))
+  }
+  if (kind == "reps") return(r$v[1])
+  mean(r$v)
+}
+tw_total <- function(reps, end_time) {
+  area <- 0; dur <- 0
+  for (r in reps) if (length(r$v)) {
+    te <- trajectory_end(r$t, end_time)
+    ov <- pmax(0, pmin(c(r$t[-1], te), te) - r$t)   # how long each record holds, up to te
+    area <- area + sum(r$v * ov); dur <- dur + sum(ov)
+  }
+  list(mean = if (dur > 0) area / dur else NaN, duration = dur)
+}
+`;
+LIB.py.explore = `
+def rep_outcome(r, kind, end_time):
+    """A replication's outcome as the analyzer forms it; nan when it has no records."""
+    v = np.asarray(r["v"], float)
+    if len(v) == 0:
+        return np.nan
+    if kind == "time":
+        t = np.asarray(r["t"], float); te = trajectory_end(t, end_time)
+        return tw_mean(t, v, te, t[0], te)
+    if kind == "reps":
+        return float(v[0])
+    return float(v.mean())
+
+def tw_total(reps, end_time):
+    """The time-weighted mean of every replication together, and the time covered."""
+    area = dur = 0.0
+    for r in reps:
+        if len(r["v"]) == 0:
+            continue
+        t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+        te = trajectory_end(t, end_time)
+        ov = np.maximum(0.0, np.minimum(np.append(t[1:], te), te) - t)   # how long each record holds, up to te
+        area += float(np.sum(v * ov)); dur += float(ov.sum())
+    return dict(mean=area / dur if dur > 0 else np.nan, duration=dur)
+`;
+LIB.m.explore = `
+function o = rep_outcome(r, kind, end_time)
+% A replication's outcome as the analyzer forms it; NaN when it has no records.
+if isempty(r.v), o = NaN; return; end
+switch kind
+    case 'time'
+        te = trajectory_end(r.t, end_time); o = tw_mean(r.t, r.v, te, r.t(1), te);
+    case 'reps'
+        o = r.v(1);
+    otherwise
+        o = mean(r.v);
+end
+end
+
+function s = tw_total(reps, end_time)
+% The time-weighted mean of every replication together, and the time covered.
+area = 0; dur = 0;
+for i = 1:numel(reps)
+    t = reps(i).t(:)'; v = reps(i).v(:)';
+    if isempty(v), continue; end
+    te = trajectory_end(t, end_time);
+    ov = max(0, min([t(2:end), te], te) - t);   % how long each record holds, up to te
+    area = area + sum(v .* ov); dur = dur + sum(ov);
+end
+if dur > 0, m = area / dur; else, m = NaN; end
+s = struct('mean', m, 'duration', dur);
+end
+`;
+
 // ── Steady State: the warm-up plot's averages ────────────────────────────
 
 LIB.R.alignment = `

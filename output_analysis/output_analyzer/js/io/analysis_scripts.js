@@ -1171,6 +1171,151 @@ function steadyBody(r, L) {
 }
 BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
 
+// ── Summary and Plots ────────────────────────────────────────────────────
+
+// The replication outcomes of the datasets ticked under Equal variances, which
+// Levene's test compares; the script has no records for any but the shown one.
+function spreadBlock(L, S) {
+  const c = L.comment, out = [''];
+  out.push(...commentLines(c, 'spread_groups holds the replication outcomes of the datasets ticked under Equal variances, which Levene\'s test compares, in order: ' +
+    S.names.map((n, i) => (i + 1) + ': ' + ascii(n)).join('; ') + '.', c));
+  out.push(...listAssign(L, 'spread_groups', S.groups.length, (L2, t, i) => vecAssign(L2, t, S.groups[i]), i => L.vec(S.groups[i])));
+  return out;
+}
+
+// Summary and Plots: each replication's count and outcome, the descriptives
+// of the outcomes, every replication together, the t interval over the
+// outcomes, the Shapiro-Wilk test of the outcomes, Levene's test across the
+// ticked datasets, and a figure of the outcomes.
+function exploreBody(r, L) {
+  const X = r.explore, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
+  const need = ['descriptives', 'timeWeighted', 'explore'], out = [];
+  const R = r.records, tally = X.kind === 'tally';
+  const ind = lang === 'R' ? '  ' : '    ';
+
+  // Each replication.
+  out.push(L.sect('Each replication: its observations and its outcome'));
+  out.push(...commentLines(c, 'A replication\'s outcome is ' + ascii(r.outcomes.how) + '; a replication with no records gives none (NaN).' +
+    (tally ? ' Its sd, min, and max describe its own observations.' : ''), c));
+  const page = k => R.reps.map(rp => e['rep ' + rp.id + ' ' + k]);
+  const cols = tally ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
+  out.push(c + 'The analyzer\'s values, in replication order, printed beside the script\'s.');
+  for (const k of cols) out.push(...vecAssign(L, 'page_' + k, page(k)));
+  if (lang === 'R') out.push('outcome <- vapply(reps, rep_outcome, numeric(1), kind = kind, end_time = end_time)');
+  else if (lang === 'py') out.push('outcome = np.array([rep_outcome(r, kind, end_time) for r in reps], dtype=float)');
+  else out.push('outcome = arrayfun(@(r) rep_outcome(r, kind, end_time), reps);');
+  out.push(rep(L, r, 'replications', lang === 'R' ? 'length(reps)' : lang === 'py' ? 'len(reps)' : 'numel(reps)'));
+  out.push(rep(L, r, 'observations', lang === 'R' ? 'sum(lengths(lapply(reps, function(r) r$v)))' : lang === 'py' ? 'sum(len(r["v"]) for r in reps)' : 'sum(arrayfun(@(r) numel(r.v), reps))'));
+  if (lang === 'R') {
+    out.push('for (i in seq_along(reps)) {',
+      ind + 'v <- reps[[i]]$v; p <- paste("rep", reps[[i]]$id)',
+      ind + 'report(paste(p, "n"), length(v), page_n[i])',
+      ind + 'report(paste(p, "outcome"), outcome[i], page_outcome[i])');
+    if (tally) out.push(ind + 'report(paste(p, "sd"), if (length(v) > 1) sd(v) else NaN, page_sd[i])',
+      ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, page_min[i])',
+      ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, page_max[i])');
+    out.push('}');
+  } else if (lang === 'py') {
+    out.push('for i, r in enumerate(reps):',
+      ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]',
+      ind + 'report(p + " n", len(v), page_n[i])',
+      ind + 'report(p + " outcome", outcome[i], page_outcome[i])');
+    if (tally) out.push(ind + 'report(p + " sd", v.std(ddof=1) if len(v) > 1 else np.nan, page_sd[i])',
+      ind + 'report(p + " min", v.min() if len(v) else np.nan, page_min[i])',
+      ind + 'report(p + " max", v.max() if len(v) else np.nan, page_max[i])');
+  } else {
+    out.push('for i = 1:numel(reps)',
+      ind + "v = reps(i).v; p = ['rep ' reps(i).id];",
+      ind + "report([p ' n'], numel(v), page_n(i));",
+      ind + "report([p ' outcome'], outcome(i), page_outcome(i));");
+    if (tally) out.push(ind + 's = NaN; if numel(v) > 1, s = std(v); end',
+      ind + "report([p ' sd'], s, page_sd(i));",
+      ind + 'lo = NaN; hi = NaN; if ~isempty(v), lo = min(v); hi = max(v); end',
+      ind + "report([p ' min'], lo, page_min(i));",
+      ind + "report([p ' max'], hi, page_max(i));");
+    out.push('end');
+  }
+
+  // The outcomes.
+  if (X.outcomes) {
+    out.push(L.sect('Descriptives of the replication outcomes'));
+    if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + r.outcomes.dropped.map(ascii).join(', ') + '.', c));
+    out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
+    out.push(L.assign('d', 'describe(x)'));
+    for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));
+  }
+
+  // Every replication together.
+  if (X.pooled) {
+    out.push(L.sect('Pooled observations, for description only'));
+    out.push(...commentLines(c, 'Every observation of every replication together. They come from within runs and are correlated with their neighbors, and so they carry no standard error and no test here.', c));
+    out.push(L.assign('obs', lang === 'R' ? 'unlist(lapply(reps, function(r) r$v))' : lang === 'py' ? 'np.concatenate([np.asarray(r["v"], float) for r in reps])' : '[reps.v]'));
+    out.push(L.assign('po', 'describe(obs)'));
+    for (const k of DESC_KEYS) if (k !== 'se') out.push(rep(L, r, 'pooled ' + k, f('po', k)));
+  }
+  if (X.timeTotal) {
+    out.push(L.sect('All replications together, time-weighted'));
+    out.push(...commentLines(c, 'The area under every replication\'s state over the total time covered: every value weighted by how long it held.', c));
+    out.push(L.assign('tw', 'tw_total(reps, end_time)'));
+    out.push(rep(L, r, 'time-weighted mean', f('tw', 'mean')), rep(L, r, 'time covered', f('tw', 'duration')));
+  }
+
+  // The t interval over the outcomes.
+  if (X.interval) {
+    need.push('tInterval');
+    out.push(L.sect('Confidence interval over the replication outcomes (t)'));
+    out.push(L.assign('ti', 't_interval(x, level)'));
+    for (const [name, k] of [['interval df', 'df'], ['interval t quantile', 't'], ['interval half-width', 'hw'], ['interval lower', 'lo'], ['interval upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
+  }
+
+  // Normality, on the outcomes only.
+  if (X.checks) {
+    need.push('shapiro');
+    out.push(L.sect('Normality of the replication outcomes (Shapiro-Wilk)'));
+    out.push(...commentLines(c, 'The test assumes independent values, which the replication outcomes are and pooled observations are not, and so it is made on the outcomes only.', c));
+    const w = lit(L, e['shapiro W [optional]']), p = lit(L, e['shapiro p [optional]']);
+    out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+  }
+
+  // Equal variances.
+  if (X.spread) {
+    need.push('levene');
+    out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
+    out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
+    out.push(L.assign('lv', 'levene_test(spread_groups)'));
+    out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
+  }
+
+  // The figure: no report lines.
+  if (X.interval) {
+    const xlab = ascii(r.records.response);
+    out.push(L.sect('Figure: histogram and normal quantile-quantile plot of the outcomes'));
+    if (lang === 'R') {
+      out.push('par(mfrow = c(1, 2))',
+        'hist(x, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
+        'qqnorm(x, main = "Normal Q-Q plot"); qqline(x, lty = 2)');
+    } else if (lang === 'py') {
+      out.push('try:',
+        '    import warnings',
+        '    import matplotlib.pyplot as plt',
+        '    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9, 4))',
+        '    a1.hist(x, color="gray", edgecolor="black"); a1.set_title("Replication outcomes"); a1.set_xlabel(' + L.str(xlab) + ')',
+        '    stats.probplot(x, plot=a2); a2.set_title("Normal Q-Q plot")',
+        '    fig.tight_layout()',
+        '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
+        '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
+        '        plt.show()',
+        'except ImportError:',
+        '    print("matplotlib is not installed; the figure is skipped")');
+    } else {
+      out.push("figure; subplot(1, 2, 1); histogram(x); title('Replication outcomes'); xlabel(" + L.str(xlab) + ", 'Interpreter', 'none');",
+        "subplot(1, 2, 2); qqplot(x); title('Normal Q-Q plot');");
+    }
+  }
+  return { body: out, need };
+}
+BODIES.explore = { R: exploreBody, py: exploreBody, m: exploreBody };
+
 function settingsBlock(recipe, L) {
   const out = [L.sect('Settings')];
   // A page may say which settings the script reads and which choices are written into its code.
@@ -1209,6 +1354,7 @@ function dataBlock(recipe, L) {
   }
   if (recipe.groups) out.push(...groupsBlock(L, recipe));
   if (recipe.records) out.push(...recordsBlock(L, recipe.records));
+  if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
 }
 

@@ -155,6 +155,28 @@ export function observations(ds) {
 }
 
 /**
+ * The time-weighted mean over every replication of a time-persistent
+ * dataset: the total area under the state over the total time covered, each
+ * record holding until the next and the last until the end time (for no time
+ * without one), clipped at the end time. The mean is NaN when no time is covered.
+ * @param {Dataset} ds
+ * @returns {{mean: number, duration: number}}
+ */
+export function timeWeightedOverall(ds) {
+  let area = 0, dur = 0;
+  for (const r of ds.reps) {
+    const n = r.v.length;
+    if (!n) continue;
+    const end = ds.endTime == null ? r.t[n - 1] : ds.endTime;
+    for (let i = 0; i < n; i++) {
+      const a = Math.min(r.t[i], end), b = Math.min(i + 1 < n ? r.t[i + 1] : end, end);
+      if (b > a) { area += (b - a) * r.v[i]; dur += b - a; }
+    }
+  }
+  return { mean: dur > 0 ? area / dur : NaN, duration: dur };
+}
+
+/**
  * Counts and descriptives for the summary card. `est` summarizes the finite
  * replication outcomes and is null when there are none. `tRange` spans the
  * recorded times and is null when no replication carries times.

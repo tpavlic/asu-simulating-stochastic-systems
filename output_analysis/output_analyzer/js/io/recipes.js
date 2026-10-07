@@ -10,7 +10,7 @@
 // `regen: { build: () => recipe, tooBig }` with its result, and the export
 // row calls build() only when a script is asked for.
 
-import { repEstimates, repIds } from '../data/model.js';
+import { repEstimates, repIds, datasetSummary, observations, timeWeightedOverall } from '../data/model.js';
 import { summary, acf } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
 import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
@@ -698,5 +698,110 @@ export function steadyRecipe(o) {
     'align is index (observation i of every replication averaged with observation i of the others, and cut counts the observations deleted from the start of each replication) or time (n_bins equal bins of simulation time from start, and cut is the time the warm-up ends); time-persistent data are aligned by time only. w is the moving average\'s half-width, and cut = 0 deletes nothing.',
     'When lumped is true, every replication is cut and joined end to end; otherwise the replication in position replication (1 is the first) is batched. Set batch_count to a number of batches, or set it to NaN and batch_size to a batch size (observations, or units of simulation time for time-persistent data).'
   ];
+  return r;
+}
+
+// ── Summary and Plots ────────────────────────────────────────────────────
+
+/**
+ * Whether a Summary and Plots script would embed more than MAX_NUMBERS
+ * numbers: the shown dataset's records and the outcomes of the datasets
+ * Levene's test compares. Cheap, and copies nothing.
+ * @param {{ds: object, spread: null|{groups: ArrayLike<number>[]}}} o
+ */
+export function exploreTooBig({ ds, spread }) {
+  let n = recordCount(ds);
+  if (spread) for (const g of spread.groups) n += g.length;
+  return n > MAX_NUMBERS;
+}
+
+/**
+ * The Summary and Plots recipe: each replication's count and outcome (and,
+ * for tally data, its sd, min, and max), the descriptives of the replication
+ * outcomes, the pooled observations or the time-weighted mean of every
+ * replication together, the t interval over the outcomes, the Shapiro-Wilk
+ * test of the outcomes, and Levene's test across the datasets ticked under
+ * Equal variances, each computed as the page computes it.
+ * @param {{ ds: object, spread: null|{names: string[], groups: ArrayLike<number>[]}, level: number,
+ *   title?: string, provenance?: object }} o
+ *   `spread` is the Equal variances section's ticked datasets and their finite
+ *   replication outcomes, or null when the section has none to compare.
+ *   Levene's test is formed only when there are two or more groups and every
+ *   group has two or more outcomes, as the page's checklist requires. `level`
+ *   is the per-interval level of the t interval over the outcomes. `title` and
+ *   `provenance` are the page's own, copied into the recipe. A pure function
+ *   of its argument, and so a page can call it lazily. When the numbers would
+ *   run past MAX_NUMBERS, the recipe carries `tooBig` and no records.
+ */
+export function exploreRecipe(o) {
+  const { ds, spread, level } = o;
+  const r = baseRecipe({ page: 'explore', title: o.title || 'Summary of ' + ds.name, provenance: o.provenance || { dataset: ds.name }, level });
+  if (exploreTooBig({ ds, spread })) { r.tooBig = true; return r; }
+  r.records = recordsOf(ds);
+  const ov = outcomeVector(ds);
+  r.outcomes = ov;
+  const e = r.expect;
+  const sm = datasetSummary(ds);
+  const est = repEstimates(ds);
+  const tally = ds.kind === 'tally';
+
+  // Each replication, as the page's replication summary lists it.
+  Object.assign(e, { replications: sm.nReps, observations: sm.nObs });
+  ds.reps.forEach((rp, i) => {
+    const p = 'rep ' + rp.id + ' ';
+    e[p + 'n'] = rp.v.length;
+    e[p + 'outcome'] = est[i];
+    if (tally) {
+      const s = rp.v.length ? summary(rp.v) : null;
+      Object.assign(e, { [p + 'sd']: s ? s.sd : NaN, [p + 'min']: s ? s.min : NaN, [p + 'max']: s ? s.max : NaN });
+    }
+  });
+
+  // The descriptives of the finite outcomes.
+  const x = ov.values, n = x.length;
+  if (n) {
+    const s = summary(x);
+    Object.assign(e, { n: s.n, mean: s.mean, sd: s.sd, se: s.se, min: s.min, q1: s.q1, median: s.median, q3: s.q3, max: s.max });
+  }
+
+  // Every replication together: the pooled observations of tally data, which
+  // the page describes without a standard error, or the time-weighted mean of
+  // time-persistent data.
+  let pooled = false;
+  if (tally) {
+    const obs = observations(ds);
+    if (obs.length) {
+      pooled = true;
+      const p = summary(obs);
+      Object.assign(e, { 'pooled n': p.n, 'pooled mean': p.mean, 'pooled sd': p.sd, 'pooled min': p.min, 'pooled q1': p.q1,
+        'pooled median': p.median, 'pooled q3': p.q3, 'pooled max': p.max });
+    }
+  }
+  const timeTotal = ds.kind === 'time';
+  if (timeTotal) {
+    const tw = timeWeightedOverall(ds);
+    Object.assign(e, { 'time-weighted mean': tw.mean, 'time covered': tw.duration });
+  }
+
+  // The t interval over the outcomes, which the Replications section draws.
+  const interval = n >= 2;
+  if (interval) {
+    const ti = tInterval(x, level);
+    Object.assign(e, { 'interval df': ti.df, 'interval t quantile': ti.t, 'interval half-width': ti.hw, 'interval lower': ti.lo, 'interval upper': ti.hi });
+  }
+
+  // The Shapiro-Wilk test, on the outcomes only: the page withholds it on pooled observations.
+  const checks = shapiroOk(x);
+  if (checks) Object.assign(e, shapiroExpect('shapiro ', x));
+
+  // Levene's test, only where every group has two or more outcomes.
+  if (spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2)) {
+    const groups = spread.groups.map(g => Array.from(g));
+    const lv = levene(groups);
+    Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
+    r.spread = { names: spread.names.slice(), groups };
+  }
+  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread };
+  r.settings = {};
   return r;
 }
