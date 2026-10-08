@@ -5,7 +5,11 @@
 // functions its key names and nothing else, so that a body emitter can list
 // what it needs and get exactly that.
 //
-// The report line format is the contract with test/analysis_scripts.test.mjs:
+// Every result goes through one report helper. By default it prints the
+// result under its section's heading as an aligned name and value, and
+// remembers whether the value agrees with the analyzer's, which
+// report_summary() then sums up in one line. With check_details set (as
+// test/analysis_scripts.test.mjs sets it), it prints the contract instead:
 //   name: value   (analyzer: value)
 // with %.10g for numbers, yes/no for booleans, NaN for a missing number in
 // every language, and the string itself otherwise.
@@ -19,58 +23,208 @@ export const LIB = { R: {}, py: {}, m: {} };
 // ── report ───────────────────────────────────────────────────────────────
 
 LIB.R.report = `
-report <- function(name, value, analyzer = NULL) {
-  fmt <- function(v) {
-    if (length(v) == 0 || (length(v) == 1 && is.na(v))) return("NaN")
-    if (is.logical(v)) return(if (isTRUE(v)) "yes" else "no")
-    if (is.numeric(v)) return(sprintf("%.10g", as.numeric(v)))
-    as.character(v)
+# report() prints one result and checks it against the value the Output
+# Analyzer's page showed (analyzer), within a relative tolerance tol.
+report_state <- new.env()
+report_start <- function(details) {
+  report_state$details <- isTRUE(details)
+  report_state$n <- 0
+  report_state$bad <- character(0)
+}
+report_fmt <- function(v, digits = 10) {
+  if (length(v) == 0 || (length(v) == 1 && is.na(v))) return("NaN")
+  if (is.logical(v)) return(if (isTRUE(v)) "yes" else "no")
+  if (is.numeric(v)) return(sprintf(paste0("%.", digits, "g"), as.numeric(v)))
+  as.character(v)
+}
+report_agrees <- function(v, a, tol) {
+  if (length(v) == 0) v <- NaN
+  if (length(v) != 1) return(FALSE)
+  if (is.logical(v) || is.logical(a)) return(isTRUE(as.logical(v) == as.logical(a)))
+  if (is.character(v) || is.character(a)) return(identical(as.character(v), as.character(a)))
+  v <- as.numeric(v); a <- as.numeric(a)
+  if (is.na(v) || is.na(a)) return(is.na(v) && is.na(a))
+  if (is.infinite(v) || is.infinite(a)) return(v == a)
+  abs(v - a) <= tol * max(1, abs(a))
+}
+report <- function(name, value, analyzer = NULL, tol = 1e-6) {
+  if (report_state$details) {
+    cat(sprintf("%s: %s%s\\n", name, report_fmt(value),
+                if (is.null(analyzer)) "" else sprintf("   (analyzer: %s)", report_fmt(analyzer))))
+  } else {
+    cat(sprintf("  %-36s %s\\n", name, report_fmt(value, 7)))
   }
-  cat(sprintf("%s: %s%s\\n", name, fmt(value),
-              if (is.null(analyzer)) "" else sprintf("   (analyzer: %s)", fmt(analyzer))))
+  if (is.null(analyzer)) return(invisible(NULL))
+  report_state$n <- report_state$n + 1
+  if (!report_agrees(value, analyzer, tol)) {
+    report_state$bad <- c(report_state$bad,
+      sprintf("%s: %s here, %s on the page", name, report_fmt(value), report_fmt(analyzer)))
+  }
+  invisible(NULL)
+}
+report_section <- function(title) {
+  if (!report_state$details) cat("\\n", title, "\\n", strrep("-", nchar(title)), "\\n", sep = "")
+}
+report_summary <- function() {
+  n <- report_state$n; bad <- report_state$bad
+  if (n == 0) return(invisible(NULL))
+  if (length(bad) == 0) {
+    cat(sprintf("\\nAll %d results agree with the values on the Output Analyzer's page.\\n", n))
+  } else {
+    cat(sprintf("\\n%d of %d results differ from the values on the Output Analyzer's page:\\n", length(bad), n))
+    cat(paste0("  ", bad, "\\n"), sep = "")
+  }
+  invisible(NULL)
 }
 `;
 
 LIB.py.report = `
-def report(name, value, analyzer=None):
-    """Prints one result as 'name: value   (analyzer: value)'."""
-    def fmt(v):
-        if v is None:
+# report() prints one result and checks it against the value the Output
+# Analyzer's page showed (analyzer), within a relative tolerance tol.
+_report = {"details": False, "n": 0, "bad": []}
+
+
+def report_start(details):
+    _report.update(details=bool(details), n=0, bad=[])
+
+
+def report_fmt(v, digits=10):
+    if v is None:
+        return "NaN"
+    if isinstance(v, (bool, np.bool_)):
+        return "yes" if v else "no"
+    if isinstance(v, (int, float, np.integer, np.floating)):
+        v = float(v)
+        if np.isnan(v):
             return "NaN"
-        if isinstance(v, (bool, np.bool_)):
-            return "yes" if v else "no"
-        if isinstance(v, (int, float, np.integer, np.floating)):
-            v = float(v)
-            if np.isnan(v):
-                return "NaN"
-            if np.isinf(v):
-                return "Inf" if v > 0 else "-Inf"
-            return f"{v:.10g}"
-        return str(v)
-    tail = "" if analyzer is None else f"   (analyzer: {fmt(analyzer)})"
-    print(f"{name}: {fmt(value)}{tail}")
+        if np.isinf(v):
+            return "Inf" if v > 0 else "-Inf"
+        return f"{v:.{digits}g}"
+    return str(v)
+
+
+def report_agrees(v, a, tol):
+    if isinstance(v, (bool, np.bool_)) or isinstance(a, (bool, np.bool_)):
+        return bool(v) == bool(a)
+    if isinstance(v, str) or isinstance(a, str):
+        return str(v) == str(a)
+    v = np.nan if v is None else float(v)
+    a = float(a)
+    if np.isnan(v) or np.isnan(a):
+        return bool(np.isnan(v) and np.isnan(a))
+    if np.isinf(v) or np.isinf(a):
+        return v == a
+    return abs(v - a) <= tol * max(1.0, abs(a))
+
+
+def report(name, value, analyzer=None, tol=1e-6):
+    if _report["details"]:
+        tail = "" if analyzer is None else f"   (analyzer: {report_fmt(analyzer)})"
+        print(f"{name}: {report_fmt(value)}{tail}")
+    else:
+        print(f"  {name:<36} {report_fmt(value, 7)}")
+    if analyzer is None:
+        return
+    _report["n"] += 1
+    if not report_agrees(value, analyzer, tol):
+        _report["bad"].append(f"{name}: {report_fmt(value)} here, {report_fmt(analyzer)} on the page")
+
+
+def report_section(title):
+    if not _report["details"]:
+        print(f"\\n{title}\\n{'-' * len(title)}")
+
+
+def report_summary():
+    n, bad = _report["n"], _report["bad"]
+    if n == 0:
+        return
+    if not bad:
+        print(f"\\nAll {n} results agree with the values on the Output Analyzer's page.")
+    else:
+        print(f"\\n{len(bad)} of {n} results differ from the values on the Output Analyzer's page:")
+        for line in bad:
+            print("  " + line)
 `;
 
 LIB.m.report = `
-function report(name, value, analyzer)
-% Prints one result as "name: value   (analyzer: value)", or without the analyzer's value
-% when there is none (no third argument, or an empty one).
-tail = '';
-if nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer))
-    tail = sprintf('   (analyzer: %s)', report_fmt(analyzer));
-end
-fprintf('%s: %s%s\\n', name, report_fmt(value), tail);
+function report_start(details)
+% Starts the record of results checked against the Output Analyzer's page.
+report_store('start', details);
 end
 
-function s = report_fmt(v)
-% One value as a report line prints it: %.10g for a number, yes/no for a
-% logical, NaN for a missing number, and the text itself otherwise.
+function report(name, value, analyzer, tol)
+% Prints one result and checks it against the value the Output Analyzer's
+% page showed (analyzer), within a relative tolerance tol (1e-6 unless given).
+if nargin < 4, tol = 1e-6; end
+has = nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer));
+if report_store('details')
+    tail = '';
+    if has, tail = sprintf('   (analyzer: %s)', report_fmt(analyzer, 10)); end
+    fprintf('%s: %s%s\\n', name, report_fmt(value, 10), tail);
+else
+    fprintf('  %-36s %s\\n', name, report_fmt(value, 7));
+end
+if has
+    report_store('add', report_agrees(value, analyzer, tol), ...
+        sprintf('%s: %s here, %s on the page', name, report_fmt(value, 10), report_fmt(analyzer, 10)));
+end
+end
+
+function report_section(title)
+if ~report_store('details')
+    fprintf('\\n%s\\n%s\\n', title, repmat('-', 1, numel(title)));
+end
+end
+
+function report_summary()
+[n, bad] = report_store('get');
+if n == 0, return; end
+if isempty(bad)
+    fprintf('\\nAll %d results agree with the values on the Output Analyzer''s page.\\n', n);
+else
+    fprintf('\\n%d of %d results differ from the values on the Output Analyzer''s page:\\n', numel(bad), n);
+    fprintf('  %s\\n', bad{:});
+end
+end
+
+function varargout = report_store(op, varargin)
+% The record behind report(): whether to print details, and how many results
+% were checked and which of them differ. A local function keeps it between calls.
+persistent details n bad
+if isempty(details), details = false; n = 0; bad = {}; end
+switch op
+    case 'start', details = logical(varargin{1}); n = 0; bad = {};
+    case 'details', varargout{1} = details;
+    case 'add', n = n + 1; if ~varargin{1}, bad{end + 1} = varargin{2}; end
+    case 'get', varargout{1} = n; varargout{2} = bad;
+end
+end
+
+function ok = report_agrees(v, a, tol)
+if isempty(v), v = NaN; end
+if islogical(v) || islogical(a)
+    ok = isscalar(v) && logical(v) == logical(a);
+elseif ischar(v) || isstring(v) || ischar(a) || isstring(a)
+    ok = strcmp(string(v), string(a));
+elseif isnan(v) || isnan(a)
+    ok = isnan(v) && isnan(a);
+elseif isinf(v) || isinf(a)
+    ok = v == a;
+else
+    ok = abs(v - a) <= tol * max(1, abs(a));
+end
+end
+
+function s = report_fmt(v, digits)
+% One value as a report line prints it: a number to the given significant
+% digits, yes/no for a logical, NaN for a missing number, and the text itself.
 if isempty(v) && ~ischar(v) && ~isstring(v)
     s = 'NaN';
 elseif islogical(v)
     s = 'no'; if v, s = 'yes'; end
 elseif isnumeric(v)
-    s = sprintf('%.10g', v);
+    s = sprintf(['%.' num2str(digits) 'g'], v);
 else
     s = char(v);
 end

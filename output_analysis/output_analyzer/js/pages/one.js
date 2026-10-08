@@ -17,6 +17,7 @@ import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, stat, intl, pct, esc, dash, lvl } from '../ui/format.js';
+import { outcomeAxis } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'one';
@@ -704,22 +705,13 @@ function overrideBlock(ds, on, oneRep) {
   return box;
 }
 
-function axisLabel(ds, pooled) {
-  if (!ds) return 'Replication outcome';
-  const r = ds.response || 'value';
-  if (pooled) return 'Observation of ' + r;
-  if (ds.kind === 'reps') return r + ' per replication';
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + r;
-  return 'Replication mean of ' + r;
-}
-
 function drawFigure(d) {
   const level = state.settings.level;
   const cEst = '--est', cTruth = '--truth';
   if (!d || !d.values.length) {
     fig.render(f => {
       f.x([0, 1]);
-      f.axes({ y: false, xLabel: axisLabel(d && d.ds, false), xFormat: () => '' });
+      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false), xFormat: () => '' });
       svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication outcomes to show.';
     });
     legend(els.leg, [
@@ -738,7 +730,7 @@ function drawFigure(d) {
     // Many pooled observations stack into a dot histogram, which needs room.
     f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
     f.x(hasInt ? extent(values, [ti.lo, ti.hi]) : extent(values), { pad: 0.06, nice: true });
-    f.axes({ y: false, xLabel: axisLabel(ds, pooled) });
+    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;
     f.ih = fullH - band;

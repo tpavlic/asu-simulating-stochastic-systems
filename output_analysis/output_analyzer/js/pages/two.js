@@ -20,7 +20,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { fRatioVerdict } from '../ui/rules.js';
+import { fRatioVerdict, roleLabels } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -91,17 +91,6 @@ function defaultMatch(idsA, idsB) {
     return { by: 'id', why: 'Matched by replication id by default. Both datasets number their replications 1, 2, 3, …, and so matching by position gives the same pairs.' };
   }
   return { by: 'id', why: 'Matched by replication id by default: both datasets carry distinct ids, and ' + plural(shared, 'id appears', 'ids appear') + ' in both.' };
-}
-
-// The row label for a design in a figure: its role letter, followed by the
-// dataset's name with any prefix the two names share ("file · A" and
-// "file · B" become "A" and "B") unless that is the role letter itself.
-function roleLabels(dsA, dsB) {
-  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
-  const pa = cut(dsA.name), pb = cut(dsB.name);
-  const shared = pa && pb && pa[0] === pb[0] && pa[1] !== pb[1];
-  const na = shared ? pa[1] : dsA.name, nb = shared ? pb[1] : dsB.name;
-  return [na === 'A' ? 'A' : 'A · ' + na, nb === 'B' ? 'B' : 'B · ' + nb];
 }
 
 // Two significant digits, for a default target that reads as a round number.
@@ -556,7 +545,7 @@ function drawPlan() {
   // for, from the inputs and settings in force now.
   const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title;
   const planIn = { h: hwVal, delta, power: plan.power };
-  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn })),
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn, view: { pairView: state.getPick(id, 'pairView') } })),
     files: [{ ds: recipeIn.dsA, form: 'replications' }, { ds: recipeIn.dsB, form: 'replications' }] } : undefined;
   state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }

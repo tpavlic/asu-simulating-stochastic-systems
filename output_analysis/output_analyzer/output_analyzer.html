@@ -14446,6 +14446,7 @@ export function canInfer(ds) {
 
 import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
 import { LIB } from './script_lib.js';
+import { FIG, figureBlock } from './figure_scripts.js';
 import { pairLabel, repKeys, REP_LINES_MAX, MAX_NUMBERS } from './recipes.js';
 
 const BY = 'the Output Analyzer';
@@ -14526,7 +14527,7 @@ const LANG = {
     },
     // Matplotlib is named only where the script draws a figure.
     requires: code => 'Python 3 with NumPy and SciPy 1.11 or later' +
-      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figure).' : '.')
+      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figures).' : '.')
   },
   m: {
     lang: 'm', comment: '% ', sect: s => '\n%% ' + s,
@@ -14689,6 +14690,49 @@ function listAssign(L, target, n, part, lit) {
   return out;
 }
 
+// Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
+// language can only approximate are looser. A post-hoc rule's differences,
+// standard errors, and degrees of freedom are exact; what rests on its
+// quantile (the critical value, the half-width, the interval's ends, and a
+// p-value) is held to 1e-5 for the studentized range and Dunnett's quantile
+// in every language (MATLAB's scripts compute Dunnett's value themselves,
+// because multcompare's root search stops at about 1e-4, and Tukey's, because
+// multcompare's studentized range is approximate on few degrees of freedom).
+// SciPy's dunnett, which Python uses without blocks and with some spread to
+// compare, finds its critical value by randomized quadrature and is held to
+// 2e-3. The scripts check their own results with these tolerances, and
+// test/analysis_scripts.test.mjs holds them to the same.
+export function tolFor(key, lang, recipe) {
+  // R's qtukey and ptukey are documented as accurate to about 4 digits; at a few
+  // residual degrees of freedom they miss the analyzer's studentized range by up to
+  // about 1.1e-5 relative (3 df), and so R alone is held to 5e-5 on these keys.
+  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: lang === 'R' || lang === 'tidy' ? 5e-5 : 1e-5 };
+  if (/^posthoc dunnett .*(critical value|hw|lower|upper)$/.test(key)) {
+    const A = recipe && recipe.several && recipe.several.anova;
+    const scipy = lang === 'py' && A && !A.blocked && recipe.expect['ms within'] > 0;
+    return { rel: scipy ? 2e-3 : 1e-5 };
+  }
+  if (/\bN\b|additional/.test(key)) return { abs: 1 + 1e-9 };
+  if (/rinott/.test(key)) return { rel: 1e-4 };
+  // A Wilcoxon interval under the normal approximation is a root found to 1e-4,
+  // by a different root finder in each language.
+  if (/(wilcoxon|shift|pseudo-median of differences|^rank design \d+).*(lower|upper)/.test(key)) return { rel: 2e-4 };
+  return { rel: 1e-6 };
+}
+
+// The recipe the script being written comes from, for the tolerances of
+// report lines named at run time. analysisScript sets it.
+let current = null;
+
+// The tolerance argument of a report call for `key`: none at the default
+// 1e-6, a relative tolerance otherwise (an absolute one is made relative to
+// the analyzer's value `want`).
+function tolArg(L, key, want) {
+  const t = tolFor(key, L.lang, current);
+  if (t.abs != null) return ', ' + (typeof want === 'number' && Number.isFinite(want) ? t.abs / Math.max(1, Math.abs(want)) : 1e-6);
+  return t.rel === 1e-6 ? '' : ', ' + t.rel;
+}
+
 /**
  * A report call for `name` with expression `expr`, carrying the analyzer's
  * value from the recipe's expect map (under `name` or `name [optional]`); a
@@ -14698,7 +14742,7 @@ export function rep(L, recipe, name, expr) {
   const key = ascii(name);
   const has = k => Object.prototype.hasOwnProperty.call(recipe.expect, k);
   const want = has(key) ? recipe.expect[key] : has(key + ' [optional]') ? recipe.expect[key + ' [optional]'] : undefined;
-  const a = want !== undefined && want !== null ? ', ' + lit(L, want) : '';
+  const a = want !== undefined && want !== null ? ', ' + lit(L, want) + tolArg(L, key, want) : '';
   const call = 'report(' + L.str(key) + ', ' + expr + a + ')';
   return L.lang === 'm' ? call + ';' : call;
 }
@@ -15111,7 +15155,6 @@ function sevBody(r, L) {
   if (r.several.rank) sevRank(r, L, out, need);
   if (r.several.subset) sevSubset(r, L, out, need);
   sevPlan(r, L, out, need);
-  sevFigure(r, L, out);
   return { body: out, need };
 }
 
@@ -15141,7 +15184,7 @@ function pairName(L, prefix, suffix) {
 // A report call for one pair: the name from pairName, the script's value, and
 // the analyzer's value at position pos of `pageVar` (none when pos is).
 function pairRep(L, prefix, suffix, expr, pageVar) {
-  const call = 'report(' + pairName(L, prefix, suffix) + ', ' + expr + ', page_at(' + pageVar + ', pos))';
+  const call = 'report(' + pairName(L, prefix, suffix) + ', ' + expr + ', page_at(' + pageVar + ', pos)' + tolArg(L, prefix + ' 1-2' + (suffix || ''), NaN) + ')';
   return L.lang === 'm' ? call + ';' : call;
 }
 
@@ -15427,7 +15470,7 @@ function sevMeans(r, L, out, need) {
       'after the design\'s number and name from d_tbl. ' + WILCOX_OWN, c));
     out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test)))))');
   } else if (L.tidy) {
-    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl, which the figure draws. ' +
+    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl. ' +
       'It is not a tibble of tidied t.test results: those test each mean against 0, which is not the question here.', c));
     out.push('means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(means_tbl)');
   }
@@ -15435,83 +15478,6 @@ function sevMeans(r, L, out, need) {
     need.push('shapiro');
     out.push(c + 'The checks: the t intervals take each design\'s outcomes as normal (Shapiro-Wilk).');
     for (let i = 0; i < S.k; i++) out.push(shapiroLine(r, L, 'shapiro design ' + (i + 1), GROUP[lang](i)));
-  }
-}
-
-// The figure of the means section: each design's interval as a horizontal
-// segment with its mean (or pseudo-median) as a point, the benchmark as a
-// dashed line, and the designs numbered down the side. An end the procedure
-// leaves unbounded is drawn to the edge of the plot, and one it leaves
-// undetermined is not drawn. The figure prints no report lines.
-function sevFigure(r, L, out) {
-  const S = r.several, lang = L.lang, c = L.comment;
-  const src = S.np ? 'srs' : (lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items');
-  const mid = S.np ? 'estimate' : 'mean';
-  const what = S.np ? 'Pseudo-median' : 'Mean';
-  const xlab = what + ' of ' + ascii(r.groups.response);
-  const title = (S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals';
-  const B = S.bench != null;
-  out.push(L.sect('Figure: each design\'s simultaneous interval'));
-  out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
-  if (!L.tidy) out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
-  if (L.tidy) {
-    if (S.np) {
-      out.push(...commentLines(c, 'The tidied wilcox.test tibble above carries wilcox.test\'s own estimates and intervals, not the ones drawn here, ' +
-        'and so the figure\'s tibble is built from signed_rank\'s.', c));
-      out.push('fig_tbl <- tibble(design = seq_len(k), mid = ' + PLUCK.R(src, mid) + ', lo = ' + PLUCK.R(src, 'lo') + ', hi = ' + PLUCK.R(src, 'hi') + ')');
-    } else out.push('fig_tbl <- means_tbl |> transmute(design = as.integer(design), mid = mean, lo, hi)');
-    // ggplot2 warns of every row it drops for a missing value, and so an
-    // undetermined end is filtered out before the segments are drawn.
-    out.push('fig_all <- c(fig_tbl$lo, fig_tbl$hi, fig_tbl$mid' + (B ? ', benchmark' : '') + ')',
-      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_tbl <- fig_tbl |> mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
-      'p <- ggplot(fig_tbl, aes(y = design)) +',
-      '  geom_segment(aes(x = lo, xend = hi, yend = design), data = filter(fig_tbl, is.finite(lo), is.finite(hi)), linewidth = 1) +',
-      '  geom_point(aes(x = mid), data = filter(fig_tbl, is.finite(mid)), size = 2) +');
-    if (B) out.push('  geom_vline(xintercept = benchmark, linetype = "dashed") +');
-    out.push('  scale_y_reverse(breaks = seq_len(k)) + coord_cartesian(xlim = xr) +',
-      '  labs(x = ' + L.str(xlab) + ', y = "design", title = ' + L.str(title) + ')',
-      'print(p)');
-  } else if (lang === 'R') {
-    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
-      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_lo[is.infinite(fig_lo) & fig_lo < 0] <- xr[1]; fig_hi[is.infinite(fig_hi) & fig_hi > 0] <- xr[2]',
-      'plot(fig_mid, seq_len(k), xlim = xr, ylim = c(k + 0.5, 0.5), yaxt = "n", pch = 19, xlab = ' + L.str(xlab) + ', ylab = "design",',
-      '     main = ' + L.str(title) + ')',
-      'segments(fig_lo, seq_len(k), fig_hi, seq_len(k), lwd = 2)',
-      'axis(2, at = seq_len(k), labels = seq_len(k), las = 1)');
-    if (B) out.push('abline(v = benchmark, lty = 2)');
-  } else if (lang === 'py') {
-    out.push('try:',
-      '    import warnings',
-      '    import matplotlib.pyplot as plt',
-      '    fig_all = np.concatenate([fig_lo, fig_hi, fig_mid' + (B ? ', [benchmark]' : '') + '])',
-      '    fin = fig_all[np.isfinite(fig_all)]; xr = [fin.min(), fin.max()]',
-      '    if xr[0] == xr[1]: xr = [xr[0] - 1, xr[1] + 1]',
-      '    fig_lo = np.where(fig_lo == -np.inf, xr[0], fig_lo); fig_hi = np.where(fig_hi == np.inf, xr[1], fig_hi)',
-      '    ys = np.arange(1, k + 1)',
-      '    fig, ax = plt.subplots(figsize=(7, 1.5 + 0.4 * k))',
-      '    ax.hlines(ys, fig_lo, fig_hi, linewidth=2)',
-      '    ax.plot(fig_mid, ys, "o", color="black")');
-    if (B) out.push('    ax.axvline(benchmark, linestyle="--", color="black")');
-    out.push('    ax.set_ylim(k + 0.5, 0.5); ax.set_yticks(ys)',
-      '    ax.set_xlabel(' + L.str(xlab) + '); ax.set_ylabel("design"); ax.set_title(' + L.str(title) + ')',
-      '    fig.tight_layout()',
-      '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-      '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-      '        plt.show()',
-      'except ImportError:',
-      '    print("matplotlib is not installed; the figure is skipped")');
-  } else {
-    out.push('fig_all = [fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + '];',
-      'xr = [min(fig_all(isfinite(fig_all))), max(fig_all(isfinite(fig_all)))]; if xr(1) == xr(2), xr = xr + [-1, 1]; end',
-      'fig_lo(fig_lo == -Inf) = xr(1); fig_hi(fig_hi == Inf) = xr(2);',
-      'figure; hold on;',
-      "plot([fig_lo; fig_hi], [1:k; 1:k], 'k-', 'LineWidth', 2);",
-      "plot(fig_mid, 1:k, 'ko', 'MarkerFaceColor', 'k');");
-    if (B) out.push("xline(benchmark, '--');");
-    out.push("xlim(xr + [-1, 1] * 0.04 * diff(xr)); ylim([0.5, k + 0.5]); set(gca, 'YDir', 'reverse', 'YTick', 1:k);",
-      'xlabel(' + L.str(xlab) + ", 'Interpreter', 'none'); ylabel('design'); title(" + L.str(title) + ", 'Interpreter', 'none'); hold off;");
   }
 }
 
@@ -15569,6 +15535,16 @@ function sevDiffs(r, L, out, need) {
   }
   const body = [L.assign('cmp', call)];
   keys.forEach(([suffix, k, expr]) => body.push(pairRep(L, P, suffix, expr || f('cmp', k), varOf(suffix))));
+  // The figure of this section draws every comparison, and so each one's interval is collected as it runs.
+  const collect = r.fig && r.fig.section === 'diffs';
+  if (collect) {
+    const mid = f('cmp', S.np ? 'estimate' : S.paired ? 'meanD' : 'diff');
+    if (lang === 'R') body.push('fam_mid <- c(fam_mid, ' + mid + '); fam_lo <- c(fam_lo, cmp$lo); fam_hi <- c(fam_hi, cmp$hi); fam_lab <- c(fam_lab, paste(i, "-", j))');
+    else if (lang === 'py') body.push('fam_mid.append(' + mid + '); fam_lo.append(cmp["lo"]); fam_hi.append(cmp["hi"]); fam_lab.append(f"{i + 1} - {j + 1}")');
+    else body.push('fam_mid(end + 1) = ' + mid + '; fam_lo(end + 1) = cmp.lo; fam_hi(end + 1) = cmp.hi; fam_lab{end + 1} = sprintf(\'%d - %d\', i, j);');
+    out.push(c + 'Each comparison\'s interval is kept for the figure at the end.',
+      lang === 'R' ? 'fam_mid <- fam_lo <- fam_hi <- numeric(0); fam_lab <- character(0)' : lang === 'py' ? 'fam_mid, fam_lo, fam_hi, fam_lab = [], [], [], []' : 'fam_mid = []; fam_lo = []; fam_hi = []; fam_lab = {};');
+  }
   if (shapiro) {
     need.push('shapiro');
     const nm = pairName(L, 'shapiro diff', '');
@@ -15688,17 +15664,18 @@ function recordsBlock(L, r) {
 // `hoist`.
 function loopReport(L, out, { name, count, value, page, pageVar, indent = '', hoist }) {
   const lang = L.lang;
+  const tol = tolArg(L, name.replace('%d', '1'), NaN);
   // The analyzer's values go in `hoist`, outside any block, so that R reads
   // them as short top-level statements (see rChunks).
   hoist.push(L.comment + 'The analyzer\'s values for ' + pageVar + ', printed beside the script\'s.', ...vecAssign(L, pageVar, page));
   if (lang === 'R') {
-    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i])');
+    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i]' + tol + ')');
   } else if (lang === 'py') {
     out.push(indent + 'for i in range(' + count + '):',
-      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None)');
+      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None' + tol + ')');
   } else {
     out.push(indent + 'for i = 1:' + count,
-      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
+      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)' + tol + '); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
       indent + 'end');
   }
 }
@@ -15835,45 +15812,6 @@ function steadyBody(r, L) {
       'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
   }
 
-  // The figure, drawn last so that every report line prints before a figure opens on screen
-  // (Python's plt.show waits until it is closed); it prints no report lines.
-  const ylab = 'Batch mean of ' + ascii(r.records.response);
-  out.push(L.sect('Figure: the batch means'));
-  out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
-  if (L.tidy) {
-    out.push('if (bm$ok) {',
-      '  batch_tbl <- tibble(batch = seq_len(bm$b), mean = bm$means)',
-      '  p <- ggplot(batch_tbl, aes(batch, mean)) + geom_line() + geom_point(size = 2) +',
-      '    geom_hline(yintercept = bm$mean, linetype = "dashed") +',
-      '    labs(x = "batch", y = ' + L.str(ylab) + ', title = "Batch means")',
-      '  print(p)',
-      '}');
-  } else if (lang === 'R') {
-    out.push('if (bm$ok) {',
-      '  plot(seq_len(bm$b), bm$means, type = "b", pch = 19, xlab = "batch", ylab = ' + L.str(ylab) + ', main = "Batch means")',
-      '  abline(h = bm$mean, lty = 2)',
-      '}');
-  } else if (lang === 'py') {
-    out.push('if bm["ok"]:',
-      '    try:',
-      '        import warnings',
-      '        import matplotlib.pyplot as plt',
-      '        fig, ax = plt.subplots(figsize=(7, 3.5))',
-      '        ax.plot(np.arange(1, bm["b"] + 1), bm["means"], "o-", color="black")',
-      '        ax.axhline(bm["mean"], linestyle="--", color="gray")',
-      '        ax.set_xlabel("batch"); ax.set_ylabel(' + L.str(ylab) + '); ax.set_title("Batch means")',
-      '        fig.tight_layout()',
-      '        with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-      '            warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-      '            plt.show()',
-      '    except ImportError:',
-      '        print("matplotlib is not installed; the figure is skipped")');
-  } else {
-    out.push('if bm.ok',
-      "    figure; plot(1:bm.b, bm.means, 'ko-', 'MarkerFaceColor', 'k'); yline(bm.mean, '--');",
-      "    xlabel('batch'); ylabel(" + L.str(ylab) + ", 'Interpreter', 'none'); title('Batch means');",
-      'end');
-  }
   return { body: out, need };
 }
 BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
@@ -16026,56 +15964,6 @@ function exploreBody(r, L, { csv = false } = {}) {
     if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
-  // The figure: no report lines. Its histogram has the page's bins, and its
-  // quantile-quantile plot the page's plotting positions and quartile line.
-  if (X.interval) {
-    const xlab = ascii(r.records.response);
-    out.push(L.sect('Figure: histogram and normal quantile-quantile plot of the outcomes'));
-    out.push(...commentLines(c, 'As the page draws them: the histogram has max(5, ceiling(sqrt(n))) equal-width bins from the smallest outcome to the largest ' +
-      '(one bin of width 1 when the outcomes are all equal), each holding its left edge and the last both edges. ' +
-      'The quantile-quantile plot has each sorted outcome against the normal quantile at its plotting position, (i-a)/(n+1-2a), ' +
-      'with a = 3/8 for n <= 10 and 1/2 otherwise, as R\'s ppoints, and a dashed line through the first and third quartiles, as R\'s qqline.', c));
-    if (L.tidy) {
-      need.push('tidyFigure');
-      out.push('plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ' + L.str(xlab) + ')');
-    } else if (lang === 'R') {
-      out.push('nb <- max(5, ceiling(sqrt(length(x))))',
-        'breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)',
-        'par(mfrow = c(1, 2))',
-        'hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
-        'qqnorm(x, main = "Normal Q-Q plot"); qqline(x, lty = 2)');
-    } else if (lang === 'py') {
-      out.push('try:',
-        '    import warnings',
-        '    import matplotlib.pyplot as plt',
-        '    nb = max(5, int(np.ceil(np.sqrt(len(x)))))',
-        '    edges = np.linspace(x.min(), x.max(), nb + 1) if x.max() > x.min() else x[0] + np.array([-0.5, 0.5])',
-        '    n_x = len(x); off = 3 / 8 if n_x <= 10 else 0.5',
-        '    theo = stats.norm.ppf((np.arange(1, n_x + 1) - off) / (n_x + 1 - 2 * off))',
-        '    q1, q3 = np.quantile(x, [0.25, 0.75]); z1, z3 = stats.norm.ppf([0.25, 0.75])',
-        '    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9, 4))',
-        '    a1.hist(x, bins=edges, color="gray", edgecolor="black"); a1.set_title("Replication outcomes"); a1.set_xlabel(' + L.str(xlab) + ')',
-        '    a2.plot(theo, np.sort(x), "o", color="black")',
-        '    a2.axline((z1, q1), slope=(q3 - q1) / (z3 - z1), linestyle="--", color="gray")',
-        '    a2.set_xlabel("Theoretical quantiles"); a2.set_ylabel("Sample quantiles"); a2.set_title("Normal Q-Q plot")',
-        '    fig.tight_layout()',
-        '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-        '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-        '        plt.show()',
-        'except ImportError:',
-        '    print("matplotlib is not installed; the figure is skipped")');
-    } else {
-      out.push('nb = max(5, ceil(sqrt(numel(x))));',
-        'if max(x) > min(x), edges = linspace(min(x), max(x), nb + 1); else, edges = x(1) + [-0.5, 0.5]; end',
-        'n_x = numel(x); off = 0.5; if n_x <= 10, off = 3 / 8; end',
-        'theo = norminv(((1:n_x) - off) / (n_x + 1 - 2 * off));',
-        'z = norminv([0.25, 0.75]); slope = (d.q3 - d.q1) / (z(2) - z(1));   % the type-7 quartiles from describe above',
-        "figure; subplot(1, 2, 1); histogram(x, edges); title('Replication outcomes'); xlabel(" + L.str(xlab) + ", 'Interpreter', 'none');",
-        "subplot(1, 2, 2); plot(theo, sort(x), 'ko'); hold on;",
-        "plot(theo([1, end]), d.q1 + slope * (theo([1, end]) - z(1)), 'k--'); hold off;",
-        "xlabel('Theoretical quantiles'); ylabel('Sample quantiles'); title('Normal Q-Q plot');");
-    }
-  }
   return { body: out, need };
 }
 BODIES.explore = { R: exploreBody, py: exploreBody, m: exploreBody };
@@ -16086,8 +15974,11 @@ function settingsBlock(recipe, L) {
   for (const note of recipe.settingsNote || []) out.push(...commentLines(L.comment, ascii(note), L.comment));
   out.push(L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level'));
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
+  out.push(L.comment + CHECK_NOTE, L.assign('check_details', L.bool(false)), L.lang === 'm' ? 'report_start(check_details);' : 'report_start(check_details)');
   return out;
 }
+
+const CHECK_NOTE = 'Set check_details to print each result beside the value the page showed.';
 
 // The matched pairs of a paired comparison: the pair labels and the A and B
 // outcomes in step, with what was left out and why.
@@ -16482,6 +16373,35 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
   return out;
 }
 
+// The body with the printed parts of its output marked: a heading printed
+// under every section that reports a result (report_section, which prints
+// nothing when check_details is set), and the one-line summary of the checks
+// (report_summary) after the last of them, before any figure.
+const SECTION_RE = { R: /^## (.*) ----$/, py: /^# ---- (.*) ----$/, m: /^%% (.*)$/ };
+const PRINTS_RE = /\b(report|shapiro_check)\(/;
+function headings(body, L) {
+  const lines = body.join('\n').split('\n');
+  const re = SECTION_RE[L.lang], end = L.lang === 'm' ? ';' : '';
+  const heads = [];
+  lines.forEach((ln, i) => { const m = re.exec(ln); if (m) heads.push([i, m[1]]); });
+  const out = [];
+  let last = -1;
+  heads.forEach(([i, title], h) => {
+    const stop = h + 1 < heads.length ? heads[h + 1][0] : lines.length;
+    if (lines.slice(i + 1, stop).some(x => PRINTS_RE.test(x) && !/^\s*(#|%)/.test(x))) heads[h].push(true);
+  });
+  for (let h = 0; h < heads.length; h++) if (heads[h][2]) last = h;
+  const summaryAt = last >= 0 ? (last + 1 < heads.length ? heads[last + 1][0] : lines.length) : -1;
+  lines.forEach((ln, i) => {
+    if (i === summaryAt) out.push('report_summary()' + end);
+    out.push(ln);
+    const h = heads.find(x => x[0] === i);
+    if (h && h[2]) out.push('report_section(' + L.str(h[1]) + ')' + end);
+  });
+  if (summaryAt === lines.length) out.push('report_summary()' + end);
+  return out;
+}
+
 /**
  * The script of a recipe in one language. With `csv`, the script holds no
  * data: its Data block is the live read block, which reads the data from the
@@ -16499,15 +16419,23 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
   if (!page || !page[L.lang]) throw new RangeError('analysisScript: unknown page ' + recipe.page);
   const snippets = LIB[L.lang];   // both R dialects share LIB.R
+  current = recipe;
   const fromCsv = !!(csv || recipe.csvOnly);
   if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
   const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
-  const helpers = Array.from(new Set(need || [])).map(k => {
+  // The figures the page's view shows, drawn after every result is printed.
+  const figs = figureBlock(recipe, L);
+  const helpers = Array.from(new Set((need || []).concat(figs.need))).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
-  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...body];
+  const figLib = FIG[L.tidy ? 'tidy' : L.lang];
+  for (const k of figs.fig) {
+    if (!figLib[k]) throw new RangeError('analysisScript: no ' + lang + ' figure helper ' + k);
+    helpers.push(figLib[k].trim());
+  }
+  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...headings(body.concat(figs.lines), L)];
   const lines = header(recipe, L, fromCsv, main.join('\n'));
   lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
@@ -17203,6 +17131,3066 @@ export function downloadText(name, text, mime = 'text/csv;charset=utf-8') {
   downloadBlob(name, new Blob([text], { type: mime }));
 }
 </script>
+<script type="text/plain" data-module="js/io/figure_lib_m.js">
+// Literal MATLAB code for the figures the "Regenerate these results in"
+// scripts draw: one local function per kind of figure the Output Analyzer's
+// pages show, plus the helpers they share (common). Core MATLAB graphics only,
+// no toolbox, and nothing newer than R2021a. Each helper takes its required
+// arguments in order and then one optional struct o of options, read with
+// fig_opt, and draws one new figure. Pure text; the script writer chooses
+// which snippets to include, and always includes common with any of them.
+//
+// The snippets are template literals, and so none of them may contain a
+// backtick or a dollar sign followed by a brace. In a MATLAB char vector a
+// single quote is doubled.
+
+export const FIG_M = {};
+
+// ── common ───────────────────────────────────────────────────────────────
+
+FIG_M.common = `
+function c = fig_colors()
+% The figure colors as RGB triples: data points and series (est, #2b6cb0),
+% intervals and means (truth, #1a1a1a), a flagged interval (miss, #c0392b),
+% survivors and highlights (ok, #2e7d32), reference lines and excluded
+% stretches (muted, #9e9e9e), and the cut line and letters (accent, #8c1d40).
+c = struct('est', [43 108 176] / 255, 'truth', [26 26 26] / 255, ...
+           'miss', [192 57 43] / 255, 'ok', [46 125 50] / 255, ...
+           'muted', [158 158 158] / 255, 'accent', [140 29 64] / 255);
+end
+
+function v = fig_opt(o, name, default)
+% The option o.(name), or default when o is missing or empty or lacks it.
+if nargin < 1 || isempty(o) || ~isstruct(o) || ~isfield(o, name) || isempty(o.(name))
+    v = default;
+else
+    v = o.(name);
+end
+end
+
+function fig_size(w, h)
+% Sets the current figure to w by h inches.
+f = gcf;
+f.Units = 'inches';
+f.Position(3:4) = [w, h];
+end
+
+function r = fig_range(v)
+% The smallest and largest finite values of v, widened by 1 on each side
+% when they are equal, and [0, 1] when v holds no finite value.
+v = v(isfinite(v));
+if isempty(v)
+    r = [0, 1];
+    return;
+end
+r = [min(v), max(v)];
+if r(2) - r(1) <= 1e-10 * max([1, abs(r)])   % a range that is only rounding has no width either
+    r = mean(r) + [-1, 1];
+end
+end
+
+function r = fig_pad(r, frac)
+% The range r widened on each side by the fraction frac of its width.
+w = r(2) - r(1);
+r = [r(1) - frac * w, r(2) + frac * w];
+end
+
+function f = fig_flags(v, n)
+% A logical column of n flags from v, all false when v is empty.
+f = false(n, 1);
+if ~isempty(v)
+    v = logical(v(:));
+    f(1:min(n, numel(v))) = v(1:min(n, numel(v)));
+end
+end
+
+function s = fig_text_cell(v, n)
+% Labels as a cell array of char vectors (numbers become text), or the
+% numbers 1 to n when v is empty.
+if isempty(v)
+    v = 1:n;
+end
+if isnumeric(v)
+    v = arrayfun(@(t) num2str(t), v(:)', 'UniformOutput', false);
+end
+s = cellstr(v);
+end
+
+function fig_labels(ttl, xlab, ylab)
+% Writes the title and the axis labels.
+c = fig_colors();
+title(ttl, 'Interpreter', 'none', 'Color', c.truth);
+xlabel(xlab, 'Interpreter', 'none');
+ylabel(ylab, 'Interpreter', 'none');
+end
+
+function fig_empty(ttl)
+% An empty frame with the title and the words "nothing to draw".
+c = fig_colors();
+axis([0, 1, 0, 1]);
+box on;
+set(gca, 'XTick', [], 'YTick', []);
+title(ttl, 'Interpreter', 'none', 'Color', c.truth);
+text(0.5, 0.5, 'nothing to draw', 'HorizontalAlignment', 'center', ...
+     'Color', c.muted, 'Interpreter', 'none');
+end
+
+function fig_band(x0, x1, color)
+% A light shaded band from x0 to x1 over the full height of the axes.
+yl = ylim;
+patch([x0, x1, x1, x0], [yl(1), yl(1), yl(2), yl(2)], color, ...
+      'FaceAlpha', 0.15, 'EdgeColor', 'none');
+end
+
+function h = fig_vline(x, color, style, width)
+% A vertical line at x over the full height of the axes.
+yl = ylim;
+h = plot([x, x], yl, 'Color', color, 'LineStyle', style, 'LineWidth', width);
+end
+
+function h = fig_hline(y, color, style, width)
+% A horizontal line at y over the full width of the axes.
+xl = xlim;
+h = plot(xl, [y, y], 'Color', color, 'LineStyle', style, 'LineWidth', width);
+end
+
+function [px, py] = fig_segments(x0, y0, x1, y1)
+% Many line segments joined into one line broken by NaN, for a single plot call.
+n = numel(x0);
+px = [x0(:)'; x1(:)'; NaN(1, n)];
+py = [y0(:)'; y1(:)'; NaN(1, n)];
+px = px(:);
+py = py(:);
+end
+
+function h = fig_steps(x, y, color, style, width)
+% A step function holding each y until the next x.
+[sx, sy] = stairs(x(:), y(:));
+h = plot(sx, sy, 'Color', color, 'LineStyle', style, 'LineWidth', width);
+end
+`;
+
+// ── strips ───────────────────────────────────────────────────────────────
+
+FIG_M.strips = `
+function fig_strips(values, labels, xlab, ttl, o)
+% Rows of dots, one row per vector in the cell array values, each with its
+% interval from o.lo to o.hi (center o.mid) drawn under the dots, a dashed
+% reference line at o.ref, and a solid line at the mean of all the values
+% when o.mean_line is true.
+if nargin < 5, o = struct(); end
+if ~iscell(values), values = {values}; end
+c = fig_colors();
+nr = numel(values);
+labels = fig_text_cell(labels, nr);
+mid = fig_opt(o, 'mid', []);
+lo = fig_opt(o, 'lo', []);
+hi = fig_opt(o, 'hi', []);
+ref = fig_opt(o, 'ref', NaN);
+mean_line = fig_opt(o, 'mean_line', false);
+figure;
+fig_size(6.5, 1.2 + 0.8 * nr);
+all_values = [];
+for i = 1:nr
+    v = values{i}(:);
+    all_values = [all_values; v(isfinite(v))]; %#ok<AGROW>
+end
+if isempty(all_values)
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim(fig_pad(fig_range([all_values; mid(:); lo(:); hi(:); ref]), 0.05));
+ylim([0.4, nr + 0.6]);
+set(gca, 'YDir', 'reverse', 'YTick', 1:nr, 'YTickLabel', labels, ...
+         'TickLabelInterpreter', 'none');
+if isfinite(ref)
+    fig_vline(ref, c.muted, '--', 1.2);
+end
+for i = 1:nr
+    v = values{i}(:);
+    v = v(isfinite(v));
+    % Spread the dots up and down a little in a fixed pattern (the
+    % golden-ratio sequence), so that equal values do not hide each other.
+    k = (1:numel(v))';
+    y = i - 0.12 + 0.3 * (mod(k * 0.618034, 1) - 0.5);
+    scatter(v, y, 30, c.est, 'filled', 'MarkerFaceAlpha', 0.6);
+    % The row's interval sits just below its dots.
+    if numel(lo) >= i && numel(hi) >= i && isfinite(lo(i)) && isfinite(hi(i))
+        yi = i + 0.28;
+        plot([lo(i), hi(i)], [yi, yi], 'Color', c.truth, 'LineWidth', 2);
+        plot([lo(i), lo(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
+        plot([hi(i), hi(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
+        if numel(mid) >= i && isfinite(mid(i))
+            plot(mid(i), yi, 'o', 'Color', c.truth, 'MarkerFaceColor', c.truth, ...
+                 'MarkerSize', 6);
+        end
+    end
+end
+if mean_line
+    m = mean(all_values);
+    fig_vline(m, c.truth, '-', 1.5);
+    text(m, 0.4, ' mean', 'Color', c.truth, 'VerticalAlignment', 'top', ...
+         'Interpreter', 'none');
+end
+fig_labels(ttl, xlab, '');
+hold off;
+end
+`;
+
+// ── intervals ────────────────────────────────────────────────────────────
+
+FIG_M.intervals = `
+function fig_intervals(mid, lo, hi, labels, xlab, ttl, o)
+% A forest plot: one interval per row from lo to hi with a dot at mid, row 1
+% at the top. Options: ref (a dashed reference line), flagged, muted, and ok
+% (logical per row), right (a cell array of texts printed right of the
+% intervals), and brackets (an n-by-2 matrix of rows joined by a bracket).
+if nargin < 7, o = struct(); end
+c = fig_colors();
+mid = mid(:);
+lo = lo(:);
+hi = hi(:);
+n = numel(mid);
+labels = fig_text_cell(labels, n);
+ref = fig_opt(o, 'ref', NaN);
+flagged = fig_flags(fig_opt(o, 'flagged', []), n);
+muted = fig_flags(fig_opt(o, 'muted', []), n);
+ok = fig_flags(fig_opt(o, 'ok', []), n);
+right = fig_opt(o, 'right', {});
+if ~iscell(right), right = cellstr(right); end
+brackets = fig_opt(o, 'brackets', zeros(0, 2));
+figure;
+fig_size(6.5, max(1.8, 1.0 + 0.35 * n));
+if n == 0
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xr = fig_pad(fig_range([mid; lo; hi; ref]), 0.05);
+ylim([0.5, n + 0.5]);
+set(gca, 'YDir', 'reverse', 'YTick', 1:n, 'YTickLabel', labels, ...
+         'TickLabelInterpreter', 'none');
+fig_labels(ttl, xlab, '');
+
+% Give each bracket the leftmost column where it overlaps no bracket already
+% placed there, taking the shorter spans first.
+nb = size(brackets, 1);
+column = zeros(nb, 1);
+[~, order] = sort(abs(brackets(:, 2) - brackets(:, 1)));
+for k = order(:)'
+    a = min(brackets(k, :));
+    b = max(brackets(k, :));
+    j = 1;
+    while true
+        clash = false;
+        for m = find(column == j)'
+            if a <= max(brackets(m, :)) && min(brackets(m, :)) <= b
+                clash = true;
+            end
+        end
+        if ~clash, break; end
+        j = j + 1;
+    end
+    column(k) = j;
+end
+ncol = max([0; column]);
+
+% Widen the axes to the right so the texts and the brackets fit: estimate
+% the text width from its length in characters, and give each bracket
+% column 12 points.
+has_right = any(~cellfun(@isempty, right));
+ax = gca;
+ax.Units = 'points';
+width_pt = ax.Position(3);
+ax.Units = 'normalized';
+text_frac = 0;
+if has_right
+    nchar = max(cellfun(@numel, right));
+    text_frac = max(0.12, (nchar * 0.55 * ax.FontSize + 8) / width_pt);
+end
+col_frac = 12 / width_pt;
+span = (xr(2) - xr(1)) / (1 - text_frac - ncol * col_frac);
+xlim(xr);
+ticks = get(gca, 'XTick');
+xlim([xr(1), xr(1) + span]);
+set(gca, 'XTick', ticks);   % no tick labels under the texts and brackets
+
+if isfinite(ref)
+    fig_vline(ref, c.muted, '--', 1.2);
+end
+for i = 1:n
+    % Precedence: muted, then flagged, then ok, then the default.
+    color = c.truth;
+    style = '-';
+    face = c.truth;
+    if ok(i), color = c.ok; face = c.ok; end
+    if flagged(i), color = c.miss; style = '--'; face = 'w'; end
+    if muted(i), color = c.muted; style = '--'; face = 'w'; end
+    a = lo(i);
+    b = hi(i);
+    if ~isnan(a) && ~isnan(b)
+        % An infinite end runs to the edge of the data area, with no tick.
+        plot([max(a, xr(1)), min(b, xr(2))], [i, i], 'Color', color, ...
+             'LineStyle', style, 'LineWidth', 2);
+        if isfinite(a)
+            plot([a, a], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+        end
+        if isfinite(b)
+            plot([b, b], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+        end
+    end
+    if isfinite(mid(i))
+        plot(mid(i), i, 'o', 'Color', color, 'MarkerFaceColor', face, ...
+             'MarkerSize', 6, 'LineWidth', 1.5);
+    end
+    if numel(right) >= i && ~isempty(right{i})
+        tc = c.accent;
+        if ok(i), tc = c.ok; end
+        if muted(i), tc = c.muted; end
+        text(xr(2) + 4 / width_pt * span, i, right{i}, 'Color', tc, ...
+             'FontWeight', 'bold', 'Interpreter', 'none');
+    end
+end
+% Each bracket: a vertical line from row i to row j with short ticks
+% pointing left at both ends.
+for k = 1:nb
+    x = xr(2) + (text_frac + (column(k) - 0.4) * col_frac) * span;
+    tick = 4 / width_pt * span;
+    a = min(brackets(k, :));
+    b = max(brackets(k, :));
+    plot([x - tick, x, x, x - tick], [a, a, b, b], 'Color', c.truth, 'LineWidth', 0.75);
+end
+hold off;
+end
+`;
+
+// ── pairsByRep ───────────────────────────────────────────────────────────
+
+FIG_M.pairsByRep = `
+function fig_pairs_by_rep(a, b, ids, o)
+% Matched pairs side by side, one column per replication: design A as a
+% filled dot, design B as a hollow dot, joined by a dashed line.
+% Options: xlab and title.
+if nargin < 4, o = struct(); end
+c = fig_colors();
+a = a(:);
+b = b(:);
+n = numel(a);
+ids = fig_text_cell(ids, n);
+ttl = fig_opt(o, 'title', 'Pairs by replication');
+figure;
+fig_size(6.5, 3.5);
+if n == 0
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+x = (1:n)';
+xlim([0.5, n + 0.5]);
+ylim(fig_pad(fig_range([a; b]), 0.08));
+[px, py] = fig_segments(x, a, x, b);
+plot(px, py, 'Color', c.muted, 'LineStyle', '--');
+ha = plot(x, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
+hb = plot(x, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
+          'LineWidth', 1.2);
+% Label at most about 20 columns.
+every = ceil(n / 20);
+shown = 1:every:n;
+set(gca, 'XTick', shown, 'XTickLabel', ids(shown), 'TickLabelInterpreter', 'none');
+legend([ha, hb], {'A', 'B'}, 'Location', 'best', 'Interpreter', 'none');
+fig_labels(ttl, fig_opt(o, 'xlab', 'Replication id'), 'Replication outcome');
+hold off;
+end
+`;
+
+// ── pairsSlopes ──────────────────────────────────────────────────────────
+
+FIG_M.pairsSlopes = `
+function fig_pairs_slopes(a, b, o)
+% Matched pairs as slopes from design A (left) to design B (right): solid
+% when a pair differs in the same direction as the mean difference, dashed
+% gray otherwise, with each design's mean as a short thick bar.
+% Options: label_a, label_b, and title.
+if nargin < 3, o = struct(); end
+c = fig_colors();
+a = a(:);
+b = b(:);
+ttl = fig_opt(o, 'title', 'Pairs as slopes');
+figure;
+fig_size(5, 4.5);
+both = isfinite(a) & isfinite(b);
+if ~any(both)
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim([0.6, 2.4]);
+ylim(fig_pad(fig_range([a; b]), 0.08));
+d = a(both) - b(both);
+same = sign(d) == sign(mean(d));
+a_pair = a(both);
+b_pair = b(both);
+[px, py] = fig_segments(ones(sum(~same), 1), a_pair(~same), ...
+                        2 * ones(sum(~same), 1), b_pair(~same));
+plot(px, py, 'Color', c.muted, 'LineStyle', '--');
+[px, py] = fig_segments(ones(sum(same), 1), a_pair(same), ...
+                        2 * ones(sum(same), 1), b_pair(same));
+plot(px, py, 'Color', c.est, 'LineWidth', 1);
+ma = mean(a(isfinite(a)));
+mb = mean(b(isfinite(b)));
+plot([0.9, 1.1], [ma, ma], 'Color', c.truth, 'LineWidth', 4);
+plot([1.9, 2.1], [mb, mb], 'Color', c.truth, 'LineWidth', 4);
+set(gca, 'XTick', [1, 2], 'TickLabelInterpreter', 'none', 'XTickLabel', ...
+    {fig_opt(o, 'label_a', 'A'), fig_opt(o, 'label_b', 'B')});
+fig_labels(ttl, 'Design', 'Replication outcome');
+hold off;
+end
+`;
+
+// ── hist ─────────────────────────────────────────────────────────────────
+
+FIG_M.hist = `
+function fig_hist(x, edges, xlab, ttl)
+% A histogram of x over the bin edges (counts), each bin [e(k), e(k+1))
+% except the last, which also holds its right edge.
+c = fig_colors();
+x = x(isfinite(x));
+figure;
+fig_size(6.5, 4);
+if isempty(x)
+    fig_empty(ttl);
+    return;
+end
+if numel(edges) < 2
+    r = fig_range(x);
+    edges = linspace(r(1), r(2), 11);
+end
+h = histogram(x, edges, 'FaceColor', c.est, 'EdgeColor', 'w', 'FaceAlpha', 1);
+box on;
+% Leave a little room above the tallest bar, and label whole counts only.
+ylim([0, 1.05 * max(1, max(h.Values))]);
+ticks = get(gca, 'YTick');
+set(gca, 'YTick', ticks(ticks == round(ticks)));
+fig_labels(ttl, xlab, 'Frequency');
+end
+`;
+
+// ── ecdf ─────────────────────────────────────────────────────────────────
+
+FIG_M.ecdf = `
+function fig_ecdf(x, xlab, ttl)
+% The empirical cumulative distribution function of x as a step function.
+c = fig_colors();
+s = sort(x(isfinite(x)));
+s = s(:);
+n = numel(s);
+figure;
+fig_size(6.5, 4);
+if n == 0
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+r = fig_range(s);
+pad = 0.05 * (r(2) - r(1));
+xlim([r(1) - 2 * pad, r(2) + 2 * pad]);
+ylim([-0.02, 1.02]);
+% The steps start a little left of the smallest value at 0 and end a little
+% right of the largest at 1.
+fig_steps([s(1) - pad; s; s(n) + pad], [0; (1:n)' / n; 1], c.est, '-', 1.5);
+set(gca, 'YTick', 0:0.25:1);
+fig_labels(ttl, xlab, 'Cumulative fraction');
+hold off;
+end
+`;
+
+// ── box ──────────────────────────────────────────────────────────────────
+
+FIG_M.box = `
+function fig_box(x, xlab, ttl)
+% One horizontal box plot of x: the box spans Tukey's hinges (as R's
+% fivenum), a thick line marks the median, the whiskers reach the most
+% extreme values within 1.5 hinge spreads, outliers are hollow circles, and
+% the mean is a hollow diamond.
+c = fig_colors();
+s = sort(x(isfinite(x)));
+s = s(:);
+n = numel(s);
+figure;
+fig_size(6.5, 2.6);
+if n == 0
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+% Tukey's hinges: the medians of the lower and upper halves, each half
+% holding the median when n is odd.
+depth = [1, floor((n + 3) / 2) / 2, (n + 1) / 2, n + 1 - floor((n + 3) / 2) / 2, n];
+five = 0.5 * (s(floor(depth)) + s(ceil(depth)));
+q1 = five(2);
+med = five(3);
+q3 = five(4);
+reach = 1.5 * (q3 - q1);
+inside = s(s >= q1 - reach & s <= q3 + reach);
+w_lo = min(inside);
+w_hi = max(inside);
+outside = s(s < q1 - reach | s > q3 + reach);
+xlim(fig_pad(fig_range(s), 0.05));
+ylim([0.4, 1.6]);
+plot([w_lo, q1], [1, 1], 'Color', c.est, 'LineWidth', 1.5);
+plot([q3, w_hi], [1, 1], 'Color', c.est, 'LineWidth', 1.5);
+plot([w_lo, w_lo], [0.88, 1.12], 'Color', c.est, 'LineWidth', 1.5);
+plot([w_hi, w_hi], [0.88, 1.12], 'Color', c.est, 'LineWidth', 1.5);
+patch([q1, q3, q3, q1], [0.75, 0.75, 1.25, 1.25], c.est, 'FaceAlpha', 0.15, ...
+      'EdgeColor', c.est, 'LineWidth', 1.5);
+plot([med, med], [0.75, 1.25], 'Color', c.est, 'LineWidth', 3);
+plot(outside, ones(size(outside)), 'o', 'Color', c.est, 'MarkerFaceColor', 'w');
+plot(mean(s), 1, 'd', 'Color', c.truth, 'MarkerFaceColor', 'w', 'MarkerSize', 9, ...
+     'LineWidth', 1.5);
+set(gca, 'YTick', []);
+fig_labels(ttl, xlab, '');
+hold off;
+end
+`;
+
+// ── qq ───────────────────────────────────────────────────────────────────
+
+FIG_M.qq = `
+function fig_qq(x, ylab, ttl, o)
+% A normal quantile-quantile plot of x: the sorted values against standard
+% normal quantiles at R's plotting positions (ppoints), and a dashed line
+% through the first and third quartiles (as R's qqline). Option: xlab.
+if nargin < 4, o = struct(); end
+c = fig_colors();
+s = sort(x(isfinite(x)));
+s = s(:);
+n = numel(s);
+figure;
+fig_size(5.5, 4.5);
+if n == 0
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+if n <= 10, a = 3 / 8; else, a = 1 / 2; end
+p = ((1:n)' - a) / (n + 1 - 2 * a);
+z = -sqrt(2) * erfcinv(2 * p);   % the standard normal quantile, without a toolbox
+xlim(fig_pad(fig_range(z), 0.06));
+ylim(fig_pad(fig_range(s), 0.06));
+% The sample quartiles by linear interpolation (R's type 7).
+if n > 1
+    q = interp1(0:n - 1, s, (n - 1) * [0.25, 0.75]);
+else
+    q = [s(1), s(1)];
+end
+zq = -sqrt(2) * erfcinv(2 * [0.25, 0.75]);
+slope = (q(2) - q(1)) / (zq(2) - zq(1));
+xl = xlim;
+plot(xl, q(1) + slope * (xl - zq(1)), 'Color', c.truth, 'LineStyle', '--', 'LineWidth', 1.2);
+plot(z, s, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 5);
+fig_labels(ttl, fig_opt(o, 'xlab', 'Standard normal quantile'), ylab);
+hold off;
+end
+`;
+
+// ── series ───────────────────────────────────────────────────────────────
+
+FIG_M.series = `
+function fig_series(x, y, xlab, ylab, ttl, o)
+% y against x as dots (o.type = 'points', the default), a line ('line'), or
+% a step function holding each y until the next x ('step'). When o.fence is
+% finite, everything left of it is gray over a shaded band, and a dashed line
+% marks the fence.
+if nargin < 6, o = struct(); end
+c = fig_colors();
+x = x(:);
+y = y(:);
+n = numel(x);
+type = fig_opt(o, 'type', 'points');
+fence = fig_opt(o, 'fence', NaN);
+figure;
+fig_size(6.5, 4);
+if ~any(isfinite(x) & isfinite(y))
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim(fig_pad(fig_range([x; fence]), 0.02));
+ylim(fig_pad(fig_range(y), 0.05));
+before = false(n, 1);
+if isfinite(fence)
+    fig_band(min(xlim), fence, c.muted);
+    before = x < fence;
+end
+if strcmp(type, 'points')
+    if n > 2000, ms = 5; elseif n > 200, ms = 8; else, ms = 12; end
+    plot(x(before), y(before), '.', 'Color', c.muted, 'MarkerSize', ms);
+    plot(x(~before), y(~before), '.', 'Color', c.est, 'MarkerSize', ms);
+else
+    % The gray part runs on to the first point at the fence, so the two
+    % parts meet.
+    k = find(before, 1, 'last');
+    if isempty(k), k = 0; end
+    gray = 1:min(k + 1, n);
+    blue = min(k + 1, n):n;
+    if k == 0, gray = []; blue = 1:n; end
+    if strcmp(type, 'step')
+        if ~isempty(gray), fig_steps(x(gray), y(gray), c.muted, '-', 1); end
+        fig_steps(x(blue), y(blue), c.est, '-', 1);
+    else
+        plot(x(gray), y(gray), 'Color', c.muted, 'LineWidth', 1);
+        plot(x(blue), y(blue), 'Color', c.est, 'LineWidth', 1);
+    end
+end
+if isfinite(fence)
+    fig_vline(fence, c.accent, '--', 1.5);
+end
+fig_labels(ttl, xlab, ylab);
+hold off;
+end
+`;
+
+// ── running ──────────────────────────────────────────────────────────────
+
+FIG_M.running = `
+function fig_running(x, y, xlab, ylab, ttl)
+% A line of y against x, with a dashed line at the last finite value.
+c = fig_colors();
+x = x(:);
+y = y(:);
+figure;
+fig_size(6.5, 4);
+last = find(isfinite(y), 1, 'last');
+if isempty(last)
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim(fig_pad(fig_range(x), 0.02));
+ylim(fig_pad(fig_range(y), 0.05));
+plot(x, y, 'Color', c.est, 'LineWidth', 1.5);
+h = fig_hline(y(last), c.truth, '--', 1.2);
+legend(h, {'final value'}, 'Location', 'best', 'Interpreter', 'none');
+fig_labels(ttl, xlab, ylab);
+hold off;
+end
+`;
+
+// ── lag ──────────────────────────────────────────────────────────────────
+
+FIG_M.lag = `
+function fig_lag(x, k, xlab, ylab, ttl)
+% A lag plot: each value x(i) against the value k steps later, x(i + k), on
+% equal axes spanning the whole series, with a dashed identity line.
+c = fig_colors();
+x = x(:);
+n = numel(x);
+figure;
+fig_size(5, 5);
+if n <= k
+    fig_empty(ttl);
+    return;
+end
+now_v = x(1:n - k);
+later = x(1 + k:n);
+keep = isfinite(now_v) & isfinite(later);
+if ~any(keep)
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+r = fig_pad(fig_range(x), 0.05);
+xlim(r);
+ylim(r);
+axis square;
+plot(r, r, 'Color', c.muted, 'LineStyle', '--');
+plot(now_v(keep), later(keep), 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 4);
+fig_labels(ttl, xlab, ylab);
+hold off;
+end
+`;
+
+// ── acf ──────────────────────────────────────────────────────────────────
+
+FIG_M.acf = `
+function fig_acf(r, o)
+% A correlogram: the autocorrelation r(k) at lag k as a stem at k * o.step,
+% with dashed lines at plus and minus o.band and, when o.mark is finite, a
+% dashed green line at o.mark labeled o.mark_label. Options: step, band,
+% xlab, title, mark, and mark_label.
+if nargin < 2, o = struct(); end
+c = fig_colors();
+r = r(:);
+n = numel(r);
+step = fig_opt(o, 'step', 1);
+band = fig_opt(o, 'band', NaN);
+ttl = fig_opt(o, 'title', 'Autocorrelation');
+mark = fig_opt(o, 'mark', NaN);
+mark_label = fig_opt(o, 'mark_label', '');
+figure;
+fig_size(6.5, 4);
+if ~any(isfinite(r))
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+lags = (1:n)' * step;
+xlim([0, (n + 1) * step]);
+yr = fig_pad(fig_range([r; 0; band; -band]), 0.08);
+ylim(yr);
+fig_hline(0, c.muted, '-', 1);
+if isfinite(band)
+    fig_hline(band, c.muted, '--', 1);
+    fig_hline(-band, c.muted, '--', 1);
+end
+[px, py] = fig_segments(lags, zeros(n, 1), lags, r);
+plot(px, py, 'Color', c.est, 'LineWidth', 1.2);
+if n <= 120
+    plot(lags, r, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 4);
+end
+if isfinite(mark)
+    xl = xlim;
+    label = [' ', mark_label, ' '];
+    if mark > xl(2)
+        % A mark beyond the last lag goes at the right edge, and says so.
+        mark = xl(2) - 0.006 * (xl(2) - xl(1));
+        label = [' ', mark_label, ' (past the axis) '];
+    end
+    fig_vline(mark, c.ok, '--', 1.5);
+    side = 'left';
+    if mark > mean(xl), side = 'right'; end
+    text(mark, yr(2) - 0.02 * (yr(2) - yr(1)), label, 'Color', c.ok, ...
+         'HorizontalAlignment', side, ...
+         'VerticalAlignment', 'top', 'Interpreter', 'none');
+end
+fig_labels(ttl, fig_opt(o, 'xlab', 'Lag'), 'Autocorrelation');
+hold off;
+end
+`;
+
+// ── warmup ───────────────────────────────────────────────────────────────
+
+FIG_M.warmup = `
+function fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, ttl, o)
+% Welch's warm-up plot: the average across replications (thin gray), its
+% moving average (blue), and the cumulative average (dashed), with the
+% warm-up period up to cut shaded and the cut marked. When o.end_lo is
+% finite, a dotted line marks where the shortest run ends.
+if nargin < 9, o = struct(); end
+c = fig_colors();
+x = x(:);
+end_lo = fig_opt(o, 'end_lo', NaN);
+figure;
+fig_size(6.5, 4.8);
+if ~any(isfinite(x) & isfinite(ybar(:)))
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim(fig_pad(fig_range([x; cut; end_lo]), 0.02));
+ylim(fig_pad(fig_range([ybar(:); smooth(:); cumavg(:)]), 0.05));
+handles = gobjects(0);
+names = {};
+if cut > min(x)
+    fig_band(min(xlim), cut, c.muted);
+end
+% NaN entries leave gaps in the lines rather than being joined across.
+handles(end + 1) = plot(x, ybar(:), 'Color', c.muted, 'LineWidth', 0.75);
+names{end + 1} = 'average across replications';
+handles(end + 1) = plot(x, smooth(:), 'Color', c.est, 'LineWidth', 2);
+names{end + 1} = 'moving average';
+handles(end + 1) = plot(x, cumavg(:), 'Color', c.truth, 'LineStyle', '--', 'LineWidth', 1.2);
+names{end + 1} = 'cumulative average';
+if cut > min(x)
+    handles(end + 1) = fig_vline(cut, c.accent, '--', 1.5);
+    names{end + 1} = 'cut';
+end
+if isfinite(end_lo)
+    fig_vline(end_lo, c.muted, ':', 1.5);
+    yl = ylim;
+    text(end_lo, yl(1) + 0.02 * (yl(2) - yl(1)), 'shortest run ends ', ...
+         'Color', c.muted, 'Rotation', 90, ...
+         'HorizontalAlignment', 'left', 'VerticalAlignment', 'bottom', 'Interpreter', 'none');
+end
+% The legend goes below the axes, where it covers none of the lines.
+legend(handles, names, 'Location', 'southoutside', 'NumColumns', 2, ...
+       'Interpreter', 'none');
+fig_labels(ttl, xlab, ylab);
+hold off;
+end
+`;
+
+// ── batches ──────────────────────────────────────────────────────────────
+
+FIG_M.batches = `
+function fig_batches(x, y, starts, ends, means, xlab, ylab, ttl, o)
+% Batch means: the series y against x (dots, or a step function when o.step
+% is true), a dotted line at each batch boundary, and a thick green segment
+% at each batch's mean. When o.exclude_to is finite, the series left of it is
+% gray over a shaded band; o.joins marks where concatenated replications meet.
+if nargin < 9, o = struct(); end
+c = fig_colors();
+x = x(:);
+y = y(:);
+starts = starts(:);
+ends = ends(:);
+means = means(:);
+as_step = fig_opt(o, 'step', false);
+exclude_to = fig_opt(o, 'exclude_to', NaN);
+joins = fig_opt(o, 'joins', []);
+figure;
+fig_size(6.5, 4);
+if ~any(isfinite(x) & isfinite(y))
+    fig_empty(ttl);
+    return;
+end
+hold on;
+box on;
+xlim(fig_pad(fig_range([x; starts; ends; exclude_to]), 0.02));
+ylim(fig_pad(fig_range([y; means]), 0.05));
+before = false(size(x));
+if isfinite(exclude_to)
+    fig_band(min(xlim), exclude_to, c.muted);
+    before = x < exclude_to;
+end
+if as_step
+    % The gray part runs on to the first point past the cut, so the parts meet.
+    k = find(before, 1, 'last');
+    if isempty(k)
+        fig_steps(x, y, c.est, '-', 1);
+    else
+        fig_steps(x(1:min(k + 1, end)), y(1:min(k + 1, end)), c.muted, '-', 1);
+        if k < numel(x)
+            fig_steps(x(k + 1:end), y(k + 1:end), c.est, '-', 1);
+        end
+    end
+else
+    if numel(x) > 2000, ms = 5; elseif numel(x) > 200, ms = 8; else, ms = 12; end
+    plot(x(before), y(before), '.', 'Color', c.muted, 'MarkerSize', ms);
+    plot(x(~before), y(~before), '.', 'Color', c.est, 'MarkerSize', ms);
+end
+for b = [starts; ends(end:end)]'
+    fig_vline(b, c.muted, ':', 1);
+end
+for j = joins(:)'
+    fig_vline(j, c.accent, ':', 1.5);
+end
+[px, py] = fig_segments(starts, means, ends, means);
+plot(px, py, 'Color', c.ok, 'LineWidth', 3);
+fig_labels(ttl, xlab, ylab);
+hold off;
+end
+`;
+</script>
+<script type="text/plain" data-module="js/io/figure_lib_py.js">
+// Python (numpy and matplotlib) figure helpers for the regenerate scripts. Each value is the
+// text of one function (or, for `common`, the shared constants and small helpers) that a
+// script carries so that a figure is one readable call. Every helper imports matplotlib inside
+// itself, makes its own figure, and returns it; none calls plt.show(). The script calls
+// show_figures() once at the end. This file is pure text: no snippet holds a backtick or a
+// dollar-brace, and none touches the DOM.
+export const FIG_PY = {};
+
+FIG_PY.common = `
+# Colors used by every figure.
+FIG_EST = "#2b6cb0"      # data points and series
+FIG_TRUTH = "#1a1a1a"    # intervals, means, estimates
+FIG_MISS = "#c0392b"     # a flagged interval
+FIG_OK = "#2e7d32"       # survivors, batch means, highlights
+FIG_MUTED = "#9e9e9e"    # reference lines, eliminated rows, excluded stretches
+FIG_ACCENT = "#8c1d40"   # the cut or fence, letters
+
+
+def show_figures():
+    import warnings
+    import matplotlib.pyplot as plt
+    with warnings.catch_warnings():   # a backend that only writes files cannot show figures
+        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)
+        plt.show()
+
+
+def fig_vec(x):
+    """x as a flat float array with the NaN entries removed."""
+    x = np.asarray(x, dtype=float).ravel()
+    return x[~np.isnan(x)]
+
+
+def fig_flags(f, n):
+    """A list of n booleans from f, which may be None or shorter than n."""
+    out = [False] * n
+    if f is not None:
+        for i, v in enumerate(list(f)[:n]):
+            out[i] = bool(v)
+    return out
+
+
+def fig_span(lo, hi, pad=0.0):
+    """(lo, hi) widened by 1 on each side when they coincide (or differ only by rounding), then
+    padded by a fraction."""
+    if not (np.isfinite(lo) and np.isfinite(hi)):
+        lo, hi = 0.0, 1.0
+    if hi - lo <= 1e-10 * max(1.0, abs(lo), abs(hi)):
+        mid = (lo + hi) / 2
+        lo, hi = mid - 1.0, mid + 1.0
+    d = (hi - lo) * pad
+    return lo - d, hi + d
+
+
+def fig_range(arrays, pad=0.05):
+    """The padded range of every finite number in the given arrays (None entries are skipped)."""
+    keep = []
+    for a in arrays:
+        if a is not None:
+            a = np.asarray(a, dtype=float).ravel()
+            keep.append(a[np.isfinite(a)])
+    allv = np.concatenate(keep) if keep else np.array([])
+    if allv.size == 0:
+        return fig_span(np.nan, np.nan, pad)
+    return fig_span(allv.min(), allv.max(), pad)
+
+
+def fig_labels(labels, n):
+    """n row labels: the given ones, with the row number where one is missing."""
+    labels = [] if labels is None else list(labels)
+    return [str(labels[i]) if i < len(labels) else str(i + 1) for i in range(n)]
+
+
+def fig_empty(ax, title, xlab="", ylab=""):
+    """An empty frame that says there is nothing to draw."""
+    ax.text(0.5, 0.5, "nothing to draw", ha="center", va="center",
+            transform=ax.transAxes, color=FIG_MUTED)
+    ax.set_title(title)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
+def fig_stack(v):
+    """Small vertical offsets so that values that nearly tie do not hide each other."""
+    v = np.asarray(v, dtype=float)
+    if v.size == 0:
+        return v
+    width = (v.max() - v.min()) / 60.0
+    if width <= 0:
+        width = 1.0
+    cell = np.floor((v - v.min()) / width).astype(int)
+    pattern = [0.0, 1.0, -1.0, 2.0, -2.0]
+    seen = {}
+    out = np.zeros(v.size)
+    for k in np.argsort(v, kind="stable"):
+        c = seen.get(cell[k], 0)
+        seen[cell[k]] = c + 1
+        out[k] = 0.09 * pattern[c % 5]
+    return out
+`;
+
+FIG_PY.strips = `
+def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.nan,
+               mean_line=False):
+    """Rows of dots, one row per vector, each with its own interval under the dots."""
+    import matplotlib.pyplot as plt
+    rows = [fig_vec(v) for v in values]
+    n = len(rows)
+    fig, ax = plt.subplots(figsize=(7.0, 1.2 + 0.8 * max(n, 1)))
+    mid, lo, hi = [None if a is None else np.asarray(a, dtype=float).ravel()
+                   for a in (mid, lo, hi)]
+    if n == 0 or (sum(r.size for r in rows) == 0 and lo is None and hi is None):
+        fig_empty(ax, title, xlab)
+        fig.tight_layout()
+        return fig
+    xlo, xhi = fig_range(rows + [mid, lo, hi, np.array([ref])], 0.05)
+    for i, r in enumerate(rows):
+        ax.scatter(r, i - 0.1 + fig_stack(r), s=22, color=FIG_EST, alpha=0.6, linewidths=0)
+        if lo is not None and hi is not None and i < lo.size and i < hi.size:
+            if np.isfinite(lo[i]) and np.isfinite(hi[i]):
+                a, b = lo[i], hi[i]
+                y = i + 0.3
+                ax.plot([a, b], [y, y], color=FIG_TRUTH, linewidth=1.5)
+                for e in (a, b):
+                    ax.plot([e, e], [y - 0.09, y + 0.09], color=FIG_TRUTH, linewidth=1.5)
+                if mid is not None and i < mid.size and np.isfinite(mid[i]):
+                    ax.plot([mid[i]], [y], "o", color=FIG_TRUTH, markersize=5)
+    if np.isfinite(ref):
+        ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
+    if mean_line:
+        allv = np.concatenate(rows)
+        if allv.size > 0:
+            ax.axvline(allv.mean(), color=FIG_TRUTH, linewidth=1.2)
+    ax.set_xlim(xlo, xhi)
+    ax.set_ylim(n - 0.4, -0.7)
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(fig_labels(labels, n))
+    ax.set_xlabel(xlab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.intervals = `
+def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, muted=None,
+                  right=None, brackets=None, ok=None):
+    """A forest plot: one interval per row, with optional texts and brackets at the right."""
+    import matplotlib.pyplot as plt
+    mid, lo, hi = [np.asarray(a, dtype=float).ravel() for a in (mid, lo, hi)]
+    n = max(mid.size, lo.size, hi.size)
+    fig, ax = plt.subplots(figsize=(7.0, 1.0 + 0.35 * max(n, 1) + 0.4))
+    if n == 0:
+        fig_empty(ax, title, xlab)
+        fig.tight_layout()
+        return fig
+    pad = lambda a: np.concatenate([a, np.full(n - a.size, np.nan)])
+    mid, lo, hi = pad(mid), pad(lo), pad(hi)
+    flagged, muted, ok = fig_flags(flagged, n), fig_flags(muted, n), fig_flags(ok, n)
+    xlo, xhi = fig_range([mid, lo, hi, np.array([ref])], 0.05)
+    # Place each bracket in the leftmost column where its rows are free.
+    placed = []   # (first row, last row, column), rows counted from 0
+    pairs = [] if brackets is None else [tuple(sorted((int(p[0]) - 1, int(p[1]) - 1)))
+                                         for p in brackets]
+    for a, b in sorted(pairs, key=lambda p: p[1] - p[0]):
+        col = 0
+        while any(c == col and not (b < pa or a > pb) for pa, pb, c in placed):
+            col += 1
+        placed.append((a, b, col))
+    ncols = 1 + max([c for _, _, c in placed]) if placed else 0
+    texts = [] if right is None else list(right)
+    span = xhi - xlo
+    extra = (0.16 if any(str(t) != "" for t in texts) else 0.0) + 0.03 * ncols
+    if placed:
+        extra += 0.02
+    for i in range(n):
+        color = FIG_MUTED if muted[i] else FIG_MISS if flagged[i] else FIG_OK if ok[i] \
+            else FIG_TRUTH
+        weak = muted[i] or flagged[i]
+        style = "--" if weak else "-"
+        if np.isfinite(lo[i]) or np.isfinite(hi[i]):
+            a = lo[i] if np.isfinite(lo[i]) or np.isnan(lo[i]) else xlo
+            b = hi[i] if np.isfinite(hi[i]) or np.isnan(hi[i]) else xhi
+            ends = [e for e in (a, b) if not np.isnan(e)]
+            ax.plot([min(ends), max(ends)], [i, i], color=color, linestyle=style, linewidth=1.5)
+            for e, real in ((a, lo[i]), (b, hi[i])):
+                if np.isfinite(real):
+                    ax.plot([e, e], [i - 0.2, i + 0.2], color=color, linewidth=1.5)
+        if np.isfinite(mid[i]):
+            ax.plot([mid[i]], [i], "o", color=color, markersize=5,
+                    markerfacecolor="white" if weak else color)
+    if np.isfinite(ref):
+        ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
+    for i, t in enumerate(texts[:n]):
+        if str(t) != "":
+            color = FIG_MUTED if muted[i] else FIG_OK if ok[i] else FIG_ACCENT
+            ax.text(xhi + 0.02 * span, i, str(t), color=color, va="center", ha="left",
+                    fontsize=9)
+    for a, b, col in placed:
+        x = xhi + span * (0.17 + 0.03 * col)
+        tick = 0.012 * span
+        ax.plot([x - tick, x, x, x - tick], [a, a, b, b], color=FIG_TRUTH, linewidth=0.9,
+                clip_on=False)
+    ax.set_xlim(xlo, xhi + span * extra)
+    ticks = [t for t in ax.get_xticks() if xlo - 1e-9 <= t <= xhi + 1e-9]
+    ax.set_xticks(ticks)
+    ax.set_xlim(xlo, xhi + span * extra)
+    ax.set_ylim(n - 0.4, -0.6)
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(fig_labels(labels, n))
+    ax.set_xlabel(xlab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.pairsByRep = `
+def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replication"):
+    """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment."""
+    import matplotlib.pyplot as plt
+    a = np.asarray(a, dtype=float).ravel()
+    b = np.asarray(b, dtype=float).ravel()
+    n = min(a.size, b.size)
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    if n == 0:
+        fig_empty(ax, title, xlab, "Replication outcome")
+        fig.tight_layout()
+        return fig
+    a, b = a[:n], b[:n]
+    x = np.arange(1, n + 1)
+    ax.vlines(x, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
+    ax.plot(x, a, "o", color=FIG_EST, markersize=6, label="A")
+    ax.plot(x, b, "o", color=FIG_EST, markerfacecolor="white", markersize=6, label="B")
+    step = int(np.ceil(n / 20.0))
+    shown = list(range(0, n, step))
+    names = fig_labels(ids, n)
+    ax.set_xticks([x[k] for k in shown])
+    ax.set_xticklabels([names[k] for k in shown], rotation=45 if step == 1 and n > 10 else 0)
+    ax.set_xlim(0.4, n + 0.6)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel("Replication outcome")
+    ax.set_title(title)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.pairsSlopes = `
+def fig_pairs_slopes(a, b, label_a="A", label_b="B", title="Pairs as slopes"):
+    """One line per pair from design A to design B, dashed gray when it runs against the mean."""
+    import matplotlib.pyplot as plt
+    a = np.asarray(a, dtype=float).ravel()
+    b = np.asarray(b, dtype=float).ravel()
+    n = min(a.size, b.size)
+    a, b = a[:n], b[:n]
+    keep = np.isfinite(a) & np.isfinite(b)
+    a, b = a[keep], b[keep]
+    fig, ax = plt.subplots(figsize=(5.0, 4.5))
+    if a.size == 0:
+        fig_empty(ax, title, "Design", "Replication outcome")
+        fig.tight_layout()
+        return fig
+    mean_sign = np.sign(np.mean(a - b))
+    for k in range(a.size):
+        same = np.sign(a[k] - b[k]) == mean_sign
+        ax.plot([1, 2], [a[k], b[k]], color=FIG_EST if same else FIG_MUTED,
+                linestyle="-" if same else "--", linewidth=1.2, marker="o", markersize=3)
+    ax.plot([0.9, 1.1], [a.mean()] * 2, color=FIG_TRUTH, linewidth=3.5)
+    ax.plot([1.9, 2.1], [b.mean()] * 2, color=FIG_TRUTH, linewidth=3.5)
+    ax.plot([], [], color=FIG_EST, label="same direction as the mean")
+    ax.plot([], [], color=FIG_MUTED, linestyle="--", label="opposite direction")
+    ax.set_xticks([1, 2])
+    ax.set_xticklabels([str(label_a), str(label_b)])
+    ax.set_xlim(0.5, 2.5)
+    ax.set_xlabel("Design")
+    ax.set_ylabel("Replication outcome")
+    ax.set_title(title)
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.hist = `
+def fig_hist(x, edges, xlab, title):
+    """A histogram of counts over the given bin edges."""
+    import matplotlib.pyplot as plt
+    x = fig_vec(x)
+    edges = np.asarray(edges, dtype=float).ravel()
+    fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    if x.size == 0 or edges.size < 2:
+        fig_empty(ax, title, xlab, "Frequency")
+        fig.tight_layout()
+        return fig
+    ax.hist(x, bins=edges, color=FIG_EST, edgecolor="white")
+    ax.set_xlabel(xlab)
+    ax.set_ylabel("Frequency")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.ecdf = `
+def fig_ecdf(x, xlab, title):
+    """The empirical cumulative distribution function as a step function."""
+    import matplotlib.pyplot as plt
+    x = np.sort(fig_vec(x))
+    fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    if x.size == 0:
+        fig_empty(ax, title, xlab, "Cumulative fraction")
+        fig.tight_layout()
+        return fig
+    lo, hi = fig_span(x[0], x[-1], 0.05)
+    xs = np.concatenate([[lo], x, [hi]])
+    ys = np.concatenate([[0.0], np.arange(1, x.size + 1) / x.size, [1.0]])
+    ax.step(xs, ys, where="post", color=FIG_EST, linewidth=1.5)
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(-0.03, 1.03)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel("Cumulative fraction")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.box = `
+def fig_box(x, xlab, title):
+    """One horizontal box plot (Tukey's hinges) with the mean as a hollow diamond."""
+    import matplotlib.pyplot as plt
+    x = np.sort(fig_vec(x))
+    fig, ax = plt.subplots(figsize=(6.0, 2.4))
+    if x.size == 0:
+        fig_empty(ax, title, xlab)
+        fig.tight_layout()
+        return fig
+    n = x.size
+    n4 = np.floor((n + 3) / 2.0) / 2.0
+    d = np.array([1.0, n4, (n + 1) / 2.0, n + 1 - n4, float(n)]) - 1.0
+    five = 0.5 * (x[np.floor(d).astype(int)] + x[np.ceil(d).astype(int)])
+    h1, med, h2 = five[1], five[2], five[3]
+    step = 1.5 * (h2 - h1)
+    inside = x[(x >= h1 - step) & (x <= h2 + step)]
+    w1, w2 = inside.min(), inside.max()
+    out = x[(x < w1) | (x > w2)]
+    ax.add_patch(plt.Rectangle((h1, 0.7), h2 - h1, 0.6, facecolor="white",
+                               edgecolor=FIG_EST, linewidth=1.5))
+    ax.plot([med, med], [0.7, 1.3], color=FIG_EST, linewidth=2.5)
+    ax.plot([w1, h1], [1, 1], color=FIG_EST, linewidth=1.5)
+    ax.plot([h2, w2], [1, 1], color=FIG_EST, linewidth=1.5)
+    for w in (w1, w2):
+        ax.plot([w, w], [0.85, 1.15], color=FIG_EST, linewidth=1.5)
+    ax.plot(out, np.ones(out.size), "o", markerfacecolor="white", color=FIG_EST, markersize=5)
+    ax.plot([x.mean()], [1], "D", markerfacecolor="white", color=FIG_TRUTH, markersize=7)
+    lo, hi = fig_span(x[0], x[-1], 0.05)
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(0.5, 1.5)
+    ax.set_yticks([])
+    ax.set_xlabel(xlab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.qq = `
+def fig_qq(x, ylab, title, xlab="Standard normal quantile"):
+    """A normal quantile-quantile plot with the line through the quartiles."""
+    import matplotlib.pyplot as plt
+    from scipy import stats
+    x = np.sort(fig_vec(x))
+    fig, ax = plt.subplots(figsize=(5.0, 4.5))
+    if x.size == 0:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    n = x.size
+    a = 3.0 / 8.0 if n <= 10 else 0.5
+    p = (np.arange(1, n + 1) - a) / (n + 1 - 2 * a)
+    q = stats.norm.ppf(p)
+    ax.plot(q, x, "o", color=FIG_EST, markersize=4, alpha=0.8)
+    y1, y3 = np.quantile(x, [0.25, 0.75])
+    q1, q3 = stats.norm.ppf([0.25, 0.75])
+    slope = (y3 - y1) / (q3 - q1)
+    qs = np.array(fig_span(q.min(), q.max(), 0.05))
+    ax.plot(qs, y1 + slope * (qs - q1), color=FIG_TRUTH, linestyle="--", linewidth=1.2)
+    ax.set_xlim(qs[0], qs[1])
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.series = `
+def fig_series(x, y, xlab, ylab, title, type="points", fence=np.nan):
+    """y against x as dots, a line, or steps; everything before the fence is drawn gray."""
+    import matplotlib.pyplot as plt
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    n = min(x.size, y.size)
+    x, y = x[:n], y[:n]
+    keep = np.isfinite(x) & np.isfinite(y)
+    x, y = x[keep], y[keep]
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    if x.size == 0:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    xlo, xhi = fig_range([x, np.array([fence])], 0.03)
+    ylo, yhi = fig_range([y], 0.05)
+    size = 14 if x.size < 200 else 6 if x.size < 2000 else 2
+    early = x < fence if np.isfinite(fence) else np.zeros(x.size, dtype=bool)
+    for part, color in ((early, FIG_MUTED), (~early, FIG_EST)):
+        if not part.any():
+            continue
+        if type == "line":
+            ax.plot(x[part], y[part], color=color, linewidth=1.0)
+        elif type == "step":
+            ax.step(x[part], y[part], where="post", color=color, linewidth=1.2)
+        else:
+            ax.scatter(x[part], y[part], s=size, color=color, linewidths=0)
+    if np.isfinite(fence):
+        ax.axvspan(xlo, fence, color=FIG_MUTED, alpha=0.15, linewidth=0)
+        ax.axvline(fence, color=FIG_ACCENT, linestyle="--", linewidth=1.3)
+    ax.set_xlim(xlo, xhi)
+    ax.set_ylim(ylo, yhi)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.running = `
+def fig_running(x, y, xlab, ylab, title):
+    """A line of y against x with a dashed line at its last finite value."""
+    import matplotlib.pyplot as plt
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    n = min(x.size, y.size)
+    x, y = x[:n], y[:n]
+    keep = np.isfinite(x) & np.isfinite(y)
+    x, y = x[keep], y[keep]
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    if x.size == 0:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    ax.plot(x, y, color=FIG_EST, linewidth=1.5)
+    ax.axhline(y[-1], color=FIG_TRUTH, linestyle="--", linewidth=1.2,
+               label="final value (" + format(y[-1], ".6g") + ")")
+    xlo, xhi = fig_span(x.min(), x.max(), 0.03)
+    ax.set_xlim(xlo, xhi)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.lag = `
+def fig_lag(x, k, xlab, ylab, title):
+    """A scatter of each value against the value k places later, on a square plot."""
+    import matplotlib.pyplot as plt
+    x = np.asarray(x, dtype=float).ravel()
+    k = int(k)
+    fig, ax = plt.subplots(figsize=(5.0, 5.0))
+    if k < 1 or x.size - k < 1:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    u, v = x[:-k], x[k:]
+    keep = np.isfinite(u) & np.isfinite(v)
+    lo, hi = fig_range([x], 0.05)
+    size = 14 if keep.sum() < 500 else 5
+    ax.plot([lo, hi], [lo, hi], color=FIG_MUTED, linestyle="--", linewidth=1)
+    ax.scatter(u[keep], v[keep], s=size, color=FIG_EST, alpha=0.7, linewidths=0)
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal")
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.acf = `
+def fig_acf(r, step=1, band=np.nan, xlab="Lag", title="Autocorrelation", mark=np.nan,
+            mark_label=""):
+    """Autocorrelations as stems, with optional bands and a vertical mark."""
+    import matplotlib.pyplot as plt
+    r = np.asarray(r, dtype=float).ravel()
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
+    if r.size == 0:
+        fig_empty(ax, title, xlab, "Autocorrelation")
+        fig.tight_layout()
+        return fig
+    lags = np.arange(1, r.size + 1) * step
+    ok = np.isfinite(r)
+    ax.axhline(0, color=FIG_MUTED, linewidth=1)
+    if np.isfinite(band):
+        for s in (band, -band):
+            ax.axhline(s, color=FIG_MUTED, linestyle="--", linewidth=1)
+    ax.vlines(lags[ok], 0, r[ok], color=FIG_EST, linewidth=1.2 if r.size <= 120 else 0.8)
+    if r.size <= 120:
+        ax.plot(lags[ok], r[ok], "o", color=FIG_EST, markersize=4)
+    last = lags[-1]
+    right = last + step
+    left = 0.0
+    top = max(np.nanmax(r) if ok.any() else 0.0, band if np.isfinite(band) else 0.0, 0.0)
+    bottom = min(np.nanmin(r) if ok.any() else 0.0, -band if np.isfinite(band) else 0.0, 0.0)
+    room = 0.12 * (top - bottom if top > bottom else 1.0)
+    ax.set_ylim(bottom - 0.05 * (top - bottom + 1e-9), top + room + 0.05)
+    ax.set_xlim(left, right)
+    if np.isfinite(mark):
+        past = mark > right
+        x = right if past else mark
+        text = (mark_label + " (past the axis)") if past else mark_label
+        ax.axvline(x, color=FIG_OK, linestyle="--", linewidth=1.3, clip_on=False)
+        ax.text(x - 0.01 * (right - left) if past else x + 0.01 * (right - left),
+                top + room * 0.5 + 0.02, text, color=FIG_OK, fontsize=9, va="center",
+                ha="right" if past else "left")
+    ax.set_xlabel(xlab)
+    ax.set_ylabel("Autocorrelation")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.warmup = `
+def fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo=np.nan):
+    """Welch's warm-up plot: the raw average, its moving average, and the cumulative average."""
+    import matplotlib.pyplot as plt
+    x = np.asarray(x, dtype=float).ravel()
+    ybar, smooth, cumavg = [np.asarray(a, dtype=float).ravel() for a in (ybar, smooth, cumavg)]
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    if fig_vec(x).size == 0:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    xlo, xhi = fig_range([x, np.array([cut, end_lo])], 0.02)
+    ylo, yhi = fig_range([ybar, smooth, cumavg], 0.05)
+    if np.isfinite(cut) and cut > np.nanmin(x):
+        ax.axvspan(xlo, cut, color=FIG_MUTED, alpha=0.15, linewidth=0)
+        ax.axvline(cut, color=FIG_ACCENT, linestyle="--", linewidth=1.5,
+                   label="cut at " + format(cut, ".6g"))
+    ax.plot(x[:ybar.size], ybar[:x.size], color=FIG_MUTED, linewidth=0.8,
+            label="average across replications")
+    ax.plot(x[:smooth.size], smooth[:x.size], color=FIG_EST, linewidth=2.0,
+            label="moving average")
+    ax.plot(x[:cumavg.size], cumavg[:x.size], color=FIG_TRUTH, linestyle="--", linewidth=1.3,
+            label="cumulative average")
+    if np.isfinite(end_lo):
+        ax.axvline(end_lo, color=FIG_MUTED, linestyle=":", linewidth=1.3)
+        ax.text(end_lo, yhi - 0.02 * (yhi - ylo), " shortest run ends", color=FIG_MUTED,
+                fontsize=8, rotation=90, va="top", ha="right")
+    ax.set_xlim(xlo, xhi)
+    ax.set_ylim(ylo, yhi)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    return fig
+`;
+
+FIG_PY.batches = `
+def fig_batches(x, y, starts, ends, means, xlab, ylab, title, step=False, exclude_to=np.nan,
+                joins=None):
+    """A series cut into batches, with each batch mean drawn as a thick green segment."""
+    import matplotlib.pyplot as plt
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    n = min(x.size, y.size)
+    x, y = x[:n], y[:n]
+    keep = np.isfinite(x) & np.isfinite(y)
+    x, y = x[keep], y[keep]
+    starts, ends, means = [np.asarray([] if a is None else a, dtype=float).ravel()
+                           for a in (starts, ends, means)]
+    joins = np.asarray([] if joins is None else joins, dtype=float).ravel()
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
+    if x.size == 0:
+        fig_empty(ax, title, xlab, ylab)
+        fig.tight_layout()
+        return fig
+    xlo, xhi = fig_range([x, starts, ends, joins, np.array([exclude_to])], 0.02)
+    ylo, yhi = fig_range([y, means], 0.05)
+    early = x < exclude_to if np.isfinite(exclude_to) else np.zeros(x.size, dtype=bool)
+    size = 12 if x.size < 300 else 5 if x.size < 3000 else 2
+    for part, color in ((early, FIG_MUTED), (~early, FIG_EST)):
+        if not part.any():
+            continue
+        if step:
+            ax.step(x[part], y[part], where="post", color=color, linewidth=1.0)
+        else:
+            ax.scatter(x[part], y[part], s=size, color=color, linewidths=0)
+    if np.isfinite(exclude_to):
+        ax.axvspan(xlo, exclude_to, color=FIG_MUTED, alpha=0.15, linewidth=0)
+    bounds = list(starts[np.isfinite(starts)])
+    if np.isfinite(ends).any():
+        bounds.append(ends[np.isfinite(ends)][-1])
+    for b in bounds:
+        ax.axvline(b, color=FIG_MUTED, linestyle=":", linewidth=1)
+    for j in range(min(starts.size, ends.size, means.size)):
+        if np.isfinite(starts[j]) and np.isfinite(ends[j]) and np.isfinite(means[j]):
+            ax.plot([starts[j], ends[j]], [means[j]] * 2, color=FIG_OK, linewidth=3.5,
+                    solid_capstyle="butt", label="batch mean" if j == 0 else None)
+    for k, j in enumerate(joins[np.isfinite(joins)]):
+        ax.axvline(j, color=FIG_ACCENT, linestyle=":", linewidth=1.3,
+                   label="join between replications" if k == 0 else None)
+    ax.set_xlim(xlo, xhi)
+    ax.set_ylim(ylo, yhi)
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
+    ax.set_title(title)
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend(loc="best", fontsize=8)
+    fig.tight_layout()
+    return fig
+`;
+</script>
+<script type="text/plain" data-module="js/io/figure_lib_r.js">
+// Figure helpers for the Base R regenerate scripts. Each value is literal R code: `common`
+// holds the colors and small helpers that several figures share, and every other key defines
+// the one function that draws that kind of figure with base graphics on the current device.
+// Pure text; the script writer in analysis_scripts.js chooses which helpers a script carries
+// (always with `common`). The snippets are template literals, and so none of them may
+// contain a backtick or a dollar sign followed by a brace.
+
+export const FIG_R = {};
+
+FIG_R.common = `
+# Colors used by every figure.
+FIG_EST <- "#2b6cb0"      # data points and series
+FIG_TRUTH <- "#1a1a1a"    # intervals, means, estimates
+FIG_MISS <- "#c0392b"     # a flagged interval
+FIG_OK <- "#2e7d32"       # survivors, batch means, highlights
+FIG_MUTED <- "#9e9e9e"    # reference lines, eliminated rows, excluded stretches
+FIG_ACCENT <- "#8c1d40"   # the cut or fence line, letters
+
+# The finite entries of a vector (a missing argument gives an empty vector).
+fig_finite <- function(v) {
+  v <- as.numeric(v)
+  v[is.finite(v)]
+}
+
+# The range of the finite entries, widened by pad on each side; (0, 1) when there are none,
+# and a zero-width range is widened by 1 on each side.
+fig_span <- function(v, pad = 0.05) {
+  v <- fig_finite(v)
+  if (length(v) == 0) return(c(0, 1))
+  r <- range(v)
+  # a range that is only rounding (0.1 against 0.1000...01) has no width either
+  if (diff(r) <= 1e-10 * max(1, abs(r))) r <- mean(r) + c(-1, 1)
+  r + c(-1, 1) * pad * diff(r)
+}
+
+# A y range for the finite entries of v, with extra room (a fraction of the range) on top
+# for a legend.
+fig_ylim <- function(v, head = 0) {
+  r <- fig_span(v, 0.05)
+  r[2] <- r[2] + head * diff(r)
+  r
+}
+
+# A TRUE/FALSE flag for each of n rows; NULL or a missing entry means FALSE.
+fig_flag <- function(f, n) {
+  if (is.null(f)) return(rep(FALSE, n))
+  f <- rep_len(as.logical(f), n)
+  f[is.na(f)] <- FALSE
+  f
+}
+
+# An empty frame with the title and a note, for a figure with nothing to draw.
+fig_empty <- function(title, xlab = "", ylab = "") {
+  plot(c(0, 1), c(0, 1), type = "n", axes = FALSE, xlab = xlab, ylab = ylab, main = title)
+  box()
+  text(0.5, 0.5, "nothing to draw", col = FIG_MUTED)
+}
+
+# A light gray band over the x stretch from xl to xr, the full height of the plot region.
+fig_band <- function(xl, xr) {
+  u <- par("usr")
+  rect(max(xl, u[1]), u[3], min(xr, u[2]), u[4], col = adjustcolor(FIG_MUTED, 0.2),
+       border = NA)
+}
+`;
+
+FIG_R.strips = `
+# Rows of dots, one row per element of values (a list), with an optional interval under each
+# row (mid, lo, hi), a dashed reference line at ref, and a solid line at the mean of all the
+# values when mean_line is TRUE.
+fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
+                       ref = NA, mean_line = FALSE) {
+  if (!is.list(values)) values <- list(values)
+  n <- length(values)
+  values <- lapply(values, as.numeric)
+  allv <- c(unlist(values), mid, lo, hi, ref)
+  if (n == 0 || length(fig_finite(allv)) == 0) {
+    fig_empty(title, xlab)
+    return(invisible(NULL))
+  }
+  labels <- rep_len(as.character(labels), n)
+  xlim <- fig_span(allv, 0.05)
+  op <- par(mai = c(0.8, max(strwidth(labels, units = "inches")) + 0.35, 0.5, 0.2))
+  on.exit(par(op))
+  plot(xlim, c(1, 1), ylim = c(n + 0.55, 0.45), type = "n", axes = FALSE, xlab = "", ylab = "")
+  if (is.finite(ref)) abline(v = ref, lty = 2, col = FIG_MUTED)
+  if (mean_line) abline(v = mean(fig_finite(unlist(values))), col = FIG_TRUTH, lwd = 1.5)
+  for (i in seq_len(n)) {
+    v <- fig_finite(values[[i]])
+    if (length(v) > 0) {
+      # Neighboring values in sorted order sit at different heights so ties stay visible.
+      off <- ((seq_along(v) - 1) %% 4) * 0.06 - 0.09
+      points(sort(v), i - 0.1 + off, pch = 19, cex = 1, col = adjustcolor(FIG_EST, 0.6))
+    }
+    if (!is.null(lo) && !is.null(hi) && is.finite(lo[i]) && is.finite(hi[i])) {
+      y <- i + 0.28
+      segments(lo[i], y, hi[i], y, col = FIG_TRUTH, lwd = 1.8)
+      segments(c(lo[i], hi[i]), y - 0.08, c(lo[i], hi[i]), y + 0.08, col = FIG_TRUTH, lwd = 1.8)
+      if (!is.null(mid) && is.finite(mid[i])) points(mid[i], y, pch = 19, col = FIG_TRUTH)
+    }
+  }
+  axis(1)
+  axis(2, at = seq_len(n), labels = labels, las = 1, tick = FALSE)
+  box()
+  title(main = title, xlab = xlab)
+  invisible(NULL)
+}
+`;
+
+FIG_R.intervals = `
+# A forest plot: one row per interval (row 1 at the top) with the estimate as a dot. A
+# flagged row is red and dashed with a hollow dot, a muted row gray and dashed, an ok row
+# green. right gives a text for each row to the right of the plot, and brackets (a
+# two-column matrix of row numbers) are drawn to the right of those texts.
+fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+  mid <- as.numeric(mid)
+  lo <- as.numeric(lo)
+  hi <- as.numeric(hi)
+  n <- length(mid)
+  rng <- fig_span(c(mid, lo, hi, ref), 0.05)
+  if (n == 0 || length(fig_finite(c(mid, lo, hi, ref))) == 0) {
+    fig_empty(title, xlab)
+    return(invisible(NULL))
+  }
+  labels <- rep_len(as.character(labels), n)
+  flagged <- fig_flag(flagged, n)
+  muted <- fig_flag(muted, n)
+  ok <- fig_flag(ok, n)
+  if (is.null(right)) right <- rep("", n)
+  right <- rep_len(as.character(right), n)
+  right[is.na(right)] <- ""
+
+  # Give each bracket the leftmost column where no bracket already there shares a row;
+  # shorter spans are placed first.
+  nb <- if (is.null(brackets)) 0 else nrow(as.matrix(brackets))
+  col_of <- integer(nb)
+  if (nb > 0) {
+    b <- as.matrix(brackets)
+    top <- pmin(b[, 1], b[, 2])
+    bottom <- pmax(b[, 1], b[, 2])
+    for (k in order(bottom - top)) {
+      column <- 1
+      repeat {
+        clash <- FALSE
+        for (m in which(col_of == column)) {
+          if (top[k] <= bottom[m] && top[m] <= bottom[k]) clash <- TRUE
+        }
+        if (!clash) break
+        column <- column + 1
+      }
+      col_of[k] <- column
+    }
+  }
+  ncol_b <- if (nb > 0) max(col_of) else 0
+
+  op <- par(mai = c(0.8, max(strwidth(labels, units = "inches")) + 0.35, 0.5, 0.2))
+  on.exit(par(op))
+  # Widen the x range on the right just enough for the texts and the bracket columns.
+  text_in <- if (any(nzchar(right))) max(strwidth(right, units = "inches")) + 0.1 else 0
+  frac <- min(text_in / par("pin")[1] + ncol_b * 0.03 + (if (nb > 0) 0.02 else 0), 0.7)
+  total <- diff(rng) / (1 - frac)
+  plot(c(rng[1], rng[1] + total), c(1, 1), ylim = c(n + 0.5, 0.5), type = "n", axes = FALSE,
+       xlab = "", ylab = "")
+
+  if (is.finite(ref)) abline(v = ref, lty = 2, col = FIG_MUTED)
+  for (i in seq_len(n)) {
+    kind <- if (muted[i]) "muted" else if (flagged[i]) "flagged" else if (ok[i]) "ok" else "plain"
+    color <- c(plain = FIG_TRUTH, flagged = FIG_MISS, muted = FIG_MUTED, ok = FIG_OK)[[kind]]
+    dashed <- kind %in% c("muted", "flagged")
+    # An infinite end runs to the edge of the data range and gets no end tick.
+    a <- if (is.nan(lo[i]) || is.na(lo[i])) NA else if (lo[i] == -Inf) rng[1] else lo[i]
+    z <- if (is.nan(hi[i]) || is.na(hi[i])) NA else if (hi[i] == Inf) rng[2] else hi[i]
+    a_seg <- if (is.na(a)) mid[i] else a
+    z_seg <- if (is.na(z)) mid[i] else z
+    if (is.finite(a_seg) && is.finite(z_seg)) {
+      segments(a_seg, i, z_seg, i, col = color, lwd = 1.8, lty = if (dashed) 2 else 1)
+    }
+    if (is.finite(lo[i])) segments(lo[i], i - 0.15, lo[i], i + 0.15, col = color, lwd = 1.8)
+    if (is.finite(hi[i])) segments(hi[i], i - 0.15, hi[i], i + 0.15, col = color, lwd = 1.8)
+    if (is.finite(mid[i])) {
+      points(mid[i], i, pch = if (dashed) 21 else 19, col = color, bg = "white", cex = 1.2)
+    }
+    if (nzchar(right[i])) {
+      text_col <- if (kind == "ok") FIG_OK else if (kind == "muted") FIG_MUTED else FIG_ACCENT
+      text(rng[2] + 0.01 * total, i, right[i], adj = c(0, 0.5), col = text_col)
+    }
+  }
+  if (nb > 0) {
+    x0 <- rng[2] + 0.01 * total + text_in / par("pin")[1] * total
+    for (k in seq_len(nb)) {
+      x <- x0 + (col_of[k] - 0.5) * 0.03 * total
+      segments(x, top[k], x, bottom[k], col = FIG_TRUTH, lwd = 1)
+      segments(x - 0.012 * total, c(top[k], bottom[k]), x, c(top[k], bottom[k]),
+               col = FIG_TRUTH, lwd = 1)
+    }
+  }
+  ticks <- pretty(rng)
+  axis(1, at = ticks[ticks >= rng[1] & ticks <= rng[2]])
+  axis(2, at = seq_len(n), labels = labels, las = 1, tick = FALSE)
+  box()
+  title(main = title, xlab = xlab)
+  invisible(NULL)
+}
+`;
+
+FIG_R.pairsByRep = `
+# Matched pairs by replication: design A as a filled dot, design B as a hollow dot, and a
+# dashed segment joining the two.
+fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication") {
+  a <- as.numeric(a)
+  b <- as.numeric(b)
+  n <- length(a)
+  if (n == 0 || length(fig_finite(c(a, b))) == 0) {
+    fig_empty(title, xlab, "Replication outcome")
+    return(invisible(NULL))
+  }
+  ids <- rep_len(as.character(ids), n)
+  plot(c(0.5, n + 0.5), fig_ylim(c(a, b), 0.12), type = "n", axes = FALSE, xlab = xlab,
+       ylab = "Replication outcome", main = title)
+  x <- seq_len(n)
+  both <- is.finite(a) & is.finite(b)
+  segments(x[both], a[both], x[both], b[both], lty = 2, col = FIG_MUTED)
+  points(x, a, pch = 19, col = FIG_EST)
+  points(x, b, pch = 21, col = FIG_EST, bg = "white")
+  shown <- unique(round(seq(1, n, length.out = min(n, 20))))
+  axis(1, at = shown, labels = ids[shown])
+  axis(2, las = 1)
+  box()
+  legend("top", legend = c("A", "B"), pch = c(19, 21), col = FIG_EST, pt.bg = "white",
+         horiz = TRUE, bty = "n")
+  invisible(NULL)
+}
+`;
+
+FIG_R.pairsSlopes = `
+# Matched pairs as slopes between two columns: a solid blue line when the pair differs in the
+# same direction as the average difference, a dashed gray line otherwise, and a short bar at
+# each column's mean.
+fig_pairs_slopes <- function(a, b, label_a = "A", label_b = "B", title = "Pairs as slopes") {
+  a <- as.numeric(a)
+  b <- as.numeric(b)
+  n <- length(a)
+  if (n == 0 || length(fig_finite(c(a, b))) == 0) {
+    fig_empty(title, "Design", "Replication outcome")
+    return(invisible(NULL))
+  }
+  plot(c(0.6, 2.4), fig_ylim(c(a, b)), type = "n", axes = FALSE, xlab = "Design",
+       ylab = "Replication outcome", main = title)
+  same <- sign(a - b) == sign(mean(a - b, na.rm = TRUE))
+  same[is.na(same)] <- FALSE
+  for (k in seq_len(n)) {
+    segments(1, a[k], 2, b[k], col = if (same[k]) FIG_EST else FIG_MUTED,
+             lty = if (same[k]) 1 else 2)
+  }
+  segments(c(0.9, 1.9), c(mean(a, na.rm = TRUE), mean(b, na.rm = TRUE)), c(1.1, 2.1),
+           c(mean(a, na.rm = TRUE), mean(b, na.rm = TRUE)), col = FIG_TRUTH, lwd = 4)
+  axis(1, at = c(1, 2), labels = c(label_a, label_b))
+  axis(2, las = 1)
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.hist = `
+# A histogram of x over the given bin edges: [e_k, e_k+1) except the last bin, which is closed.
+fig_hist <- function(x, edges, xlab, title) {
+  x <- fig_finite(x)
+  edges <- sort(as.numeric(edges))
+  x <- x[x >= edges[1] & x <= edges[length(edges)]]
+  if (length(x) == 0 || length(edges) < 2) {
+    fig_empty(title, xlab, "Frequency")
+    return(invisible(NULL))
+  }
+  h <- hist(x, breaks = edges, right = FALSE, include.lowest = TRUE, plot = FALSE)
+  plot(range(edges), c(0, max(h$counts, 1) * 1.05), type = "n", xlab = xlab,
+       ylab = "Frequency", main = title, yaxs = "i")
+  k <- length(edges)
+  rect(edges[-k], 0, edges[-1], h$counts, col = FIG_EST, border = "white")
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.ecdf = `
+# The empirical CDF of x as a step function.
+fig_ecdf <- function(x, xlab, title) {
+  x <- sort(fig_finite(x))
+  n <- length(x)
+  if (n == 0) {
+    fig_empty(title, xlab, "Cumulative fraction")
+    return(invisible(NULL))
+  }
+  r <- fig_span(x, 0.05)
+  xx <- c(r[1], x, r[2])
+  yy <- c(0, seq_len(n) / n, 1)
+  plot(xx, yy, type = "s", col = FIG_EST, lwd = 1.8, xlim = r, ylim = c(0, 1), xlab = xlab,
+       ylab = "Cumulative fraction", main = title, las = 1)
+  invisible(NULL)
+}
+`;
+
+FIG_R.box = `
+# One horizontal box plot of x (Tukey's hinges, whiskers to 1.5 hinge spreads) with the mean
+# marked by a hollow diamond.
+fig_box <- function(x, xlab, title) {
+  x <- fig_finite(x)
+  if (length(x) == 0) {
+    fig_empty(title, xlab)
+    return(invisible(NULL))
+  }
+  r <- fig_span(x, 0.05)
+  boxplot(x, horizontal = TRUE, ylim = r, col = adjustcolor(FIG_EST, 0.25), border = FIG_EST,
+          medcol = FIG_TRUTH, outpch = 1, outcol = FIG_EST, xlab = xlab, main = title,
+          axes = FALSE)
+  axis(1)
+  box()
+  points(mean(x), 1, pch = 5, cex = 1.4, lwd = 2, col = FIG_TRUTH)
+  invisible(NULL)
+}
+`;
+
+FIG_R.qq = `
+# A normal quantile-quantile plot of x with a dashed line through the quartiles.
+fig_qq <- function(x, ylab, title, xlab = "Standard normal quantile") {
+  x <- sort(fig_finite(x))
+  n <- length(x)
+  if (n == 0) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  a <- if (n <= 10) 3 / 8 else 1 / 2
+  q <- qnorm((seq_len(n) - a) / (n + 1 - 2 * a))
+  plot(q, x, pch = 19, col = adjustcolor(FIG_EST, 0.8), xlab = xlab, ylab = ylab, main = title,
+       ylim = fig_span(x, 0.05), las = 1)
+  y <- quantile(x, c(0.25, 0.75), names = FALSE, type = 7)
+  z <- qnorm(c(0.25, 0.75))
+  slope <- diff(y) / diff(z)
+  abline(y[1] - slope * z[1], slope, lty = 2, col = FIG_TRUTH)
+  invisible(NULL)
+}
+`;
+
+FIG_R.series = `
+# y against x as points, a line, or a step function. Everything left of fence (when it is
+# finite) is gray, shaded, and marked by a dashed maroon line.
+fig_series <- function(x, y, xlab, ylab, title, type = "points", fence = NA) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  keep <- is.finite(x) & is.finite(y)
+  if (!any(keep)) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  n <- length(x)
+  cex <- if (n > 2000) 0.3 else if (n > 300) 0.5 else 0.8
+  plot(fig_span(c(x, fence), 0.03), fig_span(y, 0.05), type = "n", xlab = xlab, ylab = ylab,
+       main = title, las = 1, xaxs = "i")
+  drawn <- function(idx, color) {
+    if (length(idx) == 0) return(invisible(NULL))
+    if (type == "points") {
+      points(x[idx], y[idx], pch = 19, cex = cex, col = color)
+    } else {
+      lines(x[idx], y[idx], type = if (type == "step") "s" else "l", col = color,
+            lwd = if (type == "line") 1 else 1.5)
+    }
+  }
+  if (is.finite(fence)) {
+    fig_band(-Inf, fence)
+    before <- which(x < fence)
+    after <- which(x >= fence)
+    if (type != "points" && length(before) > 0 && length(after) > 0) {
+      after <- c(max(before), after)   # join the two stretches
+    }
+    drawn(before, FIG_MUTED)
+    drawn(after, FIG_EST)
+    abline(v = fence, lty = 2, col = FIG_ACCENT, lwd = 1.5)
+  } else {
+    drawn(seq_len(n), FIG_EST)
+  }
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.running = `
+# A running value against x, with a dashed line at its last finite value.
+fig_running <- function(x, y, xlab, ylab, title) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  if (!any(is.finite(x) & is.finite(y))) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  final <- tail(fig_finite(y), 1)
+  plot(fig_span(x, 0.03), fig_ylim(c(y, final), 0.15), type = "n", xlab = xlab, ylab = ylab,
+       main = title, las = 1, xaxs = "i")
+  abline(h = final, lty = 2, col = FIG_TRUTH)
+  lines(x, y, col = FIG_EST, lwd = 1.5)
+  legend("top", legend = paste0("final value (", signif(final, 4), ")"), lty = 2,
+         col = FIG_TRUTH, bty = "n")
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.lag = `
+# A lag plot: x[i + k] against x[i], on a square plot with a dashed identity line.
+fig_lag <- function(x, k, xlab, ylab, title) {
+  x <- as.numeric(x)
+  n <- length(x)
+  if (k < 1 || n <= k || length(fig_finite(x)) == 0) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  op <- par(pty = "s")
+  on.exit(par(op))
+  r <- fig_span(x, 0.05)
+  plot(x[1:(n - k)], x[(1 + k):n], pch = 19, cex = if (n > 1000) 0.5 else 0.8,
+       col = adjustcolor(FIG_EST, 0.6), xlim = r, ylim = r, xlab = xlab, ylab = ylab,
+       main = title, las = 1)
+  abline(0, 1, lty = 2, col = FIG_MUTED)
+  invisible(NULL)
+}
+`;
+
+FIG_R.acf = `
+# Autocorrelation stems at lags step, 2 * step, ... with optional dashed bands at +/- band
+# and an optional marked lag (a dashed green line with a label).
+fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelation",
+                    mark = NA, mark_label = "") {
+  r <- as.numeric(r)
+  n <- length(r)
+  if (n == 0) {
+    fig_empty(title, xlab, "Autocorrelation")
+    return(invisible(NULL))
+  }
+  lags <- seq_len(n) * step
+  last <- n * step
+  bands <- if (is.finite(band)) c(band, -band) else numeric(0)
+  mark_x <- if (is.finite(mark)) min(mark, last) else NA
+  past <- is.finite(mark) && mark > last
+  plot(c(0, last + step / 2), fig_ylim(c(r, 0, bands, 1.0 * (is.finite(mark))), 0.1),
+       type = "n", xlab = xlab, ylab = "Autocorrelation", main = title, las = 1, xaxs = "i")
+  abline(h = 0, col = FIG_MUTED)
+  if (is.finite(band)) abline(h = bands, lty = 2, col = FIG_MUTED)
+  segments(lags, 0, lags, r, col = FIG_EST)
+  if (n <= 120) points(lags, r, pch = 19, cex = 0.7, col = FIG_EST)
+  if (is.finite(mark)) {
+    abline(v = mark_x, lty = 2, col = FIG_OK, lwd = 1.5)
+    label <- if (past) paste(mark_label, "(past the axis)") else mark_label
+    left_half <- mark_x < (last + step / 2) / 2
+    text(mark_x, par("usr")[4], label, col = FIG_OK, adj = c(if (left_half) -0.05 else 1.05, 1.3))
+  }
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.warmup = `
+# Welch's warm-up plot: the raw average, its moving average, and the cumulative average
+# against x, with the excluded stretch left of cut shaded and a dashed line at the cut.
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+  x <- as.numeric(x)
+  allv <- c(ybar, smooth, cumavg)
+  if (length(fig_finite(x)) == 0 || length(fig_finite(allv)) == 0) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  show_cut <- is.finite(cut) && cut > min(fig_finite(x))
+  plot(fig_span(c(x, if (show_cut) cut, end_lo), 0.03), fig_ylim(allv, 0.3), type = "n",
+       xlab = xlab, ylab = ylab, main = title, las = 1, xaxs = "i")
+  if (show_cut) fig_band(-Inf, cut)
+  lines(x, ybar, col = FIG_MUTED, lwd = 1)
+  lines(x, smooth, col = FIG_EST, lwd = 2)
+  lines(x, cumavg, col = FIG_TRUTH, lty = 2)
+  if (show_cut) abline(v = cut, lty = 2, col = FIG_ACCENT, lwd = 1.5)
+  if (is.finite(end_lo)) {
+    abline(v = end_lo, lty = 3, col = FIG_MUTED)
+    text(end_lo, par("usr")[3], "shortest run ends", srt = 90, adj = c(0, 1.4),
+         col = FIG_MUTED, cex = 0.85)
+  }
+  names <- c("average across replications", "moving average", "cumulative average")
+  cols <- c(FIG_MUTED, FIG_EST, FIG_TRUTH)
+  ltys <- c(1, 1, 2)
+  lwds <- c(1, 2, 1)
+  if (show_cut) {
+    names <- c(names, "warm-up cut")
+    cols <- c(cols, FIG_ACCENT)
+    ltys <- c(ltys, 2)
+    lwds <- c(lwds, 1.5)
+  }
+  legend("top", legend = names, col = cols, lty = ltys, lwd = lwds, ncol = 2, bty = "n",
+         cex = 0.85)
+  box()
+  invisible(NULL)
+}
+`;
+
+FIG_R.batches = `
+# The series with its batches: a dotted line at each batch boundary and a thick green segment
+# at each batch mean. Optionally the stretch left of exclude_to is gray and shaded, and each
+# value in joins (where replications were joined end to end) gets a dotted maroon line.
+fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FALSE,
+                        exclude_to = NA, joins = NULL) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  starts <- as.numeric(starts)
+  ends <- as.numeric(ends)
+  means <- as.numeric(means)
+  if (!any(is.finite(x) & is.finite(y))) {
+    fig_empty(title, xlab, ylab)
+    return(invisible(NULL))
+  }
+  has_joins <- length(fig_finite(joins)) > 0
+  plot(fig_span(c(x, starts, ends), 0.02), fig_ylim(c(y, means), 0.18), type = "n", xlab = xlab,
+       ylab = ylab, main = title, las = 1, xaxs = "i")
+  drawn <- function(idx, color) {
+    if (length(idx) == 0) return(invisible(NULL))
+    if (step) {
+      lines(x[idx], y[idx], type = "s", col = color)
+    } else {
+      points(x[idx], y[idx], pch = 19, cex = if (length(x) > 2000) 0.3 else 0.5, col = color)
+    }
+  }
+  if (is.finite(exclude_to)) {
+    fig_band(-Inf, exclude_to)
+    drawn(which(x < exclude_to), FIG_MUTED)
+    drawn(which(x >= exclude_to), FIG_EST)
+  } else {
+    drawn(seq_along(x), FIG_EST)
+  }
+  if (length(starts) > 0) abline(v = c(starts, tail(ends, 1)), lty = 3, col = FIG_MUTED)
+  if (has_joins) abline(v = fig_finite(joins), lty = 3, col = FIG_ACCENT)
+  segments(starts, means, ends, means, col = FIG_OK, lwd = 4, lend = 1)
+  names <- c("series", "batch mean", "batch boundary")
+  cols <- c(FIG_EST, FIG_OK, FIG_MUTED)
+  ltys <- c(if (step) 1 else NA, 1, 3)
+  pchs <- c(if (step) NA else 19, NA, NA)
+  lwds <- c(1, 4, 1)
+  if (has_joins) {
+    names <- c(names, "join of replications")
+    cols <- c(cols, FIG_ACCENT)
+    ltys <- c(ltys, 3)
+    pchs <- c(pchs, NA)
+    lwds <- c(lwds, 1)
+  }
+  legend("top", legend = names, col = cols, lty = ltys, pch = pchs, lwd = lwds, ncol = 2, bty = "n",
+         cex = 0.85)
+  box()
+  invisible(NULL)
+}
+`;
+</script>
+<script type="text/plain" data-module="js/io/figure_lib_tidy.js">
+// Literal Tidy R code for the figures the regenerate scripts draw: one ggplot2 helper per kind
+// of figure, plus a `common` snippet of colors and small helpers they share. Each helper builds
+// a tibble, plots it with ggplot2, prints the plot, and returns it invisibly. Pure text; the
+// writers in analysis_scripts.js choose what to include (always `common` first). The snippets
+// are template literals, and so none of them may contain a backtick or a dollar sign followed
+// by a brace. The contract for every helper is at the top of figure_scripts.js.
+
+export const FIG_TIDY = {};
+
+FIG_TIDY.common = `
+# Colors used by every figure.
+FIG_EST <- "#2b6cb0"; FIG_TRUTH <- "#1a1a1a"; FIG_MISS <- "#c0392b"
+FIG_OK <- "#2e7d32"; FIG_MUTED <- "#9e9e9e"; FIG_ACCENT <- "#8c1d40"
+
+# The look shared by every figure.
+fig_theme <- function() {
+  theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
+}
+
+# The range of the finite values, padded by a fraction on each side (+/- 1 if it has no width).
+fig_span <- function(v, pad = 0.05) {
+  v <- v[is.finite(v)]
+  if (length(v) == 0) return(c(-1, 1))
+  r <- range(v)
+  # a range that is only rounding (0.1 against 0.1000...01) has no width either
+  if (diff(r) <= 1e-10 * max(1, abs(r))) r <- mean(r) + c(-1, 1)
+  r + c(-1, 1) * pad * diff(r)
+}
+
+# A vector of length n as numbers, with NA where an argument was not given.
+fig_num <- function(v, n) {
+  if (is.null(v)) rep(NA_real_, n) else as.numeric(v)
+}
+
+# A vector of length n as TRUE/FALSE, with FALSE where an argument was not given or is NA.
+fig_flag <- function(v, n) {
+  if (is.null(v)) return(rep(FALSE, n))
+  out <- as.logical(v)
+  out[is.na(out)] <- FALSE
+  out
+}
+
+# An empty frame with the title and the words "nothing to draw".
+fig_empty <- function(title, xlab = "", ylab = "") {
+  p <- ggplot(tibble(x = 0, y = 0, label = "nothing to draw"), aes(x, y, label = label)) +
+    geom_text(color = FIG_MUTED) +
+    labs(title = title, x = xlab, y = ylab) +
+    theme_bw(base_size = 11) +
+    theme(panel.grid = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+  print(p)
+  invisible(p)
+}
+
+# The column (1, 2, ...) each bracket is drawn in. A bracket is a pair of rows; shorter spans
+# are placed first, each in the leftmost column where no placed bracket shares a row with it.
+fig_bracket_cols <- function(brackets) {
+  m <- nrow(brackets)
+  lo <- pmin(brackets[, 1], brackets[, 2])
+  hi <- pmax(brackets[, 1], brackets[, 2])
+  col <- integer(m)
+  for (idx in order(hi - lo)) {
+    cc <- 1
+    repeat {
+      clash <- FALSE
+      for (j in which(col == cc)) {
+        if (lo[idx] <= hi[j] && lo[j] <= hi[idx]) clash <- TRUE
+      }
+      if (!clash) break
+      cc <- cc + 1
+    }
+    col[idx] <- cc
+  }
+  col
+}
+`;
+
+FIG_TIDY.strips = `
+# Rows of dots (one row per element of values, first row on top), with an optional interval
+# under each row's dots: a line from lo to hi with end ticks and a dot at mid.
+fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
+                       ref = NA, mean_line = FALSE) {
+  if (is.numeric(values)) values <- list(values)
+  n <- length(values)
+  dots <- bind_rows(lapply(seq_len(n), function(i) {
+    v <- sort(as.numeric(values[[i]]))
+    v <- v[is.finite(v)]
+    tibble(row = rep(i, length(v)), value = v)
+  }))
+  mid <- fig_num(mid, n); lo <- fig_num(lo, n); hi <- fig_num(hi, n)
+  iv <- tibble(row = seq_len(n), mid = mid, lo = lo, hi = hi) %>%
+    filter(is.finite(lo), is.finite(hi))
+  if (n == 0 || (nrow(dots) == 0 && nrow(iv) == 0)) return(fig_empty(title, xlab))
+  # Neighbors in sorted order go to different heights, so ties do not hide each other.
+  dots <- dots %>%
+    group_by(row) %>%
+    mutate(y = n - row + 1 + 0.12 + ((row_number() - 1) %% 5 - 2) * 0.07) %>%
+    ungroup()
+  xr <- fig_span(c(dots$value, iv$lo, iv$hi, ref))
+  iv <- iv %>% mutate(y = n - row + 1 - 0.25)
+  p <- ggplot() + geom_point(data = dots, aes(x = value, y = y), color = FIG_EST,
+                             alpha = 0.6, size = 2)
+  if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
+  if (isTRUE(mean_line) && nrow(dots) > 0) {
+    p <- p + geom_vline(xintercept = mean(dots$value), color = FIG_TRUTH)
+  }
+  if (nrow(iv) > 0) {
+    p <- p +
+      geom_segment(data = iv, aes(x = lo, xend = hi, y = y, yend = y), color = FIG_TRUTH,
+                   linewidth = 0.6) +
+      geom_segment(data = iv, aes(x = lo, xend = lo, y = y - 0.1, yend = y + 0.1),
+                   color = FIG_TRUTH, linewidth = 0.6) +
+      geom_segment(data = iv, aes(x = hi, xend = hi, y = y - 0.1, yend = y + 0.1),
+                   color = FIG_TRUTH, linewidth = 0.6) +
+      geom_point(data = filter(iv, is.finite(mid)), aes(x = mid, y = y), color = FIG_TRUTH,
+                 size = 2.4)
+  }
+  p <- p +
+    scale_y_continuous(breaks = n:1, labels = labels, limits = c(0.45, n + 0.55),
+                       expand = expansion(0)) +
+    coord_cartesian(xlim = xr) +
+    labs(x = xlab, y = NULL, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.intervals = `
+# A forest plot: one row per element (row 1 on top) with a line from lo to hi and a dot at mid.
+# Flagged rows are red and dashed, muted rows gray and dashed (both with a hollow dot), ok rows
+# green. Optional texts stand to the right of the rows, with brackets joining pairs of rows.
+fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+  n <- length(mid)
+  if (n == 0) return(fig_empty(title, xlab))
+  lo <- fig_num(lo, n); hi <- fig_num(hi, n); mid <- as.numeric(mid)
+  flagged <- fig_flag(flagged, n); muted <- fig_flag(muted, n); ok <- fig_flag(ok, n)
+  right <- if (is.null(right)) rep("", n) else as.character(right)
+  right[is.na(right)] <- ""
+  xr <- fig_span(c(mid, lo, hi, ref))
+  span <- diff(xr)
+  rows <- tibble(row = seq_len(n), y = n - seq_len(n) + 1, mid = mid, lo = lo, hi = hi,
+                 right = right) %>%
+    mutate(kind = case_when(muted ~ "muted", flagged ~ "flagged", ok ~ "ok", TRUE ~ "plain"),
+           col = case_when(kind == "muted" ~ FIG_MUTED, kind == "flagged" ~ FIG_MISS,
+                           kind == "ok" ~ FIG_OK, TRUE ~ FIG_TRUTH),
+           lt = if_else(kind %in% c("muted", "flagged"), "dashed", "solid"),
+           fillc = if_else(kind %in% c("muted", "flagged"), "white", col),
+           # Infinite ends run to the edge; an end that is NaN is left out.
+           a = if_else(is.na(lo), mid, pmax(lo, xr[1])),
+           b = if_else(is.na(hi), mid, pmin(hi, xr[2])),
+           textcol = case_when(kind == "muted" ~ FIG_MUTED, kind == "ok" ~ FIG_OK,
+                               TRUE ~ FIG_ACCENT))
+  # Room on the right for the texts and for one column per bracket.
+  has_text <- any(nzchar(right))
+  text_w <- if (has_text) 0.03 + 0.013 * max(nchar(right)) else 0
+  if (!is.null(brackets) && length(brackets) > 0) {
+    brackets <- matrix(as.numeric(brackets), ncol = 2)
+    bcol <- fig_bracket_cols(brackets)
+  } else {
+    brackets <- NULL; bcol <- integer(0)
+  }
+  ncol_b <- if (length(bcol) > 0) max(bcol) else 0
+  xmax <- xr[2] + span * (text_w + if (ncol_b > 0) 0.03 * ncol_b + 0.02 else 0)
+  seg <- filter(rows, !is.na(a), !is.na(b))
+  p <- ggplot()
+  if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
+  p <- p +
+    geom_segment(data = seg, aes(x = a, xend = b, y = y, yend = y, color = col, linetype = lt),
+                 linewidth = 0.6) +
+    geom_segment(data = filter(rows, is.finite(lo)),
+                 aes(x = lo, xend = lo, y = y - 0.15, yend = y + 0.15, color = col),
+                 linewidth = 0.6) +
+    geom_segment(data = filter(rows, is.finite(hi)),
+                 aes(x = hi, xend = hi, y = y - 0.15, yend = y + 0.15, color = col),
+                 linewidth = 0.6) +
+    geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col, fill = fillc),
+               shape = 21, size = 2.6, stroke = 0.8)
+  if (has_text) {
+    p <- p + geom_text(data = filter(rows, nzchar(right)),
+                       aes(x = xr[2] + 0.02 * span, y = y, label = right, color = textcol),
+                       hjust = 0, size = 3.5)
+  }
+  if (!is.null(brackets)) {
+    bk <- tibble(top = n - pmin(brackets[, 1], brackets[, 2]) + 1,
+                 bottom = n - pmax(brackets[, 1], brackets[, 2]) + 1,
+                 x = xr[2] + span * (text_w + 0.03 * bcol), tick = 0.015 * span)
+    p <- p +
+      geom_segment(data = bk, aes(x = x, xend = x, y = top, yend = bottom), color = FIG_TRUTH,
+                   linewidth = 0.4) +
+      geom_segment(data = bk, aes(x = x, xend = x - tick, y = top, yend = top),
+                   color = FIG_TRUTH, linewidth = 0.4) +
+      geom_segment(data = bk, aes(x = x, xend = x - tick, y = bottom, yend = bottom),
+                   color = FIG_TRUTH, linewidth = 0.4)
+  }
+  xb <- pretty(xr)
+  p <- p +
+    scale_color_identity() + scale_fill_identity() + scale_linetype_identity() +
+    scale_x_continuous(breaks = xb[xb >= xr[1] & xb <= xr[2]]) +
+    scale_y_continuous(breaks = n:1, labels = labels, limits = c(0.4, n + 0.6),
+                       expand = expansion(0)) +
+    coord_cartesian(xlim = c(xr[1], xmax), expand = FALSE) +
+    labs(x = xlab, y = NULL, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.pairsByRep = `
+# One column per matched pair: design A as a filled dot, design B as a hollow dot, joined by a
+# dashed segment.
+fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication") {
+  n <- length(a)
+  if (n == 0) return(fig_empty(title, xlab, "Replication outcome"))
+  d <- tibble(k = seq_len(n), a = as.numeric(a), b = as.numeric(b))
+  both <- filter(d, is.finite(a), is.finite(b))
+  long <- bind_rows(tibble(k = d$k, y = d$a, design = "A"), tibble(k = d$k, y = d$b, design = "B")) %>%
+    filter(is.finite(y))
+  keep <- seq(1, n, by = max(1, ceiling(n / 20)))
+  p <- ggplot() +
+    geom_segment(data = both, aes(x = k, xend = k, y = a, yend = b), linetype = "dashed",
+                 color = FIG_MUTED) +
+    geom_point(data = long, aes(x = k, y = y, shape = design, fill = design), color = FIG_EST,
+               size = 2.6, stroke = 0.8) +
+    scale_shape_manual(values = c(A = 21, B = 21)) +
+    scale_fill_manual(values = c(A = FIG_EST, B = "white")) +
+    scale_x_continuous(breaks = keep, labels = as.character(ids)[keep]) +
+    labs(x = xlab, y = "Replication outcome", title = title, shape = NULL, fill = NULL) +
+    fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.pairsSlopes = `
+# One line per pair from design A to design B: solid blue when the pair differs in the same
+# direction as the average difference, dashed gray otherwise; a short thick bar marks each mean.
+fig_pairs_slopes <- function(a, b, label_a = "A", label_b = "B", title = "Pairs as slopes") {
+  d <- tibble(a = as.numeric(a), b = as.numeric(b)) %>% filter(is.finite(a), is.finite(b))
+  if (nrow(d) == 0) return(fig_empty(title, "Design", "Replication outcome"))
+  m <- mean(d$a - d$b)
+  d <- d %>%
+    mutate(same = sign(a - b) == sign(m),
+           col = if_else(same, FIG_EST, FIG_MUTED),
+           lt = if_else(same, "solid", "dashed"))
+  bars <- tibble(x0 = c(0.9, 1.9), x1 = c(1.1, 2.1), y = c(mean(d$a), mean(d$b)))
+  p <- ggplot() +
+    geom_segment(data = d, aes(x = 1, xend = 2, y = a, yend = b, color = col, linetype = lt)) +
+    geom_segment(data = bars, aes(x = x0, xend = x1, y = y, yend = y), color = FIG_TRUTH,
+                 linewidth = 1.6) +
+    scale_color_identity() + scale_linetype_identity() +
+    scale_x_continuous(breaks = c(1, 2), labels = c(label_a, label_b), limits = c(0.6, 2.4)) +
+    labs(x = "Design", y = "Replication outcome", title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.hist = `
+# A histogram of x over the given bin edges: each bin holds its left edge, and the last both.
+fig_hist <- function(x, edges, xlab, title) {
+  x <- as.numeric(x)
+  edges <- sort(unique(as.numeric(edges)))
+  x <- x[is.finite(x) & x >= min(edges) & x <= max(edges)]
+  if (length(x) == 0) return(fig_empty(title, xlab, "Frequency"))
+  p <- ggplot(tibble(x = x), aes(x)) +
+    geom_histogram(breaks = edges, closed = "left", fill = FIG_EST, color = "white") +
+    labs(x = xlab, y = "Frequency", title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.ecdf = `
+# The empirical cumulative distribution function as a step function.
+fig_ecdf <- function(x, xlab, title) {
+  x <- as.numeric(x)
+  x <- x[is.finite(x)]
+  if (length(x) == 0) return(fig_empty(title, xlab, "Cumulative fraction"))
+  F <- ecdf(x)
+  r <- fig_span(x)
+  steps <- tibble(x = c(r[1], knots(F), r[2]), y = c(0, F(knots(F)), 1))
+  p <- ggplot(steps, aes(x, y)) +
+    geom_step(color = FIG_EST, linewidth = 0.8) +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(x = xlab, y = "Cumulative fraction", title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.box = `
+# One horizontal box plot: Tukey's hinges, the median, whiskers to the most extreme values
+# within 1.5 hinge spreads, outliers as hollow circles, and the mean as a hollow diamond.
+fig_box <- function(x, xlab, title) {
+  x <- as.numeric(x)
+  x <- x[is.finite(x)]
+  if (length(x) == 0) return(fig_empty(title, xlab))
+  f <- fivenum(x)
+  spread <- f[4] - f[2]
+  inside <- x[x >= f[2] - 1.5 * spread & x <= f[4] + 1.5 * spread]
+  wl <- min(inside); wh <- max(inside)
+  outl <- tibble(x = x[x < wl | x > wh], y = 1)
+  p <- ggplot() +
+    geom_segment(aes(x = wl, xend = f[2], y = 1, yend = 1), color = FIG_TRUTH) +
+    geom_segment(aes(x = f[4], xend = wh, y = 1, yend = 1), color = FIG_TRUTH) +
+    geom_rect(aes(xmin = f[2], xmax = f[4], ymin = 0.7, ymax = 1.3), fill = "white",
+              color = FIG_TRUTH) +
+    geom_segment(aes(x = f[3], xend = f[3], y = 0.7, yend = 1.3), color = FIG_TRUTH,
+                 linewidth = 1.2) +
+    geom_point(data = outl, aes(x = x, y = y), shape = 1, color = FIG_TRUTH, size = 2) +
+    geom_point(aes(x = mean(x), y = 1), shape = 23, fill = "white", color = FIG_TRUTH, size = 3) +
+    scale_y_continuous(limits = c(0.4, 1.6)) +
+    coord_cartesian(xlim = fig_span(c(x, f[2], f[4]))) +
+    labs(x = xlab, y = NULL, title = title) + fig_theme() +
+    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+          panel.grid.major.y = element_blank())
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.qq = `
+# A normal quantile-quantile plot, at R's ppoints positions, with the line through the quartiles.
+fig_qq <- function(x, ylab, title, xlab = "Standard normal quantile") {
+  x <- sort(as.numeric(x))
+  x <- x[is.finite(x)]
+  if (length(x) == 0) return(fig_empty(title, xlab, ylab))
+  d <- tibble(q = qnorm(ppoints(length(x))), x = x)
+  qs <- quantile(x, c(0.25, 0.75), names = FALSE)
+  slope <- diff(qs) / diff(qnorm(c(0.25, 0.75)))
+  icpt <- qs[1] - slope * qnorm(0.25)
+  p <- ggplot(d, aes(q, x)) +
+    geom_abline(slope = slope, intercept = icpt, linetype = "dashed", color = FIG_TRUTH) +
+    geom_point(color = FIG_EST, size = 2) +
+    labs(x = xlab, y = ylab, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.series = `
+# A series y against x as points, a line, or a step function. With a fence, everything left of
+# it is gray, shaded, and marked by a dashed maroon line.
+fig_series <- function(x, y, xlab, ylab, title, type = "points", fence = NA) {
+  d <- tibble(x = as.numeric(x), y = as.numeric(y)) %>% filter(is.finite(x), is.finite(y))
+  if (nrow(d) == 0) return(fig_empty(title, xlab, ylab))
+  xr <- fig_span(c(d$x, fence))
+  d <- d %>% mutate(col = if (is.finite(fence)) if_else(x < fence, FIG_MUTED, FIG_EST) else FIG_EST,
+                    part = if (is.finite(fence)) x < fence else FALSE)
+  p <- ggplot()
+  if (is.finite(fence)) {
+    p <- p + annotate("rect", xmin = xr[1], xmax = fence, ymin = -Inf, ymax = Inf,
+                      fill = FIG_MUTED, alpha = 0.2)
+  }
+  if (type == "points") {
+    p <- p + geom_point(data = d, aes(x, y, color = col), size = if (nrow(d) > 1000) 0.6 else 1.4)
+  } else {
+    draw <- if (type == "step") geom_step else geom_line
+    for (pt in unique(d$part)) {
+      piece <- filter(d, part == pt)
+      p <- p + draw(data = piece, aes(x, y), color = piece$col[1], linewidth = 0.5)
+    }
+  }
+  if (is.finite(fence)) p <- p + geom_vline(xintercept = fence, linetype = "dashed", color = FIG_ACCENT)
+  p <- p + scale_color_identity() + scale_x_continuous(expand = expansion(0)) +
+    coord_cartesian(xlim = xr) +
+    labs(x = xlab, y = ylab, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.running = `
+# A line of y against x, with a dashed line at the last finite y.
+fig_running <- function(x, y, xlab, ylab, title) {
+  d <- tibble(x = as.numeric(x), y = as.numeric(y)) %>% filter(is.finite(x), is.finite(y))
+  if (nrow(d) == 0) return(fig_empty(title, xlab, ylab))
+  last <- tibble(y = d$y[nrow(d)], what = "final value")
+  p <- ggplot(d, aes(x, y)) +
+    geom_line(color = FIG_EST, linewidth = 0.8) +
+    geom_hline(data = last, aes(yintercept = y, linetype = what), color = FIG_TRUTH) +
+    scale_linetype_manual(values = c("final value" = "dashed")) +
+    labs(x = xlab, y = ylab, title = title, linetype = NULL) + fig_theme() +
+    theme(legend.position = "bottom")
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.lag = `
+# A scatter of x[i + k] against x[i] on a square plot with the identity line.
+fig_lag <- function(x, k, xlab, ylab, title) {
+  x <- as.numeric(x)
+  n <- length(x)
+  if (n <= k) return(fig_empty(title, xlab, ylab))
+  d <- tibble(a = x[1:(n - k)], b = x[(k + 1):n]) %>% filter(is.finite(a), is.finite(b))
+  if (nrow(d) == 0) return(fig_empty(title, xlab, ylab))
+  r <- fig_span(x)
+  p <- ggplot(d, aes(a, b)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = FIG_MUTED) +
+    geom_point(color = FIG_EST, alpha = 0.7, size = if (nrow(d) > 1000) 0.8 else 1.6) +
+    coord_fixed(xlim = r, ylim = r) +
+    labs(x = xlab, y = ylab, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.acf = `
+# Autocorrelations at lags step, 2 * step, ... as stems, with optional +/- band lines and a
+# marked lag.
+fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelation", mark = NA,
+                    mark_label = "") {
+  d <- tibble(lag = seq_along(r) * step, r = as.numeric(r)) %>% filter(is.finite(r))
+  if (nrow(d) == 0) return(fig_empty(title, xlab, "Autocorrelation"))
+  xr <- fig_span(c(0, d$lag))
+  yr <- fig_span(c(0, d$r, band, -band), 0.05)
+  yr[2] <- yr[2] + 0.1 * diff(yr)
+  p <- ggplot(d, aes(lag, r)) +
+    geom_hline(yintercept = 0, color = FIG_MUTED) +
+    geom_segment(aes(xend = lag, yend = 0), color = FIG_EST)
+  if (nrow(d) <= 120) p <- p + geom_point(color = FIG_EST, size = 1.6)
+  if (is.finite(band)) {
+    p <- p + geom_hline(yintercept = c(-band, band), linetype = "dashed", color = FIG_MUTED)
+  }
+  if (is.finite(mark)) {
+    past <- mark > max(d$lag)
+    mx <- if (past) xr[2] - 0.004 * diff(xr) else mark
+    lab <- if (past) paste(mark_label, "(past the axis)") else mark_label
+    left <- past || mx > xr[1] + 0.6 * diff(xr)
+    p <- p +
+      geom_vline(xintercept = mx, linetype = "dashed", color = FIG_OK) +
+      annotate("text", x = mx + if (left) -0.01 * diff(xr) else 0.01 * diff(xr), y = yr[2],
+               label = lab, hjust = if (left) 1 else 0, vjust = 1, color = FIG_OK, size = 3.5)
+  }
+  p <- p + coord_cartesian(xlim = xr, ylim = yr, expand = FALSE) +
+    labs(x = xlab, y = "Autocorrelation", title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.warmup = `
+# Welch's warm-up plot: the raw average across replications, its moving average, and its
+# cumulative average, with the chosen cut marked and the stretch before it shaded.
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+  x <- as.numeric(x)
+  if (length(x) == 0) return(fig_empty(title, xlab, ylab))
+  nm <- c("average across replications", "moving average", "cumulative average")
+  cut_on <- is.finite(cut) && cut > min(x, na.rm = TRUE)
+  cut_name <- paste("cut at", format(cut, digits = 4))
+  d <- bind_rows(tibble(x = x, y = as.numeric(ybar), what = nm[1]),
+                 tibble(x = x, y = as.numeric(smooth), what = nm[2]),
+                 tibble(x = x, y = as.numeric(cumavg), what = nm[3])) %>%
+    mutate(what = factor(what, levels = nm)) %>% filter(is.finite(x))
+  cols <- c(FIG_MUTED, FIG_EST, FIG_TRUTH); lts <- c("solid", "solid", "dashed")
+  lws <- c(0.4, 1.1, 0.7)
+  if (cut_on) {
+    cols <- c(cols, FIG_ACCENT); lts <- c(lts, "dashed"); lws <- c(lws, 0.7)
+    names(cols) <- names(lts) <- names(lws) <- c(nm, cut_name)
+  } else {
+    names(cols) <- names(lts) <- names(lws) <- nm
+  }
+  p <- ggplot()
+  if (cut_on) {
+    p <- p + annotate("rect", xmin = -Inf, xmax = cut, ymin = -Inf, ymax = Inf,
+                      fill = FIG_MUTED, alpha = 0.2)
+  }
+  p <- p + geom_line(data = d, aes(x, y, color = what, linetype = what, linewidth = what),
+                     na.rm = TRUE)
+  if (cut_on) {
+    p <- p + geom_vline(data = tibble(x = cut, what = cut_name),
+                        aes(xintercept = x, color = what, linetype = what, linewidth = what))
+  }
+  if (is.finite(end_lo)) {
+    p <- p + geom_vline(xintercept = end_lo, linetype = "dotted", color = FIG_MUTED) +
+      annotate("text", x = end_lo, y = -Inf, label = "shortest run ends", angle = 90,
+               hjust = 0, vjust = -0.4, color = FIG_MUTED, size = 3.2)
+  }
+  p <- p +
+    scale_color_manual(values = cols, breaks = names(cols)) +
+    scale_linetype_manual(values = lts, breaks = names(cols)) +
+    scale_linewidth_manual(values = lws, breaks = names(cols)) +
+    labs(x = xlab, y = ylab, title = title, color = NULL, linetype = NULL, linewidth = NULL) +
+    fig_theme() + theme(legend.position = "bottom") +
+    guides(color = guide_legend(nrow = 2))
+  print(p)
+  invisible(p)
+}
+`;
+
+FIG_TIDY.batches = `
+# A series with its batches: dotted lines at the batch boundaries, a thick green segment at each
+# batch mean, a gray stretch for an excluded start, and maroon lines where replications join.
+fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FALSE,
+                        exclude_to = NA, joins = NULL) {
+  d <- tibble(x = as.numeric(x), y = as.numeric(y)) %>% filter(is.finite(x), is.finite(y))
+  if (nrow(d) == 0) return(fig_empty(title, xlab, ylab))
+  starts <- as.numeric(starts); ends <- as.numeric(ends); means <- as.numeric(means)
+  bt <- tibble(s = starts, e = ends, m = means) %>% filter(is.finite(s), is.finite(e), is.finite(m))
+  bounds <- c(starts, if (length(ends) > 0) ends[length(ends)])
+  bounds <- bounds[is.finite(bounds)]
+  joins <- if (is.null(joins)) numeric(0) else as.numeric(joins)
+  joins <- joins[is.finite(joins)]
+  xr <- fig_span(c(d$x, bounds))
+  d <- d %>% mutate(part = if (is.finite(exclude_to)) x < exclude_to else FALSE)
+  p <- ggplot()
+  if (is.finite(exclude_to)) {
+    p <- p + annotate("rect", xmin = -Inf, xmax = exclude_to, ymin = -Inf, ymax = Inf,
+                      fill = FIG_MUTED, alpha = 0.2)
+  }
+  if (length(bounds) > 0) {
+    p <- p + geom_vline(xintercept = bounds, linetype = "dotted", color = FIG_MUTED)
+  }
+  if (length(joins) > 0) {
+    p <- p + geom_vline(xintercept = joins, linetype = "dotted", color = FIG_ACCENT)
+  }
+  for (pt in unique(d$part)) {
+    piece <- filter(d, part == pt)
+    col <- if (pt) FIG_MUTED else FIG_EST
+    if (isTRUE(step)) {
+      p <- p + geom_step(data = piece, aes(x, y), color = col, linewidth = 0.5)
+    } else {
+      p <- p + geom_point(data = piece, aes(x, y), color = col,
+                          size = if (nrow(d) > 1000) 0.6 else 1.4)
+    }
+  }
+  if (nrow(bt) > 0) {
+    p <- p + geom_segment(data = bt, aes(x = s, xend = e, y = m, yend = m), color = FIG_OK,
+                          linewidth = 1.6)
+  }
+  p <- p + coord_cartesian(xlim = xr) + labs(x = xlab, y = ylab, title = title) + fig_theme()
+  print(p)
+  invisible(p)
+}
+`;
+</script>
+<script type="text/plain" data-module="js/io/figure_scripts.js">
+// The figures of the "Regenerate these results in" scripts: every figure the
+// page shows in the view the reader had open when the script was written,
+// each drawn by one call to a helper the script carries (figure_lib_r.js,
+// figure_lib_tidy.js, figure_lib_py.js, figure_lib_m.js). The calls name the
+// variables the page bodies in analysis_scripts.js compute, and so a body
+// and its figures change together. Pure functions, no DOM.
+//
+// FIGURES[page](r, L) returns { notes, calls, fig, need }: comments saying
+// what is drawn, the lines that draw the figures, the helper keys they call
+// (figure_lib_*.js), and any statistical snippets they need beyond the body's
+// (script_lib.js). figureBlock wraps the calls in the script's Figures section.
+//
+// The helpers' contract, the same in every dialect. R and Python take the
+// options by name; MATLAB takes the required arguments in order and then one
+// struct o of options. Labels are character vectors (MATLAB: cell arrays), a
+// list of vectors is an R list, a Python list, or a MATLAB cell array, and
+// brackets are rows of two 1-based row numbers. Every helper opens a figure
+// of its own, skips NaN values, widens a zero-width range, draws an empty
+// frame for no data, and prints and warns nothing on valid input.
+//   fig_strips(values, labels, xlab, title; mid, lo, hi, ref, mean_line):
+//     a row of dots per vector, each with its interval under it.
+//   fig_intervals(mid, lo, hi, labels, xlab, title; ref, flagged, muted,
+//     right, brackets, ok): a forest plot, row 1 at the top; flagged rows red
+//     and dashed, muted rows gray, ok rows green; text at each row's right,
+//     and a bracket joining each pair of rows given.
+//   fig_pairs_by_rep(a, b, ids; xlab, title) and
+//   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs.
+//   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
+//   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
+//   fig_series(x, y, xlab, ylab, title; type "points" | "line" | "step", fence)
+//   and fig_running(x, y, xlab, ylab, title): a run and its running mean.
+//   fig_lag(x, k, xlab, ylab, title) and fig_acf(r; step, band, xlab, title,
+//     mark, mark_label): the lag plot and the correlogram from lag 1.
+//   fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title; end_lo).
+//   fig_batches(x, y, starts, ends, means, xlab, ylab, title; step,
+//     exclude_to, joins).
+// Colors: EST #2b6cb0 for data, TRUTH #1a1a1a for intervals and means, MISS
+// #c0392b for a flagged row, OK #2e7d32, MUTED #9e9e9e, and ACCENT #8c1d40 for
+// a cut or fence.
+
+import { FIG_R } from './figure_lib_r.js';
+import { FIG_TIDY } from './figure_lib_tidy.js';
+import { FIG_PY } from './figure_lib_py.js';
+import { FIG_M } from './figure_lib_m.js';
+
+/** The figure helpers by dialect key: 'R', 'tidy', 'py', 'm'. */
+export const FIG = { R: FIG_R, tidy: FIG_TIDY, py: FIG_PY, m: FIG_M };
+
+// ── Code builders ────────────────────────────────────────────────────────
+// Each takes the language L (from analysis_scripts.js) and returns code.
+
+/** A field of a list (R), dict (Python), or struct (MATLAB). */
+export const fld = (L, v, k) => (L.lang === 'R' ? v + '$' + k : L.lang === 'py' ? v + '["' + k + '"]' : v + '.' + k);
+
+/** A vector of expressions. */
+export const vecOf = (L, exprs) => (L.lang === 'R' ? 'c(' + exprs.join(', ') + ')' : '[' + exprs.join(', ') + ']');
+
+/** A list of vectors: an R list, a Python list, a MATLAB cell array. */
+export const listOf = (L, exprs) => (L.lang === 'R' ? 'list(' + exprs.join(', ') + ')' : L.lang === 'py' ? '[' + exprs.join(', ') + ']' : '{' + exprs.join(', ') + '}');
+
+/** A vector of strings, each folded to ASCII by `str`. */
+export const strsOf = (L, a) => (L.lang === 'R' ? 'c(' + a.map(L.str).join(', ') + ')' : L.lang === 'py' ? '[' + a.map(L.str).join(', ') + ']' : '{' + a.map(L.str).join(', ') + '}');
+
+/** A logical expression as the language writes "x or y". */
+export const orOf = (L, a, b) => (L.lang === 'R' ? 'isTRUE(' + a + ' || ' + b + ')' : L.lang === 'py' ? 'bool(' + a + ' or ' + b + ')' : '(' + a + ' || ' + b + ')');
+
+/** Replication ids as text, whether the script holds them as numbers or strings. */
+export function idText(L, v) {
+  if (L.lang === 'R') return 'as.character(' + v + ')';
+  if (L.lang === 'py') return '[str(int(s)) if isinstance(s, (int, float, np.integer, np.floating)) and float(s).is_integer() else str(s) for s in ' + v + ']';
+  return 'cellstr(string(' + v + '))';
+}
+
+/**
+ * The lines of one helper call: positional arguments, then named options
+ * (undefined ones left out). R and Python pass the options by name; MATLAB
+ * gathers them in a struct o, set field by field, passed last.
+ * @param {object} L
+ * @param {string} name
+ * @param {string[]} pos
+ * @param {Record<string, string|undefined>} [opts]
+ */
+export function call(L, name, pos, opts = {}) {
+  const entries = Object.entries(opts).filter(([, v]) => v !== undefined && v !== null);
+  if (L.lang === 'm') {
+    if (!entries.length) return [name + '(' + pos.join(', ') + ');'];
+    return ['o = struct();', ...entries.map(([k, v]) => 'o.' + k + ' = ' + v + ';'), name + '(' + pos.join(', ') + ', o);'];
+  }
+  const eq = L.lang === 'R' ? ' = ' : '=';
+  const args = pos.concat(entries.map(([k, v]) => k + eq + v));
+  const one = name + '(' + args.join(', ') + ')';
+  if (one.length <= 96) return [one];
+  // A long call keeps its arguments on lines of their own, indented under the name.
+  const pad = ' '.repeat(name.length + 1), out = [];
+  let line = name + '(';
+  args.forEach((a, i) => {
+    const piece = a + (i < args.length - 1 ? ',' : ')');
+    if (line.length + piece.length + 1 > 96 && line.trim() !== name + '(') { out.push(line.replace(/ +$/, '')); line = pad; }
+    line += piece + (i < args.length - 1 ? ' ' : '');
+  });
+  out.push(line);
+  return out;
+}
+
+// ── One System ───────────────────────────────────────────────────────────
+
+// The outcomes (or the pooled observations) as one row of dots, with the
+// interval under them and a line at their mean.
+function oneFigures(r, L) {
+  const o = r.one, F = r.fig;
+  const opts = { mean_line: L.bool(true) };
+  if (o.interval) {
+    const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
+      : [fld(L, 'd', 'mean'), fld(L, 'ti', 'lo'), fld(L, 'ti', 'hi')];
+    Object.assign(opts, { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]) });
+  }
+  const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
+  return {
+    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them.' : '.')],
+    calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
+    fig: ['strips']
+  };
+}
+
+// ── Two Systems ──────────────────────────────────────────────────────────
+
+function twoFigures(r, L) {
+  return r.two.mode === 'paired' ? twoPairedFigures(r, L) : twoIndependentFigures(r, L);
+}
+
+// Each design's outcomes with its own interval (a t interval, or the
+// Wilcoxon signed-rank interval under the rank procedure), and the interval
+// on the difference A - B against zero, flagged when it excludes zero.
+function twoIndependentFigures(r, L) {
+  const o = r.two, F = r.fig, calls = [], need = [];
+  const own = o.np ? 'signed_rank' : 't_interval';
+  need.push(o.np ? 'signedRank' : 'tInterval');
+  calls.push(L.assign('ia', own + '(a, level)'), L.assign('ib', own + '(b, level)'));
+  const mid = o.np ? [fld(L, 'ia', 'estimate'), fld(L, 'ib', 'estimate')] : [fld(L, 'da', 'mean'), fld(L, 'db', 'mean')];
+  calls.push(...call(L, 'fig_strips', [listOf(L, ['a', 'b']), strsOf(L, F.labels), L.str('Replication outcome'), L.str('Replication outcomes and each design\'s interval')],
+    { mid: vecOf(L, mid), lo: vecOf(L, [fld(L, 'ia', 'lo'), fld(L, 'ib', 'lo')]), hi: vecOf(L, [fld(L, 'ia', 'hi'), fld(L, 'ib', 'hi')]) }));
+  const v = o.np ? 'rs' : 'w';
+  const [m, lo, hi] = [fld(L, v, o.np ? 'estimate' : 'diff'), fld(L, v, 'lo'), fld(L, v, 'hi')];
+  calls.push(...call(L, 'fig_intervals', [vecOf(L, [m]), vecOf(L, [lo]), vecOf(L, [hi]), strsOf(L, ['A - B']),
+    L.str(o.np ? 'Shift in location, A - B' : 'Difference in means, A - B'), L.str('The difference against zero')],
+  { ref: '0', flagged: vecOf(L, [orOf(L, lo + ' > 0', hi + ' < 0')]) }));
+  return {
+    notes: ['Each design\'s replication outcomes with its own ' + (o.np ? 'Wilcoxon signed-rank interval' : 't interval') + ', and the interval on the ' +
+      (o.np ? 'shift' : 'difference') + ' A - B, drawn in red when it excludes zero.'],
+    calls, need, fig: ['strips', 'intervals']
+  };
+}
+
+// The differences with their interval against zero, and the pairs: by
+// replication (A filled, B hollow, joined) or as slopes from A to B.
+function twoPairedFigures(r, L) {
+  const o = r.two, F = r.fig, calls = [];
+  const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
+    : [fld(L, 'pr', 'meanD'), fld(L, 'pr', 'lo'), fld(L, 'pr', 'hi')];
+  calls.push(...call(L, 'fig_strips', [listOf(L, [fld(L, 'pr', 'diffs')]), strsOf(L, ['A - B']), L.str('Difference A - B in each matched pair'),
+    L.str('Paired differences')], { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]), ref: '0' }));
+  const slope = F.view === 'slope';
+  if (slope) calls.push(...call(L, 'fig_pairs_slopes', ['a', 'b'], { label_a: L.str(F.labels[0]), label_b: L.str(F.labels[1]) }));
+  else {
+    calls.push(...call(L, 'fig_pairs_by_rep', ['a', 'b', idText(L, 'pair_id')],
+      { xlab: L.str(r.pairs.by === 'id' ? 'Replication id' : 'Replication ids, A/B') }));
+  }
+  return {
+    notes: ['The differences of the matched pairs with their ' + (o.np ? 'Wilcoxon signed-rank interval' : 'paired t interval') + ', and the pairs ' +
+      (slope ? 'as slopes from A to B, solid where a pair differs in the direction of the mean difference.' : 'by replication, A filled and B hollow.')],
+    calls, fig: ['strips', slope ? 'pairsSlopes' : 'pairsByRep']
+  };
+}
+
+// ── Several Systems ──────────────────────────────────────────────────────
+
+// A field of every element of a list (R list, Python list of dicts, MATLAB cell array) as a vector.
+const pluck = (L, v, k) => (L.lang === 'R' ? 'sapply(' + v + ', function(e) e$' + k + ')'
+  : L.lang === 'py' ? 'np.array([e["' + k + '"] for e in ' + v + '], dtype=float)' : 'cellfun(@(e) e.' + k + ', ' + v + ')');
+
+// The rows of a design-level figure in the page's order, best first: ord
+// lists the designs by mean (largest first when bigger is better), and
+// row_of gives each design's row.
+function orderLines(L, means) {
+  if (L.lang === 'R') return ['row_means <- ' + means, 'ord <- order(row_means, decreasing = direction == "max")', 'row_of <- match(seq_len(k), ord)'];
+  if (L.lang === 'py') {
+    return ['row_means = ' + means, 'ord = np.argsort(-row_means if direction == "max" else row_means, kind="stable")',
+      'row_of = np.empty(k, dtype=int)', 'row_of[ord] = np.arange(1, k + 1)'];
+  }
+  return ['row_means = ' + means + ';', "if strcmp(direction, 'max'), [~, ord] = sort(row_means, 'descend'); else, [~, ord] = sort(row_means); end",
+    'row_of = zeros(1, k); row_of(ord) = 1:k;'];
+}
+
+// A vector, or the labels, taken in the order ord.
+const inOrd = (L, v, strs = false) => (L.lang === 'R' ? v + '[ord]' : L.lang === 'py' ? (strs ? '[' + v + '[i] for i in ord]' : 'np.asarray(' + v + ')[ord]') : v + '(ord)');
+
+// The brackets of the pairs a post-hoc rule declared different, as rows: from
+// a list of pairs with fields i, j, and flagged.
+function bracketsFromPairs(L, pairs) {
+  if (L.lang === 'R') return ['fl <- Filter(function(p) isTRUE(p$flagged), ' + pairs + ')', 'brackets <- if (length(fl)) t(sapply(fl, function(p) row_of[c(p$i, p$j)])) else NULL'];
+  if (L.lang === 'py') return ['brackets = [(row_of[p["i"]], row_of[p["j"]]) for p in ' + pairs + ' if p["flagged"]]'];
+  return ['fl = ' + pairs + '(cellfun(@(p) logical(p.flagged), ' + pairs + '));', 'brackets = zeros(numel(fl), 2);',
+    'for q = 1:numel(fl), brackets(q, :) = row_of([fl{q}.i, fl{q}.j]); end'];
+}
+
+function severalFigures(r, L) {
+  const S = r.several, F = r.fig, resp = r.groups.response, calls = [], fig = [], notes = [];
+  calls.push(L.lang === 'm' ? 'design_labels = ' + strsOf(L, F.labels) + ';' : L.assign('design_labels', strsOf(L, F.labels)));
+  const items = fld(L, 'sm', 'items');
+  if (F.section === 'means') {
+    const src = S.np ? 'srs' : items;
+    calls.push(L.assign('iv_lo', pluck(L, src, 'lo')), L.assign('iv_hi', pluck(L, src, 'hi')));
+    const opts = {};
+    if (S.bench != null) {
+      calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
+      Object.assign(opts, { ref: 'benchmark', flagged: 'bench_flag' });
+    }
+    calls.push(...call(L, 'fig_intervals', [pluck(L, src, S.np ? 'estimate' : 'mean'), 'iv_lo', 'iv_hi', 'design_labels',
+      L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
+    fig.push('intervals');
+    notes.push('Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its simultaneous interval' + (S.bench != null ? ', drawn in red when it excludes the benchmark (the dashed line).' : '.'));
+  } else if (F.section === 'diffs') {
+    calls.push(...call(L, 'fig_intervals', ['fam_mid', 'fam_lo', 'fam_hi', 'fam_lab', L.str((S.np ? 'Shift in location of ' : 'Difference in means of ') + resp),
+      L.str('Pairwise comparisons (Bonferroni)')], { ref: '0', flagged: L.lang === 'R' ? '(fam_lo > 0) %in% TRUE | (fam_hi < 0) %in% TRUE' : L.lang === 'py' ? '(np.array(fam_lo) > 0) | (np.array(fam_hi) < 0)' : '(fam_lo > 0) | (fam_hi < 0)' }));
+    fig.push('intervals');
+    notes.push('Every comparison of the family with its interval, collected as the comparisons above ran, drawn in red when it excludes zero.');
+  } else if (F.section === 'anova' && S.anova && !S.anova.welchBad.length) {
+    const A = S.anova, dunnett = !A.welch && A.rule === 'dunnett';
+    calls.push(...call(L, 'fig_qq', [fld(L, 'av', 'resid'), L.str('Residual'), L.str('Residuals, normal quantile-quantile plot')]));
+    calls.push(...orderLines(L, pluck(L, items, 'mean')));
+    let right;
+    if (A.letters) right = inOrd(L, 'cld', true);
+    else if (dunnett) {
+      if (L.lang === 'R') right = 'ifelse(seq_len(k) == control, "control", "")[ord]';
+      else if (L.lang === 'py') right = '["control" if i == control - 1 else "" for i in ord]';
+      else { calls.push("row_text = repmat({''}, 1, k); row_text{control} = 'control';"); right = 'row_text(ord)'; }
+    }
+    calls.push(...bracketsFromPairs(L, fld(L, 'ph', 'pairs')));
+    calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
+    calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
+      inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
+    { right, brackets: 'brackets' }));
+    const pp = fld(L, 'ph', 'pairs');
+    const lab = L.lang === 'R' ? 'sapply(' + pp + ', function(p) paste(p$i, "-", p$j))' : L.lang === 'py' ? '[f"{p[\'i\'] + 1} - {p[\'j\'] + 1}" for p in ' + pp + ']'
+      : "cellfun(@(p) sprintf('%d - %d', p.i, p.j), " + pp + ", 'UniformOutput', false)";
+    const flag = L.lang === 'R' ? 'sapply(' + pp + ', function(p) isTRUE(p$flagged))' : L.lang === 'py' ? '[bool(p["flagged"]) for p in ' + pp + ']' : 'cellfun(@(p) logical(p.flagged), ' + pp + ')';
+    calls.push(...call(L, 'fig_intervals', [pluck(L, pp, 'diff'), pluck(L, pp, 'lo'), pluck(L, pp, 'hi'), lab, L.str('Difference in means of ' + resp),
+      L.str('Post-hoc comparisons')], { ref: '0', flagged: flag }));
+    fig.push('qq', 'intervals');
+    notes.push('The residuals\' normal quantile-quantile plot; the designs, best first, each with its simultaneous interval, its letters, and a bracket joining each pair the post-hoc rule declared different; and the post-hoc intervals, red where a pair was declared different.');
+  } else if (F.section === 'anova' && S.rank) {
+    if (L.lang === 'R') calls.push('hl <- lapply(groups, function(x) signed_rank(x, level))');
+    else if (L.lang === 'py') calls.push('hl = [signed_rank(x, level) for x in groups]');
+    else calls.push("hl = cellfun(@(x) signed_rank(x, level), groups, 'UniformOutput', false);");
+    calls.push(...orderLines(L, pluck(L, 'hl', 'estimate')));
+    if (L.lang === 'R') calls.push('brackets <- if (length(rank_flagged)) t(sapply(rank_flagged, function(p) row_of[p])) else NULL');
+    else if (L.lang === 'py') calls.push('brackets = [(row_of[i], row_of[j]) for i, j in rank_flagged]');
+    else calls.push('brackets = []; if ~isempty(rank_flagged), brackets = [reshape(row_of(rank_flagged(:, 1)), [], 1), reshape(row_of(rank_flagged(:, 2)), [], 1)]; end');
+    calls.push(L.assign('iv_lo', pluck(L, 'hl', 'lo')), L.assign('iv_hi', pluck(L, 'hl', 'hi')));
+    calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
+      inOrd(L, 'design_labels', true), L.str('Pseudo-median of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
+    { right: inOrd(L, 'rank_cld', true), brackets: 'brackets' }));
+    fig.push('intervals');
+    notes.push('The designs, best first, each with its pseudo-median and Wilcoxon signed-rank interval, its letters, and a bracket joining each pair declared different.');
+  } else if (F.section === 'subset' && S.subset && S.subset.ok) {
+    calls.push(...orderLines(L, pluck(L, items, 'mean')));
+    const surv = L.lang === 'R' ? 'ss$survivors[ord]' : L.lang === 'py' ? 'np.asarray(ss["survivors"], dtype=bool)[ord]' : 'logical(ss.survivors(ord))';
+    calls.push(L.assign('survives', surv));
+    const right = L.lang === 'R' ? 'ifelse(survives, "survives", "eliminated")' : L.lang === 'py' ? '["survives" if s else "eliminated" for s in survives]'
+      : "row_text";
+    if (L.lang === 'm') calls.push("row_text = repmat({'eliminated'}, 1, k); row_text(survives) = {'survives'};");
+    calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
+    calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
+      inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Screen for the best')],
+    { right, ok: 'survives', muted: L.lang === 'py' ? '~survives' : '!survives'.replace('!', L.lang === 'm' ? '~' : '!') }));
+    fig.push('intervals');
+    notes.push('The designs, best first, each with its simultaneous interval: the survivors of the screen in green, and the eliminated designs in gray.');
+  } else return { calls: [] };
+  return { notes, calls, fig };
+}
+
+// ── Steady State ─────────────────────────────────────────────────────────
+
+// The warm-up section: Welch's plot of the ensemble average, its moving
+// average, and its cumulative average, with the cut. The batch section: the
+// correlogram of the series after truncation with the batch size marked, each
+// batch mean against the next, and the series with its batches.
+function steadyFigures(r, L) {
+  const S = r.steady, F = r.fig, time = S.kind === 'time', resp = F.response, calls = [];
+  if (F.section === 'warmup') {
+    if (L.lang === 'R') calls.push('x <- if (align == "index") seq_along(ybar) else (al$edges[-1] + al$edges[-length(al$edges)]) / 2');
+    else if (L.lang === 'py') calls.push('x = np.arange(1, L + 1) if align == "index" else (edges[1:] + edges[:-1]) / 2');
+    else calls.push("if strcmp(align, 'index'), x = 1:L; else, x = (edges(2:end) + edges(1:end - 1)) / 2; end");
+    const xlab = L.lang === 'R' ? 'if (align == "index") "Observation index" else "Simulation time (bin centers)"'
+      : L.lang === 'py' ? '"Observation index" if align == "index" else "Simulation time (bin centers)"' : null;
+    if (L.lang === 'm') calls.push("xlab = 'Simulation time (bin centers)'; if strcmp(align, 'index'), xlab = 'Observation index'; end");
+    calls.push(...call(L, 'fig_warmup', ['x', 'ybar', 'smooth', 'cum', 'cut', xlab || 'xlab',
+      L.str(F.nReps > 1 ? 'Average ' + resp + ' across replications' : resp), L.str('Warm-up: the average across replications')]));
+    return { notes: ['Welch\'s warm-up plot: the average across replications, its moving average over w points on each side, and its cumulative average, with the stretch before the cut shaded.'],
+      calls, fig: ['warmup'] };
+  }
+  if (!S.batchOk) return { calls: [] };
+  const ind = L.lang === 'R' ? '  ' : '    ';
+  const inner = [];
+  // The correlogram, at every lag the page draws.
+  const step = time ? (L.lang === 'R' ? '(b_end - bt[1]) / n_steps' : L.lang === 'py' ? '(b_end - bt[0]) / n_steps' : '(b_end - bt(1)) / n_steps') : '1';
+  const markLabel = time ? (L.lang === 'R' ? 'paste("batch length", signif(bm$size, 4))' : L.lang === 'py' ? 'f"batch length {bm[\'size\']:.4g}"' : "sprintf('batch length %.4g', bm.size)")
+    : (L.lang === 'R' ? 'paste("batch size", bm$size)' : L.lang === 'py' ? 'f"batch size {bm[\'size\']:g}"' : "sprintf('batch size %g', bm.size)");
+  const acfCall = call(L, 'fig_acf', [L.lang === 'm' ? 'acf_lags(series, n_lags)' : 'acf_lags(series, n_lags)'],
+    { step, band: L.lang === 'R' ? '2 / sqrt(length(series))' : L.lang === 'py' ? '2 / np.sqrt(len(series))' : '2 / sqrt(numel(series))',
+      xlab: L.str(time ? 'Lag (time units)' : 'Lag (observations)'), title: L.str('Autocorrelation after truncation'),
+      mark: fld(L, 'bm', 'size'), mark_label: markLabel });
+  if (L.lang === 'R') inner.push('if (n_lags >= 1) {', ...acfCall.map(x => ind + x), '}');
+  else if (L.lang === 'py') inner.push('if n_lags >= 1:', ...acfCall.map(x => ind + x));
+  else inner.push('if n_lags >= 1', ...acfCall.map(x => ind + x), 'end');
+  // Each batch mean against the next.
+  const lagCall = call(L, 'fig_lag', [fld(L, 'bm', 'means'), '1', L.str('Batch mean j'), L.str('Batch mean j + 1'), L.str('Neighboring batch means')]);
+  if (L.lang === 'R') inner.push('if (bm$b >= 3) {', ...lagCall.map(x => ind + x), '}');
+  else if (L.lang === 'py') inner.push('if bm["b"] >= 3:', ...lagCall.map(x => ind + x));
+  else inner.push('if bm.b >= 3', ...lagCall.map(x => ind + x), 'end');
+  // The series the batches were formed on, with each batch's span and mean.
+  if (time) {
+    if (L.lang === 'R') inner.push('bx <- bt; b_starts <- bm$start + (seq_len(bm$b) - 1) * bm$size');
+    else if (L.lang === 'py') inner.push('bx = bt; b_starts = bm["start"] + np.arange(bm["b"]) * bm["size"]');
+    else inner.push('bx = bt; b_starts = bm.start + (0:bm.b - 1) * bm.size;');
+  } else if (L.lang === 'R') inner.push('bx <- seq_along(bv); b_starts <- (seq_len(bm$b) - 1) * bm$size + 0.5');
+  else if (L.lang === 'py') inner.push('bx = np.arange(1, len(bv) + 1); b_starts = np.arange(bm["b"]) * bm["size"] + 0.5');
+  else inner.push('bx = 1:numel(bv); b_starts = (0:bm.b - 1) * bm.size + 0.5;');
+  inner.push(...call(L, 'fig_batches', ['bx', 'bv', 'b_starts', 'b_starts + ' + fld(L, 'bm', 'size'), fld(L, 'bm', 'means'),
+    L.str(time ? 'Simulation time' : 'Observation (after the cut)'), L.str(resp), L.str('The series and its batch means')], { step: L.bool(time) }));
+  if (L.lang === 'R') calls.push('if (bm$ok) {', ...inner.map(x => ind + x), '}');
+  else if (L.lang === 'py') calls.push('if bm["ok"]:', ...inner.map(x => ind + x));
+  else calls.push('if bm.ok', ...inner.map(x => ind + x), 'end');
+  return {
+    notes: ['The correlogram of the series after truncation with the batch ' + (time ? 'length' : 'size') + ' marked; each batch mean against the next, ' +
+      'which should show no trend when the batches are long enough; and the series with each batch\'s span and mean.'],
+    calls, fig: ['acf', 'lag', 'batches']
+  };
+}
+
+// ── Summary and Plots ────────────────────────────────────────────────────
+
+// Lines per language, chosen by L.
+const by = (L, R, py, m) => (L.lang === 'R' ? R : L.lang === 'py' ? py : m);
+
+// The values a distribution figure draws: every observation pooled, or the outcomes x.
+function valuesLine(L, pooled) {
+  if (!pooled) return [by(L, 'plot_v <- x', 'plot_v = x', 'plot_v = x;')];
+  return [by(L, 'plot_v <- unlist(lapply(reps, function(r) r$v))', 'plot_v = np.concatenate([np.asarray(r["v"], float) for r in reps])', 'plot_v = [reps.v];')];
+}
+
+// The open section's figures: the distribution (histogram, empirical CDF, and
+// box plot), one replication's run (its series, running mean, and, for tally
+// data, a lag plot and correlogram), the replications (a dot plot and their
+// intervals), or the normal quantile-quantile plot.
+function exploreFigures(r, L) {
+  const F = r.fig, calls = [], need = [], fig = [], notes = [];
+  const tally = F.kind === 'tally', resp = F.response;
+  if (F.section === 'dist') {
+    calls.push(...valuesLine(L, F.pooledDist));
+    calls.push(by(L, 'nb <- max(5, ceiling(sqrt(length(plot_v))))', 'nb = max(5, int(np.ceil(np.sqrt(len(plot_v)))))', 'nb = max(5, ceil(sqrt(numel(plot_v))));'));
+    calls.push(by(L, 'edges <- if (max(plot_v) > min(plot_v)) seq(min(plot_v), max(plot_v), length.out = nb + 1) else plot_v[1] + c(-0.5, 0.5)',
+      'edges = np.linspace(plot_v.min(), plot_v.max(), nb + 1) if plot_v.max() > plot_v.min() else plot_v[0] + np.array([-0.5, 0.5])',
+      'if max(plot_v) > min(plot_v), edges = linspace(min(plot_v), max(plot_v), nb + 1); else, edges = plot_v(1) + [-0.5, 0.5]; end'));
+    const xlab = F.pooledDist ? resp : F.outcomeAxis, what = F.pooledDist ? 'Pooled observations' : 'Replication outcomes';
+    calls.push(...call(L, 'fig_hist', ['plot_v', 'edges', L.str(xlab), L.str(what + ': histogram')]));
+    calls.push(...call(L, 'fig_ecdf', ['plot_v', L.str(xlab), L.str(what + ': empirical CDF')]));
+    fig.push('hist', 'ecdf');
+    if (F.nOut >= 5) { calls.push(...call(L, 'fig_box', ['x', L.str(F.outcomeAxis), L.str('Replication outcomes: box plot')])); fig.push('box'); }
+    notes.push('The histogram has max(5, ceiling(sqrt(n))) equal-width bins from the smallest value to the largest, as the page draws it' +
+      (F.nOut >= 5 ? '; the box plot is always of the replication outcomes.' : '.'));
+  } else if (F.section === 'run') {
+    const k = F.rep;
+    calls.push(by(L, 'rv <- reps[[' + k + ']]$v; rt <- reps[[' + k + ']]$t', 'rv = np.asarray(reps[' + (k - 1) + ']["v"], float); rt = reps[' + (k - 1) + ']["t"]',
+      'rv = reps(' + k + ').v; rt = reps(' + k + ').t;'));
+    const title = 'Replication ' + F.repId;
+    if (tally) {
+      const useT = F.axis === 'time';
+      calls.push(useT ? by(L, 'xs <- if (is.null(rt)) seq_along(rv) else rt', 'xs = np.arange(1, len(rv) + 1) if rt is None else np.asarray(rt, float)', 'xs = rt; if isempty(xs), xs = 1:numel(rv); end')
+        : by(L, 'xs <- seq_along(rv)', 'xs = np.arange(1, len(rv) + 1)', 'xs = 1:numel(rv);'));
+      const xlab = useT ? 'Time' : 'Observation number';
+      calls.push(...call(L, 'fig_series', ['xs', 'rv', L.str(xlab), L.str(resp), L.str(title + ': observations')], { type: L.str('points') }));
+      calls.push(...call(L, 'fig_running', ['xs', by(L, 'cumsum(rv) / seq_along(rv)', 'np.cumsum(rv) / np.arange(1, len(rv) + 1)', 'cumsum(rv) ./ (1:numel(rv))'),
+        L.str(xlab), L.str('Running mean'), L.str(title + ': running mean')]));
+      need.push('acf');
+      const lagCalls = [...call(L, 'fig_lag', ['rv', 'k_lag', L.str('Observation i'), L.str('Observation i + k'), L.str(title + ': lag plot')]),
+        ...call(L, 'fig_acf', ['acf_lags(rv, n_lags)'], { band: by(L, '2 / sqrt(length(rv))', '2 / np.sqrt(len(rv))', '2 / sqrt(numel(rv))'),
+          title: L.str(title + ': autocorrelation'), mark: 'k_lag', mark_label: by(L, 'paste("lag", k_lag)', 'f"lag {k_lag}"', "sprintf('lag %d', k_lag)") })];
+      const ind = L.lang === 'R' ? '  ' : '    ';
+      calls.push(L.comment + 'The lag k of the page, held to the lags the correlogram draws: 1 to min(400, n/4).');
+      calls.push(by(L, 'n_lags <- min(400, floor(length(rv) / 4)); k_lag <- min(' + F.lag + ', n_lags)',
+        'n_lags = min(400, len(rv) // 4); k_lag = min(' + F.lag + ', n_lags)', 'n_lags = min(400, floor(numel(rv) / 4)); k_lag = min(' + F.lag + ', n_lags);'));
+      if (L.lang === 'R') calls.push('if (length(rv) >= 8 && n_lags >= 1) {', ...lagCalls.map(x => ind + x), '}');
+      else if (L.lang === 'py') calls.push('if len(rv) >= 8 and n_lags >= 1:', ...lagCalls.map(x => ind + x));
+      else calls.push('if numel(rv) >= 8 && n_lags >= 1', ...lagCalls.map(x => ind + x), 'end');
+      fig.push('series', 'running', 'lag', 'acf');
+      notes.push('Replication ' + F.repId + ', the one the page showed: its observations, their running mean, and, with eight or more, the lag plot at lag k and the correlogram.');
+    } else {
+      calls.push(L.comment + 'The state holds each value until the next record, and the last until end_time when the data give one.');
+      calls.push(...by(L, ['te <- if (is.finite(end_time)) end_time else rt[length(rt)]', 'sx <- c(rt, te); sy <- c(rv, rv[length(rv)])',
+        'area <- cumsum(rv * diff(sx)); at <- sx[-1]; later <- at > rt[1]'],
+      ['te = end_time if np.isfinite(end_time) else rt[-1]', 'sx = np.append(np.asarray(rt, float), te); sy = np.append(rv, rv[-1])',
+        'area = np.cumsum(rv * np.diff(sx)); at = sx[1:]; later = at > sx[0]'],
+      ['te = end_time; if ~isfinite(te), te = rt(end); end', "sx = [rt(:)', te]; sy = [rv(:)', rv(end)];",
+        "area = cumsum(rv(:)' .* diff(sx)); at = sx(2:end); later = at > sx(1);"]));
+      calls.push(...call(L, 'fig_series', ['sx', 'sy', L.str('Time'), L.str(resp), L.str(title + ': the state over time')], { type: L.str('step') }));
+      calls.push(...call(L, 'fig_running', [by(L, 'at[later]', 'at[later]', 'at(later)'), by(L, '(area / (at - rt[1]))[later]', '(area / (at - sx[0]))[later]', 'area(later) ./ (at(later) - sx(1))'),
+        L.str('Time'), L.str('Running time-weighted mean'), L.str(title + ': running time-weighted mean')]));
+      fig.push('series', 'running');
+      notes.push('Replication ' + F.repId + ', the one the page showed: the state over time, and its running time-weighted mean.');
+    }
+  } else if (F.section === 'reps') {
+    calls.push(...call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, ['']), L.str(F.outcomeAxis), L.str('Replication outcomes')], { mean_line: L.bool(true) }));
+    need.push('tInterval');
+    calls.push(L.assign('ta', 't_interval(x, level)'));
+    if (tally) {
+      calls.push(L.comment + 'Each replication\'s own t interval over its observations, for the first 60 with two or more.');
+      calls.push(...by(L, ['keep <- head(Filter(function(r) length(r$v) >= 2, reps), 60)', 'per <- lapply(keep, function(r) t_interval(r$v, level))',
+        'f_mid <- c(mean(x), vapply(keep, function(r) mean(r$v), numeric(1)))', 'f_lo <- c(ta$lo, vapply(per, function(p) p$lo, numeric(1)))',
+        'f_hi <- c(ta$hi, vapply(per, function(p) p$hi, numeric(1)))', 'f_lab <- c("all replications", vapply(keep, function(r) paste("replication", r$id), ""))'],
+      ['keep = [rp for rp in reps if len(rp["v"]) >= 2][:60]', 'per = [t_interval(np.asarray(rp["v"], float), level) for rp in keep]',
+        'f_mid = [np.mean(x)] + [np.mean(rp["v"]) for rp in keep]', 'f_lo = [ta["lo"]] + [p["lo"] for p in per]', 'f_hi = [ta["hi"]] + [p["hi"] for p in per]',
+        'f_lab = ["all replications"] + ["replication " + str(rp["id"]) for rp in keep]'],
+      ['keep = find(arrayfun(@(rp) numel(rp.v) >= 2, reps)); keep = keep(1:min(60, end));', "f_mid = mean(x); f_lo = ta.lo; f_hi = ta.hi; f_lab = {'all replications'};",
+        'for q = keep', '    p = t_interval(reps(q).v, level);', "    f_mid(end + 1) = mean(reps(q).v); f_lo(end + 1) = p.lo; f_hi(end + 1) = p.hi; f_lab{end + 1} = ['replication ' char(reps(q).id)];", 'end']));
+      calls.push(...call(L, 'fig_intervals', ['f_mid', 'f_lo', 'f_hi', 'f_lab', L.str(F.outcomeAxis), L.str('t intervals')], { ref: by(L, 'mean(x)', 'np.mean(x)', 'mean(x)') }));
+    } else {
+      calls.push(...call(L, 'fig_intervals', [vecOf(L, [by(L, 'mean(x)', 'np.mean(x)', 'mean(x)')]), vecOf(L, [fld(L, 'ta', 'lo')]), vecOf(L, [fld(L, 'ta', 'hi')]),
+        strsOf(L, ['all replications']), L.str(F.outcomeAxis), L.str('t interval over the replication outcomes')]));
+    }
+    fig.push('strips', 'intervals');
+    notes.push('The replication outcomes as dots with their mean, and the t interval over them' + (tally ? ' above each replication\'s own interval over its observations.' : '.'));
+  } else if (F.section === 'normality') {
+    calls.push(...valuesLine(L, F.pooledQQ));
+    calls.push(...call(L, 'fig_qq', ['plot_v', L.str(F.pooledQQ ? resp : F.outcomeAxis), L.str((F.pooledQQ ? 'Pooled observations' : 'Replication outcomes') + ': normal quantile-quantile plot')]));
+    fig.push('qq');
+    notes.push('The normal quantile-quantile plot: each sorted value against the normal quantile at its plotting position (R\'s ppoints), with a dashed line through the quartiles (R\'s qqline).');
+  } else return { calls: [] };
+  return { notes, calls, need, fig };
+}
+
+/** The figure emitters by page. */
+export const FIGURES = { one: oneFigures, two: twoFigures, several: severalFigures, steady: steadyFigures, explore: exploreFigures };
+
+/**
+ * The Figures section of a script, or nothing when the page's view shows no
+ * figure: a comment saying what is drawn, the calls, and in Python the guard
+ * that skips the figures when Matplotlib is not installed and the one call
+ * that shows them all.
+ * @param {object} r the recipe
+ * @param {object} L the language
+ * @returns {{ lines: string[], fig: string[], need: string[] }}
+ */
+export function figureBlock(r, L) {
+  const make = Object.prototype.hasOwnProperty.call(FIGURES, r.page) ? FIGURES[r.page] : null;
+  const got = make ? make(r, L) : null;
+  if (!got || !got.calls.length) return { lines: [], fig: [], need: [] };
+  const c = L.comment, lines = [L.sect('Figures')];
+  for (const n of got.notes || []) lines.push(...wrapComment(c, n));
+  if (L.lang === 'R' && !L.tidy) lines.push(c + 'Each figure replaces the last on screen; in RStudio, the arrows of the Plots pane step back through them.');
+  if (L.lang === 'R' && L.tidy) lines.push(c + 'In RStudio, the arrows of the Plots pane step back through the figures.');
+  if (L.lang === 'py') {
+    lines.push('try:', '    import matplotlib', 'except ImportError:', '    matplotlib = None',
+      'if matplotlib is None:', '    print("Matplotlib is not installed, and so the figures are skipped.")', 'else:',
+      ...got.calls.map(x => '    ' + x), '    show_figures()');
+  } else lines.push(...got.calls);
+  return { lines, fig: Array.from(new Set(['common', ...got.fig])), need: got.need || [] };
+}
+
+function wrapComment(c, text) {
+  const out = [];
+  let line = c;
+  for (const w of text.split(/ +/)) {
+    if (line.length > c.length && line.length + 1 + w.length > 92) { out.push(line); line = c; }
+    line += (line.length > c.length ? ' ' : '') + w;
+  }
+  out.push(line);
+  return out;
+}
+</script>
 <script type="text/plain" data-module="js/io/parse.js">
 // Reading simulation output from delimited text: splitting lines into cells,
 // detecting a header and the file's layout, suggesting a column mapping, and
@@ -17598,6 +20586,7 @@ import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
          resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { slug } from './export.js';
+import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -17770,6 +20759,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
   r.one = { pooled, np, interval, variance, checks, plan: planOut };
+  // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
+  r.fig = { xlab: outcomeAxis(ds, pooled), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}
@@ -17881,6 +20872,8 @@ export function twoRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
   r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  // The page's two figures: each design's outcomes with its own interval, and the interval on the difference.
+  r.fig = { labels: roleLabels(dsA, dsB) };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
@@ -17939,6 +20932,9 @@ function twoPairedRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
   r.two = { mode: 'paired', np, checks: !np, plan: planOut };
+  // The page's two figures: the differences with their interval, and the pairs in the view the page
+  // shows (by replication, or as slopes).
+  r.fig = { labels: roleLabels(dsA, dsB), view: o.view && o.view.pairView === 'slope' ? 'slope' : 'rep' };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
@@ -18080,6 +21076,10 @@ export function severalRecipe(o) {
   // compares from control and family at run time.
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  // The figures of the section the page showed (means unless a view says otherwise), each design
+  // labelled by its number and short name as on the page.
+  const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
+  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
@@ -18364,6 +21364,9 @@ export function steadyRecipe(o) {
   }
 
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
+  // The figures of the section the page showed: the warm-up plot, or the correlogram, the
+  // neighboring batch means, and the batches.
+  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response };
   r.settings = {
     kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime,
     align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
@@ -18410,6 +21413,27 @@ export function exploreTooBig({ ds, spread }) {
   let n = recordCount(ds) + ds.reps.length * (1 + repKeys(ds.kind).length);
   if (spread) for (const g of spread.groups) n += g.length;
   return n > MAX_NUMBERS;
+}
+
+// The figures Summary and Plots shows in its open section, with the choices
+// that shape them: the pooled observations in place of the outcomes (forced
+// on tally data with too few outcomes, as the page forces it), the
+// replication shown in the run section, its horizontal axis, and the lag.
+// A section the data cannot fill draws nothing, as on the page.
+function exploreView(ds, view, nOut) {
+  const v = view || {};
+  const tally = ds.kind === 'tally';
+  let section = ['summary', 'dist', 'run', 'reps', 'normality', 'spread'].includes(v.section) ? v.section : 'summary';
+  if ((section === 'dist' && !tally && nOut < 2) || (section === 'run' && ds.kind === 'reps') || (section === 'reps' && nOut < 2) ||
+    (section === 'normality' && !tally && nOut < 3)) section = 'none';
+  const rep = Number.isInteger(v.rep) && v.rep >= 1 && v.rep <= ds.reps.length ? v.rep : 1;
+  const pooledDist = tally && (v.pooled === true || nOut < 2), pooledQQ = tally && (v.pooled === true || nOut < 3);
+  return {
+    section, kind: ds.kind, rep, repId: ds.reps.length ? String(ds.reps[rep - 1].id) : '',
+    axis: v.axis === 'time' && tally && ds.reps.some(r => r.t) ? 'time' : 'index',
+    lag: Number.isInteger(v.lag) && v.lag >= 1 ? v.lag : 1,
+    pooledDist, pooledQQ, nOut, response: ds.response, outcomeAxis: estimateAxis(ds)
+  };
 }
 
 /**
@@ -18514,6 +21538,7 @@ export function exploreRecipe(o) {
     }
   }
   r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
+  r.fig = exploreView(ds, o.view, ov.values.length);
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
   r.settingsNote = [dataNote(ds.kind)];
   return r;
@@ -18527,7 +21552,11 @@ export function exploreRecipe(o) {
 // functions its key names and nothing else, so that a body emitter can list
 // what it needs and get exactly that.
 //
-// The report line format is the contract with test/analysis_scripts.test.mjs:
+// Every result goes through one report helper. By default it prints the
+// result under its section's heading as an aligned name and value, and
+// remembers whether the value agrees with the analyzer's, which
+// report_summary() then sums up in one line. With check_details set (as
+// test/analysis_scripts.test.mjs sets it), it prints the contract instead:
 //   name: value   (analyzer: value)
 // with %.10g for numbers, yes/no for booleans, NaN for a missing number in
 // every language, and the string itself otherwise.
@@ -18541,58 +21570,208 @@ export const LIB = { R: {}, py: {}, m: {} };
 // ── report ───────────────────────────────────────────────────────────────
 
 LIB.R.report = `
-report <- function(name, value, analyzer = NULL) {
-  fmt <- function(v) {
-    if (length(v) == 0 || (length(v) == 1 && is.na(v))) return("NaN")
-    if (is.logical(v)) return(if (isTRUE(v)) "yes" else "no")
-    if (is.numeric(v)) return(sprintf("%.10g", as.numeric(v)))
-    as.character(v)
+# report() prints one result and checks it against the value the Output
+# Analyzer's page showed (analyzer), within a relative tolerance tol.
+report_state <- new.env()
+report_start <- function(details) {
+  report_state$details <- isTRUE(details)
+  report_state$n <- 0
+  report_state$bad <- character(0)
+}
+report_fmt <- function(v, digits = 10) {
+  if (length(v) == 0 || (length(v) == 1 && is.na(v))) return("NaN")
+  if (is.logical(v)) return(if (isTRUE(v)) "yes" else "no")
+  if (is.numeric(v)) return(sprintf(paste0("%.", digits, "g"), as.numeric(v)))
+  as.character(v)
+}
+report_agrees <- function(v, a, tol) {
+  if (length(v) == 0) v <- NaN
+  if (length(v) != 1) return(FALSE)
+  if (is.logical(v) || is.logical(a)) return(isTRUE(as.logical(v) == as.logical(a)))
+  if (is.character(v) || is.character(a)) return(identical(as.character(v), as.character(a)))
+  v <- as.numeric(v); a <- as.numeric(a)
+  if (is.na(v) || is.na(a)) return(is.na(v) && is.na(a))
+  if (is.infinite(v) || is.infinite(a)) return(v == a)
+  abs(v - a) <= tol * max(1, abs(a))
+}
+report <- function(name, value, analyzer = NULL, tol = 1e-6) {
+  if (report_state$details) {
+    cat(sprintf("%s: %s%s\\n", name, report_fmt(value),
+                if (is.null(analyzer)) "" else sprintf("   (analyzer: %s)", report_fmt(analyzer))))
+  } else {
+    cat(sprintf("  %-36s %s\\n", name, report_fmt(value, 7)))
   }
-  cat(sprintf("%s: %s%s\\n", name, fmt(value),
-              if (is.null(analyzer)) "" else sprintf("   (analyzer: %s)", fmt(analyzer))))
+  if (is.null(analyzer)) return(invisible(NULL))
+  report_state$n <- report_state$n + 1
+  if (!report_agrees(value, analyzer, tol)) {
+    report_state$bad <- c(report_state$bad,
+      sprintf("%s: %s here, %s on the page", name, report_fmt(value), report_fmt(analyzer)))
+  }
+  invisible(NULL)
+}
+report_section <- function(title) {
+  if (!report_state$details) cat("\\n", title, "\\n", strrep("-", nchar(title)), "\\n", sep = "")
+}
+report_summary <- function() {
+  n <- report_state$n; bad <- report_state$bad
+  if (n == 0) return(invisible(NULL))
+  if (length(bad) == 0) {
+    cat(sprintf("\\nAll %d results agree with the values on the Output Analyzer's page.\\n", n))
+  } else {
+    cat(sprintf("\\n%d of %d results differ from the values on the Output Analyzer's page:\\n", length(bad), n))
+    cat(paste0("  ", bad, "\\n"), sep = "")
+  }
+  invisible(NULL)
 }
 `;
 
 LIB.py.report = `
-def report(name, value, analyzer=None):
-    """Prints one result as 'name: value   (analyzer: value)'."""
-    def fmt(v):
-        if v is None:
+# report() prints one result and checks it against the value the Output
+# Analyzer's page showed (analyzer), within a relative tolerance tol.
+_report = {"details": False, "n": 0, "bad": []}
+
+
+def report_start(details):
+    _report.update(details=bool(details), n=0, bad=[])
+
+
+def report_fmt(v, digits=10):
+    if v is None:
+        return "NaN"
+    if isinstance(v, (bool, np.bool_)):
+        return "yes" if v else "no"
+    if isinstance(v, (int, float, np.integer, np.floating)):
+        v = float(v)
+        if np.isnan(v):
             return "NaN"
-        if isinstance(v, (bool, np.bool_)):
-            return "yes" if v else "no"
-        if isinstance(v, (int, float, np.integer, np.floating)):
-            v = float(v)
-            if np.isnan(v):
-                return "NaN"
-            if np.isinf(v):
-                return "Inf" if v > 0 else "-Inf"
-            return f"{v:.10g}"
-        return str(v)
-    tail = "" if analyzer is None else f"   (analyzer: {fmt(analyzer)})"
-    print(f"{name}: {fmt(value)}{tail}")
+        if np.isinf(v):
+            return "Inf" if v > 0 else "-Inf"
+        return f"{v:.{digits}g}"
+    return str(v)
+
+
+def report_agrees(v, a, tol):
+    if isinstance(v, (bool, np.bool_)) or isinstance(a, (bool, np.bool_)):
+        return bool(v) == bool(a)
+    if isinstance(v, str) or isinstance(a, str):
+        return str(v) == str(a)
+    v = np.nan if v is None else float(v)
+    a = float(a)
+    if np.isnan(v) or np.isnan(a):
+        return bool(np.isnan(v) and np.isnan(a))
+    if np.isinf(v) or np.isinf(a):
+        return v == a
+    return abs(v - a) <= tol * max(1.0, abs(a))
+
+
+def report(name, value, analyzer=None, tol=1e-6):
+    if _report["details"]:
+        tail = "" if analyzer is None else f"   (analyzer: {report_fmt(analyzer)})"
+        print(f"{name}: {report_fmt(value)}{tail}")
+    else:
+        print(f"  {name:<36} {report_fmt(value, 7)}")
+    if analyzer is None:
+        return
+    _report["n"] += 1
+    if not report_agrees(value, analyzer, tol):
+        _report["bad"].append(f"{name}: {report_fmt(value)} here, {report_fmt(analyzer)} on the page")
+
+
+def report_section(title):
+    if not _report["details"]:
+        print(f"\\n{title}\\n{'-' * len(title)}")
+
+
+def report_summary():
+    n, bad = _report["n"], _report["bad"]
+    if n == 0:
+        return
+    if not bad:
+        print(f"\\nAll {n} results agree with the values on the Output Analyzer's page.")
+    else:
+        print(f"\\n{len(bad)} of {n} results differ from the values on the Output Analyzer's page:")
+        for line in bad:
+            print("  " + line)
 `;
 
 LIB.m.report = `
-function report(name, value, analyzer)
-% Prints one result as "name: value   (analyzer: value)", or without the analyzer's value
-% when there is none (no third argument, or an empty one).
-tail = '';
-if nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer))
-    tail = sprintf('   (analyzer: %s)', report_fmt(analyzer));
-end
-fprintf('%s: %s%s\\n', name, report_fmt(value), tail);
+function report_start(details)
+% Starts the record of results checked against the Output Analyzer's page.
+report_store('start', details);
 end
 
-function s = report_fmt(v)
-% One value as a report line prints it: %.10g for a number, yes/no for a
-% logical, NaN for a missing number, and the text itself otherwise.
+function report(name, value, analyzer, tol)
+% Prints one result and checks it against the value the Output Analyzer's
+% page showed (analyzer), within a relative tolerance tol (1e-6 unless given).
+if nargin < 4, tol = 1e-6; end
+has = nargin >= 3 && ~(isnumeric(analyzer) && isempty(analyzer));
+if report_store('details')
+    tail = '';
+    if has, tail = sprintf('   (analyzer: %s)', report_fmt(analyzer, 10)); end
+    fprintf('%s: %s%s\\n', name, report_fmt(value, 10), tail);
+else
+    fprintf('  %-36s %s\\n', name, report_fmt(value, 7));
+end
+if has
+    report_store('add', report_agrees(value, analyzer, tol), ...
+        sprintf('%s: %s here, %s on the page', name, report_fmt(value, 10), report_fmt(analyzer, 10)));
+end
+end
+
+function report_section(title)
+if ~report_store('details')
+    fprintf('\\n%s\\n%s\\n', title, repmat('-', 1, numel(title)));
+end
+end
+
+function report_summary()
+[n, bad] = report_store('get');
+if n == 0, return; end
+if isempty(bad)
+    fprintf('\\nAll %d results agree with the values on the Output Analyzer''s page.\\n', n);
+else
+    fprintf('\\n%d of %d results differ from the values on the Output Analyzer''s page:\\n', numel(bad), n);
+    fprintf('  %s\\n', bad{:});
+end
+end
+
+function varargout = report_store(op, varargin)
+% The record behind report(): whether to print details, and how many results
+% were checked and which of them differ. A local function keeps it between calls.
+persistent details n bad
+if isempty(details), details = false; n = 0; bad = {}; end
+switch op
+    case 'start', details = logical(varargin{1}); n = 0; bad = {};
+    case 'details', varargout{1} = details;
+    case 'add', n = n + 1; if ~varargin{1}, bad{end + 1} = varargin{2}; end
+    case 'get', varargout{1} = n; varargout{2} = bad;
+end
+end
+
+function ok = report_agrees(v, a, tol)
+if isempty(v), v = NaN; end
+if islogical(v) || islogical(a)
+    ok = isscalar(v) && logical(v) == logical(a);
+elseif ischar(v) || isstring(v) || ischar(a) || isstring(a)
+    ok = strcmp(string(v), string(a));
+elseif isnan(v) || isnan(a)
+    ok = isnan(v) && isnan(a);
+elseif isinf(v) || isinf(a)
+    ok = v == a;
+else
+    ok = abs(v - a) <= tol * max(1, abs(a));
+end
+end
+
+function s = report_fmt(v, digits)
+% One value as a report line prints it: a number to the given significant
+% digits, yes/no for a logical, NaN for a missing number, and the text itself.
 if isempty(v) && ~ischar(v) && ~isstring(v)
     s = 'NaN';
 elseif islogical(v)
     s = 'no'; if v, s = 'yes'; end
 elseif isnumeric(v)
-    s = sprintf('%.10g', v);
+    s = sprintf(['%.' num2str(digits) 'g'], v);
 else
     s = char(v);
 end
@@ -22033,8 +25212,8 @@ import {
 } from '../ui/widgets.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { initialTicks } from '../ui/rules.js';
-import { setSectionAvailable } from '../ui/tabs.js';
+import { initialTicks, estimateAxis } from '../ui/rules.js';
+import { setSectionAvailable, currentSection } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, dataFilesHelp } from '../ui/exportrow.js';
 
 /** The page's hash id. */
@@ -22256,12 +25435,6 @@ function estimateWord(ds) {
   return 'replication means';
 }
 
-function estimateAxis(ds) {
-  if (ds.kind === 'reps') return ds.response;
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + ds.response;
-  return 'Replication mean of ' + ds.response;
-}
-
 // ── Rendering ───────────────────────────────────────────────────────────
 
 function releaseAll() {
@@ -22407,7 +25580,7 @@ function storeResult(ds, est) {
     title,
     provenance,
     tables,
-    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(recipeIn),
+    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), pooled, rep: repIndex, axis: xMode, lag } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] },
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
@@ -24138,6 +27311,7 @@ import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
 import { num, stat, intl, pct, esc, dash, lvl } from '../ui/format.js';
+import { outcomeAxis } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'one';
@@ -24825,22 +27999,13 @@ function overrideBlock(ds, on, oneRep) {
   return box;
 }
 
-function axisLabel(ds, pooled) {
-  if (!ds) return 'Replication outcome';
-  const r = ds.response || 'value';
-  if (pooled) return 'Observation of ' + r;
-  if (ds.kind === 'reps') return r + ' per replication';
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + r;
-  return 'Replication mean of ' + r;
-}
-
 function drawFigure(d) {
   const level = state.settings.level;
   const cEst = '--est', cTruth = '--truth';
   if (!d || !d.values.length) {
     fig.render(f => {
       f.x([0, 1]);
-      f.axes({ y: false, xLabel: axisLabel(d && d.ds, false), xFormat: () => '' });
+      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false), xFormat: () => '' });
       svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication outcomes to show.';
     });
     legend(els.leg, [
@@ -24859,7 +28024,7 @@ function drawFigure(d) {
     // Many pooled observations stack into a dot histogram, which needs room.
     f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
     f.x(hasInt ? extent(values, [ti.lo, ti.hi]) : extent(values), { pad: 0.06, nice: true });
-    f.axes({ y: false, xLabel: axisLabel(ds, pooled) });
+    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;
     f.ih = fullH - band;
@@ -25214,6 +28379,7 @@ import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui
 import { currentSection } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
+import { shortNames } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'several';
@@ -25297,18 +28463,6 @@ const andList = xs => (xs.length < 3 ? xs.join(' and ') : xs.slice(0, -1).join('
 // Each post-hoc rule as a sentence names it.
 const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', dunnett: 'Dunnett’s procedure' };
 const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs' };
-
-// Display names: when every name shares one "prefix · " part (the datasets a
-// scenario column split one file into), only the part after it is shown.
-function shortNames(list) {
-  const names = list.map(d => d.name);
-  if (names.length < 2) return names;
-  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
-  const parts = names.map(cut);
-  if (parts.some(p => !p) || parts.some(p => p[0] !== parts[0][0])) return names;
-  const tails = parts.map(p => p[1]);
-  return new Set(tails).size === tails.length ? tails : names;
-}
 
 // Two significant digits, for a default target that reads as a round number.
 function round2(v) {
@@ -26445,7 +29599,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
   const regen = recipeIn && c
-    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })),
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection() } })),
       files: recipeIn.list.map(d => ({ ds: d, form: 'replications' })) }
     : undefined;
   state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
@@ -26709,6 +29863,7 @@ import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { currentSection } from '../ui/tabs.js';
 
 /** The page's hash id. */
 export const id = 'steady';
@@ -28034,7 +31189,7 @@ function storeResult(ds, src, res, rows) {
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
     summaryHtml,
-    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn),
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection() } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] }
   });
 }
@@ -28163,7 +31318,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { fRatioVerdict } from '../ui/rules.js';
+import { fRatioVerdict, roleLabels } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -28234,17 +31389,6 @@ function defaultMatch(idsA, idsB) {
     return { by: 'id', why: 'Matched by replication id by default. Both datasets number their replications 1, 2, 3, …, and so matching by position gives the same pairs.' };
   }
   return { by: 'id', why: 'Matched by replication id by default: both datasets carry distinct ids, and ' + plural(shared, 'id appears', 'ids appear') + ' in both.' };
-}
-
-// The row label for a design in a figure: its role letter, followed by the
-// dataset's name with any prefix the two names share ("file · A" and
-// "file · B" become "A" and "B") unless that is the role letter itself.
-function roleLabels(dsA, dsB) {
-  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
-  const pa = cut(dsA.name), pb = cut(dsB.name);
-  const shared = pa && pb && pa[0] === pb[0] && pa[1] !== pb[1];
-  const na = shared ? pa[1] : dsA.name, nb = shared ? pb[1] : dsB.name;
-  return [na === 'A' ? 'A' : 'A · ' + na, nb === 'B' ? 'B' : 'B · ' + nb];
 }
 
 // Two significant digits, for a default target that reads as a round number.
@@ -28699,7 +31843,7 @@ function drawPlan() {
   // for, from the inputs and settings in force now.
   const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title;
   const planIn = { h: hwVal, delta, power: plan.power };
-  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn })),
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn, view: { pairView: state.getPick(id, 'pairView') } })),
     files: [{ ds: recipeIn.dsA, form: 'replications' }, { ds: recipeIn.dsB, form: 'replications' }] } : undefined;
   state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }
@@ -35256,8 +38400,9 @@ export { esc };
 </script>
 <script type="text/plain" data-module="js/ui/rules.js">
 // Small rules the pages apply, kept apart from the pages so that they can be
-// tested in Node: the ticks a dataset checklist opens with, and Two Systems'
-// verdict on the F ratio of the variances. Pure functions, no DOM.
+// tested in Node and shared with the regenerate scripts: the ticks a dataset
+// checklist opens with, Two Systems' verdict on the F ratio of the variances,
+// and the labels the figures carry. Pure functions, no DOM.
 
 /**
  * The ticks a dataset checklist opens with. A stored list stands at any
@@ -35289,6 +38434,65 @@ export function fRatioVerdict(fr) {
   return fr.lo <= 1 && 1 <= fr.hi
     ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
     : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
+}
+
+/**
+ * The row label for a design in a Two Systems figure: its role letter,
+ * followed by the dataset's name with any prefix the two names share
+ * ("file · A" and "file · B" become "A" and "B") unless that is the role
+ * letter itself.
+ * @param {{name: string}} dsA
+ * @param {{name: string}} dsB
+ * @returns {[string, string]}
+ */
+export function roleLabels(dsA, dsB) {
+  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
+  const pa = cut(dsA.name), pb = cut(dsB.name);
+  const shared = pa && pb && pa[0] === pb[0] && pa[1] !== pb[1];
+  const na = shared ? pa[1] : dsA.name, nb = shared ? pb[1] : dsB.name;
+  return [na === 'A' ? 'A' : 'A · ' + na, nb === 'B' ? 'B' : 'B · ' + nb];
+}
+
+/**
+ * The axis label for a dataset's replication outcomes on One System, or for
+ * its observations under the pooled override.
+ * @param {{kind: string, response?: string}|null} ds
+ * @param {boolean} [pooled]
+ */
+export function outcomeAxis(ds, pooled) {
+  if (!ds) return 'Replication outcome';
+  const r = ds.response || 'value';
+  if (pooled) return 'Observation of ' + r;
+  if (ds.kind === 'reps') return r + ' per replication';
+  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + r;
+  return 'Replication mean of ' + r;
+}
+
+/**
+ * The axis label for a dataset's replication outcomes on Summary and Plots.
+ * @param {{kind: string, response: string}} ds
+ */
+export function estimateAxis(ds) {
+  if (ds.kind === 'reps') return ds.response;
+  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + ds.response;
+  return 'Replication mean of ' + ds.response;
+}
+
+/**
+ * The designs' names as the Several Systems figures label them: the part
+ * after a prefix every name shares ("file · A", "file · B" become "A", "B"),
+ * or the whole names when they share none or the parts would repeat.
+ * @param {{name: string}[]} list
+ * @returns {string[]}
+ */
+export function shortNames(list) {
+  const names = list.map(d => d.name);
+  if (names.length < 2) return names;
+  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
+  const parts = names.map(cut);
+  if (parts.some(p => !p) || parts.some(p => p[0] !== parts[0][0])) return names;
+  const tails = parts.map(p => p[1]);
+  return new Set(tails).size === tails.length ? tails : names;
 }
 </script>
 <script type="text/plain" data-module="js/ui/session.js">

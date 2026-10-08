@@ -23,6 +23,7 @@ import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui
 import { currentSection } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
+import { shortNames } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'several';
@@ -106,18 +107,6 @@ const andList = xs => (xs.length < 3 ? xs.join(' and ') : xs.slice(0, -1).join('
 // Each post-hoc rule as a sentence names it.
 const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', dunnett: 'Dunnett’s procedure' };
 const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs' };
-
-// Display names: when every name shares one "prefix · " part (the datasets a
-// scenario column split one file into), only the part after it is shown.
-function shortNames(list) {
-  const names = list.map(d => d.name);
-  if (names.length < 2) return names;
-  const cut = s => { const k = s.lastIndexOf(' · '); return k < 0 ? null : [s.slice(0, k), s.slice(k + 3)]; };
-  const parts = names.map(cut);
-  if (parts.some(p => !p) || parts.some(p => p[0] !== parts[0][0])) return names;
-  const tails = parts.map(p => p[1]);
-  return new Set(tails).size === tails.length ? tails : names;
-}
 
 // Two significant digits, for a default target that reads as a round number.
 function round2(v) {
@@ -1254,7 +1243,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
   const regen = recipeIn && c
-    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })),
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection() } })),
       files: recipeIn.list.map(d => ({ ds: d, form: 'replications' })) }
     : undefined;
   state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));

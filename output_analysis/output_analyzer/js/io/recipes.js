@@ -28,6 +28,7 @@ import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
          resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { slug } from './export.js';
+import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -200,6 +201,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
   r.one = { pooled, np, interval, variance, checks, plan: planOut };
+  // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
+  r.fig = { xlab: outcomeAxis(ds, pooled), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}
@@ -311,6 +314,8 @@ export function twoRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
   r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  // The page's two figures: each design's outcomes with its own interval, and the interval on the difference.
+  r.fig = { labels: roleLabels(dsA, dsB) };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
@@ -369,6 +374,9 @@ function twoPairedRecipe(o) {
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
   r.two = { mode: 'paired', np, checks: !np, plan: planOut };
+  // The page's two figures: the differences with their interval, and the pairs in the view the page
+  // shows (by replication, or as slopes).
+  r.fig = { labels: roleLabels(dsA, dsB), view: o.view && o.view.pairView === 'slope' ? 'slope' : 'rep' };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
   return r;
 }
@@ -510,6 +518,10 @@ export function severalRecipe(o) {
   // compares from control and family at run time.
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  // The figures of the section the page showed (means unless a view says otherwise), each design
+  // labelled by its number and short name as on the page.
+  const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
+  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
@@ -794,6 +806,9 @@ export function steadyRecipe(o) {
   }
 
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
+  // The figures of the section the page showed: the warm-up plot, or the correlogram, the
+  // neighboring batch means, and the batches.
+  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response };
   r.settings = {
     kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime,
     align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
@@ -840,6 +855,27 @@ export function exploreTooBig({ ds, spread }) {
   let n = recordCount(ds) + ds.reps.length * (1 + repKeys(ds.kind).length);
   if (spread) for (const g of spread.groups) n += g.length;
   return n > MAX_NUMBERS;
+}
+
+// The figures Summary and Plots shows in its open section, with the choices
+// that shape them: the pooled observations in place of the outcomes (forced
+// on tally data with too few outcomes, as the page forces it), the
+// replication shown in the run section, its horizontal axis, and the lag.
+// A section the data cannot fill draws nothing, as on the page.
+function exploreView(ds, view, nOut) {
+  const v = view || {};
+  const tally = ds.kind === 'tally';
+  let section = ['summary', 'dist', 'run', 'reps', 'normality', 'spread'].includes(v.section) ? v.section : 'summary';
+  if ((section === 'dist' && !tally && nOut < 2) || (section === 'run' && ds.kind === 'reps') || (section === 'reps' && nOut < 2) ||
+    (section === 'normality' && !tally && nOut < 3)) section = 'none';
+  const rep = Number.isInteger(v.rep) && v.rep >= 1 && v.rep <= ds.reps.length ? v.rep : 1;
+  const pooledDist = tally && (v.pooled === true || nOut < 2), pooledQQ = tally && (v.pooled === true || nOut < 3);
+  return {
+    section, kind: ds.kind, rep, repId: ds.reps.length ? String(ds.reps[rep - 1].id) : '',
+    axis: v.axis === 'time' && tally && ds.reps.some(r => r.t) ? 'time' : 'index',
+    lag: Number.isInteger(v.lag) && v.lag >= 1 ? v.lag : 1,
+    pooledDist, pooledQQ, nOut, response: ds.response, outcomeAxis: estimateAxis(ds)
+  };
 }
 
 /**
@@ -944,6 +980,7 @@ export function exploreRecipe(o) {
     }
   }
   r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
+  r.fig = exploreView(ds, o.view, ov.values.length);
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
   r.settingsNote = [dataNote(ds.kind)];
   return r;

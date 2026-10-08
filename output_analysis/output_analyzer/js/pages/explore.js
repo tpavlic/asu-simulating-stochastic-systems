@@ -27,8 +27,8 @@ import {
 } from '../ui/widgets.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { initialTicks } from '../ui/rules.js';
-import { setSectionAvailable } from '../ui/tabs.js';
+import { initialTicks, estimateAxis } from '../ui/rules.js';
+import { setSectionAvailable, currentSection } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, dataFilesHelp } from '../ui/exportrow.js';
 
 /** The page's hash id. */
@@ -250,12 +250,6 @@ function estimateWord(ds) {
   return 'replication means';
 }
 
-function estimateAxis(ds) {
-  if (ds.kind === 'reps') return ds.response;
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + ds.response;
-  return 'Replication mean of ' + ds.response;
-}
-
 // ── Rendering ───────────────────────────────────────────────────────────
 
 function releaseAll() {
@@ -401,7 +395,7 @@ function storeResult(ds, est) {
     title,
     provenance,
     tables,
-    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(recipeIn),
+    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), pooled, rep: repIndex, axis: xMode, lag } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] },
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +

@@ -15,6 +15,7 @@
 
 import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
 import { LIB } from './script_lib.js';
+import { FIG, figureBlock } from './figure_scripts.js';
 import { pairLabel, repKeys, REP_LINES_MAX, MAX_NUMBERS } from './recipes.js';
 
 const BY = 'the Output Analyzer';
@@ -95,7 +96,7 @@ const LANG = {
     },
     // Matplotlib is named only where the script draws a figure.
     requires: code => 'Python 3 with NumPy and SciPy 1.11 or later' +
-      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figure).' : '.')
+      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figures).' : '.')
   },
   m: {
     lang: 'm', comment: '% ', sect: s => '\n%% ' + s,
@@ -258,6 +259,49 @@ function listAssign(L, target, n, part, lit) {
   return out;
 }
 
+// Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
+// language can only approximate are looser. A post-hoc rule's differences,
+// standard errors, and degrees of freedom are exact; what rests on its
+// quantile (the critical value, the half-width, the interval's ends, and a
+// p-value) is held to 1e-5 for the studentized range and Dunnett's quantile
+// in every language (MATLAB's scripts compute Dunnett's value themselves,
+// because multcompare's root search stops at about 1e-4, and Tukey's, because
+// multcompare's studentized range is approximate on few degrees of freedom).
+// SciPy's dunnett, which Python uses without blocks and with some spread to
+// compare, finds its critical value by randomized quadrature and is held to
+// 2e-3. The scripts check their own results with these tolerances, and
+// test/analysis_scripts.test.mjs holds them to the same.
+export function tolFor(key, lang, recipe) {
+  // R's qtukey and ptukey are documented as accurate to about 4 digits; at a few
+  // residual degrees of freedom they miss the analyzer's studentized range by up to
+  // about 1.1e-5 relative (3 df), and so R alone is held to 5e-5 on these keys.
+  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: lang === 'R' || lang === 'tidy' ? 5e-5 : 1e-5 };
+  if (/^posthoc dunnett .*(critical value|hw|lower|upper)$/.test(key)) {
+    const A = recipe && recipe.several && recipe.several.anova;
+    const scipy = lang === 'py' && A && !A.blocked && recipe.expect['ms within'] > 0;
+    return { rel: scipy ? 2e-3 : 1e-5 };
+  }
+  if (/\bN\b|additional/.test(key)) return { abs: 1 + 1e-9 };
+  if (/rinott/.test(key)) return { rel: 1e-4 };
+  // A Wilcoxon interval under the normal approximation is a root found to 1e-4,
+  // by a different root finder in each language.
+  if (/(wilcoxon|shift|pseudo-median of differences|^rank design \d+).*(lower|upper)/.test(key)) return { rel: 2e-4 };
+  return { rel: 1e-6 };
+}
+
+// The recipe the script being written comes from, for the tolerances of
+// report lines named at run time. analysisScript sets it.
+let current = null;
+
+// The tolerance argument of a report call for `key`: none at the default
+// 1e-6, a relative tolerance otherwise (an absolute one is made relative to
+// the analyzer's value `want`).
+function tolArg(L, key, want) {
+  const t = tolFor(key, L.lang, current);
+  if (t.abs != null) return ', ' + (typeof want === 'number' && Number.isFinite(want) ? t.abs / Math.max(1, Math.abs(want)) : 1e-6);
+  return t.rel === 1e-6 ? '' : ', ' + t.rel;
+}
+
 /**
  * A report call for `name` with expression `expr`, carrying the analyzer's
  * value from the recipe's expect map (under `name` or `name [optional]`); a
@@ -267,7 +311,7 @@ export function rep(L, recipe, name, expr) {
   const key = ascii(name);
   const has = k => Object.prototype.hasOwnProperty.call(recipe.expect, k);
   const want = has(key) ? recipe.expect[key] : has(key + ' [optional]') ? recipe.expect[key + ' [optional]'] : undefined;
-  const a = want !== undefined && want !== null ? ', ' + lit(L, want) : '';
+  const a = want !== undefined && want !== null ? ', ' + lit(L, want) + tolArg(L, key, want) : '';
   const call = 'report(' + L.str(key) + ', ' + expr + a + ')';
   return L.lang === 'm' ? call + ';' : call;
 }
@@ -680,7 +724,6 @@ function sevBody(r, L) {
   if (r.several.rank) sevRank(r, L, out, need);
   if (r.several.subset) sevSubset(r, L, out, need);
   sevPlan(r, L, out, need);
-  sevFigure(r, L, out);
   return { body: out, need };
 }
 
@@ -710,7 +753,7 @@ function pairName(L, prefix, suffix) {
 // A report call for one pair: the name from pairName, the script's value, and
 // the analyzer's value at position pos of `pageVar` (none when pos is).
 function pairRep(L, prefix, suffix, expr, pageVar) {
-  const call = 'report(' + pairName(L, prefix, suffix) + ', ' + expr + ', page_at(' + pageVar + ', pos))';
+  const call = 'report(' + pairName(L, prefix, suffix) + ', ' + expr + ', page_at(' + pageVar + ', pos)' + tolArg(L, prefix + ' 1-2' + (suffix || ''), NaN) + ')';
   return L.lang === 'm' ? call + ';' : call;
 }
 
@@ -996,7 +1039,7 @@ function sevMeans(r, L, out, need) {
       'after the design\'s number and name from d_tbl. ' + WILCOX_OWN, c));
     out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test)))))');
   } else if (L.tidy) {
-    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl, which the figure draws. ' +
+    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl. ' +
       'It is not a tibble of tidied t.test results: those test each mean against 0, which is not the question here.', c));
     out.push('means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(means_tbl)');
   }
@@ -1004,83 +1047,6 @@ function sevMeans(r, L, out, need) {
     need.push('shapiro');
     out.push(c + 'The checks: the t intervals take each design\'s outcomes as normal (Shapiro-Wilk).');
     for (let i = 0; i < S.k; i++) out.push(shapiroLine(r, L, 'shapiro design ' + (i + 1), GROUP[lang](i)));
-  }
-}
-
-// The figure of the means section: each design's interval as a horizontal
-// segment with its mean (or pseudo-median) as a point, the benchmark as a
-// dashed line, and the designs numbered down the side. An end the procedure
-// leaves unbounded is drawn to the edge of the plot, and one it leaves
-// undetermined is not drawn. The figure prints no report lines.
-function sevFigure(r, L, out) {
-  const S = r.several, lang = L.lang, c = L.comment;
-  const src = S.np ? 'srs' : (lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items');
-  const mid = S.np ? 'estimate' : 'mean';
-  const what = S.np ? 'Pseudo-median' : 'Mean';
-  const xlab = what + ' of ' + ascii(r.groups.response);
-  const title = (S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals';
-  const B = S.bench != null;
-  out.push(L.sect('Figure: each design\'s simultaneous interval'));
-  out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
-  if (!L.tidy) out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
-  if (L.tidy) {
-    if (S.np) {
-      out.push(...commentLines(c, 'The tidied wilcox.test tibble above carries wilcox.test\'s own estimates and intervals, not the ones drawn here, ' +
-        'and so the figure\'s tibble is built from signed_rank\'s.', c));
-      out.push('fig_tbl <- tibble(design = seq_len(k), mid = ' + PLUCK.R(src, mid) + ', lo = ' + PLUCK.R(src, 'lo') + ', hi = ' + PLUCK.R(src, 'hi') + ')');
-    } else out.push('fig_tbl <- means_tbl |> transmute(design = as.integer(design), mid = mean, lo, hi)');
-    // ggplot2 warns of every row it drops for a missing value, and so an
-    // undetermined end is filtered out before the segments are drawn.
-    out.push('fig_all <- c(fig_tbl$lo, fig_tbl$hi, fig_tbl$mid' + (B ? ', benchmark' : '') + ')',
-      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_tbl <- fig_tbl |> mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
-      'p <- ggplot(fig_tbl, aes(y = design)) +',
-      '  geom_segment(aes(x = lo, xend = hi, yend = design), data = filter(fig_tbl, is.finite(lo), is.finite(hi)), linewidth = 1) +',
-      '  geom_point(aes(x = mid), data = filter(fig_tbl, is.finite(mid)), size = 2) +');
-    if (B) out.push('  geom_vline(xintercept = benchmark, linetype = "dashed") +');
-    out.push('  scale_y_reverse(breaks = seq_len(k)) + coord_cartesian(xlim = xr) +',
-      '  labs(x = ' + L.str(xlab) + ', y = "design", title = ' + L.str(title) + ')',
-      'print(p)');
-  } else if (lang === 'R') {
-    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
-      'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_lo[is.infinite(fig_lo) & fig_lo < 0] <- xr[1]; fig_hi[is.infinite(fig_hi) & fig_hi > 0] <- xr[2]',
-      'plot(fig_mid, seq_len(k), xlim = xr, ylim = c(k + 0.5, 0.5), yaxt = "n", pch = 19, xlab = ' + L.str(xlab) + ', ylab = "design",',
-      '     main = ' + L.str(title) + ')',
-      'segments(fig_lo, seq_len(k), fig_hi, seq_len(k), lwd = 2)',
-      'axis(2, at = seq_len(k), labels = seq_len(k), las = 1)');
-    if (B) out.push('abline(v = benchmark, lty = 2)');
-  } else if (lang === 'py') {
-    out.push('try:',
-      '    import warnings',
-      '    import matplotlib.pyplot as plt',
-      '    fig_all = np.concatenate([fig_lo, fig_hi, fig_mid' + (B ? ', [benchmark]' : '') + '])',
-      '    fin = fig_all[np.isfinite(fig_all)]; xr = [fin.min(), fin.max()]',
-      '    if xr[0] == xr[1]: xr = [xr[0] - 1, xr[1] + 1]',
-      '    fig_lo = np.where(fig_lo == -np.inf, xr[0], fig_lo); fig_hi = np.where(fig_hi == np.inf, xr[1], fig_hi)',
-      '    ys = np.arange(1, k + 1)',
-      '    fig, ax = plt.subplots(figsize=(7, 1.5 + 0.4 * k))',
-      '    ax.hlines(ys, fig_lo, fig_hi, linewidth=2)',
-      '    ax.plot(fig_mid, ys, "o", color="black")');
-    if (B) out.push('    ax.axvline(benchmark, linestyle="--", color="black")');
-    out.push('    ax.set_ylim(k + 0.5, 0.5); ax.set_yticks(ys)',
-      '    ax.set_xlabel(' + L.str(xlab) + '); ax.set_ylabel("design"); ax.set_title(' + L.str(title) + ')',
-      '    fig.tight_layout()',
-      '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-      '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-      '        plt.show()',
-      'except ImportError:',
-      '    print("matplotlib is not installed; the figure is skipped")');
-  } else {
-    out.push('fig_all = [fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + '];',
-      'xr = [min(fig_all(isfinite(fig_all))), max(fig_all(isfinite(fig_all)))]; if xr(1) == xr(2), xr = xr + [-1, 1]; end',
-      'fig_lo(fig_lo == -Inf) = xr(1); fig_hi(fig_hi == Inf) = xr(2);',
-      'figure; hold on;',
-      "plot([fig_lo; fig_hi], [1:k; 1:k], 'k-', 'LineWidth', 2);",
-      "plot(fig_mid, 1:k, 'ko', 'MarkerFaceColor', 'k');");
-    if (B) out.push("xline(benchmark, '--');");
-    out.push("xlim(xr + [-1, 1] * 0.04 * diff(xr)); ylim([0.5, k + 0.5]); set(gca, 'YDir', 'reverse', 'YTick', 1:k);",
-      'xlabel(' + L.str(xlab) + ", 'Interpreter', 'none'); ylabel('design'); title(" + L.str(title) + ", 'Interpreter', 'none'); hold off;");
   }
 }
 
@@ -1138,6 +1104,16 @@ function sevDiffs(r, L, out, need) {
   }
   const body = [L.assign('cmp', call)];
   keys.forEach(([suffix, k, expr]) => body.push(pairRep(L, P, suffix, expr || f('cmp', k), varOf(suffix))));
+  // The figure of this section draws every comparison, and so each one's interval is collected as it runs.
+  const collect = r.fig && r.fig.section === 'diffs';
+  if (collect) {
+    const mid = f('cmp', S.np ? 'estimate' : S.paired ? 'meanD' : 'diff');
+    if (lang === 'R') body.push('fam_mid <- c(fam_mid, ' + mid + '); fam_lo <- c(fam_lo, cmp$lo); fam_hi <- c(fam_hi, cmp$hi); fam_lab <- c(fam_lab, paste(i, "-", j))');
+    else if (lang === 'py') body.push('fam_mid.append(' + mid + '); fam_lo.append(cmp["lo"]); fam_hi.append(cmp["hi"]); fam_lab.append(f"{i + 1} - {j + 1}")');
+    else body.push('fam_mid(end + 1) = ' + mid + '; fam_lo(end + 1) = cmp.lo; fam_hi(end + 1) = cmp.hi; fam_lab{end + 1} = sprintf(\'%d - %d\', i, j);');
+    out.push(c + 'Each comparison\'s interval is kept for the figure at the end.',
+      lang === 'R' ? 'fam_mid <- fam_lo <- fam_hi <- numeric(0); fam_lab <- character(0)' : lang === 'py' ? 'fam_mid, fam_lo, fam_hi, fam_lab = [], [], [], []' : 'fam_mid = []; fam_lo = []; fam_hi = []; fam_lab = {};');
+  }
   if (shapiro) {
     need.push('shapiro');
     const nm = pairName(L, 'shapiro diff', '');
@@ -1257,17 +1233,18 @@ function recordsBlock(L, r) {
 // `hoist`.
 function loopReport(L, out, { name, count, value, page, pageVar, indent = '', hoist }) {
   const lang = L.lang;
+  const tol = tolArg(L, name.replace('%d', '1'), NaN);
   // The analyzer's values go in `hoist`, outside any block, so that R reads
   // them as short top-level statements (see rChunks).
   hoist.push(L.comment + 'The analyzer\'s values for ' + pageVar + ', printed beside the script\'s.', ...vecAssign(L, pageVar, page));
   if (lang === 'R') {
-    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i])');
+    out.push(indent + 'for (i in seq_len(' + count + ')) report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', if (i <= length(' + pageVar + ')) ' + pageVar + '[i]' + tol + ')');
   } else if (lang === 'py') {
     out.push(indent + 'for i in range(' + count + '):',
-      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None)');
+      indent + '    report(' + L.str(name) + ' % (i + 1), ' + value('i') + ', ' + pageVar + '[i] if i < len(' + pageVar + ') else None' + tol + ')');
   } else {
     out.push(indent + 'for i = 1:' + count,
-      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
+      indent + '    if i <= numel(' + pageVar + '), report(sprintf(' + L.str(name) + ', i), ' + value('i') + ', ' + pageVar + '(i)' + tol + '); else, report(sprintf(' + L.str(name) + ', i), ' + value('i') + '); end',
       indent + 'end');
   }
 }
@@ -1404,45 +1381,6 @@ function steadyBody(r, L) {
       'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
   }
 
-  // The figure, drawn last so that every report line prints before a figure opens on screen
-  // (Python's plt.show waits until it is closed); it prints no report lines.
-  const ylab = 'Batch mean of ' + ascii(r.records.response);
-  out.push(L.sect('Figure: the batch means'));
-  out.push(c + 'Each batch mean against its batch number, with the mean of the batch means as a dashed line.');
-  if (L.tidy) {
-    out.push('if (bm$ok) {',
-      '  batch_tbl <- tibble(batch = seq_len(bm$b), mean = bm$means)',
-      '  p <- ggplot(batch_tbl, aes(batch, mean)) + geom_line() + geom_point(size = 2) +',
-      '    geom_hline(yintercept = bm$mean, linetype = "dashed") +',
-      '    labs(x = "batch", y = ' + L.str(ylab) + ', title = "Batch means")',
-      '  print(p)',
-      '}');
-  } else if (lang === 'R') {
-    out.push('if (bm$ok) {',
-      '  plot(seq_len(bm$b), bm$means, type = "b", pch = 19, xlab = "batch", ylab = ' + L.str(ylab) + ', main = "Batch means")',
-      '  abline(h = bm$mean, lty = 2)',
-      '}');
-  } else if (lang === 'py') {
-    out.push('if bm["ok"]:',
-      '    try:',
-      '        import warnings',
-      '        import matplotlib.pyplot as plt',
-      '        fig, ax = plt.subplots(figsize=(7, 3.5))',
-      '        ax.plot(np.arange(1, bm["b"] + 1), bm["means"], "o-", color="black")',
-      '        ax.axhline(bm["mean"], linestyle="--", color="gray")',
-      '        ax.set_xlabel("batch"); ax.set_ylabel(' + L.str(ylab) + '); ax.set_title("Batch means")',
-      '        fig.tight_layout()',
-      '        with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-      '            warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-      '            plt.show()',
-      '    except ImportError:',
-      '        print("matplotlib is not installed; the figure is skipped")');
-  } else {
-    out.push('if bm.ok',
-      "    figure; plot(1:bm.b, bm.means, 'ko-', 'MarkerFaceColor', 'k'); yline(bm.mean, '--');",
-      "    xlabel('batch'); ylabel(" + L.str(ylab) + ", 'Interpreter', 'none'); title('Batch means');",
-      'end');
-  }
   return { body: out, need };
 }
 BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
@@ -1595,56 +1533,6 @@ function exploreBody(r, L, { csv = false } = {}) {
     if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
-  // The figure: no report lines. Its histogram has the page's bins, and its
-  // quantile-quantile plot the page's plotting positions and quartile line.
-  if (X.interval) {
-    const xlab = ascii(r.records.response);
-    out.push(L.sect('Figure: histogram and normal quantile-quantile plot of the outcomes'));
-    out.push(...commentLines(c, 'As the page draws them: the histogram has max(5, ceiling(sqrt(n))) equal-width bins from the smallest outcome to the largest ' +
-      '(one bin of width 1 when the outcomes are all equal), each holding its left edge and the last both edges. ' +
-      'The quantile-quantile plot has each sorted outcome against the normal quantile at its plotting position, (i-a)/(n+1-2a), ' +
-      'with a = 3/8 for n <= 10 and 1/2 otherwise, as R\'s ppoints, and a dashed line through the first and third quartiles, as R\'s qqline.', c));
-    if (L.tidy) {
-      need.push('tidyFigure');
-      out.push('plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ' + L.str(xlab) + ')');
-    } else if (lang === 'R') {
-      out.push('nb <- max(5, ceiling(sqrt(length(x))))',
-        'breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)',
-        'par(mfrow = c(1, 2))',
-        'hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE, main = "Replication outcomes", xlab = ' + L.str(xlab) + ')',
-        'qqnorm(x, main = "Normal Q-Q plot"); qqline(x, lty = 2)');
-    } else if (lang === 'py') {
-      out.push('try:',
-        '    import warnings',
-        '    import matplotlib.pyplot as plt',
-        '    nb = max(5, int(np.ceil(np.sqrt(len(x)))))',
-        '    edges = np.linspace(x.min(), x.max(), nb + 1) if x.max() > x.min() else x[0] + np.array([-0.5, 0.5])',
-        '    n_x = len(x); off = 3 / 8 if n_x <= 10 else 0.5',
-        '    theo = stats.norm.ppf((np.arange(1, n_x + 1) - off) / (n_x + 1 - 2 * off))',
-        '    q1, q3 = np.quantile(x, [0.25, 0.75]); z1, z3 = stats.norm.ppf([0.25, 0.75])',
-        '    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9, 4))',
-        '    a1.hist(x, bins=edges, color="gray", edgecolor="black"); a1.set_title("Replication outcomes"); a1.set_xlabel(' + L.str(xlab) + ')',
-        '    a2.plot(theo, np.sort(x), "o", color="black")',
-        '    a2.axline((z1, q1), slope=(q3 - q1) / (z3 - z1), linestyle="--", color="gray")',
-        '    a2.set_xlabel("Theoretical quantiles"); a2.set_ylabel("Sample quantiles"); a2.set_title("Normal Q-Q plot")',
-        '    fig.tight_layout()',
-        '    with warnings.catch_warnings():   # a backend that only writes files cannot show the figure',
-        '        warnings.filterwarnings("ignore", message=".*non-interactive", category=UserWarning)',
-        '        plt.show()',
-        'except ImportError:',
-        '    print("matplotlib is not installed; the figure is skipped")');
-    } else {
-      out.push('nb = max(5, ceil(sqrt(numel(x))));',
-        'if max(x) > min(x), edges = linspace(min(x), max(x), nb + 1); else, edges = x(1) + [-0.5, 0.5]; end',
-        'n_x = numel(x); off = 0.5; if n_x <= 10, off = 3 / 8; end',
-        'theo = norminv(((1:n_x) - off) / (n_x + 1 - 2 * off));',
-        'z = norminv([0.25, 0.75]); slope = (d.q3 - d.q1) / (z(2) - z(1));   % the type-7 quartiles from describe above',
-        "figure; subplot(1, 2, 1); histogram(x, edges); title('Replication outcomes'); xlabel(" + L.str(xlab) + ", 'Interpreter', 'none');",
-        "subplot(1, 2, 2); plot(theo, sort(x), 'ko'); hold on;",
-        "plot(theo([1, end]), d.q1 + slope * (theo([1, end]) - z(1)), 'k--'); hold off;",
-        "xlabel('Theoretical quantiles'); ylabel('Sample quantiles'); title('Normal Q-Q plot');");
-    }
-  }
   return { body: out, need };
 }
 BODIES.explore = { R: exploreBody, py: exploreBody, m: exploreBody };
@@ -1655,8 +1543,11 @@ function settingsBlock(recipe, L) {
   for (const note of recipe.settingsNote || []) out.push(...commentLines(L.comment, ascii(note), L.comment));
   out.push(L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level'));
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
+  out.push(L.comment + CHECK_NOTE, L.assign('check_details', L.bool(false)), L.lang === 'm' ? 'report_start(check_details);' : 'report_start(check_details)');
   return out;
 }
+
+const CHECK_NOTE = 'Set check_details to print each result beside the value the page showed.';
 
 // The matched pairs of a paired comparison: the pair labels and the A and B
 // outcomes in step, with what was left out and why.
@@ -2051,6 +1942,35 @@ export function csvReadBlock(L, recipe, { live = false } = {}) {
   return out;
 }
 
+// The body with the printed parts of its output marked: a heading printed
+// under every section that reports a result (report_section, which prints
+// nothing when check_details is set), and the one-line summary of the checks
+// (report_summary) after the last of them, before any figure.
+const SECTION_RE = { R: /^## (.*) ----$/, py: /^# ---- (.*) ----$/, m: /^%% (.*)$/ };
+const PRINTS_RE = /\b(report|shapiro_check)\(/;
+function headings(body, L) {
+  const lines = body.join('\n').split('\n');
+  const re = SECTION_RE[L.lang], end = L.lang === 'm' ? ';' : '';
+  const heads = [];
+  lines.forEach((ln, i) => { const m = re.exec(ln); if (m) heads.push([i, m[1]]); });
+  const out = [];
+  let last = -1;
+  heads.forEach(([i, title], h) => {
+    const stop = h + 1 < heads.length ? heads[h + 1][0] : lines.length;
+    if (lines.slice(i + 1, stop).some(x => PRINTS_RE.test(x) && !/^\s*(#|%)/.test(x))) heads[h].push(true);
+  });
+  for (let h = 0; h < heads.length; h++) if (heads[h][2]) last = h;
+  const summaryAt = last >= 0 ? (last + 1 < heads.length ? heads[last + 1][0] : lines.length) : -1;
+  lines.forEach((ln, i) => {
+    if (i === summaryAt) out.push('report_summary()' + end);
+    out.push(ln);
+    const h = heads.find(x => x[0] === i);
+    if (h && h[2]) out.push('report_section(' + L.str(h[1]) + ')' + end);
+  });
+  if (summaryAt === lines.length) out.push('report_summary()' + end);
+  return out;
+}
+
 /**
  * The script of a recipe in one language. With `csv`, the script holds no
  * data: its Data block is the live read block, which reads the data from the
@@ -2068,15 +1988,23 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
   if (!page || !page[L.lang]) throw new RangeError('analysisScript: unknown page ' + recipe.page);
   const snippets = LIB[L.lang];   // both R dialects share LIB.R
+  current = recipe;
   const fromCsv = !!(csv || recipe.csvOnly);
   if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
   const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
-  const helpers = Array.from(new Set(need || [])).map(k => {
+  // The figures the page's view shows, drawn after every result is printed.
+  const figs = figureBlock(recipe, L);
+  const helpers = Array.from(new Set((need || []).concat(figs.need))).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
-  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...body];
+  const figLib = FIG[L.tidy ? 'tidy' : L.lang];
+  for (const k of figs.fig) {
+    if (!figLib[k]) throw new RangeError('analysisScript: no ' + lang + ' figure helper ' + k);
+    helpers.push(figLib[k].trim());
+  }
+  const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...headings(body.concat(figs.lines), L)];
   const lines = header(recipe, L, fromCsv, main.join('\n'));
   lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));

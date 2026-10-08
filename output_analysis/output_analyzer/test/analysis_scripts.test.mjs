@@ -10,11 +10,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, openSync, closeSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, statSync, openSync, closeSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analysisScript, parseReport, scriptFileName, ascii, sectionLine, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
+import { analysisScript as writeScript, parseReport, scriptFileName, ascii, sectionLine, ANALYSIS_WRITERS, tolFor } from '../js/io/analysis_scripts.js';
 import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
@@ -272,34 +272,17 @@ function runMatlab() {
   child.on('exit', (code, signal) => end(signal ? 'signal ' + signal : 'exit status ' + code));
 }
 
-// Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
-// language can only approximate are looser. A
-// post-hoc rule's differences, standard errors, and degrees of freedom are
-// exact; what rests on its quantile (the critical value, the half-width, the
-// interval's ends, and a p-value) is held to 1e-5 for the studentized range
-// and Dunnett's quantile in every language (MATLAB's scripts compute Dunnett's
-// value themselves, because multcompare's root search stops at about 1e-4, and
-// Tukey's, because multcompare's studentized range is approximate on few
-// degrees of freedom).
-// SciPy's dunnett, which Python uses without blocks and with some spread to
-// compare, finds its critical value by randomized quadrature and is held to 2e-3.
-export function tolFor(key, lang, recipe) {
-  // R's qtukey and ptukey are documented as accurate to about 4 digits; at a few
-  // residual degrees of freedom they miss the analyzer's studentized range by up to
-  // about 1.1e-5 relative (3 df), and so R alone is held to 5e-5 on these keys.
-  if (/^posthoc (tukey|gameshowell) .*(critical value|crit|hw|lower|upper| p)$/.test(key)) return { rel: lang === 'R' ? 5e-5 : 1e-5 };
-  if (/^posthoc dunnett .*(critical value|hw|lower|upper)$/.test(key)) {
-    const A = recipe && recipe.several && recipe.several.anova;
-    const scipy = lang === 'py' && A && !A.blocked && recipe.expect['ms within'] > 0;
-    return { rel: scipy ? 2e-3 : 1e-5 };
-  }
-  if (/\bN\b|additional/.test(key)) return { abs: 1 + 1e-9 };
-  if (/rinott/.test(key)) return { rel: 1e-4 };
-  // A Wilcoxon interval under the normal approximation is a root found to 1e-4,
-  // by a different root finder in each language.
-  if (/(wilcoxon|shift|pseudo-median of differences|^rank design \d+).*(lower|upper)/.test(key)) return { rel: 2e-4 };
-  return { rel: 1e-6 };
+// Tolerances come from tolFor in js/io/analysis_scripts.js, the same ones the
+// scripts check their own results with.
+export { tolFor };
+
+// Every script the tests write prints its results in detail, each beside the
+// analyzer's value, as parseReport reads them: check_details is set.
+export function detailed(text) {
+  return text.replace(/^check_details (<-|=) (FALSE|False|false)(;?)$/m,
+    (m, op, v, semi) => 'check_details ' + op + ' ' + { FALSE: 'TRUE', False: 'True', false: 'true' }[v] + semi);
 }
+function analysisScript(recipe, lang, opts) { return detailed(writeScript(recipe, lang, opts)); }
 
 /** Compares a parsed report with a recipe's expect map; fails with every mismatch listed. */
 export function compareReport(report, expect, lang, recipe) {
@@ -873,11 +856,11 @@ function pairedProv(dsA, dsB, level, proc, by, unmatched, plan) {
     'planning target power': Math.round(plan.power * 100) + '%', 'planning significance level': String(Math.round((1 - level) * 1000) / 1000) });
   return prov;
 }
-function pairedRecipe(dsA, dsB, proc, by, plan, level = 0.95) {
+function pairedRecipe(dsA, dsB, proc, by, plan, level = 0.95, view = undefined) {
   const eA = est(dsA), eB = est(dsB);
   const m = Object.assign(matchPairs(eA.ids, eB.ids, by), { by });
   return twoRecipe({ dsA, dsB, eA, eB, mode: 'paired', match: m, proc, level,
-    provenance: pairedProv(dsA, dsB, level, proc, by, m.unmatchedA.length + m.unmatchedB.length, plan), plan });
+    provenance: pairedProv(dsA, dsB, level, proc, by, m.unmatchedA.length + m.unmatchedB.length, plan), plan, view });
 }
 // A pair of reps datasets whose matched differences a - b are `diffs`, with b varied.
 function pairedOf(diffs, b = diffs.map((_, i) => 10 + ((i * 7) % 5) + 0.25 * i)) {
@@ -1074,9 +1057,9 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   // A pure function of its argument: built twice, the same recipe.
   assert.deepEqual(JSON.parse(JSON.stringify(sevRecipe(FOUR))), JSON.parse(JSON.stringify(r)));
   const R = analysisScript(r, 'R');
-  assert.ok(R.includes('groups <- list(') && R.includes('t.test(') && R.includes('rep_ids <- list(') && R.includes('segments('));
+  assert.ok(R.includes('groups <- list(') && R.includes('t.test(') && R.includes('rep_ids <- list(') && R.includes('fig_intervals('));
   assert.ok(analysisScript(r, 'py').includes('import matplotlib.pyplot as plt'));
-  assert.ok(analysisScript(r, 'm').includes("plot(fig_mid, 1:k, 'ko'"));
+  assert.ok(analysisScript(r, 'm').includes('fig_intervals('));
   for (const lang of LANGS) {
     const s = analysisScript(r, lang);
     assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
@@ -1089,7 +1072,7 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.equal(rc.settings.benchmark, 2.4);
   assert.deepEqual(Object.keys(rc.settings), ['control', 'family', 'benchmark', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
   assert.equal(rc.settings.family, 'control');
-  assert.ok(analysisScript(rc, 'R').includes('abline(v = benchmark'));
+  assert.ok(analysisScript(rc, 'R').includes('ref = benchmark'));
   // Under the rank procedures: pseudo-medians, shifts, and the inflated plans.
   const rn = sevRecipe(SIX_D, { proc: 'np' });
   assert.equal(rn.expect.C, 15);
@@ -1219,7 +1202,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
       "for i = 1:numel(p), report(sprintf('holm " + s + " %d', i), h(i)); report(sprintf('bonferroni " + s + " %d', i), b(i)); end"];
   });
   const same = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-12);
-  const text = lang => (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body('R')] : [...body('m'), LIB.m.report, LIB.m.holm]).join('\n') + '\n';
+  const text = lang => (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, 'report_start(True)', ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, 'report_start(TRUE)', ...body('R')] : ['report_start(true);', ...body('m'), LIB.m.report, LIB.m.holm]).join('\n') + '\n';
   for (const lang of ['R', 'py', 'm']) {
     const title = 'the Holm snippet adjusts as p.adjust does in ' + lang;
     const job = lang === 'm' ? matlabJob(title, false, () => ({ name: 'holm_check.m', text: text('m') })) : null;
@@ -1368,7 +1351,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
     const body = cases.flatMap((c, s) => (lang === 'R' ? ['cld <- letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for (i in seq_along(cld)) report(paste("case ' + s + '", i), cld[i])']
         : lang === 'py' ? ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for i, v in enumerate(cld): report(f"case ' + s + ' {i + 1}", v)']
           : ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ');', "for i = 1:numel(cld), report(sprintf('case " + s + " %d', i), cld{i}); end"]));
-    return (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.letters, ...body] : lang === 'R' ? [LIB.R.report, LIB.R.letters, ...body] : [...body, LIB.m.report, LIB.m.letters]).join('\n') + '\n';
+    return (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.letters, 'report_start(True)', ...body] : lang === 'R' ? [LIB.R.report, LIB.R.letters, 'report_start(TRUE)', ...body] : ['report_start(true);', ...body, LIB.m.report, LIB.m.letters]).join('\n') + '\n';
   };
   for (const lang of ['R', 'py', 'm']) {
     const title = 'the letter display matches letterGroups in ' + lang;
@@ -1874,8 +1857,8 @@ import { exploreRecipe, exploreTooBig, repKeys, REP_LINES_MAX } from '../js/io/r
 // The page's inputs: its title and provenance, and the Equal variances
 // section's ticked datasets with their finite replication outcomes.
 const exSpread = (...list) => ({ names: list.map(d => d.name), groups: list.map(d => outcomeVector(d).values) });
-const exRecipe = (ds, spread = null, level = 0.95) =>
-  exploreRecipe({ ds, spread, level, title: 'Summary of ' + ds.name, provenance: { dataset: ds.name } });
+const exRecipe = (ds, spread = null, level = 0.95, view = undefined) =>
+  exploreRecipe({ ds, spread, level, title: 'Summary of ' + ds.name, provenance: { dataset: ds.name }, view });
 const exChecks = { also: noWarning };
 
 test('exploreRecipe carries the replications, the outcomes, the check, and the spread test', () => {
@@ -1985,11 +1968,11 @@ test('the Tidy R script reads its data as a tibble, summarizes with dplyr, tidie
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN });
   const s = analysisScript(r, 'tidy');
   for (const needle of ['tibble(', 'summarise(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
-  assert.ok(!s.includes('ggplot('), 'One System draws no figure');
+  assert.ok(s.includes('ggplot('), 'One System\'s figure is drawn with ggplot2');
   assert.ok(!analysisScript(r, 'R').includes('tibble('), 'Base R stays base');
   const sev = analysisScript(sevRecipe(FOUR), 'tidy');
   assert.ok(sev.includes('tibble(design = '), 'the designs as a long tibble');
-  for (const t of [sev, analysisScript(stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }), 'tidy'), analysisScript(exRecipe(TRANSIENT), 'tidy')]) {
+  for (const t of [sev, analysisScript(stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }), 'tidy'), analysisScript(exRecipe(TRANSIENT, null, 0.95, { section: 'dist' }), 'tidy')]) {
     assert.ok(t.includes('ggplot('), 'a page with a figure draws it with ggplot2');
   }
 });
@@ -2015,20 +1998,20 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     ['two, paired signed-rank', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2), ['print(broom::tidy(sr$test))']],
     ['several, Tukey', sevRecipe(FOUR),
       ['d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), outcome = unlist(groups))',
-        'means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'fig_tbl <- means_tbl |> transmute(', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
-        'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")', 'p <- ggplot(fig_tbl, aes(y = design))']],
+        'means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
+        'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")']],
     ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))',
       'oneway.test(outcome ~ design, var.equal = FALSE)', 'anova(lm(distance ~ group))']],
     ['several, Kruskal-Wallis with a benchmark', sevRecipe(SIX_D, { proc: 'np', bench: 2 }),
-      ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))', 'fig_tbl <- tibble(design = seq_len(k), mid = sapply(srs, ',
-        'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
+      ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))',
+        'print(bind_rows(rk$pairs))']],
     ['several, Friedman', sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }),
       ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))', 'print(tibble(design = seq_len(k), survives = ss$survivors']],
     ['steady', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
-      ['records_tbl <- bind_rows(lapply(reps, function(r) tibble(', 'print(broom::tidy(bm$test))', 'ggplot(batch_tbl, aes(batch, mean))']],
+      ['records_tbl <- bind_rows(lapply(reps, function(r) tibble(', 'print(broom::tidy(bm$test))']],
     ['explore', exRecipe(TRANSIENT),
       ['records_tbl <- bind_rows(', 'out_tbl <- tibble(rep_id = ', 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)', 'po <- records_tbl |> describe_tbl(v)',
-        'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))', 'plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ']],
+        'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))']],
     ['explore, Levene', exRecipe(IND_A, exSpread(IND_A, IND_B)), ['print(broom::tidy(lv$test))', 'anova(lm(distance ~ group))']]
   ];
   const tidyMarks = ['tibble(', 'describe_tbl', 'summarise(', 'broom::', 'ggplot', 'bind_rows(', 'library('];
@@ -2042,7 +2025,9 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     assert.ok(/^[\x00-\x7f]*$/.test(tidy), label + ': Tidy R is ASCII');
     assert.ok(!/\$\{|`/.test(tidy), label + ': no template residue');
     assert.deepEqual(reports(tidy), reports(base), label + ': the same report lines');
-    if (r.page === 'one' || r.page === 'two') assert.ok(!tidy.includes('ggplot('), label + ': no figure');
+    // Every view these recipes describe shows a figure but Summary and Plots' summary section, and
+    // Tidy R draws each with ggplot2.
+    if (r.page !== 'explore') assert.ok(tidy.includes('ggplot(') && base.includes('fig_'), label + ': its figures, with ggplot2 in Tidy R');
   }
 });
 
@@ -2052,17 +2037,20 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
 // before a figure opens on screen; Python imports only the SciPy submodules
 // its code calls; the comments read as English; and the Summary and Plots
 // figure uses the page's bins and plotting positions.
-test('scripts end with their figure, import what they use, and say what the page draws', () => {
+test('scripts end with their figures, import what they use, and say what the page draws', () => {
   const sect = { R: /\n## (.*) ----\n/g, tidy: /\n## (.*) ----\n/g, py: /\n# ---- (.*) ----\n/g, m: /\n%% (.*)\n/g };
   const withFigure = [sevRecipe(FOUR, { bench: 2.4 }), sevRecipe(SIX_D, { proc: 'np' }), stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
-    stRecipe(QLEN, { align: 'time', cut: 100, count: 60 }), exRecipe(TRANSIENT), exRecipe(IND_A, exSpread(IND_A, IND_B))];
+    stRecipe(QLEN, { align: 'time', cut: 100, count: 60 }), exRecipe(TRANSIENT, null, 0.95, { section: 'dist' }),
+    exRecipe(IND_A, exSpread(IND_A, IND_B), 0.95, { section: 'normality' }),
+    oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN }), twoOf(IND_A, IND_B, 't', 0.95, PLAN2)];
   for (const r of withFigure) {
     for (const lang of LANGS) {
       const s = analysisScript(r, lang);
       const heads = [...s.matchAll(sect[lang])].map(m => m[1]).filter(h => h !== 'Local functions');
-      assert.ok(/^Figure/.test(heads[heads.length - 1]), r.page + ' ' + lang + ': the figure is last, not ' + heads[heads.length - 1]);
+      assert.equal(heads[heads.length - 1], 'Figures', r.page + ' ' + lang + ': the figures are last');
       const tail = lang === 'm' ? s.slice(0, s.indexOf('\n%% Local functions')) : s;
-      assert.ok(!/\breport\(/.test(tail.slice(tail.lastIndexOf('Figure'))), r.page + ' ' + lang + ': no report line after the figure');
+      assert.ok(!/\breport\(/.test(tail.slice(tail.lastIndexOf('Figures'))), r.page + ' ' + lang + ': no report line after the figures');
+      assert.ok(tail.slice(0, tail.lastIndexOf('Figures')).includes('report_summary()'), r.page + ' ' + lang + ': the check summary comes before the figures');
       assert.ok(!/cut at at|before at\b|at time at\b|over steps equal/.test(s), r.page + ' ' + lang + ': comments read as English');
     }
   }
@@ -2072,15 +2060,15 @@ test('scripts end with their figure, import what they use, and say what the page
   // A replication-value dataset's records are one value per replication, not tally observations.
   const reps = analysisScript(exRecipe(IND_A), 'R').replace(/\n# /g, ' ');
   assert.ok(reps.includes('one value v per replication') && !reps.includes('tally observations v'));
-  // The page's histogram bins and quantile-quantile positions, in Python and MATLAB too.
-  const py = analysisScript(exRecipe(TRANSIENT), 'py'), m = analysisScript(exRecipe(TRANSIENT), 'm'), R = analysisScript(exRecipe(TRANSIENT), 'R');
-  assert.ok(py.includes('np.linspace(x.min(), x.max(), nb + 1)') && py.includes('off = 3 / 8 if n_x <= 10 else 0.5') && !py.includes('probplot'));
-  assert.ok(m.includes('linspace(min(x), max(x), nb + 1)') && m.includes('histogram(x, edges)') && !m.includes('qqplot('));
-  assert.ok(R.includes('hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE'));
+  // The page's histogram bins, in every language.
+  const dist = exRecipe(TRANSIENT, null, 0.95, { section: 'dist' });
+  assert.ok(analysisScript(dist, 'py').includes('np.linspace(plot_v.min(), plot_v.max(), nb + 1)'));
+  assert.ok(analysisScript(dist, 'm').includes('linspace(min(plot_v), max(plot_v), nb + 1)'));
+  assert.ok(analysisScript(dist, 'R').includes('seq(min(plot_v), max(plot_v), length.out = nb + 1)'));
   // Python's Requires line names Matplotlib only where the script draws a figure.
   const pyNeeds = r => analysisScript(r, 'py').split('\n\n')[0].replace(/\n# +/g, ' ');
-  for (const r of withFigure) assert.ok(pyNeeds(r).includes('SciPy 1.11 or later (Matplotlib, if installed, draws the figure).'), r.page + ': Matplotlib named');
-  for (const r of [oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN }), twoOf(IND_A, IND_B, 't', 0.95, PLAN2), exRecipe(LONG)]) {
+  for (const r of withFigure) assert.ok(pyNeeds(r).includes('SciPy 1.11 or later (Matplotlib, if installed, draws the figures).'), r.page + ': Matplotlib named');
+  for (const r of [exRecipe(LONG), exRecipe(TRANSIENT, null, 0.95, { section: 'spread' })]) {
     assert.ok(pyNeeds(r).includes('SciPy 1.11 or later.') && !/matplotlib/i.test(pyNeeds(r)), r.page + ': no figure, and so no Matplotlib');
   }
   // MATLAB's Shapiro-Wilk helper picks swtest's calling form by its argument list, so that
@@ -2652,6 +2640,79 @@ test('Levene groups too large to embed are left out of a script that reads its f
   assert.equal(rs.expect['half-width'], 0);
   assert.ok(Number.isNaN(rs.expect['fishman C']) && Number.isNaN(rs.expect['acf lag 1']));
   checkRecipe('Steady State, a constant run of 0.1', rs, stChecks);
+}
+
+// ── Figures of every view ──────────────────────────────────────────────
+// A script draws the figures of the view the page showed: its section, and on
+// Two Systems the pair view, on Summary and Plots the pooled choice, the
+// replication, the axis, and the lag. Each view below runs in every language
+// with its report checked and no warning printed, and in R and Python its
+// figures are counted: R's on a png device, one file a figure, and Python's
+// through a wrapper that runs the script under Agg and counts the figures it
+// leaves open. Degenerate data (constant outcomes, a run too short for a
+// correlogram, a flat batch series) are among them.
+{
+  const flatReps = makeDataset({ name: 'Flat', response: 'w', kind: 'reps', reps: [1, 2, 3, 4, 5, 6].map(i => ({ id: i, v: [0.1] })) });
+  const shortRun = makeDataset({ name: 'Short', response: 'w', kind: 'tally', reps: [{ id: 1, v: [3, 1, 4, 1, 5] }, { id: 2, v: [9, 2, 6] }] });
+  const flatRun = makeDataset({ name: 'Flat run', response: 'v', kind: 'tally', reps: [{ id: 1, v: Array(200).fill(0.1) }] });
+  // [label, recipe, figures drawn, smoke]
+  const views = [
+    ['One System, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null }), 1, true],
+    ['One System, pooled', oneRecipe({ ds: TRANSIENT, x: TRANSIENT.reps.flatMap(p => Array.from(p.v)), ids: null, pooled: true, proc: 't', level: 0.95, plan: null }), 1],
+    ['Two Systems, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, null), 2],
+    ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
+    ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],
+    ['Several Systems, means with a benchmark', sevRecipe(FOUR, { bench: 2.4, view: { section: 'means' } }), 1],
+    ['Several Systems, pairwise differences', sevRecipe(FOUR, { view: { section: 'diffs' } }), 1, true],
+    ['Several Systems, paired rank differences', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, view: { section: 'diffs' } }), 1],
+    ['Several Systems, analysis of variance with Tukey', sevRecipe(SIX_D, { view: { section: 'anova' } }), 3, true],
+    ['Several Systems, analysis of variance with Dunnett', sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1, view: { section: 'anova' } }), 3],
+    ['Several Systems, Welch analysis', sevRecipe(FOUR, { varMode: 'welch', view: { section: 'anova' } }), 3],
+    ['Several Systems, Kruskal-Wallis groups', sevRecipe(SIX_D, { proc: 'np', view: { section: 'anova' } }), 1],
+    ['Several Systems, Friedman groups', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, view: { section: 'anova' } }), 1],
+    ['Several Systems, the screen', sevRecipe(SIX_D, { dir: 'min', view: { section: 'subset' } }), 1],
+    ['Steady State, warm-up by index', stRecipe(TRANSIENT, { cut: 30, view: { section: 'warmup' } }), 1],
+    ['Steady State, warm-up by time', stRecipe(QLEN, { align: 'time', cut: 100, view: { section: 'warmup' } }), 1],
+    ['Steady State, batches of tally data', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10, view: { section: 'batch' } }), 3, true],
+    ['Steady State, batches of time-persistent data', stRecipe(QLEN, { align: 'time', cut: 100, count: 10, view: { section: 'batch' } }), 3],
+    ['Steady State, batches of a flat run', stRecipe(flatRun, { count: 10, view: { section: 'batch' } }), 3],
+    ['Summary and Plots, distribution', exRecipe(TRANSIENT, null, 0.95, { section: 'dist' }), 3, true],
+    ['Summary and Plots, distribution of pooled observations', exRecipe(TRANSIENT, null, 0.95, { section: 'dist', pooled: true }), 3],
+    ['Summary and Plots, distribution of constant outcomes', exRecipe(flatReps, null, 0.95, { section: 'dist' }), 3],
+    ['Summary and Plots, a run with its lag plot', exRecipe(TRANSIENT, null, 0.95, { section: 'run', rep: 2, lag: 3, axis: 'time' }), 4, true],
+    ['Summary and Plots, a run too short for a correlogram', exRecipe(shortRun, null, 0.95, { section: 'run', rep: 2 }), 2],
+    ['Summary and Plots, a time-persistent run', exRecipe(QLEN, null, 0.95, { section: 'run', rep: 3 }), 2],
+    ['Summary and Plots, replications', exRecipe(TRANSIENT, null, 0.95, { section: 'reps' }), 2],
+    ['Summary and Plots, normality', exRecipe(QUEUE, null, 0.95, { section: 'normality' }), 1]
+  ];
+  for (const [label, r, , smoke] of views) checkRecipe('Figures: ' + label, r, { smoke: !!smoke, also: noWarning });
+  const WRAP = 'import runpy, sys, matplotlib\nmatplotlib.use("Agg")\nimport matplotlib.pyplot as plt\nplt.show = lambda *a, **k: None\n' +
+    'runpy.run_path(sys.argv[1], run_name="__main__")\nprint("FIGURES", len(plt.get_fignums()))\n';
+  function countFigures(r, lang) {
+    const dir = mkdtempSync(join(tmpdir(), 'oa-figs-'));
+    try {
+      const f = join(dir, lang === 'py' ? 'script.py' : 'script.R');
+      writeFileSync(f, analysisScript(r, lang));
+      if (lang === 'py') {
+        writeFileSync(join(dir, 'wrap.py'), WRAP);
+        const run = spawnSync('python3', [join(dir, 'wrap.py'), f], { cwd: dir, encoding: 'utf8', timeout: 120000 });
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        return Number((/FIGURES (\d+)/.exec(run.stdout) || [])[1]);
+      }
+      const run = spawnSync('Rscript', ['--vanilla', '-e', 'png("fig_%02d.png"); source("' + f + '"); invisible(dev.off())'], { cwd: dir, encoding: 'utf8', timeout: 120000 });
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      return readdirSync(dir).filter(n => /^fig_\d+\.png$/.test(n)).length;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  for (const lang of ['R', 'tidy', 'py']) {
+    for (const [label, r, n, smoke] of views) {
+      test('Figures: ' + label + ' draws ' + n + ' in ' + lang, { skip: skipFor(lang, !!smoke) }, () => {
+        assert.equal(countFigures(r, lang), n);
+      });
+    }
+  }
 }
 
 // Every test is defined: the MATLAB batch can start (see "MATLAB batch" above).

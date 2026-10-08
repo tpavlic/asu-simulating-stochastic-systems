@@ -1,13 +1,14 @@
-// Tests for two small rules the pages apply, each a pure function: the ticks
-// the Equal variances checklist on Summary and Plots opens with, and Two
-// Systems' verdict on the F ratio of the variances with its exported
-// "interval contains 1" entry. Expected values follow from each rule as its
+// Tests for the small rules the pages apply, each a pure function: the ticks
+// the Equal variances checklist on Summary and Plots opens with, Two Systems'
+// verdict on the F ratio of the variances with its exported "interval
+// contains 1" entry, and the labels the figures and the regenerate scripts
+// share. Expected values follow from each rule as its
 // JSDoc states it; the one statistic used, fRatio on constant designs, gives
 // standard deviations of exactly 0 by its own definition (pinned in
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks, fRatioVerdict } from '../js/ui/rules.js';
+import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
@@ -55,4 +56,26 @@ test('fRatioVerdict: contains and excludes 1 follow the interval', () => {
   assert.equal(fRatioVerdict({ s1: 1, s2: 2, lo: 1, hi: 3 }).contains, 'yes');
   assert.equal(fRatioVerdict({ s1: 1, s2: 2, lo: 1.2, hi: 3 }).contains, 'no');
   assert.match(fRatioVerdict({ s1: 1, s2: 2, lo: 0.5, hi: 2 }).text, /^The interval contains 1/);
+});
+
+test('roleLabels drops a prefix the two names share, and never repeats the role letter', () => {
+  assert.deepEqual(roleLabels({ name: 'file · A' }, { name: 'file · B' }), ['A', 'B']);
+  assert.deepEqual(roleLabels({ name: 'file · fast' }, { name: 'file · slow' }), ['A · fast', 'B · slow']);
+  assert.deepEqual(roleLabels({ name: 'one · x' }, { name: 'two · y' }), ['A · one · x', 'B · two · y']);
+});
+
+test('outcomeAxis and estimateAxis name the outcome by the data kind', () => {
+  assert.equal(outcomeAxis(null), 'Replication outcome');
+  assert.equal(outcomeAxis({ kind: 'tally', response: 'wait' }, true), 'Observation of wait');
+  assert.equal(outcomeAxis({ kind: 'reps', response: 'cost' }), 'cost per replication');
+  assert.equal(outcomeAxis({ kind: 'time', response: 'queue' }), 'Time-weighted replication mean of queue');
+  assert.equal(estimateAxis({ kind: 'reps', response: 'cost' }), 'cost');
+  assert.equal(estimateAxis({ kind: 'tally', response: 'wait' }), 'Replication mean of wait');
+});
+
+test('shortNames keeps only what follows a prefix every name shares', () => {
+  assert.deepEqual(shortNames([{ name: 'f · A' }, { name: 'f · B' }, { name: 'f · C' }]), ['A', 'B', 'C']);
+  assert.deepEqual(shortNames([{ name: 'f · A' }, { name: 'g · B' }]), ['f · A', 'g · B']);
+  assert.deepEqual(shortNames([{ name: 'f · A' }, { name: 'f · A' }]), ['f · A', 'f · A']);
+  assert.deepEqual(shortNames([{ name: 'only' }]), ['only']);
 });

@@ -16,6 +16,7 @@ import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { currentSection } from '../ui/tabs.js';
 
 /** The page's hash id. */
 export const id = 'steady';
@@ -1341,7 +1342,7 @@ function storeResult(ds, src, res, rows) {
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
     summaryHtml,
-    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(recipeIn),
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection() } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] }
   });
 }
