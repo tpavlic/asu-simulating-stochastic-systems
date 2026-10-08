@@ -25,12 +25,16 @@ tags
 # Browser-automation artifacts from local testing (screenshots, snapshots)
 .playwright-mcp/
 
+# Specs, plans, and notes the superpowers plugin writes while planning work
+/docs/superpowers/
+
 # General
 .DS_Store
 __MACOSX/
 .AppleDouble
 .LSOverride
-Icon[]
+Icon[
+]
 
 # Thumbnails
 ._*
