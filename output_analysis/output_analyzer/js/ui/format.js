@@ -135,6 +135,17 @@ export function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * Escaped text with a <wbr> break point after each underscore and after each
+ * period that a letter follows (as in a file extension), so that a long file
+ * name can wrap in a narrow column; a number such as 1.5 is never broken.
+ * @param {string} html text already escaped by esc
+ * @returns {string}
+ */
+export function breakPoints(html) {
+  return String(html).replace(/(_|\.(?=[A-Za-z]))/g, '$1<wbr>');
+}
+
 function trimFixed(s) {
   if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
   return s === '-0' ? '0' : s;

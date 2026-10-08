@@ -11,7 +11,7 @@ import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io
 import { sameData } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
-import { esc, intl, plural, num } from '../ui/format.js';
+import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { datasetFiles, fileButtons, stamp, DATA_FILES_HELP } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
@@ -29,7 +29,7 @@ const FORMAT_LABEL = {
 };
 
 const ALL_OBS_TIP = 'Every record of every loaded dataset in one file, one row per record under dataset, replication, time, and value, in the order of the table. The time column is present when some dataset has time stamps.';
-const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind (tally, time, or reps), replication id, observation count, and replication outcome.';
+const ALL_REPS_TIP = 'One row per replication of every loaded dataset, under dataset, kind (tally, time, or reps), replication, n_obs, and mean, which holds the replication outcome (the time-weighted mean for time-persistent data), as in each dataset’s own replication summary.';
 
 const KINDS = [
   { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
@@ -704,7 +704,7 @@ function renderList() {
   wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th class="no-print"><span class="sr-only">Remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -716,19 +716,24 @@ function renderList() {
       '<td><span class="kind-badge">' + esc(KIND_LABEL[ds.kind] || ds.kind) + '</span></td>' +
       '<td>' + intl(ds.reps.length) + '</td>' +
       '<td>' + intl(nObs) + '</td>' +
-      '<td class="im-src">' + esc(sourceText(ds)).replace(/([_.])/g, '$1<wbr>') + '</td>' +
+      '<td class="im-src">' + breakPoints(esc(sourceText(ds))) + '</td>' +
       '<td class="im-rej"></td>' +
       '<td class="no-print"><button type="button" class="im-link im-xp"></button></td>' +
-      '<td><button type="button" class="btn-clear im-rm">Remove</button></td>';
+      '<td class="no-print"><button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
     inp.dataset.focus = 'name:' + ds.id;
-    inp.addEventListener('change', () => {
+    // A rename redraws the table. Enter renames at once, and the redraw puts
+    // focus back in the new name box. Leaving the box (by Tab or a click)
+    // renames once focus has moved on, and so the redraw finds the control
+    // that now has focus and gives it focus again.
+    const commit = () => {
       const v = inp.value.trim();
       if (!v) { inp.value = ds.name; return; }
       if (v !== ds.name) state.rename(ds.id, v);
-    });
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+    };
+    inp.addEventListener('change', () => setTimeout(commit, 0));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
     const rej = tr.querySelector('.im-rej');
     if (nIss || nNotes) {
       const b = document.createElement('button');
@@ -754,7 +759,9 @@ function renderList() {
       if (exportOpen.has(ds.id)) exportOpen.delete(ds.id); else exportOpen.add(ds.id);
       renderList();
     });
-    tr.querySelector('.im-rm').addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
+    const rm = tr.querySelector('.im-rm');
+    rm.dataset.focus = 'rm:' + ds.id;
+    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
     tb.appendChild(tr);
     if (expanded.has(ds.id) && (nIss || nNotes)) {
       const er = document.createElement('tr');
@@ -799,7 +806,7 @@ function renderList() {
   box.appendChild(wrap);
 
   const row = document.createElement('div');
-  row.className = 'ctrl-row im-rm-all';
+  row.className = 'ctrl-row im-rm-all no-print';
   const all = document.createElement('button');
   all.type = 'button';
   all.className = 'btn-clear';

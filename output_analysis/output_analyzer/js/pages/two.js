@@ -682,14 +682,10 @@ function renderIndependent(res, notes, d, level) {
     card('Two-sided p', fr ? pValue(fr.p) : dash, 'against σ²<sub>A</sub> = σ²<sub>B</sub>'),
     wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
   ]));
-  const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
-  // Two designs with no spread make F = 0/0: there is no ratio to judge.
-  const fNone = !!fr && fr.s1 === 0 && fr.s2 === 0;
+  const fv = fr ? fRatioVerdict(fr) : null;
   const vVerdict = document.createElement('p');
   vVerdict.className = 'cmp-verdict cmp-res';
-  vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
-    : fNone ? 'Neither design varies, and so the variances cannot be compared.'
-      : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+  vVerdict.textContent = fv ? fv.text : 'No comparison yet: choose two different datasets above.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
@@ -727,8 +723,25 @@ function renderIndependent(res, notes, d, level) {
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
-    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fNone ? 'not defined' : fContains ? 'yes' : 'no']
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
+}
+
+/**
+ * The F ratio's verdict, and the "interval contains 1" entry of its exported
+ * table. Two designs with no spread make F = 0/0, and so there is no ratio to
+ * judge. The page reaches fRatio only with two or more outcomes in each
+ * design; the undefined interval of fewer is judged here all the same, rather
+ * than read as one that excludes 1.
+ * @param {ReturnType<typeof fRatio>} fr
+ * @returns {{ text: string, contains: 'yes'|'no'|'not defined' }}
+ */
+export function fRatioVerdict(fr) {
+  if (fr.s1 === 0 && fr.s2 === 0) return { text: 'Neither design varies, and so the variances cannot be compared.', contains: 'not defined' };
+  if (Number.isNaN(fr.lo) || Number.isNaN(fr.hi)) return { text: 'The F ratio needs at least two replication outcomes of each design.', contains: 'not defined' };
+  return fr.lo <= 1 && 1 <= fr.hi
+    ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
+    : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
 }
 
 // Card labels are set in capitals; a symbol keeps its own case, and so σ

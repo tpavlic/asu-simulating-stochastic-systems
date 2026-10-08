@@ -3,7 +3,7 @@
 // file downloads. The CSV writers and the slug are pure; the browser functions
 // check for a DOM and throw without one.
 
-import { repEstimates, observations, KIND_LABEL } from '../data/model.js';
+import { repEstimates, observations, KIND_LABEL, ESTIMATE_LABEL } from '../data/model.js';
 
 /**
  * One CSV field by RFC 4180: a field holding a comma, a double quote, or a
@@ -78,13 +78,15 @@ function withProvenance(provenance, rows, write = toCsv) {
 }
 
 /**
- * A file-name slug of a title.
+ * A file-name slug of a title: lower-case letters and digits, each run of
+ * anything else turned into one hyphen, at most 60 characters, and never
+ * starting or ending in a hyphen, even where the cut falls just after one.
  * @param {string} s
  * @returns {string}
  */
 export function slug(s) {
   const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return (t || 'data').slice(0, 60);
+  return (t || 'data').slice(0, 60).replace(/-+$/, '');
 }
 
 /**
@@ -173,9 +175,11 @@ function namedRows(header, body) {
   return dataCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(dataField).join(',') + '\n').join('');
 }
 
-// One provenance line per dataset, ahead of the caller's own fields (such as
-// the export time, which the caller passes so that this stays pure).
-function datasetsProvenance(list, provenance) {
+// One provenance line per dataset, then, when `means` is set, one line per
+// kind in the list saying what its mean column holds, and then the caller's
+// own fields (such as the export time, which the caller passes so that this
+// stays pure).
+function datasetsProvenance(list, provenance, means) {
   const p = {};
   list.forEach((ds, i) => {
     const parts = [KIND_LABEL[ds.kind] || ds.kind, 'response ' + ds.response];
@@ -183,11 +187,16 @@ function datasetsProvenance(list, provenance) {
     if (ds.kind === 'time') parts.push('end time ' + (ds.endTime != null ? ds.endTime : 'none'));
     p['dataset ' + (i + 1)] = ds.name + ' (' + parts.join(', ') + ')';
   });
+  if (means) {
+    for (const kind of ['tally', 'time', 'reps']) {
+      if (list.some(ds => ds.kind === kind)) p['mean (' + KIND_LABEL[kind] + ')'] = ESTIMATE_LABEL[kind];
+    }
+  }
   return provenanceLines(Object.assign(p, provenance || {}));
 }
 
-function withDatasetsProvenance(list, provenance, text) {
-  const head = datasetsProvenance(list, provenance);
+function withDatasetsProvenance(list, provenance, text, means = false) {
+  const head = datasetsProvenance(list, provenance, means);
   return (head.length ? head.join('\n') + '\n' : '') + text;
 }
 
@@ -195,9 +204,18 @@ function withDatasetsProvenance(list, provenance, text) {
  * Every record of several datasets in one file: the dataset's name, the
  * replication id, the time when any dataset in the list has time stamps
  * (blank for a record without one), and the value, one row per record with
- * the datasets in list order. A replication with no records has no row; the
- * replications file lists it, but re-importing this file loses it. The value
- * column is headed `value` because the datasets' responses may differ.
+ * the datasets in list order. The value column is headed `value` because the
+ * datasets' responses may differ.
+ *
+ * Re-importing the file (as delimited columns, with the dataset column as the
+ * scenario) does not bring everything back. A replication with no records has
+ * no row; the replications file lists it, but the re-imported dataset lacks
+ * it. An empty name is an empty quoted field, which the importer drops as a
+ * blank cell, and so every row of that dataset is rejected as short. A name
+ * holding a line break splits each of its rows across two lines, which the
+ * importer reads one at a time, and so those rows are rejected or misread. A
+ * name with leading or trailing spaces does come back, because the quoted
+ * field keeps them.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -220,8 +238,11 @@ export function datasetsObservationsCsv(list, provenance) {
  * One row per replication of several datasets: the dataset's name and kind
  * (the id `tally`, `time`, or `reps`, as the regenerate scripts' `kind`
  * setting writes it; the # lines give the kind's label), the replication id,
- * its observation count, and its replication outcome (time weighted for
- * time-persistent data), blank for a replication with no outcome.
+ * its observation count, and its replication outcome, blank for a replication
+ * with no outcome. The outcome column is headed `mean`, as in one dataset's
+ * replication summary, and a # line for each kind in the list says what that
+ * mean is (time weighted for time-persistent data, the value itself for
+ * replication values).
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -232,7 +253,7 @@ export function datasetsReplicationsCsv(list, provenance) {
     const est = repEstimates(ds);
     ds.reps.forEach((r, i) => body.push([ds.name, [ds.kind, r.id, r.v.length, est[i]]]));
   }
-  return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'outcome'], body));
+  return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'mean'], body), true);
 }
 
 function estimateVector(x) {

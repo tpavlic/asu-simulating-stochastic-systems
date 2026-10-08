@@ -11,7 +11,7 @@
 // written from `files` alone without building the recipe.
 
 import * as state from '../state.js';
-import { repEstimates, repIds } from '../data/model.js';
+import { repEstimates, repIds, ESTIMATE_LABEL } from '../data/model.js';
 import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { csvFileName } from '../io/recipes.js';
@@ -19,12 +19,6 @@ import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
 import { esc, intl, plural } from './format.js';
-
-const ESTIMATE_LABEL = {
-  tally: 'replication mean',
-  time: 'time-weighted replication mean',
-  reps: 'one value per replication'
-};
 
 const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
 const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';

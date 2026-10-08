@@ -160,9 +160,9 @@ test('all-dataset observations: no time column when no dataset has times', () =>
   ]);
 });
 
-test('all-dataset replications: blank outcome for an empty replication', () => {
+test('all-dataset replications: blank mean for an empty replication', () => {
   assert.deepEqual(dataRows(datasetsReplicationsCsv([allTally, allTime])), [
-    'dataset,kind,replication,n_obs,outcome',
+    'dataset,kind,replication,n_obs,mean',
     '"Queue, ""A""",tally,1,2,1.5',
     '"Queue, ""A""",tally,2,0,',
     // (0 x 4 + 1 x 6) / 10 = 0.6
@@ -174,17 +174,32 @@ test('all-dataset replications: blank outcome for an empty replication', () => {
 });
 
 test('provenance names every dataset and the time-persistent end time', () => {
-  for (const write of [datasetsObservationsCsv, datasetsReplicationsCsv]) {
-    const head = lines(write([allTally, allTime, allOpen], { exported: '2026-10-07 12:00:00' })).filter(l => l.startsWith('#'));
-    assert.deepEqual(head, [
-      '# dataset 1: Queue, "A" (tally, response wait, source queue.csv)',
-      '# dataset 2: Busy (time-persistent, response busy, end time 10)',
-      '# dataset 3: Open (time-persistent, response busy, end time none)',
-      '# exported: 2026-10-07 12:00:00'
-    ]);
-    assert.ok(head.some(l => /Busy/.test(l) && /end time 10/.test(l)));
-    assert.ok(head.some(l => /Queue, "A"/.test(l) && /tally/.test(l)));
-  }
+  const datasetLines = [
+    '# dataset 1: Queue, "A" (tally, response wait, source queue.csv)',
+    '# dataset 2: Busy (time-persistent, response busy, end time 10)',
+    '# dataset 3: Open (time-persistent, response busy, end time none)'
+  ];
+  const head = write => lines(write([allTally, allTime, allOpen], { exported: '2026-10-07 12:00:00' })).filter(l => l.startsWith('#'));
+  assert.deepEqual(head(datasetsObservationsCsv), [...datasetLines, '# exported: 2026-10-07 12:00:00']);
+  // The replications file also says what its mean column holds, once for
+  // each kind in the list.
+  assert.deepEqual(head(datasetsReplicationsCsv), [
+    ...datasetLines,
+    '# mean (tally): replication mean',
+    '# mean (time-persistent): time-weighted replication mean',
+    '# exported: 2026-10-07 12:00:00'
+  ]);
+});
+
+test('all-dataset replications: the mean lines name only the kinds present, in a fixed order', async () => {
+  const { ESTIMATE_LABEL, KIND_LABEL } = await import('../js/data/model.js');
+  const head = list => lines(datasetsReplicationsCsv(list)).filter(l => l.startsWith('# mean'));
+  assert.deepEqual(head([allReps, allTime]), [
+    '# mean (' + KIND_LABEL.time + '): ' + ESTIMATE_LABEL.time,
+    '# mean (' + KIND_LABEL.reps + '): ' + ESTIMATE_LABEL.reps
+  ]);
+  assert.deepEqual(head([allReps]), ['# mean (replication values): one value per replication']);
+  assert.deepEqual(head([]), []);
 });
 
 // R's read.csv(comment.char = "#") ends a line at an unquoted '#', and so a
@@ -212,6 +227,18 @@ test('slug: lower-case words joined by hyphens, at most 60 characters', () => {
   assert.equal(slug('Four designs · B'), 'four-designs-b');
   assert.equal(slug('···'), 'data');
   assert.equal(slug('x'.repeat(80)).length, 60);
+});
+
+test('slug: never ends in a hyphen where the 60-character cut falls just after one', () => {
+  // The cut leaves 59 letters and a hyphen, which is dropped.
+  assert.equal(slug('a'.repeat(59) + ' b'), 'a'.repeat(59));
+  // A run of separators is already one hyphen, and so one is all that is dropped.
+  assert.equal(slug('a'.repeat(59) + ' ,; b'), 'a'.repeat(59));
+  assert.equal(slug('a'.repeat(58) + ' b c'), 'a'.repeat(58) + '-b');
+  for (let k = 50; k <= 62; k++) {
+    const t = slug('w'.repeat(k) + ' tail ' + 'z'.repeat(20));
+    assert.ok(t.length <= 60 && !/^-|-$/.test(t), t);
+  }
 });
 
 test('a time-persistent data file states its end time', async () => {

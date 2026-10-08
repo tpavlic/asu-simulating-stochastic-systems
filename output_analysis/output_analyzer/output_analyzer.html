@@ -14029,6 +14029,13 @@ D,10,1.4099
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
 
+/** What a replication's outcome is for each kind, as a data file's # lines say it. */
+export const ESTIMATE_LABEL = {
+  tally: 'replication mean',
+  time: 'time-weighted replication mean',
+  reps: 'one value per replication'
+};
+
 let idCounter = 0;
 
 /**
@@ -16814,7 +16821,7 @@ export function arenaFinalCounts(dat, opts = {}) {
 // file downloads. The CSV writers and the slug are pure; the browser functions
 // check for a DOM and throw without one.
 
-import { repEstimates, observations, KIND_LABEL } from '../data/model.js';
+import { repEstimates, observations, KIND_LABEL, ESTIMATE_LABEL } from '../data/model.js';
 
 /**
  * One CSV field by RFC 4180: a field holding a comma, a double quote, or a
@@ -16889,13 +16896,15 @@ function withProvenance(provenance, rows, write = toCsv) {
 }
 
 /**
- * A file-name slug of a title.
+ * A file-name slug of a title: lower-case letters and digits, each run of
+ * anything else turned into one hyphen, at most 60 characters, and never
+ * starting or ending in a hyphen, even where the cut falls just after one.
  * @param {string} s
  * @returns {string}
  */
 export function slug(s) {
   const t = String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return (t || 'data').slice(0, 60);
+  return (t || 'data').slice(0, 60).replace(/-+$/, '');
 }
 
 /**
@@ -16984,9 +16993,11 @@ function namedRows(header, body) {
   return dataCsv([header]) + body.map(([name, rest]) => quotedName(name) + ',' + rest.map(dataField).join(',') + '\n').join('');
 }
 
-// One provenance line per dataset, ahead of the caller's own fields (such as
-// the export time, which the caller passes so that this stays pure).
-function datasetsProvenance(list, provenance) {
+// One provenance line per dataset, then, when `means` is set, one line per
+// kind in the list saying what its mean column holds, and then the caller's
+// own fields (such as the export time, which the caller passes so that this
+// stays pure).
+function datasetsProvenance(list, provenance, means) {
   const p = {};
   list.forEach((ds, i) => {
     const parts = [KIND_LABEL[ds.kind] || ds.kind, 'response ' + ds.response];
@@ -16994,11 +17005,16 @@ function datasetsProvenance(list, provenance) {
     if (ds.kind === 'time') parts.push('end time ' + (ds.endTime != null ? ds.endTime : 'none'));
     p['dataset ' + (i + 1)] = ds.name + ' (' + parts.join(', ') + ')';
   });
+  if (means) {
+    for (const kind of ['tally', 'time', 'reps']) {
+      if (list.some(ds => ds.kind === kind)) p['mean (' + KIND_LABEL[kind] + ')'] = ESTIMATE_LABEL[kind];
+    }
+  }
   return provenanceLines(Object.assign(p, provenance || {}));
 }
 
-function withDatasetsProvenance(list, provenance, text) {
-  const head = datasetsProvenance(list, provenance);
+function withDatasetsProvenance(list, provenance, text, means = false) {
+  const head = datasetsProvenance(list, provenance, means);
   return (head.length ? head.join('\n') + '\n' : '') + text;
 }
 
@@ -17006,9 +17022,18 @@ function withDatasetsProvenance(list, provenance, text) {
  * Every record of several datasets in one file: the dataset's name, the
  * replication id, the time when any dataset in the list has time stamps
  * (blank for a record without one), and the value, one row per record with
- * the datasets in list order. A replication with no records has no row; the
- * replications file lists it, but re-importing this file loses it. The value
- * column is headed `value` because the datasets' responses may differ.
+ * the datasets in list order. The value column is headed `value` because the
+ * datasets' responses may differ.
+ *
+ * Re-importing the file (as delimited columns, with the dataset column as the
+ * scenario) does not bring everything back. A replication with no records has
+ * no row; the replications file lists it, but the re-imported dataset lacks
+ * it. An empty name is an empty quoted field, which the importer drops as a
+ * blank cell, and so every row of that dataset is rejected as short. A name
+ * holding a line break splits each of its rows across two lines, which the
+ * importer reads one at a time, and so those rows are rejected or misread. A
+ * name with leading or trailing spaces does come back, because the quoted
+ * field keeps them.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -17031,8 +17056,11 @@ export function datasetsObservationsCsv(list, provenance) {
  * One row per replication of several datasets: the dataset's name and kind
  * (the id `tally`, `time`, or `reps`, as the regenerate scripts' `kind`
  * setting writes it; the # lines give the kind's label), the replication id,
- * its observation count, and its replication outcome (time weighted for
- * time-persistent data), blank for a replication with no outcome.
+ * its observation count, and its replication outcome, blank for a replication
+ * with no outcome. The outcome column is headed `mean`, as in one dataset's
+ * replication summary, and a # line for each kind in the list says what that
+ * mean is (time weighted for time-persistent data, the value itself for
+ * replication values).
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
  * @returns {string}
@@ -17043,7 +17071,7 @@ export function datasetsReplicationsCsv(list, provenance) {
     const est = repEstimates(ds);
     ds.reps.forEach((r, i) => body.push([ds.name, [ds.kind, r.id, r.v.length, est[i]]]));
   }
-  return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'outcome'], body));
+  return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'mean'], body), true);
 }
 
 function estimateVector(x) {
@@ -22021,7 +22049,7 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, initialTicks, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
 } from '../ui/widgets.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
@@ -22963,17 +22991,15 @@ function buildSpread(api, { ds, est }) {
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
-  const stored = state.getPick(id, 'spread');
   // The reader's own ticks stand, even fewer than two; every eligible dataset
   // is ticked only before any choice, or when none of the stored ones is left.
-  const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
-  const initial = Array.isArray(stored) && (want.length || !stored.length) ? want : eligible.map(d => d.id);
+  const initial = initialTicks(state.getPick(id, 'spread'), eligible.map(d => d.id));
   const host = el('div');
   sec.appendChild(host);
   const list = datasetChecklist(host, { filter: d => finite(repEstimates(d)).length >= 2, checked: initial,
     onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
-  if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result with ' + (chosen.length ? 'one' : 'none') + ' ticked. Tick two or more to compare their spreads.'); return; }
+  if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result when ' + (chosen.length ? 'one' : 'none') + ' is ticked. Tick two or more to compare their spreads.'); return; }
   const groups = chosen.map(d => finite(repEstimates(d)));
   const lv = levene(groups);
   lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
@@ -23269,7 +23295,7 @@ import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io
 import { sameData } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
-import { esc, intl, plural, num } from '../ui/format.js';
+import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { datasetFiles, fileButtons, stamp, DATA_FILES_HELP } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
@@ -23287,7 +23313,7 @@ const FORMAT_LABEL = {
 };
 
 const ALL_OBS_TIP = 'Every record of every loaded dataset in one file, one row per record under dataset, replication, time, and value, in the order of the table. The time column is present when some dataset has time stamps.';
-const ALL_REPS_TIP = 'One row per replication of every loaded dataset, giving its dataset, kind (tally, time, or reps), replication id, observation count, and replication outcome.';
+const ALL_REPS_TIP = 'One row per replication of every loaded dataset, under dataset, kind (tally, time, or reps), replication, n_obs, and mean, which holds the replication outcome (the time-weighted mean for time-persistent data), as in each dataset’s own replication summary.';
 
 const KINDS = [
   { kind: 'tally', label: 'Tally', tip: 'Each value is one observation, such as one customer’s wait. A replication’s outcome is the plain mean of its observations.' },
@@ -23962,7 +23988,7 @@ function renderList() {
   wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th class="no-print"><span class="sr-only">Remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -23974,19 +24000,24 @@ function renderList() {
       '<td><span class="kind-badge">' + esc(KIND_LABEL[ds.kind] || ds.kind) + '</span></td>' +
       '<td>' + intl(ds.reps.length) + '</td>' +
       '<td>' + intl(nObs) + '</td>' +
-      '<td class="im-src">' + esc(sourceText(ds)).replace(/([_.])/g, '$1<wbr>') + '</td>' +
+      '<td class="im-src">' + breakPoints(esc(sourceText(ds))) + '</td>' +
       '<td class="im-rej"></td>' +
       '<td class="no-print"><button type="button" class="im-link im-xp"></button></td>' +
-      '<td><button type="button" class="btn-clear im-rm">Remove</button></td>';
+      '<td class="no-print"><button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
     inp.dataset.focus = 'name:' + ds.id;
-    inp.addEventListener('change', () => {
+    // A rename redraws the table. Enter renames at once, and the redraw puts
+    // focus back in the new name box. Leaving the box (by Tab or a click)
+    // renames once focus has moved on, and so the redraw finds the control
+    // that now has focus and gives it focus again.
+    const commit = () => {
       const v = inp.value.trim();
       if (!v) { inp.value = ds.name; return; }
       if (v !== ds.name) state.rename(ds.id, v);
-    });
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+    };
+    inp.addEventListener('change', () => setTimeout(commit, 0));
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
     const rej = tr.querySelector('.im-rej');
     if (nIss || nNotes) {
       const b = document.createElement('button');
@@ -24012,7 +24043,9 @@ function renderList() {
       if (exportOpen.has(ds.id)) exportOpen.delete(ds.id); else exportOpen.add(ds.id);
       renderList();
     });
-    tr.querySelector('.im-rm').addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
+    const rm = tr.querySelector('.im-rm');
+    rm.dataset.focus = 'rm:' + ds.id;
+    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
     tb.appendChild(tr);
     if (expanded.has(ds.id) && (nIss || nNotes)) {
       const er = document.createElement('tr');
@@ -24057,7 +24090,7 @@ function renderList() {
   box.appendChild(wrap);
 
   const row = document.createElement('div');
-  row.className = 'ctrl-row im-rm-all';
+  row.className = 'ctrl-row im-rm-all no-print';
   const all = document.createElement('button');
   all.type = 'button';
   all.className = 'btn-clear';
@@ -28811,14 +28844,10 @@ function renderIndependent(res, notes, d, level) {
     card('Two-sided p', fr ? pValue(fr.p) : dash, 'against σ²<sub>A</sub> = σ²<sub>B</sub>'),
     wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
   ]));
-  const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
-  // Two designs with no spread make F = 0/0: there is no ratio to judge.
-  const fNone = !!fr && fr.s1 === 0 && fr.s2 === 0;
+  const fv = fr ? fRatioVerdict(fr) : null;
   const vVerdict = document.createElement('p');
   vVerdict.className = 'cmp-verdict cmp-res';
-  vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
-    : fNone ? 'Neither design varies, and so the variances cannot be compared.'
-      : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+  vVerdict.textContent = fv ? fv.text : 'No comparison yet: choose two different datasets above.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
@@ -28856,8 +28885,25 @@ function renderIndependent(res, notes, d, level) {
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
-    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fNone ? 'not defined' : fContains ? 'yes' : 'no']
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
+}
+
+/**
+ * The F ratio's verdict, and the "interval contains 1" entry of its exported
+ * table. Two designs with no spread make F = 0/0, and so there is no ratio to
+ * judge. The page reaches fRatio only with two or more outcomes in each
+ * design; the undefined interval of fewer is judged here all the same, rather
+ * than read as one that excludes 1.
+ * @param {ReturnType<typeof fRatio>} fr
+ * @returns {{ text: string, contains: 'yes'|'no'|'not defined' }}
+ */
+export function fRatioVerdict(fr) {
+  if (fr.s1 === 0 && fr.s2 === 0) return { text: 'Neither design varies, and so the variances cannot be compared.', contains: 'not defined' };
+  if (Number.isNaN(fr.lo) || Number.isNaN(fr.hi)) return { text: 'The F ratio needs at least two replication outcomes of each design.', contains: 'not defined' };
+  return fr.lo <= 1 && 1 <= fr.hi
+    ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
+    : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
 }
 
 // Card labels are set in capitals; a symbol keeps its own case, and so σ
@@ -33145,7 +33191,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
 // written from `files` alone without building the recipe.
 
 import * as state from '../state.js';
-import { repEstimates, repIds } from '../data/model.js';
+import { repEstimates, repIds, ESTIMATE_LABEL } from '../data/model.js';
 import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { csvFileName } from '../io/recipes.js';
@@ -33153,12 +33199,6 @@ import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
 import { esc, intl, plural } from './format.js';
-
-const ESTIMATE_LABEL = {
-  tally: 'replication mean',
-  time: 'time-weighted replication mean',
-  reps: 'one value per replication'
-};
 
 const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
 const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
@@ -33652,6 +33692,17 @@ export function intl(n) {
 export function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Escaped text with a <wbr> break point after each underscore and after each
+ * period that a letter follows (as in a file extension), so that a long file
+ * name can wrap in a narrow column; a number such as 1.5 is never broken.
+ * @param {string} html text already escaped by esc
+ * @returns {string}
+ */
+export function breakPoints(html) {
+  return String(html).replace(/(_|\.(?=[A-Za-z]))/g, '$1<wbr>');
 }
 
 function trimFixed(s) {
@@ -36384,6 +36435,21 @@ export function datasetSelect(selectEl, opts = {}) {
     value: () => selectEl.value,
     destroy: () => { off(); selectEl.removeEventListener('change', onChange); }
   };
+}
+
+/**
+ * The ticks a dataset checklist opens with. A stored list stands at any
+ * length, even one or none, less any id no longer offered; every offered
+ * dataset is ticked only before any choice (nothing stored) or when a
+ * non-empty stored list has none of its datasets left.
+ * @param {unknown} stored the list kept with the session, or anything else when there is none
+ * @param {string[]} offered the ids of the datasets the checklist offers
+ * @returns {string[]}
+ */
+export function initialTicks(stored, offered) {
+  if (!Array.isArray(stored)) return offered.slice();
+  const kept = stored.filter(x => offered.includes(x));
+  return kept.length || !stored.length ? kept : offered.slice();
 }
 
 /**

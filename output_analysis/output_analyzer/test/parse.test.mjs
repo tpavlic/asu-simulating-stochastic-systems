@@ -252,6 +252,29 @@ test('the bundled examples round-trip through the all-dataset observations file'
   }
 });
 
+// What datasetsObservationsCsv's JSDoc says does not come back, and the one
+// case that does.
+test('names that do and do not survive the round trip', () => {
+  const back = name => {
+    const group = [makeDataset({ name, kind: 'tally', reps: [{ id: 1, v: [1, 2] }] }),
+      makeDataset({ name: 'other', kind: 'tally', reps: [{ id: 1, v: [3] }] })];
+    const s = sniff(datasetsObservationsCsv(group), { name: 'f' });
+    const { datasets } = buildDatasets(s, { ...s.suggested, kind: 'tally' });
+    return { names: datasets.map(d => d.name), issues: s.issues.map(i => i.reason) };
+  };
+  // Leading and trailing spaces are kept in the quoted field.
+  assert.deepEqual(back('  lead').names, ['f ·   lead', 'f · other']);
+  assert.deepEqual(back('trail  ').names, ['f · trail  ', 'f · other']);
+  // An empty name is a blank cell, and each of its rows is one cell short.
+  assert.deepEqual(back(''), { names: ['f · other'], issues: ['expected 3 cells, found 2', 'expected 3 cells, found 2'] });
+  // A line break splits each row in two: the first half is rejected and the
+  // second is read under a different name.
+  const broken = back('a\nb');
+  assert.deepEqual(broken.issues, ['expected 3 cells, found 1', 'expected 3 cells, found 1']);
+  assert.ok(!broken.names.includes('f · a\nb'));
+  assert.equal(broken.names.length, 2);
+});
+
 test('a dataset name with a space and a semicolon survives the round trip', () => {
   const group = [
     makeDataset({ name: 'Line 1; shift A', kind: 'tally', reps: [{ id: 1, v: [3, 4] }, { id: 2, v: [5] }] }),

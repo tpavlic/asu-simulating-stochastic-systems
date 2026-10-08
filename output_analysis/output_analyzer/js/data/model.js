@@ -16,6 +16,13 @@
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
 
+/** What a replication's outcome is for each kind, as a data file's # lines say it. */
+export const ESTIMATE_LABEL = {
+  tally: 'replication mean',
+  time: 'time-weighted replication mean',
+  reps: 'one value per replication'
+};
+
 let idCounter = 0;
 
 /**

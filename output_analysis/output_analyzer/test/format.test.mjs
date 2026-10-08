@@ -4,7 +4,7 @@
 // decimal value, and so no R reference is involved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { num, stat, fixed, pct, pValue, plural, intl, dash, esc } from '../js/ui/format.js';
+import { num, stat, fixed, pct, pValue, plural, intl, dash, esc, breakPoints } from '../js/ui/format.js';
 
 test('dash is the en dash', () => {
   assert.equal(dash, '–');
@@ -87,4 +87,13 @@ test('stat prints an infinite statistic as infinity and otherwise as num', () =>
   assert.equal(stat(NaN), dash);
   assert.equal(stat(3.14159), num(3.14159));
   assert.equal(stat(1234.5678, 6), num(1234.5678, 6));
+});
+
+test('breakPoints: after an underscore or a period before a letter, never inside a number', () => {
+  assert.equal(breakPoints('queue_days.csv'), 'queue_<wbr>days.<wbr>csv');
+  assert.equal(breakPoints('run_1.5.dat'), 'run_<wbr>1.5.<wbr>dat');
+  assert.equal(breakPoints('truncated at time 1.5'), 'truncated at time 1.5');
+  assert.equal(breakPoints('v2.0.flt · tally'), 'v2.0.<wbr>flt · tally');
+  assert.equal(breakPoints('end.'), 'end.');
+  assert.equal(breakPoints(esc('a&b_c.txt')), 'a&amp;b_<wbr>c.<wbr>txt');
 });
