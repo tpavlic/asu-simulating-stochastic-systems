@@ -21,17 +21,17 @@ import { esc } from './format.js';
 
 // A script's tip; `from` says where its data come from.
 const REGEN_TIP = {
-  m: from => 'A MATLAB script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
-  R: from => 'An R script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Base R and its stats package only.',
-  tidy: () => 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and any figure with ggplot2. Needs tibble, dplyr, tidyr, broom, and ggplot2.',
-  py: from => 'A Python script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Needs NumPy and SciPy 1.11 or later.'
+  m: from => 'A MATLAB script that recomputes every result on this page from ' + from + ', checks each against the value shown here, and draws any figures this view shows. It needs the Statistics and Machine Learning Toolbox.',
+  R: from => 'An R script that recomputes every result on this page from ' + from + ', checks each against the value shown here, and draws any figures this view shows. It uses base R and its stats package only.',
+  tidy: () => 'The same R analysis written the tidyverse way: the data as a tibble, summaries with dplyr, test results through broom, and the figures with ggplot2. It needs tibble, dplyr, tidyr, broom, and ggplot2.',
+  py: from => 'A Python script that recomputes every result on this page from ' + from + ', checks each against the value shown here, and draws any figures this view shows. It needs NumPy, SciPy 1.11 or later, and Matplotlib for the figures.'
 };
 const FROM_EMBEDDED = 'the data embedded in it', FROM_FILES = 'the CSV files the Data buttons save';
 const REGEN_HELP =
-  '<p>Each script holds every choice made above and code that recomputes every number shown here, printing each beside the value the page got. It also holds the data this page analyzed, or, where those would run past 200,000 numbers, reads them from CSV files. ' +
-  'The analysis is done with the language’s own functions wherever it has one, and with a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
-  '<p>A script embeds replication outcomes on the inference pages (every observation, under One System’s pooled override) and the records of the run on Steady State and Summary and Plots, and in comments beside them it shows the lines that read the same data from the CSV files Export saves on the Import page. ' +
-  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead: a Data button beside the four script buttons saves each file the script reads, to be kept in the folder the script runs from.</p>';
+  '<p>Each script holds the data this page analyzed, every choice made above, and code that recomputes every number shown here. It prints the results section by section, says at the end whether every one agrees with the value on this page, and then draws the figures this view shows. ' +
+  'Setting <code>check_details</code> at the top of the script prints each result beside the page’s value instead. Each step uses the language’s own function where it has one and a short function written into the script where it has none, so that the script can be read as a worked example and changed.</p>' +
+  '<p>The data are the replication outcomes on the inference pages (every observation, under One System’s pooled override) and the run’s records on Steady State and Summary and Plots. Beside them, in comments, the script shows the lines that read the same data from the CSV files that Export saves on the Import page. ' +
+  'Where the data would run past 200,000 numbers, the script embeds none and runs those lines instead, and a Data button beside the four script buttons saves each file the script reads; keep those files in the folder the script runs from.</p>';
 // The note under the line when the scripts read their data from files.
 const regenFilesNote = n => 'These data run past 200,000 numbers, and so each script reads them from the CSV ' + (n === 1
   ? 'file the Data button saves; keep it in one folder with the script.'
@@ -138,7 +138,7 @@ export function dataFilesHelp(ds) {
     (time ? '' : '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads.</p>') +
     '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome under <code>mean</code>' +
     (time ? ' (the time-weighted mean)' : ds && ds.kind === 'tally' ? ', plus the standard deviation, minimum, and maximum' : '') +
-    '. Its <code>mean</code> column, copied on its own, is the pilot data a sample-size planner reads; for a paired pilot, copy the <code>A</code> and <code>B</code> columns of the Matched pairs table that Two Systems offers when its replications are paired.</p>';
+    '. Its <code>mean</code> column, copied on its own, is the pilot data a sample-size planner reads; for a paired pilot, copy the <code>A</code> and <code>B</code> columns of the Matched pairs table that Two Systems offers when the replications are paired.</p>';
 }
 
 // A table name follows "Download" mid-sentence, and so its first letter is
@@ -226,7 +226,7 @@ export function regenDataFiles(files) {
     file,
     label: 'Data: ' + file + (count.get(file) > 1 ? ' (' + ds.name + ')' : ''),
     tip: 'The ' + (form === 'observations' ? 'Observations CSV' : 'Replication summary CSV') + ' of ' + ds.name +
-      ', which the scripts read. Export on its row of the Import page saves the same file.',
+      ', which the scripts read. The Import page saves the same file from Export on that dataset’s row.',
     run: () => downloadText(file, dataFileText(ds, form))
   }));
 }
@@ -252,7 +252,7 @@ export function installExportRow(root, pageId, opts = {}) {
   regen.className = 'xp-regen';
   regen.hidden = true;
   regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
-  regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
+  regen.appendChild(details('What these scripts regenerate', REGEN_HELP));
   // The data files' explanation follows the buttons it explains, above the regenerate line.
   // A function is called again at every refresh, so that the explanation
   // follows the dataset shown.

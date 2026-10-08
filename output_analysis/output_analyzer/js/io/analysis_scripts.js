@@ -1,7 +1,8 @@
 // The "Regenerate these results in" scripts: a recipe (see recipes.js)
 // becomes a MATLAB, R, or Python script holding the data the page analyzed,
 // the choices it made, and code that recomputes every number the page shows,
-// printing each beside the analyzer's own value. Pure functions, no DOM.
+// checks each against the analyzer's own value, and draws the figures of the
+// page's view (figure_scripts.js). Pure functions, no DOM.
 //
 // A script is assembled from: a header comment (title, stamp, choices,
 // requirements), the report helper, the helpers the body needs (MATLAB puts
