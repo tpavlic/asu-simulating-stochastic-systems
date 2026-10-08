@@ -15,7 +15,7 @@ import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
-import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
@@ -1214,7 +1214,7 @@ export function render(root) {
   state.on('selection', () => { if (visible()) schedule(); });
   state.on('settings', () => { if (visible()) schedule(); });
   update();
-  installExportRow(root, id, { extra: () => pairedPilotFile(state.get(selA.value), state.get(selB.value)) });
+  installExportRow(root, id);
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept

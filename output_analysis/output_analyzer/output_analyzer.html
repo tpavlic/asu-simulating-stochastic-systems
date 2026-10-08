@@ -17081,38 +17081,6 @@ export function datasetsReplicationsCsv(list, provenance) {
   return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'mean'], body), true);
 }
 
-function estimateVector(x) {
-  return x && x.reps ? Array.from(repEstimates(x)) : Array.from(x);
-}
-
-/**
- * Replication outcomes in the form a pilot-data box reads: `#` lines, a
- * header, and one number per line. Given one dataset (or vector), one column
- * headed `mean` holding its finite estimates. Given a pair `[a, b]` of
- * datasets or vectors already matched by the caller, two columns headed
- * `mean_A,mean_B` over the first min(nA, nB) positions, skipping a position
- * where either estimate is missing.
- * @param {import('../data/model.js').Dataset|ArrayLike<number>|
- *   [import('../data/model.js').Dataset|ArrayLike<number>, import('../data/model.js').Dataset|ArrayLike<number>]} x
- * @param {Record<string, unknown>} [provenance]
- * @returns {string}
- */
-export function pilotCsv(x, provenance) {
-  const paired = Array.isArray(x) && x.length === 2 && typeof x[0] === 'object' && x[0] !== null;
-  if (!paired) {
-    const rows = [['mean']];
-    for (const v of estimateVector(x)) if (Number.isFinite(v)) rows.push([v]);
-    return withProvenance(provenance, rows);
-  }
-  const a = estimateVector(x[0]), b = estimateVector(x[1]);
-  const rows = [['mean_A', 'mean_B']];
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    if (Number.isFinite(a[i]) && Number.isFinite(b[i])) rows.push([a[i], b[i]]);
-  }
-  return withProvenance(provenance, rows);
-}
-
 /**
  * Batch means as CSV: one row per complete batch, numbered from 1, with its
  * start, end, observation count, and mean.
@@ -22067,7 +22035,7 @@ import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/form
 import { registerTips } from '../ui/tooltip.js';
 import { initialTicks } from '../ui/rules.js';
 import { setSectionAvailable } from '../ui/tabs.js';
-import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
+import { installExportRow, datasetFiles, dataFilesHelp } from '../ui/exportrow.js';
 
 /** The page's hash id. */
 export const id = 'explore';
@@ -22181,7 +22149,7 @@ export function render(root) {
   });
   // The replication summary is among the data files, and so only the test
   // table is offered from the results.
-  installExportRow(root, id, { tables: t => !/^replication summary$/i.test(t.name), extra: () => datasetFiles(current()), help: DATA_FILES_HELP });
+  installExportRow(root, id, { tables: t => !/^replication summary$/i.test(t.name), extra: () => datasetFiles(current()), help: () => dataFilesHelp(current()) });
 }
 
 /** Called each time the page is shown. */
@@ -23310,7 +23278,7 @@ import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { datasetFiles, fileButtons, stamp, DATA_FILES_HELP } from '../ui/exportrow.js';
+import { datasetFiles, fileButtons, stamp, dataFilesHelp } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
 
 /** The page's hash id. */
@@ -24091,7 +24059,7 @@ function renderList() {
       files.setAttribute('role', 'group');
       files.setAttribute('aria-label', 'Data files of ' + ds.name);
       inner.appendChild(files);
-      inner.appendChild(details('What each data file holds', DATA_FILES_HELP));
+      inner.appendChild(details('What each data file holds', dataFilesHelp(ds)));
       td.appendChild(inner);
       er.appendChild(td);
       tb.appendChild(er);
@@ -28190,7 +28158,7 @@ import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
-import { installExportRow, pairedPilotFile } from '../ui/exportrow.js';
+import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
@@ -29389,7 +29357,7 @@ export function render(root) {
   state.on('selection', () => { if (visible()) schedule(); });
   state.on('settings', () => { if (visible()) schedule(); });
   update();
-  installExportRow(root, id, { extra: () => pairedPilotFile(state.get(selA.value), state.get(selB.value)) });
+  installExportRow(root, id);
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept
@@ -33177,28 +33145,25 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
 <script type="text/plain" data-module="js/ui/exportrow.js">
 // The export row at the foot of a page: one button per result table the page
 // has computed (a CSV with `#` provenance lines), any files the page adds
-// (the data files on Summary and Plots, the paired pilot on Two Systems), and
-// a Print button that prints the page as shown, without the navigation. The
-// row follows the page's results as they change. When the page's result
-// carries `regen: { build, tooBig, files }`, a second line offers the scripts
-// that regenerate its results in MATLAB, Base R, Tidy R, and Python; the
-// recipe is built only when one of those buttons is pressed. Where the data
-// run past the cap (`tooBig`), the scripts hold no data and read the CSV files
-// `files` names, and the line adds a Data button for each of those files,
-// written from `files` alone without building the recipe.
+// (the data files on Summary and Plots), and a Print button that prints the
+// page as shown, without the navigation. The row follows the page's results
+// as they change. When the page's result carries `regen: { build, tooBig,
+// files }`, a second line offers the scripts that regenerate its results in
+// MATLAB, Base R, Tidy R, and Python; the recipe is built only when one of
+// those buttons is pressed. Where the data run past the cap (`tooBig`), the
+// scripts hold no data and read the CSV files `files` names, and the line
+// adds a Data button for each of those files, written from `files` alone
+// without building the recipe.
 
 import * as state from '../state.js';
-import { repEstimates, repIds, ESTIMATE_LABEL } from '../data/model.js';
-import { observationsCsv, repSummaryCsv, pilotCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
+import { ESTIMATE_LABEL } from '../data/model.js';
+import { observationsCsv, repSummaryCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { csvFileName } from '../io/recipes.js';
-import { matchPairs } from '../stats/compare.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
-import { esc, intl, plural } from './format.js';
+import { esc } from './format.js';
 
-const PILOT_TIP = 'One bare numeric column of replication outcomes, the form a pilot-data paste box reads; such a reader skips the header and the # lines.';
-const PAIRED_TIP = 'Two matched columns, read as a paired pilot: the outcomes of replications with the same id in both datasets, as common random numbers would pair them.';
 // A script's tip; `from` says where its data come from.
 const REGEN_TIP = {
   m: from => 'A MATLAB script that recomputes every result on this page from ' + from + ', printing each beside the value shown here. Needs the Statistics and Machine Learning Toolbox.',
@@ -33248,12 +33213,6 @@ export function derivedName(ds) {
   return parent ? parent.name : ds.derivedFrom.id;
 }
 
-function finiteCount(ds) {
-  let n = 0;
-  for (const v of repEstimates(ds)) if (Number.isFinite(v)) n++;
-  return n;
-}
-
 /**
  * The `#` lines every data file carries: what the dataset is, where it came
  * from, how it was derived when it was truncated, and, for time-persistent
@@ -33301,7 +33260,6 @@ export function dataFileText(ds, form) {
 export function datasetFiles(ds) {
   if (!ds) return [];
   const base = slug(ds.name);
-  const pilotOk = finiteCount(ds) >= 2;
   const out = [
     { label: 'Observations CSV', run: () => downloadText(csvFileName(ds, 'observations'), dataFileText(ds, 'observations')) }
   ];
@@ -33309,69 +33267,23 @@ export function datasetFiles(ds) {
     out.push({ label: 'Observations, one column', tip: ONECOL_TIP, run: () => downloadText(base + '_observations_column.csv', observationsCsv(ds, dsProvenance(ds))) });
   }
   out.push({ label: 'Replication summary CSV', run: () => downloadText(csvFileName(ds, 'replications'), dataFileText(ds, 'replications')) });
-  out.push({
-    label: 'Pilot-ready CSV', tip: PILOT_TIP, disabled: !pilotOk,
-    note: pilotOk ? '' : 'A pilot needs at least two replication outcomes, and this dataset has ' + intl(finiteCount(ds)) + '.',
-    run: () => downloadText(base + '_pilot.csv', pilotCsv(ds, dsProvenance(ds, { estimate: ESTIMATE_LABEL[ds.kind], form: 'pilot data, one column' })))
-  });
   return out;
 }
 
-/** The explanation of the data files, for a details block under the row. */
-export const DATA_FILES_HELP =
-  '<p><strong>Observations CSV</strong>: every observation with its replication id and its time where one was recorded. Time-persistent data always carry their times because each value counts in proportion to how long it holds.</p>' +
-  '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads. It is not offered for time-persistent data.</p>' +
-  '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome (the time-weighted mean for time-persistent data), plus the standard deviation, minimum, and maximum for tally data.</p>' +
-  '<p><strong>Pilot-ready CSV</strong>: one column of replication outcomes under the header <code>mean</code>, which a sample-size planner reads as pilot data. The paired pilot on Two Systems holds two columns, <code>mean_A</code> and <code>mean_B</code>.</p>';
-
-// The replications of A and B matched by id, keeping only the pairs where
-// both estimates are finite, as the two vectors the paired pilot writes.
-function pairedVectors(a, b) {
-  const m = matchPairs(repIds(a), repIds(b), 'id');
-  const ea = repEstimates(a), eb = repEstimates(b);
-  const xa = [], xb = [];
-  let missing = 0;
-  for (const [i, j] of m.pairs) {
-    if (Number.isFinite(ea[i]) && Number.isFinite(eb[j])) { xa.push(ea[i]); xb.push(eb[j]); } else missing++;
-  }
-  return { xa: Float64Array.from(xa), xb: Float64Array.from(xb), unmatchedA: m.unmatchedA.length, unmatchedB: m.unmatchedB.length, missing };
-}
-
 /**
- * The paired-pilot file of two datasets, as one button descriptor (disabled,
- * with the reason as its note, when the pair cannot be formed).
- * @param {object|null} a
- * @param {object|null} b
+ * The explanation of one dataset's data files, for a details block under the
+ * buttons: one paragraph per file that `datasetFiles` offers for it.
+ * @param {object|null} ds
+ * @returns {string} HTML
  */
-export function pairedPilotFile(a, b) {
-  if (!a || !b || a.id === b.id) return [];
-  const v = pairedVectors(a, b);
-  const unmatched = v.unmatchedA + v.unmatchedB;
-  let msg = plural(v.xa.length, 'pair') + ' matched by replication id';
-  if (unmatched) msg += '; ' + plural(unmatched, 'replication') + ' without a partner left out';
-  if (v.missing) msg += '; ' + plural(v.missing, 'pair') + ' with a missing outcome left out';
-  msg += '.';
-  const ok = v.xa.length >= 2;
-  return [{
-    label: 'Paired pilot CSV', tip: PAIRED_TIP, disabled: !ok, note: ok ? '' : msg + ' A paired pilot needs at least two pairs.',
-    run: () => {
-      const prov = {
-        'dataset A': a.name,
-        'dataset B': b.name,
-        kind: a.kind === b.kind ? (KIND_LABEL[a.kind] || a.kind) : (KIND_LABEL[a.kind] || a.kind) + ' (A), ' + (KIND_LABEL[b.kind] || b.kind) + ' (B)',
-        estimate: a.kind === b.kind ? ESTIMATE_LABEL[a.kind] : ESTIMATE_LABEL[a.kind] + ' (A), ' + ESTIMATE_LABEL[b.kind] + ' (B)',
-        'matched by': 'replication id',
-        pairs: v.xa.length,
-        'unmatched replications': v.unmatchedA + v.unmatchedB + ' (' + v.unmatchedA + ' in A, ' + v.unmatchedB + ' in B)'
-      };
-      if (v.missing) prov['pairs with a missing outcome'] = v.missing;
-      if (a.derivedFrom) { prov['A derived from'] = derivedName(a); prov['A truncation'] = truncationText(a); }
-      if (b.derivedFrom) { prov['B derived from'] = derivedName(b); prov['B truncation'] = truncationText(b); }
-      prov.form = 'pilot data, two matched columns';
-      prov.exported = stamp(new Date());
-      downloadText('paired_pilot_' + slug(a.name) + '_vs_' + slug(b.name) + '.csv', pilotCsv([v.xa, v.xb], prov));
-    }
-  }];
+export function dataFilesHelp(ds) {
+  const time = ds && ds.kind === 'time';
+  return '<p><strong>Observations CSV</strong>: every observation with its replication id and its time where one was recorded.' +
+    (time ? ' Time-persistent data always carry their times because each value counts in proportion to how long it holds.' : '') + '</p>' +
+    (time ? '' : '<p><strong>Observations, one column</strong>: the same observations as one bare column, the form a distribution-fitting tool reads.</p>') +
+    '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome under <code>mean</code>' +
+    (time ? ' (the time-weighted mean)' : ds && ds.kind === 'tally' ? ', plus the standard deviation, minimum, and maximum' : '') +
+    '. Its <code>mean</code> column, copied on its own, is the pilot data a sample-size planner reads; for a paired pilot, copy the <code>A</code> and <code>B</code> columns of the Matched pairs table that Two Systems offers when its replications are paired.</p>';
 }
 
 // A table name follows "Download" mid-sentence, and so its first letter is
@@ -33469,9 +33381,10 @@ export function regenDataFiles(files) {
  * @param {HTMLElement} root the page's section
  * @param {string} pageId the page whose results the row offers
  * @param {{ extra?: () => {label: string, tip?: string, disabled?: boolean, note?: string, run: () => void}[],
- *   tables?: (t: object) => boolean, help?: string, printLabel?: string }} [opts] `extra` returns the
+ *   tables?: (t: object) => boolean, help?: string|(() => string), printLabel?: string }} [opts] `extra` returns the
  *   page's own files, evaluated at every refresh; `tables` keeps only the result tables it
- *   accepts; `help` is HTML for a details block under the row
+ *   accepts; `help` is HTML for a details block under the row, or a function
+ *   returning it, called again at every refresh
  * @returns {{ refresh: () => void }}
  */
 export function installExportRow(root, pageId, opts = {}) {
@@ -33486,7 +33399,10 @@ export function installExportRow(root, pageId, opts = {}) {
   regen.innerHTML = '<span class="xp-regen-lbl">Regenerate these results in</span><div class="xp-btns xp-regen-btns"></div><p class="muted-line xp-regen-note" aria-live="polite" hidden></p>';
   regen.appendChild(details('What a regenerated script holds', REGEN_HELP));
   // The data files' explanation follows the buttons it explains, above the regenerate line.
-  if (opts.help) row.appendChild(details('What each data file holds', opts.help));
+  // A function is called again at every refresh, so that the explanation
+  // follows the dataset shown.
+  const helpBox = opts.help ? details('What each data file holds', typeof opts.help === 'function' ? opts.help() : opts.help) : null;
+  if (helpBox) row.appendChild(helpBox);
   row.appendChild(regen);
   root.appendChild(row);
   const files = row.querySelector('.xp-files');
@@ -33519,6 +33435,7 @@ export function installExportRow(root, pageId, opts = {}) {
       regenNote.hidden = !big;
     }
     fileButtons(files, items);
+    if (typeof opts.help === 'function') helpBox.querySelector('.why-body').innerHTML = opts.help();
     registerTips(regen);
   }
   // The recipe is built here, once per press, from the inputs the page

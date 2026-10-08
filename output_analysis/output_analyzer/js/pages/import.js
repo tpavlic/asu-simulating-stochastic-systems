@@ -13,7 +13,7 @@ import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { datasetFiles, fileButtons, stamp, DATA_FILES_HELP } from '../ui/exportrow.js';
+import { datasetFiles, fileButtons, stamp, dataFilesHelp } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
 
 /** The page's hash id. */
@@ -794,7 +794,7 @@ function renderList() {
       files.setAttribute('role', 'group');
       files.setAttribute('aria-label', 'Data files of ' + ds.name);
       inner.appendChild(files);
-      inner.appendChild(details('What each data file holds', DATA_FILES_HELP));
+      inner.appendChild(details('What each data file holds', dataFilesHelp(ds)));
       td.appendChild(inner);
       er.appendChild(td);
       tb.appendChild(er);

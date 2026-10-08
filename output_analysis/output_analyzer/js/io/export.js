@@ -256,38 +256,6 @@ export function datasetsReplicationsCsv(list, provenance) {
   return withDatasetsProvenance(list, provenance, namedRows(['dataset', 'kind', 'replication', 'n_obs', 'mean'], body), true);
 }
 
-function estimateVector(x) {
-  return x && x.reps ? Array.from(repEstimates(x)) : Array.from(x);
-}
-
-/**
- * Replication outcomes in the form a pilot-data box reads: `#` lines, a
- * header, and one number per line. Given one dataset (or vector), one column
- * headed `mean` holding its finite estimates. Given a pair `[a, b]` of
- * datasets or vectors already matched by the caller, two columns headed
- * `mean_A,mean_B` over the first min(nA, nB) positions, skipping a position
- * where either estimate is missing.
- * @param {import('../data/model.js').Dataset|ArrayLike<number>|
- *   [import('../data/model.js').Dataset|ArrayLike<number>, import('../data/model.js').Dataset|ArrayLike<number>]} x
- * @param {Record<string, unknown>} [provenance]
- * @returns {string}
- */
-export function pilotCsv(x, provenance) {
-  const paired = Array.isArray(x) && x.length === 2 && typeof x[0] === 'object' && x[0] !== null;
-  if (!paired) {
-    const rows = [['mean']];
-    for (const v of estimateVector(x)) if (Number.isFinite(v)) rows.push([v]);
-    return withProvenance(provenance, rows);
-  }
-  const a = estimateVector(x[0]), b = estimateVector(x[1]);
-  const rows = [['mean_A', 'mean_B']];
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    if (Number.isFinite(a[i]) && Number.isFinite(b[i])) rows.push([a[i], b[i]]);
-  }
-  return withProvenance(provenance, rows);
-}
-
 /**
  * Batch means as CSV: one row per complete batch, numbered from 1, with its
  * start, end, observation count, and mean.

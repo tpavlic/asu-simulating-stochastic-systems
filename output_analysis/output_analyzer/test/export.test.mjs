@@ -1,31 +1,16 @@
 // Tests for js/io/export.js: the shape of every CSV writer's output. Expected
 // values are the tiny inputs written out here, or sums of them worked by hand.
-// The pilot CSV is read back with a minimal reader that skips `#` lines and
-// non-numeric (header) lines, as a pilot-data paste box does.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeDataset } from '../js/data/model.js';
 import {
-  csvEscape, toCsv, provenanceLines, observationsCsv, repSummaryCsv, pilotCsv,
+  csvEscape, toCsv, provenanceLines, observationsCsv, repSummaryCsv,
   batchMeansCsv, tableCsv, svgToString, svgToPngBlob, downloadText, downloadBlob,
   datasetsObservationsCsv, datasetsReplicationsCsv, sampledCsv, slug
 } from '../js/io/export.js';
 
 const lines = text => text.split('\n').filter(l => l !== '');
-
-// Numeric rows of a pasted CSV: `#` lines and any line with a non-numeric
-// cell are skipped.
-function readNumericColumns(text) {
-  const rows = [];
-  for (const line of lines(text)) {
-    if (line.trim().startsWith('#')) continue;
-    const cells = line.split(/[,;\t]| +/).filter(s => s !== '');
-    const nums = cells.map(Number);
-    if (nums.every(Number.isFinite)) rows.push(nums);
-  }
-  return rows;
-}
 
 const tally = makeDataset({
   name: 'wait', response: 'wait', kind: 'tally',
@@ -68,28 +53,6 @@ test('repSummaryCsv for reps and time data has three columns', () => {
   const time = makeDataset({ kind: 'time', endTime: 4, reps: [{ id: 'r1', t: [0, 1], v: [2, 6] }] });
   // 2 on [0,1), 6 on [1,4): (2 + 18)/4 = 5
   assert.deepEqual(lines(repSummaryCsv(time)), ['replication,n_obs,mean', 'r1,2,5']);
-});
-
-test('pilotCsv: one numeric column after # and header lines', () => {
-  const text = pilotCsv(tally, { dataset: 'wait', level: 0.95 });
-  const out = lines(text);
-  assert.deepEqual(out.slice(0, 3), ['# dataset: wait', '# level: 0.95', 'mean']);
-  const rows = readNumericColumns(text);
-  assert.ok(rows.every(r => r.length === 1));
-  // estimates (1+3+5)/3 = 3, 4, (2+2)/2 = 2
-  assert.deepEqual(rows.map(r => r[0]), [3, 4, 2]);
-  assert.deepEqual(readNumericColumns(pilotCsv([7, 8, 9])).map(r => r[0]), [7, 8, 9]);
-});
-
-test('pilotCsv: the paired form has two columns over the first min length', () => {
-  const text = pilotCsv([tally, reps], { pairing: 'by position' });
-  const out = lines(text);
-  assert.equal(out[1], 'mean_A,mean_B');
-  const rows = readNumericColumns(text);
-  assert.ok(rows.every(r => r.length === 2));
-  assert.deepEqual(rows, [[3, 10], [4, 12], [2, 11]]);
-  // vectors of unequal length are cut to the shorter
-  assert.deepEqual(readNumericColumns(pilotCsv([[1, 2, 3], [4, 5]])), [[1, 4], [2, 5]]);
 });
 
 test('observationsCsv: a plain column by default, the full form on request', () => {

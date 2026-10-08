@@ -1040,9 +1040,12 @@ better.
   its end time, or "none", in its provenance (`dsProvenance`). Exporting is otherwise per page:
   every analysis page ends in an export row (`installExportRow` in
   `js/ui/exportrow.js`) offering that page's result tables as CSV with `#` provenance lines and a
-  "Print this page" button, Summary and Plots adds the shown dataset's data files (observations,
-  one-column observations, replication summary, and a pilot-ready single column the Power
-  Explorer's pilot box reads as pasted), and Two Systems adds the paired pilot of A and B. Every
+  "Print this page" button, and Summary and Plots adds the shown dataset's data files
+  (observations, one-column observations except for time-persistent data, and the replication
+  summary). No file is written for a sample-size planner's pilot box: the help under the data
+  files (`dataFilesHelp`, written for the dataset's kind) says to copy the replication summary's
+  `mean` column, or for a paired pilot the `A` and `B` columns of Two Systems' Matched pairs
+  table, which pairs replications as the page does. Every
   analysis page's export row also offers "Regenerate these results in" MATLAB, Base R, Tidy R, and
   Python: a script holding the data the page analyzed (replication outcomes on the inference pages,
   the run's records on Steady State and Summary and Plots), every choice made on the page, and code
