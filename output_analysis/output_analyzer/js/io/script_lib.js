@@ -222,8 +222,8 @@ end
 // The exact distribution is used below 50 values when none is tied and none
 // equals mu, and otherwise the normal approximation with continuity and tie
 // corrections, as the analyzer does. R is told which through wilcox.test's
-// exact argument, because R 4.4 and later would otherwise use an exact
-// distribution under ties too. Python and MATLAB carry the procedure in full,
+// exact argument because R 4.4 and later would otherwise use an exact
+// distribution under ties too. Python and MATLAB carry the procedure in full
 // because neither ships the interval. Under the approximation, a few tied
 // values can leave the inverted test short of significance at one end of
 // the range or both: the analyzer then reports that end as undetermined (NaN)
@@ -273,6 +273,7 @@ signed_rank <- function(x, level, mu = 0) {
     if (zmin < zq || zmax > -zq) {
       end <- function(z0, at) {
         if (at == z0) return(if (z0 > 0) min(x) else max(x))
+        # The analyzer bisects to 1e-4 instead, and so the last digits can differ.
         uniroot(function(dd) signed_rank_z(x, dd) - z0, c(min(x), max(x)), tol = 1e-4)$root
       }
       lo <- if (zmin < zq) NaN else end(zq, zmin)
@@ -529,10 +530,12 @@ if numel(x) < 3 || numel(x) > 5000 || min(x) == max(x)
     fprintf('%s: too few values, too many, or no spread to test\\n', name); return;
 end
 if exist('swtest', 'file') == 2
-    try
-        [~, p, W] = swtest(x, 'Alpha', alpha);   % the toolbox's swtest
-    catch
-        [~, p, W] = swtest(x, alpha);            % the File Exchange swtest
+    % The toolbox's swtest takes name-value arguments (its nargin is negative), and the
+    % File Exchange's takes alpha as its second argument.
+    if nargin('swtest') < 0
+        [~, p, W] = swtest(x, 'Alpha', alpha);
+    else
+        [~, p, W] = swtest(x, alpha);
     end
     if nargin < 4, report([name ' W'], W); else, report([name ' W'], W, analyzerW); end
     if nargin < 5, report([name ' p'], p); else, report([name ' p'], p, analyzerP); end
@@ -732,7 +735,7 @@ end
 // leaves the approximate test short of significance, as with a few tied
 // outcomes, the analyzer reports no interval end where wilcox.test reports
 // the end of the range of shifts. Python and MATLAB carry the procedure in
-// full, because neither ships the interval; MATLAB's ranksum gives the p-value
+// full because neither ships the interval; MATLAB's ranksum gives the p-value
 // only. These need the signedRank helpers for midranks and bisection.
 
 LIB.R.rankSum = `
@@ -990,16 +993,17 @@ end
 
 LIB.R.levene = `
 levene_test <- function(groups) {
-  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
-  z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
-  tiny <- 1e-24 * sum(y^2)   # below this, a sum of squares is rounding error
-  if (sum((z - ave(z, g))^2) <= tiny) {
+  # anova(lm(distance ~ group)): each outcome's distance from its own group's median.
+  outcome <- unlist(groups); group <- factor(rep(seq_along(groups), lengths(groups)))
+  distance <- abs(outcome - ave(outcome, group, FUN = median)); k <- length(groups); N <- length(outcome)
+  tiny <- 1e-24 * sum(outcome^2)   # below this, a sum of squares is rounding error
+  if (sum((distance - ave(distance, group))^2) <= tiny) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
-    between <- sum((ave(z, g) - mean(z))^2) > tiny
+    between <- sum((ave(distance, group) - mean(distance))^2) > tiny
     return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN, test = NULL))
   }
-  tab <- anova(lm(z ~ g))
+  tab <- anova(lm(distance ~ group))
   list(F = tab[["F value"]][1], df1 = tab$Df[1], df2 = tab$Df[2], p = tab[["Pr(>F)"]][1], test = tab)
 }
 `;
@@ -1226,8 +1230,8 @@ simultaneous_means <- function(groups, level) {
   list(k = k, perLevel = per, items = items)
 }
 bench_word <- function(lo, hi, bench) {
-  # Above or below the benchmark when the interval excludes it; an end that is not a number
-  # declares no side.
+  # The interval against the benchmark: "above" or "below" when it excludes it, and otherwise
+  # "contains", the word in the page's table. An end that is not a number declares no side.
   if (isTRUE(lo > bench)) "above" else if (isTRUE(hi < bench)) "below" else "contains"
 }
 `;
@@ -1247,7 +1251,8 @@ def simultaneous_means(groups, level):
     return dict(k=k, perLevel=per, items=items)
 
 def bench_word(lo, hi, bench):
-    """Above or below the benchmark when the interval excludes it, and otherwise contains."""
+    """The interval against the benchmark: "above" or "below" when it excludes it, and otherwise
+    "contains", the word in the page's table. An end that is not a number declares no side."""
     return "above" if lo > bench else "below" if hi < bench else "contains"
 `;
 LIB.m.simultaneous = `
@@ -1269,7 +1274,8 @@ r = struct('k', k, 'perLevel', per, 'items', {items});
 end
 
 function w = bench_word(lo, hi, bench)
-% Above or below the benchmark when the interval excludes it, and otherwise contains.
+% The interval against the benchmark: 'above' or 'below' when it excludes it, and otherwise
+% 'contains', the word in the page's table. An end that is not a number declares no side.
 if lo > bench, w = 'above'; elseif hi < bench, w = 'below'; else, w = 'contains'; end
 end
 `;
@@ -1579,8 +1585,8 @@ end
 LIB.R.welchAnova = `
 welch_anova <- function(groups) {
   # Welch (1951): each design weighted by R_i / s_i^2, nothing pooled.
-  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
-  ow <- oneway.test(y ~ g, var.equal = FALSE)
+  outcome <- unlist(groups); design <- factor(rep(seq_along(groups), lengths(groups)))
+  ow <- oneway.test(outcome ~ design, var.equal = FALSE)
   list(F = unname(ow$statistic), df1 = unname(ow$parameter[1]), df2 = unname(ow$parameter[2]), p = ow$p.value,
        means = sapply(groups, mean), n = lengths(groups), resid = unlist(lapply(groups, function(x) x - mean(x))), test = ow)
 }

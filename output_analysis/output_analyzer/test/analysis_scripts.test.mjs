@@ -14,7 +14,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analysisScript, parseReport, scriptFileName, ascii, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
+import { analysisScript, parseReport, scriptFileName, ascii, sectionLine, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
 import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
@@ -71,11 +71,13 @@ export function runScript(recipe, lang, { text = null, files = {} } = {}) {
   try {
     for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body);
     writeFileSync(f, text != null ? text : analysisScript(recipe, lang));
-    // A hung script fails its test instead of hanging the suite.
+    // A hung script fails its test instead of hanging the suite. A script with a
+    // line per replication can print megabytes, past spawnSync's 1 MB default.
+    const big = 256 * 1024 * 1024;
     let r;
-    if (lang === 'R' || lang === 'tidy') r = spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 });
-    else if (lang === 'py') r = spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) });
-    else r = spawnSync('matlab', ['-batch', `cd('${dir}'); run('${name}')`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+    if (lang === 'R' || lang === 'tidy') r = spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000, maxBuffer: big });
+    else if (lang === 'py') r = spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, maxBuffer: big, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) });
+    else r = spawnSync('matlab', ['-batch', `cd('${dir}'); run('${name}')`], { cwd: dir, encoding: 'utf8', timeout: 600000, maxBuffer: big });
     return Object.assign(scriptResult(r, lang, name), { file: f });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -107,8 +109,9 @@ function scriptResult(r, lang, name) {
 // test whose script was left out gets it from a later batch.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const M_TIMEOUT = 600000;   // one script, as when each started a MATLAB of its own
+const M_TIMEOUT = 600000;   // one script, as when each started a MATLAB of its own, or the gap between two
 const M_START = 600000;     // MATLAB's start, up to its first script
+const M_EXIT = 120000;      // MATLAB's exit, after its last script
 const mJobs = [];
 let mRoot = null, mChild = null, mBatches = 0, mOpen = false;
 
@@ -159,12 +162,17 @@ function collect(j) {
   return true;
 }
 
+/** Waits for a job's run as matlabOutcome does, and throws the error its build() threw, if any. */
+async function matlabRun(job) {
+  const r = await matlabOutcome(job);
+  if (r.buildError) throw r.buildError;
+  return r;
+}
+
 /** Runs a fixture's script: in the batch when `job` is given, and otherwise as runScript does. */
 async function runIn(job, recipe, lang, opts) {
   if (!job) return runScript(recipe, lang, opts);
-  const r = await matlabOutcome(job);
-  if (r.buildError) throw r.buildError;
-  return scriptResult(r, 'm', job.script + '.m');
+  return scriptResult(await matlabRun(job), 'm', job.script + '.m');
 }
 
 /** Starts the batch; called once, after every test is defined. */
@@ -224,13 +232,21 @@ function runMatlab() {
   const at = (j, f) => join(j.dir, f);
   const read = (j, f) => (existsSync(at(j, f)) ? readFileSync(at(j, f), 'utf8') : '');
   const log = () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
-  let stopped = null;   // the job MATLAB was stopped in, or 'start'
+  let stopped = null;   // the job MATLAB was stopped in, 'start', or 'between'
+  // `done` counts the finished scripts, and `doneAt` is when the latest of them
+  // finished. Between two scripts (in the driver's own clean-up) or after the
+  // last, MATLAB is stopped once nothing has finished for M_TIMEOUT or M_EXIT,
+  // and the scripts not yet started run in a new session.
+  let done = 0, doneAt = t0;
   const poll = () => {
     for (const j of list) collect(j);
+    const n = list.filter(j => j.result).length;
+    if (n !== done) { done = n; doneAt = Date.now(); }
     if (stopped) return;
     const cur = list.find(j => !j.result && existsSync(at(j, 'started.txt')));
     if (cur && Date.now() - statSync(at(cur, 'started.txt')).mtimeMs > M_TIMEOUT) { stopped = cur; stopMatlab(); }
     if (!cur && !list.some(j => existsSync(at(j, 'started.txt'))) && Date.now() - t0 > M_START) { stopped = 'start'; stopMatlab(); }
+    if (!cur && done && Date.now() - doneAt > (done === list.length ? M_EXIT : M_TIMEOUT)) { stopped = 'between'; stopMatlab(); }
   };
   const timer = setInterval(poll, 200);
   let ended = false;
@@ -325,11 +341,14 @@ function skipFor(lang, smoke) {
  * idiomatic call and say so in a comment.
  */
 export function checkRecipe(name, recipe, { smoke = false, also = null, notInR = null } = {}) {
+  // Base R's stderr for this fixture, kept from its own run (or run when Tidy R needs it).
+  let baseErr = null;
   for (const lang of LANGS) {
     const title = `${name} regenerates in ${lang}`;
     const job = lang === 'm' ? matlabJob(title, smoke, () => ({ name: scriptFileName(recipe, 'm'), text: analysisScript(recipe, 'm') })) : null;
     test(title, { skip: skipFor(lang, smoke) }, async () => {
       const { report, stdout, stderr } = await runIn(job, recipe, lang);
+      if (lang === 'R') baseErr = stderr;
       let expect = recipe.expect;
       if (notInR && (lang === 'R' || lang === 'tidy')) {
         expect = Object.assign({}, expect);
@@ -337,11 +356,20 @@ export function checkRecipe(name, recipe, { smoke = false, also = null, notInR =
       }
       compareReport(report, expect, lang === 'tidy' ? 'R' : lang, recipe);
       // The tidyverse layer of the Tidy R script (its tibbles, broom's tables,
-      // and ggplot2's figures) says nothing on stderr, in every fixture.
-      if (lang === 'tidy') assert.ok(!/ggplot|geom_|stat_|Removed \d+ rows?|broom|tibble|dplyr|pillar|summarise|Multiple parameters|naming those columns/i.test(stderr), 'the tidyverse is silent:\n' + stderr);
+      // and ggplot2's figures) adds nothing to what Base R prints on stderr.
+      if (lang === 'tidy') {
+        if (baseErr === null) baseErr = runScript(recipe, 'R').stderr;
+        assert.deepEqual(stderrAdded(stderr, baseErr), [], 'Tidy R prints on stderr what Base R does not:\n' + stderr);
+      }
       if (also) also(stdout, lang, stderr);
     });
   }
+}
+
+/** The lines of `stderr` that `base` lacks, blank lines ignored. */
+export function stderrAdded(stderr, base) {
+  const seen = new Set(String(base).split(/\r?\n/).map(l => l.trim()));
+  return String(stderr).split(/\r?\n/).map(l => l.trim()).filter(l => l && !seen.has(l));
 }
 
 /**
@@ -362,6 +390,13 @@ export function analyzerColumnCounts(stdout, expect) {
     else bare.push(m[1]);
   }
   return { lines, withColumn, bare };
+}
+
+/** A script's text up to its Data section, which opens on the line the writers emit for it. */
+export function settingsOf(text, lang) {
+  const at = text.indexOf('\n' + sectionLine(lang, 'Data') + '\n');
+  assert.ok(at > 0, lang + ': a Data section');
+  return text.slice(0, at);
 }
 
 /** Asserts that every report line `recipe.expect` names carries the analyzer's value. */
@@ -391,7 +426,7 @@ const GAPPY = makeDataset({ name: 'Gappy', response: 'wait', kind: 'tally',
 // builds it with planning off, under a given title.
 function descRecipe(title, ds) {
   const o = outcomeVector(ds);
-  return oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, base: 0.95, title,
+  return oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, title,
     provenance: { dataset: ds.name, 'confidence level': '95%' }, plan: null });
 }
 
@@ -419,6 +454,12 @@ test('parseReport reads report lines and ignores the rest', () => {
   assert.equal(s.get('g'), 0);
   assert.equal(s.get('ratio 1:2'), 0.5);
   assert.equal(s.get('h'), 'NA', 'an R NA stays a string, and so fails a numeric compare');
+});
+
+test('stderrAdded keeps the lines one run prints on stderr that another does not', () => {
+  assert.deepEqual(stderrAdded('Warning message:\nIn f(x) : odd\n\nRemoved 2 rows\n', 'Warning message:\nIn f(x) : odd\n'), ['Removed 2 rows']);
+  assert.deepEqual(stderrAdded('', 'Warning message:'), []);
+  assert.deepEqual(stderrAdded('  \n', ''), []);
 });
 
 test('the writers refuse an unknown page or language', () => {
@@ -542,7 +583,7 @@ const oneProv = (ds, level, proc) => ({ dataset: ds.name, 'confidence level': Ma
 
 test('oneRecipe carries the data, the choices, and every expect key of the t path', () => {
   const prov = oneProv(QUEUE, 0.95, 't');
-  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: prov, plan: PLAN });
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN });
   assert.equal(r.page, 'one');
   assert.equal(r.title, 'Interval on the mean: ' + QUEUE.name);
   assert.deepEqual(r.provenance, prov);
@@ -558,7 +599,7 @@ test('oneRecipe carries the data, the choices, and every expect key of the t pat
   assert.ok(analysisScript(r, 'R').includes('plan_h <- plan_rel / 100 * abs(d$mean)'));
   assert.ok(analysisScript(r, 'py').includes('plan_h = plan_rel / 100 * abs(d["mean"])'));
   assert.ok(analysisScript(r, 'm').includes('plan_h = plan_rel / 100 * abs(d.mean);'));
-  const ra = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: prov,
+  const ra = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov,
     plan: { relative: false, rel: 10, abs: 0.25, delta: 0.3, power: 0.8 } });
   assert.deepEqual(ra.settings, { plan_h: 0.25, plan_delta: 0.3, plan_power: 0.8 });
   assert.ok(!analysisScript(ra, 'R').includes('plan_rel'));
@@ -569,7 +610,7 @@ test('oneRecipe carries the data, the choices, and every expect key of the t pat
 });
 
 test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-inflated plans', () => {
-  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, base: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'), plan: PLAN });
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'), plan: PLAN });
   assert.equal(r.title, 'Interval on the pseudo-median: ' + QUEUE.name);
   assert.equal(r.expect.exact, 1);
   assert.ok('achieved level' in r.expect && !('df' in r.expect) && !('shapiro W [optional]' in r.expect));
@@ -579,9 +620,9 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
 });
 
 {
-  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(QUEUE, 0.95, 't'), plan: PLAN });
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: oneProv(QUEUE, 0.95, 't'), plan: PLAN });
   checkRecipe('One System, t interval on queue-reps', r, { smoke: true });
-  const rn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.90, base: 0.90, provenance: oneProv(QUEUE, 0.9, 'np'),
+  const rn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.90, provenance: oneProv(QUEUE, 0.9, 'np'),
     plan: { relative: false, rel: 10, abs: 0.25, delta: 0.5, power: 0.9 } });
   checkRecipe('One System, Wilcoxon on queue-reps (exact)', rn);
 }
@@ -591,7 +632,7 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
   const ds = makeDataset({ name: 'gappy', response: 'wait', kind: 'tally', reps: [{ id: 1, v: [1, 2, 3] }, { id: 2, v: [] }, { id: 3, v: [2, 2, 5] }, { id: 4, v: [4] }] });
   const o = outcomeVector(ds);
   assert.deepEqual(o.dropped, [2]);
-  const r = oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: null });
+  const r = oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: null });
   assert.equal(r.expect.n, 3);
   assert.ok(analysisScript(r, 'py').includes('left out: 2'));
   checkRecipe('One System on a dataset with an empty replication', r);
@@ -600,14 +641,14 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
 // Review Focus 2: ties and n >= 50 put the Wilcoxon interval on the normal approximation.
 {
   const tied = makeDataset({ name: 'tied', response: 'v', kind: 'reps', reps: [3, 3, 4, 5, 5, 5, 6, 7, 7, 9].map((v, i) => ({ id: i + 1, v: [v] })) });
-  const r = oneRecipe({ ds: tied, x: tied.reps.map(p => p.v[0]), ids: tied.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(tied, 0.95, 'np'), plan: null });
+  const r = oneRecipe({ ds: tied, x: tied.reps.map(p => p.v[0]), ids: tied.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(tied, 0.95, 'np'), plan: null });
   assert.equal(r.expect.exact, 0);
   checkRecipe('One System, Wilcoxon with ties (normal approximation)', r);
   // Sixty distinct outcomes, so that only n >= 50 sends the procedure to the approximation.
   const vals = Array.from({ length: 60 }, (_, i) => Math.round(1e6 * (5 + 2 * Math.sin(i * 1.7) + 0.003 * i)) / 1e6);
   assert.equal(new Set(vals).size, 60);
   const big = makeDataset({ name: 'sixty', response: 'v', kind: 'reps', reps: vals.map((v, i) => ({ id: i + 1, v: [v] })) });
-  const rb = oneRecipe({ ds: big, x: vals, ids: big.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(big, 0.95, 'np'), plan: null });
+  const rb = oneRecipe({ ds: big, x: vals, ids: big.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(big, 0.95, 'np'), plan: null });
   assert.equal(rb.expect.exact, 0);
   checkRecipe('One System, Wilcoxon on sixty untied outcomes (normal approximation)', rb);
 }
@@ -617,7 +658,7 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
 for (const c of [5, 0]) {
   const ds = makeDataset({ name: 'constant ' + c, response: 'v', kind: 'reps', reps: [1, 2, 3, 4, 5, 6].map(id => ({ id, v: [c] })) });
   const x = ds.reps.map(p => p.v[0]);
-  const r = oneRecipe({ ds, x, ids: ds.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
+  const r = oneRecipe({ ds, x, ids: ds.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
   assert.equal(r.expect['wilcoxon lower'], c);
   assert.equal(r.expect['wilcoxon upper'], c);
   assert.equal(r.expect.exact, 0);
@@ -631,7 +672,7 @@ for (const c of [5, 0]) {
 {
   const ds = makeDataset({ name: 'pooled', response: 'wait', kind: 'tally', reps: [{ id: 1, v: [1.5, 2.5, 3.5] }, { id: 2, v: [2, 2.2, 5.1, 0.4] }] });
   const prov = Object.assign(oneProv(ds, 0.99, 't'), { 'unit of inference': 'pooled observations (override)' });
-  const r = oneRecipe({ ds, x: [1.5, 2.5, 3.5, 2, 2.2, 5.1, 0.4], ids: null, pooled: true, proc: 't', level: 0.99, base: 0.99, provenance: prov, plan: PLAN });
+  const r = oneRecipe({ ds, x: [1.5, 2.5, 3.5, 2, 2.2, 5.1, 0.4], ids: null, pooled: true, proc: 't', level: 0.99, provenance: prov, plan: PLAN });
   assert.equal(r.expect.n, 7);
   assert.ok(!('s2' in r.expect) && !('plan n for power' in r.expect) && !('shapiro W [optional]' in r.expect));
   assert.ok(analysisScript(r, 'm').includes('pooled across its replications'));
@@ -651,7 +692,7 @@ test('One System under the pooled override is held to the 200,000-number cap', (
 // A plan with no answer: a relative target on a zero mean, printed NaN in every language.
 {
   const ds = makeDataset({ name: 'centered', response: 'v', kind: 'reps', reps: [-2, -1, 0, 1, 2].map((v, i) => ({ id: i + 1, v: [v] })) });
-  const r = oneRecipe({ ds, x: [-2, -1, 0, 1, 2], ids: [1, 2, 3, 4, 5], pooled: false, proc: 't', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: PLAN });
+  const r = oneRecipe({ ds, x: [-2, -1, 0, 1, 2], ids: [1, 2, 3, 4, 5], pooled: false, proc: 't', level: 0.95, provenance: oneProv(ds, 0.95, 't'), plan: PLAN });
   assert.ok(Number.isNaN(r.expect['plan n for half-width']));
   checkRecipe('One System with a plan that has no answer', r);
 }
@@ -673,7 +714,7 @@ function twoProv(dsA, dsB, level, proc, plan) {
   return prov;
 }
 function twoOf(dsA, dsB, proc, level, plan) {
-  return twoRecipe({ dsA, dsB, eA: est(dsA), eB: est(dsB), mode: 'independent', proc, level, base: level,
+  return twoRecipe({ dsA, dsB, eA: est(dsA), eB: est(dsB), mode: 'independent', proc, level,
     provenance: twoProv(dsA, dsB, level, proc, plan), plan });
 }
 const reps = (name, vals) => makeDataset({ name, response: 'w', kind: 'reps', reps: vals.map((v, i) => ({ id: i + 1, v: [v] })) });
@@ -681,7 +722,7 @@ const noWarning = (stdout, lang, stderr) => assert.ok(!/warning/i.test(stdout + 
 
 test('twoRecipe (independent) carries both designs, the Welch keys, and the page\'s provenance', () => {
   const prov = twoProv(IND_A, IND_B, 0.95, 't', PLAN2);
-  const r = twoRecipe({ dsA: IND_A, dsB: IND_B, eA: est(IND_A), eB: est(IND_B), mode: 'independent', proc: 't', level: 0.95, base: 0.95, provenance: prov, plan: PLAN2 });
+  const r = twoRecipe({ dsA: IND_A, dsB: IND_B, eA: est(IND_A), eB: est(IND_B), mode: 'independent', proc: 't', level: 0.95, provenance: prov, plan: PLAN2 });
   assert.equal(r.page, 'two');
   assert.equal(r.title, 'Two Systems: Welch comparison');
   for (const lang of LANGS) assert.ok(!/see the note|note above/.test(analysisScript(r, lang)), lang + ' script points at no note it lacks');
@@ -835,7 +876,7 @@ function pairedProv(dsA, dsB, level, proc, by, unmatched, plan) {
 function pairedRecipe(dsA, dsB, proc, by, plan, level = 0.95) {
   const eA = est(dsA), eB = est(dsB);
   const m = Object.assign(matchPairs(eA.ids, eB.ids, by), { by });
-  return twoRecipe({ dsA, dsB, eA, eB, mode: 'paired', match: m, proc, level, base: level,
+  return twoRecipe({ dsA, dsB, eA, eB, mode: 'paired', match: m, proc, level,
     provenance: pairedProv(dsA, dsB, level, proc, by, m.unmatchedA.length + m.unmatchedB.length, plan), plan });
 }
 // A pair of reps datasets whose matched differences a - b are `diffs`, with b varied.
@@ -871,6 +912,17 @@ test('twoRecipe (paired) carries the matched pairs and the paired keys', () => {
 
 checkRecipe('Two Systems, paired t on two-crn', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), { smoke: true, also: noWarning });
 checkRecipe('Two Systems, paired signed-rank on two-crn', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2, 0.9), { also: noWarning });
+
+// The pairs comment adds "(A)" and "(B)" only where the names do not already end in them.
+test('the pairs comment names A and B once when the dataset names end in them', () => {
+  const flat = r => analysisScript(r, 'R').replace(/\n# /g, ' ');
+  const ends = flat(pairedRecipe(reps('Design A', [1, 2, 3]), reps('Design B', [1.5, 2.1, 3.3]), 't', 'id', null));
+  assert.ok(ends.includes('a holds Design A and b holds Design B, matched by replication id'), 'no letter repeated');
+  const other = flat(pairedRecipe(reps('Old line', [1, 2, 3]), reps('New line', [1.5, 2.1, 3.3]), 't', 'id', null));
+  assert.ok(other.includes('a holds Old line (A) and b holds New line (B), matched'), 'the letters added');
+  const swapped = flat(pairedRecipe(reps('Run B', [1, 2, 3]), reps('Run A', [1.5, 2.1, 3.3]), 't', 'id', null));
+  assert.ok(swapped.includes('a holds Run B (A) and b holds Run A (B)'), 'a name ending in the other letter keeps its own');
+});
 
 // Unmatched replications on both sides, matched by id.
 {
@@ -943,7 +995,7 @@ checkRecipe('Two Systems, paired signed-rank on two-crn', pairedRecipe(CRN_A, CR
   const near = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-3);
   for (const [label, v, [lo, hi]] of patterns) {
     const ds = reps('tied ' + label, v);
-    const r = oneRecipe({ ds, x: v, ids: v.map((_, i) => i + 1), pooled: false, proc: 'np', level: 0.95, base: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
+    const r = oneRecipe({ ds, x: v, ids: v.map((_, i) => i + 1), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(ds, 0.95, 'np'), plan: null });
     assert.equal(r.expect.exact, 0);
     assert.ok(near(r.expect['wilcoxon lower'], lo) && near(r.expect['wilcoxon upper'], hi), label + ': ' + r.expect['wilcoxon lower'] + ', ' + r.expect['wilcoxon upper']);
     checkRecipe('One System, Wilcoxon on ' + label + ' (an end out of reach)', r, { also: noWarning });
@@ -1056,7 +1108,7 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
     const text = analysisScript(rc, lang), flat = text.replace(/\n[#%] /g, ' ');   // the comment's lines joined
     assert.ok(flat.includes('family chooses the pairwise comparisons') && flat.includes('benchmark is the value'), lang + ' explains the settings');
     // Every editable choice is assigned in the Settings block, before the data.
-    const settings = text.slice(0, text.search(/\n(## Data ----|# ---- Data ----|%% Data)\n/));
+    const settings = settingsOf(text, lang);
     for (const v of ['control', 'family', 'benchmark', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']) {
       assert.ok(new RegExp('\\n' + v + ' (<-|=) ').test(settings), lang + ': ' + v + ' is a setting');
       assert.ok(!new RegExp('\\n' + v + ' (<-|=) ').test(text.slice(settings.length)), lang + ': ' + v + ' is assigned once');
@@ -1178,7 +1230,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
         if (dir) writeFileSync(f, text(lang));
         const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
           : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-            : await matlabOutcome(job);
+            : await matlabRun(job);
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
@@ -1328,7 +1380,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
         if (dir) writeFileSync(f, text(lang));
         const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
           : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-            : await matlabOutcome(job);
+            : await matlabRun(job);
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
@@ -1359,7 +1411,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
         if (dir) writeFileSync(f, edited(lang));
         const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
           : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
-            : await matlabOutcome(job);
+            : await matlabRun(job);
         assert.equal(run.status, 0, run.stdout + run.stderr);
         const want = Object.fromEntries(Object.entries(r3.expect).filter(([k]) => /^(posthoc dunnett |diff |C$|per-comparison level$|plan diffs )/.test(k)));
         assert.ok(Object.keys(want).some(k => k.startsWith('posthoc dunnett 2-3 ')) && Object.keys(want).some(k => k.startsWith('diff 4-3 ')));
@@ -1377,12 +1429,12 @@ test('severalRecipe carries the rank tests, the screen, and the letters', () => 
   const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
   for (const k of ['kruskal H', 'kruskal p', 'rank pair 1-2 z', 'rank pair 5-6 adjusted p', 'rank pair 1-6 different', 'rank letters 1', 'rank design 3 pseudo-median',
     'rank design 6 upper', 'screen t', 'rinott h', 'design 1 survives', 'design 1 N', 'design 6 additional', 'best design']) assert.ok(k in r.expect, k);
-  assert.deepEqual(r.several.rank, { paired: false, adjust: 'holm', pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
+  assert.deepEqual(r.several.rank, { paired: false, pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
   // R counts the ties exactly itself; kruskal.test, which rounds them to 15 digits, is left as a comment.
   assert.ok(analysisScript(r, 'R').includes('# kw <- kruskal.test(y, g)') && !/^\s*kw <- kruskal\.test/m.test(analysisScript(r, 'R')));
   // The adjustment is a setting, assigned once in the Settings block, and the rank section reads it.
   for (const lang of LANGS) {
-    const text = analysisScript(r, lang), settings = text.slice(0, text.search(/\n(## Data ----|# ---- Data ----|%% Data)\n/));
+    const text = analysisScript(r, lang), settings = settingsOf(text, lang);
     assert.ok(/\nrank_adjust (<-|=) ["']holm["']/.test(settings), lang + ': rank_adjust is a setting');
     assert.ok(!/\nrank_adjust (<-|=) /.test(text.slice(settings.length)), lang + ': rank_adjust is assigned once');
     assert.ok(text.includes('kruskal_dunn(groups, alpha, rank_adjust, rank_pairs)'), lang + ': the rank section reads rank_adjust');
@@ -1412,35 +1464,62 @@ test('severalRecipe carries the rank tests, the screen, and the letters', () => 
   checkRecipe('Several Systems, Friedman and its pairs on four-crn', rf, sevPinned(rf));
 }
 
+// The analyzer-column check catches a lookup that fails. With the page's labels
+// of the rank-shift family reversed ("2-1" for "1-2"), the script finds none of
+// its pairs among them, prints every shift line without the analyzer's value,
+// and assertAnalyzerColumns names those lines.
+{
+  const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm', eps: 0.3 });
+  const reverse = text => text.split('\n')
+    .map(l => (/^page_family_pairs (<-|=) /.test(l) ? l.replace(/(["'])(\d+)-(\d+)\1/g, '$1$3-$2$1') : l)).join('\n');
+  for (const lang of ['R', 'py']) {
+    test('the analyzer-column check catches a failed rank-shift lookup in ' + lang, { skip: skipFor(lang, true) }, () => {
+      const text = analysisScript(r, lang), mutated = reverse(text);
+      assert.notEqual(mutated, text, 'the labels are reversed');
+      const { stdout } = runScript(r, lang, { text: mutated });
+      const { bare } = analyzerColumnCounts(stdout, r.expect);
+      assert.ok(bare.includes('shift 1-2') && bare.includes('shift 5-6 adjusted p'), 'the shift lines are bare: ' + bare.join('; '));
+      assert.ok(bare.every(k => /^shift \d+-\d+/.test(k)), 'only the shift lines are bare: ' + bare.join('; '));
+      assert.throws(() => assertAnalyzerColumns(stdout, r, lang), /no analyzer column: shift 1-2/);
+    });
+  }
+}
+
 // rank_adjust is a setting: a Kruskal-Wallis script written under Holm and
-// edited to "bonferroni" prints Dunn's Bonferroni-adjusted p-values and the
-// pairs they declare different.
-for (const lang of ['R', 'py']) {
-  test('editing rank_adjust to bonferroni changes the adjusted p-values in ' + lang, { skip: skipFor(lang, true) }, () => {
-    const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
-    const groups = SIX_D.map(d => Float64Array.from(outcomeVector(d).values));
-    const dn = dunn(groups, { alpha: 0.05, adjust: 'bonferroni' });
-    assert.ok(dn.pairs.some(p => Math.abs(p.pAdj - r.expect['rank pair ' + (p.i + 1) + '-' + (p.j + 1) + ' adjusted p']) > 1e-6), 'Holm and Bonferroni differ on these data');
-    const from = lang === 'R' ? 'rank_adjust <- "holm"\n' : 'rank_adjust = "holm"\n';
-    const text = analysisScript(r, lang);
-    assert.ok(text.includes(from), 'the settings carry ' + from.trim());
-    const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
-    try {
-      const f = join(dir, lang === 'R' ? 'rank_adjust.R' : 'rank_adjust.py');
-      writeFileSync(f, text.replace(from, from.replace('holm', 'bonferroni')));
-      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-        : spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) });
-      assert.equal(run.status, 0, run.stdout + run.stderr);
-      noWarning(run.stdout, lang, run.stderr || '');
-      const want = {};
-      for (const p of dn.pairs) {
-        const key = 'rank pair ' + (p.i + 1) + '-' + (p.j + 1);
-        want[key + ' adjusted p'] = p.pAdj;
-        want[key + ' different'] = p.flagged ? 1 : 0;
-      }
-      compareReport(parseReport(run.stdout), want, lang, r);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  });
+// edited to "bonferroni" prints Dunn's Bonferroni-adjusted p-values, the pairs
+// they declare different, and the letters those pairs give.
+{
+  const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
+  const groups = SIX_D.map(d => Float64Array.from(outcomeVector(d).values));
+  const dn = dunn(groups, { alpha: 0.05, adjust: 'bonferroni' });
+  const from = lang => (lang === 'R' ? 'rank_adjust <- "holm"\n' : lang === 'py' ? 'rank_adjust = "holm"\n' : "rank_adjust = 'holm';\n");
+  const edited = lang => analysisScript(r, lang).replace(from(lang), from(lang).replace('holm', 'bonferroni'));
+  for (const lang of ['R', 'py', 'm']) {
+    const title = 'editing rank_adjust to bonferroni changes the adjusted p-values and the letters in ' + lang;
+    const job = lang === 'm' ? matlabJob(title, true, () => ({ name: 'rank_adjust_edit.m', text: edited('m') })) : null;
+    test(title, { skip: skipFor(lang, true) }, async () => {
+      assert.ok(dn.pairs.some(p => Math.abs(p.pAdj - r.expect['rank pair ' + (p.i + 1) + '-' + (p.j + 1) + ' adjusted p']) > 1e-6), 'Holm and Bonferroni differ on these data');
+      assert.ok(analysisScript(r, lang).includes(from(lang)), 'the settings carry ' + from(lang).trim());
+      const dir = job ? null : mkdtempSync(join(tmpdir(), 'oa-regen-'));
+      try {
+        const f = dir && join(dir, lang === 'R' ? 'rank_adjust.R' : 'rank_adjust.py');
+        if (dir) writeFileSync(f, edited(lang));
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
+            : await matlabRun(job);
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        noWarning(run.stdout, lang, run.stderr || '');
+        const want = {};
+        for (const p of dn.pairs) {
+          const key = 'rank pair ' + (p.i + 1) + '-' + (p.j + 1);
+          want[key + ' adjusted p'] = p.pAdj;
+          want[key + ' different'] = p.flagged ? 1 : 0;
+        }
+        dn.letters.forEach((l, i) => { want['rank letters ' + (i + 1)] = l; });
+        compareReport(parseReport(run.stdout), want, lang, r);
+      } finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
 }
 checkRecipe('Several Systems, Friedman with Holm by position', sevRecipe(FOUR_CRN, { paired: true, by: 'position', proc: 'np', adjust: 'holm', level: 0.9 }), sevChecks);
 checkRecipe('Several Systems, the screen for the best, smaller is better', sevRecipe(SIX_D, { dir: 'min', eps: 1.0 }), sevChecks);
@@ -1731,7 +1810,8 @@ test('R data blocks are one-line statements', () => {
   for (const [label, r] of recipes) {
     for (const lang of ['R', 'tidy']) {
       const s = analysisScript(r, lang);
-      const data = s.slice(s.indexOf('\n## Data ----'), s.indexOf('\n## ', s.indexOf('\n## Data ----') + 5));
+      const head = '\n' + sectionLine(lang, 'Data');
+      const data = s.slice(s.indexOf(head), s.indexOf('\n## ', s.indexOf(head) + 5));
       const lines = data.split('\n').filter(l => l.trim() && !/^\s*#/.test(l));
       assert.ok(lines.length > 1, label + ': a data block');
       for (const l of lines) {
@@ -1764,7 +1844,7 @@ test('R data blocks are one-line statements', () => {
 }
 
 // ── Task 9: Summary and Plots ──────────────────────────────────────────
-import { exploreRecipe, exploreTooBig } from '../js/io/recipes.js';
+import { exploreRecipe, exploreTooBig, repKeys, REP_LINES_MAX } from '../js/io/recipes.js';
 
 // The page's inputs: its title and provenance, and the Equal variances
 // section's ticked datasets with their finite replication outcomes.
@@ -1865,7 +1945,7 @@ test('a Summary and Plots dataset past 200,000 numbers gives a full recipe that 
 // ── Task 11: the Tidy R dialect ────────────────────────────────────────
 
 test('the Tidy R script reads its data as a tibble, summarises with dplyr, tidies its tests, and plots with ggplot2', () => {
-  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: PLAN });
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN });
   const s = analysisScript(r, 'tidy');
   for (const needle of ['tibble(', 'summarise(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
   assert.ok(!s.includes('ggplot('), 'One System draws no figure');
@@ -1884,11 +1964,11 @@ test('the Tidy R script reads its data as a tibble, summarises with dplyr, tidie
 test('Tidy R carries each page\'s tidy forms and the same report lines as Base R', () => {
   const pooledX = TRANSIENT.reps.flatMap(p => Array.from(p.v));
   const cases = [
-    ['one, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: PLAN }),
+    ['one, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN }),
       ['d_tbl <- tibble(rep_id = rep_id, outcome = x)', 'd <- d_tbl |> describe_tbl(outcome)', 'if (!is.null(ti$test)) print(broom::tidy(ti$test))']],
-    ['one, signed-rank', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.95, base: 0.95, plan: PLAN }),
+    ['one, signed-rank', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.95, plan: PLAN }),
       ['print(broom::tidy(sr$test))']],
-    ['one, pooled', oneRecipe({ ds: TRANSIENT, x: pooledX, ids: null, pooled: true, proc: 't', level: 0.95, base: 0.95, plan: null }),
+    ['one, pooled', oneRecipe({ ds: TRANSIENT, x: pooledX, ids: null, pooled: true, proc: 't', level: 0.95, plan: null }),
       ['d_tbl <- tibble(observation = x)', 'd <- d_tbl |> describe_tbl(observation)']],
     ['two, Welch', twoOf(IND_A, IND_B, 't', 0.95, PLAN2),
       ['d_tbl <- bind_rows(tibble(design = "A", outcome = a), tibble(design = "B", outcome = b))', 'da <- d_tbl |> filter(design == "A") |> describe_tbl(outcome)',
@@ -1898,19 +1978,21 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     ['two, paired signed-rank', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2), ['print(broom::tidy(sr$test))']],
     ['several, Tukey', sevRecipe(FOUR),
       ['d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), outcome = unlist(groups))',
-        'bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
+        'means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'fig_tbl <- means_tbl |> transmute(', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
         'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")', 'p <- ggplot(fig_tbl, aes(y = design))']],
-    ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))']],
+    ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))',
+      'oneway.test(outcome ~ design, var.equal = FALSE)', 'anova(lm(distance ~ group))']],
     ['several, Kruskal-Wallis with a benchmark', sevRecipe(SIX_D, { proc: 'np', bench: 2 }),
-      ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))', 'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
+      ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))', 'fig_tbl <- tibble(design = seq_len(k), mid = sapply(srs, ',
+        'print(bind_rows(rk$pairs))', 'geom_vline(xintercept = benchmark']],
     ['several, Friedman', sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }),
       ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))', 'print(tibble(design = seq_len(k), survives = ss$survivors']],
     ['steady', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
       ['records_tbl <- bind_rows(lapply(reps, function(r) tibble(', 'print(broom::tidy(bm$test))', 'ggplot(batch_tbl, aes(batch, mean))']],
     ['explore', exRecipe(TRANSIENT),
       ['records_tbl <- bind_rows(', 'out_tbl <- tibble(rep_id = ', 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)', 'po <- records_tbl |> describe_tbl(v)',
-        'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))', 'plot_outcomes(tibble(outcome = x), outcome, ']],
-    ['explore, Levene', exRecipe(IND_A, exSpread(IND_A, IND_B)), ['print(broom::tidy(lv$test))']]
+        'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))', 'plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ']],
+    ['explore, Levene', exRecipe(IND_A, exSpread(IND_A, IND_B)), ['print(broom::tidy(lv$test))', 'anova(lm(distance ~ group))']]
   ];
   const tidyMarks = ['tibble(', 'describe_tbl', 'summarise(', 'broom::', 'ggplot', 'bind_rows(', 'library('];
   const baseGraphics = /(^|[^\w.])(plot|hist|qqnorm|qqline|segments|abline|par)\(/m;
@@ -1948,7 +2030,7 @@ test('scripts end with their figure, import what they use, and say what the page
     }
   }
   const imports = r => analysisScript(r, 'py').split('\n').find(l => l.startsWith('from scipy import'));
-  assert.equal(imports(oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, base: 0.95, plan: null })), 'from scipy import stats');
+  assert.equal(imports(oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null })), 'from scipy import stats');
   assert.equal(imports(sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1 })), 'from scipy import integrate, optimize, stats');
   // A replication-value dataset's records are one value per replication, not tally observations.
   const reps = analysisScript(exRecipe(IND_A), 'R').replace(/\n# /g, ' ');
@@ -1958,6 +2040,15 @@ test('scripts end with their figure, import what they use, and say what the page
   assert.ok(py.includes('np.linspace(x.min(), x.max(), nb + 1)') && py.includes('off = 3 / 8 if n_x <= 10 else 0.5') && !py.includes('probplot'));
   assert.ok(m.includes('linspace(min(x), max(x), nb + 1)') && m.includes('histogram(x, edges)') && !m.includes('qqplot('));
   assert.ok(R.includes('hist(x, breaks = breaks, right = FALSE, include.lowest = TRUE'));
+  // Python's Requires line names Matplotlib only where the script draws a figure.
+  const pyNeeds = r => analysisScript(r, 'py').split('\n\n')[0].replace(/\n# +/g, ' ');
+  for (const r of withFigure) assert.ok(pyNeeds(r).includes('SciPy 1.11 or later (Matplotlib, if installed, draws the figure).'), r.page + ': Matplotlib named');
+  for (const r of [oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN }), twoOf(IND_A, IND_B, 't', 0.95, PLAN2), exRecipe(LONG)]) {
+    assert.ok(pyNeeds(r).includes('SciPy 1.11 or later.') && !/matplotlib/i.test(pyNeeds(r)), r.page + ': no figure, and so no Matplotlib');
+  }
+  // MATLAB's Shapiro-Wilk helper picks swtest's calling form by its argument list, so that
+  // a real error in swtest is never taken for the wrong calling form.
+  assert.ok(LIB.m.shapiro.includes("if nargin('swtest') < 0") && !/\bcatch\b/.test(LIB.m.shapiro));
 });
 
 // ── The CSV files that hold the same data ──────────────────────────────
@@ -1971,7 +2062,7 @@ import { slug, observationsCsv, repSummaryCsv } from '../js/io/export.js';
 import { dsProvenance } from '../js/ui/exportrow.js';
 import { observations } from '../js/data/model.js';
 
-const SECT = { R: '## Data ----', tidy: '## Data ----', py: '# ---- Data ----', m: '%% Data' };
+const SECT = Object.fromEntries(LANGS.map(lang => [lang, sectionLine(lang, 'Data')]));
 const MARK = { R: '#   ', tidy: '#   ', py: '#   ', m: '%   ' };
 
 // A dataset's file as the Import page writes it (Export on its row): the
@@ -2178,9 +2269,9 @@ const embeddedIn = (script, lang) => EMBEDDED[lang].filter(re => re.test(script)
  * Runs a recipe's CSV-mode scripts beside the files its Data buttons save, in
  * `langs` where installed, and compares every report line with expect, with no
  * warning printed. `timed` asserts that each R run (Base and Tidy) finishes
- * under 60 seconds.
+ * under 60 seconds, and `also(stdout, lang, stderr)` makes further checks.
  */
-function checkCsvMode(name, recipe, datasets, { smoke = false, langs = LANGS, timed = false } = {}) {
+function checkCsvMode(name, recipe, datasets, { smoke = false, langs = LANGS, timed = false, also = null } = {}) {
   const csvFiles = () => {
     const files = {};
     for (const f of recipe.csv) {
@@ -2203,6 +2294,7 @@ function checkCsvMode(name, recipe, datasets, { smoke = false, langs = LANGS, ti
       if (timed && (lang === 'R' || lang === 'tidy')) assert.ok(secs < 60, lang + ' took ' + secs + ' s');
       compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
       noWarning(stdout, lang, stderr);
+      if (also) also(stdout, lang, stderr);
     });
   }
 }
@@ -2260,7 +2352,7 @@ test('kind and end_time are assigned once, in the Settings block', () => {
         if (want) assert.ok(settings.includes('\n' + want + '\n'), r.page + ' ' + lang + ': end_time in Settings');
         assert.ok(/\nkind (<-|=) ["']/.test(settings), r.page + ' ' + lang + ': kind in Settings');
         const rest = s.slice(s.indexOf('\n' + SECT[lang] + '\n'));
-        assert.ok(!/\n#?\s*(kind|end_time) (<-|=) /.test(rest), r.page + ' ' + lang + (csv ? ' csv' : '') + ': kind and end_time are not assigned again');
+        assert.ok(!/\n[#%]?\s*(kind|end_time) (<-|=) /.test(rest), r.page + ' ' + lang + (csv ? ' csv' : '') + ': kind and end_time are not assigned again, in code or in a commented read line');
       }
     }
   }
@@ -2303,6 +2395,16 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   const hashR = makeDataset({ name: 'Hash runs', response: 'w', kind: 'reps', reps: [2.0, 2.4, 1.9, 3.1, 2.2].map((v, i) => ({ id: 'run#' + (i + 1), v: [v] })) });
   const oh = outcomeVector(hashR);
   checkCsvMode('One System in CSV mode on ids run#1 to run#5', oneRecipe({ ds: hashR, x: oh.values, ids: oh.ids, pooled: false, proc: 't', level: 0.95, plan: PLAN }), [hashR]);
+  // An observations file with no records at all, only its header: every
+  // language still reads its columns as numbers (MATLAB's readtable, left to
+  // itself, would type them as text), and every replication gives no outcome.
+  for (const kind of ['tally', 'time']) {
+    const none = makeDataset({ name: 'No records, ' + kind, response: 'wait', kind, endTime: kind === 'time' ? 10 : undefined,
+      reps: [1, 2].map(id => (kind === 'time' ? { id, t: [], v: [] } : { id, v: [] })) });
+    const r = exRecipe(none);
+    assert.equal(r.expect.observations, 0);
+    checkCsvMode('Summary and Plots in CSV mode, an observations file with no records (' + kind + ')', r, [none]);
+  }
 }
 
 // Over the cap: generated runs of more than 200,000 numbers, whose recipes
@@ -2342,6 +2444,74 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   checkCsvMode('One System past the cap, pooled observations', one, [tallyBig], { langs: ['R', 'py'], timed: true });
 }
 
+// Very many replications. Thirty thousand tally replications of one or two
+// observations, and an empty one, hold 50,000 records, under the cap, but
+// with each replication's id and its five analyzer values (n, outcome, sd,
+// min, and max) a script would hold 230,006 numbers, and so the recipe is
+// csvOnly. Its scripts write out the analyzer's values for the first
+// REP_LINES_MAX replications only, and each later replication's lines print
+// without them. A dataset of 1,500 replication values stays under the cap and
+// keeps every analyzer value when its data are embedded; written to read its
+// files, it keeps the first 1,000.
+{
+  const many = makeDataset({ name: 'Many short runs', response: 'wait', unit: 'min', kind: 'tally',
+    reps: Array.from({ length: 30000 }, (_, i) => ({ id: i + 1, v: (i % 3 ? [((i * 37) % 101) / 8, ((i * 53) % 97) / 8] : [((i * 41) % 89) / 8]) }))
+      .concat([{ id: 'e', v: [] }]) });
+  const fifteen = makeDataset({ name: 'Fifteen hundred days', response: 'avg wait', kind: 'reps',
+    reps: Array.from({ length: 1500 }, (_, i) => ({ id: 'd' + (i + 1), v: [((i * 29) % 103) / 10] })) });
+  const rm = exRecipe(many), r15 = exRecipe(fifteen);
+  test('very many replications: the analyzer\'s values for the first 1,000 only, in a script that reads its files', () => {
+    assert.equal(REP_LINES_MAX, 1000);
+    assert.ok(recordCount(many) <= MAX_NUMBERS && exploreTooBig({ ds: many, spread: null }), 'the per-replication values take it past the cap');
+    assert.equal(rm.csvOnly, true);
+    assert.ok(Number.isNaN(rm.expect['rep e outcome']) && Number.isNaN(rm.expect['rep 1 sd']) && 'rep 30000 max' in rm.expect);
+    for (const lang of LANGS) {
+      const s = analysisScript(rm, lang), flat = s.replace(/\n[#%] /g, ' ');
+      assert.deepEqual(embeddedIn(s, lang), [], lang + ': no embedded data');
+      assert.ok(s.length < 100000, lang + ': a small script (' + s.length + ' characters)');
+      assert.ok(flat.includes('They are written out for the first 1,000 of the 30,001 replications only'), lang + ': says why');
+      for (const k of repKeys('tally')) assert.ok(s.includes('page_at(page_' + k + ', pos)'), lang + ': ' + k + ' looked up by position');
+    }
+    assert.ok(!r15.csvOnly && !exploreTooBig({ ds: fifteen, spread: null }));
+    for (const lang of LANGS) {
+      const embedded = analysisScript(r15, lang), csv = analysisScript(r15, lang, { csv: true });
+      assert.ok(!embedded.includes('page_at(') && !embedded.includes('written out for the first'), lang + ': every analyzer value when embedded');
+      assert.ok(csv.includes('page_at(page_outcome, pos)') && csv.replace(/\n[#%] /g, ' ').includes('first 1,000 of the 1,500 replications'), lang + ': the first 1,000 when reading files');
+    }
+  });
+  const pastFirst = (stdout, lang, stderr) => {
+    noWarning(stdout, lang, stderr);
+    assert.match(stdout, /^rep 1000 n: \d+ {3}\(analyzer: \d+\)$/m, lang + ': the 1,000th replication carries the analyzer\'s value');
+    assert.match(stdout, /^rep 1001 n: \d+$/m, lang + ': the next prints alone');
+  };
+  checkCsvMode('Summary and Plots past the cap, thirty thousand tally replications', rm, [many], { timed: true, also: pastFirst });
+  checkCsvMode('Summary and Plots in CSV mode, 1,500 replication values', r15, [fifteen], { also: (stdout, lang, stderr) => {
+    pastFirst(stdout.replace(/^rep d(\d+) /gm, 'rep $1 '), lang, stderr);
+  } });
+}
+
+// Levene's groups stay embedded in every script, and a script that reads its
+// records from files must still hold no more than MAX_NUMBERS numbers: when the
+// groups alone would take it past, the recipe leaves the test out and the
+// script says why. Groups that fit stay.
+test('Levene groups too large to embed are left out of a script that reads its files', () => {
+  const big = makeDataset({ name: 'big', response: 'q', kind: 'tally', reps: [{ id: 1, v: Array.from({ length: MAX_NUMBERS + 1 }, (_, i) => i % 7) }] });
+  const groups = n => [0, 1].map(k => Float64Array.from({ length: n }, (_, i) => ((i * 7 + k) % 13) / 2));
+  // The room the groups have: the cap less one replication's analyzer values (199,995).
+  assert.equal(MAX_NUMBERS - repKeys('tally').length, 199995);
+  const out = exploreRecipe({ ds: big, spread: { names: ['G1', 'G2'], groups: groups(99998) }, level: 0.95, title: 'Summary of big', provenance: {} });
+  assert.equal(out.csvOnly, true);
+  assert.ok(!('levene F' in out.expect) && !out.spread);
+  assert.deepEqual(out.explore.spreadOmitted, { names: ['G1', 'G2'], count: 199996 });
+  for (const lang of LANGS) {
+    const s = analysisScript(out, lang), flat = s.replace(/\n[#%] /g, ' ');
+    assert.ok(flat.includes('The page runs Levene\'s test across G1 and G2, but their 199,996 replication outcomes would take this script past the 200,000 numbers'), lang + ': says why');
+    assert.ok(!s.includes('spread_groups') && !s.includes('levene_test'), lang + ': no Levene test');
+  }
+  const kept = exploreRecipe({ ds: big, spread: { names: ['G1', 'G2'], groups: groups(99997) }, level: 0.95, title: 'Summary of big', provenance: {} });
+  assert.ok('levene F' in kept.expect && kept.spread && !kept.explore.spreadOmitted);
+});
+
 // ── Repeated values and no spread within groups ────────────────────────
 // Values repeated in a way that does not sum exactly (0.1 three times sums to
 // 0.30000000000000004): their variance is exactly 0 in the analyzer and in
@@ -2366,7 +2536,7 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   checkRecipe('Two Systems, paired t on 0.1 and 0.3 each repeated', pairedRecipe(reps('A', r01(3)), reps('B', r03(3)), 't', 'id', PLAN2), { also: noWarning });
   // One System: 0.1 seven times.
   const flat7 = makeDataset({ name: 'Point one', response: 'v', kind: 'reps', reps: r01(7).map((v, i) => ({ id: i + 1, v: [v] })) });
-  const ro = oneRecipe({ ds: flat7, x: r01(7), ids: flat7.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, base: 0.95,
+  const ro = oneRecipe({ ds: flat7, x: r01(7), ids: flat7.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95,
     provenance: oneProv(flat7, 0.95, 't'), plan: { relative: false, rel: 10, abs: 0.05, delta: 0.3, power: 0.8 } });
   assert.equal(ro.expect['half-width'], 0);
   checkRecipe('One System, t interval on 0.1 repeated seven times', ro, { also: noWarning });

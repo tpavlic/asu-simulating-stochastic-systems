@@ -215,7 +215,7 @@ export function arenaDataset(dat, opts = {}) {
     kind = 'time';
     reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
     notes.push((code === 207
-      ? 'A frequency statistic from an Arena output file, read as time-persistent data, because the file holds its expression’s value over time rather than the categories. '
+      ? 'A frequency statistic from an Arena output file, read as time-persistent data because the file holds its expression’s value over time rather than the categories. '
       : 'Time-persistent data from an Arena output file. ') +
       'Each record is the value from its time until the next record, and the replication’s last record is its closing value at the end of the run, which holds for no time.');
     const e = endsNote(reps); if (e) notes.push(e);

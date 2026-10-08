@@ -843,7 +843,7 @@ function update() {
   if (!np && welchBad.length) {
     bodies[2].appendChild(notice('warn', 'Welch’s analysis of variance weights each design by R<sub>i</sub>/s<sub>i</sub>², and so it needs at least two outcomes with some spread in every design; ' +
       esc(andList(welchBad)) + (welchBad.length === 1 ? ' has' : ' have') + ' none. Choose equal variances above, or leave ' + (welchBad.length === 1 ? 'that design' : 'those designs') + ' out of the checklist.'));
-    summary.push('Welch ANOVA: not defined, because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
+    summary.push('Welch ANOVA: not defined because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
   } else if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));

@@ -110,10 +110,13 @@ export function shapiroExpect(prefix, v, flat = false) {
  * The planning entries by half-width and by power for one standard deviation,
  * added to `expect`. `plan.h` is the absolute half-width target, used unless
  * `plan.relative`, when the target is `plan.rel` percent of |mean|. Under a
- * rank procedure (`np`) the counts are also given inflated by pi/3.
+ * rank procedure (`np`) the counts are also given inflated by pi/3. The power
+ * at the current R is taken when sd and delta are both positive, as One
+ * System takes it, or with `anySign` whenever sd is positive, as Two Systems
+ * takes it for paired replications (the two-sided power is symmetric in delta).
  * @returns {{h: number}} the resolved half-width target
  */
-export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'plan ' }) {
+export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'plan ', anySign = false }) {
   const alpha = 1 - level;
   const hp = planReplications({ sd, level, target: plan.relative ? plan.rel / 100 : plan.h, relative: plan.relative, mean });
   const pp = planPowerOneSample({ sd, delta: plan.delta, alpha, power: plan.power });
@@ -126,7 +129,7 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
     [prefix + 'power target']: plan.power,
     [prefix + 'n for power']: pp.n == null ? NaN : pp.n,
     [prefix + 'power at n']: pp.powerAtN,
-    'power at current R': sd > 0 && plan.delta > 0 ? powerOneSample({ n: R, sd, delta: plan.delta, alpha }) : NaN
+    'power at current R': sd > 0 && (anySign || plan.delta > 0) ? powerOneSample({ n: R, sd, delta: plan.delta, alpha }) : NaN
   });
   if (np) {
     expect[prefix + 'n for half-width (rank)'] = inflate(hp.n);
@@ -140,17 +143,17 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
 /**
  * The One System recipe.
  * @param {{ ds: object, x: ArrayLike<number>, ids: (string|number)[]|null, pooled: boolean, proc: 't'|'np',
- *   level: number, base?: number, title?: string, provenance?: object,
+ *   level: number, title?: string, provenance?: object,
  *   plan: null|{ relative: boolean, rel: number, abs: number|null, delta: number, power: number } }} o
  *   `x` is what the page analyzed (the finite replication outcomes, or the
  *   pooled observations under the override) and `ids` the ids in step with it
  *   (null when pooled). `title` and `provenance` are the page's own, copied
- *   into the recipe. `base` is the stated level the checks line judges by; it
- *   changes the line's verdict but not W or p, and so the recipe does not
- *   need it. `plan` is the planning card's settings, or null while planning
- *   is off. With fewer than two values only the descriptives are formed.
- *   Under the override past MAX_NUMBERS observations, the recipe is marked
- *   `csvOnly` and its data block holds no values.
+ *   into the recipe. The stated level the checks line judges by is not an
+ *   input: it changes the line's verdict but not W or p. `plan` is the
+ *   planning card's settings, or null while planning is off. With fewer than
+ *   two values only the descriptives are formed. Under the override past
+ *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
+ *   block holds no values.
  */
 export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan }) {
   const xs = Array.from(x);
@@ -226,17 +229,17 @@ function designBlock(ds, e) {
 /**
  * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
- *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
+ *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, title?: string,
  *   provenance?: object, plan: null|{ h: number, delta: number, power: number },
  *   match?: { by: 'id'|'position', pairs: number[][], unmatchedA: number[], unmatchedB: number[] } }} o
  *   `eA` and `eB` are the finite replication outcomes of each design with their
  *   ids and the ids that gave none, as the page forms them. `title` and
- *   `provenance` are the page's own, copied into the recipe. `base` is the
- *   stated level the checks line judges by; it changes the line's verdict but
- *   not W or p, and so the recipe does not need it. `plan` is the planning
- *   card's resolved target half-width, difference to detect, and target power,
- *   or null when the page has no plan to show. Under the rank procedure the
- *   page plans with Welch's t and inflates the counts by pi/3, as here.
+ *   `provenance` are the page's own, copied into the recipe. The stated level
+ *   the checks line judges by is not an input: it changes the line's verdict
+ *   but not W or p. `plan` is the planning card's resolved target half-width,
+ *   difference to detect, and target power, or null when the page has no plan
+ *   to show. Under the rank procedure the page plans with Welch's t and
+ *   inflates the counts by pi/3, as here.
  */
 export function twoRecipe(o) {
   if (o.mode === 'paired') return twoPairedRecipe(o);
@@ -359,11 +362,10 @@ function twoPairedRecipe(o) {
   if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs, pr.sdD === 0));
   let planOut = null;
   if (plan) {
-    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
-      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     // The page takes the power at the current pairs whenever s_D is positive,
-    // whatever the sign of delta (the two-sided power is symmetric in it).
-    e['power at current R'] = pr.sdD > 0 ? powerOneSample({ n: pr.n, sd: pr.sdD, delta: plan.delta, alpha: 1 - level }) : NaN;
+    // whatever the sign of delta.
+    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np, anySign: true,
+      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
   r.two = { mode: 'paired', np, checks: !np, plan: planOut };
@@ -487,6 +489,10 @@ export function severalRecipe(o) {
   Object.assign(e, { 'plan means half-width target': plan.meansH, 'plan means n': hpM.n == null ? NaN : hpM.n, 'plan means half-width at n': hpM.hwAtN });
   let hpD;
   if (paired) {
+    // Each pair's sd of differences is its standard error times sqrt(n), n = df + 1, as the
+    // page reads it back from the pair's interval. The scripts take paired_t's sdD directly,
+    // which agrees up to rounding; their comment on the widest pair says how they break a
+    // tie that the rounding splits.
     const sdDs = fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) }));
     const worst = sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
     const pr = planReplications({ sd: worst.sd, level: 1 - alpha / fam.C, target: plan.diffsH });
@@ -626,7 +632,8 @@ function severalRank(r, o, g) {
     const sr = signedRank(x, { level }), d = 'rank design ' + (i + 1) + ' ';
     Object.assign(e, { [d + 'pseudo-median']: sr.estimate, [d + 'lower']: sr.lo, [d + 'upper']: sr.hi });
   });
-  r.several.rank = { paired, adjust, pairs };
+  // The adjustment is the rank_adjust setting, which the script reads.
+  r.several.rank = { paired, pairs };
 }
 
 /**
@@ -667,7 +674,7 @@ export function recordCount(ds) {
 /**
  * The files the records of a dataset can be read from: the Observations CSV
  * for the records, and the Replication summary CSV for the list and order of
- * the replications, because one with no records has no row in the first.
+ * the replications because one with no records has no row in the first.
  */
 function recordsCsv(ds) {
   return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
@@ -802,13 +809,33 @@ export function steadyRecipe(o) {
 // ── Summary and Plots ────────────────────────────────────────────────────
 
 /**
+ * The analyzer's values a Summary and Plots script reports for each
+ * replication, by the suffix of its report name: the count and the outcome,
+ * and for tally data the sd, min, and max of the replication's observations.
+ * @param {string} kind
+ * @returns {string[]}
+ */
+export function repKeys(kind) {
+  return kind === 'tally' ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
+}
+
+/**
+ * The most replications whose analyzer values a Summary and Plots script that
+ * reads its data from files writes out (repKeys per replication). Past it,
+ * each later replication's lines print without the analyzer's values, and so
+ * such a script stays small however many replications its files hold.
+ */
+export const REP_LINES_MAX = 1000;
+
+/**
  * Whether a Summary and Plots script would embed more than MAX_NUMBERS
- * numbers: the shown dataset's records and the outcomes of the datasets
+ * numbers: the shown dataset's records, each replication's id and the
+ * analyzer's values for it (repKeys), and the outcomes of the datasets
  * Levene's test compares. Cheap, and copies nothing.
  * @param {{ds: object, spread: null|{groups: ArrayLike<number>[]}}} o
  */
 export function exploreTooBig({ ds, spread }) {
-  let n = recordCount(ds);
+  let n = recordCount(ds) + ds.reps.length * (1 + repKeys(ds.kind).length);
   if (spread) for (const g of spread.groups) n += g.length;
   return n > MAX_NUMBERS;
 }
@@ -829,8 +856,10 @@ export function exploreTooBig({ ds, spread }) {
  *   is the per-interval level of the t interval over the outcomes. `title` and
  *   `provenance` are the page's own, copied into the recipe. A pure function
  *   of its argument, and so a page can call it lazily. When the numbers would
- *   run past MAX_NUMBERS, the recipe is marked `csvOnly` and carries the
- *   records' description (recordsMeta) without the records.
+ *   run past MAX_NUMBERS (exploreTooBig), the recipe is marked `csvOnly` and
+ *   carries the records' description (recordsMeta) without the records; if
+ *   Levene's groups would then still run past it, the recipe leaves the test
+ *   out and names it in `explore.spreadOmitted`.
  */
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
@@ -895,14 +924,24 @@ export function exploreRecipe(o) {
   const checks = shapiroOk(x);
   if (checks) Object.assign(e, shapiroExpect('shapiro ', x));
 
-  // Levene's test, only where every group has two or more outcomes.
+  // Levene's test, only where every group has two or more outcomes. Its
+  // groups are embedded in every script; in one that reads its records from
+  // files, they and the analyzer's per-replication values (REP_LINES_MAX
+  // replications' worth) must fit under MAX_NUMBERS, and otherwise the
+  // script leaves the test out and says so.
+  let spreadOmitted = null;
   if (spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2)) {
-    const groups = spread.groups.map(g => Array.from(g));
-    const lv = levene(groups);
-    Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
-    r.spread = { names: spread.names.slice(), groups };
+    const count = spread.groups.reduce((a, g) => a + g.length, 0);
+    const room = MAX_NUMBERS - repKeys(ds.kind).length * Math.min(ds.reps.length, REP_LINES_MAX);
+    if (r.csvOnly && count > room) spreadOmitted = { names: spread.names.slice(), count };
+    else {
+      const groups = spread.groups.map(g => Array.from(g));
+      const lv = levene(groups);
+      Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
+      r.spread = { names: spread.names.slice(), groups };
+    }
   }
-  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread };
+  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
   r.settingsNote = [dataNote(ds.kind)];
   return r;

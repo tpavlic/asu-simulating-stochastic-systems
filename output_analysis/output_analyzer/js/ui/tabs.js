@@ -273,7 +273,7 @@ function buildSections(page, list) {
     for (const s of list) {
       const o = document.createElement('option');
       o.value = page + '/' + s.id;
-      // Em spaces, because a select collapses ordinary ones.
+      // Em spaces because a select collapses ordinary ones.
       o.dataset.short = '\u2003\u2014 ' + s.label;
       o.dataset.full = opt.textContent.trim() + '\u00a0\u2013 ' + s.label;
       o.textContent = o.dataset.short;

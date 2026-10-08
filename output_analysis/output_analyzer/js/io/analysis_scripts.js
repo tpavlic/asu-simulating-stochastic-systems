@@ -15,7 +15,7 @@
 
 import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
 import { LIB } from './script_lib.js';
-import { pairLabel } from './recipes.js';
+import { pairLabel, repKeys, REP_LINES_MAX, MAX_NUMBERS } from './recipes.js';
 
 const BY = 'the Output Analyzer';
 
@@ -93,7 +93,9 @@ const LANG = {
       const mods = ['integrate', 'optimize', 'stats'].filter(m => new RegExp('\\b' + m + '\\.').test(code));
       return ['import numpy as np', ...(mods.length ? ['from scipy import ' + mods.join(', ')] : []), 'np.set_printoptions(precision=10)'];
     },
-    requires: 'Python 3 with NumPy and SciPy 1.11 or later (Matplotlib, if installed, draws any figure).'
+    // Matplotlib is named only where the script draws a figure.
+    requires: code => 'Python 3 with NumPy and SciPy 1.11 or later' +
+      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figure).' : '.')
   },
   m: {
     lang: 'm', comment: '% ', sect: s => '\n%% ' + s,
@@ -107,6 +109,18 @@ const LANG = {
     requires: 'MATLAB with the Statistics and Machine Learning Toolbox. A Shapiro-Wilk check, where the page makes one, runs only when a swtest function is on the path (the toolbox has one from R2026b; for earlier releases, one is on the File Exchange).'
   }
 };
+
+/**
+ * The line that opens a section of a script, as the writers emit it: for the
+ * Data section, "## Data ----" in R, "# ---- Data ----" in Python, and
+ * "%% Data" in MATLAB.
+ * @param {'m'|'R'|'tidy'|'py'} lang
+ * @param {string} title
+ */
+export function sectionLine(lang, title) {
+  if (!Object.prototype.hasOwnProperty.call(LANG, lang)) throw new RangeError('sectionLine: unknown language ' + lang);
+  return LANG[lang].sect(title).trim();
+}
 
 /** The writers by language key, with the button label and the file-name rule. */
 export const ANALYSIS_WRITERS = {
@@ -275,7 +289,7 @@ function commentLines(first, text, cont, width = 92) {
   return out;
 }
 
-function header(recipe, L, csv) {
+function header(recipe, L, csv, code) {
   const c = L.comment;
   const out = [c + ascii(recipe.title)];
   out.push(c + 'Written by ' + BY + ' on ' + stamp(new Date()) + '. It regenerates the page\'s results from the');
@@ -286,7 +300,7 @@ function header(recipe, L, csv) {
     if (v === undefined || v === null || v === '') continue;
     out.push(...commentLines(c + '  ', ascii(k) + ': ' + ascii(Array.isArray(v) ? v.join(', ') : String(v)), c + '    '));
   }
-  let needs = 'Requires: ' + L.requires;
+  let needs = 'Requires: ' + (typeof L.requires === 'function' ? L.requires(code) : L.requires);
   if (csv) {
     const files = csvFiles(recipe);
     needs += ' It also needs the data ' + (files.length === 1 ? 'file ' : 'files ') + listWords(files) + ' in the folder it runs from.';
@@ -331,8 +345,9 @@ export function vectorBlock(L, { ids, values, dropped, how, name, response, unit
 }
 
 // ── Page bodies ──────────────────────────────────────────────────────────
-// BODIES[page][lang] returns { body: string[], need: string[] }, `need`
-// naming LIB snippets. The keys are 'R' (both R dialects), 'py', and 'm'.
+// BODIES[page][lang](recipe, L, { csv }) returns { body: string[], need:
+// string[] }, `need` naming LIB snippets, and `csv` saying whether the script
+// reads its data from files. The keys are 'R' (both R dialects), 'py', and 'm'.
 
 export const BODIES = {};
 
@@ -981,8 +996,9 @@ function sevMeans(r, L, out, need) {
       'after the design\'s number and name from d_tbl. ' + WILCOX_OWN, c));
     out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test)))))');
   } else if (L.tidy) {
-    out.push(c + 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl.');
-    out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items)))');
+    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl, which the figure draws. ' +
+      'It is not a tibble of tidied t.test results: those test each mean against 0, which is not the question here.', c));
+    out.push('means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(means_tbl)');
   }
   if (!S.np) {
     need.push('shapiro');
@@ -1006,14 +1022,18 @@ function sevFigure(r, L, out) {
   const B = S.bench != null;
   out.push(L.sect('Figure: each design\'s simultaneous interval'));
   out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
-  out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
+  if (!L.tidy) out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
   if (L.tidy) {
+    if (S.np) {
+      out.push(...commentLines(c, 'The tidied wilcox.test tibble above carries wilcox.test\'s own estimates and intervals, not the ones drawn here, ' +
+        'and so the figure\'s tibble is built from signed_rank\'s.', c));
+      out.push('fig_tbl <- tibble(design = seq_len(k), mid = ' + PLUCK.R(src, mid) + ', lo = ' + PLUCK.R(src, 'lo') + ', hi = ' + PLUCK.R(src, 'hi') + ')');
+    } else out.push('fig_tbl <- means_tbl |> transmute(design = as.integer(design), mid = mean, lo, hi)');
     // ggplot2 warns of every row it drops for a missing value, and so an
     // undetermined end is filtered out before the segments are drawn.
-    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
+    out.push('fig_all <- c(fig_tbl$lo, fig_tbl$hi, fig_tbl$mid' + (B ? ', benchmark' : '') + ')',
       'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_tbl <- tibble(design = seq_len(k), mid = fig_mid, lo = fig_lo, hi = fig_hi) |>',
-      '  mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
+      'fig_tbl <- fig_tbl |> mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
       'p <- ggplot(fig_tbl, aes(y = design)) +',
       '  geom_segment(aes(x = lo, xend = hi, yend = design), data = filter(fig_tbl, is.finite(lo), is.finite(hi)), linewidth = 1) +',
       '  geom_point(aes(x = mid), data = filter(fig_tbl, is.finite(mid)), size = 2) +');
@@ -1102,7 +1122,7 @@ function sevDiffs(r, L, out, need) {
   if (shapiro) pageVectors(L, r, out, { prefix: 'shapiro diff', labels, labelsVar: 'page_family_pairs', items: items.slice(keys.length) });
   if (L.tidy) {
     out.push(...commentLines(c, 'family_tests collects each comparison\'s test object, for the tibble after the last one' +
-      (S.np ? '.' : ' (a comparison of two constant designs has none, because t.test stops there, and is left out).'), c), 'family_tests <- list()');
+      (S.np ? '.' : '; t.test stops on two constant designs, and so such a comparison has no test object and is left out.'), c), 'family_tests <- list()');
   }
 
   // The comparison itself, for designs i and j (Python's counted from 0).
@@ -1358,7 +1378,7 @@ function steadyBody(r, L) {
   const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
   out.push(L.sect('Autocorrelation of the series after truncation'));
   out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
-    (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
+    (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
       : 'It needs at least 8 observations.'), c));
   const tooShort = 'The series after truncation is too short for its autocorrelation.';
   const report5 = [], hoistA = [];
@@ -1443,20 +1463,30 @@ function spreadBlock(L, S) {
 // of the outcomes, every replication together, the t interval over the
 // outcomes, the Shapiro-Wilk test of the outcomes, Levene's test across the
 // ticked datasets, and a figure of the outcomes.
-function exploreBody(r, L) {
+function exploreBody(r, L, { csv = false } = {}) {
   const X = r.explore, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
   const need = [descNeed(L), 'timeWeighted', 'explore'], out = [];
   const R = r.records, tally = X.kind === 'tally';
   const ind = lang === 'R' ? '  ' : '    ';
 
-  // Each replication.
+  // Each replication. A script that reads its data from files writes out the
+  // analyzer's values for the first REP_LINES_MAX replications only (see
+  // recipes.js), and each later line looks its value up by position, finds
+  // none, and prints alone.
   out.push(L.sect('Each replication: its observations and its outcome'));
   out.push(...commentLines(c, 'A replication\'s outcome is ' + ascii(r.outcomes.how) + '; a replication with no records gives none (NaN).' +
     (tally ? ' Its sd, min, and max describe its own observations.' : ''), c));
-  const page = k => R.ids.map(id => e['rep ' + id + ' ' + k]);
-  const cols = tally ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
+  const shown = csv ? Math.min(R.ids.length, REP_LINES_MAX) : R.ids.length, cut = shown < R.ids.length;
+  const page = k => R.ids.slice(0, shown).map(id => e['rep ' + id + ' ' + k]);
   out.push(c + 'The analyzer\'s values, in replication order, printed beside the script\'s.');
-  for (const k of cols) out.push(...vecAssign(L, 'page_' + k, page(k)));
+  if (cut) {
+    need.push('pageAt');
+    out.push(...commentLines(c, 'They are written out for the first ' + shown.toLocaleString('en-US') + ' of the ' + R.ids.length.toLocaleString('en-US') + ' replications only, which keeps a script that reads its data from files small; ' +
+      'the lines for the later replications print without an analyzer column.', c));
+  }
+  for (const k of repKeys(X.kind)) out.push(...vecAssign(L, 'page_' + k, page(k)));
+  // The analyzer's value for this replication: page_k at i, or by position when the vectors stop short.
+  const pg = k => (cut ? 'page_at(page_' + k + ', pos)' : lang === 'm' ? 'page_' + k + '(i)' : 'page_' + k + '[i]');
   if (lang === 'R') out.push('outcome <- vapply(reps, rep_outcome, numeric(1), kind = kind, end_time = end_time)');
   else if (lang === 'py') out.push('outcome = np.array([rep_outcome(r, kind, end_time) for r in reps], dtype=float)');
   else out.push('outcome = arrayfun(@(r) rep_outcome(r, kind, end_time), reps);');
@@ -1464,33 +1494,33 @@ function exploreBody(r, L) {
   out.push(rep(L, r, 'observations', lang === 'R' ? 'sum(lengths(lapply(reps, function(r) r$v)))' : lang === 'py' ? 'sum(len(r["v"]) for r in reps)' : 'sum(arrayfun(@(r) numel(r.v), reps))'));
   if (lang === 'R') {
     out.push('for (i in seq_along(reps)) {',
-      ind + 'v <- reps[[i]]$v; p <- paste("rep", reps[[i]]$id)',
-      ind + 'report(paste(p, "n"), length(v), page_n[i])',
-      ind + 'report(paste(p, "outcome"), outcome[i], page_outcome[i])');
-    if (tally) out.push(ind + 'report(paste(p, "sd"), if (length(v) > 1) sd(v) else NaN, page_sd[i])',
-      ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, page_min[i])',
-      ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, page_max[i])');
+      ind + 'v <- reps[[i]]$v; p <- paste("rep", reps[[i]]$id)' + (cut ? '; pos <- if (i <= length(page_n)) i else NA' : ''),
+      ind + 'report(paste(p, "n"), length(v), ' + pg('n') + ')',
+      ind + 'report(paste(p, "outcome"), outcome[i], ' + pg('outcome') + ')');
+    if (tally) out.push(ind + 'report(paste(p, "sd"), if (length(v) > 1) sd(v) else NaN, ' + pg('sd') + ')',
+      ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, ' + pg('min') + ')',
+      ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, ' + pg('max') + ')');
     out.push('}');
     if (L.tidy) out.push(c + 'The outcomes as a tibble, a row per replication (NaN where a replication gave none).',
       'out_tbl <- tibble(rep_id = vapply(reps, function(r) r$id, ""), outcome = outcome)');
   } else if (lang === 'py') {
     out.push('for i, r in enumerate(reps):',
-      ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]',
-      ind + 'report(p + " n", len(v), page_n[i])',
-      ind + 'report(p + " outcome", outcome[i], page_outcome[i])');
-    if (tally) out.push(ind + 'report(p + " sd", v.std(ddof=1) if len(v) > 1 else np.nan, page_sd[i])',
-      ind + 'report(p + " min", v.min() if len(v) else np.nan, page_min[i])',
-      ind + 'report(p + " max", v.max() if len(v) else np.nan, page_max[i])');
+      ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]' + (cut ? '; pos = i if i < len(page_n) else None' : ''),
+      ind + 'report(p + " n", len(v), ' + pg('n') + ')',
+      ind + 'report(p + " outcome", outcome[i], ' + pg('outcome') + ')');
+    if (tally) out.push(ind + 'report(p + " sd", v.std(ddof=1) if len(v) > 1 else np.nan, ' + pg('sd') + ')',
+      ind + 'report(p + " min", v.min() if len(v) else np.nan, ' + pg('min') + ')',
+      ind + 'report(p + " max", v.max() if len(v) else np.nan, ' + pg('max') + ')');
   } else {
     out.push('for i = 1:numel(reps)',
-      ind + "v = reps(i).v; p = ['rep ' reps(i).id];",
-      ind + "report([p ' n'], numel(v), page_n(i));",
-      ind + "report([p ' outcome'], outcome(i), page_outcome(i));");
+      ind + "v = reps(i).v; p = ['rep ' reps(i).id];" + (cut ? ' pos = []; if i <= numel(page_n), pos = i; end' : ''),
+      ind + "report([p ' n'], numel(v), " + pg('n') + ');',
+      ind + "report([p ' outcome'], outcome(i), " + pg('outcome') + ');');
     if (tally) out.push(ind + 's = NaN; if numel(v) > 1, s = std(v); end',
-      ind + "report([p ' sd'], s, page_sd(i));",
+      ind + "report([p ' sd'], s, " + pg('sd') + ');',
       ind + 'lo = NaN; hi = NaN; if ~isempty(v), lo = min(v); hi = max(v); end',
-      ind + "report([p ' min'], lo, page_min(i));",
-      ind + "report([p ' max'], hi, page_max(i));");
+      ind + "report([p ' min'], lo, " + pg('min') + ');',
+      ind + "report([p ' max'], hi, " + pg('max') + ');');
     out.push('end');
   }
 
@@ -1543,13 +1573,19 @@ function exploreBody(r, L) {
   }
 
   // Equal variances.
+  if (X.spreadOmitted) {
+    const O = X.spreadOmitted;
+    out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
+    out.push(...commentLines(c, 'The page runs Levene\'s test across ' + listWords(O.names.map(ascii)) + ', but their ' + O.count.toLocaleString('en-US') +
+      ' replication outcomes would take this script past the ' + MAX_NUMBERS.toLocaleString('en-US') + ' numbers it writes out, and so the test is left out here.', c));
+  }
   if (X.spread) {
     need.push('levene');
     out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
-    if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(z ~ g)) returns it, g being the dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
+    if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
   // The figure: no report lines. Its histogram has the page's bins, and its
@@ -1563,7 +1599,7 @@ function exploreBody(r, L) {
       'with a = 3/8 for n <= 10 and 1/2 otherwise, as R\'s ppoints, and a dashed line through the first and third quartiles, as R\'s qqline.', c));
     if (L.tidy) {
       need.push('tidyFigure');
-      out.push('plot_outcomes(tibble(outcome = x), outcome, ' + L.str(xlab) + ')');
+      out.push('plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ' + L.str(xlab) + ')');
     } else if (lang === 'R') {
       out.push('nb <- max(5, ceiling(sqrt(length(x))))',
         'breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)',
@@ -1620,8 +1656,10 @@ function settingsBlock(recipe, L) {
 function pairsBlock(L, r) {
   const P = r.pairs, c = L.comment, out = [];
   const what = ascii(P.response) + (P.unit ? ', ' + ascii(P.unit) : '');
-  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + ascii(P.nameA) + ' (A) and b holds ' +
-    ascii(P.nameB) + ' (B), matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
+  // A name that already ends in its letter (such as "Design A") is not followed by the letter again.
+  const named = (n, letter) => ascii(n) + (new RegExp('\\b' + letter + '$').test(ascii(n)) ? '' : ' (' + letter + ')');
+  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + named(P.nameA, 'A') + ' and b holds ' +
+    named(P.nameB, 'B') + ', matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
   out.push(...commentLines(c, 'Each outcome of A is ' + ascii(P.howA) + (P.howA === P.howB ? ', and so is each of B.' : ', and each of B is ' + ascii(P.howB) + '.'), c));
   const left = (ids, what) => { if (ids.length) out.push(...commentLines(c, what + ' were left out: ' + ids.map(ascii).join(', ') + '.', c)); };
   left(P.droppedA, 'Replications of A that gave no outcome');
@@ -1682,7 +1720,7 @@ function tidyDataBlock(recipe, L) {
     out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
       (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
     out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
-    if (summary) out.push('print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }
@@ -1757,9 +1795,10 @@ const PY_READ_CSV = [
 ];
 
 // MATLAB's reader, as an anonymous function: readtable with the options it
-// detects, the replication column set to text.
+// detects, the replication column set to text and every other one to numbers
+// (from a file with no records, readtable could not tell they are numbers).
 const M_READ_CSV = [
-  "read_csv = @(f) readtable(f, setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped and its ids read as text"
+  "read_csv = @(f) readtable(f, setvartype(setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'double'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped, its ids read as text, and its other columns as numbers"
 ];
 
 // Python: each id's outcome at its first row, in the order the ids first
@@ -1912,7 +1951,8 @@ function readRecords(L, r, obsFile, repFile) {
       'by_rep <- factor(obs$replication, levels = unique(ids))' + c + 'each record\'s replication, in the order of ids',
       'v_by <- split(as.numeric(obs[[ncol(obs)]]), by_rep)' + c + 'the values, one vector per replication');
     if (timed) out.push('t_by <- split(as.numeric(obs$time), by_rep)');
-    out.push('reps <- lapply(ids, function(id) list(id = id, t = ' + (timed ? 't_by[[id]]' : 'NULL') + ', v = v_by[[id]]))');
+    out.push('at <- match(ids, levels(by_rep))' + c + 'each replication\'s place among them, matched at once (by name in a loop, slow with many replications)',
+      'reps <- lapply(seq_along(ids), function(i) list(id = ids[i], t = ' + (timed ? 't_by[[at[i]]]' : 'NULL') + ', v = v_by[[at[i]]]))');
   } else if (lang === 'py') {
     out.push('obs = ' + readExpr(L, obsFile) + c + cols, ...meta, 'by_rep = {}',
       'for r in obs: by_rep.setdefault(r[0], []).append(r)',
@@ -2021,16 +2061,16 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
   if (!page || !page[L.lang]) throw new RangeError('analysisScript: unknown page ' + recipe.page);
   const snippets = LIB[L.lang];   // both R dialects share LIB.R
-  const { body, need } = page[L.lang](recipe, L);
+  const fromCsv = !!(csv || recipe.csvOnly);
+  if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
+  const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
   const helpers = Array.from(new Set(need || [])).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
-  const fromCsv = !!(csv || recipe.csvOnly);
-  if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
   const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...body];
-  const lines = header(recipe, L, fromCsv);
+  const lines = header(recipe, L, fromCsv, main.join('\n'));
   lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
   lines.push(...main);

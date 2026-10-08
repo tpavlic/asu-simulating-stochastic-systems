@@ -14439,7 +14439,7 @@ export function canInfer(ds) {
 
 import { plain, joinNums, sanitizeName, kebabName } from './scripts.js';
 import { LIB } from './script_lib.js';
-import { pairLabel } from './recipes.js';
+import { pairLabel, repKeys, REP_LINES_MAX, MAX_NUMBERS } from './recipes.js';
 
 const BY = 'the Output Analyzer';
 
@@ -14517,7 +14517,9 @@ const LANG = {
       const mods = ['integrate', 'optimize', 'stats'].filter(m => new RegExp('\\b' + m + '\\.').test(code));
       return ['import numpy as np', ...(mods.length ? ['from scipy import ' + mods.join(', ')] : []), 'np.set_printoptions(precision=10)'];
     },
-    requires: 'Python 3 with NumPy and SciPy 1.11 or later (Matplotlib, if installed, draws any figure).'
+    // Matplotlib is named only where the script draws a figure.
+    requires: code => 'Python 3 with NumPy and SciPy 1.11 or later' +
+      (/import matplotlib/.test(code) ? ' (Matplotlib, if installed, draws the figure).' : '.')
   },
   m: {
     lang: 'm', comment: '% ', sect: s => '\n%% ' + s,
@@ -14531,6 +14533,18 @@ const LANG = {
     requires: 'MATLAB with the Statistics and Machine Learning Toolbox. A Shapiro-Wilk check, where the page makes one, runs only when a swtest function is on the path (the toolbox has one from R2026b; for earlier releases, one is on the File Exchange).'
   }
 };
+
+/**
+ * The line that opens a section of a script, as the writers emit it: for the
+ * Data section, "## Data ----" in R, "# ---- Data ----" in Python, and
+ * "%% Data" in MATLAB.
+ * @param {'m'|'R'|'tidy'|'py'} lang
+ * @param {string} title
+ */
+export function sectionLine(lang, title) {
+  if (!Object.prototype.hasOwnProperty.call(LANG, lang)) throw new RangeError('sectionLine: unknown language ' + lang);
+  return LANG[lang].sect(title).trim();
+}
 
 /** The writers by language key, with the button label and the file-name rule. */
 export const ANALYSIS_WRITERS = {
@@ -14699,7 +14713,7 @@ function commentLines(first, text, cont, width = 92) {
   return out;
 }
 
-function header(recipe, L, csv) {
+function header(recipe, L, csv, code) {
   const c = L.comment;
   const out = [c + ascii(recipe.title)];
   out.push(c + 'Written by ' + BY + ' on ' + stamp(new Date()) + '. It regenerates the page\'s results from the');
@@ -14710,7 +14724,7 @@ function header(recipe, L, csv) {
     if (v === undefined || v === null || v === '') continue;
     out.push(...commentLines(c + '  ', ascii(k) + ': ' + ascii(Array.isArray(v) ? v.join(', ') : String(v)), c + '    '));
   }
-  let needs = 'Requires: ' + L.requires;
+  let needs = 'Requires: ' + (typeof L.requires === 'function' ? L.requires(code) : L.requires);
   if (csv) {
     const files = csvFiles(recipe);
     needs += ' It also needs the data ' + (files.length === 1 ? 'file ' : 'files ') + listWords(files) + ' in the folder it runs from.';
@@ -14755,8 +14769,9 @@ export function vectorBlock(L, { ids, values, dropped, how, name, response, unit
 }
 
 // ── Page bodies ──────────────────────────────────────────────────────────
-// BODIES[page][lang] returns { body: string[], need: string[] }, `need`
-// naming LIB snippets. The keys are 'R' (both R dialects), 'py', and 'm'.
+// BODIES[page][lang](recipe, L, { csv }) returns { body: string[], need:
+// string[] }, `need` naming LIB snippets, and `csv` saying whether the script
+// reads its data from files. The keys are 'R' (both R dialects), 'py', and 'm'.
 
 export const BODIES = {};
 
@@ -15405,8 +15420,9 @@ function sevMeans(r, L, out, need) {
       'after the design\'s number and name from d_tbl. ' + WILCOX_OWN, c));
     out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test)))))');
   } else if (L.tidy) {
-    out.push(c + 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl.');
-    out.push('print(bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items)))');
+    out.push(...commentLines(c, 'The intervals above as one tibble, a row per design, after the design\'s number and name from d_tbl, which the figure draws. ' +
+      'It is not a tibble of tidied t.test results: those test each mean against 0, which is not the question here.', c));
+    out.push('means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(means_tbl)');
   }
   if (!S.np) {
     need.push('shapiro');
@@ -15430,14 +15446,18 @@ function sevFigure(r, L, out) {
   const B = S.bench != null;
   out.push(L.sect('Figure: each design\'s simultaneous interval'));
   out.push(c + 'Each design\'s ' + what.toLowerCase() + ' with its interval at 1 - alpha/k' + (B ? ', and the benchmark as a dashed line' : '') + '.');
-  out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
+  if (!L.tidy) out.push(L.assign('fig_mid', PLUCK[lang](src, mid)), L.assign('fig_lo', PLUCK[lang](src, 'lo')), L.assign('fig_hi', PLUCK[lang](src, 'hi')));
   if (L.tidy) {
+    if (S.np) {
+      out.push(...commentLines(c, 'The tidied wilcox.test tibble above carries wilcox.test\'s own estimates and intervals, not the ones drawn here, ' +
+        'and so the figure\'s tibble is built from signed_rank\'s.', c));
+      out.push('fig_tbl <- tibble(design = seq_len(k), mid = ' + PLUCK.R(src, mid) + ', lo = ' + PLUCK.R(src, 'lo') + ', hi = ' + PLUCK.R(src, 'hi') + ')');
+    } else out.push('fig_tbl <- means_tbl |> transmute(design = as.integer(design), mid = mean, lo, hi)');
     // ggplot2 warns of every row it drops for a missing value, and so an
     // undetermined end is filtered out before the segments are drawn.
-    out.push('fig_all <- c(fig_lo, fig_hi, fig_mid' + (B ? ', benchmark' : '') + ')',
+    out.push('fig_all <- c(fig_tbl$lo, fig_tbl$hi, fig_tbl$mid' + (B ? ', benchmark' : '') + ')',
       'xr <- range(fig_all[is.finite(fig_all)]); if (xr[1] == xr[2]) xr <- xr + c(-1, 1)',
-      'fig_tbl <- tibble(design = seq_len(k), mid = fig_mid, lo = fig_lo, hi = fig_hi) |>',
-      '  mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
+      'fig_tbl <- fig_tbl |> mutate(lo = if_else(lo == -Inf, xr[1], lo), hi = if_else(hi == Inf, xr[2], hi))',
       'p <- ggplot(fig_tbl, aes(y = design)) +',
       '  geom_segment(aes(x = lo, xend = hi, yend = design), data = filter(fig_tbl, is.finite(lo), is.finite(hi)), linewidth = 1) +',
       '  geom_point(aes(x = mid), data = filter(fig_tbl, is.finite(mid)), size = 2) +');
@@ -15526,7 +15546,7 @@ function sevDiffs(r, L, out, need) {
   if (shapiro) pageVectors(L, r, out, { prefix: 'shapiro diff', labels, labelsVar: 'page_family_pairs', items: items.slice(keys.length) });
   if (L.tidy) {
     out.push(...commentLines(c, 'family_tests collects each comparison\'s test object, for the tibble after the last one' +
-      (S.np ? '.' : ' (a comparison of two constant designs has none, because t.test stops there, and is left out).'), c), 'family_tests <- list()');
+      (S.np ? '.' : '; t.test stops on two constant designs, and so such a comparison has no test object and is left out.'), c), 'family_tests <- list()');
   }
 
   // The comparison itself, for designs i and j (Python's counted from 0).
@@ -15782,7 +15802,7 @@ function steadyBody(r, L) {
   const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
   out.push(L.sect('Autocorrelation of the series after truncation'));
   out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
-    (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time, because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
+    (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
       : 'It needs at least 8 observations.'), c));
   const tooShort = 'The series after truncation is too short for its autocorrelation.';
   const report5 = [], hoistA = [];
@@ -15867,20 +15887,30 @@ function spreadBlock(L, S) {
 // of the outcomes, every replication together, the t interval over the
 // outcomes, the Shapiro-Wilk test of the outcomes, Levene's test across the
 // ticked datasets, and a figure of the outcomes.
-function exploreBody(r, L) {
+function exploreBody(r, L, { csv = false } = {}) {
   const X = r.explore, lang = L.lang, c = L.comment, e = r.expect, f = FIELD[lang];
   const need = [descNeed(L), 'timeWeighted', 'explore'], out = [];
   const R = r.records, tally = X.kind === 'tally';
   const ind = lang === 'R' ? '  ' : '    ';
 
-  // Each replication.
+  // Each replication. A script that reads its data from files writes out the
+  // analyzer's values for the first REP_LINES_MAX replications only (see
+  // recipes.js), and each later line looks its value up by position, finds
+  // none, and prints alone.
   out.push(L.sect('Each replication: its observations and its outcome'));
   out.push(...commentLines(c, 'A replication\'s outcome is ' + ascii(r.outcomes.how) + '; a replication with no records gives none (NaN).' +
     (tally ? ' Its sd, min, and max describe its own observations.' : ''), c));
-  const page = k => R.ids.map(id => e['rep ' + id + ' ' + k]);
-  const cols = tally ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
+  const shown = csv ? Math.min(R.ids.length, REP_LINES_MAX) : R.ids.length, cut = shown < R.ids.length;
+  const page = k => R.ids.slice(0, shown).map(id => e['rep ' + id + ' ' + k]);
   out.push(c + 'The analyzer\'s values, in replication order, printed beside the script\'s.');
-  for (const k of cols) out.push(...vecAssign(L, 'page_' + k, page(k)));
+  if (cut) {
+    need.push('pageAt');
+    out.push(...commentLines(c, 'They are written out for the first ' + shown.toLocaleString('en-US') + ' of the ' + R.ids.length.toLocaleString('en-US') + ' replications only, which keeps a script that reads its data from files small; ' +
+      'the lines for the later replications print without an analyzer column.', c));
+  }
+  for (const k of repKeys(X.kind)) out.push(...vecAssign(L, 'page_' + k, page(k)));
+  // The analyzer's value for this replication: page_k at i, or by position when the vectors stop short.
+  const pg = k => (cut ? 'page_at(page_' + k + ', pos)' : lang === 'm' ? 'page_' + k + '(i)' : 'page_' + k + '[i]');
   if (lang === 'R') out.push('outcome <- vapply(reps, rep_outcome, numeric(1), kind = kind, end_time = end_time)');
   else if (lang === 'py') out.push('outcome = np.array([rep_outcome(r, kind, end_time) for r in reps], dtype=float)');
   else out.push('outcome = arrayfun(@(r) rep_outcome(r, kind, end_time), reps);');
@@ -15888,33 +15918,33 @@ function exploreBody(r, L) {
   out.push(rep(L, r, 'observations', lang === 'R' ? 'sum(lengths(lapply(reps, function(r) r$v)))' : lang === 'py' ? 'sum(len(r["v"]) for r in reps)' : 'sum(arrayfun(@(r) numel(r.v), reps))'));
   if (lang === 'R') {
     out.push('for (i in seq_along(reps)) {',
-      ind + 'v <- reps[[i]]$v; p <- paste("rep", reps[[i]]$id)',
-      ind + 'report(paste(p, "n"), length(v), page_n[i])',
-      ind + 'report(paste(p, "outcome"), outcome[i], page_outcome[i])');
-    if (tally) out.push(ind + 'report(paste(p, "sd"), if (length(v) > 1) sd(v) else NaN, page_sd[i])',
-      ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, page_min[i])',
-      ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, page_max[i])');
+      ind + 'v <- reps[[i]]$v; p <- paste("rep", reps[[i]]$id)' + (cut ? '; pos <- if (i <= length(page_n)) i else NA' : ''),
+      ind + 'report(paste(p, "n"), length(v), ' + pg('n') + ')',
+      ind + 'report(paste(p, "outcome"), outcome[i], ' + pg('outcome') + ')');
+    if (tally) out.push(ind + 'report(paste(p, "sd"), if (length(v) > 1) sd(v) else NaN, ' + pg('sd') + ')',
+      ind + 'report(paste(p, "min"), if (length(v)) min(v) else NaN, ' + pg('min') + ')',
+      ind + 'report(paste(p, "max"), if (length(v)) max(v) else NaN, ' + pg('max') + ')');
     out.push('}');
     if (L.tidy) out.push(c + 'The outcomes as a tibble, a row per replication (NaN where a replication gave none).',
       'out_tbl <- tibble(rep_id = vapply(reps, function(r) r$id, ""), outcome = outcome)');
   } else if (lang === 'py') {
     out.push('for i, r in enumerate(reps):',
-      ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]',
-      ind + 'report(p + " n", len(v), page_n[i])',
-      ind + 'report(p + " outcome", outcome[i], page_outcome[i])');
-    if (tally) out.push(ind + 'report(p + " sd", v.std(ddof=1) if len(v) > 1 else np.nan, page_sd[i])',
-      ind + 'report(p + " min", v.min() if len(v) else np.nan, page_min[i])',
-      ind + 'report(p + " max", v.max() if len(v) else np.nan, page_max[i])');
+      ind + 'v = np.asarray(r["v"], float); p = "rep " + r["id"]' + (cut ? '; pos = i if i < len(page_n) else None' : ''),
+      ind + 'report(p + " n", len(v), ' + pg('n') + ')',
+      ind + 'report(p + " outcome", outcome[i], ' + pg('outcome') + ')');
+    if (tally) out.push(ind + 'report(p + " sd", v.std(ddof=1) if len(v) > 1 else np.nan, ' + pg('sd') + ')',
+      ind + 'report(p + " min", v.min() if len(v) else np.nan, ' + pg('min') + ')',
+      ind + 'report(p + " max", v.max() if len(v) else np.nan, ' + pg('max') + ')');
   } else {
     out.push('for i = 1:numel(reps)',
-      ind + "v = reps(i).v; p = ['rep ' reps(i).id];",
-      ind + "report([p ' n'], numel(v), page_n(i));",
-      ind + "report([p ' outcome'], outcome(i), page_outcome(i));");
+      ind + "v = reps(i).v; p = ['rep ' reps(i).id];" + (cut ? ' pos = []; if i <= numel(page_n), pos = i; end' : ''),
+      ind + "report([p ' n'], numel(v), " + pg('n') + ');',
+      ind + "report([p ' outcome'], outcome(i), " + pg('outcome') + ');');
     if (tally) out.push(ind + 's = NaN; if numel(v) > 1, s = std(v); end',
-      ind + "report([p ' sd'], s, page_sd(i));",
+      ind + "report([p ' sd'], s, " + pg('sd') + ');',
       ind + 'lo = NaN; hi = NaN; if ~isempty(v), lo = min(v); hi = max(v); end',
-      ind + "report([p ' min'], lo, page_min(i));",
-      ind + "report([p ' max'], hi, page_max(i));");
+      ind + "report([p ' min'], lo, " + pg('min') + ');',
+      ind + "report([p ' max'], hi, " + pg('max') + ');');
     out.push('end');
   }
 
@@ -15967,13 +15997,19 @@ function exploreBody(r, L) {
   }
 
   // Equal variances.
+  if (X.spreadOmitted) {
+    const O = X.spreadOmitted;
+    out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
+    out.push(...commentLines(c, 'The page runs Levene\'s test across ' + listWords(O.names.map(ascii)) + ', but their ' + O.count.toLocaleString('en-US') +
+      ' replication outcomes would take this script past the ' + MAX_NUMBERS.toLocaleString('en-US') + ' numbers it writes out, and so the test is left out here.', c));
+  }
   if (X.spread) {
     need.push('levene');
     out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
-    if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(z ~ g)) returns it, g being the dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
+    if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
   }
 
   // The figure: no report lines. Its histogram has the page's bins, and its
@@ -15987,7 +16023,7 @@ function exploreBody(r, L) {
       'with a = 3/8 for n <= 10 and 1/2 otherwise, as R\'s ppoints, and a dashed line through the first and third quartiles, as R\'s qqline.', c));
     if (L.tidy) {
       need.push('tidyFigure');
-      out.push('plot_outcomes(tibble(outcome = x), outcome, ' + L.str(xlab) + ')');
+      out.push('plot_outcomes(filter(out_tbl, is.finite(outcome)), outcome, ' + L.str(xlab) + ')');
     } else if (lang === 'R') {
       out.push('nb <- max(5, ceiling(sqrt(length(x))))',
         'breaks <- if (max(x) > min(x)) seq(min(x), max(x), length.out = nb + 1) else x[1] + c(-0.5, 0.5)',
@@ -16044,8 +16080,10 @@ function settingsBlock(recipe, L) {
 function pairsBlock(L, r) {
   const P = r.pairs, c = L.comment, out = [];
   const what = ascii(P.response) + (P.unit ? ', ' + ascii(P.unit) : '');
-  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + ascii(P.nameA) + ' (A) and b holds ' +
-    ascii(P.nameB) + ' (B), matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
+  // A name that already ends in its letter (such as "Design A") is not followed by the letter again.
+  const named = (n, letter) => ascii(n) + (new RegExp('\\b' + letter + '$').test(ascii(n)) ? '' : ' (' + letter + ')');
+  out.push(...commentLines(c, 'Matched pairs of replication outcomes (' + what + '): a holds ' + named(P.nameA, 'A') + ' and b holds ' +
+    named(P.nameB, 'B') + ', matched by ' + (P.by === 'id' ? 'replication id' : 'position, each pair named by its A and B ids') + '.', c));
   out.push(...commentLines(c, 'Each outcome of A is ' + ascii(P.howA) + (P.howA === P.howB ? ', and so is each of B.' : ', and each of B is ' + ascii(P.howB) + '.'), c));
   const left = (ids, what) => { if (ids.length) out.push(...commentLines(c, what + ' were left out: ' + ids.map(ascii).join(', ') + '.', c)); };
   left(P.droppedA, 'Replications of A that gave no outcome');
@@ -16106,7 +16144,7 @@ function tidyDataBlock(recipe, L) {
     out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
       (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
     out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
-    if (summary) out.push('print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }
@@ -16181,9 +16219,10 @@ const PY_READ_CSV = [
 ];
 
 // MATLAB's reader, as an anonymous function: readtable with the options it
-// detects, the replication column set to text.
+// detects, the replication column set to text and every other one to numbers
+// (from a file with no records, readtable could not tell they are numbers).
 const M_READ_CSV = [
-  "read_csv = @(f) readtable(f, setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped and its ids read as text"
+  "read_csv = @(f) readtable(f, setvartype(setvartype(detectImportOptions(f, 'CommentStyle', '#', 'VariableNamingRule', 'preserve'), 'double'), 'replication', 'string'));   % a CSV file the analyzer saved, its # lines skipped, its ids read as text, and its other columns as numbers"
 ];
 
 // Python: each id's outcome at its first row, in the order the ids first
@@ -16336,7 +16375,8 @@ function readRecords(L, r, obsFile, repFile) {
       'by_rep <- factor(obs$replication, levels = unique(ids))' + c + 'each record\'s replication, in the order of ids',
       'v_by <- split(as.numeric(obs[[ncol(obs)]]), by_rep)' + c + 'the values, one vector per replication');
     if (timed) out.push('t_by <- split(as.numeric(obs$time), by_rep)');
-    out.push('reps <- lapply(ids, function(id) list(id = id, t = ' + (timed ? 't_by[[id]]' : 'NULL') + ', v = v_by[[id]]))');
+    out.push('at <- match(ids, levels(by_rep))' + c + 'each replication\'s place among them, matched at once (by name in a loop, slow with many replications)',
+      'reps <- lapply(seq_along(ids), function(i) list(id = ids[i], t = ' + (timed ? 't_by[[at[i]]]' : 'NULL') + ', v = v_by[[at[i]]]))');
   } else if (lang === 'py') {
     out.push('obs = ' + readExpr(L, obsFile) + c + cols, ...meta, 'by_rep = {}',
       'for r in obs: by_rep.setdefault(r[0], []).append(r)',
@@ -16445,16 +16485,16 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const page = Object.prototype.hasOwnProperty.call(BODIES, recipe.page) ? BODIES[recipe.page] : null;
   if (!page || !page[L.lang]) throw new RangeError('analysisScript: unknown page ' + recipe.page);
   const snippets = LIB[L.lang];   // both R dialects share LIB.R
-  const { body, need } = page[L.lang](recipe, L);
+  const fromCsv = !!(csv || recipe.csvOnly);
+  if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
+  const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
   const helpers = Array.from(new Set(need || [])).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
   });
-  const fromCsv = !!(csv || recipe.csvOnly);
-  if (fromCsv && !(recipe.csv && recipe.csv.length)) throw new RangeError('analysisScript: the recipe names no CSV file to read');
   const main = [...settingsBlock(recipe, L), ...dataBlock(recipe, L, fromCsv), ...body];
-  const lines = header(recipe, L, fromCsv);
+  const lines = header(recipe, L, fromCsv, main.join('\n'));
   lines.push('', ...L.prelude(helpers.concat(main).join('\n')));
   if (lang !== 'm') lines.push('', snippets.report.trim(), '', ...helpers.flatMap(h => [h, '']));
   lines.push(...main);
@@ -16703,7 +16743,7 @@ export function arenaDataset(dat, opts = {}) {
     kind = 'time';
     reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
     notes.push((code === 207
-      ? 'A frequency statistic from an Arena output file, read as time-persistent data, because the file holds its expression’s value over time rather than the categories. '
+      ? 'A frequency statistic from an Arena output file, read as time-persistent data because the file holds its expression’s value over time rather than the categories. '
       : 'Time-persistent data from an Arena output file. ') +
       'Each record is the value from its time until the next record, and the replication’s last record is its closing value at the end of the run, which holds for no time.');
     const e = endsNote(reps); if (e) notes.push(e);
@@ -16817,9 +16857,9 @@ export function provenanceLines(fields) {
 }
 
 // One field of a data file: as csvEscape writes it, and also quoted when it
-// holds a '#', because R's read.csv(comment.char = "#") ends a line at an
-// unquoted '#' and would cut a replication id such as run#1 short. An
-// unquoted csvEscape field holds no double quote, and so wrapping it is safe.
+// holds a '#'. R's read.csv(comment.char = "#") ends a line at an unquoted '#'
+// and would cut a replication id such as run#1 short. An unquoted csvEscape
+// field holds no double quote, and so wrapping it is safe.
 function dataField(v) {
   const s = csvEscape(v);
   return s[0] !== '"' && s.includes('#') ? '"' + s + '"' : s;
@@ -16863,7 +16903,7 @@ export function slug(s) {
  * default is one plain column headed by the response name, the form a
  * distribution-fitting tool reads; `{ full: true }` adds the replication id
  * and, when present, the time. A time-persistent dataset always gets the
- * full form, because its values mean nothing without their times.
+ * full form because its values mean nothing without their times.
  * @param {import('../data/model.js').Dataset} ds
  * @param {Record<string, unknown>} [provenance]
  * @param {{ full?: boolean }} [opts]
@@ -16932,7 +16972,7 @@ export function repSummaryCsv(ds, provenance) {
   return withProvenance(provenance, rows, dataCsv);
 }
 
-// The all-dataset files always quote the dataset name, because a reader that
+// The all-dataset files always quote the dataset name because a reader that
 // splits on spaces or semicolons as well as commas would otherwise cut a name
 // such as "Queue days" in two. Quoting a field is valid RFC 4180 whether or
 // not it needs it.
@@ -17637,10 +17677,13 @@ export function shapiroExpect(prefix, v, flat = false) {
  * The planning entries by half-width and by power for one standard deviation,
  * added to `expect`. `plan.h` is the absolute half-width target, used unless
  * `plan.relative`, when the target is `plan.rel` percent of |mean|. Under a
- * rank procedure (`np`) the counts are also given inflated by pi/3.
+ * rank procedure (`np`) the counts are also given inflated by pi/3. The power
+ * at the current R is taken when sd and delta are both positive, as One
+ * System takes it, or with `anySign` whenever sd is positive, as Two Systems
+ * takes it for paired replications (the two-sided power is symmetric in delta).
  * @returns {{h: number}} the resolved half-width target
  */
-export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'plan ' }) {
+export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'plan ', anySign = false }) {
   const alpha = 1 - level;
   const hp = planReplications({ sd, level, target: plan.relative ? plan.rel / 100 : plan.h, relative: plan.relative, mean });
   const pp = planPowerOneSample({ sd, delta: plan.delta, alpha, power: plan.power });
@@ -17653,7 +17696,7 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
     [prefix + 'power target']: plan.power,
     [prefix + 'n for power']: pp.n == null ? NaN : pp.n,
     [prefix + 'power at n']: pp.powerAtN,
-    'power at current R': sd > 0 && plan.delta > 0 ? powerOneSample({ n: R, sd, delta: plan.delta, alpha }) : NaN
+    'power at current R': sd > 0 && (anySign || plan.delta > 0) ? powerOneSample({ n: R, sd, delta: plan.delta, alpha }) : NaN
   });
   if (np) {
     expect[prefix + 'n for half-width (rank)'] = inflate(hp.n);
@@ -17667,17 +17710,17 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
 /**
  * The One System recipe.
  * @param {{ ds: object, x: ArrayLike<number>, ids: (string|number)[]|null, pooled: boolean, proc: 't'|'np',
- *   level: number, base?: number, title?: string, provenance?: object,
+ *   level: number, title?: string, provenance?: object,
  *   plan: null|{ relative: boolean, rel: number, abs: number|null, delta: number, power: number } }} o
  *   `x` is what the page analyzed (the finite replication outcomes, or the
  *   pooled observations under the override) and `ids` the ids in step with it
  *   (null when pooled). `title` and `provenance` are the page's own, copied
- *   into the recipe. `base` is the stated level the checks line judges by; it
- *   changes the line's verdict but not W or p, and so the recipe does not
- *   need it. `plan` is the planning card's settings, or null while planning
- *   is off. With fewer than two values only the descriptives are formed.
- *   Under the override past MAX_NUMBERS observations, the recipe is marked
- *   `csvOnly` and its data block holds no values.
+ *   into the recipe. The stated level the checks line judges by is not an
+ *   input: it changes the line's verdict but not W or p. `plan` is the
+ *   planning card's settings, or null while planning is off. With fewer than
+ *   two values only the descriptives are formed. Under the override past
+ *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
+ *   block holds no values.
  */
 export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan }) {
   const xs = Array.from(x);
@@ -17753,17 +17796,17 @@ function designBlock(ds, e) {
 /**
  * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
- *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, base?: number, title?: string,
+ *   mode: 'independent'|'paired', proc: 't'|'pooled'|'np', level: number, title?: string,
  *   provenance?: object, plan: null|{ h: number, delta: number, power: number },
  *   match?: { by: 'id'|'position', pairs: number[][], unmatchedA: number[], unmatchedB: number[] } }} o
  *   `eA` and `eB` are the finite replication outcomes of each design with their
  *   ids and the ids that gave none, as the page forms them. `title` and
- *   `provenance` are the page's own, copied into the recipe. `base` is the
- *   stated level the checks line judges by; it changes the line's verdict but
- *   not W or p, and so the recipe does not need it. `plan` is the planning
- *   card's resolved target half-width, difference to detect, and target power,
- *   or null when the page has no plan to show. Under the rank procedure the
- *   page plans with Welch's t and inflates the counts by pi/3, as here.
+ *   `provenance` are the page's own, copied into the recipe. The stated level
+ *   the checks line judges by is not an input: it changes the line's verdict
+ *   but not W or p. `plan` is the planning card's resolved target half-width,
+ *   difference to detect, and target power, or null when the page has no plan
+ *   to show. Under the rank procedure the page plans with Welch's t and
+ *   inflates the counts by pi/3, as here.
  */
 export function twoRecipe(o) {
   if (o.mode === 'paired') return twoPairedRecipe(o);
@@ -17886,11 +17929,10 @@ function twoPairedRecipe(o) {
   if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs, pr.sdD === 0));
   let planOut = null;
   if (plan) {
-    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
-      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     // The page takes the power at the current pairs whenever s_D is positive,
-    // whatever the sign of delta (the two-sided power is symmetric in it).
-    e['power at current R'] = pr.sdD > 0 ? powerOneSample({ n: pr.n, sd: pr.sdD, delta: plan.delta, alpha: 1 - level }) : NaN;
+    // whatever the sign of delta.
+    planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np, anySign: true,
+      plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
   r.two = { mode: 'paired', np, checks: !np, plan: planOut };
@@ -18014,6 +18056,10 @@ export function severalRecipe(o) {
   Object.assign(e, { 'plan means half-width target': plan.meansH, 'plan means n': hpM.n == null ? NaN : hpM.n, 'plan means half-width at n': hpM.hwAtN });
   let hpD;
   if (paired) {
+    // Each pair's sd of differences is its standard error times sqrt(n), n = df + 1, as the
+    // page reads it back from the pair's interval. The scripts take paired_t's sdD directly,
+    // which agrees up to rounding; their comment on the widest pair says how they break a
+    // tie that the rounding splits.
     const sdDs = fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) }));
     const worst = sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
     const pr = planReplications({ sd: worst.sd, level: 1 - alpha / fam.C, target: plan.diffsH });
@@ -18153,7 +18199,8 @@ function severalRank(r, o, g) {
     const sr = signedRank(x, { level }), d = 'rank design ' + (i + 1) + ' ';
     Object.assign(e, { [d + 'pseudo-median']: sr.estimate, [d + 'lower']: sr.lo, [d + 'upper']: sr.hi });
   });
-  r.several.rank = { paired, adjust, pairs };
+  // The adjustment is the rank_adjust setting, which the script reads.
+  r.several.rank = { paired, pairs };
 }
 
 /**
@@ -18194,7 +18241,7 @@ export function recordCount(ds) {
 /**
  * The files the records of a dataset can be read from: the Observations CSV
  * for the records, and the Replication summary CSV for the list and order of
- * the replications, because one with no records has no row in the first.
+ * the replications because one with no records has no row in the first.
  */
 function recordsCsv(ds) {
   return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
@@ -18329,13 +18376,33 @@ export function steadyRecipe(o) {
 // ── Summary and Plots ────────────────────────────────────────────────────
 
 /**
+ * The analyzer's values a Summary and Plots script reports for each
+ * replication, by the suffix of its report name: the count and the outcome,
+ * and for tally data the sd, min, and max of the replication's observations.
+ * @param {string} kind
+ * @returns {string[]}
+ */
+export function repKeys(kind) {
+  return kind === 'tally' ? ['n', 'outcome', 'sd', 'min', 'max'] : ['n', 'outcome'];
+}
+
+/**
+ * The most replications whose analyzer values a Summary and Plots script that
+ * reads its data from files writes out (repKeys per replication). Past it,
+ * each later replication's lines print without the analyzer's values, and so
+ * such a script stays small however many replications its files hold.
+ */
+export const REP_LINES_MAX = 1000;
+
+/**
  * Whether a Summary and Plots script would embed more than MAX_NUMBERS
- * numbers: the shown dataset's records and the outcomes of the datasets
+ * numbers: the shown dataset's records, each replication's id and the
+ * analyzer's values for it (repKeys), and the outcomes of the datasets
  * Levene's test compares. Cheap, and copies nothing.
  * @param {{ds: object, spread: null|{groups: ArrayLike<number>[]}}} o
  */
 export function exploreTooBig({ ds, spread }) {
-  let n = recordCount(ds);
+  let n = recordCount(ds) + ds.reps.length * (1 + repKeys(ds.kind).length);
   if (spread) for (const g of spread.groups) n += g.length;
   return n > MAX_NUMBERS;
 }
@@ -18356,8 +18423,10 @@ export function exploreTooBig({ ds, spread }) {
  *   is the per-interval level of the t interval over the outcomes. `title` and
  *   `provenance` are the page's own, copied into the recipe. A pure function
  *   of its argument, and so a page can call it lazily. When the numbers would
- *   run past MAX_NUMBERS, the recipe is marked `csvOnly` and carries the
- *   records' description (recordsMeta) without the records.
+ *   run past MAX_NUMBERS (exploreTooBig), the recipe is marked `csvOnly` and
+ *   carries the records' description (recordsMeta) without the records; if
+ *   Levene's groups would then still run past it, the recipe leaves the test
+ *   out and names it in `explore.spreadOmitted`.
  */
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
@@ -18422,14 +18491,24 @@ export function exploreRecipe(o) {
   const checks = shapiroOk(x);
   if (checks) Object.assign(e, shapiroExpect('shapiro ', x));
 
-  // Levene's test, only where every group has two or more outcomes.
+  // Levene's test, only where every group has two or more outcomes. Its
+  // groups are embedded in every script; in one that reads its records from
+  // files, they and the analyzer's per-replication values (REP_LINES_MAX
+  // replications' worth) must fit under MAX_NUMBERS, and otherwise the
+  // script leaves the test out and says so.
+  let spreadOmitted = null;
   if (spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2)) {
-    const groups = spread.groups.map(g => Array.from(g));
-    const lv = levene(groups);
-    Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
-    r.spread = { names: spread.names.slice(), groups };
+    const count = spread.groups.reduce((a, g) => a + g.length, 0);
+    const room = MAX_NUMBERS - repKeys(ds.kind).length * Math.min(ds.reps.length, REP_LINES_MAX);
+    if (r.csvOnly && count > room) spreadOmitted = { names: spread.names.slice(), count };
+    else {
+      const groups = spread.groups.map(g => Array.from(g));
+      const lv = levene(groups);
+      Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
+      r.spread = { names: spread.names.slice(), groups };
+    }
   }
-  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread };
+  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
   r.settingsNote = [dataNote(ds.kind)];
   return r;
@@ -18660,8 +18739,8 @@ end
 // The exact distribution is used below 50 values when none is tied and none
 // equals mu, and otherwise the normal approximation with continuity and tie
 // corrections, as the analyzer does. R is told which through wilcox.test's
-// exact argument, because R 4.4 and later would otherwise use an exact
-// distribution under ties too. Python and MATLAB carry the procedure in full,
+// exact argument because R 4.4 and later would otherwise use an exact
+// distribution under ties too. Python and MATLAB carry the procedure in full
 // because neither ships the interval. Under the approximation, a few tied
 // values can leave the inverted test short of significance at one end of
 // the range or both: the analyzer then reports that end as undetermined (NaN)
@@ -18711,6 +18790,7 @@ signed_rank <- function(x, level, mu = 0) {
     if (zmin < zq || zmax > -zq) {
       end <- function(z0, at) {
         if (at == z0) return(if (z0 > 0) min(x) else max(x))
+        # The analyzer bisects to 1e-4 instead, and so the last digits can differ.
         uniroot(function(dd) signed_rank_z(x, dd) - z0, c(min(x), max(x)), tol = 1e-4)$root
       }
       lo <- if (zmin < zq) NaN else end(zq, zmin)
@@ -18967,10 +19047,12 @@ if numel(x) < 3 || numel(x) > 5000 || min(x) == max(x)
     fprintf('%s: too few values, too many, or no spread to test\\n', name); return;
 end
 if exist('swtest', 'file') == 2
-    try
-        [~, p, W] = swtest(x, 'Alpha', alpha);   % the toolbox's swtest
-    catch
-        [~, p, W] = swtest(x, alpha);            % the File Exchange swtest
+    % The toolbox's swtest takes name-value arguments (its nargin is negative), and the
+    % File Exchange's takes alpha as its second argument.
+    if nargin('swtest') < 0
+        [~, p, W] = swtest(x, 'Alpha', alpha);
+    else
+        [~, p, W] = swtest(x, alpha);
     end
     if nargin < 4, report([name ' W'], W); else, report([name ' W'], W, analyzerW); end
     if nargin < 5, report([name ' p'], p); else, report([name ' p'], p, analyzerP); end
@@ -19170,7 +19252,7 @@ end
 // leaves the approximate test short of significance, as with a few tied
 // outcomes, the analyzer reports no interval end where wilcox.test reports
 // the end of the range of shifts. Python and MATLAB carry the procedure in
-// full, because neither ships the interval; MATLAB's ranksum gives the p-value
+// full because neither ships the interval; MATLAB's ranksum gives the p-value
 // only. These need the signedRank helpers for midranks and bisection.
 
 LIB.R.rankSum = `
@@ -19428,16 +19510,17 @@ end
 
 LIB.R.levene = `
 levene_test <- function(groups) {
-  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
-  z <- abs(y - ave(y, g, FUN = median)); k <- length(groups); N <- length(y)
-  tiny <- 1e-24 * sum(y^2)   # below this, a sum of squares is rounding error
-  if (sum((z - ave(z, g))^2) <= tiny) {
+  # anova(lm(distance ~ group)): each outcome's distance from its own group's median.
+  outcome <- unlist(groups); group <- factor(rep(seq_along(groups), lengths(groups)))
+  distance <- abs(outcome - ave(outcome, group, FUN = median)); k <- length(groups); N <- length(outcome)
+  tiny <- 1e-24 * sum(outcome^2)   # below this, a sum of squares is rounding error
+  if (sum((distance - ave(distance, group))^2) <= tiny) {
     # The distances do not vary within any group: F is infinite (p = 0) when they differ
     # between groups, and there is nothing to compare when they do not (every group constant).
-    between <- sum((ave(z, g) - mean(z))^2) > tiny
+    between <- sum((ave(distance, group) - mean(distance))^2) > tiny
     return(list(F = if (between) Inf else NaN, df1 = k - 1, df2 = N - k, p = if (between) 0 else NaN, test = NULL))
   }
-  tab <- anova(lm(z ~ g))
+  tab <- anova(lm(distance ~ group))
   list(F = tab[["F value"]][1], df1 = tab$Df[1], df2 = tab$Df[2], p = tab[["Pr(>F)"]][1], test = tab)
 }
 `;
@@ -19664,8 +19747,8 @@ simultaneous_means <- function(groups, level) {
   list(k = k, perLevel = per, items = items)
 }
 bench_word <- function(lo, hi, bench) {
-  # Above or below the benchmark when the interval excludes it; an end that is not a number
-  # declares no side.
+  # The interval against the benchmark: "above" or "below" when it excludes it, and otherwise
+  # "contains", the word in the page's table. An end that is not a number declares no side.
   if (isTRUE(lo > bench)) "above" else if (isTRUE(hi < bench)) "below" else "contains"
 }
 `;
@@ -19685,7 +19768,8 @@ def simultaneous_means(groups, level):
     return dict(k=k, perLevel=per, items=items)
 
 def bench_word(lo, hi, bench):
-    """Above or below the benchmark when the interval excludes it, and otherwise contains."""
+    """The interval against the benchmark: "above" or "below" when it excludes it, and otherwise
+    "contains", the word in the page's table. An end that is not a number declares no side."""
     return "above" if lo > bench else "below" if hi < bench else "contains"
 `;
 LIB.m.simultaneous = `
@@ -19707,7 +19791,8 @@ r = struct('k', k, 'perLevel', per, 'items', {items});
 end
 
 function w = bench_word(lo, hi, bench)
-% Above or below the benchmark when the interval excludes it, and otherwise contains.
+% The interval against the benchmark: 'above' or 'below' when it excludes it, and otherwise
+% 'contains', the word in the page's table. An end that is not a number declares no side.
 if lo > bench, w = 'above'; elseif hi < bench, w = 'below'; else, w = 'contains'; end
 end
 `;
@@ -20017,8 +20102,8 @@ end
 LIB.R.welchAnova = `
 welch_anova <- function(groups) {
   # Welch (1951): each design weighted by R_i / s_i^2, nothing pooled.
-  y <- unlist(groups); g <- factor(rep(seq_along(groups), lengths(groups)))
-  ow <- oneway.test(y ~ g, var.equal = FALSE)
+  outcome <- unlist(groups); design <- factor(rep(seq_along(groups), lengths(groups)))
+  ow <- oneway.test(outcome ~ design, var.equal = FALSE)
   list(F = unname(ow$statistic), df1 = unname(ow$parameter[1]), df2 = unname(ow$parameter[2]), p = ow$p.value,
        means = sapply(groups, mean), n = lengths(groups), resid = unlist(lapply(groups, function(x) x - mean(x))), test = ow)
 }
@@ -23392,7 +23477,7 @@ export function onShow() {
 
 // ── Reading input ───────────────────────────────────────────────────────
 
-// Every file is read as bytes first, because an Arena output file is binary
+// Every file is read as bytes first because an Arena output file is binary
 // after its header and is told apart by its first bytes; anything else is
 // decoded as UTF-8 text and queued for the mapping dialog.
 function readFiles(fileList) {
@@ -24689,10 +24774,9 @@ function drawPlan() {
   // The scripts that regenerate these results are written only when asked
   // for, from the inputs and settings in force now.
   const { recipeIn, ...result } = resultBase;
-  const base = state.settings.base;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
   // Past the cap (pooled observations only) the scripts read the CSV file `files` names.
-  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, base, title: result.title, provenance: prov, plan: planIn })),
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn })),
     files: [{ ds: recipeIn.ds, form: recipeIn.pooled ? 'observations' : 'replications' }] };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
@@ -25936,7 +26020,7 @@ function update() {
   if (!np && welchBad.length) {
     bodies[2].appendChild(notice('warn', 'Welch’s analysis of variance weights each design by R<sub>i</sub>/s<sub>i</sub>², and so it needs at least two outcomes with some spread in every design; ' +
       esc(andList(welchBad)) + (welchBad.length === 1 ? ' has' : ' have') + ' none. Choose equal variances above, or leave ' + (welchBad.length === 1 ? 'that design' : 'those designs') + ' out of the checklist.'));
-    summary.push('Welch ANOVA: not defined, because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
+    summary.push('Welch ANOVA: not defined because ' + andList(welchBad) + (welchBad.length === 1 ? ' has' : ' have') + ' no spread.');
   } else if (!np) {
     let b = bodies[2];
     if (paired) b.appendChild(para('cmp-lead', 'With the replications paired across designs, the analysis of variance treats each replication as a block: the variation the replications share under common random numbers is removed as its own row, and the designs are judged against what remains.'));
@@ -28598,9 +28682,9 @@ function drawPlan() {
   });
   // The scripts that regenerate these results are written only when asked
   // for, from the inputs and settings in force now.
-  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title, base = state.settings.base;
+  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title;
   const planIn = { h: hwVal, delta, power: plan.power };
-  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, base, title: recipeTitle, provenance: prov, plan: planIn })),
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn })),
     files: [{ ds: recipeIn.dsA, form: 'replications' }, { ds: recipeIn.dsB, form: 'replications' }] } : undefined;
   state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }
@@ -29848,7 +29932,7 @@ function sumSq(groups) {
  * between sum of squares exceeds that bound, and undefined (NaN, with the
  * between sum of squares taken as 0) when it does not; R's aov reports
  * rounding noise there. The scale is Σy² of the groups, or `scale` when given:
- * Levene's test passes the outcomes' own Σy², because the distances it
+ * Levene's test passes the outcomes' own Σy² because the distances it
  * analyzes carry the rounding of the outcomes they came from.
  * @param {(number[]|Float64Array)[]} groups
  * @param {{scale?: number}} [opts]
@@ -35872,7 +35956,7 @@ function buildSections(page, list) {
     for (const s of list) {
       const o = document.createElement('option');
       o.value = page + '/' + s.id;
-      // Em spaces, because a select collapses ordinary ones.
+      // Em spaces because a select collapses ordinary ones.
       o.dataset.short = '\u2003\u2014 ' + s.label;
       o.dataset.full = opt.textContent.trim() + '\u00a0\u2013 ' + s.label;
       o.textContent = o.dataset.short;

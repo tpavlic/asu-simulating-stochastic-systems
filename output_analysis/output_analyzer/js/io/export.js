@@ -46,9 +46,9 @@ export function provenanceLines(fields) {
 }
 
 // One field of a data file: as csvEscape writes it, and also quoted when it
-// holds a '#', because R's read.csv(comment.char = "#") ends a line at an
-// unquoted '#' and would cut a replication id such as run#1 short. An
-// unquoted csvEscape field holds no double quote, and so wrapping it is safe.
+// holds a '#'. R's read.csv(comment.char = "#") ends a line at an unquoted '#'
+// and would cut a replication id such as run#1 short. An unquoted csvEscape
+// field holds no double quote, and so wrapping it is safe.
 function dataField(v) {
   const s = csvEscape(v);
   return s[0] !== '"' && s.includes('#') ? '"' + s + '"' : s;
@@ -92,7 +92,7 @@ export function slug(s) {
  * default is one plain column headed by the response name, the form a
  * distribution-fitting tool reads; `{ full: true }` adds the replication id
  * and, when present, the time. A time-persistent dataset always gets the
- * full form, because its values mean nothing without their times.
+ * full form because its values mean nothing without their times.
  * @param {import('../data/model.js').Dataset} ds
  * @param {Record<string, unknown>} [provenance]
  * @param {{ full?: boolean }} [opts]
@@ -161,7 +161,7 @@ export function repSummaryCsv(ds, provenance) {
   return withProvenance(provenance, rows, dataCsv);
 }
 
-// The all-dataset files always quote the dataset name, because a reader that
+// The all-dataset files always quote the dataset name because a reader that
 // splits on spaces or semicolons as well as commas would otherwise cut a name
 // such as "Queue days" in two. Quoting a field is valid RFC 4180 whether or
 // not it needs it.

@@ -6,12 +6,14 @@ function run_matlab_batch(list)
 %   what this function writes into each folder:
 %
 %     started.txt  written just before the script runs
-%     stdout.txt   the script's Command Window text, warnings included
+%     stdout.txt   the script's Command Window text, warnings included,
+%                  with their hyperlinks and backspaces removed
 %     stderr.txt   the error report, when the script stops with an error
 %     status.txt   0, or 1 after an error; written last, and so it marks
 %                  the job as finished
 %
-%   The test harness watches started.txt to stop a script that hangs.
+%   The test harness watches started.txt to stop a script that hangs, and
+%   status.txt to stop MATLAB when it hangs between scripts or after the last.
 %
 %   Each script runs as it would in a MATLAB of its own: from its own folder
 %   (the CSV-reading scripts open their files by relative paths), in a fresh
@@ -37,7 +39,9 @@ for i = 1:numel(lines)
   warning(warn0);
   format;
   clear(name);
-  write_text(fullfile(folder, 'stdout.txt'), out);
+  % A warning's text carries hyperlinks (its stack's "In ..." lines) and backspaces
+  % around its brackets, which the Command Window renders and a log does not.
+  write_text(fullfile(folder, 'stdout.txt'), regexprep(out, ['<a\s(?:[^>"]|"[^"]*")*>|</a>|' char(8)], ''));
   if isempty(err)
     write_text(fullfile(folder, 'stderr.txt'), '');
     write_status(folder, '0');

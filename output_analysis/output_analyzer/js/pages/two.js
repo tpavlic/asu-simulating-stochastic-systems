@@ -553,9 +553,9 @@ function drawPlan() {
   });
   // The scripts that regenerate these results are written only when asked
   // for, from the inputs and settings in force now.
-  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title, base = state.settings.base;
+  const recipeIn = c && c.recipeIn, recipeTitle = resultBase.title;
   const planIn = { h: hwVal, delta, power: plan.power };
-  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, base, title: recipeTitle, provenance: prov, plan: planIn })),
+  const regen = recipeIn ? { tooBig: false, build: () => twoRecipe(Object.assign({}, recipeIn, { level, title: recipeTitle, provenance: prov, plan: planIn })),
     files: [{ ds: recipeIn.dsA, form: 'replications' }, { ds: recipeIn.dsB, form: 'replications' }] } : undefined;
   state.setResult('two', Object.assign({}, resultBase, { provenance: prov, tables: resultBase.tables.concat([{ name: 'Replications needed', headers: PLAN_HEADERS, rows }]), regen }));
 }

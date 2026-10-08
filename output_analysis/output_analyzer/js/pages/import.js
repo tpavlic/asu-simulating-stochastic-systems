@@ -219,7 +219,7 @@ export function onShow() {
 
 // ── Reading input ───────────────────────────────────────────────────────
 
-// Every file is read as bytes first, because an Arena output file is binary
+// Every file is read as bytes first because an Arena output file is binary
 // after its header and is told apart by its first bytes; anything else is
 // decoded as UTF-8 text and queued for the mapping dialog.
 function readFiles(fileList) {

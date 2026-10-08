@@ -314,7 +314,7 @@ function sumSq(groups) {
  * between sum of squares exceeds that bound, and undefined (NaN, with the
  * between sum of squares taken as 0) when it does not; R's aov reports
  * rounding noise there. The scale is Σy² of the groups, or `scale` when given:
- * Levene's test passes the outcomes' own Σy², because the distances it
+ * Levene's test passes the outcomes' own Σy² because the distances it
  * analyzes carry the rounding of the outcomes they came from.
  * @param {(number[]|Float64Array)[]} groups
  * @param {{scale?: number}} [opts]
