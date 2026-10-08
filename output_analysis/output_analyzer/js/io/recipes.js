@@ -22,7 +22,7 @@ import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } fro
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
-         posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
+         posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
@@ -95,9 +95,13 @@ export function shapiroOk(v) {
   return v.length >= 3 && v.length <= 5000 && Math.min(...v) < Math.max(...v);
 }
 
-/** The Shapiro-Wilk expect entries for one set, under a key prefix; nothing when the check cannot run. */
-export function shapiroExpect(prefix, v) {
-  if (!shapiroOk(v)) return {};
+/**
+ * The Shapiro-Wilk expect entries for one set, under a key prefix; nothing when
+ * the check cannot run, or when `flat` says the set is paired differences equal
+ * up to rounding, which the page does not test either.
+ */
+export function shapiroExpect(prefix, v, flat = false) {
+  if (flat || !shapiroOk(v)) return {};
   const sw = shapiroWilk(v);
   return { [prefix + 'W [optional]']: sw.W, [prefix + 'p [optional]']: sw.p };
 }
@@ -352,7 +356,7 @@ function twoPairedRecipe(o) {
   e.r = pr.r;
   // The paired t's checks line tests the differences for normality; the
   // signed-rank procedure carries no checks line.
-  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs));
+  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs, pr.sdD === 0));
   let planOut = null;
   if (plan) {
     planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
@@ -466,7 +470,10 @@ export function severalRecipe(o) {
                          [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
       // Under pairing the checks line tests each pair's differences; otherwise it
       // repeats the designs' own checks, reported once under the means.
-      if (paired) Object.assign(e, shapiroExpect('shapiro diff ' + pairLabel(c.i, c.j) + ' ', g[c.i].map((v, t) => v - g[c.j][t])));
+      if (paired) {
+        const d = g[c.i].map((v, t) => v - g[c.j][t]);
+        Object.assign(e, shapiroExpect('shapiro diff ' + pairLabel(c.i, c.j) + ' ', d, constantDifferences(d, g[c.i], g[c.j])));
+      }
     }
   }
 

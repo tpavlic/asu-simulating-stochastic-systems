@@ -47,6 +47,9 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
     if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, and so there is no shape to test')); continue; }
+    // Paired differences equal up to the subtraction's rounding: the test would
+    // read the rounding's own pattern as a shape.
+    if (st.flat) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': the values are equal up to rounding, and so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;
@@ -67,7 +70,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
       // Every value lies the same distance from its group's median, as two values
       // always do: F is infinite, but the test then compares only the groups'
       // ranges, which says little about their variances.
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups, uninformative here: ' + pEq(lv.p) +
         ', but every value lies the same distance from its group’s median (as two values always do), and so the test compares one distance per group and says little about the variances') + '.';
     } else if (Number.isFinite(lv.p)) {
       tested = true;
@@ -77,7 +80,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed, because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);

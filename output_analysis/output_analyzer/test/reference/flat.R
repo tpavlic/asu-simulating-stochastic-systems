@@ -124,6 +124,8 @@ out <- list(
   anovaConstants1e6 = oneway(list(reps(1e6 + 0.1, 3), reps(1e6 + 0.3, 3), reps(1e6 + 0.7, 3))),
   # Real spread near a million (half a unit) is not "no spread".
   anovaReal1e6 = oneway(list(1e6 + c(0.1, 0.6), 1e6 + c(0.3, 0.9))),
+  # Spread barely above the bound: {m, m + 1e-8, m - 1e-8}, F near 3e16 (aov agrees).
+  anovaNearFlat = oneway(lapply(1:3, function(m) m + c(0, 1e-8, -1e-8))),
   # The same distances in both designs: nothing within or between.
   leveneEqual = levene(list(c(0.1, 0.3), c(1.1, 1.3))),
   leveneConstants = levene(list(reps(0.1, 3), reps(0.3, 3), reps(0.7, 3))),

@@ -10,7 +10,7 @@
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
@@ -808,7 +808,10 @@ function update() {
     // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
     b.appendChild(assumptionChecks({
       sets: paired
-        ? fam.comparisons.map(c => ({ name: 'the differences ' + pairLabel(c.i, c.j), values: Array.from(groups[c.i], (v, r) => v - groups[c.j][r]) }))
+        ? fam.comparisons.map(c => {
+          const values = Array.from(groups[c.i], (v, r) => v - groups[c.j][r]);
+          return { name: 'the differences ' + pairLabel(c.i, c.j), values, flat: constantDifferences(values, groups[c.i], groups[c.j]) };
+        })
         : designSets,
       alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
@@ -880,8 +883,11 @@ function update() {
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     const levNaN = Number.isNaN(lv.p);
-    const levTxt = levNaN ? 'cannot be computed, because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
-    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.' : 'Levene’s test gives ' + levTxt + ' here.') +
+    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    const levInf = lv.F === Infinity;
+    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.'
+      : levInf ? 'Levene’s test gives ' + levTxt + ' here, but every outcome lies the same distance from its design’s median (as two outcomes always do), and so the test compares one distance per design and says little about the variances.'
+        : 'Levene’s test gives ' + levTxt + ' here.') +
       ' Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
     // The residuals' own quantile–quantile plot: the Normality section shows
     // one design's outcomes at a time, and the F test's assumption is about

@@ -101,6 +101,11 @@ test('one-way ANOVA with no spread within the designs: F infinite, or undefined 
   // Half a unit of spread near a million is real spread.
   const real = anova(REF.anovaReal1e6.groups);
   same(real.F, REF.anovaReal1e6.F, 'real F', 1e-8); same(real.p, REF.anovaReal1e6.p, 'real p', 1e-8);
+  // Barely above the bound, F is finite and huge; its last digits rest on how each language
+  // rounds the means, and so it is compared to 1e-6.
+  const nf = anova(REF.anovaNearFlat.groups);
+  assert.ok(nf.ssw > 0 && Number.isFinite(nf.F));
+  same(nf.F, REF.anovaNearFlat.F, 'near-flat F', 1e-6); same(nf.F, REF.anovaNearFlat.aovF, 'near-flat F against aov', 1e-6);
   // The post-hoc rules then have no width.
   const ph = posthoc(REF.anovaConstants.groups, { rule: 'tukey', alpha: 0.05 });
   assert.ok(ph.pairs.every(p => p.hw === 0 && p.flagged));

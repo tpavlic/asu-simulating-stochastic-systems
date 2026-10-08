@@ -1044,7 +1044,7 @@ function renderPaired(res, notes, d, level) {
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
-  if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
+  if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs, flat: pr.sdD === 0 }], alpha: 1 - state.settings.base,
     procedure: 'the paired t test',
     declared: 'between pairs cannot be checked from the data, and the paired t test assumes it; the pairing within each replication is what the Paired setting declares.' }));
 

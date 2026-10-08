@@ -14870,6 +14870,17 @@ function oneBody(r, L) {
 BODIES.one = { R: oneBody, py: oneBody, m: oneBody };
 
 // The Shapiro-Wilk check of one design's outcomes, reported as '<prefix> W' and '<prefix> p'.
+// The Shapiro-Wilk check of paired differences, skipped when paired_t found
+// them equal up to rounding (sdD = 0): the test would read the rounding's own
+// pattern as a shape. nameCode is code for the report name, xCode the
+// differences, sdCode their sd, and wCode and pCode the analyzer's values.
+function diffShapiro(L, nameCode, xCode, sdCode, wCode, pCode) {
+  const msg = ': the differences are equal up to rounding, no spread to test';
+  if (L.lang === 'R') return ['if (' + sdCode + ' > 0) shapiro_check(' + nameCode + ', ' + xCode + ', ' + wCode + ', ' + pCode + ') else cat(' + nameCode + ', ' + L.str(msg) + ', "\\n", sep = "")'];
+  if (L.lang === 'py') return ['if ' + sdCode + ' > 0: shapiro_check(' + nameCode + ', ' + xCode + ', ' + wCode + ', ' + pCode + ')', 'else: print(' + nameCode + ' + ' + L.str(msg) + ')'];
+  return ['if ' + sdCode + ' > 0, shapiro_check(' + nameCode + ', ' + xCode + ', alpha, ' + wCode + ', ' + pCode + '); else, fprintf(\'%s' + msg + '\\n\', ' + nameCode + '); end'];
+}
+
 function shapiroLine(r, L, prefix, v) {
   const w = lit(L, r.expect[prefix + ' W [optional]']), p = lit(L, r.expect[prefix + ' p [optional]']);
   return L.lang === 'm' ? 'shapiro_check(' + L.str(prefix) + ', ' + v + ', alpha, ' + w + ', ' + p + ');'
@@ -15009,8 +15020,9 @@ function twoPairedBody(r, L) {
   if (!o.np) {
     need.push('shapiro');
     out.push(L.sect('Checks'));
-    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes.');
-    out.push(shapiroLine(r, L, 'shapiro differences', f('pr', 'diffs')));
+    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes; differences equal up to rounding have no shape to test.');
+    out.push(...diffShapiro(L, L.str('shapiro differences'), f('pr', 'diffs'), f('pr', 'sdD'),
+      lit(L, r.expect['shapiro differences W [optional]']), lit(L, r.expect['shapiro differences p [optional]'])));
   }
   if (o.plan) {
     need.push('planning');
@@ -15536,8 +15548,8 @@ function sevDiffs(r, L, out, need) {
   if (shapiro) {
     need.push('shapiro');
     const nm = pairName(L, 'shapiro diff', '');
-    body.push(lang === 'm' ? 'shapiro_check(' + nm + ', cmp.diffs, alpha, page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos));'
-      : 'shapiro_check(' + nm + ', ' + f('cmp', 'diffs') + ', page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos))');
+    // Differences equal up to rounding (sdD = 0) have no shape to test.
+    body.push(...diffShapiro(L, nm, f('cmp', 'diffs'), f('cmp', 'sdD'), 'page_at(page_shapiro_diff_W, pos)', 'page_at(page_shapiro_diff_p, pos)'));
   }
   if (L.tidy) body.push('family_tests[[lab]] <- cmp$test');
   if (lang === 'R') out.push('for (p in family_pairs) {', ind + 'i <- p[1]; j <- p[2]; ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), '}');
@@ -17540,7 +17552,7 @@ import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } fro
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
-         posthoc, posthocWelch, powerAnova, planPowerAnova } from '../stats/compare.js';
+         posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
@@ -17613,9 +17625,13 @@ export function shapiroOk(v) {
   return v.length >= 3 && v.length <= 5000 && Math.min(...v) < Math.max(...v);
 }
 
-/** The Shapiro-Wilk expect entries for one set, under a key prefix; nothing when the check cannot run. */
-export function shapiroExpect(prefix, v) {
-  if (!shapiroOk(v)) return {};
+/**
+ * The Shapiro-Wilk expect entries for one set, under a key prefix; nothing when
+ * the check cannot run, or when `flat` says the set is paired differences equal
+ * up to rounding, which the page does not test either.
+ */
+export function shapiroExpect(prefix, v, flat = false) {
+  if (flat || !shapiroOk(v)) return {};
   const sw = shapiroWilk(v);
   return { [prefix + 'W [optional]']: sw.W, [prefix + 'p [optional]']: sw.p };
 }
@@ -17870,7 +17886,7 @@ function twoPairedRecipe(o) {
   e.r = pr.r;
   // The paired t's checks line tests the differences for normality; the
   // signed-rank procedure carries no checks line.
-  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs));
+  if (!np) Object.assign(e, shapiroExpect('shapiro differences ', diffs, pr.sdD === 0));
   let planOut = null;
   if (plan) {
     planExpect(e, { sd: pr.sdD, mean: pr.meanD, level, R: pr.n, np,
@@ -17984,7 +18000,10 @@ export function severalRecipe(o) {
                          [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
       // Under pairing the checks line tests each pair's differences; otherwise it
       // repeats the designs' own checks, reported once under the means.
-      if (paired) Object.assign(e, shapiroExpect('shapiro diff ' + pairLabel(c.i, c.j) + ' ', g[c.i].map((v, t) => v - g[c.j][t])));
+      if (paired) {
+        const d = g[c.i].map((v, t) => v - g[c.j][t]);
+        Object.assign(e, shapiroExpect('shapiro diff ' + pairLabel(c.i, c.j) + ' ', d, constantDifferences(d, g[c.i], g[c.j])));
+      }
     }
   }
 
@@ -19873,6 +19892,12 @@ anova_table <- function(groups, blocked) {
                 ssw = tab[e, "Sum Sq"], dfw = tab[e, "Df"], msw = tab[e, "Mean Sq"])
     if (blocked) res <- c(res, list(ssblk = tab[2, "Sum Sq"], dfblk = tab[2, "Df"], msblk = tab[2, "Mean Sq"],
                                     Fblock = tab[2, "F value"], pBlock = tab[2, "Pr(>F)"]))
+    # Barely above "no spread", aov's residual can itself be rounding error; an F that is not
+    # finite then comes from the sums of squares taken directly, as the analyzer takes them.
+    if (!is.finite(res$F)) { res$F <- (ssb / res$dfb) / (ssw / res$dfw); res$p <- pval(res$F, res$dfb, res$dfw) }
+    if (blocked && !is.finite(res$Fblock)) {
+      res$Fblock <- (ssblk / res$dfblk) / (ssw / res$dfw); res$pBlock <- pval(res$Fblock, res$dfblk, res$dfw)
+    }
   } else {
     dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(outcome) - k
     res <- list(ssb = ssb, dfb = dfb, msb = ssb / dfb, ssw = 0, dfw = dfw, msw = 0)
@@ -19920,6 +19945,10 @@ def anova_table(groups, blocked):
     ssw = float(sum(np.sum((g - g.mean()) ** 2) for g in groups)); dfb, dfw = k - 1, len(y) - k
     if ssw > tiny:
         res = stats.f_oneway(*groups); F, p = float(res.statistic), float(res.pvalue)
+        if not np.isfinite(F):
+            # Barely above "no spread", f_oneway's within sum of squares can come out 0; F then
+            # comes from the sums of squares taken directly, as the analyzer takes them.
+            F = (ssb / dfb) / (ssw / dfw); p = pval(F, dfb, dfw)
     else:
         ssw = 0.0; F = no_spread_F(ssb); p = pval(F, dfb, dfw)
     msb, msw = ssb / dfb, ssw / dfw
@@ -19947,10 +19976,10 @@ if blocked
     resid = reshape(M - means - (bm - grand), [], 1);
     % anova2 finds the residual sum of squares by subtraction, with error near 1e-16 of the total,
     % and so the sum the rule tests is taken from the residuals themselves.
-    ssw = sum(resid.^2); flat = ssw <= tiny;   % nothing left once the designs and the blocks are removed
+    ssw = sum(resid.^2); flat = tab{4,3} > 0 && ssw <= tiny;   % nothing left once the designs and the blocks are removed
     if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
-    [F, p] = f_entry(tab, 2, flat, tiny); [Fb, pb] = f_entry(tab, 3, flat, tiny);
     msw = ssw / tab{4,3};
+    [F, p] = f_entry(tab, 2, flat, tiny, msw, tab{4,3}); [Fb, pb] = f_entry(tab, 3, flat, tiny, msw, tab{4,3});
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
                'ssw', ssw, 'dfw', tab{4,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
@@ -19962,24 +19991,26 @@ else
     resid = y - reshape(means(g), [], 1);
     % anova1 finds the error sum of squares by subtraction, and so the sum the rule tests is
     % taken from the residuals themselves.
-    ssw = sum(resid.^2); flat = ssw <= tiny;   % no design varies within itself
+    ssw = sum(resid.^2); flat = tab{3,3} > 0 && ssw <= tiny;   % no design varies within itself
     if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
-    [F, p] = f_entry(tab, 2, flat, tiny);
     msw = ssw / tab{3,3};
+    [F, p] = f_entry(tab, 2, flat, tiny, msw, tab{3,3});
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssw', ssw, 'dfw', tab{3,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', [], 'resid', resid, 'stats', st);
 end
 end
 
-function [F, p] = f_entry(tab, row, flat, tiny)
-% F and p from one row of a table. With nothing left within the designs (flat), the table's F is
-% rounding noise, or empty when the error sum of squares is exactly 0: F is then infinite (p = 0)
-% when the row's sum of squares exceeds tiny, and undefined when it does not.
+function [F, p] = f_entry(tab, row, flat, tiny, msw, dfw)
+% F and p for one row of a table, on the mean square msw summed directly from the residuals
+% (dfw degrees of freedom): the table's own F rests on an error sum of squares found by
+% subtraction, which near "no spread" is rounding error or 0 (F empty). With nothing left within
+% the designs (flat), F is infinite (p = 0) when the row's sum of squares exceeds tiny, and
+% undefined when it does not.
 if flat
     if tab{row, 2} > tiny, F = Inf; p = 0; else, F = NaN; p = NaN; end
 else
-    F = tab{row, 5}; p = tab{row, 6};
+    F = (tab{row, 2} / tab{row, 3}) / msw; p = fcdf(F, tab{row, 3}, dfw, 'upper');
 end
 end
 `;
@@ -20196,10 +20227,11 @@ elseif strcmp(rule, 'tukey')
     crit = studrange_inv(1 - alpha, numel(means), av.dfw);
 else
     types = struct('lsd', 'lsd', 'bonferroni', 'bonferroni');
+    % The statistics carry anova1's or anova2's own variance, found by subtraction; they are given
+    % the directly summed one (or 1 when there is none), so the read-back matches av.msw.
     st = av.stats; s2 = msw;
-    if ~(msw > 0)
-        s2 = 1; if isfield(st, 's'), st.s = 1; else, st.sigmasq = 1; end
-    end
+    if ~(msw > 0), s2 = 1; end
+    if isfield(st, 's'), st.s = sqrt(s2); else, st.sigmasq = s2; end
     opts = {'CriticalValueType', types.(rule), 'Alpha', alpha, 'Display', 'off'};
     if isfield(st, 'sigmasq'), opts = [opts, {'Estimate', 'column'}]; end
     c = multcompare(st, opts{:});
@@ -25072,7 +25104,7 @@ export default { id, title, render, onShow };
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova } from '../stats/compare.js';
+import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
@@ -25870,7 +25902,10 @@ function update() {
     // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
     b.appendChild(assumptionChecks({
       sets: paired
-        ? fam.comparisons.map(c => ({ name: 'the differences ' + pairLabel(c.i, c.j), values: Array.from(groups[c.i], (v, r) => v - groups[c.j][r]) }))
+        ? fam.comparisons.map(c => {
+          const values = Array.from(groups[c.i], (v, r) => v - groups[c.j][r]);
+          return { name: 'the differences ' + pairLabel(c.i, c.j), values, flat: constantDifferences(values, groups[c.i], groups[c.j]) };
+        })
         : designSets,
       alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
@@ -25942,8 +25977,11 @@ function update() {
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     const levNaN = Number.isNaN(lv.p);
-    const levTxt = levNaN ? 'cannot be computed, because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
-    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.' : 'Levene’s test gives ' + levTxt + ' here.') +
+    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    const levInf = lv.F === Infinity;
+    if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.'
+      : levInf ? 'Levene’s test gives ' + levTxt + ' here, but every outcome lies the same distance from its design’s median (as two outcomes always do), and so the test compares one distance per design and says little about the variances.'
+        : 'Levene’s test gives ' + levTxt + ' here.') +
       ' Welch’s procedure does not assume equal variances, and so that test is not among its checks.'));
     // The residuals' own quantile–quantile plot: the Normality section shows
     // one design's outcomes at a time, and the F test's assumption is about
@@ -29046,7 +29084,7 @@ function renderPaired(res, notes, d, level) {
   s.appendChild(verdict);
   if (np) s.appendChild(caption(NP_PLAN));
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
-  if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs }], alpha: 1 - state.settings.base,
+  if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs, flat: pr.sdD === 0 }], alpha: 1 - state.settings.base,
     procedure: 'the paired t test',
     declared: 'between pairs cannot be checked from the data, and the paired t test assumes it; the pairing within each replication is what the Paired setting declares.' }));
 
@@ -32955,6 +32993,9 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
     if (n < 3) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': too few values to test (n = ' + n + ')')); continue; }
     if (n > 5000) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': n = ' + intl(n) + ' is beyond the test')); continue; }
     if (Math.min(...v) === Math.max(...v)) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': every value is the same, and so there is no shape to test')); continue; }
+    // Paired differences equal up to the subtraction's rounding: the test would
+    // read the rounding's own pattern as a shape.
+    if (st.flat) { parts.push(na('Shapiro–Wilk on ' + esc(st.name) + ': the values are equal up to rounding, and so there is no shape to test')); continue; }
     tested = normTested = true;
     const sw = shapiroWilk(v);
     const bad = sw.p < alpha;
@@ -32975,7 +33016,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
       // Every value lies the same distance from its group's median, as two values
       // always do: F is infinite, but the test then compares only the groups'
       // ranges, which says little about their variances.
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups: ' + pEq(lv.p) +
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test across the groups, uninformative here: ' + pEq(lv.p) +
         ', but every value lies the same distance from its group’s median (as two values always do), and so the test compares one distance per group and says little about the variances') + '.';
     } else if (Number.isFinite(lv.p)) {
       tested = true;
@@ -32985,7 +33026,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed, because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);

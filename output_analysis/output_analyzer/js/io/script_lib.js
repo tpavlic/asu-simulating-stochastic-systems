@@ -1451,6 +1451,12 @@ anova_table <- function(groups, blocked) {
                 ssw = tab[e, "Sum Sq"], dfw = tab[e, "Df"], msw = tab[e, "Mean Sq"])
     if (blocked) res <- c(res, list(ssblk = tab[2, "Sum Sq"], dfblk = tab[2, "Df"], msblk = tab[2, "Mean Sq"],
                                     Fblock = tab[2, "F value"], pBlock = tab[2, "Pr(>F)"]))
+    # Barely above "no spread", aov's residual can itself be rounding error; an F that is not
+    # finite then comes from the sums of squares taken directly, as the analyzer takes them.
+    if (!is.finite(res$F)) { res$F <- (ssb / res$dfb) / (ssw / res$dfw); res$p <- pval(res$F, res$dfb, res$dfw) }
+    if (blocked && !is.finite(res$Fblock)) {
+      res$Fblock <- (ssblk / res$dfblk) / (ssw / res$dfw); res$pBlock <- pval(res$Fblock, res$dfblk, res$dfw)
+    }
   } else {
     dfb <- k - 1; dfw <- if (blocked) (k - 1) * (R - 1) else length(outcome) - k
     res <- list(ssb = ssb, dfb = dfb, msb = ssb / dfb, ssw = 0, dfw = dfw, msw = 0)
@@ -1498,6 +1504,10 @@ def anova_table(groups, blocked):
     ssw = float(sum(np.sum((g - g.mean()) ** 2) for g in groups)); dfb, dfw = k - 1, len(y) - k
     if ssw > tiny:
         res = stats.f_oneway(*groups); F, p = float(res.statistic), float(res.pvalue)
+        if not np.isfinite(F):
+            # Barely above "no spread", f_oneway's within sum of squares can come out 0; F then
+            # comes from the sums of squares taken directly, as the analyzer takes them.
+            F = (ssb / dfb) / (ssw / dfw); p = pval(F, dfb, dfw)
     else:
         ssw = 0.0; F = no_spread_F(ssb); p = pval(F, dfb, dfw)
     msb, msw = ssb / dfb, ssw / dfw
@@ -1525,10 +1535,10 @@ if blocked
     resid = reshape(M - means - (bm - grand), [], 1);
     % anova2 finds the residual sum of squares by subtraction, with error near 1e-16 of the total,
     % and so the sum the rule tests is taken from the residuals themselves.
-    ssw = sum(resid.^2); flat = ssw <= tiny;   % nothing left once the designs and the blocks are removed
+    ssw = sum(resid.^2); flat = tab{4,3} > 0 && ssw <= tiny;   % nothing left once the designs and the blocks are removed
     if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
-    [F, p] = f_entry(tab, 2, flat, tiny); [Fb, pb] = f_entry(tab, 3, flat, tiny);
     msw = ssw / tab{4,3};
+    [F, p] = f_entry(tab, 2, flat, tiny, msw, tab{4,3}); [Fb, pb] = f_entry(tab, 3, flat, tiny, msw, tab{4,3});
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssblk', tab{3,2}, 'dfblk', tab{3,3}, 'msblk', tab{3,4}, 'Fblock', Fb, 'pBlock', pb, ...
                'ssw', ssw, 'dfw', tab{4,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
@@ -1540,24 +1550,26 @@ else
     resid = y - reshape(means(g), [], 1);
     % anova1 finds the error sum of squares by subtraction, and so the sum the rule tests is
     % taken from the residuals themselves.
-    ssw = sum(resid.^2); flat = ssw <= tiny;   % no design varies within itself
+    ssw = sum(resid.^2); flat = tab{3,3} > 0 && ssw <= tiny;   % no design varies within itself
     if flat, ssw = 0; resid = zeros(size(resid)); end   % computed, they would be rounding error
-    [F, p] = f_entry(tab, 2, flat, tiny);
     msw = ssw / tab{3,3};
+    [F, p] = f_entry(tab, 2, flat, tiny, msw, tab{3,3});
     r = struct('ssb', tab{2,2}, 'dfb', tab{2,3}, 'msb', tab{2,4}, 'F', F, 'p', p, ...
                'ssw', ssw, 'dfw', tab{3,3}, 'msw', msw, 'means', means, 'n', n, 'grandMean', grand, ...
                'blockMeans', [], 'resid', resid, 'stats', st);
 end
 end
 
-function [F, p] = f_entry(tab, row, flat, tiny)
-% F and p from one row of a table. With nothing left within the designs (flat), the table's F is
-% rounding noise, or empty when the error sum of squares is exactly 0: F is then infinite (p = 0)
-% when the row's sum of squares exceeds tiny, and undefined when it does not.
+function [F, p] = f_entry(tab, row, flat, tiny, msw, dfw)
+% F and p for one row of a table, on the mean square msw summed directly from the residuals
+% (dfw degrees of freedom): the table's own F rests on an error sum of squares found by
+% subtraction, which near "no spread" is rounding error or 0 (F empty). With nothing left within
+% the designs (flat), F is infinite (p = 0) when the row's sum of squares exceeds tiny, and
+% undefined when it does not.
 if flat
     if tab{row, 2} > tiny, F = Inf; p = 0; else, F = NaN; p = NaN; end
 else
-    F = tab{row, 5}; p = tab{row, 6};
+    F = (tab{row, 2} / tab{row, 3}) / msw; p = fcdf(F, tab{row, 3}, dfw, 'upper');
 end
 end
 `;
@@ -1774,10 +1786,11 @@ elseif strcmp(rule, 'tukey')
     crit = studrange_inv(1 - alpha, numel(means), av.dfw);
 else
     types = struct('lsd', 'lsd', 'bonferroni', 'bonferroni');
+    % The statistics carry anova1's or anova2's own variance, found by subtraction; they are given
+    % the directly summed one (or 1 when there is none), so the read-back matches av.msw.
     st = av.stats; s2 = msw;
-    if ~(msw > 0)
-        s2 = 1; if isfield(st, 's'), st.s = 1; else, st.sigmasq = 1; end
-    end
+    if ~(msw > 0), s2 = 1; end
+    if isfield(st, 's'), st.s = sqrt(s2); else, st.sigmasq = s2; end
     opts = {'CriticalValueType', types.(rule), 'Alpha', alpha, 'Display', 'off'};
     if isfield(st, 'sigmasq'), opts = [opts, {'Estimate', 'column'}]; end
     c = multcompare(st, opts{:});

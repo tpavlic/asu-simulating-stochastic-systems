@@ -2216,6 +2216,25 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   const pc = reps('PC', [0.9, 1.4, 0.6]);
   const rsp = sevRecipe([pa, pb, pc], { paired: true, rule: 'bonferroni' });
   checkRecipe('Several Systems, paired differences equal up to rounding', rsp, sevChecks);
+  // Five pairs whose differences are equal up to rounding: the paired t has no spread, and the
+  // differences' normality check is skipped (on the rounding's own pattern Shapiro-Wilk gives
+  // W = 0.759 in the analyzer and 0.881 in SciPy).
+  const qa = reps('QA', [0.1, 0.2, 0.5, 0.7, 1.1]), qb = reps('QB', [0.3, 0.4, 0.7, 0.9, 1.3]);
+  const rq = pairedRecipe(qa, qb, 't', 'id', PLAN2);
+  assert.equal(rq.expect['sd of differences'], 0);
+  assert.ok(!('shapiro differences W [optional]' in rq.expect));
+  checkRecipe('Two Systems, paired t on five differences equal up to rounding', rq, { also: noWarning });
+  const qc = reps('QC', [0.9, 1.4, 0.6, 1.8, 1.0]);
+  const rsq = sevRecipe([qa, qb, qc], { paired: true, rule: 'bonferroni' });
+  assert.ok(!('shapiro diff 1-2 W [optional]' in rsq.expect) && 'shapiro diff 1-3 W [optional]' in rsq.expect);
+  checkRecipe('Several Systems, paired, five differences equal up to rounding', rsq, sevChecks);
+  // Barely above the bound: groups {m, m + 1e-8, m - 1e-8}. The analyzer and R's aov give F near
+  // 3e16; SciPy's f_oneway gives inf and MATLAB's anova1 no F, and so both take F from the sums
+  // of squares summed directly.
+  const near = [1, 2, 3].map(m => reps('N' + m, [m, m + 1e-8, m - 1e-8]));
+  const rn = sevRecipe(near, { eps: 0.4 });
+  assert.ok(Number.isFinite(rn.expect['anova F']) && rn.expect['anova F'] > 1e15, 'F ' + rn.expect['anova F']);
+  checkRecipe('Several Systems, spread barely above the bound', rn, sevChecks);
   // Steady State: a constant run of 0.1, whose batch means are all equal.
   const flatRun = makeDataset({ name: 'Flat run', response: 'v', kind: 'tally', reps: [{ id: 1, v: Array(200).fill(0.1) }] });
   const rs = stRecipe(flatRun, { count: 10 });

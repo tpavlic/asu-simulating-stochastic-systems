@@ -446,6 +446,17 @@ function oneBody(r, L) {
 BODIES.one = { R: oneBody, py: oneBody, m: oneBody };
 
 // The Shapiro-Wilk check of one design's outcomes, reported as '<prefix> W' and '<prefix> p'.
+// The Shapiro-Wilk check of paired differences, skipped when paired_t found
+// them equal up to rounding (sdD = 0): the test would read the rounding's own
+// pattern as a shape. nameCode is code for the report name, xCode the
+// differences, sdCode their sd, and wCode and pCode the analyzer's values.
+function diffShapiro(L, nameCode, xCode, sdCode, wCode, pCode) {
+  const msg = ': the differences are equal up to rounding, no spread to test';
+  if (L.lang === 'R') return ['if (' + sdCode + ' > 0) shapiro_check(' + nameCode + ', ' + xCode + ', ' + wCode + ', ' + pCode + ') else cat(' + nameCode + ', ' + L.str(msg) + ', "\\n", sep = "")'];
+  if (L.lang === 'py') return ['if ' + sdCode + ' > 0: shapiro_check(' + nameCode + ', ' + xCode + ', ' + wCode + ', ' + pCode + ')', 'else: print(' + nameCode + ' + ' + L.str(msg) + ')'];
+  return ['if ' + sdCode + ' > 0, shapiro_check(' + nameCode + ', ' + xCode + ', alpha, ' + wCode + ', ' + pCode + '); else, fprintf(\'%s' + msg + '\\n\', ' + nameCode + '); end'];
+}
+
 function shapiroLine(r, L, prefix, v) {
   const w = lit(L, r.expect[prefix + ' W [optional]']), p = lit(L, r.expect[prefix + ' p [optional]']);
   return L.lang === 'm' ? 'shapiro_check(' + L.str(prefix) + ', ' + v + ', alpha, ' + w + ', ' + p + ');'
@@ -585,8 +596,9 @@ function twoPairedBody(r, L) {
   if (!o.np) {
     need.push('shapiro');
     out.push(L.sect('Checks'));
-    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes.');
-    out.push(shapiroLine(r, L, 'shapiro differences', f('pr', 'diffs')));
+    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes; differences equal up to rounding have no shape to test.');
+    out.push(...diffShapiro(L, L.str('shapiro differences'), f('pr', 'diffs'), f('pr', 'sdD'),
+      lit(L, r.expect['shapiro differences W [optional]']), lit(L, r.expect['shapiro differences p [optional]'])));
   }
   if (o.plan) {
     need.push('planning');
@@ -1112,8 +1124,8 @@ function sevDiffs(r, L, out, need) {
   if (shapiro) {
     need.push('shapiro');
     const nm = pairName(L, 'shapiro diff', '');
-    body.push(lang === 'm' ? 'shapiro_check(' + nm + ', cmp.diffs, alpha, page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos));'
-      : 'shapiro_check(' + nm + ', ' + f('cmp', 'diffs') + ', page_at(page_shapiro_diff_W, pos), page_at(page_shapiro_diff_p, pos))');
+    // Differences equal up to rounding (sdD = 0) have no shape to test.
+    body.push(...diffShapiro(L, nm, f('cmp', 'diffs'), f('cmp', 'sdD'), 'page_at(page_shapiro_diff_W, pos)', 'page_at(page_shapiro_diff_p, pos)'));
   }
   if (L.tidy) body.push('family_tests[[lab]] <- cmp$test');
   if (lang === 'R') out.push('for (p in family_pairs) {', ind + 'i <- p[1]; j <- p[2]; ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), '}');
