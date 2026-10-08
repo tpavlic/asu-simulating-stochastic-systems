@@ -5,13 +5,15 @@
 // `expect` map. R and Python run on every test run when installed (the full
 // matrix under OA_SCRIPTS=1, and otherwise only the fixtures marked smoke, a
 // subset on every page); MATLAB runs under OA_MATLAB=1 only, because its
-// start-up takes about a minute.
+// start-up takes about a minute, and then runs every script in one session
+// (see "MATLAB batch" below).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, openSync, closeSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { analysisScript, parseReport, scriptFileName, ascii, ANALYSIS_WRITERS } from '../js/io/analysis_scripts.js';
 import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
@@ -38,7 +40,9 @@ export const HAS = {
   R: has('Rscript', ['--version']),
   tidy: has('Rscript', ['--vanilla', '-e', 'if (getRversion() < "4.1" || packageVersion("dplyr") < "1.1") quit(status = 1); for (p in c("tibble","tidyr","broom","ggplot2")) if (!requireNamespace(p, quietly = TRUE)) quit(status = 1)']),
   py: PY === true,
-  m: process.env.OA_MATLAB === '1' && has('matlab', ['-batch', 'disp(1)'])
+  // Found on the PATH, not started: the batch below starts MATLAB once, and a
+  // MATLAB that cannot start fails every MATLAB test with its own message.
+  m: process.env.OA_MATLAB === '1' && has('sh', ['-c', 'command -v matlab'])
 };
 // Why a language cannot run here.
 const MISSING = { R: 'R is not installed', tidy: 'R 4.1 with dplyr 1.1, tibble, tidyr, broom, and ggplot2 is not installed', py: PY,
@@ -57,7 +61,8 @@ export function example(id) {
  * Writes the script, runs it, and returns the parsed report and both output
  * streams (or throws with the output). `text` replaces the script the recipe
  * gives, and `files` (name to contents) are written beside it, where the
- * script runs.
+ * script runs. MATLAB runs here in a session of its own; the fixtures below
+ * run their MATLAB scripts through the batch instead (runIn).
  */
 export function runScript(recipe, lang, { text = null, files = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
@@ -71,12 +76,184 @@ export function runScript(recipe, lang, { text = null, files = {} } = {}) {
     if (lang === 'R' || lang === 'tidy') r = spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 });
     else if (lang === 'py') r = spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) });
     else r = spawnSync('matlab', ['-batch', `cd('${dir}'); run('${name}')`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
-    if (r.error) throw new Error(`${lang} script did not finish (${name}): ${r.error.message}\n${r.stdout || ''}\n${r.stderr || ''}`);
-    if (r.status !== 0) throw new Error(`${lang} script failed (${name}):\n${r.stdout}\n${r.stderr}`);
-    return { report: parseReport(r.stdout), stdout: r.stdout, stderr: r.stderr || '', file: f };
+    return Object.assign(scriptResult(r, lang, name), { file: f });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/** A finished run ({ status, stdout, stderr, error }, as spawnSync gives it) as runScript returns it, or the error it throws. */
+function scriptResult(r, lang, name) {
+  if (r.error) throw new Error(`${lang} script did not finish (${name}): ${r.error.message}\n${r.stdout || ''}\n${r.stderr || ''}`);
+  if (r.status !== 0) throw new Error(`${lang} script failed (${name}):\n${r.stdout}\n${r.stderr}`);
+  return { report: parseReport(r.stdout), stdout: r.stdout, stderr: r.stderr || '' };
+}
+
+// ── MATLAB batch ────────────────────────────────────────────────────────
+//
+// MATLAB takes from fifteen seconds to a minute to start, which, once per
+// script, came to most of the full matrix's hour. Every MATLAB script in this
+// file therefore runs in one session. A test registers its script when it is
+// defined (matlabJob, with a function that builds the script and its files),
+// the batch starts once every test is defined (startMatlab, the last line of
+// this file) and runs in the background while the R and Python tests run, and
+// each MATLAB test then waits for its own script's result (matlabOutcome),
+// which reads as a run of its own would. test/run_matlab_batch.m runs each
+// script from its own folder in a fresh workspace and writes what it printed
+// into that folder. A script still running after M_TIMEOUT is stopped and
+// fails its own test, as does one that brings MATLAB down, and the scripts
+// after it run in a new session. A run filtered by --test-name-pattern or
+// --test-skip-pattern batches only the scripts of the tests it selects, and a
+// test whose script was left out gets it from a later batch.
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const M_TIMEOUT = 600000;   // one script, as when each started a MATLAB of its own
+const M_START = 600000;     // MATLAB's start, up to its first script
+const mJobs = [];
+let mRoot = null, mChild = null, mBatches = 0, mOpen = false;
+
+// The name patterns node passes to this file's process, as regular expressions.
+function namePatterns(flag) {
+  const out = [], a = process.execArgv;
+  for (let i = 0; i < a.length; i++) {
+    let v = null;
+    if (a[i].startsWith(flag + '=')) v = a[i].slice(flag.length + 1);
+    else if (a[i] === flag && i + 1 < a.length) v = a[++i];
+    if (v == null) continue;
+    const m = /^\/(.*)\/([a-z]*)$/s.exec(v);
+    out.push(m ? new RegExp(m[1], m[2]) : new RegExp(v));
+  }
+  return out;
+}
+const NAME_ONLY = namePatterns('--test-name-pattern'), NAME_SKIP = namePatterns('--test-skip-pattern');
+const selected = title => (!NAME_ONLY.length || NAME_ONLY.some(re => re.test(title))) && !NAME_SKIP.some(re => re.test(title));
+
+/**
+ * Registers the MATLAB script of the test titled `title`, or returns null when
+ * MATLAB does not run here (`smoke` as for skipFor). `build()` returns
+ * { name, text, files }: the script's file name, its text, and the files
+ * (name to contents) written beside it. It runs when the batch starts, and an
+ * error it throws fails the test.
+ */
+function matlabJob(title, smoke, build) {
+  if (skipFor('m', smoke)) return null;
+  const job = { id: mJobs.length, wanted: selected(title), build, dir: null, script: null, result: null };
+  job.done = new Promise(resolve => { job.settle = r => { if (!job.result) { job.result = r; resolve(r); } }; });
+  mJobs.push(job);
+  if (mOpen && job.wanted) runMatlab();
+  return job;
+}
+
+/** Waits for a job's run: { status, stdout, stderr, error }, as spawnSync gives it. */
+function matlabOutcome(job) {
+  job.wanted = true;
+  if (!job.result && !collect(job)) runMatlab();
+  return job.done;
+}
+
+// Settles a job the driver has finished, and says whether it had.
+function collect(j) {
+  if (j.result || !j.dir || !existsSync(join(j.dir, 'status.txt'))) return !!j.result;
+  const read = f => readFileSync(join(j.dir, f), 'utf8');
+  j.settle({ status: Number(read('status.txt')), stdout: read('stdout.txt'), stderr: read('stderr.txt'), error: null });
+  return true;
+}
+
+/** Runs a fixture's script: in the batch when `job` is given, and otherwise as runScript does. */
+async function runIn(job, recipe, lang, opts) {
+  if (!job) return runScript(recipe, lang, opts);
+  const r = await matlabOutcome(job);
+  if (r.buildError) throw r.buildError;
+  return scriptResult(r, 'm', job.script + '.m');
+}
+
+/** Starts the batch; called once, after every test is defined. */
+function startMatlab() {
+  mOpen = true;
+  runMatlab();
+}
+
+function stopMatlab() {
+  if (mChild) try { process.kill(-mChild.pid, 'SIGKILL'); } catch { /* already gone */ }
+}
+
+// Starts one MATLAB session on every wanted script not yet run, unless one is
+// running; when it ends, the next starts on whatever is left.
+function runMatlab() {
+  if (mChild || !mOpen) return;
+  const todo = mJobs.filter(j => j.wanted && !j.result);
+  if (!todo.length) return;
+  if (!mRoot) {
+    mRoot = mkdtempSync(join(tmpdir(), 'oa-matlab-'));
+    // MATLAB runs in a process group of its own, so that stopping it stops
+    // every process it started; this process stops it on the way out.
+    process.on('exit', () => { stopMatlab(); rmSync(mRoot, { recursive: true, force: true }); });
+    for (const sig of ['SIGINT', 'SIGTERM']) {
+      process.once(sig, () => { stopMatlab(); if (!process.listenerCount(sig)) process.kill(process.pid, sig); });
+    }
+  }
+  const list = [];
+  for (const j of todo) {
+    if (!j.dir) {
+      try {
+        const { name, text, files = {} } = j.build();
+        const dir = join(mRoot, 'job' + String(j.id).padStart(4, '0'));
+        mkdirSync(dir);
+        for (const [file, body] of Object.entries(files)) writeFileSync(join(dir, file), body);
+        writeFileSync(join(dir, name), text);
+        j.dir = dir;
+        j.script = name.replace(/\.m$/, '');
+      } catch (e) {
+        j.settle({ status: null, stdout: '', stderr: '', error: e, buildError: e });
+        continue;
+      }
+    }
+    list.push(j);
+  }
+  if (!list.length) return;
+  const n = ++mBatches;
+  const listFile = join(mRoot, 'batch' + n + '.txt'), logFile = join(mRoot, 'batch' + n + '.log');
+  writeFileSync(listFile, list.map(j => j.dir + '\t' + j.script).join('\n') + '\n');
+  const q = s => s.replace(/'/g, "''");
+  const fd = openSync(logFile, 'w');
+  try {
+    mChild = spawn('matlab', ['-batch', `addpath('${q(HERE)}'); run_matlab_batch('${q(listFile)}')`],
+      { cwd: mRoot, stdio: ['ignore', fd, fd], detached: true });
+  } finally { closeSync(fd); }
+  const child = mChild, t0 = Date.now();
+  const at = (j, f) => join(j.dir, f);
+  const read = (j, f) => (existsSync(at(j, f)) ? readFileSync(at(j, f), 'utf8') : '');
+  const log = () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : '');
+  let stopped = null;   // the job MATLAB was stopped in, or 'start'
+  const poll = () => {
+    for (const j of list) collect(j);
+    if (stopped) return;
+    const cur = list.find(j => !j.result && existsSync(at(j, 'started.txt')));
+    if (cur && Date.now() - statSync(at(cur, 'started.txt')).mtimeMs > M_TIMEOUT) { stopped = cur; stopMatlab(); }
+    if (!cur && !list.some(j => existsSync(at(j, 'started.txt'))) && Date.now() - t0 > M_START) { stopped = 'start'; stopMatlab(); }
+  };
+  const timer = setInterval(poll, 200);
+  let ended = false;
+  const end = how => {
+    if (ended) return;
+    ended = true;
+    clearInterval(timer);
+    mChild = null;
+    poll();
+    const begun = list.some(j => existsSync(at(j, 'started.txt')));
+    for (const j of list) {
+      if (j.result) continue;
+      let why;
+      if (stopped === j) why = `it was still running after ${M_TIMEOUT / 1000} s, and so MATLAB was stopped`;
+      else if (existsSync(at(j, 'started.txt'))) why = `MATLAB stopped while running it (${how})`;
+      else if (!begun) why = stopped === 'start' ? `MATLAB had not started a script after ${M_START / 1000} s` : `MATLAB did not start (${how})`;
+      else continue;   // not started: the next session runs it
+      j.settle({ status: null, stdout: read(j, 'stdout.txt'), stderr: why + '\n' + log(), error: new Error(why) });
+    }
+    runMatlab();
+  };
+  child.on('error', e => end(e.message));
+  child.on('exit', (code, signal) => end(signal ? 'signal ' + signal : 'exit status ' + code));
 }
 
 // Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
@@ -149,8 +326,10 @@ function skipFor(lang, smoke) {
  */
 export function checkRecipe(name, recipe, { smoke = false, also = null, notInR = null } = {}) {
   for (const lang of LANGS) {
-    test(`${name} regenerates in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
-      const { report, stdout, stderr } = runScript(recipe, lang);
+    const title = `${name} regenerates in ${lang}`;
+    const job = lang === 'm' ? matlabJob(title, smoke, () => ({ name: scriptFileName(recipe, 'm'), text: analysisScript(recipe, 'm') })) : null;
+    test(title, { skip: skipFor(lang, smoke) }, async () => {
+      const { report, stdout, stderr } = await runIn(job, recipe, lang);
       let expect = recipe.expect;
       if (notInR && (lang === 'R' || lang === 'tidy')) {
         expect = Object.assign({}, expect);
@@ -988,16 +1167,18 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
       "for i = 1:numel(p), report(sprintf('holm " + s + " %d', i), h(i)); report(sprintf('bonferroni " + s + " %d', i), b(i)); end"];
   });
   const same = (got, want) => (Number.isNaN(want) ? Number.isNaN(got) : Math.abs(got - want) < 1e-12);
+  const text = lang => (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body('R')] : [...body('m'), LIB.m.report, LIB.m.holm]).join('\n') + '\n';
   for (const lang of ['R', 'py', 'm']) {
-    test('the Holm snippet adjusts as p.adjust does in ' + lang, { skip: skipFor(lang, false) }, () => {
-      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.holm, ...body('py')] : lang === 'R' ? [LIB.R.report, LIB.R.holm, ...body('R')] : [...body('m'), LIB.m.report, LIB.m.holm];
-      const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+    const title = 'the Holm snippet adjusts as p.adjust does in ' + lang;
+    const job = lang === 'm' ? matlabJob(title, false, () => ({ name: 'holm_check.m', text: text('m') })) : null;
+    test(title, { skip: skipFor(lang, false) }, async () => {
+      const dir = job ? null : mkdtempSync(join(tmpdir(), 'oa-regen-'));
       try {
-        const f = join(dir, lang === 'm' ? 'holm_check.m' : lang === 'R' ? 'holm.R' : 'holm.py');
-        writeFileSync(f, L.join('\n') + '\n');
+        const f = dir && join(dir, lang === 'R' ? 'holm.R' : 'holm.py');
+        if (dir) writeFileSync(f, text(lang));
         const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
           : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-            : spawnSync('matlab', ['-batch', `cd('${dir}'); holm_check`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+            : await matlabOutcome(job);
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
@@ -1009,7 +1190,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
             assert.ok(same(b, bonf[i]), 'bonferroni ' + s + ' ' + (i + 1) + ': ' + b + ' vs ' + bonf[i]);
           });
         });
-      } finally { rmSync(dir, { recursive: true, force: true }); }
+      } finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
     });
   }
 }
@@ -1127,24 +1308,28 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   const lit = (lang, f) => (lang === 'R' ? 'list(' + f.map(([i, j]) => 'c(' + (i + 1) + ', ' + (j + 1) + ')').join(', ') + ')'
     : lang === 'py' ? '[' + f.map(([i, j]) => '(' + i + ', ' + j + ')').join(', ') + ']'
       : f.length ? '[' + f.map(([i, j]) => (i + 1) + ' ' + (j + 1)).join('; ') + ']' : 'zeros(0, 2)');
-  for (const lang of ['R', 'py', 'm']) {
-    test('the letter display matches letterGroups in ' + lang, { skip: skipFor(lang, false) }, () => {
-      const body = cases.flatMap((c, s) => (lang === 'R' ? ['cld <- letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for (i in seq_along(cld)) report(paste("case ' + s + '", i), cld[i])']
+  const text = lang => {
+    const body = cases.flatMap((c, s) => (lang === 'R' ? ['cld <- letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for (i in seq_along(cld)) report(paste("case ' + s + '", i), cld[i])']
         : lang === 'py' ? ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ')', 'for i, v in enumerate(cld): report(f"case ' + s + ' {i + 1}", v)']
           : ['cld = letter_groups(' + c.k + ', ' + lit(lang, c.flagged) + ');', "for i = 1:numel(cld), report(sprintf('case " + s + " %d', i), cld{i}); end"]));
-      const L = lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.letters, ...body] : lang === 'R' ? [LIB.R.report, LIB.R.letters, ...body] : [...body, LIB.m.report, LIB.m.letters];
-      const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
+    return (lang === 'py' ? ['import numpy as np', LIB.py.report, LIB.py.letters, ...body] : lang === 'R' ? [LIB.R.report, LIB.R.letters, ...body] : [...body, LIB.m.report, LIB.m.letters]).join('\n') + '\n';
+  };
+  for (const lang of ['R', 'py', 'm']) {
+    const title = 'the letter display matches letterGroups in ' + lang;
+    const job = lang === 'm' ? matlabJob(title, false, () => ({ name: 'letters_check.m', text: text('m') })) : null;
+    test(title, { skip: skipFor(lang, false) }, async () => {
+      const dir = job ? null : mkdtempSync(join(tmpdir(), 'oa-regen-'));
       try {
-        const f = join(dir, lang === 'm' ? 'letters_check.m' : lang === 'R' ? 'letters.R' : 'letters.py');
-        writeFileSync(f, L.join('\n') + '\n');
+        const f = dir && join(dir, lang === 'R' ? 'letters.R' : 'letters.py');
+        if (dir) writeFileSync(f, text(lang));
         const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
           : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-            : spawnSync('matlab', ['-batch', `cd('${dir}'); letters_check`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+            : await matlabOutcome(job);
         assert.equal(run.status, 0, run.stdout + run.stderr);
         noWarning(run.stdout, lang, run.stderr || '');
         const rep = parseReport(run.stdout);
         cases.forEach((c, s) => letterGroups(c.k, c.flagged).forEach((want, i) => assert.equal(rep.get('case ' + s + ' ' + (i + 1)), want, 'case ' + s + ' design ' + (i + 1))));
-      } finally { rmSync(dir, { recursive: true, force: true }); }
+      } finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
     });
   }
 }
@@ -1154,29 +1339,32 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
 // gives with design 3 as the control, for Dunnett's rule and for the
 // Bonferroni family against the control, and prints those comparisons without
 // an analyzer column, the page having made none of them.
-for (const lang of ['R', 'py', 'm']) {
-  test('editing control alone changes the comparisons to match in ' + lang, { skip: skipFor(lang, false) }, () => {
-    const over = { rule: 'dunnett', diffMode: 'control' };
-    const r = sevRecipe(FOUR, Object.assign({ ctrlIdx: 1 }, over)), r3 = sevRecipe(FOUR, Object.assign({ ctrlIdx: 2 }, over));
-    const name = lang === 'm' ? 'control_edit.m' : lang === 'R' ? 'control_edit.R' : 'control_edit.py';
-    const from = lang === 'R' ? 'control <- 2\n' : lang === 'py' ? 'control = 2\n' : 'control = 2;\n';
-    const text = analysisScript(r, lang);
-    assert.ok(text.includes(from), 'the settings carry ' + from.trim());
-    const dir = mkdtempSync(join(tmpdir(), 'oa-regen-'));
-    try {
-      const f = join(dir, name);
-      writeFileSync(f, text.replace(from, from.replace('2', '3')));
-      const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
-        : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
-          : spawnSync('matlab', ['-batch', `cd('${dir}'); control_edit`], { cwd: dir, encoding: 'utf8', timeout: 600000 });
-      assert.equal(run.status, 0, run.stdout + run.stderr);
-      const want = Object.fromEntries(Object.entries(r3.expect).filter(([k]) => /^(posthoc dunnett |diff |C$|per-comparison level$|plan diffs )/.test(k)));
-      assert.ok(Object.keys(want).some(k => k.startsWith('posthoc dunnett 2-3 ')) && Object.keys(want).some(k => k.startsWith('diff 4-3 ')));
-      compareReport(parseReport(run.stdout), want, lang, r3);
-      assert.match(run.stdout, /^posthoc dunnett 1-3 diff: [^(]*$/m, 'a comparison the page did not make prints alone');
-      assert.match(run.stdout, /^diff 4-3 se: [^(]*$/m, 'a comparison the page did not make prints alone');
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  });
+{
+  const over = { rule: 'dunnett', diffMode: 'control' };
+  const r = sevRecipe(FOUR, Object.assign({ ctrlIdx: 1 }, over)), r3 = sevRecipe(FOUR, Object.assign({ ctrlIdx: 2 }, over));
+  const from = lang => (lang === 'R' ? 'control <- 2\n' : lang === 'py' ? 'control = 2\n' : 'control = 2;\n');
+  const edited = lang => analysisScript(r, lang).replace(from(lang), from(lang).replace('2', '3'));
+  for (const lang of ['R', 'py', 'm']) {
+    const title = 'editing control alone changes the comparisons to match in ' + lang;
+    const job = lang === 'm' ? matlabJob(title, false, () => ({ name: 'control_edit.m', text: edited('m') })) : null;
+    test(title, { skip: skipFor(lang, false) }, async () => {
+      assert.ok(analysisScript(r, lang).includes(from(lang)), 'the settings carry ' + from(lang).trim());
+      const dir = job ? null : mkdtempSync(join(tmpdir(), 'oa-regen-'));
+      try {
+        const f = dir && join(dir, lang === 'R' ? 'control_edit.R' : 'control_edit.py');
+        if (dir) writeFileSync(f, edited(lang));
+        const run = lang === 'R' ? spawnSync('Rscript', ['--vanilla', f], { cwd: dir, encoding: 'utf8', timeout: 120000 })
+          : lang === 'py' ? spawnSync('python3', [f], { cwd: dir, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { MPLBACKEND: 'Agg' }) })
+            : await matlabOutcome(job);
+        assert.equal(run.status, 0, run.stdout + run.stderr);
+        const want = Object.fromEntries(Object.entries(r3.expect).filter(([k]) => /^(posthoc dunnett |diff |C$|per-comparison level$|plan diffs )/.test(k)));
+        assert.ok(Object.keys(want).some(k => k.startsWith('posthoc dunnett 2-3 ')) && Object.keys(want).some(k => k.startsWith('diff 4-3 ')));
+        compareReport(parseReport(run.stdout), want, lang, r3);
+        assert.match(run.stdout, /^posthoc dunnett 1-3 diff: [^(]*$/m, 'a comparison the page did not make prints alone');
+        assert.match(run.stdout, /^diff 4-3 se: [^(]*$/m, 'a comparison the page did not make prints alone');
+      } finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
 }
 
 // ── Task 7: Several Systems, the rank tests and the screen for the best ──
@@ -1813,15 +2001,21 @@ export function csvModeScript(script, lang) {
  * compares every report line with expect, with no warning printed.
  */
 function checkCsvRead(name, recipe, datasets, { smoke = false } = {}) {
+  const csvFiles = () => {
+    const files = {};
+    for (const f of recipe.csv) {
+      const ds = datasets.find(x => x.name === f.dataset);
+      assert.ok(ds, 'a dataset for ' + f.file);
+      assert.equal(f.file, slug(ds.name) + (f.form === 'observations' ? '_observations.csv' : '_replications.csv'), 'the Import page\'s file name');
+      files[f.file] = importPageFile(ds, f.form);
+    }
+    return files;
+  };
   for (const lang of LANGS) {
-    test(`${name} regenerates from its CSV files in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
-      const files = {};
-      for (const f of recipe.csv) {
-        const ds = datasets.find(x => x.name === f.dataset);
-        assert.ok(ds, 'a dataset for ' + f.file);
-        assert.equal(f.file, slug(ds.name) + (f.form === 'observations' ? '_observations.csv' : '_replications.csv'), 'the Import page\'s file name');
-        files[f.file] = importPageFile(ds, f.form);
-      }
+    const title = `${name} regenerates from its CSV files in ${lang}`;
+    const job = lang === 'm' ? matlabJob(title, smoke, () => ({ name: scriptFileName(recipe, 'm'), text: csvModeScript(analysisScript(recipe, 'm'), 'm').text, files: csvFiles() })) : null;
+    test(title, { skip: skipFor(lang, smoke) }, async () => {
+      const files = csvFiles();
       const { text, code } = csvModeScript(analysisScript(recipe, lang), lang);
       // What the comment shows is exactly what a script that reads the files runs.
       const c = lang === 'm' ? '%' : '#';
@@ -1829,7 +2023,7 @@ function checkCsvRead(name, recipe, datasets, { smoke = false } = {}) {
       // No embedded data remain.
       assert.ok(!/^(x|a|b) (<-|=) (c|np\.array|\[)|^reps\[\[1\]\] <- list\(id|^    dict\(id=|^reps\(1\) = struct|^groups\[\[1\]\] <- c|^groups = (\[|\{)\[|^pair_id (<-|=) /m.test(text.slice(0, text.indexOf(c + ' To read'))),
         lang + ': the embedded data are gone');
-      const { report, stdout, stderr } = runScript(recipe, lang, { text, files });
+      const { report, stdout, stderr } = await runIn(job, recipe, lang, { text, files });
       compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
       noWarning(stdout, lang, stderr);
     });
@@ -1983,18 +2177,24 @@ const embeddedIn = (script, lang) => EMBEDDED[lang].filter(re => re.test(script)
  * under 60 seconds.
  */
 function checkCsvMode(name, recipe, datasets, { smoke = false, langs = LANGS, timed = false } = {}) {
+  const csvFiles = () => {
+    const files = {};
+    for (const f of recipe.csv) {
+      const ds = datasets.find(x => x.name === f.dataset);
+      assert.ok(ds, 'a dataset for ' + f.file);
+      files[f.file] = dataFileText(ds, f.form);
+    }
+    return files;
+  };
   for (const lang of langs) {
-    test(`${name} reads its CSV files in ${lang}`, { skip: skipFor(lang, smoke) }, () => {
-      const files = {};
-      for (const f of recipe.csv) {
-        const ds = datasets.find(x => x.name === f.dataset);
-        assert.ok(ds, 'a dataset for ' + f.file);
-        files[f.file] = dataFileText(ds, f.form);
-      }
+    const title = `${name} reads its CSV files in ${lang}`;
+    const job = lang === 'm' ? matlabJob(title, smoke, () => ({ name: scriptFileName(recipe, 'm'), text: analysisScript(recipe, 'm', { csv: true }), files: csvFiles() })) : null;
+    test(title, { skip: skipFor(lang, smoke) }, async () => {
+      const files = csvFiles();
       const text = analysisScript(recipe, lang, { csv: true });
       assert.deepEqual(embeddedIn(text, lang), [], lang + ': no embedded data');
       const t0 = Date.now();
-      const { report, stdout, stderr } = runScript(recipe, lang, { text, files });
+      const { report, stdout, stderr } = await runIn(job, recipe, lang, { text, files });
       const secs = (Date.now() - t0) / 1000;
       if (timed && (lang === 'R' || lang === 'tidy')) assert.ok(secs < 60, lang + ' took ' + secs + ' s');
       compareReport(report, recipe.expect, lang === 'tidy' ? 'R' : lang, recipe);
@@ -2242,3 +2442,7 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   assert.ok(Number.isNaN(rs.expect['fishman C']) && Number.isNaN(rs.expect['acf lag 1']));
   checkRecipe('Steady State, a constant run of 0.1', rs, stChecks);
 }
+
+// Every test is defined: the MATLAB batch can start (see "MATLAB batch" above).
+// Keep this line last.
+startMatlab();
