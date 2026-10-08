@@ -23,10 +23,11 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, initialTicks, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
 } from '../ui/widgets.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { initialTicks } from '../ui/rules.js';
 import { setSectionAvailable } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
 
@@ -986,7 +987,7 @@ function buildSpread(api, { ds, est }) {
     card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
     (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict',
-      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'only the ranges differ' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'uninformative (F infinite)' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
@@ -998,7 +999,7 @@ function buildSpread(api, { ds, est }) {
     return;
   }
   if (undefinedP) {
-    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as happens when no dataset varies), and so the distances have no spread to analyze, within the datasets or between them.');
+    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as when no dataset varies, or when every dataset has two outcomes and all share one range), and so the distances have no spread to analyze, within the datasets or between them.');
     return;
   }
   caption(sec, (rejects

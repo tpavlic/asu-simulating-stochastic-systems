@@ -15324,8 +15324,8 @@ function sevAnova(r, L, out, need) {
     out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
     if (A.rule === 'lsd') out.push(repYesNo(L, r, 'posthoc lsd protected', f('ph', 'protected')));
     if (lang === 'R' && A.rule === 'tukey' && !L.tidy) {
-      out.push(c + 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier).');
-      out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
+      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier), where its qtukey is defined.', c));
+      out.push('if (av$msw > 0 && av$dfw >= 2) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
     }
   }
   // Each pair's report keys: [suffix, field, yes/no].
@@ -15348,8 +15348,8 @@ function sevAnova(r, L, out, need) {
     out.push(c + 'The pairs above as one tibble, a row per pair (i and j are the design numbers).');
     out.push('print(bind_rows(ph$pairs))');
     if (!A.welch && A.rule === 'tukey') {
-      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals, tidied by broom (its estimate is the later design less the earlier).', c));
-      out.push('if (av$msw > 0) print(broom::tidy(TukeyHSD(av$fit, "design", conf.level = 1 - alpha)))');
+      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals, tidied by broom (its estimate is the later design less the earlier), where its qtukey is defined.', c));
+      out.push('if (av$msw > 0 && av$dfw >= 2) print(broom::tidy(TukeyHSD(av$fit, "design", conf.level = 1 - alpha)))');
     }
   }
   if (A.letters) {
@@ -15880,6 +15880,13 @@ BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
 
 // ── Summary and Plots ────────────────────────────────────────────────────
 
+// The first `max` ids, then how many more there are: a script that reads its
+// data from files may hold any number of replications.
+function idList(ids, max = 20) {
+  const head = ids.slice(0, max).map(ascii).join(', ');
+  return ids.length > max ? head + ', and ' + (ids.length - max).toLocaleString('en-US') + ' more' : head;
+}
+
 // The replication outcomes of the datasets ticked under Equal variances, which
 // Levene's test compares; the script has no records for any but the shown one.
 function spreadBlock(L, S) {
@@ -15958,7 +15965,7 @@ function exploreBody(r, L, { csv = false } = {}) {
   // The outcomes.
   if (X.outcomes) {
     out.push(L.sect('Descriptives of the replication outcomes'));
-    if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + r.outcomes.dropped.map(ascii).join(', ') + '.', c));
+    if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + idList(r.outcomes.dropped) + '.', c));
     out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
     out.push(L.tidy ? 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)' : L.assign('d', 'describe(x)'));
     for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));
@@ -17032,7 +17039,7 @@ function withDatasetsProvenance(list, provenance, text, means = false) {
  * blank cell, and so every row of that dataset is rejected as short. A name
  * holding a line break splits each of its rows across two lines, which the
  * importer reads one at a time, and so those rows are rejected or misread. A
- * name with leading or trailing spaces does come back, because the quoted
+ * name with leading or trailing spaces does come back because the quoted
  * field keeps them.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]
@@ -18252,7 +18259,7 @@ function severalSubset(r, o, g) {
 
 // ── Steady State ─────────────────────────────────────────────────────────
 
-/** The most numbers a script embeds; past it, a page's scripts read the data from its CSV files. */
+/** The most data values a script embeds; past it, a page's scripts read the data from its CSV files. */
 export const MAX_NUMBERS = 200000;
 
 /**
@@ -18269,7 +18276,8 @@ export function recordCount(ds) {
 /**
  * The files the records of a dataset can be read from: the Observations CSV
  * for the records, and the Replication summary CSV for the list and order of
- * the replications because one with no records has no row in the first.
+ * the replications; the second is needed because a replication with no
+ * records has no row in the first.
  */
 function recordsCsv(ds) {
   return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
@@ -18423,10 +18431,11 @@ export function repKeys(kind) {
 export const REP_LINES_MAX = 1000;
 
 /**
- * Whether a Summary and Plots script would embed more than MAX_NUMBERS
- * numbers: the shown dataset's records, each replication's id and the
+ * Whether a Summary and Plots script would embed more than MAX_NUMBERS data
+ * values: the shown dataset's records, each replication's id and the
  * analyzer's values for it (repKeys), and the outcomes of the datasets
- * Levene's test compares. Cheap, and copies nothing.
+ * Levene's test compares. The analyzer's single values (the descriptives and
+ * the test results) are not counted. Cheap, and copies nothing.
  * @param {{ds: object, spread: null|{groups: ArrayLike<number>[]}}} o
  */
 export function exploreTooBig({ ds, spread }) {
@@ -20265,8 +20274,10 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   k <- length(groups); C <- length(pairs); scale <- 1
   if (rule == "tukey") {
     # R's qtukey is approximate on few degrees of freedom (about 1% or more off at 2, several
-    # percent with many designs), and below 2 it returns NaN with a warning.
-    crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
+    # percent with many designs), and below 2 it is not defined (it returns NaN with a
+    # warning), and so there the critical value and the half-widths are left NaN and no pair is
+    # declared different.
+    crit <- if (av$dfw >= 2) qtukey(1 - alpha, k, av$dfw) else NaN; scale <- 1 / sqrt(2)
   } else if (rule == "lsd") {
     crit <- qt(1 - alpha / 2, av$dfw)
   } else if (rule == "bonferroni") {
@@ -20279,7 +20290,7 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
     diff <- av$means[p[1]] - av$means[p[2]]; se <- sqrt(av$msw * (1 / av$n[p[1]] + 1 / av$n[p[2]]))
     hw <- crit * scale * se
     list(i = p[1], j = p[2], diff = diff, se = se, hw = hw, lo = diff - hw, hi = diff + hw,
-         flagged = !identical(protected, FALSE) && (diff - hw > 0 || diff + hw < 0))
+         flagged = isTRUE(!identical(protected, FALSE) && (diff - hw > 0 || diff + hw < 0)))
   })
   list(crit = crit, protected = protected, pairs = out)
 }
@@ -20378,15 +20389,16 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     if (rule == "gameshowell") {
       # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% or more off at 2,
       # several percent with many designs), and below 2, as between two designs of 2 replications
-      # each, they return NaN with a warning.
-      crit <- qtukey(1 - alpha, k, df); hw <- crit * se / sqrt(2)
-      pval <- ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE)
+      # each, they are not defined (they return NaN with a warning), and so there the critical
+      # value, the half-width, and the p-value are left NaN and the pair is not declared different.
+      crit <- if (df >= 2) qtukey(1 - alpha, k, df) else NaN; hw <- crit * se / sqrt(2)
+      pval <- if (df >= 2) ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE) else NaN
     } else {
       crit <- qt(1 - alpha / (2 * C), df); hw <- crit * se
       pval <- min(1, C * 2 * pt(-abs(diff / se), df))
     }
     list(i = p[1], j = p[2], diff = diff, se = se, df = df, crit = crit, hw = hw, lo = diff - hw, hi = diff + hw, p = pval,
-         flagged = (diff - hw > 0 || diff + hw < 0))
+         flagged = isTRUE(diff - hw > 0 || diff + hw < 0))
   })
   list(pairs = out)
 }
@@ -22049,10 +22061,11 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, initialTicks, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
 } from '../ui/widgets.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { initialTicks } from '../ui/rules.js';
 import { setSectionAvailable } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, DATA_FILES_HELP } from '../ui/exportrow.js';
 
@@ -23012,7 +23025,7 @@ function buildSpread(api, { ds, est }) {
     card(DF_LABEL, intl(lv.df1) + ', ' + intl(lv.df2), 'k − 1 and N − k'),
     card('<span class="sym">p</span>-value', pValue(lv.p), 'against equal spreads'),
     (c => { c.querySelector('.sc-val').classList.add('wrap'); return c; })(card('Verdict',
-      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'only the ranges differ' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
+      undefinedP ? 'cannot be computed' : lv.F === Infinity ? 'uninformative (F infinite)' : rejects ? 'the spreads differ' : 'no evidence against equal spreads', 'at α = ' + num(alpha, 2)))
   ]));
   const rows = chosen.map((d, i) => { const s = summary(groups[i]); return [esc(d.name), intl(s.n), num(s.sd), num(s.median)]; });
   sec.appendChild(table(['Dataset', 'R', 'SD of the outcomes', 'Median'], rows));
@@ -23024,7 +23037,7 @@ function buildSpread(api, { ds, est }) {
     return;
   }
   if (undefinedP) {
-    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as happens when no dataset varies), and so the distances have no spread to analyze, within the datasets or between them.');
+    caption(sec, 'Levene’s test cannot be computed here: every outcome lies the same distance from its dataset’s median (as when no dataset varies, or when every dataset has two outcomes and all share one range), and so the distances have no spread to analyze, within the datasets or between them.');
     return;
   }
   caption(sec, (rejects
@@ -26098,7 +26111,7 @@ function update() {
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     const levNaN = Number.isNaN(lv.p);
-    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as when no design varies, or when every design has two outcomes and all share one range)' : pEq(lv.p);
     const levInf = lv.F === Infinity;
     if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.'
       : levInf ? 'Levene’s test gives ' + levTxt + ' here, but every outcome lies the same distance from its design’s median (as two outcomes always do), and so the test compares one distance per design and says little about the variances.'
@@ -28182,6 +28195,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { fRatioVerdict } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -28887,23 +28901,6 @@ function renderIndependent(res, notes, d, level) {
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
     ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
-}
-
-/**
- * The F ratio's verdict, and the "interval contains 1" entry of its exported
- * table. Two designs with no spread make F = 0/0, and so there is no ratio to
- * judge. The page reaches fRatio only with two or more outcomes in each
- * design; the undefined interval of fewer is judged here all the same, rather
- * than read as one that excludes 1.
- * @param {ReturnType<typeof fRatio>} fr
- * @returns {{ text: string, contains: 'yes'|'no'|'not defined' }}
- */
-export function fRatioVerdict(fr) {
-  if (fr.s1 === 0 && fr.s2 === 0) return { text: 'Neither design varies, and so the variances cannot be compared.', contains: 'not defined' };
-  if (Number.isNaN(fr.lo) || Number.isNaN(fr.hi)) return { text: 'The F ratio needs at least two replication outcomes of each design.', contains: 'not defined' };
-  return fr.lo <= 1 && 1 <= fr.hi
-    ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
-    : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
 }
 
 // Card labels are set in capitals; a symbol keeps its own case, and so σ
@@ -33164,7 +33161,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as when no group varies, or when every group has two values and all share one range)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);
@@ -35340,6 +35337,43 @@ export function figureSpec(fig, name) {
 /** Escapes text for HTML labels passed to legend(). */
 export { esc };
 </script>
+<script type="text/plain" data-module="js/ui/rules.js">
+// Small rules the pages apply, kept apart from the pages so that they can be
+// tested in Node: the ticks a dataset checklist opens with, and Two Systems'
+// verdict on the F ratio of the variances. Pure functions, no DOM.
+
+/**
+ * The ticks a dataset checklist opens with. A stored list stands at any
+ * length, even one or none, less any id no longer offered; every offered
+ * dataset is ticked only before any choice (nothing stored) or when a
+ * non-empty stored list has none of its datasets left.
+ * @param {unknown} stored the list kept with the session, or anything else when there is none
+ * @param {string[]} offered the ids of the datasets the checklist offers
+ * @returns {string[]}
+ */
+export function initialTicks(stored, offered) {
+  if (!Array.isArray(stored)) return offered.slice();
+  const kept = stored.filter(x => offered.includes(x));
+  return kept.length || !stored.length ? kept : offered.slice();
+}
+
+/**
+ * The F ratio's verdict, and the "interval contains 1" entry of its exported
+ * table. Two designs with no spread make F = 0/0, and so there is no ratio to
+ * judge. The page reaches fRatio only with two or more outcomes in each
+ * design; the undefined interval of fewer is judged here all the same, rather
+ * than read as one that excludes 1.
+ * @param {ReturnType<typeof import('../stats/intervals.js').fRatio>} fr
+ * @returns {{ text: string, contains: 'yes'|'no'|'not defined' }}
+ */
+export function fRatioVerdict(fr) {
+  if (fr.s1 === 0 && fr.s2 === 0) return { text: 'Neither design varies, and so the variances cannot be compared.', contains: 'not defined' };
+  if (Number.isNaN(fr.lo) || Number.isNaN(fr.hi)) return { text: 'The F ratio needs at least two replication outcomes of each design.', contains: 'not defined' };
+  return fr.lo <= 1 && 1 <= fr.hi
+    ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
+    : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
+}
+</script>
 <script type="text/plain" data-module="js/ui/session.js">
 // Session restore: the loaded datasets and the shared settings are written to
 // localStorage (through ui/store.js) after every change and read back at
@@ -36435,21 +36469,6 @@ export function datasetSelect(selectEl, opts = {}) {
     value: () => selectEl.value,
     destroy: () => { off(); selectEl.removeEventListener('change', onChange); }
   };
-}
-
-/**
- * The ticks a dataset checklist opens with. A stored list stands at any
- * length, even one or none, less any id no longer offered; every offered
- * dataset is ticked only before any choice (nothing stored) or when a
- * non-empty stored list has none of its datasets left.
- * @param {unknown} stored the list kept with the session, or anything else when there is none
- * @param {string[]} offered the ids of the datasets the checklist offers
- * @returns {string[]}
- */
-export function initialTicks(stored, offered) {
-  if (!Array.isArray(stored)) return offered.slice();
-  const kept = stored.filter(x => offered.includes(x));
-  return kept.length || !stored.length ? kept : offered.slice();
 }
 
 /**

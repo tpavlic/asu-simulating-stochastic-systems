@@ -893,8 +893,8 @@ function sevAnova(r, L, out, need) {
     out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
     if (A.rule === 'lsd') out.push(repYesNo(L, r, 'posthoc lsd protected', f('ph', 'protected')));
     if (lang === 'R' && A.rule === 'tukey' && !L.tidy) {
-      out.push(c + 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier).');
-      out.push('if (av$msw > 0) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
+      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier), where its qtukey is defined.', c));
+      out.push('if (av$msw > 0 && av$dfw >= 2) print(TukeyHSD(av$fit, "design", conf.level = 1 - alpha))');
     }
   }
   // Each pair's report keys: [suffix, field, yes/no].
@@ -917,8 +917,8 @@ function sevAnova(r, L, out, need) {
     out.push(c + 'The pairs above as one tibble, a row per pair (i and j are the design numbers).');
     out.push('print(bind_rows(ph$pairs))');
     if (!A.welch && A.rule === 'tukey') {
-      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals, tidied by broom (its estimate is the later design less the earlier).', c));
-      out.push('if (av$msw > 0) print(broom::tidy(TukeyHSD(av$fit, "design", conf.level = 1 - alpha)))');
+      out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals, tidied by broom (its estimate is the later design less the earlier), where its qtukey is defined.', c));
+      out.push('if (av$msw > 0 && av$dfw >= 2) print(broom::tidy(TukeyHSD(av$fit, "design", conf.level = 1 - alpha)))');
     }
   }
   if (A.letters) {
@@ -1449,6 +1449,13 @@ BODIES.steady = { R: steadyBody, py: steadyBody, m: steadyBody };
 
 // ── Summary and Plots ────────────────────────────────────────────────────
 
+// The first `max` ids, then how many more there are: a script that reads its
+// data from files may hold any number of replications.
+function idList(ids, max = 20) {
+  const head = ids.slice(0, max).map(ascii).join(', ');
+  return ids.length > max ? head + ', and ' + (ids.length - max).toLocaleString('en-US') + ' more' : head;
+}
+
 // The replication outcomes of the datasets ticked under Equal variances, which
 // Levene's test compares; the script has no records for any but the shown one.
 function spreadBlock(L, S) {
@@ -1527,7 +1534,7 @@ function exploreBody(r, L, { csv = false } = {}) {
   // The outcomes.
   if (X.outcomes) {
     out.push(L.sect('Descriptives of the replication outcomes'));
-    if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + r.outcomes.dropped.map(ascii).join(', ') + '.', c));
+    if (r.outcomes.dropped.length) out.push(...commentLines(c, 'Replications that gave no outcome are left out: ' + idList(r.outcomes.dropped) + '.', c));
     out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
     out.push(L.tidy ? 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)' : L.assign('d', 'describe(x)'));
     for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));

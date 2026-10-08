@@ -657,7 +657,7 @@ function severalSubset(r, o, g) {
 
 // ── Steady State ─────────────────────────────────────────────────────────
 
-/** The most numbers a script embeds; past it, a page's scripts read the data from its CSV files. */
+/** The most data values a script embeds; past it, a page's scripts read the data from its CSV files. */
 export const MAX_NUMBERS = 200000;
 
 /**
@@ -674,7 +674,8 @@ export function recordCount(ds) {
 /**
  * The files the records of a dataset can be read from: the Observations CSV
  * for the records, and the Replication summary CSV for the list and order of
- * the replications because one with no records has no row in the first.
+ * the replications; the second is needed because a replication with no
+ * records has no row in the first.
  */
 function recordsCsv(ds) {
   return [csvEntry(ds, 'observations', 'records'), csvEntry(ds, 'replications', 'replication list')];
@@ -828,10 +829,11 @@ export function repKeys(kind) {
 export const REP_LINES_MAX = 1000;
 
 /**
- * Whether a Summary and Plots script would embed more than MAX_NUMBERS
- * numbers: the shown dataset's records, each replication's id and the
+ * Whether a Summary and Plots script would embed more than MAX_NUMBERS data
+ * values: the shown dataset's records, each replication's id and the
  * analyzer's values for it (repKeys), and the outcomes of the datasets
- * Levene's test compares. Cheap, and copies nothing.
+ * Levene's test compares. The analyzer's single values (the descriptives and
+ * the test results) are not counted. Cheap, and copies nothing.
  * @param {{ds: object, spread: null|{groups: ArrayLike<number>[]}}} o
  */
 export function exploreTooBig({ ds, spread }) {

@@ -214,7 +214,7 @@ function withDatasetsProvenance(list, provenance, text, means = false) {
  * blank cell, and so every row of that dataset is rejected as short. A name
  * holding a line break splits each of its rows across two lines, which the
  * importer reads one at a time, and so those rows are rejected or misread. A
- * name with leading or trailing spaces does come back, because the quoted
+ * name with leading or trailing spaces does come back because the quoted
  * field keeps them.
  * @param {import('../data/model.js').Dataset[]} list
  * @param {Record<string, unknown>} [provenance]

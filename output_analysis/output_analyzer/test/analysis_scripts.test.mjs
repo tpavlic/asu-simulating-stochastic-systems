@@ -273,7 +273,7 @@ function runMatlab() {
 }
 
 // Tolerances: a relative 1e-6 on max(1, |expected|) by default; the keys a
-// language can only approximate are looser (see the spec, decision 6). A
+// language can only approximate are looser. A
 // post-hoc rule's differences, standard errors, and degrees of freedom are
 // exact; what rests on its quantile (the critical value, the half-width, the
 // interval's ends, and a p-value) is held to 1e-5 for the studentized range
@@ -406,7 +406,7 @@ export function assertAnalyzerColumns(stdout, recipe, lang) {
   assert.equal(withColumn, lines, lang + ': report lines with no analyzer column: ' + bare.join('; '));
 }
 
-// ── Task 1: the skeleton ────────────────────────────────────────────────
+// ── Every script: header, names, ids, and descriptives ──────────────────
 
 const AWKWARD = makeDataset({ name: 'Queue "A" – 1\\2', response: 'avg_wait', unit: 'min', kind: 'reps',
   reps: [1, 2, 3, 4, 5, 6].map((id, i) => ({ id, v: [2.5 + 0.3 * i] })) });
@@ -430,7 +430,7 @@ function descRecipe(title, ds) {
     provenance: { dataset: ds.name, 'confidence level': '95%' }, plan: null });
 }
 
-// The descriptives every Task 1 smoke fixture pins, checked against the recipe's own.
+// The descriptives every smoke fixture below pins, checked against the recipe's own.
 function assertDescriptives(r, want) {
   for (const [k, v] of Object.entries(want)) {
     if (Number.isNaN(v)) assert.ok(Number.isNaN(r.expect[k]), k);
@@ -571,7 +571,7 @@ const SIX = { n: 6, mean: 3.25, sd: 0.5612486080, se: 0.2291287847, min: 2.5, q1
   });
 }
 
-// ── Task 2: One System ──────────────────────────────────────────────────
+// ── One System ──────────────────────────────────────────────────────────
 
 const QUEUE = example('queue-reps')[0];   // 20 replication values of avg_wait
 const PLAN = { relative: true, rel: 10, abs: null, delta: 0.3, power: 0.8 };
@@ -627,7 +627,7 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
   checkRecipe('One System, Wilcoxon on queue-reps (exact)', rn);
 }
 
-// Review Focus 1: a replication that gave no outcome is left out and named.
+// A replication that gave no outcome is left out and named.
 {
   const ds = makeDataset({ name: 'gappy', response: 'wait', kind: 'tally', reps: [{ id: 1, v: [1, 2, 3] }, { id: 2, v: [] }, { id: 3, v: [2, 2, 5] }, { id: 4, v: [4] }] });
   const o = outcomeVector(ds);
@@ -638,7 +638,7 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
   checkRecipe('One System on a dataset with an empty replication', r);
 }
 
-// Review Focus 2: ties and n >= 50 put the Wilcoxon interval on the normal approximation.
+// Ties and n >= 50 put the Wilcoxon interval on the normal approximation.
 {
   const tied = makeDataset({ name: 'tied', response: 'v', kind: 'reps', reps: [3, 3, 4, 5, 5, 5, 6, 7, 7, 9].map((v, i) => ({ id: i + 1, v: [v] })) });
   const r = oneRecipe({ ds: tied, x: tied.reps.map(p => p.v[0]), ids: tied.reps.map(p => p.id), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(tied, 0.95, 'np'), plan: null });
@@ -697,7 +697,7 @@ test('One System under the pooled override is held to the 200,000-number cap', (
   checkRecipe('One System with a plan that has no answer', r);
 }
 
-// ── Task 3: Two Systems, independent replications ───────────────────────
+// ── Two Systems, independent replications ───────────────────────────────
 
 // The page's {v, ids, dropped} for one design.
 const est = ds => { const o = outcomeVector(ds); return { v: Float64Array.from(o.values), ids: o.ids, dropped: o.dropped }; };
@@ -859,7 +859,7 @@ for (const [proc, label, level] of [['t', 'Welch', 0.95], ['pooled', 'pooled t',
   });
 }
 
-// ── Task 4: Two Systems, paired replications ────────────────────────────
+// ── Two Systems, paired replications ────────────────────────────────────
 import { matchPairs } from '../js/stats/compare.js';
 
 const [CRN_A, CRN_B] = example('two-crn');
@@ -1007,14 +1007,14 @@ test('the pairs comment names A and B once when the dataset names end in them', 
   }
 }
 
-// ── Task 5: Several Systems, the means and the differences ──────────────
+// ── Several Systems, the means and the differences ──────────────────────
 import { severalRecipe } from '../js/io/recipes.js';
 import { matchBlocks } from '../js/stats/compare.js';
 import { LIB } from '../js/io/script_lib.js';
 
 const FOUR = example('four-designs');
 const FOUR_CRN = example('four-crn');
-const SIX_D = example('six-designs');   // SIX names Task 1's descriptives above
+const SIX_D = example('six-designs');   // SIX names the descriptives fixture above
 const SEV_PLAN = { meansH: 0.5, diffsH: 0.6, delta: 0.4, power: 0.8 };
 const SEV_RULES = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s LSD (protected)', bonferroni: 'Bonferroni (pooled variance)', dunnett: 'Dunnett vs control' };
 
@@ -1166,7 +1166,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
   checkRecipe('Several Systems, paired by position under the rank procedures', rq, sevChecks);
 }
 
-// Designs with no spread (R12). One flat design: its interval is its mean,
+// Designs with no spread. One flat design: its interval is its mean,
 // every Welch comparison with it still runs, and the plan for the
 // differences has no answer, as on the page. Every design flat: the
 // differences are known exactly, Welch's test is decided by whether two
@@ -1247,7 +1247,7 @@ test('the benchmark fixtures declare designs above, below, and containing it', (
   }
 }
 
-// ── Task 6: Several Systems, the analysis of variance and the post-hoc rules ──
+// ── Several Systems, the analysis of variance and the post-hoc rules ──
 import { letterGroups } from '../js/stats/compare.js';
 import { dunn } from '../js/stats/nonparam.js';
 
@@ -1286,7 +1286,7 @@ test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the 
   const rb = sevRecipe(FOUR_CRN, { paired: true });
   for (const k of ['ss blocks', 'df blocks', 'block F', 'block p']) assert.ok(k in rb.expect, k);
   assert.equal(rb.expect['anova df2'], 27);
-  // The rank procedures report no analysis of variance here (Task 7's rank tests take its place), only the F plan.
+  // The rank procedures report no analysis of variance here (the rank tests below take its place), only the F plan.
   const rn = sevRecipe(SIX_D, { proc: 'np' });
   assert.equal(rn.several.anova, null);
   assert.equal(rn.several.anovaPlan.sigmaFrom, 'pooled');
@@ -1329,7 +1329,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   checkRecipe('Several Systems, blocked Dunnett on 1 residual degree of freedom at 99%', r99, sevChecks);
 }
 
-// Review Focus 3: a flat design under Welch's analysis of variance. The page
+// A flat design under Welch's analysis of variance. The page
 // shows a warning in place of the section, and plans the F test on the
 // pooled analysis it falls back to.
 {
@@ -1423,7 +1423,7 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
   }
 }
 
-// ── Task 7: Several Systems, the rank tests and the screen for the best ──
+// ── Several Systems, the rank tests and the screen for the best ──────────
 
 test('severalRecipe carries the rank tests, the screen, and the letters', () => {
   const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
@@ -1563,7 +1563,7 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
 }
 
 // The screen refuses an indifference zone of 0 (or one not set), and the
-// script says why in ASCII (R18: the reason names delta).
+// script says why in ASCII (the reason names delta).
 {
   const r = sevRecipe(FOUR, { eps: 0 });
   assert.equal(r.expect.screen, 'not defined');
@@ -1636,7 +1636,32 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
     Object.assign({ notInR: /^posthoc gameshowell .*(crit|hw|lower|upper| p)$/ }, sevChecks));
 }
 
-// ── Task 8: Steady State ───────────────────────────────────────────────
+// Below 2 degrees of freedom, where R's qtukey and ptukey are not defined: the
+// R scripts print NaN for the studentized-range values, declare no pair
+// different, and carry on through the letters, the screen, and the plans. The
+// analyzer declares no pair different in either fixture, and so the flags and
+// the letters are compared in R too.
+{
+  // Two designs in two blocks: Tukey on 1 residual degree of freedom.
+  const blk2 = [[2, 3.5], [4, 4.5]].map((v, i) => reps('P' + (i + 1), v));
+  const rt = sevRecipe(blk2, { paired: true });
+  assert.equal(rt.expect['anova df2'], 1);
+  assert.ok(Number.isFinite(rt.expect['posthoc tukey critical value']) && rt.expect['posthoc tukey 1-2 different'] === 0);
+  checkRecipe('Several Systems, Tukey on 1 degree of freedom, in blocks', rt,
+    Object.assign({ notInR: /^posthoc tukey .*(critical value|hw|lower|upper)$/ }, sevChecks));
+  // Games-Howell on three designs of two outcomes each: every pair's Welch degrees of freedom lie
+  // between 1 and 2.
+  const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('W' + (i + 1), v));
+  const rg = sevRecipe(two, { varMode: 'welch', eps: 0.4 });
+  for (const p of ['1-2', '1-3', '2-3']) {
+    const df = rg.expect['posthoc gameshowell ' + p + ' df'];
+    assert.ok(df >= 1 && df < 2, p + ': df ' + df);
+  }
+  checkRecipe('Several Systems, Games-Howell on two outcomes per design', rg,
+    Object.assign({ notInR: /^posthoc gameshowell .*(crit|hw|lower|upper| p)$/ }, sevChecks));
+}
+
+// ── Steady State ───────────────────────────────────────────────────────
 import { steadyRecipe, recordCount, MAX_NUMBERS } from '../js/io/recipes.js';
 import { batchMeans } from '../js/stats/steadystate.js';
 import { truncateDataset } from '../js/data/model.js';
@@ -1694,7 +1719,7 @@ checkRecipe('Steady State, transient waits lumped after a cut by index', stRecip
 checkRecipe('Steady State, transient waits aligned by time, replication 3, cut by time', stRecipe(TRANSIENT, { align: 'time', nBins: 40, repIdx: 2, cut: 20, count: 8 }), stChecks);
 checkRecipe('Steady State, transient waits lumped by time, by size', stRecipe(TRANSIENT, { align: 'time', nBins: 60, lumped: true, cut: 30, mode: 'size', size: 75, level: 0.99 }), stChecks);
 
-// Review Focus 4: a time-persistent run cut by time carries the state in force
+// A time-persistent run cut by time carries the state in force
 // at the cut as its first record, at the cut time, and the first batch's time
 // average counts it. Dropping the records before the cut instead loses the
 // stretch from the cut to the next record and changes the first batch mean,
@@ -1843,7 +1868,7 @@ test('R data blocks are one-line statements', () => {
   });
 }
 
-// ── Task 9: Summary and Plots ──────────────────────────────────────────
+// ── Summary and Plots ──────────────────────────────────────────────────
 import { exploreRecipe, exploreTooBig, repKeys, REP_LINES_MAX } from '../js/io/recipes.js';
 
 // The page's inputs: its title and provenance, and the Equal variances
@@ -1876,7 +1901,7 @@ test('exploreRecipe carries the replications, the outcomes, the check, and the s
   }
   // Building is pure: twice gives the same recipe.
   assert.deepEqual(JSON.parse(JSON.stringify(exRecipe(TRANSIENT))), JSON.parse(JSON.stringify(exRecipe(TRANSIENT))));
-  // Tidy R summarises each replication's records for tally and time-persistent
+  // Tidy R summarizes each replication's records for tally and time-persistent
   // data only: one value per replication has no count or times to show.
   const summary = 'print(records_tbl |> summarise(records = n()';
   for (const ds of [TRANSIENT, QLEN]) assert.ok(analysisScript(exRecipe(ds), 'tidy').includes(summary), ds.kind + ': the records summary');
@@ -1909,6 +1934,18 @@ checkRecipe('Summary and Plots on replication values', exRecipe(example('queue-r
   const r = exRecipe(odd);
   assert.ok(Number.isNaN(r.expect['rep b outcome']) && Number.isNaN(r.expect['rep c sd']) && r.expect.n === 3);
   for (const lang of LANGS) assert.ok(/left out: b\./.test(analysisScript(r, lang)), lang + ' names the replication with no outcome');
+  // A long list of replications with no outcome names the first twenty and counts the rest.
+  test('Summary and Plots names at most twenty replications with no outcome', () => {
+    const gaps = makeDataset({ name: 'Gappy', response: 'wait', kind: 'tally',
+      reps: Array.from({ length: 30 }, (_, i) => ({ id: 'g' + (i + 1), v: i < 5 ? [i, i + 1.5] : [] })) });
+    const rg = exRecipe(gaps);
+    for (const lang of LANGS) for (const csv of [false, true]) {
+      const flat = analysisScript(rg, lang, { csv }).replace(/\n[#%] /g, ' ');
+      const at = flat.indexOf('gave no outcome are left out: '), line = flat.slice(at, flat.indexOf('.', at) + 1);
+      assert.ok(at > 0 && line.endsWith(': g6, g7, g8, g9, g10, g11, g12, g13, g14, g15, g16, g17, g18, g19, g20, g21, g22, g23, g24, g25, and 5 more.'),
+        lang + (csv ? ' (CSV mode)' : '') + ': ' + line);
+    }
+  });
   checkRecipe('Summary and Plots on tally data with an empty and a one-observation replication', r, exChecks);
   // Time-persistent runs of unequal length with no end time, one of them empty.
   const lens = [300, 0, 760, 410, 848];
@@ -1942,9 +1979,9 @@ test('a Summary and Plots dataset past 200,000 numbers gives a full recipe that 
   assert.deepEqual(r.settings, { kind: 'tally', end_time: NaN });
 });
 
-// ── Task 11: the Tidy R dialect ────────────────────────────────────────
+// ── The Tidy R dialect ─────────────────────────────────────────────────
 
-test('the Tidy R script reads its data as a tibble, summarises with dplyr, tidies its tests, and plots with ggplot2', () => {
+test('the Tidy R script reads its data as a tibble, summarizes with dplyr, tidies its tests, and plots with ggplot2', () => {
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN });
   const s = analysisScript(r, 'tidy');
   for (const needle of ['tibble(', 'summarise(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
@@ -2125,7 +2162,7 @@ function checkCsvRead(name, recipe, datasets, { smoke = false } = {}) {
   }
 }
 
-// Review Focus 1 and 2: a name with a comma, quotes, a non-ASCII dash, and a
+// A name with a comma, quotes, a non-ASCII dash, and a
 // backslash, with ids that only text keeps (007, 1.0) and a replication with
 // no observations, and so no outcome.
 const QUEUE_COMMA = makeDataset({ name: 'Queue, "A" – 1\\2', response: 'busy servers', unit: 'min', kind: 'tally',
@@ -2374,7 +2411,7 @@ test('the Data buttons save the files the CSV-mode scripts read', () => {
   assert.deepEqual(two.map(d => d.label), ['Data: queue-a-1-2_replications.csv (' + ds.name + ')', 'Data: queue-a-1-2_replications.csv (Queue A 1 2)']);
 });
 
-// Review Focus 3: time-persistent data with and without an end time, whose
+// Time-persistent data with and without an end time, whose
 // CSV-mode scripts take end_time from Settings and reach the same time
 // averages; and one fixture on every other page.
 {

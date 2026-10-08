@@ -20,6 +20,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
+import { fRatioVerdict } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -725,23 +726,6 @@ function renderIndependent(res, notes, d, level) {
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
     ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
-}
-
-/**
- * The F ratio's verdict, and the "interval contains 1" entry of its exported
- * table. Two designs with no spread make F = 0/0, and so there is no ratio to
- * judge. The page reaches fRatio only with two or more outcomes in each
- * design; the undefined interval of fewer is judged here all the same, rather
- * than read as one that excludes 1.
- * @param {ReturnType<typeof fRatio>} fr
- * @returns {{ text: string, contains: 'yes'|'no'|'not defined' }}
- */
-export function fRatioVerdict(fr) {
-  if (fr.s1 === 0 && fr.s2 === 0) return { text: 'Neither design varies, and so the variances cannot be compared.', contains: 'not defined' };
-  if (Number.isNaN(fr.lo) || Number.isNaN(fr.hi)) return { text: 'The F ratio needs at least two replication outcomes of each design.', contains: 'not defined' };
-  return fr.lo <= 1 && 1 <= fr.hi
-    ? { text: 'The interval contains 1: insufficient evidence that the variances differ at this level.', contains: 'yes' }
-    : { text: 'The interval excludes 1: the variances differ at this level.', contains: 'no' };
 }
 
 // Card labels are set in capitals; a symbol keeps its own case, and so σ

@@ -888,7 +888,7 @@ function update() {
       alternative: 'Welch’s analysis of variance, which pools nothing (the Variances switch above)',
       procedure: welch ? 'Welch’s analysis of variance' : 'the analysis of variance', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
     const levNaN = Number.isNaN(lv.p);
-    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as happens when no design varies)' : pEq(lv.p);
+    const levTxt = levNaN ? 'cannot be computed because every outcome lies the same distance from its design’s median (as when no design varies, or when every design has two outcomes and all share one range)' : pEq(lv.p);
     const levInf = lv.F === Infinity;
     if (welch) b.appendChild(para('exp-note', (levNaN ? 'Levene’s test ' + levTxt + '.'
       : levInf ? 'Levene’s test gives ' + levTxt + ' here, but every outcome lies the same distance from its design’s median (as two outcomes always do), and so the test compares one distance per design and says little about the variances.'

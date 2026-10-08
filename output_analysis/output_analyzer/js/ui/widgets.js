@@ -180,21 +180,6 @@ export function datasetSelect(selectEl, opts = {}) {
 }
 
 /**
- * The ticks a dataset checklist opens with. A stored list stands at any
- * length, even one or none, less any id no longer offered; every offered
- * dataset is ticked only before any choice (nothing stored) or when a
- * non-empty stored list has none of its datasets left.
- * @param {unknown} stored the list kept with the session, or anything else when there is none
- * @param {string[]} offered the ids of the datasets the checklist offers
- * @returns {string[]}
- */
-export function initialTicks(stored, offered) {
-  if (!Array.isArray(stored)) return offered.slice();
-  const kept = stored.filter(x => offered.includes(x));
-  return kept.length || !stored.length ? kept : offered.slice();
-}
-
-/**
  * A checklist of the loaded datasets that pass `filter`, one checkbox label
  * per dataset (each label clears the 24px touch target), kept in sync on
  * every 'datasets' event with the checked ones preserved.

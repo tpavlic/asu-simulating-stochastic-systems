@@ -1720,8 +1720,10 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   k <- length(groups); C <- length(pairs); scale <- 1
   if (rule == "tukey") {
     # R's qtukey is approximate on few degrees of freedom (about 1% or more off at 2, several
-    # percent with many designs), and below 2 it returns NaN with a warning.
-    crit <- qtukey(1 - alpha, k, av$dfw); scale <- 1 / sqrt(2)
+    # percent with many designs), and below 2 it is not defined (it returns NaN with a
+    # warning), and so there the critical value and the half-widths are left NaN and no pair is
+    # declared different.
+    crit <- if (av$dfw >= 2) qtukey(1 - alpha, k, av$dfw) else NaN; scale <- 1 / sqrt(2)
   } else if (rule == "lsd") {
     crit <- qt(1 - alpha / 2, av$dfw)
   } else if (rule == "bonferroni") {
@@ -1734,7 +1736,7 @@ posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
     diff <- av$means[p[1]] - av$means[p[2]]; se <- sqrt(av$msw * (1 / av$n[p[1]] + 1 / av$n[p[2]]))
     hw <- crit * scale * se
     list(i = p[1], j = p[2], diff = diff, se = se, hw = hw, lo = diff - hw, hi = diff + hw,
-         flagged = !identical(protected, FALSE) && (diff - hw > 0 || diff + hw < 0))
+         flagged = isTRUE(!identical(protected, FALSE) && (diff - hw > 0 || diff + hw < 0)))
   })
   list(crit = crit, protected = protected, pairs = out)
 }
@@ -1833,15 +1835,16 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     if (rule == "gameshowell") {
       # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% or more off at 2,
       # several percent with many designs), and below 2, as between two designs of 2 replications
-      # each, they return NaN with a warning.
-      crit <- qtukey(1 - alpha, k, df); hw <- crit * se / sqrt(2)
-      pval <- ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE)
+      # each, they are not defined (they return NaN with a warning), and so there the critical
+      # value, the half-width, and the p-value are left NaN and the pair is not declared different.
+      crit <- if (df >= 2) qtukey(1 - alpha, k, df) else NaN; hw <- crit * se / sqrt(2)
+      pval <- if (df >= 2) ptukey(abs(diff) / (se / sqrt(2)), k, df, lower.tail = FALSE) else NaN
     } else {
       crit <- qt(1 - alpha / (2 * C), df); hw <- crit * se
       pval <- min(1, C * 2 * pt(-abs(diff / se), df))
     }
     list(i = p[1], j = p[2], diff = diff, se = se, df = df, crit = crit, hw = hw, lo = diff - hw, hi = diff + hw, p = pval,
-         flagged = (diff - hw > 0 || diff + hw < 0))
+         flagged = isTRUE(diff - hw > 0 || diff + hw < 0))
   })
   list(pairs = out)
 }

@@ -4,7 +4,7 @@
 # Base R only. Infinite and undefined values are written as the strings
 # "Infinity", "-Infinity", and "NaN", which JSON has no numbers for.
 #
-# Two rules are the analyzer's, and R applies them here by hand:
+# Three rules are the analyzer's, and R applies them here by hand:
 # - A sample whose minimum equals its maximum has variance exactly 0. R's var()
 #   already gives 0 on these (its mean is accumulated in long double), but
 #   t.test() stops on them ("data are essentially constant"), and so a t

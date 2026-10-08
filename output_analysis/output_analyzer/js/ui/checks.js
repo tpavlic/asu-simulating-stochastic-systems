@@ -80,7 +80,7 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
         (bad ? ' <b>(unequal variances detected)</b>' : '')) +
         (bad ? '. Consider ' + alternative + '. The pooled results on this page assume equal variances and should be interpreted with caution when the spreads differ.' : '.');
     } else {
-      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as happens when no group varies)') + '.';
+      html += ' ' + heading('Heteroscedasticity (unequal variance) tests.', false, false) + ' ' + na('Levene (Brown–Forsythe) test: cannot be computed because every value lies the same distance from its group’s median (as when no group varies, or when every group has two values and all share one range)') + '.';
     }
   }
   if (declared) html += ' ' + na('<b>Independence</b> ' + declared);

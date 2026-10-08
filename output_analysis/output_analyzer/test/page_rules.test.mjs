@@ -7,8 +7,7 @@
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks } from '../js/ui/widgets.js';
-import { fRatioVerdict } from '../js/pages/two.js';
+import { initialTicks, fRatioVerdict } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
