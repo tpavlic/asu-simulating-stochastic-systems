@@ -683,10 +683,13 @@ function renderIndependent(res, notes, d, level) {
     wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
   ]));
   const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
+  // Two designs with no spread make F = 0/0: there is no ratio to judge.
+  const fNone = !!fr && fr.s1 === 0 && fr.s2 === 0;
   const vVerdict = document.createElement('p');
   vVerdict.className = 'cmp-verdict cmp-res';
   vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
-    : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+    : fNone ? 'Neither design varies, and so the variances cannot be compared.'
+      : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
@@ -724,7 +727,7 @@ function renderIndependent(res, notes, d, level) {
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
-    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fContains ? 'yes' : 'no']
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fNone ? 'not defined' : fContains ? 'yes' : 'no']
   ] });
 }
 

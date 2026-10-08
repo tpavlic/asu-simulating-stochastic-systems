@@ -22,7 +22,7 @@ import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } fro
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
-         posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
+         anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
@@ -583,16 +583,16 @@ function severalAnova(r, o, g) {
       if (ph.letters) { section.letters = true; ph.letters.forEach((l, i) => { e['letters ' + (i + 1)] = l; }); }
     }
   }
-  // The plan reads sqrt(msw) of the page's table: the pooled one (blocked
-  // under pairing), and under a defined Welch analysis Welch's table, which
-  // has no msw, and so no plan.
-  const sigma = Math.sqrt(av.msw);
+  // The plan reads sqrt(msw) of the pooled table (blocked under pairing).
+  // Welch's analysis pools no variance, and so under it the plan assumes a
+  // common sigma and reads it from the ordinary one-way analysis.
+  const sigma = Math.sqrt((welchOk ? anova(g) : av).msw);
   const pp = planPowerAnova({ k, sigma, delta: plan.delta, alpha, power: plan.power, blocked: paired });
   const Rlo = Math.min(...g.map(x => x.length));
   Object.assign(e, { 'plan anova delta': plan.delta, 'plan anova power target': plan.power, 'plan anova n': pp.n == null ? NaN : pp.n, 'plan anova power at n': pp.powerAtN,
     'power at current R': sigma > 0 ? powerAnova({ n: Rlo, k, sigma, delta: plan.delta, alpha, blocked: paired }) : NaN });
   if (np) e['plan anova n (rank)'] = pp.n == null ? NaN : Math.ceil(pp.n * Math.PI / 3);
-  r.several.anovaPlan = { blocked: paired, sigmaFrom: welchOk ? 'none' : np || welchBad.length ? 'pooled' : 'anova' };
+  r.several.anovaPlan = { blocked: paired, sigmaFrom: np || welch ? 'pooled' : 'anova' };
 }
 
 /**

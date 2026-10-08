@@ -825,13 +825,18 @@ function update() {
 
   // ANOVA and post-hoc. Welch's analysis weights each design by R/s², and so
   // a design with fewer than two outcomes or with no spread leaves it
-  // undefined; the section then says which designs, and the planning card
-  // below still takes the pooled analysis's variance.
+  // undefined; the section then says which designs. The planning card below
+  // always takes the pooled analysis's variance: the F test's power needs one
+  // σ, and Welch's analysis pools none, and so under Welch's analysis the plan
+  // assumes a common σ and reads it, and the grand mean behind the default δ,
+  // from the ordinary one-way analysis.
   const welch = welchOn();
   const flat = groups.map(g => g.length < 2 || Math.min(...g) === Math.max(...g));
   const welchBad = welch ? list.filter((d, i) => flat[i]).map(d => d.name) : [];
-  const ph = welch && !welchBad.length ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const welchOk = welch && !welchBad.length;
+  const ph = welchOk ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
+  const avPlan = welchOk ? anova(groups) : av;
   const ruleName = welch ? WELCH_RULES[ruleW] : RULES[rule];
   const totalDf = welch ? NaN : paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
   rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : welch ? 'Welch’s analysis of variance and post-hoc tests' : 'Analysis of variance and post-hoc tests';
@@ -1077,7 +1082,7 @@ function update() {
   const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
   planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
               sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)), meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)),
-              sigma: Math.sqrt(av.msw), grandMean: av.grandMean, paired, sdDs };
+              sigma: Math.sqrt(avPlan.msw), grandMean: avPlan.grandMean, welch: welchOk, paired, sdDs };
   registerTips(rootEl);
   resultBase = {
     title: 'Several Systems',
@@ -1221,7 +1226,8 @@ function drawPlan() {
       cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
       pwNote = pp.n != null
         ? 'This is the ' + (c.paired ? 'blocked ' : '') + 'F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best section are a third way to set replications, by selection. ' +
-          'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
+          'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) +
+          (c.welch ? ' from the ordinary one-way analysis (the plan assumes a common σ, which Welch’s analysis does not)' : '') + ', not a guarantee; a larger pilot can move it either way.'
         : esc(pp.reason);
     }
     dText = 'δ = ' + num(c ? delta : NaN) + unit;

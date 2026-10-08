@@ -1220,11 +1220,15 @@ test('severalRecipe carries the ANOVA, the post-hoc pairs, the letters, and the 
   const rl = sevRecipe(FOUR, { rule: 'lsd' });
   assert.equal(rl.expect['posthoc lsd protected'], 0);
   assert.ok(Object.keys(rl.expect).filter(k => / different$/.test(k)).every(k => rl.expect[k] === 0));
-  // Welch: per-pair degrees of freedom, critical values, and p; no pooled critical value; no plan.
+  // Welch: per-pair degrees of freedom, critical values, and p; no pooled critical value; the
+  // F test planned on the ordinary analysis's sigma, and so exactly as under pooled variances.
   const rw = sevRecipe(FOUR, { varMode: 'welch' });
   for (const k of ['welch F', 'welch df2', 'posthoc gameshowell 1-2 df', 'posthoc gameshowell 1-2 crit', 'posthoc gameshowell 2-4 p', 'letters 4']) assert.ok(k in rw.expect, k);
   assert.ok(!('anova F' in rw.expect) && !('posthoc gameshowell critical value' in rw.expect));
-  assert.ok(Number.isNaN(rw.expect['plan anova n']) && Number.isNaN(rw.expect['power at current R']));
+  assert.equal(rw.several.anovaPlan.sigmaFrom, 'pooled');
+  assert.ok(Number.isFinite(rw.expect['plan anova n']) && Number.isFinite(rw.expect['power at current R']));
+  for (const k of ['plan anova n', 'plan anova power at n', 'power at current R']) assert.equal(rw.expect[k], r.expect[k], k);
+  for (const lang of LANGS) assert.ok(analysisScript(rw, lang).includes('av_pooled'), lang);
   assert.ok(analysisScript(rw, 'm').includes('function q = studrange_inv('));
   // Blocked: the blocks' row, and Python's Tukey on the residual mean square, not tukey_hsd.
   const rb = sevRecipe(FOUR_CRN, { paired: true });

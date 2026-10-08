@@ -920,25 +920,22 @@ function sevAnova(r, L, out, need) {
 
 // The F test's power plan, on the standard deviation the page reads from the
 // pooled analysis of variance (with blocks, the residual one): the table
-// above when it ran, a pooled table run here when the section above ran the
-// rank tests or found Welch's analysis undefined, and none under a defined
-// Welch analysis, which pools nothing.
+// above when it ran, and a pooled table run here when the section above ran
+// the rank tests or Welch's analysis, which pools nothing.
 function sevPlanAnova(r, L, out, need) {
   const S = r.several, A = S.anovaPlan, lang = L.lang, f = FIELD[lang], c = L.comment;
   const what = 'For the ' + (A.blocked ? 'blocked ' : '') + 'F test: the smallest R per design at which the F test at alpha detects one design ' +
     'shifted by plan_delta from the others, which share a mean, with probability plan_power';
   const sq = v => (lang === 'py' ? 'np.sqrt(' : 'sqrt(') + f(v, 'msw') + ')';
   const held = ', on the ' + (A.blocked ? 'residual' : 'pooled') + ' standard deviation held at its current value.';
-  if (A.sigmaFrom === 'none') {
-    out.push(...commentLines(c, what + '. Welch\'s analysis pools no variance, and the page gives no F-test plan under it: sigma is missing, and so is every line that needs it.', c));
-    out.push(L.assign('sigma', L.nan));
-  } else if (A.sigmaFrom === 'anova') {
+  if (A.sigmaFrom === 'anova') {
     out.push(...commentLines(c, what + held, c));
     out.push(L.assign('sigma', sq('av')));
   } else {
     need.push('anova');
     out.push(...commentLines(c, what + held + ' The page reads it from the pooled analysis of variance, ' +
-      (S.np ? 'which the rank procedures do not report, and so it is run here.' : 'which it falls back to while Welch\'s analysis is undefined.'), c));
+      (S.np ? 'which the rank procedures do not report, and so it is run here.'
+        : 'run here because Welch\'s analysis pools no variance; the F test\'s power needs one sigma, and so the plan assumes a common sigma across the designs.'), c));
     out.push(L.assign('av_pooled', 'anova_table(groups, paired)'));
     out.push(L.assign('sigma', sq('av_pooled')));
   }

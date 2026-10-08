@@ -15344,25 +15344,22 @@ function sevAnova(r, L, out, need) {
 
 // The F test's power plan, on the standard deviation the page reads from the
 // pooled analysis of variance (with blocks, the residual one): the table
-// above when it ran, a pooled table run here when the section above ran the
-// rank tests or found Welch's analysis undefined, and none under a defined
-// Welch analysis, which pools nothing.
+// above when it ran, and a pooled table run here when the section above ran
+// the rank tests or Welch's analysis, which pools nothing.
 function sevPlanAnova(r, L, out, need) {
   const S = r.several, A = S.anovaPlan, lang = L.lang, f = FIELD[lang], c = L.comment;
   const what = 'For the ' + (A.blocked ? 'blocked ' : '') + 'F test: the smallest R per design at which the F test at alpha detects one design ' +
     'shifted by plan_delta from the others, which share a mean, with probability plan_power';
   const sq = v => (lang === 'py' ? 'np.sqrt(' : 'sqrt(') + f(v, 'msw') + ')';
   const held = ', on the ' + (A.blocked ? 'residual' : 'pooled') + ' standard deviation held at its current value.';
-  if (A.sigmaFrom === 'none') {
-    out.push(...commentLines(c, what + '. Welch\'s analysis pools no variance, and the page gives no F-test plan under it: sigma is missing, and so is every line that needs it.', c));
-    out.push(L.assign('sigma', L.nan));
-  } else if (A.sigmaFrom === 'anova') {
+  if (A.sigmaFrom === 'anova') {
     out.push(...commentLines(c, what + held, c));
     out.push(L.assign('sigma', sq('av')));
   } else {
     need.push('anova');
     out.push(...commentLines(c, what + held + ' The page reads it from the pooled analysis of variance, ' +
-      (S.np ? 'which the rank procedures do not report, and so it is run here.' : 'which it falls back to while Welch\'s analysis is undefined.'), c));
+      (S.np ? 'which the rank procedures do not report, and so it is run here.'
+        : 'run here because Welch\'s analysis pools no variance; the F test\'s power needs one sigma, and so the plan assumes a common sigma across the designs.'), c));
     out.push(L.assign('av_pooled', 'anova_table(groups, paired)'));
     out.push(L.assign('sigma', sq('av_pooled')));
   }
@@ -17552,7 +17549,7 @@ import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } fro
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
-         posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
+         anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
@@ -18113,16 +18110,16 @@ function severalAnova(r, o, g) {
       if (ph.letters) { section.letters = true; ph.letters.forEach((l, i) => { e['letters ' + (i + 1)] = l; }); }
     }
   }
-  // The plan reads sqrt(msw) of the page's table: the pooled one (blocked
-  // under pairing), and under a defined Welch analysis Welch's table, which
-  // has no msw, and so no plan.
-  const sigma = Math.sqrt(av.msw);
+  // The plan reads sqrt(msw) of the pooled table (blocked under pairing).
+  // Welch's analysis pools no variance, and so under it the plan assumes a
+  // common sigma and reads it from the ordinary one-way analysis.
+  const sigma = Math.sqrt((welchOk ? anova(g) : av).msw);
   const pp = planPowerAnova({ k, sigma, delta: plan.delta, alpha, power: plan.power, blocked: paired });
   const Rlo = Math.min(...g.map(x => x.length));
   Object.assign(e, { 'plan anova delta': plan.delta, 'plan anova power target': plan.power, 'plan anova n': pp.n == null ? NaN : pp.n, 'plan anova power at n': pp.powerAtN,
     'power at current R': sigma > 0 ? powerAnova({ n: Rlo, k, sigma, delta: plan.delta, alpha, blocked: paired }) : NaN });
   if (np) e['plan anova n (rank)'] = pp.n == null ? NaN : Math.ceil(pp.n * Math.PI / 3);
-  r.several.anovaPlan = { blocked: paired, sigmaFrom: welchOk ? 'none' : np || welchBad.length ? 'pooled' : 'anova' };
+  r.several.anovaPlan = { blocked: paired, sigmaFrom: np || welch ? 'pooled' : 'anova' };
 }
 
 /**
@@ -22882,14 +22879,16 @@ function buildSpread(api, { ds, est }) {
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   const stored = state.getPick(id, 'spread');
+  // The reader's own ticks stand, even fewer than two; every eligible dataset
+  // is ticked only before any choice, or when none of the stored ones is left.
   const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
-  const initial = want.length >= 2 ? want : eligible.map(d => d.id);
+  const initial = Array.isArray(stored) && (want.length || !stored.length) ? want : eligible.map(d => d.id);
   const host = el('div');
   sec.appendChild(host);
   const list = datasetChecklist(host, { filter: d => finite(repEstimates(d)).length >= 2, checked: initial,
     onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
-  if (chosen.length < 2) { emptyLine(sec, 'Tick two or more datasets to compare their spreads.'); return; }
+  if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result with ' + (chosen.length ? 'one' : 'none') + ' ticked. Tick two or more to compare their spreads.'); return; }
   const groups = chosen.map(d => finite(repEstimates(d)));
   const lv = levene(groups);
   lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
@@ -25919,13 +25918,18 @@ function update() {
 
   // ANOVA and post-hoc. Welch's analysis weights each design by R/s², and so
   // a design with fewer than two outcomes or with no spread leaves it
-  // undefined; the section then says which designs, and the planning card
-  // below still takes the pooled analysis's variance.
+  // undefined; the section then says which designs. The planning card below
+  // always takes the pooled analysis's variance: the F test's power needs one
+  // σ, and Welch's analysis pools none, and so under Welch's analysis the plan
+  // assumes a common σ and reads it, and the grand mean behind the default δ,
+  // from the ordinary one-way analysis.
   const welch = welchOn();
   const flat = groups.map(g => g.length < 2 || Math.min(...g) === Math.max(...g));
   const welchBad = welch ? list.filter((d, i) => flat[i]).map(d => d.name) : [];
-  const ph = welch && !welchBad.length ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
+  const welchOk = welch && !welchBad.length;
+  const ph = welchOk ? posthocWelch(groups, { rule: ruleW, alpha }) : posthoc(groups, { rule, alpha, control: ctrlIdx, blocked: paired });
   const av = ph.anova;
+  const avPlan = welchOk ? anova(groups) : av;
   const ruleName = welch ? WELCH_RULES[ruleW] : RULES[rule];
   const totalDf = welch ? NaN : paired ? av.dfb + av.dfblk + av.dfw : av.dfb + av.dfw;
   rootEl.querySelector('#sev-anova-hd').textContent = np ? (paired ? 'Friedman’s test and its pairwise comparisons' : 'Kruskal–Wallis test and Dunn’s pairwise comparisons') : welch ? 'Welch’s analysis of variance and post-hoc tests' : 'Analysis of variance and post-hoc tests';
@@ -26171,7 +26175,7 @@ function update() {
   const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
   planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
               sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)), meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)),
-              sigma: Math.sqrt(av.msw), grandMean: av.grandMean, paired, sdDs };
+              sigma: Math.sqrt(avPlan.msw), grandMean: avPlan.grandMean, welch: welchOk, paired, sdDs };
   registerTips(rootEl);
   resultBase = {
     title: 'Several Systems',
@@ -26315,7 +26319,8 @@ function drawPlan() {
       cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
       pwNote = pp.n != null
         ? 'This is the ' + (c.paired ? 'blocked ' : '') + 'F test’s power when one design is shifted by δ and the others share a mean; the second-stage counts in the Screen for the best section are a third way to set replications, by selection. ' +
-          'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) + ', not a guarantee; a larger pilot can move it either way.'
+          'An estimate conditional on the current ' + (c.paired ? 'residual standard deviation, √MSE = ' : 'pooled sample standard deviation, √MSW = ') + num(c.sigma) +
+          (c.welch ? ' from the ordinary one-way analysis (the plan assumes a common σ, which Welch’s analysis does not)' : '') + ', not a guarantee; a larger pilot can move it either way.'
         : esc(pp.reason);
     }
     dText = 'δ = ' + num(c ? delta : NaN) + unit;
@@ -28723,10 +28728,13 @@ function renderIndependent(res, notes, d, level) {
     wide(card(L + ' interval for ' + S('σ²<sub>A</sub> / σ²<sub>B</sub>'), fr ? interval(fr.lo, fr.hi) : dash, 'F divided by the F quantiles'))
   ]));
   const fContains = !!fr && fr.lo <= 1 && 1 <= fr.hi;
+  // Two designs with no spread make F = 0/0: there is no ratio to judge.
+  const fNone = !!fr && fr.s1 === 0 && fr.s2 === 0;
   const vVerdict = document.createElement('p');
   vVerdict.className = 'cmp-verdict cmp-res';
   vVerdict.textContent = !fr ? 'No comparison yet: choose two different datasets above.'
-    : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
+    : fNone ? 'Neither design varies, and so the variances cannot be compared.'
+      : fContains ? 'The interval contains 1: insufficient evidence that the variances differ at this level.' : 'The interval excludes 1: the variances differ at this level.';
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
@@ -28764,7 +28772,7 @@ function renderIndependent(res, notes, d, level) {
       ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
   };
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
-    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fContains ? 'yes' : 'no']
+    ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fNone ? 'not defined' : fContains ? 'yes' : 'no']
   ] });
 }
 

@@ -966,14 +966,16 @@ function buildSpread(api, { ds, est }) {
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   const stored = state.getPick(id, 'spread');
+  // The reader's own ticks stand, even fewer than two; every eligible dataset
+  // is ticked only before any choice, or when none of the stored ones is left.
   const want = Array.isArray(stored) ? stored.filter(x => eligible.some(d => d.id === x)) : [];
-  const initial = want.length >= 2 ? want : eligible.map(d => d.id);
+  const initial = Array.isArray(stored) && (want.length || !stored.length) ? want : eligible.map(d => d.id);
   const host = el('div');
   sec.appendChild(host);
   const list = datasetChecklist(host, { filter: d => finite(repEstimates(d)).length >= 2, checked: initial,
     onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
-  if (chosen.length < 2) { emptyLine(sec, 'Tick two or more datasets to compare their spreads.'); return; }
+  if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result with ' + (chosen.length ? 'one' : 'none') + ' ticked. Tick two or more to compare their spreads.'); return; }
   const groups = chosen.map(d => finite(repEstimates(d)));
   const lv = levene(groups);
   lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
