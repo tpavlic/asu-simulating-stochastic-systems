@@ -1049,7 +1049,11 @@ better.
   analysis page's export row also offers "Regenerate these results in" MATLAB, Base R, Tidy R, and
   Python: a script holding the data the page analyzed (replication outcomes on the inference pages,
   the run's records on Steady State and Summary and Plots), every choice made on the page, and code
-  that recomputes every number shown and prints each beside the analyzer's own value. The scripts
+  that recomputes every number shown, prints each under its section's heading, and ends in one
+  line saying whether every number agrees with the page (a `check_details` setting prints each
+  beside the analyzer's own value instead). It then draws every figure the page showed when the
+  button was pressed: the section open, and on Two Systems the pair view, on Summary and Plots the
+  pooled choice, the replication, the axis, and the lag. The scripts
   call each language's own procedure where it has one and carry a short function where it has none.
   In every language, they write out the Hodges–Lehmann estimates, Games–Howell, Rinott's constant,
   Fishman's test, the time-weighted averages, the compact letter display, and the replication-count
@@ -1057,10 +1061,8 @@ better.
   Friedman's test, and Dunnett's critical value is written out everywhere but in SciPy on an
   unblocked design. Tidy R prints the same report lines as Base R through a tidyverse layer: the
   data as a tibble beside the vectors, the descriptives through dplyr, each test object through
-  `broom::tidy()`, and ggplot2 for the three figures the scripts draw (the design intervals on
-  Several Systems, the batch means on Steady State, and the histogram and quantile–quantile plot on
-  Summary and Plots), which the other scripts draw with base graphics, Matplotlib, and MATLAB's own
-  plotting. The files are `<title>-analysis.R`, `<title>-analysis-tidy.R`, `<title>-analysis.py`,
+  `broom::tidy()`, and ggplot2 for every figure, which the other scripts draw with base graphics,
+  Matplotlib, and MATLAB's own plotting. The files are `<title>-analysis.R`, `<title>-analysis-tidy.R`, `<title>-analysis.py`,
   and `<title>_analysis.m`. Each script also shows, in comments after its data, the lines that
   read the same data from the CSV files the Import page's Export saves. Where the data run
   past 200,000 numbers, which Steady State, Summary and Plots, and One System's pooled override
@@ -1089,7 +1091,8 @@ better.
      on untied samples under 50 and the classical normal approximation otherwise, where R 4.4 and
      later compute an exact permutation distribution instead), `js/io/parse.js`, `js/io/arena.js`,
      `js/io/scripts.js`, `js/io/recipes.js`, `js/io/analysis_scripts.js`, `js/io/script_lib.js`,
-     `js/ui/format.js`, `js/ui/rules.js`, and `js/data/model.js` are pure modules
+     `js/io/figure_scripts.js`, the four `js/io/figure_lib_*.js`, `js/ui/format.js`,
+     `js/ui/rules.js`, and `js/data/model.js` are pure modules
      with no DOM access and must not contain the words "window" or "document";
      `node --test output_analysis/output_analyzer/test/` imports them directly (about thirty
      seconds, nearly all of it convention 11's smoke runs of the regenerate scripts in R, Tidy R,
@@ -1098,7 +1101,9 @@ better.
      `Rscript` and a Python one under matplotlib when those are installed, and skips them otherwise;
      the MATLAB script is not run by the tests, and so after changing `js/io/scripts.js` run one
      through MATLAB (`matlab -batch`) as well. Small rules the pages apply live in `js/ui/rules.js`
-     (`initialTicks` and `fRatioVerdict`), which `test/page_rules.test.mjs` tests, and so no test
+     (`initialTicks` and `fRatioVerdict`), with the labels the figures and the scripts share
+     (`roleLabels`, `outcomeAxis`, `estimateAxis`, and `shortNames`), which
+     `test/page_rules.test.mjs` tests, and so no test
      imports a page module. A page module, and every module it imports, still touches the DOM,
      `window`, or `localStorage` only when called, never at the top level as it loads.*
   3. *Every expected value in `test/` comes from the R scripts in `test/reference/`, which print the
@@ -1225,7 +1230,14 @@ better.
      script passes through `ascii()`, which keeps every script 7-bit ASCII. R data blocks are
      one-line statements (a long vector is built by appending chunks) because Rscript's parse is
      quadratic in a long expression: a near-cap script took about three minutes as one expression
-     and four seconds as statements. Every script prints its results through one `report` helper as
+     and four seconds as statements. Every script prints its results through one `report` helper,
+     which by default prints an aligned name and value (seven significant digits) under a heading
+     for each section that reports (`report_section`, placed by `headings()` in
+     `js/io/analysis_scripts.js`), checks the value against the analyzer's within the tolerance
+     `tolFor` gives that name, and leaves `report_summary()`, after the last section that reports
+     and before any figure, to say in one line whether every value agrees or to list those that do
+     not. The Settings block sets `check_details`, and with it set (as `detailed()` in the harness
+     sets it for every script the tests run) the helper prints the contract instead,
      `name: value   (analyzer: value)` lines, with numbers in `%.10g`, `NaN` for a missing number,
      and yes/no for a flag; the report names are defined by the emitters in
      `js/io/analysis_scripts.js`, pinned by `test/analysis_scripts.test.mjs`, and must stay
@@ -1247,7 +1259,25 @@ better.
      report line with `expect`, and `checkCsvMode` does the same for CSV-mode scripts beside files
      written by `dataFileText`, the patterns in `EMBEDDED` confirming that no data remain in them. A
      fixture passes `also: noWarning` to check that no run prints a warning, and a skipped language
-     is not a pass after a change to its snippets. The tolerance is
+     is not a pass after a change to its snippets. The figures come last, in a Figures section that
+     `figureBlock` in `js/io/figure_scripts.js` writes from `FIGURES[page]`: each figure is one
+     call of a helper the script carries, `fig_strips`, `fig_intervals`, `fig_pairs_by_rep`,
+     `fig_pairs_slopes`, `fig_hist`, `fig_ecdf`, `fig_box`, `fig_qq`, `fig_series`,
+     `fig_running`, `fig_lag`, `fig_acf`, `fig_warmup`, or `fig_batches`, each written once per
+     dialect in `js/io/figure_lib_r.js`, `figure_lib_tidy.js` (ggplot2), `figure_lib_py.js`
+     (Matplotlib, imported only inside the helpers, with one `show_figures()` at the end and a
+     guard that skips the figures when Matplotlib is missing), and `figure_lib_m.js` (core
+     MATLAB graphics, options passed as a struct), under the contract stated at the top of
+     `js/io/figure_scripts.js`.
+     A helper named `common` in each holds what the others share, and so a script's own variables
+     never take the helpers' `fig_` prefix. A page passes the view as `view` when the recipe is
+     built, at the press of the button (`currentSection()` from `js/ui/tabs.js` and the page's
+     own picks), and the recipe records what the figures need in `recipe.fig`; a figure follows
+     the page's rules where that is cheap (the histogram's bins, the quantile-quantile plotting
+     positions, the order of the designs, the letters and brackets) and is otherwise an
+     approximation of the page's, since the scripts are templates. The harness's "Figures of
+     every view" fixtures run each view in all four languages and count the figures R and
+     Python draw. The tolerance is
      1e-6 relative, looser only where a routine approximates: 2e-4 on a Wilcoxon interval end under
      the normal approximation (a root found to 1e-4 by a different finder in each language), 1e-5 on
      studentized-range and Dunnett quantiles (5e-5 in R, whose `qtukey` is good to about four digits
