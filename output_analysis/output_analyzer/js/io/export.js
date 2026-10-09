@@ -281,6 +281,59 @@ export function tableCsv(headers, rows, provenance) {
   return withProvenance(provenance, [headers, ...rows], resultCsv);
 }
 
+/**
+ * The start of a CSV file this module wrote, for a preview: its `#` lines
+ * without the mark, its header's fields, the fields of its first `n` records,
+ * and how many records follow those. Fields are read by RFC 4180, and so a
+ * quoted field keeps its commas and line breaks and an empty field stays.
+ * @param {string} text
+ * @param {number} [n]
+ * @returns {{notes: string[], header: string[], rows: string[][], more: number}}
+ */
+export function csvHead(text, n = 8) {
+  const out = { notes: [], header: [], rows: [], more: 0 };
+  let fields = [], cur = '', quoted = false, started = false, header = false;
+  const len = text.length;
+  const endRecord = () => {
+    fields.push(cur);
+    if (!header) { out.header = fields; header = true; }
+    else if (out.rows.length < n) out.rows.push(fields);
+    else out.more++;
+    fields = []; cur = ''; started = false;
+  };
+  let i = 0;
+  while (i < len) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i += 2; continue; }
+        quoted = false;
+      } else cur += ch;
+      i++;
+      continue;
+    }
+    if (!started && ch === '#') {
+      let e = text.indexOf('\n', i);
+      if (e < 0) e = len;
+      out.notes.push(text.slice(i + 1, e).replace(/\r$/, '').trim());
+      i = e + 1;
+      continue;
+    }
+    if (ch === '\n' || ch === '\r') {
+      if (started) endRecord();
+      i++;
+      continue;
+    }
+    started = true;
+    if (ch === '"' && cur === '') quoted = true;
+    else if (ch === ',') { fields.push(cur); cur = ''; }
+    else cur += ch;
+    i++;
+  }
+  if (started) endRecord();
+  return out;
+}
+
 function requireDom(what) {
   if (typeof document === 'undefined') throw new Error(what + ' needs a browser.');
 }

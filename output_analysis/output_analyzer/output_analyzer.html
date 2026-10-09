@@ -578,6 +578,14 @@ footer a:hover { text-decoration: underline; }
 .im-ds-wrap { container-type: inline-size; }
 .im-xp-box { position: sticky; left: 10px; max-width: calc(100cqw - 20px); padding: 2px 0; }
 .im-xp-box details.why { margin-top: 6px; }
+.xp-peek { margin-top: 8px; }
+.xp-peek + .xp-peek { margin-top: 18px; }
+.xp-peek .scroll-box { max-height: none; overflow-x: auto; }
+.xp-peek .ptab { width: auto; }
+.xp-peek .ptab th, .xp-peek .ptab td { padding: 4px 10px 4px 22px; }
+.xp-peek .ptab th:first-child, .xp-peek .ptab td:first-child { padding-left: 4px; }
+.xp-peek-notes { font-family: 'IBM Plex Mono', monospace; font-size: .75rem; color: var(--muted); margin: 2px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.xp-peek .ptab th { text-transform: none; letter-spacing: 0; font-family: 'IBM Plex Mono', monospace; }
 .im-xp-all { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .im-xp-lbl { font-size: .85rem; color: var(--muted); }
 .ex-sub { margin-top: 10px; }
@@ -17059,6 +17067,59 @@ export function tableCsv(headers, rows, provenance) {
   return withProvenance(provenance, [headers, ...rows], resultCsv);
 }
 
+/**
+ * The start of a CSV file this module wrote, for a preview: its `#` lines
+ * without the mark, its header's fields, the fields of its first `n` records,
+ * and how many records follow those. Fields are read by RFC 4180, and so a
+ * quoted field keeps its commas and line breaks and an empty field stays.
+ * @param {string} text
+ * @param {number} [n]
+ * @returns {{notes: string[], header: string[], rows: string[][], more: number}}
+ */
+export function csvHead(text, n = 8) {
+  const out = { notes: [], header: [], rows: [], more: 0 };
+  let fields = [], cur = '', quoted = false, started = false, header = false;
+  const len = text.length;
+  const endRecord = () => {
+    fields.push(cur);
+    if (!header) { out.header = fields; header = true; }
+    else if (out.rows.length < n) out.rows.push(fields);
+    else out.more++;
+    fields = []; cur = ''; started = false;
+  };
+  let i = 0;
+  while (i < len) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i += 2; continue; }
+        quoted = false;
+      } else cur += ch;
+      i++;
+      continue;
+    }
+    if (!started && ch === '#') {
+      let e = text.indexOf('\n', i);
+      if (e < 0) e = len;
+      out.notes.push(text.slice(i + 1, e).replace(/\r$/, '').trim());
+      i = e + 1;
+      continue;
+    }
+    if (ch === '\n' || ch === '\r') {
+      if (started) endRecord();
+      i++;
+      continue;
+    }
+    started = true;
+    if (ch === '"' && cur === '') quoted = true;
+    else if (ch === ',') { fields.push(cur); cur = ''; }
+    else cur += ch;
+    i++;
+  }
+  if (started) endRecord();
+  return out;
+}
+
 function requireDom(what) {
   if (typeof document === 'undefined') throw new Error(what + ' needs a browser.');
 }
@@ -26514,7 +26575,7 @@ import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { datasetFiles, fileButtons, stamp, dataFilesHelp } from '../ui/exportrow.js';
+import { datasetFiles, fileButtons, stamp, dataFilesHelp, dataPreview } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
 
 /** The page's hash id. */
@@ -26550,6 +26611,8 @@ let lastImport = null;
 const expanded = new Set();
 /** Ids of datasets whose data files are shown in the table. */
 const exportOpen = new Set();
+/** Ids of datasets whose data preview is open under their data files. */
+const previewOpen = new Set();
 let removeAllTimer = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -27194,7 +27257,7 @@ function renderList() {
   const focusKey = active && box.contains(active) && active.dataset ? active.dataset.focus || null : null;
   box.innerHTML = '';
   const list = state.datasets;
-  for (const set of [expanded, exportOpen]) {
+  for (const set of [expanded, exportOpen, previewOpen]) {
     for (const idx of Array.from(set)) if (!list.some(d => d.id === idx)) set.delete(idx);
   }
   if (!list.length) {
@@ -27262,7 +27325,7 @@ function renderList() {
     });
     const rm = tr.querySelector('.im-rm');
     rm.dataset.focus = 'rm:' + ds.id;
-    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
+    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); previewOpen.delete(ds.id); state.remove(ds.id); });
     tb.appendChild(tr);
     if (expanded.has(ds.id) && (nIss || nNotes)) {
       const er = document.createElement('tr');
@@ -27295,6 +27358,19 @@ function renderList() {
       files.setAttribute('role', 'group');
       files.setAttribute('aria-label', 'Data files of ' + ds.name);
       inner.appendChild(files);
+      // The preview is built when it opens, since it writes both files.
+      const peek = details('Preview the data', '');
+      peek.classList.add('xp-peek-box');
+      const sum = peek.querySelector('summary');
+      sum.dataset.focus = 'peek:' + ds.id;
+      const fill = () => { peek.querySelector('.why-body').innerHTML = peek.open ? dataPreview(ds) : ''; };
+      peek.open = previewOpen.has(ds.id);
+      fill();
+      peek.addEventListener('toggle', () => {
+        if (peek.open) previewOpen.add(ds.id); else previewOpen.delete(ds.id);
+        fill();
+      });
+      inner.appendChild(peek);
       inner.appendChild(details('What each data file holds', dataFilesHelp(ds)));
       td.appendChild(inner);
       er.appendChild(td);
@@ -36364,12 +36440,12 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
 
 import * as state from '../state.js';
 import { ESTIMATE_LABEL } from '../data/model.js';
-import { observationsCsv, repSummaryCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
+import { observationsCsv, repSummaryCsv, tableCsv, provenanceLines, downloadText, slug, csvHead } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { csvFileName } from '../io/recipes.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
-import { esc } from './format.js';
+import { esc, intl } from './format.js';
 
 // A script's tip; `from` says where its data come from.
 const REGEN_TIP = {
@@ -36491,6 +36567,32 @@ export function dataFilesHelp(ds) {
     '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome under <code>mean</code>' +
     (time ? ' (the time-weighted mean)' : ds && ds.kind === 'tally' ? ', plus the standard deviation, minimum, and maximum' : '') +
     '. Its <code>mean</code> column, copied on its own, is the pilot data a sample-size planner reads; for a paired pilot, copy the <code>A</code> and <code>B</code> columns of the Matched pairs table that Two Systems offers when the replications are paired.</p>';
+}
+
+/**
+ * The start of each of a dataset's two data files, as the files themselves
+ * write it: the `#` lines, then a table of the header and the first `n`
+ * rows, under a line saying how many rows the whole file holds. The
+ * one-column file is left out, as it holds the observations file's last
+ * column.
+ * @param {object} ds
+ * @param {number} [n]
+ * @returns {string} HTML
+ */
+export function dataPreview(ds, n = 8) {
+  return [['Observations CSV', 'observations'], ['Replication summary CSV', 'replications']].map(([label, form]) => {
+    const h = csvHead(dataFileText(ds, form), n);
+    const total = h.rows.length + h.more;
+    const count = total === 0 ? 'no rows'
+      : h.more ? 'the first ' + intl(h.rows.length) + ' of ' + intl(total) + ' rows'
+        : total === 1 ? 'its one row' : 'all ' + intl(total) + ' rows';
+    return '<div class="xp-peek">' +
+      '<div class="ctrl-grp-lbl">' + esc(label) + ', ' + count + '</div>' +
+      '<pre class="xp-peek-notes">' + h.notes.map(l => esc('# ' + l)).join('\n') + '</pre>' +
+      '<div class="scroll-box"><table class="ptab"><thead><tr>' + h.header.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
+      h.rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table></div></div>';
+  }).join('');
 }
 
 // A table name follows "Download" mid-sentence, and so its first letter is

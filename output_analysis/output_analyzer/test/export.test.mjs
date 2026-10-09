@@ -7,7 +7,7 @@ import { makeDataset } from '../js/data/model.js';
 import {
   csvEscape, toCsv, provenanceLines, observationsCsv, repSummaryCsv,
   batchMeansCsv, tableCsv, svgToString, svgToPngBlob, downloadText, downloadBlob,
-  datasetsObservationsCsv, datasetsReplicationsCsv, sampledCsv, slug
+  datasetsObservationsCsv, datasetsReplicationsCsv, sampledCsv, slug, csvHead
 } from '../js/io/export.js';
 
 const lines = text => text.split('\n').filter(l => l !== '');
@@ -216,4 +216,25 @@ test('result tables write an infinite number as Inf and NaN as an empty field', 
   const t = tableCsv(['source', 'F', 'p'], [['between', Infinity, 0], ['other', -Infinity, NaN]]);
   assert.equal(t, 'source,F,p\nbetween,Inf,0\nother,-Inf,\n');
   assert.equal(csvEscape(Infinity), '', 'data fields are unchanged');
+});
+
+test('csvHead reads the notes, the header, the first records, and a count of the rest', () => {
+  const text = observationsCsv(tally, { dataset: 'wait', kind: 'tally' }, { full: true });
+  const h = csvHead(text, 4);
+  assert.deepEqual(h.notes, ['dataset: wait', 'kind: tally']);
+  assert.deepEqual(h.header, ['replication', 'wait']);
+  assert.deepEqual(h.rows, [['1', '1'], ['1', '3'], ['1', '5'], ['2', '4']]);
+  assert.equal(h.more, 2);
+  assert.equal(csvHead(text, 10).more, 0);
+});
+
+test('csvHead keeps empty fields and quoted commas, quotes, line breaks, and #', () => {
+  const text = '# a: b\nreplication,n_obs,mean\n"run#1",3,\n"x, ""y""\nz",0,\n\n7,1,2\n';
+  const h = csvHead(text, 2);
+  assert.deepEqual(h.notes, ['a: b']);
+  assert.deepEqual(h.rows, [['run#1', '3', ''], ['x, "y"\nz', '0', '']]);
+  assert.equal(h.more, 1);
+  const r = csvHead(repSummaryCsv(makeDataset({ kind: 'tally', reps: [{ id: 'a', v: [1] }, { id: 'b', v: [] }] })), 8);
+  assert.deepEqual(r.rows[1], ['b', '0', '', '', '', '']);
+  assert.deepEqual(csvHead('', 3), { notes: [], header: [], rows: [], more: 0 });
 });

@@ -12,12 +12,12 @@
 
 import * as state from '../state.js';
 import { ESTIMATE_LABEL } from '../data/model.js';
-import { observationsCsv, repSummaryCsv, tableCsv, provenanceLines, downloadText, slug } from '../io/export.js';
+import { observationsCsv, repSummaryCsv, tableCsv, provenanceLines, downloadText, slug, csvHead } from '../io/export.js';
 import { analysisScript, scriptFileName, ANALYSIS_WRITERS } from '../io/analysis_scripts.js';
 import { csvFileName } from '../io/recipes.js';
 import { KIND_LABEL, details } from './widgets.js';
 import { registerTips } from './tooltip.js';
-import { esc } from './format.js';
+import { esc, intl } from './format.js';
 
 // A script's tip; `from` says where its data come from.
 const REGEN_TIP = {
@@ -139,6 +139,32 @@ export function dataFilesHelp(ds) {
     '<p><strong>Replication summary CSV</strong>: one row per replication with its observation count and its outcome under <code>mean</code>' +
     (time ? ' (the time-weighted mean)' : ds && ds.kind === 'tally' ? ', plus the standard deviation, minimum, and maximum' : '') +
     '. Its <code>mean</code> column, copied on its own, is the pilot data a sample-size planner reads; for a paired pilot, copy the <code>A</code> and <code>B</code> columns of the Matched pairs table that Two Systems offers when the replications are paired.</p>';
+}
+
+/**
+ * The start of each of a dataset's two data files, as the files themselves
+ * write it: the `#` lines, then a table of the header and the first `n`
+ * rows, under a line saying how many rows the whole file holds. The
+ * one-column file is left out, as it holds the observations file's last
+ * column.
+ * @param {object} ds
+ * @param {number} [n]
+ * @returns {string} HTML
+ */
+export function dataPreview(ds, n = 8) {
+  return [['Observations CSV', 'observations'], ['Replication summary CSV', 'replications']].map(([label, form]) => {
+    const h = csvHead(dataFileText(ds, form), n);
+    const total = h.rows.length + h.more;
+    const count = total === 0 ? 'no rows'
+      : h.more ? 'the first ' + intl(h.rows.length) + ' of ' + intl(total) + ' rows'
+        : total === 1 ? 'its one row' : 'all ' + intl(total) + ' rows';
+    return '<div class="xp-peek">' +
+      '<div class="ctrl-grp-lbl">' + esc(label) + ', ' + count + '</div>' +
+      '<pre class="xp-peek-notes">' + h.notes.map(l => esc('# ' + l)).join('\n') + '</pre>' +
+      '<div class="scroll-box"><table class="ptab"><thead><tr>' + h.header.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>' +
+      h.rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table></div></div>';
+  }).join('');
 }
 
 // A table name follows "Download" mid-sentence, and so its first letter is

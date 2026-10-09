@@ -13,7 +13,7 @@ import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { datasetFiles, fileButtons, stamp, dataFilesHelp } from '../ui/exportrow.js';
+import { datasetFiles, fileButtons, stamp, dataFilesHelp, dataPreview } from '../ui/exportrow.js';
 import { datasetsObservationsCsv, datasetsReplicationsCsv, downloadText } from '../io/export.js';
 
 /** The page's hash id. */
@@ -49,6 +49,8 @@ let lastImport = null;
 const expanded = new Set();
 /** Ids of datasets whose data files are shown in the table. */
 const exportOpen = new Set();
+/** Ids of datasets whose data preview is open under their data files. */
+const previewOpen = new Set();
 let removeAllTimer = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -693,7 +695,7 @@ function renderList() {
   const focusKey = active && box.contains(active) && active.dataset ? active.dataset.focus || null : null;
   box.innerHTML = '';
   const list = state.datasets;
-  for (const set of [expanded, exportOpen]) {
+  for (const set of [expanded, exportOpen, previewOpen]) {
     for (const idx of Array.from(set)) if (!list.some(d => d.id === idx)) set.delete(idx);
   }
   if (!list.length) {
@@ -761,7 +763,7 @@ function renderList() {
     });
     const rm = tr.querySelector('.im-rm');
     rm.dataset.focus = 'rm:' + ds.id;
-    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); state.remove(ds.id); });
+    rm.addEventListener('click', () => { expanded.delete(ds.id); exportOpen.delete(ds.id); previewOpen.delete(ds.id); state.remove(ds.id); });
     tb.appendChild(tr);
     if (expanded.has(ds.id) && (nIss || nNotes)) {
       const er = document.createElement('tr');
@@ -794,6 +796,19 @@ function renderList() {
       files.setAttribute('role', 'group');
       files.setAttribute('aria-label', 'Data files of ' + ds.name);
       inner.appendChild(files);
+      // The preview is built when it opens, since it writes both files.
+      const peek = details('Preview the data', '');
+      peek.classList.add('xp-peek-box');
+      const sum = peek.querySelector('summary');
+      sum.dataset.focus = 'peek:' + ds.id;
+      const fill = () => { peek.querySelector('.why-body').innerHTML = peek.open ? dataPreview(ds) : ''; };
+      peek.open = previewOpen.has(ds.id);
+      fill();
+      peek.addEventListener('toggle', () => {
+        if (peek.open) previewOpen.add(ds.id); else previewOpen.delete(ds.id);
+        fill();
+      });
+      inner.appendChild(peek);
       inner.appendChild(details('What each data file holds', dataFilesHelp(ds)));
       td.appendChild(inner);
       er.appendChild(td);

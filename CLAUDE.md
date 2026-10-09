@@ -1027,7 +1027,10 @@ better.
   the hash `#variance` lands on One System. Each row of the Import page's table of loaded datasets
   has a name box, which renames the dataset when focus leaves it or on Enter (Enter keeps focus in
   the box), and an Export control revealing that dataset's data files, drawn by `fileButtons` in
-  `js/ui/exportrow.js` as the export rows' are. "Export all" below the table writes two files,
+  `js/ui/exportrow.js` as the export rows' are, with a "Preview the data" disclosure that shows the
+  start of the observations file and the replication summary as the files write them (their `#`
+  lines and first eight rows, read back by `csvHead` in `js/io/export.js`; `dataPreview` in
+  `js/ui/exportrow.js`). "Export all" below the table writes two files,
   through `datasetsObservationsCsv` and `datasetsReplicationsCsv` in `js/io/export.js`.
   `datasets_observations.csv` holds every record under `dataset`, `replication`, `time` (present
   when any dataset has time stamps), and `value`. `datasets_replications.csv` holds one row per
