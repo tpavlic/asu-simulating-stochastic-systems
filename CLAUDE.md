@@ -432,10 +432,15 @@ view. Canvas's sanitizer keeps `src`, `width`, `height`, `loading`, `allowfullsc
           title="Monte Carlo Explorer"
           width="100%" height="1560"
           style="width:100%;border:0;display:block;"
+          allow="clipboard-write"
           loading="lazy" allowfullscreen></iframe>
   <p><a href="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html" target="_blank" rel="noopener">Open the Monte Carlo Explorer in a new tab</a></p>
   ```
 
+- **`allow="clipboard-write"` lets the plots' COPY buttons work in Chrome.** Chrome refuses a
+  clipboard write from a cross-origin frame that the host has not granted it, and the widget then
+  says the copy was blocked and points to the PNG button; Safari needs no grant. Canvas keeps the
+  attribute, as above.
 - **The `height` attribute is the fallback** for any host that ignores the resize message. Set it to
   the tallest tab, measured with the footer hidden at about 780px (the narrow end of Canvas's
   desktop content column) and rounded up a little to absorb results that appear after a run. Where
@@ -694,8 +699,9 @@ better.
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
   two tabs, one fitting fourteen candidate distributions to a pasted sample and one estimating a
-  piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, M,
-  R, and PY buttons above the plot: the `Plot` builder records each mark it draws as data, files
+  piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
+  R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
+  browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
   the result under the plot's title in `PLOT_SPECS`, and the `FIG_SCRIPTS` block writes a MATLAB,
   R, or Python script that redraws the plot from that data. That block is a copy of
   `output_analysis/output_analyzer/js/io/scripts.js` with the exports removed and the
@@ -1075,8 +1081,9 @@ better.
   because it divides α by its own family sizes), and every parametric result carries a checks line
   from `js/ui/checks.js` (Shapiro–Wilk on what the procedure takes as normal, Levene's test where a
   variance is pooled; flags only, never gates, and a line whose checks all pass says so with a check
-  badge). Every figure carries five download buttons: SVG, PNG, and M, R, and PY, the last three
-  being scripts (MATLAB, base-graphics R, matplotlib Python) that redraw the figure from the data
+  badge). Every figure carries six buttons: SVG, PNG, COPY (the PNG, at two to three times its
+  on-screen size, put on the clipboard, and left out where the browser cannot write an image
+  there), and M, R, and PY, the last three being scripts (MATLAB, base-graphics R, matplotlib Python) that redraw the figure from the data
   embedded in them; the images and the R and Python scripts share one hyphenated file name, and the
   MATLAB script takes the underscored identifier its language requires. Commit tag `oa`. Conventions
   relied on by code outside the page, which any later edit has to preserve:*

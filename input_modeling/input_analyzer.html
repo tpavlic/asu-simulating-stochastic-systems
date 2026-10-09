@@ -219,12 +219,18 @@ textarea.data-in:focus { border-style: solid; }
 .gen-msg strong { color: var(--accent); }
 
 /* ── Plot toolbar and probe ────────────────────────────────────────────
-   The row of small buttons above each plot saves it as an SVG or a PNG, or
-   as a MATLAB, R, or Python script that redraws it from its data. The plot
+   The row of small buttons above each plot saves it as an SVG or a PNG,
+   copies the PNG to the clipboard, or saves a MATLAB, R, or Python script
+   that redraws it from its data. A copy's status shows for a moment just
+   under the buttons, over the plot's corner. The plot
    itself is a probe: the pointer over it (or a finger on it) draws a
    crosshair with dashed projections onto both axes and the values there. */
 svg.plot { cursor: crosshair; }
-.fig-tools { display: flex; justify-content: flex-end; gap: 6px; margin: -2px 0 4px; }
+.fig-tools { display: flex; position: relative; justify-content: flex-end; gap: 6px; margin: -2px 0 4px; }
+.fig-tools .btn-mini { flex-shrink: 0; }
+.fig-status { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; max-width: 100%; font-size: .75rem; color: var(--text);
+              background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; pointer-events: none; }
+.fig-status:empty { padding: 0; border: 0; }
 .btn-mini { font-family: 'Outfit', system-ui, sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .04em;
             min-height: 24px; min-width: 40px; padding: 2px 9px; background: transparent; color: var(--muted);
             border: 1.5px solid var(--border); border-radius: 5px; cursor: pointer; }
@@ -733,8 +739,8 @@ footer a:hover { text-decoration: underline; }
       Two views of the same fit, each next to the test built on it: the histogram is what the
       chi-square test compares bin by bin, and the largest gap between the two curves on the right
       is exactly the Kolmogorov&ndash;Smirnov statistic. <strong>The buttons above each plot save it as
-      an SVG or a PNG, or as a MATLAB, R, or Python script that redraws it from its data, and the
-      pointer over a plot (or a finger on it) reads values off both axes.</strong>
+      an SVG or a PNG, copy it as an image (COPY), or save a MATLAB, R, or Python script that redraws
+      it from its data, and the pointer over a plot (or a finger on it) reads values off both axes.</strong>
     </div>
 
     <div class="plot-wrap" style="margin-top:13px">
@@ -6693,8 +6699,8 @@ function legacyCopy(text, done) {
 }
 
 /* ── Downloading a plot ────────────────────────────────────────────
-   Every plot on the page is clickable and saves itself as a PNG at twice
-   the on-screen size, which is enough to drop into a report without it
+   The PNG and COPY buttons render a plot at two to three times its
+   on-screen size, which is enough to drop into a report without it
    looking soft.
 
    Two things have to be repaired on the way out.  The SVG's colors are
@@ -6751,7 +6757,8 @@ function downloadBlob(name, blob) {
 function exportSvg(svg, name) {
   downloadBlob(name, new Blob([standaloneSvg(svg).text], { type: 'image/svg+xml;charset=utf-8' }));
 }
-function exportPlot(svg, name) {
+/* The plot as a PNG blob, for the PNG button and the COPY button. */
+function plotPngBlob(svg) {
   var doc = standaloneSvg(svg), W = doc.W, H = doc.H;
   /* Render at the display's own pixel density, so a plot saved on a phone
      is as sharp as the phone can show and one saved on an ordinary monitor
@@ -6760,18 +6767,42 @@ function exportPlot(svg, name) {
      large plot cannot turn into a 20-megapixel file. */
   var SCALE = Math.max(2, Math.min(3, Math.round(window.devicePixelRatio || 1)));
   var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc.text);
-  var img = new Image();
-  img.onload = function () {
-    var cv = document.createElement('canvas');
-    cv.width = Math.round(W * SCALE);
-    cv.height = Math.round(H * SCALE);
-    var ctx = cv.getContext('2d');
-    ctx.fillStyle = cssToken('--card') || '#ffffff';
-    ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    cv.toBlob(function (blob) { if (blob) downloadBlob(name, blob); }, 'image/png');
-  };
-  img.src = url;
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    img.onload = function () {
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(W * SCALE);
+      cv.height = Math.round(H * SCALE);
+      var ctx = cv.getContext('2d');
+      ctx.fillStyle = cssToken('--card') || '#ffffff';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob(function (blob) { if (blob) resolve(blob); else reject(new Error('PNG encoding failed')); }, 'image/png');
+    };
+    img.onerror = function () { reject(new Error('The plot could not be rasterized')); };
+    img.src = url;
+  });
+}
+function exportPlot(svg, name) {
+  plotPngBlob(svg).then(function (blob) { downloadBlob(name, blob); }, function (err) { console.error(err); });
+}
+function canCopyImage() {
+  return typeof ClipboardItem !== 'undefined' && !!(navigator.clipboard && navigator.clipboard.write);
+}
+/* The image goes to the clipboard as a promise, so that the write starts
+   within the click itself: Safari refuses a write that starts after an
+   await. A browser also refuses one from a frame not granted clipboard-write. */
+function copyPlot(svg, status) {
+  var p;
+  try { p = navigator.clipboard.write([new ClipboardItem({ 'image/png': plotPngBlob(svg) })]); }
+  catch (err) { p = Promise.reject(err); }
+  p.then(function () { flashStatus(status, 'Copied to the clipboard'); },
+    function () { flashStatus(status, 'The browser blocked the copy; use PNG instead'); });
+}
+function flashStatus(el, text) {
+  clearTimeout(el._t);
+  el.textContent = text;
+  el._t = setTimeout(function () { el.textContent = ''; }, 3000);
 }
 
 /* Called after every render that replaces a plot's host element. The
@@ -6789,7 +6820,8 @@ function armPlotDownloads() {
     if (!svg.dataset.armed) { svg.dataset.armed = '1'; armProbe(svg); }
   }
 }
-/* The SVG, PNG, M, R, and PY buttons above a plot. */
+/* The SVG, PNG, COPY, M, R, and PY buttons above a plot. COPY is left out
+   where the browser cannot put an image on the clipboard. */
 function plotToolbar(card) {
   var row = document.createElement('div');
   row.className = 'fig-tools';
@@ -6807,6 +6839,14 @@ function plotToolbar(card) {
   }
   mk('SVG', 'Download this plot as SVG', function (svg) { exportSvg(svg, plotFileName(svg, 'svg')); });
   mk('PNG', 'Download this plot as PNG', function (svg) { exportPlot(svg, plotFileName(svg, 'png')); });
+  if (canCopyImage()) {
+    /* The status shows under the buttons, over the plot (see .fig-status). */
+    var status = document.createElement('span');
+    status.className = 'fig-status';
+    status.setAttribute('role', 'status');
+    row.insertBefore(status, row.firstChild);
+    mk('COPY', 'Copy this plot to the clipboard as a PNG image', function (svg) { copyPlot(svg, status); });
+  }
   var W = FIG_SCRIPTS.SCRIPT_WRITERS;
   Object.keys(W).forEach(function (ext) {
     mk(W[ext].label, 'Download a ' + W[ext].name + ' script that redraws this plot from its data', function (svg) {

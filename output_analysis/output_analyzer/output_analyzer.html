@@ -280,9 +280,15 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; min-height: 30px; background: transparent;
              color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
-/* The SVG and PNG download buttons over a figure's top-right corner: small,
-   outlined, and still 24px tall for a finger. */
-.fig-tools { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 4px; }
+/* The download and copy buttons over a figure's top-right corner: small,
+   outlined, and still 24px tall for a finger. A copy's status shows for a
+   moment just under the buttons, over the figure's corner, and so it never
+   moves a button or the figure. */
+.fig-tools { display: flex; position: relative; justify-content: flex-end; gap: 6px; margin-bottom: 4px; }
+.fig-tools .btn-mini { flex-shrink: 0; }
+.fig-status { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; max-width: 100%; font-size: .75rem; color: var(--text);
+              background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; pointer-events: none; }
+.fig-status:empty { padding: 0; border: 0; }
 .btn-mini { font-family: 'Outfit', sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .04em; min-height: 24px; min-width: 40px;
             padding: 2px 9px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 5px; cursor: pointer; }
 .btn-mini:hover { color: var(--accent); border-color: var(--accent); }
@@ -38375,9 +38381,35 @@ function safeName(s) {
   return String(s || 'figure').trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'figure';
 }
 
+function canCopyImage() {
+  return typeof ClipboardItem !== 'undefined' && !!(navigator.clipboard && navigator.clipboard.write);
+}
+
+// The image goes to the clipboard as a promise, so that the write starts
+// within the click itself: Safari refuses a write that starts after an await.
+// A browser also refuses one from a frame not granted clipboard-write. A
+// pasted image usually lands in a document, and so it is drawn at two to
+// three times its on-screen size even on a low-density screen.
+function copyFigure(fig, status) {
+  const scale = Math.max(2, Math.min(3, Math.round(window.devicePixelRatio || 1)));
+  let p;
+  try { p = navigator.clipboard.write([new ClipboardItem({ 'image/png': figureToPngBlob(fig, scale) })]); }
+  catch (err) { p = Promise.reject(err); }
+  p.then(() => flash(status, 'Copied to the clipboard'),
+    () => flash(status, 'The browser blocked the copy; use PNG instead'));
+}
+
+function flash(el, text) {
+  clearTimeout(el._t);
+  el.textContent = text;
+  el._t = setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
 /**
- * Two small outlined buttons, "SVG" and "PNG", placed above the figure's
- * top-right corner, that download the figure. Accepts either
+ * Small outlined buttons placed above the figure's top-right corner: "SVG"
+ * and "PNG" download the figure, "COPY" puts the PNG on the clipboard (where
+ * the browser can write an image there), and "M", "R", and "PY" download a
+ * script that redraws it. Accepts either
  * `(container, fig, baseName)` or `(fig, baseName)`, the latter placing the
  * buttons in the figure's own container.
  * @param {HTMLElement|Figure} container
@@ -38399,6 +38431,14 @@ export function exportButtons(container, fig, baseName) {
   };
   mk('SVG', 'Download this figure as SVG', () => download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
+  if (canCopyImage()) {
+    // The status shows under the buttons, over the figure (see .fig-status).
+    const status = document.createElement('span');
+    status.className = 'fig-status';
+    status.setAttribute('role', 'status');
+    row.insertBefore(status, row.firstChild);
+    mk('COPY', 'Copy this figure to the clipboard as a PNG image', () => copyFigure(fig, status));
+  }
   for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
     mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
       // Each language names the file its own way: MATLAB runs a script by

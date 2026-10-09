@@ -1541,9 +1541,35 @@ function safeName(s) {
   return String(s || 'figure').trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'figure';
 }
 
+function canCopyImage() {
+  return typeof ClipboardItem !== 'undefined' && !!(navigator.clipboard && navigator.clipboard.write);
+}
+
+// The image goes to the clipboard as a promise, so that the write starts
+// within the click itself: Safari refuses a write that starts after an await.
+// A browser also refuses one from a frame not granted clipboard-write. A
+// pasted image usually lands in a document, and so it is drawn at two to
+// three times its on-screen size even on a low-density screen.
+function copyFigure(fig, status) {
+  const scale = Math.max(2, Math.min(3, Math.round(window.devicePixelRatio || 1)));
+  let p;
+  try { p = navigator.clipboard.write([new ClipboardItem({ 'image/png': figureToPngBlob(fig, scale) })]); }
+  catch (err) { p = Promise.reject(err); }
+  p.then(() => flash(status, 'Copied to the clipboard'),
+    () => flash(status, 'The browser blocked the copy; use PNG instead'));
+}
+
+function flash(el, text) {
+  clearTimeout(el._t);
+  el.textContent = text;
+  el._t = setTimeout(() => { el.textContent = ''; }, 3000);
+}
+
 /**
- * Two small outlined buttons, "SVG" and "PNG", placed above the figure's
- * top-right corner, that download the figure. Accepts either
+ * Small outlined buttons placed above the figure's top-right corner: "SVG"
+ * and "PNG" download the figure, "COPY" puts the PNG on the clipboard (where
+ * the browser can write an image there), and "M", "R", and "PY" download a
+ * script that redraws it. Accepts either
  * `(container, fig, baseName)` or `(fig, baseName)`, the latter placing the
  * buttons in the figure's own container.
  * @param {HTMLElement|Figure} container
@@ -1565,6 +1591,14 @@ export function exportButtons(container, fig, baseName) {
   };
   mk('SVG', 'Download this figure as SVG', () => download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
+  if (canCopyImage()) {
+    // The status shows under the buttons, over the figure (see .fig-status).
+    const status = document.createElement('span');
+    status.className = 'fig-status';
+    status.setAttribute('role', 'status');
+    row.insertBefore(status, row.firstChild);
+    mk('COPY', 'Copy this figure to the clipboard as a PNG image', () => copyFigure(fig, status));
+  }
   for (const [ext, w] of Object.entries(SCRIPT_WRITERS)) {
     mk(w.label, 'Download a ' + w.name + ' script that redraws this figure from its data', () => {
       // Each language names the file its own way: MATLAB runs a script by
