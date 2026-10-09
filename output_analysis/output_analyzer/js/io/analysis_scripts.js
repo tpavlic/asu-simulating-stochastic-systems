@@ -399,14 +399,13 @@ export const BODIES = {};
 const DESC_KEYS = ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max'];
 
 /**
- * The opening of a section that checks an assumption: its heading, and under
- * it a bracketed comment naming the assumption (normality for a Shapiro-Wilk
- * check, equal variances for Levene's) and the procedure that makes it, which
- * headings() also prints under the heading in the script's output.
+ * The opening of a section that checks an assumption: its heading, which
+ * names the assumption (normality, or equal variances), and under it a
+ * bracketed comment naming the procedure that makes it, which headings()
+ * also prints under the heading in the script's output.
  */
 function checkSect(L, title, by) {
-  const what = /Levene/.test(title) ? 'equal variances' : 'normality';
-  return [L.sect(title), L.comment + '[checks the assumption of ' + what + ' made by ' + by + ']'];
+  return [L.sect(title), L.comment + '[checks an assumption of ' + by + ']'];
 }
 
 /** Field access per language: d$k, d["k"], d.k. */
@@ -898,7 +897,7 @@ function sevAnova(r, L, out, need) {
     return;
   }
   need.push('levene', 'shapiro');
-  out.push(...checkSect(L, 'Equal variances (Levene, median-centered)', A.welch ? 'the ordinary analysis of variance (not by Welch\'s)' : 'the analysis of variance'));
+  out.push(...checkSect(L, 'Equal variances (Levene, median-centered)', A.welch ? 'the ordinary analysis of variance (not of Welch\'s)' : 'the analysis of variance'));
   out.push(c + 'Brown and Forsythe\'s form of Levene\'s test: the analysis of variance of each outcome\'s distance from');
   out.push(c + 'its design\'s median' + (A.welch ? '. Welch\'s analysis does not assume equal variances, and so it is for reference.' : ', checking the equal variances the pooled analysis assumes.'));
   out.push(L.assign('lv', 'levene_test(groups)'));

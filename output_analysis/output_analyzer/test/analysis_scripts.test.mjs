@@ -735,7 +735,7 @@ test('twoRecipe under the pooled t and the rank-sum procedure', () => {
   const rn = twoOf(IND_A, IND_B, 'np', 0.95, PLAN2);
   // The page checks normality on the F ratio's line under every procedure, the rank one included.
   assert.ok(!('df' in rn.expect) && 'shapiro A W [optional]' in rn.expect && 'shapiro B p [optional]' in rn.expect && !('levene F' in rn.expect));
-  for (const lang of LANGS) assert.ok(analysisScript(rn, lang).includes('[checks the assumption of normality made by the F ratio of the variances]'), lang + ' checks the F ratio');
+  for (const lang of LANGS) assert.ok(analysisScript(rn, lang).includes('[checks an assumption of the F ratio of the variances]'), lang + ' checks the F ratio');
   assert.ok(rn.expect['plan n per design for power (rank)'] >= rn.expect['plan n per design for power']);
   const R = analysisScript(rn, 'R');
   assert.ok(R.includes('wilcox.test(a, b') && R.includes('exact = exact, correct = TRUE'));
