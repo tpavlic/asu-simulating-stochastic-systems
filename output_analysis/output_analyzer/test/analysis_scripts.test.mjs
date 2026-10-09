@@ -2715,6 +2715,41 @@ test('Levene groups too large to embed are left out of a script that reads its f
   }
 }
 
+// ── The output a reader sees ───────────────────────────────────────────
+// Every other run here sets check_details, which prints the lines the
+// harness compares. A script as the page writes it prints the readable form
+// instead: aligned names and values under section headings, a verdict under
+// each normality check, and one closing line on the checks. These run that
+// form in every language and hold it to finishing cleanly with every result
+// agreeing, and to showing each check's verdict.
+{
+  const plain = [
+    ['Several Systems with failed normality checks', sevRecipe(example('two-independent'), { view: { section: 'anova' } }), true],
+    ['Two Systems, paired', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), false],
+    ['Summary and Plots, normality', exRecipe(QUEUE, null, 0.95, { section: 'normality' }), false]
+  ];
+  for (const [label, r, smoke] of plain) {
+    for (const lang of LANGS) {
+      const title = 'Readable output: ' + label + ' in ' + lang;
+      const text = writeScript(r, lang);
+      const job = lang === 'm' ? matlabJob(title, smoke, () => ({ name: scriptFileName(r, 'm'), text })) : null;
+      test(title, { skip: skipFor(lang, smoke) }, async () => {
+        const { stdout, stderr } = await runIn(job, r, lang, { text });
+        noWarning(stdout, lang, stderr);
+        const n = Object.keys(r.expect).filter(k => !(lang === 'm' && / \[optional\]$/.test(k))).length;
+        assert.match(stdout, /\nAll (\d+) results agree with the values on the Output Analyzer's page\./);
+        assert.ok(Number(/All (\d+) results agree/.exec(stdout)[1]) >= n, 'every result is checked');
+        assert.ok(!/\(analyzer: /.test(stdout), 'no side-by-side lines');
+        const shapiro = Object.keys(r.expect).filter(k => /^shapiro (.* )?p( \[optional\])?$/.test(k));
+        const verdicts = (stdout.match(/^ {4}p (<|>=) [\d.e-]+: (these values do not look normal|no evidence against normality)$/gm) || []).length;
+        // A MATLAB without swtest says so in place of each check, and so gives no verdicts.
+        if (lang === 'm' && /no Shapiro-Wilk function on the path/.test(stdout)) assert.equal(verdicts, 0);
+        else assert.equal(verdicts, shapiro.length, 'a verdict under each normality check');
+      });
+    }
+  }
+}
+
 // Every test is defined: the MATLAB batch can start (see "MATLAB batch" above).
 // Keep this line last.
 startMatlab();

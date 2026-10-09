@@ -561,8 +561,8 @@ function twoBody(r, L) {
     if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
     for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
     if (L.tidy) tidyTest(out, L, 'w$test', (o.pooled ? 'The pooled-variance t test' : 'Welch\'s t test') + ' as t.test returns it, tidied by broom into a one-row tibble (none when neither design varies, where t.test stops).', true);
-    out.push(L.sect('Checks'));
-    out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk)' + (o.levene ? ', and equal variances' : '') + '.');
+    out.push(L.sect(o.levene ? 'Checks: normality (Shapiro-Wilk) and equal variances (Levene)' : 'Checks: normality of each design\'s outcomes (Shapiro-Wilk)'));
+    out.push(c + 'The t procedures take each design\'s replication outcomes as normal' + (o.levene ? ', and the pooled t takes their variances as equal' : '') + '.');
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
     if (o.levene) {
       need.push('levene');
@@ -587,7 +587,7 @@ function twoBody(r, L) {
   if (o.np) {
     // The rank procedure assumes no normality, but the F ratio does, and the
     // page checks it there.
-    out.push(L.sect('Checks on the F ratio'));
+    out.push(L.sect('Checks on the F ratio: normality of each design\'s outcomes (Shapiro-Wilk)'));
     out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk), which the F ratio assumes.');
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
   }
@@ -655,8 +655,8 @@ function twoPairedBody(r, L) {
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
   if (!o.np) {
     need.push('shapiro');
-    out.push(L.sect('Checks'));
-    out.push(c + 'Normality of the differences (Shapiro-Wilk), which the paired t assumes; differences equal up to rounding have no shape to test.');
+    out.push(L.sect('Normality of the differences (Shapiro-Wilk)'));
+    out.push(c + 'The paired t takes the differences as normal; differences equal up to rounding have no shape to test.');
     out.push(...diffShapiro(L, L.str('shapiro differences'), f('pr', 'diffs'), f('pr', 'sdD'),
       lit(L, r.expect['shapiro differences W [optional]']), lit(L, r.expect['shapiro differences p [optional]'])));
   }
@@ -908,6 +908,7 @@ function sevAnova(r, L, out, need) {
     if (A.blocked) out.push(rep(L, r, 'ss blocks', f('av', 'ssblk')), rep(L, r, 'df blocks', f('av', 'dfblk')), rep(L, r, 'block F', f('av', 'Fblock')), rep(L, r, 'block p', f('av', 'pBlock')));
     if (L.tidy) tidyTest(out, L, 'av$fit', 'The table as aov fits it, tidied by broom into a tibble, a row per source (none when nothing varies within the designs, where the table above is written out by hand).', true);
   }
+  out.push(L.sect('Normality of the residuals (Shapiro-Wilk)'));
   out.push(...commentLines(c, 'The residuals (each outcome less its design\'s mean' + (A.blocked ? ' and its replication\'s effect' : '') +
     ') are what ' + (A.welch ? 'Welch\'s F' : 'the F test') + ' and the post-hoc rules take as normal.', c));
   out.push(shapiroLine(r, L, 'shapiro residuals', f('av', 'resid')));
@@ -1046,7 +1047,8 @@ function sevMeans(r, L, out, need) {
   }
   if (!S.np) {
     need.push('shapiro');
-    out.push(c + 'The checks: the t intervals take each design\'s outcomes as normal (Shapiro-Wilk).');
+    out.push(L.sect('Normality of each design\'s outcomes (Shapiro-Wilk)'));
+    out.push(c + 'The t intervals take each design\'s replication outcomes as normal.');
     for (let i = 0; i < S.k; i++) out.push(shapiroLine(r, L, 'shapiro design ' + (i + 1), GROUP[lang](i)));
   }
 }

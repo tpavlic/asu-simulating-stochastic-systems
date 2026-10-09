@@ -663,7 +663,14 @@ shapiro_check <- function(name, x, analyzerW = NULL, analyzerP = NULL) {
   sw <- shapiro.test(x)
   report(paste(name, "W"), unname(sw$statistic), analyzerW)
   report(paste(name, "p"), sw$p.value, analyzerP)
+  report_verdict(sw$p.value, alpha)
   invisible(sw)
+}
+# The check's verdict at alpha, in words, under its W and p.
+report_verdict <- function(p, alpha) {
+  if (report_state$details || !is.finite(p)) return(invisible())
+  cat(if (p < alpha) sprintf("    p < %g: these values do not look normal\\n", alpha)
+      else sprintf("    p >= %g: no evidence against normality\\n", alpha))
 }
 `;
 LIB.py.shapiro = `
@@ -674,6 +681,17 @@ def shapiro_check(name, x, analyzer_w=None, analyzer_p=None):
     W, p = stats.shapiro(x)
     report(f"{name} W", W, analyzer_w)
     report(f"{name} p", p, analyzer_p)
+    report_verdict(p, alpha)
+
+
+def report_verdict(p, alpha):
+    """The check's verdict at alpha, in words, under its W and p."""
+    if _report["details"] or not np.isfinite(p):
+        return
+    if p < alpha:
+        print(f"    p < {alpha:g}: these values do not look normal")
+    else:
+        print(f"    p >= {alpha:g}: no evidence against normality")
 `;
 LIB.m.shapiro = `
 function shapiro_check(name, x, alpha, analyzerW, analyzerP)
@@ -693,6 +711,14 @@ if exist('swtest', 'file') == 2
     end
     if nargin < 4, report([name ' W'], W); else, report([name ' W'], W, analyzerW); end
     if nargin < 5, report([name ' p'], p); else, report([name ' p'], p, analyzerP); end
+    % The check's verdict at alpha, in words, under its W and p.
+    if ~report_store('details') && isfinite(p)
+        if p < alpha
+            fprintf('    p < %g: these values do not look normal\\n', alpha);
+        else
+            fprintf('    p >= %g: no evidence against normality\\n', alpha);
+        end
+    end
 else
     fprintf('%s: no Shapiro-Wilk function on the path (swtest, in the toolbox from R2026b, would run here)\\n', name);
 end
