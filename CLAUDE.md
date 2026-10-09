@@ -439,7 +439,7 @@ view. Canvas's sanitizer keeps `src`, `width`, `height`, `loading`, `allowfullsc
 
 - **`allow="clipboard-write"` lets the plots' COPY buttons work in Chrome.** Chrome refuses a
   clipboard write from a cross-origin frame that the host has not granted it, and the widget then
-  says the copy was blocked and points to the PNG button; Safari needs no grant. Canvas keeps the
+  says the copy was blocked and points to the PNG button; Safari and Firefox need no grant. Canvas keeps the
   attribute, as above.
 - **The `height` attribute is the fallback** for any host that ignores the resize message. Set it to
   the tallest tab, measured with the footer hidden at about 780px (the narrow end of Canvas's
