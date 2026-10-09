@@ -398,6 +398,15 @@ export const BODIES = {};
 
 const DESC_KEYS = ['n', 'mean', 'sd', 'se', 'min', 'q1', 'median', 'q3', 'max'];
 
+/**
+ * The opening of a section that checks an assumption: its heading, and under
+ * it a bracketed comment naming the procedure that makes the assumption,
+ * which headings() also prints under the heading in the script's output.
+ */
+function checkSect(L, title, what) {
+  return [L.sect(title), L.comment + '[checks an assumption of ' + what + ']'];
+}
+
 /** Field access per language: d$k, d["k"], d.k. */
 export const FIELD = { R: (v, k) => v + '$' + k, py: (v, k) => v + '["' + k + '"]', m: (v, k) => v + '.' + k };
 
@@ -464,7 +473,7 @@ function oneBody(r, L) {
   }
   if (o.checks) {
     need.push('shapiro');
-    out.push(L.sect('Normality check on the replication outcomes'));
+    out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', o.np ? 'the Wilcoxon signed-rank interval' : 'the t interval'));
     const w = lit(L, r.expect['shapiro W [optional]']), p = lit(L, r.expect['shapiro p [optional]']);
     out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
   }
@@ -561,11 +570,13 @@ function twoBody(r, L) {
     if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
     for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
     if (L.tidy) tidyTest(out, L, 'w$test', (o.pooled ? 'The pooled-variance t test' : 'Welch\'s t test') + ' as t.test returns it, tidied by broom into a one-row tibble (none when neither design varies, where t.test stops).', true);
-    out.push(L.sect(o.levene ? 'Checks: normality (Shapiro-Wilk) and equal variances (Levene)' : 'Checks: normality of each design\'s outcomes (Shapiro-Wilk)'));
-    out.push(c + 'The t procedures take each design\'s replication outcomes as normal' + (o.levene ? ', and the pooled t takes their variances as equal' : '') + '.');
+    const tName = o.pooled ? 'the pooled-variance t comparison' : 'Welch\'s t comparison';
+    out.push(...checkSect(L, 'Normality of each design\'s outcomes (Shapiro-Wilk)', tName));
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
     if (o.levene) {
       need.push('levene');
+      out.push(...checkSect(L, 'Equal variances (Levene, median-centered)', tName));
+      out.push(c + 'Brown and Forsythe\'s form of Levene\'s test, on the equal variances the pooled t assumes.');
       out.push(L.assign('lv', 'levene_test(' + L.list(['a', 'b']) + ')'));
       const F = rep(L, r, 'levene F', f('lv', 'F')), P = rep(L, r, 'levene p', f('lv', 'p'));
       const none = 'levene: no spread within any design to compare';
@@ -587,7 +598,7 @@ function twoBody(r, L) {
   if (o.np) {
     // The rank procedure assumes no normality, but the F ratio does, and the
     // page checks it there.
-    out.push(L.sect('Checks on the F ratio: normality of each design\'s outcomes (Shapiro-Wilk)'));
+    out.push(...checkSect(L, 'Normality of each design\'s outcomes (Shapiro-Wilk)', 'the F ratio of the variances'));
     out.push(c + 'Normality of each design\'s replication outcomes (Shapiro-Wilk), which the F ratio assumes.');
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
   }
@@ -655,7 +666,7 @@ function twoPairedBody(r, L) {
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
   if (!o.np) {
     need.push('shapiro');
-    out.push(L.sect('Normality of the differences (Shapiro-Wilk)'));
+    out.push(...checkSect(L, 'Normality of the differences (Shapiro-Wilk)', 'the paired t'));
     out.push(c + 'The paired t takes the differences as normal; differences equal up to rounding have no shape to test.');
     out.push(...diffShapiro(L, L.str('shapiro differences'), f('pr', 'diffs'), f('pr', 'sdD'),
       lit(L, r.expect['shapiro differences W [optional]']), lit(L, r.expect['shapiro differences p [optional]'])));
@@ -885,7 +896,7 @@ function sevAnova(r, L, out, need) {
     return;
   }
   need.push('levene', 'shapiro');
-  out.push(L.sect('Equal variances (Levene, median-centered)'));
+  out.push(...checkSect(L, 'Equal variances (Levene, median-centered)', A.welch ? 'the ordinary analysis of variance, which Welch\'s does not make' : 'the analysis of variance'));
   out.push(c + 'Brown and Forsythe\'s form of Levene\'s test: the analysis of variance of each outcome\'s distance from');
   out.push(c + 'its design\'s median' + (A.welch ? '. Welch\'s analysis does not assume equal variances, and so it is for reference.' : ', checking the equal variances the pooled analysis assumes.'));
   out.push(L.assign('lv', 'levene_test(groups)'));
@@ -908,7 +919,7 @@ function sevAnova(r, L, out, need) {
     if (A.blocked) out.push(rep(L, r, 'ss blocks', f('av', 'ssblk')), rep(L, r, 'df blocks', f('av', 'dfblk')), rep(L, r, 'block F', f('av', 'Fblock')), rep(L, r, 'block p', f('av', 'pBlock')));
     if (L.tidy) tidyTest(out, L, 'av$fit', 'The table as aov fits it, tidied by broom into a tibble, a row per source (none when nothing varies within the designs, where the table above is written out by hand).', true);
   }
-  out.push(L.sect('Normality of the residuals (Shapiro-Wilk)'));
+  out.push(...checkSect(L, 'Normality of the residuals (Shapiro-Wilk)', 'the analysis of variance and its post-hoc rules'));
   out.push(...commentLines(c, 'The residuals (each outcome less its design\'s mean' + (A.blocked ? ' and its replication\'s effect' : '') +
     ') are what ' + (A.welch ? 'Welch\'s F' : 'the F test') + ' and the post-hoc rules take as normal.', c));
   out.push(shapiroLine(r, L, 'shapiro residuals', f('av', 'resid')));
@@ -1047,8 +1058,7 @@ function sevMeans(r, L, out, need) {
   }
   if (!S.np) {
     need.push('shapiro');
-    out.push(L.sect('Normality of each design\'s outcomes (Shapiro-Wilk)'));
-    out.push(c + 'The t intervals take each design\'s replication outcomes as normal.');
+    out.push(...checkSect(L, 'Normality of each design\'s outcomes (Shapiro-Wilk)', S.paired ? 'the t intervals on the means' : 'the t intervals and the Welch pairwise comparisons'));
     for (let i = 0; i < S.k; i++) out.push(shapiroLine(r, L, 'shapiro design ' + (i + 1), GROUP[lang](i)));
   }
 }
@@ -1511,7 +1521,7 @@ function exploreBody(r, L, { csv = false } = {}) {
   // Normality, on the outcomes only.
   if (X.checks) {
     need.push('shapiro');
-    out.push(L.sect('Normality of the replication outcomes (Shapiro-Wilk)'));
+    out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', 'the t interval over the outcomes'));
     out.push(...commentLines(c, 'The test assumes independent values, which the replication outcomes are and pooled observations are not, and so it is made on the outcomes only.', c));
     const w = lit(L, e['shapiro W [optional]']), p = lit(L, e['shapiro p [optional]']);
     if (L.tidy) {
@@ -1523,13 +1533,13 @@ function exploreBody(r, L, { csv = false } = {}) {
   // Equal variances.
   if (X.spreadOmitted) {
     const O = X.spreadOmitted;
-    out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
+    out.push(...checkSect(L, 'Equal variances across datasets (Levene, median-centered)', 'the procedures that pool the variances'));
     out.push(...commentLines(c, 'The page runs Levene\'s test across ' + listWords(O.names.map(ascii)) + ', but their ' + O.count.toLocaleString('en-US') +
       ' replication outcomes would take this script past the ' + MAX_NUMBERS.toLocaleString('en-US') + ' numbers it writes out, and so the test is left out here.', c));
   }
   if (X.spread) {
     need.push('levene');
-    out.push(L.sect('Equal variances across datasets (Levene, median-centered)'));
+    out.push(...checkSect(L, 'Equal variances across datasets (Levene, median-centered)', 'the procedures that pool the variances'));
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
@@ -1964,11 +1974,16 @@ function headings(body, L) {
   });
   for (let h = 0; h < heads.length; h++) if (heads[h][2]) last = h;
   const summaryAt = last >= 0 ? (last + 1 < heads.length ? heads[last + 1][0] : lines.length) : -1;
+  // A check section's bracketed comment (see checkSect) prints under its heading.
+  const TAG = /^(?:#|%) (\[.*\])$/;
   lines.forEach((ln, i) => {
     if (i === summaryAt) out.push('report_summary()' + end);
     out.push(ln);
     const h = heads.find(x => x[0] === i);
-    if (h && h[2]) out.push('report_section(' + L.str(h[1]) + ')' + end);
+    if (h && h[2]) {
+      const tag = TAG.exec(lines[i + 1] || '');
+      out.push('report_section(' + L.str(h[1]) + (tag ? ', ' + L.str(tag[1]) : '') + ')' + end);
+    }
   });
   if (summaryAt === lines.length) out.push('report_summary()' + end);
   return out;

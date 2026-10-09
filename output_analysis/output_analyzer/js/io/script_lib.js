@@ -62,8 +62,12 @@ report <- function(name, value, analyzer = NULL, tol = 1e-6) {
   }
   invisible(NULL)
 }
-report_section <- function(title) {
-  if (!report_state$details) cat("\\n", title, "\\n", strrep("-", nchar(title)), "\\n", sep = "")
+report_section <- function(title, tag = NULL) {
+  # The section's heading, and under it any tag saying why the section is there.
+  if (report_state$details) return(invisible(NULL))
+  cat("\\n", title, "\\n", sep = "")
+  if (!is.null(tag)) cat(tag, "\\n", sep = "")
+  cat(strrep("-", max(nchar(title), nchar(tag))), "\\n", sep = "")
 }
 report_summary <- function() {
   n <- report_state$n; bad <- report_state$bad
@@ -130,9 +134,14 @@ def report(name, value, analyzer=None, tol=1e-6):
         _report["bad"].append(f"{name}: {report_fmt(value)} here, {report_fmt(analyzer)} on the page")
 
 
-def report_section(title):
-    if not _report["details"]:
-        print(f"\\n{title}\\n{'-' * len(title)}")
+def report_section(title, tag=None):
+    # The section's heading, and under it any tag saying why the section is there.
+    if _report["details"]:
+        return
+    print("\\n" + title)
+    if tag:
+        print(tag)
+    print("-" * max(len(title), len(tag or "")))
 
 
 def report_summary():
@@ -171,10 +180,13 @@ if has
 end
 end
 
-function report_section(title)
-if ~report_store('details')
-    fprintf('\\n%s\\n%s\\n', title, repmat('-', 1, numel(title)));
-end
+function report_section(title, tag)
+% The section's heading, and under it any tag saying why the section is there.
+if report_store('details'), return; end
+if nargin < 2, tag = ''; end
+fprintf('\\n%s\\n', title);
+if ~isempty(tag), fprintf('%s\\n', tag); end
+fprintf('%s\\n', repmat('-', 1, max(numel(title), numel(tag))));
 end
 
 function report_summary()
