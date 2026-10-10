@@ -237,14 +237,16 @@ test('the bundled examples round-trip through the all-dataset observations file'
     const built = buildDatasets(sniff(ex.text, { name: ex.mapping.name }), ex.mapping).datasets;
     for (const ds of built) {
       ds.source.file = ex.file;
-      const key = ds.kind + (ds.reps.some(r => r.t) ? ' timed' : ' untimed');
+      // The importer applies one end time to a whole file, and so time-persistent
+      // examples with different end times travel in files of their own.
+      const key = ds.kind + (ds.reps.some(r => r.t) ? ' timed' : ' untimed') + (ds.kind === 'time' ? ' to ' + ds.endTime : '');
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(ds);
     }
   }
-  // reps without times (six examples), tally with times (two), time-persistent (one)
-  assert.deepEqual([...groups.keys()].sort(), ['reps untimed', 'tally timed', 'time timed']);
-  assert.equal(groups.get('reps untimed').length, 19);
+  // reps without times (seven examples), tally with times (two), time-persistent ending at 480 and at 600 (one each)
+  assert.deepEqual([...groups.keys()].sort(), ['reps untimed', 'tally timed', 'time timed to 480', 'time timed to 600']);
+  assert.equal(groups.get('reps untimed').length, 22);
   for (const [key, group] of groups) {
     const ends = new Set(group.map(ds => ds.endTime));
     assert.equal(ends.size, 1, key);

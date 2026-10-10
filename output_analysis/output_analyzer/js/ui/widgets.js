@@ -350,7 +350,7 @@ export function levelSelect(selectEl) {
 function trimNum(v) { return String(Number(v.toFixed(4))); }
 
 /** The label for a transform picker, its explanation in the shared tooltip. */
-export const TRANSFORM_LABEL = '<span class="tip" tabindex="0" data-tip="A function every replication outcome is put through before the analysis, the same for every design, so that all of them are compared on one scale: log or square root for skewed positive outcomes, arcsine square root or logit for proportions, reciprocal to turn a time per job into a rate.">Transform</span>';
+export const TRANSFORM_LABEL = '<span class="tip" tabindex="0" data-tip="A function every replication outcome is put through before the analysis, the same for every design, so that all of them are compared on one scale: log for outcomes whose spread grows in proportion to their level, square root for counts, arcsine square root or logit for a share of counts such as the fraction of customers served on time, reciprocal to turn a time per job into a rate.">Transform</span>';
 
 /**
  * Binds a <select> to the shared transform of the replication outcomes: it
@@ -389,7 +389,7 @@ export function transformNote(id, extra = '') {
     '<p>A transform changes the question as well as the scale. A mean of transformed outcomes is not the transform of the mean: the mean of the logs carried back through the exponential is the geometric mean, which lies below the ordinary mean whenever the outcomes vary, and under a symmetric spread of the logs it is the median. The reciprocal carries back to the harmonic mean, and the square root, the arcsine square root, and the logit carry back to a center with no common name.</p>' +
     '<p>Each transform keeps the outcomes in order, except the reciprocal, which reverses it exactly. An interval on the transformed scale therefore carries back end for end into an interval on the back-transformed center, its ends swapped under the reciprocal, and under the reciprocal a design that is best by a bigger response is the one with the smallest mean on the transformed scale. A difference carries back only under the log, where a difference of logs is the log of a ratio: an interval on the difference becomes an interval on the ratio of the two geometric means.</p>' +
     '<p>Rank procedures use only the order of the outcomes, and so Kruskal–Wallis, Friedman, Dunn’s comparisons, and the rank-sum test give the same p-values under any of these transforms. The signed-rank test and the Hodges–Lehmann estimates do change, because they work with differences and averages of outcomes.</p>' +
-    '<p>Choose the transform from what the outcomes measure (a time, a count, a proportion) or from a pilot study, before looking at the comparison. Trying each transform until one gives the answer hoped for is itself a multiple-comparisons problem.</p>'));
+    '<p>Choose the transform from what the outcomes measure and how their spread changes with their level, or from a pilot study, before looking at the comparison. A proportion is not always a share of counts: a day’s utilization is its total work divided by its length, and across designs that differ in their service times its spread grows in proportion to its level, which the log evens out and the logit does not. Trying each transform until one gives the answer hoped for is itself a multiple-comparisons problem.</p>'));
   return box;
 }
 

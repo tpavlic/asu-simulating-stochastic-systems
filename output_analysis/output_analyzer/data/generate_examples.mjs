@@ -25,6 +25,11 @@
 //   transient_waits.txt        10 replications of the first 300 waits at rho = 0.9
 //   steady_state_long.csv      one run of 5000 waits at rho = 0.8
 //   queue_length.txt           5 replications of 600 minutes of the number in queue at rho = 0.8
+//   service_level.csv          designs A..C (mean service 0.5, 0.7, 0.8), 15 days each, independent:
+//                              each day's fraction of customers who waited less than 2 minutes
+//   utilization.csv            designs A..C (mean service 0.4, 1.0, 1.8 at mean interarrival 2.0),
+//                              12 days of 480 minutes each, independent: whether the server is busy,
+//                              recorded at every change
 //
 // Usage, from anywhere:
 //   node output_analysis/output_analyzer/data/generate_examples.mjs [--out <dir>]
@@ -48,7 +53,9 @@ const SEEDS = {
   fourCrn: 150000,
   transient: 83000,
   steady: 97001,
-  queueLength: 101000
+  queueLength: 101000,
+  serviceLevel: [170000, 176000, 182000],
+  utilization: [190000, 196000, 202000]
 };
 
 function mulberry32(seed) {
@@ -126,6 +133,30 @@ function queueLength(st, meanArr, meanSrv, endTime) {
   return rec;
 }
 
+/** Event-driven M/M/1; returns [time, 1 if the server is busy else 0] at every change, ending at `endTime`. */
+function busyServer(st, meanArr, meanSrv, endTime) {
+  const rec = [[0, 0]];
+  let q = 0;
+  let busy = false;
+  let nextArr = expo(st.arr(), meanArr);
+  let nextDep = Infinity;
+  for (;;) {
+    const t = Math.min(nextArr, nextDep);
+    if (t > endTime) break;
+    if (nextArr <= nextDep) {
+      if (busy) q++;
+      else { busy = true; rec.push([t, 1]); nextDep = t + expo(st.srv(), meanSrv); }
+      nextArr = t + expo(st.arr(), meanArr);
+    } else if (q > 0) {
+      q--;
+      nextDep = t + expo(st.srv(), meanSrv);
+    } else {
+      busy = false; rec.push([t, 0]); nextDep = Infinity;
+    }
+  }
+  return rec;
+}
+
 /** At most four decimals, no trailing zeros. */
 const fmt = (x) => String(Number(x.toFixed(4)));
 
@@ -143,6 +174,29 @@ function designsCsv(designs, reps) {
   for (const { name, mean, base } of designs) {
     for (let r = 1; r <= reps; r++) {
       lines.push(`${name},${r},${fmt(day(streams(base, r), mean).avg)}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+/** Each day's fraction of customers whose wait in queue was under `target` minutes, per design. */
+function serviceLevelCsv(designs, reps, target) {
+  const lines = ['design,replication,served_within_2'];
+  for (const { name, mean, base } of designs) {
+    for (let r = 1; r <= reps; r++) {
+      const { waits } = lindley(streams(base, r), 1.0, mean, { until: 480 });
+      lines.push(`${name},${r},${fmt(waits.filter(w => w < target).length / waits.length)}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+/** The server's busy state at every change, per design and day, with times to two decimals. */
+function utilizationCsv(designs, reps) {
+  const lines = ['design,replication,time,busy'];
+  for (const { name, mean, base } of designs) {
+    for (let r = 1; r <= reps; r++) {
+      for (const [t, b] of busyServer(streams(base, r), 2.0, mean, 480)) lines.push(`${name},${r},${Number(t.toFixed(2))},${b}`);
     }
   }
   return lines.join('\n') + '\n';
@@ -243,6 +297,20 @@ function entries() {
       description: 'The number of customers waiting in a single-server queue at utilization 0.8, recorded at the moment of every change over 600 minutes, in 5 runs. Use it to see why a time-persistent quantity is averaged with weights equal to how long each value is held.',
       text: buildQueueLength(),
       mapping: { ...nullMap, kind: 'time', value: 1, time: 0, endTime: 600, name: 'Queue length' }
+    },
+    {
+      id: 'service-level', title: 'Service level: a proportion to transform', file: 'service_level.csv',
+      kind: 'reps', format: 'columns',
+      description: 'The fraction of each 8-hour day\'s customers who waited less than 2 minutes, for three versions of a queue with mean service times 0.5, 0.7, and 0.8 minute, with 15 independent days each. A share of customers varies least near 0 or 1, and so the busier designs\' service levels spread more widely: Levene\'s test and the checks lines flag it. Under the logit transform, the spreads even out; the arcsine square root helps less.',
+      text: serviceLevelCsv([A('A', 0.5, SEEDS.serviceLevel[0]), A('B', 0.7, SEEDS.serviceLevel[1]), A('C', 0.8, SEEDS.serviceLevel[2])], 15, 2),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Service level' }
+    },
+    {
+      id: 'utilization', title: 'Utilization: a time-persistent proportion', file: 'utilization.csv',
+      kind: 'time', format: 'columns',
+      description: 'Whether the server of a single-server queue is busy, recorded at every change over 8-hour days, for three versions with mean service times 0.4, 1.0, and 1.8 minutes and a mean interarrival time of 2 minutes, with 12 independent days each. Each day\'s utilization, the time-weighted mean of the busy state, is a proportion, but because a day\'s utilization is its total work divided by its length, its spread grows in step with its level across designs that differ in their service times. Under the log transform the spreads even out; the arcsine square root and the logit, built for shares of counts, do not.',
+      text: utilizationCsv([A('A', 0.4, SEEDS.utilization[0]), A('B', 1.0, SEEDS.utilization[1]), A('C', 1.8, SEEDS.utilization[2])], 12),
+      mapping: { ...nullMap, kind: 'time', value: 3, time: 2, rep: 1, scenario: 0, endTime: 480, name: 'Utilization' }
     }
   ];
 }
