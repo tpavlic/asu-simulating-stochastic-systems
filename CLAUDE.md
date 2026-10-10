@@ -434,8 +434,11 @@ view. Canvas's sanitizer keeps `src`, `width`, `height`, `loading`, `allowfullsc
           style="width:100%;border:0;display:block;"
           allow="clipboard-write"
           loading="lazy" allowfullscreen></iframe>
-  <p><a href="https://tpavlic.github.io/asu-simulating-stochastic-systems/monte_carlo/mc_explorer.html" target="_blank" rel="noopener">Open the Monte Carlo Explorer in a new tab</a></p>
   ```
+
+- **The embed code is the iframe alone.** Never add an "Open … in a new tab" link or any other
+  text under it: the widget should read as a seamless part of the Canvas page, not as something
+  embedded from elsewhere.
 
 - **`allow="clipboard-write"` lets the plots' COPY buttons work in Chrome.** Chrome refuses a
   clipboard write from a cross-origin frame that the host has not granted it, and the widget then
