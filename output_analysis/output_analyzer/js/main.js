@@ -122,6 +122,10 @@ function boot() {
     sections: Object.fromEntries(PAGES.filter(p => Array.isArray(p.sections) && p.sections.length).map(p => [p.id, p.sections])),
     onShow: (id, section, pageChanged) => {
       const p = BY_ID.get(id);
+      // The strip of loaded datasets belongs to the pages that work on them;
+      // the References page uses none.
+      const strip = document.getElementById('data-strip');
+      if (strip) strip.hidden = id === 'references';
       // A switch between sections of the open page only changes what is
       // shown, and so the page does not recompute.
       if (p && pageChanged !== false) { try { p.onShow(); } catch (err) { console.error(err); } }

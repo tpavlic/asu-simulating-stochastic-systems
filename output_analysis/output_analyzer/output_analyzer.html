@@ -198,6 +198,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* The loaded datasets, one chip each, under the navigation on every page. */
 .data-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 28px;
               font-size: .8rem; color: var(--muted); margin: 0 0 12px; }
+.data-strip[hidden] { display: none; }
 .ds-count { font-weight: 600; }
 .ds-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-width: 0; min-height: 26px;
            border: 1.5px solid var(--border); border-radius: 999px; padding: 1px 11px; color: var(--text); background: var(--card); }
@@ -33901,6 +33902,10 @@ function boot() {
     sections: Object.fromEntries(PAGES.filter(p => Array.isArray(p.sections) && p.sections.length).map(p => [p.id, p.sections])),
     onShow: (id, section, pageChanged) => {
       const p = BY_ID.get(id);
+      // The strip of loaded datasets belongs to the pages that work on them;
+      // the References page uses none.
+      const strip = document.getElementById('data-strip');
+      if (strip) strip.hidden = id === 'references';
       // A switch between sections of the open page only changes what is
       // shown, and so the page does not recompute.
       if (p && pageChanged !== false) { try { p.onShow(); } catch (err) { console.error(err); } }
