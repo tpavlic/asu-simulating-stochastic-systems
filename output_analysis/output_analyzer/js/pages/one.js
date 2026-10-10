@@ -3,14 +3,18 @@
 // the estimates with the interval under it, and a card that plans the number
 // of replications by a target half-width or by a target power. A tally
 // dataset can be analyzed as pooled observations only through an explicit,
-// warned override.
+// warned override. Under a transform, every replication outcome is put
+// through it first, and the interval is carried back to the response's
+// units beneath the results; the pooled observations are never transformed.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
@@ -212,6 +216,7 @@ export function render(rootEl) {
     '<div class="ctrl-row">' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-ds">Dataset</label><select id="rp-ds"></select></span>' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-lvl">Confidence level</label><select id="rp-lvl"></select></span>' +
+      '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-tf">' + TRANSFORM_LABEL + '</label><select id="rp-tf"></select></span>' +
     '</div>' +
     '<div class="ctrl-row">' +
       '<span class="ctrl-lbl" id="rp-proc-lbl"><span class="tip" tabindex="0" data-tip="t interval: on the mean, assuming the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon signed-rank interval on the pseudo-median, the Hodges–Lehmann estimate; it needs no normality and keeps its level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
@@ -220,6 +225,8 @@ export function render(rootEl) {
         '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
       '</span>' +
     '</div>';
+  const tfBox = el('div');
+  ctrl.appendChild(tfBox);
   root.appendChild(ctrl);
 
   // Results.
@@ -229,11 +236,11 @@ export function render(rootEl) {
   const unitBox = el('div');
   const warnBox = el('div');
   const ovrBox = el('div');
-  const row1 = el('div'), row2 = el('div'), row3 = el('div');
+  const row1 = el('div'), row2 = el('div'), row3 = el('div'), row4 = el('div');
   const npNote = el('p', 'exp-note');
   npNote.hidden = true;
   const checks = el('div');
-  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks);
+  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks);
   res.appendChild(details('What the half-width means',
     '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R outcomes and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>An interval is a test turned around: the ' + lvl(state.settings.level) + ' interval holds exactly the values a two-sided t test at α = ' + num(1 - state.settings.level, 3) + ' would not reject, and so reading whether it contains a value is that test. This holds for every interval in this tool unless its page says otherwise.</p>' +
@@ -286,8 +293,8 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vRow1, vRow2, ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
-          sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'),
+  els = { varSec, vRow1, vRow2, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks, leg, cap, planSec,
+          sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
           paneHw: planSec.querySelector('[data-pane="hw"]'), panePw: planSec.querySelector('[data-pane="power"]'),
@@ -303,6 +310,7 @@ export function render(rootEl) {
     if (state.selected() === before && visible()) draw();
   });
   levelSelect(els.lvl);
+  transformSelect(els.tf);
   ctrl.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => {
     if (proc === b.dataset.proc) return;
     proc = b.dataset.proc;
@@ -377,17 +385,63 @@ function currentDataset() {
   return els && els.sel.value ? state.get(els.sel.value) : null;
 }
 
+// The transform in force on the chosen dataset: the shared one, except under
+// the pooled override, whose observations are never transformed.
+function activeTransform(ds) {
+  const tf = state.settings.transform;
+  return ds && isTransform(tf) && !(ds.kind === 'tally' && override.has(ds.id)) ? tf : 'none';
+}
+
+// The key a target typed in the response's units is kept under: the
+// dataset, and the transform too when one is on, so that a value typed on one
+// scale is never read on another.
+function unitKey(ds) {
+  if (!ds) return null;
+  const tf = activeTransform(ds);
+  return tf === 'none' ? ds.id : ds.id + '|' + tf;
+}
+
+// The words for the response's units, or for the transformed scale.
+function unitWords(ds) {
+  const tf = activeTransform(ds);
+  if (tf !== 'none') return 'on the ' + transformOf(tf).scale + ' scale';
+  return ds && ds.unit ? ds.unit : 'in the response’s units';
+}
+
+// The half-width target in force: a relative target means nothing on a
+// transformed scale (a percent of a mean of logs), and so a transform makes it absolute.
+function targetKind() {
+  return activeTransform(currentDataset()) !== 'none' ? 'absolute' : plan.target;
+}
+
+// The finite replication outcomes planning works from, transformed when a
+// transform is on; none when an outcome lies outside its domain.
+function planOutcomes(ds) {
+  const est = Array.from(repEstimates(ds)).filter(Number.isFinite);
+  const tf = activeTransform(ds);
+  if (tf === 'none') return est;
+  const r = transformSets([{ name: ds.name, values: est, ids: est.map((_, i) => i) }], tf);
+  return r.ok ? Array.from(r.values[0]) : [];
+}
+
 // The target field is rebuilt when the target kind or the dataset changes,
 // because a spinner's step is fixed when it is made.
 function buildTargetInput() {
-  for (const b of els.segs) b.setAttribute('aria-pressed', String(b.dataset.target === plan.target));
+  const kind = targetKind();
+  plan.builtKind = kind;
+  // On a transformed scale the target is absolute, and the relative choice is unavailable.
+  const tfOn = activeTransform(currentDataset()) !== 'none';
+  for (const b of els.segs) {
+    b.setAttribute('aria-pressed', String(b.dataset.target === kind));
+    b.disabled = tfOn && b.dataset.target === 'relative';
+  }
   els.tgtBox.innerHTML = '';
   const inp = document.createElement('input');
   inp.type = 'text';
   inp.id = 'rp-tgt';
   inp.setAttribute('aria-label', 'Target half-width');
   els.tgtBox.appendChild(inp);
-  if (plan.target === 'relative') {
+  if (kind === 'relative') {
     inp.value = String(plan.rel);
     spinner(inp, { min: 0.1, max: 100, step: 1, decimals: 1, onChange: v => { plan.rel = v; state.setPick(id, 'targetRel', v); drawPlan(); } });
     els.tgtUnit.textContent = '% of the mean';
@@ -404,16 +458,17 @@ function buildTargetInput() {
       drawPlan();
     } });
     plan.abs = plan.absSpin.get();
-    els.tgtUnit.textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+    els.tgtUnit.textContent = unitWords(ds);
   }
 }
 
 // The default for a target in the response's units: 10% of the mean of the
 // chosen dataset's estimates to two significant digits, or a quarter of
-// their standard deviation when the mean is zero.
+// their standard deviation when the mean is zero. Under a transform, the
+// estimates are the transformed ones.
 function defaultShift(ds) {
   if (!ds) return 1;
-  const est = Array.from(repEstimates(ds)).filter(Number.isFinite);
+  const est = planOutcomes(ds);
   if (!est.length) return 1;
   const s = summary(est);
   return Math.abs(s.mean) > 0 ? round2(0.1 * Math.abs(s.mean)) : round2(0.25 * s.sd);
@@ -421,7 +476,7 @@ function defaultShift(ds) {
 
 // Seeds the absolute target at the default for the chosen dataset.
 function ensureAbsDefault(ds) {
-  const key = ds ? ds.id : null;
+  const key = unitKey(ds);
   if (plan.absFor === key && plan.abs != null) return;
   plan.absFor = key;
   const kept = storedFor('target', key);
@@ -431,7 +486,7 @@ function ensureAbsDefault(ds) {
 // Seeds δ at the default for the chosen dataset and shows it in its field,
 // which is empty and disabled while there is nothing to plan from.
 function syncDeltaInput(ds, ready) {
-  const key = ds ? ds.id : null;
+  const key = unitKey(ds);
   if (ready && plan.deltaFor !== key) {
     plan.deltaFor = key;
     const def = defaultShift(ds);
@@ -441,7 +496,7 @@ function syncDeltaInput(ds, ready) {
   }
   syncSpin(plan.deltaSlot, els.deltaHost, 'one-plan-delta', 'Shift to detect δ', plan.deltaStep || 1,
     ready ? plan.delta : null, v => { plan.delta = v; if (plan.deltaFor) state.setPick(id, 'delta:' + plan.deltaFor, v); drawPlan(); });
-  els.deltaUnit.textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+  els.deltaUnit.textContent = unitWords(ds);
 }
 
 function placeholderRows(label) {
@@ -466,6 +521,11 @@ function draw() {
   els.unitBox.replaceChildren(unitLine(ds));
   els.warnBox.replaceChildren();
   els.ovrBox.replaceChildren();
+  els.row4.replaceChildren();
+  const tf = activeTransform(ds), T = transformOf(tf);
+  const tfNote = tf === 'none' ? null : transformNote(tf, 'Beneath the interval, the same interval is carried back to the response’s units, where its center is the ' + esc(proc === 'np' ? 'back-transformed pseudo-median' : T.center) + '.');
+  els.tfBox.replaceChildren(...(tfNote ? [tfNote] : []));
+  if (plan.builtKind && plan.builtKind !== targetKind()) buildTargetInput();
 
   if (!ds) {
     placeholderRows();
@@ -483,9 +543,26 @@ function draw() {
 
   const ids = repIds(ds);
   const estAll = repEstimates(ds);
-  const labels = [], est = [], estIds = [];
+  const labels = [], estIds = [];
+  let est = [];
   for (let i = 0; i < estAll.length; i++) {
     if (Number.isFinite(estAll[i])) { est.push(estAll[i]); estIds.push(ids[i]); labels.push('replication ' + ids[i]); }
+  }
+  // The outcomes as the data give them, before any transform.
+  const rawEst = est;
+  if (pooled && isTransform(state.settings.transform)) {
+    els.warnBox.appendChild(notice('info', 'The transform applies to replication outcomes, and so it is off while the pooled observations are in use.'));
+  }
+  if (tf !== 'none') {
+    const tr = transformSets([{ name: ds.name, values: est, ids: estIds }], tf);
+    if (!tr.ok) {
+      els.warnBox.appendChild(transformRefusal(tf, tr));
+      placeholderRows();
+      drawFigure({ values: [], labels: null, ti: null, ds, pooled: false, tf });
+      finish(null, 'Planning needs replication outcomes the transform can take.');
+      return;
+    }
+    est = Array.from(tr.values[0]);
   }
 
   let x;
@@ -493,13 +570,13 @@ function draw() {
   else x = est;
   if (!pooled && !inf.ok) {
     placeholderRows();
-    drawFigure({ values: est, labels, ti: null, ds, pooled: false });
+    drawFigure({ values: est, labels, ti: null, ds, pooled: false, tf });
     finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
   if (x.length < 2) {
     placeholderRows(pooled ? POOLED : '');
-    drawFigure({ values: x, labels: null, ti: null, ds, pooled });
+    drawFigure({ values: x, labels: null, ti: null, ds, pooled, tf });
     finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
@@ -516,9 +593,9 @@ function draw() {
   els.npNote.hidden = !np;
   // The pooled override's own warning says what is wrong with it; the
   // checks run on replication outcomes only.
-  els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
+  els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: tf !== 'none' ? 'the ' + T.label.toLowerCase() + ' of the replication outcomes' : 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
     procedure: 'the t interval', declared: 'between replications cannot be checked from the data, and the t interval assumes it; it holds when each replication ran on its own random streams.' })]));
-  const note = pooled ? POOLED : '';
+  const note = pooled ? POOLED : tf !== 'none' ? T.scale + ' scale' : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
     card(nLabel, intl(s.n), pooled ? POOLED : 'replication outcomes'),
@@ -542,7 +619,20 @@ function draw() {
     ]));
   }
 
-  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np });
+  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np, tf });
+
+  // Under a transform, the interval carried back to the response's units.
+  let back = null;
+  if (tf !== 'none') {
+    const ctrName = np ? 'back-transformed pseudo-median' : T.center;
+    const bi = np ? backInterval(sr.lo, sr.hi, tf) : backInterval(ti.lo, ti.hi, tf);
+    back = { name: ctrName, center: backTransform(np ? sr.estimate : s.mean, tf), lo: bi.lo, hi: bi.hi };
+    const cap1 = ctrName.charAt(0).toUpperCase() + ctrName.slice(1);
+    els.row4.replaceChildren(cardRow([
+      wide(card(lvl(level) + ' interval for the ' + esc(ctrName), '[' + stat(back.lo) + ', ' + stat(back.hi) + ']', 'the interval above, carried back' + (ds.unit ? '; ' + esc(ds.unit) : ''))),
+      card(esc(cap1), num(back.center), 'the ' + (np ? 'pseudo-median' : 'mean') + ' above, carried back')
+    ]));
+  }
 
   // The variance interval, on replication outcomes only.
   const vi = pooled ? null : varianceInterval(x, level);
@@ -551,8 +641,8 @@ function draw() {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     els.vRow1.replaceChildren(cardRow([
       card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
-      card(S('s²'), num(vi.s2), 'sample variance'),
-      card(S('s'), num(vi.s), 'sample standard deviation'),
+      card(S('s²'), num(vi.s2), 'sample variance' + (tf !== 'none' ? ', ' + T.scale + ' scale' : '')),
+      card(S('s'), num(vi.s), 'sample standard deviation' + (tf !== 'none' ? ', ' + T.scale + ' scale' : '')),
       card(S('χ²') + ' quantiles', num(vi.chiLo) + ', ' + num(vi.chiHi), 'χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub>')
     ]));
     els.vRow2.replaceChildren(cardRow([
@@ -562,7 +652,7 @@ function draw() {
   }
 
   // The page's result, for its export row and the Report page.
-  const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
+  const estRows = pooled ? [] : tf !== 'none' ? est.map((v, i) => [estIds[i], rawEst[i], v]) : est.map((v, i) => [estIds[i], v]);
   const intervalRows = np ? [
     ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['min', s.min], ['q1', s.q1], ['median', s.median], ['q3', s.q3], ['max', s.max],
     ['pseudo-median (Hodges-Lehmann)', sr.estimate], ['lower', sr.lo], ['upper', sr.hi],
@@ -573,8 +663,10 @@ function draw() {
     ['half-width', ti.hw], ['lower', ti.lo], ['upper', ti.hi]
   ];
   const tables = [];
-  if (!pooled) tables.push({ name: 'Replication outcomes', headers: ['replication', 'estimate'], rows: estRows });
+  if (!pooled) tables.push({ name: 'Replication outcomes', headers: tf !== 'none' ? ['replication', 'estimate', T.label.toLowerCase() + ' of estimate'] : ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
+    ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
   if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
     ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
     ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
@@ -586,15 +678,18 @@ function draw() {
       dataset: ds.name,
       'confidence level': lvl(level),
       procedure: np ? 'Wilcoxon signed-rank (nonparametric)' : 't interval',
-      'unit of inference': pooled ? 'pooled observations (override)' : 'replication means'
+      'unit of inference': pooled ? 'pooled observations (override)' : 'replication means',
+      ...(tf !== 'none' ? { transform: T.label.toLowerCase() + ' of each replication outcome' } : {})
     },
     tables,
     summaryHtml: np
-      ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications).</p>'
+      ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications)' +
+        (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>'
       : '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + lvl(level) +
-        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>',
+        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ')' +
+        (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>',
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { ds, x, ids: pooled ? null : estIds, pooled, proc }
+    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf }
   }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
@@ -618,7 +713,7 @@ function drawPlan() {
   const ctx = planCtx && !planCtx.msg ? planCtx : null;
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Load a dataset on the Import page to plan replications.';
   const ds = ctx ? ctx.ds : currentDataset();
-  const unit = ds && ds.unit ? ' ' + ds.unit : '';
+  const unit = ds && activeTransform(ds) !== 'none' ? ' (' + unitWords(ds) + ')' : ds && ds.unit ? ' ' + ds.unit : '';
   const sd = ctx ? ctx.s.sd : NaN, R = ctx ? ctx.s.n : NaN, mean = ctx ? ctx.s.mean : NaN;
   const level = state.settings.level, alpha = 1 - level;
   const closing = 'An estimate conditional on the current sample standard deviation s = ' + num(sd) +
@@ -627,8 +722,8 @@ function drawPlan() {
   const rows = [];
 
   // By half-width.
-  if (plan.target === 'absolute' && ds && plan.absFor !== ds.id) buildTargetInput();
-  const relative = plan.target === 'relative';
+  if (targetKind() !== plan.builtKind || (targetKind() === 'absolute' && ds && plan.absFor !== unitKey(ds))) buildTargetInput();
+  const relative = targetKind() === 'relative';
   let hp = { n: null, hwAtN: NaN, h: NaN }, hwNote = esc(msg);
   if (ctx) {
     hp = planReplications({ sd, level, target: relative ? plan.rel / 100 : plan.abs, relative, mean });
@@ -711,7 +806,7 @@ function drawFigure(d) {
   if (!d || !d.values.length) {
     fig.render(f => {
       f.x([0, 1]);
-      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false), xFormat: () => '' });
+      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false, d ? d.tf : 'none'), xFormat: () => '' });
       svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication outcomes to show.';
     });
     legend(els.leg, [
@@ -722,7 +817,7 @@ function drawFigure(d) {
     els.cap.textContent = 'Choose a dataset to see its replication outcomes.';
     return;
   }
-  const { values, labels, ti, ds, pooled, np } = d;
+  const { values, labels, ti, ds, pooled, np, tf } = d;
   const intName = np ? ' Wilcoxon interval on the pseudo-median' : ' interval on the mean';
   const hasInt = ti && Number.isFinite(ti.lo);
   const band = hasInt ? 28 : 0;
@@ -730,7 +825,7 @@ function drawFigure(d) {
     // Many pooled observations stack into a dot histogram, which needs room.
     f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
     f.x(hasInt ? extent(values, [ti.lo, ti.hi]) : extent(values), { pad: 0.06, nice: true });
-    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled) });
+    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled, tf) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;
     f.ih = fullH - band;

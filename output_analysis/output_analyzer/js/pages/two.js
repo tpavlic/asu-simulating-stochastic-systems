@@ -4,7 +4,9 @@
 // numbers. Pairing is a
 // switch the reader sets; the page never infers it from equal sample sizes.
 // A card under the comparison plans the replications per design by a target
-// half-width on the difference or by a target power.
+// half-width on the difference or by a target power. Under a transform,
+// both designs' outcomes are put through it before anything else, and under
+// the log the difference is carried back as the ratio of geometric means.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
@@ -13,7 +15,9 @@ import { welch, pooledT, matchPairs, pairedT, planHalfWidthWelch, powerWelch, pl
 import { tInterval, fRatio, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
-import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, transformLabel } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
@@ -50,6 +54,8 @@ const plan = { mode: 'hw', key: null, hwUser: null, deltaUser: null, power: 0.8,
 // so a planning control redraws only the planning card.
 let planCtx = null;
 let resultBase = null;
+// The transform in force for the drawing under way, set by update().
+let tfNow = 'none';
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
@@ -421,8 +427,18 @@ function update() {
   res.innerHTML = '';
   const level = state.settings.level;
   const { a: dsA, b: dsB } = chosen();
-  const eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
+  let eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
   res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
+  const tf = isTransform(state.settings.transform) ? state.settings.transform : 'none';
+  tfNow = tf;
+  const tfBox = rootEl.querySelector('#two-tf-note');
+  const tfN = tf === 'none' ? null : transformNote(tf, tf === 'log'
+    ? 'Under the log, the difference A − B carries back as the ratio A / B of the geometric means, shown beneath the comparison.'
+    : 'A difference on the ' + esc(transformOf(tf).scale) + ' scale has no counterpart in the response’s units, and so the comparison is reported on that scale only.');
+  tfBox.replaceChildren(...(tfN ? [tfN] : []));
+  // The outcomes as the data give them, which the regenerate scripts embed.
+  const rawA = eA, rawB = eB;
+  let refused = false;
 
   const notes = [];
   const eligible = state.datasets.filter(d => canInfer(d).ok).length;
@@ -433,7 +449,12 @@ function update() {
   for (const [e, tag] of [[eA, 'A'], [eB, 'B']]) {
     if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no outcome and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
   }
-  const ready = dsA && dsB && dsA.id !== dsB.id;
+  let ready = dsA && dsB && dsA.id !== dsB.id;
+  if (ready && tf !== 'none') {
+    const tr = transformSets([{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }], tf);
+    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
+    else { eA = Object.assign({}, eA, { v: tr.values[0] }); eB = Object.assign({}, eB, { v: tr.values[1] }); }
+  }
 
   // The match rule and its note, shown under the Paired switch.
   let match = null;
@@ -448,8 +469,9 @@ function update() {
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
 
-  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, match } : null, level);
-  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB } : null, level);
+  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level);
+  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level);
+  if (refused) planCtx = { msg: 'Planning needs replication outcomes the transform can take.' };
   registerTips(res);
   drawPlan();
 }
@@ -468,8 +490,9 @@ function drawPlan() {
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Choose two different datasets above to plan replications.';
   if (c && c.key !== plan.key) { plan.key = c.key; plan.hwUser = storedTarget('target', c.key); plan.deltaUser = storedTarget('delta', c.key); }
   const level = state.settings.level, alpha = 1 - level;
-  const unit = c && c.dsA.unit ? ' ' + c.dsA.unit : '';
-  const unitNote = c && c.dsA.unit ? c.dsA.unit : 'in the response’s units';
+  const tfScale = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : null;
+  const unit = tfScale ? ' (' + tfScale + ')' : c && c.dsA.unit ? ' ' + c.dsA.unit : '';
+  const unitNote = tfScale || (c && c.dsA.unit ? c.dsA.unit : 'in the response’s units');
   const paired = c ? c.paired : mode === 'paired';
   const pooled = !!(c && c.pooled);
   // Additional replications are counted beyond the larger of the two current
@@ -561,6 +584,31 @@ function npLevelNote(r, L) {
   return r.exact && Number.isFinite(r.achieved) ? 'achieved level ' + levelPct(r.achieved) : L + ' by the ' + npBasis(r);
 }
 
+// Under the log, the comparison's center and interval carried back as a
+// ratio A / B, drawn as a card row under the comparison; null otherwise.
+function ratioBlock(parent, d, center, lo, hi, L, what) {
+  if (!d || d.tf !== 'log' || !Number.isFinite(center)) return null;
+  const r = { center: Math.exp(center), lo: Math.exp(lo), hi: Math.exp(hi) };
+  parent.appendChild(cardRow([
+    card(what, num(r.center), 'the exponential of the estimate above'),
+    wide(card(L + ' interval for the ratio', interval(r.lo, r.hi), 'it excludes 1 exactly when the interval above excludes 0'))
+  ]));
+  return r;
+}
+
+// A ratio's table and its clause for the page's summary.
+function ratioTable(r, what) {
+  return { name: 'Ratio A / B (back-transformed)', headers: ['statistic', 'value'], rows: [[what, r.center], ['lower', r.lo], ['upper', r.hi]] };
+}
+function ratioClause(r, L) {
+  return ' On the response’s own scale, the ratio A / B is ' + num(r.center) + ', ' + L + ' interval ' + interval(r.lo, r.hi) + '.';
+}
+
+// A difference's axis label, naming the transformed scale.
+function diffAxis(base) {
+  return tfNow === 'none' ? base : base.replace(/, A − B$/, '') + ' on the ' + transformOf(tfNow).scale + ' scale, A − B';
+}
+
 function renderIndependent(res, notes, d, level) {
   for (const n of notes) res.appendChild(n);
   const np = proc === 'np', pooled = proc === 'pooled';
@@ -606,6 +654,8 @@ function renderIndependent(res, notes, d, level) {
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
+  const ratioWhat = np ? 'Ratio A / B (back-transformed shift)' : 'Ratio of geometric means A / B';
+  const ratio = shown ? ratioBlock(s, d, center, shown.lo, shown.hi, L, ratioWhat) : null;
   if (np) s.appendChild(caption(NP_PLAN));
   // The checks follow a parametric result only: the Wilcoxon procedures assume no normality.
   if (d && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base, pooled,
@@ -615,11 +665,11 @@ function renderIndependent(res, notes, d, level) {
   const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
   const box1 = figBox(f);
-  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: d ? 'Replication outcome of ' + d.dsA.response : 'Replication outcome' });
+  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: transformLabel(d ? 'Replication outcome of ' + d.dsA.response : 'Replication outcome', tfNow) });
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   const box2 = figBox(f);
-  const fig2 = makeFigure(box2, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: np ? 'Shift in location, A − B' : 'Difference in means, A − B' });
+  const fig2 = makeFigure(box2, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: diffAxis(np ? 'Shift in location, A − B' : 'Difference in means, A − B') });
   const leg2 = document.createElement('div');
   f.appendChild(leg2);
   const ownName = np ? L + ' Wilcoxon interval' : L + ' t interval';
@@ -686,10 +736,10 @@ function renderIndependent(res, notes, d, level) {
     planCtx = { msg: 'Choose two different datasets above to plan replications.' };
     return;
   }
-  planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
+  planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
               hw: w.hw, meanA: w.mean1, sdA: w.sd1,
               // What the regenerate scripts are built from.
-              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'independent', proc } };
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'independent', proc, transform: d.tf } };
   const prov = provenance(d, level, false, null, null);
   resultBase = np ? {
     title: 'Two Systems: Wilcoxon rank-sum comparison',
@@ -700,7 +750,7 @@ function renderIndependent(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, summary(d.eA.v).median, summary(d.eB.v).median, rs.estimate, rs.W, rs.p, rs.lo, rs.hi, rs.exact ? rs.achieved : level, npBasis(rs)]]
     }],
     summaryHtml: '<p>Wilcoxon rank-sum comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): shift A − B = ' + num(rs.estimate) +
-      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', ' + pEq(rs.p) + '. ' + esc(verdict.textContent) + '</p>'
+      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', ' + pEq(rs.p) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   } : {
     title: 'Two Systems: ' + tName + ' comparison',
     provenance: prov,
@@ -710,8 +760,9 @@ function renderIndependent(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, w.mean1, w.mean2, w.diff].concat(pooled ? [w.sp] : [], [w.se, w.df, w.t, w.p, w.lo, w.hi, w.hw])]
     }],
     summaryHtml: '<p>' + tName + ' comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
-      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
+      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   };
+  if (ratio) resultBase.tables.push(ratioTable(ratio, np ? 'ratio (back-transformed shift)' : 'ratio of geometric means'));
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
     ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
@@ -910,7 +961,7 @@ function pairViews(parent, P) {
     '</span>';
   block.appendChild(row);
   const box = figBox(block);
-  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: 'Replication outcome' });
+  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: transformLabel('Replication outcome', tfNow) });
   const stack = (cls) => {
     const s = document.createElement('div');
     s.style.display = 'grid';
@@ -1031,6 +1082,8 @@ function renderPaired(res, notes, d, level) {
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
+  const ratioWhat = np ? 'Ratio A / B (back-transformed pseudo-median)' : 'Ratio of geometric means A / B';
+  const ratio = shown ? ratioBlock(s, d, shown.center, shown.lo, shown.hi, L, ratioWhat) : null;
   if (np) s.appendChild(caption(NP_PLAN));
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
   if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs, flat: pr.sdD === 0 }], alpha: 1 - state.settings.base,
@@ -1040,7 +1093,7 @@ function renderPaired(res, notes, d, level) {
   const f = sec('Paired differences');
   res.appendChild(f);
   const box1 = figBox(f);
-  const fig1 = makeFigure(box1, { height: 150, narrowHeight: 170, margin: { t: 8, b: 40 }, xLabel: 'Difference A − B in each matched pair' });
+  const fig1 = makeFigure(box1, { height: 150, narrowHeight: 170, margin: { t: 8, b: 40 }, xLabel: tfNow === 'none' ? 'Difference A − B in each matched pair' : 'Difference A − B in each matched pair, ' + transformOf(tfNow).scale + ' scale' });
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   f.appendChild(caption('Each dot is one matched pair’s difference A − B; under the dots is ' + (np ? 'the pseudo-median of the differences (the Hodges–Lehmann estimate) with its ' + L + ' Wilcoxon signed-rank interval' : 'the mean difference with its ' + L + ' paired t interval') +
@@ -1067,10 +1120,10 @@ function renderPaired(res, notes, d, level) {
   let sumA = 0;
   for (const v of d.eA.v) sumA += v;
   const iA = tInterval(d.eA.v, level);
-  planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
+  planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
               meanA: sumA / d.eA.v.length, sdA: iA.sd,
               // What the regenerate scripts are built from.
-              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc() } };
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc(), transform: d.tf } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
   resultBase = {
     title: np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison',
@@ -1085,14 +1138,16 @@ function renderPaired(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, pr.n, pr.meanD, pr.sdD, pr.se, pr.df, pr.t, pr.p, pr.lo, pr.hi, pr.hw, pr.r]]
     }, {
       name: 'Matched pairs',
-      headers: ['replication A', 'replication B', 'A', 'B', 'difference A - B'],
+      headers: d.tf !== 'none' ? ['replication A', 'replication B', transformOf(d.tf).label.toLowerCase() + ' of A', transformOf(d.tf).label.toLowerCase() + ' of B', 'difference A - B']
+        : ['replication A', 'replication B', 'A', 'B', 'difference A - B'],
       rows: m.pairs.map(([i, j], k) => [String(d.eA.ids[i]), String(d.eB.ids[j]), x[k], y[k], pr.diffs[k]])
     }],
     summaryHtml: '<p>' + (np ? 'Wilcoxon signed-rank comparison' : 'Paired comparison') + ' of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B) over ' + plural(pr.n, 'pair') +
       (np ? ': pseudo-median of the differences ' + num(sr.estimate) + ', ' + L + ' interval ' + interval(sr.lo, sr.hi) + ', ' + pEq(sr.p)
         : ': mean difference ' + num(pr.meanD) + ', ' + L + ' interval ' + interval(pr.lo, pr.hi) + ', ' + pEq(pr.p)) +
-      ', r = ' + num(pr.r, 3) + '. ' + esc(verdict.textContent) + '</p>'
+      ', r = ' + num(pr.r, 3) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   };
+  if (ratio) resultBase.tables.splice(1, 0, ratioTable(ratio, np ? 'ratio (back-transformed pseudo-median)' : 'ratio of geometric means'));
 }
 
 function provenance(d, level, paired, by, unmatched) {
@@ -1102,7 +1157,8 @@ function provenance(d, level, paired, by, unmatched) {
     procedure: proc === 'np' ? (paired ? 'Wilcoxon signed-rank (nonparametric)' : 'Wilcoxon rank-sum (nonparametric)') : (paired ? 'paired t' : proc === 'pooled' ? 'pooled-variance t' : 'Welch t'),
     paired: paired ? 'yes' : 'no',
     'matched by': paired ? (by === 'id' ? 'replication id' : 'position') : 'not applicable',
-    'unmatched replications': paired ? unmatched : 'not applicable'
+    'unmatched replications': paired ? unmatched : 'not applicable',
+    ...(d.tf && d.tf !== 'none' ? { transform: transformOf(d.tf).label.toLowerCase() + ' of each replication outcome' } : {})
   };
 }
 
@@ -1121,6 +1177,7 @@ export function render(root) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-a">Design A</label><select id="two-a"></select></span>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-b">Design B</label><select id="two-b"></select></span>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-lvl">Confidence level</label><select id="two-lvl"></select></span>' +
+        '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-tf">' + TRANSFORM_LABEL + '</label><select id="two-tf"></select></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run on separate random streams. Paired: replication i of A and replication i of B used the same random inputs (common random numbers).">Replications are</span></span>' +
@@ -1146,6 +1203,7 @@ export function render(root) {
         '</span>' +
       '</div>' +
       '<div id="two-excluded"></div>' +
+      '<div id="two-tf-note"></div>' +
     '</div>' +
     '<div id="two-results"></div>' +
     '<div class="sec plan-card" id="two-plan"></div>';
@@ -1185,6 +1243,7 @@ export function render(root) {
   datasetSelect(selA, { filter, remember: { page: id, key: 'a' } });
   datasetSelect(selB, { filter, remember: { page: id, key: 'b' } });
   levelSelect(root.querySelector('#two-lvl'));
+  transformSelect(root.querySelector('#two-tf'));
   applyStored();
   separateB();
 

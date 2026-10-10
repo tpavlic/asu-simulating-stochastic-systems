@@ -6,7 +6,10 @@
 // differences or a target ANOVA power needs; one-way ANOVA with a post-hoc
 // rule and the compact letter display; and a subset-selection screen for the
 // best design with the second-stage replication counts a Rinott procedure
-// would ask for. Every result is computed whichever section is open.
+// would ask for. Every result is computed whichever section is open. Under a
+// transform, every design's outcomes are put through it before anything
+// else; the means are carried back to the response's units, and under the
+// log the differences are carried back as ratios.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
@@ -14,7 +17,9 @@ import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posth
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -94,8 +99,36 @@ const plan = { key: null, hwUser: null, mhwUser: null, deltaUser: null, power: 0
 // so a planning control redraws only the planning card.
 let planCtx = null;
 let resultBase = null;
+// The transform in force for the drawing under way, set by update(), and the
+// one the indifference zone's stored value was read under.
+let tfNow = 'none';
+let epsTf = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
+
+// The response as the axes name it: "wait", or under a transform "the log of wait".
+const respName = list => (tfNow === 'none' ? list[0].response : 'the ' + transformOf(tfNow).label.toLowerCase() + ' of ' + list[0].response);
+// A key suffix for a value typed in the response's units, which a transform puts on another scale.
+const tfKey = () => (tfNow === 'none' ? '' : '|' + tfNow);
+// Where the indifference zone is kept: a value typed on one scale is never read on another.
+const epsKey = () => 'eps' + tfKey();
+// Under a transform, a design's center and interval carried back to the
+// response's units: the page's two cells, the CSV's three values, and the
+// headers of both. Nothing without a transform.
+function backCols(center, lo, hi, np) {
+  if (tfNow === 'none') return null;
+  const T = transformOf(tfNow), bi = backInterval(lo, hi, tfNow), c = backTransform(center, tfNow);
+  const name = np ? 'back-transformed pseudo-median' : T.center;
+  return { cells: [num(c), interval(bi.lo, bi.hi)], values: [c, bi.lo, bi.hi],
+           heads: [name.charAt(0).toUpperCase() + name.slice(1), 'Interval, back-transformed'],
+           csvHeads: ['back-transformed center (' + name + ')', 'back-transformed lower', 'back-transformed upper'] };
+}
+// Under the log, a difference and its interval carried back as a ratio.
+function ratioCols(center, lo, hi) {
+  if (tfNow !== 'log') return null;
+  const r = [Math.exp(center), Math.exp(lo), Math.exp(hi)];
+  return { cells: [num(r[0]), interval(r[1], r[2])], values: r, heads: ['Ratio', 'Ratio interval'], csvHeads: ['ratio', 'ratio lower', 'ratio upper'] };
+}
 
 // An infinite end (an unbounded rank interval) shows as ∞, as on the Report page.
 const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
@@ -466,7 +499,7 @@ function ensureEpsSpinner(step) {
   host.innerHTML = '<input id="sev-eps" type="text" class="par-inp" aria-label="Indifference zone ε">';
   const inp = host.querySelector('#sev-eps');
   inp.value = '0';
-  epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, 'eps', v); schedule(); } });
+  epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, epsKey(), v); schedule(); } });
 }
 
 // The benchmark the means (or pseudo-medians) are tested against: the
@@ -477,7 +510,7 @@ function benchmark(items, ds) {
   const on = benchOn && items.length > 0;
   rootEl.querySelector('#sev-bench-on').checked = benchOn;
   pair.hidden = !on;
-  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|');
+  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|') + tfKey();
   let value = null;
   if (on) {
     const centers = items.map(it => it.center);
@@ -498,7 +531,7 @@ function benchmark(items, ds) {
       inp.value = String(value);
       benchSpin = { key, step, spin: spinner(inp, { step, min: -1e12, max: 1e12, onChange: v => { benchVal = v; state.setPick(id, key, v); schedule(); } }) };
     } else benchSpin.spin.set(value, false);
-    rootEl.querySelector('#sev-bench-unit').textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+    rootEl.querySelector('#sev-bench-unit').textContent = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : ds && ds.unit ? ds.unit : 'in the response’s units';
   }
   const flag = i => on && (items[i].lo > value || items[i].hi < value);
   const word = i => (!on ? '' : items[i].lo > value ? 'above the benchmark' : items[i].hi < value ? 'below the benchmark' : 'contains the benchmark');
@@ -557,7 +590,8 @@ function syncControls(list, groups) {
     ensureEpsSpinner(Math.pow(10, Math.floor(Math.log10(def)) - 1));
     epsSpin.set(epsUser === null ? def : epsUser, false);
     const responses = Array.from(new Set(list.map(d => d.response)));
-    const unitTxt = responses.length === 1 ? 'in the units of ' + esc(responses[0]) : 'in the units of the response';
+    const unitTxt = tfNow !== 'none' ? 'on the ' + esc(transformOf(tfNow).scale) + ' scale'
+      : responses.length === 1 ? 'in the units of ' + esc(responses[0]) : 'in the units of the response';
     note.innerHTML = unitTxt + '; ' + (epsUser === null
       ? 'the default is 10% of the pooled standard deviation, ' + num(pooledSd(groups), 3)
       : 'the default would be ' + num(def) + ', 10% of the pooled standard deviation');
@@ -608,6 +642,29 @@ function update() {
   if (!rootEl) return;
   const list = checkedList();
   let groups = list.map(finiteOf);
+  // The outcomes as the data give them, which the regenerate scripts embed,
+  // and under a transform the transformed ones every procedure runs on.
+  let rawGroups = groups;
+  tfNow = isTransform(state.settings.transform) ? state.settings.transform : 'none';
+  // The direction on the transformed scale: the reciprocal reverses the
+  // order, and so there the best design has the smallest mean when bigger is better.
+  const dirS = transformOf(tfNow).decreasing ? (dir === 'min' ? 'max' : 'min') : dir;
+  if (epsTf !== tfNow) {
+    epsTf = tfNow;
+    const e = state.getPick(id, epsKey());
+    epsUser = typeof e === 'number' && Number.isFinite(e) && e > 0 ? e : null;
+  }
+  const tfBox = rootEl.querySelector('#sev-tf-note');
+  const tfN = tfNow === 'none' ? null : transformNote(tfNow, 'Each design’s interval is also carried back to the response’s units, as an interval on its ' + esc(transformOf(tfNow).center) +
+    (tfNow === 'log' ? ', and each difference as a ratio of geometric means.' : '; a difference on this scale has no counterpart in those units.'));
+  tfBox.replaceChildren(...(tfN ? [tfN] : []));
+  // The outcomes outside the transform's domain, which stop every section.
+  let refused = null;
+  if (tfNow !== 'none' && list.length >= 2) {
+    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: finiteIds(d) })), tfNow);
+    if (tr.ok) groups = tr.values;
+    else refused = tr;
+  }
   // Under common random numbers across designs the replications are matched
   // into complete blocks, and every procedure runs on the aligned groups.
   const paired = pairMode === 'paired';
@@ -622,6 +679,7 @@ function update() {
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why });
     groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
+    rawGroups = list.map((d, i) => Float64Array.from(match.blocks, blk => rawGroups[i][blk[i]]));
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
@@ -644,12 +702,12 @@ function update() {
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
   key.innerHTML = list.map((d, i) => '<span class="sev-key-it">' + badge(i) + ' ' + esc(d.name) + '</span>').join(' ');
-  if (k < 2 || (paired && match.blocks.length < 2)) {
-    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : 'too few replications matched across the designs.');
+  if (k < 2 || (paired && match.blocks.length < 2) || refused) {
+    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : refused ? 'no result while the transform cannot take every outcome.' : 'too few replications matched across the designs.');
     const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : k < 2 ? 'Check two or more designs above to compare them.' : 'Pairing needs at least two replications matched across every design.';
-    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
+    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(refused && k >= 2 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
     resultBase = null;
-    planCtx = { msg: 'Check two or more designs above to plan replications.' };
+    planCtx = { msg: refused ? 'Planning needs replication outcomes the transform can take.' : 'Check two or more designs above to plan replications.' };
     drawPlan();
     release();
     return;
@@ -693,7 +751,7 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, 'several-pseudo-medians',
       fg => {
         rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
         intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
@@ -704,17 +762,18 @@ function update() {
       ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
-    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bm.on ? ['vs benchmark'] : []), rows));
-    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-means',
       fg => {
         rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
         intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
@@ -724,11 +783,12 @@ function update() {
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
-    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bm.on ? ['vs benchmark'] : []), rows));
+    const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
+    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the benchmark comparison', declared: INDEP_REPS }));
-    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
       }
   }
@@ -752,7 +812,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: rName + ' at ' + levelPct(famR.perLevel) + ', contains 0' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: rName + ' at ' + levelPct(famR.perLevel) + ', excludes 0' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero shift' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + list[0].response }, 'several-rank-differences',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + respName(list) }, 'several-rank-differences',
       fg => {
         const cs = famR.comparisons;
         rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
@@ -761,13 +821,14 @@ function update() {
       legItems,
       'Each row is one pair’s Hodges–Lehmann shift with its ' + rName + ' at ' + levelPct(famR.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
     const statName = paired ? 'V' : 'W';
-    const rows = famR.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi), pValue(c.p), pValue(c.pAdj),
-      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
-    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval', 'p', 'Adjusted p', 'Basis', 'Flag'], rows));
+    const rk = famR.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
+    const rows = famR.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [pValue(c.p), pValue(c.pAdj),
+      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
+    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval'].concat(rk[0] ? rk[0].heads : [], ['p', 'Adjusted p', 'Basis', 'Flag']), rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
-    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
-      rows: famR.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi, c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0']) });
+    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['p', 'adjusted p', 'basis', 'flag']),
+      rows: famR.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0'])) });
     const nf = famR.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
     } else {
@@ -781,7 +842,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: famName + ' at ' + levelPct(fam.perLevel) + ', contains 0' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: famName + ' at ' + levelPct(fam.perLevel) + ', excludes 0' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + list[0].response }, 'several-differences',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-differences',
       fg => {
         const cs = fam.comparisons;
         rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
@@ -789,9 +850,10 @@ function update() {
       },
       legItems,
       'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
-    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), stat(c.t), pValue(c.p), pValue(c.pAdj),
-      c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
-    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
+    const rk = fam.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
+    const rows = fam.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [stat(c.t), pValue(c.p), pValue(c.pAdj),
+      c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
+    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval'].concat(rk[0] ? rk[0].heads : [], ['t', 'p', 'Adjusted p', 'Flag']), rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
       'The adjusted p is C·p capped at 1. Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
     // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
@@ -805,8 +867,8 @@ function update() {
       alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
         : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
-      rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
+    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['t', 'p', 'adjusted p', 'flag']),
+      rows: fam.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0'])) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
       }
@@ -919,7 +981,7 @@ function update() {
     // The designs themselves, best first, with their letter groups and a
     // bracket for every pair the rule declares different.
     {
-      const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? sm.items[x].mean - sm.items[y].mean : sm.items[y].mean - sm.items[x].mean);
+      const order = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? sm.items[x].mean - sm.items[y].mean : sm.items[y].mean - sm.items[x].mean);
       const pos = [];
       order.forEach((i, r) => { pos[i] = r; });
       const letterOf = i => (ph.letters ? ph.letters[i] : i === ctrlIdx ? 'control' : '');
@@ -928,12 +990,12 @@ function update() {
       b.appendChild(para('sev-fig-title', 'Designs, best first, with letter groups and the pairs declared different'));
       const legD = [{ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }];
       if (pairsD.length) legD.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by the rule (bracket)' });
-      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-design-groups',
+      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-design-groups',
         fg => designRows(fg, rowsD, pairsD), legD,
         (ph.letters
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
-        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' mean down.' +
+        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' +
         ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
@@ -941,7 +1003,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: 'not declared different' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: 'declared different' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + list[0].response }, 'several-posthoc',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-posthoc',
       fg => {
         const ps = ph.pairs;
         rowReadout(fg, ps.length, i => [full(ps[i]), num(ps[i].diff) + '  ' + interval(ps[i].lo, ps[i].hi), ps[i].flagged ? 'declared different' : 'not declared different']);
@@ -964,7 +1026,7 @@ function update() {
     // The letters are read off the design plot; the table exists only as an
     // export, where nothing can be hovered.
     if (ph.letters) {
-      const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
+      const order = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
       tables.push({ section: 'anova', name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
     }
     summary.push('Levene: ' + levTxt + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': ' + (Number.isNaN(av.F) ? 'F cannot be computed' : 'F = ' + stat(av.F) + ', ' + pEq(av.p)) + '. ' + ruleName + ': ' +
@@ -997,7 +1059,7 @@ function update() {
     // Each design's pseudo-median with its Wilcoxon interval, best first,
     // carrying Dunn's letters and brackets.
     const hl = groups.map(g => signedRank(g, { level }));
-    const orderN = list.map((_, i) => i).sort((x, y) => dir === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
+    const orderN = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
     const posN = [];
     orderN.forEach((i, r) => { posN[i] = r; });
     const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
@@ -1005,9 +1067,9 @@ function update() {
     b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
     const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
     if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
-    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
+    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
       fg => designRows(fg, rowsN, pairsN), legN,
-      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down. ' +
       'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
     const labN = p => pairLabel(p.i, p.j);
     const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
@@ -1027,7 +1089,7 @@ function update() {
   // The screen for the best.
   if (np) bodies[3].appendChild(para('cmp-lead', 'The screen is a procedure on sample means and standard deviations, and it has no rank version here; it is shown unchanged.'));
   const eps = epsSpin ? epsSpin.get() : NaN;
-  const ss = subsetSelection(groups, { alpha, delta: eps, dir });
+  const ss = subsetSelection(groups, { alpha, delta: eps, dir: dirS });
   {
     const b = bodies[3];
     b.appendChild(para('cmp-lead', 'Confidence 1 − α is split evenly between the screen and the second-stage sizing: the screen runs at 1 − α/2 = ' + levelPct(1 - alpha / 2) +
@@ -1042,10 +1104,10 @@ function update() {
         : 'These designs cannot be distinguished from the best within ε on these data: ' + andList(short.filter((_, i) => ss.survivors[i])) +
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
-      const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
+      const orderS = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
       const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
         note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
-      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-best-subset',
+      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-best-subset',
         fg => designRows(fg, rowsS, []),
         [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
           nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean),
@@ -1069,7 +1131,7 @@ function update() {
   // Under pairing the half-width plan works on the standard deviations of
   // the paired differences, and the power plan on the blocked F test.
   const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
-  planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
+  planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : '') + tfKey(), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
               sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)), meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)),
               sigma: Math.sqrt(avPlan.msw), grandMean: avPlan.grandMean, welch: welchOk, paired, sdDs };
   registerTips(rootEl);
@@ -1088,13 +1150,14 @@ function update() {
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
       benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
-      'indifference zone': Number.isFinite(eps) ? eps : ''
+      'indifference zone': Number.isFinite(eps) ? eps : '',
+      ...(tfNow !== 'none' ? { transform: transformOf(tfNow).label.toLowerCase() + ' of each replication outcome' } : {})
     },
     tables,
     summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { list, groups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
-                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps }
+    recipeIn: { list, groups: rawGroups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps, transform: tfNow }
   };
   drawPlan();
   release();
@@ -1111,8 +1174,9 @@ function drawPlan() {
     plan.hwUser = storedTarget('target', c.key); plan.mhwUser = storedTarget('mtarget', c.key); plan.deltaUser = storedTarget('delta', c.key);
   }
   const level = state.settings.base, alpha = 1 - level;
-  const unit = c && c.unit ? ' ' + c.unit : '';
-  const unitNote = c && c.unit ? c.unit : 'in the response’s units';
+  const tfScale = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : null;
+  const unit = tfScale ? ' (' + tfScale + ')' : c && c.unit ? ' ' + c.unit : '';
+  const unitNote = tfScale || (c && c.unit ? c.unit : 'in the response’s units');
   // Additional replications are counted beyond the largest current count,
   // and the power at the current count uses the smallest.
   const R = c ? Math.max(...c.ns) : NaN, Rlo = c ? Math.min(...c.ns) : NaN;
@@ -1264,6 +1328,7 @@ export function render(root) {
       '<div id="sev-list"></div>' +
       '<div class="ctrl-row cmp-gap">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-lvl">Confidence level</label><select id="sev-lvl"></select></span>' +
+        '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-tf">' + TRANSFORM_LABEL + '</label><select id="sev-tf"></select></span>' +
         '<span class="ctrl-grp"><span class="ctrl-lbl" id="sev-dir-lbl">Direction</span>' +
         '<span class="seg" role="group" aria-labelledby="sev-dir-lbl">' +
           '<button type="button" class="seg-btn" data-dir="max" aria-pressed="true">bigger is better</button>' +
@@ -1295,6 +1360,7 @@ export function render(root) {
       '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
       '<div id="sev-mixed"></div>' +
+      '<div id="sev-tf-note"></div>' +
     '</div>' +
     '<p class="unit-line" id="sev-unit"></p>' +
     '<p class="sev-key" id="sev-key"></p>' +
@@ -1379,6 +1445,7 @@ export function render(root) {
   });
   root.querySelector('#sev-list').addEventListener('change', () => { state.setPick(id, 'checked', checklist.selected()); });
   levelSelect(root.querySelector('#sev-lvl'));
+  transformSelect(root.querySelector('#sev-tf'));
   ctrlSels = Array.from(root.querySelectorAll('select[data-control]'));
   for (const sel of ctrlSels) sel.addEventListener('change', () => { controlId = sel.value || null; state.setPick(id, 'control', controlId); schedule(); });
   root.querySelector('#sev-rule').addEventListener('change', e => {
@@ -1386,7 +1453,7 @@ export function render(root) {
     schedule();
   });
   root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
-  root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
+  root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, epsKey(), null); schedule(); });
   root.querySelector('#sev-bench-on').addEventListener('change', e => { benchOn = e.target.checked; state.setPick(id, 'benchOn', benchOn); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
@@ -1440,7 +1507,7 @@ function applyStored() {
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   if (get('benchOn') === true) benchOn = true;
-  const e = get('eps');
+  const e = get(epsKey());
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;
   if (PLAN_POWERS.includes(get('power'))) {
     plan.power = get('power');

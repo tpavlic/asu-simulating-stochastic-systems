@@ -28,6 +28,7 @@ import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
          resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { slug } from './export.js';
+import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
 import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
@@ -156,8 +157,11 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
  *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
  *   block holds no values.
  */
-export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan }) {
-  const xs = Array.from(x);
+export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform }) {
+  // The transform applies to replication outcomes, never to the pooled observations.
+  const tf = !pooled && isTransform(transform) ? transform : 'none';
+  const raw = Array.from(x);
+  const xs = tf === 'none' ? raw : Array.from(applyTransform(raw, tf).values);
   const np = proc === 'np' && !pooled;
   const o = outcomeVector(ds);
   const r = baseRecipe({
@@ -168,8 +172,9 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   });
   // Past the cap the recipe holds no data, and its scripts read the CSV file.
   const csvOnly = oneTooBig({ pooled, x: xs });
-  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: csvOnly ? [] : xs,
+  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: csvOnly ? [] : raw,
              dropped: pooled ? [] : o.dropped, how: o.how, pooled };
+  r.transform = tf;
   if (csvOnly) r.csvOnly = true;
   // The pooled observations come from the Observations CSV, the outcomes from the Replication summary CSV.
   r.csv = [csvEntry(ds, pooled ? 'observations' : 'replications', 'x')];
@@ -177,14 +182,22 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   const e = r.expect;
   Object.assign(e, { n: s.n, mean: s.mean, sd: s.sd, se: s.se, min: s.min, q1: s.q1, median: s.median, q3: s.q3, max: s.max });
   const interval = s.n >= 2;
+  // The interval's center and ends, carried back to the response's units under a transform.
+  const back = (ctr, lo, hi) => {
+    if (tf === 'none') return;
+    const bi = backInterval(lo, hi, tf);
+    Object.assign(e, { 'back-transformed center': backTransform(ctr, tf), 'back-transformed lower': bi.lo, 'back-transformed upper': bi.hi });
+  };
   if (interval && np) {
     const sr = signedRank(xs, { level });
     Object.assign(e, { 'pseudo-median': sr.estimate, V: sr.V, 'signed-rank p': sr.p, exact: ex(sr.exact),
                        'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
     if (sr.exact) e['achieved level'] = sr.achieved;
+    back(sr.estimate, sr.lo, sr.hi);
   } else if (interval) {
     const ti = tInterval(xs, level);
     Object.assign(e, { df: ti.df, 't quantile': ti.t, 'half-width': ti.hw, lower: ti.lo, upper: ti.hi });
+    back(s.mean, ti.lo, ti.hi);
   }
   const checks = interval && !pooled && !np && shapiroOk(xs);
   if (checks) Object.assign(e, shapiroExpect('shapiro ', xs));
@@ -200,9 +213,10 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
       plan: { h: plan.abs, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power } });
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
-  r.one = { pooled, np, interval, variance, checks, plan: planOut };
+  r.one = { pooled, np, interval, variance, checks, plan: planOut,
+            center: np ? 'back-transformed pseudo-median' : transformOf(tf).center };
   // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
-  r.fig = { xlab: outcomeAxis(ds, pooled), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
+  r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}
@@ -229,6 +243,28 @@ function designBlock(ds, e) {
            dropped: e.dropped, how: OUTCOME_HOW[ds.kind] || OUTCOME_HOW.tally };
 }
 
+// Values put through a transform ('none' leaves them as they are).
+function tfValues(v, tf) {
+  return tf === 'none' ? Array.from(v) : Array.from(applyTransform(v, tf).values);
+}
+
+// Under a transform, a design's center and interval carried back to the
+// response's units, added to `expect` under the design's key prefix `d`.
+function backExpect(e, d, tf, ctr, lo, hi) {
+  if (tf === 'none') return;
+  const bi = backInterval(lo, hi, tf);
+  Object.assign(e, { [d + 'back-transformed center']: backTransform(ctr, tf), [d + 'back-transformed lower']: bi.lo, [d + 'back-transformed upper']: bi.hi });
+}
+
+// Under the log, a comparison's estimate and interval carried back as a ratio
+// A / B, added to `expect`; the name of what was carried back, or null.
+function ratioExpect(e, tf, ctr, lo, hi, what) {
+  if (tf !== 'log') return null;
+  const bi = backInterval(lo, hi, tf);
+  Object.assign(e, { ratio: backTransform(ctr, tf), 'ratio lower': bi.lo, 'ratio upper': bi.hi });
+  return what;
+}
+
 /**
  * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
@@ -248,7 +284,8 @@ export function twoRecipe(o) {
   if (o.mode === 'paired') return twoPairedRecipe(o);
   if (o.mode && o.mode !== 'independent') throw new RangeError('twoRecipe: unknown mode ' + o.mode);
   const { dsA, dsB, eA, eB, proc, level, plan } = o;
-  const a = Array.from(eA.v), b = Array.from(eB.v);
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const a = tfValues(eA.v, tf), b = tfValues(eB.v, tf);
   const np = proc === 'np', pooled = proc === 'pooled';
   const alpha = 1 - level;
   const w = pooled ? pooledT(a, b, level) : welch(a, b, level);
@@ -261,9 +298,11 @@ export function twoRecipe(o) {
   });
   r.dataA = designBlock(dsA, eA);
   r.dataB = designBlock(dsB, eB);
+  r.transform = tf;
   r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   Object.assign(e, { R_A: w.n1, R_B: w.n2, 'mean A': w.mean1, 'mean B': w.mean2, 'sd A': w.sd1, 'sd B': w.sd2 });
+  let ratio = null;
   // Levene's test joins the checks line under the pooled t only, and only when
   // each design has two outcomes; a test with no spread to compare reports none.
   const leveneOn = !np && pooled && a.length >= 2 && b.length >= 2;
@@ -272,10 +311,12 @@ export function twoRecipe(o) {
     Object.assign(e, { 'median A': summary(a).median, 'median B': summary(b).median, shift: rs.estimate, W: rs.W,
                        'rank-sum p': rs.p, exact: ex(rs.exact), 'shift lower': rs.lo, 'shift upper': rs.hi });
     if (rs.exact) e['achieved level'] = rs.achieved;
+    ratio = ratioExpect(e, tf, rs.estimate, rs.lo, rs.hi, 'shift');
   } else {
     Object.assign(e, { difference: w.diff });
     if (pooled) e['pooled sd'] = w.sp;
     Object.assign(e, { se: w.se, df: w.df, t: w.t, p: w.p, lower: w.lo, upper: w.hi, 'half-width': w.hw });
+    ratio = ratioExpect(e, tf, w.diff, w.lo, w.hi, 'difference');
     if (leveneOn) {
       const lv = levene([a, b]);
       if (Number.isFinite(lv.p)) Object.assign(e, { 'levene F': lv.F, 'levene p': lv.p });
@@ -313,7 +354,7 @@ export function twoRecipe(o) {
     }
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
-  r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut, ratio };
   // The page's two figures: each design's outcomes with its own interval, and the interval on the difference.
   r.fig = { labels: roleLabels(dsA, dsB) };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
@@ -332,7 +373,10 @@ export function twoRecipe(o) {
 function twoPairedRecipe(o) {
   const { dsA, dsB, eA, eB, match, proc, level, plan } = o;
   const np = proc === 'np';
-  const x = Array.from(match.pairs, ([i]) => eA.v[i]), y = Array.from(match.pairs, ([, j]) => eB.v[j]);
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const vA = tfValues(eA.v, tf), vB = tfValues(eB.v, tf);
+  const x = Array.from(match.pairs, ([i]) => vA[i]), y = Array.from(match.pairs, ([, j]) => vB[j]);
+  const rawX = Array.from(match.pairs, ([i]) => eA.v[i]), rawY = Array.from(match.pairs, ([, j]) => eB.v[j]);
   const ids = match.pairs.map(([i, j]) => (match.by === 'id' ? String(eA.ids[i]) : String(eA.ids[i]) + '/' + String(eB.ids[j])));
   const pr = pairedT(x, y, level);
   const r = baseRecipe({
@@ -341,8 +385,9 @@ function twoPairedRecipe(o) {
     provenance: o.provenance || {},
     level
   });
+  r.transform = tf;
   r.pairs = {
-    ids, a: x, b: y, by: match.by,
+    ids, a: rawX, b: rawY, by: match.by,
     unmatchedA: match.unmatchedA.map(i => String(eA.ids[i])), unmatchedB: match.unmatchedB.map(j => String(eB.ids[j])),
     droppedA: (eA.dropped || []).map(String), droppedB: (eB.dropped || []).map(String),
     nameA: dsA.name, nameB: dsB.name, response: dsA.response, unit: dsA.unit,
@@ -351,15 +396,18 @@ function twoPairedRecipe(o) {
   r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   e.pairs = pr.n;
+  let ratio = null;
   const diffs = Array.from(pr.diffs);
   if (np) {
     const sr = signedRank(diffs, { level });
     Object.assign(e, { 'pseudo-median of differences': sr.estimate, V: sr.V, 'zero differences dropped': sr.zeros,
                        'signed-rank p': sr.p, exact: ex(sr.exact), 'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
     if (sr.exact) e['achieved level'] = sr.achieved;
+    ratio = ratioExpect(e, tf, sr.estimate, sr.lo, sr.hi, 'pseudo-median of the differences');
   } else {
     Object.assign(e, { 'mean difference': pr.meanD, 'sd of differences': pr.sdD, se: pr.se, df: pr.df, t: pr.t, p: pr.p,
                        lower: pr.lo, upper: pr.hi, 'half-width': pr.hw });
+    ratio = ratioExpect(e, tf, pr.meanD, pr.lo, pr.hi, 'mean difference');
   }
   e.r = pr.r;
   // The paired t's checks line tests the differences for normality; the
@@ -373,7 +421,7 @@ function twoPairedRecipe(o) {
       plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
-  r.two = { mode: 'paired', np, checks: !np, plan: planOut };
+  r.two = { mode: 'paired', np, checks: !np, plan: planOut, ratio };
   // The page's two figures: the differences with their interval, and the pairs in the view the page
   // shows (by replication, or as slopes).
   r.fig = { labels: roleLabels(dsA, dsB), view: o.view && o.view.pairView === 'slope' ? 'slope' : 'rep' };
@@ -416,8 +464,11 @@ export function severalRecipe(o) {
   const { list, groups, paired, match, level, proc, diffMode, ctrlIdx, dir, eps, plan } = o;
   const k = list.length, alpha = 1 - level, np = proc === 'np';
   const bench = o.bench != null && Number.isFinite(o.bench) ? o.bench : null;
-  const g = groups.map(x => Array.from(x));
+  // `groups` holds the outcomes as the data give them; every procedure runs on them transformed.
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const g = groups.map(x => tfValues(x, tf));
   const r = baseRecipe({ page: 'several', title: o.title || 'Several Systems', provenance: o.provenance || {}, level });
+  r.transform = tf;
   // The data: the outcomes the page compared, with the ids they came from and
   // the replications left out (no outcome, or under pairing no partner in
   // every design).
@@ -432,7 +483,7 @@ export function severalRecipe(o) {
   } else ids = ovs.map(ov => ov.ids.map(String));
   r.groups = {
     names: list.map(d => d.name), response: responses.join(', '), unit: units.length === 1 ? units[0] : '',
-    values: g, paired, by: paired ? match.by : null, ids,
+    values: groups.map(x => Array.from(x)), paired, by: paired ? match.by : null, ids,
     dropped: ovs.map(ov => ov.dropped.map(String)),
     unmatched: paired ? match.unmatched.map((u, d) => u.map(x => String(ovs[d].ids[x]))) : list.map(() => []),
     how: list.map(d => OUTCOME_HOW[d.kind] || OUTCOME_HOW.tally)
@@ -449,6 +500,7 @@ export function severalRecipe(o) {
       const sr = signedRank(x, { level: sm.perLevel }), d = 'design ' + (i + 1) + ' ';
       Object.assign(e, { [d + 'R']: x.length, [d + 'pseudo-median']: sr.estimate, [d + 'wilcoxon lower']: sr.lo,
                          [d + 'wilcoxon upper']: sr.hi, [d + 'exact']: ex(sr.exact) });
+      backExpect(e, d, tf, sr.estimate, sr.lo, sr.hi);
       if (bench != null) e[d + 'vs benchmark'] = benchWord(sr.lo, sr.hi, bench);
     });
   } else {
@@ -456,6 +508,7 @@ export function severalRecipe(o) {
       const d = 'design ' + (i + 1) + ' ';
       Object.assign(e, { [d + 'R']: it.n, [d + 'mean']: it.mean, [d + 'sd']: it.sd, [d + 'se']: it.se, [d + 'df']: it.df,
                          [d + 'lower']: it.lo, [d + 'upper']: it.hi });
+      backExpect(e, d, tf, it.mean, it.lo, it.hi);
       if (bench != null) e[d + 'vs benchmark'] = benchWord(it.lo, it.hi, bench);
     });
     // The checks line under the means tests each design's outcomes.
@@ -470,14 +523,16 @@ export function severalRecipe(o) {
     const famR = bonferroniFamilyRank(g, { mode: diffMode, control: ctrlIdx, level, paired });
     for (const c of famR.comparisons) {
       const p = 'shift ' + pairLabel(c.i, c.j);
-      Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' p']: c.p,
-                         [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
+      if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
+      Object.assign(e, { [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
     }
   } else {
     for (const c of fam.comparisons) {
       const p = 'diff ' + pairLabel(c.i, c.j);
-      Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' t']: c.t,
-                         [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
+      if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
+      Object.assign(e, { [p + ' t']: c.t, [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
       // Under pairing the checks line tests each pair's differences; otherwise it
       // repeats the designs' own checks, reported once under the means.
       if (paired) {
@@ -512,7 +567,7 @@ export function severalRecipe(o) {
     'plan diffs widest pair': hpD.n == null ? 'none' : pairLabel(hpD.pair[0], hpD.pair[1]) });
   if (np) { e['plan means n (rank)'] = inflate(hpM.n); e['plan diffs n (rank)'] = inflate(hpD.n); }
 
-  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps,
+  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps, center: np ? 'back-transformed pseudo-median' : transformOf(tf).center,
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
   // Every choice a reader may edit is a setting; the script forms the pairs it
   // compares from control and family at run time.
@@ -654,7 +709,9 @@ function severalRank(r, o, g) {
  * second-stage sizes, or the reason the screen is not defined.
  */
 function severalSubset(r, o, g) {
-  const { level, dir, eps } = o;
+  const { level, eps } = o;
+  // The reciprocal reverses the order, and so on its scale the direction flips.
+  const dir = transformOf(r.transform).decreasing ? (o.dir === 'min' ? 'max' : 'min') : o.dir;
   const alpha = 1 - level, e = r.expect;
   const ss = subsetSelection(g, { alpha, delta: eps, dir });
   r.several.subset = { ok: ss.ok, reason: ss.ok ? '' : ss.reason };
@@ -902,6 +959,8 @@ function exploreView(ds, view, nOut) {
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
   const r = baseRecipe({ page: 'explore', title: o.title || 'Summary of ' + ds.name, provenance: o.provenance || { dataset: ds.name }, level });
+  // The transform applies to the Normality and Equal variances sections only.
+  const tf = isTransform(o.transform) ? o.transform : 'none';
   // Levene's groups (other datasets' outcomes) stay embedded and are read from no file.
   r.csv = recordsCsv(ds);
   if (exploreTooBig({ ds, spread })) r.csvOnly = true;
@@ -958,9 +1017,26 @@ export function exploreRecipe(o) {
     Object.assign(e, { 'interval df': ti.df, 'interval t quantile': ti.t, 'interval half-width': ti.hw, 'interval lower': ti.lo, 'interval upper': ti.hi });
   }
 
+  // A transform that cannot take every outcome of the shown dataset leaves the
+  // Normality section without a result, and one that cannot take every outcome
+  // of the datasets ticked under Equal variances leaves Levene's test without
+  // one, on the page and so in the scripts; each is decided on its own.
+  const spreadOn = spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2);
+  const fits = v => applyTransform(v, tf).bad.length === 0;
+  const normRefused = tf !== 'none' && !fits(x);
+  const spreadRefused = tf !== 'none' && spreadOn && !spread.groups.every(fits);
+  const word = transformOf(tf).label.toLowerCase();
+  const notes = [];
+  if (normRefused) notes.push('The page\'s ' + word + ' transform cannot take every replication outcome of this dataset, and so the page shows no normality result, and this script leaves it out.');
+  if (spreadRefused) notes.push('The page\'s ' + word + ' transform cannot take every replication outcome of the datasets ticked under Equal variances, and so the page shows no Levene result, and this script leaves it out.');
+  r.settingsNote = notes;
+  // A transform neither section can use is left out of the script.
+  r.transform = (normRefused || !n) && (spreadRefused || !spreadOn) ? 'none' : tf;
+  const xt = normRefused ? [] : tfValues(x, tf);
+
   // The Shapiro-Wilk test, on the outcomes only: the page withholds it on pooled observations.
-  const checks = shapiroOk(x);
-  if (checks) Object.assign(e, shapiroExpect('shapiro ', x));
+  const checks = !normRefused && shapiroOk(xt);
+  if (checks) Object.assign(e, shapiroExpect('shapiro ', xt));
 
   // Levene's test, only where every group has two or more outcomes. Its
   // groups are embedded in every script; in one that reads its records from
@@ -968,20 +1044,21 @@ export function exploreRecipe(o) {
   // replications' worth) must fit under MAX_NUMBERS, and otherwise the
   // script leaves the test out and says so.
   let spreadOmitted = null;
-  if (spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2)) {
+  if (spreadOn && !spreadRefused) {
     const count = spread.groups.reduce((a, g) => a + g.length, 0);
     const room = MAX_NUMBERS - repKeys(ds.kind).length * Math.min(ds.reps.length, REP_LINES_MAX);
     if (r.csvOnly && count > room) spreadOmitted = { names: spread.names.slice(), count };
     else {
       const groups = spread.groups.map(g => Array.from(g));
-      const lv = levene(groups);
+      const lv = levene(groups.map(g => tfValues(g, tf)));
       Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
       r.spread = { names: spread.names.slice(), groups };
     }
   }
-  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
-  r.fig = exploreView(ds, o.view, ov.values.length);
+  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted,
+                normTf: r.transform !== 'none' && !normRefused };
+  r.fig = Object.assign(exploreView(ds, o.view, ov.values.length), { qqAxis: estimateAxis(ds, r.explore.normTf ? tf : 'none') });
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
-  r.settingsNote = [dataNote(ds.kind)];
+  r.settingsNote = [dataNote(ds.kind)].concat(r.settingsNote || []);
   return r;
 }

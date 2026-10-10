@@ -79,3 +79,16 @@ test('shortNames keeps only what follows a prefix every name shares', () => {
   assert.deepEqual(shortNames([{ name: 'f · A' }, { name: 'f · A' }]), ['f · A', 'f · A']);
   assert.deepEqual(shortNames([{ name: 'only' }]), ['only']);
 });
+
+test('outcomeAxis and estimateAxis name the transform, and leave the pooled observations alone', () => {
+  const tally = { kind: 'tally', response: 'wait' }, time = { kind: 'time', response: 'queue length' }, reps = { kind: 'reps', response: 'Cost' };
+  assert.equal(outcomeAxis(tally, false, 'log'), 'Log of replication mean of wait');
+  assert.equal(outcomeAxis(time, false, 'sqrt'), 'Square root of time-weighted replication mean of queue length');
+  assert.equal(outcomeAxis(reps, false, 'reciprocal'), 'Reciprocal of cost per replication');
+  assert.equal(outcomeAxis(tally, true, 'log'), 'Observation of wait');
+  assert.equal(outcomeAxis(null, false, 'logit'), 'Logit of replication outcome');
+  assert.equal(outcomeAxis(tally, false), 'Replication mean of wait');
+  assert.equal(estimateAxis(tally, 'asin_sqrt'), 'Arcsine square root of replication mean of wait');
+  assert.equal(estimateAxis(reps, 'log'), 'Log of cost');
+  assert.equal(estimateAxis(reps), 'Cost');
+});

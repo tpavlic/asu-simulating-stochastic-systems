@@ -472,6 +472,14 @@ function oneBody(r, L) {
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
     if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
+  if (o.interval && tfOn(r)) {
+    out.push(L.sect('Back-transformed interval'));
+    out.push(...commentLines(c, 'The interval above, carried back to the response\'s units: its center is the ' + ascii(o.center) + '.', c));
+    const ctr = o.np ? f('sr', 'estimate') : f('d', 'mean');
+    out.push(L.assign('bt', 'back_interval(' + (o.np ? f('sr', 'lo') : f('ti', 'lo')) + ', ' + (o.np ? f('sr', 'hi') : f('ti', 'hi')) + ', outcome_transform)'));
+    out.push(rep(L, r, 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
+      rep(L, r, 'back-transformed lower', f('bt', 'lo')), rep(L, r, 'back-transformed upper', f('bt', 'hi')));
+  }
   if (o.checks) {
     need.push('shapiro');
     out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', o.np ? 'the Wilcoxon signed-rank interval' : 'the t interval'));
@@ -533,6 +541,19 @@ function shapiroLine(r, L, prefix, v) {
     : 'shapiro_check(' + L.str(prefix) + ', ' + v + ', ' + w + ', ' + p + ')';
 }
 
+// Under the log, a comparison's estimate and interval carried back as a ratio
+// A / B, under their own heading; `ctr`, `lo`, and `hi` are the expressions
+// for them on the log scale.
+function ratioSection(r, L, out, ctr, lo, hi) {
+  if (!r.two || !r.two.ratio) return;
+  const c = L.comment;
+  out.push(L.sect('Ratio A / B (back-transformed)'));
+  out.push(...commentLines(c, 'A difference of logs is the log of a ratio, and so the exponential carries the ' + ascii(r.two.ratio) + ' and its interval back to the response\'s units.', c));
+  out.push(L.assign('ratio_ci', 'back_interval(' + lo + ', ' + hi + ', outcome_transform)'));
+  out.push(rep(L, r, 'ratio', 'back_transform(' + ctr + ', outcome_transform)'), rep(L, r, 'ratio lower', FIELD[L.lang]('ratio_ci', 'lo')),
+    rep(L, r, 'ratio upper', FIELD[L.lang]('ratio_ci', 'hi')));
+}
+
 // Two Systems, independent replications: descriptives of both designs; the
 // Welch, pooled-variance t, or Wilcoxon rank-sum comparison; the checks a
 // parametric comparison carries; the F ratio of the variances; and the
@@ -560,6 +581,7 @@ function twoBody(r, L) {
     out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
     if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
     if (L.tidy) tidyTest(out, L, 'rs$test', 'The rank-sum test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
+    ratioSection(r, L, out, f('rs', 'estimate'), f('rs', 'lo'), f('rs', 'hi'));
   } else {
     need.push('twoSample');
     out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
@@ -571,6 +593,7 @@ function twoBody(r, L) {
     if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
     for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
     if (L.tidy) tidyTest(out, L, 'w$test', (o.pooled ? 'The pooled-variance t test' : 'Welch\'s t test') + ' as t.test returns it, tidied by broom into a one-row tibble (none when neither design varies, where t.test stops).', true);
+    ratioSection(r, L, out, f('w', 'diff'), f('w', 'lo'), f('w', 'hi'));
     const tName = o.pooled ? 'the pooled-variance t comparison' : 'Welch\'s t comparison';
     out.push(...checkSect(L, 'Normality of each design\'s outcomes (Shapiro-Wilk)', tName));
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
@@ -665,6 +688,8 @@ function twoPairedBody(r, L) {
   }
   if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
+  if (o.np) ratioSection(r, L, out, f('sr', 'estimate'), f('sr', 'lo'), f('sr', 'hi'));
+  else ratioSection(r, L, out, f('pr', 'meanD'), f('pr', 'lo'), f('pr', 'hi'));
   if (!o.np) {
     need.push('shapiro');
     out.push(...checkSect(L, 'Normality of the differences (Shapiro-Wilk)', 'the paired t'));
@@ -1035,16 +1060,23 @@ function sevMeans(r, L, out, need) {
       : lang === 'py' ? '[signed_rank(x, sm["perLevel"]) for x in groups]'
         : "cellfun(@(x) signed_rank(x, sm.perLevel), groups, 'UniformOutput', false)"));
   }
+  if (tfOn(r)) out.push(...commentLines(c, 'Each design\'s interval is also carried back to the response\'s units, as an interval on its ' + ascii(S.center) + '.', c));
   for (let i = 0; i < S.k; i++) {
     const d = 'design ' + (i + 1) + ' ';
     out.push(rep(L, r, d + 'R', el(f('sm', 'items'), i, 'n')));
     const lo = S.np ? el('srs', i, 'lo') : el(f('sm', 'items'), i, 'lo'), hi = S.np ? el('srs', i, 'hi') : el(f('sm', 'items'), i, 'hi');
+    const ctr = S.np ? el('srs', i, 'estimate') : el(f('sm', 'items'), i, 'mean');
     if (S.np) {
-      out.push(rep(L, r, d + 'pseudo-median', el('srs', i, 'estimate')), rep(L, r, d + 'wilcoxon lower', lo), rep(L, r, d + 'wilcoxon upper', hi));
+      out.push(rep(L, r, d + 'pseudo-median', ctr), rep(L, r, d + 'wilcoxon lower', lo), rep(L, r, d + 'wilcoxon upper', hi));
       out.push(repYesNo(L, r, d + 'exact', el('srs', i, 'exact')));
     } else {
       for (const k of ['mean', 'sd', 'se', 'df']) out.push(rep(L, r, d + k, el(f('sm', 'items'), i, k)));
       out.push(rep(L, r, d + 'lower', lo), rep(L, r, d + 'upper', hi));
+    }
+    if (tfOn(r)) {
+      out.push(L.assign('bt', 'back_interval(' + lo + ', ' + hi + ', outcome_transform)'));
+      out.push(rep(L, r, d + 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
+        rep(L, r, d + 'back-transformed lower', f('bt', 'lo')), rep(L, r, d + 'back-transformed upper', f('bt', 'hi')));
     }
     if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
   }
@@ -1080,6 +1112,7 @@ function sevDiffs(r, L, out, need) {
   else out.push("if strcmp(family, 'control'), family_pairs = " + pairsExpr(lang, true) + '; else, family_pairs = ' + pairsExpr(lang, false) + '; end');
   out.push(L.assign('C', lang === 'R' ? 'length(family_pairs)' : lang === 'py' ? 'len(family_pairs)' : 'size(family_pairs, 1)'), L.assign('per_c', '1 - alpha / C'));
   out.push(rep(L, r, 'C', 'C'), rep(L, r, 'per-comparison level', 'per_c'));
+  if (r.transform === 'log') out.push(...commentLines(c, 'A difference of logs is the log of a ratio, and so each comparison is also carried back as a ratio, its estimate and both ends of its interval through the exponential.', c));
   if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk lines after it check.');
   else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
 
@@ -1089,9 +1122,14 @@ function sevDiffs(r, L, out, need) {
   const adj = lang === 'R' ? 'min(1, C * ' + f('cmp', 'p') + ')' : lang === 'py' ? 'np.minimum(1, C * ' + f('cmp', 'p') + ')' : "min(1, C * " + f('cmp', 'p') + ", 'includenan')";
   const lo = f('cmp', 'lo'), hi = f('cmp', 'hi');
   const excl = lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0';
+  // Under the log, each comparison's estimate and interval carried back as a ratio, after its interval.
+  const mid = f('cmp', S.np ? 'estimate' : S.paired ? 'meanD' : 'diff');
+  const ratio = r.transform === 'log'
+    ? [[' ratio', null, 'back_transform(' + mid + ', outcome_transform)'], [' ratio lower', null, 'back_transform(' + lo + ', outcome_transform)'],
+      [' ratio upper', null, 'back_transform(' + hi + ', outcome_transform)']] : [];
   const keys = S.np
-    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
-    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
+    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
+    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
   const varOf = suffix => 'page_' + P + suffix.replace(/ /g, '_');
   const items = keys.map(([suffix, , , yesno]) => [suffix, varOf(suffix), !!yesno]);
   const shapiro = !S.np && S.paired;
@@ -1490,6 +1528,10 @@ function exploreBody(r, L, { csv = false } = {}) {
     out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
     out.push(L.tidy ? 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)' : L.assign('d', 'describe(x)'));
     for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));
+    if (X.normTf) {
+      out.push(...commentLines(c, 'The Normality section, and Levene\'s test under Equal variances, run on the outcomes put through outcome_transform, as on the page; every other section stays on the response\'s own scale.', c));
+      out.push(L.assign('x_tf', 'transform_outcomes(x, outcome_transform)'));
+    }
   }
 
   // Every replication together.
@@ -1525,10 +1567,11 @@ function exploreBody(r, L, { csv = false } = {}) {
     out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', 'the t interval over the outcomes'));
     out.push(...commentLines(c, 'The test assumes independent values, which the replication outcomes are and pooled observations are not, and so it is made on the outcomes only.', c));
     const w = lit(L, e['shapiro W [optional]']), p = lit(L, e['shapiro p [optional]']);
+    const xv = X.normTf ? 'x_tf' : 'x';
     if (L.tidy) {
-      out.push('sw <- shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+      out.push('sw <- shapiro_check("shapiro", ' + xv + ', ' + w + ', ' + p + ')');
       tidyTest(out, L, 'sw', 'The test as shapiro.test returns it, tidied by broom into a one-row tibble (none when the check is not made).', true);
-    } else out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+    } else out.push(lang === 'm' ? "shapiro_check('shapiro', " + xv + ', alpha, ' + w + ', ' + p + ');' : 'shapiro_check("shapiro", ' + xv + ', ' + w + ', ' + p + ')');
   }
 
   // Equal variances.
@@ -1542,6 +1585,7 @@ function exploreBody(r, L, { csv = false } = {}) {
     need.push('levene');
     out.push(...checkSect(L, 'Equal variances across datasets (Levene, median-centered)', 'the procedures that pool the variances'));
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
+    if (tfOn(r)) out.push(transformList(L, 'spread_groups'));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
     if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
@@ -1556,6 +1600,10 @@ function settingsBlock(recipe, L) {
   // A page may say which settings the script reads and which choices are written into its code.
   for (const note of recipe.settingsNote || []) out.push(...commentLines(L.comment, ascii(note), L.comment));
   out.push(L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level'));
+  if (tfOn(recipe)) {
+    out.push(...commentLines(L.comment, 'The transform every replication outcome is put through before the analysis (in the Data section): none, log, sqrt, asin_sqrt, logit, or reciprocal.', L.comment));
+    out.push(L.assign('outcome_transform', L.str(recipe.transform)));
+  }
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
   out.push(L.comment + CHECK_NOTE, L.assign('check_details', L.bool(false)), L.lang === 'm' ? 'report_start(check_details);' : 'report_start(check_details)');
   return out;
@@ -1583,6 +1631,44 @@ function pairsBlock(L, r) {
   return out;
 }
 
+/** Whether a recipe's outcomes are put through a transform other than none. */
+export function tfOn(recipe) {
+  return !!recipe.transform && recipe.transform !== 'none';
+}
+
+// A list of outcome vectors put through outcome_transform, one by one.
+function transformList(L, g) {
+  if (L.lang === 'R') return g + ' <- lapply(' + g + ', transform_outcomes, tf = outcome_transform)';
+  if (L.lang === 'py') return g + ' = [transform_outcomes(v, outcome_transform) for v in ' + g + ']';
+  return g + ' = cellfun(@(v) transform_outcomes(v, outcome_transform), ' + g + ', \'UniformOutput\', false);';
+}
+
+// The lines that transform the outcomes, after the data are in and before any
+// tibble is built from them: x (not under the pooled override, which a recipe
+// marks with no transform), a and b, or each design of groups. Summary and
+// Plots transforms its outcomes in the sections that use them instead.
+function transformBlock(recipe, L) {
+  if (!tfOn(recipe)) return [];
+  const one = v => L.assign(v, 'transform_outcomes(' + v + ', outcome_transform)');
+  const lines = [];
+  if (recipe.data) lines.push(one('x'));
+  if (recipe.pairs || recipe.dataA) lines.push(one('a'), one('b'));
+  if (recipe.groups) lines.push(transformList(L, 'groups'));
+  if (!lines.length) return [];
+  const c = L.comment;
+  const out = ['', ...commentLines(c, 'Every replication outcome is put through outcome_transform before the analysis, as on the page. ' +
+    'The report lines below are on the transformed scale, except those named back-transformed or ratio, which are in the response\'s own units.', c), ...lines];
+  // Several Systems orders its designs and screens for the best by direction,
+  // which the reciprocal reverses.
+  if (recipe.groups && recipe.transform === 'reciprocal') {
+    out.push(...commentLines(c, 'The reciprocal reverses the order of the outcomes, and so the best design on its scale is the one at the other end: the direction flips.', c));
+    if (L.lang === 'R') out.push('direction <- if (direction == "max") "min" else "max"');
+    else if (L.lang === 'py') out.push('direction = "min" if direction == "max" else "max"');
+    else out.push("if strcmp(direction, 'max'), direction = 'min'; else, direction = 'max'; end");
+  }
+  return out;
+}
+
 // The Data block: the embedded data with the commented lines that read the
 // same data from their CSV files, or in CSV mode those lines alone, live.
 function dataBlock(recipe, L, csv) {
@@ -1600,6 +1686,7 @@ function dataBlock(recipe, L, csv) {
     const read = csvReadBlock(L, recipe, { live: false });
     if (read.length) out.push('', ...read);
   }
+  out.push(...transformBlock(recipe, L));
   if (L.tidy) out.push(...tidyDataBlock(recipe, L));
   if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
@@ -2013,7 +2100,7 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
   // The figures the page's view shows, drawn after every result is printed.
   const figs = figureBlock(recipe, L);
-  const helpers = Array.from(new Set((need || []).concat(figs.need))).map(k => {
+  const helpers = Array.from(new Set((need || []).concat(tfOn(recipe) ? ['transform'] : [], figs.need))).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();

@@ -6,10 +6,12 @@
 // assumption the inference pages' intervals rest on. The results fall into
 // five sections shown one at a time under the dataset picker; a section with
 // no plot for the data's kind is hidden from the page's strip and grayed in
-// the navigation.
+// the navigation. The Normality and Equal variances sections carry the shared
+// transform of the replication outcomes; every other section stays on the
+// response's own scale.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
+import { repEstimates, repIds, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
 import { exploreRecipe, exploreTooBig } from '../io/recipes.js';
 import { sampledCsv, downloadText, slug } from '../io/export.js';
 import {
@@ -23,8 +25,10 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL,
+  transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL
 } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform } from '../stats/transform.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { initialTicks, estimateAxis } from '../ui/rules.js';
@@ -163,11 +167,17 @@ function mount(parent, build) {
   const sec = document.createElement('div');
   sec.className = 'sec';
   parent.appendChild(sec);
-  const figs = [];
+  const figs = [], cleanups = [];
   const api = {
     sec,
     fig(box, opts) { const f = makeFigure(box, opts); figs.push(f); return f; },
-    release() { for (const f of figs) if (f.ro) f.ro.disconnect(); figs.length = 0; },
+    // Runs `fn` when the section is next rebuilt or released.
+    onRelease(fn) { cleanups.push(fn); },
+    release() {
+      for (const f of figs) if (f.ro) f.ro.disconnect();
+      figs.length = 0;
+      for (const fn of cleanups.splice(0)) fn();
+    },
     rebuild() {
       const h = sec.offsetHeight;
       if (h) sec.style.minHeight = h + 'px';
@@ -214,6 +224,36 @@ function table(headers, rows) {
 // ── Data helpers ────────────────────────────────────────────────────────
 
 function finite(a) { return Float64Array.from(Array.from(a).filter(Number.isFinite)); }
+
+// The shared transform, or 'none'.
+function currentTf() {
+  return isTransform(state.settings.transform) ? state.settings.transform : 'none';
+}
+
+// The finite replication outcomes of each dataset put through the shared
+// transform: transformSets's result (`values`, one array per dataset, when
+// `ok`), or the outcomes as they are when no transform is on.
+function transformedOutcomes(list) {
+  const sets = list.map(ds => {
+    const est = repEstimates(ds), ids = repIds(ds), values = [], keep = [];
+    for (let i = 0; i < est.length; i++) if (Number.isFinite(est[i])) { values.push(est[i]); keep.push(ids[i]); }
+    return { name: ds.name, values, ids: keep };
+  });
+  const tf = currentTf();
+  if (tf === 'none') return { ok: true, values: sets.map(st => Float64Array.from(st.values)), problems: [], fitting: [] };
+  return transformSets(sets, tf);
+}
+
+// The section's transform picker, bound to the shared setting, with the note
+// on what the transform does while one is on.
+function transformRow(api, sec, idSuffix, what, applies = true) {
+  const row = el('div', 'ctrl-row ex-tight');
+  row.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-tf-' + idSuffix + '">' + TRANSFORM_LABEL + '</label><select id="ex-tf-' + idSuffix + '"></select></span>';
+  sec.appendChild(row);
+  api.onRelease(transformSelect(row.querySelector('select')));
+  const tf = currentTf();
+  if (tf !== 'none' && applies) sec.appendChild(transformNote(tf, what));
+}
 
 // A time-persistent replication as a step function: each value held from its
 // record time to the next, and the last to the end time when one is given.
@@ -382,15 +422,20 @@ function storeResult(ds, est) {
   const sm = datasetSummary(ds);
   const e = sm.est;
   const tables = [{ name: 'replication summary', headers, rows }];
-  const sw = shapiroOf(est);
-  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
+  // The Shapiro–Wilk test of the outcomes as the Normality section forms it,
+  // transformed when a transform is on (none when it cannot take them all).
+  const tf = currentTf();
+  const tr = transformedOutcomes([ds]);
+  const sw = tr.ok ? shapiroOf(tr.values[0]) : null;
+  if (sw) tables.push({ name: 'Shapiro-Wilk test of the ' + (tf !== 'none' ? transformOf(tf).label.toLowerCase() + ' of the ' : '') + 'replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
   if (lastLevene) tables.push({ name: 'Equal-variance test (Levene)', headers: ['datasets', 'F', 'df1', 'df2', 'p'], rows: [[lastLevene.names.join('; '), lastLevene.F, lastLevene.df1, lastLevene.df2, lastLevene.p]] });
-  const title = 'Summary of ' + ds.name, provenance = { dataset: ds.name };
+  const title = 'Summary of ' + ds.name, provenance = Object.assign({ dataset: ds.name },
+    tf !== 'none' ? { transform: transformOf(tf).label.toLowerCase() + ' of each replication outcome, in the Normality and Equal variances sections' } : {});
   // The regenerate scripts' recipe is built only when a button asks for one,
   // from the inputs as they stand now; past the cap its scripts read the two
   // CSV files `files` names.
   const recipeIn = { ds, spread: lastLevene ? { names: lastLevene.names, groups: lastLevene.groups } : null,
-    level: state.settings.level, title, provenance };
+    level: state.settings.level, title, provenance, transform: tf };
   state.setResult('explore', {
     title,
     provenance,
@@ -890,6 +935,8 @@ function buildNormality(api, { ds, estF }) {
   const usePooled = ds.kind === 'tally' && (pooled || forced);
   const level = state.settings.level, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Normal quantile–quantile (Q–Q) plot'));
+  const tf = usePooled ? 'none' : currentTf();
+  transformRow(api, sec, 'qq', 'This section’s plot and test are of the transformed outcomes; the other sections show the outcomes as they are.', !usePooled);
   if (ds.kind === 'tally') {
     const row = el('div', 'ctrl-row ex-tight');
     row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled-qq"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
@@ -898,7 +945,15 @@ function buildNormality(api, { ds, estF }) {
     row.querySelector('#ex-pooled-qq').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
   let values = usePooled ? finite(observations(ds)) : estF;
-  const what = usePooled ? 'pooled observations' : estimateWord(ds);
+  if (usePooled && isTransform(state.settings.transform)) {
+    sec.appendChild(notice('info', 'The transform applies to replication outcomes, and so the pooled observations are shown as they are.'));
+  }
+  if (tf !== 'none') {
+    const tr = transformedOutcomes([ds]);
+    if (!tr.ok) { sec.appendChild(transformRefusal(tf, tr)); return; }
+    values = tr.values[0];
+  }
+  const what = usePooled ? 'pooled observations' : tf !== 'none' ? transformOf(tf).label.toLowerCase() + ' of the ' + estimateWord(ds) : estimateWord(ds);
   const total = values.length;
   // Of many pooled observations, every k-th order statistic is plotted; the
   // quartile line is still fitted to all of them.
@@ -912,7 +967,7 @@ function buildNormality(api, { ds, estF }) {
     thinned = true;
   }
   if (!q) { emptyLine(sec, 'This dataset holds fewer than two values.'); return; }
-  const yLabel = usePooled ? ds.response : estimateAxis(ds);
+  const yLabel = usePooled ? ds.response : estimateAxis(ds, tf);
   figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-outcomes') + '-qq',
     { height: 320, narrowHeight: 300, xLabel: 'Standard normal quantile', yLabel, ariaLabel: 'Normal quantile–quantile plot of the ' + what },
     f => qqPlot(f, q),
@@ -958,6 +1013,7 @@ function buildSpread(api, { ds, est }) {
   lastLevene = null;
   const level = state.settings.base, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
+  transformRow(api, sec, 'spread', 'Levene’s test here compares the spreads of the transformed outcomes, which is what the pooled procedures on Several Systems assume under this transform.');
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   // The reader's own ticks stand, even fewer than two; every eligible dataset
@@ -969,9 +1025,14 @@ function buildSpread(api, { ds, est }) {
     onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
   if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result when ' + (chosen.length ? 'one' : 'none') + ' is ticked. Tick two or more to compare their spreads.'); return; }
-  const groups = chosen.map(d => finite(repEstimates(d)));
+  // The outcomes as the data give them, which the regenerate scripts embed,
+  // and transformed as the test takes them.
+  const raw = chosen.map(d => finite(repEstimates(d)));
+  const tr = transformedOutcomes(chosen);
+  if (!tr.ok) { sec.appendChild(transformRefusal(currentTf(), tr)); return; }
+  const groups = tr.values;
   const lv = levene(groups);
-  lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
+  lastLevene = { names: chosen.map(d => d.name), groups: raw.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
   const rejects = lv.p < alpha;
   // With no spread left in the distances from the medians, F is infinite when
   // the distances differ between datasets and undefined when they do not.

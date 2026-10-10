@@ -1087,7 +1087,16 @@ better.
   because it divides α by its own family sizes), and every parametric result carries a checks line
   from `js/ui/checks.js` (Shapiro–Wilk on what the procedure takes as normal, Levene's test where a
   variance is pooled; flags only, never gates, and a line whose checks all pass says so with a check
-  badge). Every figure carries six buttons: SVG, PNG, COPY (the PNG, at two to three times its
+  badge). The transform of the replication outcomes is a second shared setting (`state.settings.transform`,
+  with the transforms in `js/stats/transform.js`: none, log, square root, arcsine square root, logit, and
+  reciprocal), picked beside the level on One, Two, and Several Systems and inside Summary and Plots'
+  Normality and Equal variances sections, the only sections it changes there. Every replication outcome is
+  put through it before any inference; Steady State and the pooled observations never are. An outcome
+  outside the transform's domain stops the page's result with a warning naming the replications and the
+  transforms that do fit. Each page carries its intervals back to the response's units (the center is the
+  geometric mean under the log and the harmonic mean under the reciprocal), and under the log Two and Several
+  Systems carry differences back as ratios. A value the reader types in the response's units (a target, δ,
+  the benchmark, ε) is kept per transform as well as per dataset. Every figure carries six buttons: SVG, PNG, COPY (the PNG, at two to three times its
   on-screen size, put on the clipboard, and left out where the browser cannot write an image
   there), and M, R, and PY, the last three being scripts (MATLAB, base-graphics R, matplotlib Python) that redraw the figure from the data
   embedded in them; the images and the R and Python scripts share one hyphenated file name, and the
@@ -1239,7 +1248,14 @@ better.
      outcomes), which leaves the test out and says why in a comment (`spreadOmitted`).
      `js/io/analysis_scripts.js` assembles each script from the literal snippets in
      `js/io/script_lib.js` (`LIB.py`, `LIB.m`, and `LIB.R`, which both R dialects share); no snippet
-     may contain a backtick or `${`, which would end its template literal. Every string bound for a
+     may contain a backtick or `${`, which would end its template literal. A recipe's `transform` (an id
+     from `js/stats/transform.js`) puts `outcome_transform` in the Settings block and, in the Data
+     section after the data are in and before any tibble is built, a line sending every outcome through
+     `transform_outcomes` (LIB's `transform`); the data blocks and the CSV files keep the outcomes as
+     given, and the back-transformed and ratio report lines go through `back_transform` and
+     `back_interval`. Summary and Plots transforms only in its Normality section (`x_tf`) and before
+     Levene's test, and a transform its outcomes do not fit leaves both out. With no transform, a
+     script carries none of these lines. Every string bound for a
      script passes through `ascii()`, which keeps every script 7-bit ASCII. R data blocks are
      one-line statements (a long vector is built by appending chunks) because Rscript's parse is
      quadratic in a long expression: a near-cap script took about three minutes as one expression

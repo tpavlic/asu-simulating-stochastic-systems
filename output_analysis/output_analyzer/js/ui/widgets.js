@@ -1,8 +1,10 @@
 // Small UI building blocks shared by the pages: numeric spinners, result
 // cards, dataset pickers, the experimental-unit banner, collapsible notes,
-// the rejected-row list, the confidence-level picker, and callouts.
+// the rejected-row list, the confidence-level and transform pickers, the
+// transform's note and refusal, and callouts.
 
 import * as state from '../state.js';
+import { TRANSFORMS, transformOf } from '../stats/transform.js';
 import { esc, intl, plural, pct, lvl } from './format.js';
 import { KIND_LABEL } from '../data/model.js';
 
@@ -346,6 +348,80 @@ export function levelSelect(selectEl) {
 }
 
 function trimNum(v) { return String(Number(v.toFixed(4))); }
+
+/** The label for a transform picker, its explanation in the shared tooltip. */
+export const TRANSFORM_LABEL = '<span class="tip" tabindex="0" data-tip="A function every replication outcome is put through before the analysis, the same for every design, so that all of them are compared on one scale: log or square root for skewed positive outcomes, arcsine square root or logit for proportions, reciprocal to turn a time per job into a rate.">Transform</span>';
+
+/**
+ * Binds a <select> to the shared transform of the replication outcomes: it
+ * shows the current one, sets it on change, and follows changes made by any
+ * other transform picker.
+ * @param {HTMLSelectElement} selectEl
+ * @returns {() => void} a function that unbinds it
+ */
+export function transformSelect(selectEl) {
+  selectEl.innerHTML = TRANSFORMS.map(t => '<option value="' + t.id + '"' + (t.id === state.settings.transform ? ' selected' : '') + '>' + esc(t.label) + '</option>').join('');
+  const sync = () => { selectEl.value = state.settings.transform; };
+  selectEl.addEventListener('change', () => { if (!state.setTransform(selectEl.value)) sync(); });
+  sync();
+  return state.on('settings', sync);
+}
+
+// The transform as a noun phrase in running text: "the log".
+function theTransform(t) { return 'the ' + t.label.toLowerCase(); }
+
+/**
+ * The line a page shows while a transform is on, saying what it does to the
+ * page's results, with a collapsed note on what a transform changes; null
+ * with no transform. `extra` is HTML the page adds to the line.
+ * @param {string} id
+ * @param {string} [extra]
+ * @returns {HTMLElement|null}
+ */
+export function transformNote(id, extra = '') {
+  const t = transformOf(id);
+  if (t.id === 'none') return null;
+  const box = document.createElement('div');
+  box.className = 'tf-note';
+  box.appendChild(notice('info', 'Every replication outcome is put through ' + esc(theTransform(t)) + ' before the analysis, and so the results below are on the ' +
+    esc(t.scale) + ' scale.' + (extra ? ' ' + extra : '')));
+  box.appendChild(details('What a transform changes',
+    '<p>A transform changes the question as well as the scale. A mean of transformed outcomes is not the transform of the mean: the mean of the logs carried back through the exponential is the geometric mean, which lies below the ordinary mean whenever the outcomes vary, and under a symmetric spread of the logs it is the median. The reciprocal carries back to the harmonic mean, and the square root, the arcsine square root, and the logit carry back to a center with no common name.</p>' +
+    '<p>Each transform keeps the outcomes in order, except the reciprocal, which reverses it exactly. An interval on the transformed scale therefore carries back end for end into an interval on the back-transformed center, its ends swapped under the reciprocal, and under the reciprocal a design that is best by a bigger response is the one with the smallest mean on the transformed scale. A difference carries back only under the log, where a difference of logs is the log of a ratio: an interval on the difference becomes an interval on the ratio of the two geometric means.</p>' +
+    '<p>Rank procedures use only the order of the outcomes, and so Kruskal–Wallis, Friedman, Dunn’s comparisons, and the rank-sum test give the same p-values under any of these transforms. The signed-rank test and the Hodges–Lehmann estimates do change, because they work with differences and averages of outcomes.</p>' +
+    '<p>Choose the transform from what the outcomes measure (a time, a count, a proportion) or from a pilot study, before looking at the comparison. Trying each transform until one gives the answer hoped for is itself a multiple-comparisons problem.</p>'));
+  return box;
+}
+
+/**
+ * The warning a page shows in place of its results when some replication
+ * outcomes lie outside the transform's domain: which ones, by dataset and
+ * id, and the transforms the outcomes do fit. `res` is transformSets's result.
+ * @param {string} id
+ * @param {{problems: {name: string, ids: (string|number)[], all?: boolean}[], fitting: string[]}} res
+ * @returns {HTMLDivElement}
+ */
+export function transformRefusal(id, res) {
+  const t = transformOf(id);
+  const MAX = 10;
+  const which = res.problems.map(p => {
+    if (p.all && p.ids.length > 1) return '<b>' + esc(p.name) + '</b>, every replication';
+    const shown = p.ids.slice(0, MAX).map(v => esc(String(v))).join(', ');
+    const more = p.ids.length > MAX ? ', and ' + intl(p.ids.length - MAX) + ' more' : '';
+    return '<b>' + esc(p.name) + '</b>, ' + (p.ids.length === 1 ? 'replication ' : 'replications ') + shown + more;
+  }).join('; ');
+  const fit = res.fitting.map(f => transformOf(f).label.toLowerCase());
+  const offer = fit.length
+    ? 'Of the transforms offered, ' + (fit.length === 1 ? 'only the ' + esc(fit[0]) + ' fits' : esc(listWords(fit)) + ' fit') + ' every outcome here; choose ' + (fit.length === 1 ? 'it' : 'one of them') + ' or None.'
+    : 'None of the transforms offered fits every outcome here; choose None.';
+  const n = res.problems.reduce((a, p) => a + p.ids.length, 0);
+  return notice('warn', 'The ' + esc(t.label.toLowerCase()) + ' needs every replication outcome ' + esc(t.domain) + ', and so no result is shown. ' +
+    'Outside that: ' + which + (n > 1 ? ' (' + esc(plural(n, 'outcome')) + ' in all)' : '') + '. ' + offer);
+}
+
+function listWords(a) {
+  return a.length <= 2 ? a.join(' and ') : a.slice(0, -1).join(', ') + ', and ' + a[a.length - 1];
+}
 
 /**
  * A callout block: 'warn' for a caution (an ochre rule and a "!" badge) or

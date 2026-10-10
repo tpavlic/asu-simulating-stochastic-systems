@@ -1,5 +1,5 @@
 // The Storage page: what this browser keeps between visits (the loaded
-// datasets, the confidence level, and every control's setting), whether it
+// datasets, the confidence level, the transform, and every control's setting), whether it
 // could be stored, and the button that forgets it all.
 
 import * as state from '../state.js';
@@ -33,7 +33,7 @@ function refresh() {
   } else if (s.skipped === 'write-failed') {
     lines.push('The browser refused to store this session (its storage is full or blocked), and so it will not come back after a reload.');
   } else if (s.available && s.saved && state.datasets.length) {
-    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ', the confidence level, and every control’s setting, ' + sizeText(s.chars) + ' in all.');
+    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ', the confidence level, the transform, and every control’s setting, ' + sizeText(s.chars) + ' in all.');
   } else if (s.available) {
     lines.push('Nothing is stored: no data are loaded.');
   }
@@ -52,7 +52,7 @@ function refresh() {
 export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
+    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, the transform of the replication outcomes, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
     '<div class="sec"><div class="sec-hd">Stored in this browser</div>' +
       '<p class="xp-status" id="ss-status"></p>' +
       '<p class="muted-line" id="ss-size" aria-live="polite"></p>' +
@@ -75,7 +75,7 @@ export function render(root) {
       forgetSession();
       refresh();
       // A reload is the one sure way to put every page's controls, the
-      // remembered sections, and the confidence level back to their
+      // remembered sections, the confidence level, and the transform back to their
       // defaults: each page keeps its state in its own module.
       try { history.replaceState(null, '', '#storage'); } catch (err) { /* a file:// page may refuse */ }
       location.reload();

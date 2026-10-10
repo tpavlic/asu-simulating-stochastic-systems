@@ -793,7 +793,9 @@ def plan_half_width(sd, level, h):
 def power_t1(n, sd, delta, alpha):
     """Two-sided power of the one-sample t test, both tails counted."""
     q = stats.t.ppf(1 - alpha / 2, n - 1); ncp = delta * np.sqrt(n) / sd
-    return stats.nct.sf(q, n - 1, ncp) + stats.nct.cdf(-q, n - 1, ncp)
+    # The lower tail as the upper tail at -ncp: SciPy's nct.cdf returns NaN far
+    # into that tail at a large noncentrality, where the two are equal.
+    return stats.nct.sf(q, n - 1, ncp) + stats.nct.sf(q, n - 1, -ncp)
 
 def plan_power_t1(sd, delta, alpha, power):
     if (not np.isfinite(delta) or delta == 0 or not np.isfinite(sd) or not sd > 0
@@ -1297,7 +1299,8 @@ def power_two(n, s1, s2, delta, alpha, pooled):
     noncentral-t approximation at the Welch degrees of freedom."""
     df = 2 * (n - 1) if pooled else welch_df_equal(s1, s2, n)
     q = stats.t.ppf(1 - alpha / 2, df); ncp = delta / np.sqrt((s1 ** 2 + s2 ** 2) / n)
-    return stats.nct.sf(q, df, ncp) + stats.nct.cdf(-q, df, ncp)
+    # The lower tail as the upper tail at -ncp (see power_t1).
+    return stats.nct.sf(q, df, ncp) + stats.nct.sf(q, df, -ncp)
 
 def plan_power_two(s1, s2, delta, alpha, power, pooled):
     if (not sds_ok(s1, s2) or not np.isfinite(delta) or delta == 0 or not 0 < power < 1
@@ -3082,5 +3085,119 @@ function out = resample_tw(t, v, a, z, n_steps)
 % which an autocorrelation needs because the records arrive at uneven times.
 edges = [a + (0:n_steps-1) * ((z - a) / n_steps), z];
 out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:n_steps);
+end
+`;
+
+// ── Transform of the replication outcomes ────────────────────────────────
+// The page puts every replication outcome through one transform before the
+// analysis (js/stats/transform.js), and the script does the same in its Data
+// section. transform_outcomes stops on an outcome outside the transform's
+// domain, as the page refuses to show a result. back_transform carries a
+// value on the transformed scale back to the response's units, an interval
+// end past the image of the domain going to the domain's edge (or to Inf for
+// the reciprocal); back_interval does both ends and keeps them in increasing
+// order, which the reciprocal reverses.
+
+LIB.R.transform = `
+transform_outcomes <- function(y, tf) {
+  ok <- switch(tf, none = rep(TRUE, length(y)), log = y > 0, sqrt = y >= 0, asin_sqrt = y >= 0 & y <= 1,
+               logit = y > 0 & y < 1, reciprocal = y > 0, stop("unknown transform: ", tf))
+  if (!all(ok)) stop("the ", tf, " transform is not defined for the outcome(s) ", paste(format(y[!ok]), collapse = ", "))
+  switch(tf, none = y, log = log(y), sqrt = sqrt(y), asin_sqrt = asin(sqrt(y)), logit = log(y / (1 - y)), reciprocal = 1 / y)
+}
+back_transform <- function(v, tf) {
+  if (is.na(v)) return(NaN)
+  switch(tf, none = v, log = exp(v), sqrt = if (v <= 0) 0 else v^2,
+         asin_sqrt = if (v <= 0) 0 else if (v >= pi / 2) 1 else sin(v)^2,
+         logit = 1 / (1 + exp(-v)), reciprocal = if (v > 0) 1 / v else Inf)
+}
+back_interval <- function(lo, hi, tf) {
+  if (tf == "reciprocal") list(lo = back_transform(hi, tf), hi = back_transform(lo, tf))
+  else list(lo = back_transform(lo, tf), hi = back_transform(hi, tf))
+}
+`;
+LIB.py.transform = `
+def transform_outcomes(y, tf):
+    """The transform the page applied to every replication outcome."""
+    y = np.asarray(y, float)
+    ok = {"none": np.full(y.shape, True), "log": y > 0, "sqrt": y >= 0, "asin_sqrt": (y >= 0) & (y <= 1),
+          "logit": (y > 0) & (y < 1), "reciprocal": y > 0}[tf]
+    if not ok.all():
+        raise ValueError("the " + tf + " transform is not defined for the outcome(s) " + ", ".join("%g" % v for v in y[~ok]))
+    if tf == "log":
+        return np.log(y)
+    if tf == "sqrt":
+        return np.sqrt(y)
+    if tf == "asin_sqrt":
+        return np.arcsin(np.sqrt(y))
+    if tf == "logit":
+        return np.log(y / (1 - y))
+    if tf == "reciprocal":
+        return 1 / y
+    return y
+
+def back_transform(v, tf):
+    """One value on the transformed scale, carried back to the response's units."""
+    v = float(v)
+    if np.isnan(v):
+        return np.nan
+    if tf == "log":
+        return float(np.exp(v))
+    if tf == "sqrt":
+        return 0.0 if v <= 0 else v * v
+    if tf == "asin_sqrt":
+        return 0.0 if v <= 0 else 1.0 if v >= np.pi / 2 else float(np.sin(v) ** 2)
+    if tf == "logit":
+        return float(1 / (1 + np.exp(-v)))
+    if tf == "reciprocal":
+        return 1 / v if v > 0 else np.inf
+    return v
+
+def back_interval(lo, hi, tf):
+    """Both ends carried back, in increasing order."""
+    if tf == "reciprocal":
+        return dict(lo=back_transform(hi, tf), hi=back_transform(lo, tf))
+    return dict(lo=back_transform(lo, tf), hi=back_transform(hi, tf))
+`;
+LIB.m.transform = `
+function v = transform_outcomes(y, tf)
+% The transform the page applied to every replication outcome.
+switch tf
+    case 'none', ok = true(size(y));
+    case 'log', ok = y > 0;
+    case 'sqrt', ok = y >= 0;
+    case 'asin_sqrt', ok = y >= 0 & y <= 1;
+    case 'logit', ok = y > 0 & y < 1;
+    case 'reciprocal', ok = y > 0;
+    otherwise, error('unknown transform: %s', tf);
+end
+if ~all(ok), error('the %s transform is not defined for the outcome(s) %s', tf, mat2str(y(~ok))); end
+switch tf
+    case 'none', v = y;
+    case 'log', v = log(y);
+    case 'sqrt', v = sqrt(y);
+    case 'asin_sqrt', v = asin(sqrt(y));
+    case 'logit', v = log(y ./ (1 - y));
+    case 'reciprocal', v = 1 ./ y;
+end
+end
+
+function b = back_transform(v, tf)
+% One value on the transformed scale, carried back to the response's units.
+if isnan(v), b = NaN; return; end
+switch tf
+    case 'log', b = exp(v);
+    case 'sqrt', if v <= 0, b = 0; else, b = v^2; end
+    case 'asin_sqrt', if v <= 0, b = 0; elseif v >= pi / 2, b = 1; else, b = sin(v)^2; end
+    case 'logit', b = 1 / (1 + exp(-v));
+    case 'reciprocal', if v > 0, b = 1 / v; else, b = Inf; end
+    otherwise, b = v;
+end
+end
+
+function r = back_interval(lo, hi, tf)
+% Both ends carried back, in increasing order.
+if strcmp(tf, 'reciprocal'), r = struct('lo', back_transform(hi, tf), 'hi', back_transform(lo, tf));
+else, r = struct('lo', back_transform(lo, tf), 'hi', back_transform(hi, tf)); end
 end
 `;

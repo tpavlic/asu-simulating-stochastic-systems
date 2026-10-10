@@ -3,6 +3,8 @@
 // checklist opens with, Two Systems' verdict on the F ratio of the variances,
 // and the labels the figures carry. Pure functions, no DOM.
 
+import { transformLabel } from '../stats/transform.js';
+
 /**
  * The ticks a dataset checklist opens with. A stored list stands at any
  * length, even one or none, less any id no longer offered; every offered
@@ -54,27 +56,32 @@ export function roleLabels(dsA, dsB) {
 
 /**
  * The axis label for a dataset's replication outcomes on One System, or for
- * its observations under the pooled override.
+ * its observations under the pooled override. Under a transform the label
+ * names it ("Log of replication mean of wait"); the pooled observations are
+ * never transformed.
  * @param {{kind: string, response?: string}|null} ds
  * @param {boolean} [pooled]
+ * @param {string} [tf] the transform's id
  */
-export function outcomeAxis(ds, pooled) {
-  if (!ds) return 'Replication outcome';
+export function outcomeAxis(ds, pooled, tf = 'none') {
+  if (!ds) return transformLabel('Replication outcome', tf);
   const r = ds.response || 'value';
   if (pooled) return 'Observation of ' + r;
-  if (ds.kind === 'reps') return r + ' per replication';
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + r;
-  return 'Replication mean of ' + r;
+  if (ds.kind === 'reps') return transformLabel(r + ' per replication', tf);
+  if (ds.kind === 'time') return transformLabel('Time-weighted replication mean of ' + r, tf);
+  return transformLabel('Replication mean of ' + r, tf);
 }
 
 /**
- * The axis label for a dataset's replication outcomes on Summary and Plots.
+ * The axis label for a dataset's replication outcomes on Summary and Plots,
+ * naming the transform when one is given.
  * @param {{kind: string, response: string}} ds
+ * @param {string} [tf] the transform's id
  */
-export function estimateAxis(ds) {
-  if (ds.kind === 'reps') return ds.response;
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + ds.response;
-  return 'Replication mean of ' + ds.response;
+export function estimateAxis(ds, tf = 'none') {
+  if (ds.kind === 'reps') return transformLabel(ds.response, tf);
+  if (ds.kind === 'time') return transformLabel('Time-weighted replication mean of ' + ds.response, tf);
+  return transformLabel('Replication mean of ' + ds.response, tf);
 }
 
 /**

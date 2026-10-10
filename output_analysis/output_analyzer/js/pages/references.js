@@ -33,6 +33,10 @@ const GROUPS = [
     'M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>Journal of the American Statistical Association</i> 69 (1974) 364–367; H. Levene, “Robust tests for equality of variances,” in <i>Contributions to Probability and Statistics</i>, ed. I. Olkin (Stanford University Press, 1960) 278–292.',
     'S. S. Shapiro and M. B. Wilk, “An analysis of variance test for normality (complete samples),” <i>Biometrika</i> 52 (1965) 591–611; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551: the test and the algorithm the Normality section computes it by.',
   ]],
+  ['Transforms', [
+    'G. E. P. Box and D. R. Cox, “An analysis of transformations,” <i>Journal of the Royal Statistical Society, Series B</i> 26 (1964) 211–252: the family of power transforms that holds the log, the square root, and the reciprocal, chosen to bring the outcomes closer to normal with a common variance.',
+    'D. I. Warton and F. K. C. Hui, “The arcsine is asinine: the analysis of proportions in ecology,” <i>Ecology</i> 92 (2011) 3–10: the case for modeling a proportion on the logit scale, through a generalized linear model, rather than analyzing its arcsine square root.'
+  ]],
   ['Steady State', [
     'P. D. Welch, “The statistical analysis of simulation results,” in <i>The Computer Performance Modeling Handbook</i>, ed. S. S. Lavenberg (Academic Press, 1983) 268–328: the moving-average plot for choosing a warm-up.',
     'G. S. Fishman, “Grouping observations in digital simulation,” <i>Management Science</i> 24 (1978) 510–521: batch means and the lag-one test of their independence.'

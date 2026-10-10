@@ -2750,6 +2750,185 @@ test('Levene groups too large to embed are left out of a script that reads its f
   }
 }
 
+// ── Transforms of the replication outcomes ─────────────────────────────
+// The script embeds the outcomes as the data give them, assigns the
+// transform in its Settings, and puts every outcome through it in its Data
+// section; every report line is then on the transformed scale except the
+// back-transformed and ratio lines, which the analyzer computes as the page does.
+
+const tfProv = (ds, level, proc, tf) => Object.assign(oneProv(ds, level, proc), { transform: tf + ' of each replication outcome' });
+const ONE_ABS = { relative: false, rel: 10, abs: 0.1, delta: 0.2, power: 0.8 };
+
+test('a transform puts its name in the Settings and its lines in the Data section, and none changes nothing', () => {
+  const base = { ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: oneProv(QUEUE, 0.95, 't'), plan: ONE_ABS };
+  const none = oneRecipe(base), noneSaid = oneRecipe(Object.assign({}, base, { transform: 'none' }));
+  for (const lang of LANGS) assert.equal(writeScript(noneSaid, lang).replace(/Written by .*\n/, ''), writeScript(none, lang).replace(/Written by .*\n/, ''), lang);
+  const r = oneRecipe(Object.assign({}, base, { transform: 'log', provenance: tfProv(QUEUE, 0.95, 't', 'log') }));
+  assert.equal(r.transform, 'log');
+  assert.deepEqual(r.data.values, queueX(), 'the data block holds the outcomes as given');
+  assert.ok(Math.abs(r.expect.mean - queueX().reduce((a, v) => a + Math.log(v), 0) / 20) < 1e-12, 'the mean is the mean of the logs');
+  assert.ok(Math.abs(r.expect['back-transformed center'] - Math.exp(r.expect.mean)) < 1e-12);
+  const R = writeScript(r, 'R'), P = writeScript(r, 'py'), M = writeScript(r, 'm');
+  assert.ok(settingsOf(R, 'R').includes('outcome_transform <- "log"'));
+  assert.ok(P.includes('x = transform_outcomes(x, outcome_transform)'));
+  assert.ok(M.includes("outcome_transform = 'log';") && M.includes('x = transform_outcomes(x, outcome_transform);'));
+  assert.ok(R.indexOf('x <- transform_outcomes(x, outcome_transform)') > R.indexOf('x <- c('), 'the transform follows the data');
+  // Under the pooled override the observations are never transformed.
+  const pooled = oneRecipe(Object.assign({}, base, { pooled: true, transform: 'log', plan: null }));
+  assert.equal(pooled.transform, 'none');
+  assert.ok(!writeScript(pooled, 'R').includes('transform_outcomes'));
+});
+
+test('the reciprocal\'s back-transformed interval swaps its ends', () => {
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, transform: 'reciprocal' });
+  assert.ok(Math.abs(r.expect['back-transformed lower'] - 1 / r.expect.upper) < 1e-12);
+  assert.ok(Math.abs(r.expect['back-transformed upper'] - 1 / r.expect.lower) < 1e-12);
+  assert.ok(Math.abs(r.expect['back-transformed center'] - 1 / r.expect.mean) < 1e-12);
+});
+
+{
+  checkRecipe('One System, t interval on the log of queue-reps', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95,
+    provenance: tfProv(QUEUE, 0.95, 't', 'log'), plan: ONE_ABS, transform: 'log' }), { smoke: true, also: noWarning });
+  checkRecipe('One System, Wilcoxon on the square root of queue-reps', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9,
+    provenance: tfProv(QUEUE, 0.9, 'np', 'square root'), plan: ONE_ABS, transform: 'sqrt' }));
+  checkRecipe('One System, t interval on the reciprocal of queue-reps', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99,
+    provenance: tfProv(QUEUE, 0.99, 't', 'reciprocal'), plan: null, transform: 'reciprocal' }));
+  // Proportions: a utilization near 1 in every replication.
+  const util = makeDataset({ name: 'utilization', response: 'busy', kind: 'reps', reps: [0.91, 0.87, 0.95, 0.9, 0.97, 0.89, 0.93, 0.85].map((v, i) => ({ id: i + 1, v: [v] })) });
+  const uo = outcomeVector(util);
+  checkRecipe('One System, t interval on the logit of a utilization', oneRecipe({ ds: util, x: uo.values, ids: uo.ids, pooled: false, proc: 't', level: 0.95,
+    plan: null, transform: 'logit' }), { smoke: true });
+  checkRecipe('One System, t interval on the arcsine square root of a utilization', oneRecipe({ ds: util, x: uo.values, ids: uo.ids, pooled: false, proc: 't', level: 0.95,
+    plan: null, transform: 'asin_sqrt' }));
+}
+
+// Two Systems: both designs are transformed before any matching, and under
+// the log the comparison carries back as a ratio A / B.
+const PLAN_TF = { h: 0.05, delta: 0.1, power: 0.8 };
+const withTf = (prov, tf) => Object.assign(prov, { transform: tf + ' of each replication outcome' });
+function twoTf(dsA, dsB, proc, tf, plan = PLAN_TF, level = 0.95) {
+  return twoRecipe({ dsA, dsB, eA: est(dsA), eB: est(dsB), mode: 'independent', proc, level, transform: tf,
+    provenance: withTf(twoProv(dsA, dsB, level, proc, plan), tf), plan });
+}
+function pairedTf(dsA, dsB, proc, tf, plan = PLAN_TF, level = 0.95) {
+  const eA = est(dsA), eB = est(dsB);
+  const m = Object.assign(matchPairs(eA.ids, eB.ids, 'id'), { by: 'id' });
+  return twoRecipe({ dsA, dsB, eA, eB, mode: 'paired', match: m, proc, level, transform: tf,
+    provenance: withTf(pairedProv(dsA, dsB, level, proc, 'id', m.unmatchedA.length + m.unmatchedB.length, plan), tf), plan });
+}
+
+test('Two Systems under the log: the ratio is the exponential of the difference, and the data stay as given', () => {
+  const r = twoTf(IND_A, IND_B, 't', 'log');
+  assert.deepEqual(r.dataA.values, Array.from(est(IND_A).v));
+  assert.ok(Math.abs(r.expect.ratio - Math.exp(r.expect.difference)) < 1e-12);
+  assert.ok(Math.abs(r.expect['ratio lower'] - Math.exp(r.expect.lower)) < 1e-12);
+  const p = pairedTf(CRN_A, CRN_B, 't', 'log');
+  assert.deepEqual(p.pairs.a.slice(0, 3), Array.from(est(CRN_A).v).slice(0, 3));
+  assert.ok(Math.abs(p.expect.ratio - Math.exp(p.expect['mean difference'])) < 1e-12);
+  // Under any other transform there is no ratio.
+  const q = twoTf(IND_A, IND_B, 't', 'sqrt');
+  assert.ok(!('ratio' in q.expect) && q.two.ratio === null);
+  assert.ok(writeScript(q, 'R').includes('a <- transform_outcomes(a, outcome_transform)'));
+});
+
+checkRecipe('Two Systems, Welch on the log of two-independent', twoTf(IND_A, IND_B, 't', 'log'), { smoke: true, also: noWarning });
+checkRecipe('Two Systems, rank-sum on the log of two-independent', twoTf(IND_A, IND_B, 'np', 'log'));
+checkRecipe('Two Systems, pooled t on the square root of two-independent', twoTf(IND_A, IND_B, 'pooled', 'sqrt'));
+checkRecipe('Two Systems, paired t on the log of two-crn', pairedTf(CRN_A, CRN_B, 't', 'log'), { smoke: true, also: noWarning });
+checkRecipe('Two Systems, signed-rank on the log of two-crn', pairedTf(CRN_A, CRN_B, 'np', 'log'));
+checkRecipe('Two Systems, paired t on the reciprocal of two-crn', pairedTf(CRN_A, CRN_B, 't', 'reciprocal'));
+
+// Several Systems: every design is transformed, the means carry back to the
+// response's units, and under the log the differences carry back as ratios.
+const SEV_PLAN_TF = { meansH: 0.05, diffsH: 0.06, delta: 0.04, power: 0.8 };
+function sevTf(list, tf, over = {}) {
+  const r = sevRecipe(list, Object.assign({ transform: tf, eps: 0.05, plan: SEV_PLAN_TF }, over));
+  r.provenance.transform = tf + ' of each replication outcome';
+  return r;
+}
+
+test('Several Systems under a transform: the data stay as given, and the centers and ratios carry back', () => {
+  const r = sevTf(FOUR, 'log');
+  assert.deepEqual(r.groups.values[0], outcomeVector(FOUR[0]).values);
+  assert.ok(Math.abs(r.expect['design 1 back-transformed center'] - Math.exp(r.expect['design 1 mean'])) < 1e-12);
+  assert.ok(Math.abs(r.expect['diff 1-2 ratio upper'] - Math.exp(r.expect['diff 1-2 upper'])) < 1e-12);
+  const q = sevTf(FOUR, 'reciprocal');
+  assert.ok(Math.abs(q.expect['design 1 back-transformed lower'] - 1 / q.expect['design 1 upper']) < 1e-12);
+  assert.ok(!('diff 1-2 ratio' in q.expect));
+  assert.ok(writeScript(q, 'py').includes('groups = [transform_outcomes(v, outcome_transform) for v in groups]'));
+  assert.ok(writeScript(q, 'm').includes("groups = cellfun(@(v) transform_outcomes(v, outcome_transform), groups, 'UniformOutput', false);"));
+});
+
+{
+  const r = sevTf(FOUR, 'log', { view: { section: 'means' } });
+  checkRecipe('Several Systems, means and differences on the log of four-designs', r, Object.assign({ smoke: true, also: noWarning }, sevPinned(r)));
+  const d = sevTf(FOUR, 'log', { view: { section: 'diffs' }, diffMode: 'control', ctrlIdx: 1, bench: 1.0 });
+  checkRecipe('Several Systems, differences against a control on the log of four-designs', d, sevPinned(d));
+  const a = sevTf(FOUR, 'sqrt', { view: { section: 'anova' } });
+  checkRecipe('Several Systems, ANOVA on the square root of four-designs', a, Object.assign({ smoke: true }, sevPinned(a)));
+  const n = sevTf(FOUR, 'log', { proc: 'np', view: { section: 'diffs' } });
+  checkRecipe('Several Systems, rank procedures on the log of four-designs', n, sevPinned(n));
+  const p = sevTf(FOUR_CRN, 'log', { paired: true, view: { section: 'subset' } });
+  checkRecipe('Several Systems, paired, on the log of four-crn', p, sevPinned(p));
+  const w = sevTf(FOUR, 'reciprocal', { varMode: 'welch', view: { section: 'anova' } });
+  checkRecipe('Several Systems, Welch ANOVA on the reciprocal of four-designs', w, sevPinned(w));
+}
+
+// Summary and Plots: only the Normality section and Levene's test take the
+// transform; the descriptives and the interval stay on the response's scale.
+const exTf = (ds, spread, tf, view = undefined) => exploreRecipe({ ds, spread, level: 0.95, title: 'Summary of ' + ds.name,
+  provenance: { dataset: ds.name, transform: tf + ' of each replication outcome, in the Normality and Equal variances sections' }, view, transform: tf });
+
+test('Summary and Plots under a transform: the checks are transformed, and nothing else is', () => {
+  const r = exTf(QUEUE, exSpread(QUEUE, IND_A), 'log', { section: 'normality' });
+  const plain = exRecipe(QUEUE, exSpread(QUEUE, IND_A), 0.95, { section: 'normality' });
+  assert.equal(r.expect.mean, plain.expect.mean, 'the descriptives stay as they are');
+  assert.equal(r.expect['interval upper'], plain.expect['interval upper']);
+  assert.notEqual(r.expect['shapiro W [optional]'], plain.expect['shapiro W [optional]']);
+  assert.notEqual(r.expect['levene F'], plain.expect['levene F']);
+  assert.deepEqual(r.spread.groups[0], outcomeVector(QUEUE).values, 'Levene\'s groups stay as given');
+  const R = writeScript(r, 'R');
+  assert.ok(R.includes('x_tf <- transform_outcomes(x, outcome_transform)') && R.includes('plot_v <- x_tf'));
+  // A transform that cannot take an outcome leaves both checks out, and the script applies none.
+  const zeros = makeDataset({ name: 'zeros', response: 'wait', kind: 'reps', reps: [0, 1.5, 2, 2.5].map((v, i) => ({ id: i + 1, v: [v] })) });
+  const z = exTf(zeros, null, 'log');
+  assert.equal(z.transform, 'none');
+  assert.ok(!('shapiro W [optional]' in z.expect));
+  assert.ok(writeScript(z, 'R').includes('transform cannot take every replication outcome'));
+  // The shown dataset's outcomes may not fit while the datasets ticked under Equal variances do:
+  // the page still shows Levene's test on the transformed outcomes, and so does the script.
+  const zl = exTf(zeros, exSpread(IND_A, IND_B), 'log');
+  assert.equal(zl.transform, 'log');
+  assert.ok(!('shapiro W [optional]' in zl.expect) && 'levene F' in zl.expect);
+  const plainL = exRecipe(zeros, exSpread(IND_A, IND_B));
+  assert.notEqual(zl.expect['levene F'], plainL.expect['levene F']);
+  const RL = writeScript(zl, 'R');
+  assert.ok(!RL.includes('x_tf') && RL.includes('spread_groups <- lapply(spread_groups, transform_outcomes'));
+});
+
+test('Several Systems under the reciprocal: the screen picks the design with the smallest reciprocal mean when bigger is better', () => {
+  const r = sevTf(FOUR, 'reciprocal', { dir: 'max', view: { section: 'subset' } });
+  const plain = sevRecipe(FOUR, { dir: 'max', eps: 0.5, view: { section: 'subset' } });
+  assert.equal(r.expect['best design'], plain.expect['best design'], 'the best design is the same one either way');
+  assert.ok(writeScript(r, 'R').includes('direction <- if (direction == "max") "min" else "max"'), 'the script flips the direction in its Data section');
+});
+checkRecipe('Several Systems, the screen on the reciprocal of four-designs', sevTf(FOUR, 'reciprocal', { dir: 'max', view: { section: 'subset' } }), { smoke: true, also: noWarning });
+
+checkRecipe('Summary and Plots, normality and spread on the log of queue-reps', exTf(QUEUE, exSpread(QUEUE, IND_A, IND_B), 'log', { section: 'normality' }),
+  { smoke: true, also: noWarning });
+checkRecipe('Summary and Plots, normality on the square root of a tally dataset', exTf(TRANSIENT, null, 'sqrt', { section: 'normality' }), exChecks);
+
+// A script whose data are edited so that an outcome falls outside the
+// transform's domain stops and says which, as the page refuses to show a result.
+for (const lang of ['R', 'py']) {
+  test('the ' + lang + ' script refuses an outcome outside the transform\'s domain', { skip: HAS[lang] ? false : MISSING[lang] }, () => {
+    const ds = makeDataset({ name: 'zeros', response: 'wait', kind: 'reps', reps: [0, 1.5, 2, 2.5].map((v, i) => ({ id: i + 1, v: [v] })) });
+    const o = outcomeVector(ds);
+    const r = oneRecipe({ ds, x: o.values, ids: o.ids, pooled: false, proc: 't', level: 0.95, plan: null, transform: 'log' });
+    assert.throws(() => runScript(r, lang), /the log transform is not defined for the outcome\(s\) 0/);
+  });
+}
+
 // Every test is defined: the MATLAB batch can start (see "MATLAB batch" above).
 // Keep this line last.
 startMatlab();

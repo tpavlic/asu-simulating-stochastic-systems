@@ -1,10 +1,13 @@
 // The application's shared state: the loaded datasets, the one a page last
-// selected, and the settings every page reads (the confidence level). Pages
+// selected, and the settings every page reads (the confidence level and the
+// transform of the replication outcomes). Pages
 // read `datasets` and `settings` directly and subscribe to changes with `on`.
 // The array and the settings object are mutated in place and never replaced,
 // and so a reference taken at import time stays current.
 
 /** @typedef {import('./data/model.js').Dataset} Dataset */
+
+import { transformOf } from './stats/transform.js';
 
 /** Every loaded dataset, in the order it was added. */
 export const datasets = [];
@@ -14,7 +17,9 @@ export const datasets = [];
 // the reader stated and `bonfC` the Bonferroni count it is divided by:
 // level = 1 − (1 − base)/bonfC, so that C hand-made statements hold jointly
 // at `base`. Pages that already divide α by a family size read `base`.
-export const settings = { level: 0.95, base: 0.95, bonfC: 1, custom: false };
+// `transform` is the id of the transform every replication outcome is put
+// through before inference (js/stats/transform.js), 'none' by default.
+export const settings = { level: 0.95, base: 0.95, bonfC: 1, custom: false, transform: 'none' };
 
 /** The confidence levels the page offers. */
 export const LEVELS = [0.90, 0.95, 0.99];
@@ -25,7 +30,8 @@ const listeners = { datasets: new Set(), selection: new Set(), settings: new Set
 
 /**
  * Subscribes to an event: 'datasets' (added, removed, renamed), 'selection'
- * (the selected dataset changed), 'settings' (the level changed), or
+ * (the selected dataset changed), 'settings' (the level or the transform
+ * changed), or
  * 'results' (a page stored a new result).
  * @param {'datasets'|'selection'|'settings'|'results'|'picks'} event
  * @param {(payload: *) => void} fn
@@ -163,6 +169,22 @@ export function setCustomLevel(base, bonfC = 1) {
 }
 
 /**
+ * Sets the transform every page applies to the replication outcomes before
+ * inference and emits 'settings'. An unknown id is ignored.
+ * @param {string} id
+ * @returns {boolean} whether the id was accepted
+ */
+export function setTransform(id) {
+  const t = transformOf(id);
+  if (t.id !== id) return false;
+  if (settings.transform !== id) {
+    settings.transform = id;
+    emit('settings', { transform: id });
+  }
+  return true;
+}
+
+/**
  * The latest result of every analysis page, keyed by page id, and so the Export
  * page can write out what the reader has computed. A page stores its result
  * whenever it recomputes and stores null when its inputs no longer allow one.
@@ -219,5 +241,5 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
 export default state;

@@ -42,6 +42,14 @@ import { FIG_R } from './figure_lib_r.js';
 import { FIG_TIDY } from './figure_lib_tidy.js';
 import { FIG_PY } from './figure_lib_py.js';
 import { FIG_M } from './figure_lib_m.js';
+import { transformOf, transformLabel } from '../stats/transform.js';
+
+// A label on the recipe's transformed scale: "Replication outcome" becomes
+// "Log of replication outcome", and a difference's label names its scale.
+const tfLabel = (r, label) => transformLabel(label, r.transform || 'none');
+const tfDiff = (r, label) => (!r.transform || r.transform === 'none' ? label
+  : label.replace(/, A - B$/, '') + ' on the ' + transformOf(r.transform).scale + ' scale, A - B');
+const tfResp = (r, resp) => (!r.transform || r.transform === 'none' ? resp : 'the ' + transformOf(r.transform).label.toLowerCase() + ' of ' + resp);
 
 /** The figure helpers by dialect key: 'R', 'tidy', 'py', 'm'. */
 export const FIG = { R: FIG_R, tidy: FIG_TIDY, py: FIG_PY, m: FIG_M };
@@ -137,12 +145,12 @@ function twoIndependentFigures(r, L) {
   need.push(o.np ? 'signedRank' : 'tInterval');
   calls.push(L.assign('ia', own + '(a, level)'), L.assign('ib', own + '(b, level)'));
   const mid = o.np ? [fld(L, 'ia', 'estimate'), fld(L, 'ib', 'estimate')] : [fld(L, 'da', 'mean'), fld(L, 'db', 'mean')];
-  calls.push(...call(L, 'fig_strips', [listOf(L, ['a', 'b']), strsOf(L, F.labels), L.str('Replication outcome'), L.str('Replication outcomes and each design\'s interval')],
+  calls.push(...call(L, 'fig_strips', [listOf(L, ['a', 'b']), strsOf(L, F.labels), L.str(tfLabel(r, 'Replication outcome')), L.str('Replication outcomes and each design\'s interval')],
     { mid: vecOf(L, mid), lo: vecOf(L, [fld(L, 'ia', 'lo'), fld(L, 'ib', 'lo')]), hi: vecOf(L, [fld(L, 'ia', 'hi'), fld(L, 'ib', 'hi')]) }));
   const v = o.np ? 'rs' : 'w';
   const [m, lo, hi] = [fld(L, v, o.np ? 'estimate' : 'diff'), fld(L, v, 'lo'), fld(L, v, 'hi')];
   calls.push(...call(L, 'fig_intervals', [vecOf(L, [m]), vecOf(L, [lo]), vecOf(L, [hi]), strsOf(L, ['A - B']),
-    L.str(o.np ? 'Shift in location, A - B' : 'Difference in means, A - B'), L.str('The difference against zero')],
+    L.str(tfDiff(r, o.np ? 'Shift in location, A - B' : 'Difference in means, A - B')), L.str('The difference against zero')],
   { ref: '0', flagged: vecOf(L, [orOf(L, lo + ' > 0', hi + ' < 0')]) }));
   return {
     notes: ['Each design\'s replication outcomes with its own ' + (o.np ? 'Wilcoxon signed-rank interval' : 't interval') + ', and the interval on the ' +
@@ -157,7 +165,7 @@ function twoPairedFigures(r, L) {
   const o = r.two, F = r.fig, calls = [];
   const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
     : [fld(L, 'pr', 'meanD'), fld(L, 'pr', 'lo'), fld(L, 'pr', 'hi')];
-  calls.push(...call(L, 'fig_strips', [listOf(L, [fld(L, 'pr', 'diffs')]), strsOf(L, ['A - B']), L.str('Difference A - B in each matched pair'),
+  calls.push(...call(L, 'fig_strips', [listOf(L, [fld(L, 'pr', 'diffs')]), strsOf(L, ['A - B']), L.str('Difference A - B in each matched pair' + (r.transform && r.transform !== 'none' ? ', ' + transformOf(r.transform).scale + ' scale' : '')),
     L.str('Paired differences')], { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]), ref: '0' }));
   const slope = F.view === 'slope';
   if (slope) calls.push(...call(L, 'fig_pairs_slopes', ['a', 'b'], { label_a: L.str(F.labels[0]), label_b: L.str(F.labels[1]) }));
@@ -204,7 +212,7 @@ function bracketsFromPairs(L, pairs) {
 }
 
 function severalFigures(r, L) {
-  const S = r.several, F = r.fig, resp = r.groups.response, calls = [], fig = [], notes = [];
+  const S = r.several, F = r.fig, resp = tfResp(r, r.groups.response), calls = [], fig = [], notes = [];
   calls.push(L.lang === 'm' ? 'design_labels = ' + strsOf(L, F.labels) + ';' : L.assign('design_labels', strsOf(L, F.labels)));
   const items = fld(L, 'sm', 'items');
   if (F.section === 'means') {
@@ -344,8 +352,8 @@ function steadyFigures(r, L) {
 const by = (L, R, py, m) => (L.lang === 'R' ? R : L.lang === 'py' ? py : m);
 
 // The values a distribution figure draws: every observation pooled, or the outcomes x.
-function valuesLine(L, pooled) {
-  if (!pooled) return [by(L, 'plot_v <- x', 'plot_v = x', 'plot_v = x;')];
+function valuesLine(L, pooled, xv = 'x') {
+  if (!pooled) return [by(L, 'plot_v <- ' + xv, 'plot_v = ' + xv, 'plot_v = ' + xv + ';')];
   return [by(L, 'plot_v <- unlist(lapply(reps, function(r) r$v))', 'plot_v = np.concatenate([np.asarray(r["v"], float) for r in reps])', 'plot_v = [reps.v];')];
 }
 
@@ -431,8 +439,8 @@ function exploreFigures(r, L) {
     fig.push('strips', 'intervals');
     notes.push('The replication outcomes as dots with their mean, and the t interval over them' + (tally ? ' above each replication\'s own interval over its observations.' : '.'));
   } else if (F.section === 'normality') {
-    calls.push(...valuesLine(L, F.pooledQQ));
-    calls.push(...call(L, 'fig_qq', ['plot_v', L.str(F.pooledQQ ? resp : F.outcomeAxis), L.str((F.pooledQQ ? 'Pooled observations' : 'Replication outcomes') + ': normal quantile-quantile plot')]));
+    calls.push(...valuesLine(L, F.pooledQQ, r.explore && r.explore.normTf ? 'x_tf' : 'x'));
+    calls.push(...call(L, 'fig_qq', ['plot_v', L.str(F.pooledQQ ? resp : F.qqAxis || F.outcomeAxis), L.str((F.pooledQQ ? 'Pooled observations' : 'Replication outcomes') + ': normal quantile-quantile plot')]));
     fig.push('qq');
     notes.push('The normal quantile-quantile plot: each sorted value against the normal quantile at its plotting position (R\'s ppoints), with a dashed line through the quartiles (R\'s qqline).');
   } else return { calls: [] };

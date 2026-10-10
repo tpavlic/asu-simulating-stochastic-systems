@@ -349,6 +349,8 @@ select:focus-visible, .btn-run:focus-visible, .btn-run2:focus-visible, .btn-clea
 .notice-info .notice-badge { background: var(--accent); font-style: italic; font-family: Georgia, serif; }
 .notice-ok .notice-badge { background: var(--ok); font-weight: 700; }
 .notice-body { min-width: 0; }
+.tf-note { margin: 8px 0 4px; }
+.tf-note .notice { margin-bottom: 2px; }
 /* Check verdicts as running text at .84rem: the data red and the muted gray
    sit within a tenth of 4.5:1 on the tinted notice backgrounds, so the text
    takes darker stand-ins (5.6:1 and 6.3:1 on the warn tint; THEME.md). */
@@ -14917,6 +14919,14 @@ function oneBody(r, L) {
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
     if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
+  if (o.interval && tfOn(r)) {
+    out.push(L.sect('Back-transformed interval'));
+    out.push(...commentLines(c, 'The interval above, carried back to the response\'s units: its center is the ' + ascii(o.center) + '.', c));
+    const ctr = o.np ? f('sr', 'estimate') : f('d', 'mean');
+    out.push(L.assign('bt', 'back_interval(' + (o.np ? f('sr', 'lo') : f('ti', 'lo')) + ', ' + (o.np ? f('sr', 'hi') : f('ti', 'hi')) + ', outcome_transform)'));
+    out.push(rep(L, r, 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
+      rep(L, r, 'back-transformed lower', f('bt', 'lo')), rep(L, r, 'back-transformed upper', f('bt', 'hi')));
+  }
   if (o.checks) {
     need.push('shapiro');
     out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', o.np ? 'the Wilcoxon signed-rank interval' : 'the t interval'));
@@ -14978,6 +14988,19 @@ function shapiroLine(r, L, prefix, v) {
     : 'shapiro_check(' + L.str(prefix) + ', ' + v + ', ' + w + ', ' + p + ')';
 }
 
+// Under the log, a comparison's estimate and interval carried back as a ratio
+// A / B, under their own heading; `ctr`, `lo`, and `hi` are the expressions
+// for them on the log scale.
+function ratioSection(r, L, out, ctr, lo, hi) {
+  if (!r.two || !r.two.ratio) return;
+  const c = L.comment;
+  out.push(L.sect('Ratio A / B (back-transformed)'));
+  out.push(...commentLines(c, 'A difference of logs is the log of a ratio, and so the exponential carries the ' + ascii(r.two.ratio) + ' and its interval back to the response\'s units.', c));
+  out.push(L.assign('ratio_ci', 'back_interval(' + lo + ', ' + hi + ', outcome_transform)'));
+  out.push(rep(L, r, 'ratio', 'back_transform(' + ctr + ', outcome_transform)'), rep(L, r, 'ratio lower', FIELD[L.lang]('ratio_ci', 'lo')),
+    rep(L, r, 'ratio upper', FIELD[L.lang]('ratio_ci', 'hi')));
+}
+
 // Two Systems, independent replications: descriptives of both designs; the
 // Welch, pooled-variance t, or Wilcoxon rank-sum comparison; the checks a
 // parametric comparison carries; the F ratio of the variances; and the
@@ -15005,6 +15028,7 @@ function twoBody(r, L) {
     out.push(rep(L, r, 'shift lower', f('rs', 'lo')), rep(L, r, 'shift upper', f('rs', 'hi')));
     if ('achieved level' in r.expect) out.push(rep(L, r, 'achieved level', f('rs', 'achieved')));
     if (L.tidy) tidyTest(out, L, 'rs$test', 'The rank-sum test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
+    ratioSection(r, L, out, f('rs', 'estimate'), f('rs', 'lo'), f('rs', 'hi'));
   } else {
     need.push('twoSample');
     out.push(L.sect((o.pooled ? 'Pooled-variance t' : 'Welch') + ' comparison of A and B'));
@@ -15016,6 +15040,7 @@ function twoBody(r, L) {
     if (o.pooled) out.push(rep(L, r, 'pooled sd', f('w', 'sp')));
     for (const [name, k] of [['se', 'se'], ['df', 'df'], ['t', 't'], ['p', 'p'], ['lower', 'lo'], ['upper', 'hi'], ['half-width', 'hw']]) out.push(rep(L, r, name, f('w', k)));
     if (L.tidy) tidyTest(out, L, 'w$test', (o.pooled ? 'The pooled-variance t test' : 'Welch\'s t test') + ' as t.test returns it, tidied by broom into a one-row tibble (none when neither design varies, where t.test stops).', true);
+    ratioSection(r, L, out, f('w', 'diff'), f('w', 'lo'), f('w', 'hi'));
     const tName = o.pooled ? 'the pooled-variance t comparison' : 'Welch\'s t comparison';
     out.push(...checkSect(L, 'Normality of each design\'s outcomes (Shapiro-Wilk)', tName));
     out.push(shapiroLine(r, L, 'shapiro A', 'a'), shapiroLine(r, L, 'shapiro B', 'b'));
@@ -15110,6 +15135,8 @@ function twoPairedBody(r, L) {
   }
   if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
+  if (o.np) ratioSection(r, L, out, f('sr', 'estimate'), f('sr', 'lo'), f('sr', 'hi'));
+  else ratioSection(r, L, out, f('pr', 'meanD'), f('pr', 'lo'), f('pr', 'hi'));
   if (!o.np) {
     need.push('shapiro');
     out.push(...checkSect(L, 'Normality of the differences (Shapiro-Wilk)', 'the paired t'));
@@ -15480,16 +15507,23 @@ function sevMeans(r, L, out, need) {
       : lang === 'py' ? '[signed_rank(x, sm["perLevel"]) for x in groups]'
         : "cellfun(@(x) signed_rank(x, sm.perLevel), groups, 'UniformOutput', false)"));
   }
+  if (tfOn(r)) out.push(...commentLines(c, 'Each design\'s interval is also carried back to the response\'s units, as an interval on its ' + ascii(S.center) + '.', c));
   for (let i = 0; i < S.k; i++) {
     const d = 'design ' + (i + 1) + ' ';
     out.push(rep(L, r, d + 'R', el(f('sm', 'items'), i, 'n')));
     const lo = S.np ? el('srs', i, 'lo') : el(f('sm', 'items'), i, 'lo'), hi = S.np ? el('srs', i, 'hi') : el(f('sm', 'items'), i, 'hi');
+    const ctr = S.np ? el('srs', i, 'estimate') : el(f('sm', 'items'), i, 'mean');
     if (S.np) {
-      out.push(rep(L, r, d + 'pseudo-median', el('srs', i, 'estimate')), rep(L, r, d + 'wilcoxon lower', lo), rep(L, r, d + 'wilcoxon upper', hi));
+      out.push(rep(L, r, d + 'pseudo-median', ctr), rep(L, r, d + 'wilcoxon lower', lo), rep(L, r, d + 'wilcoxon upper', hi));
       out.push(repYesNo(L, r, d + 'exact', el('srs', i, 'exact')));
     } else {
       for (const k of ['mean', 'sd', 'se', 'df']) out.push(rep(L, r, d + k, el(f('sm', 'items'), i, k)));
       out.push(rep(L, r, d + 'lower', lo), rep(L, r, d + 'upper', hi));
+    }
+    if (tfOn(r)) {
+      out.push(L.assign('bt', 'back_interval(' + lo + ', ' + hi + ', outcome_transform)'));
+      out.push(rep(L, r, d + 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
+        rep(L, r, d + 'back-transformed lower', f('bt', 'lo')), rep(L, r, d + 'back-transformed upper', f('bt', 'hi')));
     }
     if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
   }
@@ -15525,6 +15559,7 @@ function sevDiffs(r, L, out, need) {
   else out.push("if strcmp(family, 'control'), family_pairs = " + pairsExpr(lang, true) + '; else, family_pairs = ' + pairsExpr(lang, false) + '; end');
   out.push(L.assign('C', lang === 'R' ? 'length(family_pairs)' : lang === 'py' ? 'len(family_pairs)' : 'size(family_pairs, 1)'), L.assign('per_c', '1 - alpha / C'));
   out.push(rep(L, r, 'C', 'C'), rep(L, r, 'per-comparison level', 'per_c'));
+  if (r.transform === 'log') out.push(...commentLines(c, 'A difference of logs is the log of a ratio, and so each comparison is also carried back as a ratio, its estimate and both ends of its interval through the exponential.', c));
   if (!S.np && S.paired) out.push(c + 'Each paired t interval takes its pair\'s differences as normal, which the Shapiro-Wilk lines after it check.');
   else if (!S.np) out.push(...commentLines(c, 'The Welch intervals take each design\'s outcomes as normal, which the Shapiro-Wilk lines under the means check.', c));
 
@@ -15534,9 +15569,14 @@ function sevDiffs(r, L, out, need) {
   const adj = lang === 'R' ? 'min(1, C * ' + f('cmp', 'p') + ')' : lang === 'py' ? 'np.minimum(1, C * ' + f('cmp', 'p') + ')' : "min(1, C * " + f('cmp', 'p') + ", 'includenan')";
   const lo = f('cmp', 'lo'), hi = f('cmp', 'hi');
   const excl = lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0';
+  // Under the log, each comparison's estimate and interval carried back as a ratio, after its interval.
+  const mid = f('cmp', S.np ? 'estimate' : S.paired ? 'meanD' : 'diff');
+  const ratio = r.transform === 'log'
+    ? [[' ratio', null, 'back_transform(' + mid + ', outcome_transform)'], [' ratio lower', null, 'back_transform(' + lo + ', outcome_transform)'],
+      [' ratio upper', null, 'back_transform(' + hi + ', outcome_transform)']] : [];
   const keys = S.np
-    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
-    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
+    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
+    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
   const varOf = suffix => 'page_' + P + suffix.replace(/ /g, '_');
   const items = keys.map(([suffix, , , yesno]) => [suffix, varOf(suffix), !!yesno]);
   const shapiro = !S.np && S.paired;
@@ -15935,6 +15975,10 @@ function exploreBody(r, L, { csv = false } = {}) {
     out.push(L.assign('x', lang === 'R' ? 'outcome[is.finite(outcome)]' : lang === 'py' ? 'outcome[np.isfinite(outcome)]' : 'outcome(isfinite(outcome))'));
     out.push(L.tidy ? 'd <- out_tbl |> filter(is.finite(outcome)) |> describe_tbl(outcome)' : L.assign('d', 'describe(x)'));
     for (const k of DESC_KEYS) out.push(rep(L, r, k, f('d', k)));
+    if (X.normTf) {
+      out.push(...commentLines(c, 'The Normality section, and Levene\'s test under Equal variances, run on the outcomes put through outcome_transform, as on the page; every other section stays on the response\'s own scale.', c));
+      out.push(L.assign('x_tf', 'transform_outcomes(x, outcome_transform)'));
+    }
   }
 
   // Every replication together.
@@ -15970,10 +16014,11 @@ function exploreBody(r, L, { csv = false } = {}) {
     out.push(...checkSect(L, 'Normality of the replication outcomes (Shapiro-Wilk)', 'the t interval over the outcomes'));
     out.push(...commentLines(c, 'The test assumes independent values, which the replication outcomes are and pooled observations are not, and so it is made on the outcomes only.', c));
     const w = lit(L, e['shapiro W [optional]']), p = lit(L, e['shapiro p [optional]']);
+    const xv = X.normTf ? 'x_tf' : 'x';
     if (L.tidy) {
-      out.push('sw <- shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+      out.push('sw <- shapiro_check("shapiro", ' + xv + ', ' + w + ', ' + p + ')');
       tidyTest(out, L, 'sw', 'The test as shapiro.test returns it, tidied by broom into a one-row tibble (none when the check is not made).', true);
-    } else out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
+    } else out.push(lang === 'm' ? "shapiro_check('shapiro', " + xv + ', alpha, ' + w + ', ' + p + ');' : 'shapiro_check("shapiro", ' + xv + ', ' + w + ', ' + p + ')');
   }
 
   // Equal variances.
@@ -15987,6 +16032,7 @@ function exploreBody(r, L, { csv = false } = {}) {
     need.push('levene');
     out.push(...checkSect(L, 'Equal variances across datasets (Levene, median-centered)', 'the procedures that pool the variances'));
     out.push(...commentLines(c, 'The one-way analysis of variance of each outcome\'s absolute deviation from its own dataset\'s median (Brown and Forsythe\'s form), across the datasets in spread_groups.', c));
+    if (tfOn(r)) out.push(transformList(L, 'spread_groups'));
     out.push(L.assign('lv', 'levene_test(spread_groups)'));
     out.push(rep(L, r, 'levene F', f('lv', 'F')), rep(L, r, 'levene df1', f('lv', 'df1')), rep(L, r, 'levene df2', f('lv', 'df2')), rep(L, r, 'levene p', f('lv', 'p')));
     if (L.tidy) tidyTest(out, L, 'lv$test', 'The analysis of variance of the distances as anova(lm(distance ~ group)) returns it, each group a dataset, tidied by broom into a tibble (none when the distances do not vary within any dataset).', true);
@@ -16001,6 +16047,10 @@ function settingsBlock(recipe, L) {
   // A page may say which settings the script reads and which choices are written into its code.
   for (const note of recipe.settingsNote || []) out.push(...commentLines(L.comment, ascii(note), L.comment));
   out.push(L.assign('level', String(recipe.level)), L.assign('alpha', '1 - level'));
+  if (tfOn(recipe)) {
+    out.push(...commentLines(L.comment, 'The transform every replication outcome is put through before the analysis (in the Data section): none, log, sqrt, asin_sqrt, logit, or reciprocal.', L.comment));
+    out.push(L.assign('outcome_transform', L.str(recipe.transform)));
+  }
   for (const [k, v] of Object.entries(recipe.settings || {})) out.push(L.assign(k, lit(L, v)));
   out.push(L.comment + CHECK_NOTE, L.assign('check_details', L.bool(false)), L.lang === 'm' ? 'report_start(check_details);' : 'report_start(check_details)');
   return out;
@@ -16028,6 +16078,44 @@ function pairsBlock(L, r) {
   return out;
 }
 
+/** Whether a recipe's outcomes are put through a transform other than none. */
+export function tfOn(recipe) {
+  return !!recipe.transform && recipe.transform !== 'none';
+}
+
+// A list of outcome vectors put through outcome_transform, one by one.
+function transformList(L, g) {
+  if (L.lang === 'R') return g + ' <- lapply(' + g + ', transform_outcomes, tf = outcome_transform)';
+  if (L.lang === 'py') return g + ' = [transform_outcomes(v, outcome_transform) for v in ' + g + ']';
+  return g + ' = cellfun(@(v) transform_outcomes(v, outcome_transform), ' + g + ', \'UniformOutput\', false);';
+}
+
+// The lines that transform the outcomes, after the data are in and before any
+// tibble is built from them: x (not under the pooled override, which a recipe
+// marks with no transform), a and b, or each design of groups. Summary and
+// Plots transforms its outcomes in the sections that use them instead.
+function transformBlock(recipe, L) {
+  if (!tfOn(recipe)) return [];
+  const one = v => L.assign(v, 'transform_outcomes(' + v + ', outcome_transform)');
+  const lines = [];
+  if (recipe.data) lines.push(one('x'));
+  if (recipe.pairs || recipe.dataA) lines.push(one('a'), one('b'));
+  if (recipe.groups) lines.push(transformList(L, 'groups'));
+  if (!lines.length) return [];
+  const c = L.comment;
+  const out = ['', ...commentLines(c, 'Every replication outcome is put through outcome_transform before the analysis, as on the page. ' +
+    'The report lines below are on the transformed scale, except those named back-transformed or ratio, which are in the response\'s own units.', c), ...lines];
+  // Several Systems orders its designs and screens for the best by direction,
+  // which the reciprocal reverses.
+  if (recipe.groups && recipe.transform === 'reciprocal') {
+    out.push(...commentLines(c, 'The reciprocal reverses the order of the outcomes, and so the best design on its scale is the one at the other end: the direction flips.', c));
+    if (L.lang === 'R') out.push('direction <- if (direction == "max") "min" else "max"');
+    else if (L.lang === 'py') out.push('direction = "min" if direction == "max" else "max"');
+    else out.push("if strcmp(direction, 'max'), direction = 'min'; else, direction = 'max'; end");
+  }
+  return out;
+}
+
 // The Data block: the embedded data with the commented lines that read the
 // same data from their CSV files, or in CSV mode those lines alone, live.
 function dataBlock(recipe, L, csv) {
@@ -16045,6 +16133,7 @@ function dataBlock(recipe, L, csv) {
     const read = csvReadBlock(L, recipe, { live: false });
     if (read.length) out.push('', ...read);
   }
+  out.push(...transformBlock(recipe, L));
   if (L.tidy) out.push(...tidyDataBlock(recipe, L));
   if (recipe.spread) out.push(...spreadBlock(L, recipe.spread));
   return out;
@@ -16458,7 +16547,7 @@ export function analysisScript(recipe, lang, { csv = false } = {}) {
   const { body, need } = page[L.lang](recipe, L, { csv: fromCsv });
   // The figures the page's view shows, drawn after every result is printed.
   const figs = figureBlock(recipe, L);
-  const helpers = Array.from(new Set((need || []).concat(figs.need))).map(k => {
+  const helpers = Array.from(new Set((need || []).concat(tfOn(recipe) ? ['transform'] : [], figs.need))).map(k => {
     const s = snippets[k];
     if (!s) throw new RangeError('analysisScript: no ' + lang + ' snippet ' + k);
     return s.trim();
@@ -19841,6 +19930,14 @@ import { FIG_R } from './figure_lib_r.js';
 import { FIG_TIDY } from './figure_lib_tidy.js';
 import { FIG_PY } from './figure_lib_py.js';
 import { FIG_M } from './figure_lib_m.js';
+import { transformOf, transformLabel } from '../stats/transform.js';
+
+// A label on the recipe's transformed scale: "Replication outcome" becomes
+// "Log of replication outcome", and a difference's label names its scale.
+const tfLabel = (r, label) => transformLabel(label, r.transform || 'none');
+const tfDiff = (r, label) => (!r.transform || r.transform === 'none' ? label
+  : label.replace(/, A - B$/, '') + ' on the ' + transformOf(r.transform).scale + ' scale, A - B');
+const tfResp = (r, resp) => (!r.transform || r.transform === 'none' ? resp : 'the ' + transformOf(r.transform).label.toLowerCase() + ' of ' + resp);
 
 /** The figure helpers by dialect key: 'R', 'tidy', 'py', 'm'. */
 export const FIG = { R: FIG_R, tidy: FIG_TIDY, py: FIG_PY, m: FIG_M };
@@ -19936,12 +20033,12 @@ function twoIndependentFigures(r, L) {
   need.push(o.np ? 'signedRank' : 'tInterval');
   calls.push(L.assign('ia', own + '(a, level)'), L.assign('ib', own + '(b, level)'));
   const mid = o.np ? [fld(L, 'ia', 'estimate'), fld(L, 'ib', 'estimate')] : [fld(L, 'da', 'mean'), fld(L, 'db', 'mean')];
-  calls.push(...call(L, 'fig_strips', [listOf(L, ['a', 'b']), strsOf(L, F.labels), L.str('Replication outcome'), L.str('Replication outcomes and each design\'s interval')],
+  calls.push(...call(L, 'fig_strips', [listOf(L, ['a', 'b']), strsOf(L, F.labels), L.str(tfLabel(r, 'Replication outcome')), L.str('Replication outcomes and each design\'s interval')],
     { mid: vecOf(L, mid), lo: vecOf(L, [fld(L, 'ia', 'lo'), fld(L, 'ib', 'lo')]), hi: vecOf(L, [fld(L, 'ia', 'hi'), fld(L, 'ib', 'hi')]) }));
   const v = o.np ? 'rs' : 'w';
   const [m, lo, hi] = [fld(L, v, o.np ? 'estimate' : 'diff'), fld(L, v, 'lo'), fld(L, v, 'hi')];
   calls.push(...call(L, 'fig_intervals', [vecOf(L, [m]), vecOf(L, [lo]), vecOf(L, [hi]), strsOf(L, ['A - B']),
-    L.str(o.np ? 'Shift in location, A - B' : 'Difference in means, A - B'), L.str('The difference against zero')],
+    L.str(tfDiff(r, o.np ? 'Shift in location, A - B' : 'Difference in means, A - B')), L.str('The difference against zero')],
   { ref: '0', flagged: vecOf(L, [orOf(L, lo + ' > 0', hi + ' < 0')]) }));
   return {
     notes: ['Each design\'s replication outcomes with its own ' + (o.np ? 'Wilcoxon signed-rank interval' : 't interval') + ', and the interval on the ' +
@@ -19956,7 +20053,7 @@ function twoPairedFigures(r, L) {
   const o = r.two, F = r.fig, calls = [];
   const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
     : [fld(L, 'pr', 'meanD'), fld(L, 'pr', 'lo'), fld(L, 'pr', 'hi')];
-  calls.push(...call(L, 'fig_strips', [listOf(L, [fld(L, 'pr', 'diffs')]), strsOf(L, ['A - B']), L.str('Difference A - B in each matched pair'),
+  calls.push(...call(L, 'fig_strips', [listOf(L, [fld(L, 'pr', 'diffs')]), strsOf(L, ['A - B']), L.str('Difference A - B in each matched pair' + (r.transform && r.transform !== 'none' ? ', ' + transformOf(r.transform).scale + ' scale' : '')),
     L.str('Paired differences')], { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]), ref: '0' }));
   const slope = F.view === 'slope';
   if (slope) calls.push(...call(L, 'fig_pairs_slopes', ['a', 'b'], { label_a: L.str(F.labels[0]), label_b: L.str(F.labels[1]) }));
@@ -20003,7 +20100,7 @@ function bracketsFromPairs(L, pairs) {
 }
 
 function severalFigures(r, L) {
-  const S = r.several, F = r.fig, resp = r.groups.response, calls = [], fig = [], notes = [];
+  const S = r.several, F = r.fig, resp = tfResp(r, r.groups.response), calls = [], fig = [], notes = [];
   calls.push(L.lang === 'm' ? 'design_labels = ' + strsOf(L, F.labels) + ';' : L.assign('design_labels', strsOf(L, F.labels)));
   const items = fld(L, 'sm', 'items');
   if (F.section === 'means') {
@@ -20143,8 +20240,8 @@ function steadyFigures(r, L) {
 const by = (L, R, py, m) => (L.lang === 'R' ? R : L.lang === 'py' ? py : m);
 
 // The values a distribution figure draws: every observation pooled, or the outcomes x.
-function valuesLine(L, pooled) {
-  if (!pooled) return [by(L, 'plot_v <- x', 'plot_v = x', 'plot_v = x;')];
+function valuesLine(L, pooled, xv = 'x') {
+  if (!pooled) return [by(L, 'plot_v <- ' + xv, 'plot_v = ' + xv, 'plot_v = ' + xv + ';')];
   return [by(L, 'plot_v <- unlist(lapply(reps, function(r) r$v))', 'plot_v = np.concatenate([np.asarray(r["v"], float) for r in reps])', 'plot_v = [reps.v];')];
 }
 
@@ -20230,8 +20327,8 @@ function exploreFigures(r, L) {
     fig.push('strips', 'intervals');
     notes.push('The replication outcomes as dots with their mean, and the t interval over them' + (tally ? ' above each replication\'s own interval over its observations.' : '.'));
   } else if (F.section === 'normality') {
-    calls.push(...valuesLine(L, F.pooledQQ));
-    calls.push(...call(L, 'fig_qq', ['plot_v', L.str(F.pooledQQ ? resp : F.outcomeAxis), L.str((F.pooledQQ ? 'Pooled observations' : 'Replication outcomes') + ': normal quantile-quantile plot')]));
+    calls.push(...valuesLine(L, F.pooledQQ, r.explore && r.explore.normTf ? 'x_tf' : 'x'));
+    calls.push(...call(L, 'fig_qq', ['plot_v', L.str(F.pooledQQ ? resp : F.qqAxis || F.outcomeAxis), L.str((F.pooledQQ ? 'Pooled observations' : 'Replication outcomes') + ': normal quantile-quantile plot')]));
     fig.push('qq');
     notes.push('The normal quantile-quantile plot: each sorted value against the normal quantile at its plotting position (R\'s ppoints), with a dashed line through the quartiles (R\'s qqline).');
   } else return { calls: [] };
@@ -20672,6 +20769,7 @@ import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
          resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { slug } from './export.js';
+import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
 import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
@@ -20800,8 +20898,11 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
  *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
  *   block holds no values.
  */
-export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan }) {
-  const xs = Array.from(x);
+export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform }) {
+  // The transform applies to replication outcomes, never to the pooled observations.
+  const tf = !pooled && isTransform(transform) ? transform : 'none';
+  const raw = Array.from(x);
+  const xs = tf === 'none' ? raw : Array.from(applyTransform(raw, tf).values);
   const np = proc === 'np' && !pooled;
   const o = outcomeVector(ds);
   const r = baseRecipe({
@@ -20812,8 +20913,9 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   });
   // Past the cap the recipe holds no data, and its scripts read the CSV file.
   const csvOnly = oneTooBig({ pooled, x: xs });
-  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: csvOnly ? [] : xs,
+  r.data = { name: ds.name, response: ds.response, unit: ds.unit, ids: pooled ? null : ids, values: csvOnly ? [] : raw,
              dropped: pooled ? [] : o.dropped, how: o.how, pooled };
+  r.transform = tf;
   if (csvOnly) r.csvOnly = true;
   // The pooled observations come from the Observations CSV, the outcomes from the Replication summary CSV.
   r.csv = [csvEntry(ds, pooled ? 'observations' : 'replications', 'x')];
@@ -20821,14 +20923,22 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   const e = r.expect;
   Object.assign(e, { n: s.n, mean: s.mean, sd: s.sd, se: s.se, min: s.min, q1: s.q1, median: s.median, q3: s.q3, max: s.max });
   const interval = s.n >= 2;
+  // The interval's center and ends, carried back to the response's units under a transform.
+  const back = (ctr, lo, hi) => {
+    if (tf === 'none') return;
+    const bi = backInterval(lo, hi, tf);
+    Object.assign(e, { 'back-transformed center': backTransform(ctr, tf), 'back-transformed lower': bi.lo, 'back-transformed upper': bi.hi });
+  };
   if (interval && np) {
     const sr = signedRank(xs, { level });
     Object.assign(e, { 'pseudo-median': sr.estimate, V: sr.V, 'signed-rank p': sr.p, exact: ex(sr.exact),
                        'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
     if (sr.exact) e['achieved level'] = sr.achieved;
+    back(sr.estimate, sr.lo, sr.hi);
   } else if (interval) {
     const ti = tInterval(xs, level);
     Object.assign(e, { df: ti.df, 't quantile': ti.t, 'half-width': ti.hw, lower: ti.lo, upper: ti.hi });
+    back(s.mean, ti.lo, ti.hi);
   }
   const checks = interval && !pooled && !np && shapiroOk(xs);
   if (checks) Object.assign(e, shapiroExpect('shapiro ', xs));
@@ -20844,9 +20954,10 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
       plan: { h: plan.abs, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power } });
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
-  r.one = { pooled, np, interval, variance, checks, plan: planOut };
+  r.one = { pooled, np, interval, variance, checks, plan: planOut,
+            center: np ? 'back-transformed pseudo-median' : transformOf(tf).center };
   // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
-  r.fig = { xlab: outcomeAxis(ds, pooled), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
+  r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}
@@ -20873,6 +20984,28 @@ function designBlock(ds, e) {
            dropped: e.dropped, how: OUTCOME_HOW[ds.kind] || OUTCOME_HOW.tally };
 }
 
+// Values put through a transform ('none' leaves them as they are).
+function tfValues(v, tf) {
+  return tf === 'none' ? Array.from(v) : Array.from(applyTransform(v, tf).values);
+}
+
+// Under a transform, a design's center and interval carried back to the
+// response's units, added to `expect` under the design's key prefix `d`.
+function backExpect(e, d, tf, ctr, lo, hi) {
+  if (tf === 'none') return;
+  const bi = backInterval(lo, hi, tf);
+  Object.assign(e, { [d + 'back-transformed center']: backTransform(ctr, tf), [d + 'back-transformed lower']: bi.lo, [d + 'back-transformed upper']: bi.hi });
+}
+
+// Under the log, a comparison's estimate and interval carried back as a ratio
+// A / B, added to `expect`; the name of what was carried back, or null.
+function ratioExpect(e, tf, ctr, lo, hi, what) {
+  if (tf !== 'log') return null;
+  const bi = backInterval(lo, hi, tf);
+  Object.assign(e, { ratio: backTransform(ctr, tf), 'ratio lower': bi.lo, 'ratio upper': bi.hi });
+  return what;
+}
+
 /**
  * The Two Systems recipe, independent or paired replications.
  * @param {{ dsA: object, dsB: object, eA: {v: ArrayLike<number>, ids: any[], dropped: any[]}, eB: object,
@@ -20892,7 +21025,8 @@ export function twoRecipe(o) {
   if (o.mode === 'paired') return twoPairedRecipe(o);
   if (o.mode && o.mode !== 'independent') throw new RangeError('twoRecipe: unknown mode ' + o.mode);
   const { dsA, dsB, eA, eB, proc, level, plan } = o;
-  const a = Array.from(eA.v), b = Array.from(eB.v);
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const a = tfValues(eA.v, tf), b = tfValues(eB.v, tf);
   const np = proc === 'np', pooled = proc === 'pooled';
   const alpha = 1 - level;
   const w = pooled ? pooledT(a, b, level) : welch(a, b, level);
@@ -20905,9 +21039,11 @@ export function twoRecipe(o) {
   });
   r.dataA = designBlock(dsA, eA);
   r.dataB = designBlock(dsB, eB);
+  r.transform = tf;
   r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   Object.assign(e, { R_A: w.n1, R_B: w.n2, 'mean A': w.mean1, 'mean B': w.mean2, 'sd A': w.sd1, 'sd B': w.sd2 });
+  let ratio = null;
   // Levene's test joins the checks line under the pooled t only, and only when
   // each design has two outcomes; a test with no spread to compare reports none.
   const leveneOn = !np && pooled && a.length >= 2 && b.length >= 2;
@@ -20916,10 +21052,12 @@ export function twoRecipe(o) {
     Object.assign(e, { 'median A': summary(a).median, 'median B': summary(b).median, shift: rs.estimate, W: rs.W,
                        'rank-sum p': rs.p, exact: ex(rs.exact), 'shift lower': rs.lo, 'shift upper': rs.hi });
     if (rs.exact) e['achieved level'] = rs.achieved;
+    ratio = ratioExpect(e, tf, rs.estimate, rs.lo, rs.hi, 'shift');
   } else {
     Object.assign(e, { difference: w.diff });
     if (pooled) e['pooled sd'] = w.sp;
     Object.assign(e, { se: w.se, df: w.df, t: w.t, p: w.p, lower: w.lo, upper: w.hi, 'half-width': w.hw });
+    ratio = ratioExpect(e, tf, w.diff, w.lo, w.hi, 'difference');
     if (leveneOn) {
       const lv = levene([a, b]);
       if (Number.isFinite(lv.p)) Object.assign(e, { 'levene F': lv.F, 'levene p': lv.p });
@@ -20957,7 +21095,7 @@ export function twoRecipe(o) {
     }
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, Rlo };
   }
-  r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut };
+  r.two = { mode: 'independent', np, pooled, fratio, checks: !np, levene: leveneOn, plan: planOut, ratio };
   // The page's two figures: each design's outcomes with its own interval, and the interval on the difference.
   r.fig = { labels: roleLabels(dsA, dsB) };
   r.settings = planOut ? { plan_h: plan.h, plan_delta: plan.delta, plan_power: plan.power } : {};
@@ -20976,7 +21114,10 @@ export function twoRecipe(o) {
 function twoPairedRecipe(o) {
   const { dsA, dsB, eA, eB, match, proc, level, plan } = o;
   const np = proc === 'np';
-  const x = Array.from(match.pairs, ([i]) => eA.v[i]), y = Array.from(match.pairs, ([, j]) => eB.v[j]);
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const vA = tfValues(eA.v, tf), vB = tfValues(eB.v, tf);
+  const x = Array.from(match.pairs, ([i]) => vA[i]), y = Array.from(match.pairs, ([, j]) => vB[j]);
+  const rawX = Array.from(match.pairs, ([i]) => eA.v[i]), rawY = Array.from(match.pairs, ([, j]) => eB.v[j]);
   const ids = match.pairs.map(([i, j]) => (match.by === 'id' ? String(eA.ids[i]) : String(eA.ids[i]) + '/' + String(eB.ids[j])));
   const pr = pairedT(x, y, level);
   const r = baseRecipe({
@@ -20985,8 +21126,9 @@ function twoPairedRecipe(o) {
     provenance: o.provenance || {},
     level
   });
+  r.transform = tf;
   r.pairs = {
-    ids, a: x, b: y, by: match.by,
+    ids, a: rawX, b: rawY, by: match.by,
     unmatchedA: match.unmatchedA.map(i => String(eA.ids[i])), unmatchedB: match.unmatchedB.map(j => String(eB.ids[j])),
     droppedA: (eA.dropped || []).map(String), droppedB: (eB.dropped || []).map(String),
     nameA: dsA.name, nameB: dsB.name, response: dsA.response, unit: dsA.unit,
@@ -20995,15 +21137,18 @@ function twoPairedRecipe(o) {
   r.csv = [csvEntry(dsA, 'replications', 'a'), csvEntry(dsB, 'replications', 'b')];
   const e = r.expect;
   e.pairs = pr.n;
+  let ratio = null;
   const diffs = Array.from(pr.diffs);
   if (np) {
     const sr = signedRank(diffs, { level });
     Object.assign(e, { 'pseudo-median of differences': sr.estimate, V: sr.V, 'zero differences dropped': sr.zeros,
                        'signed-rank p': sr.p, exact: ex(sr.exact), 'wilcoxon lower': sr.lo, 'wilcoxon upper': sr.hi });
     if (sr.exact) e['achieved level'] = sr.achieved;
+    ratio = ratioExpect(e, tf, sr.estimate, sr.lo, sr.hi, 'pseudo-median of the differences');
   } else {
     Object.assign(e, { 'mean difference': pr.meanD, 'sd of differences': pr.sdD, se: pr.se, df: pr.df, t: pr.t, p: pr.p,
                        lower: pr.lo, upper: pr.hi, 'half-width': pr.hw });
+    ratio = ratioExpect(e, tf, pr.meanD, pr.lo, pr.hi, 'mean difference');
   }
   e.r = pr.r;
   // The paired t's checks line tests the differences for normality; the
@@ -21017,7 +21162,7 @@ function twoPairedRecipe(o) {
       plan: { h: plan.h, relative: false, rel: 0, delta: plan.delta, power: plan.power } });
     planOut = { h: plan.h, delta: plan.delta, power: plan.power, R: pr.n };
   }
-  r.two = { mode: 'paired', np, checks: !np, plan: planOut };
+  r.two = { mode: 'paired', np, checks: !np, plan: planOut, ratio };
   // The page's two figures: the differences with their interval, and the pairs in the view the page
   // shows (by replication, or as slopes).
   r.fig = { labels: roleLabels(dsA, dsB), view: o.view && o.view.pairView === 'slope' ? 'slope' : 'rep' };
@@ -21060,8 +21205,11 @@ export function severalRecipe(o) {
   const { list, groups, paired, match, level, proc, diffMode, ctrlIdx, dir, eps, plan } = o;
   const k = list.length, alpha = 1 - level, np = proc === 'np';
   const bench = o.bench != null && Number.isFinite(o.bench) ? o.bench : null;
-  const g = groups.map(x => Array.from(x));
+  // `groups` holds the outcomes as the data give them; every procedure runs on them transformed.
+  const tf = isTransform(o.transform) ? o.transform : 'none';
+  const g = groups.map(x => tfValues(x, tf));
   const r = baseRecipe({ page: 'several', title: o.title || 'Several Systems', provenance: o.provenance || {}, level });
+  r.transform = tf;
   // The data: the outcomes the page compared, with the ids they came from and
   // the replications left out (no outcome, or under pairing no partner in
   // every design).
@@ -21076,7 +21224,7 @@ export function severalRecipe(o) {
   } else ids = ovs.map(ov => ov.ids.map(String));
   r.groups = {
     names: list.map(d => d.name), response: responses.join(', '), unit: units.length === 1 ? units[0] : '',
-    values: g, paired, by: paired ? match.by : null, ids,
+    values: groups.map(x => Array.from(x)), paired, by: paired ? match.by : null, ids,
     dropped: ovs.map(ov => ov.dropped.map(String)),
     unmatched: paired ? match.unmatched.map((u, d) => u.map(x => String(ovs[d].ids[x]))) : list.map(() => []),
     how: list.map(d => OUTCOME_HOW[d.kind] || OUTCOME_HOW.tally)
@@ -21093,6 +21241,7 @@ export function severalRecipe(o) {
       const sr = signedRank(x, { level: sm.perLevel }), d = 'design ' + (i + 1) + ' ';
       Object.assign(e, { [d + 'R']: x.length, [d + 'pseudo-median']: sr.estimate, [d + 'wilcoxon lower']: sr.lo,
                          [d + 'wilcoxon upper']: sr.hi, [d + 'exact']: ex(sr.exact) });
+      backExpect(e, d, tf, sr.estimate, sr.lo, sr.hi);
       if (bench != null) e[d + 'vs benchmark'] = benchWord(sr.lo, sr.hi, bench);
     });
   } else {
@@ -21100,6 +21249,7 @@ export function severalRecipe(o) {
       const d = 'design ' + (i + 1) + ' ';
       Object.assign(e, { [d + 'R']: it.n, [d + 'mean']: it.mean, [d + 'sd']: it.sd, [d + 'se']: it.se, [d + 'df']: it.df,
                          [d + 'lower']: it.lo, [d + 'upper']: it.hi });
+      backExpect(e, d, tf, it.mean, it.lo, it.hi);
       if (bench != null) e[d + 'vs benchmark'] = benchWord(it.lo, it.hi, bench);
     });
     // The checks line under the means tests each design's outcomes.
@@ -21114,14 +21264,16 @@ export function severalRecipe(o) {
     const famR = bonferroniFamilyRank(g, { mode: diffMode, control: ctrlIdx, level, paired });
     for (const c of famR.comparisons) {
       const p = 'shift ' + pairLabel(c.i, c.j);
-      Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' p']: c.p,
-                         [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
+      if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
+      Object.assign(e, { [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
     }
   } else {
     for (const c of fam.comparisons) {
       const p = 'diff ' + pairLabel(c.i, c.j);
-      Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi, [p + ' t']: c.t,
-                         [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
+      if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
+      Object.assign(e, { [p + ' t']: c.t, [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
       // Under pairing the checks line tests each pair's differences; otherwise it
       // repeats the designs' own checks, reported once under the means.
       if (paired) {
@@ -21156,7 +21308,7 @@ export function severalRecipe(o) {
     'plan diffs widest pair': hpD.n == null ? 'none' : pairLabel(hpD.pair[0], hpD.pair[1]) });
   if (np) { e['plan means n (rank)'] = inflate(hpM.n); e['plan diffs n (rank)'] = inflate(hpD.n); }
 
-  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps,
+  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps, center: np ? 'back-transformed pseudo-median' : transformOf(tf).center,
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
   // Every choice a reader may edit is a setting; the script forms the pairs it
   // compares from control and family at run time.
@@ -21298,7 +21450,9 @@ function severalRank(r, o, g) {
  * second-stage sizes, or the reason the screen is not defined.
  */
 function severalSubset(r, o, g) {
-  const { level, dir, eps } = o;
+  const { level, eps } = o;
+  // The reciprocal reverses the order, and so on its scale the direction flips.
+  const dir = transformOf(r.transform).decreasing ? (o.dir === 'min' ? 'max' : 'min') : o.dir;
   const alpha = 1 - level, e = r.expect;
   const ss = subsetSelection(g, { alpha, delta: eps, dir });
   r.several.subset = { ok: ss.ok, reason: ss.ok ? '' : ss.reason };
@@ -21546,6 +21700,8 @@ function exploreView(ds, view, nOut) {
 export function exploreRecipe(o) {
   const { ds, spread, level } = o;
   const r = baseRecipe({ page: 'explore', title: o.title || 'Summary of ' + ds.name, provenance: o.provenance || { dataset: ds.name }, level });
+  // The transform applies to the Normality and Equal variances sections only.
+  const tf = isTransform(o.transform) ? o.transform : 'none';
   // Levene's groups (other datasets' outcomes) stay embedded and are read from no file.
   r.csv = recordsCsv(ds);
   if (exploreTooBig({ ds, spread })) r.csvOnly = true;
@@ -21602,9 +21758,26 @@ export function exploreRecipe(o) {
     Object.assign(e, { 'interval df': ti.df, 'interval t quantile': ti.t, 'interval half-width': ti.hw, 'interval lower': ti.lo, 'interval upper': ti.hi });
   }
 
+  // A transform that cannot take every outcome of the shown dataset leaves the
+  // Normality section without a result, and one that cannot take every outcome
+  // of the datasets ticked under Equal variances leaves Levene's test without
+  // one, on the page and so in the scripts; each is decided on its own.
+  const spreadOn = spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2);
+  const fits = v => applyTransform(v, tf).bad.length === 0;
+  const normRefused = tf !== 'none' && !fits(x);
+  const spreadRefused = tf !== 'none' && spreadOn && !spread.groups.every(fits);
+  const word = transformOf(tf).label.toLowerCase();
+  const notes = [];
+  if (normRefused) notes.push('The page\'s ' + word + ' transform cannot take every replication outcome of this dataset, and so the page shows no normality result, and this script leaves it out.');
+  if (spreadRefused) notes.push('The page\'s ' + word + ' transform cannot take every replication outcome of the datasets ticked under Equal variances, and so the page shows no Levene result, and this script leaves it out.');
+  r.settingsNote = notes;
+  // A transform neither section can use is left out of the script.
+  r.transform = (normRefused || !n) && (spreadRefused || !spreadOn) ? 'none' : tf;
+  const xt = normRefused ? [] : tfValues(x, tf);
+
   // The Shapiro-Wilk test, on the outcomes only: the page withholds it on pooled observations.
-  const checks = shapiroOk(x);
-  if (checks) Object.assign(e, shapiroExpect('shapiro ', x));
+  const checks = !normRefused && shapiroOk(xt);
+  if (checks) Object.assign(e, shapiroExpect('shapiro ', xt));
 
   // Levene's test, only where every group has two or more outcomes. Its
   // groups are embedded in every script; in one that reads its records from
@@ -21612,21 +21785,22 @@ export function exploreRecipe(o) {
   // replications' worth) must fit under MAX_NUMBERS, and otherwise the
   // script leaves the test out and says so.
   let spreadOmitted = null;
-  if (spread && spread.groups.length >= 2 && spread.groups.every(g => g.length >= 2)) {
+  if (spreadOn && !spreadRefused) {
     const count = spread.groups.reduce((a, g) => a + g.length, 0);
     const room = MAX_NUMBERS - repKeys(ds.kind).length * Math.min(ds.reps.length, REP_LINES_MAX);
     if (r.csvOnly && count > room) spreadOmitted = { names: spread.names.slice(), count };
     else {
       const groups = spread.groups.map(g => Array.from(g));
-      const lv = levene(groups);
+      const lv = levene(groups.map(g => tfValues(g, tf)));
       Object.assign(e, { 'levene F': lv.F, 'levene df1': lv.df1, 'levene df2': lv.df2, 'levene p': lv.p });
       r.spread = { names: spread.names.slice(), groups };
     }
   }
-  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted };
-  r.fig = exploreView(ds, o.view, ov.values.length);
+  r.explore = { kind: ds.kind, outcomes: n > 0, pooled, timeTotal, interval, checks, spread: !!r.spread, spreadOmitted,
+                normTf: r.transform !== 'none' && !normRefused };
+  r.fig = Object.assign(exploreView(ds, o.view, ov.values.length), { qqAxis: estimateAxis(ds, r.explore.normTf ? tf : 'none') });
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
-  r.settingsNote = [dataNote(ds.kind)];
+  r.settingsNote = [dataNote(ds.kind)].concat(r.settingsNote || []);
   return r;
 }
 </script>
@@ -22426,7 +22600,9 @@ def plan_half_width(sd, level, h):
 def power_t1(n, sd, delta, alpha):
     """Two-sided power of the one-sample t test, both tails counted."""
     q = stats.t.ppf(1 - alpha / 2, n - 1); ncp = delta * np.sqrt(n) / sd
-    return stats.nct.sf(q, n - 1, ncp) + stats.nct.cdf(-q, n - 1, ncp)
+    # The lower tail as the upper tail at -ncp: SciPy's nct.cdf returns NaN far
+    # into that tail at a large noncentrality, where the two are equal.
+    return stats.nct.sf(q, n - 1, ncp) + stats.nct.sf(q, n - 1, -ncp)
 
 def plan_power_t1(sd, delta, alpha, power):
     if (not np.isfinite(delta) or delta == 0 or not np.isfinite(sd) or not sd > 0
@@ -22930,7 +23106,8 @@ def power_two(n, s1, s2, delta, alpha, pooled):
     noncentral-t approximation at the Welch degrees of freedom."""
     df = 2 * (n - 1) if pooled else welch_df_equal(s1, s2, n)
     q = stats.t.ppf(1 - alpha / 2, df); ncp = delta / np.sqrt((s1 ** 2 + s2 ** 2) / n)
-    return stats.nct.sf(q, df, ncp) + stats.nct.cdf(-q, df, ncp)
+    # The lower tail as the upper tail at -ncp (see power_t1).
+    return stats.nct.sf(q, df, ncp) + stats.nct.sf(q, df, -ncp)
 
 def plan_power_two(s1, s2, delta, alpha, power, pooled):
     if (not sds_ok(s1, s2) or not np.isfinite(delta) or delta == 0 or not 0 < power < 1
@@ -24717,6 +24894,120 @@ edges = [a + (0:n_steps-1) * ((z - a) / n_steps), z];
 out = arrayfun(@(i) tw_mean(t, v, z, edges(i), edges(i + 1)), 1:n_steps);
 end
 `;
+
+// ── Transform of the replication outcomes ────────────────────────────────
+// The page puts every replication outcome through one transform before the
+// analysis (js/stats/transform.js), and the script does the same in its Data
+// section. transform_outcomes stops on an outcome outside the transform's
+// domain, as the page refuses to show a result. back_transform carries a
+// value on the transformed scale back to the response's units, an interval
+// end past the image of the domain going to the domain's edge (or to Inf for
+// the reciprocal); back_interval does both ends and keeps them in increasing
+// order, which the reciprocal reverses.
+
+LIB.R.transform = `
+transform_outcomes <- function(y, tf) {
+  ok <- switch(tf, none = rep(TRUE, length(y)), log = y > 0, sqrt = y >= 0, asin_sqrt = y >= 0 & y <= 1,
+               logit = y > 0 & y < 1, reciprocal = y > 0, stop("unknown transform: ", tf))
+  if (!all(ok)) stop("the ", tf, " transform is not defined for the outcome(s) ", paste(format(y[!ok]), collapse = ", "))
+  switch(tf, none = y, log = log(y), sqrt = sqrt(y), asin_sqrt = asin(sqrt(y)), logit = log(y / (1 - y)), reciprocal = 1 / y)
+}
+back_transform <- function(v, tf) {
+  if (is.na(v)) return(NaN)
+  switch(tf, none = v, log = exp(v), sqrt = if (v <= 0) 0 else v^2,
+         asin_sqrt = if (v <= 0) 0 else if (v >= pi / 2) 1 else sin(v)^2,
+         logit = 1 / (1 + exp(-v)), reciprocal = if (v > 0) 1 / v else Inf)
+}
+back_interval <- function(lo, hi, tf) {
+  if (tf == "reciprocal") list(lo = back_transform(hi, tf), hi = back_transform(lo, tf))
+  else list(lo = back_transform(lo, tf), hi = back_transform(hi, tf))
+}
+`;
+LIB.py.transform = `
+def transform_outcomes(y, tf):
+    """The transform the page applied to every replication outcome."""
+    y = np.asarray(y, float)
+    ok = {"none": np.full(y.shape, True), "log": y > 0, "sqrt": y >= 0, "asin_sqrt": (y >= 0) & (y <= 1),
+          "logit": (y > 0) & (y < 1), "reciprocal": y > 0}[tf]
+    if not ok.all():
+        raise ValueError("the " + tf + " transform is not defined for the outcome(s) " + ", ".join("%g" % v for v in y[~ok]))
+    if tf == "log":
+        return np.log(y)
+    if tf == "sqrt":
+        return np.sqrt(y)
+    if tf == "asin_sqrt":
+        return np.arcsin(np.sqrt(y))
+    if tf == "logit":
+        return np.log(y / (1 - y))
+    if tf == "reciprocal":
+        return 1 / y
+    return y
+
+def back_transform(v, tf):
+    """One value on the transformed scale, carried back to the response's units."""
+    v = float(v)
+    if np.isnan(v):
+        return np.nan
+    if tf == "log":
+        return float(np.exp(v))
+    if tf == "sqrt":
+        return 0.0 if v <= 0 else v * v
+    if tf == "asin_sqrt":
+        return 0.0 if v <= 0 else 1.0 if v >= np.pi / 2 else float(np.sin(v) ** 2)
+    if tf == "logit":
+        return float(1 / (1 + np.exp(-v)))
+    if tf == "reciprocal":
+        return 1 / v if v > 0 else np.inf
+    return v
+
+def back_interval(lo, hi, tf):
+    """Both ends carried back, in increasing order."""
+    if tf == "reciprocal":
+        return dict(lo=back_transform(hi, tf), hi=back_transform(lo, tf))
+    return dict(lo=back_transform(lo, tf), hi=back_transform(hi, tf))
+`;
+LIB.m.transform = `
+function v = transform_outcomes(y, tf)
+% The transform the page applied to every replication outcome.
+switch tf
+    case 'none', ok = true(size(y));
+    case 'log', ok = y > 0;
+    case 'sqrt', ok = y >= 0;
+    case 'asin_sqrt', ok = y >= 0 & y <= 1;
+    case 'logit', ok = y > 0 & y < 1;
+    case 'reciprocal', ok = y > 0;
+    otherwise, error('unknown transform: %s', tf);
+end
+if ~all(ok), error('the %s transform is not defined for the outcome(s) %s', tf, mat2str(y(~ok))); end
+switch tf
+    case 'none', v = y;
+    case 'log', v = log(y);
+    case 'sqrt', v = sqrt(y);
+    case 'asin_sqrt', v = asin(sqrt(y));
+    case 'logit', v = log(y ./ (1 - y));
+    case 'reciprocal', v = 1 ./ y;
+end
+end
+
+function b = back_transform(v, tf)
+% One value on the transformed scale, carried back to the response's units.
+if isnan(v), b = NaN; return; end
+switch tf
+    case 'log', b = exp(v);
+    case 'sqrt', if v <= 0, b = 0; else, b = v^2; end
+    case 'asin_sqrt', if v <= 0, b = 0; elseif v >= pi / 2, b = 1; else, b = sin(v)^2; end
+    case 'logit', b = 1 / (1 + exp(-v));
+    case 'reciprocal', if v > 0, b = 1 / v; else, b = Inf; end
+    otherwise, b = v;
+end
+end
+
+function r = back_interval(lo, hi, tf)
+% Both ends carried back, in increasing order.
+if strcmp(tf, 'reciprocal'), r = struct('lo', back_transform(hi, tf), 'hi', back_transform(lo, tf));
+else, r = struct('lo', back_transform(lo, tf), 'hi', back_transform(hi, tf)); end
+end
+`;
 </script>
 <script type="text/plain" data-module="js/io/scripts.js">
 // A figure as a script that redraws it: MATLAB, R (base graphics), or Python
@@ -25315,10 +25606,12 @@ else boot();
 // assumption the inference pages' intervals rest on. The results fall into
 // five sections shown one at a time under the dataset picker; a section with
 // no plot for the data's kind is hidden from the page's strip and grayed in
-// the navigation.
+// the navigation. The Normality and Equal variances sections carry the shared
+// transform of the replication outcomes; every other section stays on the
+// response's own scale.
 
 import * as state from '../state.js';
-import { repEstimates, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
+import { repEstimates, repIds, datasetSummary, observations, truncationView, sampleDataset, timeWeightedOverall } from '../data/model.js';
 import { exploreRecipe, exploreTooBig } from '../io/recipes.js';
 import { sampledCsv, downloadText, slug } from '../io/export.js';
 import {
@@ -25332,8 +25625,10 @@ import {
   dotPlot, intervals, lagPlot, qqPlot, correlogram, svgEl, tok, extent, niceStep
 } from '../ui/plots.js';
 import {
-  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL
+  card, cardRow, datasetSelect, datasetChecklist, unitLine, details, levelSelect, spinner, notice, KIND_LABEL, DF_LABEL,
+  transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL
 } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform } from '../stats/transform.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { initialTicks, estimateAxis } from '../ui/rules.js';
@@ -25472,11 +25767,17 @@ function mount(parent, build) {
   const sec = document.createElement('div');
   sec.className = 'sec';
   parent.appendChild(sec);
-  const figs = [];
+  const figs = [], cleanups = [];
   const api = {
     sec,
     fig(box, opts) { const f = makeFigure(box, opts); figs.push(f); return f; },
-    release() { for (const f of figs) if (f.ro) f.ro.disconnect(); figs.length = 0; },
+    // Runs `fn` when the section is next rebuilt or released.
+    onRelease(fn) { cleanups.push(fn); },
+    release() {
+      for (const f of figs) if (f.ro) f.ro.disconnect();
+      figs.length = 0;
+      for (const fn of cleanups.splice(0)) fn();
+    },
     rebuild() {
       const h = sec.offsetHeight;
       if (h) sec.style.minHeight = h + 'px';
@@ -25523,6 +25824,36 @@ function table(headers, rows) {
 // ── Data helpers ────────────────────────────────────────────────────────
 
 function finite(a) { return Float64Array.from(Array.from(a).filter(Number.isFinite)); }
+
+// The shared transform, or 'none'.
+function currentTf() {
+  return isTransform(state.settings.transform) ? state.settings.transform : 'none';
+}
+
+// The finite replication outcomes of each dataset put through the shared
+// transform: transformSets's result (`values`, one array per dataset, when
+// `ok`), or the outcomes as they are when no transform is on.
+function transformedOutcomes(list) {
+  const sets = list.map(ds => {
+    const est = repEstimates(ds), ids = repIds(ds), values = [], keep = [];
+    for (let i = 0; i < est.length; i++) if (Number.isFinite(est[i])) { values.push(est[i]); keep.push(ids[i]); }
+    return { name: ds.name, values, ids: keep };
+  });
+  const tf = currentTf();
+  if (tf === 'none') return { ok: true, values: sets.map(st => Float64Array.from(st.values)), problems: [], fitting: [] };
+  return transformSets(sets, tf);
+}
+
+// The section's transform picker, bound to the shared setting, with the note
+// on what the transform does while one is on.
+function transformRow(api, sec, idSuffix, what, applies = true) {
+  const row = el('div', 'ctrl-row ex-tight');
+  row.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="ex-tf-' + idSuffix + '">' + TRANSFORM_LABEL + '</label><select id="ex-tf-' + idSuffix + '"></select></span>';
+  sec.appendChild(row);
+  api.onRelease(transformSelect(row.querySelector('select')));
+  const tf = currentTf();
+  if (tf !== 'none' && applies) sec.appendChild(transformNote(tf, what));
+}
 
 // A time-persistent replication as a step function: each value held from its
 // record time to the next, and the last to the end time when one is given.
@@ -25691,15 +26022,20 @@ function storeResult(ds, est) {
   const sm = datasetSummary(ds);
   const e = sm.est;
   const tables = [{ name: 'replication summary', headers, rows }];
-  const sw = shapiroOf(est);
-  if (sw) tables.push({ name: 'Shapiro-Wilk test of the replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
+  // The Shapiro–Wilk test of the outcomes as the Normality section forms it,
+  // transformed when a transform is on (none when it cannot take them all).
+  const tf = currentTf();
+  const tr = transformedOutcomes([ds]);
+  const sw = tr.ok ? shapiroOf(tr.values[0]) : null;
+  if (sw) tables.push({ name: 'Shapiro-Wilk test of the ' + (tf !== 'none' ? transformOf(tf).label.toLowerCase() + ' of the ' : '') + 'replication outcomes', headers: ['n', 'W', 'p'], rows: [[sw.n, sw.W, sw.p]] });
   if (lastLevene) tables.push({ name: 'Equal-variance test (Levene)', headers: ['datasets', 'F', 'df1', 'df2', 'p'], rows: [[lastLevene.names.join('; '), lastLevene.F, lastLevene.df1, lastLevene.df2, lastLevene.p]] });
-  const title = 'Summary of ' + ds.name, provenance = { dataset: ds.name };
+  const title = 'Summary of ' + ds.name, provenance = Object.assign({ dataset: ds.name },
+    tf !== 'none' ? { transform: transformOf(tf).label.toLowerCase() + ' of each replication outcome, in the Normality and Equal variances sections' } : {});
   // The regenerate scripts' recipe is built only when a button asks for one,
   // from the inputs as they stand now; past the cap its scripts read the two
   // CSV files `files` names.
   const recipeIn = { ds, spread: lastLevene ? { names: lastLevene.names, groups: lastLevene.groups } : null,
-    level: state.settings.level, title, provenance };
+    level: state.settings.level, title, provenance, transform: tf };
   state.setResult('explore', {
     title,
     provenance,
@@ -26199,6 +26535,8 @@ function buildNormality(api, { ds, estF }) {
   const usePooled = ds.kind === 'tally' && (pooled || forced);
   const level = state.settings.level, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Normal quantile–quantile (Q–Q) plot'));
+  const tf = usePooled ? 'none' : currentTf();
+  transformRow(api, sec, 'qq', 'This section’s plot and test are of the transformed outcomes; the other sections show the outcomes as they are.', !usePooled);
   if (ds.kind === 'tally') {
     const row = el('div', 'ctrl-row ex-tight');
     row.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="ex-pooled-qq"' + (usePooled ? ' checked' : '') + (forced ? ' disabled' : '') + '> Pooled observations</label>' +
@@ -26207,7 +26545,15 @@ function buildNormality(api, { ds, estF }) {
     row.querySelector('#ex-pooled-qq').addEventListener('change', e => { pooled = e.target.checked; state.setPick(id, 'pooled:' + ds.id, pooled); api.rebuild(); });
   }
   let values = usePooled ? finite(observations(ds)) : estF;
-  const what = usePooled ? 'pooled observations' : estimateWord(ds);
+  if (usePooled && isTransform(state.settings.transform)) {
+    sec.appendChild(notice('info', 'The transform applies to replication outcomes, and so the pooled observations are shown as they are.'));
+  }
+  if (tf !== 'none') {
+    const tr = transformedOutcomes([ds]);
+    if (!tr.ok) { sec.appendChild(transformRefusal(tf, tr)); return; }
+    values = tr.values[0];
+  }
+  const what = usePooled ? 'pooled observations' : tf !== 'none' ? transformOf(tf).label.toLowerCase() + ' of the ' + estimateWord(ds) : estimateWord(ds);
   const total = values.length;
   // Of many pooled observations, every k-th order statistic is plotted; the
   // quartile line is still fitted to all of them.
@@ -26221,7 +26567,7 @@ function buildNormality(api, { ds, estF }) {
     thinned = true;
   }
   if (!q) { emptyLine(sec, 'This dataset holds fewer than two values.'); return; }
-  const yLabel = usePooled ? ds.response : estimateAxis(ds);
+  const yLabel = usePooled ? ds.response : estimateAxis(ds, tf);
   figure(api, sec, slug(ds.name) + (usePooled ? '-observations' : '-outcomes') + '-qq',
     { height: 320, narrowHeight: 300, xLabel: 'Standard normal quantile', yLabel, ariaLabel: 'Normal quantile–quantile plot of the ' + what },
     f => qqPlot(f, q),
@@ -26267,6 +26613,7 @@ function buildSpread(api, { ds, est }) {
   lastLevene = null;
   const level = state.settings.base, alpha = 1 - level;
   sec.appendChild(el('div', 'sec-hd', 'Equal variances across datasets (Levene’s test)'));
+  transformRow(api, sec, 'spread', 'Levene’s test here compares the spreads of the transformed outcomes, which is what the pooled procedures on Several Systems assume under this transform.');
   sec.appendChild(el('p', 'cmp-lead', 'The pooled procedures on the Several Systems page, the analysis of variance and its post-hoc rules, assume that every design’s replication outcomes have the same variance. Levene’s test checks that across the datasets ticked here without assuming normality: it is the one-way analysis of variance of each outcome’s absolute deviation from its dataset’s median (Brown and Forsythe’s form). Welch’s procedure on Two Systems and the Bonferroni families need no such check.'));
   const eligible = spreadable();
   // The reader's own ticks stand, even fewer than two; every eligible dataset
@@ -26278,9 +26625,14 @@ function buildSpread(api, { ds, est }) {
     onChange: ids => { state.setPick(id, 'spread', ids); api.rebuild(); storeResult(ds, est); } });
   const chosen = list.selected().map(x => state.get(x)).filter(Boolean);
   if (chosen.length < 2) { emptyLine(sec, 'Levene’s test compares the spreads of two or more datasets, and so there is no result when ' + (chosen.length ? 'one' : 'none') + ' is ticked. Tick two or more to compare their spreads.'); return; }
-  const groups = chosen.map(d => finite(repEstimates(d)));
+  // The outcomes as the data give them, which the regenerate scripts embed,
+  // and transformed as the test takes them.
+  const raw = chosen.map(d => finite(repEstimates(d)));
+  const tr = transformedOutcomes(chosen);
+  if (!tr.ok) { sec.appendChild(transformRefusal(currentTf(), tr)); return; }
+  const groups = tr.values;
   const lv = levene(groups);
-  lastLevene = { names: chosen.map(d => d.name), groups: groups.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
+  lastLevene = { names: chosen.map(d => d.name), groups: raw.map(g => Array.from(g)), F: lv.F, df1: lv.df1, df2: lv.df2, p: lv.p };
   const rejects = lv.p < alpha;
   // With no spread left in the distances from the medians, F is infinite when
   // the distances differ between datasets and undefined when they do not.
@@ -27436,14 +27788,18 @@ export default { id, title, render, onShow };
 // the estimates with the interval under it, and a card that plans the number
 // of replications by a target half-width or by a target power. A tally
 // dataset can be analyzed as pooled observations only through an explicit,
-// warned override.
+// warned override. Under a transform, every replication outcome is put
+// through it first, and the interval is carried back to the response's
+// units beneath the results; the pooled observations are never transformed.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
 import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
@@ -27645,6 +28001,7 @@ export function render(rootEl) {
     '<div class="ctrl-row">' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-ds">Dataset</label><select id="rp-ds"></select></span>' +
       '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-lvl">Confidence level</label><select id="rp-lvl"></select></span>' +
+      '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-tf">' + TRANSFORM_LABEL + '</label><select id="rp-tf"></select></span>' +
     '</div>' +
     '<div class="ctrl-row">' +
       '<span class="ctrl-lbl" id="rp-proc-lbl"><span class="tip" tabindex="0" data-tip="t interval: on the mean, assuming the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon signed-rank interval on the pseudo-median, the Hodges–Lehmann estimate; it needs no normality and keeps its level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
@@ -27653,6 +28010,8 @@ export function render(rootEl) {
         '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
       '</span>' +
     '</div>';
+  const tfBox = el('div');
+  ctrl.appendChild(tfBox);
   root.appendChild(ctrl);
 
   // Results.
@@ -27662,11 +28021,11 @@ export function render(rootEl) {
   const unitBox = el('div');
   const warnBox = el('div');
   const ovrBox = el('div');
-  const row1 = el('div'), row2 = el('div'), row3 = el('div');
+  const row1 = el('div'), row2 = el('div'), row3 = el('div'), row4 = el('div');
   const npNote = el('p', 'exp-note');
   npNote.hidden = true;
   const checks = el('div');
-  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks);
+  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks);
   res.appendChild(details('What the half-width means',
     '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R outcomes and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>An interval is a test turned around: the ' + lvl(state.settings.level) + ' interval holds exactly the values a two-sided t test at α = ' + num(1 - state.settings.level, 3) + ' would not reject, and so reading whether it contains a value is that test. This holds for every interval in this tool unless its page says otherwise.</p>' +
@@ -27719,8 +28078,8 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vRow1, vRow2, ctrl, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, npNote, checks, leg, cap, planSec,
-          sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'),
+  els = { varSec, vRow1, vRow2, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks, leg, cap, planSec,
+          sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
           paneHw: planSec.querySelector('[data-pane="hw"]'), panePw: planSec.querySelector('[data-pane="power"]'),
@@ -27736,6 +28095,7 @@ export function render(rootEl) {
     if (state.selected() === before && visible()) draw();
   });
   levelSelect(els.lvl);
+  transformSelect(els.tf);
   ctrl.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => {
     if (proc === b.dataset.proc) return;
     proc = b.dataset.proc;
@@ -27810,17 +28170,63 @@ function currentDataset() {
   return els && els.sel.value ? state.get(els.sel.value) : null;
 }
 
+// The transform in force on the chosen dataset: the shared one, except under
+// the pooled override, whose observations are never transformed.
+function activeTransform(ds) {
+  const tf = state.settings.transform;
+  return ds && isTransform(tf) && !(ds.kind === 'tally' && override.has(ds.id)) ? tf : 'none';
+}
+
+// The key a target typed in the response's units is kept under: the
+// dataset, and the transform too when one is on, so that a value typed on one
+// scale is never read on another.
+function unitKey(ds) {
+  if (!ds) return null;
+  const tf = activeTransform(ds);
+  return tf === 'none' ? ds.id : ds.id + '|' + tf;
+}
+
+// The words for the response's units, or for the transformed scale.
+function unitWords(ds) {
+  const tf = activeTransform(ds);
+  if (tf !== 'none') return 'on the ' + transformOf(tf).scale + ' scale';
+  return ds && ds.unit ? ds.unit : 'in the response’s units';
+}
+
+// The half-width target in force: a relative target means nothing on a
+// transformed scale (a percent of a mean of logs), and so a transform makes it absolute.
+function targetKind() {
+  return activeTransform(currentDataset()) !== 'none' ? 'absolute' : plan.target;
+}
+
+// The finite replication outcomes planning works from, transformed when a
+// transform is on; none when an outcome lies outside its domain.
+function planOutcomes(ds) {
+  const est = Array.from(repEstimates(ds)).filter(Number.isFinite);
+  const tf = activeTransform(ds);
+  if (tf === 'none') return est;
+  const r = transformSets([{ name: ds.name, values: est, ids: est.map((_, i) => i) }], tf);
+  return r.ok ? Array.from(r.values[0]) : [];
+}
+
 // The target field is rebuilt when the target kind or the dataset changes,
 // because a spinner's step is fixed when it is made.
 function buildTargetInput() {
-  for (const b of els.segs) b.setAttribute('aria-pressed', String(b.dataset.target === plan.target));
+  const kind = targetKind();
+  plan.builtKind = kind;
+  // On a transformed scale the target is absolute, and the relative choice is unavailable.
+  const tfOn = activeTransform(currentDataset()) !== 'none';
+  for (const b of els.segs) {
+    b.setAttribute('aria-pressed', String(b.dataset.target === kind));
+    b.disabled = tfOn && b.dataset.target === 'relative';
+  }
   els.tgtBox.innerHTML = '';
   const inp = document.createElement('input');
   inp.type = 'text';
   inp.id = 'rp-tgt';
   inp.setAttribute('aria-label', 'Target half-width');
   els.tgtBox.appendChild(inp);
-  if (plan.target === 'relative') {
+  if (kind === 'relative') {
     inp.value = String(plan.rel);
     spinner(inp, { min: 0.1, max: 100, step: 1, decimals: 1, onChange: v => { plan.rel = v; state.setPick(id, 'targetRel', v); drawPlan(); } });
     els.tgtUnit.textContent = '% of the mean';
@@ -27837,16 +28243,17 @@ function buildTargetInput() {
       drawPlan();
     } });
     plan.abs = plan.absSpin.get();
-    els.tgtUnit.textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+    els.tgtUnit.textContent = unitWords(ds);
   }
 }
 
 // The default for a target in the response's units: 10% of the mean of the
 // chosen dataset's estimates to two significant digits, or a quarter of
-// their standard deviation when the mean is zero.
+// their standard deviation when the mean is zero. Under a transform, the
+// estimates are the transformed ones.
 function defaultShift(ds) {
   if (!ds) return 1;
-  const est = Array.from(repEstimates(ds)).filter(Number.isFinite);
+  const est = planOutcomes(ds);
   if (!est.length) return 1;
   const s = summary(est);
   return Math.abs(s.mean) > 0 ? round2(0.1 * Math.abs(s.mean)) : round2(0.25 * s.sd);
@@ -27854,7 +28261,7 @@ function defaultShift(ds) {
 
 // Seeds the absolute target at the default for the chosen dataset.
 function ensureAbsDefault(ds) {
-  const key = ds ? ds.id : null;
+  const key = unitKey(ds);
   if (plan.absFor === key && plan.abs != null) return;
   plan.absFor = key;
   const kept = storedFor('target', key);
@@ -27864,7 +28271,7 @@ function ensureAbsDefault(ds) {
 // Seeds δ at the default for the chosen dataset and shows it in its field,
 // which is empty and disabled while there is nothing to plan from.
 function syncDeltaInput(ds, ready) {
-  const key = ds ? ds.id : null;
+  const key = unitKey(ds);
   if (ready && plan.deltaFor !== key) {
     plan.deltaFor = key;
     const def = defaultShift(ds);
@@ -27874,7 +28281,7 @@ function syncDeltaInput(ds, ready) {
   }
   syncSpin(plan.deltaSlot, els.deltaHost, 'one-plan-delta', 'Shift to detect δ', plan.deltaStep || 1,
     ready ? plan.delta : null, v => { plan.delta = v; if (plan.deltaFor) state.setPick(id, 'delta:' + plan.deltaFor, v); drawPlan(); });
-  els.deltaUnit.textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+  els.deltaUnit.textContent = unitWords(ds);
 }
 
 function placeholderRows(label) {
@@ -27899,6 +28306,11 @@ function draw() {
   els.unitBox.replaceChildren(unitLine(ds));
   els.warnBox.replaceChildren();
   els.ovrBox.replaceChildren();
+  els.row4.replaceChildren();
+  const tf = activeTransform(ds), T = transformOf(tf);
+  const tfNote = tf === 'none' ? null : transformNote(tf, 'Beneath the interval, the same interval is carried back to the response’s units, where its center is the ' + esc(proc === 'np' ? 'back-transformed pseudo-median' : T.center) + '.');
+  els.tfBox.replaceChildren(...(tfNote ? [tfNote] : []));
+  if (plan.builtKind && plan.builtKind !== targetKind()) buildTargetInput();
 
   if (!ds) {
     placeholderRows();
@@ -27916,9 +28328,26 @@ function draw() {
 
   const ids = repIds(ds);
   const estAll = repEstimates(ds);
-  const labels = [], est = [], estIds = [];
+  const labels = [], estIds = [];
+  let est = [];
   for (let i = 0; i < estAll.length; i++) {
     if (Number.isFinite(estAll[i])) { est.push(estAll[i]); estIds.push(ids[i]); labels.push('replication ' + ids[i]); }
+  }
+  // The outcomes as the data give them, before any transform.
+  const rawEst = est;
+  if (pooled && isTransform(state.settings.transform)) {
+    els.warnBox.appendChild(notice('info', 'The transform applies to replication outcomes, and so it is off while the pooled observations are in use.'));
+  }
+  if (tf !== 'none') {
+    const tr = transformSets([{ name: ds.name, values: est, ids: estIds }], tf);
+    if (!tr.ok) {
+      els.warnBox.appendChild(transformRefusal(tf, tr));
+      placeholderRows();
+      drawFigure({ values: [], labels: null, ti: null, ds, pooled: false, tf });
+      finish(null, 'Planning needs replication outcomes the transform can take.');
+      return;
+    }
+    est = Array.from(tr.values[0]);
   }
 
   let x;
@@ -27926,13 +28355,13 @@ function draw() {
   else x = est;
   if (!pooled && !inf.ok) {
     placeholderRows();
-    drawFigure({ values: est, labels, ti: null, ds, pooled: false });
+    drawFigure({ values: est, labels, ti: null, ds, pooled: false, tf });
     finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
   if (x.length < 2) {
     placeholderRows(pooled ? POOLED : '');
-    drawFigure({ values: x, labels: null, ti: null, ds, pooled });
+    drawFigure({ values: x, labels: null, ti: null, ds, pooled, tf });
     finish(null, 'Planning needs at least two replication outcomes.');
     return;
   }
@@ -27949,9 +28378,9 @@ function draw() {
   els.npNote.hidden = !np;
   // The pooled override's own warning says what is wrong with it; the
   // checks run on replication outcomes only.
-  els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
+  els.checks.replaceChildren(...(pooled || np ? [] : [assumptionChecks({ sets: [{ name: tf !== 'none' ? 'the ' + T.label.toLowerCase() + ' of the replication outcomes' : 'the replication outcomes', values: x, dsId: ds.id }], alpha: 1 - state.settings.base,
     procedure: 'the t interval', declared: 'between replications cannot be checked from the data, and the t interval assumes it; it holds when each replication ran on its own random streams.' })]));
-  const note = pooled ? POOLED : '';
+  const note = pooled ? POOLED : tf !== 'none' ? T.scale + ' scale' : '';
   const nLabel = pooled ? '<span class="sym">n</span>' : NR;
   els.row1.replaceChildren(cardRow([
     card(nLabel, intl(s.n), pooled ? POOLED : 'replication outcomes'),
@@ -27975,7 +28404,20 @@ function draw() {
     ]));
   }
 
-  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np });
+  drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np, tf });
+
+  // Under a transform, the interval carried back to the response's units.
+  let back = null;
+  if (tf !== 'none') {
+    const ctrName = np ? 'back-transformed pseudo-median' : T.center;
+    const bi = np ? backInterval(sr.lo, sr.hi, tf) : backInterval(ti.lo, ti.hi, tf);
+    back = { name: ctrName, center: backTransform(np ? sr.estimate : s.mean, tf), lo: bi.lo, hi: bi.hi };
+    const cap1 = ctrName.charAt(0).toUpperCase() + ctrName.slice(1);
+    els.row4.replaceChildren(cardRow([
+      wide(card(lvl(level) + ' interval for the ' + esc(ctrName), '[' + stat(back.lo) + ', ' + stat(back.hi) + ']', 'the interval above, carried back' + (ds.unit ? '; ' + esc(ds.unit) : ''))),
+      card(esc(cap1), num(back.center), 'the ' + (np ? 'pseudo-median' : 'mean') + ' above, carried back')
+    ]));
+  }
 
   // The variance interval, on replication outcomes only.
   const vi = pooled ? null : varianceInterval(x, level);
@@ -27984,8 +28426,8 @@ function draw() {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     els.vRow1.replaceChildren(cardRow([
       card('R (' + DF_LABEL + ')', intl(vi.n) + ' (' + intl(vi.df) + ')', 'replication outcomes'),
-      card(S('s²'), num(vi.s2), 'sample variance'),
-      card(S('s'), num(vi.s), 'sample standard deviation'),
+      card(S('s²'), num(vi.s2), 'sample variance' + (tf !== 'none' ? ', ' + T.scale + ' scale' : '')),
+      card(S('s'), num(vi.s), 'sample standard deviation' + (tf !== 'none' ? ', ' + T.scale + ' scale' : '')),
       card(S('χ²') + ' quantiles', num(vi.chiLo) + ', ' + num(vi.chiHi), 'χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub>')
     ]));
     els.vRow2.replaceChildren(cardRow([
@@ -27995,7 +28437,7 @@ function draw() {
   }
 
   // The page's result, for its export row and the Report page.
-  const estRows = pooled ? [] : est.map((v, i) => [estIds[i], v]);
+  const estRows = pooled ? [] : tf !== 'none' ? est.map((v, i) => [estIds[i], rawEst[i], v]) : est.map((v, i) => [estIds[i], v]);
   const intervalRows = np ? [
     ['n', s.n], ['mean', s.mean], ['sd', s.sd], ['min', s.min], ['q1', s.q1], ['median', s.median], ['q3', s.q3], ['max', s.max],
     ['pseudo-median (Hodges-Lehmann)', sr.estimate], ['lower', sr.lo], ['upper', sr.hi],
@@ -28006,8 +28448,10 @@ function draw() {
     ['half-width', ti.hw], ['lower', ti.lo], ['upper', ti.hi]
   ];
   const tables = [];
-  if (!pooled) tables.push({ name: 'Replication outcomes', headers: ['replication', 'estimate'], rows: estRows });
+  if (!pooled) tables.push({ name: 'Replication outcomes', headers: tf !== 'none' ? ['replication', 'estimate', T.label.toLowerCase() + ' of estimate'] : ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
+    ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
   if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
     ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
     ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
@@ -28019,15 +28463,18 @@ function draw() {
       dataset: ds.name,
       'confidence level': lvl(level),
       procedure: np ? 'Wilcoxon signed-rank (nonparametric)' : 't interval',
-      'unit of inference': pooled ? 'pooled observations (override)' : 'replication means'
+      'unit of inference': pooled ? 'pooled observations (override)' : 'replication means',
+      ...(tf !== 'none' ? { transform: T.label.toLowerCase() + ' of each replication outcome' } : {})
     },
     tables,
     summaryHtml: np
-      ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications).</p>'
+      ? '<p>' + esc(ds.name) + ': pseudo-median ' + num(sr.estimate) + ' (' + lvl(level) + ' Wilcoxon interval [' + num(sr.lo) + ', ' + num(sr.hi) + '], n = ' + intl(s.n) + ' replications)' +
+        (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>'
       : '<p>' + esc(ds.name) + ': mean ' + num(ti.mean) + ' ± ' + num(ti.hw) + ' (' + lvl(level) +
-        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ').</p>',
+        ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ')' +
+        (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>',
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { ds, x, ids: pooled ? null : estIds, pooled, proc }
+    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf }
   }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
@@ -28051,7 +28498,7 @@ function drawPlan() {
   const ctx = planCtx && !planCtx.msg ? planCtx : null;
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Load a dataset on the Import page to plan replications.';
   const ds = ctx ? ctx.ds : currentDataset();
-  const unit = ds && ds.unit ? ' ' + ds.unit : '';
+  const unit = ds && activeTransform(ds) !== 'none' ? ' (' + unitWords(ds) + ')' : ds && ds.unit ? ' ' + ds.unit : '';
   const sd = ctx ? ctx.s.sd : NaN, R = ctx ? ctx.s.n : NaN, mean = ctx ? ctx.s.mean : NaN;
   const level = state.settings.level, alpha = 1 - level;
   const closing = 'An estimate conditional on the current sample standard deviation s = ' + num(sd) +
@@ -28060,8 +28507,8 @@ function drawPlan() {
   const rows = [];
 
   // By half-width.
-  if (plan.target === 'absolute' && ds && plan.absFor !== ds.id) buildTargetInput();
-  const relative = plan.target === 'relative';
+  if (targetKind() !== plan.builtKind || (targetKind() === 'absolute' && ds && plan.absFor !== unitKey(ds))) buildTargetInput();
+  const relative = targetKind() === 'relative';
   let hp = { n: null, hwAtN: NaN, h: NaN }, hwNote = esc(msg);
   if (ctx) {
     hp = planReplications({ sd, level, target: relative ? plan.rel / 100 : plan.abs, relative, mean });
@@ -28144,7 +28591,7 @@ function drawFigure(d) {
   if (!d || !d.values.length) {
     fig.render(f => {
       f.x([0, 1]);
-      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false), xFormat: () => '' });
+      f.axes({ y: false, xLabel: outcomeAxis(d && d.ds, false, d ? d.tf : 'none'), xFormat: () => '' });
       svgEl('text', { x: f.iw / 2, y: f.ih / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: tok('--muted') }, f.inner).textContent = 'No replication outcomes to show.';
     });
     legend(els.leg, [
@@ -28155,7 +28602,7 @@ function drawFigure(d) {
     els.cap.textContent = 'Choose a dataset to see its replication outcomes.';
     return;
   }
-  const { values, labels, ti, ds, pooled, np } = d;
+  const { values, labels, ti, ds, pooled, np, tf } = d;
   const intName = np ? ' Wilcoxon interval on the pseudo-median' : ' interval on the mean';
   const hasInt = ti && Number.isFinite(ti.lo);
   const band = hasInt ? 28 : 0;
@@ -28163,7 +28610,7 @@ function drawFigure(d) {
     // Many pooled observations stack into a dot histogram, which needs room.
     f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
     f.x(hasInt ? extent(values, [ti.lo, ti.hi]) : extent(values), { pad: 0.06, nice: true });
-    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled) });
+    f.axes({ y: false, xLabel: outcomeAxis(ds, pooled, tf) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;
     f.ih = fullH - band;
@@ -28253,6 +28700,10 @@ const GROUPS = [
   ['The checks', [
     'M. B. Brown and A. B. Forsythe, “Robust tests for the equality of variances,” <i>Journal of the American Statistical Association</i> 69 (1974) 364–367; H. Levene, “Robust tests for equality of variances,” in <i>Contributions to Probability and Statistics</i>, ed. I. Olkin (Stanford University Press, 1960) 278–292.',
     'S. S. Shapiro and M. B. Wilk, “An analysis of variance test for normality (complete samples),” <i>Biometrika</i> 52 (1965) 591–611; P. Royston, “A remark on algorithm AS 181: the W-test for normality,” <i>Applied Statistics</i> 44 (1995) 547–551: the test and the algorithm the Normality section computes it by.',
+  ]],
+  ['Transforms', [
+    'G. E. P. Box and D. R. Cox, “An analysis of transformations,” <i>Journal of the Royal Statistical Society, Series B</i> 26 (1964) 211–252: the family of power transforms that holds the log, the square root, and the reciprocal, chosen to bring the outcomes closer to normal with a common variance.',
+    'D. I. Warton and F. K. C. Hui, “The arcsine is asinine: the analysis of proportions in ecology,” <i>Ecology</i> 92 (2011) 3–10: the case for modeling a proportion on the logit scale, through a generalized linear model, rather than analyzing its arcsine square root.'
   ]],
   ['Steady State', [
     'P. D. Welch, “The statistical analysis of simulation results,” in <i>The Computer Performance Modeling Handbook</i>, ed. S. S. Lavenberg (Academic Press, 1983) 268–328: the moving-average plot for choosing a warm-up.',
@@ -28501,7 +28952,10 @@ export default { id, title, render, onShow };
 // differences or a target ANOVA power needs; one-way ANOVA with a post-hoc
 // rule and the compact letter display; and a subset-selection screen for the
 // best design with the second-stage replication counts a Rinott procedure
-// would ask for. Every result is computed whichever section is open.
+// would ask for. Every result is computed whichever section is open. Under a
+// transform, every design's outcomes are put through it before anything
+// else; the means are carried back to the response's units, and under the
+// log the differences are carried back as ratios.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
@@ -28509,7 +28963,9 @@ import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posth
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
-import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -28589,8 +29045,36 @@ const plan = { key: null, hwUser: null, mhwUser: null, deltaUser: null, power: 0
 // so a planning control redraws only the planning card.
 let planCtx = null;
 let resultBase = null;
+// The transform in force for the drawing under way, set by update(), and the
+// one the indifference zone's stored value was read under.
+let tfNow = 'none';
+let epsTf = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
+
+// The response as the axes name it: "wait", or under a transform "the log of wait".
+const respName = list => (tfNow === 'none' ? list[0].response : 'the ' + transformOf(tfNow).label.toLowerCase() + ' of ' + list[0].response);
+// A key suffix for a value typed in the response's units, which a transform puts on another scale.
+const tfKey = () => (tfNow === 'none' ? '' : '|' + tfNow);
+// Where the indifference zone is kept: a value typed on one scale is never read on another.
+const epsKey = () => 'eps' + tfKey();
+// Under a transform, a design's center and interval carried back to the
+// response's units: the page's two cells, the CSV's three values, and the
+// headers of both. Nothing without a transform.
+function backCols(center, lo, hi, np) {
+  if (tfNow === 'none') return null;
+  const T = transformOf(tfNow), bi = backInterval(lo, hi, tfNow), c = backTransform(center, tfNow);
+  const name = np ? 'back-transformed pseudo-median' : T.center;
+  return { cells: [num(c), interval(bi.lo, bi.hi)], values: [c, bi.lo, bi.hi],
+           heads: [name.charAt(0).toUpperCase() + name.slice(1), 'Interval, back-transformed'],
+           csvHeads: ['back-transformed center (' + name + ')', 'back-transformed lower', 'back-transformed upper'] };
+}
+// Under the log, a difference and its interval carried back as a ratio.
+function ratioCols(center, lo, hi) {
+  if (tfNow !== 'log') return null;
+  const r = [Math.exp(center), Math.exp(lo), Math.exp(hi)];
+  return { cells: [num(r[0]), interval(r[1], r[2])], values: r, heads: ['Ratio', 'Ratio interval'], csvHeads: ['ratio', 'ratio lower', 'ratio upper'] };
+}
 
 // An infinite end (an unbounded rank interval) shows as ∞, as on the Report page.
 const interval = (lo, hi) => '[' + stat(lo) + ', ' + stat(hi) + ']';
@@ -28961,7 +29445,7 @@ function ensureEpsSpinner(step) {
   host.innerHTML = '<input id="sev-eps" type="text" class="par-inp" aria-label="Indifference zone ε">';
   const inp = host.querySelector('#sev-eps');
   inp.value = '0';
-  epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, 'eps', v); schedule(); } });
+  epsSpin = spinner(inp, { min: step, step, onChange: v => { epsUser = v; state.setPick(id, epsKey(), v); schedule(); } });
 }
 
 // The benchmark the means (or pseudo-medians) are tested against: the
@@ -28972,7 +29456,7 @@ function benchmark(items, ds) {
   const on = benchOn && items.length > 0;
   rootEl.querySelector('#sev-bench-on').checked = benchOn;
   pair.hidden = !on;
-  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|');
+  const key = 'bench:' + state.datasets.filter(d => canInfer(d).ok).map(d => d.id).sort().join('|') + tfKey();
   let value = null;
   if (on) {
     const centers = items.map(it => it.center);
@@ -28993,7 +29477,7 @@ function benchmark(items, ds) {
       inp.value = String(value);
       benchSpin = { key, step, spin: spinner(inp, { step, min: -1e12, max: 1e12, onChange: v => { benchVal = v; state.setPick(id, key, v); schedule(); } }) };
     } else benchSpin.spin.set(value, false);
-    rootEl.querySelector('#sev-bench-unit').textContent = ds && ds.unit ? ds.unit : 'in the response’s units';
+    rootEl.querySelector('#sev-bench-unit').textContent = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : ds && ds.unit ? ds.unit : 'in the response’s units';
   }
   const flag = i => on && (items[i].lo > value || items[i].hi < value);
   const word = i => (!on ? '' : items[i].lo > value ? 'above the benchmark' : items[i].hi < value ? 'below the benchmark' : 'contains the benchmark');
@@ -29052,7 +29536,8 @@ function syncControls(list, groups) {
     ensureEpsSpinner(Math.pow(10, Math.floor(Math.log10(def)) - 1));
     epsSpin.set(epsUser === null ? def : epsUser, false);
     const responses = Array.from(new Set(list.map(d => d.response)));
-    const unitTxt = responses.length === 1 ? 'in the units of ' + esc(responses[0]) : 'in the units of the response';
+    const unitTxt = tfNow !== 'none' ? 'on the ' + esc(transformOf(tfNow).scale) + ' scale'
+      : responses.length === 1 ? 'in the units of ' + esc(responses[0]) : 'in the units of the response';
     note.innerHTML = unitTxt + '; ' + (epsUser === null
       ? 'the default is 10% of the pooled standard deviation, ' + num(pooledSd(groups), 3)
       : 'the default would be ' + num(def) + ', 10% of the pooled standard deviation');
@@ -29103,6 +29588,29 @@ function update() {
   if (!rootEl) return;
   const list = checkedList();
   let groups = list.map(finiteOf);
+  // The outcomes as the data give them, which the regenerate scripts embed,
+  // and under a transform the transformed ones every procedure runs on.
+  let rawGroups = groups;
+  tfNow = isTransform(state.settings.transform) ? state.settings.transform : 'none';
+  // The direction on the transformed scale: the reciprocal reverses the
+  // order, and so there the best design has the smallest mean when bigger is better.
+  const dirS = transformOf(tfNow).decreasing ? (dir === 'min' ? 'max' : 'min') : dir;
+  if (epsTf !== tfNow) {
+    epsTf = tfNow;
+    const e = state.getPick(id, epsKey());
+    epsUser = typeof e === 'number' && Number.isFinite(e) && e > 0 ? e : null;
+  }
+  const tfBox = rootEl.querySelector('#sev-tf-note');
+  const tfN = tfNow === 'none' ? null : transformNote(tfNow, 'Each design’s interval is also carried back to the response’s units, as an interval on its ' + esc(transformOf(tfNow).center) +
+    (tfNow === 'log' ? ', and each difference as a ratio of geometric means.' : '; a difference on this scale has no counterpart in those units.'));
+  tfBox.replaceChildren(...(tfN ? [tfN] : []));
+  // The outcomes outside the transform's domain, which stop every section.
+  let refused = null;
+  if (tfNow !== 'none' && list.length >= 2) {
+    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: finiteIds(d) })), tfNow);
+    if (tr.ok) groups = tr.values;
+    else refused = tr;
+  }
   // Under common random numbers across designs the replications are matched
   // into complete blocks, and every procedure runs on the aligned groups.
   const paired = pairMode === 'paired';
@@ -29117,6 +29625,7 @@ function update() {
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why });
     groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
+    rawGroups = list.map((d, i) => Float64Array.from(match.blocks, blk => rawGroups[i][blk[i]]));
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
@@ -29139,12 +29648,12 @@ function update() {
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
   key.innerHTML = list.map((d, i) => '<span class="sev-key-it">' + badge(i) + ' ' + esc(d.name) + '</span>').join(' ');
-  if (k < 2 || (paired && match.blocks.length < 2)) {
-    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : 'too few replications matched across the designs.');
+  if (k < 2 || (paired && match.blocks.length < 2) || refused) {
+    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : refused ? 'no result while the transform cannot take every outcome.' : 'too few replications matched across the designs.');
     const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : k < 2 ? 'Check two or more designs above to compare them.' : 'Pairing needs at least two replications matched across every design.';
-    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', msg)));
+    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(refused && k >= 2 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
     resultBase = null;
-    planCtx = { msg: 'Check two or more designs above to plan replications.' };
+    planCtx = { msg: refused ? 'Planning needs replication outcomes the transform can take.' : 'Check two or more designs above to plan replications.' };
     drawPlan();
     release();
     return;
@@ -29188,7 +29697,7 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, 'several-pseudo-medians',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, 'several-pseudo-medians',
       fg => {
         rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
         intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
@@ -29199,17 +29708,18 @@ function update() {
       ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
-    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bm.on ? ['vs benchmark'] : []), rows));
-    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-means',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-means',
       fg => {
         rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
         intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
@@ -29219,11 +29729,12 @@ function update() {
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
       ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
-    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bm.on ? ['vs benchmark'] : []), rows));
+    const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
+    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the benchmark comparison', declared: INDEP_REPS }));
-    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bm.on ? [bm.value, bm.word(i)] : [])) });
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
+      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
       }
   }
@@ -29247,7 +29758,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: rName + ' at ' + levelPct(famR.perLevel) + ', contains 0' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: rName + ' at ' + levelPct(famR.perLevel) + ', excludes 0' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero shift' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + list[0].response }, 'several-rank-differences',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + respName(list) }, 'several-rank-differences',
       fg => {
         const cs = famR.comparisons;
         rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
@@ -29256,13 +29767,14 @@ function update() {
       legItems,
       'Each row is one pair’s Hodges–Lehmann shift with its ' + rName + ' at ' + levelPct(famR.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
     const statName = paired ? 'V' : 'W';
-    const rows = famR.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi), pValue(c.p), pValue(c.pAdj),
-      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
-    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval', 'p', 'Adjusted p', 'Basis', 'Flag'], rows));
+    const rk = famR.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
+    const rows = famR.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [pValue(c.p), pValue(c.pAdj),
+      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
+    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval'].concat(rk[0] ? rk[0].heads : [], ['p', 'Adjusted p', 'Basis', 'Flag']), rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
-    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper', 'p', 'adjusted p', 'basis', 'flag'],
-      rows: famR.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi, c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0']) });
+    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['p', 'adjusted p', 'basis', 'flag']),
+      rows: famR.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0'])) });
     const nf = famR.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
     } else {
@@ -29276,7 +29788,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: famName + ' at ' + levelPct(fam.perLevel) + ', contains 0' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: famName + ' at ' + levelPct(fam.perLevel) + ', excludes 0' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + list[0].response }, 'several-differences',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-differences',
       fg => {
         const cs = fam.comparisons;
         rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
@@ -29284,9 +29796,10 @@ function update() {
       },
       legItems,
       'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
-    const rows = fam.comparisons.map(c => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi), stat(c.t), pValue(c.p), pValue(c.pAdj),
-      c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']);
-    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval', 't', 'p', 'Adjusted p', 'Flag'], rows));
+    const rk = fam.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
+    const rows = fam.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [stat(c.t), pValue(c.p), pValue(c.pAdj),
+      c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
+    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval'].concat(rk[0] ? rk[0].heads : [], ['t', 'p', 'Adjusted p', 'Flag']), rows));
     b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
       'The adjusted p is C·p capped at 1. Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
     // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
@@ -29300,8 +29813,8 @@ function update() {
       alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
         : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper', 't', 'p', 'adjusted p', 'flag'],
-      rows: fam.comparisons.map(c => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi, c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0']) });
+    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['t', 'p', 'adjusted p', 'flag']),
+      rows: fam.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0'])) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
     summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
       }
@@ -29414,7 +29927,7 @@ function update() {
     // The designs themselves, best first, with their letter groups and a
     // bracket for every pair the rule declares different.
     {
-      const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? sm.items[x].mean - sm.items[y].mean : sm.items[y].mean - sm.items[x].mean);
+      const order = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? sm.items[x].mean - sm.items[y].mean : sm.items[y].mean - sm.items[x].mean);
       const pos = [];
       order.forEach((i, r) => { pos[i] = r; });
       const letterOf = i => (ph.letters ? ph.letters[i] : i === ctrlIdx ? 'control' : '');
@@ -29423,12 +29936,12 @@ function update() {
       b.appendChild(para('sev-fig-title', 'Designs, best first, with letter groups and the pairs declared different'));
       const legD = [{ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }];
       if (pairsD.length) legD.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by the rule (bracket)' });
-      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-design-groups',
+      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-design-groups',
         fg => designRows(fg, rowsD, pairsD), legD,
         (ph.letters
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
-        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' mean down.' +
+        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' +
         ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
@@ -29436,7 +29949,7 @@ function update() {
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: 'not declared different' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: 'declared different' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + list[0].response }, 'several-posthoc',
+    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-posthoc',
       fg => {
         const ps = ph.pairs;
         rowReadout(fg, ps.length, i => [full(ps[i]), num(ps[i].diff) + '  ' + interval(ps[i].lo, ps[i].hi), ps[i].flagged ? 'declared different' : 'not declared different']);
@@ -29459,7 +29972,7 @@ function update() {
     // The letters are read off the design plot; the table exists only as an
     // export, where nothing can be hovered.
     if (ph.letters) {
-      const order = list.map((_, i) => i).sort((x, y) => dir === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
+      const order = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? av.means[x] - av.means[y] : av.means[y] - av.means[x]);
       tables.push({ section: 'anova', name: 'Compact letter display: ' + ruleName, headers: ['design', 'mean', 'letters'], rows: order.map(i => [list[i].name, av.means[i], ph.letters[i]]) });
     }
     summary.push('Levene: ' + levTxt + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': ' + (Number.isNaN(av.F) ? 'F cannot be computed' : 'F = ' + stat(av.F) + ', ' + pEq(av.p)) + '. ' + ruleName + ': ' +
@@ -29492,7 +30005,7 @@ function update() {
     // Each design's pseudo-median with its Wilcoxon interval, best first,
     // carrying Dunn's letters and brackets.
     const hl = groups.map(g => signedRank(g, { level }));
-    const orderN = list.map((_, i) => i).sort((x, y) => dir === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
+    const orderN = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
     const posN = [];
     orderN.forEach((i, r) => { posN[i] = r; });
     const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
@@ -29500,9 +30013,9 @@ function update() {
     b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
     const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
     if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
-    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + list[0].response }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
+    figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
       fg => designRows(fg, rowsN, pairsN), legN,
-      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dir === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down. ' +
       'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
     const labN = p => pairLabel(p.i, p.j);
     const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
@@ -29522,7 +30035,7 @@ function update() {
   // The screen for the best.
   if (np) bodies[3].appendChild(para('cmp-lead', 'The screen is a procedure on sample means and standard deviations, and it has no rank version here; it is shown unchanged.'));
   const eps = epsSpin ? epsSpin.get() : NaN;
-  const ss = subsetSelection(groups, { alpha, delta: eps, dir });
+  const ss = subsetSelection(groups, { alpha, delta: eps, dir: dirS });
   {
     const b = bodies[3];
     b.appendChild(para('cmp-lead', 'Confidence 1 − α is split evenly between the screen and the second-stage sizing: the screen runs at 1 − α/2 = ' + levelPct(1 - alpha / 2) +
@@ -29537,10 +30050,10 @@ function update() {
         : 'These designs cannot be distinguished from the best within ε on these data: ' + andList(short.filter((_, i) => ss.survivors[i])) +
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
-      const orderS = list.map((_, i) => i).sort((x, y) => dir === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
+      const orderS = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
       const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
         note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
-      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + list[0].response }, 'several-best-subset',
+      figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-best-subset',
         fg => designRows(fg, rowsS, []),
         [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
           nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean),
@@ -29564,7 +30077,7 @@ function update() {
   // Under pairing the half-width plan works on the standard deviations of
   // the paired differences, and the power plan on the blocked F test.
   const sdDs = paired ? fam.comparisons.map(c => ({ i: c.i, j: c.j, sd: c.se * Math.sqrt(c.df + 1) })) : null;
-  planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : ''), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
+  planCtx = { key: list.map(d => d.id).join('|') + (paired ? '|paired' : '') + tfKey(), k, ns, short, ctrlIdx, unit: units.length === 1 ? units[0] : '',
               sds: sm.items.map(it => it.sd), widest: Math.max(...fam.comparisons.map(c => c.hw)), meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)),
               sigma: Math.sqrt(avPlan.msw), grandMean: avPlan.grandMean, welch: welchOk, paired, sdDs };
   registerTips(rootEl);
@@ -29583,13 +30096,14 @@ function update() {
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
       control: list[ctrlIdx].name,
       benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
-      'indifference zone': Number.isFinite(eps) ? eps : ''
+      'indifference zone': Number.isFinite(eps) ? eps : '',
+      ...(tfNow !== 'none' ? { transform: transformOf(tfNow).label.toLowerCase() + ' of each replication outcome' } : {})
     },
     tables,
     summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { list, groups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
-                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps }
+    recipeIn: { list, groups: rawGroups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+                bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps, transform: tfNow }
   };
   drawPlan();
   release();
@@ -29606,8 +30120,9 @@ function drawPlan() {
     plan.hwUser = storedTarget('target', c.key); plan.mhwUser = storedTarget('mtarget', c.key); plan.deltaUser = storedTarget('delta', c.key);
   }
   const level = state.settings.base, alpha = 1 - level;
-  const unit = c && c.unit ? ' ' + c.unit : '';
-  const unitNote = c && c.unit ? c.unit : 'in the response’s units';
+  const tfScale = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : null;
+  const unit = tfScale ? ' (' + tfScale + ')' : c && c.unit ? ' ' + c.unit : '';
+  const unitNote = tfScale || (c && c.unit ? c.unit : 'in the response’s units');
   // Additional replications are counted beyond the largest current count,
   // and the power at the current count uses the smallest.
   const R = c ? Math.max(...c.ns) : NaN, Rlo = c ? Math.min(...c.ns) : NaN;
@@ -29759,6 +30274,7 @@ export function render(root) {
       '<div id="sev-list"></div>' +
       '<div class="ctrl-row cmp-gap">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-lvl">Confidence level</label><select id="sev-lvl"></select></span>' +
+        '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-tf">' + TRANSFORM_LABEL + '</label><select id="sev-tf"></select></span>' +
         '<span class="ctrl-grp"><span class="ctrl-lbl" id="sev-dir-lbl">Direction</span>' +
         '<span class="seg" role="group" aria-labelledby="sev-dir-lbl">' +
           '<button type="button" class="seg-btn" data-dir="max" aria-pressed="true">bigger is better</button>' +
@@ -29790,6 +30306,7 @@ export function render(root) {
       '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
       '<div id="sev-mixed"></div>' +
+      '<div id="sev-tf-note"></div>' +
     '</div>' +
     '<p class="unit-line" id="sev-unit"></p>' +
     '<p class="sev-key" id="sev-key"></p>' +
@@ -29874,6 +30391,7 @@ export function render(root) {
   });
   root.querySelector('#sev-list').addEventListener('change', () => { state.setPick(id, 'checked', checklist.selected()); });
   levelSelect(root.querySelector('#sev-lvl'));
+  transformSelect(root.querySelector('#sev-tf'));
   ctrlSels = Array.from(root.querySelectorAll('select[data-control]'));
   for (const sel of ctrlSels) sel.addEventListener('change', () => { controlId = sel.value || null; state.setPick(id, 'control', controlId); schedule(); });
   root.querySelector('#sev-rule').addEventListener('change', e => {
@@ -29881,7 +30399,7 @@ export function render(root) {
     schedule();
   });
   root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
-  root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, 'eps', null); schedule(); });
+  root.querySelector('#sev-eps-reset').addEventListener('click', () => { epsUser = null; state.setPick(id, epsKey(), null); schedule(); });
   root.querySelector('#sev-bench-on').addEventListener('change', e => { benchOn = e.target.checked; state.setPick(id, 'benchOn', benchOn); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
@@ -29935,7 +30453,7 @@ function applyStored() {
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   if (get('benchOn') === true) benchOn = true;
-  const e = get('eps');
+  const e = get(epsKey());
   if (typeof e === 'number' && Number.isFinite(e) && e > 0) epsUser = e;
   if (PLAN_POWERS.includes(get('power'))) {
     plan.power = get('power');
@@ -31337,7 +31855,7 @@ export default { id, title, sections, render, onShow, onShowSection };
 </script>
 <script type="text/plain" data-module="js/pages/storage.js">
 // The Storage page: what this browser keeps between visits (the loaded
-// datasets, the confidence level, and every control's setting), whether it
+// datasets, the confidence level, the transform, and every control's setting), whether it
 // could be stored, and the button that forgets it all.
 
 import * as state from '../state.js';
@@ -31371,7 +31889,7 @@ function refresh() {
   } else if (s.skipped === 'write-failed') {
     lines.push('The browser refused to store this session (its storage is full or blocked), and so it will not come back after a reload.');
   } else if (s.available && s.saved && state.datasets.length) {
-    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ', the confidence level, and every control’s setting, ' + sizeText(s.chars) + ' in all.');
+    lines.push('Stored: ' + plural(state.datasets.length, 'dataset') + ', the confidence level, the transform, and every control’s setting, ' + sizeText(s.chars) + ' in all.');
   } else if (s.available) {
     lines.push('Nothing is stored: no data are loaded.');
   }
@@ -31390,7 +31908,7 @@ function refresh() {
 export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
+    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, the transform of the replication outcomes, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
     '<div class="sec"><div class="sec-hd">Stored in this browser</div>' +
       '<p class="xp-status" id="ss-status"></p>' +
       '<p class="muted-line" id="ss-size" aria-live="polite"></p>' +
@@ -31413,7 +31931,7 @@ export function render(root) {
       forgetSession();
       refresh();
       // A reload is the one sure way to put every page's controls, the
-      // remembered sections, and the confidence level back to their
+      // remembered sections, the confidence level, and the transform back to their
       // defaults: each page keeps its state in its own module.
       try { history.replaceState(null, '', '#storage'); } catch (err) { /* a file:// page may refuse */ }
       location.reload();
@@ -31441,7 +31959,9 @@ export default { id, title, render, onShow };
 // numbers. Pairing is a
 // switch the reader sets; the page never infers it from equal sample sizes.
 // A card under the comparison plans the replications per design by a target
-// half-width on the difference or by a target power.
+// half-width on the difference or by a target power. Under a transform,
+// both designs' outcomes are put through it before anything else, and under
+// the log the difference is carried back as the ratio of geometric means.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
@@ -31450,7 +31970,9 @@ import { welch, pooledT, matchPairs, pairedT, planHalfWidthWelch, powerWelch, pl
 import { tInterval, fRatio, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
-import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL } from '../ui/widgets.js';
+import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL,
+         transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
+import { transformSets, transformOf, isTransform, transformLabel } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
@@ -31487,6 +32009,8 @@ const plan = { mode: 'hw', key: null, hwUser: null, deltaUser: null, power: 0.8,
 // so a planning control redraws only the planning card.
 let planCtx = null;
 let resultBase = null;
+// The transform in force for the drawing under way, set by update().
+let tfNow = 'none';
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
@@ -31858,8 +32382,18 @@ function update() {
   res.innerHTML = '';
   const level = state.settings.level;
   const { a: dsA, b: dsB } = chosen();
-  const eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
+  let eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
   res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
+  const tf = isTransform(state.settings.transform) ? state.settings.transform : 'none';
+  tfNow = tf;
+  const tfBox = rootEl.querySelector('#two-tf-note');
+  const tfN = tf === 'none' ? null : transformNote(tf, tf === 'log'
+    ? 'Under the log, the difference A − B carries back as the ratio A / B of the geometric means, shown beneath the comparison.'
+    : 'A difference on the ' + esc(transformOf(tf).scale) + ' scale has no counterpart in the response’s units, and so the comparison is reported on that scale only.');
+  tfBox.replaceChildren(...(tfN ? [tfN] : []));
+  // The outcomes as the data give them, which the regenerate scripts embed.
+  const rawA = eA, rawB = eB;
+  let refused = false;
 
   const notes = [];
   const eligible = state.datasets.filter(d => canInfer(d).ok).length;
@@ -31870,7 +32404,12 @@ function update() {
   for (const [e, tag] of [[eA, 'A'], [eB, 'B']]) {
     if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no outcome and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
   }
-  const ready = dsA && dsB && dsA.id !== dsB.id;
+  let ready = dsA && dsB && dsA.id !== dsB.id;
+  if (ready && tf !== 'none') {
+    const tr = transformSets([{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }], tf);
+    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
+    else { eA = Object.assign({}, eA, { v: tr.values[0] }); eB = Object.assign({}, eB, { v: tr.values[1] }); }
+  }
 
   // The match rule and its note, shown under the Paired switch.
   let match = null;
@@ -31885,8 +32424,9 @@ function update() {
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
 
-  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, match } : null, level);
-  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB } : null, level);
+  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level);
+  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level);
+  if (refused) planCtx = { msg: 'Planning needs replication outcomes the transform can take.' };
   registerTips(res);
   drawPlan();
 }
@@ -31905,8 +32445,9 @@ function drawPlan() {
   const msg = planCtx && planCtx.msg ? planCtx.msg : 'Choose two different datasets above to plan replications.';
   if (c && c.key !== plan.key) { plan.key = c.key; plan.hwUser = storedTarget('target', c.key); plan.deltaUser = storedTarget('delta', c.key); }
   const level = state.settings.level, alpha = 1 - level;
-  const unit = c && c.dsA.unit ? ' ' + c.dsA.unit : '';
-  const unitNote = c && c.dsA.unit ? c.dsA.unit : 'in the response’s units';
+  const tfScale = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : null;
+  const unit = tfScale ? ' (' + tfScale + ')' : c && c.dsA.unit ? ' ' + c.dsA.unit : '';
+  const unitNote = tfScale || (c && c.dsA.unit ? c.dsA.unit : 'in the response’s units');
   const paired = c ? c.paired : mode === 'paired';
   const pooled = !!(c && c.pooled);
   // Additional replications are counted beyond the larger of the two current
@@ -31998,6 +32539,31 @@ function npLevelNote(r, L) {
   return r.exact && Number.isFinite(r.achieved) ? 'achieved level ' + levelPct(r.achieved) : L + ' by the ' + npBasis(r);
 }
 
+// Under the log, the comparison's center and interval carried back as a
+// ratio A / B, drawn as a card row under the comparison; null otherwise.
+function ratioBlock(parent, d, center, lo, hi, L, what) {
+  if (!d || d.tf !== 'log' || !Number.isFinite(center)) return null;
+  const r = { center: Math.exp(center), lo: Math.exp(lo), hi: Math.exp(hi) };
+  parent.appendChild(cardRow([
+    card(what, num(r.center), 'the exponential of the estimate above'),
+    wide(card(L + ' interval for the ratio', interval(r.lo, r.hi), 'it excludes 1 exactly when the interval above excludes 0'))
+  ]));
+  return r;
+}
+
+// A ratio's table and its clause for the page's summary.
+function ratioTable(r, what) {
+  return { name: 'Ratio A / B (back-transformed)', headers: ['statistic', 'value'], rows: [[what, r.center], ['lower', r.lo], ['upper', r.hi]] };
+}
+function ratioClause(r, L) {
+  return ' On the response’s own scale, the ratio A / B is ' + num(r.center) + ', ' + L + ' interval ' + interval(r.lo, r.hi) + '.';
+}
+
+// A difference's axis label, naming the transformed scale.
+function diffAxis(base) {
+  return tfNow === 'none' ? base : base.replace(/, A − B$/, '') + ' on the ' + transformOf(tfNow).scale + ' scale, A − B';
+}
+
 function renderIndependent(res, notes, d, level) {
   for (const n of notes) res.appendChild(n);
   const np = proc === 'np', pooled = proc === 'pooled';
@@ -32043,6 +32609,8 @@ function renderIndependent(res, notes, d, level) {
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
+  const ratioWhat = np ? 'Ratio A / B (back-transformed shift)' : 'Ratio of geometric means A / B';
+  const ratio = shown ? ratioBlock(s, d, center, shown.lo, shown.hi, L, ratioWhat) : null;
   if (np) s.appendChild(caption(NP_PLAN));
   // The checks follow a parametric result only: the Wilcoxon procedures assume no normality.
   if (d && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base, pooled,
@@ -32052,11 +32620,11 @@ function renderIndependent(res, notes, d, level) {
   const f = sec('Replication outcomes and the difference');
   res.appendChild(f);
   const box1 = figBox(f);
-  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: d ? 'Replication outcome of ' + d.dsA.response : 'Replication outcome' });
+  const fig1 = makeFigure(box1, { height: 190, narrowHeight: 210, margin: { t: 8, b: 40 }, xLabel: transformLabel(d ? 'Replication outcome of ' + d.dsA.response : 'Replication outcome', tfNow) });
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   const box2 = figBox(f);
-  const fig2 = makeFigure(box2, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: np ? 'Shift in location, A − B' : 'Difference in means, A − B' });
+  const fig2 = makeFigure(box2, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: diffAxis(np ? 'Shift in location, A − B' : 'Difference in means, A − B') });
   const leg2 = document.createElement('div');
   f.appendChild(leg2);
   const ownName = np ? L + ' Wilcoxon interval' : L + ' t interval';
@@ -32123,10 +32691,10 @@ function renderIndependent(res, notes, d, level) {
     planCtx = { msg: 'Choose two different datasets above to plan replications.' };
     return;
   }
-  planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
+  planCtx = { paired: false, pooled, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sd1: w.sd1, sd2: w.sd2, nA: w.n1, nB: w.n2,
               hw: w.hw, meanA: w.mean1, sdA: w.sd1,
               // What the regenerate scripts are built from.
-              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'independent', proc } };
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'independent', proc, transform: d.tf } };
   const prov = provenance(d, level, false, null, null);
   resultBase = np ? {
     title: 'Two Systems: Wilcoxon rank-sum comparison',
@@ -32137,7 +32705,7 @@ function renderIndependent(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, summary(d.eA.v).median, summary(d.eB.v).median, rs.estimate, rs.W, rs.p, rs.lo, rs.hi, rs.exact ? rs.achieved : level, npBasis(rs)]]
     }],
     summaryHtml: '<p>Wilcoxon rank-sum comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): shift A − B = ' + num(rs.estimate) +
-      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', ' + pEq(rs.p) + '. ' + esc(verdict.textContent) + '</p>'
+      ', ' + L + ' interval ' + interval(rs.lo, rs.hi) + ', ' + pEq(rs.p) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   } : {
     title: 'Two Systems: ' + tName + ' comparison',
     provenance: prov,
@@ -32147,8 +32715,9 @@ function renderIndependent(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, w.n1, w.n2, w.mean1, w.mean2, w.diff].concat(pooled ? [w.sp] : [], [w.se, w.df, w.t, w.p, w.lo, w.hi, w.hw])]
     }],
     summaryHtml: '<p>' + tName + ' comparison of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B): A − B = ' + num(w.diff) +
-      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + '</p>'
+      ', ' + L + ' interval ' + interval(w.lo, w.hi) + ', ' + pEq(w.p) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   };
+  if (ratio) resultBase.tables.push(ratioTable(ratio, np ? 'ratio (back-transformed shift)' : 'ratio of geometric means'));
   if (fr) resultBase.tables.push({ name: 'F ratio of variances (A over B)', headers: ['statistic', 'value'], rows: [
     ['F', fr.F], ['df1', fr.df1], ['df2', fr.df2], ['p (two-sided)', fr.p], ['lower', fr.lo], ['upper', fr.hi], ['interval contains 1', fv.contains]
   ] });
@@ -32347,7 +32916,7 @@ function pairViews(parent, P) {
     '</span>';
   block.appendChild(row);
   const box = figBox(block);
-  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: 'Replication outcome' });
+  const fig = makeFigure(box, { height: 260, narrowHeight: 290, margin: { t: 10, b: 44 }, yLabel: transformLabel('Replication outcome', tfNow) });
   const stack = (cls) => {
     const s = document.createElement('div');
     s.style.display = 'grid';
@@ -32468,6 +33037,8 @@ function renderPaired(res, notes, d, level) {
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
+  const ratioWhat = np ? 'Ratio A / B (back-transformed pseudo-median)' : 'Ratio of geometric means A / B';
+  const ratio = shown ? ratioBlock(s, d, shown.center, shown.lo, shown.hi, L, ratioWhat) : null;
   if (np) s.appendChild(caption(NP_PLAN));
   if (pr && pr.r < 0) s.appendChild(notice('warn', 'The correlation across the pairs is negative, and so the pairing is increasing the variance of the comparison rather than reducing it. Common random numbers should induce a positive correlation; before running more replications, check that replication i of both designs shared its random streams.'));
   if (pr && !np) s.appendChild(assumptionChecks({ sets: [{ name: 'the differences A − B', values: pr.diffs, flat: pr.sdD === 0 }], alpha: 1 - state.settings.base,
@@ -32477,7 +33048,7 @@ function renderPaired(res, notes, d, level) {
   const f = sec('Paired differences');
   res.appendChild(f);
   const box1 = figBox(f);
-  const fig1 = makeFigure(box1, { height: 150, narrowHeight: 170, margin: { t: 8, b: 40 }, xLabel: 'Difference A − B in each matched pair' });
+  const fig1 = makeFigure(box1, { height: 150, narrowHeight: 170, margin: { t: 8, b: 40 }, xLabel: tfNow === 'none' ? 'Difference A − B in each matched pair' : 'Difference A − B in each matched pair, ' + transformOf(tfNow).scale + ' scale' });
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   f.appendChild(caption('Each dot is one matched pair’s difference A − B; under the dots is ' + (np ? 'the pseudo-median of the differences (the Hodges–Lehmann estimate) with its ' + L + ' Wilcoxon signed-rank interval' : 'the mean difference with its ' + L + ' paired t interval') +
@@ -32504,10 +33075,10 @@ function renderPaired(res, notes, d, level) {
   let sumA = 0;
   for (const v of d.eA.v) sumA += v;
   const iA = tInterval(d.eA.v, level);
-  planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id, dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
+  planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
               meanA: sumA / d.eA.v.length, sdA: iA.sd,
               // What the regenerate scripts are built from.
-              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.eA, eB: d.eB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc() } };
+              recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc(), transform: d.tf } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
   resultBase = {
     title: np ? 'Two Systems: Wilcoxon signed-rank paired comparison' : 'Two Systems: paired comparison',
@@ -32522,14 +33093,16 @@ function renderPaired(res, notes, d, level) {
       rows: [[d.dsA.name, d.dsB.name, pr.n, pr.meanD, pr.sdD, pr.se, pr.df, pr.t, pr.p, pr.lo, pr.hi, pr.hw, pr.r]]
     }, {
       name: 'Matched pairs',
-      headers: ['replication A', 'replication B', 'A', 'B', 'difference A - B'],
+      headers: d.tf !== 'none' ? ['replication A', 'replication B', transformOf(d.tf).label.toLowerCase() + ' of A', transformOf(d.tf).label.toLowerCase() + ' of B', 'difference A - B']
+        : ['replication A', 'replication B', 'A', 'B', 'difference A - B'],
       rows: m.pairs.map(([i, j], k) => [String(d.eA.ids[i]), String(d.eB.ids[j]), x[k], y[k], pr.diffs[k]])
     }],
     summaryHtml: '<p>' + (np ? 'Wilcoxon signed-rank comparison' : 'Paired comparison') + ' of ' + esc(d.dsA.name) + ' (A) and ' + esc(d.dsB.name) + ' (B) over ' + plural(pr.n, 'pair') +
       (np ? ': pseudo-median of the differences ' + num(sr.estimate) + ', ' + L + ' interval ' + interval(sr.lo, sr.hi) + ', ' + pEq(sr.p)
         : ': mean difference ' + num(pr.meanD) + ', ' + L + ' interval ' + interval(pr.lo, pr.hi) + ', ' + pEq(pr.p)) +
-      ', r = ' + num(pr.r, 3) + '. ' + esc(verdict.textContent) + '</p>'
+      ', r = ' + num(pr.r, 3) + '. ' + esc(verdict.textContent) + (ratio ? ratioClause(ratio, L) : '') + '</p>'
   };
+  if (ratio) resultBase.tables.splice(1, 0, ratioTable(ratio, np ? 'ratio (back-transformed pseudo-median)' : 'ratio of geometric means'));
 }
 
 function provenance(d, level, paired, by, unmatched) {
@@ -32539,7 +33112,8 @@ function provenance(d, level, paired, by, unmatched) {
     procedure: proc === 'np' ? (paired ? 'Wilcoxon signed-rank (nonparametric)' : 'Wilcoxon rank-sum (nonparametric)') : (paired ? 'paired t' : proc === 'pooled' ? 'pooled-variance t' : 'Welch t'),
     paired: paired ? 'yes' : 'no',
     'matched by': paired ? (by === 'id' ? 'replication id' : 'position') : 'not applicable',
-    'unmatched replications': paired ? unmatched : 'not applicable'
+    'unmatched replications': paired ? unmatched : 'not applicable',
+    ...(d.tf && d.tf !== 'none' ? { transform: transformOf(d.tf).label.toLowerCase() + ' of each replication outcome' } : {})
   };
 }
 
@@ -32558,6 +33132,7 @@ export function render(root) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-a">Design A</label><select id="two-a"></select></span>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-b">Design B</label><select id="two-b"></select></span>' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-lvl">Confidence level</label><select id="two-lvl"></select></span>' +
+        '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-tf">' + TRANSFORM_LABEL + '</label><select id="two-tf"></select></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run on separate random streams. Paired: replication i of A and replication i of B used the same random inputs (common random numbers).">Replications are</span></span>' +
@@ -32583,6 +33158,7 @@ export function render(root) {
         '</span>' +
       '</div>' +
       '<div id="two-excluded"></div>' +
+      '<div id="two-tf-note"></div>' +
     '</div>' +
     '<div id="two-results"></div>' +
     '<div class="sec plan-card" id="two-plan"></div>';
@@ -32622,6 +33198,7 @@ export function render(root) {
   datasetSelect(selA, { filter, remember: { page: id, key: 'a' } });
   datasetSelect(selB, { filter, remember: { page: id, key: 'b' } });
   levelSelect(root.querySelector('#two-lvl'));
+  transformSelect(root.querySelector('#two-tf'));
   applyStored();
   separateB();
 
@@ -32686,12 +33263,15 @@ export default { id, title, render, onShow };
 </script>
 <script type="text/plain" data-module="js/state.js">
 // The application's shared state: the loaded datasets, the one a page last
-// selected, and the settings every page reads (the confidence level). Pages
+// selected, and the settings every page reads (the confidence level and the
+// transform of the replication outcomes). Pages
 // read `datasets` and `settings` directly and subscribe to changes with `on`.
 // The array and the settings object are mutated in place and never replaced,
 // and so a reference taken at import time stays current.
 
 /** @typedef {import('./data/model.js').Dataset} Dataset */
+
+import { transformOf } from './stats/transform.js';
 
 /** Every loaded dataset, in the order it was added. */
 export const datasets = [];
@@ -32701,7 +33281,9 @@ export const datasets = [];
 // the reader stated and `bonfC` the Bonferroni count it is divided by:
 // level = 1 − (1 − base)/bonfC, so that C hand-made statements hold jointly
 // at `base`. Pages that already divide α by a family size read `base`.
-export const settings = { level: 0.95, base: 0.95, bonfC: 1, custom: false };
+// `transform` is the id of the transform every replication outcome is put
+// through before inference (js/stats/transform.js), 'none' by default.
+export const settings = { level: 0.95, base: 0.95, bonfC: 1, custom: false, transform: 'none' };
 
 /** The confidence levels the page offers. */
 export const LEVELS = [0.90, 0.95, 0.99];
@@ -32712,7 +33294,8 @@ const listeners = { datasets: new Set(), selection: new Set(), settings: new Set
 
 /**
  * Subscribes to an event: 'datasets' (added, removed, renamed), 'selection'
- * (the selected dataset changed), 'settings' (the level changed), or
+ * (the selected dataset changed), 'settings' (the level or the transform
+ * changed), or
  * 'results' (a page stored a new result).
  * @param {'datasets'|'selection'|'settings'|'results'|'picks'} event
  * @param {(payload: *) => void} fn
@@ -32850,6 +33433,22 @@ export function setCustomLevel(base, bonfC = 1) {
 }
 
 /**
+ * Sets the transform every page applies to the replication outcomes before
+ * inference and emits 'settings'. An unknown id is ignored.
+ * @param {string} id
+ * @returns {boolean} whether the id was accepted
+ */
+export function setTransform(id) {
+  const t = transformOf(id);
+  if (t.id !== id) return false;
+  if (settings.transform !== id) {
+    settings.transform = id;
+    emit('settings', { transform: id });
+  }
+  return true;
+}
+
+/**
  * The latest result of every analysis page, keyed by page id, and so the Export
  * page can write out what the reader has computed. A page stores its result
  * whenever it recomputes and stores null when its inputs no longer allow one.
@@ -32906,7 +33505,7 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
 export default state;
 </script>
 <script type="text/plain" data-module="js/stats/compare.js">
@@ -36329,6 +36928,158 @@ export function resampleTimeWeighted(t, v, start, end, steps) {
   return { step, edges, values };
 }
 </script>
+<script type="text/plain" data-module="js/stats/transform.js">
+// Transforms of the replication outcomes: the one shared choice that puts every
+// outcome on another scale before any inference, so that every design is
+// compared on the same scale. Each transform is strictly monotone on its
+// domain, and so an interval on the transformed scale carries back to the
+// response's own units end for end (in reverse order for the reciprocal).
+// Pure functions, no DOM.
+
+const HALF_PI = Math.PI / 2;
+
+/**
+ * A transform: its id (also its name in the regenerate scripts), the label its
+ * menu shows, the word an axis label starts with, the scale's name as a
+ * modifier ("on the square-root scale"), the function and its
+ * inverse, the domain as a test and in words, whether it reverses order, and
+ * the name of the back-transformed center.
+ * @typedef {{ id: string, label: string, word: string, scale: string, f: (y: number) => number, inv: (v: number) => number,
+ *   ok: (y: number) => boolean, domain: string, decreasing: boolean, center: string }} Transform
+ */
+
+/**
+ * The transforms in menu order. Each inverse is defined on the whole line: an
+ * interval end that falls outside the image of the domain (a lower end below
+ * 0 on the square-root scale) maps to the edge of the domain, or to Infinity
+ * for the reciprocal, whose interval on a positive harmonic mean is then
+ * unbounded above.
+ * @type {Transform[]}
+ */
+export const TRANSFORMS = [
+  { id: 'none', label: 'None', word: '', scale: 'original', f: y => y, inv: v => v, ok: () => true, domain: 'any value', decreasing: false, center: 'mean' },
+  { id: 'log', label: 'Log', word: 'Log', scale: 'log', f: Math.log, inv: Math.exp, ok: y => y > 0,
+    domain: 'above 0', decreasing: false, center: 'geometric mean' },
+  { id: 'sqrt', label: 'Square root', word: 'Square root', scale: 'square-root', f: Math.sqrt, inv: v => (Number.isNaN(v) ? NaN : v <= 0 ? 0 : v * v), ok: y => y >= 0,
+    domain: 'at least 0', decreasing: false, center: 'back-transformed mean' },
+  { id: 'asin_sqrt', label: 'Arcsine square root', word: 'Arcsine square root', scale: 'arcsine-square-root', f: y => Math.asin(Math.sqrt(y)),
+    inv: v => (Number.isNaN(v) ? NaN : v <= 0 ? 0 : v >= HALF_PI ? 1 : Math.sin(v) ** 2), ok: y => y >= 0 && y <= 1,
+    domain: 'between 0 and 1', decreasing: false, center: 'back-transformed mean' },
+  { id: 'logit', label: 'Logit', word: 'Logit', scale: 'logit', f: y => Math.log(y / (1 - y)), inv: v => 1 / (1 + Math.exp(-v)), ok: y => y > 0 && y < 1,
+    domain: 'strictly between 0 and 1', decreasing: false, center: 'back-transformed mean' },
+  { id: 'reciprocal', label: 'Reciprocal', word: 'Reciprocal', scale: 'reciprocal', f: y => 1 / y, inv: v => (Number.isNaN(v) ? NaN : v > 0 ? 1 / v : Infinity), ok: y => y > 0,
+    domain: 'above 0', decreasing: true, center: 'harmonic mean' }
+];
+
+const BY_ID = new Map(TRANSFORMS.map(t => [t.id, t]));
+
+/**
+ * The transform with this id, or None for an unknown one.
+ * @param {string} id
+ * @returns {Transform}
+ */
+export function transformOf(id) {
+  return BY_ID.get(id) || BY_ID.get('none');
+}
+
+/** Whether `id` names a transform other than None. */
+export function isTransform(id) {
+  return BY_ID.has(id) && id !== 'none';
+}
+
+/**
+ * Applies a transform to every value. A value that is not a finite number
+ * passes through as NaN and is not counted as outside the domain, because
+ * the pages already drop it as a replication with no outcome.
+ * @param {ArrayLike<number>} values
+ * @param {string} id
+ * @returns {{values: Float64Array, bad: number[]}} the transformed values, and
+ *   the indices of the finite values outside the domain (left NaN)
+ */
+export function applyTransform(values, id) {
+  const t = transformOf(id);
+  const out = new Float64Array(values.length), bad = [];
+  for (let i = 0; i < values.length; i++) {
+    const y = values[i];
+    if (!Number.isFinite(y)) out[i] = NaN;
+    else if (!t.ok(y)) { out[i] = NaN; bad.push(i); }
+    else out[i] = t.f(y);
+  }
+  return { values: out, bad };
+}
+
+/**
+ * One value carried back to the response's units.
+ * @param {number} v
+ * @param {string} id
+ */
+export function backTransform(v, id) {
+  return transformOf(id).inv(v);
+}
+
+/**
+ * An interval on the transformed scale carried back to the response's units,
+ * its ends in increasing order.
+ * @param {number} lo
+ * @param {number} hi
+ * @param {string} id
+ * @returns {{lo: number, hi: number}}
+ */
+export function backInterval(lo, hi, id) {
+  const t = transformOf(id);
+  return t.decreasing ? { lo: t.inv(hi), hi: t.inv(lo) } : { lo: t.inv(lo), hi: t.inv(hi) };
+}
+
+/**
+ * An axis or column label on the transformed scale: "Log of replication mean
+ * of wait". A label whose first two letters are capitals (an acronym) keeps
+ * its case.
+ * @param {string} label
+ * @param {string} id
+ */
+export function transformLabel(label, id) {
+  const t = transformOf(id);
+  if (t.id === 'none') return label;
+  const s = String(label);
+  const lower = /^[A-Z][A-Z]/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1);
+  return t.word + ' of ' + lower;
+}
+
+/**
+ * The transforms other than None whose domain holds every finite value.
+ * @param {ArrayLike<number>} values
+ * @returns {string[]} their ids, in menu order
+ */
+export function fittingTransforms(values) {
+  const v = Array.from(values).filter(Number.isFinite);
+  return TRANSFORMS.filter(t => t.id !== 'none' && v.every(t.ok)).map(t => t.id);
+}
+
+/**
+ * Transforms the finite replication outcomes of several sets (one per design)
+ * with one transform, and finds the replications whose outcome lies outside
+ * its domain.
+ * @param {{name: string, values: ArrayLike<number>, ids: (string|number)[]}[]} sets
+ *   each set's outcomes with the replication ids in step with them
+ * @param {string} id
+ * @returns {{ok: boolean, values: Float64Array[], problems: {name: string, ids: (string|number)[], all: boolean}[], fitting: string[]}}
+ *   the transformed values of each set, the sets with outcomes outside the
+ *   domain (none when `ok`; `all` when every outcome of the set is), and the
+ *   transforms whose domain holds every outcome of every set
+ */
+export function transformSets(sets, id) {
+  const values = [], problems = [];
+  for (const set of sets) {
+    const r = applyTransform(set.values, id);
+    values.push(r.values);
+    const finite = Array.from(set.values).filter(Number.isFinite).length;
+    if (r.bad.length) problems.push({ name: set.name, ids: r.bad.map(i => set.ids[i]), all: r.bad.length === finite });
+  }
+  const all = [];
+  for (const set of sets) for (const v of Array.from(set.values)) all.push(v);
+  return { ok: problems.length === 0, values, problems, fitting: fittingTransforms(all) };
+}
+</script>
 <script type="text/plain" data-module="js/ui/checks.js">
 // A line of assumption checks under a parametric result: the Shapiro–Wilk
 // test on each set of values the procedure takes as normal, Levene's test
@@ -38603,6 +39354,8 @@ export { esc };
 // checklist opens with, Two Systems' verdict on the F ratio of the variances,
 // and the labels the figures carry. Pure functions, no DOM.
 
+import { transformLabel } from '../stats/transform.js';
+
 /**
  * The ticks a dataset checklist opens with. A stored list stands at any
  * length, even one or none, less any id no longer offered; every offered
@@ -38654,27 +39407,32 @@ export function roleLabels(dsA, dsB) {
 
 /**
  * The axis label for a dataset's replication outcomes on One System, or for
- * its observations under the pooled override.
+ * its observations under the pooled override. Under a transform the label
+ * names it ("Log of replication mean of wait"); the pooled observations are
+ * never transformed.
  * @param {{kind: string, response?: string}|null} ds
  * @param {boolean} [pooled]
+ * @param {string} [tf] the transform's id
  */
-export function outcomeAxis(ds, pooled) {
-  if (!ds) return 'Replication outcome';
+export function outcomeAxis(ds, pooled, tf = 'none') {
+  if (!ds) return transformLabel('Replication outcome', tf);
   const r = ds.response || 'value';
   if (pooled) return 'Observation of ' + r;
-  if (ds.kind === 'reps') return r + ' per replication';
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + r;
-  return 'Replication mean of ' + r;
+  if (ds.kind === 'reps') return transformLabel(r + ' per replication', tf);
+  if (ds.kind === 'time') return transformLabel('Time-weighted replication mean of ' + r, tf);
+  return transformLabel('Replication mean of ' + r, tf);
 }
 
 /**
- * The axis label for a dataset's replication outcomes on Summary and Plots.
+ * The axis label for a dataset's replication outcomes on Summary and Plots,
+ * naming the transform when one is given.
  * @param {{kind: string, response: string}} ds
+ * @param {string} [tf] the transform's id
  */
-export function estimateAxis(ds) {
-  if (ds.kind === 'reps') return ds.response;
-  if (ds.kind === 'time') return 'Time-weighted replication mean of ' + ds.response;
-  return 'Replication mean of ' + ds.response;
+export function estimateAxis(ds, tf = 'none') {
+  if (ds.kind === 'reps') return transformLabel(ds.response, tf);
+  if (ds.kind === 'time') return transformLabel('Time-weighted replication mean of ' + ds.response, tf);
+  return transformLabel('Replication mean of ' + ds.response, tf);
 }
 
 /**
@@ -38781,7 +39539,7 @@ export function saveSession() {
   const payload = {
     version: 1,
     savedAt: new Date().toISOString(),
-    settings: { level: state.settings.level, base: state.settings.base, bonfC: state.settings.bonfC, custom: state.settings.custom },
+    settings: { level: state.settings.level, base: state.settings.base, bonfC: state.settings.bonfC, custom: state.settings.custom, transform: state.settings.transform },
     selected: state.selected(),
     picks: state.picks,
     datasets: state.datasets.map(serializeDataset)
@@ -38945,6 +39703,7 @@ export function restoreSession() {
         const st = stored.settings;
         if (st.custom && Number.isFinite(st.base)) state.setCustomLevel(st.base, Number.isFinite(st.bonfC) ? st.bonfC : 1);
         else state.setLevel(st.level);
+        if (isStr(st.transform)) state.setTransform(st.transform);
       }
       if (isStr(stored.selected)) state.select(stored.selected);
       // The datasets arrive one at a time, and a page answering the first
@@ -39612,9 +40371,11 @@ function prune() {
 <script type="text/plain" data-module="js/ui/widgets.js">
 // Small UI building blocks shared by the pages: numeric spinners, result
 // cards, dataset pickers, the experimental-unit banner, collapsible notes,
-// the rejected-row list, the confidence-level picker, and callouts.
+// the rejected-row list, the confidence-level and transform pickers, the
+// transform's note and refusal, and callouts.
 
 import * as state from '../state.js';
+import { TRANSFORMS, transformOf } from '../stats/transform.js';
 import { esc, intl, plural, pct, lvl } from './format.js';
 import { KIND_LABEL } from '../data/model.js';
 
@@ -39958,6 +40719,80 @@ export function levelSelect(selectEl) {
 }
 
 function trimNum(v) { return String(Number(v.toFixed(4))); }
+
+/** The label for a transform picker, its explanation in the shared tooltip. */
+export const TRANSFORM_LABEL = '<span class="tip" tabindex="0" data-tip="A function every replication outcome is put through before the analysis, the same for every design, so that all of them are compared on one scale: log or square root for skewed positive outcomes, arcsine square root or logit for proportions, reciprocal to turn a time per job into a rate.">Transform</span>';
+
+/**
+ * Binds a <select> to the shared transform of the replication outcomes: it
+ * shows the current one, sets it on change, and follows changes made by any
+ * other transform picker.
+ * @param {HTMLSelectElement} selectEl
+ * @returns {() => void} a function that unbinds it
+ */
+export function transformSelect(selectEl) {
+  selectEl.innerHTML = TRANSFORMS.map(t => '<option value="' + t.id + '"' + (t.id === state.settings.transform ? ' selected' : '') + '>' + esc(t.label) + '</option>').join('');
+  const sync = () => { selectEl.value = state.settings.transform; };
+  selectEl.addEventListener('change', () => { if (!state.setTransform(selectEl.value)) sync(); });
+  sync();
+  return state.on('settings', sync);
+}
+
+// The transform as a noun phrase in running text: "the log".
+function theTransform(t) { return 'the ' + t.label.toLowerCase(); }
+
+/**
+ * The line a page shows while a transform is on, saying what it does to the
+ * page's results, with a collapsed note on what a transform changes; null
+ * with no transform. `extra` is HTML the page adds to the line.
+ * @param {string} id
+ * @param {string} [extra]
+ * @returns {HTMLElement|null}
+ */
+export function transformNote(id, extra = '') {
+  const t = transformOf(id);
+  if (t.id === 'none') return null;
+  const box = document.createElement('div');
+  box.className = 'tf-note';
+  box.appendChild(notice('info', 'Every replication outcome is put through ' + esc(theTransform(t)) + ' before the analysis, and so the results below are on the ' +
+    esc(t.scale) + ' scale.' + (extra ? ' ' + extra : '')));
+  box.appendChild(details('What a transform changes',
+    '<p>A transform changes the question as well as the scale. A mean of transformed outcomes is not the transform of the mean: the mean of the logs carried back through the exponential is the geometric mean, which lies below the ordinary mean whenever the outcomes vary, and under a symmetric spread of the logs it is the median. The reciprocal carries back to the harmonic mean, and the square root, the arcsine square root, and the logit carry back to a center with no common name.</p>' +
+    '<p>Each transform keeps the outcomes in order, except the reciprocal, which reverses it exactly. An interval on the transformed scale therefore carries back end for end into an interval on the back-transformed center, its ends swapped under the reciprocal, and under the reciprocal a design that is best by a bigger response is the one with the smallest mean on the transformed scale. A difference carries back only under the log, where a difference of logs is the log of a ratio: an interval on the difference becomes an interval on the ratio of the two geometric means.</p>' +
+    '<p>Rank procedures use only the order of the outcomes, and so Kruskal–Wallis, Friedman, Dunn’s comparisons, and the rank-sum test give the same p-values under any of these transforms. The signed-rank test and the Hodges–Lehmann estimates do change, because they work with differences and averages of outcomes.</p>' +
+    '<p>Choose the transform from what the outcomes measure (a time, a count, a proportion) or from a pilot study, before looking at the comparison. Trying each transform until one gives the answer hoped for is itself a multiple-comparisons problem.</p>'));
+  return box;
+}
+
+/**
+ * The warning a page shows in place of its results when some replication
+ * outcomes lie outside the transform's domain: which ones, by dataset and
+ * id, and the transforms the outcomes do fit. `res` is transformSets's result.
+ * @param {string} id
+ * @param {{problems: {name: string, ids: (string|number)[], all?: boolean}[], fitting: string[]}} res
+ * @returns {HTMLDivElement}
+ */
+export function transformRefusal(id, res) {
+  const t = transformOf(id);
+  const MAX = 10;
+  const which = res.problems.map(p => {
+    if (p.all && p.ids.length > 1) return '<b>' + esc(p.name) + '</b>, every replication';
+    const shown = p.ids.slice(0, MAX).map(v => esc(String(v))).join(', ');
+    const more = p.ids.length > MAX ? ', and ' + intl(p.ids.length - MAX) + ' more' : '';
+    return '<b>' + esc(p.name) + '</b>, ' + (p.ids.length === 1 ? 'replication ' : 'replications ') + shown + more;
+  }).join('; ');
+  const fit = res.fitting.map(f => transformOf(f).label.toLowerCase());
+  const offer = fit.length
+    ? 'Of the transforms offered, ' + (fit.length === 1 ? 'only the ' + esc(fit[0]) + ' fits' : esc(listWords(fit)) + ' fit') + ' every outcome here; choose ' + (fit.length === 1 ? 'it' : 'one of them') + ' or None.'
+    : 'None of the transforms offered fits every outcome here; choose None.';
+  const n = res.problems.reduce((a, p) => a + p.ids.length, 0);
+  return notice('warn', 'The ' + esc(t.label.toLowerCase()) + ' needs every replication outcome ' + esc(t.domain) + ', and so no result is shown. ' +
+    'Outside that: ' + which + (n > 1 ? ' (' + esc(plural(n, 'outcome')) + ' in all)' : '') + '. ' + offer);
+}
+
+function listWords(a) {
+  return a.length <= 2 ? a.join(' and ') : a.slice(0, -1).join(', ') + ', and ' + a[a.length - 1];
+}
 
 /**
  * A callout block: 'warn' for a caution (an ochre rule and a "!" badge) or
