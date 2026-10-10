@@ -14,7 +14,7 @@ import { tInterval, varianceInterval, planReplications, powerOneSample, planPowe
 import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
@@ -289,7 +289,7 @@ export function render(rootEl) {
       '<span class="ctrl-pair"><span id="rp-tgt-box"></span><span class="ctrl-note" id="rp-tgt-unit"></span></span>' +
     '</div>',
     powerControls('one', 'Shift to detect δ',
-      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean.'));
+      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
@@ -465,9 +465,11 @@ function buildTargetInput() {
 // The default for a target in the response's units: 10% of the mean of the
 // chosen dataset's estimates to two significant digits, or a quarter of
 // their standard deviation when the mean is zero. Under a transform, the
-// estimates are the transformed ones.
+// estimates are the transformed ones, except under the log, whose default is
+// a ratio of 1.1 whatever the units.
 function defaultShift(ds) {
   if (!ds) return 1;
+  if (activeTransform(ds) === 'log') return LOG_DEFAULT_SHIFT;
   const est = planOutcomes(ds);
   if (!est.length) return 1;
   const s = summary(est);

@@ -17,7 +17,7 @@ import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, transformLabel } from '../stats/transform.js';
+import { transformSets, applyTransform, transformOf, isTransform, transformLabel, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
@@ -450,11 +450,6 @@ function update() {
     if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no outcome and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
   }
   let ready = dsA && dsB && dsA.id !== dsB.id;
-  if (ready && tf !== 'none') {
-    const tr = transformSets([{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }], tf);
-    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
-    else { eA = Object.assign({}, eA, { v: tr.values[0] }); eB = Object.assign({}, eB, { v: tr.values[1] }); }
-  }
 
   // The match rule and its note, shown under the Paired switch.
   let match = null;
@@ -468,6 +463,25 @@ function update() {
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
+
+  // Under a transform, the outcomes the comparison uses must fit its domain:
+  // every outcome of both designs, or under pairing only the matched ones,
+  // because a replication with no partner is left out of the analysis. An
+  // unmatched outcome outside the domain is left NaN and used nowhere.
+  if (ready && tf !== 'none') {
+    let sets = [{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }];
+    if (mode === 'paired') {
+      const mm = matchPairs(eA.ids, eB.ids, match.by);
+      sets = [{ name: dsA.name, values: mm.pairs.map(([i]) => eA.v[i]), ids: mm.pairs.map(([i]) => eA.ids[i]) },
+              { name: dsB.name, values: mm.pairs.map(([, j]) => eB.v[j]), ids: mm.pairs.map(([, j]) => eB.ids[j]) }];
+    }
+    const tr = transformSets(sets, tf);
+    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
+    else {
+      eA = Object.assign({}, eA, { v: applyTransform(eA.v, tf).values });
+      eB = Object.assign({}, eB, { v: applyTransform(eB.v, tf).values });
+    }
+  }
 
   if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level);
   else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level);
@@ -532,7 +546,8 @@ function drawPlan() {
 
   // By power.
   const m = c ? Math.abs(c.meanA) : NaN;
-  const dDef = c ? (m > 0 ? round2(0.1 * m) : round2(0.25 * c.sdA)) : NaN;
+  // Under the log, a ratio of 1.1, which means the same in any units.
+  const dDef = !c ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : m > 0 ? round2(0.1 * m) : round2(0.25 * c.sdA);
   const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
   syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'two-plan-delta', 'Difference to detect δ', stepFor(dDef), delta,
     v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
@@ -1117,11 +1132,14 @@ function renderPaired(res, notes, d, level) {
     planCtx = { msg: d ? 'Planning needs at least two matched pairs.' : 'Choose two different datasets above to plan replications.' };
     return;
   }
+  // Design A's outcomes for the planning defaults: under a transform, an
+  // unmatched outcome outside its domain is NaN and is left out here too.
+  const vA = Array.from(d.eA.v).filter(Number.isFinite);
   let sumA = 0;
-  for (const v of d.eA.v) sumA += v;
-  const iA = tInterval(d.eA.v, level);
+  for (const v of vA) sumA += v;
+  const iA = tInterval(vA, level);
   planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
-              meanA: sumA / d.eA.v.length, sdA: iA.sd,
+              meanA: sumA / vA.length, sdA: iA.sd,
               // What the regenerate scripts are built from.
               recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc(), transform: d.tf } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
@@ -1215,7 +1233,7 @@ export function render(root) {
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>',
     powerControls('two', 'Difference to detect δ',
-      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
+      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
     if (plan.mode === b.dataset.plan) return;

@@ -27799,7 +27799,7 @@ import { tInterval, varianceInterval, planReplications, powerOneSample, planPowe
 import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, dotPlot, extent, svgEl, tok } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
@@ -28074,7 +28074,7 @@ export function render(rootEl) {
       '<span class="ctrl-pair"><span id="rp-tgt-box"></span><span class="ctrl-note" id="rp-tgt-unit"></span></span>' +
     '</div>',
     powerControls('one', 'Shift to detect δ',
-      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean.'));
+      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
@@ -28250,9 +28250,11 @@ function buildTargetInput() {
 // The default for a target in the response's units: 10% of the mean of the
 // chosen dataset's estimates to two significant digits, or a quarter of
 // their standard deviation when the mean is zero. Under a transform, the
-// estimates are the transformed ones.
+// estimates are the transformed ones, except under the log, whose default is
+// a ratio of 1.1 whatever the units.
 function defaultShift(ds) {
   if (!ds) return 1;
+  if (activeTransform(ds) === 'log') return LOG_DEFAULT_SHIFT;
   const est = planOutcomes(ds);
   if (!est.length) return 1;
   const s = summary(est);
@@ -28965,7 +28967,7 @@ import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -29604,17 +29606,12 @@ function update() {
   const tfN = tfNow === 'none' ? null : transformNote(tfNow, 'Each design’s interval is also carried back to the response’s units, as an interval on its ' + esc(transformOf(tfNow).center) +
     (tfNow === 'log' ? ', and each difference as a ratio of geometric means.' : '; a difference on this scale has no counterpart in those units.'));
   tfBox.replaceChildren(...(tfN ? [tfN] : []));
-  // The outcomes outside the transform's domain, which stop every section.
-  let refused = null;
-  if (tfNow !== 'none' && list.length >= 2) {
-    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: finiteIds(d) })), tfNow);
-    if (tr.ok) groups = tr.values;
-    else refused = tr;
-  }
   // Under common random numbers across designs the replications are matched
   // into complete blocks, and every procedure runs on the aligned groups.
   const paired = pairMode === 'paired';
   let match = null;
+  // Each design's replication ids in step with its outcomes, aligned with them under pairing.
+  let blockIds = list.map(finiteIds);
   const pairNote = rootEl.querySelector('#sev-pairnote');
   pairNote.innerHTML = '';
   if (paired && list.length >= 2) {
@@ -29625,7 +29622,8 @@ function update() {
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why });
     groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
-    rawGroups = list.map((d, i) => Float64Array.from(match.blocks, blk => rawGroups[i][blk[i]]));
+    rawGroups = groups;
+    blockIds = list.map((d, i) => match.blocks.map(blk => ids[i][blk[i]]));
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
@@ -29633,6 +29631,15 @@ function update() {
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#sev-match-note').textContent = match ? match.why : '';
+  // The outcomes outside the transform's domain, which stop every section.
+  // Under pairing only the matched replications are analyzed, and so only
+  // theirs are checked.
+  let refused = null;
+  if (tfNow !== 'none' && list.length >= 2) {
+    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: blockIds[i] })), tfNow);
+    if (tr.ok) groups = tr.values;
+    else refused = tr;
+  }
   syncControls(list, groups);
   showExcluded();
   const level = state.settings.base, alpha = 1 - level;
@@ -30213,7 +30220,8 @@ function drawPlan() {
   {
     const sec = cards.anova;
     const g = c ? Math.abs(c.grandMean) : NaN;
-    const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
+    // Under the log, a ratio of 1.1, which means the same in any units.
+    const dDef = !c ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma);
     const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
     planDelta = delta;
     syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
@@ -30360,7 +30368,7 @@ export function render(root) {
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>');
   root.querySelector('#sev-plan-anova').innerHTML = subPlanMarkup(powerControls('sev', 'Shift to detect δ',
-      'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean.'));
+      'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'));
   for (const sid of ['diffs', 'anova']) root.querySelector('#sev-plan-' + sid).appendChild(details('Half-width or power?', PLAN_WHY));
   const powSel = root.querySelector('#sev-plan-pow');
   powSel.addEventListener('change', () => { plan.power = Number(powSel.value); state.setPick(id, 'power', plan.power); drawPlan(); });
@@ -31972,7 +31980,7 @@ import { rankSum, signedRank } from '../stats/nonparam.js';
 import { summary } from '../stats/descriptive.js';
 import { card, cardRow, datasetSelect, levelSelect, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, transformLabel } from '../stats/transform.js';
+import { transformSets, applyTransform, transformOf, isTransform, transformLabel, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { twoRecipe } from '../io/recipes.js';
@@ -32405,11 +32413,6 @@ function update() {
     if (e && e.dropped.length) notes.push(notice('warn', plural(e.dropped.length, 'replication') + ' of ' + tag + ' gave no outcome and ' + (e.dropped.length === 1 ? 'was' : 'were') + ' left out: ' + (e.dropped.length === 1 ? 'id ' : 'ids ') + listIds(e.dropped) + '.'));
   }
   let ready = dsA && dsB && dsA.id !== dsB.id;
-  if (ready && tf !== 'none') {
-    const tr = transformSets([{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }], tf);
-    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
-    else { eA = Object.assign({}, eA, { v: tr.values[0] }); eB = Object.assign({}, eB, { v: tr.values[1] }); }
-  }
 
   // The match rule and its note, shown under the Paired switch.
   let match = null;
@@ -32423,6 +32426,25 @@ function update() {
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
+
+  // Under a transform, the outcomes the comparison uses must fit its domain:
+  // every outcome of both designs, or under pairing only the matched ones,
+  // because a replication with no partner is left out of the analysis. An
+  // unmatched outcome outside the domain is left NaN and used nowhere.
+  if (ready && tf !== 'none') {
+    let sets = [{ name: dsA.name, values: eA.v, ids: eA.ids }, { name: dsB.name, values: eB.v, ids: eB.ids }];
+    if (mode === 'paired') {
+      const mm = matchPairs(eA.ids, eB.ids, match.by);
+      sets = [{ name: dsA.name, values: mm.pairs.map(([i]) => eA.v[i]), ids: mm.pairs.map(([i]) => eA.ids[i]) },
+              { name: dsB.name, values: mm.pairs.map(([, j]) => eB.v[j]), ids: mm.pairs.map(([, j]) => eB.ids[j]) }];
+    }
+    const tr = transformSets(sets, tf);
+    if (!tr.ok) { notes.push(transformRefusal(tf, tr)); ready = false; refused = true; }
+    else {
+      eA = Object.assign({}, eA, { v: applyTransform(eA.v, tf).values });
+      eB = Object.assign({}, eB, { v: applyTransform(eB.v, tf).values });
+    }
+  }
 
   if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level);
   else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level);
@@ -32487,7 +32509,8 @@ function drawPlan() {
 
   // By power.
   const m = c ? Math.abs(c.meanA) : NaN;
-  const dDef = c ? (m > 0 ? round2(0.1 * m) : round2(0.25 * c.sdA)) : NaN;
+  // Under the log, a ratio of 1.1, which means the same in any units.
+  const dDef = !c ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : m > 0 ? round2(0.1 * m) : round2(0.25 * c.sdA);
   const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
   syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'two-plan-delta', 'Difference to detect δ', stepFor(dDef), delta,
     v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
@@ -33072,11 +33095,14 @@ function renderPaired(res, notes, d, level) {
     planCtx = { msg: d ? 'Planning needs at least two matched pairs.' : 'Choose two different datasets above to plan replications.' };
     return;
   }
+  // Design A's outcomes for the planning defaults: under a transform, an
+  // unmatched outcome outside its domain is NaN and is left out here too.
+  const vA = Array.from(d.eA.v).filter(Number.isFinite);
   let sumA = 0;
-  for (const v of d.eA.v) sumA += v;
-  const iA = tInterval(d.eA.v, level);
+  for (const v of vA) sumA += v;
+  const iA = tInterval(vA, level);
   planCtx = { paired: true, key: d.dsA.id + '|' + d.dsB.id + (d.tf !== 'none' ? '|' + d.tf : ''), dsA: d.dsA, sdD: pr.sdD, nPairs: pr.n, hw: pr.hw,
-              meanA: sumA / d.eA.v.length, sdA: iA.sd,
+              meanA: sumA / vA.length, sdA: iA.sd,
               // What the regenerate scripts are built from.
               recipeIn: { dsA: d.dsA, dsB: d.dsB, eA: d.rawA, eB: d.rawB, mode: 'paired', match: Object.assign({ by: d.match.by }, m), proc: effProc(), transform: d.tf } };
   const unmatched = m.unmatchedA.length + m.unmatchedB.length;
@@ -33170,7 +33196,7 @@ export function render(root) {
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>',
     powerControls('two', 'Difference to detect δ',
-      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
+      'The difference between the two designs’ true means that a two-sided test should detect, in the response’s units. The default is 10% of design A’s mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1. Under common random numbers, the paired plan uses the standard deviation of the differences.'));
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   planSec.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
     if (plan.mode === b.dataset.plan) return;
@@ -36970,6 +36996,14 @@ export const TRANSFORMS = [
   { id: 'reciprocal', label: 'Reciprocal', word: 'Reciprocal', scale: 'reciprocal', f: y => 1 / y, inv: v => (Number.isNaN(v) ? NaN : v > 0 ? 1 / v : Infinity), ok: y => y > 0,
     domain: 'above 0', decreasing: true, center: 'harmonic mean' }
 ];
+
+/**
+ * The default shift or half-width on the log scale: ln 1.1 to two significant
+ * digits, a ratio of 1.1. A difference of logs is the log of a ratio, and so
+ * this default means the same in any units, where a percent of the mean of
+ * the logs (which a change of units moves by a constant) would not.
+ */
+export const LOG_DEFAULT_SHIFT = 0.095;
 
 const BY_ID = new Map(TRANSFORMS.map(t => [t.id, t]));
 

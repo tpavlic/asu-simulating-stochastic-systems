@@ -40,6 +40,14 @@ export const TRANSFORMS = [
     domain: 'above 0', decreasing: true, center: 'harmonic mean' }
 ];
 
+/**
+ * The default shift or half-width on the log scale: ln 1.1 to two significant
+ * digits, a ratio of 1.1. A difference of logs is the log of a ratio, and so
+ * this default means the same in any units, where a percent of the mean of
+ * the logs (which a change of units moves by a constant) would not.
+ */
+export const LOG_DEFAULT_SHIFT = 0.095;
+
 const BY_ID = new Map(TRANSFORMS.map(t => [t.id, t]));
 
 /**

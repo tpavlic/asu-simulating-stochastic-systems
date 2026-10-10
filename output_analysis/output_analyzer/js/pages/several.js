@@ -19,7 +19,7 @@ import { subsetSelection } from '../stats/select.js';
 import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
-import { transformSets, transformOf, isTransform, backTransform, backInterval } from '../stats/transform.js';
+import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
 import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
@@ -658,17 +658,12 @@ function update() {
   const tfN = tfNow === 'none' ? null : transformNote(tfNow, 'Each design’s interval is also carried back to the response’s units, as an interval on its ' + esc(transformOf(tfNow).center) +
     (tfNow === 'log' ? ', and each difference as a ratio of geometric means.' : '; a difference on this scale has no counterpart in those units.'));
   tfBox.replaceChildren(...(tfN ? [tfN] : []));
-  // The outcomes outside the transform's domain, which stop every section.
-  let refused = null;
-  if (tfNow !== 'none' && list.length >= 2) {
-    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: finiteIds(d) })), tfNow);
-    if (tr.ok) groups = tr.values;
-    else refused = tr;
-  }
   // Under common random numbers across designs the replications are matched
   // into complete blocks, and every procedure runs on the aligned groups.
   const paired = pairMode === 'paired';
   let match = null;
+  // Each design's replication ids in step with its outcomes, aligned with them under pairing.
+  let blockIds = list.map(finiteIds);
   const pairNote = rootEl.querySelector('#sev-pairnote');
   pairNote.innerHTML = '';
   if (paired && list.length >= 2) {
@@ -679,7 +674,8 @@ function update() {
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why });
     groups = list.map((d, i) => Float64Array.from(match.blocks, blk => groups[i][blk[i]]));
-    rawGroups = list.map((d, i) => Float64Array.from(match.blocks, blk => rawGroups[i][blk[i]]));
+    rawGroups = groups;
+    blockIds = list.map((d, i) => match.blocks.map(blk => ids[i][blk[i]]));
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
@@ -687,6 +683,15 @@ function update() {
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#sev-match-note').textContent = match ? match.why : '';
+  // The outcomes outside the transform's domain, which stop every section.
+  // Under pairing only the matched replications are analyzed, and so only
+  // theirs are checked.
+  let refused = null;
+  if (tfNow !== 'none' && list.length >= 2) {
+    const tr = transformSets(list.map((d, i) => ({ name: d.name, values: groups[i], ids: blockIds[i] })), tfNow);
+    if (tr.ok) groups = tr.values;
+    else refused = tr;
+  }
   syncControls(list, groups);
   showExcluded();
   const level = state.settings.base, alpha = 1 - level;
@@ -1267,7 +1272,8 @@ function drawPlan() {
   {
     const sec = cards.anova;
     const g = c ? Math.abs(c.grandMean) : NaN;
-    const dDef = c ? (g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma)) : NaN;
+    // Under the log, a ratio of 1.1, which means the same in any units.
+    const dDef = !c ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma);
     const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
     planDelta = delta;
     syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
@@ -1414,7 +1420,7 @@ export function render(root) {
       '<span class="ctrl-note plan-hw-def"></span>' +
     '</div>');
   root.querySelector('#sev-plan-anova').innerHTML = subPlanMarkup(powerControls('sev', 'Shift to detect δ',
-      'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean.'));
+      'How far one design’s true mean sits from the common mean of the others, in the response’s units, for the F test to detect. The default is 10% of the grand mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'));
   for (const sid of ['diffs', 'anova']) root.querySelector('#sev-plan-' + sid).appendChild(details('Half-width or power?', PLAN_WHY));
   const powSel = root.querySelector('#sev-plan-pow');
   powSel.addEventListener('change', () => { plan.power = Number(powSel.value); state.setPick(id, 'power', plan.power); drawPlan(); });
