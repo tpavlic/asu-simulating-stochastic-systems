@@ -524,6 +524,8 @@ section('11. MLE recovery, every distribution');
     ['gamma',           [2.60, 1.55],        [0.06, 0.06],       101],
     ['weibull',         [4.20, 1.80],        [0.04, 0.05],       102],
     ['lognormal',       [1.15, 0.62],        [0.03, 0.04],       103],
+    ['loglogistic',     [3.20, 4.50],        [0.03, 0.02],       114],
+    ['pearson5',        [3.40, 7.80],        [0.04, 0.05],       115],
     ['normal',          [12.5, 3.10],        [0.02, 0.03],       104],
     ['uniform',         [2.00, 9.00],        [0.01, 0.01],       105],
     ['triangular',      [1.00, 6.00, 10.0],  [0.10, 0.06, 0.05], 106],
@@ -592,6 +594,84 @@ section('11. MLE recovery, every distribution');
     ok(D < 0.02, `beta: the fitted curve tracks the data, D = ${D.toFixed(5)}`);
   }
 
+  /* Log-logistic: the two score equations, in b = alpha and
+     c = alpha ln(beta) on z = ln x, are zero at the fit:
+       Sum (1 - 2 s(u)) = 0   and   n/alpha + Sum (1 - 2 s(u)) z = 0,
+     with u = alpha (z - ln beta) and s the logistic function. */
+  {
+    const u = IA.MRG32k3a(116), x = [];
+    for (let i = 0; i < 5000; i++) x.push(IA.DISTS.loglogistic.sample(u, [2.4, 1.7]));
+    const f = IA.fitDist(IA.DISTS.loglogistic, x, false, false);
+    const [al, be] = f.p;
+    let s1 = 0, s2 = 0;
+    for (const v of x) {
+      const z = Math.log(v), uu = al * (z - Math.log(be)), g = 1 - 2 / (1 + Math.exp(-uu));
+      s1 += g; s2 += g * z;
+    }
+    ok(Math.abs(s1) < 1e-7 * x.length, `log-logistic: first score equation is solved (${s1.toExponential(2)})`);
+    ok(Math.abs(x.length / al + s2) < 1e-7 * x.length,
+       `log-logistic: second score equation is solved (${(x.length / al + s2).toExponential(2)})`);
+  }
+
+  /* Pearson type V: its fit is the gamma fit to the reciprocals, and the
+     two log-likelihoods differ by exactly the Jacobian -2 Sum ln x. */
+  {
+    const u = IA.MRG32k3a(117), x = [];
+    for (let i = 0; i < 5000; i++) x.push(IA.DISTS.pearson5.sample(u, [2.7, 5.5]));
+    const f = IA.fitDist(IA.DISTS.pearson5, x, false, false);
+    const g = IA.fitDist(IA.DISTS.gamma, x.map(v => 1 / v), false, false);
+    close(f.p[0], g.p[0], 1e-14, 'Pearson V: the shape is the gamma shape of 1/x');
+    close(f.p[1], 1 / g.p[1], 1e-14, 'Pearson V: the scale is 1 over the gamma scale of 1/x');
+    const jac = x.reduce((a, v) => a - 2 * Math.log(v), 0);
+    close(f.ll, g.ll + jac, 1e-11, 'Pearson V: log-likelihood = gamma log-likelihood of 1/x + Jacobian');
+  }
+
+  /* Pearson type VI.  Its three parameters are weakly identified (the
+     shapes and the scale trade off), and so recovery is checked loosely and
+     the solver against its own optimality conditions: at the fit the two
+     beta likelihood equations hold for t = x/(x + beta), and the profile's
+     slope in ln(beta) is zero. */
+  {
+    const u = IA.MRG32k3a(118), truth = [3, 5, 4], x = [];
+    for (let i = 0; i < N; i++) x.push(IA.DISTS.pearson6.sample(u, truth));
+    const f = IA.fitDist(IA.DISTS.pearson6, x, false, false);
+    ok(f.ok && !f.edge, 'Pearson VI: fit succeeded, away from either limit');
+    const [a1, a2, be] = f.p;
+    let ml = 0, m1 = 0, mt = 0;
+    for (const v of x) { const t = v / (v + be); ml += Math.log(t); m1 += Math.log(1 - t); mt += t; }
+    ml /= x.length; m1 /= x.length; mt /= x.length;
+    close(IA.digamma(a1) - IA.digamma(a1 + a2), ml, 1e-9, 'Pearson VI: first beta likelihood equation is solved');
+    close(IA.digamma(a2) - IA.digamma(a1 + a2), m1, 1e-9, 'Pearson VI: second beta likelihood equation is solved');
+    ok(Math.abs((a1 + a2) * mt - a1) < 1e-8 * a1,
+       `Pearson VI: the profile slope in ln(beta) is zero (${((a1 + a2) * mt - a1).toExponential(2)})`);
+    ok([0, 1, 2].every(j => Math.abs(f.p[j] - truth[j]) / truth[j] < 0.15),
+       `Pearson VI: ${f.p.map(v => v.toPrecision(4)).join(', ')} within 15% of 3, 5, 4`);
+    /* Mean and median of the fitted model against the sample's. */
+    const xs = x.slice().sort((p2, q) => p2 - q);
+    const D = IA.ksStat(xs, IA.fitCdf(f), IA.fitAtom(f)).D;
+    ok(D < 0.01, `Pearson VI: the fitted curve tracks the data, D = ${D.toFixed(5)}`);
+  }
+
+  /* The gamma is a limit of the Pearson VI, and so on gamma data the
+     Pearson VI can do no worse than the gamma, to within the gap left by
+     stopping short of the limit; and the shift is refused, because the
+     Pearson VI takes none. */
+  {
+    const u = IA.MRG32k3a(119), x = [];
+    for (let i = 0; i < 3000; i++) x.push(IA.DISTS.gamma.sample(u, [2.5, 1.4]));
+    const f6 = IA.fitDist(IA.DISTS.pearson6, x, false, false);
+    const fg = IA.fitDist(IA.DISTS.gamma, x, false, false);
+    ok(f6.ll > fg.ll - 0.05, `Pearson VI on gamma data: ll ${f6.ll.toFixed(3)} vs the gamma's ${fg.ll.toFixed(3)}` +
+       (f6.edge ? ` (stopped at the ${f6.edge} limit)` : ''));
+    const fs = IA.fitDist(IA.DISTS.pearson6, x, true, false);
+    ok(fs.ok && fs.shift === 0 && fs.k === 3, 'Pearson VI: the shift box leaves it unshifted with k = 3');
+    /* Driven hard toward the gamma limit, the edge flag is raised. */
+    const u2 = IA.MRG32k3a(120), y = [];
+    for (let i = 0; i < 40000; i++) y.push(IA.DISTS.gamma.sample(u2, [2.5, 1.4]));
+    const fe = IA.fitDist(IA.DISTS.pearson6, y, false, false);
+    ok(fe.ok, `Pearson VI on 40,000 gamma values: ${fe.edge ? 'flags the ' + fe.edge + ' limit' : 'interior fit, alpha2 = ' + fe.p[1].toPrecision(4)}`);
+  }
+
   /* The triangular endpoints must sit strictly outside the data, or the
      extreme observations get zero density and the likelihood collapses. */
   {
@@ -641,6 +721,7 @@ section('12. cdf / quantile / pdf consistency, every distribution');
   const PS = {
     expo: [3.2], gamma: [2.4, 1.3], erlang: [3, 1.1], weibull: [4.0, 1.7],
     lognormal: [0.8, 0.55], normal: [10, 2.5], uniform: [1, 7],
+    loglogistic: [3.5, 4], pearson5: [3, 8], pearson6: [3, 5, 4],
     triangular: [1, 4, 9], beta: [2.0, 3.5, 0.5, 6.5],
     poisson: [4.2], geometric: [0.3], discreteUniform: [2, 9]
   };
@@ -702,6 +783,7 @@ section('13. samplers match their own cdf');
   const PS = {
     expo: [2.5], gamma: [3.1, 0.8], erlang: [4, 1.2], weibull: [2.2, 1.6],
     lognormal: [0.4, 0.7], normal: [5, 1.5], uniform: [2, 6],
+    loglogistic: [2.2, 3], pearson5: [2.5, 4], pearson6: [2, 6, 3],
     triangular: [0, 3, 8], beta: [1.7, 2.9, 1, 5],
     poisson: [3.7], geometric: [0.22], discreteUniform: [1, 6]
   };
@@ -1222,7 +1304,111 @@ section('15e. holding parameters fixed');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15f.  THE CHI-SQUARE DEGREES OF FREEDOM
+   15f.  THE MIRROR IMAGE, c - X
+   ══════════════════════════════════════════════════════════════════════
+   A mirrored fit is the shifted fit run on -x, read back with c = -gamma.
+   A flip has a Jacobian of 1, and both K-S and A-D are unchanged when the
+   data and the model are flipped together, and so every number the page
+   reports for a mirrored fit must equal the shifted fit's on -x. */
+section('15f. the mirror image, c - X');
+{
+  const u = IA.MRG32k3a(1501), truth = [3, 1.5], c0 = 20, x = [];
+  for (let i = 0; i < 8000; i++) x.push(c0 - IA.DISTS.gamma.sample(u, truth));
+  const neg = x.map(v => -v);
+  const xs = x.slice().sort((a, b) => a - b), ns = neg.slice().sort((a, b) => a - b);
+
+  const fg = IA.fitDist(IA.DISTS.gamma, x, false, false, null, null, true);
+  ok(fg.ok && fg.reflect === true, 'gamma: the mirrored fit succeeds and is marked mirrored');
+  ok(Math.abs(fg.shift - c0) / c0 < 0.005 && Math.abs(fg.p[0] - 3) / 3 < 0.06 && Math.abs(fg.p[1] - 1.5) / 1.5 < 0.06,
+     `gamma: recovers c = ${fg.shift.toPrecision(5)} (true 20), shape ${fg.p[0].toPrecision(4)} (3), ` +
+     `scale ${fg.p[1].toPrecision(4)} (1.5)`);
+  ok(fg.k === 3, 'gamma: c counts as a third parameter');
+
+  for (const key of IA.CONTINUOUS_KEYS) {
+    const d = IA.DISTS[key];
+    const fm = IA.fitDist(d, x, false, false, null, null, true);
+    if (!d.shiftable) {
+      const f0 = IA.fitDist(d, x, false, false);
+      ok(!fm.reflect && fm.ok === f0.ok && (!f0.ok || fm.ll === f0.ll),
+         `${key}: does not start at zero, and so the mirror image leaves its fit unchanged`);
+      continue;
+    }
+    const fs = IA.fitDist(d, neg, true, false);
+    close(fm.ll, fs.ll, 1e-12, `${key}: mirrored log-likelihood equals the shifted fit's on -x`);
+    const Dm = IA.ksStat(xs, IA.fitCdf(fm), IA.fitAtom(fm)).D, Ds = IA.ksStat(ns, IA.fitCdf(fs), IA.fitAtom(fs)).D;
+    close(Dm, Ds, 1e-9, `${key}: K-S D is the same either way`);
+    close(IA.adStat(xs, IA.fitCdf(fm)), IA.adStat(ns, IA.fitCdf(fs)), 1e-7, `${key}: A-D is the same either way`);
+  }
+
+  /* The mirrored model's own functions agree with one another. */
+  const F = IA.fitCdf(fg), Q = IA.fitQuantile(fg), f = IA.fitPdf(fg);
+  let worst = 0;
+  for (const q of [1e-4, 0.01, 0.3, 0.5, 0.9, 0.999]) worst = Math.max(worst, Math.abs(F(Q(q)) - q) / Math.min(q, 1 - q));
+  ok(worst < 1e-8, `mirrored gamma: F(Q(u)) = u (worst ${worst.toExponential(2)})`);
+  {
+    const a = Q(0.001), b = Q(0.999), M = 20000, h = (b - a) / M;
+    let acc = 0;
+    for (let m = 0; m < M; m++) acc += f(a + (m + 0.5) * h) * h;
+    close(acc, F(b) - F(a), 2e-4, 'mirrored gamma: the pdf integrates to the cdf');
+  }
+  ok(IA.fitLo(fg) === -Infinity && F(fg.shift) === 1, 'mirrored gamma: no left end, and all the mass lies below c');
+  {
+    const s2 = IA.fitSampler(fg, IA.MRG32k3a(1502)), y = [];
+    for (let i = 0; i < 20000; i++) y.push(s2());
+    y.sort((a, b) => a - b);
+    const D = IA.ksStat(y, F, IA.fitAtom(fg)).D;
+    ok(D < 1.63 / Math.sqrt(y.length), `mirrored gamma: the sampler matches its own cdf, D = ${D.toFixed(5)}`);
+  }
+
+  /* Holding c. */
+  const fh = IA.fitDist(IA.DISTS.gamma, x, false, false, null, 20.5, true);
+  ok(fh.ok && fh.shift === 20.5 && fh.shiftHeld && fh.k === 2, 'held c: used as given, and costs no parameter');
+  const fb = IA.fitDist(IA.DISTS.gamma, x, false, false, null, Math.max(...x) - 1, true);
+  ok(!fb.ok && /largest observation/.test(fb.msg), 'held c below the largest observation is refused with a reason');
+
+  /* rankAll passes the flag through, and on mirrored data the mirrored
+     gamma beats every unmirrored candidate. */
+  const sub = x.slice(0, 2000);
+  const rows = IA.rankAll(sub, IA.CONTINUOUS_KEYS, false, IA.makeBins(sub, 20), {}, {}, true);
+  const best = IA.bestBy(rows, 'aic');
+  ok(best === 'gamma' || best === 'erlang', `rankAll with the mirror image: best by AIC is ${best}`);
+
+  /* Exports and scripts. */
+  const ex = IA.expressions(fg);
+  ok(['arena', 'simio', 'anylogic', 'r', 'matlab'].every(t => ex[t].startsWith(IA.num(fg.shift) + ' - (')),
+     'every tool but Python writes the mirror as c - (expression)');
+  ok(ex.python.endsWith('.rvs(size=n)') && ex.python.startsWith(IA.num(fg.shift) + ' - '),
+     'Python subtracts n draws from c');
+  const sc = IA.reproScripts(fg, x.slice(0, 100), 1, 50);
+  ok(sc.r.startsWith('# This page fitted the mirror image') && sc.matlab.startsWith('% This page fitted the mirror image'),
+     'the R and MATLAB scripts say first that they refit y = c - x');
+  ok(sc.python.includes('K = len(D_ARGS)       # loc is pinned at 0 on y = c - x, but c was estimated'),
+     'the Python script counts the estimated c in its AIC');
+
+  /* The bootstrap refits mirrored.  A mirrored resample is exactly the
+     negative of the shifted fit's resample on -x (the same uniforms, with
+     c = -gamma), and K-S and A-D are unchanged by the flip, and so the two
+     bootstraps must return identical p-values, not merely similar ones. */
+  {
+    const ur = IA.MRG32k3a(77001), y = [];
+    for (let i = 0; i < 60; i++) y.push(c0 - IA.DISTS.weibull.sample(ur, [3, 1.6]));
+    y.sort((a, b) => a - b);
+    const yn = y.map(v => -v).sort((a, b) => a - b);
+    const fm = IA.fitDist(IA.DISTS.weibull, y, false, false, null, null, true);
+    const fs = IA.fitDist(IA.DISTS.weibull, yn, true, false);
+    const Fm = IA.fitCdf(fm), Fs = IA.fitCdf(fs);
+    const bm = IA.bootstrapRun(fm, 60, 200, 31337, false, IA.ksStat(y, Fm, IA.fitAtom(fm)).D, IA.adStat(y, Fm),
+                               null, NaN, 0, null, true);
+    const bs = IA.bootstrapRun(fs, 60, 200, 31337, true, IA.ksStat(yn, Fs, IA.fitAtom(fs)).D, IA.adStat(yn, Fs));
+    bm.step(200); bs.step(200);
+    const rm = bm.result(), rs = bs.result();
+    close(rm.pD, rs.pD, 1e-12, `mirrored Weibull: bootstrap K-S p = ${rm.pD.toFixed(4)}, identical to the shifted fit's on -x`);
+    close(rm.pA, rs.pA, 1e-12, `mirrored Weibull: bootstrap A-D p = ${rm.pA.toFixed(4)}, identical to the shifted fit's on -x`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   15g.  THE CHI-SQUARE DEGREES OF FREEDOM
    ══════════════════════════════════════════════════════════════════════
    The page counts only REGULAR parameters against the chi-square degrees
    of freedom, on the grounds that an extreme order statistic converges
@@ -1231,7 +1417,7 @@ section('15e. holding parameters fixed');
    p-value that rejects about 5% of the time.  Both conventions are run,
    and the numbers are printed either way.
    ══════════════════════════════════════════════════════════════════════ */
-section('15f. chi-square degrees of freedom');
+section('15g. chi-square degrees of freedom');
 {
   /* Order-statistic parameters are identified, and only those. */
   ok(IA.DISTS.uniform.orderStat.join(',') === '0,1', 'uniform: both endpoints are order statistics');
@@ -1349,7 +1535,8 @@ section('16. bootstrap calibration under a true null');
   const se = Math.sqrt(0.05 * 0.95 / R);
   console.log(C.d(`  ${R} replications x ${B} resamples, n = ${n} (set IA_CALIB_REPS / IA_CALIB_B to change)`));
 
-  for (const [key, truth] of [['expo', [2.0]], ['gamma', [2.5, 1.2]], ['weibull', [3.0, 1.6]]]) {
+  for (const [key, truth] of [['expo', [2.0]], ['gamma', [2.5, 1.2]], ['weibull', [3.0, 1.6]],
+                              ['loglogistic', [3.0, 2.0]], ['pearson5', [3.0, 6.0]], ['pearson6', [3, 6, 4]]]) {
     const d = IA.DISTS[key];
     let rejD = 0, rejA = 0, rejTable = 0, used = 0;
     for (let rep = 0; rep < R; rep++) {

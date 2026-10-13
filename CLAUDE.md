@@ -701,7 +701,7 @@ better.
 ### Input Modeling
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
-  two tabs, one fitting fourteen candidate distributions to a pasted sample and one estimating a
+  two tabs, one fitting seventeen candidate distributions to a pasted sample and one estimating a
   piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
@@ -718,7 +718,7 @@ better.
      it in Node, and the bootstrap Web Worker is built from the same `<script id="ia-core">`
      element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
   2. *`verify_input_analyzer.mjs` is not shipped with the widget and is not linked from the site. Run
-     it (`node input_modeling/verify_input_analyzer.mjs`, about seven minutes) after touching
+     it (`node input_modeling/verify_input_analyzer.mjs`, about fifteen minutes) after touching
      anything in the core; it checks the special functions against exact identities, recovers known
      parameters for every distribution, and measures the bootstrap's rejection rate under a true
      null, confirms that the classical K-S and A-D p-values are correctly calibrated when the
@@ -730,7 +730,14 @@ better.
      parameters that are extreme order statistics -- a uniform's endpoints, a beta's interval, a
      shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
-     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.)*
+     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.*
+  4. *A mirrored fit ("Fit the mirror image c − X", for a long left tail) is stored as an ordinary
+     shifted fit with `reflect: true`, its right end c in `shift`: `fitDist` fits the shifted model
+     to −x and negates the start, and so the profile search, the at-bound diagnosis, and the holds are
+     the shift's own, and `fitCdf`, `fitPdf`, `fitQuantile`, and `fitSampler` read `shift` and
+     `reflect` together. Any new code that reads `fit.shift` has to check `fit.reflect` as well. Only
+     `shiftable` candidates are mirrored, and the Pearson type VI is deliberately not `shiftable`:
+     with a shift it has four weakly identified parameters, and its shifted bootstrap took minutes.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

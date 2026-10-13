@@ -163,8 +163,8 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 /* .chk is nowrap, which is right for a two-word label and wrong for this
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
-#shift-wrap { white-space: normal; align-items: flex-start; }
-#shift-wrap input { margin-top: .2em; }
+#shift-wrap, #reflect-wrap { white-space: normal; align-items: flex-start; }
+#shift-wrap input, #reflect-wrap input { margin-top: .2em; }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible,
 a:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -199,8 +199,10 @@ textarea.data-in:focus { border-style: solid; }
 .gen { border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 11px;
        margin-top: 12px; background: var(--chart-bg); }
 .gen-row { display: flex; align-items: center; gap: 6px 9px; flex-wrap: wrap; }
+/* The card's heading sits on its own line, and the controls start flush left
+   under it, so that a wrapped second row lines up with the first. */
 .gen-lbl { font-size: .78rem; font-weight: 700; color: var(--accent);
-           text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+           text-transform: uppercase; letter-spacing: .05em; margin-bottom: 7px; }
 .gen-p { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .gen-p label { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .82rem;
                color: var(--muted); }
@@ -526,8 +528,8 @@ footer a:hover { text-decoration: underline; }
     </div>
 
     <div class="gen">
+      <div class="gen-lbl">Or generate</div>
       <div class="gen-row">
-        <span class="gen-lbl">Or generate</span>
         <select id="gen-dist" aria-label="Distribution to generate from"></select>
         <span class="gen-row" id="gen-params" style="gap:6px 8px"></span>
         <span class="gen-p" id="gen-shift-wrap">
@@ -634,6 +636,9 @@ footer a:hover { text-decoration: underline; }
       <label class="chk" id="shift-wrap" data-tip="Each candidate that starts at zero gets its own γ, estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="shift-chk"> <span class="tip">Estimate a location shift γ (each candidate gets its own)</span>
       </label>
+      <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
+        <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
+      </label>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="rank-by">Sort by</label>
         <select id="rank-by">
@@ -697,16 +702,28 @@ footer a:hover { text-decoration: underline; }
         collected would have been the most probable. For a few distributions that works out to a
         formula you can do by hand—the exponential's fitted mean is just the sample mean, and
         the normal's are the sample mean and standard deviation. For the rest there is no such
-        formula, and the estimate is found by numerical search: the gamma and beta fits solve
-        their likelihood equations by Newton's method, the Weibull's shape by bisection, and the
-        triangular by Nelder&ndash;Mead, a search that needs no derivatives at all.</p>
+        formula, and the estimate is found by numerical search: the gamma, beta, and log-logistic
+        fits solve their likelihood equations by Newton's method, the Weibull's shape by bisection,
+        the Pearson type VI by a search over its scale with a beta fit at each step, and the
+        triangular by Nelder&ndash;Mead, a search that needs no derivatives at all. The Pearson
+        type V needs no search of its own: its fit is the gamma fit to the reciprocals of the
+        data.</p>
         <p>A <strong>location shift</strong> <code>&gamma;</code> slides a distribution sideways
         so it starts somewhere other than zero. It applies only to the candidates that begin at
-        zero—exponential, gamma, Erlang, Weibull, lognormal—because the others already carry
-        a location parameter of their own and a second one would be redundant. Turn the shift on
+        zero—exponential, gamma, Erlang, Weibull, lognormal, log-logistic, and Pearson type
+        V—because the others already carry a location parameter of their own and a second one
+        would be redundant. The Pearson type VI also begins at zero but takes no shift: with one,
+        it would have four parameters, more than a sample of a few hundred can pin down. Turn the shift on
         when the process has an unavoidable minimum: a fixed setup time, a mandatory inspection,
         a walk down a corridor that cannot be done in zero seconds. Turn it off otherwise because
         it adds a parameter and it is estimated from the smallest value you happened to see.</p>
+        <p>The <strong>mirror image</strong> flips the same candidates the other way. Each one is
+        fitted as <code>c &minus; X</code>: the shape turned around to end at a right end
+        <code>c</code>, with its long tail on the left, which suits data that pile up near a
+        ceiling and trail off below it. <code>c</code> is estimated from the largest values the way
+        <code>&gamma;</code> is from the smallest, and it counts as one more parameter. A flip
+        leaves every likelihood unchanged, and so the mirrored rows are ranked against the normal,
+        beta, and the rest on equal terms.</p>
       </div>
     </details>
   </section>
@@ -1084,8 +1101,8 @@ footer a:hover { text-decoration: underline; }
       </div>
     </div>
     <div class="gen">
+      <div class="gen-lbl">Or generate</div>
       <div class="gen-row">
-        <span class="gen-lbl">Or generate</span>
         <select id="a-gen-proc" aria-label="Arrival process to generate"></select>
         <span class="gen-row" id="a-gen-params" style="gap:6px 8px"></span>
         <span class="gen-p">
@@ -2339,6 +2356,245 @@ DISTS.lognormal = {
   sample: function (u01, p) { return Math.exp(p[0] + p[1] * u01.normal()); }
 };
 
+/* ══ Log-logistic(alpha shape, beta scale) ═════════════════════════
+   ln X is logistic with location ln(beta) and scale 1/alpha, and so the
+   CDF is the logistic curve in the logarithm:
+     F(x) = 1 / (1 + (x/beta)^-alpha),   median beta.
+   The mean is finite only for alpha > 1, and the variance only for
+   alpha > 2.  Its right tail falls off as a power of x, slower than any
+   gamma or Weibull, and for alpha > 1 its hazard rate rises and then
+   falls.
+
+   The fit works on z = ln x, where the Jacobian is a constant and the
+   log-likelihood, written in b = alpha and c = alpha ln(beta), is
+   Sum[ln b + g(b z - c)] with g the log of the standard logistic density.
+   g is concave and its argument is linear in (b, c), and so the whole
+   log-likelihood is strictly concave there: Newton with step halving
+   cannot miss the maximum, from any start. */
+function softplus(w) { return w > 0 ? w + Math.log1p(Math.exp(-w)) : Math.log1p(Math.exp(w)); }
+function logistic(w) { return w >= 0 ? 1 / (1 + Math.exp(-w)) : Math.exp(w) / (1 + Math.exp(w)); }
+DISTS.loglogistic = {
+  key: 'loglogistic', name: 'Log-logistic', lower: 'log-logistic', kind: 'continuous', np: 2, shiftable: true,
+  params: [{ sym: 'α', name: 'shape' }, { sym: 'β', name: 'scale' }],
+  lo: function () { return 0; },
+  fit: function (x) {
+    if (!allPositive(x)) return { ok: false, msg: 'Log-logistic needs strictly positive values. Try the location shift.' };
+    var n = x.length, z = new Array(n), zbar = meanLog(x), i;
+    /* Centered on the mean log so that c starts near zero and the Hessian
+       is well scaled whatever the units of x. */
+    for (i = 0; i < n; i++) z[i] = Math.log(x[i]) - zbar;
+    var sz = 0;
+    for (i = 0; i < n; i++) sz += z[i] * z[i];
+    sz = Math.sqrt(sz / n);
+    if (!(sz > 0)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
+    /* A logistic with scale s has standard deviation s pi / sqrt(3). */
+    var b = Math.PI / (Math.sqrt(3) * sz), c = 0;
+    function ll(bb, cc) {
+      if (!(bb > 0)) return -Infinity;
+      var acc = n * Math.log(bb);
+      for (var j = 0; j < n; j++) { var u = bb * z[j] - cc; acc += -u - 2 * softplus(-u); }
+      return acc;
+    }
+    var cur = ll(b, c);
+    for (var it = 0; it < 200; it++) {
+      var gc = 0, gb = n / b, hcc = 0, hcb = 0, hbb = -n / (b * b);
+      for (i = 0; i < n; i++) {
+        var u = b * z[i] - c, sg = logistic(u), g1 = 1 - 2 * sg, g2 = -2 * sg * (1 - sg);
+        gc -= g1; gb += g1 * z[i];
+        hcc += g2; hcb -= g2 * z[i]; hbb += g2 * z[i] * z[i];
+      }
+      var det = hcc * hbb - hcb * hcb;
+      if (!Number.isFinite(det) || det === 0) break;
+      /* Newton step: solve H d = -grad. */
+      var dc = -(hbb * gc - hcb * gb) / det, db = -(-hcb * gc + hcc * gb) / det;
+      var t = 1, next = ll(b + db, c + dc);
+      while (t > 1e-10 && !(next >= cur)) { t /= 2; next = ll(b + t * db, c + t * dc); }
+      if (!(next >= cur)) break;
+      b += t * db; c += t * dc; cur = next;
+      if (Math.abs(t * db) < 1e-13 * b && Math.abs(t * dc) < 1e-13 * (1 + Math.abs(c))) break;
+    }
+    if (!(b > 0) || !Number.isFinite(b) || !Number.isFinite(c))
+      return { ok: false, msg: 'The log-logistic fit did not converge.' };
+    return { ok: true, p: [b, Math.exp(zbar + c / b)] };
+  },
+  pdf: function (v, p) {
+    if (v <= 0) return 0;
+    var a = p[0], w = a * Math.log(v / p[1]);
+    return Math.exp(Math.log(a / v) + w - 2 * softplus(w));
+  },
+  cdf: function (v, p) { return v <= 0 ? 0 : logistic(p[0] * Math.log(v / p[1])); },
+  quantile: function (u, p) {
+    if (!(u > 0)) return 0;
+    if (!(u < 1)) return Infinity;
+    return p[1] * Math.exp((Math.log(u) - Math.log1p(-u)) / p[0]);
+  },
+  loglik: function (x, p) {
+    var a = p[0], lb = Math.log(p[1]), acc = 0;
+    for (var i = 0; i < x.length; i++) {
+      if (!(x[i] > 0)) return -Infinity;
+      var lx = Math.log(x[i]), w = a * (lx - lb);
+      acc += Math.log(a) - lx + w - 2 * softplus(w);
+    }
+    return acc;
+  },
+  sample: function (u01, p) { return DISTS.loglogistic.quantile(u01(), p); }
+};
+
+/* ══ Pearson type V(alpha shape, beta scale) ═══════════════════════
+   The inverse gamma: X = 1/Y with Y ~ gamma(alpha, scale 1/beta), and so
+     f(x) = beta^alpha x^-(alpha+1) e^(-beta/x) / Gamma(alpha),
+   which is Law's parameterization (and scipy's invgamma with scale beta).
+   Its left end is pushed hard against zero by the e^(-beta/x) factor and
+   its right tail falls off as a power of x.  The mean beta/(alpha - 1)
+   exists only for alpha > 1.
+
+   The Jacobian of x -> 1/x does not involve the parameters, and so the
+   maximum-likelihood fit is the gamma fit to the reciprocals, read back
+   as alpha = shape and beta = 1/scale. */
+DISTS.pearson5 = {
+  key: 'pearson5', name: 'Pearson type V', lower: 'Pearson type V', kind: 'continuous', np: 2, shiftable: true,
+  params: [{ sym: 'α', name: 'shape' }, { sym: 'β', name: 'scale' }],
+  lo: function () { return 0; },
+  fit: function (x) {
+    if (!allPositive(x)) return { ok: false, msg: 'Pearson type V needs strictly positive values. Try the location shift.' };
+    var y = new Array(x.length);
+    for (var i = 0; i < x.length; i++) y[i] = 1 / x[i];
+    var g = DISTS.gamma.fit(y);
+    if (!g.ok) return { ok: false, msg: g.msg.replace(/gamma/i, 'Pearson type V') };
+    return { ok: true, p: [g.p[0], 1 / g.p[1]] };
+  },
+  pdf: function (v, p) {
+    if (v <= 0) return 0;
+    var a = p[0], b = p[1];
+    return Math.exp(a * Math.log(b) - (a + 1) * Math.log(v) - b / v - logGamma(a));
+  },
+  cdf: function (v, p) { return v <= 0 ? 0 : gammaQ(p[0], p[1] / v); },
+  quantile: function (u, p) {
+    if (!(u > 0)) return 0;
+    if (!(u < 1)) return Infinity;
+    return p[1] / DISTS.gamma.quantile(1 - u, [p[0], 1]);
+  },
+  loglik: function (x, p) {
+    var a = p[0], b = p[1], n = x.length, sl = 0, si = 0, i;
+    for (i = 0; i < n; i++) { if (!(x[i] > 0)) return -Infinity; sl += Math.log(x[i]); si += 1 / x[i]; }
+    return n * (a * Math.log(b) - logGamma(a)) - (a + 1) * sl - b * si;
+  },
+  sample: function (u01, p) { return p[1] / gammaVariate(u01, p[0]); }
+};
+
+/* ══ Pearson type VI(alpha1, alpha2 shapes, beta scale) ════════════
+   The beta prime, scaled: X = beta Y1/Y2 with Y1 and Y2 independent
+   gammas of shapes alpha1 and alpha2, which is Law's parameterization
+   (and scipy's betaprime with scale beta):
+     f(x) = (x/beta)^(alpha1-1) / (beta B(alpha1,alpha2) (1 + x/beta)^(alpha1+alpha2)).
+   Its mean beta alpha1/(alpha2 - 1) exists only for alpha2 > 1.
+
+   T = X/(X + beta) is beta(alpha1, alpha2) distributed, and so for a
+   fixed scale beta the two shapes are a beta fit to t = x/(x + beta), and
+   the log-likelihood of x is that beta's plus the Jacobian
+   Sum ln(beta/(x + beta)^2).  The fit profiles over ln(beta): a coarse
+   grid, followed by a root of the profile's derivative inside the
+   bracketing cells.  By the envelope theorem that derivative is the partial
+   derivative at the profile's own shapes,
+     d ll / d ln(beta) = n ((alpha1 + alpha2) mean(t) - alpha1),
+   and so it comes free with every profile evaluation.
+
+   It takes no location shift.  With a shift, it would have four
+   parameters, and samples of a few hundred do not pin down four: in
+   trials, the shift and the shapes traded off against each other along a
+   nearly flat ridge, and the fit, run once per bootstrap resample, took
+   minutes.
+
+   The gamma and the Pearson type V are both limits of this family (as
+   beta and alpha2 grow together, and as beta shrinks while alpha1 grows),
+   and data from either one drives the profile to the matching end of
+   the search, where the likelihood is still creeping upward.  The fit
+   then stops at that end, a valid Pearson VI within a hair of the limit,
+   and flags `edge` so the page can say which limit it is approaching. */
+var PT6_SPAN = 9;   /* ln(beta) searched over ln(median) +/- this */
+function pt6Profile(x, lx, lb) {
+  var n = x.length, ml = 0, m1l = 0, my = 0, vy = 0, sj = 0, i, t = new Array(n);
+  for (i = 0; i < n; i++) {
+    /* ln(x + beta) as ln(beta) + log1p(x/beta), which stays accurate when
+       beta dwarfs x. */
+    var lxb = lb + Math.log1p(Math.exp(lx[i] - lb));
+    ml += lx[i] - lxb; m1l += lb - lxb; sj += lb - 2 * lxb;
+    t[i] = Math.exp(lx[i] - lxb); my += t[i];
+  }
+  ml /= n; m1l /= n; my /= n;
+  for (i = 0; i < n; i++) vy += (t[i] - my) * (t[i] - my);
+  vy /= n;
+  var ab = betaShapes(ml, m1l, my, vy);
+  if (!ab) return { ll: -Infinity };
+  var ll = n * ((ab[0] - 1) * ml + (ab[1] - 1) * m1l - logBeta(ab[0], ab[1])) + sj;
+  return { ll: Number.isFinite(ll) ? ll : -Infinity, p: [ab[0], ab[1], Math.exp(lb)],
+           slope: n * ((ab[0] + ab[1]) * my - ab[0]) };
+}
+DISTS.pearson6 = {
+  key: 'pearson6', name: 'Pearson type VI', lower: 'Pearson type VI', kind: 'continuous', np: 3, shiftable: false,
+  params: [{ sym: 'α₁', name: 'shape 1' }, { sym: 'α₂', name: 'shape 2' }, { sym: 'β', name: 'scale' }],
+  lo: function () { return 0; },
+  fit: function (x) {
+    if (!allPositive(x)) return { ok: false, msg: 'Pearson type VI needs strictly positive values, and it takes no location shift.' };
+    var n = x.length, lx = new Array(n), i;
+    for (i = 0; i < n; i++) lx[i] = Math.log(x[i]);
+    var s = summarize(x);
+    if (!(s.max > s.min)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
+    var lo = Math.log(s.med) - PT6_SPAN, hi = Math.log(s.med) + PT6_SPAN, G = 25;
+    var step = (hi - lo) / (G - 1), best = -1, bestLL = -Infinity, grid = [];
+    for (i = 0; i < G; i++) {
+      var r = pt6Profile(x, lx, lo + step * i);
+      grid.push(r);
+      if (r.ll > bestLL) { bestLL = r.ll; best = i; }
+    }
+    if (best < 0) return { ok: false, msg: 'The Pearson type VI fit did not converge.' };
+    /* Still rising at an end of the search: the sample is closer to one
+       of the two limits than any Pearson VI in range, and the end point
+       is reported as it is. */
+    if (best === 0 || best === G - 1)
+      return { ok: true, p: grid[best].p, edge: best === 0 ? 'pearson5' : 'gamma' };
+    /* The slope is positive at the left neighbor of the best grid point
+       and negative at the right one, or the best point would not be best;
+       the Illinois variant of regula falsi closes in on the zero between. */
+    var a = lo + step * (best - 1), b = lo + step * (best + 1);
+    var fa = grid[best - 1].slope, fb = grid[best + 1].slope, fin = grid[best], side = 0;
+    if (fa > 0 && fb < 0) {
+      for (var it = 0; it < 60 && b - a > 1e-12; it++) {
+        var c = (a * fb - b * fa) / (fb - fa), rc = pt6Profile(x, lx, c);
+        if (!Number.isFinite(rc.ll)) break;
+        if (rc.ll > fin.ll) fin = rc;
+        if (rc.slope > 0) { a = c; fa = rc.slope; if (side === -1) fb /= 2; side = -1; }
+        else { b = c; fb = rc.slope; if (side === 1) fa /= 2; side = 1; }
+        if (Math.abs(rc.slope) < 1e-10 * n) break;
+      }
+    }
+    return { ok: true, p: fin.p };
+  },
+  pdf: function (v, p) {
+    if (v <= 0) return 0;
+    var a1 = p[0], a2 = p[1], b = p[2], r = v / b;
+    return Math.exp((a1 - 1) * Math.log(r) - Math.log(b) - logBeta(a1, a2) - (a1 + a2) * Math.log1p(r));
+  },
+  cdf: function (v, p) { return v <= 0 ? 0 : betaInc(p[0], p[1], v / (v + p[2])); },
+  quantile: function (u, p) {
+    if (!(u > 0)) return 0;
+    if (!(u < 1)) return Infinity;
+    var t = DISTS.beta.quantile(u, [p[0], p[1], 0, 1]);
+    return t >= 1 ? Infinity : p[2] * t / (1 - t);
+  },
+  loglik: function (x, p) {
+    var a1 = p[0], a2 = p[1], b = p[2], n = x.length, acc = 0, i;
+    if (!(a1 > 0) || !(a2 > 0) || !(b > 0)) return -Infinity;
+    for (i = 0; i < n; i++) {
+      if (!(x[i] > 0)) return -Infinity;
+      var r = x[i] / b;
+      acc += (a1 - 1) * Math.log(r) - (a1 + a2) * Math.log1p(r);
+    }
+    return acc - n * (Math.log(b) + logBeta(a1, a2));
+  },
+  sample: function (u01, p) { return p[2] * gammaVariate(u01, p[0]) / gammaVariate(u01, p[1]); }
+};
+
 /* ══ Normal(mu, sigma) ═════════════════════════════════════════════ */
 DISTS.normal = {
   key: 'normal', name: 'Normal', lower: 'normal', kind: 'continuous', np: 2, shiftable: false, locParam: 0,
@@ -2471,6 +2727,35 @@ DISTS.triangular = {
   sample: function (u01, p) { return DISTS.triangular.quantile(u01(), p); }
 };
 
+/* The two beta shapes from the sufficient statistics of a sample on
+   (0,1): ml and m1l are the means of ln y and ln(1 - y), and my and vy the
+   mean and the n-divisor variance of y, which give the method-of-moments
+   start.  Newton on the 2x2 system whose Jacobian is built from trigamma.
+   Returns [a, b], or null if the iteration fails.  Shared by the beta,
+   whose y is the data rescaled to [L, U], and by the Pearson type VI,
+   whose y is x/(x + beta). */
+function betaShapes(ml, m1l, my, vy) {
+  var c = vy > 0 ? my * (1 - my) / vy - 1 : 1;
+  var a = c > 0 ? my * c : 1, b = c > 0 ? (1 - my) * c : 1;
+  if (!(a > 0)) a = 1;
+  if (!(b > 0)) b = 1;
+  for (var it = 0; it < 100; it++) {
+    var dab = digamma(a + b), tab = trigamma(a + b);
+    var g1 = digamma(a) - dab - ml, g2 = digamma(b) - dab - m1l;
+    var j11 = trigamma(a) - tab, j12 = -tab, j22 = trigamma(b) - tab;
+    var det = j11 * j22 - j12 * j12;
+    if (!Number.isFinite(det) || det === 0) break;
+    var da = -(j22 * g1 - j12 * g2) / det, db = -(-j12 * g1 + j11 * g2) / det;
+    /* Halve the step as often as needed to keep both shapes positive. */
+    var t = 1;
+    while (t > 1e-8 && (a + t * da <= 0 || b + t * db <= 0)) t /= 2;
+    a += t * da; b += t * db;
+    if (Math.abs(t * da) < 1e-13 * a && Math.abs(t * db) < 1e-13 * b) break;
+  }
+  if (!(a > 0) || !(b > 0) || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return [a, b];
+}
+
 /* ══ Beta(alpha, beta) rescaled onto [L, U] ════════════════════════
    A beta lives on a bounded interval, and its density is either zero or
    infinite at the two ends, so the data cannot sit exactly on them.  The
@@ -2510,26 +2795,9 @@ DISTS.beta = {
     my /= n; ml /= n; m1l /= n;
     for (i = 0; i < n; i++) { y = (x[i] - L) / W - my; vy += y * y; }
     vy /= n;
-    var c = vy > 0 ? my * (1 - my) / vy - 1 : 1;
-    var a = c > 0 ? my * c : 1, b = c > 0 ? (1 - my) * c : 1;
-    if (!(a > 0)) a = 1;
-    if (!(b > 0)) b = 1;
-    for (var it = 0; it < 100; it++) {
-      var dab = digamma(a + b), tab = trigamma(a + b);
-      var g1 = digamma(a) - dab - ml, g2 = digamma(b) - dab - m1l;
-      var j11 = trigamma(a) - tab, j12 = -tab, j22 = trigamma(b) - tab;
-      var det = j11 * j22 - j12 * j12;
-      if (!Number.isFinite(det) || det === 0) break;
-      var da = -(j22 * g1 - j12 * g2) / det, db = -(-j12 * g1 + j11 * g2) / det;
-      /* Halve the step as often as needed to keep both shapes positive. */
-      var t = 1;
-      while (t > 1e-8 && (a + t * da <= 0 || b + t * db <= 0)) t /= 2;
-      a += t * da; b += t * db;
-      if (Math.abs(t * da) < 1e-13 * a && Math.abs(t * db) < 1e-13 * b) break;
-    }
-    if (!(a > 0) || !(b > 0) || !Number.isFinite(a) || !Number.isFinite(b))
-      return { ok: false, msg: 'The beta shapes did not converge.' };
-    return { ok: true, p: [a, b, L, U] };
+    var ab = betaShapes(ml, m1l, my, vy);
+    if (!ab) return { ok: false, msg: 'The beta shapes did not converge.' };
+    return { ok: true, p: [ab[0], ab[1], L, U] };
   },
   pdf: function (v, p) {
     var a = p[0], b = p[1], L = p[2], U = p[3], W = U - L;
@@ -2923,8 +3191,8 @@ function discreteQuantile(dist, u, p, guess) {
    back on when two candidates tie. */
 /* The fitting candidates.  The two Johnson members are absent on purpose:
    see the comment on DISTS.johnsonSB. */
-var CONTINUOUS_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'normal',
-                       'uniform', 'triangular', 'beta', 'empirical'];
+var CONTINUOUS_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic',
+                       'pearson5', 'pearson6', 'normal', 'uniform', 'triangular', 'beta', 'empirical'];
 var DISCRETE_KEYS = ['poisson', 'geometric', 'discreteUniform', 'discreteEmpirical'];
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -3034,8 +3302,41 @@ function hasHolds(fixed) {
   return false;
 }
 
-function fitDist(dist, x, useShift, fast, fixed, fixedShift) {
+/* ── The mirror image ───────────────────────────────────────────────
+   With `reflect` set, a candidate that starts at zero is fitted as
+   X = c - Y instead of X = gamma + Y: the same shape flipped, ending at c
+   with its long tail on the left.  That is the shifted fit run on -x, whose
+   estimated start gamma' is -c, and so the profile search, the at-bound
+   and divergence diagnosis, and the holds all carry over unchanged; a held
+   c arrives here in the data's own units and is negated on the way in.
+   A reflection has a Jacobian of 1, and so the log-likelihood of x under
+   c - Y equals that of -x under gamma' + Y, and AIC and BIC stay
+   comparable with every unreflected row.  The result stores c in `shift`
+   and sets `reflect`; fitCdf, fitPdf, fitQuantile, and fitSampler below
+   read the two together.  Candidates that do not start at zero (the
+   normal, uniform, triangular, beta, empirical, and the Pearson type VI,
+   which takes no shift) are fitted as usual. */
+function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   if (!x || x.length < 2) return { ok: false, msg: 'Need at least two observations.' };
+  if (reflect && dist.shiftable) {
+    var neg = new Array(x.length);
+    for (var r0 = 0; r0 < x.length; r0++) neg[r0] = -x[r0];
+    var cHeld = fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
+    if (cHeld) {
+      var top = -Infinity;
+      for (r0 = 0; r0 < x.length; r0++) if (x[r0] > top) top = x[r0];
+      if (!(fixedShift > top))
+        return { ok: false, msg: 'c held at ' + fixedShift + ' is not above your largest observation, ' +
+          'and so the mirrored model cannot produce that observation.' };
+    }
+    var fr = fitDist(dist, neg, true, fast, fixed, cHeld ? -fixedShift : null, false);
+    /* A message about a held start speaks of gamma' on -x; restate it as c. */
+    if (!fr.ok) return { ok: false, msg: fr.msg.replace(/γ held at (-?[0-9.eE+-]+)/, function (m0, v) {
+      return 'c held at ' + String(-Number(v)); }).replace(' Try the location shift.', '') };
+    fr.shift = -fr.shift;
+    fr.reflect = true;
+    return fr;
+  }
   var held = hasHolds(fixed);
   var shiftHeld = useShift && dist.shiftable &&
                   fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
@@ -3050,7 +3351,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift) {
     if (!f.ok) return f;
     var ll0 = dist.loglik(x, f.p);
     return { ok: true, dist: dist, p: f.p, shift: 0, k: heldK(f), ll: ll0,
-             atBound: false, degenerate: false, shiftHeld: false,
+             atBound: false, degenerate: false, shiftHeld: false, edge: f.edge || null,
              fixed: held ? fixed.slice() : null, allHeld: held && f.freeCount === 0 };
   }
 
@@ -3135,11 +3436,24 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift) {
    is with the location shift folded back in.  Everything downstream --
    plots, goodness of fit, export -- goes through these three, so the shift
    is handled in exactly one place. */
-function fitCdf(fit)      { return function (v) { return fit.dist.cdf(v - fit.shift, fit.p); }; }
-function fitPdf(fit)      { return function (v) { return fit.dist.pdf(v - fit.shift, fit.p); }; }
-function fitQuantile(fit) { return function (u) { return fit.shift + fit.dist.quantile(u, fit.p); }; }
-function fitSampler(fit, u01) { return function () { return fit.shift + fit.dist.sample(u01, fit.p); }; }
-function fitLo(fit) { return fit.shift + fit.dist.lo(fit.p); }
+function fitCdf(fit) {
+  if (fit.reflect) return function (v) { return 1 - fit.dist.cdf(fit.shift - v, fit.p); };
+  return function (v) { return fit.dist.cdf(v - fit.shift, fit.p); };
+}
+function fitPdf(fit) {
+  if (fit.reflect) return function (v) { return fit.dist.pdf(fit.shift - v, fit.p); };
+  return function (v) { return fit.dist.pdf(v - fit.shift, fit.p); };
+}
+function fitQuantile(fit) {
+  if (fit.reflect) return function (u) { return fit.shift - fit.dist.quantile(1 - u, fit.p); };
+  return function (u) { return fit.shift + fit.dist.quantile(u, fit.p); };
+}
+function fitSampler(fit, u01) {
+  if (fit.reflect) return function () { return fit.shift - fit.dist.sample(u01, fit.p); };
+  return function () { return fit.shift + fit.dist.sample(u01, fit.p); };
+}
+/* A mirrored model has no left end: its support runs down to -Infinity. */
+function fitLo(fit) { return fit.reflect ? -Infinity : fit.shift + fit.dist.lo(fit.p); }
 
 /* ─────────────────────────────────────────────────────────────────────
    ORDER_STAT_NOTE—why two different parameter counts
@@ -3455,7 +3769,7 @@ function adStat(sorted, F) {
    This is written as a resumable chunk so the same code can drive a Web
    Worker (posting progress between chunks) or, when a page opened from
    file:// cannot construct one, a timer on the main thread. */
-function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift) {
+function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift, reflect) {
   var u01 = MRG32k3a(seed);
   var dist = fit.dist;
   var geD = 0, geA = 0, geC = 0, done = 0, usedChi = 0;
@@ -3472,7 +3786,7 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
          With every parameter held this is a no-op, and the null
          distribution collapses to the classical one -- which is the point
          of allowing it. */
-      var rf = fitDist(dist, y, useShift, true, fixed, fixedShift);
+      var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect);
       if (!rf.ok) continue;                 /* a degenerate resample is skipped */
       var F = fitCdf(rf);
       var d = ksStat(y, F, fitAtom(rf)).D, a2 = adStat(y, F);
@@ -3633,6 +3947,13 @@ var GEN_SPEC = {
               { sym: 'α', name: 'shape',         def: 1.8, min: 1e-6 }],
   lognormal: [{ sym: 'μ', name: 'mean of ln X',  def: 0.5 },
               { sym: 'σ', name: 'sd of ln X',    def: 0.6, min: 1e-9 }],
+  loglogistic: [{ sym: 'α', name: 'shape',       def: 3,   min: 1e-6 },
+                { sym: 'β', name: 'scale',       def: 4,   min: 1e-12 }],
+  pearson5:  [{ sym: 'α', name: 'shape',         def: 3,   min: 1e-6 },
+              { sym: 'β', name: 'scale',         def: 8,   min: 1e-12 }],
+  pearson6:  [{ sym: 'α₁', name: 'shape 1',      def: 3,   min: 1e-6 },
+              { sym: 'α₂', name: 'shape 2',      def: 5,   min: 1e-6 },
+              { sym: 'β', name: 'scale',         def: 4,   min: 1e-12 }],
   normal:    [{ sym: 'μ', name: 'mean',          def: 10 },
               { sym: 'σ', name: 'std. dev.',     def: 2,   min: 1e-9 }],
   uniform:   [{ sym: 'a', name: 'minimum',       def: 0 },
@@ -3664,7 +3985,7 @@ var GEN_SPEC = {
 /* The order the generator's menu is drawn in.  Johnson sits at the end,
    under a separator because it is the one entry that cannot also be
    fitted. */
-var GEN_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'normal',
+var GEN_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic', 'pearson5', 'pearson6', 'normal',
                 'uniform', 'triangular', 'beta', 'poisson', 'geometric', 'discreteUniform',
                 'johnsonSB', 'johnsonSU'];
 
@@ -3710,14 +4031,14 @@ function generateSample(key, p, shift, n, seed, dp) {
 /* ─────────────────────────────────────────────────────────────────────
    12.  RANKING THE CANDIDATES
    ───────────────────────────────────────────────────────────────────── */
-function rankAll(x, keys, useShift, bins, holds, holdShift) {
+function rankAll(x, keys, useShift, bins, holds, holdShift, reflect) {
   var rows = [], n = x.length, i;
   for (i = 0; i < keys.length; i++) {
     var dist = DISTS[keys[i]];
     /* Holds are per distribution: pinning the gamma's shape says nothing
        about the Weibull's, so each candidate is fitted under its own. */
     var f = fitDist(dist, x, useShift, false, holds && holds[keys[i]],
-                    holdShift && holdShift[keys[i]]);
+                    holdShift && holdShift[keys[i]], reflect);
     if (!f.ok) { rows.push({ key: keys[i], dist: dist, ok: false, msg: f.msg }); continue; }
     var ic = infoCriteria(f.ll, f.k, n);
     var sqe = bins ? squareError(x, f, bins) : NaN;
@@ -4069,6 +4390,23 @@ function num(v, sig) {
 function pre(shift) { return shift ? num(shift) + ' + ' : ''; }
 
 function expressions(fit, sample) {
+  /* A mirrored fit is c minus a draw from the unmirrored model, and every
+     tool can write that as a subtraction around the expression it already
+     has.  scipy's frozen distributions have no general mirror, and so the
+     Python line draws from the unmirrored one and subtracts. */
+  if (fit.reflect) {
+    var inner = expressions(Object.assign({}, fit, { shift: 0, reflect: false }), sample);
+    var cc = num(fit.shift), mir = { arena: null, simio: null, anylogic: null, r: null, matlab: null,
+                                     python: null, notes: {} };
+    ['arena', 'simio', 'anylogic', 'r', 'matlab'].forEach(function (t) {
+      mir[t] = cc + ' - (' + inner[t] + ')';
+      mir.notes[t] = 'The mirror image: c = ' + cc + ' minus a draw. ' + (inner.notes[t] || '');
+    });
+    mir.python = cc + ' - ' + inner.python + '.rvs(size=n)';
+    mir.notes.python = 'The mirror image: c = ' + cc + ' minus n draws, because scipy has no mirrored ' +
+      'form of most families. ' + (inner.notes.python || '');
+    return mir;
+  }
   var d = fit.dist, p = fit.p, g = fit.shift || 0, k = d.key;
   var N = num;
   var out = { arena: null, simio: null, anylogic: null, r: null, matlab: null, python: null,
@@ -4130,6 +4468,54 @@ function expressions(fit, sample) {
         'lognrnd takes mu and sigma of ln X.');
     set('python', 'stats.lognorm(s=' + N(sg) + ', loc=' + N(g) + ', scale=' + N(Math.exp(mu)) + ')',
         's is sigma of ln X; scale is exp(mu).');
+  } else if (k === 'loglogistic') {
+    var al = p[0], bl = p[1], ninv = -1 / al;
+    /* (1/U - 1)^(-1/alpha) is (U/(1 - U))^(1/alpha) written with ONE
+       uniform: two UNIF calls in one expression would be two different
+       draws. */
+    set('arena', pre(g) + N(bl) + ' * (1 / UNIF(0, 1) - 1) ** (' + N(ninv) + ')',
+        'Arena has no log-logistic, and so this is the inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
+    set('simio', N(bl) + ' * Math.Pow(1 / Random.Uniform(0, 1) - 1, ' + N(ninv) + ')' + (g ? ' + ' + N(g) : ''),
+        'The inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
+    set('anylogic', (g ? N(g) + ' + ' : '') + N(bl) + ' * Math.pow(1 / uniform(0, 1) - 1, ' + N(ninv) + ')',
+        'The inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
+    set('r', 'exp(rlogis(n, location = ' + N(Math.log(bl)) + ', scale = ' + N(1 / al) + '))' + (g ? ' + ' + N(g) : ''),
+        'ln X is logistic with location ln β and scale 1/α.');
+    set('matlab', "random(makedist('Loglogistic', 'mu', " + N(Math.log(bl)) + ", 'sigma', " + N(1 / al) + '), n, 1)' +
+        (g ? ' + ' + N(g) : ''), 'mu is ln β and sigma is 1/α, both on the log scale.');
+    set('python', 'stats.fisk(c=' + N(al) + ', loc=' + N(g) + ', scale=' + N(bl) + ')',
+        'scipy calls the log-logistic fisk; c is the shape α.');
+  } else if (k === 'pearson5') {
+    var a5 = p[0], b5 = p[1];
+    set('arena', pre(g) + '1 / GAMM(' + N(1 / b5) + ', ' + N(a5) + ')',
+        'Arena has no Pearson type V, and so this is the reciprocal of a gamma with scale 1/β = ' + N(1 / b5) +
+        ' and shape α. GAMM takes the scale first.');
+    set('simio', '1 / Random.Gamma(' + N(a5) + ', ' + N(1 / b5) + ')' + (g ? ' + ' + N(g) : ''),
+        'The reciprocal of a gamma with shape α and scale 1/β = ' + N(1 / b5) + '.');
+    set('anylogic', (g ? N(g) + ' + ' : '') + '1 / gamma(' + N(a5) + ', ' + N(1 / b5) + ')',
+        'The reciprocal of a gamma with shape α and scale 1/β = ' + N(1 / b5) + '.');
+    set('r', '1 / rgamma(n, shape = ' + N(a5) + ', rate = ' + N(b5) + ')' + (g ? ' + ' + N(g) : ''),
+        'The reciprocal of a gamma whose RATE is β.');
+    set('matlab', '1 ./ gamrnd(' + N(a5) + ', ' + N(1 / b5) + ', n, 1)' + (g ? ' + ' + N(g) : ''),
+        'The reciprocal of a gamma; gamrnd(shape, scale) with scale 1/β.');
+    set('python', 'stats.invgamma(a=' + N(a5) + ', loc=' + N(g) + ', scale=' + N(b5) + ')',
+        'scipy calls the Pearson type V invgamma; a is the shape α and scale is β.');
+  } else if (k === 'pearson6') {
+    var a61 = p[0], a62 = p[1], b6 = p[2];
+    /* Two gamma calls in one expression are two independent draws, which
+       is exactly what the ratio needs. */
+    set('arena', N(b6) + ' * GAMM(1, ' + N(a61) + ') / GAMM(1, ' + N(a62) + ')',
+        'Arena has no Pearson type VI, and so this is β times a ratio of two independent gammas of scale 1, with shapes α₁ and α₂.');
+    set('simio', N(b6) + ' * Random.Gamma(' + N(a61) + ', 1) / Random.Gamma(' + N(a62) + ', 1)',
+        'β times a ratio of two independent gammas of scale 1, with shapes α₁ and α₂.');
+    set('anylogic', N(b6) + ' * gamma(' + N(a61) + ', 1) / gamma(' + N(a62) + ', 1)',
+        'β times a ratio of two independent gammas of scale 1, with shapes α₁ and α₂.');
+    set('r', N(b6) + ' * rgamma(n, ' + N(a61) + ') / rgamma(n, ' + N(a62) + ')',
+        'β times a ratio of two independent gammas of scale 1.');
+    set('matlab', N(b6) + ' * gamrnd(' + N(a61) + ', 1, n, 1) ./ gamrnd(' + N(a62) + ', 1, n, 1)',
+        'β times a ratio of two independent gammas of scale 1.');
+    set('python', 'stats.betaprime(a=' + N(a61) + ', b=' + N(a62) + ', scale=' + N(b6) + ')',
+        'scipy calls the Pearson type VI betaprime; a and b are α₁ and α₂, and scale is β.');
   } else if (k === 'normal') {
     set('arena', 'NORM(' + N(p[0]) + ', ' + N(p[1]) + ')', 'mean, then standard deviation.');
     set('simio', 'Random.Normal(' + N(p[0]) + ', ' + N(p[1]) + ')', 'mean, then standard deviation.');
@@ -4259,6 +4645,11 @@ var FIT_NAMES = {
   erlang:          { r: 'gamma',       rp: 'pgamma',   scipy: 'gamma',       ml: 'Gamma' },
   weibull:         { r: 'weibull',     rp: 'pweibull', scipy: 'weibull_min', ml: 'Weibull' },
   lognormal:       { r: 'lognormal',   rp: 'plnorm',   scipy: 'lognorm',     ml: 'Lognormal' },
+  /* None of these three is in MASS::fitdistr, and only the log-logistic
+     is in MATLAB's fitdist; each gets a hand-written branch elsewhere. */
+  loglogistic:     { r: null,          rp: null,       scipy: 'fisk',        ml: 'Loglogistic' },
+  pearson5:        { r: null,          rp: null,       scipy: 'invgamma',    ml: null },
+  pearson6:        { r: null,          rp: null,       scipy: 'betaprime',   ml: null },
   normal:          { r: 'normal',      rp: 'pnorm',    scipy: 'norm',        ml: 'Normal' },
   /* MATLAB's fitdist cannot fit these three: the uniform is declared "not
      fittable", the triangular is makedist-only, and the Beta insists on
@@ -4362,6 +4753,25 @@ function dataLiteral(x, style) {
 }
 
 function reproScripts(fit, x, seed, B, src) {
+  /* A mirrored fit is refitted as what it is underneath: the unmirrored
+     family on y = c - x, which starts at zero.  Each script says so first,
+     and the Python one still counts c when this page estimated it. */
+  if (fit.reflect) {
+    var c = fit.shift, y = x.map(function (v) { return c - v; });
+    var inner = reproScripts(Object.assign({}, fit, { shift: 0, reflect: false }), y, seed, B, src);
+    var lines = ['This page fitted the mirror image X = c - Y, with c = ' + num(c) + '.',
+      'The data below are y = c - x, and the fits are of Y, which starts at zero.',
+      fit.shiftHeld ? 'c was held, and so it is not counted as a parameter.'
+                    : 'c was estimated by this page, and so it is one more parameter than a fit to y counts.'];
+    var hdr = function (mark) { return lines.map(function (l) { return mark + ' ' + l; }).join('\n') + '\n'; };
+    return {
+      r: hdr('#') + inner.r,
+      matlab: hdr('%') + inner.matlab,
+      python: hdr('#') + (fit.shiftHeld ? inner.python : inner.python.replace(
+        'K = len(D_ARGS) - 1   # loc was pinned in advance, not estimated',
+        'K = len(D_ARGS)       # loc is pinned at 0 on y = c - x, but c was estimated, and so it counts'))
+    };
+  }
   var k = fit.dist.key, names = FIT_NAMES[k], g = fit.shift || 0;
   var out = {};
   var n = x.length;
@@ -4446,6 +4856,39 @@ function reproScripts(fit, x, seed, B, src) {
                               'library(triangle)   # install.packages("triangle") the first time\n' +
                               'ks.test(x, "ptriangle", a = ' + num(fit.p[0]) + ', b = ' + num(fit.p[2]) +
                               ', c = ' + num(fit.p[1]) + ')\n'
+       : k === 'loglogistic'
+         ? '# ln X is logistic, and the Jacobian of the log involves no parameter, and so\n' +
+           '# the maximum-likelihood fit is the logistic fit to log(x).\n' +
+           '# fitdistr probes invalid scales on its way to the maximum and warns each\n' +
+           '# time; the warnings are noise, not a failed fit.\n' +
+           'f <- suppressWarnings(MASS::fitdistr(log(x), "logistic")); print(f)\n' +
+           'm <- f$estimate[["location"]]; s <- f$estimate[["scale"]]\n' +
+           'll <- as.numeric(logLik(f)) - sum(log(x))   # back on the scale of x\n' +
+           'cat("alpha =", 1 / s, "  beta =", exp(m), "  logLik =", ll,\n' +
+           '    "  AIC =", -2 * ll + 4, "  BIC =", -2 * ll + 2 * log(length(x)), "\\n")\n' +
+           '# The p-value is too large; the parameters were estimated from x.\n' +
+           'ks.test(x, function(q) plogis(log(q), m, s))\n'
+       : k === 'pearson5'
+         ? '# 1/X is gamma with shape alpha and RATE beta, and the Jacobian of 1/x\n' +
+           '# involves no parameter, and so the maximum-likelihood fit is the gamma fit to 1/x.\n' +
+           'f <- suppressWarnings(MASS::fitdistr(1 / x, "gamma")); print(f)\n' +
+           'alpha <- f$estimate[["shape"]]; beta <- f$estimate[["rate"]]\n' +
+           'll <- as.numeric(logLik(f)) - 2 * sum(log(x))   # back on the scale of x\n' +
+           'cat("alpha =", alpha, "  beta =", beta, "  logLik =", ll,\n' +
+           '    "  AIC =", -2 * ll + 4, "  BIC =", -2 * ll + 2 * log(length(x)), "\\n")\n' +
+           '# The p-value is too large; the parameters were estimated from x.\n' +
+           'ks.test(x, function(q) pgamma(beta / q, alpha, lower.tail = FALSE))\n'
+       : k === 'pearson6'
+         ? '# The Pearson type VI density, maximized directly from this page\'s estimates.\n' +
+           'dpt6 <- function(v, a1, a2, b)\n' +
+           '  exp((a1 - 1) * log(v / b) - log(b) - lbeta(a1, a2) - (a1 + a2) * log1p(v / b))\n' +
+           'f <- suppressWarnings(MASS::fitdistr(x, dpt6, start = list(a1 = ' + num(fit.p[0]) +
+           ', a2 = ' + num(fit.p[1]) + ', b = ' + num(fit.p[2]) + '),\n' +
+           '                                     lower = c(1e-8, 1e-8, 1e-8))); print(f)\n' +
+           'e <- f$estimate\n' +
+           'cat("logLik =", logLik(f), "  AIC =", AIC(f), "  BIC =", BIC(f), "\\n")\n' +
+           '# The p-value is too large; the parameters were estimated from x.\n' +
+           'ks.test(x, function(q) pbeta(q / (q + e[["b"]]), e[["a1"]], e[["a2"]]))\n'
        : k === 'beta' ? 'L <- ' + num(fit.p[2]) + '; U <- ' + num(fit.p[3]) + '; y <- (x - L) / (U - L)\n' +
                         'f <- MASS::fitdistr(y, "beta", start = list(shape1 = ' + num(fit.p[0]) +
                         ', shape2 = ' + num(fit.p[1]) + ')); print(f)\n'
@@ -4521,6 +4964,35 @@ function reproScripts(fit, x, seed, B, src) {
       '% The p-value is still too large; the corners were estimated from x.\n' +
       "[~, p, D] = kstest(x, 'CDF', pd);\n" +
       "fprintf('D = %.5f   p = %.4f (too large)\\n', D, p);";
+  } else if (k === 'pearson5') {
+    out.matlab =
+      '% fitdist has no Pearson type V. 1/X is gamma with shape alpha and scale\n' +
+      '% 1/beta, and the Jacobian of 1/x involves no parameter, and so the\n' +
+      "% maximum-likelihood fit is fitdist's gamma fit to 1./x.\n" +
+      (g ? '% This page fitted a location shift of ' + num(g) + '; subtract it first.\n' : '') +
+      mdata + '\n' +
+      "pg = fitdist(1 ./ x(:), 'Gamma');\n" +
+      'alpha = pg.a; beta = 1 / pg.b;\n' +
+      "fprintf('alpha = %.6g   beta = %.6g\\n', alpha, beta);\n" +
+      '% K-S is unchanged by a monotone transformation, and so D for 1./x against\n' +
+      '% the gamma is D for x against the Pearson type V. The p-value is still too\n' +
+      '% large; the parameters were estimated from x.\n' +
+      "[~, p, D] = kstest(1 ./ x(:), 'CDF', pg);\n" +
+      "fprintf('D = %.5f   p = %.4f (too large)\\n', D, p);";
+  } else if (k === 'pearson6') {
+    out.matlab =
+      '% fitdist has no Pearson type VI; mle maximizes its density directly,\n' +
+      "% started from this page's estimates.\n" +
+      mdata + '\n' +
+      'pt6pdf = @(v, a1, a2, b) exp((a1 - 1) .* log(v ./ b) - log(b) - betaln(a1, a2) - (a1 + a2) .* log1p(v ./ b));\n' +
+      "est = mle(x(:), 'pdf', pt6pdf, 'Start', [" + num(fit.p[0]) + ' ' + num(fit.p[1]) + ' ' + num(fit.p[2]) +
+      "], 'LowerBound', [0 0 0]);\n" +
+      "fprintf('alpha1 = %.6g   alpha2 = %.6g   beta = %.6g\\n', est);\n" +
+      '% x/(x + beta) is beta(alpha1, alpha2) distributed, and K-S is unchanged by\n' +
+      '% that monotone map. The p-value is still too large; the parameters were\n' +
+      '% estimated from x.\n' +
+      "[~, p, D] = kstest(x(:) ./ (x(:) + est(3)), 'CDF', makedist('Beta', 'a', est(1), 'b', est(2)));\n" +
+      "fprintf('D = %.5f   p = %.4f (too large)\\n', D, p);";
   } else if (k === 'beta') {
     out.matlab =
       '% fitdist\'s Beta needs values inside [0,1]; this page\'s fit lives on [L, U],\n' +
@@ -4541,11 +5013,12 @@ function reproScripts(fit, x, seed, B, src) {
   if (names && names.scipy && !isDisc) {
     /* floc pins the location where this page pinned it, so scipy is
        solving the same optimization rather than a wider one. */
-    var flocArg = fit.dist.shiftable ? ', floc=' + num(g) : '';
+    var flocArg = fit.dist.shiftable ? ', floc=' + num(g) : (k === 'pearson6' ? ', floc=0' : '');
     /* AIC and BIC count what was ESTIMATED. A shiftable family's loc is
        pinned by floc, and so it counts only when this page itself
        estimated the shift being pinned. */
-    var kPy = !fit.dist.shiftable ? 'K = len(D_ARGS)'
+    var kPy = k === 'pearson6' ? 'K = len(D_ARGS) - 1   # loc is pinned at 0; the Pearson type VI takes no shift'
+      : !fit.dist.shiftable ? 'K = len(D_ARGS)'
       : (g !== 0 && !fit.shiftHeld
           ? 'K = len(D_ARGS)       # the pinned loc was itself estimated by this page, and so it counts'
           : 'K = len(D_ARGS) - 1   # loc was pinned in advance, not estimated');
@@ -5075,6 +5548,7 @@ var ST = {
   genTruth: null,   /* what the generator last produced, for the readout */
   family: 'auto',
   shift: false,
+  reflect: false,   /* fit each zero-based candidate as c - X instead */
   rankBy: 'aic',
   rows: [],         /* rankAll() output                                */
   pick: null,       /* key of the distribution being shown in detail   */
@@ -5302,8 +5776,9 @@ function renderStats() {
       'Continuous fits are still offered, and are a reasonable approximation once the counts get large.';
   } else if (s.min < 0) {
     msg = '<strong>Some values are negative,</strong> so the candidates that live on the positive ' +
-      'half-line—exponential, gamma, Erlang, Weibull, lognormal—can only be fitted with the ' +
-      'location shift turned on.';
+      'half-line—exponential, gamma, Erlang, Weibull, lognormal, log-logistic, and Pearson type V—can ' +
+      'only be fitted with the location shift turned on, and the Pearson type VI, which takes no ' +
+      'shift, cannot be fitted at all.';
   } else {
     var cv = s.mean > 0 ? s.sd / s.mean : NaN;
     msg = 'Coefficient of variation <span class="mono">cv = s/x̄ = ' + fmt(cv, 3) + '</span>. ' +
@@ -5322,6 +5797,15 @@ function renderStats() {
         'but it inflates the K–S and A–D statistics; read their bootstrap p-values rather than ' +
         'the statistics themselves.';
     }
+  }
+  /* A long left tail is the one shape no zero-based candidate has, and the
+     box that handles it is easy to miss, and so a clearly left-skewed
+     sample says where it is. */
+  if (!isCountData(s) && s.n >= 10 && s.skew < -0.5) {
+    msg += ' <strong>The sample leans left</strong> (skewness ' + fmt(s.skew, 2) + '): its long tail ' +
+      'runs below the bulk of the data. Every candidate that starts at zero has its long tail on the ' +
+      'right; tick <strong>Fit the mirror image</strong> in section 2 to fit those as ' +
+      '<span class="mono">c − X</span> instead.';
   }
   $('data-kind').innerHTML =
     (ST.unit ? '<div style="margin-bottom:6px">These are ' + esc(ST.unit) + '.</div>' : '') + msg;
@@ -5508,7 +5992,7 @@ function refitAll() {
   $('bins-val').textContent = String(k);
   ST.binK = k;
   ST.bins = IA.makeBins(ST.x, k);
-  ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift);
+  ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
 
   /* Keep the reader's own choice across a refit; otherwise follow the
      leader under whichever criterion is selected. */
@@ -5627,8 +6111,13 @@ function renderRanking() {
     }
     h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '"' + rowAttrs(r) + '>' +
       '<td class="rank-name">' + esc(r.dist.name) +
-        (r.fit.degenerate ? '<span class="rank-sub">the shifted fit has no maximum</span>' :
-         r.fit.atBound ? '<span class="rank-sub">shift sits at the smallest observation</span>' : '') +
+        (r.fit.degenerate ? '<span class="rank-sub">the ' + (r.fit.reflect ? 'mirrored' : 'shifted') +
+           ' fit has no maximum</span>' :
+         r.fit.atBound ? '<span class="rank-sub">' + (r.fit.reflect ? 'c sits at the largest observation'
+                                                    : 'shift sits at the smallest observation') + '</span>' :
+         r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' :
+         r.fit.edge ? '<span class="rank-sub">close to its ' +
+           (r.fit.edge === 'gamma' ? 'gamma' : 'Pearson type V') + ' limit</span>' : '') +
       '</td>' +
       '<td class="num">' + r.k + '</td>' +
       '<td' + cls(r.key, bLl) + '>' + fmt(r.ll, 6) + '</td>' +
@@ -5729,15 +6218,39 @@ function renderShiftNote() {
   var wrap = $('shift-wrap');
   if (!r) { el.innerHTML = 'Load some data first.'; return; }
   var d = r.dist;
-  wrap.classList.toggle('off', !d.shiftable);
-  $('shift-chk').disabled = !d.shiftable;
+  /* The mirror image always estimates its own end point c, and so while it
+     is on, the shift box has nothing to say about any candidate. */
+  wrap.classList.toggle('off', !d.shiftable || ST.reflect);
+  $('shift-chk').disabled = !d.shiftable || ST.reflect;
+  var mirrorNA = !ST.reflect ? ''
+    : d.key === 'pearson6'
+      ? ' It is not mirrored either, because a mirrored fit estimates an end point just as the shift does.'
+      : ' The mirror image does not apply to it either: it flips only the candidates that start at ' +
+        'zero, and the others already fit a left tail as readily as a right one, or are symmetric.';
+  if (d.shiftable && ST.reflect) {
+    el.innerHTML = '<strong>What the mirror image does:</strong> the ' + esc(distLower(d)) +
+      ' starts at zero and has its long tail on the right. With the mirror image on, it is fitted as ' +
+      '<span class="mono">c − ' + esc(d.name) + '(…)</span> instead: the same shape flipped, ending at ' +
+      '<span class="mono">c</span> with its long tail on the left. <span class="mono">c</span> is ' +
+      'estimated inside the fit, from the largest values you observed, the way γ is estimated from ' +
+      'the smallest, and it counts as one more parameter. A flip changes no likelihood, and so the ' +
+      'mirrored rows rank against the others on equal terms. Use it when the data pile up against a ' +
+      'ceiling and trail off below it.';
+    return;
+  }
   if (!d.shiftable) {
     /* Which parameter already does the shift's job is per distribution --
        it is the beta's L, not its α -- so it is read from the
        distribution rather than assumed to be the first one. */
     var lp = d.locParam;
     el.innerHTML = '<strong>The ' + esc(distLower(d)) + ' takes no separate shift.</strong> ' +
-      (lp === undefined
+      (d.key === 'pearson6'
+        ? 'It starts at zero, but with a shift, it would have four parameters, and a sample of a few ' +
+          'hundred does not pin down four: the shift and the shapes trade off against each other ' +
+          'with almost no change in the likelihood.'
+        : d.key === 'empirical'
+        ? 'It is built from your observations themselves, and so it already sits wherever the data sit.'
+        : lp === undefined
         ? 'It is defined on the counts 0, 1, 2, … and sliding it sideways would produce something ' +
           'that is no longer a ' + esc(distLower(d)) + '.'
         : 'It already carries a location parameter of its own—<span class="mono">' +
@@ -5746,7 +6259,7 @@ function renderShiftNote() {
           'data could tell the two apart. Hold or edit <span class="mono">' +
           esc(d.params[lp].sym) + '</span> in section 3 if you want to move it.') +
       ' The shift applies to the candidates that are pinned to zero: exponential, gamma, Erlang, ' +
-      'Weibull, and lognormal.';
+      'Weibull, lognormal, log-logistic, and Pearson type V.' + mirrorNA;
     return;
   }
   el.innerHTML = '<strong>What the shift does:</strong> the ' + esc(distLower(d)) +
@@ -5766,7 +6279,8 @@ function renderFit() {
     return;
   }
   var f = r.fit, d = r.dist;
-  $('fit-which').textContent = d.name + (ST.shift && d.shiftable ? ', with a location shift' : '');
+  $('fit-which').textContent = d.name + (f.reflect ? ', mirrored as c − X'
+    : ST.shift && d.shiftable ? ', with a location shift' : '');
 
   var holds = ST.holds[r.key] || [];
   var rows = '';
@@ -5781,7 +6295,7 @@ function renderFit() {
         ? (shiftHold !== null && shiftHold !== undefined)
         : (holds[idx] !== null && holds[idx] !== undefined);
       var val = isShift ? (on ? shiftHold : f.shift) : (on ? holds[idx] : f.p[idx]);
-      var label = isShift ? 'the location shift' : d.params[idx].name;
+      var label = isShift ? (f.reflect ? 'the right end c' : 'the location shift') : d.params[idx].name;
       hold = '<td><span class="hold-cell">' +
         '<input type="checkbox" data-hold="' + idx + '"' + (on ? ' checked' : '') +
         ' aria-label="Hold ' + esc(label) + ' fixed"> ' +
@@ -5791,7 +6305,13 @@ function renderFit() {
     rows += '<tr><td class="p-name">' + sym + '</td><td class="num">' + est + '</td>' +
             hold + '<td class="p-what">' + what + '</td></tr>';
   };
-  if (f.shift || (ST.shift && d.shiftable)) {
+  if (f.reflect) {
+    add('c &nbsp;<span class="p-what">right end</span>', fmt(f.shift, 5),
+      'the largest value the model can produce; everything else is measured down from here' +
+      (f.shiftHeld ? '—held, and costing no parameter'
+                   : (f.atBound ? '—estimated by your largest observation' : '—estimated')),
+      'shift');
+  } else if (f.shift || (ST.shift && d.shiftable)) {
     add('γ &nbsp;<span class="p-what">shift</span>', fmt(f.shift, 5),
       'the smallest value the model can produce; everything else is measured from here' +
       (f.shiftHeld ? '—held, and costing no parameter'
@@ -5832,7 +6352,19 @@ function renderFit() {
       'convention rather than of the fit, and it is why a beta is rarely the right first choice for a ' +
       'quantity with no natural upper bound.</div>';
   }
-  if (f.degenerate) {
+  if (f.degenerate && f.reflect) {
+    pin = '<div class="note"><strong>This mirrored fit has no maximum.</strong> ' +
+      'As c is pushed down toward your largest observation, the likelihood keeps climbing without ' +
+      'ever settling: the fitted density grows a spike at its own right endpoint and parks it on that ' +
+      'one point, ignoring the rest of the sample. The estimates above fall back to a c held safely ' +
+      'above the data. Read them as a rough description, not as a maximum-likelihood fit.</div>';
+  } else if (f.atBound && f.reflect) {
+    pin = '<div class="note"><strong>c is estimated by the largest value you observed.</strong> ' +
+      'For this distribution, that is the correct maximum-likelihood answer, but c is then an order ' +
+      'statistic and inherits its bias: collect more data and the largest observation can only move ' +
+      'up, never down, and so c is systematically too low. If the process has a known maximum—a ' +
+      'deadline, a capacity—type that in as the truth instead of trusting the estimate.</div>';
+  } else if (f.degenerate) {
     pin = '<div class="note"><strong>This three-parameter fit has no maximum.</strong> ' +
       'As γ is pushed up toward your smallest observation the likelihood keeps climbing without ever ' +
       'settling: the fitted density grows a spike at its own left endpoint and parks it on that one ' +
@@ -5846,6 +6378,25 @@ function renderFit() {
       'Collect more data and the smallest observation can only move down, never up, so γ is ' +
       'systematically too high. If the process has a known minimum—a fixed setup time, a mandatory ' +
       'inspection—type that in as the truth instead of trusting the estimate.</div>';
+  }
+  if (d.key === 'lognormal') {
+    var lnArg = f.reflect ? 'ln(c − x)' : f.shift ? 'ln(x − γ)' : 'ln x';
+    pin += '<div class="note quiet"><strong>This row is also the test of whether <span class="mono">' +
+      lnArg + '</span> is normal.</strong> The lognormal\'s maximum-likelihood fit is the normal fit ' +
+      'to the logarithms of your data, and its K–S and A–D statistics are the ones that normal fit ' +
+      'would give, because both tests are unchanged when the data and the model go through the same ' +
+      'increasing transformation. There is no need to take logarithms of the column yourself.</div>';
+  }
+  if (f.edge) {
+    var toGamma = f.edge === 'gamma';
+    pin += '<div class="note quiet"><strong>This fit is close to a ' +
+      (toGamma ? 'gamma' : 'Pearson type V') + '.</strong> The likelihood was still rising ' +
+      (toGamma ? 'as the scale β and the second shape α₂ grew together'
+               : 'as the scale β shrank and the first shape α₁ grew') +
+      ', which is the direction in which a Pearson type VI turns into a ' +
+      (toGamma ? 'gamma' : 'Pearson type V') + '. The estimates above stop at the end of the ' +
+      'search, where the curve already matches that limit closely. The ' +
+      (toGamma ? 'gamma' : 'Pearson type V') + ' row fits the limit itself, with one parameter fewer.</div>';
   }
   if (r.noCriteria) {
     pin += '<div class="note quiet"><strong>Why this one is not scored.</strong> The empirical ' +
@@ -5961,7 +6512,7 @@ function applyHolds() {
   holdTimer = setTimeout(function () {
     holdTimer = null;
     ST.gof = null;
-    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift);
+    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
     renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
   }, 0);
 }
@@ -5979,6 +6530,13 @@ function paramGloss(key, i, f) {
                 'below 1 means failures get rarer over time, above 1 means they get more likely'],
     lognormal: ['the mean of the LOGARITHM, not of the data',
                 'the standard deviation of the logarithm; bigger means a longer right tail'],
+    loglogistic: ['above 1 gives the density a hump; the mean exists only when α > 1, and the variance only when α > 2',
+                  'the median: half of the values fall below it'],
+    pearson5:  ['smaller means a heavier right tail; the mean exists only when α > 1, and the variance only when α > 2',
+                'stretches the whole distribution; the mean is β/(α − 1)'],
+    pearson6:  ['shapes the rise from zero, as a gamma\'s shape does',
+                'sets the heaviness of the right tail; the mean exists only when α₂ > 1, and the variance only when α₂ > 2',
+                'stretches the whole distribution; the mean is β·α₁/(α₂ − 1)'],
     normal:    ['the centre of the distribution', 'how far a typical value sits from the centre'],
     uniform:   ['the smallest observation, which is the maximum-likelihood estimate here',
                 'the largest observation, likewise'],
@@ -5995,6 +6553,9 @@ function paramGloss(key, i, f) {
   };
   var arr = g[key];
   var base = arr && arr[i] ? arr[i] : '';
+  if (f.reflect && i === 0 && key === 'expo') return 'mean of the exponential part, measured down from c';
+  /* A mirrored model's density starts at c, not at zero. */
+  if (f.reflect) return base.replace(/\bzero\b/g, 'c');
   if (f.shift && i === 0 && (key === 'expo')) return 'mean of the exponential part, on top of the shift';
   return base;
 }
@@ -6004,6 +6565,10 @@ function paramGloss(key, i, f) {
    scale, the model mean against the sample mean. */
 function derivedRows(d, f) {
   var out = [], p = f.p;
+  /* The model mean is the end point plus the unshifted mean, or, for a
+     mirrored fit, c minus it; the label says which. */
+  var at = function (m) { return f.reflect ? f.shift - m : f.shift + m; };
+  var lbl = function (core) { return f.reflect ? 'c − ' + core : core; };
   if (d.key === 'expo') {
     out.push(['λ = 1/β &nbsp;<span class="p-what">rate</span>', fmt(1 / p[0], 5),
       'the equivalent rate form; AnyLogic and R take this instead of the mean']);
@@ -6015,15 +6580,30 @@ function derivedRows(d, f) {
     out.push(['std. dev. of X', fmt(sX, 5), 'likewise, and it is not exp(σ)']);
   }
   if (d.key === 'gamma') {
-    out.push(['α × β &nbsp;<span class="p-what">model mean</span>', fmt(f.shift + p[0] * p[1], 5),
+    out.push([lbl('α × β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0] * p[1]), 5),
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
   }
   if (d.key === 'erlang') {
-    out.push(['k × β &nbsp;<span class="p-what">model mean</span>', fmt(f.shift + p[0] * p[1], 5),
+    out.push([lbl('k × β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0] * p[1]), 5),
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
   }
+  /* The three heavy-tailed families have a mean only for a large enough
+     shape, and a fitted shape below that bound is worth saying plainly:
+     a simulation fed such a model sees averages that never settle. */
+  var heavy = d.key === 'loglogistic' ? { ok: p[0] > 1, sym: 'α', mean: function () {
+                var th = Math.PI / p[0]; return p[1] * th / Math.sin(th); } }
+            : d.key === 'pearson5'    ? { ok: p[0] > 1, sym: 'α', mean: function () { return p[1] / (p[0] - 1); } }
+            : d.key === 'pearson6'    ? { ok: p[1] > 1, sym: 'α₂', mean: function () { return p[2] * p[0] / (p[1] - 1); } }
+            : null;
+  if (heavy) {
+    out.push(['model mean', heavy.ok ? fmt(at(heavy.mean()), 5) : (f.reflect ? '−∞' : '∞'),
+      heavy.ok ? 'compare it with the sample mean of ' + fmt(ST.s.mean, 5)
+               : 'the fitted ' + heavy.sym + ' is at most 1, and so the model has no finite mean: its ' +
+                 (f.reflect ? 'left' : 'right') + ' tail is so heavy that the running average of values ' +
+                 'drawn from it never settles']);
+  }
   if (d.key === 'expo' && f.shift) {
-    out.push(['γ + β &nbsp;<span class="p-what">model mean</span>', fmt(f.shift + p[0], 5),
+    out.push([(f.reflect ? 'c − β' : 'γ + β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0]), 5),
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
   }
   if (d.key === 'poisson') {
@@ -6133,7 +6713,7 @@ function renderDensity() {
   P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your data (' + b.k + ' bins)' },
     { mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
-      label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) }
+      label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') }
   ]);
   host.innerHTML = P.svg('Histogram of the data with the fitted ' + r.dist.name + ' density',
     'Histogram of the data in counts, with the fitted density over it') +
@@ -6249,10 +6829,10 @@ function bootWorkerSource() {
     'self.onmessage = function (e) {\n' +
     '  var m = e.data;\n' +
     '  var dist = DISTS[m.distKey];\n' +
-    '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0,\n' +
+    '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
     '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
-    '                         m.obsChi, m.binK, m.fixedShift);\n' +
+    '                         m.obsChi, m.binK, m.fixedShift, m.reflect);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
     '  var done = 0;\n' +
     '  while (done < m.B) {\n' +
@@ -6288,7 +6868,7 @@ function startBootstrap() {
               B: ST.B, seed: seed, useShift: ST.shift && f.dist.shiftable,
               obsD: obsD, obsA: obsA, fixed: f.fixed || null,
               obsChi: obsChi, binK: ST.bins.k,
-              fixedShift: f.shiftHeld ? f.shift : null };
+              fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect };
 
   function finish(res) {
     BOOT.running = false;
@@ -6333,10 +6913,10 @@ function startBootstrap() {
 /* Slices of about 40ms, so the progress bar and the Stop button stay
    responsive even without a worker. */
 function runOnMainThread(msg, obsD, obsA, finish) {
-  var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0,
+  var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
               fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
-                            msg.obsChi, msg.binK, msg.fixedShift);
+                            msg.obsChi, msg.binK, msg.fixedShift, msg.reflect);
   var chunk = Math.max(5, Math.round(msg.B / 80));
   function tick() {
     if (BOOT.cancelled) { finish(null); return; }
@@ -6369,7 +6949,7 @@ function setProgress(done, total) {
 function fitSignature() {
   var r = pickedRow();
   if (!r) return null;
-  return [r.key, ST.shift, ST.s.n, ST.seed, ST.B, r.fit.p.join(','),
+  return [r.key, ST.shift, !!r.fit.reflect, ST.s.n, ST.seed, ST.B, r.fit.p.join(','),
           JSON.stringify(r.fit.fixed || null), r.fit.shiftHeld ? r.fit.shift : 'est',
           ST.bins ? ST.bins.k : 0].join('|');
 }
@@ -6532,7 +7112,7 @@ function drawQQ() {
   var pts = [];
   for (i = 0; i < n; i++) pts.push([xs[i], ys[i]]);
   P.dots(pts, 'var(--obs)', 2.9);
-  P.labels('Quantile of the fitted ' + distLower(r.dist) + ' model',
+  P.labels('Quantile of the fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored,' : '') + ' model',
            'Quantile of the data (sorted observations)');
   P.legend(P.mL + 12, P.mT + 16, [
     { mark: 'line', color: 'var(--fit)', label: 'perfect fit' },
@@ -6611,7 +7191,7 @@ function drawCDF() {
      any right-skewed fit, which is most of what this page is used on. */
   P.legend(P.mL + P.pw - 152, P.mT + P.ph - 48, [
     { mark: 'line', color: 'var(--obs)', width: 1.6, label: 'your data (step)' },
-    { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) },
+    { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
     { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' }
   ]);
   host.innerHTML = P.svg('Empirical and fitted cumulative distribution functions',
@@ -6636,7 +7216,7 @@ function renderExport() {
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   var ex = IA.expressions(r.fit);
   var h = '<div class="plot-hd">One draw from the fitted ' + esc(distLower(r.dist)) +
-          (r.fit.shift ? ', shift included' : '') + '</div>';
+          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
     if (!ex[key]) continue;
@@ -7407,7 +7987,8 @@ function provenance(withBoot) {
     ['# data source: ' + (ST.src || 'pasted or typed by the user')],
     ['# observations: ' + (ST.s ? ST.s.n : 0)],
     ['# family: ' + (ST.family === 'auto' ? 'chosen automatically' : ST.family)],
-    ['# location shift: ' + (ST.shift ? 'estimated' : 'off')],
+    ['# location shift: ' + (ST.shift && !ST.reflect ? 'estimated' : 'off')],
+    ['# mirror image c - X for the candidates that start at zero: ' + (ST.reflect ? 'on' : 'off')],
     ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')]
   ];
   if (withBoot) {
@@ -7422,17 +8003,17 @@ function provenance(withBoot) {
 function csvRanking() {
   if (!ST.rows.length) return;
   var rows = provenance();
-  rows.push(['distribution', 'fitted', 'parameters', 'shift', 'k', 'log_likelihood', 'AIC', 'BIC',
-             'square_error', 'arena_expression']);
+  rows.push(['distribution', 'fitted', 'parameters', 'shift_or_c', 'mirrored', 'k', 'log_likelihood',
+             'AIC', 'BIC', 'square_error', 'arena_expression']);
   var sorted = IA.sortRows(ST.rows, ST.rankBy);
   for (var i = 0; i < sorted.length; i++) {
     var r = sorted[i];
-    if (!r.ok) { rows.push([r.dist.name, 'no', r.msg, '', '', '', '', '', '', '']); continue; }
+    if (!r.ok) { rows.push([r.dist.name, 'no', r.msg, '', '', '', '', '', '', '', '']); continue; }
     var ps = r.dist.params.map(function (pp, j) {
       var v = r.fit.p[j];
       return pp.sym + '=' + (Array.isArray(v) ? v.length + ' values' : IA.num(v, 8));
     }).join('; ');
-    rows.push([r.dist.name, 'yes', ps, r.fit.shift ? IA.num(r.fit.shift, 8) : 0,
+    rows.push([r.dist.name, 'yes', ps, r.fit.shift ? IA.num(r.fit.shift, 8) : 0, r.fit.reflect ? 'yes' : 'no',
                r.noCriteria ? '' : r.k,
                r.noCriteria ? '' : IA.num(r.ll, 10),
                r.noCriteria ? '' : IA.num(r.aic, 10),
@@ -8107,7 +8688,7 @@ function drawGapsHist() {
     note.innerHTML = st && st.ok && st.p < 0.05
       ? 'These two plots assume one rate for the whole window, which the test in section 2 says is ' +
         'wrong here. Expect them to look poor, and expect a fit on tab ① to be poor for the same reason.'
-      : 'Tab ① fits all fourteen candidates to these gaps and tests them properly. The exponential ' +
+      : 'Tab ① fits all seventeen candidates to these gaps and tests them properly. The exponential ' +
         'it returns will have mean ' + fmt(r.meanGap, 5) + ', the number above.';
   }
 }
@@ -8506,6 +9087,11 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.family = this.value; ST.userPicked = false; refitAll();
   });
   $('shift-chk').addEventListener('change', function () { ST.shift = this.checked; refitAll(); });
+  /* A held gamma and a held c are different numbers, and so turning the
+     mirror image on or off drops whichever end point was held. */
+  $('reflect-chk').addEventListener('change', function () {
+    ST.reflect = this.checked; ST.holdShift = {}; refitAll();
+  });
   $('rank-by').addEventListener('change', function () {
     ST.rankBy = this.value;
     if (!ST.userPicked) { ST.pick = IA.bestBy(ST.rows, ST.rankBy) || ST.pick; }
@@ -8535,7 +9121,7 @@ document.addEventListener('DOMContentLoaded', function () {
     /* Square error is a function of the binning, so the ranking is
        recomputed too -- and if the reader is sorting by square error, the
        order on screen can change under the slider.  That is the lesson. */
-    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift);
+    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
     if (!ST.userPicked) ST.pick = IA.bestBy(ST.rows, ST.rankBy) || firstOk();
     /* The chi-square null was built on the old bin count, so it no longer
        describes what is on screen. */
