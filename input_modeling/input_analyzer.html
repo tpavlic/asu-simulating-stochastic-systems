@@ -374,6 +374,10 @@ details.why .why-body code { background: var(--accent-wash); padding: 1px 4px; b
    pale enough for body text to sit on. */
 .note.warn { background: rgba(139,105,20,.10); border-left-color: var(--warn); }
 .note.warn strong { color: var(--warn); }
+/* A tab's opening statement of what it assumes and does, set as plain
+   prose above the first card rather than boxed like a note. */
+.tab-lede { font-size: .88rem; line-height: 1.6; color: var(--text); margin: 0 4px 14px;
+            max-width: 78ch; }
 .hint { background: var(--chart-bg); border-radius: 6px; padding: 9px 11px; font-size: .81rem;
         color: var(--muted); line-height: 1.55; }
 
@@ -467,11 +471,11 @@ footer a:hover { text-decoration: underline; }
 
   <nav class="tabs">
     <a class="tab active" href="#fit" data-tab="fit">① Fit a Distribution</a>
-    <a class="tab" href="#arr" data-tab="arr">② Arrival Process</a>
+    <a class="tab" href="#arr" data-tab="arr">② Fit Poisson Arrivals</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="fit">① Fit a Distribution</option>
-    <option value="arr">② Arrival Process</option>
+    <option value="arr">② Fit Poisson Arrivals</option>
   </select>
 
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -1047,9 +1051,18 @@ footer a:hover { text-decoration: underline; }
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════════════
-     TAB ②: ARRIVAL PROCESS
+     TAB ②: FIT POISSON ARRIVALS
      ══════════════════════════════════════════════════════════════════ -->
 <section id="tab-arr" class="tp">
+
+  <p class="tab-lede">This tab models arrivals as a <strong>Poisson process</strong>: customers
+  arrive one at a time and independently of one another, at a rate <code>&lambda;(t)</code>
+  that may change over the day. It estimates that rate interval by interval and tests whether
+  it is constant. If it is, the gaps between arrivals are exponential, and tab ① can fit them.
+  If it is not, the model is a <strong>nonhomogeneous</strong> Poisson process, and the rate
+  table in section 3 is what goes into a simulation. The tab does not check the Poisson
+  assumption itself. Arrivals in batches, or on a schedule, break it, and the notes under the
+  summary cards warn when the data look that way.</p>
 
   <section class="sec">
     <div class="sec-hd">1 &middot; Arrival times or interarrival durations</div>
@@ -1171,7 +1184,8 @@ footer a:hover { text-decoration: underline; }
         unchanging distribution. Interarrival gaps from a real arrival process often are not:
         arrivals come faster at lunchtime than at 3 p.m., and so the gaps early in the data and the
         gaps in the middle are drawn from different distributions. Fitting a single exponential to
-        all of them gives you the right average rate and the wrong process. A simulation built on
+        all of them gives you the right average rate and the wrong process: a constant-rate Poisson
+        process where the real one changes rate. A simulation built on
         it will never produce the lunch queue that the real system produces every day.</p>
         <p><strong>The gaps are not missing the information; tab ① is throwing it away.</strong>
         Timestamps and gaps hold the same thing: add the gaps up and you have the arrival times
@@ -8586,7 +8600,7 @@ function csvPlotData() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   TAB ②: ARRIVAL PROCESS
+   TAB ②: FIT POISSON ARRIVALS
    ═══════════════════════════════════════════════════════════════════ */
 var A_LOADER = makeLoader({
   ta: 'a-data-in', pick: 'a-col-pick', row: 'a-col-row', msg: 'a-parse-msg',
