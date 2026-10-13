@@ -96,7 +96,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-run2:disabled { color: #aaa; border-color: #d6d0d2; cursor: not-allowed; }
 /* Play and fast-forward are drawn, not typed. U+25B6 carries an emoji presentation,
    which iOS resolves to Apple Color Emoji and renders as a white triangle in a
-   blue-grey box, and two of those read as two separate glyphs rather than one
+   blue-gray box, and two of those read as two separate glyphs rather than one
    fast-forward. currentColor keeps them following the button's text through its
    hover state. Sized in em so they track the label. */
 /* A dotted underline means the same thing across these widgets: there is a tooltip
@@ -1433,7 +1433,7 @@ function raBuild(){
   const cv=document.getElementById('ra-cv');
   const W=+cv.dataset.logW, H=+cv.dataset.logH;
   const g=raGeom(W,H), P=g.P, A=g.A, R=Math.sqrt(A);
-  // Report in millimetres by scaling the drawn cavity to the study's 875 mm² nest,
+  // Report in millimeters by scaling the drawn cavity to the study's 875 mm² nest,
   // then read the prescribed path length back into canvas pixels.
   const mm2=RA_MM2/A, mm=Math.sqrt(mm2);
   const len=RA_LENS[raIdx]/mm;
@@ -1626,7 +1626,7 @@ function drawMCPlot(ctx,W,H,fn,samples,totalM){
 
   // Width annotation — always shown, drafting-style for any M
   // visW = max(actual_px_width, 3) so ticks are always visible
-  // text centred below span line regardless of indicator size
+  // text centered below span line regardless of indicator size
   if(TM>0&&samples.length>0){
     const midS=samples[Math.floor(M/2)];
     const bx=xP(midS.x), rWpx=cW/TM, visW=Math.max(rWpx,3);

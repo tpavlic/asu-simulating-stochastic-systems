@@ -1886,7 +1886,7 @@ test('exploreRecipe carries the replications, the outcomes, the check, and the s
   assert.deepEqual(JSON.parse(JSON.stringify(exRecipe(TRANSIENT))), JSON.parse(JSON.stringify(exRecipe(TRANSIENT))));
   // Tidy R summarizes each replication's records for tally and time-persistent
   // data only: one value per replication has no count or times to show.
-  const summary = 'print(records_tbl |> summarise(records = n()';
+  const summary = 'print(records_tbl |> summarize(records = n()';
   for (const ds of [TRANSIENT, QLEN]) assert.ok(analysisScript(exRecipe(ds), 'tidy').includes(summary), ds.kind + ': the records summary');
   const repsTidy = analysisScript(exRecipe(IND_A), 'tidy');
   assert.ok(repsTidy.includes('records_tbl <- bind_rows(') && !repsTidy.includes(summary) && !repsTidy.includes('dplyr counts each replication'), 'reps: no records summary');
@@ -1967,7 +1967,7 @@ test('a Summary and Plots dataset past 200,000 numbers gives a full recipe that 
 test('the Tidy R script reads its data as a tibble, summarizes with dplyr, tidies its tests, and plots with ggplot2', () => {
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: PLAN });
   const s = analysisScript(r, 'tidy');
-  for (const needle of ['tibble(', 'summarise(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
+  for (const needle of ['tibble(', 'summarize(', 'broom::tidy(']) assert.ok(s.includes(needle), needle);
   assert.ok(s.includes('ggplot('), 'One System\'s figure is drawn with ggplot2');
   assert.ok(!analysisScript(r, 'R').includes('tibble('), 'Base R stays base');
   const sev = analysisScript(sevRecipe(FOUR), 'tidy');
@@ -2014,7 +2014,7 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
         'print(broom::tidy(ti$test))', 'sw <- shapiro_check(', 'print(broom::tidy(sw))']],
     ['explore, Levene', exRecipe(IND_A, exSpread(IND_A, IND_B)), ['print(broom::tidy(lv$test))', 'anova(lm(distance ~ group))']]
   ];
-  const tidyMarks = ['tibble(', 'describe_tbl', 'summarise(', 'broom::', 'ggplot', 'bind_rows(', 'library('];
+  const tidyMarks = ['tibble(', 'describe_tbl', 'summarize(', 'broom::', 'ggplot', 'bind_rows(', 'library('];
   const baseGraphics = /(^|[^\w.])(plot|hist|qqnorm|qqline|segments|abline|par)\(/m;
   const reports = s => s.split('\n').filter(l => /\breport\(/.test(l) && !/^\s*#/.test(l) && !/^report <- function/.test(l)).map(l => l.trim());
   for (const [label, r, needles] of cases) {

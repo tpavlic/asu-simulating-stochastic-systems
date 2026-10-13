@@ -1268,7 +1268,7 @@ MODELS.dr = {
     { key: 'z2', label: 'z₂', fmt: 'z' }, { key: 'y', label: 'y (m)', fmt: 'int0' }, { key: 'hit', label: 'In zone', fmt: 'yn', bad: function (v) { return !v; } }
   ],
   /* draw.z() returns standard normals, two per drop. p.sx and p.sy are the
-     standard deviations in metres; they fall back to the book's own figures
+     standard deviations in meters; they fall back to the book's own figures
      so a caller that passes only n (the verification script does) still runs
      the book's case. */
   run: function (p, draw) {

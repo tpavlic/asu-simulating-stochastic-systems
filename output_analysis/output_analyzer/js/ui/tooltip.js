@@ -77,7 +77,7 @@ export function initTooltips() {
   });
 
   // Long press for a control that tap already operates: 450ms held still,
-  // cancelled by 10px of movement, and the click it would fire is swallowed.
+  // canceled by 10px of movement, and the click it would fire is swallowed.
   let timer = null, x0 = 0, y0 = 0, swallow = false;
   document.addEventListener('pointerdown', e => {
     const t = e.target.closest ? e.target.closest('[data-tip-press]') : null;

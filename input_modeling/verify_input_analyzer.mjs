@@ -870,7 +870,7 @@ section('14. binning and the chi-square test');
     /* A trailing group left short must be merged backwards, not left alone. */
     const g = IA.poolBins([10, 10, 1], [0.5, 0.48, 0.02], 100, 5);
     ok(g.length === 2 && g[1].to === 2 && g[1].obs === 11,
-       'a short tail group is merged into its neighbour', JSON.stringify(g));
+       'a short tail group is merged into its neighbor', JSON.stringify(g));
     ok(g.every(q => q.exp >= 5), 'and every surviving group clears the floor');
   }
 
@@ -1285,7 +1285,7 @@ section('15e. holding parameters fixed');
       `well below the ${held.critB.toFixed(4)} that applies when nothing was estimated`);
   }
 
-  /* A held location shift costs no parameter and is honoured exactly. */
+  /* A held location shift costs no parameter and is honored exactly. */
   {
     const us = IA.MRG32k3a(88), xs = [];
     for (let i = 0; i < 400; i++) xs.push(2.0 + IA.DISTS.expo.sample(us, [1.5]));
@@ -1759,7 +1759,7 @@ section('17. arrival-process analysis');
        'clean timestamps raise no flags');
     const jumbled = IA.interarrivals([5, 1, 9, 3]);
     ok(jumbled.wasAscending === false, 'out-of-order input is flagged (it is usually a column of gaps)');
-    ok(jumbled.sorted.join(',') === '1,3,5,9', 'and it is still sorted and analysed');
+    ok(jumbled.sorted.join(',') === '1,3,5,9', 'and it is still sorted and analyzed');
     const neg = IA.interarrivals([-10, -4, 0, 6]);
     ok(neg.negatives === 2, 'negative times are counted');
     ok(neg.gaps.join(',') === '6,4,6', 'and are NOT skipped: the gaps are unaffected by the origin');

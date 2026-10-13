@@ -683,8 +683,8 @@ function twoPairedBody(r, L) {
   }
   out.push(rep(L, r, 'r', f('pr', 'r')));
   if (L.tidy) {
-    out.push(c + 'The pairs summarised from pairs_tbl by dplyr: how many, and the mean and sd of the differences a - b.');
-    out.push('print(pairs_tbl |> mutate(difference = a - b) |> summarise(pairs = n(), mean = mean(difference), sd = sd(difference)))');
+    out.push(c + 'The pairs summarized from pairs_tbl by dplyr: how many, and the mean and sd of the differences a - b.');
+    out.push('print(pairs_tbl |> mutate(difference = a - b) |> summarize(pairs = n(), mean = mean(difference), sd = sd(difference)))');
   }
   if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
@@ -1719,7 +1719,7 @@ function tidyDataBlock(recipe, L) {
     out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
       (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
     out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
-    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarize(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }

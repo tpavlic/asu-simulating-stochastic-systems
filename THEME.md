@@ -133,7 +133,7 @@ unevenly by screen readers.
 - **Three ways in: hover, focus, tap.** Mouse, keyboard, and finger each need one. Mark the trigger
   `.tip` (`text-decoration: underline dotted`, `cursor: help`, `tabindex="0"`).
 - **A control that tap already operates opens its tip on a long press instead**, around 450ms held
-  still, cancelled by about 10px of movement, with the click that follows swallowed in the capture
+  still, canceled by about 10px of movement, with the click that follows swallowed in the capture
   phase. A button or a checkbox label cannot use tap for both jobs. Such a trigger still gets the
   dotted underline: it says a tooltip exists, not which gesture opens it. Add
   `-webkit-touch-callout: none` so iOS does not raise its own menu over the press.

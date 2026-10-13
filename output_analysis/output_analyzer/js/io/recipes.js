@@ -574,7 +574,7 @@ export function severalRecipe(o) {
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
   // The figures of the section the page showed (means unless a view says otherwise), each design
-  // labelled by its number and short name as on the page.
+  // labeled by its number and short name as on the page.
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
   r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';

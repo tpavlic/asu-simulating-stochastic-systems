@@ -317,9 +317,9 @@ end
 LIB.R.tidyDescriptives = `
 describe_tbl <- function(data, col) {
   # n, mean, sd, se, min, quartiles (R's type 7), and max of one column of a tibble, by dplyr's
-  # summarise, as a list. One value has no spread to estimate, and its sd and se are missing.
+  # summarize, as a list. One value has no spread to estimate, and its sd and se are missing.
   data |>
-    summarise(n = n(), mean = mean({{ col }}), sd = sd({{ col }}), se = sd / sqrt(n),
+    summarize(n = n(), mean = mean({{ col }}), sd = sd({{ col }}), se = sd / sqrt(n),
               min = min({{ col }}), q1 = quantile({{ col }}, 0.25, names = FALSE),
               median = median({{ col }}), q3 = quantile({{ col }}, 0.75, names = FALSE),
               max = max({{ col }})) |>

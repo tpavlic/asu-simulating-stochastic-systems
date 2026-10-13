@@ -23449,8 +23449,8 @@ function twoPairedBody(r, L) {
   }
   out.push(rep(L, r, 'r', f('pr', 'r')));
   if (L.tidy) {
-    out.push(c + 'The pairs summarised from pairs_tbl by dplyr: how many, and the mean and sd of the differences a - b.');
-    out.push('print(pairs_tbl |> mutate(difference = a - b) |> summarise(pairs = n(), mean = mean(difference), sd = sd(difference)))');
+    out.push(c + 'The pairs summarized from pairs_tbl by dplyr: how many, and the mean and sd of the differences a - b.');
+    out.push('print(pairs_tbl |> mutate(difference = a - b) |> summarize(pairs = n(), mean = mean(difference), sd = sd(difference)))');
   }
   if (L.tidy && o.np) tidyTest(out, L, 'sr$test', 'The signed-rank test on the differences as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   else if (L.tidy) tidyTest(out, L, 'pr$test', 'The paired t test as t.test returns it, tidied by broom into a one-row tibble (none when the differences are all equal, where t.test stops).', true);
@@ -24485,7 +24485,7 @@ function tidyDataBlock(recipe, L) {
     out.push(...commentLines(c, 'The same records as one long tibble, one row per record: rep_id names its replication, t its time (NA when the records carry none), and v its value.' +
       (summary ? ' From it, dplyr counts each replication\'s records and finds the times of its first and last (a replication with no records has no row).' : ''), c));
     out.push('records_tbl <- bind_rows(lapply(reps, function(r) tibble(rep_id = r$id, t = if (is.null(r$t)) NA_real_ else r$t, v = r$v)))');
-    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarise(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
+    if (summary) out.push('if (nrow(records_tbl)) print(records_tbl |> summarize(records = n(), first_t = min(t), last_t = max(t), .by = rep_id))');
   }
   return out.length > 1 ? out : [];
 }
@@ -29634,7 +29634,7 @@ export function severalRecipe(o) {
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
   // The figures of the section the page showed (means unless a view says otherwise), each design
-  // labelled by its number and short name as on the page.
+  // labeled by its number and short name as on the page.
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
   r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
@@ -30443,9 +30443,9 @@ end
 LIB.R.tidyDescriptives = `
 describe_tbl <- function(data, col) {
   # n, mean, sd, se, min, quartiles (R's type 7), and max of one column of a tibble, by dplyr's
-  # summarise, as a list. One value has no spread to estimate, and its sd and se are missing.
+  # summarize, as a list. One value has no spread to estimate, and its sd and se are missing.
   data |>
-    summarise(n = n(), mean = mean({{ col }}), sd = sd({{ col }}), se = sd / sqrt(n),
+    summarize(n = n(), mean = mean({{ col }}), sd = sd({{ col }}), se = sd / sqrt(n),
               min = min({{ col }}), q1 = quantile({{ col }}, 0.25, names = FALSE),
               median = median({{ col }}), q3 = quantile({{ col }}, 0.75, names = FALSE),
               max = max({{ col }})) |>
@@ -48654,7 +48654,7 @@ export function initTooltips() {
   });
 
   // Long press for a control that tap already operates: 450ms held still,
-  // cancelled by 10px of movement, and the click it would fire is swallowed.
+  // canceled by 10px of movement, and the click it would fire is swallowed.
   let timer = null, x0 = 0, y0 = 0, swallow = false;
   document.addEventListener('pointerdown', e => {
     const t = e.target.closest ? e.target.closest('[data-tip-press]') : null;

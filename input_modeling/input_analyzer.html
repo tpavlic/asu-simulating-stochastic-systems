@@ -807,7 +807,7 @@ footer a:hover { text-decoration: underline; }
         p-value are properties of your binning as much as of your data. Drag the slider and watch:
         the same data and the same fitted model will hand you a comfortable p-value at one bin
         count and an uncomfortable one a few notches away.</p>
-        <p>That is not a bug in the test, and it is not licence to shop for the bin count that
+        <p>That is not a bug in the test, and it is not license to shop for the bin count that
         gives the answer you want. It is the reason chi-square is the weakest of the three tests
         here, and the reason the other two do not bin at all. Too few bins and the test cannot see
         a misfit inside a wide bin; too many and the expected counts get so small that the
@@ -2083,7 +2083,7 @@ function columnTimes(col, conv) {
   }
   /* `clock` drives the wall-clock display, so it is set only for the
      reading that really is a time of day; `parsed` says a clock format was
-     recognised either way. */
+     recognized either way. */
   return { values: vals, skipped: skipped, parsed: asClock,
            clock: asClock && wall, elapsed: asClock && !wall };
 }
@@ -2232,7 +2232,7 @@ function gammaVariate(u01, a) {
    A gamma constrained to a whole-number shape, which is what a queueing
    model wants when a task is a sequence of k identical stages.  The MLE
    over the integers is found by fitting the unconstrained gamma and then
-   comparing the two neighbouring integers -- the profile likelihood in the
+   comparing the two neighboring integers -- the profile likelihood in the
    shape is unimodal, so the integer optimum is one of those two. */
 DISTS.erlang = {
   key: 'erlang', name: 'Erlang', lower: 'Erlang', kind: 'continuous', np: 2, shiftable: true,
@@ -3340,7 +3340,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   var held = hasHolds(fixed);
   var shiftHeld = useShift && dist.shiftable &&
                   fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
-  /* One entry point for "fit this, honouring any holds", used by the
+  /* One entry point for "fit this, honoring any holds", used by the
      unshifted path below and by every profile step of the shifted one. */
   var fitCore = held ? function (y) { return fitWithHolds(dist, y, fixed); }
                      : function (y) { return dist.fit(y); };
@@ -3630,7 +3630,7 @@ var CHI_MIN_EXPECTED = 5;
 
 /* One left-to-right sweep: accumulate bins into the current group until
    its expected count reaches the floor, then start a new one.  A final
-   group left short is merged backwards into its neighbour, which is the
+   group left short is merged backwards into its neighbor, which is the
    only direction left to go. */
 function poolBins(counts, probs, n, minExpected) {
   var groups = [], cur = null, i;
@@ -5507,7 +5507,7 @@ function tickFmt(step) {
   };
 }
 /* Ticks for a count axis: the 1-2-5 rule, floored at a step of 1 so a
-   histogram with a maximum of four never gets labelled in halves. */
+   histogram with a maximum of four never gets labeled in halves. */
 function niceCountTicks(hi, target) {
   var t = niceTicks(0, hi, target || 5);
   var step = t.length > 1 ? t[1] - t[0] : 1;
@@ -5677,7 +5677,7 @@ function makeLoader(cfg) {
     $(cfg.pick).addEventListener('change', function () { api.useColumn(Number(this.value), null); });
     $(cfg.file).addEventListener('change', function () { api.readFile(this.files && this.files[0]); });
     $(cfg.clearBtn).addEventListener('click', function () { $(cfg.ta).value = ''; cfg.clear(); });
-    /* Drag and drop.  dragover must be cancelled or the browser navigates
+    /* Drag and drop.  dragover must be canceled or the browser navigates
        to the dropped file instead of handing it over. */
     var drop = $(cfg.drop);
     ['dragenter', 'dragover'].forEach(function (ev) {
@@ -6132,7 +6132,7 @@ function renderRanking() {
     (ST.rows.some(function (q) { return q.noCriteria && Number.isFinite(q.sqe); })
       ? ' The empirical row is unscored in the first four columns but still carries a square ' +
         'error, and it is normally the smallest on the table by a wide margin. That is not a ' +
-        'rounding artefact and it is not a recommendation: a distribution with one breakpoint per ' +
+        'rounding artifact and it is not a recommendation: a distribution with one breakpoint per ' +
         'observation traces any histogram almost exactly, and square error takes no account of how ' +
         'many breakpoints that took, ' +
         'which is the clearest demonstration on this page of what is wrong with ranking by square ' +
@@ -6524,7 +6524,7 @@ function paramGloss(key, i, f) {
     expo:      ['the fitted mean, which for an exponential is exactly the sample mean'],
     gamma:     ['above 1 means the density rises from zero to a hump; below 1 means it is unbounded at zero',
                 'stretches the whole distribution; the mean is shape × scale'],
-    erlang:    ['the number of identical exponential stages the task is modelled as',
+    erlang:    ['the number of identical exponential stages the task is modeled as',
                 'the mean of each stage; the mean of the whole is k × scale'],
     weibull:   ['stretches the distribution; about 63% of values fall below it',
                 'below 1 means failures get rarer over time, above 1 means they get more likely'],
@@ -6537,7 +6537,7 @@ function paramGloss(key, i, f) {
     pearson6:  ['shapes the rise from zero, as a gamma\'s shape does',
                 'sets the heaviness of the right tail; the mean exists only when α₂ > 1, and the variance only when α₂ > 2',
                 'stretches the whole distribution; the mean is β·α₁/(α₂ − 1)'],
-    normal:    ['the centre of the distribution', 'how far a typical value sits from the centre'],
+    normal:    ['the center of the distribution', 'how far a typical value sits from the center'],
     uniform:   ['the smallest observation, which is the maximum-likelihood estimate here',
                 'the largest observation, likewise'],
     triangular:['found by numerical search, and strictly below your smallest observation',
@@ -6651,7 +6651,7 @@ function renderDensity() {
   var discrete = f.dist.kind === 'discrete';
 
   /* The bars are drawn in COUNTS, which is the axis a student has met
-     before and the only one that shows quantisation: a bin holding three
+     before and the only one that shows quantization: a bin holding three
      observations should say three, not 0.0407. The fitted curve lives in
      density, so density gets the right-hand axis. The two are the same
      bar measured twice, since count = density x n x w with n and w fixed
@@ -6819,7 +6819,7 @@ function renderChi() {
    Worker from a blob: URL there.  The fallback is not a lesser
    calculation -- it is the same bootstrapRun driven by a timer, yielding
    between chunks so the progress bar keeps moving. */
-var BOOT = { running: false, worker: null, timer: null, cancelled: false };
+var BOOT = { running: false, worker: null, timer: null, canceled: false };
 
 function bootWorkerSource() {
   /* The worker gets the page's own core, read straight out of the DOM, so
@@ -6858,7 +6858,7 @@ function startBootstrap() {
      with each resample binned on its own range. */
   var obsChi = IA.chiSquareGOF(ST.x, f, ST.bins).stat;
 
-  BOOT.running = true; BOOT.cancelled = false;
+  BOOT.running = true; BOOT.canceled = false;
   $('boot-run').disabled = true;
   $('boot-stop').disabled = false;
   $('boot-prog-wrap').style.display = 'flex';
@@ -6891,14 +6891,14 @@ function startBootstrap() {
     var w = new Worker(url);
     BOOT.worker = w;
     w.onmessage = function (e) {
-      if (BOOT.cancelled) return;
+      if (BOOT.canceled) return;
       if (e.data.type === 'progress') setProgress(e.data.done, ST.B);
       else { URL.revokeObjectURL(url); w.terminate(); BOOT.worker = null; finish(e.data.result); }
     };
     w.onerror = function () {
       /* A worker that fails after construction still has to be replaced by
          the main-thread path, or the reader is left with a stalled bar. */
-      if (BOOT.cancelled) return;
+      if (BOOT.canceled) return;
       w.terminate(); BOOT.worker = null;
       runOnMainThread(msg, obsD, obsA, finish);
     };
@@ -6919,7 +6919,7 @@ function runOnMainThread(msg, obsD, obsA, finish) {
                             msg.obsChi, msg.binK, msg.fixedShift, msg.reflect);
   var chunk = Math.max(5, Math.round(msg.B / 80));
   function tick() {
-    if (BOOT.cancelled) { finish(null); return; }
+    if (BOOT.canceled) { finish(null); return; }
     var t0 = Date.now(), done = 0;
     do { done = run.step(chunk); } while (done < msg.B && Date.now() - t0 < 40);
     setProgress(done, msg.B);
@@ -6930,7 +6930,7 @@ function runOnMainThread(msg, obsD, obsA, finish) {
 }
 
 function stopBootstrap() {
-  BOOT.cancelled = true;
+  BOOT.canceled = true;
   if (BOOT.worker) { BOOT.worker.terminate(); BOOT.worker = null; }
   if (BOOT.timer) { clearTimeout(BOOT.timer); BOOT.timer = null; }
   BOOT.running = false;
@@ -7184,6 +7184,7 @@ function drawCDF() {
   }
   var y1 = ks.sign > 0 ? eHi : eLo, y2 = Fat;
   P.seg(ks.at, y1, ks.at, y2, 'var(--alt)', 3);
+
   P.text(P.X(ks.at) + 6, P.Y(0.5 * (y1 + y2)) + 3.5, 'D = ' + fmt(ks.D, 3),
          { raw: true, size: 10, fill: 'var(--alt)', weight: '700' });
   P.labels('Value', 'Cumulative probability');
@@ -9021,7 +9022,7 @@ function runArrivalGenerator() {
   AST.unit = null;
   AST.mode = 'times';          /* the generator always produces timestamps */
   $('a-mode').value = 'times';
-  AST.ladderSpan = null;       /* let the ladder re-centre on the new span */
+  AST.ladderSpan = null;       /* let the ladder re-center on the new span */
   /* The full recipe, and so an export can say how to regenerate the data. */
   A_LOADER.loadText(g.times.map(function (v) { return IA.num(v, 8); }).join('\n'),
                     'Generated ' + spec.name,
