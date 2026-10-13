@@ -7381,25 +7381,23 @@ function fitSignature() {
           ST.bins ? ST.bins.k : 0].join('|');
 }
 
-/* The K-S statistic against the two 5% critical values: the one from the
-   published table, which assumes nothing was estimated, and the one the
-   bootstrap finds for the fit actually performed.  The wording follows
-   where D falls, so that the sentence says which test keeps or rejects the
-   fit rather than leaving the reader to compare three numbers. */
+/* The K-S statistic against the 5% critical value the bootstrap finds for
+   the fit actually performed, which is the only valid one when parameters
+   were estimated.  The table's value is shown only to measure its error,
+   and D is set against it only where it would have given the other answer:
+   the two are not two tests to choose between. */
 function critCompare(n, tableCrit, bootCrit, D) {
   var share = bootCrit / tableCrit, close = Math.abs(share - 1) < 0.02;
   var out = 'From the table, the 5% critical value for K–S at n = ' + n + ' is <span class="mono">' +
     fmt(tableCrit, 4) + '</span>. The bootstrap\'s critical value for <em>this</em> fitting problem is ' +
     '<span class="mono">' + fmt(bootCrit, 4) + '</span>, ' +
     (close ? 'nearly the same as the table\'s. ' : Math.round(100 * share) + '% of the table\'s. ');
-  var dTxt = 'Your D of <span class="mono">' + fmt(D, 4) + '</span> ';
-  var overT = D > tableCrit, overB = D > bootCrit;
-  if (!overT && !overB) out += dTxt + 'is below both, and so neither test rejects the fit.';
-  else if (overT && overB) out += dTxt + 'is above both, and so both tests reject the fit.';
-  else if (overB) out += dTxt + 'is below the table\'s critical value but above the bootstrap\'s: the ' +
-    'table would keep this fit, and the bootstrap test rejects it. This is the case the table gets wrong.';
-  else out += dTxt + 'is above the table\'s critical value but below the bootstrap\'s: the table would ' +
-    'reject this fit, and the bootstrap test keeps it.';
+  var rejB = D > bootCrit, rejT = D > tableCrit;
+  out += 'Your D of <span class="mono">' + fmt(D, 4) + '</span> is ' + (rejB ? 'above' : 'below') +
+    ' the bootstrap\'s critical value, and so the test ' + (rejB ? 'rejects' : 'does not reject') + ' the fit.';
+  if (rejB !== rejT)
+    out += ' Judged against the table\'s value instead, it would have ' + (rejT ? 'been rejected' : 'passed') +
+      ', which is the error the table makes when parameters are estimated from the data.';
   if (close) out += ' The two critical values are close here, which happens with discrete or heavily ' +
     'tied data. The bootstrap\'s is still the one to use, because it does not rely on the table\'s assumption.';
   return out;
