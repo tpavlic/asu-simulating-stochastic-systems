@@ -785,6 +785,13 @@ footer a:hover { text-decoration: underline; }
       it from its data, and the pointer over a plot (or a finger on it) reads values off both axes.</strong>
     </div>
 
+    <div class="note quiet" style="margin-top:13px"><strong>Choose the test that decides before you
+      look at the results.</strong> Use Anderson&ndash;Darling when the tails matter, as they usually
+      do for service and interarrival times; Kolmogorov&ndash;Smirnov when only the middle of the
+      distribution matters; and chi-square for counts, or when the bins mean something in the
+      process. The three ask different questions about the same fit, and going by whichever one
+      happens to pass lets a wrong fit survive more often than the 5% level says.</div>
+
     <div class="plot-wrap" style="margin-top:13px">
       <div style="flex:1 1 340px;min-width:0">
         <div class="plot-hd">Chi-square, on exactly those bins</div>
@@ -7492,8 +7499,8 @@ function renderGof() {
       vD + '</strong> and A–D <strong>' + vA + '</strong> the fitted ' +
       esc(distLower(r.dist)) + '. ' +
       (vD !== vA
-        ? 'They disagree, which usually means the misfit sits in a tail: A–D weights the tails more ' +
-          'heavily; for a queueing model believe A–D. '
+        ? 'They disagree. Go by the test you chose before running it. A disagreement usually means ' +
+          'the misfit sits in a tail, which A–D weights more heavily. '
         : '') +
       'Seed ' + ST.seed + ', ' + res.used.toLocaleString() + ' usable replications of ' +
       res.B.toLocaleString() + (res.mainThread ? ', run on the main thread because this browser ' +
