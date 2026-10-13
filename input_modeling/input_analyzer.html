@@ -7185,12 +7185,52 @@ function drawCDF() {
   var y1 = ks.sign > 0 ? eHi : eLo, y2 = Fat;
   P.seg(ks.at, y1, ks.at, y2, 'var(--alt)', 3);
 
-  P.text(P.X(ks.at) + 6, P.Y(0.5 * (y1 + y2)) + 3.5, 'D = ' + fmt(ks.D, 3),
-         { raw: true, size: 10, fill: 'var(--alt)', weight: '700' });
+  /* The legend goes in whichever of two empty corners the curves leave
+     alone.  A right-skewed fit climbs early and runs along the top, which
+     leaves the bottom right empty; a left-skewed one stays low until late
+     and climbs at the right, straight through that corner, leaving the
+     top left empty instead.  Each candidate box is scored by how many
+     points of either curve fall inside it, and the bottom right wins
+     ties.  A box spans 152 by 42 pixels around its first row. */
+  var LW = 152, LH = 42;
+  var boxes = [{ x: P.mL + P.pw - LW, y: P.mT + P.ph - 48 }, { x: P.mL + 12, y: P.mT + 14 }];
+  var inBox = function (bx, px, py) { return px >= bx.x - 4 && px <= bx.x + LW && py >= bx.y - 11 && py <= bx.y + LH - 4; };
+  var hits = boxes.map(function (bx) {
+    var h = 0, k;
+    for (k = 0; k < curve.length; k++) if (inBox(bx, P.X(curve[k][0]), P.Y(curve[k][1]))) h++;
+    for (k = 0; k < step.length; k++) if (inBox(bx, P.X(step[k][0]), P.Y(step[k][1]))) h++;
+    return h;
+  });
+  var leg = hits[1] < hits[0] ? boxes[1] : boxes[0];
+
+  /* The D label sits right of the gap, unless it would run into the
+     legend or past the frame; then it goes to the left, and if that
+     collides too, above or below the gap, on the side away from the
+     legend.  Its width is estimated at 6 pixels a character, which is
+     generous for 10px bold digits. */
+  var dTxt = 'D = ' + fmt(ks.D, 3), dW = 6 * dTxt.length;
+  var gx = P.X(ks.at), gyTop = P.Y(Math.max(y1, y2)), gyBot = P.Y(Math.min(y1, y2));
+  var gyMid = 0.5 * (gyTop + gyBot);
+  var clash = function (x0, yMid) {
+    var x1 = x0 + dW, yt = yMid - 9, yb = yMid + 3;
+    var off = x0 < P.mL || x1 > P.mL + P.pw;
+    var lx0 = leg.x - 4, lx1 = leg.x + LW, ly0 = leg.y - 11, ly1 = leg.y + LH - 4;
+    return off || (x1 > lx0 && x0 < lx1 && yb > ly0 && yt < ly1);
+  };
+  var spots = [
+    { x: gx + 6, y: gyMid + 3.5, anchor: 'start' },
+    { x: gx - 6, y: gyMid + 3.5, anchor: 'end' }
+  ];
+  var legBelow = leg.y > gyMid;
+  spots.push({ x: gx - dW / 2, y: legBelow ? gyTop - 6 : gyBot + 14, anchor: 'start' });
+  var spot = spots[spots.length - 1];
+  for (var sp = 0; sp < spots.length; sp++) {
+    var left = spots[sp].anchor === 'end' ? spots[sp].x - dW : spots[sp].x;
+    if (!clash(left, spots[sp].y - 3.5)) { spot = spots[sp]; break; }
+  }
+  P.text(spot.x, spot.y, dTxt, { raw: true, size: 10, fill: 'var(--alt)', weight: '700', anchor: spot.anchor });
   P.labels('Value', 'Cumulative probability');
-  /* Same reasoning as the gaps CDF: the curve occupies the top left for
-     any right-skewed fit, which is most of what this page is used on. */
-  P.legend(P.mL + P.pw - 152, P.mT + P.ph - 48, [
+  P.legend(leg.x, leg.y, [
     { mark: 'line', color: 'var(--obs)', width: 1.6, label: 'your data (step)' },
     { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
     { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' }
