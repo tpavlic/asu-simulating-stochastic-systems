@@ -1999,6 +1999,34 @@ section('18. export expressions');
        the mean of each exponential phase. */
     const ee = IA.expressions({ dist: IA.DISTS.erlang, p: [3, 1.5], shift: 0 });
     ok(ee.simio === 'Random.Erlang(4.5, 3)', 'Simio Random.Erlang takes the mean of the whole, then k', ee.simio);
+    /* Arena's GAMM, ERLA, and small-shape BETA leave out the bottom of their
+       distributions, and so the Pearson lines build each gamma from an exact
+       Erlang (-LN of a product of uniforms) plus BETA(f, 1 - f) * EXPO(1)
+       for the fraction f of the shape, falling back to GAMM past 20. */
+    const g35 = IA.arenaGamma(3.5), g3 = IA.arenaGamma(3), g04 = IA.arenaGamma(0.4), g25 = IA.arenaGamma(25.2);
+    ok(g35.expr === '-LN(UNIF(0,1)*UNIF(0,1)*UNIF(0,1)) + BETA(0.5, 0.5) * EXPO(1)',
+       'Arena gamma, shape 3.5: an exact Erlang of 3 plus a beta-times-exponential for the half', g35.expr);
+    ok(g3.expr === '-LN(UNIF(0,1)*UNIF(0,1)*UNIF(0,1))', 'Arena gamma, shape 3: the exact Erlang alone', g3.expr);
+    ok(g04.fracOnly && g04.expr === 'BETA(0.4, 0.6) * EXPO(1)', 'Arena gamma, shape 0.4: the fraction alone, flagged', g04.expr);
+    ok(g25.gamm && g25.expr === 'GAMM(1, 25.2)', 'Arena gamma, shape past 20: falls back to GAMM', g25.expr);
+    const e5 = IA.expressions({ dist: IA.DISTS.pearson5, p: [3, 8], shift: 0 });
+    const e6 = IA.expressions({ dist: IA.DISTS.pearson6, p: [3, 5, 4], shift: 0 });
+    ok(!/GAMM|ERLA/.test(e5.arena) && !/GAMM|ERLA/.test(e6.arena),
+       'the Arena Pearson V and VI lines do not divide by GAMM or ERLA', e5.arena + ' | ' + e6.arena);
+    /* The construction's arithmetic, evaluated with exact samplers: the
+       line's mean must match the model's. */
+    {
+      const ux = IA.MRG32k3a(4401), D2 = IA.DISTS;
+      const env = { UNIF: (lo, hi) => lo + (hi - lo) * ux(), LN: Math.log, EXPO: m => -m * Math.log(ux()),
+                    BETA: (aa, bb) => D2.beta.sample(ux, [aa, bb, 0, 1]), GAMM: (sc, sh) => D2.gamma.sample(ux, [sh, sc]) };
+      for (const [key, p, want] of [['pearson5', [3.3, 10], 10 / 2.3], ['pearson6', [2.3, 4.3, 4], 4 * 2.3 / 3.3]]) {
+        const ex = IA.expressions({ dist: D2[key], p, shift: 0 }).arena;
+        const draw = new Function('UNIF', 'LN', 'EXPO', 'BETA', 'GAMM', 'return () => ' + ex)(env.UNIF, env.LN, env.EXPO, env.BETA, env.GAMM);
+        let s2 = 0; const M = 200000;
+        for (let i = 0; i < M; i++) s2 += draw();
+        close(s2 / M, want, 0.01, `${key} Arena line, evaluated with exact samplers, averages ${(s2 / M).toFixed(4)} (model ${want.toFixed(4)})`);
+      }
+    }
   }
   /* CSV round trip. */
   {

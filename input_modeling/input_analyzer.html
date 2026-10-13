@@ -4389,6 +4389,33 @@ function num(v, sig) {
    constant in front of the expression. */
 function pre(shift) { return shift ? num(shift) + ' + ' : ''; }
 
+/* A gamma with shape a and scale 1 for Arena, built so that it does not
+   depend on Arena's GAMM, ERLA, or BETA for its lower tail.  In checks of
+   100,000 draws each, GAMM and ERLA left out the bottom few tenths of a
+   percent of their distributions, and a small-shape BETA left out most of
+   its draws below 0.001, whereas EXPO and products of UNIF matched their
+   distributions down to 1e-5.  The whole part of a is therefore an exact
+   Erlang, -LN of a product of uniforms, and only the fraction f of a uses
+   BETA(f, 1 - f) * EXPO(1), a gamma with shape f.  Added to an Erlang of
+   at least one phase, that piece's missing values barely move the sum's
+   lower tail.  Arena accepted a product of 20 uniforms; past 20 the line
+   falls back to GAMM, whose gap matters less as the shape grows. */
+var ARENA_MAX_UNIF = 20;
+function arenaGamma(a) {
+  var k = Math.floor(a), f = a - k;
+  if (f < 1e-6) f = 0;
+  if (1 - f < 1e-6) { k++; f = 0; }
+  if (k > ARENA_MAX_UNIF) return { expr: 'GAMM(1, ' + num(a) + ')', gamm: true, fracOnly: false };
+  var parts = [];
+  if (k > 0) {
+    var u = [];
+    for (var i = 0; i < k; i++) u.push('UNIF(0,1)');
+    parts.push('-LN(' + u.join('*') + ')');
+  }
+  if (f > 0) parts.push('BETA(' + num(f) + ', ' + num(1 - f) + ') * EXPO(1)');
+  return { expr: parts.join(' + '), gamm: false, fracOnly: k === 0 };
+}
+
 function expressions(fit, sample) {
   /* A mirrored fit is c minus a draw from the unmirrored model, and every
      tool can write that as a subtraction around the expression it already
@@ -4424,8 +4451,18 @@ function expressions(fit, sample) {
     set('python', 'stats.expon(loc=' + N(g) + ', scale=' + N(p[0]) + ')', 'scale is the mean.');
   } else if (k === 'gamma' || k === 'erlang') {
     var a = p[0], b = p[1], isEr = k === 'erlang';
+    /* Arena's gamma generator leaves out the bottom of its own
+       distribution: over 100,000 draws, GAMM(1, 3) never went below
+       0.3588, where a true gamma puts 0.58% of its draws, and GAMM(1, 5)
+       never below 0.954 (0.29%).  ERLA and BETA showed the same shortfall
+       when divided into.  The mean moves by about 0.1%, but a model that
+       depends on how often very short values occur sees too few of them,
+       and a reciprocal or a ratio turns the gap into a bias in the mean. */
+    var arenaGap = ' Arena\'s ' + (isEr ? 'Erlang' : 'gamma') + ' generator never returns its lowest few ' +
+      'tenths of a percent of values. That leaves the mean essentially unchanged, but very short values ' +
+      'occur slightly too rarely.';
     set('arena', pre(g) + (isEr ? 'ERLA(' : 'GAMM(') + N(b) + ', ' + N(a) + ')',
-        'Arena writes the SCALE first, then the shape.');
+        'Arena writes the SCALE first, then the shape.' + arenaGap);
     /* Simio's Random.Erlang(Mean, K) takes the mean of the WHOLE, each of
        the K exponential phases having mean Mean/K. */
     if (isEr)
@@ -4502,9 +4539,16 @@ function expressions(fit, sample) {
         'scipy calls the log-logistic fisk; c is the shape α.');
   } else if (k === 'pearson5') {
     var a5 = p[0], b5 = p[1];
-    set('arena', pre(g) + '1 / GAMM(' + N(1 / b5) + ', ' + N(a5) + ')',
-        'Arena has no Pearson type V, and so this is the reciprocal of a gamma with scale 1/β = ' + N(1 / b5) +
-        ' and shape α. GAMM takes the scale first.');
+    var ag5 = arenaGamma(a5);
+    set('arena', pre(g) + N(b5) + ' / (' + ag5.expr + ')',
+        'Arena has no Pearson type V, and so this is β divided by a gamma with shape α. ' +
+        (ag5.gamm
+          ? 'With α this large it uses GAMM, whose smallest values Arena leaves out; the mean comes out ' +
+            'slightly low.'
+          : 'The gamma is built from uniforms and an exponential rather than taken from GAMM, because ' +
+            'Arena\'s GAMM leaves out its smallest values, and dividing by it would make the mean too low.' +
+            (ag5.fracOnly ? ' With α below 1 the whole gamma comes from BETA, whose smallest values Arena ' +
+              'also leaves out, and so the largest values here occur too rarely.' : '')));
     set('simio', '1 / Random.Gamma(' + N(a5) + ', ' + N(1 / b5) + ')' + (g ? ' + ' + N(g) : ''),
         'The reciprocal of a gamma with shape α and scale 1/β = ' + N(1 / b5) + '.');
     set('anylogic', (g ? N(g) + ' + ' : '') + '1 / gamma(' + N(a5) + ', ' + N(1 / b5) + ')',
@@ -4520,8 +4564,16 @@ function expressions(fit, sample) {
     var a61 = p[0], a62 = p[1], b6 = p[2];
     /* Two gamma calls in one expression are two independent draws, which
        is exactly what the ratio needs. */
-    set('arena', N(b6) + ' * GAMM(1, ' + N(a61) + ') / GAMM(1, ' + N(a62) + ')',
-        'Arena has no Pearson type VI, and so this is β times a ratio of two independent gammas of scale 1, with shapes α₁ and α₂.');
+    var ag61 = arenaGamma(a61), ag62 = arenaGamma(a62);
+    set('arena', N(b6) + ' * (' + ag61.expr + ') / (' + ag62.expr + ')',
+        'Arena has no Pearson type VI, and so this is β times a ratio of two independent gammas of ' +
+        'scale 1, with shapes α₁ and α₂. ' +
+        (ag61.gamm || ag62.gamm
+          ? 'A shape this large uses GAMM, whose smallest values Arena leaves out, and so the mean is slightly off.'
+          : 'Each gamma is built from uniforms and an exponential rather than taken from GAMM, because ' +
+            'Arena\'s GAMM leaves out its smallest values, and a ratio of them would make the mean too low.' +
+            (ag62.fracOnly ? ' With α₂ below 1 the divisor comes from BETA, whose smallest values Arena ' +
+              'also leaves out, and so the largest values here occur too rarely.' : '')));
     set('simio', N(b6) + ' * Random.Gamma(' + N(a61) + ', 1) / Random.Gamma(' + N(a62) + ', 1)',
         'β times a ratio of two independent gammas of scale 1, with shapes α₁ and α₂.');
     set('anylogic', N(b6) + ' * gamma(' + N(a61) + ', 1) / gamma(' + N(a62) + ', 1)',
@@ -4562,7 +4614,9 @@ function expressions(fit, sample) {
   } else if (k === 'beta') {
     var al = p[0], be = p[1], L = p[2], U = p[3], W = U - L;
     set('arena', N(L) + ' + ' + N(W) + ' * BETA(' + N(al) + ', ' + N(be) + ')',
-        "Arena's BETA is on [0,1], and so it is rescaled onto [" + N(L) + ', ' + N(U) + '].');
+        "Arena's BETA is on [0,1], and so it is rescaled onto [" + N(L) + ', ' + N(U) + ']. ' +
+        "It appears to share Arena's gamma generator, which never returns its lowest few tenths of a " +
+        'percent of values, and so values very close to an end of the interval occur slightly too rarely.');
     set('simio', N(L) + ' + ' + N(W) + ' * Random.Beta(' + N(al) + ', ' + N(be) + ')', 'Also rescaled from [0,1].');
     set('anylogic', 'beta(' + N(al) + ', ' + N(be) + ', ' + N(L) + ', ' + N(U) + ')',
         'AnyLogic takes the two shapes and then the interval.');
@@ -5199,7 +5253,7 @@ var IA = {
   rateMLE: rateMLE, chiSqQuantile: chiSqQuantile,
   ARRIVAL_PROCESSES: ARRIVAL_PROCESSES, ARRIVAL_KEYS: ARRIVAL_KEYS,
   validateArrivalParams: validateArrivalParams, generateArrivals: generateArrivals,
-  expressions: expressions, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES,
+  expressions: expressions, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES, arenaGamma: arenaGamma,
   num: num, toCsv: toCsv
 };
 /* ===== IA-CORE-END ===== */
