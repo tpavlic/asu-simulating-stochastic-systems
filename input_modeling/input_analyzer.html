@@ -7432,19 +7432,29 @@ function renderGof() {
           'a realistic recording granularity barely moves the bootstrap p-value.') + '</div>'
     : '';
 
-  var explain =
-    '<div class="hint" style="margin-top:9px"><strong>The two p-value columns answer different ' +
-    'questions.</strong> The <em>table</em> column is what you would get by hand, and what most ' +
-    'software reports: it assumes the distribution and its parameters were fixed before you saw ' +
-    'the data. You estimated ' + f.k + ' parameter' + (f.k === 1 ? '' : 's') + ' from this very ' +
-    'sample, which pulls the fitted curve toward your data and makes both statistics smaller than ' +
-    'that assumption expects, and so the table column runs too <em>large</em>, and a test built on it ' +
-    'accepts fits it should reject. The <em>bootstrap</em> column estimates the right distribution ' +
-    'for the fit you actually performed.' +
-    (res ? '' : ' Press <strong>Run the bootstrap</strong> below to fill it in; with ' + n +
-      ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
-      'every resample is refitted from scratch, which is the whole point of it.') +
-    '</div>';
+  /* Which column to read depends on whether anything was estimated: with
+     every parameter held at a typed value, the table's assumption holds,
+     and the bootstrap becomes a check on it rather than a correction. */
+  var explain = f.k === 0
+    ? '<div class="hint" style="margin-top:9px"><strong>Here the table column is the right one.' +
+      '</strong> Every parameter is held at a value you chose, and so nothing was estimated from ' +
+      'this sample, which is exactly what the published tables assume. The <em>bootstrap</em> ' +
+      'column should agree with it to within its own noise' +
+      (res ? '.' : '; press <strong>Run the bootstrap</strong> below to compare the two, which is a ' +
+        'check worth running once.') + '</div>'
+    : '<div class="hint" style="margin-top:9px"><strong>The two p-value columns answer different ' +
+      'questions.</strong> The <em>table</em> column is what you would get by hand, and what most ' +
+      'software reports: it assumes the distribution and its parameters were fixed before you saw ' +
+      'the data. You estimated ' + f.k + ' parameter' + (f.k === 1 ? '' : 's') + ' from this very ' +
+      'sample, which pulls the fitted curve toward your data and makes both statistics smaller than ' +
+      'that assumption expects, and so the table column runs too <em>large</em>, and a test built on it ' +
+      'accepts fits it should reject. The <em>bootstrap</em> column estimates the right distribution ' +
+      'for the fit you actually performed. <strong>Because the parameters were estimated from your ' +
+      'data, read the bootstrap column, not the table column.</strong>' +
+      (res ? '' : ' Press <strong>Run the bootstrap</strong> below to fill it in; with ' + n +
+        ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
+        'every resample is refitted from scratch, which is the whole point of it.') +
+      '</div>';
 
   var verdict = '';
   if (res) {
