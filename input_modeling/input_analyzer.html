@@ -4484,8 +4484,10 @@ function expressions(fit, sample) {
     set('arena', pre(g) + 'WEIB(' + N(sc) + ', ' + N(sh) + ')', 'Arena writes the SCALE first, then the shape.');
     set('simio', 'Random.Weibull(' + N(sh) + ', ' + N(sc) + ')' + (g ? ' + ' + N(g) : ''),
         'shape ' + N(sh) + ', scale ' + N(sc) + '—the opposite order from Arena.');
-    set('anylogic', (g ? N(g) + ' + ' : '') + 'weibull(' + N(sh) + ', ' + N(sc) + ')',
-        'shape ' + N(sh) + ', scale ' + N(sc) + '.');
+    /* A run of weibull(1.8, 4) in AnyLogic averaged 1.632, the mean of a
+       Weibull with scale 1.8 and shape 4: AnyLogic takes the scale first. */
+    set('anylogic', (g ? N(g) + ' + ' : '') + 'weibull(' + N(sc) + ', ' + N(sh) + ')',
+        'AnyLogic takes the SCALE first, then the shape, as Arena does.');
     set('r', 'rweibull(n, shape = ' + N(sh) + ', scale = ' + N(sc) + ')' + (g ? ' + ' + N(g) : ''),
         'Named arguments; the order cannot bite.');
     set('matlab', 'wblrnd(' + N(sc) + ', ' + N(sh) + ', n, 1)' + (g ? ' + ' + N(g) : ''),
@@ -4503,8 +4505,10 @@ function expressions(fit, sample) {
         '), not of ln X (' + N(mu) + ', ' + N(sg) + ').');
     set('simio', 'Random.LogNormal(' + N(mu) + ', ' + N(sg) + ')' + (g ? ' + ' + N(g) : ''),
         'mean and std. dev. of ln X.');
-    set('anylogic', (g ? N(g) + ' + ' : '') + 'lognormal(' + N(sg) + ', ' + N(mu) + ')',
-        'AnyLogic takes sigma first, then mu—both of ln X.');
+    /* AnyLogic's lognormal takes three arguments, and a run of
+       lognormal(1, 0.3, 0) averaged 2.843, which is exp(1 + 0.3^2/2). */
+    set('anylogic', (g ? N(g) + ' + ' : '') + 'lognormal(' + N(mu) + ', ' + N(sg) + ', 0)',
+        'AnyLogic takes mu, then sigma, both of ln X, and then a shift, 0 here.');
     set('r', 'rlnorm(n, meanlog = ' + N(mu) + ', sdlog = ' + N(sg) + ')' + (g ? ' + ' + N(g) : ''),
         'meanlog and sdlog are of ln X.');
     set('matlab', 'lognrnd(' + N(mu) + ', ' + N(sg) + ', n, 1)' + (g ? ' + ' + N(g) : ''),
@@ -4639,7 +4643,11 @@ function expressions(fit, sample) {
     set('arena', 'AINT( LN(UNIF(0,1)) / LN(' + N(1 - pr) + ') )',
         'Arena has no geometric, and so this is the inverse transform. It counts FAILURES before the first success, and can therefore return 0.');
     set('simio', 'Random.Geometric(' + N(pr) + ')', 'Counts failures before the first success.');
-    set('anylogic', 'geometric(' + N(pr) + ')', 'Counts failures before the first success.');
+    /* A run of geometric(0.3) in AnyLogic averaged 3.33 with a minimum of 1:
+       it counts trials up to and including the first success. */
+    set('anylogic', 'geometric(' + N(pr) + ') - 1',
+        'AnyLogic counts trials up to and including the first success, starting at 1, and so 1 is ' +
+        'subtracted to count failures, as the fit does.');
     set('r', 'rgeom(n, prob = ' + N(pr) + ')', 'rgeom counts failures, matching the fit above.');
     set('matlab', 'geornd(' + N(pr) + ', n, 1)', 'geornd counts failures, matching the fit above.');
     set('python', 'stats.geom(p=' + N(pr) + ', loc=-1)',
@@ -4683,10 +4691,14 @@ function expressions(fit, sample) {
         'Arena takes CUMULATIVE probability and value in pairs.');
     set('simio', 'Random.Discrete(' + simioDisc.join(', ') + ')',
         'Simio takes VALUE then cumulative probability in pairs, the reverse of Arena.');
-    set('anylogic', 'new double[]{' + probs.map(function (q) { return N(q, 5); }).join(', ') +
-        '} // use with a Custom distribution over ' +
-        '{' + vals.map(function (v) { return N(v); }).join(', ') + '}',
-        'AnyLogic wants the values and their probabilities as a custom distribution.');
+    /* AnyLogic's CustomDistributionDiscrete(values, probabilities, random)
+       draws with get(), which returns an Object, hence the cast; a run with
+       {1, 2, 3, 5} and {1, 2, 3, 1}/7 averaged 2.716 against 19/7. */
+    set('anylogic', '((Number) new CustomDistributionDiscrete(new double[]{' +
+        vals.map(function (v) { return N(v); }).join(', ') + '}, new double[]{' +
+        probs.map(function (q) { return N(q, 5); }).join(', ') + '}, getDefaultRandomGenerator()).get()).doubleValue()',
+        'The values, then their probabilities, drawn with the model\'s own random-number generator. For ' +
+        'many draws, make it a Custom Distribution element (Discrete) with the same values and probabilities.');
     set('r', 'sample(c(' + vals.map(function (v) { return N(v); }).join(', ') + '), n, replace = TRUE, prob = c(' +
         probs.map(function (q) { return N(q, 5); }).join(', ') + '))', '');
     set('matlab', 'randsample([' + vals.map(function (v) { return N(v); }).join(' ') + '], n, true, [' +
@@ -4715,10 +4727,28 @@ function expressions(fit, sample) {
         'Cumulative probability and value in pairs; Arena interpolates between them.' + thin);
     set('simio', 'Random.Continuous(' + simioPairs.join(', ') + ')',
         'Simio takes VALUE then cumulative probability in pairs, the reverse of Arena; it interpolates between them.' + thin);
-    set('anylogic', 'triangular(' + N(q[0]) + ', ' + N(q[Math.floor(nq / 2)]) + ', ' + N(q[nq - 1]) + ') ' +
-        '// no piecewise-linear primitive; see the note',
-        'AnyLogic has no direct equivalent. Use a Custom distribution built from the breakpoints, ' +
-        'or fit one of the named distributions instead.');
+    /* A piecewise-linear CDF has constant density between breakpoints,
+       which is what AnyLogic's continuous custom distribution in Ranges form
+       draws: CustomDistributionContinuous(starts, ends, weights, random),
+       each weight the probability between its two breakpoints.  A run
+       through (1, 0), (2, 0.5), (4, 1) gave the right mean, median, and
+       quartiles.  (Its Frequency-table form joins densities, not CDFs, by
+       straight lines, which is a different distribution.)  A repeated
+       breakpoint is a range of zero width, which a range cannot hold, and so
+       its probability joins the next range of positive width. */
+    var rS = [], rE = [], rW = [], carry = 0;
+    for (i = 0; i + 1 < m; i++) {
+      var wgt = cp[i + 1] - cp[i] + carry;
+      if (bp[i + 1] > bp[i]) { rS.push(bp[i]); rE.push(bp[i + 1]); rW.push(wgt); carry = 0; }
+      else carry = wgt;
+    }
+    if (carry > 0 && rW.length) rW[rW.length - 1] += carry;
+    var arr = function (v, sig) { return 'new double[]{' + v.map(function (z) { return N(z, sig); }).join(', ') + '}'; };
+    set('anylogic', 'new CustomDistributionContinuous(' + arr(rS) + ', ' + arr(rE) + ', ' + arr(rW, 4) +
+        ', getDefaultRandomGenerator()).get()',
+        'Range starts, range ends, and the probability of each range, drawn with the model\'s own ' +
+        'random-number generator; the density is constant within each range, which is this CDF. For many ' +
+        'draws, make it a Custom Distribution element (Continuous, defined using Ranges) with the same rows.' + thin);
     set('r', 'approx(c(' + cp.map(function (v) { return N(v, 4); }).join(', ') + '), c(' +
         bp.map(function (v) { return N(v); }).join(', ') + '), runif(n))$y',
         'Inverse transform by linear interpolation.' + thin);

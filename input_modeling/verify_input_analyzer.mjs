@@ -2011,6 +2011,31 @@ section('18. export expressions');
     ok(g25.gamm && g25.expr === 'GAMM(1, 25.2)', 'Arena gamma, shape past 20: falls back to GAMM', g25.expr);
     const e5 = IA.expressions({ dist: IA.DISTS.pearson5, p: [3, 8], shift: 0 });
     const e6 = IA.expressions({ dist: IA.DISTS.pearson6, p: [3, 5, 4], shift: 0 });
+    /* AnyLogic, as runs there showed: weibull(scale, shape), lognormal(mu,
+       sigma, shift), and geometric counting trials from 1; the empirical
+       lines are custom distributions built in place. */
+    const aw = IA.expressions({ dist: IA.DISTS.weibull, p: [4, 1.8], shift: 0 }).anylogic;
+    ok(aw === 'weibull(4, 1.8)', 'AnyLogic weibull takes the scale first', aw);
+    const aln = IA.expressions({ dist: IA.DISTS.lognormal, p: [1, 0.3], shift: 0 }).anylogic;
+    ok(aln === 'lognormal(1, 0.3, 0)', 'AnyLogic lognormal takes mu, sigma, and a shift', aln);
+    const ag = IA.expressions({ dist: IA.DISTS.geometric, p: [0.3], shift: 0 }).anylogic;
+    ok(ag === 'geometric(0.3) - 1', 'AnyLogic geometric counts trials, and so 1 is subtracted', ag);
+    {
+      const xs = [1.2, 2.5, 2.5, 3.1, 4.8, 5.0, 6.7];
+      const ac = IA.expressions(IA.fitDist(IA.DISTS.empirical, xs, false, false), xs).anylogic;
+      const nums = s3 => s3.split(',').map(Number);
+      const m3 = ac.match(/^new CustomDistributionContinuous\(new double\[\]\{([^}]*)\}, new double\[\]\{([^}]*)\}, new double\[\]\{([^}]*)\}, getDefaultRandomGenerator\(\)\)\.get\(\)$/);
+      ok(!!m3, 'AnyLogic continuous empirical is a CustomDistributionContinuous of ranges', ac);
+      if (m3) {
+        const [st, en, wt] = [nums(m3[1]), nums(m3[2]), nums(m3[3])];
+        ok(st.every((v, i) => en[i] > v) && st.slice(1).every((v, i) => v === en[i]),
+           'its ranges have positive width and run end to end', ac);
+        close(wt.reduce((u2, v) => u2 + v, 0), 1, 1e-3, 'its range probabilities sum to 1');
+      }
+      const ad = IA.expressions(IA.fitDist(IA.DISTS.discreteEmpirical, [1, 2, 2, 3, 3, 3, 5], false, false)).anylogic;
+      ok(ad.startsWith('((Number) new CustomDistributionDiscrete(new double[]{1, 2, 3, 5}, '),
+         'AnyLogic discrete empirical is a CustomDistributionDiscrete over the values', ad);
+    }
     ok(!/GAMM|ERLA/.test(e5.arena) && !/GAMM|ERLA/.test(e6.arena),
        'the Arena Pearson V and VI lines do not divide by GAMM or ERLA', e5.arena + ' | ' + e6.arena);
     /* The construction's arithmetic, evaluated with exact samplers: the
