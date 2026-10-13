@@ -150,6 +150,11 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
        padding: 6px 18px; background: var(--accent); color: #fff; border: none;
        border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn:hover:not(:disabled) { background: var(--accent-dark); }
+/* "Run the bootstrap" inside a sentence: the same action as the button, in
+   the button's own color, set as text so it reads as part of the sentence. */
+.run-boot-link { font: inherit; font-weight: 700; color: var(--accent); background: none;
+                 border: none; padding: 0; cursor: pointer; }
+.run-boot-link:hover { text-decoration: underline; }
 .btn:disabled { background: #aaa; cursor: not-allowed; }
 .btn2 { font-family: 'Outfit', system-ui, sans-serif; font-size: .82rem; font-weight: 600;
         padding: 5px 13px; background: transparent; color: var(--accent);
@@ -6765,7 +6770,7 @@ function holdNote(r) {
       'before the sample was consulted, which is exactly the assumption the published ' +
       'Kolmogorov–Smirnov and Anderson–Darling tables are built on. In this one case the ' +
       '<em>table</em> column in section 4 is the correct p-value, and the bootstrap column should ' +
-      'agree with it to within bootstrap noise. Run the bootstrap and compare them, and then untick ' +
+      'agree with it to within bootstrap noise. <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> and compare them, and then untick ' +
       'the holds and watch the two columns separate again. That is the whole argument about ' +
       'estimated parameters, in two presses.</div>';
   }
@@ -7376,6 +7381,30 @@ function fitSignature() {
           ST.bins ? ST.bins.k : 0].join('|');
 }
 
+/* The K-S statistic against the two 5% critical values: the one from the
+   published table, which assumes nothing was estimated, and the one the
+   bootstrap finds for the fit actually performed.  The wording follows
+   where D falls, so that the sentence says which test keeps or rejects the
+   fit rather than leaving the reader to compare three numbers. */
+function critCompare(n, tableCrit, bootCrit, D) {
+  var share = bootCrit / tableCrit, close = Math.abs(share - 1) < 0.02;
+  var out = 'From the table, the 5% critical value for K–S at n = ' + n + ' is <span class="mono">' +
+    fmt(tableCrit, 4) + '</span>. The bootstrap\'s critical value for <em>this</em> fitting problem is ' +
+    '<span class="mono">' + fmt(bootCrit, 4) + '</span>, ' +
+    (close ? 'nearly the same as the table\'s. ' : Math.round(100 * share) + '% of the table\'s. ');
+  var dTxt = 'Your D of <span class="mono">' + fmt(D, 4) + '</span> ';
+  var overT = D > tableCrit, overB = D > bootCrit;
+  if (!overT && !overB) out += dTxt + 'is below both, and so neither test rejects the fit.';
+  else if (overT && overB) out += dTxt + 'is above both, and so both tests reject the fit.';
+  else if (overB) out += dTxt + 'is below the table\'s critical value but above the bootstrap\'s: the ' +
+    'table would keep this fit, and the bootstrap test rejects it. This is the case the table gets wrong.';
+  else out += dTxt + 'is above the table\'s critical value but below the bootstrap\'s: the table would ' +
+    'reject this fit, and the bootstrap test keeps it.';
+  if (close) out += ' The two critical values are close here, which happens with discrete or heavily ' +
+    'tied data. The bootstrap\'s is still the one to use, because it does not rely on the table\'s assumption.';
+  return out;
+}
+
 function renderGof() {
   var r = pickedRow(), host = $('gof-out');
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
@@ -7440,7 +7469,7 @@ function renderGof() {
       '</strong> Every parameter is held at a value you chose, and so nothing was estimated from ' +
       'this sample, which is exactly what the published tables assume. The <em>bootstrap</em> ' +
       'column should agree with it to within its own noise' +
-      (res ? '.' : '; press <strong>Run the bootstrap</strong> below to compare the two, which is a ' +
+      (res ? '.' : '; press <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> below to compare the two, which is a ' +
         'check worth running once.') + '</div>'
     : '<div class="hint" style="margin-top:9px"><strong>The two p-value columns answer different ' +
       'questions.</strong> The <em>table</em> column is what you would get by hand, and what most ' +
@@ -7451,7 +7480,7 @@ function renderGof() {
       'accepts fits it should reject. The <em>bootstrap</em> column estimates the right distribution ' +
       'for the fit you actually performed. <strong>Because the parameters were estimated from your ' +
       'data, read the bootstrap column, not the table column.</strong>' +
-      (res ? '' : ' Press <strong>Run the bootstrap</strong> below to fill it in; with ' + n +
+      (res ? '' : ' Press <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> below to fill it in; with ' + n +
         ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
         'every resample is refitted from scratch, which is the whole point of it.') +
       '</div>';
@@ -7460,8 +7489,6 @@ function renderGof() {
   if (res) {
     var vD = res.pD < 0.05 ? 'rejects' : 'does not reject';
     var vA = res.pA < 0.05 ? 'rejects' : 'does not reject';
-    var ratio = tableCrit / res.critD;
-    var tabWouldReject = (pDtab < 0.05);
     verdict =
       '<div class="hint" style="margin-top:8px">At the 5% level the bootstrap has K–S <strong>' +
       vD + '</strong> and A–D <strong>' + vA + '</strong> the fitted ' +
@@ -7473,19 +7500,7 @@ function renderGof() {
       'Seed ' + ST.seed + ', ' + res.used.toLocaleString() + ' usable replications of ' +
       res.B.toLocaleString() + (res.mainThread ? ', run on the main thread because this browser ' +
       'would not build a worker from a local file' : '') + '.</div>' +
-      '<div class="note"><strong>The same point in critical values.</strong> The published K–S 5% ' +
-      'critical value for n = ' + n + ' is <span class="mono">' + fmt(tableCrit, 4) + '</span>. ' +
-      'The bootstrap puts the right one for <em>this</em> fitting problem at <span class="mono">' +
-      fmt(res.critD, 4) + '</span>' +
-      (Number.isFinite(ratio) && ratio > 1.02
-        ? ', ' + fmt(ratio, 3) + ' times smaller. Your D of ' + fmt(D, 4) + ' ' +
-          (tabWouldReject ? 'is rejected by' : 'sails past') + ' the table and ' +
-          (D > res.critD ? 'is rejected by' : 'passes') + ' the honest test' +
-          (!tabWouldReject && D > res.critD
-            ? ', which is exactly the case the table gets wrong.' : '.')
-        : '. They are close here, which happens with discrete or heavily tied data; the bootstrap ' +
-          'is still the one to trust because it did not have to assume they would be.') +
-      '</div>';
+      '<div class="note">' + critCompare(n, tableCrit, res.critD, D) + '</div>';
   }
   host.innerHTML = tbl + tieNote + explain + verdict;
 }
@@ -9621,6 +9636,11 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   $('boot-run').addEventListener('click', startBootstrap);
+  /* The same action from the words in a note; startBootstrap ignores a
+     second press while a run is going. */
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.run-boot-link')) startBootstrap();
+  });
   $('boot-stop').addEventListener('click', stopBootstrap);
   $('seed').addEventListener('change', function () {
     ST.seed = parseSeed(this.value);
