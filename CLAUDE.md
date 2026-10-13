@@ -701,7 +701,7 @@ better.
 ### Input Modeling
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
-  two tabs, one fitting seventeen candidate distributions to a pasted sample and one estimating a
+  two tabs, one fitting eighteen candidate distributions to a pasted sample and one estimating a
   piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files

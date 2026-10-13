@@ -525,6 +525,7 @@ section('11. MLE recovery, every distribution');
     ['weibull',         [4.20, 1.80],        [0.04, 0.05],       102],
     ['lognormal',       [1.15, 0.62],        [0.03, 0.04],       103],
     ['loglogistic',     [3.20, 4.50],        [0.03, 0.02],       114],
+    ['pert',            [2.00, 5.00, 12.0],  [0.03, 0.02, 0.02], 121],
     ['pearson5',        [3.40, 7.80],        [0.04, 0.05],       115],
     ['normal',          [12.5, 3.10],        [0.02, 0.03],       104],
     ['uniform',         [2.00, 9.00],        [0.01, 0.01],       105],
@@ -722,7 +723,7 @@ section('12. cdf / quantile / pdf consistency, every distribution');
     expo: [3.2], gamma: [2.4, 1.3], erlang: [3, 1.1], weibull: [4.0, 1.7],
     lognormal: [0.8, 0.55], normal: [10, 2.5], uniform: [1, 7],
     loglogistic: [3.5, 4], pearson5: [3, 8], pearson6: [3, 5, 4],
-    triangular: [1, 4, 9], beta: [2.0, 3.5, 0.5, 6.5],
+    triangular: [1, 4, 9], pert: [1, 4, 9], beta: [2.0, 3.5, 0.5, 6.5],
     poisson: [4.2], geometric: [0.3], discreteUniform: [2, 9]
   };
   for (const key of Object.keys(PS)) {
@@ -784,7 +785,7 @@ section('13. samplers match their own cdf');
     expo: [2.5], gamma: [3.1, 0.8], erlang: [4, 1.2], weibull: [2.2, 1.6],
     lognormal: [0.4, 0.7], normal: [5, 1.5], uniform: [2, 6],
     loglogistic: [2.2, 3], pearson5: [2.5, 4], pearson6: [2, 6, 3],
-    triangular: [0, 3, 8], beta: [1.7, 2.9, 1, 5],
+    triangular: [0, 3, 8], pert: [0, 3, 8], beta: [1.7, 2.9, 1, 5],
     poisson: [3.7], geometric: [0.22], discreteUniform: [1, 6]
   };
   const M = 20000;
@@ -1994,7 +1995,15 @@ section('18. export expressions');
        'Simio Random.Discrete takes value, then cumulative probability', ed.simio);
     ok(ed.arena.startsWith('DISC(0.14286, 1, '), 'Arena DISC takes cumulative probability, then value', ed.arena);
     const el = IA.expressions({ dist: IA.DISTS.lognormal, p: [0.5, 0.6], shift: 0 });
-    ok(el.simio.startsWith('Random.LogNormal('), "Simio's lognormal is spelled Random.LogNormal", el.simio);
+    ok(el.simio.startsWith('Random.Lognormal('), "Simio's lognormal is written Random.Lognormal, as Simio's examples write it", el.simio);
+    const sll = IA.expressions({ dist: IA.DISTS.loglogistic, p: [3, 4], shift: 0 }).simio;
+    const sp6 = IA.expressions({ dist: IA.DISTS.pearson6, p: [3, 5, 4], shift: 0 }).simio;
+    const ep = IA.expressions({ dist: IA.DISTS.pert, p: [0, 3, 10], shift: 0 });
+    ok(ep.simio === 'Random.Pert(0, 3, 10)', 'Simio has the PERT by name: minimum, most likely, maximum', ep.simio);
+    ok(ep.anylogic === 'beta(2.2, 3.8, 0, 10)' && ep.arena === '0 + 10 * BETA(2.2, 3.8)',
+       'elsewhere the PERT is the beta with shapes 1 + 4(m - a)/(b - a) and 1 + 4(b - m)/(b - a)', ep.anylogic + ' | ' + ep.arena);
+    ok(sll === 'Random.LogLogistic(3, 4)' && sp6 === 'Random.PearsonVI(3, 5, 4)',
+       'Simio uses its native log-logistic (shape, scale) and Pearson VI (shapes, scale)', sll + ' | ' + sp6);
     /* Simio's Random.Erlang(Mean, K) takes the mean of the whole, K times
        the mean of each exponential phase. */
     const ee = IA.expressions({ dist: IA.DISTS.erlang, p: [3, 1.5], shift: 0 });
