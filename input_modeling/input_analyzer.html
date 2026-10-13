@@ -4426,8 +4426,14 @@ function expressions(fit, sample) {
     var a = p[0], b = p[1], isEr = k === 'erlang';
     set('arena', pre(g) + (isEr ? 'ERLA(' : 'GAMM(') + N(b) + ', ' + N(a) + ')',
         'Arena writes the SCALE first, then the shape.');
-    set('simio', 'Random.Gamma(' + N(a) + ', ' + N(b) + ')' + (g ? ' + ' + N(g) : ''),
-        'shape ' + N(a) + ', scale ' + N(b) + (isEr ? ' (an Erlang is a gamma with a whole-number shape).' : '.'));
+    /* Simio's Random.Erlang(Mean, K) takes the mean of the WHOLE, each of
+       the K exponential phases having mean Mean/K. */
+    if (isEr)
+      set('simio', 'Random.Erlang(' + N(a * b) + ', ' + N(a) + ')' + (g ? ' + ' + N(g) : ''),
+          'Simio takes the mean of the whole, k × β = ' + N(a * b) + ', and then the number of phases k.');
+    else
+      set('simio', 'Random.Gamma(' + N(a) + ', ' + N(b) + ')' + (g ? ' + ' + N(g) : ''),
+          'shape ' + N(a) + ', scale ' + N(b) + '.');
     set('anylogic', (g ? N(g) + ' + ' : '') + 'gamma(' + N(a) + ', ' + N(b) + ')',
         'shape ' + N(a) + ', scale ' + N(b) + '.');
     set('r', 'rgamma(n, shape = ' + N(a) + ', scale = ' + N(b) + ')' + (g ? ' + ' + N(g) : ''),
@@ -4469,6 +4475,15 @@ function expressions(fit, sample) {
     set('python', 'stats.lognorm(s=' + N(sg) + ', loc=' + N(g) + ', scale=' + N(Math.exp(mu)) + ')',
         's is sigma of ln X; scale is exp(mu).');
   } else if (k === 'loglogistic') {
+    /* Simio's reference guide, which ships with Simio and is not published
+       online, lists a native Random.LogLogistic(shape, scale) and, for the
+       Pearson type VI below, Random.PearsonVI(shapeA, shapeB, scale).
+       Whether their scales are Law's beta has not been checked by a run,
+       and so the Simio lines use constructions from Random.Uniform,
+       Random.Gamma, and the ^ operator, whose meanings are documented.  A
+       Simio run in which Random.LogLogistic(3, 4) averages 4.837 and
+       Random.PearsonVI(3, 5, 4) averages 3 would confirm Law's
+       parameterization and allow the native forms. */
     var al = p[0], bl = p[1], ninv = -1 / al;
     /* (1/U - 1)^(-1/alpha) is (U/(1 - U))^(1/alpha) written with ONE
        uniform: two UNIF calls in one expression would be two different
@@ -4501,6 +4516,7 @@ function expressions(fit, sample) {
     set('python', 'stats.invgamma(a=' + N(a5) + ', loc=' + N(g) + ', scale=' + N(b5) + ')',
         'scipy calls the Pearson type V invgamma; a is the shape α and scale is β.');
   } else if (k === 'pearson6') {
+    /* See the log-logistic above for Simio's native Random.PearsonVI. */
     var a61 = p[0], a62 = p[1], b6 = p[2];
     /* Two gamma calls in one expression are two independent draws, which
        is exactly what the ratio needs. */

@@ -1995,6 +1995,10 @@ section('18. export expressions');
     ok(ed.arena.startsWith('DISC(0.14286, 1, '), 'Arena DISC takes cumulative probability, then value', ed.arena);
     const el = IA.expressions({ dist: IA.DISTS.lognormal, p: [0.5, 0.6], shift: 0 });
     ok(el.simio.startsWith('Random.LogNormal('), "Simio's lognormal is spelled Random.LogNormal", el.simio);
+    /* Simio's Random.Erlang(Mean, K) takes the mean of the whole, K times
+       the mean of each exponential phase. */
+    const ee = IA.expressions({ dist: IA.DISTS.erlang, p: [3, 1.5], shift: 0 });
+    ok(ee.simio === 'Random.Erlang(4.5, 3)', 'Simio Random.Erlang takes the mean of the whole, then k', ee.simio);
   }
   /* CSV round trip. */
   {
