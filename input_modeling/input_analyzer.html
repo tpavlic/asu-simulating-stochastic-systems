@@ -376,8 +376,7 @@ details.why .why-body code { background: var(--accent-wash); padding: 1px 4px; b
 .note.warn strong { color: var(--warn); }
 /* A tab's opening statement of what it assumes and does, set as plain
    prose above the first card rather than boxed like a note. */
-.tab-lede { font-size: .88rem; line-height: 1.6; color: var(--text); margin: 0 4px 14px;
-            max-width: 78ch; }
+.tab-lede { font-size: .88rem; line-height: 1.6; color: var(--text); margin: 0 4px 14px; }
 .hint { background: var(--chart-bg); border-radius: 6px; padding: 9px 11px; font-size: .81rem;
         color: var(--muted); line-height: 1.55; }
 
@@ -465,7 +464,7 @@ footer a:hover { text-decoration: underline; }
 
   <header class="wh">
     <div class="wh-title">Input Analyzer</div>
-    <div class="wh-sub">Fit a probability distribution to sample data, check the fit, and read off the expression to type into a simulation model</div>
+    <div class="wh-sub">Fit a distribution to sample data or an arrival rate to arrival times, check the fit, and read off what to type into a simulation model</div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </header>
 
@@ -482,6 +481,10 @@ footer a:hover { text-decoration: underline; }
      TAB ①: FIT A DISTRIBUTION
      ══════════════════════════════════════════════════════════════════ -->
 <section id="tab-fit" class="tp active">
+
+  <p class="tab-lede">This tab fits a probability distribution to a sample of independent values,
+  such as service times, and ranks the candidates against one another. For arrivals whose rate
+  may change over the day, use tab ②.</p>
 
   <!-- ── 1. DATA ──────────────────────────────────────────────────── -->
   <section class="sec">
