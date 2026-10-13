@@ -4473,10 +4473,10 @@ function expressions(fit, sample) {
     /* (1/U - 1)^(-1/alpha) is (U/(1 - U))^(1/alpha) written with ONE
        uniform: two UNIF calls in one expression would be two different
        draws. */
-    set('arena', pre(g) + N(bl) + ' * (1 / UNIF(0, 1) - 1) ** (' + N(ninv) + ')',
+    set('arena', pre(g) + N(bl) + ' * ((1 / UNIF(0, 1) - 1) ** (' + N(ninv) + '))',
         'Arena has no log-logistic, and so this is the inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
-    set('simio', N(bl) + ' * Math.Pow(1 / Random.Uniform(0, 1) - 1, ' + N(ninv) + ')' + (g ? ' + ' + N(g) : ''),
-        'The inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
+    set('simio', N(bl) + ' * ((1 / Random.Uniform(0, 1) - 1) ^ (' + N(ninv) + '))' + (g ? ' + ' + N(g) : ''),
+        'The inverse transform β·(U/(1 − U))^(1/α), with one uniform draw; ^ is Simio\'s power operator.');
     set('anylogic', (g ? N(g) + ' + ' : '') + N(bl) + ' * Math.pow(1 / uniform(0, 1) - 1, ' + N(ninv) + ')',
         'The inverse transform β·(U/(1 − U))^(1/α), with one uniform draw.');
     set('r', 'exp(rlogis(n, location = ' + N(Math.log(bl)) + ', scale = ' + N(1 / al) + '))' + (g ? ' + ' + N(g) : ''),
