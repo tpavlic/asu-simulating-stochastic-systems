@@ -1977,6 +1977,24 @@ section('18. export expressions');
     ok(e.arena.includes(IA.num(f.p[1] + 1)), 'Arena UNIF upper end is one above the largest value', e.arena);
     ok(e.python.includes(`stats.randint(${IA.num(f.p[0])}, ${IA.num(f.p[1] + 1)})`),
        "scipy's randint excludes its upper end", e.python);
+    ok(/^Random\.Discrete\(\d/.test(e.simio) && !e.simio.includes('DiscreteUniform'),
+       'Simio, which has no discrete uniform, gets its own discrete distribution', e.simio);
+  }
+  /* Simio's empirical distributions take each pair as (value, cumulative
+     probability), the reverse of Arena's CONT and DISC, and so the first
+     argument is the smallest value and the last is a cumulative 1. */
+  {
+    const xs = [1.2, 2.5, 2.5, 3.1, 4.8, 5.0, 6.7];
+    const fc = IA.fitDist(IA.DISTS.empirical, xs, false, false), ec = IA.expressions(fc, xs);
+    ok(ec.simio.startsWith('Random.Continuous(1.2, 0, ') && ec.simio.endsWith('6.7, 1)'),
+       'Simio Random.Continuous takes value, then cumulative probability', ec.simio);
+    ok(ec.arena.startsWith('CONT(0, 1.2, '), 'Arena CONT takes cumulative probability, then value', ec.arena);
+    const fd = IA.fitDist(IA.DISTS.discreteEmpirical, [1, 2, 2, 3, 3, 3, 5], false, false), ed = IA.expressions(fd);
+    ok(ed.simio.startsWith('Random.Discrete(1, ') && ed.simio.endsWith('5, 1)'),
+       'Simio Random.Discrete takes value, then cumulative probability', ed.simio);
+    ok(ed.arena.startsWith('DISC(0.14286, 1, '), 'Arena DISC takes cumulative probability, then value', ed.arena);
+    const el = IA.expressions({ dist: IA.DISTS.lognormal, p: [0.5, 0.6], shift: 0 });
+    ok(el.simio.startsWith('Random.LogNormal('), "Simio's lognormal is spelled Random.LogNormal", el.simio);
   }
   /* CSV round trip. */
   {

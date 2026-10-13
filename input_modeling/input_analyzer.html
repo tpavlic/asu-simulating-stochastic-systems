@@ -4458,7 +4458,7 @@ function expressions(fit, sample) {
     set('arena', pre(g) + 'LOGN(' + N(mX) + ', ' + N(sX) + ')',
         'Arena wants the mean and std. dev. of X ITSELF (' + N(mX) + ', ' + N(sX) +
         '), not of ln X (' + N(mu) + ', ' + N(sg) + ').');
-    set('simio', 'Random.Lognormal(' + N(mu) + ', ' + N(sg) + ')' + (g ? ' + ' + N(g) : ''),
+    set('simio', 'Random.LogNormal(' + N(mu) + ', ' + N(sg) + ')' + (g ? ' + ' + N(g) : ''),
         'mean and std. dev. of ln X.');
     set('anylogic', (g ? N(g) + ' + ' : '') + 'lognormal(' + N(sg) + ', ' + N(mu) + ')',
         'AnyLogic takes sigma first, then mu—both of ln X.');
@@ -4578,7 +4578,21 @@ function expressions(fit, sample) {
     var lo = p[0], hi = p[1];
     set('arena', 'AINT( UNIF(' + N(lo) + ', ' + N(hi + 1) + ') )',
         'Note the upper end is ' + N(hi + 1) + ', one above the largest value, so that ' + N(hi) + ' can occur.');
-    set('simio', 'Random.DiscreteUniform(' + N(lo) + ', ' + N(hi) + ')', '');
+    /* Simio has no discrete uniform, and so it is written as its own
+       discrete distribution, value then cumulative probability, while the
+       list stays short enough to paste; a wider range rounds a continuous
+       uniform that runs half a unit past each end. */
+    var nVals = hi - lo + 1;
+    if (nVals <= 40) {
+      var duArgs = [];
+      for (var dv = 0; dv < nVals; dv++)
+        duArgs.push(N(lo + dv) + ', ' + (dv === nVals - 1 ? '1' : N((dv + 1) / nVals, 5)));
+      set('simio', 'Random.Discrete(' + duArgs.join(', ') + ')',
+          'Simio has no discrete uniform, and so this lists each value with its cumulative probability.');
+    } else {
+      set('simio', 'Math.Round(Random.Uniform(' + N(lo - 0.5) + ', ' + N(hi + 0.5) + '))',
+          'Simio has no discrete uniform, and so this rounds a uniform that runs half a unit past each end.');
+    }
     set('anylogic', 'uniform_discr(' + N(lo) + ', ' + N(hi) + ')', '');
     set('r', 'sample(' + N(lo) + ':' + N(hi) + ', n, replace = TRUE)', '');
     set('matlab', 'randi([' + N(lo) + ' ' + N(hi) + '], n, 1)', '');
@@ -4588,10 +4602,17 @@ function expressions(fit, sample) {
     for (i = 0; i < probs.length; i++) { acc += probs[i]; cum.push(acc); }
     cum[cum.length - 1] = 1;
     var discArgs = [];
-    for (i = 0; i < vals.length; i++) discArgs.push(N(cum[i], 5) + ', ' + N(vals[i]));
+    /* Arena takes each pair as (cumulative probability, value); Simio takes
+       the same pairs the other way around, (value, cumulative probability). */
+    var simioDisc = [];
+    for (i = 0; i < vals.length; i++) {
+      discArgs.push(N(cum[i], 5) + ', ' + N(vals[i]));
+      simioDisc.push(N(vals[i]) + ', ' + N(cum[i], 5));
+    }
     set('arena', 'DISC(' + discArgs.join(', ') + ')',
         'Arena takes CUMULATIVE probability and value in pairs.');
-    set('simio', 'Random.Discrete(' + discArgs.join(', ') + ')', 'Cumulative probability and value in pairs.');
+    set('simio', 'Random.Discrete(' + simioDisc.join(', ') + ')',
+        'Simio takes VALUE then cumulative probability in pairs, the reverse of Arena.');
     set('anylogic', 'new double[]{' + probs.map(function (q) { return N(q, 5); }).join(', ') +
         '} // use with a Custom distribution over ' +
         '{' + vals.map(function (v) { return N(v); }).join(', ') + '}',
@@ -4614,12 +4635,16 @@ function expressions(fit, sample) {
       bp.push(DISTS.empirical.quantile(u, p));
       cp.push(u);
     }
-    var pairs = [];
-    for (i = 0; i < m; i++) pairs.push(N(cp[i], 4) + ', ' + N(bp[i]));
+    var pairs = [], simioPairs = [];
+    for (i = 0; i < m; i++) {
+      pairs.push(N(cp[i], 4) + ', ' + N(bp[i]));
+      simioPairs.push(N(bp[i]) + ', ' + N(cp[i], 4));
+    }
     var thin = nq > MAXBP ? ' Thinned from ' + nq + ' observations to ' + m + ' breakpoints.' : '';
     set('arena', 'CONT(' + pairs.join(', ') + ')',
         'Cumulative probability and value in pairs; Arena interpolates between them.' + thin);
-    set('simio', 'Random.Continuous(' + pairs.join(', ') + ')', 'Cumulative probability and value in pairs.' + thin);
+    set('simio', 'Random.Continuous(' + simioPairs.join(', ') + ')',
+        'Simio takes VALUE then cumulative probability in pairs, the reverse of Arena; it interpolates between them.' + thin);
     set('anylogic', 'triangular(' + N(q[0]) + ', ' + N(q[Math.floor(nq / 2)]) + ', ' + N(q[nq - 1]) + ') ' +
         '// no piecewise-linear primitive; see the note',
         'AnyLogic has no direct equivalent. Use a Custom distribution built from the breakpoints, ' +
