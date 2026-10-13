@@ -484,7 +484,7 @@ footer a:hover { text-decoration: underline; }
 
   <p class="tab-lede">This tab fits a probability distribution to a sample of independent values,
   such as service times, and ranks the candidates against one another. For arrivals whose rate
-  may change over the day, use tab ②.</p>
+  may change over the day, use <a class="tab-link" href="#arr" data-tab="arr">tab ②</a>.</p>
 
   <!-- ── 1. DATA ──────────────────────────────────────────────────── -->
   <section class="sec">
@@ -1061,7 +1061,8 @@ footer a:hover { text-decoration: underline; }
   <p class="tab-lede">This tab models arrivals as a <strong>Poisson process</strong>: customers
   arrive one at a time and independently of one another, at a rate <code>&lambda;(t)</code>
   that may change over the day. It estimates that rate interval by interval and tests whether
-  it is constant. If it is, the gaps between arrivals are exponential, and tab ① can fit them.
+  it is constant. If it is, the gaps between arrivals are exponential, and the button in section
+  4 sends them to <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> to be fitted.
   If it is not, the model is a <strong>nonhomogeneous</strong> Poisson process, and the rate
   table in section 3 is what goes into a simulation. The tab does not check the Poisson
   assumption itself. Arrivals in batches, or on a schedule, break it, and the notes under the
@@ -1183,33 +1184,33 @@ footer a:hover { text-decoration: underline; }
     <details class="why">
       <summary>Why fitting a distribution to the gaps can hide a changing rate</summary>
       <div class="why-body">
-        <p>Tab ① fits a distribution to a set of numbers it assumes are independent draws from one
+        <p><a class="tab-link" href="#fit" data-tab="fit">Tab ①</a> fits a distribution to a set of numbers it assumes are independent draws from one
         unchanging distribution. Interarrival gaps from a real arrival process often are not:
         arrivals come faster at lunchtime than at 3 p.m., and so the gaps early in the data and the
         gaps in the middle are drawn from different distributions. Fitting a single exponential to
         all of them gives you the right average rate and the wrong process: a constant-rate Poisson
         process where the real one changes rate. A simulation built on
         it will never produce the lunch queue that the real system produces every day.</p>
-        <p><strong>The gaps are not missing the information; tab ① is throwing it away.</strong>
+        <p><strong>The gaps are not missing the information; <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> is throwing it away.</strong>
         Timestamps and gaps hold the same thing: add the gaps up and you have the arrival times
         back, give or take where you put the zero. Losing the origin leaves you unable to say
         <em>the peak was at noon</em>, and changes nothing at all when the question is whether
         there was a peak: the spacing between arrivals is untouched by sliding the whole record
         sideways.</p>
         <p>What does the damage is fitting a distribution to them. A distribution is a statement
-        about a bag of numbers with no order, and so the moment the gaps go into tab ① their
+        about a bag of numbers with no order, and so the moment the gaps go into <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> their
         sequence is discarded, and with it every trace of the rate having changed. A morning of long gaps
         followed by a lunchtime of short ones and the same gaps shuffled at random give an
         identical fit, an identical histogram, and identical p-values. This tab keeps them in
         order instead: it divides the window into intervals, estimates a separate rate in each,
-        and tests whether the rate is really constant. If it is, take the gaps to tab ① and fit an
-        exponential with a clear conscience. If it is not, the rate table below is what belongs in
+        and tests whether the rate is really constant. If it is, send the gaps to tab ① with the
+        button in section 4 and fit an exponential with a clear conscience. If it is not, the rate table below is what belongs in
         your model.</p>
         <p>Either kind of data is welcome here. If what you collected is gaps rather than
         timestamps, say so beside the box above and they will be added up for you.</p>
         <p>The two tabs read <code>12:30</code> differently, and deliberately. Here it is a
         <em>moment</em>: the readings are <code>HH:MM</code> and <code>HH:MM:SS</code>, and the
-        result is minutes past midnight. On tab ① it is a <em>duration</em> off a stopwatch, where
+        result is minutes past midnight. On <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> it is a <em>duration</em> off a stopwatch, where
         the default reading is <code>MM:SS</code> and a control lets you switch. That is not an
         inconsistency between the tabs but the two conventions the world already uses: nobody
         writes a time of day as minutes and seconds, and nobody times a task in hours and
@@ -1415,7 +1416,7 @@ footer a:hover { text-decoration: underline; }
           checks.</span></div>
         <div class="eq"><span class="eq-l">Gaps, constant rate</span>
           <span class="eq-r">f(x) = &lambda; exp(&minus;&lambda;x),&nbsp; mean 1/&lambda;</span>
-          <span class="eq-n">Only when &lambda; does not change. This is the density tab ① fits.</span></div>
+          <span class="eq-n">Only when &lambda; does not change. This is the density <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> fits.</span></div>
         <div class="eq"><span class="eq-l">Gaps, changing rate</span>
           <span class="eq-r">f(x | arrival at s) = &lambda;(s+x) &middot; exp(&minus;[&Lambda;(s+x) &minus; &Lambda;(s)])</span>
           <span class="eq-n"><strong>Read this one carefully: it depends on s.</strong> When the
@@ -9012,7 +9013,7 @@ function renderStationarity() {
         'that the busy stretch builds. Use the rate table below instead.'
       : 'The counts are about as even as a constant rate would make them (' +
         fmt(st.firstHalfRate, 4) + ' per ' + unitWord() + ' in the first half against ' +
-        fmt(st.lastHalfRate, 4) + ' in the last). Sending the gaps to tab ① and fitting an ' +
+        fmt(st.lastHalfRate, 4) + ' in the last). Sending the gaps to tab ① with the button in section 4 and fitting an ' +
         'exponential is defensible. Widen and narrow the interval below before you settle: a peak ' +
         'much shorter than the interval width can hide inside one interval.') +
     '</div>';
@@ -9071,8 +9072,8 @@ function renderRateMLE() {
   /* And which of the two is worth anything, given what the test found. */
   var verdict = constant
     ? '<div class="note quiet"><strong>The test in section 2 found no evidence the rate changes,</strong> ' +
-      'and so this single number is a fair description of the whole window. Take the gaps to tab ① and ' +
-      'fit an exponential: it will return a mean of ' + fmt(r.meanGap, 5) + ' because the ' +
+      'and so this single number is a fair description of the whole window. Send the gaps to tab ① ' +
+      'with the button below and fit an exponential: it will return a mean of ' + fmt(r.meanGap, 5) + ' because the ' +
       'maximum-likelihood estimate of an exponential mean <em>is</em> the sample mean. Confirming ' +
       'that once is a good use of five seconds: it is a rare chance to check a numerical fitting ' +
       'routine against arithmetic you can do by hand.</div>'
@@ -9149,8 +9150,8 @@ function drawGapsHist() {
     var st = IA.stationarityTest(AST.prof);
     note.innerHTML = st && st.ok && st.p < 0.05
       ? 'These two plots assume one rate for the whole window, which the test in section 2 says is ' +
-        'wrong here. Expect them to look poor, and expect a fit on tab ① to be poor for the same reason.'
-      : 'Tab ① fits all eighteen candidates to these gaps and tests them properly. The exponential ' +
+        'wrong here. Expect them to look poor, and expect a fit on <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> to be poor for the same reason.'
+      : '<a class="tab-link" href="#fit" data-tab="fit">Tab ①</a> fits all eighteen candidates to these gaps and tests them properly. The exponential ' +
         'it returns will have mean ' + fmt(r.meanGap, 5) + ', the number above.';
   }
 }
@@ -9355,10 +9356,10 @@ function sendCountsToFit() {
   genSay('These are counts, and so tab ① has switched to the discrete candidates and selected the ' +
     '<strong>Poisson</strong>, which is the comparison this button is for: its ' +
     '<span class="lit">λ̂</span> should be the <span class="lit">λ̂w</span> that section 4 of ' +
-    'tab ② reported, and the goodness-of-fit tests below now apply to the ' +
+    '<a class="tab-link" href="#arr" data-tab="arr">tab ②</a> reported, and the goodness-of-fit tests below now apply to the ' +
     '<em>counts</em> rather than to the gaps. There are only ' +
     full.length + ' counts here, one per interval, and so the ranking has very little to go on and ' +
-    'another candidate may well score better by luck. Narrow the interval on tab ② for more of ' +
+    'another candidate may well score better by luck. Narrow the interval on <a class="tab-link" href="#arr" data-tab="arr">tab ②</a> for more of ' +
     'them.');
   $('tab-fit').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -9523,6 +9524,21 @@ function showTab(name) {
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
 }
 function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+/* A mention of the other tab in the text is a link to it.  The router alone
+   would switch tabs but leave the scroll where it was, landing the reader
+   halfway down the other tab, and so the click also brings the tab strip
+   (or, on a narrow screen, the tab picker) back into view. */
+document.addEventListener('click', function (e) {
+  var a = e.target.closest ? e.target.closest('a.tab-link') : null;
+  if (!a) return;
+  var name = a.getAttribute('data-tab');
+  if (!validTab(name)) return;
+  e.preventDefault();
+  showTab(name);
+  var strip = document.querySelector('nav.tabs');
+  if (!strip || !strip.offsetParent) strip = $('tab-select');
+  strip.scrollIntoView({ block: 'start' });
+});
 // An externally opened #id, or a back/forward step across one, lands on that tab.
 window.addEventListener('hashchange', function () {
   var name = location.hash.slice(1);
