@@ -169,6 +169,9 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
 #shift-wrap, #reflect-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
+.ctrl-row.ctrl-stack { flex-direction: column; align-items: flex-start; gap: 4px; }
+.ctrl-row.tbl-bar { margin-bottom: 6px; }
+.tbl-bar .tbl-bar-end { margin-left: auto; }
 #shift-wrap input, #reflect-wrap input, #johnson-wrap input { margin-top: .2em; }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible,
 a:focus-visible, textarea:focus-visible {
@@ -661,16 +664,26 @@ footer a:hover { text-decoration: underline; }
           <option value="discrete">Discrete (counts)</option>
         </select>
       </span>
+    </div>
+    <!-- The two fit options take a line each under the family: both labels
+         are long, and side by side they wrapped at arbitrary points. -->
+    <div class="ctrl-row ctrl-stack">
       <label class="chk" id="shift-wrap" data-tip="Each candidate that starts at zero gets its own γ, estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="shift-chk"> <span class="tip">Estimate a location shift γ (each candidate gets its own)</span>
       </label>
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
       </label>
+    </div>
+
+    <div id="disagree"></div>
+    <!-- Directly above the table, what the table lists and how it is
+         ordered: the Johnson box at the left, Sort by at the right. -->
+    <div class="ctrl-row tbl-bar">
       <label class="chk" id="johnson-wrap" data-tip="Adds the two Johnson members to the ranking. Each has four parameters that reach almost any skewness and kurtosis, and so they tend to win on flexibility alone, by tracking the shape of this one sample, and rarely describe what a process would repeat. Continuous data only, and off by default for that reason." data-tip-press>
         <input type="checkbox" id="johnson-chk"> <span class="tip">Also fit the Johnson system (Sᵦ and Sᵤ)</span>
       </label>
-      <span class="ctrl-grp">
+      <span class="ctrl-grp tbl-bar-end">
         <label class="ctrl-lbl" for="rank-by">Sort by</label>
         <select id="rank-by">
           <option value="aic">AIC</option>
@@ -680,8 +693,6 @@ footer a:hover { text-decoration: underline; }
         </select>
       </span>
     </div>
-
-    <div id="disagree"></div>
     <div class="tbl-scroll" id="rank-host">
       <div class="plot-empty">Load data to rank the candidates.</div>
     </div>
@@ -4949,22 +4960,24 @@ function expressions(fit, sample) {
     set('matlab', N(L) + ' + ' + N(W) + ' * betarnd(' + N(al) + ', ' + N(be) + ', n, 1)', '');
     set('python', 'stats.beta(a=' + N(al) + ', b=' + N(be) + ', loc=' + N(L) + ', scale=' + N(W) + ')', '');
   } else if (k === 'johnsonSB' || k === 'johnsonSU') {
-    /* Each member is one standard normal put through a transformation,
-       and that one draw has to be reused inside it.  AnyLogic, R, MATLAB,
-       and Python write it in one line; Arena and Simio have no
-       one-expression form without a native function, and so the draw
-       goes into a variable first and the transformation reads it. */
+    /* Each member is one standard normal put through a transformation.
+       Arena and Simio have the family by name; AnyLogic, R, and MATLAB
+       write the transformation of one draw, and SciPy has both members. */
     var g2 = p[0], dl = p[1], xj = p[2], lj = p[3], isSB = k === 'johnsonSB';
     var zs = function (z) { return '(' + z + (g2 < 0 ? ' + ' + N(-g2) : ' - ' + N(g2)) + ')'; };
-    var what = isSB ? 'Johnson Sᵦ' : 'Johnson Sᵤ';
-    var twoStep = what + ' has no one-expression form here: it needs a single standard normal draw reused ' +
-      'inside the transformation. Assign Z first, then use the second expression wherever the draw is needed.';
-    var sinhOf = function (w, ex) { return '(' + ex + '(' + w + ') - ' + ex + '(-' + w + ')) / 2'; };
-    var wA = zs('Z') + ' / ' + N(dl);
-    set('arena', 'Z = NORM(0, 1)  then  ' + N(xj) + ' + ' + N(lj) +
-        (isSB ? ' / (1 + EP(-' + wA + '))' : ' * ' + sinhOf(wA, 'EP')), twoStep + ' EP is Arena\'s exponential function.');
-    set('simio', 'Z = Random.Normal(0, 1)  then  ' + N(xj) + ' + ' + N(lj) +
-        (isSB ? ' / (1 + Math.Exp(-' + wA + '))' : ' * ' + sinhOf(wA, 'Math.Exp')), twoStep + ' Z is a real state variable.');
+    /* Arena's JOHN(G, D, L, X) is this page's (gamma, delta, lambda, xi)
+       with the same transformation, X = xi + lambda f^-1((Z - gamma)/delta);
+       a negative D selects the unbounded member.  Simio names the two
+       members, each taking the two shapes and then its own support
+       parameters: the interval for S_B, the location and scale for S_U. */
+    set('arena', 'JOHN(' + N(g2) + ', ' + N(isSB ? dl : -dl) + ', ' + N(lj) + ', ' + N(xj) + ')',
+        'Arena\'s JOHN takes γ, δ, λ, and ξ in that order, and the SIGN of δ picks the member: positive is ' +
+        'bounded (Sᵦ), negative is unbounded (Sᵤ)' + (isSB ? '.' : ', which is why δ is passed as ' + N(-dl) + '.'));
+    set('simio', isSB
+        ? 'Random.JohnsonSB(' + N(g2) + ', ' + N(dl) + ', ' + N(xj) + ', ' + N(xj + lj) + ')'
+        : 'Random.JohnsonSU(' + N(g2) + ', ' + N(dl) + ', ' + N(xj) + ', ' + N(lj) + ')',
+        isSB ? 'The two shapes (α₁ = γ, α₂ = δ) and then the interval: min = ξ and max = ξ + λ.'
+             : 'The two shapes (α₁ = γ, α₂ = δ) and then the location ξ and the scale λ.');
     var wL = zs('normal(1, 0)') + ' / ' + N(dl);
     set('anylogic', N(xj) + ' + ' + N(lj) + (isSB ? ' / (1 + Math.exp(-' + wL + '))' : ' * Math.sinh(' + wL + ')'),
         'AnyLogic\'s normal takes the standard deviation first, then the mean, and so normal(1, 0) is a standard normal.');
