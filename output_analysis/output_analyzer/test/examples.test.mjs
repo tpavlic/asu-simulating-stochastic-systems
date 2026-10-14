@@ -14,6 +14,7 @@ const { EXAMPLES } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'e
 const { sniff, buildDatasets } = await import(pathToFileURL(path.join(ROOT, 'js', 'io', 'parse.js')).href);
 const { repEstimates } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'model.js')).href);
 const { levene } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
+const { pairedT } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { applyTransform } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'transform.js')).href);
 
 test('regenerated files match the committed ones byte for byte', () => {
@@ -21,7 +22,7 @@ test('regenerated files match the committed ones byte for byte', () => {
   try {
     execFileSync('node', [GEN, '--out', tmp]);
     const files = fs.readdirSync(path.join(tmp, 'data'));
-    assert.equal(files.length, 11);
+    assert.equal(files.length, 12);
     for (const f of files) {
       assert.ok(fs.readFileSync(path.join(tmp, 'data', f)).equals(fs.readFileSync(path.join(ROOT, 'data', f))), f);
     }
@@ -33,7 +34,7 @@ test('regenerated files match the committed ones byte for byte', () => {
 });
 
 test('each entry carries its data file text and a mapping with a kind', () => {
-  assert.equal(EXAMPLES.length, 11);
+  assert.equal(EXAMPLES.length, 12);
   for (const e of EXAMPLES) {
     assert.equal(e.text, fs.readFileSync(path.join(ROOT, 'data', e.file), 'utf8'), e.file);
     assert.ok(['tally', 'time', 'reps'].includes(e.mapping.kind), e.id);
@@ -54,4 +55,21 @@ test('the service-level and utilization examples show the transforms their descr
   };
   assert.ok(p('service-level', 'none') < 0.01 && p('service-level', 'logit') > 0.5 && p('service-level', 'asin_sqrt') < 0.05);
   assert.ok(p('utilization', 'none') < 0.01 && p('utilization', 'log') > 0.5 && p('utilization', 'asin_sqrt') < 0.01 && p('utilization', 'logit') < 0.01);
+});
+
+// The oven example's description says that the choice of output decides the comparison: paired
+// across the shared demand streams, the time in system cannot tell the policies apart, and the
+// muffins unfinished, loaded through the dialog in its place, favor the nearly full policy.
+test('the muffin-oven example shows the outputs disagreeing, as its description says', () => {
+  const ex = EXAMPLES.find(e => e.id === 'muffin-oven');
+  const sn = sniff(ex.text, { name: ex.mapping.name });
+  const paired = value => {
+    const [greedy, full] = buildDatasets(sn, Object.assign({}, ex.mapping, { value })).datasets.map(repEstimates);
+    assert.equal(greedy.length, 10);
+    return pairedT(full, greedy, 0.95);
+  };
+  assert.deepEqual(sn.header, ['policy', 'replication', 'avg_time_in_system', 'utilization', 'max_waiting', 'unfinished']);
+  const tis = paired(2), left = paired(5);
+  assert.ok(tis.p > 0.2, 'time in system p ' + tis.p);
+  assert.ok(left.p < 0.05 && left.meanD < 0, 'unfinished p ' + left.p + ', mean difference ' + left.meanD);
 });

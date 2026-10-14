@@ -903,6 +903,37 @@ B,15,2.8592
 `
   },
   {
+    id: "muffin-oven",
+    title: "Muffin oven: two loading policies, four outputs",
+    file: "muffin_oven.csv",
+    kind: "reps",
+    format: "columns",
+    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Use it to compare the policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null},
+    text: `policy,replication,avg_time_in_system,utilization,max_waiting,unfinished
+greedy,1,6.6034,0.8622,33,43
+greedy,2,5.4432,0.84,26,48
+greedy,3,5.4,0.7156,24,36
+greedy,4,5.6453,0.8311,36,50
+greedy,5,5.4774,0.7511,24,35
+greedy,6,5.6667,0.7733,26,39
+greedy,7,6.0663,0.8044,37,60
+greedy,8,5.4767,0.8244,28,43
+greedy,9,5.537,0.7867,29,47
+greedy,10,6.116,0.8711,33,49
+nearly_full,1,5.6517,0.8933,31,21
+nearly_full,2,5.6684,0.8578,30,31
+nearly_full,3,5.6,0.7156,22,36
+nearly_full,4,5.7849,0.8311,36,50
+nearly_full,5,5.2619,0.7467,21,22
+nearly_full,6,5.6467,0.7667,24,48
+nearly_full,7,5.7097,0.8267,33,40
+nearly_full,8,5.6395,0.8244,28,43
+nearly_full,9,5.6457,0.7778,31,34
+nearly_full,10,6.1282,0.8667,35,35
+`
+  },
+  {
     id: "four-designs",
     title: "Four designs: ANOVA and selection",
     file: "four_designs.csv",
@@ -35438,7 +35469,7 @@ export function render(root) {
   // listed at the end under no label rather than dropped.
   const groups = [
     { label: 'One System', ids: ['queue-reps'] },
-    { label: 'Two Systems', ids: ['two-independent', 'two-crn'] },
+    { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'muffin-oven'] },
     { label: 'Several Systems', ids: ['four-designs', 'six-designs', 'four-crn', 'service-level'] },
     { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
   ];

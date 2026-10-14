@@ -8,6 +8,11 @@
 // n+1. The number in queue (customers waiting, not the one in service) is simulated event by
 // event and recorded at every change.
 //
+// One example instead simulates a batch oven: a call for 2 to 12 muffins (uniform) arrives each
+// minute from minute 0 to minute 30, and the oven, which holds 30 muffins and bakes them for a
+// fixed time, is loaded oldest first (a call split at the capacity) whenever it is empty and at
+// least a threshold number of muffins wait. The run stops at minute 30.
+//
 // Randomness: mulberry32 streams, with exponential draws by inverse transform, -ln(1 - u) * mean.
 // Each replication uses two streams, one for arrivals and one for services, seeded from a base
 // seed plus the replication index (the service stream's seed is offset further so the two never
@@ -27,6 +32,10 @@
 //   queue_length.txt           5 replications of 600 minutes of the number in queue at rho = 0.8
 //   service_level.csv          designs A..C (mean service 0.5, 0.7, 0.8), 15 days each, independent:
 //                              each day's fraction of customers who waited less than 2 minutes
+//   muffin_oven.csv            a batch oven loaded greedily (threshold 1) or nearly full (threshold
+//                              20) at a bake time of 4 minutes, 10 replications whose demand stream
+//                              is shared by both policies: four outputs per run (average time in
+//                              system, utilization, most muffins waiting, muffins unfinished)
 //   utilization.csv            designs A..C (mean service 0.4, 1.0, 1.8 at mean interarrival 2.0),
 //                              12 days of 480 minutes each, independent: whether the server is busy,
 //                              recorded at every change
@@ -55,7 +64,8 @@ const SEEDS = {
   steady: 97001,
   queueLength: 101000,
   serviceLevel: [170000, 176000, 182000],
-  utilization: [190000, 196000, 202000]
+  utilization: [190000, 196000, 202000],
+  oven: 1190000
 };
 
 function mulberry32(seed) {
@@ -157,6 +167,48 @@ function busyServer(st, meanArr, meanSrv, endTime) {
   return rec;
 }
 
+/**
+ * One run of the batch oven against the call sizes `sizes` (one per minute from minute 0), with
+ * at one time an arrival handled before a departure. Returns the average time in system of the
+ * muffins that left, the time average of the fraction of the oven in use, the most muffins ever
+ * waiting, and the muffins still in the system at the end.
+ */
+function ovenRun(threshold, sizes, bake, { cap = 30, end = 30 } = {}) {
+  let clk = 0, waiting = 0, baking = 0, used = 0, tisSum = 0, done = 0, usedArea = 0, maxWaiting = 0, next = 0;
+  // Every call still in the system, oldest first; those baking lead.
+  const line = [];
+  const events = [{ kind: 1, t: 0 }, { kind: -1, t: end }];
+  while (events.length) {
+    events.sort((a, b) => a.t - b.t || b.kind - a.kind);
+    if (events[0].t > clk || events[0].kind === -1) { usedArea += used * (events[0].t - clk); maxWaiting = Math.max(maxWaiting, waiting); }
+    const e = events.shift();
+    clk = e.t;
+    if (e.kind === -1) break;
+    if (e.kind === 1) {
+      line.push({ arrival: clk, size: sizes[next] });
+      waiting += sizes[next++];
+      if (next < sizes.length) events.push({ kind: 1, t: clk + 1 });
+    } else {
+      const c = line.shift();
+      tisSum += (clk - c.arrival) * c.size; done += c.size;
+      baking -= c.size; used = baking / cap;
+    }
+    if (baking === 0 && waiting >= threshold) {
+      for (let k = 0; k < line.length; k++) {
+        if (baking + line[k].size > cap) {
+          const part = { arrival: line[k].arrival, size: cap - baking };
+          line[k].size -= part.size;
+          line.splice(k, 0, part);
+        }
+        events.push({ kind: 0, t: clk + bake });
+        baking += line[k].size; waiting -= line[k].size; used = baking / cap;
+        if (baking === cap) break;
+      }
+    }
+  }
+  return { tis: tisSum / done, utilization: usedArea / clk, maxWaiting, unfinished: waiting + baking };
+}
+
 /** At most four decimals, no trailing zeros. */
 const fmt = (x) => String(Number(x.toFixed(4)));
 
@@ -197,6 +249,20 @@ function utilizationCsv(designs, reps) {
   for (const { name, mean, base } of designs) {
     for (let r = 1; r <= reps; r++) {
       for (const [t, b] of busyServer(streams(base, r), 2.0, mean, 480)) lines.push(`${name},${r},${Number(t.toFixed(2))},${b}`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+/** Two loading policies of the batch oven, each replication's demand stream shared by both. */
+function ovenCsv(policies, bake, reps) {
+  const lines = ['policy,replication,avg_time_in_system,utilization,max_waiting,unfinished'];
+  for (const { name, threshold } of policies) {
+    for (let r = 1; r <= reps; r++) {
+      const u = mulberry32(SEEDS.oven + r);
+      const sizes = Array.from({ length: 31 }, () => 2 + Math.floor(u() * 11));
+      const o = ovenRun(threshold, sizes, bake);
+      lines.push(`${name},${r},${fmt(o.tis)},${fmt(o.utilization)},${o.maxWaiting},${o.unfinished}`);
     }
   }
   return lines.join('\n') + '\n';
@@ -255,6 +321,13 @@ function entries() {
       description: 'The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day. Use it to compare the two systems as a paired difference and to see how much narrower the interval becomes.',
       text: designsCsv([A('A', 0.8, SEEDS.crn), A('B', 0.75, SEEDS.crn)], 15),
       mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Two designs, paired' }
+    },
+    {
+      id: 'muffin-oven', title: 'Muffin oven: two loading policies, four outputs', file: 'muffin_oven.csv',
+      kind: 'reps', format: 'columns',
+      description: 'An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, and each run reports the average time in system of the muffins that finished, the oven\'s utilization, the most muffins ever waiting, and the muffins unfinished at the end. Use it to compare the policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.',
+      text: ovenCsv([{ name: 'greedy', threshold: 1 }, { name: 'nearly_full', threshold: 20 }], 4, 10),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Muffin oven' }
     },
     {
       id: 'four-designs', title: 'Four designs: ANOVA and selection', file: 'four_designs.csv',

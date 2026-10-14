@@ -895,6 +895,9 @@ test('twoRecipe (paired) carries the matched pairs and the paired keys', () => {
 
 checkRecipe('Two Systems, paired t on two-crn', pairedRecipe(CRN_A, CRN_B, 't', 'id', PLAN2), { smoke: true, also: noWarning });
 checkRecipe('Two Systems, paired signed-rank on two-crn', pairedRecipe(CRN_A, CRN_B, 'np', 'position', PLAN2, 0.9), { also: noWarning });
+// The oven's two loading policies, paired across the demand streams they share.
+const [OVEN_GREEDY, OVEN_FULL] = example('muffin-oven');
+checkRecipe('Two Systems, paired t on muffin-oven', pairedRecipe(OVEN_GREEDY, OVEN_FULL, 't', 'id', PLAN2), { also: noWarning });
 
 // The pairs comment adds "(A)" and "(B)" only where the names do not already end in them.
 test('the pairs comment names A and B once when the dataset names end in them', () => {
