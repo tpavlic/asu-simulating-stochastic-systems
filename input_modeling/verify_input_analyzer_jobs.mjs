@@ -52,7 +52,6 @@ export const JOBS = {
     const spec = IA.GEN_SPEC[key], p = spec.map(q => q.def);
     const g = IA.generateSample(key, p, 0, N, 777, null);
     if (!g.ok) return { genOk: false, msg: g.msg };
-    if (IA.DISTS[key].generateOnly) return { genOk: true, generateOnly: true, count: g.values.length };
     const f = IA.fitDist(IA.DISTS[key], g.values, false, false);
     if (!f.ok) return { genOk: true, fitOk: false, msg: f.msg };
     const nML = IA.DISTS[key].mlCount === undefined ? p.length : IA.DISTS[key].mlCount;

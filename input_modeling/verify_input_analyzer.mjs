@@ -563,7 +563,12 @@ section('11. MLE recovery, every distribution');
     ['triangular',      [1.00, 6.00, 10.0],  [0.10, 0.06, 0.05], 106],
     ['poisson',         [4.30],              [0.03],             107],
     ['geometric',       [0.28],              [0.03],             108],
-    ['discreteUniform', [3, 11],             [0.001, 0.001],     109]
+    ['discreteUniform', [3, 11],             [0.001, 0.001],     109],
+    /* The Johnson members are fitted on request only, by a profile search
+       over location and scale with the shapes closed form; both come
+       back from a large sample within a few percent on every parameter. */
+    ['johnsonSU',       [-1.0, 2.0, 1.5, 0.9], [0.08, 0.04, 0.04, 0.05], 116],
+    ['johnsonSB',       [1.0, 1.5, 0.0, 10.0], [0.06, 0.04, 0.02, 0.02], 117]
   ];
   for (const [key, truth, tol, seed] of CASES) {
     const d = IA.DISTS[key];
@@ -575,7 +580,10 @@ section('11. MLE recovery, every distribution');
     let good = true;
     const parts = [];
     for (let j = 0; j < truth.length; j++) {
-      const err = Math.abs(f.p[j] - truth[j]) / Math.abs(truth[j]);
+      /* A true value of zero (S_B's lower end) is judged against the
+         distribution's own scale, the next parameter, rather than itself. */
+      const scale = Math.abs(truth[j]) > 1e-9 ? Math.abs(truth[j]) : Math.abs(truth[j + 1]);
+      const err = Math.abs(f.p[j] - truth[j]) / scale;
       parts.push(`${d.params[j].sym}=${f.p[j].toPrecision(5)} (true ${truth[j]}, err ${(100*err).toFixed(2)}%)`);
       if (!(err <= tol[j])) good = false;
     }
@@ -1091,12 +1099,6 @@ section('15c. generating data from typed parameters');
   for (let gi = 0; gi < IA.GEN_KEYS.length; gi++) {
     const key = IA.GEN_KEYS[gi], g = gen[gi];
     if (!g.genOk) { ok(false, `${key}: generates`, g.msg); continue; }
-    /* The generate-only members have no fit to recover anything with;
-       section 15d checks them on their own terms. */
-    if (g.generateOnly) {
-      ok(g.count === N, `${key}: generates ${N} values (generate-only, so nothing to refit)`);
-      continue;
-    }
     if (!g.fitOk) { ok(false, `${key}: the generated sample refits`, g.msg); continue; }
     /* Endpoint parameters of the beta are not estimated, so only the
        parameters the fit owns are compared (the job does the comparing). */
@@ -1184,11 +1186,13 @@ section('15d. Johnson S_B and S_U');
 {
   for (const key of ['johnsonSB', 'johnsonSU']) {
     const d = IA.DISTS[key], p = IA.GEN_SPEC[key].map(q => q.def);
-    ok(d.generateOnly === true, `${key}: is marked generate-only`);
+    ok(d.optIn === true, `${key}: is marked opt-in (fitted only on request)`);
     ok(!IA.CONTINUOUS_KEYS.includes(key) && !IA.DISCRETE_KEYS.includes(key),
-       `${key}: is NOT on the fitting menu`);
-    ok(IA.GEN_KEYS.includes(key), `${key}: IS on the generator menu`);
-    ok(d.fit([1, 2, 3]).ok === false, `${key}: fit refuses, with a reason`);
+       `${key}: is NOT on the default fitting menu`);
+    ok(IA.JOHNSON_KEYS.includes(key) && IA.GEN_KEYS.includes(key),
+       `${key}: IS on the opt-in list and on the generator menu`);
+    ok(d.fit([1, 1, 1]).ok === false, `${key}: fit refuses a constant sample, with a reason`);
+    ok(!d.orderStat, `${key}: every parameter is a regular one (both ends are estimated, not read off the range)`);
 
     /* Closed forms must agree with each other. */
     let worst = 0;
@@ -1233,6 +1237,38 @@ section('15d. Johnson S_B and S_U');
     ok(f.ok === false, 'and a gamma consequently refuses the raw sample');
     const fs = IA.fitDist(IA.DISTS.gamma, g.values, true, false);
     ok(fs.ok === true, 'while the same gamma fits once the location shift is on');
+  }
+  /* The limits.  On normal data both members run toward the normal and
+     say so; on lognormal data toward the lognormal.  The log-likelihood
+     of each limiting fit must sit within a few units of the limit's own. */
+  {
+    const draw = (key, p, n, seed) => { const u = IA.MRG32k3a(seed), x = []; for (let i = 0; i < n; i++) x.push(IA.DISTS[key].sample(u, p)); return x; };
+    const xn = draw('normal', [12.5, 3.1], 4000, 6201), xl = draw('lognormal', [1.15, 0.62], 4000, 6202);
+    const lln = IA.fitDist(IA.DISTS.normal, xn, false, false).ll, lll = IA.fitDist(IA.DISTS.lognormal, xl, false, false).ll;
+    /* The page annotates such a row either way: the fit reports the limit it
+       ran toward, or, where the search stalled short of it on the flat
+       ridge, the row note's likelihood-ratio comparison (two degrees of
+       freedom, 5.99) says the limit's own row fits about as well. */
+    const noted = (f, ref, name) => f.edge === name || 2 * (f.ll - ref) < 5.991;
+    const how = (f, ref, name) => f.edge ? 'reports its ' + f.edge + ' limit'
+      : 'the row note says the ' + name + ' fits about as well (twice the gap is ' + (2 * (f.ll - ref)).toFixed(2) + ')';
+    for (const key of ['johnsonSB', 'johnsonSU']) {
+      const fn = IA.fitDist(IA.DISTS[key], xn, false, false), fl = IA.fitDist(IA.DISTS[key], xl, false, false);
+      ok(fn.ok && Math.abs(fn.ll - lln) < 3, `${key} on normal data: log-likelihood ${fn.ll.toFixed(2)} within 3 of the normal's ${lln.toFixed(2)}`);
+      ok(fn.ok && noted(fn, lln, 'normal'), `${key} on normal data: ${how(fn, lln, 'normal')}`);
+      ok(fl.ok && Math.abs(fl.ll - lll) < 3, `${key} on lognormal data: log-likelihood ${fl.ll.toFixed(2)} within 3 of the lognormal's ${lll.toFixed(2)}`);
+      ok(fl.ok && noted(fl, lll, 'lognormal'), `${key} on lognormal data: ${how(fl, lll, 'lognormal')}`);
+    }
+    /* The bootstrap refits start from the parent fit and must agree with
+       the full search to well within sampling noise. */
+    const xs = draw('johnsonSU', [-1, 2, 1.5, 0.9], 400, 6203);
+    const full = IA.fitDist(IA.DISTS.johnsonSU, xs, false, false);
+    const F = IA.fitCdf(full), sorted = xs.slice().sort((a, b) => a - b);
+    const oD = IA.ksStat(sorted, F, IA.fitAtom(full)).D, oA = IA.adStat(sorted, F);
+    const run = IA.bootstrapRun(full, 400, 100, 6204, false, oD, oA); run.step(100);
+    const res = run.result();
+    ok(res.used >= 95, `johnsonSU: the bootstrap refits ${res.used} of 100 resamples from the parent fit's parameters`);
+    ok(res.pD > 0.05 && res.pA > 0.05, `johnsonSU: the bootstrap does not reject its own sample (p_D = ${res.pD.toFixed(3)}, p_A = ${res.pA.toFixed(3)})`);
   }
 }
 
@@ -1797,7 +1833,7 @@ section('18. export expressions');
   const ui = IA.MRG32k3a(901);
   for (let i = 0; i < 500; i++) xi.push(IA.DISTS.poisson.sample(ui, [3.3]));
 
-  for (const key of IA.CONTINUOUS_KEYS.concat(IA.DISCRETE_KEYS)) {
+  for (const key of IA.CONTINUOUS_KEYS.concat(IA.DISCRETE_KEYS, IA.JOHNSON_KEYS)) {
     const d = IA.DISTS[key];
     const data = d.kind === 'discrete' ? xi : x;
     const f = IA.fitDist(d, data, false, false);

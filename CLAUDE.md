@@ -701,8 +701,11 @@ better.
 ### Input Modeling
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
-  two tabs, one fitting eighteen candidate distributions to a pasted sample and one estimating a
-  piecewise-constant arrival rate from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
+  two tabs, one fitting eighteen candidate distributions to a pasted sample (with the two Johnson
+  members, S_B and S_U, fitted only when a checkbox in the Candidates card asks for them, off by
+  default because four parameters that reach almost any shape win a ranking on flexibility alone;
+  their rows always carry a note saying so) and one estimating a piecewise-constant arrival rate
+  from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
   the result under the plot's title in `PLOT_SPECS`, and the `FIG_SCRIPTS` block writes a MATLAB,
@@ -736,7 +739,17 @@ better.
      shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
      4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.*
-  4. *A mirrored fit ("Fit the mirror image c − X", for a long left tail) is stored as an ordinary
+  4. *The Johnson members are fitted by maximum likelihood over all four parameters: given the
+     location and scale, the shapes are closed form (z = γ + δw is standard normal for the
+     transformed sample w), and the fit is a two-dimensional Nelder–Mead on that profile, over
+     (ξ, ln λ) for S_U and over the two log gaps between the endpoints and the sample extremes for
+     S_B, whose profile falls to −∞ as an endpoint reaches an observation. Both of S_B's ends are
+     therefore estimated (unlike the beta's) and all four parameters are regular for the
+     chi-square. A fit that runs past 20 ranges from the data reports `edge: 'normal'` or
+     `'lognormal'`, named by comparing with the closed-form fits of those limits, and S_U with
+     |γ|/δ above 2.5 reports its lognormal limit. Inside the bootstrap, `FIT_FAST` and `FIT_HINT`
+     (set by fitDist and bootstrapRun) start the search from the parent fit with fewer iterations.*
+  5. *A mirrored fit ("Fit the mirror image c − X", for a long left tail) is stored as an ordinary
      shifted fit with `reflect: true`, its right end c in `shift`: `fitDist` fits the shifted model
      to −x and negates the start, and so the profile search, the at-bound diagnosis, and the holds are
      the shift's own, and `fitCdf`, `fitPdf`, `fitQuantile`, and `fitSampler` read `shift` and

@@ -168,8 +168,8 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 /* .chk is nowrap, which is right for a two-word label and wrong for this
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
-#shift-wrap, #reflect-wrap { white-space: normal; align-items: flex-start; }
-#shift-wrap input, #reflect-wrap input { margin-top: .2em; }
+#shift-wrap, #reflect-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
+#shift-wrap input, #reflect-wrap input, #johnson-wrap input { margin-top: .2em; }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible,
 a:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -608,7 +608,8 @@ footer a:hover { text-decoration: underline; }
         tends to break the fit itself first: rounding small positive values to whole numbers creates
         zeros that no gamma, lognormal, or Weibull can absorb.</p>
         <p>The two <strong>Johnson</strong> entries sit under their own heading in the menu because
-        they are the only ones that cannot also be fitted. That is what they are for. Every other
+        they are fitted only on request (the box in section 2), never by default. That is what they
+        are for here. Every other
         choice here rewards the ranking table for recovering a distribution that is genuinely on
         its menu, which is a flattering test; real data is never on anybody's menu. A Johnson
         sample gives the table nothing to recover; what you see is how well the best available
@@ -636,7 +637,9 @@ footer a:hover { text-decoration: underline; }
         one a dataset needs is settled by where its skewness and kurtosis fall, with the lognormal
         line acting as the border between the <code>S&#7495;</code> and <code>S&#7512;</code>
         regions. That is why fitting a Johnson distribution is a different kind of job from fitting
-        anything else on this page, and part of why it is not offered here.</p>
+        anything else on this page, and part of why it is off by default: tick the box in section 2
+        and both members join the ranking, where a note under each says what four free parameters
+        mean.</p>
         <p>With <strong>new seed each time</strong> ticked, pressing Generate again draws a
         different sample from the same distribution. That is the quickest way to see how much of
         what the ranking table tells you is the distribution and how much is the luck of one
@@ -663,6 +666,9 @@ footer a:hover { text-decoration: underline; }
       </label>
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
+      </label>
+      <label class="chk" id="johnson-wrap" data-tip="Adds the two Johnson members to the ranking. Each has four parameters that reach almost any skewness and kurtosis, and so they tend to win on flexibility alone, by tracking the shape of this one sample, and rarely describe what a process would repeat. Continuous data only, and off by default for that reason." data-tip-press>
+        <input type="checkbox" id="johnson-chk"> <span class="tip">Also fit the Johnson system (Sᵦ and Sᵤ)</span>
       </label>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="rank-by">Sort by</label>
@@ -695,6 +701,12 @@ footer a:hover { text-decoration: underline; }
         more data you have. When they disagree, the disagreement is telling you the extra
         parameter is doing something worth about one or two log-likelihood units&nbsp;– real, but
         marginal.</p>
+        <p>The <strong>Johnson system</strong>, when the box above adds it, is the extreme case. Four
+        parameters reach almost any skewness and kurtosis, and so its log-likelihood is usually the
+        highest in the table; AIC adds only 2 for each extra parameter, and a family that flexible
+        gains more than that on most samples by tracking the sample&#39;s own tails. Its rows always carry a note
+        under the name saying so. The other rows carry one only when the fit is close to a simpler
+        family, such as a gamma whose shape is near a whole number.</p>
         <p><strong>Square error</strong> is the criterion Arena's Input Analyzer ranks by. It
         lays the fitted density over the histogram and adds up the squared gaps between the
         observed relative frequency in each bin and the probability the fitted model puts in
@@ -3205,30 +3217,140 @@ DISTS.discreteEmpirical = {
    whole plane of skewness and kurtosis a distribution can have, which is
    what they are for.
 
-   THESE ARE DELIBERATELY NOT FITTING CANDIDATES.  They are offered only
-   in the generator, and that is the point of having them: they make data
-   that none of the candidates on the fitting menu can match exactly, so a
-   reader can watch the best fit be genuinely, honestly wrong rather than
-   secretly right.  Every dataset on this page that comes from one of the
-   fitted families rewards the ranking table for recovering the truth;
-   Johnson data rewards it for nothing, which is what real data does.
+   THEY ARE FITTED ONLY ON REQUEST (optIn), never by default.  The
+   generator offers them so that a reader can make data that nothing on
+   the default fitting menu matches exactly, and watch the best fit be
+   genuinely, honestly wrong rather than secretly right; every dataset
+   drawn from a fitted family rewards the ranking table for recovering the
+   truth, and Johnson data rewards it for nothing, which is what real data
+   does.  With the box ticked they join the ranking, where four parameters
+   that reach almost any skewness and kurtosis tend to win on flexibility
+   alone, and the row note says so every time.
 
-   The pdf, cdf, and quantile are all closed form and are implemented in
-   full even though nothing fits them, so the plots and the goodness-of-fit
-   machinery would work unchanged if a future version did add them. */
+   FITTING.  Both members are fitted by maximum likelihood over all four
+   parameters.  Given the location and scale (xi, lambda), the two shapes
+   are closed form: with w_i the transformed observation (the logit of
+   y_i = (x_i - xi)/lambda for S_B, asinh(y_i) for S_U), z = gamma +
+   delta w is standard normal, and so delta = 1/sd(w) and
+   gamma = -mean(w)/sd(w), with the population standard deviation.  The
+   profile log-likelihood in (xi, lambda) is then
+
+     n ln delta - n ln lambda + J - n/2 - n ln sqrt(2 pi),
+
+   where J is the sum of the transformation's log-Jacobian terms (minus
+   ln y - ln(1 - y) for S_B, minus half ln(1 + y^2) for S_U), and the fit
+   is a two-dimensional Nelder-Mead on that profile from several starts.
+   S_U searches over (xi, ln lambda); S_B over the two log gaps between
+   the endpoints and the sample extremes, ln(min - xi) and
+   ln(xi + lambda - max), because its profile falls to -infinity as either
+   endpoint reaches an observation (the Jacobian term wins), so the
+   maximum is always strictly outside the data and the gaps are the
+   natural coordinates.  Both endpoints are therefore ESTIMATED, unlike
+   the beta's, which are read off the range, and all four parameters are
+   regular ones for the chi-square degrees of freedom.
+
+   LIMITS.  As lambda grows with delta, both members turn into the
+   normal; as one S_B endpoint recedes, or S_U's location recedes with
+   its scale, they turn into the lognormal (Johnson's S_L).  On data that
+   are close to either limit the profile keeps rising in that direction
+   without a maximum, and so the search is capped at JOHNSON_CAP ranges
+   from the data and a fit that ends past JOHNSON_EDGE ranges is reported
+   with `edge` set, the way the Pearson type VI reports its own limits;
+   which limit is named by comparing the fit's log-likelihood with the
+   closed-form normal and lognormal fits of the same sample.  S_U reaches
+   the lognormal a second way, as lambda shrinks toward zero with gamma
+   running off, which puts the whole sample on one exponential arm of the
+   sinh; its scale is capped below at sd/JOHNSON_CAP, and a fitted
+   |gamma|/delta above 2.5 is reported as that limit.
+   Inside the bootstrap (FIT_FAST) the search starts from the parent
+   fit's own parameters (FIT_HINT) with fewer iterations; the estimate
+   moves by far less than the sampling noise the bootstrap measures. */
+var JOHNSON_CAP = 50, JOHNSON_EDGE = 20;
+/* The log-likelihood of the sample under the normal, and under the
+   lognormal when every value is positive, each at its own maximum-
+   likelihood fit: what a Johnson fit that has run off toward a limit is
+   compared with to name the limit. */
+function limitLogliks(x) {
+  var n = x.length, i, m = 0, v = 0, lm = 0, lv = 0, pos = true, sl = 0;
+  for (i = 0; i < n; i++) { m += x[i]; if (!(x[i] > 0)) pos = false; }
+  m /= n;
+  for (i = 0; i < n; i++) v += (x[i] - m) * (x[i] - m);
+  v /= n;
+  var normal = v > 0 ? -n / 2 * Math.log(v) - n * LOG_SQRT_2PI - n / 2 : -Infinity, lognormal = -Infinity;
+  if (pos) {
+    for (i = 0; i < n; i++) { var l = Math.log(x[i]); lm += l; sl += l; }
+    lm /= n;
+    for (i = 0; i < n; i++) lv += (Math.log(x[i]) - lm) * (Math.log(x[i]) - lm);
+    lv /= n;
+    if (lv > 0) lognormal = -n / 2 * Math.log(lv) - n * LOG_SQRT_2PI - n / 2 - sl;
+  }
+  return { normal: normal, lognormal: lognormal };
+}
+function nearerLimit(x, ll) {
+  var L = limitLogliks(x);
+  return Math.abs(ll - L.lognormal) < Math.abs(ll - L.normal) ? 'lognormal' : 'normal';
+}
+/* The two shapes given the transformed sample w, and the profile
+   log-likelihood's data-dependent part. */
+function johnsonShapes(w) {
+  var n = w.length, mw = 0, i, d, ss = 0;
+  for (i = 0; i < n; i++) mw += w[i];
+  mw /= n;
+  for (i = 0; i < n; i++) { d = w[i] - mw; ss += d * d; }
+  var sd = Math.sqrt(ss / n);
+  if (!(sd > 0)) return null;
+  return { gamma: -mw / sd, delta: 1 / sd };
+}
+function johnsonSearch(prof, starts, hint) {
+  var fast = FIT_FAST, best = null, i;
+  var opts = { maxIter: fast ? 200 : 1500, tol: fast ? 1e-8 : 1e-12 };
+  var neg = function (v) { var q = prof(v); return Number.isFinite(q.ll) ? -q.ll : 1e300; };
+  if (fast && hint && Number.isFinite(prof(hint).ll)) starts = [hint];
+  for (i = 0; i < starts.length && !(fast && i >= 2); i++) {
+    var r = nelderMead(neg, starts[i], opts), q = prof(r.x);
+    if (Number.isFinite(q.ll) && (!best || q.ll > best.ll)) best = q;
+  }
+  return best;
+}
 function johnsonZ_SB(x, p) {
   var y = (x - p[2]) / p[3];
   return p[0] + p[1] * Math.log(y / (1 - y));
 }
 DISTS.johnsonSB = {
   key: 'johnsonSB', name: 'Johnson Sᵦ (bounded)', lower: 'Johnson Sᵦ (bounded)', kind: 'continuous',
-  np: 4, shiftable: false, generateOnly: true,
+  np: 4, shiftable: false, optIn: true, locParam: 2,
   params: [{ sym: 'γ', name: 'shape 1' }, { sym: 'δ', name: 'shape 2' },
            { sym: 'ξ', name: 'lower end' }, { sym: 'λ', name: 'range' }],
   lo: function (p) { return p[2]; },
-  fit: function () {
-    return { ok: false, msg: 'The Johnson system is not a fitting candidate here. It is in the ' +
-      'generator so that you can make data no candidate can match exactly.' };
+  fit: function (x) {
+    var n = x.length, s = summarize(x), range = s.max - s.min;
+    if (!(range > 0)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
+    var cap = JOHNSON_CAP * range;
+    /* v = [ln(min - xi), ln(xi + lambda - max)], the two gaps. */
+    function prof(v) {
+      var gL = Math.exp(v[0]), gU = Math.exp(v[1]);
+      if (!(gL > 0) || !(gU > 0) || gL > cap || gU > cap) return { ll: -Infinity };
+      var xi = s.min - gL, lam = range + gL + gU, w = new Array(n), J = 0, i, y;
+      for (i = 0; i < n; i++) {
+        y = (x[i] - xi) / lam;
+        w[i] = Math.log(y / (1 - y));
+        J -= Math.log(y) + Math.log(1 - y);
+      }
+      var sh = johnsonShapes(w);
+      if (!sh) return { ll: -Infinity };
+      return { ll: n * Math.log(sh.delta) - n * Math.log(lam) + J - n / 2 - n * LOG_SQRT_2PI,
+               p: [sh.gamma, sh.delta, xi, lam] };
+    }
+    var lr = Math.log(range), starts = [[lr - 1.6, lr - 1.6], [lr + 0.7, lr + 0.7], [lr - 3.9, lr - 3.9],
+                                        [lr - 3.9, lr + 2.3], [lr + 2.3, lr - 3.9]];
+    var h = FIT_HINT, hint = (h && h.length === 4 && s.min - h[2] > 0 && h[2] + h[3] - s.max > 0)
+      ? [Math.log(s.min - h[2]), Math.log(h[2] + h[3] - s.max)] : null;
+    var best = johnsonSearch(prof, starts, hint);
+    if (!best) return { ok: false, msg: 'The Johnson Sᵦ fit did not converge.' };
+    var out = { ok: true, p: best.p };
+    if ((s.min - best.p[2]) > JOHNSON_EDGE * range || (best.p[2] + best.p[3] - s.max) > JOHNSON_EDGE * range)
+      out.edge = nearerLimit(x, best.ll);
+    return out;
   },
   pdf: function (x, p) {
     var y = (x - p[2]) / p[3];
@@ -3247,6 +3369,7 @@ DISTS.johnsonSB = {
     return p[2] + p[3] / (1 + Math.exp(-w));
   },
   loglik: function (x, p) {
+    if (!(p[1] > 0) || !(p[3] > 0)) return -Infinity;
     var acc = 0;
     for (var i = 0; i < x.length; i++) {
       var d = DISTS.johnsonSB.pdf(x[i], p);
@@ -3263,13 +3386,44 @@ DISTS.johnsonSB = {
 
 DISTS.johnsonSU = {
   key: 'johnsonSU', name: 'Johnson Sᵤ (unbounded)', lower: 'Johnson Sᵤ (unbounded)', kind: 'continuous',
-  np: 4, shiftable: false, generateOnly: true,
+  np: 4, shiftable: false, optIn: true, locParam: 2,
   params: [{ sym: 'γ', name: 'shape 1' }, { sym: 'δ', name: 'shape 2' },
            { sym: 'ξ', name: 'location' }, { sym: 'λ', name: 'scale' }],
   lo: function () { return -Infinity; },
-  fit: function () {
-    return { ok: false, msg: 'The Johnson system is not a fitting candidate here. It is in the ' +
-      'generator so that you can make data no candidate can match exactly.' };
+  fit: function (x) {
+    var n = x.length, s = summarize(x), range = s.max - s.min;
+    if (!(range > 0)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
+    var cap = JOHNSON_CAP * range, floor = s.sd / JOHNSON_CAP, med = s.med;
+    /* v = [xi, ln lambda]. */
+    function prof(v) {
+      var xi = v[0], lam = Math.exp(v[1]);
+      if (!(lam > floor) || lam > cap || Math.abs(xi - med) > cap) return { ll: -Infinity };
+      var w = new Array(n), J = 0, i, y;
+      for (i = 0; i < n; i++) {
+        y = (x[i] - xi) / lam;
+        w[i] = Math.asinh(y);
+        J -= 0.5 * Math.log1p(y * y);
+      }
+      var sh = johnsonShapes(w);
+      if (!sh) return { ll: -Infinity };
+      return { ll: n * Math.log(sh.delta) - n * Math.log(lam) + J - n / 2 - n * LOG_SQRT_2PI,
+               p: [sh.gamma, sh.delta, xi, lam] };
+    }
+    var ls = Math.log(s.sd), starts = [[med, ls], [med, ls - 1.1], [med, ls + 1.1],
+                                       [s.min - range, Math.log(range)], [s.max + range, Math.log(range)]];
+    var h = FIT_HINT, hint = (h && h.length === 4 && h[3] > 0) ? [h[2], Math.log(h[3])] : null;
+    var best = johnsonSearch(prof, starts, hint);
+    if (!best) return { ok: false, msg: 'The Johnson Sᵤ fit did not converge.' };
+    var out = { ok: true, p: best.p };
+    /* Far out in location or scale, the fit is a limiting member, named by
+       comparing it with the closed-form normal and lognormal fits.  Nearer
+       in, a shape ratio |gamma|/delta above 2.5 puts the whole sample on
+       one exponential arm of the sinh, where S_U is the three-parameter
+       lognormal (mirrored when gamma is positive). */
+    if (best.p[3] > JOHNSON_EDGE * range || Math.abs(best.p[2] - med) > JOHNSON_EDGE * range)
+      out.edge = nearerLimit(x, best.ll);
+    else if (Math.abs(best.p[0]) / best.p[1] > 2.5) out.edge = 'lognormal';
+    return out;
   },
   pdf: function (x, p) {
     var y = (x - p[2]) / p[3];
@@ -3283,6 +3437,7 @@ DISTS.johnsonSU = {
     return p[2] + p[3] * Math.sinh((normInv(u) - p[0]) / p[1]);
   },
   loglik: function (x, p) {
+    if (!(p[1] > 0) || !(p[3] > 0)) return -Infinity;
     var acc = 0;
     for (var i = 0; i < x.length; i++) {
       var d = DISTS.johnsonSU.pdf(x[i], p);
@@ -3320,11 +3475,13 @@ function discreteQuantile(dist, u, p, guess) {
 
 /* Ordered candidate lists, which is also the order the ranking table falls
    back on when two candidates tie. */
-/* The fitting candidates.  The two Johnson members are absent on purpose:
-   see the comment on DISTS.johnsonSB. */
+/* The fitting candidates.  The two Johnson members are not on the default
+   list on purpose (see the comment on DISTS.johnsonSB); the page appends
+   JOHNSON_KEYS to the continuous list only when the reader asks. */
 var CONTINUOUS_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic',
                        'pearson5', 'pearson6', 'normal', 'uniform', 'triangular', 'pert', 'beta', 'empirical'];
 var DISCRETE_KEYS = ['poisson', 'geometric', 'discreteUniform', 'discreteEmpirical'];
+var JOHNSON_KEYS = ['johnsonSB', 'johnsonSU'];
 
 /* ─────────────────────────────────────────────────────────────────────
    7.  FITTING, WITH AN OPTIONAL LOCATION SHIFT
@@ -3447,8 +3604,16 @@ function hasHolds(fixed) {
    read the two together.  Candidates that do not start at zero (the
    normal, uniform, triangular, beta, empirical, and the Pearson type VI,
    which takes no shift) are fitted as usual. */
+/* Set by fitDist for the duration of a fit: a distribution whose own fit
+   is a numerical search (the Johnson members) reads it to run a cheaper
+   search inside the bootstrap, where fitDist is called with `fast`. */
+var FIT_FAST = false;
+/* The parent fit's parameters while the bootstrap refits its resamples,
+   for a search that can start from them; null otherwise. */
+var FIT_HINT = null;
 function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   if (!x || x.length < 2) return { ok: false, msg: 'Need at least two observations.' };
+  FIT_FAST = !!fast;
   if (reflect && dist.shiftable) {
     var neg = new Array(x.length);
     for (var r0 = 0; r0 < x.length; r0++) neg[r0] = -x[r0];
@@ -3917,7 +4082,9 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
          With every parameter held this is a no-op, and the null
          distribution collapses to the classical one -- which is the point
          of allowing it. */
+      FIT_HINT = fit.p;
       var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect);
+      FIT_HINT = null;
       if (!rf.ok) continue;                 /* a degenerate resample is skipped */
       var F = fitCdf(rf);
       var d = ksStat(y, F, fitAtom(rf)).D, a2 = adStat(y, F);
@@ -4117,8 +4284,7 @@ var GEN_SPEC = {
               { sym: 'λ', name: 'scale',     def: 0.9, min: 1e-9 }]
 };
 /* The order the generator's menu is drawn in.  Johnson sits at the end,
-   under a separator because it is the one entry that cannot also be
-   fitted. */
+   under a separator, because it is fitted only on request. */
 var GEN_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic', 'pearson5', 'pearson6', 'normal',
                 'uniform', 'triangular', 'pert', 'beta', 'poisson', 'geometric', 'discreteUniform',
                 'johnsonSB', 'johnsonSU'];
@@ -4782,6 +4948,32 @@ function expressions(fit, sample) {
     set('r', N(L) + ' + ' + N(W) + ' * rbeta(n, ' + N(al) + ', ' + N(be) + ')', '');
     set('matlab', N(L) + ' + ' + N(W) + ' * betarnd(' + N(al) + ', ' + N(be) + ', n, 1)', '');
     set('python', 'stats.beta(a=' + N(al) + ', b=' + N(be) + ', loc=' + N(L) + ', scale=' + N(W) + ')', '');
+  } else if (k === 'johnsonSB' || k === 'johnsonSU') {
+    /* Each member is one standard normal put through a transformation,
+       and that one draw has to be reused inside it.  AnyLogic, R, MATLAB,
+       and Python write it in one line; Arena and Simio have no
+       one-expression form without a native function, and so the draw
+       goes into a variable first and the transformation reads it. */
+    var g2 = p[0], dl = p[1], xj = p[2], lj = p[3], isSB = k === 'johnsonSB';
+    var zs = function (z) { return '(' + z + (g2 < 0 ? ' + ' + N(-g2) : ' - ' + N(g2)) + ')'; };
+    var what = isSB ? 'Johnson Sᵦ' : 'Johnson Sᵤ';
+    var twoStep = what + ' has no one-expression form here: it needs a single standard normal draw reused ' +
+      'inside the transformation. Assign Z first, then use the second expression wherever the draw is needed.';
+    var sinhOf = function (w, ex) { return '(' + ex + '(' + w + ') - ' + ex + '(-' + w + ')) / 2'; };
+    var wA = zs('Z') + ' / ' + N(dl);
+    set('arena', 'Z = NORM(0, 1)  then  ' + N(xj) + ' + ' + N(lj) +
+        (isSB ? ' / (1 + EP(-' + wA + '))' : ' * ' + sinhOf(wA, 'EP')), twoStep + ' EP is Arena\'s exponential function.');
+    set('simio', 'Z = Random.Normal(0, 1)  then  ' + N(xj) + ' + ' + N(lj) +
+        (isSB ? ' / (1 + Math.Exp(-' + wA + '))' : ' * ' + sinhOf(wA, 'Math.Exp')), twoStep + ' Z is a real state variable.');
+    var wL = zs('normal(1, 0)') + ' / ' + N(dl);
+    set('anylogic', N(xj) + ' + ' + N(lj) + (isSB ? ' / (1 + Math.exp(-' + wL + '))' : ' * Math.sinh(' + wL + ')'),
+        'AnyLogic\'s normal takes the standard deviation first, then the mean, and so normal(1, 0) is a standard normal.');
+    var wR = zs('rnorm(n)') + ' / ' + N(dl);
+    set('r', N(xj) + ' + ' + N(lj) + (isSB ? ' / (1 + exp(-' + wR + '))' : ' * sinh(' + wR + ')'), '');
+    var wM = zs('randn(n, 1)') + ' / ' + N(dl);
+    set('matlab', N(xj) + ' + ' + N(lj) + (isSB ? ' ./ (1 + exp(-' + wM + '))' : ' * sinh(' + wM + ')'), '');
+    set('python', 'stats.' + (isSB ? 'johnsonsb' : 'johnsonsu') + '(a=' + N(g2) + ', b=' + N(dl) + ', loc=' + N(xj) + ', scale=' + N(lj) + ')',
+        'SciPy\'s a is γ and b is δ; loc is ξ and scale is λ.');
   } else if (k === 'poisson') {
     set('arena', 'POIS(' + N(p[0]) + ')', '');
     set('simio', 'Random.Poisson(' + N(p[0]) + ')', '');
@@ -4930,6 +5122,8 @@ var FIT_NAMES = {
   loglogistic:     { r: null,          rp: null,       scipy: 'fisk',        ml: 'Loglogistic' },
   pearson5:        { r: null,          rp: null,       scipy: 'invgamma',    ml: null },
   pearson6:        { r: null,          rp: null,       scipy: 'betaprime',   ml: null },
+  johnsonSB:       { r: null,          rp: null,       scipy: 'johnsonsb',   ml: null },
+  johnsonSU:       { r: null,          rp: null,       scipy: 'johnsonsu',   ml: null },
   normal:          { r: 'normal',      rp: 'pnorm',    scipy: 'norm',        ml: 'Normal' },
   /* MATLAB's fitdist cannot fit these three: the uniform is declared "not
      fittable", the triangular is makedist-only, and the Beta insists on
@@ -5452,7 +5646,7 @@ var IA = {
   toClockDuration: toClockDuration, columnDurations: columnDurations,
   columnValues: columnValues, columnTimes: columnTimes, toClockMinutes: toClockMinutes,
   summarize: summarize,
-  DISTS: DISTS, CONTINUOUS_KEYS: CONTINUOUS_KEYS, DISCRETE_KEYS: DISCRETE_KEYS,
+  DISTS: DISTS, CONTINUOUS_KEYS: CONTINUOUS_KEYS, DISCRETE_KEYS: DISCRETE_KEYS, JOHNSON_KEYS: JOHNSON_KEYS,
   fitDist: fitDist, fitWithHolds: fitWithHolds, hasHolds: hasHolds,
   infoCriteria: infoCriteria,
   fitCdf: fitCdf, fitPdf: fitPdf, fitQuantile: fitQuantile, fitSampler: fitSampler, fitLo: fitLo,
@@ -5863,6 +6057,7 @@ var ST = {
   family: 'auto',
   shift: false,
   reflect: false,   /* fit each zero-based candidate as c - X instead */
+  johnson: false,   /* add the two Johnson members to the continuous ranking */
   rankBy: 'aic',
   rows: [],         /* rankAll() output                                */
   pick: null,       /* key of the distribution being shown in detail   */
@@ -6136,17 +6331,17 @@ function initGenerator() {
   var sel = $('gen-dist');
   /* Two groups because the difference between them is the whole reason
      the second one is here: a Johnson sample cannot be matched exactly by
-     anything on the fitting menu. */
+     anything on the default fitting menu. */
   var gFit = document.createElement('optgroup');
-  gFit.label = 'Also on the fitting menu';
+  gFit.label = 'On the fitting menu';
   var gNot = document.createElement('optgroup');
-  gNot.label = 'Not on the fitting menu';
+  gNot.label = 'Fitted only on request';
   for (var i = 0; i < IA.GEN_KEYS.length; i++) {
     var k = IA.GEN_KEYS[i], d = IA.DISTS[k];
     var o = document.createElement('option');
     o.value = k;
     o.textContent = d.name;
-    (d.generateOnly ? gNot : gFit).appendChild(o);
+    (d.optIn ? gNot : gFit).appendChild(o);
   }
   sel.appendChild(gFit);
   sel.appendChild(gNot);
@@ -6242,11 +6437,14 @@ function runGenerator() {
     (dp === null ? ', at full precision' : ', rounded to ' +
       (dp === 0 ? 'whole numbers' : dp + ' decimal place' + (dp === 1 ? '' : 's'))) +
     ', seed ' + seed + '. ';
-  msg += d.generateOnly
-    ? '<strong>Nothing on the menu below is this distribution</strong>, which is why it is here: ' +
-      'see how close the best candidate gets, and how large n has to be before the tests notice ' +
-      'that it is wrong.'
-    : 'Now see whether the table below finds it.';
+  msg += !d.optIn
+    ? 'Now see whether the table below finds it.'
+    : ST.johnson
+      ? 'This distribution is in the ranking below only because the Johnson box in section 2 is ticked; ' +
+        'untick it to see how close the best default candidate gets.'
+      : '<strong>Nothing on the default menu below is this distribution</strong>, which is why it is here: ' +
+        'see how close the best candidate gets, and how large n has to be before the tests notice ' +
+        'that it is wrong. The Johnson box in section 2 adds it.';
   if (neg) {
     msg += ' Note that ' + neg + ' value' + (neg === 1 ? '' : 's') + ' came out negative, and so the ' +
       'candidates that live on the positive half-line will refuse until you turn the shift on.';
@@ -6288,10 +6486,23 @@ function isCountData(s) {
   if (ST.clockUnit) return false;   /* known to be a duration, not a count */
   return !!(s && s.allInt && s.nUnique <= 30 && s.min >= 0 && (s.max - s.min) <= DISCRETE_MAX_SPAN);
 }
-function activeKeys() {
+function activeFamily() {
   var fam = ST.family;
   if (fam === 'auto') fam = isCountData(ST.s) ? 'discrete' : 'continuous';
-  return fam === 'discrete' ? IA.DISCRETE_KEYS : IA.CONTINUOUS_KEYS;
+  return fam;
+}
+function activeKeys() {
+  var fam = activeFamily();
+  if (fam === 'discrete') return IA.DISCRETE_KEYS;
+  return ST.johnson ? IA.CONTINUOUS_KEYS.concat(IA.JOHNSON_KEYS) : IA.CONTINUOUS_KEYS;
+}
+/* Both Johnson members are continuous, and so under the discrete family
+   the box has nothing to add and is grayed, as Arena grays its own menu
+   entries that do not apply to the data. */
+function syncJohnsonBox() {
+  var disc = !!ST.s && activeFamily() === 'discrete';
+  $('johnson-wrap').classList.toggle('off', disc);
+  $('johnson-chk').disabled = disc;
 }
 
 function currentBinK() {
@@ -6300,6 +6511,7 @@ function currentBinK() {
 }
 
 function refitAll() {
+  syncJohnsonBox();
   if (!ST.x || ST.x.length < 2) { renderAllEmpty(); return; }
   var k = currentBinK();
   $('bins').value = String(k);
@@ -6428,12 +6640,13 @@ function renderRanking() {
       '<td class="rank-name">' +
         (NAME_TIPS[r.key] ? '<span class="tip" data-tip="' + NAME_TIPS[r.key] + '" data-tip-press>' +
                             esc(r.dist.name) + '</span>' : esc(r.dist.name)) +
-        (r.fit.degenerate ? '<span class="rank-sub">the ' + (r.fit.reflect ? 'mirrored' : 'shifted') +
+        ((r.key === 'johnsonSB' || r.key === 'johnsonSU') && (near = nearSpecialCase(r, ST.rows))
+           ? tipSpan('rank-sub', near.label, near.tip) :
+         r.fit.degenerate ? '<span class="rank-sub">the ' + (r.fit.reflect ? 'mirrored' : 'shifted') +
            ' fit has no maximum</span>' :
          r.fit.atBound ? '<span class="rank-sub">' + (r.fit.reflect ? 'c sits at the largest observation'
                                                     : 'shift sits at the smallest observation') + '</span>' :
-         r.fit.edge ? tipSpan('rank-sub', 'close to its ' + (r.fit.edge === 'gamma' ? 'gamma' : 'Pearson type V') +
-                              ' limit', edgeTip(r.fit.edge)) :
+         r.fit.edge ? tipSpan('rank-sub', 'close to its ' + EDGE_NAME[r.fit.edge] + ' limit', edgeTip(r.fit.edge, r.key)) :
          (near = nearSpecialCase(r, ST.rows)) ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' : '') +
       '</td>' +
@@ -6671,6 +6884,14 @@ function renderFit() {
       'convention rather than of the fit, and it is why a beta is rarely the right first choice for a ' +
       'quantity with no natural upper bound.</div>';
   }
+  if (d.key === 'johnsonSB') {
+    pin += '<div class="note quiet"><strong>Both ends were estimated, and the fit never leaves them.</strong> ' +
+      'A Johnson Sᵦ lives strictly between ξ and ξ + λ, and maximum likelihood puts those ends just outside ' +
+      'your smallest and largest observations unless the sample itself argues for a wider range. A model ' +
+      'drawn from this fit therefore never produces a value past what you happened to sample. For anything ' +
+      'open-ended, such as a service time, that is the wrong behavior, and it is a reason to prefer a named ' +
+      'family with a tail.</div>';
+  }
   if (f.degenerate && f.reflect) {
     pin = '<div class="note"><strong>This mirrored fit has no maximum.</strong> ' +
       'As c is pushed down toward your largest observation, the likelihood keeps climbing without ' +
@@ -6857,6 +7078,12 @@ function applyHolds() {
    fitting the familiar distribution to the transformed data.  The text
    carries markup for the tip box and so must not contain a double quote. */
 var NAME_TIPS = {
+  johnsonSB: 'A standard normal put through a logistic curve: Z = γ + δ ln(y/(1 − y)) with y = (X − ξ)/λ, ' +
+    'and so X lives strictly between ξ and ξ + λ. Four parameters reach almost any skewness and kurtosis a ' +
+    'bounded distribution can have, which is a strength in a generator and a warning in a ranking.',
+  johnsonSU: 'A standard normal put through a hyperbolic sine: X = ξ + λ sinh((Z − γ)/δ), with support on the ' +
+    'whole real line and tails that fall off as a lognormal&#39;s do. Four parameters reach almost any ' +
+    'skewness and kurtosis, which is a strength in a generator and a warning in a ranking.',
   lognormal: 'ln X is normal. Fitting a lognormal is fitting a normal to the logarithms of the data, ' +
     'and so this row is also the test of whether ln x is normal.',
   loglogistic: 'ln X has a logistic distribution, a symmetric bell like the normal&#39;s with heavier ' +
@@ -6879,7 +7106,7 @@ var NAME_TIPS = {
    treats only approximately, and the tip says "about as well" for that
    reason.  Rows with held parameters are skipped, because a hold changes
    what is being compared. */
-var LR_CRIT_1DF = 3.841;
+var LR_CRIT_1DF = 3.841, LR_CRIT_2DF = 5.991;
 function nearSpecialCase(r, rows) {
   if (!r.ok || r.held || !r.fit || r.fit.degenerate) return null;
   var find = function (key) {
@@ -6893,6 +7120,28 @@ function nearSpecialCase(r, rows) {
       ', below the 3.84 a likelihood-ratio test would need at the 5% level. If the process has no ' +
       'reason for a shape other than 1, prefer the exponential and its one fewer parameter.';
   };
+  /* A Johnson row always carries a note: four free parameters that reach
+     almost any shape are a warning in a ranking, whatever the numbers
+     say.  The note names the limit the fit ran toward when it did, and
+     otherwise says when the normal or the lognormal row, two parameters
+     lighter, fits about as well (two degrees of freedom, 5.99). */
+  if (r.key === 'johnsonSB' || r.key === 'johnsonSU') {
+    var warn = 'Four free parameters reach almost any skewness and kurtosis, and so this family can win the ' +
+      'ranking by tracking the shape of this one sample, tails included, without describing anything the ' +
+      'process would repeat. Prefer a named family whose shape the process explains, and reach for the ' +
+      'Johnson system only when none fits' +
+      (r.key === 'johnsonSB' ? '; a fitted Sᵦ also never produces a value outside its estimated ends, ξ to ξ + λ.' : '.');
+    if (r.fit.edge)
+      return { label: 'close to its ' + r.fit.edge + ' limit', tip: edgeTip(r.fit.edge, r.key) + ' ' + warn };
+    var gn = gap(find('normal')), gl = gap(find('lognormal'));
+    var nearer = (gn < LR_CRIT_2DF && !(gl < gn)) ? ['normal', gn] : gl < LR_CRIT_2DF ? ['lognormal', gl] : null;
+    if (nearer)
+      return { label: 'four free parameters; fits about as well as the ' + nearer[0],
+               tip: 'The ' + nearer[0] + ' row fits about as well: twice the difference in log-likelihood is ' +
+                    fmt(nearer[1], 3) + ', below the 5.99 a likelihood-ratio test with two degrees of freedom ' +
+                    'would need at the 5% level, and it has two fewer parameters. ' + warn };
+    return { label: 'four free parameters: fits almost anything', tip: warn };
+  }
   if (r.key === 'erlang' && r.fit.p[0] === 1)
     return { label: 'one stage: the exponential',
              tip: 'An Erlang with a single stage is exactly the exponential, and so this row and the ' +
@@ -6920,7 +7169,21 @@ function nearSpecialCase(r, rows) {
   }
   return null;
 }
-function edgeTip(edge) {
+var EDGE_NAME = { gamma: 'gamma', pearson5: 'Pearson type V', normal: 'normal', lognormal: 'lognormal' };
+function edgeTip(edge, key) {
+  if (edge === 'normal' || edge === 'lognormal') {
+    var who = key === 'johnsonSB' ? 'Sᵦ' : 'Sᵤ';
+    if (edge === 'normal')
+      return 'The Johnson ' + who + '&#39;s likelihood was still rising as its ' +
+        (key === 'johnsonSB' ? 'two ends receded from the data' : 'scale λ grew with its shape δ') +
+        ', the direction in which it turns into the normal, and so these data are described as well by the ' +
+        'normal row, which is that limit with two fewer parameters.';
+    return 'The Johnson ' + who + '&#39;s likelihood was still rising as ' +
+      (key === 'johnsonSB' ? 'one end receded from the data' : 'its location ξ and shape ratio γ/δ ran off together, ' +
+       'which puts the whole sample on one exponential arm of the sinh') +
+      ', the direction in which it turns into a shifted lognormal (mirrored when γ is positive), and so these ' +
+      'data are described about as well by the lognormal row, which is that limit with two fewer parameters.';
+  }
   return edge === 'gamma'
     ? 'The Pearson type VI&#39;s likelihood was still rising at the end of its search, in the direction ' +
       'where its scale β and second shape α₂ grow together. That is the direction in which a Pearson ' +
@@ -6979,7 +7242,15 @@ function paramGloss(key, i, f) {
                 'likewise, at the top'],
     poisson:   ['the mean count, and for a Poisson also its variance, which is worth checking against the data'],
     geometric: ['the per-trial success probability; the mean number of failures is (1 − p)/p'],
-    discreteUniform: ['the smallest observation', 'the largest observation']
+    discreteUniform: ['the smallest observation', 'the largest observation'],
+    johnsonSB: ['with δ, sets where the density piles up between the two ends; negative pushes it toward the upper end',
+                'with γ, sets the shape; larger means a narrower, more normal-looking hump',
+                'the lower end of the support, estimated by maximum likelihood and strictly below your smallest observation',
+                'the width of the support: the upper end is ξ + λ, strictly above your largest observation'],
+    johnsonSU: ['with δ, sets the skewness; negative skews the distribution to the right, and zero makes it symmetric',
+                'with γ, sets the tails; larger means lighter tails and a more normal-looking shape',
+                'the location; the median is ξ + λ sinh(−γ/δ)',
+                'the scale, which stretches the whole distribution']
   };
   var arr = g[key];
   var base = arr && arr[i] ? arr[i] : '';
@@ -7039,6 +7310,14 @@ function derivedRows(d, f) {
   if (d.key === 'expo' && f.shift) {
     out.push([(f.reflect ? 'c − β' : 'γ + β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0]), 5),
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
+  }
+  if (d.key === 'johnsonSB') {
+    out.push(['ξ + λ &nbsp;<span class="p-what">upper end</span>', fmt(p[2] + p[3], 5),
+      'the top of the support; a fitted Sᵦ never produces a value above it']);
+  }
+  if (d.key === 'johnsonSB' || d.key === 'johnsonSU') {
+    var medJ = d.key === 'johnsonSB' ? p[2] + p[3] / (1 + Math.exp(p[0] / p[1])) : p[2] + p[3] * Math.sinh(-p[0] / p[1]);
+    out.push(['model median', fmt(medJ, 5), 'compare it with the sample median of ' + fmt(ST.s.med, 5)]);
   }
   if (d.key === 'poisson') {
     out.push(['s² / λ̂ &nbsp;<span class="p-what">variance over mean</span>',
@@ -8482,6 +8761,7 @@ function provenance(withBoot) {
     ['# family: ' + (ST.family === 'auto' ? 'chosen automatically' : ST.family)],
     ['# location shift: ' + (ST.shift && !ST.reflect ? 'estimated' : 'off')],
     ['# mirror image c - X for the candidates that start at zero: ' + (ST.reflect ? 'on' : 'off')],
+    ['# Johnson system fitted on request: ' + (ST.johnson ? 'on' : 'off')],
     ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')]
   ];
   if (withBoot) {
@@ -9600,6 +9880,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('reflect-chk').addEventListener('change', function () {
     ST.reflect = this.checked; ST.holdShift = {}; refitAll();
   });
+  $('johnson-chk').addEventListener('change', function () { ST.johnson = this.checked; refitAll(); });
   $('rank-by').addEventListener('change', function () {
     ST.rankBy = this.value;
     if (!ST.userPicked) { ST.pick = IA.bestBy(ST.rows, ST.rankBy) || ST.pick; }
