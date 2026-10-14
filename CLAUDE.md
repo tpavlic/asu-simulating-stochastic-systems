@@ -717,9 +717,14 @@ better.
      access. `input_modeling/verify_input_analyzer.mjs` slices that block out of the HTML and runs
      it in Node, and the bootstrap Web Worker is built from the same `<script id="ia-core">`
      element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
-  2. *`verify_input_analyzer.mjs` is not shipped with the widget and is not linked from the site. Run
-     it (`node input_modeling/verify_input_analyzer.mjs`, about fifteen minutes) after touching
-     anything in the core; it checks the special functions against exact identities, recovers known
+  2. *`verify_input_analyzer.mjs` and its companion `verify_input_analyzer_jobs.mjs` are not shipped
+     with the widget and are not linked from the site. Run the first (`node
+     input_modeling/verify_input_analyzer.mjs`, about three minutes on a multi-core machine) after
+     touching anything in the core. Its slow Monte Carlo loops live in the jobs module and run on
+     worker threads, one fewer than the cores, with the same seeds as a serial loop, and so the output
+     is the same either way; `IA_SERIAL=1` runs them on one thread (about fifteen minutes), and
+     `IA_WORKERS` sets the thread count. A new slow loop belongs in the jobs module as a job returning
+     plain counts. The script checks the special functions against exact identities, recovers known
      parameters for every distribution, and measures the bootstrap's rejection rate under a true
      null, confirms that the classical K-S and A-D p-values are correctly calibrated when the
      parameters are fixed and far too permissive when they are estimated, and measures the

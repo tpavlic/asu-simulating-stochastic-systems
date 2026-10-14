@@ -15,27 +15,10 @@
    can check the check.  Where a published constant is used instead, the
    source is named on the line.
    ══════════════════════════════════════════════════════════════════════ */
-import fs from 'node:fs';
-import vm from 'node:vm';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const HTML = path.join(here, 'input_analyzer.html');
-
-/* ── Load the core out of the page ─────────────────────────────────── */
-function loadCore() {
-  const src = fs.readFileSync(HTML, 'utf8');
-  const a = src.indexOf('/* ===== IA-CORE-BEGIN ===== */');
-  const b = src.indexOf('/* ===== IA-CORE-END ===== */');
-  if (a < 0 || b < 0) throw new Error('IA-CORE sentinels not found in ' + HTML);
-  const core = src.slice(a, b);
-  const ctx = { Math, Number, NaN, Infinity, Array, Object, String, RegExp, JSON, isNaN };
-  vm.createContext(ctx);
-  vm.runInContext(core, ctx, { filename: 'input_analyzer.html#IA-CORE' });
-  if (!ctx.IA) throw new Error('core ran but exported no IA namespace');
-  return { IA: ctx.IA, lines: core.split('\n').length };
-}
+/* The core loader and the slow Monte Carlo loops live in the jobs module,
+   which also runs them on worker threads; see its header. */
+import { HTML, loadCore, makePool } from './verify_input_analyzer_jobs.mjs';
 
 /* ── Tiny test harness ─────────────────────────────────────────────── */
 let pass = 0, fail = 0, group = '';
@@ -69,6 +52,54 @@ const EULER   = 0.5772156649015328606;   /* Euler-Mascheroni, A&S 6.1.3 */
 const { IA, lines } = loadCore();
 console.log(C.b('Input Analyzer — numerics verification'));
 console.log(C.d(`core block: ${lines} lines, sliced from ${path.relative(process.cwd(), HTML)}`));
+
+/* ── The slow sections, started now ───────────────────────────────────
+   Sections 15c, 15f, 15g, and 16 spend nearly all of the run in Monte Carlo
+   loops whose replications are independent, and so the loops are handed
+   to worker threads here, at the start, and each section waits for its own
+   results when it reaches them.  The jobs use the same seeds as a serial
+   loop and their counts are summed before any check, and so the output is
+   the same either way.  Jobs are queued in the order the sections need
+   them, so that the main thread can work through the sections in between
+   (15d to 15f do a minute of their own work) while the workers carry on
+   with the long calibrations of 15g and 16. */
+const pool = makePool();
+console.log(C.d(pool.size
+  ? `slow sections on ${pool.size} worker threads (IA_SERIAL=1 runs them on this thread; IA_WORKERS sets the count)`
+  : 'slow sections on this thread'));
+const CALIB_R = Number(process.env.IA_CALIB_REPS || 200);
+const CALIB_B = Number(process.env.IA_CALIB_B || 300);
+const BOOT_FAMILIES = [['pearson6', [3, 6, 4]], ['expo', [2.0]], ['gamma', [2.5, 1.2]], ['weibull', [3.0, 1.6]],
+                       ['loglogistic', [3.0, 2.0]], ['pearson5', [3.0, 6.0]]];
+const BOOT_ORDER = ['expo', 'gamma', 'weibull', 'loglogistic', 'pearson5', 'pearson6'];
+function chunks(R, size) {
+  const out = [];
+  for (let a = 0; a < R; a += size) out.push([a, Math.min(R, a + size)]);
+  return out;
+}
+function sumCounts(rs) {
+  const acc = {};
+  for (const r of rs) for (const k in r) acc[k] = (acc[k] || 0) + r[k];
+  return acc;
+}
+const pending = {};
+pending.shiftRoundTrip = pool.run('shiftRoundTrip', {});
+pending.holdHeld = pool.run('holdControl', { fixed: [2.5, 1.4] });
+pending.holdFree = pool.run('holdControl', { fixed: null });
+pending.mirrorBootM = pool.run('mirrorBoot', { mirrored: true });
+pending.mirrorBootS = pool.run('mirrorBoot', { mirrored: false });
+pending.mirrorRank = pool.run('mirrorRank', {});
+pending.genRefit = Promise.all(IA.GEN_KEYS.map(key => pool.run('genRefit', { key, N: 20000 })));
+pending.mirror = Promise.all(IA.CONTINUOUS_KEYS.map(key => pool.run('mirrorKey', { key })));
+pending.chiDf = Promise.all(chunks(1200, 150).map(([from, to]) =>
+  pool.run('chiDf', { from, to, n: 200, K: 8 }))).then(sumCounts);
+pending.chiBoot = Promise.all(chunks(250, 20).map(([from, to]) =>
+  pool.run('chiBoot', { from, to, n: 150, K: 8, B: 300 }))).then(sumCounts);
+pending.boot = {};
+for (const [key, truth] of BOOT_FAMILIES)
+  pending.boot[key] = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+    pool.run('bootCalib', { key, truth, n: 60, B: CALIB_B, from, to }))).then(sumCounts);
+pool.start();
 
 /* ══════════════════════════════════════════════════════════════════════
    1.  LOG GAMMA
@@ -1056,27 +1087,20 @@ section('15c. generating data from typed parameters');
 {
   /* Every offered distribution must generate, and the fit must find its
      way back to the parameters that produced the sample. */
-  const N = 20000;
-  for (const key of IA.GEN_KEYS) {
-    const spec = IA.GEN_SPEC[key], p = spec.map(q => q.def);
-    const g = IA.generateSample(key, p, 0, N, 777, null);
-    if (!g.ok) { ok(false, `${key}: generates`, g.msg); continue; }
+  const N = 20000, gen = await pending.genRefit;
+  for (let gi = 0; gi < IA.GEN_KEYS.length; gi++) {
+    const key = IA.GEN_KEYS[gi], g = gen[gi];
+    if (!g.genOk) { ok(false, `${key}: generates`, g.msg); continue; }
     /* The generate-only members have no fit to recover anything with;
        section 15d checks them on their own terms. */
-    if (IA.DISTS[key].generateOnly) {
-      ok(g.values.length === N, `${key}: generates ${N} values (generate-only, so nothing to refit)`);
+    if (g.generateOnly) {
+      ok(g.count === N, `${key}: generates ${N} values (generate-only, so nothing to refit)`);
       continue;
     }
-    const f = IA.fitDist(IA.DISTS[key], g.values, false, false);
-    if (!f.ok) { ok(false, `${key}: the generated sample refits`, f.msg); continue; }
+    if (!g.fitOk) { ok(false, `${key}: the generated sample refits`, g.msg); continue; }
     /* Endpoint parameters of the beta are not estimated, so only the
-       parameters the fit owns are compared. */
-    const nML = IA.DISTS[key].mlCount === undefined ? p.length : IA.DISTS[key].mlCount;
-    let worst = 0;
-    for (let j = 0; j < nML; j++) {
-      const denom = Math.abs(p[j]) > 1e-9 ? Math.abs(p[j]) : 1;
-      worst = Math.max(worst, Math.abs(f.p[j] - p[j]) / denom);
-    }
+       parameters the fit owns are compared (the job does the comparing). */
+    const worst = g.worst;
     /* The beta gets a wider band, and the reason is the convention rather
        than the solver: its interval is read off the data range, which for
        shapes above 1 is narrower than the true support, and the shapes
@@ -1085,21 +1109,19 @@ section('15c. generating data from typed parameters');
        here is that the fitted curve still describes the sample. */
     const tol = key === 'beta' ? 0.25 : 0.12;
     ok(worst < tol, `${key}: generate then refit recovers the parameters (worst ${(100 * worst).toFixed(2)}%, band ${(100 * tol).toFixed(0)}%)`);
-    if (key === 'beta') {
-      const xs = g.values.slice().sort((a, b) => a - b);
-      const D = IA.ksStat(xs, IA.fitCdf(f), IA.fitAtom(f)).D;
-      ok(D < 0.02, `beta: and the fitted curve still tracks the sample, D = ${D.toFixed(5)}`);
-    }
+    if (key === 'beta')
+      ok(g.D < 0.02, `beta: and the fitted curve still tracks the sample, D = ${g.D.toFixed(5)}`);
   }
 
   /* The shift must survive the round trip too. */
   {
-    const g = IA.generateSample('weibull', [3, 1.6], 2.5, 40000, 4242, null);
-    const f = IA.fitDist(IA.DISTS.weibull, g.values, true, false);
+    /* A Weibull(3, 1.6) shifted by 2.5, 40,000 draws, refitted with the
+       shift on (job shiftRoundTrip). */
+    const f = await pending.shiftRoundTrip;
     ok(f.ok && Math.abs(f.shift - 2.5) < 0.05,
       `shifted generation: gamma-hat = ${f.ok ? f.shift.toFixed(4) : '?'} against a true 2.5`);
-    ok(f.ok && Math.abs(f.p[1] - 1.6) / 1.6 < 0.08,
-      `shifted generation: shape ${f.ok ? f.p[1].toFixed(4) : '?'} against a true 1.6`);
+    ok(f.ok && Math.abs(f.shape - 1.6) / 1.6 < 0.08,
+      `shifted generation: shape ${f.ok ? f.shape.toFixed(4) : '?'} against a true 1.6`);
   }
 
   /* Reproducibility from the seed, which is what the seed box promises. */
@@ -1265,22 +1287,14 @@ section('15e. holding parameters fixed');
      the classical null are the same distribution, so the two p-values
      must agree -- and with nothing held they must not. */
   {
-    const runOne = (fixed) => {
-      const f = IA.fitDist(G, x, false, false, fixed);
-      const F = IA.fitCdf(f);
-      const D = IA.ksStat(x, F, IA.fitAtom(f)).D, A = IA.adStat(x, F);
-      const r = IA.bootstrapRun(f, n, 3000, 777, false, D, A, fixed);
-      r.step(3000);
-      const res = r.result();
-      return { D, tab: IA.ksPvalueClassical(D, n), boot: res.pD,
-               critB: res.critD, critT: IA.ksTableCritical(n) };
-    };
-    const held = runOne([2.5, 1.4]);
+    /* Each case fits this sample under its holds and runs a 3,000-resample
+       bootstrap (job holdControl). */
+    const held = await pending.holdHeld;
     ok(Math.abs(held.tab - held.boot) < 0.03,
       `all held: table p = ${held.tab.toFixed(4)} and bootstrap p = ${held.boot.toFixed(4)} agree`);
     ok(Math.abs(held.critT - held.critB) / held.critT < 0.06,
       `all held: table critical value ${held.critT.toFixed(4)} and bootstrap ${held.critB.toFixed(4)} agree`);
-    const free = runOne(null);
+    const free = await pending.holdFree;
     ok(free.critB < held.critB * 0.85,
       `and with nothing held the bootstrap critical value drops to ${free.critB.toFixed(4)}, ` +
       `well below the ${held.critB.toFixed(4)} that applies when nothing was estimated`);
@@ -1325,20 +1339,16 @@ section('15f. the mirror image, c - X');
      `scale ${fg.p[1].toPrecision(4)} (1.5)`);
   ok(fg.k === 3, 'gamma: c counts as a third parameter');
 
-  for (const key of IA.CONTINUOUS_KEYS) {
-    const d = IA.DISTS[key];
-    const fm = IA.fitDist(d, x, false, false, null, null, true);
-    if (!d.shiftable) {
-      const f0 = IA.fitDist(d, x, false, false);
-      ok(!fm.reflect && fm.ok === f0.ok && (!f0.ok || fm.ll === f0.ll),
-         `${key}: does not start at zero, and so the mirror image leaves its fit unchanged`);
+  const mir = await pending.mirror;
+  for (let mi = 0; mi < IA.CONTINUOUS_KEYS.length; mi++) {
+    const key = IA.CONTINUOUS_KEYS[mi], m = mir[mi];
+    if (!m.shiftable) {
+      ok(m.unchanged, `${key}: does not start at zero, and so the mirror image leaves its fit unchanged`);
       continue;
     }
-    const fs = IA.fitDist(d, neg, true, false);
-    close(fm.ll, fs.ll, 1e-12, `${key}: mirrored log-likelihood equals the shifted fit's on -x`);
-    const Dm = IA.ksStat(xs, IA.fitCdf(fm), IA.fitAtom(fm)).D, Ds = IA.ksStat(ns, IA.fitCdf(fs), IA.fitAtom(fs)).D;
-    close(Dm, Ds, 1e-9, `${key}: K-S D is the same either way`);
-    close(IA.adStat(xs, IA.fitCdf(fm)), IA.adStat(ns, IA.fitCdf(fs)), 1e-7, `${key}: A-D is the same either way`);
+    close(m.llM, m.llS, 1e-12, `${key}: mirrored log-likelihood equals the shifted fit's on -x`);
+    close(m.Dm, m.Ds, 1e-9, `${key}: K-S D is the same either way`);
+    close(m.Am, m.As, 1e-7, `${key}: A-D is the same either way`);
   }
 
   /* The mirrored model's own functions agree with one another. */
@@ -1369,9 +1379,9 @@ section('15f. the mirror image, c - X');
 
   /* rankAll passes the flag through, and on mirrored data the mirrored
      gamma beats every unmirrored candidate. */
-  const sub = x.slice(0, 2000);
-  const rows = IA.rankAll(sub, IA.CONTINUOUS_KEYS, false, IA.makeBins(sub, 20), {}, {}, true);
-  const best = IA.bestBy(rows, 'aic');
+  /* The first 2,000 of these values, ranked with the mirror image on (job
+     mirrorRank). */
+  const best = await pending.mirrorRank;
   ok(best === 'gamma' || best === 'erlang', `rankAll with the mirror image: best by AIC is ${best}`);
 
   /* Exports and scripts. */
@@ -1391,18 +1401,10 @@ section('15f. the mirror image, c - X');
      c = -gamma), and K-S and A-D are unchanged by the flip, and so the two
      bootstraps must return identical p-values, not merely similar ones. */
   {
-    const ur = IA.MRG32k3a(77001), y = [];
-    for (let i = 0; i < 60; i++) y.push(c0 - IA.DISTS.weibull.sample(ur, [3, 1.6]));
-    y.sort((a, b) => a - b);
-    const yn = y.map(v => -v).sort((a, b) => a - b);
-    const fm = IA.fitDist(IA.DISTS.weibull, y, false, false, null, null, true);
-    const fs = IA.fitDist(IA.DISTS.weibull, yn, true, false);
-    const Fm = IA.fitCdf(fm), Fs = IA.fitCdf(fs);
-    const bm = IA.bootstrapRun(fm, 60, 200, 31337, false, IA.ksStat(y, Fm, IA.fitAtom(fm)).D, IA.adStat(y, Fm),
-                               null, NaN, 0, null, true);
-    const bs = IA.bootstrapRun(fs, 60, 200, 31337, true, IA.ksStat(yn, Fs, IA.fitAtom(fs)).D, IA.adStat(yn, Fs));
-    bm.step(200); bs.step(200);
-    const rm = bm.result(), rs = bs.result();
+    /* 60 values of 20 minus a Weibull(3, 1.6): the mirrored fit's
+       bootstrap and the shifted fit's on their negatives, 200 resamples
+       each with the same seed (job mirrorBoot). */
+    const rm = await pending.mirrorBootM, rs = await pending.mirrorBootS;
     close(rm.pD, rs.pD, 1e-12, `mirrored Weibull: bootstrap K-S p = ${rm.pD.toFixed(4)}, identical to the shifted fit's on -x`);
     close(rm.pA, rs.pA, 1e-12, `mirrored Weibull: bootstrap A-D p = ${rm.pA.toFixed(4)}, identical to the shifted fit's on -x`);
   }
@@ -1458,21 +1460,9 @@ section('15g. chi-square degrees of freedom');
      statistics, so the page's convention subtracts nothing and the naive
      one subtracts two. */
   {
-    const R = 1200, n = 200, K = 8;
-    let rejPage = 0, rejNaive = 0, used = 0;
-    for (let rep = 0; rep < R; rep++) {
-      const u = IA.MRG32k3a(410000 + rep), x = [];
-      for (let i = 0; i < n; i++) x.push(IA.DISTS.uniform.sample(u, [2, 9]));
-      const f = IA.fitDist(IA.DISTS.uniform, x, false, false);
-      if (!f.ok) continue;
-      const c = IA.chiSquareGOF(x, f, IA.makeBins(x, K));
-      if (!(c.df >= 1) || !Number.isFinite(c.stat)) continue;
-      used++;
-      if (c.p < 0.05) rejPage++;
-      /* The same statistic against the naive df, subtracting all of k. */
-      const dfNaive = c.nGroups - 1 - f.k;
-      if (dfNaive >= 1 && IA.gammaQ(dfNaive / 2, c.stat / 2) < 0.05) rejNaive++;
-    }
+    /* 1200 replications of n = 200 in 8 bins, each statistic also set
+       against the naive df that subtracts all of k (job chiDf). */
+    const { rejPage, rejNaive, used } = await pending.chiDf;
     const rP = rejPage / used, rN = rejNaive / used;
     const se = Math.sqrt(0.05 * 0.95 / used);
     console.log(C.d(`  uniform fit, ${used} replications: this page's df rejects ` +
@@ -1487,26 +1477,9 @@ section('15g. chi-square degrees of freedom');
   /* And the bootstrap chi-square must be calibrated whatever the df
      convention, because it uses none. */
   {
-    const R = 250, n = 150, K = 8, B = 300;
-    let rej = 0, used = 0;
-    for (let rep = 0; rep < R; rep++) {
-      const u = IA.MRG32k3a(420000 + rep), x = [];
-      for (let i = 0; i < n; i++) x.push(IA.DISTS.gamma.sample(u, [2, 1.5]));
-      x.sort((a, b) => a - b);
-      const f = IA.fitDist(IA.DISTS.gamma, x, false, false);
-      if (!f.ok) continue;
-      const c = IA.chiSquareGOF(x, f, IA.makeBins(x, K));
-      if (!Number.isFinite(c.stat)) continue;
-      const F = IA.fitCdf(f);
-      const r = IA.bootstrapRun(f, n, B, 700000 + rep, false,
-                                IA.ksStat(x, F, IA.fitAtom(f)).D, IA.adStat(x, F),
-                                null, c.stat, K, null);
-      r.step(B);
-      const res = r.result();
-      if (!Number.isFinite(res.pChi)) continue;
-      used++;
-      if (res.pChi < 0.05) rej++;
-    }
+    /* 250 replications of n = 150 in 8 bins, 300 resamples each (job
+       chiBoot). */
+    const { rej, used } = await pending.chiBoot;
     const rate = rej / used, se = Math.sqrt(0.05 * 0.95 / used);
     ok(Math.abs(rate - 0.05) < 4 * se + 0.015,
       `bootstrap chi-square rejects ${(100 * rate).toFixed(1)}% of the time (nominal 5%, ${used} reps)`);
@@ -1530,33 +1503,15 @@ section('15g. chi-square degrees of freedom');
    ══════════════════════════════════════════════════════════════════════ */
 section('16. bootstrap calibration under a true null');
 {
-  const R = Number(process.env.IA_CALIB_REPS || 200);
-  const B = Number(process.env.IA_CALIB_B || 300);
+  const R = CALIB_R, B = CALIB_B;
   const n = 60;
   const se = Math.sqrt(0.05 * 0.95 / R);
   console.log(C.d(`  ${R} replications x ${B} resamples, n = ${n} (set IA_CALIB_REPS / IA_CALIB_B to change)`));
 
-  for (const [key, truth] of [['expo', [2.0]], ['gamma', [2.5, 1.2]], ['weibull', [3.0, 1.6]],
-                              ['loglogistic', [3.0, 2.0]], ['pearson5', [3.0, 6.0]], ['pearson6', [3, 6, 4]]]) {
-    const d = IA.DISTS[key];
-    let rejD = 0, rejA = 0, rejTable = 0, used = 0;
-    for (let rep = 0; rep < R; rep++) {
-      const u = IA.MRG32k3a(90000 + rep * 17 + key.length);
-      const x = [];
-      for (let i = 0; i < n; i++) x.push(d.sample(u, truth));
-      x.sort((a, b) => a - b);
-      const f = IA.fitDist(d, x, false, false);
-      if (!f.ok) continue;
-      const F = IA.fitCdf(f);
-      const obsD = IA.ksStat(x, F, IA.fitAtom(f)).D, obsA = IA.adStat(x, F);
-      const run = IA.bootstrapRun(f, n, B, 1234567 + rep, false, obsD, obsA);
-      run.step(B);
-      const res = run.result();
-      used++;
-      if (res.pD < 0.05) rejD++;
-      if (res.pA < 0.05) rejA++;
-      if (obsD > IA.ksTableCritical(n)) rejTable++;
-    }
+  for (const key of BOOT_ORDER) {
+    /* Each replication draws a fresh sample, fits it, and runs the
+       bootstrap on the fit (job bootCalib). */
+    const { rejD, rejA, rejTable, used } = await pending.boot[key];
     const rD = rejD / used, rA = rejA / used, rT = rejTable / used;
     /* Four standard errors, plus a small allowance for the discreteness
        of a p-value built from B resamples. */
@@ -2074,6 +2029,7 @@ section('18. export expressions');
    ══════════════════════════════════════════════════════════════════════ */
 console.log('\n' + C.b('─'.repeat(60)));
 console.log(C.b(`${pass} passed, ${fail} failed`));
+pool.close();
 if (fail) {
   console.log(C.r('\nFailures:'));
   for (const f of failures) console.log('  - ' + f);
