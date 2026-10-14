@@ -195,7 +195,21 @@ export function render(root) {
     enqueue('pasted data', s);
   });
 
-  els.ex.innerHTML = EXAMPLES.map(ex => '<option value="' + esc(ex.id) + '">' + esc(ex.title) + '</option>').join('');
+  // One group per page the examples are for, in the pages' own order, so a
+  // reader who came from a page finds its datasets together. The groups
+  // name ids, and an example missing from every group (a new one, say) is
+  // listed at the end under no label rather than dropped.
+  const groups = [
+    { label: 'One System', ids: ['queue-reps'] },
+    { label: 'Two Systems', ids: ['two-independent', 'two-crn'] },
+    { label: 'Several Systems', ids: ['four-designs', 'six-designs', 'four-crn', 'service-level'] },
+    { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
+  ];
+  const option = ex => '<option value="' + esc(ex.id) + '">' + esc(ex.title) + '</option>';
+  const grouped = new Set(groups.flatMap(g => g.ids));
+  els.ex.innerHTML = groups.map(g => '<optgroup label="' + esc(g.label) + '">'
+      + g.ids.map(id => EXAMPLES.find(ex => ex.id === id)).filter(Boolean).map(option).join('') + '</optgroup>').join('')
+    + EXAMPLES.filter(ex => !grouped.has(ex.id)).map(option).join('');
   const showDesc = () => {
     const ex = EXAMPLES.find(x => x.id === els.ex.value);
     els.exDesc.textContent = ex ? ex.description : '';
