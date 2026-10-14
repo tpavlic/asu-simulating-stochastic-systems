@@ -4976,7 +4976,9 @@ function expressions(fit, sample) {
     set('simio', isSB
         ? 'Random.JohnsonSB(' + N(g2) + ', ' + N(dl) + ', ' + N(xj) + ', ' + N(xj + lj) + ')'
         : 'Random.JohnsonSU(' + N(g2) + ', ' + N(dl) + ', ' + N(xj) + ', ' + N(lj) + ')',
-        isSB ? 'The two shapes (α₁ = γ, α₂ = δ) and then the interval: min = ξ and max = ξ + λ.'
+        isSB ? 'The two shapes (α₁ = γ, α₂ = δ) and then the interval: min = ξ and max = ξ + λ. The value Simio\'s ' +
+               'reference guide gives as E(x), min + (max − min)/(1 + e^(α₁/α₂)), is this distribution\'s median, the ' +
+               'model-median row above, not its mean.'
              : 'The two shapes (α₁ = γ, α₂ = δ) and then the location ξ and the scale λ.');
     var wL = zs('normal(1, 0)') + ' / ' + N(dl);
     set('anylogic', N(xj) + ' + ' + N(lj) + (isSB ? ' / (1 + Math.exp(-' + wL + '))' : ' * Math.sinh(' + wL + ')'),
