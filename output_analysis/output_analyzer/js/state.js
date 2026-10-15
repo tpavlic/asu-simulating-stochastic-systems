@@ -101,6 +101,21 @@ export function rename(id, name) {
 }
 
 /**
+ * Declares, or withdraws, that the replication ids of every dataset from one
+ * load are blocks, and emits 'datasets'.
+ * @param {string} loadId
+ * @param {boolean} on
+ * @returns {boolean} whether any dataset carries that load id
+ */
+export function setBlocks(loadId, on) {
+  const hit = datasets.filter(d => d.loadId != null && d.loadId === loadId);
+  if (!hit.length) return false;
+  for (const d of hit) d.blocks = !!on;
+  emit('datasets', { type: 'blocks', loadId });
+  return true;
+}
+
+/**
  * The dataset with this id, or null.
  * @param {string} id
  * @returns {Dataset|null}
@@ -241,5 +256,5 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, setBlocks, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
 export default state;

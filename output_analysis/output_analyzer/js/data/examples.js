@@ -13,7 +13,7 @@ export const EXAMPLES = [
     kind: "reps",
     format: "columns",
     description: "Twenty independent 8-hour days of a single-server queue with exponential interarrival times (mean 1.0 minute) and service times (mean 0.8 minute), reporting each day's average wait, longest wait, and customers served. Use it to form a confidence interval from replications; the Assign its columns myself button opens the dialog in which the other two columns can be loaded as responses too.",
-    mapping: {"kind":"reps","value":1,"time":null,"rep":0,"scenario":null,"name":"Queue days","endTime":null},
+    mapping: {"kind":"reps","value":1,"time":null,"rep":0,"scenario":null,"name":"Queue days","endTime":null,"blocks":false},
     text: `replication,avg_wait,max_wait,n_served
 1,2.6187,13.2803,487
 2,3.2672,15.4566,498
@@ -44,7 +44,7 @@ export const EXAMPLES = [
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for a queue served at a mean of 0.8 minute (design A) and one served at 0.75 minute (design B), with 15 days each drawn from independent random streams. Use it to compare two systems with a two-sample interval, ignoring any pairing.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, independent","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, independent","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,2.4621
 A,2,3.7378
@@ -84,9 +84,9 @@ B,15,2.3592
     file: "two_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day. Use it to compare the two systems as a paired difference and to see how much narrower the interval becomes.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, paired","endTime":null},
-    text: `design,replication,avg_wait
+    description: "The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day, and so the file's block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, paired","endTime":null,"blocks":true},
+    text: `design,block,avg_wait
 A,1,1.7
 A,2,2.7121
 A,3,2.4175
@@ -125,9 +125,9 @@ B,15,2.8592
     file: "muffin_oven.csv",
     kind: "reps",
     format: "columns",
-    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Use it to compare the policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null},
-    text: `policy,replication,avg_time_in_system,utilization,max_waiting,unfinished
+    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file's block column names, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null,"blocks":true},
+    text: `policy,block,avg_time_in_system,utilization,max_waiting,unfinished
 greedy,1,6.6034,0.8622,33,43
 greedy,2,5.4432,0.84,26,48
 greedy,3,5.4,0.7156,24,36
@@ -157,7 +157,7 @@ nearly_full,10,6.1282,0.8667,35,35
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for four versions of a queue with mean service times 0.80, 0.78, 0.75, and 0.70 minute, with 10 independent days each. Use it for one-way analysis of variance, all-pairs comparisons, and picking the best design.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,3.2203
 A,2,2.9911
@@ -208,7 +208,7 @@ D,10,2.3796
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,10.3814
 A,2,7.1211
@@ -308,9 +308,9 @@ F,15,0.8066
     file: "four_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs. Use it with the replications declared paired across designs on the Several Systems page: the replication effect the designs share comes out as a block, and the differences become paired intervals.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null},
-    text: `design,replication,avg_wait
+    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs, and so the file's block column names the day. Several Systems opens the four designs paired across designs: the day effect they share comes out as a block, and the differences become paired intervals.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null,"blocks":true},
+    text: `design,block,avg_wait
 A,1,2.2815
 A,2,3.1706
 A,3,4.5721
@@ -360,7 +360,7 @@ D,10,1.4099
     kind: "tally",
     format: "minus1",
     description: "Waiting times of the first 300 customers in each of 10 runs of a busy single-server queue (utilization 0.9) that starts empty, listed with each customer's arrival time and ended by a −1 row. Use it to find where the averaged waits stop climbing, and so choose how much of each run to delete as warm-up.",
-    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"Transient waits","endTime":null},
+    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"Transient waits","endTime":null,"blocks":false},
     text: `2.359 0
 2.9669 2.0143
 3.8883 2.0791
@@ -3380,7 +3380,7 @@ D,10,1.4099
     kind: "tally",
     format: "columns",
     description: "The waiting times of 5000 consecutive customers in one long run of a single-server queue at utilization 0.8, with each customer's arrival time. Use it to split the run into batches, check that the batch means are nearly uncorrelated, and form an interval for the long-run mean wait.",
-    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"One long run","endTime":null},
+    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"One long run","endTime":null,"blocks":false},
     text: `time,wait
 1.7071,0
 2.9225,0
@@ -8391,7 +8391,7 @@ D,10,1.4099
     kind: "time",
     format: "minus1",
     description: "The number of customers waiting in a single-server queue at utilization 0.8, recorded at the moment of every change over 600 minutes, in 5 runs. Use it to see why a time-persistent quantity is averaged with weights equal to how long each value is held.",
-    mapping: {"kind":"time","value":1,"time":0,"rep":null,"scenario":null,"name":"Queue length","endTime":600},
+    mapping: {"kind":"time","value":1,"time":0,"rep":null,"scenario":null,"name":"Queue length","endTime":600,"blocks":false},
     text: `0 0
 4.6459 1
 5.7495 0
@@ -13280,7 +13280,7 @@ D,10,1.4099
     kind: "reps",
     format: "columns",
     description: "The fraction of each 8-hour day's customers who waited less than 2 minutes, for three versions of a queue with mean service times 0.5, 0.7, and 0.8 minute, with 15 independent days each. A share of customers varies least near 0 or 1, and so the busier designs' service levels spread more widely: Levene's test and the checks lines flag it. Under the logit transform, the spreads even out; the arcsine square root helps less.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Service level","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Service level","endTime":null,"blocks":false},
     text: `design,replication,served_within_2
 A,1,0.9399
 A,2,0.937
@@ -13336,7 +13336,7 @@ C,15,0.5613
     kind: "time",
     format: "columns",
     description: "Whether the server of a single-server queue is busy, recorded at every change over 8-hour days, for three versions with mean service times 0.4, 1.0, and 1.8 minutes and a mean interarrival time of 2 minutes, with 12 independent days each. Each day's utilization, the time-weighted mean of the busy state, is a proportion, but because a day's utilization is its total work divided by its length, its spread grows in step with its level across designs that differ in their service times. Under the log transform the spreads even out; the arcsine square root and the logit, built for shares of counts, do not.",
-    mapping: {"kind":"time","value":3,"time":2,"rep":1,"scenario":0,"name":"Utilization","endTime":480},
+    mapping: {"kind":"time","value":3,"time":2,"rep":1,"scenario":0,"name":"Utilization","endTime":480,"blocks":false},
     text: `design,replication,time,busy
 A,1,0,0
 A,1,1.64,1

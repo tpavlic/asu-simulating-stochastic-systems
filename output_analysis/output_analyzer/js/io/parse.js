@@ -3,10 +3,22 @@
 // building datasets from a mapping. Every row that is not used is reported
 // with its line number and a reason. Pure functions, no DOM.
 
-import { makeDataset } from '../data/model.js';
+import { makeDataset, newId } from '../data/model.js';
+
+/**
+ * A fresh load id, for the datasets one load of a file makes.
+ * @returns {string}
+ */
+export function newLoadId() {
+  return 'load-' + newId();
+}
 
 /** @typedef {{ kind: 'tally'|'time'|'reps'|null, value: number|null, time: number|null,
- *   rep: number|null, scenario: number|null, name: string, endTime: number|null }} Mapping */
+ *   rep: number|null, scenario: number|null, name: string, endTime: number|null,
+ *   blocks?: boolean }} Mapping
+ * `blocks` declares that the replication ids are blocks shared by the file's
+ * scenarios (see the Dataset typedef in data/model.js); it needs a replication
+ * column. */
 /** @typedef {{ line: number, text: string, reason: string }} Issue */
 
 const NUMBER_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -91,7 +103,7 @@ export function parseRows(text) {
 
 const ROLE_NAMES = {
   time: ['time', 't', 'clock', 'sim_time', 'simtime'],
-  rep: ['rep', 'replication', 'run', 'repl'],
+  rep: ['rep', 'replication', 'run', 'repl', 'block'],
   scenario: ['scenario', 'system', 'design', 'config', 'configuration', 'treatment',
     'alternative', 'policy', 'dataset']
 };
@@ -181,9 +193,9 @@ export function sniff(text, opts = {}) {
   /** @type {Mapping} */
   let suggested;
   if (format === 'minus1') {
-    suggested = { kind: null, value: 1, time: 0, rep: null, scenario: null, name, endTime: null };
+    suggested = { kind: null, value: 1, time: 0, rep: null, scenario: null, name, endTime: null, blocks: false };
   } else if (format === 'single') {
-    suggested = { kind: 'reps', value: 0, time: null, rep: null, scenario: null, name, endTime: null };
+    suggested = { kind: 'reps', value: 0, time: null, rep: null, scenario: null, name, endTime: null, blocks: false };
   } else {
     const time = find('time'), rep = find('rep'), scenario = find('scenario');
     const used = [time, rep, scenario];
@@ -191,7 +203,9 @@ export function sniff(text, opts = {}) {
     let kind;
     if (time != null) kind = null;
     else kind = rep != null ? 'tally' : 'reps';
-    suggested = { kind, value: value != null ? value : null, time, rep, scenario, name, endTime: null };
+    // A replication column headed "block" declares its ids blocks.
+    const blocks = rep != null && lower[rep] === 'block';
+    suggested = { kind, value: value != null ? value : null, time, rep, scenario, name, endTime: null, blocks };
   }
 
   return {
@@ -228,12 +242,16 @@ function cellKey(row, j) {
  * 'minus1' format, or one replication when neither applies, except that a
  * 'reps' dataset without a replication column takes each row as its own
  * replication. Each dataset's issues are the sniff issues plus the issues
- * raised while building it.
+ * raised while building it. With a replication column, every dataset carries
+ * one load id (`opts.loadId`, or a fresh one), so that a file loaded in
+ * several calls, one per response, is still one load, and `blocks` as the
+ * mapping declares it.
  * @param {ReturnType<typeof sniff>} sniffed
  * @param {Mapping} mapping
+ * @param {{ loadId?: string }} [opts]
  * @returns {{ datasets: import('../data/model.js').Dataset[], issues: Issue[] }}
  */
-export function buildDatasets(sniffed, mapping) {
+export function buildDatasets(sniffed, mapping, opts = {}) {
   const kind = mapping.kind;
   if (kind !== 'tally' && kind !== 'time' && kind !== 'reps') {
     throw new Error('Choose what the values are: observations (tally), a time-persistent state (time), or one value per replication (reps).');
@@ -248,6 +266,7 @@ export function buildDatasets(sniffed, mapping) {
   const response = header ? header[mapping.value] : 'value';
   const baseName = mapping.name != null ? mapping.name : 'data';
   const endTime = mapping.endTime != null ? mapping.endTime : null;
+  const loadId = mapping.rep != null && !minus1 ? (opts.loadId || newLoadId()) : null;
 
   // Group usable rows by scenario, in order of first appearance.
   const groups = new Map();
@@ -353,7 +372,9 @@ export function buildDatasets(sniffed, mapping) {
       reps: built,
       endTime,
       source: { file: baseName, format: sniffed.format, notes },
-      issues: dsIssues
+      issues: dsIssues,
+      loadId,
+      blocks: loadId != null && !!mapping.blocks
     }));
   }
 

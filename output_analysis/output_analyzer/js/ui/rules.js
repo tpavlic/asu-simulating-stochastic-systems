@@ -1,7 +1,8 @@
 // Small rules the pages apply, kept apart from the pages so that they can be
 // tested in Node and shared with the regenerate scripts: the ticks a dataset
-// checklist opens with, Two Systems' verdict on the F ratio of the variances,
-// and the labels the figures carry. Pure functions, no DOM.
+// checklist opens with, whether a comparison opens paired, Two Systems'
+// verdict on the F ratio of the variances, and the labels the figures carry.
+// Pure functions, no DOM.
 
 import { transformLabel } from '../stats/transform.js';
 
@@ -18,6 +19,27 @@ export function initialTicks(stored, offered) {
   if (!Array.isArray(stored)) return offered.slice();
   const kept = stored.filter(x => offered.includes(x));
   return kept.length || !stored.length ? kept : offered.slice();
+}
+
+/**
+ * Whether a comparison of these datasets opens paired, with the sentence
+ * that says why. It does exactly when every one of them came from the same
+ * load of one file whose replication column was marked as blocks: block 3
+ * of one file need not be block 3 of another, and so datasets from different
+ * files open independent even when each file marked its blocks. The reader
+ * can still choose Paired for them. `why` is empty when no dataset has
+ * blocks, as there is then nothing to explain.
+ * @param {{ loadId?: string|null, blocks?: boolean }[]} list the datasets compared
+ * @returns {{ paired: boolean, why: string }}
+ */
+export function pairingDefault(list) {
+  const blocked = list.filter(d => d.blocks && d.loadId != null);
+  if (list.length < 2 || !blocked.length) return { paired: false, why: '' };
+  if (blocked.length === list.length && list.every(d => d.loadId === list[0].loadId)) {
+    return { paired: true, why: 'Paired by default: ' + (list.length === 2 ? 'both datasets come' : 'these datasets all come') + ' from one file whose replication column is marked as blocks.' };
+  }
+  return { paired: false, why: 'Independent by default: blocks are matched only among datasets from one file whose replication column is marked as blocks, and ' +
+    (list.length === 2 ? 'these two do' : 'these do') + ' not all come from one such file. Choose Paired if their replications do correspond.' };
 }
 
 /**

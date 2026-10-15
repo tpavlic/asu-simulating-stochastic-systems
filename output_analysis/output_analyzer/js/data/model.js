@@ -10,8 +10,16 @@
  *   endTime: number|null,
  *   source: { file: string, format: string, notes: string[] },
  *   issues: { line: number, text: string, reason: string }[],
- *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null
- * }} Dataset */
+ *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null,
+ *   loadId: string|null,
+ *   blocks: boolean
+ * }} Dataset
+ * `loadId` names the load of one delimited file with a replication column that
+ * the dataset came from, shared by every dataset that load made, and null for
+ * any other source. `blocks` says that the file's replication ids are blocks:
+ * the same id in two datasets of that load is one block (the same subject,
+ * batch, day, or random-number stream), and so a comparison of datasets from
+ * the load is paired by default. Datasets from different loads never are. */
 
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -114,7 +122,9 @@ export function makeDataset(fields = {}) {
       notes: (src.notes || []).slice()
     },
     issues: (fields.issues || []).slice(),
-    derivedFrom: fields.derivedFrom || null
+    derivedFrom: fields.derivedFrom || null,
+    loadId: fields.loadId != null ? fields.loadId : null,
+    blocks: fields.loadId != null && !!fields.blocks
   };
 }
 
@@ -294,7 +304,10 @@ export function truncateDataset(ds, { by, at }) {
     endTime: ds.endTime,
     source: { file: ds.source.file, format: ds.source.format, notes },
     issues: ds.issues,
-    derivedFrom: { id: ds.id, truncate: { by, at } }
+    derivedFrom: { id: ds.id, truncate: { by, at } },
+    // A truncated run keeps its place among its file's blocks.
+    loadId: ds.loadId,
+    blocks: ds.blocks
   });
 }
 

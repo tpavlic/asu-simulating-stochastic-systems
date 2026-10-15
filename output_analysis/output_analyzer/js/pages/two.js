@@ -24,7 +24,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { fRatioVerdict, roleLabels } from '../ui/rules.js';
+import { fRatioVerdict, roleLabels, pairingDefault } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -33,6 +33,9 @@ export const title = 'Two Systems';
 
 let rootEl = null;
 let selA = null, selB = null;
+// 'independent' or 'paired', for the chosen pair of datasets: the reader's
+// choice for that pair where there is one, and otherwise the default
+// pairingDefault gives, Paired for two datasets of one file marked as blocks.
 let mode = 'independent';
 // 't' for Welch's and the paired t procedures, 'pooled' for the pooled-variance
 // t (offered only for independent replications; under pairing it reads as
@@ -84,7 +87,9 @@ function idsDistinct(ids) {
 }
 
 // The default match rule for two id lists, with the sentence that says why.
-function defaultMatch(idsA, idsB) {
+// Ids declared blocks are matched by id, and never by position.
+function defaultMatch(idsA, idsB, blocked) {
+  if (blocked) return { by: 'id', why: 'Matched by block id by default: the file marks its replication column as blocks, and so each id names a block.' };
   if (!idsDistinct(idsA) || !idsDistinct(idsB)) {
     return { by: 'position', why: 'Matched by position by default: at least one dataset repeats a replication id, and so the ids cannot identify a replication.' };
   }
@@ -118,7 +123,9 @@ function kindWord(ds) {
 }
 
 // The experimental-unit line for the pair, in the shared banner's markup.
-function unitLineTwo(dsA, dsB, nA, nB) {
+// Under pairing, `pairs` gives the matched count and how many replications
+// of each design had no partner.
+function unitLineTwo(dsA, dsB, nA, nB, pairs) {
   const el = document.createElement('p');
   el.className = 'unit-line';
   if (!dsA || !dsB) {
@@ -128,6 +135,12 @@ function unitLineTwo(dsA, dsB, nA, nB) {
     return el;
   }
   const same = kindWord(dsA) === kindWord(dsB);
+  if (pairs) {
+    const left = [[pairs.leftA, 'A'], [pairs.leftB, 'B']].filter(([n]) => n > 0).map(([n, tag]) => intl(n) + ' of ' + tag);
+    el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> n = ' + plural(pairs.n, 'matched pair') + ' of ' +
+      (same ? kindWord(dsA) : 'replication outcomes') + (left.length ? ' (' + left.join(' and ') + ' left out, with no partner)' : '');
+    return el;
+  }
   el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' +
     'R<sub>A</sub> = ' + intl(nA) + (same ? '' : ' ' + kindWord(dsA)) +
     ' and R<sub>B</sub> = ' + intl(nB) + ' ' + kindWord(dsB);
@@ -394,6 +407,23 @@ function chosen() {
   return { a: a && canInfer(a).ok ? a : null, b: b && canInfer(b).ok ? b : null };
 }
 
+// Sets the mode for the chosen pair, the reader's own choice for it or the
+// default, and the note under the switch saying which and why. With no pair
+// chosen, the switch keeps its last setting.
+function pickMode() {
+  const { a, b } = chosen();
+  const note = rootEl.querySelector('#two-mode-note');
+  if (!a || !b || a.id === b.id) { note.textContent = ''; return; }
+  const def = pairingDefault([a, b]);
+  const kept = state.getPick(id, 'mode:' + pairKey());
+  const chosenMode = kept === 'paired' || kept === 'independent' ? kept : null;
+  mode = chosenMode || (def.paired ? 'paired' : 'independent');
+  const defMode = def.paired ? 'paired' : 'independent';
+  note.textContent = chosenMode && chosenMode !== defMode
+    ? (def.why ? (chosenMode === 'paired' ? 'Paired' : 'Independent') + ', as chosen. ' + def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '') : '')
+    : def.why;
+}
+
 function syncControls() {
   rootEl.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   const ep = effProc();
@@ -421,6 +451,7 @@ function schedule() {
 
 function update() {
   if (!rootEl) return;
+  pickMode();
   syncControls();
   showExcluded();
   const res = rootEl.querySelector('#two-results');
@@ -428,7 +459,7 @@ function update() {
   const level = state.settings.level;
   const { a: dsA, b: dsB } = chosen();
   let eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
-  res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
+  const unitEl = res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
   const tf = isTransform(state.settings.transform) ? state.settings.transform : 'none';
   tfNow = tf;
   const tfBox = rootEl.querySelector('#two-tf-note');
@@ -456,13 +487,17 @@ function update() {
   const kept = ready ? state.getPick(id, 'match:' + pairKey()) : null;
   matchChoice = kept === 'id' || kept === 'position' ? kept : null;
   if (ready) {
-    const def = defaultMatch(eA.ids, eB.ids);
+    const def = defaultMatch(eA.ids, eB.ids, pairingDefault([dsA, dsB]).paired);
     match = { by: matchChoice || def.by, why: matchChoice && matchChoice !== def.by
       ? 'Matched by ' + (matchChoice === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why };
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
+  if (ready && mode === 'paired') {
+    const mm = matchPairs(eA.ids, eB.ids, match.by);
+    unitEl.replaceWith(unitLineTwo(dsA, dsB, eA.v.length, eB.v.length, { n: mm.pairs.length, leftA: mm.unmatchedA.length, leftB: mm.unmatchedB.length }));
+  }
 
   // Under a transform, the outcomes the comparison uses must fit its domain:
   // every outcome of both designs, or under pairing only the matched ones,
@@ -489,7 +524,7 @@ function update() {
   const blank = refused
     ? { verdict: 'No comparison while the transform cannot take every outcome; see the note above.', frame: 'No result under this transform' }
     : { verdict: 'No comparison yet: choose two different datasets above.', frame: 'Choose two datasets' };
-  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level, blank);
+  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf, blocked: pairingDefault([dsA, dsB]).paired } : null, level, blank);
   else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level, blank);
   if (refused) planCtx = { msg: 'Planning needs replication outcomes the transform can take.' };
   registerTips(res);
@@ -1061,7 +1096,7 @@ function renderPaired(res, notes, d, level, blank) {
     pairIds = m.pairs.map(([i, j]) => d.match.by === 'id' ? String(d.eA.ids[i]) : String(d.eA.ids[i]) + '/' + String(d.eB.ids[j]));
     if (m.unmatchedA.length) notes.push(notice('warn', plural(m.unmatchedA.length, 'replication') + ' of A had no partner in B and ' + (m.unmatchedA.length === 1 ? 'was' : 'were') + ' left out: ' + (m.unmatchedA.length === 1 ? 'id ' : 'ids ') + listIds(m.unmatchedA.map(i => d.eA.ids[i])) + '.'));
     if (m.unmatchedB.length) notes.push(notice('warn', plural(m.unmatchedB.length, 'replication') + ' of B had no partner in A and ' + (m.unmatchedB.length === 1 ? 'was' : 'were') + ' left out: ' + (m.unmatchedB.length === 1 ? 'id ' : 'ids ') + listIds(m.unmatchedB.map(j => d.eB.ids[j])) + '.'));
-    if (m.pairs.length < 2) notes.push(notice('warn', 'A paired comparison needs at least two matched pairs, and ' + (m.pairs.length === 1 ? 'only one replication was' : 'no replications were') + ' matched. Try matching by position, or check the replication ids.'));
+    if (m.pairs.length < 2) notes.push(notice('warn', 'A paired comparison needs at least two matched pairs, and ' + (m.pairs.length === 1 ? 'only one replication was' : 'no replications were') + ' matched. ' + (d.blocked ? 'Check the block ids: the same id in both designs names one block.' : 'Try matching by position, or check the replication ids.')));
     else pr = pairedT(x, y, level);
   }
   const np = proc === 'np';
@@ -1195,7 +1230,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with a two-sample t procedure, Welch’s by default or the pooled-variance t when the two designs are taken to share one variance. ' +
-    'Replications run under common random numbers are compared as pairs, and pairing is something you declare with the switch below: the page never infers it from equal numbers of replications.</p>' +
+    'Replications that share a block (common random numbers, or the same subject, batch, or day) are compared as pairs. Pairing is something you declare, never something the page infers from the data: with the switch below, or once for a whole file on the Import page by marking its replication column as blocks, which opens the comparison of two datasets from that file paired.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-a">Design A</label><select id="two-a"></select></span>' +
@@ -1204,11 +1239,12 @@ export function render(root) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-tf">' + TRANSFORM_LABEL + '</label><select id="two-tf"></select></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run on separate random streams. Paired: replication i of A and replication i of B used the same random inputs (common random numbers).">Replications are</span></span>' +
+        '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run separately, on separate random streams or units. Paired: replication i of A and replication i of B share a block, such as the same random inputs (common random numbers), subject, batch, or day.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="two-mode-lbl">' +
           '<button type="button" class="seg-btn" data-mode="independent" aria-pressed="true">Independent</button>' +
           '<button type="button" class="seg-btn" data-mode="paired" aria-pressed="false">Paired</button>' +
         '</span>' +
+        '<span class="ctrl-note row-note" id="two-mode-note"></span>' +
       '</div>' +
       '<div class="ctrl-row" id="two-match-row" style="display:none">' +
         '<span class="ctrl-lbl" id="two-match-lbl">Match by</span>' +
@@ -1216,7 +1252,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-match="id" aria-pressed="true">replication id</button>' +
           '<button type="button" class="seg-btn" data-match="position" aria-pressed="false">position</button>' +
         '</span>' +
-        '<span class="ctrl-note" id="two-match-note"></span>' +
+        '<span class="ctrl-note row-note" id="two-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="Pooled t: the two-sample t test that pools the two sample variances into one, on R_A + R_B − 2 degrees of freedom; it assumes the two designs share a variance, which the checks line tests with Levene’s test. Welch’s t: the two-sample t test that keeps the variances apart, on the Welch–Satterthwaite degrees of freedom, safe whether or not they are equal. Paired t: for pairs. All three assume the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
@@ -1273,7 +1309,11 @@ export function render(root) {
 
   selA.addEventListener('change', () => schedule());
   selB.addEventListener('change', () => schedule());
-  root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; state.setPick(id, 'mode', mode); schedule(); }));
+  root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    mode = b.dataset.mode;
+    if (selA.value && selB.value && selA.value !== selB.value) state.setPick(id, 'mode:' + pairKey(), mode);
+    schedule();
+  }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => {
     matchChoice = b.dataset.match;
@@ -1290,7 +1330,7 @@ export function render(root) {
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept
-// per pair: the match rule and the planning targets.
+// per pair: independent or paired, the match rule, and the planning targets.
 function pairKey() { return selA.value + '|' + selB.value; }
 
 // A planning target typed for one pair of datasets, or null.
@@ -1305,7 +1345,6 @@ function storedTarget(name, key) {
 // reload.
 function applyStored() {
   const get = k => state.getPick(id, k);
-  if (get('mode') === 'paired' || get('mode') === 'independent') mode = get('mode');
   if (get('proc') === 't' || get('proc') === 'pooled' || get('proc') === 'np') proc = get('proc');
   if (get('planMode') === 'hw' || get('planMode') === 'power') plan.mode = get('planMode');
   if (PLAN_POWERS.includes(get('power'))) {

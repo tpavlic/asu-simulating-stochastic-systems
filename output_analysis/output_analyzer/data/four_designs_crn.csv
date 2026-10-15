@@ -1,4 +1,4 @@
-design,replication,avg_wait
+design,block,avg_wait
 A,1,2.2815
 A,2,3.1706
 A,3,4.5721

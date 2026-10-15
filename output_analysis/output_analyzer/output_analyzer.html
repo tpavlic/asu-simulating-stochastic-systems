@@ -247,6 +247,10 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* The display rule above would otherwise beat the hidden attribute. */
 .ctrl-pair[hidden] { display: none; }
 .ctrl-note { font-size: .74rem; color: var(--muted); }
+/* A note explaining a switch takes its own line under it, so that a longer
+   or shorter sentence never moves it beside the buttons or back. */
+.ctrl-note.row-note { flex-basis: 100%; margin-top: -4px; }
+.ctrl-note.row-note:empty { display: none; }
 .ref-list { margin: 4px 0 0; padding-left: 20px; font-size: .86rem; line-height: 1.55; }
 .ref-list li + li { margin-top: 7px; }
 .lvl-custom { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -564,6 +568,8 @@ footer a:hover { text-decoration: underline; }
 .im-ds-tab td { vertical-align: middle; }
 .im-ds-tab .im-name { width: 100%; min-width: 18ch; }
 .im-ds-tab td.im-src { font-family: 'Outfit', sans-serif; color: var(--muted); white-space: normal; min-width: 14ch; }
+.im-ds-tab td.im-src .im-blk { display: flex; margin-top: 3px; font-size: .78rem; }
+.im-blocks { margin-top: 6px; }
 /* A file name may break after an underscore or a dot, and the Rejected rows
    heading and link may wrap, which keeps the table, Export column included,
    inside a desktop content column. */
@@ -796,7 +802,7 @@ export const EXAMPLES = [
     kind: "reps",
     format: "columns",
     description: "Twenty independent 8-hour days of a single-server queue with exponential interarrival times (mean 1.0 minute) and service times (mean 0.8 minute), reporting each day's average wait, longest wait, and customers served. Use it to form a confidence interval from replications; the Assign its columns myself button opens the dialog in which the other two columns can be loaded as responses too.",
-    mapping: {"kind":"reps","value":1,"time":null,"rep":0,"scenario":null,"name":"Queue days","endTime":null},
+    mapping: {"kind":"reps","value":1,"time":null,"rep":0,"scenario":null,"name":"Queue days","endTime":null,"blocks":false},
     text: `replication,avg_wait,max_wait,n_served
 1,2.6187,13.2803,487
 2,3.2672,15.4566,498
@@ -827,7 +833,7 @@ export const EXAMPLES = [
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for a queue served at a mean of 0.8 minute (design A) and one served at 0.75 minute (design B), with 15 days each drawn from independent random streams. Use it to compare two systems with a two-sample interval, ignoring any pairing.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, independent","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, independent","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,2.4621
 A,2,3.7378
@@ -867,9 +873,9 @@ B,15,2.3592
     file: "two_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day. Use it to compare the two systems as a paired difference and to see how much narrower the interval becomes.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, paired","endTime":null},
-    text: `design,replication,avg_wait
+    description: "The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day, and so the file's block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, paired","endTime":null,"blocks":true},
+    text: `design,block,avg_wait
 A,1,1.7
 A,2,2.7121
 A,3,2.4175
@@ -908,9 +914,9 @@ B,15,2.8592
     file: "muffin_oven.csv",
     kind: "reps",
     format: "columns",
-    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Use it to compare the policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null},
-    text: `policy,replication,avg_time_in_system,utilization,max_waiting,unfinished
+    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file's block column names, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null,"blocks":true},
+    text: `policy,block,avg_time_in_system,utilization,max_waiting,unfinished
 greedy,1,6.6034,0.8622,33,43
 greedy,2,5.4432,0.84,26,48
 greedy,3,5.4,0.7156,24,36
@@ -940,7 +946,7 @@ nearly_full,10,6.1282,0.8667,35,35
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for four versions of a queue with mean service times 0.80, 0.78, 0.75, and 0.70 minute, with 10 independent days each. Use it for one-way analysis of variance, all-pairs comparisons, and picking the best design.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,3.2203
 A,2,2.9911
@@ -991,7 +997,7 @@ D,10,2.3796
     kind: "reps",
     format: "columns",
     description: "Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,10.3814
 A,2,7.1211
@@ -1091,9 +1097,9 @@ F,15,0.8066
     file: "four_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs. Use it with the replications declared paired across designs on the Several Systems page: the replication effect the designs share comes out as a block, and the differences become paired intervals.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null},
-    text: `design,replication,avg_wait
+    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs, and so the file's block column names the day. Several Systems opens the four designs paired across designs: the day effect they share comes out as a block, and the differences become paired intervals.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null,"blocks":true},
+    text: `design,block,avg_wait
 A,1,2.2815
 A,2,3.1706
 A,3,4.5721
@@ -1143,7 +1149,7 @@ D,10,1.4099
     kind: "tally",
     format: "minus1",
     description: "Waiting times of the first 300 customers in each of 10 runs of a busy single-server queue (utilization 0.9) that starts empty, listed with each customer's arrival time and ended by a −1 row. Use it to find where the averaged waits stop climbing, and so choose how much of each run to delete as warm-up.",
-    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"Transient waits","endTime":null},
+    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"Transient waits","endTime":null,"blocks":false},
     text: `2.359 0
 2.9669 2.0143
 3.8883 2.0791
@@ -4163,7 +4169,7 @@ D,10,1.4099
     kind: "tally",
     format: "columns",
     description: "The waiting times of 5000 consecutive customers in one long run of a single-server queue at utilization 0.8, with each customer's arrival time. Use it to split the run into batches, check that the batch means are nearly uncorrelated, and form an interval for the long-run mean wait.",
-    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"One long run","endTime":null},
+    mapping: {"kind":"tally","value":1,"time":0,"rep":null,"scenario":null,"name":"One long run","endTime":null,"blocks":false},
     text: `time,wait
 1.7071,0
 2.9225,0
@@ -9174,7 +9180,7 @@ D,10,1.4099
     kind: "time",
     format: "minus1",
     description: "The number of customers waiting in a single-server queue at utilization 0.8, recorded at the moment of every change over 600 minutes, in 5 runs. Use it to see why a time-persistent quantity is averaged with weights equal to how long each value is held.",
-    mapping: {"kind":"time","value":1,"time":0,"rep":null,"scenario":null,"name":"Queue length","endTime":600},
+    mapping: {"kind":"time","value":1,"time":0,"rep":null,"scenario":null,"name":"Queue length","endTime":600,"blocks":false},
     text: `0 0
 4.6459 1
 5.7495 0
@@ -14063,7 +14069,7 @@ D,10,1.4099
     kind: "reps",
     format: "columns",
     description: "The fraction of each 8-hour day's customers who waited less than 2 minutes, for three versions of a queue with mean service times 0.5, 0.7, and 0.8 minute, with 15 independent days each. A share of customers varies least near 0 or 1, and so the busier designs' service levels spread more widely: Levene's test and the checks lines flag it. Under the logit transform, the spreads even out; the arcsine square root helps less.",
-    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Service level","endTime":null},
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Service level","endTime":null,"blocks":false},
     text: `design,replication,served_within_2
 A,1,0.9399
 A,2,0.937
@@ -14119,7 +14125,7 @@ C,15,0.5613
     kind: "time",
     format: "columns",
     description: "Whether the server of a single-server queue is busy, recorded at every change over 8-hour days, for three versions with mean service times 0.4, 1.0, and 1.8 minutes and a mean interarrival time of 2 minutes, with 12 independent days each. Each day's utilization, the time-weighted mean of the busy state, is a proportion, but because a day's utilization is its total work divided by its length, its spread grows in step with its level across designs that differ in their service times. Under the log transform the spreads even out; the arcsine square root and the logit, built for shares of counts, do not.",
-    mapping: {"kind":"time","value":3,"time":2,"rep":1,"scenario":0,"name":"Utilization","endTime":480},
+    mapping: {"kind":"time","value":3,"time":2,"rep":1,"scenario":0,"name":"Utilization","endTime":480,"blocks":false},
     text: `design,replication,time,busy
 A,1,0,0
 A,1,1.64,1
@@ -22389,8 +22395,16 @@ C,12,479.52,0
  *   endTime: number|null,
  *   source: { file: string, format: string, notes: string[] },
  *   issues: { line: number, text: string, reason: string }[],
- *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null
- * }} Dataset */
+ *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null,
+ *   loadId: string|null,
+ *   blocks: boolean
+ * }} Dataset
+ * `loadId` names the load of one delimited file with a replication column that
+ * the dataset came from, shared by every dataset that load made, and null for
+ * any other source. `blocks` says that the file's replication ids are blocks:
+ * the same id in two datasets of that load is one block (the same subject,
+ * batch, day, or random-number stream), and so a comparison of datasets from
+ * the load is paired by default. Datasets from different loads never are. */
 
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -22493,7 +22507,9 @@ export function makeDataset(fields = {}) {
       notes: (src.notes || []).slice()
     },
     issues: (fields.issues || []).slice(),
-    derivedFrom: fields.derivedFrom || null
+    derivedFrom: fields.derivedFrom || null,
+    loadId: fields.loadId != null ? fields.loadId : null,
+    blocks: fields.loadId != null && !!fields.blocks
   };
 }
 
@@ -22673,7 +22689,10 @@ export function truncateDataset(ds, { by, at }) {
     endTime: ds.endTime,
     source: { file: ds.source.file, format: ds.source.format, notes },
     issues: ds.issues,
-    derivedFrom: { id: ds.id, truncate: { by, at } }
+    derivedFrom: { id: ds.id, truncate: { by, at } },
+    // A truncated run keeps its place among its file's blocks.
+    loadId: ds.loadId,
+    blocks: ds.blocks
   });
 }
 
@@ -28730,10 +28749,22 @@ function wrapComment(c, text) {
 // building datasets from a mapping. Every row that is not used is reported
 // with its line number and a reason. Pure functions, no DOM.
 
-import { makeDataset } from '../data/model.js';
+import { makeDataset, newId } from '../data/model.js';
+
+/**
+ * A fresh load id, for the datasets one load of a file makes.
+ * @returns {string}
+ */
+export function newLoadId() {
+  return 'load-' + newId();
+}
 
 /** @typedef {{ kind: 'tally'|'time'|'reps'|null, value: number|null, time: number|null,
- *   rep: number|null, scenario: number|null, name: string, endTime: number|null }} Mapping */
+ *   rep: number|null, scenario: number|null, name: string, endTime: number|null,
+ *   blocks?: boolean }} Mapping
+ * `blocks` declares that the replication ids are blocks shared by the file's
+ * scenarios (see the Dataset typedef in data/model.js); it needs a replication
+ * column. */
 /** @typedef {{ line: number, text: string, reason: string }} Issue */
 
 const NUMBER_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -28818,7 +28849,7 @@ export function parseRows(text) {
 
 const ROLE_NAMES = {
   time: ['time', 't', 'clock', 'sim_time', 'simtime'],
-  rep: ['rep', 'replication', 'run', 'repl'],
+  rep: ['rep', 'replication', 'run', 'repl', 'block'],
   scenario: ['scenario', 'system', 'design', 'config', 'configuration', 'treatment',
     'alternative', 'policy', 'dataset']
 };
@@ -28908,9 +28939,9 @@ export function sniff(text, opts = {}) {
   /** @type {Mapping} */
   let suggested;
   if (format === 'minus1') {
-    suggested = { kind: null, value: 1, time: 0, rep: null, scenario: null, name, endTime: null };
+    suggested = { kind: null, value: 1, time: 0, rep: null, scenario: null, name, endTime: null, blocks: false };
   } else if (format === 'single') {
-    suggested = { kind: 'reps', value: 0, time: null, rep: null, scenario: null, name, endTime: null };
+    suggested = { kind: 'reps', value: 0, time: null, rep: null, scenario: null, name, endTime: null, blocks: false };
   } else {
     const time = find('time'), rep = find('rep'), scenario = find('scenario');
     const used = [time, rep, scenario];
@@ -28918,7 +28949,9 @@ export function sniff(text, opts = {}) {
     let kind;
     if (time != null) kind = null;
     else kind = rep != null ? 'tally' : 'reps';
-    suggested = { kind, value: value != null ? value : null, time, rep, scenario, name, endTime: null };
+    // A replication column headed "block" declares its ids blocks.
+    const blocks = rep != null && lower[rep] === 'block';
+    suggested = { kind, value: value != null ? value : null, time, rep, scenario, name, endTime: null, blocks };
   }
 
   return {
@@ -28955,12 +28988,16 @@ function cellKey(row, j) {
  * 'minus1' format, or one replication when neither applies, except that a
  * 'reps' dataset without a replication column takes each row as its own
  * replication. Each dataset's issues are the sniff issues plus the issues
- * raised while building it.
+ * raised while building it. With a replication column, every dataset carries
+ * one load id (`opts.loadId`, or a fresh one), so that a file loaded in
+ * several calls, one per response, is still one load, and `blocks` as the
+ * mapping declares it.
  * @param {ReturnType<typeof sniff>} sniffed
  * @param {Mapping} mapping
+ * @param {{ loadId?: string }} [opts]
  * @returns {{ datasets: import('../data/model.js').Dataset[], issues: Issue[] }}
  */
-export function buildDatasets(sniffed, mapping) {
+export function buildDatasets(sniffed, mapping, opts = {}) {
   const kind = mapping.kind;
   if (kind !== 'tally' && kind !== 'time' && kind !== 'reps') {
     throw new Error('Choose what the values are: observations (tally), a time-persistent state (time), or one value per replication (reps).');
@@ -28975,6 +29012,7 @@ export function buildDatasets(sniffed, mapping) {
   const response = header ? header[mapping.value] : 'value';
   const baseName = mapping.name != null ? mapping.name : 'data';
   const endTime = mapping.endTime != null ? mapping.endTime : null;
+  const loadId = mapping.rep != null && !minus1 ? (opts.loadId || newLoadId()) : null;
 
   // Group usable rows by scenario, in order of first appearance.
   const groups = new Map();
@@ -29080,7 +29118,9 @@ export function buildDatasets(sniffed, mapping) {
       reps: built,
       endTime,
       source: { file: baseName, format: sniffed.format, notes },
-      issues: dsIssues
+      issues: dsIssues,
+      loadId,
+      blocks: loadId != null && !!mapping.blocks
     }));
   }
 
@@ -35274,7 +35314,7 @@ export default { id, title, render, onShow };
 // same door.
 
 import * as state from '../state.js';
-import { sniff, buildDatasets } from '../io/parse.js';
+import { sniff, buildDatasets, newLoadId } from '../io/parse.js';
 import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
 import { sameData } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
@@ -35382,7 +35422,7 @@ export function render(root) {
           '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> the same two forms as a tally, with the time column required; the dialog takes an end time until which each replication’s last value holds.</li>' +
           '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> a single column with one value per replication; or columns under a header row, each numeric column a response.</li>' +
         '</ul>' +
-        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
+        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design, and a replication column headed <code>block</code> marks its ids as blocks those designs share, so that a comparison of them opens paired. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
       '</div>' +
       '<div class="im-block">' +
         '<div class="ctrl-grp-lbl">From a file</div>' +
@@ -35575,7 +35615,7 @@ function nextPending() {
     delimiter: delimiterOf(it.text),
     mapping: {
       kind, value: s.value, time: s.time, rep: s.rep, scenario: s.scenario,
-      name, endTime: null
+      name, endTime: null, blocks: !!s.blocks
     },
     endText: it.endTime != null ? String(it.endTime) : '',
     wide: false,
@@ -35631,6 +35671,10 @@ function addNew(list) {
   return { added, skipped };
 }
 
+// What marking the replication ids as blocks declares, for the dialog's box
+// and the one on each loaded dataset's row.
+const BLOCKS_TIP = 'Mark this when replication i of every scenario in the file shares something that pairs them: the same random inputs (common random numbers), subject, batch, or day. Two Systems and Several Systems then open a comparison of this file’s datasets paired, matched by id; datasets from different files open independent. A replication column headed block is marked when the file loads.';
+
 // ── The mapping dialog ──────────────────────────────────────────────────
 
 // The columns the response checklist offers: the numeric columns not used as
@@ -35682,12 +35726,14 @@ function trialBuild() {
   if (sn.format === 'minus1') { base.rep = null; base.scenario = null; }
   if (sn.format === 'single') { base.time = null; base.rep = null; base.scenario = null; }
   const cols = pending.wide ? Array.from(pending.wideCols).sort((a, b) => a - b) : [base.value];
+  // One load, even when each response column is built on its own.
+  const loadId = newLoadId();
   const datasets = [];
   const issues = [];
   const seen = new Set();
   for (const j of cols) {
     const mm = Object.assign({}, base, { value: j, name: pending.wide ? base.name + ' · ' + colName(sn, j) : base.name });
-    const res = buildDatasets(sn, mm);
+    const res = buildDatasets(sn, mm, { loadId });
     for (const ds of res.datasets) { ds.source.file = pending.fileName; datasets.push(ds); }
     for (const it of res.issues) {
       const key = it.line + '|' + it.reason;
@@ -35757,6 +35803,10 @@ function renderDialog() {
     html += roleSelect('im-scen', 'Scenario column', allCols, m.scenario, true, 'The column naming the design or scenario. Each distinct value becomes its own dataset.');
   }
   html += '</div>';
+  if (sn.format === 'columns') {
+    html += '<label class="ctrl-chk im-blocks"><input type="checkbox" id="im-blocks"' + (m.blocks ? ' checked' : '') + '> ' +
+      '<span class="tip" tabindex="0" data-tip="' + esc(BLOCKS_TIP) + '">The replication ids are blocks: one id in different scenarios is one block</span></label>';
+  }
   if (sn.format === 'minus1') html += '<p class="ctrl-note im-gap-b">The rows whose first value is −1 mark where each replication ends.</p>';
   if (showWide) {
     html += '<label class="ctrl-chk"><input type="checkbox" id="im-wide"' + (pending.wide ? ' checked' : '') + '> Load every numeric column as its own dataset</label>' +
@@ -35798,6 +35848,7 @@ function renderDialog() {
   });
   if (q('#im-rep')) q('#im-rep').addEventListener('change', e => { m.rep = intOrNull(e.target.value); refreshWide(); updateDialog(); });
   if (q('#im-scen')) q('#im-scen').addEventListener('change', e => { m.scenario = intOrNull(e.target.value); refreshWide(); updateDialog(); });
+  if (q('#im-blocks')) q('#im-blocks').addEventListener('change', e => { m.blocks = e.target.checked; updateDialog(); });
   if (q('#im-wide')) q('#im-wide').addEventListener('change', e => {
     pending.wide = e.target.checked;
     if (pending.wide && !pending.wideCols) pending.wideCols = new Set(wideCandidates());
@@ -35865,6 +35916,9 @@ function updateDialog() {
   sec.querySelector('#im-end-wrap').hidden = m.kind !== 'time';
   const end = sec.querySelector('#im-end');
   end.setAttribute('aria-invalid', String(m.kind === 'time' && endTimeValue() === undefined));
+  // Blocks are named by a replication column, and so the box waits for one.
+  const blk = sec.querySelector('#im-blocks');
+  if (blk) { blk.disabled = m.rep == null; blk.checked = !!m.blocks && m.rep != null; }
 
   const problem = mappingProblem();
   const accept = sec.querySelector('#im-accept');
@@ -35887,7 +35941,8 @@ function updateDialog() {
         const parts = res.datasets.slice(0, 6).map(ds => ds.name + ' (R = ' + intl(ds.reps.length) + ')');
         if (res.datasets.length > 6) parts.push('and ' + intl(res.datasets.length - 6) + ' more');
         const what = { tally: 'tally observations', time: 'a time-persistent state', reps: 'one value per replication' }[m.kind];
-        prevEl.textContent = 'Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + what + ': ' + parts.join(', ') + '.';
+        prevEl.textContent = 'Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + what + ': ' + parts.join(', ') + '.' +
+          (res.datasets.some(ds => ds.blocks) && res.datasets.length > 1 ? ' Their replication ids are blocks, and so Two and Several Systems open a comparison of them paired.' : '');
       }
     } catch (err) {
       ok = false;
@@ -36018,6 +36073,25 @@ function renderList() {
     };
     inp.addEventListener('change', () => setTimeout(commit, 0));
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+    // A file loaded with a replication column can have its ids declared
+    // blocks, or not, after loading; the box sets every dataset of that load.
+    if (ds.loadId != null && list.filter(d => d.loadId === ds.loadId).length > 1) {
+      const lab = document.createElement('label');
+      lab.className = 'ctrl-chk im-blk';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = ds.blocks;
+      cb.dataset.focus = 'blk:' + ds.id;
+      cb.setAttribute('aria-label', 'Replication ids of ' + ds.name + ' are blocks shared with the other datasets of its file');
+      cb.addEventListener('change', () => state.setBlocks(ds.loadId, cb.checked));
+      const span = document.createElement('span');
+      span.className = 'tip';
+      span.tabIndex = 0;
+      span.dataset.tip = BLOCKS_TIP;
+      span.textContent = 'ids are blocks';
+      lab.appendChild(cb); lab.appendChild(span);
+      tr.querySelector('.im-src').appendChild(lab);
+    }
     const rej = tr.querySelector('.im-rej');
     if (nIss || nNotes) {
       const b = document.createElement('button');
@@ -37344,7 +37418,7 @@ import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui
 import { currentSection } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
-import { shortNames } from '../ui/rules.js';
+import { shortNames, pairingDefault } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'several';
@@ -37388,8 +37462,11 @@ let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
 const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
-// 'independent' or 'paired': whether replication i of every design shared its
-// random inputs (common random numbers across designs), making it a block.
+// 'independent' or 'paired': whether replication i of every design shares a
+// block (common random numbers across designs, or the same subject, batch, or
+// day), for the checked set of designs: the reader's choice for that set where
+// there is one, and otherwise the default pairingDefault gives, Paired for
+// designs that all come from one file marked as blocks.
 let pairMode = 'independent';
 // The reader's own choice of how blocks are matched, or null for the default.
 let matchChoice = null;
@@ -37479,8 +37556,10 @@ function idsArePositions(ids) { return ids.every((v, i) => String(v) === String(
 
 // How the blocks are matched by default: by replication id when every
 // design carries distinct ids and most of them appear in every design, and
-// by position otherwise, with the reason.
-function defaultMatchK(idsList) {
+// by position otherwise, with the reason. Ids declared blocks are matched by
+// id, and never by position.
+function defaultMatchK(idsList, blocked) {
+  if (blocked) return { by: 'id', why: 'Matched by block id by default: the file marks its replication column as blocks, and so each id names a block.' };
   if (!idsList.every(idsDistinct)) {
     return { by: 'position', why: 'Matched by position by default: at least one design repeats a replication id, and so the ids cannot identify a replication.' };
   }
@@ -37954,9 +38033,29 @@ function schedule() {
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
+// The checked designs as one key, their ids sorted, for the choice of
+// independent or paired kept per set.
+const setKey = list => list.map(d => d.id).sort().join('|');
+
+// Sets the pairing for the checked designs, the reader's own choice for that
+// set or the default, and the note under the switch saying which and why.
+function pickPairing(list) {
+  const note = rootEl.querySelector('#sev-pair-mode-note');
+  if (list.length < 2) { note.textContent = ''; return; }
+  const def = pairingDefault(list);
+  const kept = state.getPick(id, 'pairing:' + setKey(list));
+  const chosen = kept === 'paired' || kept === 'independent' ? kept : null;
+  const defMode = def.paired ? 'paired' : 'independent';
+  pairMode = chosen || defMode;
+  note.textContent = chosen && chosen !== defMode
+    ? (def.why ? (chosen === 'paired' ? 'Paired' : 'Independent') + ', as chosen. ' + def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '') : '')
+    : def.why;
+}
+
 function update() {
   if (!rootEl) return;
   const list = checkedList();
+  pickPairing(list);
   let groups = list.map(finiteOf);
   // The outcomes as the data give them, which the regenerate scripts embed,
   // and under a transform the transformed ones every procedure runs on.
@@ -37984,7 +38083,8 @@ function update() {
   pairNote.innerHTML = '';
   if (paired && list.length >= 2) {
     const ids = list.map(finiteIds);
-    const def = defaultMatchK(ids);
+    const blocked = pairingDefault(list).paired;
+    const def = defaultMatchK(ids, blocked);
     const by = matchChoice || def.by;
     match = Object.assign(matchBlocks(ids, by), { by, why: matchChoice && matchChoice !== def.by
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
@@ -37995,7 +38095,7 @@ function update() {
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
-    if (match.blocks.length < 2) pairNote.appendChild(notice('warn', 'A paired comparison needs at least two replications matched across every design, and ' + (match.blocks.length === 1 ? 'only one was' : 'none were') + '. Try matching by position, or check the replication ids.'));
+    if (match.blocks.length < 2) pairNote.appendChild(notice('warn', 'A paired comparison needs at least two replications matched across every design, and ' + (match.blocks.length === 1 ? 'only one was' : 'none were') + '. ' + (blocked ? 'Check the block ids: the same id in every design names one block.' : 'Try matching by position, or check the replication ids.')));
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#sev-match-note').textContent = match ? match.why : '';
@@ -38034,9 +38134,10 @@ function update() {
     return;
   }
   const ns = groups.map(g => g.length);
+  const leftOut = match ? match.unmatched.reduce((t, u) => t + u.length, 0) : 0;
   const kw = list.every(d => d.kind === 'reps') ? 'replication values' : list.every(d => d.kind === 'time') ? 'replication time averages' : 'replication outcomes';
   unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (paired
-    ? 'R = ' + intl(ns[0]) + ' ' + kw + ' paired across the ' + k + ' designs (common random numbers)'
+    ? 'R = ' + plural(ns[0], 'block') + ' of ' + kw + ' matched across the ' + k + ' designs' + (leftOut ? ' (' + plural(leftOut, 'replication') + ' left out, with no partner in every design)' : '')
     : ns.every(n => n === ns[0])
       ? 'R = ' + intl(ns[0]) + ' ' + kw + ' for each of the ' + k + ' designs'
       : 'R = ' + ns.map(intl).join(', ') + ' ' + kw + ' for ' + esc(short.join(', ')) + ', in that order');
@@ -38644,7 +38745,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two or more designs at once on their replication outcomes: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
-    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams unless the switch below says the replications are paired across designs (common random numbers): then the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
+    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run independently unless the switch below says the replications are paired across designs (common random numbers, or a shared subject, batch, or day). It opens paired when every checked design comes from one file whose replication ids are marked as blocks on the Import page. Paired, the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +
       '<div id="sev-list"></div>' +
@@ -38658,11 +38759,12 @@ export function render(root) {
         '</span></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run on its own random streams. Paired: replication i of every design used the same random inputs (common random numbers across designs), and so each replication is a block. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
+        '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run separately, on its own random streams or units. Paired: replication i of every design shares a block, such as the same random inputs (common random numbers across designs), subject, batch, or day. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-pair-lbl">' +
           '<button type="button" class="seg-btn" data-pair="independent" aria-pressed="true">Independent</button>' +
           '<button type="button" class="seg-btn" data-pair="paired" aria-pressed="false">Paired across designs</button>' +
         '</span>' +
+        '<span class="ctrl-note row-note" id="sev-pair-mode-note"></span>' +
       '</div>' +
       '<div class="ctrl-row" id="sev-match-row" style="display:none">' +
         '<span class="ctrl-lbl" id="sev-match-lbl">Match by</span>' +
@@ -38670,7 +38772,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-match="id" aria-pressed="true">replication id</button>' +
           '<button type="button" class="seg-btn" data-match="position" aria-pressed="false">position</button>' +
         '</span>' +
-        '<span class="ctrl-note" id="sev-match-note"></span>' +
+        '<span class="ctrl-note row-note" id="sev-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="sev-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: intervals on means by the t distribution, the analysis of variance, and its post-hoc rules, all assuming normal replication outcomes. Nonparametric: the same sub-items by ranks, with Wilcoxon intervals on pseudo-medians and shifts, Kruskal–Wallis or Friedman in place of the analysis of variance, and Dunn’s or Friedman’s pairwise comparisons in place of the post-hoc rules; they need no normality and keep their level under heavy tails. The screen for the best has no rank version and is shown unchanged.">Procedure</span></span>' +
@@ -38780,7 +38882,12 @@ export function render(root) {
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
-  root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => { pairMode = b.dataset.pair; state.setPick(id, 'pairing', pairMode); schedule(); }));
+  root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => {
+    pairMode = b.dataset.pair;
+    const list = checkedList();
+    if (list.length >= 2) state.setPick(id, 'pairing:' + setKey(list), pairMode);
+    schedule();
+  }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
@@ -38824,7 +38931,6 @@ function applyStored() {
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
-  if (get('pairing') === 'independent' || get('pairing') === 'paired') pairMode = get('pairing');
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
@@ -40355,7 +40461,7 @@ import { twoRecipe } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { fRatioVerdict, roleLabels } from '../ui/rules.js';
+import { fRatioVerdict, roleLabels, pairingDefault } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'two';
@@ -40364,6 +40470,9 @@ export const title = 'Two Systems';
 
 let rootEl = null;
 let selA = null, selB = null;
+// 'independent' or 'paired', for the chosen pair of datasets: the reader's
+// choice for that pair where there is one, and otherwise the default
+// pairingDefault gives, Paired for two datasets of one file marked as blocks.
 let mode = 'independent';
 // 't' for Welch's and the paired t procedures, 'pooled' for the pooled-variance
 // t (offered only for independent replications; under pairing it reads as
@@ -40415,7 +40524,9 @@ function idsDistinct(ids) {
 }
 
 // The default match rule for two id lists, with the sentence that says why.
-function defaultMatch(idsA, idsB) {
+// Ids declared blocks are matched by id, and never by position.
+function defaultMatch(idsA, idsB, blocked) {
+  if (blocked) return { by: 'id', why: 'Matched by block id by default: the file marks its replication column as blocks, and so each id names a block.' };
   if (!idsDistinct(idsA) || !idsDistinct(idsB)) {
     return { by: 'position', why: 'Matched by position by default: at least one dataset repeats a replication id, and so the ids cannot identify a replication.' };
   }
@@ -40449,7 +40560,9 @@ function kindWord(ds) {
 }
 
 // The experimental-unit line for the pair, in the shared banner's markup.
-function unitLineTwo(dsA, dsB, nA, nB) {
+// Under pairing, `pairs` gives the matched count and how many replications
+// of each design had no partner.
+function unitLineTwo(dsA, dsB, nA, nB, pairs) {
   const el = document.createElement('p');
   el.className = 'unit-line';
   if (!dsA || !dsB) {
@@ -40459,6 +40572,12 @@ function unitLineTwo(dsA, dsB, nA, nB) {
     return el;
   }
   const same = kindWord(dsA) === kindWord(dsB);
+  if (pairs) {
+    const left = [[pairs.leftA, 'A'], [pairs.leftB, 'B']].filter(([n]) => n > 0).map(([n, tag]) => intl(n) + ' of ' + tag);
+    el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> n = ' + plural(pairs.n, 'matched pair') + ' of ' +
+      (same ? kindWord(dsA) : 'replication outcomes') + (left.length ? ' (' + left.join(' and ') + ' left out, with no partner)' : '');
+    return el;
+  }
   el.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' +
     'R<sub>A</sub> = ' + intl(nA) + (same ? '' : ' ' + kindWord(dsA)) +
     ' and R<sub>B</sub> = ' + intl(nB) + ' ' + kindWord(dsB);
@@ -40725,6 +40844,23 @@ function chosen() {
   return { a: a && canInfer(a).ok ? a : null, b: b && canInfer(b).ok ? b : null };
 }
 
+// Sets the mode for the chosen pair, the reader's own choice for it or the
+// default, and the note under the switch saying which and why. With no pair
+// chosen, the switch keeps its last setting.
+function pickMode() {
+  const { a, b } = chosen();
+  const note = rootEl.querySelector('#two-mode-note');
+  if (!a || !b || a.id === b.id) { note.textContent = ''; return; }
+  const def = pairingDefault([a, b]);
+  const kept = state.getPick(id, 'mode:' + pairKey());
+  const chosenMode = kept === 'paired' || kept === 'independent' ? kept : null;
+  mode = chosenMode || (def.paired ? 'paired' : 'independent');
+  const defMode = def.paired ? 'paired' : 'independent';
+  note.textContent = chosenMode && chosenMode !== defMode
+    ? (def.why ? (chosenMode === 'paired' ? 'Paired' : 'Independent') + ', as chosen. ' + def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '') : '')
+    : def.why;
+}
+
 function syncControls() {
   rootEl.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
   const ep = effProc();
@@ -40752,6 +40888,7 @@ function schedule() {
 
 function update() {
   if (!rootEl) return;
+  pickMode();
   syncControls();
   showExcluded();
   const res = rootEl.querySelector('#two-results');
@@ -40759,7 +40896,7 @@ function update() {
   const level = state.settings.level;
   const { a: dsA, b: dsB } = chosen();
   let eA = dsA ? estimatesOf(dsA) : null, eB = dsB ? estimatesOf(dsB) : null;
-  res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
+  const unitEl = res.appendChild(unitLineTwo(dsA, dsB, eA ? eA.v.length : 0, eB ? eB.v.length : 0));
   const tf = isTransform(state.settings.transform) ? state.settings.transform : 'none';
   tfNow = tf;
   const tfBox = rootEl.querySelector('#two-tf-note');
@@ -40787,13 +40924,17 @@ function update() {
   const kept = ready ? state.getPick(id, 'match:' + pairKey()) : null;
   matchChoice = kept === 'id' || kept === 'position' ? kept : null;
   if (ready) {
-    const def = defaultMatch(eA.ids, eB.ids);
+    const def = defaultMatch(eA.ids, eB.ids, pairingDefault([dsA, dsB]).paired);
     match = { by: matchChoice || def.by, why: matchChoice && matchChoice !== def.by
       ? 'Matched by ' + (matchChoice === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
       : def.why };
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#two-match-note').textContent = match ? match.why : '';
+  if (ready && mode === 'paired') {
+    const mm = matchPairs(eA.ids, eB.ids, match.by);
+    unitEl.replaceWith(unitLineTwo(dsA, dsB, eA.v.length, eB.v.length, { n: mm.pairs.length, leftA: mm.unmatchedA.length, leftB: mm.unmatchedB.length }));
+  }
 
   // Under a transform, the outcomes the comparison uses must fit its domain:
   // every outcome of both designs, or under pairing only the matched ones,
@@ -40820,7 +40961,7 @@ function update() {
   const blank = refused
     ? { verdict: 'No comparison while the transform cannot take every outcome; see the note above.', frame: 'No result under this transform' }
     : { verdict: 'No comparison yet: choose two different datasets above.', frame: 'Choose two datasets' };
-  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level, blank);
+  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf, blocked: pairingDefault([dsA, dsB]).paired } : null, level, blank);
   else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level, blank);
   if (refused) planCtx = { msg: 'Planning needs replication outcomes the transform can take.' };
   registerTips(res);
@@ -41392,7 +41533,7 @@ function renderPaired(res, notes, d, level, blank) {
     pairIds = m.pairs.map(([i, j]) => d.match.by === 'id' ? String(d.eA.ids[i]) : String(d.eA.ids[i]) + '/' + String(d.eB.ids[j]));
     if (m.unmatchedA.length) notes.push(notice('warn', plural(m.unmatchedA.length, 'replication') + ' of A had no partner in B and ' + (m.unmatchedA.length === 1 ? 'was' : 'were') + ' left out: ' + (m.unmatchedA.length === 1 ? 'id ' : 'ids ') + listIds(m.unmatchedA.map(i => d.eA.ids[i])) + '.'));
     if (m.unmatchedB.length) notes.push(notice('warn', plural(m.unmatchedB.length, 'replication') + ' of B had no partner in A and ' + (m.unmatchedB.length === 1 ? 'was' : 'were') + ' left out: ' + (m.unmatchedB.length === 1 ? 'id ' : 'ids ') + listIds(m.unmatchedB.map(j => d.eB.ids[j])) + '.'));
-    if (m.pairs.length < 2) notes.push(notice('warn', 'A paired comparison needs at least two matched pairs, and ' + (m.pairs.length === 1 ? 'only one replication was' : 'no replications were') + ' matched. Try matching by position, or check the replication ids.'));
+    if (m.pairs.length < 2) notes.push(notice('warn', 'A paired comparison needs at least two matched pairs, and ' + (m.pairs.length === 1 ? 'only one replication was' : 'no replications were') + ' matched. ' + (d.blocked ? 'Check the block ids: the same id in both designs names one block.' : 'Try matching by position, or check the replication ids.')));
     else pr = pairedT(x, y, level);
   }
   const np = proc === 'np';
@@ -41526,7 +41667,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with a two-sample t procedure, Welch’s by default or the pooled-variance t when the two designs are taken to share one variance. ' +
-    'Replications run under common random numbers are compared as pairs, and pairing is something you declare with the switch below: the page never infers it from equal numbers of replications.</p>' +
+    'Replications that share a block (common random numbers, or the same subject, batch, or day) are compared as pairs. Pairing is something you declare, never something the page infers from the data: with the switch below, or once for a whole file on the Import page by marking its replication column as blocks, which opens the comparison of two datasets from that file paired.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-a">Design A</label><select id="two-a"></select></span>' +
@@ -41535,11 +41676,12 @@ export function render(root) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-tf">' + TRANSFORM_LABEL + '</label><select id="two-tf"></select></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run on separate random streams. Paired: replication i of A and replication i of B used the same random inputs (common random numbers).">Replications are</span></span>' +
+        '<span class="ctrl-lbl" id="two-mode-lbl"><span class="tip" tabindex="0" data-tip="Independent: the two designs were run separately, on separate random streams or units. Paired: replication i of A and replication i of B share a block, such as the same random inputs (common random numbers), subject, batch, or day.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="two-mode-lbl">' +
           '<button type="button" class="seg-btn" data-mode="independent" aria-pressed="true">Independent</button>' +
           '<button type="button" class="seg-btn" data-mode="paired" aria-pressed="false">Paired</button>' +
         '</span>' +
+        '<span class="ctrl-note row-note" id="two-mode-note"></span>' +
       '</div>' +
       '<div class="ctrl-row" id="two-match-row" style="display:none">' +
         '<span class="ctrl-lbl" id="two-match-lbl">Match by</span>' +
@@ -41547,7 +41689,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-match="id" aria-pressed="true">replication id</button>' +
           '<button type="button" class="seg-btn" data-match="position" aria-pressed="false">position</button>' +
         '</span>' +
-        '<span class="ctrl-note" id="two-match-note"></span>' +
+        '<span class="ctrl-note row-note" id="two-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="two-proc-lbl"><span class="tip" tabindex="0" data-tip="Pooled t: the two-sample t test that pools the two sample variances into one, on R_A + R_B − 2 degrees of freedom; it assumes the two designs share a variance, which the checks line tests with Levene’s test. Welch’s t: the two-sample t test that keeps the variances apart, on the Welch–Satterthwaite degrees of freedom, safe whether or not they are equal. Paired t: for pairs. All three assume the replication outcomes are normal, which averages nearly always are. Nonparametric: the Wilcoxon rank-sum test (independent) or signed-rank test (paired), with the Hodges–Lehmann estimate and its interval; they need no normality and keep their level under heavy tails, which is where to turn when the Normality section rejects.">Procedure</span></span>' +
@@ -41604,7 +41746,11 @@ export function render(root) {
 
   selA.addEventListener('change', () => schedule());
   selB.addEventListener('change', () => schedule());
-  root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; state.setPick(id, 'mode', mode); schedule(); }));
+  root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    mode = b.dataset.mode;
+    if (selA.value && selB.value && selA.value !== selB.value) state.setPick(id, 'mode:' + pairKey(), mode);
+    schedule();
+  }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => {
     matchChoice = b.dataset.match;
@@ -41621,7 +41767,7 @@ export function render(root) {
 }
 
 // The chosen pair of datasets as one key, "A id|B id", for the settings kept
-// per pair: the match rule and the planning targets.
+// per pair: independent or paired, the match rule, and the planning targets.
 function pairKey() { return selA.value + '|' + selB.value; }
 
 // A planning target typed for one pair of datasets, or null.
@@ -41636,7 +41782,6 @@ function storedTarget(name, key) {
 // reload.
 function applyStored() {
   const get = k => state.getPick(id, k);
-  if (get('mode') === 'paired' || get('mode') === 'independent') mode = get('mode');
   if (get('proc') === 't' || get('proc') === 'pooled' || get('proc') === 'np') proc = get('proc');
   if (get('planMode') === 'hw' || get('planMode') === 'power') plan.mode = get('planMode');
   if (PLAN_POWERS.includes(get('power'))) {
@@ -41761,6 +41906,21 @@ export function rename(id, name) {
   if (!ds) return false;
   ds.name = String(name);
   emit('datasets', { type: 'rename', id });
+  return true;
+}
+
+/**
+ * Declares, or withdraws, that the replication ids of every dataset from one
+ * load are blocks, and emits 'datasets'.
+ * @param {string} loadId
+ * @param {boolean} on
+ * @returns {boolean} whether any dataset carries that load id
+ */
+export function setBlocks(loadId, on) {
+  const hit = datasets.filter(d => d.loadId != null && d.loadId === loadId);
+  if (!hit.length) return false;
+  for (const d of hit) d.blocks = !!on;
+  emit('datasets', { type: 'blocks', loadId });
   return true;
 }
 
@@ -41905,7 +42065,7 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, setBlocks, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
 export default state;
 </script>
 <script type="text/plain" data-module="js/stats/compare.js">
@@ -45672,6 +45832,7 @@ export function dsProvenance(ds, extra) {
   };
   if (ds.kind === 'time') p['end time'] = ds.endTime != null ? ds.endTime : 'none (the last record holds for no time)';
   if (ds.source && ds.source.file) p['source file'] = ds.source.file;
+  if (ds.blocks) p['replication ids'] = 'blocks, shared with the other datasets loaded from ' + (ds.source && ds.source.file ? ds.source.file : 'its file');
   if (ds.derivedFrom) {
     p['derived from'] = derivedName(ds);
     p.truncation = truncationText(ds);
@@ -47759,8 +47920,9 @@ export { esc };
 <script type="text/plain" data-module="js/ui/rules.js">
 // Small rules the pages apply, kept apart from the pages so that they can be
 // tested in Node and shared with the regenerate scripts: the ticks a dataset
-// checklist opens with, Two Systems' verdict on the F ratio of the variances,
-// and the labels the figures carry. Pure functions, no DOM.
+// checklist opens with, whether a comparison opens paired, Two Systems'
+// verdict on the F ratio of the variances, and the labels the figures carry.
+// Pure functions, no DOM.
 
 import { transformLabel } from '../stats/transform.js';
 
@@ -47777,6 +47939,27 @@ export function initialTicks(stored, offered) {
   if (!Array.isArray(stored)) return offered.slice();
   const kept = stored.filter(x => offered.includes(x));
   return kept.length || !stored.length ? kept : offered.slice();
+}
+
+/**
+ * Whether a comparison of these datasets opens paired, with the sentence
+ * that says why. It does exactly when every one of them came from the same
+ * load of one file whose replication column was marked as blocks: block 3
+ * of one file need not be block 3 of another, and so datasets from different
+ * files open independent even when each file marked its blocks. The reader
+ * can still choose Paired for them. `why` is empty when no dataset has
+ * blocks, as there is then nothing to explain.
+ * @param {{ loadId?: string|null, blocks?: boolean }[]} list the datasets compared
+ * @returns {{ paired: boolean, why: string }}
+ */
+export function pairingDefault(list) {
+  const blocked = list.filter(d => d.blocks && d.loadId != null);
+  if (list.length < 2 || !blocked.length) return { paired: false, why: '' };
+  if (blocked.length === list.length && list.every(d => d.loadId === list[0].loadId)) {
+    return { paired: true, why: 'Paired by default: ' + (list.length === 2 ? 'both datasets come' : 'these datasets all come') + ' from one file whose replication column is marked as blocks.' };
+  }
+  return { paired: false, why: 'Independent by default: blocks are matched only among datasets from one file whose replication column is marked as blocks, and ' +
+    (list.length === 2 ? 'these two do' : 'these do') + ' not all come from one such file. Choose Paired if their replications do correspond.' };
 }
 
 /**
@@ -47913,6 +48096,8 @@ function serializeDataset(ds) {
     source: ds.source,
     issues: ds.issues,
     derivedFrom: ds.derivedFrom,
+    loadId: ds.loadId,
+    blocks: ds.blocks,
     reps: ds.reps.map(r => ({ id: r.id, t: plainArray(r.t), v: plainArray(r.v) }))
   };
 }
@@ -48060,7 +48245,9 @@ function restoreDataset(o) {
       notes: Array.isArray(src.notes) ? src.notes.filter(isStr) : []
     },
     issues,
-    derivedFrom: restoreDerived(o.derivedFrom)
+    derivedFrom: restoreDerived(o.derivedFrom),
+    loadId: isStr(o.loadId) && o.loadId ? o.loadId : null,
+    blocks: o.blocks === true
   });
 }
 

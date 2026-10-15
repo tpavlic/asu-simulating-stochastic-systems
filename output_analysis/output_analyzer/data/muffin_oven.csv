@@ -1,4 +1,4 @@
-policy,replication,avg_time_in_system,utilization,max_waiting,unfinished
+policy,block,avg_time_in_system,utilization,max_waiting,unfinished
 greedy,1,6.6034,0.8622,33,43
 greedy,2,5.4432,0.84,26,48
 greedy,3,5.4,0.7156,24,36

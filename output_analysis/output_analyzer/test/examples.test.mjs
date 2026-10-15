@@ -16,6 +16,7 @@ const { repEstimates } = await import(pathToFileURL(path.join(ROOT, 'js', 'data'
 const { levene } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { pairedT } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { applyTransform } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'transform.js')).href);
+const { pairingDefault } = await import(pathToFileURL(path.join(ROOT, 'js', 'ui', 'rules.js')).href);
 
 test('regenerated files match the committed ones byte for byte', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'examples-'));
@@ -68,8 +69,26 @@ test('the muffin-oven example shows the outputs disagreeing, as its description 
     assert.equal(greedy.length, 10);
     return pairedT(full, greedy, 0.95);
   };
-  assert.deepEqual(sn.header, ['policy', 'replication', 'avg_time_in_system', 'utilization', 'max_waiting', 'unfinished']);
+  assert.deepEqual(sn.header, ['policy', 'block', 'avg_time_in_system', 'utilization', 'max_waiting', 'unfinished']);
   const tis = paired(2), left = paired(5);
   assert.ok(tis.p > 0.2, 'time in system p ' + tis.p);
   assert.ok(left.p < 0.05 && left.meanD < 0, 'unfinished p ' + left.p + ', mean difference ' + left.meanD);
+});
+
+// The examples run on common random numbers name their replication column "block", and so
+// they open paired both when loaded with their own mapping and when the file is read with the
+// mapping the importer suggests (the Assign its columns myself path); the others do not.
+test('the common-random-numbers examples mark their ids as blocks, and only they do', () => {
+  const BLOCKED = ['two-crn', 'muffin-oven', 'four-crn'];
+  for (const ex of EXAMPLES) {
+    const sn = sniff(ex.text, { name: ex.mapping.name });
+    const blocked = BLOCKED.includes(ex.id);
+    assert.equal(!!ex.mapping.blocks, blocked, ex.id + ' mapping');
+    assert.equal(!!sn.suggested.blocks, blocked, ex.id + ' suggested mapping');
+    for (const mapping of [ex.mapping, Object.assign({}, sn.suggested, { kind: ex.mapping.kind, value: ex.mapping.value })]) {
+      const ds = buildDatasets(sn, mapping).datasets;
+      if (ds.length < 2) continue;
+      assert.equal(pairingDefault(ds).paired, blocked, ex.id);
+    }
+  }
 });

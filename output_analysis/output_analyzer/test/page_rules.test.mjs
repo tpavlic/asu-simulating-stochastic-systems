@@ -8,7 +8,7 @@
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames } from '../js/ui/rules.js';
+import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
@@ -91,4 +91,26 @@ test('outcomeAxis and estimateAxis name the transform, and leave the pooled obse
   assert.equal(estimateAxis(tally, 'asin_sqrt'), 'Arcsine square root of replication mean of wait');
   assert.equal(estimateAxis(reps, 'log'), 'Log of cost');
   assert.equal(estimateAxis(reps), 'Cost');
+});
+
+test('pairingDefault: paired only for datasets of one load whose ids are blocks', () => {
+  const d = (loadId, blocks) => ({ loadId, blocks });
+  assert.equal(pairingDefault([d('L1', true), d('L1', true)]).paired, true);
+  assert.match(pairingDefault([d('L1', true), d('L1', true)]).why, /^Paired by default: both datasets come from one file/);
+  assert.equal(pairingDefault([d('L1', true), d('L1', true), d('L1', true)]).paired, true);
+  assert.match(pairingDefault([d('L1', true), d('L1', true), d('L1', true)]).why, /these datasets all come/);
+  // Each file marked its blocks, but block 3 of one file need not be block 3 of the other.
+  const across = pairingDefault([d('L1', true), d('L2', true)]);
+  assert.equal(across.paired, false);
+  assert.match(across.why, /^Independent by default: .*Choose Paired if their replications do correspond\.$/);
+  // One dataset of a blocked load beside one with no blocks.
+  assert.equal(pairingDefault([d('L1', true), d('L1', false)]).paired, false);
+  assert.equal(pairingDefault([d('L1', true), d(null, false)]).paired, false);
+  // Nothing to explain where no dataset has blocks, or where fewer than two are compared.
+  assert.deepEqual(pairingDefault([d('L1', false), d('L1', false)]), { paired: false, why: '' });
+  assert.deepEqual(pairingDefault([d(null, false), d(null, false)]), { paired: false, why: '' });
+  assert.deepEqual(pairingDefault([d('L1', true)]), { paired: false, why: '' });
+  assert.deepEqual(pairingDefault([]), { paired: false, why: '' });
+  // A dataset with no load (from an Arena file, or a session saved earlier) has no blocks.
+  assert.equal(pairingDefault([d(null, true), d(null, true)]).paired, false);
 });

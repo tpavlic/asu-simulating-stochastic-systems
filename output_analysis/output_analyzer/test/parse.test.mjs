@@ -41,7 +41,7 @@ test('sniff: header, comments, blank lines, and CRLF', () => {
   assert.equal(s.format, 'columns');
   assert.deepEqual(s.numericCols, [0, 1]);
   assert.deepEqual(s.issues, []);
-  assert.deepEqual(s.suggested, { kind: 'tally', value: 1, time: null, rep: 0, scenario: null, name: 'out', endTime: null });
+  assert.deepEqual(s.suggested, { kind: 'tally', value: 1, time: null, rep: 0, scenario: null, name: 'out', endTime: null, blocks: false });
   const { datasets } = buildDatasets(s, s.suggested);
   assert.equal(datasets.length, 1);
   assert.equal(datasets[0].response, 'value');
@@ -285,4 +285,31 @@ test('a dataset name with a space and a semicolon survives the round trip', () =
   const text = datasetsObservationsCsv(group);
   assert.match(text, /^"Line 1; shift A",1,3$/m);
   roundTrip(group, 'tally', null);
+});
+
+test('a replication column headed block marks its ids as blocks, shared by one load', () => {
+  const text = 'design,block,y\nA,1,2.5\nA,2,3.5\nB,1,2.0\nB,2,3.0\n';
+  const sn = sniff(text, { name: 'crn' });
+  assert.equal(sn.suggested.rep, 1);
+  assert.equal(sn.suggested.blocks, true);
+  const one = buildDatasets(sn, sn.suggested).datasets;
+  assert.equal(one.length, 2);
+  assert.ok(one.every(ds => ds.blocks && ds.loadId === one[0].loadId && typeof ds.loadId === 'string'));
+  // A second load of the same file is a different load.
+  const two = buildDatasets(sn, sn.suggested).datasets;
+  assert.notEqual(two[0].loadId, one[0].loadId);
+  // A load built in several calls, one per response, is one load when it says so.
+  const shared = buildDatasets(sn, sn.suggested, { loadId: 'load-x' }).datasets;
+  assert.ok(shared.every(ds => ds.loadId === 'load-x'));
+  // Unmarked, the ids keep their load but are not blocks.
+  const plain = buildDatasets(sn, Object.assign({}, sn.suggested, { blocks: false })).datasets;
+  assert.ok(plain.every(ds => !ds.blocks && ds.loadId === plain[0].loadId));
+  // Without a replication column there are no ids to declare, and no load to share.
+  const none = buildDatasets(sn, Object.assign({}, sn.suggested, { rep: null, blocks: true })).datasets;
+  assert.ok(none.every(ds => !ds.blocks && ds.loadId === null));
+  // A replication column under another name is not marked.
+  const rsn = sniff(text.replace('block', 'replication'), { name: 'indep' });
+  assert.equal(rsn.suggested.rep, 1);
+  assert.equal(rsn.suggested.blocks, false);
+  assert.ok(buildDatasets(rsn, rsn.suggested).datasets.every(ds => !ds.blocks));
 });

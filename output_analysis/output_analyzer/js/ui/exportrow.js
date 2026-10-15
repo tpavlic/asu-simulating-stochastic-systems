@@ -85,6 +85,7 @@ export function dsProvenance(ds, extra) {
   };
   if (ds.kind === 'time') p['end time'] = ds.endTime != null ? ds.endTime : 'none (the last record holds for no time)';
   if (ds.source && ds.source.file) p['source file'] = ds.source.file;
+  if (ds.blocks) p['replication ids'] = 'blocks, shared with the other datasets loaded from ' + (ds.source && ds.source.file ? ds.source.file : 'its file');
   if (ds.derivedFrom) {
     p['derived from'] = derivedName(ds);
     p.truncation = truncationText(ds);

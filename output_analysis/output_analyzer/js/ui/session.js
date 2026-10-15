@@ -50,6 +50,8 @@ function serializeDataset(ds) {
     source: ds.source,
     issues: ds.issues,
     derivedFrom: ds.derivedFrom,
+    loadId: ds.loadId,
+    blocks: ds.blocks,
     reps: ds.reps.map(r => ({ id: r.id, t: plainArray(r.t), v: plainArray(r.v) }))
   };
 }
@@ -197,7 +199,9 @@ function restoreDataset(o) {
       notes: Array.isArray(src.notes) ? src.notes.filter(isStr) : []
     },
     issues,
-    derivedFrom: restoreDerived(o.derivedFrom)
+    derivedFrom: restoreDerived(o.derivedFrom),
+    loadId: isStr(o.loadId) && o.loadId ? o.loadId : null,
+    blocks: o.blocks === true
   });
 }
 

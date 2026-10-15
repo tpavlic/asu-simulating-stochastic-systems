@@ -28,7 +28,7 @@ import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui
 import { currentSection } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
-import { shortNames } from '../ui/rules.js';
+import { shortNames, pairingDefault } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'several';
@@ -72,8 +72,11 @@ let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
 const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
-// 'independent' or 'paired': whether replication i of every design shared its
-// random inputs (common random numbers across designs), making it a block.
+// 'independent' or 'paired': whether replication i of every design shares a
+// block (common random numbers across designs, or the same subject, batch, or
+// day), for the checked set of designs: the reader's choice for that set where
+// there is one, and otherwise the default pairingDefault gives, Paired for
+// designs that all come from one file marked as blocks.
 let pairMode = 'independent';
 // The reader's own choice of how blocks are matched, or null for the default.
 let matchChoice = null;
@@ -163,8 +166,10 @@ function idsArePositions(ids) { return ids.every((v, i) => String(v) === String(
 
 // How the blocks are matched by default: by replication id when every
 // design carries distinct ids and most of them appear in every design, and
-// by position otherwise, with the reason.
-function defaultMatchK(idsList) {
+// by position otherwise, with the reason. Ids declared blocks are matched by
+// id, and never by position.
+function defaultMatchK(idsList, blocked) {
+  if (blocked) return { by: 'id', why: 'Matched by block id by default: the file marks its replication column as blocks, and so each id names a block.' };
   if (!idsList.every(idsDistinct)) {
     return { by: 'position', why: 'Matched by position by default: at least one design repeats a replication id, and so the ids cannot identify a replication.' };
   }
@@ -638,9 +643,29 @@ function schedule() {
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
+// The checked designs as one key, their ids sorted, for the choice of
+// independent or paired kept per set.
+const setKey = list => list.map(d => d.id).sort().join('|');
+
+// Sets the pairing for the checked designs, the reader's own choice for that
+// set or the default, and the note under the switch saying which and why.
+function pickPairing(list) {
+  const note = rootEl.querySelector('#sev-pair-mode-note');
+  if (list.length < 2) { note.textContent = ''; return; }
+  const def = pairingDefault(list);
+  const kept = state.getPick(id, 'pairing:' + setKey(list));
+  const chosen = kept === 'paired' || kept === 'independent' ? kept : null;
+  const defMode = def.paired ? 'paired' : 'independent';
+  pairMode = chosen || defMode;
+  note.textContent = chosen && chosen !== defMode
+    ? (def.why ? (chosen === 'paired' ? 'Paired' : 'Independent') + ', as chosen. ' + def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '') : '')
+    : def.why;
+}
+
 function update() {
   if (!rootEl) return;
   const list = checkedList();
+  pickPairing(list);
   let groups = list.map(finiteOf);
   // The outcomes as the data give them, which the regenerate scripts embed,
   // and under a transform the transformed ones every procedure runs on.
@@ -668,7 +693,8 @@ function update() {
   pairNote.innerHTML = '';
   if (paired && list.length >= 2) {
     const ids = list.map(finiteIds);
-    const def = defaultMatchK(ids);
+    const blocked = pairingDefault(list).paired;
+    const def = defaultMatchK(ids, blocked);
     const by = matchChoice || def.by;
     match = Object.assign(matchBlocks(ids, by), { by, why: matchChoice && matchChoice !== def.by
       ? 'Matched by ' + (by === 'id' ? 'replication id' : 'position') + ', as chosen. ' + def.why.replace('by default', 'would be the default')
@@ -679,7 +705,7 @@ function update() {
     const names = shortNames(list);
     const dropped = match.unmatched.map((u, i) => (u.length ? esc(names[i]) + ' (' + u.map(x => String(ids[i][x])).join(', ') + ')' : null)).filter(Boolean);
     if (dropped.length) pairNote.appendChild(notice('warn', 'Replications with no partner in every design are left out: ' + dropped.join('; ') + '.'));
-    if (match.blocks.length < 2) pairNote.appendChild(notice('warn', 'A paired comparison needs at least two replications matched across every design, and ' + (match.blocks.length === 1 ? 'only one was' : 'none were') + '. Try matching by position, or check the replication ids.'));
+    if (match.blocks.length < 2) pairNote.appendChild(notice('warn', 'A paired comparison needs at least two replications matched across every design, and ' + (match.blocks.length === 1 ? 'only one was' : 'none were') + '. ' + (blocked ? 'Check the block ids: the same id in every design names one block.' : 'Try matching by position, or check the replication ids.')));
   }
   rootEl.querySelectorAll('[data-match]').forEach(b => b.setAttribute('aria-pressed', String(match ? b.dataset.match === match.by : b.dataset.match === 'id')));
   rootEl.querySelector('#sev-match-note').textContent = match ? match.why : '';
@@ -718,9 +744,10 @@ function update() {
     return;
   }
   const ns = groups.map(g => g.length);
+  const leftOut = match ? match.unmatched.reduce((t, u) => t + u.length, 0) : 0;
   const kw = list.every(d => d.kind === 'reps') ? 'replication values' : list.every(d => d.kind === 'time') ? 'replication time averages' : 'replication outcomes';
   unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (paired
-    ? 'R = ' + intl(ns[0]) + ' ' + kw + ' paired across the ' + k + ' designs (common random numbers)'
+    ? 'R = ' + plural(ns[0], 'block') + ' of ' + kw + ' matched across the ' + k + ' designs' + (leftOut ? ' (' + plural(leftOut, 'replication') + ' left out, with no partner in every design)' : '')
     : ns.every(n => n === ns[0])
       ? 'R = ' + intl(ns[0]) + ' ' + kw + ' for each of the ' + k + ' designs'
       : 'R = ' + ns.map(intl).join(', ') + ' ' + kw + ' for ' + esc(short.join(', ')) + ', in that order');
@@ -1328,7 +1355,7 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two or more designs at once on their replication outcomes: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
-    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run on independent random streams unless the switch below says the replications are paired across designs (common random numbers): then the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
+    'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run independently unless the switch below says the replications are paired across designs (common random numbers, or a shared subject, batch, or day). It opens paired when every checked design comes from one file whose replication ids are marked as blocks on the Import page. Paired, the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +
       '<div id="sev-list"></div>' +
@@ -1342,11 +1369,12 @@ export function render(root) {
         '</span></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run on its own random streams. Paired: replication i of every design used the same random inputs (common random numbers across designs), and so each replication is a block. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
+        '<span class="ctrl-lbl" id="sev-pair-lbl"><span class="tip" tabindex="0" data-tip="Independent: each design was run separately, on its own random streams or units. Paired: replication i of every design shares a block, such as the same random inputs (common random numbers across designs), subject, batch, or day. The differences then become paired t intervals, the analysis of variance removes the replication effect before judging the designs, and Friedman’s test replaces Kruskal–Wallis. The screen for the best works either way.">Replications are</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-pair-lbl">' +
           '<button type="button" class="seg-btn" data-pair="independent" aria-pressed="true">Independent</button>' +
           '<button type="button" class="seg-btn" data-pair="paired" aria-pressed="false">Paired across designs</button>' +
         '</span>' +
+        '<span class="ctrl-note row-note" id="sev-pair-mode-note"></span>' +
       '</div>' +
       '<div class="ctrl-row" id="sev-match-row" style="display:none">' +
         '<span class="ctrl-lbl" id="sev-match-lbl">Match by</span>' +
@@ -1354,7 +1382,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-match="id" aria-pressed="true">replication id</button>' +
           '<button type="button" class="seg-btn" data-match="position" aria-pressed="false">position</button>' +
         '</span>' +
-        '<span class="ctrl-note" id="sev-match-note"></span>' +
+        '<span class="ctrl-note row-note" id="sev-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-lbl" id="sev-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: intervals on means by the t distribution, the analysis of variance, and its post-hoc rules, all assuming normal replication outcomes. Nonparametric: the same sub-items by ranks, with Wilcoxon intervals on pseudo-medians and shifts, Kruskal–Wallis or Friedman in place of the analysis of variance, and Dunn’s or Friedman’s pairwise comparisons in place of the post-hoc rules; they need no normality and keep their level under heavy tails. The screen for the best has no rank version and is shown unchanged.">Procedure</span></span>' +
@@ -1464,7 +1492,12 @@ export function render(root) {
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
   root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
-  root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => { pairMode = b.dataset.pair; state.setPick(id, 'pairing', pairMode); schedule(); }));
+  root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => {
+    pairMode = b.dataset.pair;
+    const list = checkedList();
+    if (list.length >= 2) state.setPick(id, 'pairing:' + setKey(list), pairMode);
+    schedule();
+  }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
@@ -1508,7 +1541,6 @@ function applyStored() {
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
-  if (get('pairing') === 'independent' || get('pairing') === 'paired') pairMode = get('pairing');
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');

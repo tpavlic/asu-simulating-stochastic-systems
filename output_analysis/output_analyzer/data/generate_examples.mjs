@@ -23,10 +23,12 @@
 // functions, to produce a different but equally valid family of files):
 //   queue_reps.csv             20 days of 480 minutes, lambda = 1, mean service 0.8 (rho = 0.8)
 //   two_designs_independent.csv  designs A (0.8) and B (0.75), 15 days each, independent streams
-//   two_designs_crn.csv        the same designs with the same streams reused for both
+//   two_designs_crn.csv        the same designs with the same streams reused for both, the day
+//                              in a column headed block, which marks the ids as blocks
 //   four_designs.csv           designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, independent
 //   six_designs.csv            designs A..F (0.90, 0.88, 0.80, 0.75, 0.65, 0.60), 15 days each, independent
-//   four_designs_crn.csv       designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, one stream set reused for all four
+//   four_designs_crn.csv       designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, one stream set reused for all four,
+//                              the day in a column headed block
 //   transient_waits.txt        10 replications of the first 300 waits at rho = 0.9
 //   steady_state_long.csv      one run of 5000 waits at rho = 0.8
 //   queue_length.txt           5 replications of 600 minutes of the number in queue at rho = 0.8
@@ -35,7 +37,8 @@
 //   muffin_oven.csv            a batch oven loaded greedily (threshold 1) or nearly full (threshold
 //                              20) at a bake time of 4 minutes, 10 replications whose demand stream
 //                              is shared by both policies: four outputs per run (average time in
-//                              system, utilization, most muffins waiting, muffins unfinished)
+//                              system, utilization, most muffins waiting, muffins unfinished), the
+//                              stream in a column headed block
 //   utilization.csv            designs A..C (mean service 0.4, 1.0, 1.8 at mean interarrival 2.0),
 //                              12 days of 480 minutes each, independent: whether the server is busy,
 //                              recorded at every change
@@ -221,8 +224,10 @@ function buildQueueReps() {
   return lines.join('\n') + '\n';
 }
 
-function designsCsv(designs, reps) {
-  const lines = ['design,replication,avg_wait'];
+// `idName` heads the replication column: "block" for designs run on common
+// random numbers, which marks the ids as blocks when the file loads.
+function designsCsv(designs, reps, idName = 'replication') {
+  const lines = ['design,' + idName + ',avg_wait'];
   for (const { name, mean, base } of designs) {
     for (let r = 1; r <= reps; r++) {
       lines.push(`${name},${r},${fmt(day(streams(base, r), mean).avg)}`);
@@ -256,7 +261,7 @@ function utilizationCsv(designs, reps) {
 
 /** Two loading policies of the batch oven, each replication's demand stream shared by both. */
 function ovenCsv(policies, bake, reps) {
-  const lines = ['policy,replication,avg_time_in_system,utilization,max_waiting,unfinished'];
+  const lines = ['policy,block,avg_time_in_system,utilization,max_waiting,unfinished'];
   for (const { name, threshold } of policies) {
     for (let r = 1; r <= reps; r++) {
       const u = mulberry32(SEEDS.oven + r);
@@ -296,7 +301,7 @@ function buildQueueLength() {
   return lines.join('\n') + '\n';
 }
 
-const nullMap = { kind: null, value: null, time: null, rep: null, scenario: null, name: null, endTime: null };
+const nullMap = { kind: null, value: null, time: null, rep: null, scenario: null, name: null, endTime: null, blocks: false };
 
 function entries() {
   const A = (name, mean, base) => ({ name, mean, base });
@@ -318,16 +323,16 @@ function entries() {
     {
       id: 'two-crn', title: 'Two designs: common random numbers', file: 'two_designs_crn.csv',
       kind: 'reps', format: 'columns',
-      description: 'The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day. Use it to compare the two systems as a paired difference and to see how much narrower the interval becomes.',
-      text: designsCsv([A('A', 0.8, SEEDS.crn), A('B', 0.75, SEEDS.crn)], 15),
-      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Two designs, paired' }
+      description: 'The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day, and so the file\'s block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.',
+      text: designsCsv([A('A', 0.8, SEEDS.crn), A('B', 0.75, SEEDS.crn)], 15, 'block'),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: 'Two designs, paired' }
     },
     {
       id: 'muffin-oven', title: 'Muffin oven: two loading policies, four outputs', file: 'muffin_oven.csv',
       kind: 'reps', format: 'columns',
-      description: 'An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, and each run reports the average time in system of the muffins that finished, the oven\'s utilization, the most muffins ever waiting, and the muffins unfinished at the end. Use it to compare the policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.',
+      description: 'An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file\'s block column names, and each run reports the average time in system of the muffins that finished, the oven\'s utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.',
       text: ovenCsv([{ name: 'greedy', threshold: 1 }, { name: 'nearly_full', threshold: 20 }], 4, 10),
-      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Muffin oven' }
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: 'Muffin oven' }
     },
     {
       id: 'four-designs', title: 'Four designs: ANOVA and selection', file: 'four_designs.csv',
@@ -346,9 +351,9 @@ function entries() {
     {
       id: 'four-crn', title: 'Four designs: common random numbers', file: 'four_designs_crn.csv',
       kind: 'reps', format: 'columns',
-      description: 'The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs. Use it with the replications declared paired across designs on the Several Systems page: the replication effect the designs share comes out as a block, and the differences become paired intervals.',
-      text: designsCsv([A('A', 0.8, SEEDS.fourCrn), A('B', 0.78, SEEDS.fourCrn), A('C', 0.75, SEEDS.fourCrn), A('D', 0.7, SEEDS.fourCrn)], 10),
-      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Four designs, CRN' }
+      description: 'The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs, and so the file\'s block column names the day. Several Systems opens the four designs paired across designs: the day effect they share comes out as a block, and the differences become paired intervals.',
+      text: designsCsv([A('A', 0.8, SEEDS.fourCrn), A('B', 0.78, SEEDS.fourCrn), A('C', 0.75, SEEDS.fourCrn), A('D', 0.7, SEEDS.fourCrn)], 10, 'block'),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: 'Four designs, CRN' }
     },
     {
       id: 'transient', title: 'Transient waits: warm-up', file: 'transient_waits.txt',

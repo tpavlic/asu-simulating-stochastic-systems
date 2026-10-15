@@ -6,7 +6,7 @@
 // same door.
 
 import * as state from '../state.js';
-import { sniff, buildDatasets } from '../io/parse.js';
+import { sniff, buildDatasets, newLoadId } from '../io/parse.js';
 import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
 import { sameData } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
@@ -114,7 +114,7 @@ export function render(root) {
           '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> the same two forms as a tally, with the time column required; the dialog takes an end time until which each replication’s last value holds.</li>' +
           '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> a single column with one value per replication; or columns under a header row, each numeric column a response.</li>' +
         '</ul>' +
-        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
+        '<p class="ctrl-note">In any of these, a header can name a <code>scenario</code> (or <code>design</code>) column, which splits the rows into one dataset per design, and a replication column headed <code>block</code> marks its ids as blocks those designs share, so that a comparison of them opens paired. Columns may be separated by commas, tabs, semicolons, or spaces, and a line starting with # is a comment.</p>' +
       '</div>' +
       '<div class="im-block">' +
         '<div class="ctrl-grp-lbl">From a file</div>' +
@@ -307,7 +307,7 @@ function nextPending() {
     delimiter: delimiterOf(it.text),
     mapping: {
       kind, value: s.value, time: s.time, rep: s.rep, scenario: s.scenario,
-      name, endTime: null
+      name, endTime: null, blocks: !!s.blocks
     },
     endText: it.endTime != null ? String(it.endTime) : '',
     wide: false,
@@ -363,6 +363,10 @@ function addNew(list) {
   return { added, skipped };
 }
 
+// What marking the replication ids as blocks declares, for the dialog's box
+// and the one on each loaded dataset's row.
+const BLOCKS_TIP = 'Mark this when replication i of every scenario in the file shares something that pairs them: the same random inputs (common random numbers), subject, batch, or day. Two Systems and Several Systems then open a comparison of this file’s datasets paired, matched by id; datasets from different files open independent. A replication column headed block is marked when the file loads.';
+
 // ── The mapping dialog ──────────────────────────────────────────────────
 
 // The columns the response checklist offers: the numeric columns not used as
@@ -414,12 +418,14 @@ function trialBuild() {
   if (sn.format === 'minus1') { base.rep = null; base.scenario = null; }
   if (sn.format === 'single') { base.time = null; base.rep = null; base.scenario = null; }
   const cols = pending.wide ? Array.from(pending.wideCols).sort((a, b) => a - b) : [base.value];
+  // One load, even when each response column is built on its own.
+  const loadId = newLoadId();
   const datasets = [];
   const issues = [];
   const seen = new Set();
   for (const j of cols) {
     const mm = Object.assign({}, base, { value: j, name: pending.wide ? base.name + ' · ' + colName(sn, j) : base.name });
-    const res = buildDatasets(sn, mm);
+    const res = buildDatasets(sn, mm, { loadId });
     for (const ds of res.datasets) { ds.source.file = pending.fileName; datasets.push(ds); }
     for (const it of res.issues) {
       const key = it.line + '|' + it.reason;
@@ -489,6 +495,10 @@ function renderDialog() {
     html += roleSelect('im-scen', 'Scenario column', allCols, m.scenario, true, 'The column naming the design or scenario. Each distinct value becomes its own dataset.');
   }
   html += '</div>';
+  if (sn.format === 'columns') {
+    html += '<label class="ctrl-chk im-blocks"><input type="checkbox" id="im-blocks"' + (m.blocks ? ' checked' : '') + '> ' +
+      '<span class="tip" tabindex="0" data-tip="' + esc(BLOCKS_TIP) + '">The replication ids are blocks: one id in different scenarios is one block</span></label>';
+  }
   if (sn.format === 'minus1') html += '<p class="ctrl-note im-gap-b">The rows whose first value is −1 mark where each replication ends.</p>';
   if (showWide) {
     html += '<label class="ctrl-chk"><input type="checkbox" id="im-wide"' + (pending.wide ? ' checked' : '') + '> Load every numeric column as its own dataset</label>' +
@@ -530,6 +540,7 @@ function renderDialog() {
   });
   if (q('#im-rep')) q('#im-rep').addEventListener('change', e => { m.rep = intOrNull(e.target.value); refreshWide(); updateDialog(); });
   if (q('#im-scen')) q('#im-scen').addEventListener('change', e => { m.scenario = intOrNull(e.target.value); refreshWide(); updateDialog(); });
+  if (q('#im-blocks')) q('#im-blocks').addEventListener('change', e => { m.blocks = e.target.checked; updateDialog(); });
   if (q('#im-wide')) q('#im-wide').addEventListener('change', e => {
     pending.wide = e.target.checked;
     if (pending.wide && !pending.wideCols) pending.wideCols = new Set(wideCandidates());
@@ -597,6 +608,9 @@ function updateDialog() {
   sec.querySelector('#im-end-wrap').hidden = m.kind !== 'time';
   const end = sec.querySelector('#im-end');
   end.setAttribute('aria-invalid', String(m.kind === 'time' && endTimeValue() === undefined));
+  // Blocks are named by a replication column, and so the box waits for one.
+  const blk = sec.querySelector('#im-blocks');
+  if (blk) { blk.disabled = m.rep == null; blk.checked = !!m.blocks && m.rep != null; }
 
   const problem = mappingProblem();
   const accept = sec.querySelector('#im-accept');
@@ -619,7 +633,8 @@ function updateDialog() {
         const parts = res.datasets.slice(0, 6).map(ds => ds.name + ' (R = ' + intl(ds.reps.length) + ')');
         if (res.datasets.length > 6) parts.push('and ' + intl(res.datasets.length - 6) + ' more');
         const what = { tally: 'tally observations', time: 'a time-persistent state', reps: 'one value per replication' }[m.kind];
-        prevEl.textContent = 'Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + what + ': ' + parts.join(', ') + '.';
+        prevEl.textContent = 'Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + what + ': ' + parts.join(', ') + '.' +
+          (res.datasets.some(ds => ds.blocks) && res.datasets.length > 1 ? ' Their replication ids are blocks, and so Two and Several Systems open a comparison of them paired.' : '');
       }
     } catch (err) {
       ok = false;
@@ -750,6 +765,25 @@ function renderList() {
     };
     inp.addEventListener('change', () => setTimeout(commit, 0));
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+    // A file loaded with a replication column can have its ids declared
+    // blocks, or not, after loading; the box sets every dataset of that load.
+    if (ds.loadId != null && list.filter(d => d.loadId === ds.loadId).length > 1) {
+      const lab = document.createElement('label');
+      lab.className = 'ctrl-chk im-blk';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = ds.blocks;
+      cb.dataset.focus = 'blk:' + ds.id;
+      cb.setAttribute('aria-label', 'Replication ids of ' + ds.name + ' are blocks shared with the other datasets of its file');
+      cb.addEventListener('change', () => state.setBlocks(ds.loadId, cb.checked));
+      const span = document.createElement('span');
+      span.className = 'tip';
+      span.tabIndex = 0;
+      span.dataset.tip = BLOCKS_TIP;
+      span.textContent = 'ids are blocks';
+      lab.appendChild(cb); lab.appendChild(span);
+      tr.querySelector('.im-src').appendChild(lab);
+    }
     const rej = tr.querySelector('.im-rej');
     if (nIss || nNotes) {
       const b = document.createElement('button');
