@@ -469,6 +469,19 @@ footer a:hover { text-decoration: underline; }
           background: var(--accent-dark); color: #fff; font: 400 12.5px/1.45 'Outfit', sans-serif;
           box-shadow: 0 5px 16px rgba(31,10,18,.3); pointer-events: none; opacity: 0;
           transition: opacity .08s; }
+
+/* ── Segmented choice (the pairing switch on tab 3) ───────────────────
+   Radio buttons drawn as one bar of joined buttons; the inputs stay in
+   the tab order and the accessibility tree, only visually hidden. */
+.seg { display: inline-flex; flex-wrap: wrap; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg label { position: relative; display: inline-flex; align-items: center; min-height: 28px; padding: 3px 11px;
+             font-size: .82rem; cursor: pointer; color: var(--muted); border-left: 1.5px solid var(--border); }
+.seg label:first-child { border-left: none; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg input:checked + span { color: var(--accent); font-weight: 600; }
+.seg label:has(input:checked) { background: var(--accent-wash); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-mini.on { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
 </style>
 </head>
 <body>
@@ -483,10 +496,12 @@ footer a:hover { text-decoration: underline; }
   <nav class="tabs">
     <a class="tab active" href="#fit" data-tab="fit">① Fit a Distribution</a>
     <a class="tab" href="#arr" data-tab="arr">② Fit Poisson Arrivals</a>
+    <a class="tab" href="#pair" data-tab="pair">③ Relate Two Variables</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="fit">① Fit a Distribution</option>
     <option value="arr">② Fit Poisson Arrivals</option>
+    <option value="pair">③ Relate Two Variables</option>
   </select>
 
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -1472,6 +1487,133 @@ footer a:hover { text-decoration: underline; }
           <span class="eq-n">How to simulate from a rate function once you have one: draw a
           homogeneous process at &lambda;<sub>max</sub> and reject the surplus. It is also how the
           generator above made these arrivals.</span></div>
+      </div>
+    </details>
+  </section>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     TAB ③: RELATE TWO VARIABLES
+     ══════════════════════════════════════════════════════════════════ -->
+<section id="tab-pair" class="tp">
+
+  <p class="tab-lede">Tab ① treats a column of numbers as independent draws from one
+  distribution, and so it never asks whether another column carries information about it. This
+  tab does. It plots one column against another, measures how strongly the two move together, and
+  builds a model of one given the other, such as a checkout time given the number of items
+  bought. The noise left over goes to <a class="tab-link" href="#fit" data-tab="fit">tab ①</a>
+  to be fitted.</p>
+
+  <section class="sec">
+    <div class="sec-hd">1 &middot; Data <span class="sec-note">paste two or more columns, drop a .csv or .txt file, or load a sample</span></div>
+    <div class="data-grid">
+      <div class="data-input">
+        <div class="drop" id="p-drop">
+          <textarea id="p-data-in" class="data-in" spellcheck="false" autocomplete="off"
+            aria-label="Paired data: two or more columns, one row per observation"
+            placeholder="Paste two or more columns, one row per observation, for example&#10;&#10;items,minutes&#10;12,2.31&#10;3,1.02&#10;27,4.75&#10;&#10;A header row names the columns. A row counts only when both of the chosen columns hold a number in it."></textarea>
+          <div class="drop-hint">Drop the file to load it</div>
+        </div>
+      </div>
+      <div class="data-tools">
+        <div class="samples">
+          <span class="file-lbl" style="align-self:center">Samples:</span>
+          <button class="btn2" data-psample="checkout" type="button">Grocery checkout</button>
+          <button class="btn2" data-psample="ushape" type="button">Line speed and rework</button>
+        </div>
+        <div class="samples" style="margin-top:6px">
+          <label class="btn2" for="p-file-in" style="display:inline-block">Choose a file&hellip;</label>
+          <input id="p-file-in" type="file" accept=".csv,.txt,.dat,.tsv,text/plain,text/csv"
+                 style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+          <button class="btn2" id="p-btn-clear" type="button">Clear</button>
+        </div>
+        <div class="parse-msg" id="p-parse-msg" role="status" aria-live="polite"></div>
+      </div>
+      <div class="data-info">
+        <div class="ctrl-row">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="p-x">X</label>
+            <select id="p-x"></select>
+          </span>
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="p-y">Y</label>
+            <select id="p-y"></select>
+          </span>
+        </div>
+        <div id="p-matrix"></div>
+        <div class="hint" id="p-about" style="margin-top:10px">Load some data to begin.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">2 &middot; The two columns together <span class="sec-note">the pairs in the middle, each column's own histogram on the margins</span></div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl" id="p-pair-lbl">Pair the values</span>
+      <div class="seg" role="radiogroup" aria-labelledby="p-pair-lbl">
+        <label><input type="radio" name="p-pairing" value="obs" checked><span>as observed</span></label>
+        <label><input type="radio" name="p-pairing" value="shuffled"><span>shuffled</span></label>
+        <label><input type="radio" name="p-pairing" value="together"><span>sorted together</span></label>
+        <label><input type="radio" name="p-pairing" value="opposite"><span>sorted opposite</span></label>
+      </div>
+      <button class="btn2" id="p-reshuffle" type="button" disabled>Shuffle again</button>
+    </div>
+    <div class="ctrl-row" id="p-jitter-row" style="display:none">
+      <label class="chk"><input type="checkbox" id="p-jitter" checked> Spread the points that share a whole-number X</label>
+    </div>
+    <div class="plot-wrap">
+      <div class="plot-card" style="flex:1 1 460px">
+        <div class="plot-hd" id="p-joint-hd">Y against X, with each column's histogram</div>
+        <div id="p-joint-host"><div class="plot-empty">Load paired data to plot them.</div></div>
+      </div>
+      <div style="flex:1 1 280px;min-width:0">
+        <div id="p-range"></div>
+        <div class="hint" id="p-pair-note" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <details class="why">
+      <summary>What re-pairing the values shows</summary>
+      <div class="why-body">
+        <p>A histogram of X and a histogram of Y say nothing about which X goes with which Y. The
+        four settings above keep both sets of values exactly as they are and change only which X is
+        matched with which Y, and so the two histograms never move. As observed, the points are the data. Shuffled,
+        each Y is matched with a randomly chosen X, which breaks any link between them, and r falls
+        to about 0. Sorted together, the smallest X is matched with the smallest Y, the next with
+        the next, and so on, which gives the largest r these two sets of values can have. Sorted
+        opposite, the smallest X is matched with the largest Y, which gives the most negative r.</p>
+        <p>When the two histograms have different shapes (one skewed and one symmetric, say), even
+        the sorted pairing falls short of r = 1, because no pairing can put the points on a straight
+        line. Two input models with these marginal distributions therefore cannot be given any
+        correlation you like: the range in the card beside the plot is all that is reachable.
+        A simulation that builds correlated inputs from separately fitted marginals (the NORTA
+        method is the standard one) runs into exactly this limit. Spearman's &rho; and Kendall's
+        &tau; work on ranks, and so the sorted pairings take them all the way to +1 and &minus;1
+        whenever there are no ties.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">3 &middot; How strongly they move together <span class="sec-note">three correlation coefficients, each with a test of no association</span></div>
+    <div id="p-coef"><div class="plot-empty">Load paired data.</div></div>
+    <details class="why">
+      <summary>What each coefficient measures, and what all three miss</summary>
+      <div class="why-body">
+        <p><strong>Pearson's r</strong> measures how close the points lie to a straight line. It
+        is the one to use for a linear model of Y given X, and it is the one a few large values can
+        move most. Its interval comes from Fisher's z transformation.</p>
+        <p><strong>Spearman's &rho;</strong> is Pearson's r computed on the ranks of the values
+        instead of the values. It measures how close the relation is to always rising (or always
+        falling), whether or not it is straight, and a single extreme value moves it only as far
+        as one rank.</p>
+        <p><strong>Kendall's &tau;</strong> compares every pair of points: a pair is concordant
+        when the point with the larger X also has the larger Y. &tau; is the excess of concordant
+        over discordant pairs, scaled to lie between &minus;1 and 1 (the &tau;<sub>b</sub> form
+        corrects that scale for ties). Its p-value is exact for fewer than 50 pairs with no ties.</p>
+        <p>All three measure a relation that rises or falls. A relation that rises and then falls
+        can have all three near 0 while Y depends strongly on X. The line-speed sample shows this:
+        rework is least at a speed of 5 and grows on both sides of it. Always look at the plot
+        before trusting a coefficient.</p>
       </div>
     </details>
   </section>
@@ -10933,6 +11075,422 @@ function runArrivalGenerator() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   TAB 3: RELATE TWO VARIABLES
+   ═══════════════════════════════════════════════════════════════════ */
+var PST = {
+  table: null,        /* parseTable() result                              */
+  xi: 0, yi: 1,       /* the chosen columns                               */
+  x: [], y: [],       /* the pairs in play, row-aligned                    */
+  dropped: 0,         /* rows left out because a chosen cell was not a number */
+  xCount: false,      /* every X a whole number, as with counts of items   */
+  jit: [],            /* fixed horizontal offsets for whole-number X       */
+  jitter: true,
+  pairing: 'obs',     /* obs | shuffled | together | opposite              */
+  shuffleSeed: 1,
+  src: null,          /* where the data came from, for every export        */
+  about: null,        /* a loaded sample, so its model can be shown        */
+  sig: ''             /* identifies these pairs, for the hand-off to tab 1 */
+};
+
+/* A loader for the tabs that read several columns at once.  The paste,
+   file, and drop paths match the one-column loader's; what differs is that
+   the whole table is handed on and each section picks its own columns. */
+function makeTableLoader(cfg) {
+  var api = {};
+  api.say = function (msg, bad) {
+    var el = $(cfg.msg);
+    el.textContent = msg || '';
+    el.classList.toggle('bad', !!bad);
+  };
+  api.parse = function (label) {
+    var t = IA.parseTable($(cfg.ta).value), st = cfg.state();
+    st.table = t;
+    if (!t.cols.length) { api.say(''); cfg.clear(); return; }
+    var nr = t.cols[0].length;
+    var bits = ['Read ' + nr + ' row' + (nr === 1 ? '' : 's') + ' in ' + t.names.length + ' column' +
+                (t.names.length === 1 ? '' : 's')];
+    if (t.header) bits.push('header row used for the column names');
+    if (t.ragged) bits.push(t.ragged + ' line' + (t.ragged === 1 ? '' : 's') + ' had a different number of columns');
+    api.say((label ? label + ': ' : '') + bits.join(', ') + '.', false);
+    cfg.accept(t);
+  };
+  api.loadText = function (text, label, srcLine) {
+    $(cfg.ta).value = text;
+    cfg.state().src = srcLine || label || 'pasted or typed by the user';
+    api.parse(label);
+  };
+  api.readFile = function (file) {
+    if (!file) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      cfg.state().about = null;
+      api.loadText(String(fr.result), 'uploaded file "' + file.name + '"');
+    };
+    fr.onerror = function () { api.say('Could not read that file.', true); };
+    fr.readAsText(file);
+  };
+  api.wire = function () {
+    $(cfg.ta).addEventListener('input', function () {
+      var st = cfg.state();
+      st.src = 'pasted or typed by the user';
+      st.about = null;
+      api.parse(null);
+    });
+    $(cfg.file).addEventListener('change', function () { api.readFile(this.files && this.files[0]); });
+    $(cfg.clearBtn).addEventListener('click', function () {
+      $(cfg.ta).value = '';
+      cfg.state().table = null; cfg.state().about = null;
+      api.say('');
+      cfg.clear();
+    });
+    var drop = $(cfg.drop);
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      var dt = e.dataTransfer;
+      cfg.state().about = null;
+      if (dt && dt.files && dt.files.length) api.readFile(dt.files[0]);
+      else if (dt) api.loadText(dt.getData('text'), 'Dropped text');
+    });
+  };
+  return api;
+}
+
+/* Columns that hold at least two numbers, by index. */
+function numericColumns(t) {
+  var out = [];
+  if (!t) return out;
+  for (var j = 0; j < t.cols.length; j++) {
+    var v = IA.rowValues(t.cols[j], 'ms').values, k = 0;
+    for (var i = 0; i < v.length; i++) if (Number.isFinite(v[i])) k++;
+    if (k >= 2) out.push(j);
+  }
+  return out;
+}
+
+/* A sample's columns joined into CSV text with a header row. */
+function sampleCsv(s) {
+  var lines = [s.cols.join(',')], n = s.v[0].length;
+  for (var i = 0; i < n; i++) {
+    var row = [];
+    for (var j = 0; j < s.v.length; j++) row.push(s.v[j][i]);
+    lines.push(row.join(','));
+  }
+  return lines.join('\n');
+}
+
+/* An element's tallest height over every text it can show, so that
+   switching between them never moves anything below it.  Each text is
+   laid out in a hidden clone of the element at its current width. */
+function reserveHeight(el, htmls) {
+  if (!el || !el.offsetWidth) return;
+  var c = el.cloneNode(false);
+  c.removeAttribute('id');
+  c.style.cssText += ';position:absolute;visibility:hidden;left:-9999px;min-height:0;width:' + el.offsetWidth + 'px';
+  el.parentNode.appendChild(c);
+  var h = 0;
+  for (var i = 0; i < htmls.length; i++) { c.innerHTML = htmls[i]; h = Math.max(h, c.offsetHeight); }
+  c.remove();
+  el.style.minHeight = h + 'px';
+}
+
+var P_LOADER = makeTableLoader({
+  ta: 'p-data-in', file: 'p-file-in', clearBtn: 'p-btn-clear', drop: 'p-drop', msg: 'p-parse-msg',
+  state: function () { return PST; },
+  accept: function (t) {
+    var nc = numericColumns(t);
+    var fill = function (sel, val) {
+      sel.innerHTML = '';
+      for (var i = 0; i < nc.length; i++) {
+        var o = document.createElement('option');
+        o.value = String(nc[i]); o.textContent = t.names[nc[i]];
+        sel.appendChild(o);
+      }
+      if (val !== undefined) sel.value = String(val);
+    };
+    if (nc.length < 2) {
+      fill($('p-x')); fill($('p-y'));
+      P_LOADER.say($('p-parse-msg').textContent + ' Two columns of numbers are needed.', true);
+      PST.x = []; PST.y = [];
+      renderPairAll();
+      return;
+    }
+    PST.xi = nc[0]; PST.yi = nc[1];
+    fill($('p-x'), PST.xi); fill($('p-y'), PST.yi);
+    pairUse();
+  },
+  clear: function () {
+    PST.x = []; PST.y = []; PST.table = null;
+    $('p-x').innerHTML = ''; $('p-y').innerHTML = '';
+    renderPairAll();
+  }
+});
+
+/* The pairs in the chosen columns, and everything that depends only on
+   them: whether X counts things, the fixed jitter, and the signature the
+   hand-off to tab 1 is matched against. */
+function pairUse() {
+  var pc = IA.pairedColumns(PST.table, PST.xi, PST.yi, 'ms');
+  PST.x = pc.x; PST.y = pc.y; PST.dropped = pc.dropped;
+  PST.xCount = pc.x.length > 0 && pc.x.every(function (v) { return Number.isInteger(v); });
+  var u = IA.MRG32k3a(4242);
+  PST.jit = pc.x.map(function () { return (u() - 0.5) * 0.5; });
+  var sx = 0, sy = 0;
+  for (var i = 0; i < pc.x.length; i++) { sx += pc.x[i]; sy += pc.y[i]; }
+  PST.sig = [PST.table.names[PST.xi], PST.table.names[PST.yi], pc.x.length, sx, sy].join('|');
+  PST.shuffleSeed = 1;
+  renderPairAll();
+}
+
+function pairNames() {
+  var t = PST.table;
+  return { x: t ? t.names[PST.xi] : 'X', y: t ? t.names[PST.yi] : 'Y' };
+}
+
+/* The pairs as the pairing switch shows them.  Every setting keeps both
+   sets of values; only the matching changes. */
+function pairShown() {
+  var x = PST.x, y = PST.y, asc = function (a, b) { return a - b; };
+  if (PST.pairing === 'shuffled') return { x: x, y: IA.shuffleWith(IA.MRG32k3a(PST.shuffleSeed), y) };
+  if (PST.pairing === 'together') return { x: x.slice().sort(asc), y: y.slice().sort(asc) };
+  if (PST.pairing === 'opposite') return { x: x.slice().sort(asc), y: y.slice().sort(asc).reverse() };
+  return { x: x, y: y };
+}
+
+function renderPairAll() {
+  renderPairAbout();
+  renderPairMatrix();
+  renderJoint();
+  renderPairRange();
+  renderPairCoef();
+  if (typeof renderPairModel === 'function') renderPairModel();
+  armPlotDownloads();
+}
+
+function renderPairAbout() {
+  var el = $('p-about'), n = PST.x.length;
+  if (!PST.table || !n) { el.innerHTML = 'Load some data to begin.'; return; }
+  var s = PST.about, h = '';
+  if (s) h += '<strong>' + esc(s.name) + '.</strong> The ' + esc(s.unit) + '. ' +
+              '<strong>How it was made:</strong> ' + esc(s.truth) + '<br>';
+  h += n + ' pair' + (n === 1 ? '' : 's') + ' in use.';
+  if (PST.dropped) h += ' ' + PST.dropped + ' row' + (PST.dropped === 1 ? ' was' : 's were') +
+    ' left out because one of the two chosen cells was blank or not a number.';
+  if (n < 4) h += ' <strong>At least 4 pairs are needed.</strong>';
+  el.innerHTML = h;
+  $('p-jitter-row').style.display = PST.xCount ? 'flex' : 'none';
+}
+
+/* With three or more columns of numbers, Pearson's r for every pair of
+   them, each cell a button that puts that pair on the plot. */
+function renderPairMatrix() {
+  var host = $('p-matrix'), t = PST.table, nc = numericColumns(t);
+  if (nc.length < 3) { host.innerHTML = ''; return; }
+  var h = '<div class="plot-hd" style="margin-top:10px">Pearson r for every pair of columns</div>' +
+          '<div class="tbl-scroll"><table class="tbl"><thead><tr><th></th>';
+  var i, j;
+  for (j = 0; j < nc.length; j++) h += '<th class="num">' + esc(t.names[nc[j]]) + '</th>';
+  h += '</tr></thead><tbody>';
+  for (i = 0; i < nc.length; i++) {
+    h += '<tr><th>' + esc(t.names[nc[i]]) + '</th>';
+    for (j = 0; j < nc.length; j++) {
+      if (i === j) { h += '<td class="num">1</td>'; continue; }
+      var pc = IA.pairedColumns(t, nc[j], nc[i], 'ms'), r = IA.pairCorr(pc.x, pc.y);
+      var on = nc[j] === PST.xi && nc[i] === PST.yi;
+      h += '<td class="num"><button type="button" class="btn-mini' + (on ? ' on' : '') + '" data-px="' + nc[j] +
+           '" data-py="' + nc[i] + '" aria-label="Plot ' + esc(t.names[nc[i]]) + ' against ' + esc(t.names[nc[j]]) +
+           '">' + fmt(r, 3) + '</button></td>';
+    }
+    h += '</tr>';
+  }
+  h += '</tbody></table></div><div class="plot-cap" style="text-align:left">Rows are Y and columns are X. ' +
+       'Tap a value to plot that pair.</div>';
+  host.innerHTML = h;
+  var b = host.querySelectorAll('button[data-px]');
+  for (i = 0; i < b.length; i++) b[i].addEventListener('click', function () {
+    PST.xi = Number(this.getAttribute('data-px')); PST.yi = Number(this.getAttribute('data-py'));
+    $('p-x').value = String(PST.xi); $('p-y').value = String(PST.yi);
+    pairUse();
+  });
+}
+
+/* A segment of y = a + b x across [x0, x1], cut to the frame's y range so
+   that a steep line never runs out of the plot. */
+function clipLine(a, b, x0, x1, ylo, yhi) {
+  var p0 = [x0, a + b * x0], p1 = [x1, a + b * x1];
+  if (b !== 0) {
+    var cut = function (p, yv) { return [(yv - a) / b, yv]; };
+    if (p0[1] < ylo) p0 = cut(p0, ylo); else if (p0[1] > yhi) p0 = cut(p0, yhi);
+    if (p1[1] < ylo) p1 = cut(p1, ylo); else if (p1[1] > yhi) p1 = cut(p1, yhi);
+  }
+  return [p0, p1];
+}
+
+/* The joint plot: the pairs, with X's histogram along the top and Y's up
+   the right side, drawn as one SVG so that an exported image carries all
+   three.  The margins come from the scatter's own scales, and so a bar
+   sits exactly over (or beside) the stretch of axis it counts.  The frame
+   is fixed by the observed values, which every pairing shares, and so it
+   never moves when the pairing switch does. */
+function renderJoint() {
+  var host = $('p-joint-host'), n = PST.x.length, nm = pairNames();
+  $('p-joint-hd').textContent = nm.y + ' against ' + nm.x + ', with each column’s histogram';
+  if (n < 4) { host.innerHTML = '<div class="plot-empty">Load at least 4 pairs to plot them.</div>'; return; }
+  var sx = IA.summarize(PST.x), sy = IA.summarize(PST.y);
+  var padX = Math.max((sx.max - sx.min) * 0.05, PST.xCount ? 0.6 : 0, 1e-9);
+  var padY = Math.max((sy.max - sy.min) * 0.05, 1e-9);
+  var xlo = sx.min - padX, xhi = sx.max + padX, ylo = sy.min - padY, yhi = sy.max + padY;
+  /* Sized to its container, so that the type stays at its nominal size
+     from a phone to a wide screen; the margins hold the histograms and so
+     narrow with the plot. */
+  var W = Math.max(330, Math.min(600, host.clientWidth || 460)), H = Math.round(W * 0.94);
+  var narrow = W < 420;
+  var P = Plot(W, H, { l: 50, r: narrow ? 78 : 108, t: narrow ? 74 : 92, b: 44 }).domain(xlo, xhi, ylo, yhi);
+  var xt = tickPair(xlo, xhi, 6), yt = tickPair(ylo, yhi, 6);
+  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+
+  /* Marginal histograms, outside the frame and not part of the plot's
+     data record: the M, R, and PY scripts redraw the scatter. */
+  var k = IA.sturges(n), bx = IA.makeBins(PST.x, k), by = IA.makeBins(PST.y, k), i, cmax = 0;
+  for (i = 0; i < bx.k; i++) cmax = Math.max(cmax, bx.counts[i]);
+  var top0 = 22, top1 = P.mT - 8, g = [];
+  for (i = 0; i < bx.k; i++) {
+    if (!bx.counts[i]) continue;
+    var a0 = P.X(bx.edges[i]), a1 = P.X(bx.edges[i + 1]), hh = bx.counts[i] / cmax * (top1 - top0);
+    g.push('<rect x="' + a0.toFixed(1) + '" y="' + (top1 - hh).toFixed(1) + '" width="' + (a1 - a0).toFixed(1) +
+           '" height="' + hh.toFixed(1) + '" fill="var(--obs-fill)" stroke="var(--obs)" stroke-width="1"/>');
+  }
+  cmax = 0;
+  for (i = 0; i < by.k; i++) cmax = Math.max(cmax, by.counts[i]);
+  var r0 = P.mL + P.pw + 8, r1 = W - 22;
+  for (i = 0; i < by.k; i++) {
+    if (!by.counts[i]) continue;
+    var b0 = P.Y(by.edges[i]), b1 = P.Y(by.edges[i + 1]), ww = by.counts[i] / cmax * (r1 - r0);
+    g.push('<rect x="' + r0.toFixed(1) + '" y="' + b1.toFixed(1) + '" width="' + ww.toFixed(1) +
+           '" height="' + (b0 - b1).toFixed(1) + '" fill="var(--obs-fill)" stroke="var(--obs)" stroke-width="1"/>');
+  }
+  g.push('<line x1="' + P.mL + '" y1="' + top1 + '" x2="' + (P.mL + P.pw) + '" y2="' + top1 + '" stroke="var(--border)"/>');
+  g.push('<line x1="' + r0 + '" y1="' + P.mT + '" x2="' + r0 + '" y2="' + (P.mT + P.ph) + '" stroke="var(--border)"/>');
+  g.push('<text x="' + P.mL + '" y="14" font-size="10.5" fill="var(--muted)">histogram of ' + esc(nm.x) + '</text>');
+  g.push('<text x="' + (W - 8) + '" y="' + (P.mT + P.ph) + '" font-size="10.5" fill="var(--muted)" ' +
+         'transform="rotate(-90 ' + (W - 8) + ' ' + (P.mT + P.ph) + ')">histogram of ' + esc(nm.y) + '</text>');
+  P.add(g.join(''));
+
+  var sh = pairShown(), pts = [];
+  for (i = 0; i < n; i++) pts.push([sh.x[i] + (PST.xCount && PST.jitter ? PST.jit[i] : 0), sh.y[i]]);
+  P.dots(pts, 'var(--obs)');
+  var f = IA.olsSimple(sh.x, sh.y, 0.95);
+  if (Number.isFinite(f.b)) {
+    var seg = clipLine(f.a, f.b, xlo, xhi, ylo, yhi);
+    P.line(seg, 'var(--fit)', 2.2);
+  }
+  P.labels(nm.x, nm.y);
+  P.legend(P.mL + P.pw + (narrow ? 2 : 14), 26, [
+    { mark: 'dot', color: 'var(--obs)', label: n + ' pairs' },
+    { mark: 'line', color: 'var(--fit)', label: 'fitted line' }
+  ]);
+  var shownAs = { obs: 'as observed', shuffled: 'shuffled', together: 'sorted together', opposite: 'sorted opposite' }[PST.pairing];
+  host.innerHTML = P.svg('Joint plot of ' + nm.y + ' against ' + nm.x,
+    'Scatter plot of ' + nm.y + ' against ' + nm.x + ' with the pairs ' + shownAs +
+    ', a least-squares line, and the histogram of each column on the margins') +
+    '<div class="plot-cap">Pairs ' + shownAs + ' · ' + bx.k + ' bins on each margin' +
+    (PST.xCount && PST.jitter ? ' · points spread sideways at each whole number' : '') + '</div>';
+}
+
+/* The range of r the two sets of values allow, and the note that says what
+   the current pairing is. */
+function renderPairRange() {
+  var host = $('p-range'), note = $('p-pair-note'), n = PST.x.length;
+  if (n < 4) { host.innerHTML = ''; note.innerHTML = ''; note.style.minHeight = ''; return; }
+  var fr = IA.frechetPairings(PST.x, PST.y), sh = pairShown(), r = IA.pairCorr(sh.x, sh.y);
+  host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">' +
+    card('<span class="lit">r</span> as shown', fmt(r, 3)) +
+    card('Reachable <span class="lit">r</span>', fmt(fr.opposite, 3) + ' to ' + fmt(fr.together, 3)) + '</div>';
+  var texts = {
+    obs: 'These are the pairs as recorded. Switch the pairing to see the same two histograms with ' +
+         'different links between them.',
+    shuffled: 'Each Y has been matched with a randomly chosen X. Both histograms are unchanged, and r ' +
+              'is near 0 because the shuffle broke whatever link the data had.',
+    together: 'The smallest X is matched with the smallest Y, the next with the next, and so on. Both ' +
+              'histograms are unchanged, and this is the largest r these two sets of values can have.',
+    opposite: 'The smallest X is matched with the largest Y, and so on. Both histograms are unchanged, ' +
+              'and this is the most negative r these two sets of values can have.'
+  };
+  reserveHeight(note, [texts.obs, texts.shuffled, texts.together, texts.opposite]);
+  note.innerHTML = texts[PST.pairing];
+}
+
+/* Section 3: the three coefficients for the pairs as shown, with their
+   tests only for the pairs as observed. */
+function renderPairCoef() {
+  var host = $('p-coef'), n = PST.x.length;
+  if (n < 4) { host.innerHTML = '<div class="plot-empty">Load at least 4 pairs.</div>'; return; }
+  var sh = pairShown(), real = PST.pairing === 'obs';
+  var pr = IA.pearson(sh.x, sh.y, 0.95), sp = IA.spearman(sh.x, sh.y), kt = IA.kendallTauB(sh.x, sh.y);
+  var P = function (p) { return real ? fmtP(p) : '—'; };
+  var col = function (head, cards, cap) {
+    return '<div style="flex:1 1 220px;min-width:0"><div class="plot-hd">' + head + '</div>' +
+           '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + cards + '</div>' +
+           (cap ? '<div class="plot-cap" style="text-align:left;margin-top:4px">' + cap + '</div>' : '') + '</div>';
+  };
+  host.innerHTML = '<div class="plot-wrap">' +
+    col('Pearson: a straight line',
+        card('<span class="lit">r</span>', fmt(pr.r, 4)) +
+        card('p-value', P(pr.p)) +
+        card('95% interval', real ? fmt(pr.lo, 3) + ' to ' + fmt(pr.hi, 3) : '—'),
+        'An interval for the true correlation, from Fisher\u2019s z.') +
+    col('Spearman: always rising or falling',
+        card('<span class="lit">&rho;</span>', fmt(sp.rho, 4)) +
+        card('p-value', P(sp.p)),
+        'Pearson\u2019s <span class="lit">r</span> of the ranks, with a t approximation to its p-value.') +
+    col('Kendall: concordant pairs',
+        card('<span class="lit">&tau;<sub>b</sub></span>', fmt(kt.tau, 4)) +
+        card('p-value', P(kt.p)),
+        kt.exact ? 'Exact p-value: fewer than 50 pairs and no ties.'
+                 : 'Normal approximation, corrected for ties.') +
+    '</div><div class="plot-cap" id="p-coef-cap" style="text-align:left;margin-top:6px">' +
+    (real ? 'Each p-value tests the hypothesis that the two columns are not associated. A small one says ' +
+            'they are; a large one says the data cannot tell, which is not the same as saying they are independent.'
+          : 'The p-values and the interval belong to the pairs as observed, and so they are not shown for a ' +
+            're-pairing, which is not data.') + '</div>';
+  reserveHeight($('p-coef-cap'), [
+    'Each p-value tests the hypothesis that the two columns are not associated. A small one says they are; ' +
+    'a large one says the data cannot tell, which is not the same as saying they are independent.',
+    'The p-values and the interval belong to the pairs as observed, and so they are not shown for a ' +
+    're-pairing, which is not data.']);
+}
+
+function initPairTab() {
+  P_LOADER.wire();
+  var sb = document.querySelectorAll('[data-psample]');
+  for (var i = 0; i < sb.length; i++) sb[i].addEventListener('click', function () {
+    var s = PAIR_SAMPLES[this.getAttribute('data-psample')];
+    PST.about = s;
+    P_LOADER.loadText(sampleCsv(s), s.name, 'built-in sample "' + s.name + '"');
+  });
+  $('p-x').addEventListener('change', function () { PST.xi = Number(this.value); pairUse(); });
+  $('p-y').addEventListener('change', function () { PST.yi = Number(this.value); pairUse(); });
+  var rb = document.querySelectorAll('input[name="p-pairing"]');
+  for (i = 0; i < rb.length; i++) rb[i].addEventListener('change', function () {
+    PST.pairing = this.value;
+    $('p-reshuffle').disabled = PST.pairing !== 'shuffled';
+    renderJoint(); renderPairRange(); renderPairCoef(); armPlotDownloads();
+  });
+  $('p-reshuffle').addEventListener('click', function () {
+    PST.shuffleSeed++;
+    renderJoint(); renderPairRange(); renderPairCoef(); armPlotDownloads();
+  });
+  $('p-jitter').addEventListener('change', function () { PST.jitter = this.checked; renderJoint(); armPlotDownloads(); });
+  var s0 = PAIR_SAMPLES.checkout;
+  PST.about = s0;
+  P_LOADER.loadText(sampleCsv(s0), s0.name, 'built-in sample "' + s0.name + '"');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    TABS AND WIRING
    ═══════════════════════════════════════════════════════════════════ */
 function showTab(name) {
@@ -10945,7 +11503,25 @@ function showTab(name) {
   // replaceState, not pushState: switching tabs updates the link a reader could
   // copy without growing the back/forward history.
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+  onTabShown(name);
 }
+/* A tab's plots size themselves to their containers, which have no width
+   while the tab is hidden, and so a tab is redrawn as it is shown. */
+function onTabShown(name) {
+  if (name === 'pair' && PST.table) renderPairAll();
+}
+var RESIZE_TIMER = null, RESIZE_W = window.innerWidth;
+/* Only a change of width redraws: a phone fires resize as its address bar
+   slides in and out, which changes nothing a plot depends on. */
+window.addEventListener('resize', function () {
+  if (window.innerWidth === RESIZE_W) return;
+  RESIZE_W = window.innerWidth;
+  clearTimeout(RESIZE_TIMER);
+  RESIZE_TIMER = setTimeout(function () {
+    var on = document.querySelector('.tp.active');
+    if (on) onTabShown(on.id.replace(/^tab-/, ''));
+  }, 150);
+});
 function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
 /* A mention of the other tab in the text is a link to it.  The router alone
    would switch tabs but leave the scroll where it was, landing the reader
@@ -11160,6 +11736,14 @@ document.addEventListener('DOMContentLoaded', function () {
   var a0 = ARRIVAL_SAMPLES.rush;
   AST.unit = a0.unit;
   A_LOADER.loadText(a0.v.join('\n'), a0.name, 'built-in sample "' + a0.name + '"');
+
+  initPairTab();
+  /* Heights reserved before the web font arrives are measured in the
+     fallback font, and so the shown tab is redrawn once fonts are ready. */
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () {
+    var on = document.querySelector('.tp.active');
+    if (on) onTabShown(on.id.replace(/^tab-/, ''));
+  });
 
   /* An incoming #id link opens straight to that tab instead of the default. */
   var startHash = location.hash.slice(1);
