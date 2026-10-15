@@ -5911,6 +5911,231 @@ function fitMean(fit) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   15c.  ONE VARIABLE IN TIME ORDER
+   ─────────────────────────────────────────────────────────────────────
+   Whether the order of a sample carries information: the correlogram and
+   the Ljung-Box test, a cycle of known period fitted by least squares, an
+   AR(1) for what is left, and the periodogram for a period nobody knows.
+   Each matches R (acf, Box.test, lm, ar.yw, and spec.pgram), which the
+   verification checks. */
+
+/* A time column read cell by cell and kept aligned with its rows.  Clock
+   times are read as minutes past midnight when every non-empty cell is
+   one, as columnTimes decides. */
+function timeRowValues(col) {
+  var ct = columnTimes(col, 'hm'), out = [];
+  for (var i = 0; i < col.length; i++) {
+    if (String(col[i]).trim() === '') { out.push(NaN); continue; }
+    out.push(ct.clock ? toClockMinutes(col[i]) : toNum(col[i]));
+  }
+  return { values: out, clock: ct.clock };
+}
+
+/* The series in column vj, timed by column tj or, when tj is null, by
+   equal steps of delta counted over the original rows (so a reading that
+   was dropped leaves its gap in time).  gapCV is the coefficient of
+   variation of the gaps between successive times: 0 for an equally
+   spaced series. */
+function seriesFrom(table, vj, tj, delta) {
+  var cv = table.cols[vj], vals = rowValues(cv, 'ms').values;
+  var tv = tj === null || tj === undefined ? null : timeRowValues(table.cols[tj]);
+  var y = [], t = [], dropped = 0, i;
+  for (i = 0; i < vals.length; i++) {
+    var ti = tv ? tv.values[i] : i * (delta > 0 ? delta : 1);
+    if (Number.isFinite(vals[i]) && Number.isFinite(ti)) { y.push(vals[i]); t.push(ti); }
+    else if (String(cv[i]).trim() !== '' || (tv && String(table.cols[tj][i]).trim() !== '')) dropped++;
+  }
+  var sorted = true, gaps = [];
+  for (i = 1; i < t.length; i++) { if (t[i] < t[i - 1]) sorted = false; gaps.push(t[i] - t[i - 1]); }
+  var gapCV = NaN;
+  if (gaps.length > 1) {
+    var m = 0, v = 0;
+    for (i = 0; i < gaps.length; i++) m += gaps[i];
+    m /= gaps.length;
+    for (i = 0; i < gaps.length; i++) v += (gaps[i] - m) * (gaps[i] - m);
+    gapCV = m !== 0 ? Math.sqrt(v / (gaps.length - 1)) / Math.abs(m) : NaN;
+  }
+  return { y: y, t: t, dropped: dropped, sorted: sorted, gapCV: gapCV, clock: !!(tv && tv.clock) };
+}
+
+/* Sample autocorrelations r_0 .. r_maxLag, mean-centered with divisor n,
+   as R's acf.  All NaN past r_0 when the series is constant. */
+function acf(x, maxLag) {
+  var n = x.length, m = 0, i, k, out = [];
+  for (i = 0; i < n; i++) m += x[i];
+  m /= n;
+  var c0 = 0;
+  for (i = 0; i < n; i++) c0 += (x[i] - m) * (x[i] - m);
+  for (k = 0; k <= maxLag && k < n; k++) {
+    if (!(c0 > 0)) { out.push(k === 0 ? 1 : NaN); continue; }
+    var s = 0;
+    for (i = 0; i + k < n; i++) s += (x[i] - m) * (x[i + k] - m);
+    out.push(s / c0);
+  }
+  return out;
+}
+
+/* The Ljung-Box statistic over lags 1..m, referred to chi-square with
+   m - fitdf degrees of freedom (fitdf = 1 after an AR(1), whose one
+   estimated coefficient used up a lag's worth of freedom). */
+function ljungBox(r, n, m, fitdf) {
+  var Q = 0;
+  for (var k = 1; k <= m; k++) Q += r[k] * r[k] / (n - k);
+  Q *= n * (n + 2);
+  var df = m - (fitdf || 0);
+  return { Q: Q, df: df, p: Number.isFinite(Q) && df > 0 ? gammaQ(df / 2, Q / 2) : NaN };
+}
+
+/* Least squares by modified Gram-Schmidt on the columns of X (an array of
+   columns, the first usually all ones).  QR rather than the normal
+   equations, because cos and sin columns over a long record, with a trend
+   beside them, are nearly collinear enough to lose digits the other way. */
+function lsq(X, y) {
+  var p = X.length, n = y.length, Q = [], R = [], i, j, k;
+  for (j = 0; j < p; j++) { R.push(new Array(p).fill(0)); }
+  for (j = 0; j < p; j++) {
+    var v = X[j].slice();
+    for (k = 0; k < j; k++) {
+      var d = 0;
+      for (i = 0; i < n; i++) d += Q[k][i] * v[i];
+      R[k][j] = d;
+      for (i = 0; i < n; i++) v[i] -= d * Q[k][i];
+    }
+    var nr = 0;
+    for (i = 0; i < n; i++) nr += v[i] * v[i];
+    nr = Math.sqrt(nr);
+    if (!(nr > 1e-12 * Math.sqrt(n))) return null;   /* a column the others already span */
+    R[j][j] = nr;
+    for (i = 0; i < n; i++) v[i] /= nr;
+    Q.push(v);
+  }
+  var qy = [];
+  for (j = 0; j < p; j++) { var s = 0; for (i = 0; i < n; i++) s += Q[j][i] * y[i]; qy.push(s); }
+  var beta = new Array(p);
+  for (j = p - 1; j >= 0; j--) {
+    var acc = qy[j];
+    for (k = j + 1; k < p; k++) acc -= R[j][k] * beta[k];
+    beta[j] = acc / R[j][j];
+  }
+  var fitted = [], resid = [], rss = 0;
+  for (i = 0; i < n; i++) {
+    var f = 0;
+    for (j = 0; j < p; j++) f += X[j][i] * beta[j];
+    fitted.push(f); resid.push(y[i] - f); rss += (y[i] - f) * (y[i] - f);
+  }
+  return { beta: beta, fitted: fitted, resid: resid, rss: rss };
+}
+
+/* A cycle of period P with H harmonics, and optionally a straight-line
+   trend, fitted by least squares:
+     y = m + sum_k (c_k cos(2 pi k t / P) + s_k sin(2 pi k t / P)) [+ g t].
+   Each harmonic is also reported as an amplitude and the time of its peak
+   within one of its own cycles, which is how a schedule is described.
+   The F test compares the fit with a constant mean. */
+function harmonicFit(t, y, P, H, trend) {
+  var n = y.length, X = [], i, k;
+  var out = { m: NaN, c: [], s: [], g: NaN, amp: [], peakAt: [], fitted: [], resid: [],
+              r2: NaN, sd: NaN, F: NaN, df1: NaN, df2: NaN, p: NaN, P: P, H: H, trend: !!trend };
+  var ones = [];
+  for (i = 0; i < n; i++) ones.push(1);
+  X.push(ones);
+  for (k = 1; k <= H; k++) {
+    var cc = [], ss = [];
+    for (i = 0; i < n; i++) { var w = 2 * Math.PI * k * t[i] / P; cc.push(Math.cos(w)); ss.push(Math.sin(w)); }
+    X.push(cc, ss);
+  }
+  if (trend) X.push(t.slice());
+  var npar = X.length;
+  if (!(P > 0) || n <= npar) return out;
+  var f = lsq(X, y);
+  if (!f) return out;
+  var my = 0, mss = 0, tss = 0, sy2 = 0;
+  for (i = 0; i < n; i++) { my += y[i]; sy2 += y[i] * y[i]; }
+  my /= n;
+  for (i = 0; i < n; i++) { mss += (f.fitted[i] - my) * (f.fitted[i] - my); tss += (y[i] - my) * (y[i] - my); }
+  /* A sum of squares below 1e-24 of the data's own sum of squares is
+     rounding error, not variation: a constant series has no cycle to find
+     (F undefined), and a series the model reproduces exactly has an
+     infinite F.  Without this, rounding noise in both sums gives a
+     plausible-looking F for data that hold no information at all. */
+  var tiny = 1e-24 * sy2;
+  out.m = f.beta[0];
+  for (k = 0; k < H; k++) {
+    var c = f.beta[1 + 2 * k], s = f.beta[2 + 2 * k];
+    out.c.push(c); out.s.push(s);
+    out.amp.push(Math.sqrt(c * c + s * s));
+    var per = P / (k + 1), ph = Math.atan2(s, c) * per / (2 * Math.PI);
+    out.peakAt.push(((ph % per) + per) % per);
+  }
+  if (trend) out.g = f.beta[npar - 1];
+  out.fitted = f.fitted; out.resid = f.resid;
+  out.df1 = npar - 1; out.df2 = n - npar;
+  out.sd = Math.sqrt(f.rss / out.df2);
+  out.r2 = mss + f.rss > 0 ? mss / (mss + f.rss) : NaN;
+  if (!(tss > tiny)) { out.r2 = NaN; return out; }
+  if (!(f.rss > tiny)) { out.F = Infinity; out.p = 0; return out; }
+  out.F = (mss / out.df1) / (f.rss / out.df2);
+  out.p = betaInc(out.df2 / 2, out.df1 / 2, out.df2 / (out.df2 + out.df1 * out.F));
+  return out;
+}
+
+/* An AR(1) by Yule-Walker, as ar.yw(x, aic = FALSE, order.max = 1):
+   phi is the lag-one autocorrelation, and the innovation variance is
+   c0 (1 - phi^2) scaled by n / (n - 2).  innov holds e_t = z_t - phi
+   z_(t-1) for the centered series z, one per reading after the first. */
+function ar1(x) {
+  var n = x.length, m = 0, i;
+  var out = { phi: NaN, sigmaE: NaN, mean: NaN, innov: [] };
+  if (n < 3) return out;
+  for (i = 0; i < n; i++) m += x[i];
+  m /= n;
+  out.mean = m;
+  var c0 = 0, c1 = 0;
+  for (i = 0; i < n; i++) c0 += (x[i] - m) * (x[i] - m);
+  for (i = 1; i < n; i++) c1 += (x[i] - m) * (x[i - 1] - m);
+  if (!(c0 > 0)) return out;
+  var phi = c1 / c0;
+  out.phi = phi;
+  out.sigmaE = Math.sqrt((c0 / n) * (1 - phi * phi) * n / (n - 2));
+  for (i = 1; i < n; i++) out.innov.push((x[i] - m) - phi * (x[i - 1] - m));
+  return out;
+}
+
+/* The periodogram, smoothed by a modified Daniell kernel of the given odd
+   span (1 for none), as R's spec.pgram with taper = 0, no padding, and no
+   detrending.  freq is in cycles per reading and period = 1 / freq in
+   readings.  The kernel wraps around the ends, as R's does, and the zero
+   frequency is replaced by the average of its two neighbors first. */
+function periodogram(y, span) {
+  var n = y.length, i, k, m = 0;
+  for (i = 0; i < n; i++) m += y[i];
+  m /= n;
+  var half = Math.floor(n / 2), I = new Array(n);
+  for (k = 0; k <= half; k++) {
+    var re = 0, im = 0, w = 2 * Math.PI * k / n;
+    for (i = 0; i < n; i++) { re += (y[i] - m) * Math.cos(w * i); im -= (y[i] - m) * Math.sin(w * i); }
+    I[k] = (re * re + im * im) / n;
+    if (k > 0) I[n - k] = I[k];
+  }
+  I[0] = 0.5 * (I[1] + I[n - 1]);
+  var h = Math.floor((span || 1) / 2), S = I;
+  if (h >= 1) {
+    S = new Array(n);
+    for (k = 0; k < n; k++) {
+      var acc = 0;
+      for (var j = -h; j <= h; j++) {
+        var wt = Math.abs(j) === h ? 1 / (4 * h) : 1 / (2 * h);
+        acc += wt * I[((k - j) % n + n) % n];
+      }
+      S[k] = acc;
+    }
+  }
+  var freq = [], spec = [], period = [];
+  for (k = 1; k <= half; k++) { freq.push(k / n); spec.push(S[k]); period.push(n / k); }
+  return { freq: freq, spec: spec, period: period };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    16.  CSV BUILDERS
    ─────────────────────────────────────────────────────────────────────
    Every export carries the seed and the settings that produced it, so a
@@ -5971,6 +6196,8 @@ var IA = {
   pairCorr: pairCorr, pearson: pearson, spearman: spearman, kendallTauB: kendallTauB,
   frechetPairings: frechetPairings, shuffleWith: shuffleWith, olsSimple: olsSimple,
   breuschPagan: breuschPagan, fitMean: fitMean,
+  timeRowValues: timeRowValues, seriesFrom: seriesFrom, acf: acf, ljungBox: ljungBox, lsq: lsq,
+  harmonicFit: harmonicFit, ar1: ar1, periodogram: periodogram,
   num: num, toCsv: toCsv
 };
 /* ===== IA-CORE-END ===== */
