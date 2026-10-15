@@ -701,11 +701,21 @@ better.
 ### Input Modeling
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
-  two tabs, one fitting eighteen candidate distributions to a pasted sample (with the two Johnson
+  four tabs, one fitting eighteen candidate distributions to a pasted sample (with the two Johnson
   members, S_B and S_U, fitted only when a checkbox in the Candidates card asks for them, off by
   default because four parameters that reach almost any shape win a ranking on flexibility alone;
-  their rows always carry a note saying so) and one estimating a piecewise-constant arrival rate
-  from timestamps. Every plot card carries a row of SVG, PNG, COPY, M,
+  their rows always carry a note saying so), one estimating a piecewise-constant arrival rate
+  from timestamps, one relating two variables (a scatter with each column's histogram on its
+  margins, a pairing switch that keeps both histograms while it shows the pairs shuffled or sorted
+  together or opposite, with the range of r those values allow, the three correlation
+  coefficients, and a least-squares model of Y given X with a Breusch–Pagan check of its spread),
+  and one looking for patterns over time (a run sequence, a lag plot beside a correlogram with a
+  Ljung–Box test, a cycle of known period with up to three harmonics and a trend, a periodogram
+  for an unknown period, and an AR(1) for what the cycle leaves). The last two send residuals,
+  per-unit values, or AR(1) innovations to the first tab, and a fit made there to them becomes the
+  noise term of their export (`ST.handoff`, keyed to the data and model that sent them and cleared
+  whenever the first tab's data change); their exports read each tool's clock in the data's time
+  unit (Arena's `*ToBaseTime`, Simio's hours, AnyLogic's `time(UNIT)`). Every plot card carries a row of SVG, PNG, COPY, M,
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
   the result under the plot's title in `PLOT_SPECS`, and the `FIG_SCRIPTS` block writes a MATLAB,
@@ -755,7 +765,16 @@ better.
      the shift's own, and `fitCdf`, `fitPdf`, `fitQuantile`, and `fitSampler` read `shift` and
      `reflect` together. Any new code that reads `fit.shift` has to check `fit.reflect` as well. Only
      `shiftable` candidates are mirrored, and the Pearson type VI is deliberately not `shiftable`:
-     with a shift it has four weakly identified parameters, and its shifted bootstrap took minutes.)*
+     with a shift it has four weakly identified parameters, and its shifted bootstrap took minutes.*
+  6. *The dependence numerics (core sections 15b to 15d) are checked by
+     `verify_input_analyzer_dependence.mjs`, which the main verify runs and which also runs alone in
+     a few seconds. Its reference values come from `verify_dependence_reference.R`, which generates
+     every dataset with a fixed seed and writes the data and R's results to
+     `verify_dependence_reference.json`; regenerate the JSON only by re-running that script. It also
+     runs the R and Python scripts the two tabs export, each of which prints every number beside the
+     page's and says "agrees" or "DIFFERS", and the MATLAB ones under `IA_MATLAB=1`. A fit to
+     residuals is centered by `centeringMean`, which treats a mean within 1e-9 of the fit's
+     interquartile range as 0, so that an export never carries a meaningless "+ 3e-12".)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

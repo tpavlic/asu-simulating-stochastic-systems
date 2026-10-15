@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Input Analyzer – fit distributions and arrival rates</title>
-<meta name="description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; and a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not.">
+<title>Input Analyzer – fit distributions, arrival rates, and dependence</title>
+<meta name="description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Input Analyzer – fit distributions and arrival rates">
-<meta property="og:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; and a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not.">
+<meta property="og:title" content="Input Analyzer – fit distributions, arrival rates, and dependence">
+<meta property="og:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer-preview.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1200">
@@ -18,8 +18,8 @@
 
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Input Analyzer – fit distributions and arrival rates">
-<meta name="twitter:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; and a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not.">
+<meta name="twitter:title" content="Input Analyzer – fit distributions, arrival rates, and dependence">
+<meta name="twitter:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer-preview.png">
 
 <!-- Google Analytics -->
@@ -119,7 +119,10 @@ summary { min-height: 26px; }
 }
 /* Swap to the dropdown before the two labels would wrap. In em, so a reader
    with a larger default font size gets the switch sooner. */
-@media (max-width: 34em) { .tabs { display: none; } .tab-select { display: block; } }
+/* Four tabs fit on one line down to Canvas's 780px column once their padding
+   narrows; below about 750px the strip gives way to the select. */
+@media (max-width: 60em) { .tab { padding: 8px 10px; font-size: .86rem; } }
+@media (max-width: 47em) { .tabs { display: none; } .tab-select { display: block; } }
 
 /* ── Panels ──────────────────────────────────────────────────────────── */
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px;
@@ -490,7 +493,7 @@ footer a:hover { text-decoration: underline; }
 
   <header class="wh">
     <div class="wh-title">Input Analyzer</div>
-    <div class="wh-sub">Fit a distribution to sample data or an arrival rate to arrival times, check the fit, and read off what to type into a simulation model</div>
+    <div class="wh-sub">Fit a distribution to sample data or an arrival rate to arrival times, check the fit and whether the inputs depend on one another or on time, and read off what to type into a simulation model</div>
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </header>
 
@@ -514,7 +517,10 @@ footer a:hover { text-decoration: underline; }
 
   <p class="tab-lede">This tab fits a probability distribution to a sample of independent values,
   such as service times, and ranks the candidates against one another. For arrivals whose rate
-  may change over the day, use <a class="tab-link" href="#arr" data-tab="arr">tab ②</a>.</p>
+  may change over the day, use <a class="tab-link" href="#arr" data-tab="arr">tab ②</a>. To model
+  one value given another, such as a checkout time given the number of items, use
+  <a class="tab-link" href="#pair" data-tab="pair">tab ③</a>, and to check whether readings taken
+  over time are independent, use <a class="tab-link" href="#time" data-tab="time">tab ④</a>.</p>
 
   <!-- ── 1. DATA ──────────────────────────────────────────────────── -->
   <section class="sec">
@@ -1614,7 +1620,7 @@ footer a:hover { text-decoration: underline; }
         over discordant pairs, scaled to lie between &minus;1 and 1 (the &tau;<sub>b</sub> form
         corrects that scale for ties). Its p-value is exact for fewer than 50 pairs with no ties.</p>
         <p>All three measure a relation that rises or falls. A relation that rises and then falls
-        can have all three near 0 while Y depends strongly on X. The line-speed sample shows this:
+        can have all three near 0 even though Y depends strongly on X. The line-speed sample shows this:
         rework is least at a speed of 5 and grows on both sides of it. Always look at the plot
         before trusting a coefficient.</p>
       </div>
@@ -1646,7 +1652,7 @@ footer a:hover { text-decoration: underline; }
       <div class="why-body">
         <p>A residual is what the line leaves over: the observed Y minus the line's value at that
         X. The model <code>Y = a + bX + noise</code> assumes the noise has one distribution for every
-        X. On the residual plot that looks like a band of even width around the zero line.</p>
+        X. On the residual plot, that looks like a band of even width around the zero line.</p>
         <p>A band that fans out, narrow at small X and wide at large X, says the noise grows with X.
         Checkout times behave this way: each item adds its own variable time, and so a long
         order varies more than a short one. The Breusch&ndash;Pagan test checks for this by asking whether
@@ -1692,7 +1698,7 @@ footer a:hover { text-decoration: underline; }
         0, which suits a duration; it changes the distribution slightly wherever the line plus the
         noise can go negative, which the residual plot shows.</p>
         <p>The scripts recompute every number on this tab from your data and print each beside the
-        value shown here, so running one checks this page rather than repeating it.</p>
+        value shown here, and so running one checks this page rather than repeating it.</p>
       </div>
     </details>
   </section>
@@ -1816,7 +1822,7 @@ footer a:hover { text-decoration: underline; }
       <div class="why-body">
         <p>The bar at lag <code>k</code> is the correlation between each reading and the reading
         <code>k</code> steps earlier. The lag plot beside it shows the pairs that correlation is
-        computed from. For independent readings every bar is near 0, and the dashed band
+        computed from. For independent readings, every bar is near 0, and the dashed band
         (&plusmn;1.96/&radic;n) is where 95% of them should fall. About one bar in twenty crosses it by
         chance alone, which is why the Ljung&ndash;Box test below combines the first several bars
         into one test rather than judging them one at a time.</p>
@@ -1824,7 +1830,7 @@ footer a:hover { text-decoration: underline; }
         like the one before it, a little less like the one before that, and so on. A daily cycle
         gives bars that rise and fall as a slow wave, positive at a lag of a whole day and negative
         at half a day, because readings a day apart sit at the same point of the cycle.</p>
-        <p>The lag counts readings, not time. With equally spaced readings the two agree; with
+        <p>The lag counts readings, not time. With equally spaced readings, the two agree; with
         irregular gaps, a lag of 1 is the previous reading however long ago it was.</p>
       </div>
     </details>
@@ -1856,7 +1862,7 @@ footer a:hover { text-decoration: underline; }
         and measures how much each one contributes. A cycle shows up as a peak at its frequency.
         The raw periodogram is noisy, and so it is averaged over a few neighboring frequencies
         (the span below). A wider span gives a smoother curve but can shift a peak to a
-        neighboring frequency. In practice the period is usually known from the calendar, and this
+        neighboring frequency. In practice, the period is usually known from the calendar, and this
         is a check that it is there.</p>
         <div class="ctrl-row" style="margin-top:8px">
           <span class="ctrl-grp">
@@ -1912,7 +1918,7 @@ footer a:hover { text-decoration: underline; }
       <div class="why-body">
         <p>An AR(1) writes each value, measured from its mean, as <code>Z = &phi; &middot; (previous Z) +
         e</code>, where <code>e</code> is a fresh, independent draw called the innovation. With &phi;
-        near 1 the series wanders slowly; with &phi; near 0 it is close to independent. The
+        near 1, the series wanders slowly; with &phi; near 0, it is close to independent. The
         innovations' correlogram checks the fit: if its bars sit inside the band, one lag was
         enough.</p>
         <p>The cycle in section 4 reads the clock, and so it needs no memory: a model can draw a
@@ -1950,7 +1956,7 @@ footer a:hover { text-decoration: underline; }
         <code>TNOW</code> is in the model's base time unit, and the line divides it by
         <code>HoursToBaseTime(1)</code> (or the minutes, seconds, or days form) to get hours; Simio's
         <code>Run.TimeNow</code> is always in hours and is scaled from there; AnyLogic's
-        <code>time(HOUR)</code> returns hours directly. With the time unit set to "other" the bare
+        <code>time(HOUR)</code> returns hours directly. With the time unit set to "other", the bare
         clock is used, and the model's own time unit must then match the data's.</p>
         <p>If the data's time 0 is not the moment the simulation starts, set the box above: a model
         that starts at 6 a.m. against data timed from midnight in hours needs a 6 there.</p>
@@ -11445,7 +11451,7 @@ var PST = {
   pairing: 'obs',     /* obs | shuffled | together | opposite              */
   shuffleSeed: 1,
   src: null,          /* where the data came from, for every export        */
-  about: null,        /* a loaded sample, so its model can be shown        */
+  about: null,        /* a loaded sample, whose model is shown              */
   sig: ''             /* identifies these pairs, for the hand-off to tab 1 */
 };
 
@@ -11885,8 +11891,8 @@ function renderPairModel() {
   }
   var bp = IA.breuschPagan(PST.x, f.resid);
 
-  /* The residual plot shares the joint plot's x range and jitter, so the
-     two read side by side. */
+  /* The residual plot shares the joint plot's x range and jitter, so that
+     the two read side by side. */
   var host = $('p-res-host');
   var sx = IA.summarize(PST.x), sr = IA.summarize(f.resid);
   var padX = Math.max((sx.max - sx.min) * 0.05, PST.xCount ? 0.6 : 0, 1e-9);
