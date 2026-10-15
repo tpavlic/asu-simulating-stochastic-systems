@@ -1628,6 +1628,12 @@ footer a:hover { text-decoration: underline; }
   </section>
   <section class="sec">
     <div class="sec-hd">4 &middot; A model of Y given X <span class="sec-note">a straight line, what it leaves over, and where to fit that</span></div>
+    <div class="hint" style="margin-bottom:10px">The straight line fitted here is the deterministic part of the
+    relationship: it gives the typical Y for each X, but the points scatter around it. Subtracting the line from
+    each Y leaves that scatter, the <strong>residuals</strong>, which hold the randomness that remains. Fit a
+    distribution to the residuals on <a class="tab-link" href="#fit" data-tab="fit">tab ①</a>, add a draw from it
+    to the line, and the model reproduces both parts of the relationship; the export in section 5 writes exactly
+    that. When the scatter grows with X, the note beside the cards suggests modeling Y per unit of X instead.</div>
     <div class="plot-wrap">
       <div class="plot-card" style="flex:1 1 440px">
         <div class="plot-hd" id="p-res-hd">Residuals against X</div>
