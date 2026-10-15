@@ -976,9 +976,19 @@ better.
   is headed `block`; every dataset one accepted file makes shares a `loadId` (set only when the
   file has a replication column) and carries `blocks`, which the "ids are blocks" box on each of
   those datasets' rows in the loaded-datasets table changes for all of them at once (`setBlocks`
-  in `js/state.js`); every rejected row listed with its line number; and the binary `.dat` files Arena
+  in `js/state.js`); a box loading replications run in antithetic pairs as their pair averages
+  (`pairAverages` in `js/data/model.js`: each replication's outcome is computed first, as on every
+  page, and outcomes 1 and 2, 3 and 4, … are averaged into one replication value each, with ids
+  such as `1-2`; no observation is paired, none is loaded, and the dataset takes its name with
+  " (pair averages)", with `source.pairs` set and a note giving the correlation within the pairs
+  and the variance ratio that the dialog's preview also shows; numbered replications must come as
+  1 and 2, 3 and 4, …, so that a missing one never shifts the pairs, and other ids pair by
+  position; refused for an odd count, fewer than four, a replication with no outcome, or numbered
+  replications that are not whole pairs in order); every rejected row listed with its line number; and the binary `.dat` files Arena
   writes for its Output Analyzer, and the `.flt` and `.fst` files that analyzer writes, read by
-  `js/io/arena.js` without a dialog because their header names the statistic and its kind,
+  `js/io/arena.js` without a dialog because their header names the statistic and its kind
+  (unless "Open Arena files in a dialog" under the drop zone is ticked, which opens each in a
+  short dialog holding only the antithetic-pairs box),
   each treated as the Output Analyzer treats it: 201 time-persistent, 207 frequency, and 206
   counter all as a step function with no dataset end time, so each replication's last record
   (Arena's closing record, or a counter's last increment) holds for no time and every time
@@ -1067,7 +1077,10 @@ better.
   (independent mode), and the correlation lives only in Two Systems' paired Correlation r card;
   the hash `#variance` lands on One System. Each row of the Import page's table of loaded datasets
   has a name box, which renames the dataset when focus leaves it or on Enter (Enter keeps focus in
-  the box), and an Export control revealing that dataset's data files, drawn by `fileButtons` in
+  the box); no two datasets share a name, because every data file and script is named from it and
+  the all-datasets observations file tells datasets apart by it: `state.add` gives a new dataset a
+  name in use the next free number, "name (2)" (`uniqueName` in `js/data/model.js`), and
+  `state.rename` refuses a name in use, the box putting the old name back with a note under it, and an Export control revealing that dataset's data files, drawn by `fileButtons` in
   `js/ui/exportrow.js` as the export rows' are, with a "Preview the data" disclosure that shows the
   start of the observations file and the replication summary as the files write them (their `#`
   lines and first eight rows, read back by `csvHead` in `js/io/export.js`; `dataPreview` in

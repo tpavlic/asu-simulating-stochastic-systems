@@ -8,7 +8,7 @@
  *   kind: 'tally' | 'time' | 'reps',
  *   reps: Replication[],
  *   endTime: number|null,
- *   source: { file: string, format: string, notes: string[] },
+ *   source: { file: string, format: string, notes: string[], pairs?: boolean },
  *   issues: { line: number, text: string, reason: string }[],
  *   derivedFrom: { id: string, truncate: { by: 'time'|'index', at: number } } | null,
  *   loadId: string|null,
@@ -19,7 +19,9 @@
  * any other source. `blocks` says that the file's replication ids are blocks:
  * the same id in two datasets of that load is one block (the same subject,
  * batch, day, or random-number stream), and so a comparison of datasets from
- * the load is paired by default. Datasets from different loads never are. */
+ * the load is paired by default. Datasets from different loads never are.
+ * `source.pairs` says that the file's replications were loaded as antithetic
+ * pair averages (see pairAverages). */
 
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -116,11 +118,11 @@ export function makeDataset(fields = {}) {
       v: toF64(r.v) || new Float64Array(0)
     })),
     endTime: fields.endTime != null ? fields.endTime : null,
-    source: {
+    source: Object.assign({
       file: src.file != null ? src.file : '',
       format: src.format != null ? src.format : '',
       notes: (src.notes || []).slice()
-    },
+    }, src.pairs === true ? { pairs: true } : {}),
     issues: (fields.issues || []).slice(),
     derivedFrom: fields.derivedFrom || null,
     loadId: fields.loadId != null ? fields.loadId : null,
@@ -426,4 +428,106 @@ export function canInfer(ds) {
     reason: 'An interval or a test needs at least two replication outcomes, and this dataset has ' +
       nEst + '.'
   };
+}
+
+/**
+ * The dataset of antithetic pair averages that the Import page loads in place
+ * of a dataset whose replications were run in antithetic pairs (the second of
+ * each pair driven by the complements of the first's random numbers):
+ * replication outcomes 1 and 2 averaged, then 3 and 4, and so on in the
+ * dataset's order, each average one replication value with the id
+ * "<first id>-<second id>". Each replication's outcome is computed first,
+ * exactly as every page computes it, and only those outcomes are averaged; no
+ * observation is ever paired with another, and none is carried over. The
+ * dataset takes its source's name with " (pair averages)", keeps its load and
+ * blocks, and its source carries
+ * `pairs: true` and a note with the two figures below, since the replications
+ * it was made from are not loaded. Alongside it come the correlation r
+ * between the first and second
+ * members across the pairs, and the variance ratio: the sample variance of
+ * the averages over (s₁² + s₂²)/4, what averages of two independent
+ * replications with those variances would have, which is 1 + r when the two
+ * members vary alike. Below 1 is what antithetic pairs are run for.
+ * Replications numbered by whole numbers must come as 1 and 2, 3 and 4, and
+ * so on, so that a missing replication never shifts the pairs; other ids are
+ * paired by position. Refused, with the reason, for an odd number of
+ * replications, fewer than four, a replication with no outcome, or numbered
+ * replications that are not whole pairs in order.
+ * @param {Dataset} ds
+ * @returns {{ ok: true, dataset: Dataset, stats: { pairs: number, r: number, ratio: number } } | { ok: false, reason: string }}
+ */
+export function pairAverages(ds) {
+  const est = repEstimates(ds), ids = repIds(ds);
+  const R = est.length;
+  const missing = ids.filter((id, i) => !Number.isFinite(est[i]));
+  if (missing.length) return { ok: false, reason: 'Every replication needs an outcome to be paired, and ' + (missing.length === 1 ? 'replication ' + missing[0] + ' has' : 'replications ' + missing.slice(0, 10).join(', ') + (missing.length > 10 ? ', …' : '') + ' have') + ' none.' };
+  if (R % 2) return { ok: false, reason: 'Averaging in pairs needs an even number of replications, and this dataset has ' + R + '.' };
+  if (R < 4) return { ok: false, reason: 'Averaging in pairs needs at least four replications, two pairs, for an interval on the averages; this dataset has ' + R + '.' };
+  // Numbered replications pair as numbered, 1 with 2 and 3 with 4, never by
+  // position: a replication missing from the file (a rejected row) would
+  // otherwise shift every later pair onto runs that were not partners.
+  const asInt = ids.map(v => (typeof v === 'number' ? v : /^\s*\d+\s*$/.test(String(v)) ? Number(v) : NaN));
+  if (asInt.every(Number.isInteger)) {
+    for (let i = 0; i < R; i += 2) {
+      if (asInt[i] % 2 !== 1 || asInt[i + 1] !== asInt[i] + 1) {
+        return { ok: false, reason: 'Antithetic pairs are replications 1 and 2, 3 and 4, and so on, and here replication ' + ids[i] + ' is followed by ' + ids[i + 1] +
+          '. A replication is missing or out of order; every pair must be loaded whole.' };
+      }
+    }
+  }
+  const a = [], b = [], reps = [];
+  for (let i = 0; i < R; i += 2) {
+    a.push(est[i]); b.push(est[i + 1]);
+    reps.push({ id: String(ids[i]) + '-' + String(ids[i + 1]), t: null, v: [(est[i] + est[i + 1]) / 2] });
+  }
+  const n = a.length;
+  const ma = mean(a), mb = mean(b);
+  let saa = 0, sbb = 0, sab = 0;
+  for (let k = 0; k < n; k++) { saa += (a[k] - ma) ** 2; sbb += (b[k] - mb) ** 2; sab += (a[k] - ma) * (b[k] - mb); }
+  const avg = reps.map(r => r.v[0]), mAvg = mean(avg);
+  let sAvg = 0;
+  for (const v of avg) sAvg += (v - mAvg) ** 2;
+  const varA = saa / (n - 1), varB = sbb / (n - 1), varAvg = sAvg / (n - 1);
+  const r = saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
+  const ratio = varA + varB > 0 ? varAvg / ((varA + varB) / 4) : NaN;
+  const dataset = makeDataset({
+    name: ds.name + ' (pair averages)',
+    response: ds.response,
+    unit: ds.unit,
+    kind: 'reps',
+    reps,
+    endTime: null,
+    source: { file: ds.source.file, format: ds.source.format, pairs: true, notes: ds.source.notes.concat(['Replications ' + String(ids[0]) + ' to ' + String(ids[R - 1]) + ' of ' + ds.name +
+      ' were run in antithetic pairs and loaded as ' + n + ' pair averages (1 and 2, 3 and 4, …): correlation within the pairs r = ' + sig3(r) +
+      ', variance ratio ' + sig3(ratio) + ', the sample variance of the averages over what averages of two independent replications would have.']) },
+    issues: ds.issues,
+    loadId: ds.loadId,
+    blocks: ds.blocks
+  });
+  return { ok: true, dataset, stats: { pairs: n, r, ratio } };
+}
+
+// Three significant digits, for a note; a dash where there is no number.
+function sig3(x) { return Number.isFinite(x) ? String(Number(x.toPrecision(3))) : '–'; }
+
+/**
+ * A name no loaded dataset has: the name itself when it is free, and
+ * otherwise the name with the smallest free number, "name (2)", "name (3)",
+ * …, counting on from a number the name already ends in. Every data file and
+ * script takes its file name from the dataset's name, and the all-datasets
+ * observations file tells its datasets apart by name, and so two datasets
+ * must never share one.
+ * @param {string} name
+ * @param {Iterable<string>} taken the names already in use
+ * @returns {string}
+ */
+export function uniqueName(name, taken) {
+  const used = new Set(taken);
+  if (!used.has(name)) return name;
+  const m = /^(.*) \((\d+)\)$/.exec(name);
+  const base = m ? m[1] : name;
+  for (let k = m ? Number(m[2]) + 1 : 2; ; k++) {
+    const c = base + ' (' + k + ')';
+    if (!used.has(c)) return c;
+  }
 }

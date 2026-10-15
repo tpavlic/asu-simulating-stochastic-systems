@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   makeDataset, newId, repIds, repEstimates, observations, datasetSummary,
-  truncateDataset, canInfer
+  truncateDataset, canInfer, pairAverages, uniqueName
 } from '../js/data/model.js';
 
 const near = (a, b, tol = 1e-12) =>
@@ -205,4 +205,71 @@ test('sameData: equal data under different names and ids, unequal otherwise', as
   const r = mk({ kind: 'reps', reps: [{ id: 1, t: null, v: [NaN] }] });
   assert.equal(sameData(r, mk({ kind: 'reps', reps: [{ id: 1, t: null, v: [NaN] }] })), true);
   assert.equal(sameData(r, mk({ kind: 'reps', reps: [{ id: 1, t: [1], v: [NaN] }] })), false);
+});
+
+test('pairAverages averages replications 1 and 2, 3 and 4, and so on', () => {
+  // Perfectly antithetic pairs: every average is 2, r = -1, and the averages do not vary at all.
+  const reps = [1, 3, 2, 2, 4, 0, 3, 1].map((v, i) => ({ id: i + 1, t: null, v: [v] }));
+  const ds = makeDataset({ name: 'av', kind: 'reps', reps, source: { file: 'av.csv', format: 'columns', notes: [] }, loadId: 'L1', blocks: true });
+  const res = pairAverages(ds);
+  assert.equal(res.ok, true);
+  assert.deepEqual(repIds(res.dataset), ['1-2', '3-4', '5-6', '7-8']);
+  nearArr(Array.from(repEstimates(res.dataset)), [2, 2, 2, 2]);
+  assert.equal(res.dataset.kind, 'reps');
+  // It loads in place of its source, under a name of its own, and says what it is.
+  assert.equal(res.dataset.name, 'av (pair averages)');
+  assert.equal(res.dataset.derivedFrom, null);
+  assert.equal(res.dataset.source.pairs, true);
+  assert.equal(res.dataset.source.file, 'av.csv');
+  assert.deepEqual(res.dataset.source.notes, ['Replications 1 to 8 of av were run in antithetic pairs and loaded as 4 pair averages (1 and 2, 3 and 4, …): correlation within the pairs r = -1, variance ratio 0, the sample variance of the averages over what averages of two independent replications would have.']);
+  assert.equal(res.dataset.loadId, 'L1');
+  assert.equal(res.dataset.blocks, true);
+  assert.equal(res.stats.pairs, 4);
+  near(res.stats.r, -1);
+  near(res.stats.ratio, 0);
+  assert.ok(canInfer(res.dataset).ok);
+});
+
+test('pairAverages works on replication means, and its ratio is the variance of the averages over (s1^2 + s2^2)/4', () => {
+  // Tally replications: the outcomes are their means, 2, 5, 4, 4, 7, 6.
+  const obs = [[1, 3], [5], [4, 4], [3, 5], [7], [6, 6]];
+  const ds = makeDataset({ name: 'tl', kind: 'tally', reps: obs.map((v, i) => ({ id: 'r' + (i + 1), t: null, v })) });
+  const res = pairAverages(ds);
+  assert.deepEqual(repIds(res.dataset), ['r1-r2', 'r3-r4', 'r5-r6']);
+  nearArr(Array.from(repEstimates(res.dataset)), [3.5, 4, 6.5]);
+  // First members 2, 4, 7 (variance 19/3); second members 5, 4, 6 (variance 1); averages 3.5, 4, 6.5 (variance 31/12).
+  const varAvg = ((3.5 - 14 / 3) ** 2 + (4 - 14 / 3) ** 2 + (6.5 - 14 / 3) ** 2) / 2;
+  near(res.stats.ratio, varAvg / ((19 / 3 + 1) / 4));
+  // r from the deviations (-7/3, -1/3, 8/3) and (0, -1, 1).
+  near(res.stats.r, 3 / Math.sqrt((114 / 9) * 2));
+  assert.equal(res.dataset.loadId, null);
+  assert.equal(res.dataset.blocks, false);
+});
+
+test('pairAverages refuses an odd count, fewer than four, or a replication with no outcome', () => {
+  const mk = (vals, kind = 'reps') => makeDataset({ name: 'x', kind, reps: vals.map((v, i) => ({ id: i + 1, t: null, v })) });
+  assert.match(pairAverages(mk([[1], [2], [3], [4], [5]])).reason, /even number of replications, and this dataset has 5\.$/);
+  assert.match(pairAverages(mk([[1], [2]])).reason, /at least four replications/);
+  assert.match(pairAverages(mk([[1], [], [3], [4]], 'tally')).reason, /replication 2 has none\.$/);
+  // A missing replication must not shift the pairs: 1, 3, 4, 5 would pair 1 with 3.
+  const gap = makeDataset({ name: 'g', kind: 'reps', reps: [1, 3, 4, 5].map(id => ({ id, t: null, v: [id] })) });
+  assert.match(pairAverages(gap).reason, /replication 1 is followed by 3\./);
+  const late = makeDataset({ name: 'g', kind: 'reps', reps: [2, 3, 4, 5].map(id => ({ id, t: null, v: [id] })) });
+  assert.match(pairAverages(late).reason, /replication 2 is followed by 3\./);
+  // Numbers read as text pair the same way, and ids that are not numbers pair by position.
+  const txt = makeDataset({ name: 't', kind: 'reps', reps: ['1', '2', '3', '4'].map(id => ({ id, t: null, v: [Number(id)] })) });
+  assert.deepEqual(repIds(pairAverages(txt).dataset), ['1-2', '3-4']);
+  const named = makeDataset({ name: 'n', kind: 'reps', reps: ['r1', 'r3', 'r4', 'r5'].map((id, i) => ({ id, t: null, v: [i] })) });
+  assert.deepEqual(repIds(pairAverages(named).dataset), ['r1-r3', 'r4-r5']);
+});
+
+test('uniqueName numbers a name that is taken, and counts on from a number it ends in', () => {
+  assert.equal(uniqueName('A', []), 'A');
+  assert.equal(uniqueName('A', ['B']), 'A');
+  assert.equal(uniqueName('A', ['A']), 'A (2)');
+  assert.equal(uniqueName('A', ['A', 'A (2)', 'A (3)']), 'A (4)');
+  assert.equal(uniqueName('A', ['A', 'A (3)']), 'A (2)');
+  assert.equal(uniqueName('A (2)', ['A', 'A (2)']), 'A (3)');
+  // A number that is part of the name, with no parentheses, is left alone.
+  assert.equal(uniqueName('Run 2', ['Run 2']), 'Run 2 (2)');
 });

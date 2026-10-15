@@ -8,6 +8,7 @@
 /** @typedef {import('./data/model.js').Dataset} Dataset */
 
 import { transformOf } from './stats/transform.js';
+import { uniqueName } from './data/model.js';
 
 /** Every loaded dataset, in the order it was added. */
 export const datasets = [];
@@ -59,12 +60,14 @@ export function emit(event, payload) {
 
 /**
  * Adds a dataset (or replaces the one with the same id) and emits 'datasets'.
- * A dataset without an id is given one.
+ * A dataset without an id is given one, and one whose name another dataset
+ * already has is given the next free numbered name (see uniqueName).
  * @param {Dataset} ds
  * @returns {Dataset}
  */
 export function add(ds) {
   if (!ds.id) ds.id = 'ds-' + Date.now().toString(36) + '-' + (++counter);
+  ds.name = uniqueName(ds.name, datasets.filter(d => d.id !== ds.id).map(d => d.name));
   const i = datasets.findIndex(d => d.id === ds.id);
   if (i >= 0) datasets[i] = ds; else datasets.push(ds);
   emit('datasets', { type: 'add', id: ds.id });
@@ -87,14 +90,16 @@ export function remove(id) {
 }
 
 /**
- * Renames a dataset's display name and emits 'datasets'.
+ * Renames a dataset's display name and emits 'datasets'. A name another
+ * dataset already has is refused, and nothing changes.
  * @param {string} id
  * @param {string} name
- * @returns {boolean} whether the dataset exists
+ * @returns {boolean} whether the dataset was renamed
  */
 export function rename(id, name) {
   const ds = get(id);
   if (!ds) return false;
+  if (datasets.some(d => d.id !== id && d.name === String(name))) return false;
   ds.name = String(name);
   emit('datasets', { type: 'rename', id });
   return true;

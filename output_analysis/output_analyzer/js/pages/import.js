@@ -8,7 +8,7 @@
 import * as state from '../state.js';
 import { sniff, buildDatasets, newLoadId } from '../io/parse.js';
 import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
-import { sameData } from '../data/model.js';
+import { sameData, pairAverages } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
 import { esc, intl, plural, num, breakPoints } from '../ui/format.js';
@@ -51,6 +51,9 @@ const expanded = new Set();
 const exportOpen = new Set();
 /** Ids of datasets whose data preview is open under their data files. */
 const previewOpen = new Set();
+/** A refused rename's note, shown under that dataset's name box at the next redraw only. */
+let renameMsg = null;
+
 let removeAllTimer = null;
 
 function visible() { return !!rootEl && rootEl.classList.contains('active'); }
@@ -121,8 +124,10 @@ export function render(root) {
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
           '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">Text in one of the formats above, or an Arena Output Analyzer .dat, .flt, or .fst file.</div>' +
+          '<div class="ctrl-note im-drop-note">A plain-text file (.csv, .tsv, .txt, or .prn) with its columns separated by commas, tabs, semicolons, or spaces and laid out as under Text formats above; save a spreadsheet as CSV first. Also supported are Arena Output Analyzer .dat, .flt, and .fst files.</div>' +
         '</div>' +
+        '<label class="ctrl-chk im-arena-opt"><input type="checkbox" id="im-arena-dlg"> ' +
+          '<span class="tip" tabindex="0" data-tip="An Arena file names its statistic and its kind, and so it loads without a dialog. Tick this to open each one in a short dialog first, where its replications can be loaded as antithetic pairs.">Open Arena files in a dialog, for loading antithetic pairs</span></label>' +
       '</div>' +
       '<div class="im-block">' +
         '<label class="ctrl-grp-lbl" for="im-paste">Paste data</label>' +
@@ -136,6 +141,7 @@ export function render(root) {
   els = {
     drop: root.querySelector('#im-drop'),
     file: root.querySelector('#im-file'),
+    arenaDlg: root.querySelector('#im-arena-dlg'),
     paste: root.querySelector('#im-paste'),
     pasteNote: root.querySelector('#im-paste-note'),
     read: root.querySelector('#im-read'),
@@ -148,7 +154,7 @@ export function render(root) {
     list: root.querySelector('#im-list')
   };
 
-  root.querySelector('#im-why').appendChild(details('Why the kind matters',
+  root.querySelector('#im-why').appendChild(details('Why the kind of data (tally, time-persistent, or replication values) matters',
     '<p>A time-persistent state is recorded only when it changes, and so its records say nothing about how long each value lasted until their times are read with them. Averaging the recorded values would count a spike that lasted a second the same as a plateau that lasted an hour; the time-weighted mean counts each value in proportion to how long it held.</p>' +
     '<p>Whatever the kind, the replication outcomes are the unit of inference: observations within one run are correlated with their neighbors, whereas the outcomes of independent replications are independent and identically distributed, which is what a t interval assumes.</p>'));
 
@@ -183,6 +189,8 @@ export function render(root) {
       if (s) enqueue('dropped text', s);
     }
   });
+  els.arenaDlg.checked = state.getPick(id, 'arenaDialog') === true;
+  els.arenaDlg.addEventListener('change', () => state.setPick(id, 'arenaDialog', els.arenaDlg.checked));
   els.file.addEventListener('change', () => {
     if (els.file.files && els.file.files.length) readFiles(els.file.files);
     els.file.value = '';
@@ -247,7 +255,8 @@ function readFiles(fileList) {
           lastImport = { error: 'The file ' + it.name + ' could not be read: ' + (it.error.message || it.error) + '.' };
           renderStatus();
         } else if (isArenaDat(it.bytes)) {
-          loadArena(it.name, it.bytes);
+          if (els.arenaDlg.checked) enqueueArena(it.name, it.bytes);
+          else loadArena(it.name, it.bytes);
         } else {
           enqueue(it.name, new TextDecoder().decode(it.bytes));
         }
@@ -259,17 +268,30 @@ function readFiles(fileList) {
 // says whether the records are observations, a state over time, or one
 // value per replication. A counter loads twice, as the running count the
 // Output Analyzer reads and as the final count per replication.
+function arenaList(fileName, bytes) {
+  const dat = parseArenaDat(bytes);
+  const list = [arenaDataset(dat, { file: fileName })];
+  if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
+  return list;
+}
+
 function loadArena(fileName, bytes) {
   try {
-    const dat = parseArenaDat(bytes);
-    const list = [arenaDataset(dat, { file: fileName })];
-    if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
+    const list = arenaList(fileName, bytes);
     const { added, skipped } = addNew(list);
     lastImport = { what: fileName, datasets: added, skipped, issues: [], notes: collectNotes(added) };
   } catch (err) {
     lastImport = { error: 'The file ' + fileName + ' could not be loaded: ' + err.message };
   }
   renderStatus();
+}
+
+// Queues an Arena file for its short dialog, which offers only the
+// antithetic pairs, and shows it when nothing else is waiting.
+function enqueueArena(fileName, bytes) {
+  queue.push({ arena: true, fileName, bytes });
+  if (!pending) nextPending();
+  else updateWaiting();
 }
 
 // Queues one text for the mapping dialog and shows it when nothing else is
@@ -288,6 +310,19 @@ function updateWaiting() {
 function nextPending() {
   const it = queue.shift();
   if (!it) { pending = null; renderDialog(); return; }
+  if (it.arena) {
+    let list;
+    try { list = arenaList(it.fileName, it.bytes); } catch (err) {
+      lastImport = { error: 'The file ' + it.fileName + ' could not be loaded: ' + err.message };
+      renderStatus();
+      nextPending();
+      return;
+    }
+    pending = { arena: true, fileName: it.fileName, list, pairs: false };
+    renderDialog();
+    if (els.dialog.firstChild && els.dialog.scrollIntoView && visible()) els.dialog.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
   const name = it.displayName || (it.fileName === 'pasted data' || it.fileName === 'dropped text' ? it.fileName : baseName(it.fileName));
   const sn = sniff(it.text, { name });
   const s = sn.suggested;
@@ -310,6 +345,7 @@ function nextPending() {
       name, endTime: null, blocks: !!s.blocks
     },
     endText: it.endTime != null ? String(it.endTime) : '',
+    pairs: false,
     wide: false,
     wideCols: null
   };
@@ -366,6 +402,38 @@ function addNew(list) {
 // What marking the replication ids as blocks declares, for the dialog's box
 // and the one on each loaded dataset's row.
 const BLOCKS_TIP = 'Mark this when replication i of every scenario in the file shares something that pairs them: the same random inputs (common random numbers), subject, batch, or day. Two Systems and Several Systems then open a comparison of this file’s datasets paired, matched by id; datasets from different files open independent. A replication column headed block is marked when the file loads.';
+
+// What loading replications as antithetic pairs does, for the box in both dialogs.
+const PAIRS_TIP = 'Mark this when the replications were run in antithetic pairs: each odd replication on fresh random numbers and the replication after it on their complements (1 − U for each U), as simulation software does when antithetic variates are turned on. Each replication’s outcome is computed first, as on every page, and each pair of outcomes, 1 with 2, 3 with 4, and so on, loads as one replication value, their average; the observations within the replications are not loaded. It needs an even number of replications, at least four. Only pairs built to be negatively correlated gain from this: averaging independent replications in pairs halves their number and gains nothing.';
+const PAIRS_LABEL = 'The replications were run in antithetic pairs (1 with 2, 3 with 4, …): load each pair’s average';
+
+// The datasets a load adds when its replications were run in antithetic
+// pairs: each one's pair averages in its place, with the figures the preview
+// shows. Throws the first refusal, naming the dataset, so that the dialog
+// shows it where it shows any other reason it cannot accept.
+function averagePairs(list) {
+  const datasets = [], stats = [];
+  for (const ds of list) {
+    const res = pairAverages(ds);
+    if (!res.ok) throw new Error(ds.name + ': ' + res.reason);
+    datasets.push(res.dataset);
+    stats.push(Object.assign({ name: ds.name }, res.stats));
+  }
+  return { datasets, stats };
+}
+
+// The antithetic-pairs box both dialogs carry.
+function pairsBox(on) {
+  return '<label class="ctrl-chk im-blocks"><input type="checkbox" id="im-pairs"' + (on ? ' checked' : '') + '> ' +
+    '<span class="tip" tabindex="0" data-tip="' + esc(PAIRS_TIP) + '">' + esc(PAIRS_LABEL) + '</span></label>';
+}
+
+// The preview's sentence on the pair averages: r and the variance ratio of each.
+function pairsSentence(stats) {
+  const one = st => esc(st.name) + ' r = ' + num(st.r, 3) + ', variance ratio ' + num(st.ratio, 3);
+  return ' Each loads as its ' + plural(stats[0].pairs, 'pair average') + ' (correlation within the pairs, and the variance of the averages over that of averages of two independent replications): ' +
+    stats.slice(0, 6).map(one).join('; ') + (stats.length > 6 ? '; and ' + intl(stats.length - 6) + ' more' : '') + '.';
+}
 
 // ── The mapping dialog ──────────────────────────────────────────────────
 
@@ -433,7 +501,9 @@ function trialBuild() {
     }
   }
   issues.sort((a, b) => a.line - b.line);
-  return { datasets, issues };
+  if (!pending.pairs) return { datasets, issues, pairStats: null };
+  const av = averagePairs(datasets);
+  return { datasets: av.datasets, issues, pairStats: av.stats };
 }
 
 function roleSelect(idName, label, cols, value, allowNone, tip) {
@@ -448,6 +518,7 @@ function renderDialog() {
   if (!box) return;
   box.innerHTML = '';
   if (!pending) return;
+  if (pending.arena) { renderArenaDialog(); return; }
   const sn = pending.sniffed, m = pending.mapping;
   const allCols = Array.from({ length: sn.nCols }, (_, j) => j);
   const usable = sn.rows.filter(r => r.ok).length;
@@ -500,6 +571,7 @@ function renderDialog() {
       '<span class="tip" tabindex="0" data-tip="' + esc(BLOCKS_TIP) + '">The replication ids are blocks: one id in different scenarios is one block</span></label>';
   }
   if (sn.format === 'minus1') html += '<p class="ctrl-note im-gap-b">The rows whose first value is −1 mark where each replication ends.</p>';
+  html += pairsBox(pending.pairs);
   if (showWide) {
     html += '<label class="ctrl-chk"><input type="checkbox" id="im-wide"' + (pending.wide ? ' checked' : '') + '> Load every numeric column as its own dataset</label>' +
       '<div class="ds-list im-wide-list" id="im-wide-list"' + (pending.wide ? '' : ' hidden') + '></div>';
@@ -541,6 +613,7 @@ function renderDialog() {
   if (q('#im-rep')) q('#im-rep').addEventListener('change', e => { m.rep = intOrNull(e.target.value); refreshWide(); updateDialog(); });
   if (q('#im-scen')) q('#im-scen').addEventListener('change', e => { m.scenario = intOrNull(e.target.value); refreshWide(); updateDialog(); });
   if (q('#im-blocks')) q('#im-blocks').addEventListener('change', e => { m.blocks = e.target.checked; updateDialog(); });
+  q('#im-pairs').addEventListener('change', e => { pending.pairs = e.target.checked; updateDialog(); });
   if (q('#im-wide')) q('#im-wide').addEventListener('change', e => {
     pending.wide = e.target.checked;
     if (pending.wide && !pending.wideCols) pending.wideCols = new Set(wideCandidates());
@@ -563,6 +636,59 @@ function renderDialog() {
   refreshWide();
   updateDialog();
   registerTips(sec);
+}
+
+// The short dialog an Arena file opens in when asked: what the file holds,
+// and the antithetic-pairs box.
+function renderArenaDialog() {
+  const waiting = ' <span class="ctrl-note" id="im-waiting">' + (queue.length ? '(' + plural(queue.length, 'more file') + ' waiting)' : '') + '</span>';
+  const sec = document.createElement('div');
+  sec.className = 'sec im-dialog';
+  sec.setAttribute('role', 'region');
+  sec.setAttribute('aria-label', 'Load an Arena file');
+  const facts = [['File', esc(pending.fileName)]].concat(pending.list.map(ds => ['Dataset', esc(ds.name) + ' (' + esc(KIND_LABEL[ds.kind]) + ', R = ' + intl(ds.reps.length) + ')']));
+  sec.innerHTML = '<div class="sec-hd">Load an Arena file' + waiting + '</div>' +
+    '<dl class="im-facts">' + facts.map(f => '<div><dt>' + f[0] + '</dt><dd>' + f[1] + '</dd></div>').join('') + '</dl>' +
+    pairsBox(pending.pairs) +
+    '<p class="im-preview" id="im-preview" aria-live="polite"></p>' +
+    '<div class="im-accept-row"><button type="button" class="btn-run" id="im-accept">Accept</button>' +
+    '<button type="button" class="btn-clear" id="im-cancel">Cancel</button>' +
+    '<span class="im-need" id="im-need" aria-live="polite"></span></div>';
+  els.dialog.appendChild(sec);
+  sec.querySelector('#im-pairs').addEventListener('change', e => { pending.pairs = e.target.checked; updateDialog(); });
+  sec.querySelector('#im-accept').addEventListener('click', accept);
+  sec.querySelector('#im-cancel').addEventListener('click', () => { nextPending(); });
+  updateDialog();
+  registerTips(sec);
+}
+
+// The datasets an Arena file adds, as averages of its pairs when the box is ticked.
+function arenaBuild() {
+  return pending.pairs ? averagePairs(pending.list) : { datasets: pending.list, stats: null };
+}
+
+function updateArenaDialog(sec) {
+  const prevEl = sec.querySelector('#im-preview'), need = sec.querySelector('#im-need'), acc = sec.querySelector('#im-accept');
+  try {
+    const res = arenaBuild();
+    need.textContent = '';
+    acc.disabled = false;
+    prevEl.innerHTML = esc('Accepting adds ' + plural(res.datasets.length, 'dataset') + ': ' + res.datasets.map(ds => ds.name + ' (R = ' + intl(ds.reps.length) + ')').join(', ') + '.') +
+      (res.stats ? pairsSentence(res.stats) : '');
+  } catch (err) {
+    need.textContent = err.message;
+    prevEl.textContent = '';
+    acc.disabled = true;
+  }
+}
+
+function acceptArena() {
+  let res;
+  try { res = arenaBuild(); } catch (err) { return; }
+  const { added, skipped } = addNew(res.datasets);
+  lastImport = { what: pending.fileName, datasets: added, skipped, issues: [], notes: collectNotes(added) };
+  renderStatus();
+  nextPending();
 }
 
 // Rebuilds the response checklist for wide files from the current roles.
@@ -595,6 +721,7 @@ function refreshWide() {
 function updateDialog() {
   const sec = els.dialog.querySelector('.im-dialog');
   if (!sec || !pending) return;
+  if (pending.arena) { updateArenaDialog(sec); return; }
   const sn = pending.sniffed, m = pending.mapping;
   sec.querySelectorAll('.seg-btn').forEach(b => {
     const k = b.getAttribute('data-kind');
@@ -633,7 +760,8 @@ function updateDialog() {
         const parts = res.datasets.slice(0, 6).map(ds => ds.name + ' (R = ' + intl(ds.reps.length) + ')');
         if (res.datasets.length > 6) parts.push('and ' + intl(res.datasets.length - 6) + ' more');
         const what = { tally: 'tally observations', time: 'a time-persistent state', reps: 'one value per replication' }[m.kind];
-        prevEl.textContent = 'Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + what + ': ' + parts.join(', ') + '.' +
+        prevEl.innerHTML = esc('Accepting adds ' + plural(res.datasets.length, 'dataset') + ' of ' + (res.pairStats ? 'one value per replication' : what) + ': ' + parts.join(', ') + '.') +
+          (res.pairStats ? pairsSentence(res.pairStats) : '') +
           (res.datasets.some(ds => ds.blocks) && res.datasets.length > 1 ? ' Their replication ids are blocks, and so Two and Several Systems open a comparison of them paired.' : '');
       }
     } catch (err) {
@@ -657,6 +785,7 @@ function updateDialog() {
 }
 
 function accept() {
+  if (pending && pending.arena) { acceptArena(); return; }
   if (!pending || mappingProblem()) return;
   let res;
   try {
@@ -705,14 +834,17 @@ function renderStatus() {
 
 // ── The loaded datasets ─────────────────────────────────────────────────
 
-function sourceText(ds) {
-  const fmt = FORMAT_LABEL[ds.source.format] ? (ds.source.format === 'minus1' ? '−1 delimited records' : FORMAT_LABEL[ds.source.format]) : ds.source.format;
-  let s = (ds.source.file || '–') + (fmt ? ' · ' + fmt : '');
+// The Source cell's lines: the file, then whatever changes how its data
+// read, each on a line of its own. The file's layout is left to the dialog,
+// which reports it before anything loads.
+function sourceLines(ds) {
+  const lines = [ds.source.file || '–'];
+  if (ds.source.pairs) lines.push('antithetic pair averages');
   if (ds.derivedFrom && ds.derivedFrom.truncate) {
     const tr = ds.derivedFrom.truncate;
-    s += ' · truncated ' + (tr.by === 'time' ? 'at time ' + num(tr.at) : 'after ' + plural(tr.at, 'observation'));
+    lines.push('truncated ' + (tr.by === 'time' ? 'at time ' + num(tr.at) : 'after ' + plural(tr.at, 'observation')));
   }
-  return s;
+  return lines;
 }
 
 function renderList() {
@@ -735,7 +867,7 @@ function renderList() {
   wrap.className = 'tab-wrap im-ds-wrap';
   const tbl = document.createElement('table');
   tbl.className = 'ptab im-ds-tab';
-  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Rejected rows</th><th class="no-print">Export</th><th class="no-print"><span class="sr-only">Remove</span></th></tr></thead>';
+  tbl.innerHTML = '<thead><tr><th>Name</th><th>Type</th><th>Replications</th><th>Observations</th><th>Source</th><th>Notes</th><th class="no-print"><span class="sr-only">Export or remove</span></th></tr></thead>';
   const tb = document.createElement('tbody');
   for (const ds of list) {
     let nObs = 0;
@@ -747,13 +879,20 @@ function renderList() {
       '<td><span class="kind-badge">' + esc(KIND_LABEL[ds.kind] || ds.kind) + '</span></td>' +
       '<td>' + intl(ds.reps.length) + '</td>' +
       '<td>' + intl(nObs) + '</td>' +
-      '<td class="im-src">' + breakPoints(esc(sourceText(ds))) + '</td>' +
+      '<td class="im-src">' + sourceLines(ds).map(l => '<span class="im-src-line">' + breakPoints(esc(l)) + '</span>').join('') + '</td>' +
       '<td class="im-rej"></td>' +
-      '<td class="no-print"><button type="button" class="im-link im-xp"></button></td>' +
-      '<td class="no-print"><button type="button" class="btn-clear im-rm">Remove</button></td>';
+      '<td class="no-print im-acts"><button type="button" class="im-link im-xp"></button>' +
+      '<button type="button" class="btn-clear im-rm">Remove</button></td>';
     const inp = tr.querySelector('.im-name');
     inp.value = ds.name;
     inp.dataset.focus = 'name:' + ds.id;
+    if (renameMsg && renameMsg.id === ds.id) {
+      const n = document.createElement('span');
+      n.className = 'im-name-note';
+      n.setAttribute('role', 'status');
+      n.textContent = renameMsg.text;
+      inp.after(n);
+    }
     // A rename redraws the table. Enter renames at once, and the redraw puts
     // focus back in the new name box. Leaving the box (by Tab or a click)
     // renames once focus has moved on, and so the redraw finds the control
@@ -761,13 +900,18 @@ function renderList() {
     const commit = () => {
       const v = inp.value.trim();
       if (!v) { inp.value = ds.name; return; }
-      if (v !== ds.name) state.rename(ds.id, v);
+      if (v !== ds.name && !state.rename(ds.id, v)) {
+        inp.value = ds.name;
+        renameMsg = { id: ds.id, text: 'Another dataset is named ' + v + '; dataset names must differ.' };
+        renderList();
+      }
     };
     inp.addEventListener('change', () => setTimeout(commit, 0));
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
     // A file loaded with a replication column can have its ids declared
     // blocks, or not, after loading; the box sets every dataset of that load.
-    if (ds.loadId != null && list.filter(d => d.loadId === ds.loadId).length > 1) {
+    // A derived dataset follows its source's mark and has no box of its own.
+    if (ds.loadId != null && !ds.derivedFrom && list.filter(d => d.loadId === ds.loadId && !d.derivedFrom).length > 1) {
       const lab = document.createElement('label');
       lab.className = 'ctrl-chk im-blk';
       const cb = document.createElement('input');
@@ -789,7 +933,17 @@ function renderList() {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'im-link';
-      b.textContent = 'Rows rejected: ' + intl(nIss) + (nNotes ? ' · ' + plural(nNotes, 'note') : '');
+      // One line for each kind there is: the rejected rows, then the notes.
+      const lines = [];
+      if (nIss) lines.push(plural(nIss, 'row') + ' rejected');
+      if (nNotes) lines.push(plural(nNotes, 'note'));
+      for (const t of lines) {
+        const sp = document.createElement('span');
+        sp.className = 'im-rej-line';
+        sp.textContent = t;
+        b.appendChild(sp);
+      }
+      b.setAttribute('aria-label', lines.join(' and ') + ' for ' + ds.name);
       b.setAttribute('aria-expanded', String(expanded.has(ds.id)));
       b.dataset.focus = 'rej:' + ds.id;
       b.addEventListener('click', () => {
@@ -798,7 +952,7 @@ function renderList() {
       });
       rej.appendChild(b);
     } else {
-      rej.textContent = 'none';
+      rej.innerHTML = '<span class="im-none">none</span>';
     }
     const xp = tr.querySelector('.im-xp');
     xp.textContent = 'Export';
@@ -817,7 +971,7 @@ function renderList() {
       const er = document.createElement('tr');
       er.className = 'im-exp-row';
       const td = document.createElement('td');
-      td.colSpan = 8;
+      td.colSpan = 7;
       for (const n of ds.source.notes) {
         const p = document.createElement('p');
         p.className = 'muted-line';
@@ -837,7 +991,7 @@ function renderList() {
       const er = document.createElement('tr');
       er.className = 'im-exp-row no-print';
       const td = document.createElement('td');
-      td.colSpan = 8;
+      td.colSpan = 7;
       const inner = document.createElement('div');
       inner.className = 'im-xp-box';
       const files = document.createElement('div');
@@ -867,6 +1021,7 @@ function renderList() {
   tbl.appendChild(tb);
   wrap.appendChild(tbl);
   box.appendChild(wrap);
+  renameMsg = null;
 
   const row = document.createElement('div');
   row.className = 'ctrl-row im-rm-all no-print';

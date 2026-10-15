@@ -113,4 +113,6 @@ test('pairingDefault: paired only for datasets of one load whose ids are blocks'
   assert.deepEqual(pairingDefault([]), { paired: false, why: '' });
   // A dataset with no load (from an Arena file, or a session saved earlier) has no blocks.
   assert.equal(pairingDefault([d(null, true), d(null, true)]).paired, false);
+  // A truncated dataset keeps its replication ids, and so it still pairs.
+  assert.equal(pairingDefault([Object.assign(d('L1', true), { derivedFrom: { id: 'x', truncate: { by: 'time', at: 5 } } }), d('L1', true)]).paired, true);
 });
