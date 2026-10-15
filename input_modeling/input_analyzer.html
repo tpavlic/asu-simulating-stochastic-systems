@@ -6136,6 +6136,471 @@ function periodogram(y, span) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   15d.  EXPORTS FOR THE TWO DEPENDENCE TABS
+   ─────────────────────────────────────────────────────────────────────
+   A model with dependence in it is a deterministic part plus noise.  The
+   deterministic part is written here, per tool; the noise is one draw from
+   a fitted distribution, written by expressions() exactly as the fitting
+   tab writes it, so that every parameterization trap it handles is handled
+   here too. */
+var DEP_TOOLS = ['arena', 'simio', 'anylogic', 'r', 'matlab', 'python'];
+
+/* One draw per tool from a fitted model.  The Python form is a frozen
+   SciPy distribution, and so it is turned into n draws; the empirical
+   families already write an array. */
+function toolDraws(fit) {
+  var e = expressions(fit), out = { notes: e.notes };
+  for (var i = 0; i < DEP_TOOLS.length; i++) out[DEP_TOOLS[i]] = e[DEP_TOOLS[i]];
+  if (out.python && /^stats\./.test(out.python)) out.python += '.rvs(size=n)';
+  return out;
+}
+/* " + 2.5" or " - 2.5", so that a negative coefficient never prints as
+   "+ -2.5". */
+function signedTerm(v) { return (v < 0 ? ' - ' : ' + ') + num(Math.abs(v)); }
+/* Whether an expression is a sum at its top level, and so needs
+   parentheses before it is multiplied. */
+function topLevelSum(s) {
+  var depth = 0;
+  for (var i = 1; i < s.length - 1; i++) {
+    var ch = s.charAt(i);
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    else if (depth === 0 && (ch === '+' || ch === '-') && s.charAt(i - 1) === ' ') return true;
+  }
+  return false;
+}
+function clipAtZero(tool, e) {
+  var f = { arena: 'MX(0, ', simio: 'Math.Max(0, ', anylogic: 'Math.max(0, ', r: 'pmax(0, ',
+            matlab: 'max(0, ', python: 'np.maximum(0, ' }[tool];
+  return f + e + ')';
+}
+/* The noise term per tool: the fitted draw itself, or that draw with its
+   model mean taken off when the fit was to residuals, which have mean 0. */
+function noiseTerms(fit, center) {
+  var dr = toolDraws(fit), mu = center ? fitMean(fit) : 0, out = { notes: dr.notes };
+  for (var i = 0; i < DEP_TOOLS.length; i++) {
+    var t = DEP_TOOLS[i], d = dr[t];
+    if (!d) { out[t] = null; continue; }
+    out[t] = center && mu !== 0 ? '(' + d + (mu < 0 ? ' + ' + num(-mu) : ' - ' + num(mu)) + ')' : d;
+  }
+  out.mean = mu;
+  return out;
+}
+
+/* Y given X:  a + b*X + noise, or X times a per-unit draw.  m carries
+   a, b, s (the residual sd), xName (the attribute that holds X in the
+   simulation model), clip (wrap in a maximum with 0), and noise, either
+   null for normal noise with sd s, or { kind: 'resid' | 'perunit', fit }
+   for a fit made on the fitting tab. */
+function pairExpressions(m) {
+  var X = { arena: m.xName, simio: m.xName, anylogic: m.xName, r: 'x', matlab: 'x', python: 'x' };
+  var perUnit = m.noise && m.noise.kind === 'perunit';
+  var nz = m.noise ? noiseTerms(m.noise.fit, m.noise.kind === 'resid')
+                   : noiseTerms({ dist: DISTS.normal, p: [0, m.s], shift: 0 }, false);
+  var out = { notes: {} };
+  for (var i = 0; i < DEP_TOOLS.length; i++) {
+    var t = DEP_TOOLS[i], d = nz[t], line;
+    if (!d) { out[t] = null; continue; }
+    if (perUnit) {
+      line = X[t] + (t === 'matlab' ? '.*' : '*') + (topLevelSum(d) ? '(' + d + ')' : d);
+    } else {
+      line = num(m.a) + signedTerm(m.b) + '*' + X[t] + ' + ' + d;
+    }
+    out[t] = m.clip ? clipAtZero(t, line) : line;
+    out.notes[t] = nz.notes[t] || '';
+  }
+  return out;
+}
+
+/* The clock, in the data's time unit, as each tool reads it.  Arena's TNOW
+   is in the model's base time unit, and the *ToBaseTime functions convert
+   a duration into it; Simio's Run.TimeNow is always in hours; AnyLogic's
+   time(UNIT) returns the elapsed time in the unit named. */
+var DEP_CLOCK = {
+  arena: { seconds: '(TNOW/SecondsToBaseTime(1))', minutes: '(TNOW/MinutesToBaseTime(1))',
+           hours: '(TNOW/HoursToBaseTime(1))', days: '(TNOW/DaysToBaseTime(1))', other: 'TNOW' },
+  simio: { seconds: '(3600*Run.TimeNow)', minutes: '(60*Run.TimeNow)', hours: 'Run.TimeNow',
+           days: '(Run.TimeNow/24)', other: 'Run.TimeNow' },
+  anylogic: { seconds: 'time(SECOND)', minutes: 'time(MINUTE)', hours: 'time(HOUR)', days: 'time(DAY)',
+              other: 'time()' }
+};
+var DEP_TRIG = {
+  arena: ['COS', 'SIN'], simio: ['Math.Cos', 'Math.Sin'], anylogic: ['Math.cos', 'Math.sin'],
+  r: ['cos', 'sin'], matlab: ['cos', 'sin'], python: ['np.cos', 'np.sin']
+};
+
+/* A value that follows the clock:
+     m + sum_k (c_k cos(w_k T) + s_k sin(w_k T)) [+ g T] + noise,
+   with w_k = 2 pi k / P and T the clock in the data's unit (shifted by t0
+   when the data's time 0 is not the model's).  With an AR(1), the noise is
+   a variable Z updated once per draw by its own line, returned in `ar`. */
+function timeExpressions(m) {
+  var out = { notes: {}, ar: null }, H = m.c.length, i, k;
+  var nz = m.noise ? noiseTerms(m.noise.fit, true)
+                   : noiseTerms({ dist: DISTS.normal, p: [0, m.sd], shift: 0 }, false);
+  for (i = 0; i < DEP_TOOLS.length; i++) {
+    var t = DEP_TOOLS[i];
+    var T = DEP_CLOCK[t] ? DEP_CLOCK[t][m.unit] || DEP_CLOCK[t].other : 't';
+    if (m.t0) T = '(' + T + signedTerm(m.t0) + ')';
+    var trig = DEP_TRIG[t], line = num(m.m);
+    for (k = 0; k < H; k++) {
+      var w = num(2 * Math.PI * (k + 1) / m.P, 10);
+      line += signedTerm(m.c[k]) + '*' + trig[0] + '(' + w + '*' + T + ')';
+      line += signedTerm(m.s[k]) + '*' + trig[1] + '(' + w + '*' + T + ')';
+    }
+    if (m.g !== null && m.g !== undefined && Number.isFinite(m.g)) line += signedTerm(m.g) + '*' + T;
+    var zName = (t === 'r' || t === 'matlab' || t === 'python') ? 'z' : 'Z';
+    if (m.ar) line += ' + ' + zName;
+    else if (nz[t]) line += ' + ' + nz[t];
+    else { out[t] = null; continue; }
+    out[t] = m.clip ? clipAtZero(t, line) : line;
+    out.notes[t] = nz.notes[t] || '';
+  }
+  if (m.ar) {
+    var inn = m.ar.noise ? noiseTerms(m.ar.noise.fit, true)
+                         : noiseTerms({ dist: DISTS.normal, p: [0, m.ar.sigmaE], shift: 0 }, false);
+    var phi = num(m.ar.phi);
+    out.ar = {
+      arena: inn.arena ? 'Z = ' + phi + '*Z + ' + inn.arena : null,
+      simio: inn.simio ? 'Z = ' + phi + '*Z + ' + inn.simio : null,
+      anylogic: inn.anylogic ? 'Z = ' + phi + '*Z + ' + inn.anylogic + ';' : null,
+      r: inn.r ? 'z <- as.numeric(stats::filter(' + inn.r + ', ' + phi + ', method = "recursive"))' : null,
+      matlab: inn.matlab ? 'z = filter(1, [1, -' + phi + '], ' + inn.matlab + ');' : null,
+      python: inn.python ? 'e = ' + inn.python + '\nz = np.zeros(n)\nfor i in range(n):\n    z[i] = (' + phi +
+              ' * z[i - 1] if i else 0) + e[i]' : null,
+      notes: inn.notes
+    };
+  }
+  return out;
+}
+
+/* ── Scripts that recompute every number on the two tabs ─────────────
+   Each prints one line per number, beside the value this page showed and
+   the word "agrees" or "DIFFERS", so that running it is a check of the
+   page rather than a restatement of it.  Data are written into the script
+   up to MAX_INLINE values per column, and read from the tab's CSV download
+   beyond that. */
+function depLiteral(x, style) {
+  if (x.length > MAX_INLINE) return null;
+  return dataLiteral(x, style);
+}
+function pageNum(v) { return Number.isFinite(v) ? num(v, 12) : 'NaN'; }
+var REPORT_R =
+  'report <- function(label, value, page) {\n' +
+  '  same <- (is.na(value) && is.na(page)) ||\n' +
+  '    (!is.na(value) && !is.na(page) && abs(value - page) <= 1e-6 * max(1, abs(page)))\n' +
+  '  cat(sprintf("%-36s %14.7g   page %14.7g   %s\\n", label, value, page,\n' +
+  '              if (same) "agrees" else "DIFFERS"))\n' +
+  '}\n';
+var REPORT_PY =
+  'def report(label, value, page):\n' +
+  '    value, page = float(value), float(page)\n' +
+  '    same = (np.isnan(value) and np.isnan(page)) or \\\n' +
+  '        (not np.isnan(value) and not np.isnan(page) and abs(value - page) <= 1e-6 * max(1, abs(page)))\n' +
+  '    print(f"{label:<36} {value:14.7g}   page {page:14.7g}   {\'agrees\' if same else \'DIFFERS\'}")\n';
+var REPORT_M =
+  'function report(label, value, page)\n' +
+  '  same = (isnan(value) && isnan(page)) || ...\n' +
+  '    (~isnan(value) && ~isnan(page) && abs(value - page) <= 1e-6 * max(1, abs(page)));\n' +
+  '  if same, word = \'agrees\'; else, word = \'DIFFERS\'; end\n' +
+  '  fprintf(\'%-36s %14.7g   page %14.7g   %s\\n\', label, value, page, word);\n' +
+  'end\n';
+
+function pairScripts(x, y, o) {
+  o = o || {};
+  var lv = o.level || 0.95;
+  var pr = pearson(x, y, lv), sp = spearman(x, y), kt = kendallTauB(x, y), fr = frechetPairings(x, y);
+  var f = olsSimple(x, y, lv), bp = breuschPagan(x, f.resid);
+  var P = pageNum, src = o.src ? 'data source: ' + o.src : '';
+  var xn = o.xName || 'x', yn = o.yName || 'y';
+  var xl = { r: depLiteral(x, 'r'), m: depLiteral(x, 'matlab'), p: depLiteral(x, 'python') };
+  var yl = { r: depLiteral(y, 'r'), m: depLiteral(y, 'matlab'), p: depLiteral(y, 'python') };
+  var csv = 'input-analyzer-pairs.csv';
+  var rows = [
+    ['Pearson r', 'r', pr.r], ['Pearson p-value', 'p', pr.p], ['Pearson interval, lower', 'lo', pr.lo],
+    ['Pearson interval, upper', 'hi', pr.hi], ['Spearman rho', 'rho', sp.rho], ['Spearman p-value', 'rhoP', sp.p],
+    ['Kendall tau-b', 'tau', kt.tau], ['Kendall p-value', 'tauP', kt.p],
+    ['r, sorted together', 'rTog', fr.together], ['r, sorted opposite', 'rOpp', fr.opposite],
+    ['intercept a', 'a', f.a], ['slope b', 'b', f.b], ['standard error of a', 'seA', f.seA],
+    ['standard error of b', 'seB', f.seB], ['slope p-value', 'pB', f.pB],
+    ['interval for a, lower', 'aLo', f.ciA[0]], ['interval for a, upper', 'aHi', f.ciA[1]],
+    ['R squared', 'r2', f.r2], ['residual standard deviation', 's', f.s],
+    ['Breusch-Pagan statistic', 'bp', bp.stat], ['Breusch-Pagan p-value', 'bpP', bp.p]
+  ];
+  var calls = function (fmt) {
+    return rows.map(function (r) { return fmt(r[0], r[1], P(r[2])); }).join('\n');
+  };
+
+  var r =
+    '# Recompute every number on the Relate Two Variables tab in R.\n' +
+    '# Base R only. Each line prints R\'s value, the page\'s, and whether they agree.\n' +
+    (src ? '# ' + src + '\n' : '') +
+    (xl.r && yl.r ? 'x <- ' + xl.r + '   # ' + xn + '\ny <- ' + yl.r + '   # ' + yn + '\n'
+                  : 'd <- read.csv("' + csv + '", comment.char = "#")   # the tab\'s CSV download\nx <- d$x; y <- d$y\n') +
+    'level <- ' + num(lv) + '\n\n' + REPORT_R + '\n' +
+    'pr <- cor.test(x, y, method = "pearson", conf.level = level)\n' +
+    'sp <- suppressWarnings(cor.test(x, y, method = "spearman", exact = FALSE))\n' +
+    '# R uses the exact null distribution for fewer than 50 untied pairs, as the page does.\n' +
+    'kt <- suppressWarnings(cor.test(x, y, method = "kendall"))\n' +
+    'fit <- lm(y ~ x); s <- summary(fit); ci <- confint(fit, level = level)\n' +
+    '# Breusch-Pagan in Koenker\'s form: n times the R squared of the squared\n' +
+    '# residuals on x (lmtest::bptest(fit) gives the same).\n' +
+    'e <- resid(fit); bp <- length(x) * summary(lm(e^2 ~ x))$r.squared\n' +
+    'v <- list(r = unname(pr$estimate), p = pr$p.value, lo = pr$conf.int[1], hi = pr$conf.int[2],\n' +
+    '  rho = unname(sp$estimate), rhoP = sp$p.value, tau = unname(kt$estimate), tauP = kt$p.value,\n' +
+    '  rTog = cor(sort(x), sort(y)), rOpp = cor(sort(x), sort(y, decreasing = TRUE)),\n' +
+    '  a = coef(fit)[[1]], b = coef(fit)[[2]], seA = s$coefficients[1, 2], seB = s$coefficients[2, 2],\n' +
+    '  pB = s$coefficients[2, 4], aLo = ci[1, 1], aHi = ci[1, 2], r2 = s$r.squared, s = s$sigma,\n' +
+    '  bp = bp, bpP = pchisq(bp, 1, lower.tail = FALSE))\n\n' +
+    calls(function (lab, key, pv) { return 'report("' + lab + '", v$' + key + ', ' + pv + ')'; }) + '\n\n' +
+    '# The joint plot, with the least-squares line.\n' +
+    'plot(x, y, xlab = "' + xn + '", ylab = "' + yn + '"); abline(fit, col = "#8C1D40", lwd = 2)\n';
+
+  var py =
+    '# Recompute every number on the Relate Two Variables tab in Python.\n' +
+    '# Needs NumPy and SciPy. Each line prints SciPy\'s value, the page\'s, and whether they agree.\n' +
+    (src ? '# ' + src + '\n' : '') +
+    'import numpy as np\nfrom scipy import stats\n\n' +
+    (xl.p && yl.p ? 'x = ' + xl.p + '   # ' + xn + '\ny = ' + yl.p + '   # ' + yn + '\n'
+                  : 'd = np.genfromtxt("' + csv + '", delimiter=",", names=True, comments="#")   # the tab\'s CSV download\nx, y = d["x"], d["y"]\n') +
+    'level = ' + num(lv) + '\nn = len(x)\n\n' + REPORT_PY + '\n' +
+    'pr = stats.pearsonr(x, y)\nci = pr.confidence_interval(level)\n' +
+    'sp = stats.spearmanr(x, y)\n' +
+    '# The page, like R, uses the exact null distribution for fewer than 50 untied pairs.\n' +
+    'kt = stats.kendalltau(x, y, method="' + (kt.exact ? 'exact' : 'asymptotic') + '")\n' +
+    'lr = stats.linregress(x, y)\n' +
+    'e = y - (lr.intercept + lr.slope * x)\n' +
+    's = np.sqrt(np.sum(e ** 2) / (n - 2))\n' +
+    'q = stats.t.ppf(1 - (1 - level) / 2, n - 2)\n' +
+    'bp = n * np.corrcoef(x, e ** 2)[0, 1] ** 2\n' +
+    'v = dict(r=pr.statistic, p=pr.pvalue, lo=ci.low, hi=ci.high, rho=sp.statistic, rhoP=sp.pvalue,\n' +
+    '         tau=kt.statistic, tauP=kt.pvalue,\n' +
+    '         rTog=np.corrcoef(np.sort(x), np.sort(y))[0, 1], rOpp=np.corrcoef(np.sort(x), np.sort(y)[::-1])[0, 1],\n' +
+    '         a=lr.intercept, b=lr.slope, seA=lr.intercept_stderr, seB=lr.stderr, pB=lr.pvalue,\n' +
+    '         aLo=lr.intercept - q * lr.intercept_stderr, aHi=lr.intercept + q * lr.intercept_stderr,\n' +
+    '         r2=lr.rvalue ** 2, s=s, bp=bp, bpP=stats.chi2.sf(bp, 1))\n\n' +
+    calls(function (lab, key, pv) { return 'report("' + lab + '", v["' + key + '"], ' + (pv === 'NaN' ? 'float("nan")' : pv) + ')'; }) + '\n';
+
+  var mat =
+    '% Recompute every number on the Relate Two Variables tab in MATLAB.\n' +
+    '% Core MATLAB only, except corr (Statistics and Machine Learning Toolbox) for\n' +
+    '% Spearman and Kendall, whose p-values MATLAB computes its own way and so are\n' +
+    '% printed without a comparison.\n' +
+    (src ? '% ' + src + '\n' : '') +
+    (xl.m && yl.m ? 'x = ' + xl.m + '.\';   % ' + xn + '\ny = ' + yl.m + '.\';   % ' + yn + '\n'
+                  : 'd = readtable(\'' + csv + '\', \'CommentStyle\', \'#\');   % the tab\'s CSV download\nx = d.x; y = d.y;\n') +
+    'level = ' + num(lv) + ';\nn = numel(x);\n\n' +
+    '% Two-sided t tail and its inverse, from the incomplete beta function.\n' +
+    'ttail = @(t, df) betainc(df ./ (df + t.^2), df / 2, 0.5);\n' +
+    'tq = fzero(@(q) ttail(q, n - 2) - (1 - level), [0, 1e3]);\n\n' +
+    'R = corrcoef(x, y); r = R(1, 2);\n' +
+    'tr = r * sqrt((n - 2) / (1 - r^2)); pr = ttail(tr, n - 2);\n' +
+    'z = atanh(r); zq = sqrt(2) * erfinv(level);\n' +
+    'lo = tanh(z - zq / sqrt(n - 3)); hi = tanh(z + zq / sqrt(n - 3));\n' +
+    'Rs = corrcoef(sort(x), sort(y)); Ro = corrcoef(sort(x), sort(y, \'descend\'));\n' +
+    'X = [ones(n, 1), x]; b = X \\ y; e = y - X * b;\n' +
+    's = sqrt(sum(e.^2) / (n - 2)); C = s^2 * inv(X\' * X); se = sqrt(diag(C));\n' +
+    'r2 = 1 - sum(e.^2) / sum((y - mean(y)).^2);\n' +
+    'Rb = corrcoef(x, e.^2); bp = n * Rb(1, 2)^2;\n\n' +
+    'report(\'Pearson r\', r, ' + P(pr.r) + ');\n' +
+    'report(\'Pearson p-value\', pr, ' + P(pr.p) + ');\n' +
+    'report(\'Pearson interval, lower\', lo, ' + P(pr.lo) + ');\n' +
+    'report(\'Pearson interval, upper\', hi, ' + P(pr.hi) + ');\n' +
+    'report(\'r, sorted together\', Rs(1, 2), ' + P(fr.together) + ');\n' +
+    'report(\'r, sorted opposite\', Ro(1, 2), ' + P(fr.opposite) + ');\n' +
+    'report(\'intercept a\', b(1), ' + P(f.a) + ');\n' +
+    'report(\'slope b\', b(2), ' + P(f.b) + ');\n' +
+    'report(\'standard error of a\', se(1), ' + P(f.seA) + ');\n' +
+    'report(\'standard error of b\', se(2), ' + P(f.seB) + ');\n' +
+    'report(\'slope p-value\', ttail(b(2) / se(2), n - 2), ' + P(f.pB) + ');\n' +
+    'report(\'interval for a, lower\', b(1) - tq * se(1), ' + P(f.ciA[0]) + ');\n' +
+    'report(\'interval for a, upper\', b(1) + tq * se(1), ' + P(f.ciA[1]) + ');\n' +
+    'report(\'R squared\', r2, ' + P(f.r2) + ');\n' +
+    'report(\'residual standard deviation\', s, ' + P(f.s) + ');\n' +
+    'report(\'Breusch-Pagan statistic\', bp, ' + P(bp.stat) + ');\n' +
+    'report(\'Breusch-Pagan p-value\', gammainc(bp / 2, 0.5, \'upper\'), ' + P(bp.p) + ');\n' +
+    'if exist(\'corr\', \'file\')\n' +
+    '  fprintf(\'%-36s %14.7g   page %14.7g\\n\', \'Spearman rho\', corr(x, y, \'type\', \'Spearman\'), ' + P(sp.rho) + ');\n' +
+    '  fprintf(\'%-36s %14.7g   page %14.7g\\n\', \'Kendall tau-b\', corr(x, y, \'type\', \'Kendall\'), ' + P(kt.tau) + ');\n' +
+    'end\n\n' +
+    'figure; plot(x, y, \'o\'); hold on; xx = [min(x); max(x)]; plot(xx, b(1) + b(2) * xx, \'LineWidth\', 2);\n' +
+    'xlabel(\'' + xn + '\'); ylabel(\'' + yn + '\');\n\n' + REPORT_M;
+  return { r: r, python: py, matlab: mat };
+}
+
+/* o: maxLag, m (Ljung-Box lags), cycle (fit one), P, H, trend, ar (fit an
+   AR(1) to what the cycle leaves, or to the data), span (periodogram), and
+   src.  series: { t, y }. */
+function timeScripts(series, o) {
+  var y = series.y, t = series.t, n = y.length, P = pageNum, i;
+  var rows = [], a0 = acf(y, o.maxLag), lb0 = ljungBox(a0, n, o.m, 0);
+  for (i = 1; i <= Math.min(5, o.maxLag); i++) rows.push(['lag-' + i + ' autocorrelation', 'acf' + i, a0[i]]);
+  rows.push(['Ljung-Box Q, data', 'Q0', lb0.Q], ['Ljung-Box p-value, data', 'p0', lb0.p]);
+  var hf = null, left = y;
+  if (o.cycle) {
+    hf = harmonicFit(t, y, o.P, o.H, o.trend);
+    left = hf.resid;
+    rows.push(['mean level m', 'hm', hf.m]);
+    for (i = 0; i < o.H; i++) rows.push(['cos coefficient ' + (i + 1), 'hc' + (i + 1), hf.c[i]], ['sin coefficient ' + (i + 1), 'hs' + (i + 1), hf.s[i]]);
+    if (o.trend) rows.push(['trend per time unit', 'hg', hf.g]);
+    rows.push(['cycle R squared', 'hr2', hf.r2], ['cycle residual sd', 'hsd', hf.sd], ['cycle F', 'hF', hf.F], ['cycle F p-value', 'hp', hf.p]);
+    var a1 = acf(left, o.maxLag), lb1 = ljungBox(a1, n, o.m, 0);
+    rows.push(['Ljung-Box Q, after the cycle', 'Q1', lb1.Q], ['Ljung-Box p-value, after the cycle', 'p1', lb1.p]);
+  }
+  var ar = null;
+  if (o.ar) {
+    ar = ar1(left);
+    var ai = acf(ar.innov, o.maxLag), lbi = ljungBox(ai, ar.innov.length, o.m, 1);
+    rows.push(['AR(1) phi', 'phi', ar.phi], ['AR(1) innovation sd', 'se', ar.sigmaE],
+              ['Ljung-Box Q, innovations', 'Qi', lbi.Q], ['Ljung-Box p-value, innovations', 'pi', lbi.p]);
+  }
+  var pg = periodogram(y, o.span || 1), kmax = 0;
+  for (i = 1; i < pg.spec.length; i++) if (pg.spec[i] > pg.spec[kmax]) kmax = i;
+  rows.push(['periodogram peak (readings)', 'pk', pg.period[kmax]]);
+
+  var src = o.src ? 'data source: ' + o.src : '', csv = 'input-analyzer-series.csv';
+  var tl = { r: depLiteral(t, 'r'), m: depLiteral(t, 'matlab'), p: depLiteral(t, 'python') };
+  var yl = { r: depLiteral(y, 'r'), m: depLiteral(y, 'matlab'), p: depLiteral(y, 'python') };
+  var harmCols = function (lang) {
+    var parts = [];
+    for (var k = 1; k <= o.H; k++) {
+      var w = '2 * pi * ' + k + ' * t / P';
+      if (lang === 'r') parts.push('cos(' + w + '), sin(' + w + ')');
+      else parts.push('np.cos(' + w.replace('pi', 'np.pi') + '), np.sin(' + w.replace('pi', 'np.pi') + ')');
+    }
+    return parts.join(', ');
+  };
+  var call = function (fmt) { return rows.map(function (r) { return fmt(r[0], r[1], P(r[2])); }).join('\n'); };
+
+  var r =
+    '# Recompute every number on the Look for Patterns over Time tab in R.\n' +
+    '# Base R only. Each line prints R\'s value, the page\'s, and whether they agree.\n' +
+    (src ? '# ' + src + '\n' : '') +
+    (tl.r && yl.r ? 't <- ' + tl.r + '\ny <- ' + yl.r + '\n'
+                  : 'd <- read.csv("' + csv + '", comment.char = "#")   # the tab\'s CSV download\nt <- d$t; y <- d$y\n') +
+    'n <- length(y); max_lag <- ' + o.maxLag + '; m <- ' + o.m + '\n' +
+    (o.cycle ? 'P <- ' + num(o.P, 12) + '\n' : '') + '\n' + REPORT_R + '\n' +
+    'v <- list()\n' +
+    'a0 <- acf(y, lag.max = max_lag, plot = FALSE)$acf[, 1, 1]\n' +
+    'for (k in 1:' + Math.min(5, o.maxLag) + ') v[[paste0("acf", k)]] <- a0[k + 1]\n' +
+    'b0 <- Box.test(y, lag = m, type = "Ljung-Box"); v$Q0 <- unname(b0$statistic); v$p0 <- b0$p.value\n' +
+    'left <- y\n' +
+    (o.cycle
+      ? 'X <- cbind(' + harmCols('r') + (o.trend ? ', t' : '') + ')\n' +
+        'cyc <- lm(y ~ X); sc <- summary(cyc); co <- unname(coef(cyc)); fs <- sc$fstatistic\n' +
+        'v$hm <- co[1]\n' +
+        (function () { var s = ''; for (var k = 1; k <= o.H; k++) s += 'v$hc' + k + ' <- co[' + (2 * k) + ']; v$hs' + k + ' <- co[' + (2 * k + 1) + ']\n'; return s; })() +
+        (o.trend ? 'v$hg <- co[' + (2 * o.H + 2) + ']\n' : '') +
+        'v$hr2 <- sc$r.squared; v$hsd <- sc$sigma; v$hF <- unname(fs[1])\n' +
+        'v$hp <- pf(fs[1], fs[2], fs[3], lower.tail = FALSE)\n' +
+        'left <- unname(resid(cyc))\n' +
+        'b1 <- Box.test(left, lag = m, type = "Ljung-Box"); v$Q1 <- unname(b1$statistic); v$p1 <- b1$p.value\n'
+      : '') +
+    (o.ar
+      ? 'a1 <- ar.yw(left, aic = FALSE, order.max = 1); v$phi <- a1$ar[1]; v$se <- sqrt(a1$var.pred)\n' +
+        'z <- left - mean(left); innov <- z[-1] - a1$ar[1] * z[-n]\n' +
+        'bi <- Box.test(innov, lag = m, type = "Ljung-Box", fitdf = 1); v$Qi <- unname(bi$statistic); v$pi <- bi$p.value\n'
+      : '') +
+    'sp <- spec.pgram(y, ' + ((o.span || 1) > 1 ? 'spans = ' + o.span + ', ' : '') +
+      'taper = 0, detrend = FALSE, fast = FALSE, plot = FALSE)\n' +
+    'v$pk <- 1 / sp$freq[which.max(sp$spec)]\n\n' +
+    call(function (lab, key, pv) { return 'report("' + lab + '", v$' + key + ', ' + pv + ')'; }) + '\n\n' +
+    '# The run sequence and the correlogram.\n' +
+    'plot(t, y, type = "l", xlab = "time", ylab = "value")\n' +
+    (o.cycle ? 'lines(t, fitted(cyc), col = "#8C1D40", lwd = 2)\n' : '') +
+    'acf(y, lag.max = max_lag)\n';
+
+  var py =
+    '# Recompute every number on the Look for Patterns over Time tab in Python.\n' +
+    '# Needs NumPy and SciPy. Each line prints Python\'s value, the page\'s, and whether they agree.\n' +
+    (src ? '# ' + src + '\n' : '') +
+    'import numpy as np\nfrom scipy import stats\n\n' +
+    (tl.p && yl.p ? 't = ' + tl.p + '\ny = ' + yl.p + '\n'
+                  : 'd = np.genfromtxt("' + csv + '", delimiter=",", names=True, comments="#")   # the tab\'s CSV download\nt, y = d["t"], d["y"]\n') +
+    'n = len(y); max_lag = ' + o.maxLag + '; m = ' + o.m + '\n' +
+    (o.cycle ? 'P = ' + num(o.P, 12) + '\n' : '') + '\n' + REPORT_PY + '\n' +
+    'def acf(x, L):\n    z = x - x.mean(); c0 = np.sum(z * z)\n' +
+    '    return np.array([np.sum(z[:len(z) - k] * z[k:]) / c0 for k in range(L + 1)])\n\n' +
+    'def ljung_box(x, m, fitdf=0):\n    r = acf(x, m); k = np.arange(1, m + 1); N = len(x)\n' +
+    '    Q = N * (N + 2) * np.sum(r[1:] ** 2 / (N - k))\n    return Q, stats.chi2.sf(Q, m - fitdf)\n\n' +
+    'v = {}\na0 = acf(y, max_lag)\n' +
+    'for k in range(1, ' + (Math.min(5, o.maxLag) + 1) + '):\n    v[f"acf{k}"] = a0[k]\n' +
+    'v["Q0"], v["p0"] = ljung_box(y, m)\nleft = y\n' +
+    (o.cycle
+      ? 'X = np.column_stack([np.ones(n), ' + harmCols('py') + (o.trend ? ', t' : '') + '])\n' +
+        'co, *_ = np.linalg.lstsq(X, y, rcond=None)\nfit = X @ co; left = y - fit\n' +
+        'v["hm"] = co[0]\n' +
+        (function () { var s = ''; for (var k = 1; k <= o.H; k++) s += 'v["hc' + k + '"], v["hs' + k + '"] = co[' + (2 * k - 1) + '], co[' + (2 * k) + ']\n'; return s; })() +
+        (o.trend ? 'v["hg"] = co[-1]\n' : '') +
+        'rss = np.sum(left ** 2); tss = np.sum((y - y.mean()) ** 2); p1 = X.shape[1] - 1; p2 = n - X.shape[1]\n' +
+        'v["hr2"] = 1 - rss / tss; v["hsd"] = np.sqrt(rss / p2)\n' +
+        'v["hF"] = ((tss - rss) / p1) / (rss / p2); v["hp"] = stats.f.sf(v["hF"], p1, p2)\n' +
+        'v["Q1"], v["p1"] = ljung_box(left, m)\n'
+      : '') +
+    (o.ar
+      ? 'z = left - left.mean(); c0 = np.sum(z * z); phi = np.sum(z[1:] * z[:-1]) / c0\n' +
+        'v["phi"] = phi; v["se"] = np.sqrt(c0 / n * (1 - phi ** 2) * n / (n - 2))\n' +
+        'innov = z[1:] - phi * z[:-1]\nv["Qi"], v["pi"] = ljung_box(innov, m, 1)\n'
+      : '') +
+    '# The periodogram, smoothed by a modified Daniell kernel that wraps\n# around the ends, as R\'s spec.pgram does.\n' +
+    'I = np.abs(np.fft.fft(y - y.mean())) ** 2 / n\nI[0] = 0.5 * (I[1] + I[-1])\n' +
+    'h = ' + Math.floor((o.span || 1) / 2) + '\n' +
+    'if h:\n    w = np.r_[1 / (4 * h), np.full(2 * h - 1, 1 / (2 * h)), 1 / (4 * h)]\n' +
+    '    I = sum(w[j + h] * np.roll(I, j) for j in range(-h, h + 1))\n' +
+    'half = n // 2; S = I[1:half + 1]\nv["pk"] = n / (1 + np.argmax(S))\n\n' +
+    call(function (lab, key, pv) { return 'report("' + lab + '", v["' + key + '"], ' + (pv === 'NaN' ? 'float("nan")' : pv) + ')'; }) + '\n';
+
+  var mat =
+    '% Recompute every number on the Look for Patterns over Time tab in MATLAB.\n' +
+    '% Core MATLAB only. Each line prints MATLAB\'s value, the page\'s, and whether they agree.\n' +
+    (src ? '% ' + src + '\n' : '') +
+    (tl.m && yl.m ? 't = ' + tl.m + '.\';\ny = ' + yl.m + '.\';\n'
+                  : 'd = readtable(\'' + csv + '\', \'CommentStyle\', \'#\');   % the tab\'s CSV download\nt = d.t; y = d.y;\n') +
+    'n = numel(y); maxLag = ' + o.maxLag + '; m = ' + o.m + ';\n' +
+    (o.cycle ? 'P = ' + num(o.P, 12) + ';\n' : '') +
+    'acfv = @(x, L) arrayfun(@(k) sum((x(1:end-k) - mean(x)) .* (x(1+k:end) - mean(x))), 0:L) / sum((x - mean(x)).^2);\n' +
+    'lbQ = @(x, mm) numel(x) * (numel(x) + 2) * sum(acfv(x, mm).^2 .* [0, 1 ./ (numel(x) - (1:mm))]);\n' +
+    'chiP = @(Q, df) gammainc(Q / 2, df / 2, \'upper\');\n\n' +
+    'a0 = acfv(y, maxLag);\n' +
+    (function () { var s = ''; for (var k = 1; k <= Math.min(5, o.maxLag); k++) s += 'report(\'lag-' + k + ' autocorrelation\', a0(' + (k + 1) + '), ' + P(a0[k]) + ');\n'; return s; })() +
+    'Q0 = lbQ(y, m); report(\'Ljung-Box Q, data\', Q0, ' + P(lb0.Q) + '); report(\'Ljung-Box p-value, data\', chiP(Q0, m), ' + P(lb0.p) + ');\n' +
+    'left = y;\n' +
+    (o.cycle
+      ? (function () {
+          var cols = [], k;
+          for (k = 1; k <= o.H; k++) cols.push('cos(2*pi*' + k + '*t/P), sin(2*pi*' + k + '*t/P)');
+          var s = 'X = [ones(n, 1), ' + cols.join(', ') + (o.trend ? ', t' : '') + '];\nco = X \\ y; left = y - X * co;\n' +
+            'rss = sum(left.^2); tss = sum((y - mean(y)).^2); p1 = size(X, 2) - 1; p2 = n - size(X, 2);\n' +
+            'F = ((tss - rss) / p1) / (rss / p2);\n' +
+            'report(\'mean level m\', co(1), ' + P(hf.m) + ');\n';
+          for (k = 1; k <= o.H; k++) s += 'report(\'cos coefficient ' + k + '\', co(' + (2 * k) + '), ' + P(hf.c[k - 1]) + '); report(\'sin coefficient ' + k + '\', co(' + (2 * k + 1) + '), ' + P(hf.s[k - 1]) + ');\n';
+          if (o.trend) s += 'report(\'trend per time unit\', co(end), ' + P(hf.g) + ');\n';
+          s += 'report(\'cycle R squared\', 1 - rss / tss, ' + P(hf.r2) + '); report(\'cycle residual sd\', sqrt(rss / p2), ' + P(hf.sd) + ');\n' +
+            'report(\'cycle F\', F, ' + P(hf.F) + '); report(\'cycle F p-value\', betainc(p2 / (p2 + p1 * F), p2 / 2, p1 / 2), ' + P(hf.p) + ');\n';
+          var a1 = acf(left, o.maxLag), lb1 = ljungBox(a1, n, o.m, 0);
+          s += 'Q1 = lbQ(left, m); report(\'Ljung-Box Q, after the cycle\', Q1, ' + P(lb1.Q) + '); report(\'Ljung-Box p-value, after the cycle\', chiP(Q1, m), ' + P(lb1.p) + ');\n';
+          return s;
+        })()
+      : '') +
+    (o.ar
+      ? (function () {
+          var ai = acf(ar.innov, o.maxLag), lbi = ljungBox(ai, ar.innov.length, o.m, 1);
+          return 'z = left - mean(left); c0 = sum(z.^2); phi = sum(z(2:end) .* z(1:end-1)) / c0;\n' +
+            'report(\'AR(1) phi\', phi, ' + P(ar.phi) + '); report(\'AR(1) innovation sd\', sqrt(c0 / n * (1 - phi^2) * n / (n - 2)), ' + P(ar.sigmaE) + ');\n' +
+            'innov = z(2:end) - phi * z(1:end-1); Qi = lbQ(innov, m);\n' +
+            'report(\'Ljung-Box Q, innovations\', Qi, ' + P(lbi.Q) + '); report(\'Ljung-Box p-value, innovations\', chiP(Qi, m - 1), ' + P(lbi.p) + ');\n';
+        })()
+      : '') +
+    'I = abs(fft(y - mean(y))).^2 / n; I(1) = 0.5 * (I(2) + I(end)); h = ' + Math.floor((o.span || 1) / 2) + ';\n' +
+    'if h > 0\n  w = [1 / (4 * h), repmat(1 / (2 * h), 1, 2 * h - 1), 1 / (4 * h)]; S = zeros(size(I));\n' +
+    '  for j = -h:h, S = S + w(j + h + 1) * circshift(I, j); end\n  I = S;\nend\n' +
+    '[~, kmax] = max(I(2:floor(n / 2) + 1));\n' +
+    'report(\'periodogram peak (readings)\', n / kmax, ' + P(pg.period[kmax]) + ');\n\n' +
+    'figure; plot(t, y); xlabel(\'time\'); ylabel(\'value\');\n\n' + REPORT_M;
+  return { r: r, python: py, matlab: mat };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    16.  CSV BUILDERS
    ─────────────────────────────────────────────────────────────────────
    Every export carries the seed and the settings that produced it, so a
@@ -6198,6 +6663,8 @@ var IA = {
   breuschPagan: breuschPagan, fitMean: fitMean,
   timeRowValues: timeRowValues, seriesFrom: seriesFrom, acf: acf, ljungBox: ljungBox, lsq: lsq,
   harmonicFit: harmonicFit, ar1: ar1, periodogram: periodogram,
+  toolDraws: toolDraws, pairExpressions: pairExpressions, timeExpressions: timeExpressions,
+  pairScripts: pairScripts, timeScripts: timeScripts,
   num: num, toCsv: toCsv
 };
 /* ===== IA-CORE-END ===== */

@@ -15,6 +15,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const REF = JSON.parse(fs.readFileSync(path.join(here, 'verify_dependence_reference.json'), 'utf8'));
@@ -250,6 +252,110 @@ export function runTimeOrder(IA, { section, ok, close }) {
   }
 }
 
+/* Runs a generated script and returns what it printed, or null when the
+   language is not installed.  Each script prints one line per reported
+   number, marked "agrees" or "DIFFERS" against the value the page showed. */
+function runScript(cmd, args, code, ext) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-dep-'));
+  const file = path.join(dir, 'script.' + ext);
+  fs.writeFileSync(file, code);
+  const r = spawnSync(cmd, [...args, file], { encoding: 'utf8', cwd: dir, timeout: 180000 });
+  if (r.error && r.error.code === 'ENOENT') return null;
+  return { out: (r.stdout || '') + (r.stderr || ''), status: r.status };
+}
+/* MATLAB starts slowly, and so its scripts run only when IA_MATLAB=1. */
+function runMatlab(code) {
+  if (!process.env.IA_MATLAB) return undefined;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-dep-'));
+  fs.writeFileSync(path.join(dir, 'dep_check.m'), code);
+  const r = spawnSync('matlab', ['-batch', `set(0, 'DefaultFigureVisible', 'off'); cd('${dir}'); dep_check`],
+                      { encoding: 'utf8', timeout: 600000 });
+  if (r.error && r.error.code === 'ENOENT') return null;
+  return { out: (r.stdout || '') + (r.stderr || ''), status: r.status };
+}
+function judgeScript(ok, lang, what, res, minLines) {
+  if (res === undefined) { console.log(`  (skipped: ${lang}; set IA_MATLAB=1 to run it)`); return; }
+  if (!res) { console.log(`  (skipped: ${lang} is not installed)`); return; }
+  const agree = (res.out.match(/\bagrees\b/g) || []).length, differ = (res.out.match(/\bDIFFERS\b/g) || []).length;
+  ok(res.status === 0 && differ === 0 && agree >= minLines,
+     `${lang} script for ${what}: ${agree} values agree with the page, ${differ} differ`,
+     res.out.split('\n').filter(l => /DIFFERS|Error|error/.test(l)).slice(0, 8).join('\n        ') || res.out.slice(-800));
+}
+
+export function runExports(IA, { section, ok, close }) {
+  section('21. export expressions and scripts for the dependence tabs');
+  const D = IA.DISTS;
+  {
+    const base = { a: 1.5, b: 0.25, s: 0.8, xName: 'Items', clip: false, noise: null };
+    const e = IA.pairExpressions(base);
+    ok(e.arena === '1.5 + 0.25*Items + NORM(0, 0.8)', 'Arena line for a + bX with normal noise', e.arena);
+    ok(e.simio === '1.5 + 0.25*Items + Random.Normal(0, 0.8)', 'Simio line', e.simio);
+    ok(e.anylogic === '1.5 + 0.25*Items + normal(0.8, 0)', 'AnyLogic line takes the sd first', e.anylogic);
+    ok(/rnorm\(n, mean = 0, sd = 0\.8\)/.test(e.r) && /1\.5 \+ 0\.25\*x/.test(e.r), 'R line uses the vector x', e.r);
+    const neg = IA.pairExpressions(Object.assign({}, base, { b: -0.25 }));
+    ok(neg.arena === '1.5 - 0.25*Items + NORM(0, 0.8)', 'a negative slope is written with a minus sign', neg.arena);
+    const cl = IA.pairExpressions(Object.assign({}, base, { clip: true }));
+    ok(cl.arena === 'MX(0, 1.5 + 0.25*Items + NORM(0, 0.8))' && cl.simio.startsWith('Math.Max(0, ') &&
+       cl.anylogic.startsWith('Math.max(0, ') && cl.r.startsWith('pmax(0, ') && cl.python.startsWith('np.maximum(0, '),
+       'clipping at zero uses each tool\'s maximum', cl.arena);
+    const g = { dist: D.gamma, p: [2, 1.3], shift: 0 };
+    const rs = IA.pairExpressions(Object.assign({}, base, { noise: { kind: 'resid', fit: g } }));
+    ok(rs.arena === '1.5 + 0.25*Items + (GAMM(1.3, 2) - 2.6)', 'residuals fitted on tab 1 are centered by their mean', rs.arena);
+    ok(/\(stats\.gamma\(a=2, loc=0, scale=1\.3\)\.rvs\(size=n\) - 2\.6\)/.test(rs.python), 'Python draws from the frozen fit', rs.python);
+    const pu = IA.pairExpressions(Object.assign({}, base, { noise: { kind: 'perunit', fit: g } }));
+    ok(pu.arena === 'Items*GAMM(1.3, 2)', 'the per-unit model multiplies X by a draw', pu.arena);
+  }
+  {
+    /* The time expressions, evaluated: the Arena line with the noise set to
+       zero must give the fitted cycle at the data's own times, whatever the
+       model's base unit. */
+    const m = { m: 40, c: [12, 3], s: [-5, 1.5], P: 24, g: 0.02, unit: 'hours', t0: 0, sd: 4, noise: null, ar: null };
+    const det = t => 40 + 12 * Math.cos(2 * Math.PI * t / 24) - 5 * Math.sin(2 * Math.PI * t / 24) +
+                     3 * Math.cos(4 * Math.PI * t / 24) + 1.5 * Math.sin(4 * Math.PI * t / 24) + 0.02 * t;
+    const ev = (expr, env) => new Function(...Object.keys(env), 'return ' + expr)(...Object.values(env));
+    const arenaEnv = (tnow, base) => ({ TNOW: tnow, COS: Math.cos, SIN: Math.sin, NORM: () => 0, MX: Math.max,
+      SecondsToBaseTime: v => v * base.s, MinutesToBaseTime: v => v * base.m, HoursToBaseTime: v => v * base.h, DaysToBaseTime: v => v * base.d });
+    const baseHours = { s: 1 / 3600, m: 1 / 60, h: 1, d: 24 }, baseMinutes = { s: 1 / 60, m: 1, h: 60, d: 1440 };
+    const e = IA.timeExpressions(m);
+    let worst = 0;
+    for (const tt of [0, 5.5, 13, 30]) {
+      worst = Math.max(worst, Math.abs(ev(e.arena, arenaEnv(tt, baseHours)) - det(tt)));
+      worst = Math.max(worst, Math.abs(ev(e.arena, arenaEnv(tt * 60, baseMinutes)) - det(tt)));
+    }
+    ok(worst < 1e-6, `the Arena cycle line gives the fitted cycle in hours- and minutes-based models (worst ${worst.toExponential(2)})`, e.arena);
+    const em = IA.timeExpressions(Object.assign({}, m, { unit: 'minutes', P: 1440, c: [12], s: [-5], g: null }));
+    ok(/\(60\*Run\.TimeNow\)/.test(em.simio), 'Simio converts its hours to the data\'s minutes', em.simio);
+    ok(/time\(MINUTE\)/.test(em.anylogic), 'AnyLogic reads the clock in minutes', em.anylogic);
+    ok(/MinutesToBaseTime\(1\)/.test(em.arena), 'Arena divides by one minute in base units', em.arena);
+    const ss = { Math: { Cos: Math.cos, Sin: Math.sin, Max: Math.max }, Random: { Normal: () => 0 }, Run: { TimeNow: 2.5 } };
+    const sv = new Function('Math', 'Random', 'Run', 'return ' + em.simio)(ss.Math, ss.Random, ss.Run);
+    close(sv, 40 + 12 * Math.cos(2 * Math.PI * 150 / 1440) - 5 * Math.sin(2 * Math.PI * 150 / 1440), 1e-6,
+          'the Simio line, evaluated at 2.5 hours, gives the cycle at 150 minutes');
+    const eo = IA.timeExpressions(Object.assign({}, m, { unit: 'other' }));
+    ok(/TNOW/.test(eo.arena) && !/BaseTime/.test(eo.arena) && /time\(\)/.test(eo.anylogic), 'an unnamed unit uses the bare clock', eo.arena);
+    const e0 = IA.timeExpressions(Object.assign({}, m, { t0: 6 }));
+    const w0 = Math.abs(ev(e0.arena, arenaEnv(2, baseHours)) - det(8));
+    ok(w0 < 1e-6, 'a clock origin of 6 shifts the model\'s time 0 to data time 6', e0.arena);
+    const ea = IA.timeExpressions(Object.assign({}, m, { ar: { phi: 0.7, sigmaE: 1.2 } }));
+    ok(ea.ar && /Z = 0\.7\*Z \+ NORM\(0, 1\.2\)/.test(ea.ar.arena) && /\+ Z$/.test(ea.arena),
+       'with an AR(1), the draw is the cycle plus Z, and Z has its own update line', ea.arena + ' | ' + (ea.ar && ea.ar.arena));
+  }
+  {
+    const u = IA.MRG32k3a(31), x = [], y = [];
+    for (let i = 0; i < 40; i++) { const xi = 1 + Math.floor(u() * 20); x.push(xi); y.push(Math.round((0.5 + 0.3 * xi + 0.1 * xi * IA.normInv(u())) * 100) / 100); }
+    const sc = IA.pairScripts(x, y, { xName: 'items', yName: 'time', level: 0.95, src: 'verify' });
+    judgeScript(ok, 'R', 'two variables', runScript('Rscript', ['--vanilla'], sc.r, 'R'), 14);
+    judgeScript(ok, 'Python', 'two variables', runScript('python3', ['-I'], sc.python, 'py'), 14);
+    const t = [], yy = [];
+    for (let i = 0; i < 168; i++) { t.push(i); yy.push(30 + 8 * Math.cos(2 * Math.PI * (i - 14) / 24) + 2 * IA.normInv(u())); }
+    const ts = IA.timeScripts({ t, y: yy }, { maxLag: 40, m: 20, P: 24, H: 1, trend: false, cycle: true, ar: true, span: 3, src: 'verify' });
+    judgeScript(ok, 'R', 'a series', runScript('Rscript', ['--vanilla'], ts.r, 'R'), 10);
+    judgeScript(ok, 'Python', 'a series', runScript('python3', ['-I'], ts.python, 'py'), 10);
+    judgeScript(ok, 'MATLAB', 'two variables', runMatlab(sc.matlab), 14);
+    judgeScript(ok, 'MATLAB', 'a series', runMatlab(ts.matlab), 10);
+  }
+}
+
 /* Run on its own. */
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { loadCore } = await import('./verify_input_analyzer_jobs.mjs');
@@ -268,7 +374,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       t.ok(err <= tol, `${label}  (err ${err.toExponential(2)} <= ${tol.toExponential(1)})`, `got  ${got}\n        want ${want}`);
     },
   };
-  try { runDependence(IA, t); runTimeOrder(IA, t); }
+  try { runDependence(IA, t); runTimeOrder(IA, t); runExports(IA, t); }
   catch (e) { fail++; failures.push(group + ' :: threw ' + e.message); console.log('  FAIL  threw: ' + e.stack); }
   console.log(`\n${pass} passed, ${fail} failed`);
   for (const f of failures) console.log('  - ' + f);

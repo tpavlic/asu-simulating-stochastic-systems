@@ -21,7 +21,7 @@ import path from 'node:path';
 import { HTML, loadCore, makePool } from './verify_input_analyzer_jobs.mjs';
 /* Sections 19 onward, for the two dependence tabs, live in their own module,
    which also runs on its own. */
-import { runDependence, runTimeOrder } from './verify_input_analyzer_dependence.mjs';
+import { runDependence, runTimeOrder, runExports } from './verify_input_analyzer_dependence.mjs';
 
 /* ── Tiny test harness ─────────────────────────────────────────────── */
 let pass = 0, fail = 0, group = '';
@@ -2065,6 +2065,7 @@ section('18. export expressions');
 
 runDependence(IA, { section, ok, close });
 runTimeOrder(IA, { section, ok, close });
+runExports(IA, { section, ok, close });
 
 /* ══════════════════════════════════════════════════════════════════════
    Summary
