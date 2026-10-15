@@ -12646,6 +12646,20 @@ function renderAr(md) {
     'The test needs at least two lags, one more than the AR(1) uses: raise the number of lags in section 3.'
   ];
   var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
+  /* The fresh steps' distribution is not estimated here: phi and the step
+     size come from correlations alone.  The model names the one the export
+     uses, a normal unless the steps have been fitted on tab 1. */
+  var stepFit = seriesHandoff('innov');
+  if (stepFit && !Number.isFinite(IA.centeringMean(stepFit.fit))) stepFit = null;
+  var stepRows = ['e<sub>t</sub> ~ i.i.d. <span style="white-space:nowrap">Normal(0, ' + fmt(ar.sigmaE, 4) + ')</span>',
+    'e<sub>t</sub> ~ i.i.d. ' + (stepFit ? esc(distLower(stepFit.dist)) : 'normal') + ' from tab ①, centered'];
+  var whereMean = md.hf ? 'cycle(t) is the fit from section 4. ' : fmt(ar.mean, 4) + ' is the readings\u2019 mean. ';
+  var modelCaps = [
+    whereMean + 'Read i.i.d. as independent draws from one distribution. The normal is the export\u2019s default, ' +
+    'and this section does not test its shape: sending the fresh steps to tab ① fits and tests other shapes.',
+    whereMean + 'Read i.i.d. as independent draws from one distribution, here the one fitted to the fresh steps on ' +
+    'tab ①, shifted to mean 0, which the export also uses.'
+  ];
   var eq = function (l, r) {
     return '<div class="eq"><span class="eq-l" style="min-width:7em">' + l + '</span><span class="eq-r">' + r + '</span></div>';
   };
@@ -12653,9 +12667,8 @@ function renderAr(md) {
     eq('Each reading', md.hf ? 'Y<sub>t</sub> = cycle(t) + Z<sub>t</sub>'
                              : 'Y<sub>t</sub> = ' + fmt(ar.mean, 4) + ' + Z<sub>t</sub>') +
     eq('Carry-over', 'Z<sub>t</sub> = ' + fmt(ar.phi, 3) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>') +
-    eq('Fresh step', 'e<sub>t</sub> independent, mean 0, sd ' + fmt(ar.sigmaE, 4)) +
-    (md.hf ? '<div class="plot-cap" style="text-align:left">cycle(t) is the fit from section 4.</div>' :
-             '<div class="plot-cap" style="text-align:left">' + fmt(ar.mean, 4) + ' is the readings\u2019 mean.</div>');
+    eq('Fresh step', '<span id="s-ar-step">' + stepRows[stepFit ? 1 : 0] + '</span>') +
+    '<div class="plot-cap" id="s-ar-model-cap" style="text-align:left">' + modelCaps[stepFit ? 1 : 0] + '</div>';
   host.innerHTML = cards(fmt(ar.phi, 3), fmt(ar.sigmaE, 4), fmtP(q.p)) + model +
     '<div class="plot-cap" style="text-align:left;margin-top:5px">The fresh step size is its standard ' +
     'deviation. The test asks whether any correlation is left once the carry-over is taken out (Ljung–Box ' +
@@ -12663,6 +12676,9 @@ function renderAr(md) {
     '<div class="note ' + (ak === 1 ? 'warn' : 'quiet') + '" id="s-ar-say" style="margin-top:8px">' +
     says[ak] + '</div>';
   reserveHeight($('s-ar-say'), says.map(function (t) { return t.replace(fmt(ar.phi, 3), '0.000'); }));
+  reserveHeight($('s-ar-model-cap'), modelCaps);
+  var stepEl = $('s-ar-step');
+  if (stepEl) { stepEl.style.display = 'block'; reserveHeight(stepEl, stepRows.concat(['e<sub>t</sub> ~ i.i.d. log-logistic from tab ①, centered'])); }
   drawArCorrelogram(ih, md.left, ar, what);
   $('s-send-innov').disabled = false;
 }
