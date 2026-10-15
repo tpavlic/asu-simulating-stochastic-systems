@@ -483,8 +483,14 @@ function update() {
     }
   }
 
-  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level);
-  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level);
+  // What the empty verdicts and figures say when there is no comparison: a
+  // refused transform has its own notice above, and so they point to it
+  // rather than asking for datasets the reader has already chosen.
+  const blank = refused
+    ? { verdict: 'No comparison while the transform cannot take every outcome; see the note above.', frame: 'No result under this transform' }
+    : { verdict: 'No comparison yet: choose two different datasets above.', frame: 'Choose two datasets' };
+  if (mode === 'paired') renderPaired(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, match, tf } : null, level, blank);
+  else renderIndependent(res, notes, ready ? { dsA, dsB, eA, eB, rawA, rawB, tf } : null, level, blank);
   if (refused) planCtx = { msg: 'Planning needs replication outcomes the transform can take.' };
   registerTips(res);
   drawPlan();
@@ -624,7 +630,7 @@ function diffAxis(base) {
   return tfNow === 'none' ? base : base.replace(/, A − B$/, '') + ' on the ' + transformOf(tfNow).scale + ' scale, A − B';
 }
 
-function renderIndependent(res, notes, d, level) {
+function renderIndependent(res, notes, d, level, blank) {
   for (const n of notes) res.appendChild(n);
   const np = proc === 'np', pooled = proc === 'pooled';
   const w = d ? (pooled ? pooledT(d.eA.v, d.eB.v, level) : welch(d.eA.v, d.eB.v, level)) : null;
@@ -665,7 +671,7 @@ function renderIndependent(res, notes, d, level) {
   const verdict = document.createElement('p');
   verdict.className = 'cmp-verdict cmp-res';
   const excludes = shown && (shown.lo > 0 || shown.hi < 0);
-  verdict.textContent = !shown ? 'No comparison yet: choose two different datasets above.'
+  verdict.textContent = !shown ? blank.verdict
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
@@ -701,7 +707,7 @@ function renderIndependent(res, notes, d, level) {
     ]));
     fig2.render(fg => intervals(fg, [{ label: 'A − B', lo: shown.lo, hi: shown.hi, center, flagged: excludes }], { ref: 0, rowPx: 36 }));
   } else {
-    fig1.render(fg => emptyFrame(fg, 'Choose two datasets'));
+    fig1.render(fg => emptyFrame(fg, blank.frame));
     fig2.render(fg => { fg.setHeight(8 + 40 + 36); emptyFrame(fg, ''); });
   }
   exportButtons(box1, fig1, 'two-systems-outcomes');
@@ -740,7 +746,7 @@ function renderIndependent(res, notes, d, level) {
   const fv = fr ? fRatioVerdict(fr) : null;
   const vVerdict = document.createElement('p');
   vVerdict.className = 'cmp-verdict cmp-res';
-  vVerdict.textContent = fv ? fv.text : 'No comparison yet: choose two different datasets above.';
+  vVerdict.textContent = fv ? fv.text : blank.verdict;
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
@@ -1045,7 +1051,7 @@ function pairViews(parent, P) {
   show(state.getPick(id, 'pairView') === 'slope' ? 'slope' : 'rep');
 }
 
-function renderPaired(res, notes, d, level) {
+function renderPaired(res, notes, d, level, blank) {
   const L = levelPct(level);
   let pr = null, m = null, x = null, y = null, pairIds = null;
   if (d) {
@@ -1093,7 +1099,7 @@ function renderPaired(res, notes, d, level) {
   const verdict = document.createElement('p');
   verdict.className = 'cmp-verdict cmp-res';
   const excludes = shown && (shown.lo > 0 || shown.hi < 0);
-  verdict.textContent = !pr ? (d ? 'Too few matched pairs to compare.' : 'No comparison yet: choose two different datasets above.')
+  verdict.textContent = !pr ? (d ? 'Too few matched pairs to compare.' : blank.verdict)
     : excludes ? (np ? 'The interval excludes 0: the designs differ in location at this level.' : 'The interval excludes 0: the means differ at this level.')
       : (np ? 'The interval contains 0: insufficient evidence of a difference in location at this level.' : 'The interval contains 0: insufficient evidence of a difference at this level.');
   s.appendChild(verdict);
@@ -1118,7 +1124,7 @@ function renderPaired(res, notes, d, level) {
   if (pr) {
     fig1.render(fg => strips(fg, [{ label: 'A − B', values: pr.diffs, names: pairIds, mean: shown.center, lo: shown.lo, hi: shown.hi, intervalName: shown.name }], { ref: 0 }));
   } else {
-    fig1.render(fg => emptyFrame(fg, d ? 'Too few matched pairs' : 'Choose two datasets'));
+    fig1.render(fg => emptyFrame(fg, d ? 'Too few matched pairs' : blank.frame));
   }
   exportButtons(box1, fig1, 'two-systems-paired-differences');
   legend(leg1, [
