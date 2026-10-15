@@ -1900,16 +1900,17 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">5 &middot; An AR(1) for what is left <span class="sec-note">each value pulled toward the one before it</span></div>
-    <div class="plot-wrap">
+    <div class="sec-hd">5 &middot; Carry-over from one reading to the next <span class="sec-note">an AR(1) model, for dependence that a cycle does not explain</span></div>
+    <div class="hint" id="s-ar-lede"></div>
+    <div class="plot-wrap" style="margin-top:10px">
       <div style="flex:1 1 280px;min-width:0">
         <div id="s-ar-out"></div>
         <div class="ctrl-row" style="margin-top:10px">
-          <button class="btn2" id="s-send-innov" type="button">Fit the AR(1) innovations on tab ①</button>
+          <button class="btn2" id="s-send-innov" type="button">Fit the fresh steps on tab ①</button>
         </div>
       </div>
       <div class="plot-card" style="flex:1.4 1 400px">
-        <div class="plot-hd">Correlogram of the innovations</div>
+        <div class="plot-hd">Correlation at each lag, before and after the AR(1)</div>
         <div id="s-innov-host"><div class="plot-empty">Load readings.</div></div>
       </div>
     </div>
@@ -1917,10 +1918,11 @@ footer a:hover { text-decoration: underline; }
       <summary>A model that follows the clock, or one that remembers the last value</summary>
       <div class="why-body">
         <p>An AR(1) writes each value, measured from its mean, as <code>Z = &phi; &middot; (previous Z) +
-        e</code>, where <code>e</code> is a fresh, independent draw called the innovation. With &phi;
-        near 1, the series wanders slowly; with &phi; near 0, it is close to independent. The
-        innovations' correlogram checks the fit: if its bars sit inside the band, one lag was
-        enough.</p>
+        e</code>, where <code>e</code> is the fresh step: an independent draw, also called the
+        innovation. With &phi; near 1, the series wanders slowly; with &phi; near 0, it is close to
+        independent. If Z really is an AR(1), its correlation at lag k is &phi;<sup>k</sup>, which is the
+        teal curve on the plot, and the fresh steps are uncorrelated, which is why their orange bars
+        should sit inside the band.</p>
         <p>The cycle in section 4 reads the clock, and so it needs no memory: a model can draw a
         value at any time from the time alone. An AR(1) remembers the previous draw, and so a model
         needs a variable that it updates every time it draws. Its lag then means one draw ago,
@@ -12600,11 +12602,29 @@ function initSeriesTab() {
 /* Section 5: an AR(1) for what the cycle leaves, or for the readings when
    no cycle is fitted, checked by the correlogram of its innovations. */
 function renderAr(md) {
-  var host = $('s-ar-out'), ih = $('s-innov-host'), ar = md.ar, n = SST.y.length;
+  var host = $('s-ar-out'), ih = $('s-innov-host'), lede = $('s-ar-lede'), ar = md.ar, n = SST.y.length;
   var what = md.hf ? 'what the cycle leaves' : 'the readings';
+  var ledes = [
+    'Section 4’s cycle explains the part of the readings that follows the clock. What it leaves (the ' +
+    'readings minus the fitted cycle) can still carry over from one reading to the next, the way a tank’s ' +
+    'temperature changes only a little from one minute to the next. This section measures that carry-over ' +
+    'with an AR(1): each leftover value is &phi; times the one before it plus a fresh random step. A &phi; ' +
+    'near 0 means no carry-over, and a &phi; near 1 means each value is almost the one before it.',
+    'No cycle is fitted in section 4, and so this section works on the readings themselves, measured from ' +
+    'their mean. Readings can carry over from one to the next, the way a tank’s temperature changes only ' +
+    'a little from one minute to the next. This section measures that carry-over with an AR(1): each value is ' +
+    '&phi; times the one before it plus a fresh random step. A &phi; near 0 means no carry-over, and a &phi; ' +
+    'near 1 means each value is almost the one before it.'
+  ];
+  reserveHeight(lede, ledes);
+  lede.innerHTML = ledes[md.hf ? 0 : 1];
+  var cards = function (phi, sd, p) {
+    return '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
+      card('Carry-over <span class="lit">&phi;</span>', phi) + card('Fresh step size', sd) +
+      card('Test p-value', p) + '</div>';
+  };
   if (!ar || !Number.isFinite(ar.phi)) {
-    host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
-      card('<span class="lit">&phi;</span>', '—') + card('Innovation sd', '—') + '</div>';
+    host.innerHTML = cards('—', '—', '—');
     ih.innerHTML = '<div class="plot-empty">' + (n < MIN_SERIES ? 'Load at least ' + MIN_SERIES + ' readings.'
       : 'The readings do not vary, and so there is nothing to fit.') + '</div>';
     $('s-send-innov').disabled = true;
@@ -12612,27 +12632,64 @@ function renderAr(md) {
   }
   var ni = ar.innov.length, m = Math.min(SST.m, ni - 2), q = IA.ljungBox(IA.acf(ar.innov, m), ni, m, 1);
   var says = [
-    'The innovations look independent (p \u2265 0.05), and so one lag is enough: ' + what +
-    (md.hf ? ' behaves' : ' behave') + ' like an AR(1).',
-    'The innovations are still correlated (p < 0.05), and so one lag is not enough. Look for a cycle the model ' +
-    'misses (section 4), or a longer memory than an AR(1) has.',
-    'The test needs at least two lags, one more than the AR(1) uses: raise the Ljung\u2013Box lags in section 3.'
+    'Once the carry-over is taken out, no correlation remains (p ≥ 0.05). An AR(1) with &phi; = ' +
+    fmt(ar.phi, 3) + ' describes how ' + what + (md.hf ? ' depends' : ' depend') + ' on the reading before, ' +
+    'and the fresh steps are independent draws that tab ① can fit.',
+    'Correlation remains after the carry-over is taken out (p < 0.05), and so one reading’s worth of memory ' +
+    'is not enough. Look for a cycle that section 4 misses, or a longer memory than an AR(1) has.',
+    'The test needs at least two lags, one more than the AR(1) uses: raise the number of lags in section 3.'
   ];
   var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
-  host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
-    card('<span class="lit">&phi;</span>', fmt(ar.phi, 4)) +
-    card('Innovation sd', fmt(ar.sigmaE, 4)) +
-    card('Ljung–Box <span class="lit">Q</span>', fmt(q.Q, 4)) +
-    card('p-value (' + q.df + ' df)', fmtP(q.p)) + '</div>' +
-    '<div class="plot-cap" style="text-align:left;margin-top:5px">Fitted to ' + what + '; ' +
-    (md.hf ? 'its mean is 0.' : 'the mean, ' + fmt(ar.mean, 4) + ', is taken off first.') +
-    ' The test loses one degree of freedom for the estimated &phi;.</div>' +
+  host.innerHTML = cards(fmt(ar.phi, 3), fmt(ar.sigmaE, 4), fmtP(q.p)) +
+    '<div class="plot-cap" style="text-align:left;margin-top:5px">The fresh step size is its standard ' +
+    'deviation. The test asks whether any correlation is left once the carry-over is taken out (Ljung–Box ' +
+    'over the lags set in section 3).</div>' +
     '<div class="note ' + (ak === 1 ? 'warn' : 'quiet') + '" id="s-ar-say" style="margin-top:8px">' +
     says[ak] + '</div>';
-  reserveHeight($('s-ar-say'), says);
-  drawCorrelogram(ih, IA.acf(ar.innov, Math.max(1, Math.min(Math.floor(ni / 4), 60))), ni, 0,
-    'Correlogram of the AR(1) innovations', 'Autocorrelation of the AR(1) innovations, with the 95% band for independent values');
+  reserveHeight($('s-ar-say'), says.map(function (t) { return t.replace(fmt(ar.phi, 3), '0.000'); }));
+  drawArCorrelogram(ih, md.left, ar, what);
   $('s-send-innov').disabled = false;
+}
+
+/* The AR(1)'s check in one plot: the correlogram of what it was fitted to
+   (gray, as in section 3), the correlations an AR(1) with this phi
+   predicts for it (phi to the power k, teal), and the correlogram of the
+   fresh steps left once each value's carry-over is taken out (orange),
+   which should sit inside the band when the AR(1) fits. */
+function drawArCorrelogram(host, left, ar, what) {
+  var ni = ar.innov.length, L = Math.max(1, Math.min(Math.floor(ni / 4), 60));
+  var before = IA.acf(left, L), after = IA.acf(ar.innov, L), k;
+  var W = hostW(host, 330, 620, 520), narrow = W < 470, top = narrow ? 74 : 46;
+  var P = Plot(W, Math.round(W * (narrow ? 0.72 : 0.52)) + top - 12, { l: 46, r: 12, t: top, b: 44 }).domain(0, L + 0.5, -1, 1);
+  var xt = tickPair(0, L, narrow ? 5 : 8);
+  P.frame().axes(xt.ticks.filter(function (v) { return Number.isInteger(v); }), [-1, -0.5, 0, 0.5, 1],
+                 function (v) { return String(v); }, function (v) { return String(v); });
+  var band = 1.96 / Math.sqrt(ni), off = L > 30 ? 0.2 : 0.16;
+  P.seg(0, 0, L + 0.5, 0, 'var(--border)', 1);
+  P.seg(0, band, L + 0.5, band, 'var(--alt)', 1.3, '5 4');
+  P.seg(0, -band, L + 0.5, -band, 'var(--alt)', 1.3, '5 4');
+  for (k = 1; k <= L; k++) if (Number.isFinite(before[k])) P.seg(k - off, 0, k - off, before[k], 'var(--muted)', 2);
+  for (k = 1; k <= L; k++) if (Number.isFinite(after[k])) P.seg(k + off, 0, k + off, after[k], 'var(--obs)', 2);
+  var curve = [];
+  for (k = 0; k <= L; k++) curve.push([k, Math.pow(ar.phi, k)]);
+  P.line(curve, 'var(--fit)', 2);
+  P.labels('lag k', 'correlation');
+  var items = [
+    { mark: 'line', color: 'var(--muted)', label: 'before: ' + what },
+    { mark: 'line', color: 'var(--fit)', label: 'what the AR(1) predicts, φᵏ' },
+    { mark: 'line', color: 'var(--obs)', label: 'after: the fresh steps' },
+    { mark: 'line', color: 'var(--alt)', dash: '5 4', label: '95% band if independent' }
+  ];
+  for (var i = 0; i < items.length; i++) {
+    var col = narrow ? 0 : i % 2, row = narrow ? i : Math.floor(i / 2);
+    P.legend(P.mL + col * (W / 2 - 10), 14 + row * 15, [items[i]]);
+  }
+  host.innerHTML = P.svg('Correlogram before and after the AR(1)',
+    'Autocorrelation of ' + what + ' and of the AR(1) fresh steps at each lag, with the correlations the AR(1) predicts') +
+    '<div class="plot-cap">Gray bars repeat section 3’s correlogram of ' + what + '. An AR(1) predicts that ' +
+    'they shrink by a factor of φ at each lag, along the teal curve. Orange bars are the correlogram of the ' +
+    'fresh steps, what is left once each value’s carry-over is taken out; when the AR(1) fits, they sit ' +
+    'inside the dashed band.</div>';
 }
 
 /* Sends readings, what the cycle leaves, or the AR(1) innovations to tab 1.
@@ -12646,8 +12703,8 @@ function sendSeriesToFit(kind) {
     unit = 'the readings of ' + vname + ' minus the fitted cycle, from tab ④';
   } else {
     if (!md.ar || !md.ar.innov.length) return;
-    v = md.ar.innov; label = 'AR(1) innovations of ' + vname;
-    unit = 'the AR(1) innovations of ' + (md.hf ? 'what the cycle leaves in ' : '') + vname + ', from tab ④';
+    v = md.ar.innov; label = 'AR(1) fresh steps of ' + vname;
+    unit = 'the fresh random steps of an AR(1) fitted to ' + (md.hf ? 'what the cycle leaves in ' : '') + vname + ', from tab ④';
   }
   showTab('fit');
   ST.unit = unit;
@@ -12683,7 +12740,7 @@ function renderSeriesExport(md) {
     var hi = seriesHandoff('innov');
     model.ar = { phi: md.ar.phi, sigmaE: md.ar.sigmaE, noise: hi ? { fit: hi.fit } : null };
     if (hi && !Number.isFinite(IA.centeringMean(hi.fit))) { model.ar.noise = null; hi = null; }
-    msgs.push('Noise: an AR(1) variable Z with φ = ' + fmt(md.ar.phi, 4) + ', whose innovations are ' +
+    msgs.push('Noise: an AR(1) variable Z with φ = ' + fmt(md.ar.phi, 4) + ', whose fresh steps are ' +
       (hi ? 'the ' + esc(distLower(hi.dist)) + ' fitted on tab ① to them, centered by its mean.'
           : 'normal with standard deviation ' + fmt(md.ar.sigmaE, 4) + '.'));
   } else {
