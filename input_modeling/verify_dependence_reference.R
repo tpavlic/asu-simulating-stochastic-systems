@@ -79,8 +79,8 @@ harm <- function(t, y, P, H, trend) {
 }
 
 pg <- function(y, span) {
-  sp <- if (span == 1) spec.pgram(y, taper = 0, detrend = FALSE, fast = FALSE, plot = FALSE)
-        else spec.pgram(y, spans = span, taper = 0, detrend = FALSE, fast = FALSE, plot = FALSE)
+  sp <- if (span == 1) spec.pgram(y, taper = 0, fast = FALSE, plot = FALSE)
+        else spec.pgram(y, spans = span, taper = 0, fast = FALSE, plot = FALSE)
   obj(span = num(span), freq = arr(sp$freq), spec = arr(sp$spec))
 }
 

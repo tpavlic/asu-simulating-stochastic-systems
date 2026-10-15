@@ -116,6 +116,30 @@ export function runDependence(IA, { section, ok, close }) {
   }
 
   {
+    /* Kendall's S by brute force, to check the page's merge-count method on
+       tied data of every size. */
+    const brute = (x, y) => { let S = 0; for (let i = 0; i < x.length; i++) for (let j = i + 1; j < x.length; j++) S += Math.sign(x[i] - x[j]) * Math.sign(y[i] - y[j]); return S; };
+    const u = IA.MRG32k3a(515);
+    let bad = '';
+    for (let rep = 0; rep < 300; rep++) {
+      const n = 2 + Math.floor(u() * 120), x = [], y = [];
+      for (let j = 0; j < n; j++) { x.push(Math.floor(u() * 8)); y.push(rep % 3 ? Math.floor(u() * 6) : u()); }
+      const k = IA.kendallTauB(x, y);
+      if (Number.isFinite(k.S) && k.S !== brute(x, y)) bad = JSON.stringify({ n, S: k.S, want: brute(x, y) });
+    }
+    ok(!bad, "Kendall's S equals the brute-force count on 300 tied samples", bad);
+    const xl = [], yl = [];
+    for (let j = 0; j < 20000; j++) { xl.push(Math.floor(u() * 50)); yl.push(xl[j] + u()); }
+    let t0 = Date.now(); IA.kendallTauB(xl, yl); const tk = Date.now() - t0;
+    ok(tk < 200, `Kendall on 20,000 tied pairs takes ${tk} ms (under 200)`);
+    t0 = Date.now(); IA.periodogram(yl, 3); const tp = Date.now() - t0;
+    ok(tp < 200, `the periodogram of 20,000 readings takes ${tp} ms (under 200)`);
+    const ty = []; for (let j = 0; j < 30011; j++) ty.push(Math.sin(2 * Math.PI * j / 37) + 0.001 * j);
+    const pg = IA.periodogram(ty, 1); let km = 0;
+    for (let k = 1; k < pg.spec.length; k++) if (pg.spec[k] > pg.spec[km]) km = k;
+    ok(Math.abs(pg.period[km] - 37) < 0.1, `a prime-length record with a trend finds its period of 37 (${pg.period[km].toFixed(2)})`);
+  }
+  {
     let threw = '';
     let res;
     try {
@@ -212,8 +236,7 @@ export function runTimeOrder(IA, { section, ok, close }) {
     ok(wf < 1e-14 && ws < 1e-9, `periodogram, span ${d.span}: matches spec.pgram (largest relative gap ${ws.toExponential(2)})`);
     let kmax = 0;
     for (let k = 1; k < pg.spec.length; k++) if (pg.spec[k] > pg.spec[kmax]) kmax = k;
-    /* Smoothing spreads the trend's low-frequency power toward the peak, and
-       a wide kernel over 144 readings can move the maximum one Fourier
+    /* A wide kernel over 144 readings can move the maximum one Fourier
        frequency; the unsmoothed and lightly smoothed peaks must be exact. */
     const kTrue = REF.harm.y.length / 24 - 1;
     ok(d.span <= 3 ? kmax === kTrue : Math.abs(kmax - kTrue) <= 1,
@@ -255,8 +278,9 @@ export function runTimeOrder(IA, { section, ok, close }) {
 /* Runs a generated script and returns what it printed, or null when the
    language is not installed.  Each script prints one line per reported
    number, marked "agrees" or "DIFFERS" against the value the page showed. */
-function runScript(cmd, args, code, ext) {
+function runScript(cmd, args, code, ext, files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-dep-'));
+  for (const f of files || []) fs.writeFileSync(path.join(dir, f.name), f.text);
   const file = path.join(dir, 'script.' + ext);
   fs.writeFileSync(file, code);
   const r = spawnSync(cmd, [...args, file], { encoding: 'utf8', cwd: dir, timeout: 180000 });
@@ -264,9 +288,10 @@ function runScript(cmd, args, code, ext) {
   return { out: (r.stdout || '') + (r.stderr || ''), status: r.status };
 }
 /* MATLAB starts slowly, and so its scripts run only when IA_MATLAB=1. */
-function runMatlab(code) {
+function runMatlab(code, files) {
   if (!process.env.IA_MATLAB) return undefined;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-dep-'));
+  for (const f of files || []) fs.writeFileSync(path.join(dir, f.name), f.text);
   fs.writeFileSync(path.join(dir, 'dep_check.m'), code);
   const r = spawnSync('matlab', ['-batch', `set(0, 'DefaultFigureVisible', 'off'); cd('${dir}'); dep_check`],
                       { encoding: 'utf8', timeout: 600000 });
@@ -339,6 +364,10 @@ export function runExports(IA, { section, ok, close }) {
     const w0 = Math.abs(ev(e0.arena, arenaEnv(2, baseHours)) - det(8));
     ok(w0 < 1e-6, 'a clock origin of 6 shifts the model\'s time 0 to data time 6', e0.arena);
     const ea = IA.timeExpressions(Object.assign({}, m, { ar: { phi: 0.7, sigmaE: 1.2 } }));
+    const en = IA.timeExpressions(Object.assign({}, m, { ar: { phi: -0.3, sigmaE: 1 } }));
+    ok(/filter\(1, \[1, 0\.3\]/.test(en.ar.matlab), 'a negative phi gives MATLAB [1, 0.3], not [1, --0.3]', en.ar.matlab);
+    ok(ea.ar && ea.ar.notes && typeof ea.ar.notes.anylogic === 'string' && /FIRST/.test(ea.ar.notes.anylogic),
+       'the AR(1) update line carries its noise draw\'s parameter notes', JSON.stringify(ea.ar && ea.ar.notes));
     ok(ea.ar && /Z = 0\.7\*Z \+ NORM\(0, 1\.2\)/.test(ea.ar.arena) && /\+ Z$/.test(ea.arena),
        'with an AR(1), the draw is the cycle plus Z, and Z has its own update line', ea.arena + ' | ' + (ea.ar && ea.ar.arena));
   }
@@ -355,6 +384,24 @@ export function runExports(IA, { section, ok, close }) {
     judgeScript(ok, 'Python', 'a series', runScript('python3', ['-I'], ts.python, 'py'), 10);
     judgeScript(ok, 'MATLAB', 'two variables', runMatlab(sc.matlab), 14);
     judgeScript(ok, 'MATLAB', 'a series', runMatlab(ts.matlab), 10);
+    /* Past MAX_INLINE values the scripts read the tab's CSV download
+       instead of embedding the data, and the file carries # provenance
+       lines and a blank line above its header. */
+    const xb = [], yb = [], tb = [], sb = [];
+    for (let i = 0; i < 300; i++) { const xi = 1 + Math.floor(u() * 20); xb.push(xi); yb.push(Math.round((0.5 + 0.3 * xi + IA.normInv(u())) * 100) / 100); }
+    for (let i = 0; i < 300; i++) { tb.push(i); sb.push(30 + 8 * Math.cos(2 * Math.PI * i / 24) + 2 * IA.normInv(u())); }
+    const prov = ['# Input Analyzer', '# data source: verify', '# a third line', '# a fourth line'];
+    const pcsv = IA.pairCsv(xb, yb, prov), scsv = IA.seriesCsv(tb, sb, null, prov);
+    const scB = IA.pairScripts(xb, yb, { xName: 'items', yName: 'time', level: 0.95 });
+    const tsB = IA.timeScripts({ t: tb, y: sb }, { maxLag: 40, m: 20, P: 24, H: 1, trend: false, cycle: true, ar: true, span: 3 });
+    ok(!/^x = np\.array/m.test(scB.python) && /input-analyzer-pairs\.csv/.test(scB.python), 'past 250 values the pair scripts read the CSV');
+    const withCsv = (name, text) => ({ name, text });
+    judgeScript(ok, 'R', 'two variables read from CSV', runScript('Rscript', ['--vanilla'], scB.r, 'R', [withCsv('input-analyzer-pairs.csv', pcsv)]), 14);
+    judgeScript(ok, 'Python', 'two variables read from CSV', runScript('python3', ['-I'], scB.python, 'py', [withCsv('input-analyzer-pairs.csv', pcsv)]), 14);
+    judgeScript(ok, 'R', 'a series read from CSV', runScript('Rscript', ['--vanilla'], tsB.r, 'R', [withCsv('input-analyzer-series.csv', scsv)]), 10);
+    judgeScript(ok, 'Python', 'a series read from CSV', runScript('python3', ['-I'], tsB.python, 'py', [withCsv('input-analyzer-series.csv', scsv)]), 10);
+    judgeScript(ok, 'MATLAB', 'two variables read from CSV', runMatlab(scB.matlab, [withCsv('input-analyzer-pairs.csv', pcsv)]), 14);
+    judgeScript(ok, 'MATLAB', 'a series read from CSV', runMatlab(tsB.matlab, [withCsv('input-analyzer-series.csv', scsv)]), 10);
   }
 }
 

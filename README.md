@@ -39,7 +39,7 @@ below.
 
 | Directory | Description |
 | --- | --- |
-| [`input_modeling/input_analyzer.html`](input_modeling/input_analyzer.html) | Input Analyzer: paste sample data and fit eighteen candidate distributions (and the two Johnson members on request) by maximum likelihood, compare them by AIC, BIC, and square error, check the fit with bootstrap goodness-of-fit tests, and export the expression for your simulation tool; two more tabs check whether inputs depend on one another or on time, and model what they find. |
+| [`input_modeling/input_analyzer.html`](input_modeling/input_analyzer.html) | Input Analyzer: paste sample data and fit eighteen candidate distributions (and the two Johnson members on request) by maximum likelihood, compare them by AIC, BIC, and square error, check the fit with bootstrap goodness-of-fit tests, and export the expression for your simulation tool; two more tabs check whether inputs depend on one another or on time and model what they find. |
 | [`input_modeling/prob_models.html`](input_modeling/prob_models.html) | Distribution Explorer: browse nineteen input-modeling distributions, each with live pdf and cdf plots, formulas and moments, guidance on when to choose it, and an animated inverse-transform generator. |
 
 ### Output Analysis

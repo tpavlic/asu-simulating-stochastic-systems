@@ -6267,19 +6267,55 @@ function tieGroups(x) {
   return out;
 }
 
+/* Concordant minus discordant pairs, by Knight's method: sort by x (ties
+   broken by y), count the inversions left in y with a merge sort, and
+   correct for the pairs tied in x, in y, or in both.  O(n log n), where the
+   pair-by-pair count is O(n^2) and takes seconds at a few tens of thousands
+   of pairs. */
+function kendallS(x, y) {
+  var n = x.length, idx = [], i, j, t;
+  for (i = 0; i < n; i++) idx.push(i);
+  idx.sort(function (a, b) { return x[a] - x[b] || y[a] - y[b]; });
+  var n1 = 0, n3 = 0;
+  for (i = 0; i < n; i = j) {
+    for (j = i + 1; j < n && x[idx[j]] === x[idx[i]]; j++) ;
+    t = j - i; n1 += t * (t - 1) / 2;
+    for (var k = i, l; k < j; k = l) {
+      for (l = k + 1; l < j && y[idx[l]] === y[idx[k]]; l++) ;
+      n3 += (l - k) * (l - k - 1) / 2;
+    }
+  }
+  var ys = idx.map(function (q) { return y[q]; }), buf = new Array(n), dis = 0;
+  /* Bottom-up merge sort counting the pairs left before right with the left
+     value strictly larger. */
+  for (var w = 1; w < n; w *= 2) {
+    for (var lo = 0; lo < n; lo += 2 * w) {
+      var mid = Math.min(lo + w, n), hi = Math.min(lo + 2 * w, n), a = lo, b = mid, o = lo;
+      while (a < mid && b < hi) {
+        if (ys[a] <= ys[b]) buf[o++] = ys[a++];
+        else { dis += mid - a; buf[o++] = ys[b++]; }
+      }
+      while (a < mid) buf[o++] = ys[a++];
+      while (b < hi) buf[o++] = ys[b++];
+    }
+    var sw = ys; ys = buf; buf = sw;
+  }
+  var n2 = 0;
+  for (i = 0; i < n; i = j) {
+    for (j = i + 1; j < n && ys[j] === ys[i]; j++) ;
+    t = j - i; n2 += t * (t - 1) / 2;
+  }
+  return n * (n - 1) / 2 - n1 - n2 + n3 - 2 * dis;
+}
+
 /* Kendall's tau-b with the p-value cor.test reports: exact for fewer than
    50 untied pairs, otherwise the normal approximation with the variance
    corrected for ties and no continuity correction. */
 function kendallTauB(x, y) {
-  var n = x.length, S = 0, i, j;
+  var n = x.length;
   var out = { n: n, tau: NaN, S: NaN, z: NaN, p: NaN, exact: false };
   if (n < 2 || y.length !== n) return out;
-  for (i = 0; i < n; i++) {
-    for (j = i + 1; j < n; j++) {
-      var a = x[i] - x[j], b = y[i] - y[j];
-      S += (a > 0 ? 1 : a < 0 ? -1 : 0) * (b > 0 ? 1 : b < 0 ? -1 : 0);
-    }
-  }
+  var S = kendallS(x, y);
   var gx = tieGroups(x), gy = tieGroups(y);
   var sum = function (g, f) { var s = 0; for (var k = 0; k < g.length; k++) s += f(g[k]); return s; };
   var T0 = n * (n - 1) / 2;
@@ -6592,22 +6628,78 @@ function ar1(x) {
   return out;
 }
 
-/* The periodogram, smoothed by a modified Daniell kernel of the given odd
-   span (1 for none), as R's spec.pgram with taper = 0, no padding, and no
-   detrending.  freq is in cycles per reading and period = 1 / freq in
-   readings.  The kernel wraps around the ends, as R's does, and the zero
-   frequency is replaced by the average of its two neighbors first. */
-function periodogram(y, span) {
-  var n = y.length, i, k, m = 0;
-  for (i = 0; i < n; i++) m += y[i];
-  m /= n;
-  var half = Math.floor(n / 2), I = new Array(n);
-  for (k = 0; k <= half; k++) {
-    var re = 0, im = 0, w = 2 * Math.PI * k / n;
-    for (i = 0; i < n; i++) { re += (y[i] - m) * Math.cos(w * i); im -= (y[i] - m) * Math.sin(w * i); }
-    I[k] = (re * re + im * im) / n;
-    if (k > 0) I[n - k] = I[k];
+/* The discrete Fourier transform of a real sequence of any length:
+   radix-2 when the length is a power of two, and Bluestein's chirp
+   method otherwise, which rewrites the transform as a convolution done
+   with power-of-two FFTs.  Either way O(n log n). */
+function fft2(re, im, inverse) {
+  var n = re.length, i, j, k, len, t;
+  for (i = 1, j = 0; i < n; i++) {
+    var bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
   }
+  for (len = 2; len <= n; len <<= 1) {
+    var ang = (inverse ? 2 : -2) * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (i = 0; i < n; i += len) {
+      var cr = 1, ci = 0;
+      for (k = 0; k < len / 2; k++) {
+        var ar = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+        var ai = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k + len / 2] = re[i + k] - ar; im[i + k + len / 2] = im[i + k] - ai;
+        re[i + k] += ar; im[i + k] += ai;
+        t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+  if (inverse) for (i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+}
+function dftReal(x) {
+  var n = x.length, i, m = 1;
+  while (m < n) m <<= 1;
+  if (m === n) {
+    var r = x.slice(), z = new Array(n).fill(0);
+    fft2(r, z, false);
+    return { re: r, im: z };
+  }
+  m = 1;
+  while (m < 2 * n - 1) m <<= 1;
+  /* Chirp w_k = exp(-i pi k^2 / n), with k^2 reduced mod 2n so that the
+     angle stays small and exact. */
+  var wr = new Array(n), wi = new Array(n);
+  for (i = 0; i < n; i++) { var ang = Math.PI * ((i * i) % (2 * n)) / n; wr[i] = Math.cos(ang); wi[i] = -Math.sin(ang); }
+  var ar = new Array(m).fill(0), ai = new Array(m).fill(0), br = new Array(m).fill(0), bi = new Array(m).fill(0);
+  for (i = 0; i < n; i++) { ar[i] = x[i] * wr[i]; ai[i] = x[i] * wi[i]; }
+  br[0] = wr[0]; bi[0] = -wi[0];
+  for (i = 1; i < n; i++) { br[i] = br[m - i] = wr[i]; bi[i] = bi[m - i] = -wi[i]; }
+  fft2(ar, ai, false); fft2(br, bi, false);
+  for (i = 0; i < m; i++) {
+    var cr = ar[i] * br[i] - ai[i] * bi[i], ci = ar[i] * bi[i] + ai[i] * br[i];
+    ar[i] = cr; ai[i] = ci;
+  }
+  fft2(ar, ai, true);
+  var re = new Array(n), im = new Array(n);
+  for (i = 0; i < n; i++) { re[i] = ar[i] * wr[i] - ai[i] * wi[i]; im[i] = ar[i] * wi[i] + ai[i] * wr[i]; }
+  return { re: re, im: im };
+}
+
+/* The periodogram, smoothed by a modified Daniell kernel of the given odd
+   span (1 for none), as R's spec.pgram with taper = 0 and no padding.  As
+   there, a straight line is fitted and removed first: a trend puts its
+   power at the lowest frequencies, and left in, it would outrank any cycle
+   and report the length of the record as the period.  freq is in cycles
+   per reading and period = 1 / freq in readings.  The kernel wraps around
+   the ends, as R's does, and the zero frequency is replaced by the average
+   of its two neighbors first. */
+function periodogram(y, span) {
+  var n = y.length, i, k, m = 0, st = 0, c = (n + 1) / 2, st2 = n * (n * n - 1) / 12;
+  for (i = 0; i < n; i++) { m += y[i]; st += y[i] * (i + 1 - c); }
+  m /= n;
+  var z = new Array(n);
+  for (i = 0; i < n; i++) z[i] = y[i] - m - (st2 > 0 ? st * (i + 1 - c) / st2 : 0);
+  var F = dftReal(z), half = Math.floor(n / 2), I = new Array(n);
+  for (k = 0; k < n; k++) I[k] = (F.re[k] * F.re[k] + F.im[k] * F.im[k]) / n;
   I[0] = 0.5 * (I[1] + I[n - 1]);
   var h = Math.floor((span || 1) / 2), S = I;
   if (h >= 1) {
@@ -6766,7 +6858,7 @@ function timeExpressions(m) {
       simio: inn.simio ? 'Z = ' + phi + '*Z + ' + inn.simio : null,
       anylogic: inn.anylogic ? 'Z = ' + phi + '*Z + ' + inn.anylogic + ';' : null,
       r: inn.r ? 'z <- as.numeric(stats::filter(' + inn.r + ', ' + phi + ', method = "recursive"))' : null,
-      matlab: inn.matlab ? 'z = filter(1, [1, -' + phi + '], ' + inn.matlab + ');' : null,
+      matlab: inn.matlab ? 'z = filter(1, [1, ' + num(-m.ar.phi) + '], ' + inn.matlab + ');' : null,
       python: inn.python ? 'e = ' + inn.python + '\nz = np.zeros(n)\nfor i in range(n):\n    z[i] = (' + phi +
               ' * z[i - 1] if i else 0) + e[i]' : null,
       notes: inn.notes
@@ -6774,6 +6866,33 @@ function timeExpressions(m) {
   }
   return out;
 }
+
+/* The two tabs' data files: provenance lines, a blank line, a header,
+   and one row per pair or reading.  The scripts below read exactly these. */
+function pairCsv(x, y, prov) {
+  var rows = (prov || []).map(function (l) { return [l]; });
+  rows.push([], ['x', 'y']);
+  for (var i = 0; i < x.length; i++) rows.push([num(x[i], 12), num(y[i], 12)]);
+  return toCsv(rows);
+}
+function seriesCsv(t, y, cyc, prov) {
+  var rows = (prov || []).map(function (l) { return [l]; });
+  rows.push([], cyc ? ['t', 'y', 'cycle', 'left'] : ['t', 'y']);
+  for (var i = 0; i < y.length; i++) {
+    var r = [num(t[i], 12), num(y[i], 12)];
+    if (cyc) r.push(num(cyc.fitted[i], 12), num(cyc.resid[i], 12));
+    rows.push(r);
+  }
+  return toCsv(rows);
+}
+/* Python's reader for those files: the standard library's csv module,
+   skipping the # lines and the blank one.  numpy.genfromtxt would take
+   the first # line as the header. */
+var READ_CSV_PY =
+  'def read_csv(path):\n' +
+  '    with open(path, newline="") as f:\n' +
+  '        rows = [r for r in csv.reader(f) if r and not r[0].startswith("#")]\n' +
+  '    return {h: np.array([float(r[i]) for r in rows[1:]]) for i, h in enumerate(rows[0])}\n';
 
 /* ── Scripts that recompute every number on the two tabs ─────────────
    Each prints one line per number, beside the value this page showed and
@@ -6863,7 +6982,7 @@ function pairScripts(x, y, o) {
     (src ? '# ' + src + '\n' : '') +
     'import numpy as np\nfrom scipy import stats\n\n' +
     (xl.p && yl.p ? 'x = ' + xl.p + '   # ' + xn + '\ny = ' + yl.p + '   # ' + yn + '\n'
-                  : 'd = np.genfromtxt("' + csv + '", delimiter=",", names=True, comments="#")   # the tab\'s CSV download\nx, y = d["x"], d["y"]\n') +
+                  : 'import csv\n' + READ_CSV_PY + 'd = read_csv("' + csv + '")   # the tab\'s CSV download\nx, y = d["x"], d["y"]\n') +
     'level = ' + num(lv) + '\nn = len(x)\n\n' + REPORT_PY + '\n' +
     'pr = stats.pearsonr(x, y)\nci = pr.confidence_interval(level)\n' +
     'sp = stats.spearmanr(x, y)\n' +
@@ -7003,7 +7122,7 @@ function timeScripts(series, o) {
         'bi <- Box.test(innov, lag = m, type = "Ljung-Box", fitdf = 1); v$Qi <- unname(bi$statistic); v$pi <- bi$p.value\n'
       : '') +
     'sp <- spec.pgram(y, ' + ((o.span || 1) > 1 ? 'spans = ' + o.span + ', ' : '') +
-      'taper = 0, detrend = FALSE, fast = FALSE, plot = FALSE)\n' +
+      'taper = 0, fast = FALSE, plot = FALSE)\n' +
     'v$pk <- 1 / sp$freq[which.max(sp$spec)]\n\n' +
     call(function (lab, key, pv) { return 'report("' + lab + '", v$' + key + ', ' + pv + ')'; }) + '\n\n' +
     '# The run sequence and the correlogram.\n' +
@@ -7017,7 +7136,7 @@ function timeScripts(series, o) {
     (src ? '# ' + src + '\n' : '') +
     'import numpy as np\nfrom scipy import stats\n\n' +
     (tl.p && yl.p ? 't = ' + tl.p + '\ny = ' + yl.p + '\n'
-                  : 'd = np.genfromtxt("' + csv + '", delimiter=",", names=True, comments="#")   # the tab\'s CSV download\nt, y = d["t"], d["y"]\n') +
+                  : 'import csv\n' + READ_CSV_PY + 'd = read_csv("' + csv + '")   # the tab\'s CSV download\nt, y = d["t"], d["y"]\n') +
     'n = len(y); max_lag = ' + o.maxLag + '; m = ' + o.m + '\n' +
     (o.cycle ? 'P = ' + num(o.P, 12) + '\n' : '') + '\n' + REPORT_PY + '\n' +
     'def acf(x, L):\n    z = x - x.mean(); c0 = np.sum(z * z)\n' +
@@ -7043,8 +7162,9 @@ function timeScripts(series, o) {
         'v["phi"] = phi; v["se"] = np.sqrt(c0 / n * (1 - phi ** 2) * n / (n - 2))\n' +
         'innov = z[1:] - phi * z[:-1]\nv["Qi"], v["pi"] = ljung_box(innov, m, 1)\n'
       : '') +
-    '# The periodogram, smoothed by a modified Daniell kernel that wraps\n# around the ends, as R\'s spec.pgram does.\n' +
-    'I = np.abs(np.fft.fft(y - y.mean())) ** 2 / n\nI[0] = 0.5 * (I[1] + I[-1])\n' +
+    '# The periodogram of the detrended readings, smoothed by a modified Daniell\n# kernel that wraps around the ends, as R\'s spec.pgram does.\n' +
+    'c = np.arange(1, n + 1) - (n + 1) / 2\nz = y - y.mean() - np.sum(y * c) * c / (n * (n * n - 1) / 12)\n' +
+    'I = np.abs(np.fft.fft(z)) ** 2 / n\nI[0] = 0.5 * (I[1] + I[-1])\n' +
     'h = ' + Math.floor((o.span || 1) / 2) + '\n' +
     'if h:\n    w = np.r_[1 / (4 * h), np.full(2 * h - 1, 1 / (2 * h)), 1 / (4 * h)]\n' +
     '    I = sum(w[j + h] * np.roll(I, j) for j in range(-h, h + 1))\n' +
@@ -7092,7 +7212,8 @@ function timeScripts(series, o) {
             'report(\'Ljung-Box Q, innovations\', Qi, ' + P(lbi.Q) + '); report(\'Ljung-Box p-value, innovations\', chiP(Qi, m - 1), ' + P(lbi.p) + ');\n';
         })()
       : '') +
-    'I = abs(fft(y - mean(y))).^2 / n; I(1) = 0.5 * (I(2) + I(end)); h = ' + Math.floor((o.span || 1) / 2) + ';\n' +
+    'c = (1:n).\' - (n + 1) / 2; z = y - mean(y) - sum(y .* c) * c / (n * (n^2 - 1) / 12);\n' +
+    'I = abs(fft(z)).^2 / n; I(1) = 0.5 * (I(2) + I(end)); h = ' + Math.floor((o.span || 1) / 2) + ';\n' +
     'if h > 0\n  w = [1 / (4 * h), repmat(1 / (2 * h), 1, 2 * h - 1), 1 / (4 * h)]; S = zeros(size(I));\n' +
     '  for j = -h:h, S = S + w(j + h + 1) * circshift(I, j); end\n  I = S;\nend\n' +
     '[~, kmax] = max(I(2:floor(n / 2) + 1));\n' +
@@ -7164,6 +7285,7 @@ var IA = {
   breuschPagan: breuschPagan, fitMean: fitMean,
   timeRowValues: timeRowValues, seriesFrom: seriesFrom, acf: acf, ljungBox: ljungBox, lsq: lsq,
   harmonicFit: harmonicFit, ar1: ar1, periodogram: periodogram,
+  kendallS: kendallS, dftReal: dftReal, pairCsv: pairCsv, seriesCsv: seriesCsv,
   toolDraws: toolDraws, centeringMean: centeringMean, pairExpressions: pairExpressions, timeExpressions: timeExpressions,
   pairScripts: pairScripts, timeScripts: timeScripts,
   num: num, toCsv: toCsv
@@ -11602,9 +11724,11 @@ function pairUse() {
   PST.xCount = pc.x.length > 0 && pc.x.every(function (v) { return Number.isInteger(v); });
   var u = IA.MRG32k3a(4242);
   PST.jit = pc.x.map(function () { return (u() - 0.5) * 0.5; });
-  var sx = 0, sy = 0;
-  for (var i = 0; i < pc.x.length; i++) { sx += pc.x[i]; sy += pc.y[i]; }
-  PST.sig = [PST.table.names[PST.xi], PST.table.names[PST.yi], pc.x.length, sx, sy].join('|');
+  /* The sum of the products changes when the same values are paired
+     differently, which the two sums alone would not notice. */
+  var sx = 0, sy = 0, sxy = 0;
+  for (var i = 0; i < pc.x.length; i++) { sx += pc.x[i]; sy += pc.y[i]; sxy += pc.x[i] * pc.y[i]; }
+  PST.sig = [PST.table.names[PST.xi], PST.table.names[PST.yi], pc.x.length, sx, sy, sxy].join('|');
   PST.shuffleSeed = 1;
   renderPairAll();
 }
@@ -11921,7 +12045,10 @@ function renderPairModel() {
     ' to ' + fmt(f.ciB[1], 4) + '. The spread test is Breusch–Pagan’s.</div>';
 
   var notes = '';
-  if (bp.p < 0.05) {
+  if (!Number.isFinite(bp.p)) {
+    notes += '<div class="note quiet">The spread test cannot be computed: the line passes through every point, ' +
+      'and so there are no residuals to compare.</div>';
+  } else if (bp.p < 0.05) {
     notes += '<div class="note warn"><strong>The spread of the residuals changes with ' + esc(nm.x) +
       '</strong> (Breusch–Pagan p ' + (bp.p < 0.0001 ? '< 0.0001' : '= ' + fmtP(bp.p)) +
       '). One noise term for every value of ' + esc(nm.x) + ' would understate the spread at one end and ' +
@@ -12033,10 +12160,8 @@ function pairProvenance() {
 }
 function csvPairData() {
   if (!PST.x.length) return;
-  var rows = pairProvenance();
-  rows.push(['x', 'y']);
-  for (var i = 0; i < PST.x.length; i++) rows.push([IA.num(PST.x[i], 12), IA.num(PST.y[i], 12)]);
-  download('input-analyzer-pairs.csv', IA.toCsv(rows));
+  var prov = pairProvenance().filter(function (r) { return r.length; }).map(function (r) { return r[0]; });
+  download('input-analyzer-pairs.csv', IA.pairCsv(PST.x, PST.y, prov));
 }
 function csvPairResults() {
   var n = PST.x.length;
@@ -12333,13 +12458,15 @@ function renderSeriesAcf(md) {
     'these readings as a sample, and the button below sends them there.',
     'The correlations are too large for independent values (p < 0.05). Tab ① would treat the readings as ' +
     'interchangeable, and they are not: a model has to keep the pattern, through a cycle (section 4), an ' +
-    'AR(1) (section 5), or both.'
+    'AR(1) (section 5), or both.',
+    'The readings do not vary, and so there is no correlation to test.'
   ];
+  var vk = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
   lb.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:6px">' +
     card('Ljung–Box <span class="lit">Q</span>', fmt(q.Q, 4)) +
     card('df', String(q.df)) +
-    card('p-value', fmtP(q.p)) + '</div><div class="note ' + (q.p < 0.05 ? 'warn' : 'quiet') +
-    '" id="s-lb-say" style="margin-top:8px">' + verdicts[q.p < 0.05 ? 1 : 0] + '</div>';
+    card('p-value', fmtP(q.p)) + '</div><div class="note ' + (vk === 1 ? 'warn' : 'quiet') +
+    '" id="s-lb-say" style="margin-top:8px">' + verdicts[vk] + '</div>';
   reserveHeight($('s-lb-say'), verdicts);
 }
 
@@ -12427,7 +12554,12 @@ function initSeriesTab() {
     S_LOADER.loadText(sampleCsv(s), s.name, 'built-in sample "' + s.name + '"');
   });
   $('s-val').addEventListener('change', function () { SST.vi = Number(this.value); seriesUse(); });
-  $('s-time').addEventListener('change', function () { SST.ti = this.value === '' ? null : Number(this.value); seriesUse(); });
+  $('s-time').addEventListener('change', function () {
+    SST.ti = this.value === '' ? null : Number(this.value);
+    /* As on loading: clock times are minutes past midnight. */
+    if (SST.ti !== null && IA.timeRowValues(SST.table.cols[SST.ti]).clock) { SST.unit = 'minutes'; $('s-unit').value = 'minutes'; }
+    seriesUse();
+  });
   $('s-delta').addEventListener('change', function () {
     var v = Number(this.value);
     SST.delta = v > 0 ? v : 1; this.value = String(SST.delta); seriesUse();
@@ -12480,10 +12612,13 @@ function renderAr(md) {
   }
   var ni = ar.innov.length, m = Math.min(SST.m, ni - 2), q = IA.ljungBox(IA.acf(ar.innov, m), ni, m, 1);
   var says = [
-    'The innovations look independent (p ≥ 0.05), and so one lag is enough: ' + what + ' behaves like an AR(1).',
+    'The innovations look independent (p \u2265 0.05), and so one lag is enough: ' + what +
+    (md.hf ? ' behaves' : ' behave') + ' like an AR(1).',
     'The innovations are still correlated (p < 0.05), and so one lag is not enough. Look for a cycle the model ' +
-    'misses (section 4), or a longer memory than an AR(1) has.'
+    'misses (section 4), or a longer memory than an AR(1) has.',
+    'The test needs at least two lags, one more than the AR(1) uses: raise the Ljung\u2013Box lags in section 3.'
   ];
+  var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
   host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
     card('<span class="lit">&phi;</span>', fmt(ar.phi, 4)) +
     card('Innovation sd', fmt(ar.sigmaE, 4)) +
@@ -12492,8 +12627,8 @@ function renderAr(md) {
     '<div class="plot-cap" style="text-align:left;margin-top:5px">Fitted to ' + what + '; ' +
     (md.hf ? 'its mean is 0.' : 'the mean, ' + fmt(ar.mean, 4) + ', is taken off first.') +
     ' The test loses one degree of freedom for the estimated &phi;.</div>' +
-    '<div class="note ' + (q.p < 0.05 ? 'warn' : 'quiet') + '" id="s-ar-say" style="margin-top:8px">' +
-    says[q.p < 0.05 ? 1 : 0] + '</div>';
+    '<div class="note ' + (ak === 1 ? 'warn' : 'quiet') + '" id="s-ar-say" style="margin-top:8px">' +
+    says[ak] + '</div>';
   reserveHeight($('s-ar-say'), says);
   drawCorrelogram(ih, IA.acf(ar.innov, Math.max(1, Math.min(Math.floor(ni / 4), 60))), ni, 0,
     'Correlogram of the AR(1) innovations', 'Autocorrelation of the AR(1) innovations, with the 95% band for independent values');
@@ -12581,9 +12716,10 @@ function renderSeriesExport(md) {
         ({ arena: 'An Assign module, run once per draw before the value is used; Z starts at 0.',
            simio: 'An Assign step on a state variable Z, run once per draw; Z starts at 0.',
            anylogic: 'Run once per draw, with Z a double variable that starts at 0.',
-           r: 'n values in sequence.', matlab: 'n values in sequence.', python: 'n values in sequence.' }[key]) + '</div>' : '') +
+           r: 'n values in sequence.', matlab: 'n values in sequence.', python: 'n values in sequence.' }[key]) +
+        (ex.ar.notes && ex.ar.notes[key] ? ' ' + esc(ex.ar.notes[key]) : '') + '</div>' : '') +
       '<div class="exp-code" id="sexp-' + key + '">' + esc(ex[key]) + '</div>' +
-      (ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
+      (!ex.ar && ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
       '</div><button class="copy-btn" data-copy="' + (ex.ar && ex.ar[key] ? 'sexp2-' : 'sexp-') + key + '" type="button">Copy</button></div>';
     if (ex.ar && ex.ar[key]) h += '<div id="sexp2-' + key + '" hidden>' + esc(ex.ar[key] + '\n' + ex[key]) + '</div>';
   }
@@ -12618,14 +12754,9 @@ function seriesProvenance() {
 function csvSeriesData() {
   var n = SST.y.length;
   if (!n) return;
-  var md = seriesModel(), rows = seriesProvenance();
-  rows.push(md.hf ? ['t', 'y', 'cycle', 'left'] : ['t', 'y']);
-  for (var i = 0; i < n; i++) {
-    var r = [IA.num(SST.t[i], 12), IA.num(SST.y[i], 12)];
-    if (md.hf) r.push(IA.num(md.hf.fitted[i], 12), IA.num(md.hf.resid[i], 12));
-    rows.push(r);
-  }
-  download('input-analyzer-series.csv', IA.toCsv(rows));
+  var md = seriesModel();
+  var prov = seriesProvenance().filter(function (r) { return r.length; }).map(function (r) { return r[0]; });
+  download('input-analyzer-series.csv', IA.seriesCsv(SST.t, SST.y, md.hf, prov));
 }
 function csvSeriesResults() {
   var n = SST.y.length;

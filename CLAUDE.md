@@ -772,7 +772,13 @@ better.
      every dataset with a fixed seed and writes the data and R's results to
      `verify_dependence_reference.json`; regenerate the JSON only by re-running that script. It also
      runs the R and Python scripts the two tabs export, each of which prints every number beside the
-     page's and says "agrees" or "DIFFERS", and the MATLAB ones under `IA_MATLAB=1`. A fit to
+     page's and says "agrees" or "DIFFERS", and the MATLAB ones under `IA_MATLAB=1`, both with the
+     data embedded and, past 250 values a column, reading the tab's own CSV download (`pairCsv`,
+     `seriesCsv`), whose `#` lines Python reads past with the standard library's `csv` module
+     rather than `numpy.genfromtxt`. The periodogram runs on an FFT (Bluestein's method for a
+     length that is not a power of two) after removing a straight line, as `spec.pgram` does by
+     default, and Kendall's S uses Knight's merge count, so that both stay fast at tens of
+     thousands of points; every control on tab ④ recomputes them. A fit to
      residuals is centered by `centeringMean`, which treats a mean within 1e-9 of the fit's
      interquartile range as 0, so that an export never carries a meaningless "+ 3e-12".)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
