@@ -5630,6 +5630,287 @@ function reproScripts(fit, x, seed, B, src) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   15b.  TWO VARIABLES
+   ─────────────────────────────────────────────────────────────────────
+   How strongly two columns move together, and a straight-line model of
+   one given the other.  Each procedure is the one R runs (cor.test, lm,
+   and lmtest::bptest), and the verification checks them against R to the
+   last few digits. */
+
+/* One column read cell by cell and kept aligned with its rows, NaN where a
+   cell is blank or unreadable.  The column is read as clock-shaped
+   durations only when every non-empty cell is one, as columnDurations
+   decides, so that one series never mixes two units. */
+function rowValues(col, conv) {
+  var cd = columnDurations(col, conv), out = [];
+  for (var i = 0; i < col.length; i++) {
+    if (String(col[i]).trim() === '') { out.push(NaN); continue; }
+    out.push(cd.clock ? toClockDuration(col[i], conv) : toNum(col[i]));
+  }
+  return { values: out, clock: cd.clock, unit: cd.unit };
+}
+
+/* The pairs in columns i and j.  A row counts only when both of its cells
+   are numbers: dropping blanks column by column, as the one-column tabs
+   do, would slide one column against the other and pair values that never
+   belonged together. */
+function pairedColumns(table, i, j, conv) {
+  var ci = table.cols[i], cj = table.cols[j];
+  var a = rowValues(ci, conv || 'ms').values, b = rowValues(cj, conv || 'ms').values;
+  var x = [], y = [], rows = [], dropped = 0;
+  for (var k = 0; k < a.length; k++) {
+    if (Number.isFinite(a[k]) && Number.isFinite(b[k])) { x.push(a[k]); y.push(b[k]); rows.push(k); }
+    else if (String(ci[k]).trim() !== '' || String(cj[k]).trim() !== '') dropped++;
+  }
+  return { x: x, y: y, rows: rows, dropped: dropped };
+}
+
+/* Ranks from 1, with tied values sharing the average of their ranks. */
+function ranks(x) {
+  var n = x.length, idx = [], i, j, r = new Array(n);
+  for (i = 0; i < n; i++) idx.push(i);
+  idx.sort(function (a, b) { return x[a] - x[b]; });
+  for (i = 0; i < n; i = j) {
+    for (j = i + 1; j < n && x[idx[j]] === x[idx[i]]; j++) ;
+    var avg = (i + 1 + j) / 2;
+    for (var k = i; k < j; k++) r[idx[k]] = avg;
+  }
+  return r;
+}
+
+/* Two-sided p-value of a t statistic, and the t quantile that leaves
+   alpha in the two tails together. */
+function tTwoSided(t, df) {
+  if (Number.isNaN(t) || !(df > 0)) return NaN;
+  if (!Number.isFinite(t)) return 0;
+  return betaInc(df / 2, 0.5, df / (df + t * t));
+}
+function tQuantile2(alpha, df) {
+  if (!(alpha > 0 && alpha < 1) || !(df > 0)) return NaN;
+  var lo = 0, hi = 1;
+  while (tTwoSided(hi, df) > alpha && hi < 1e12) { lo = hi; hi *= 2; }
+  for (var i = 0; i < 200; i++) {
+    var mid = 0.5 * (lo + hi);
+    if (tTwoSided(mid, df) > alpha) lo = mid; else hi = mid;
+    if (hi - lo <= 1e-15 * hi) break;
+  }
+  return 0.5 * (lo + hi);
+}
+
+/* Pearson's r alone, NaN when either column is constant. */
+function pairCorr(x, y) {
+  var n = x.length, i, mx = 0, my = 0, sxx = 0, syy = 0, sxy = 0;
+  if (n < 2 || y.length !== n) return NaN;
+  for (i = 0; i < n; i++) { mx += x[i]; my += y[i]; }
+  mx /= n; my /= n;
+  for (i = 0; i < n; i++) {
+    var dx = x[i] - mx, dy = y[i] - my;
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  if (!(sxx > 0) || !(syy > 0)) return NaN;
+  return sxy / Math.sqrt(sxx * syy);
+}
+
+/* Pearson's r with its t test and the Fisher z interval, as cor.test. */
+function pearson(x, y, level) {
+  var n = x.length, r = pairCorr(x, y), df = n - 2;
+  var out = { n: n, r: r, t: NaN, df: df, p: NaN, lo: NaN, hi: NaN };
+  if (!Number.isFinite(r) || n < 3) return out;
+  if (Math.abs(r) >= 1) { out.t = r > 0 ? Infinity : -Infinity; out.p = 0; }
+  else { out.t = r * Math.sqrt(df / (1 - r * r)); out.p = tTwoSided(out.t, df); }
+  if (n > 3) {
+    var z = 0.5 * Math.log((1 + r) / (1 - r)), se = 1 / Math.sqrt(n - 3);
+    var q = normInv(1 - (1 - (level || 0.95)) / 2);
+    out.lo = Math.tanh(z - q * se); out.hi = Math.tanh(z + q * se);
+  }
+  return out;
+}
+
+/* Spearman's rho, Pearson's r of the ranks, with the t approximation to
+   its p-value (cor.test with exact = FALSE, which is what R does anyway
+   once there are ties). */
+function spearman(x, y) {
+  var n = x.length, rho = pairCorr(ranks(x), ranks(y)), df = n - 2;
+  var out = { n: n, rho: rho, t: NaN, df: df, p: NaN };
+  if (!Number.isFinite(rho) || n < 3) return out;
+  if (Math.abs(rho) >= 1) { out.t = rho > 0 ? Infinity : -Infinity; out.p = 0; }
+  else { out.t = rho * Math.sqrt(df / (1 - rho * rho)); out.p = tTwoSided(out.t, df); }
+  return out;
+}
+
+/* P(T <= q) for the number of concordant pairs among n untied values
+   under independence.  T has the distribution of the number of
+   inversions in a random permutation, built up one element at a time:
+   adding the m-th element adds 0 to m - 1 inversions, each equally
+   likely.  Cached by n because a page redraw asks for the same n again. */
+var KENDALL_CDF = {};
+function kendallCdf(q, n) {
+  if (!KENDALL_CDF[n]) {
+    var p = [1], m, k;
+    for (m = 2; m <= n; m++) {
+      var len = p.length + m - 1, nx = new Array(len), pre = [0];
+      for (k = 0; k < p.length; k++) pre.push(pre[k] + p[k]);
+      for (k = 0; k < len; k++) {
+        var lo = Math.max(0, k - (m - 1)), hi = Math.min(k, p.length - 1);
+        nx[k] = hi >= lo ? (pre[hi + 1] - pre[lo]) / m : 0;
+      }
+      p = nx;
+    }
+    var c = [], s = 0;
+    for (k = 0; k < p.length; k++) { s += p[k]; c.push(s); }
+    KENDALL_CDF[n] = c;
+  }
+  var cdf = KENDALL_CDF[n];
+  if (q < 0) return 0;
+  if (q >= cdf.length - 1) return 1;
+  return cdf[q];
+}
+
+/* Sizes of the groups of tied values, groups of one left out. */
+function tieGroups(x) {
+  var s = x.slice().sort(function (a, b) { return a - b; }), out = [], i, j;
+  for (i = 0; i < s.length; i = j) {
+    for (j = i + 1; j < s.length && s[j] === s[i]; j++) ;
+    if (j - i > 1) out.push(j - i);
+  }
+  return out;
+}
+
+/* Kendall's tau-b with the p-value cor.test reports: exact for fewer than
+   50 untied pairs, otherwise the normal approximation with the variance
+   corrected for ties and no continuity correction. */
+function kendallTauB(x, y) {
+  var n = x.length, S = 0, i, j;
+  var out = { n: n, tau: NaN, S: NaN, z: NaN, p: NaN, exact: false };
+  if (n < 2 || y.length !== n) return out;
+  for (i = 0; i < n; i++) {
+    for (j = i + 1; j < n; j++) {
+      var a = x[i] - x[j], b = y[i] - y[j];
+      S += (a > 0 ? 1 : a < 0 ? -1 : 0) * (b > 0 ? 1 : b < 0 ? -1 : 0);
+    }
+  }
+  var gx = tieGroups(x), gy = tieGroups(y);
+  var sum = function (g, f) { var s = 0; for (var k = 0; k < g.length; k++) s += f(g[k]); return s; };
+  var T0 = n * (n - 1) / 2;
+  var T1 = sum(gx, function (t) { return t * (t - 1) / 2; }), T2 = sum(gy, function (t) { return t * (t - 1) / 2; });
+  var den = Math.sqrt((T0 - T1) * (T0 - T2));
+  if (!(den > 0)) return out;
+  out.S = S; out.tau = S / den;
+  out.exact = n < 50 && !gx.length && !gy.length;
+  if (out.exact) {
+    var q = Math.round((out.tau + 1) * n * (n - 1) / 4);
+    var pr = q > n * (n - 1) / 4 ? 1 - kendallCdf(q - 1, n) : kendallCdf(q, n);
+    out.p = Math.min(2 * pr, 1);
+    return out;
+  }
+  if (n < 3) return out;
+  var v0 = n * (n - 1) * (2 * n + 5);
+  var vt = sum(gx, function (t) { return t * (t - 1) * (2 * t + 5); });
+  var vu = sum(gy, function (t) { return t * (t - 1) * (2 * t + 5); });
+  var v1 = sum(gx, function (t) { return t * (t - 1); }) * sum(gy, function (t) { return t * (t - 1); });
+  var v2 = sum(gx, function (t) { return t * (t - 1) * (t - 2); }) * sum(gy, function (t) { return t * (t - 1) * (t - 2); });
+  var varS = (v0 - vt - vu) / 18 + v1 / (2 * n * (n - 1)) + v2 / (9 * n * (n - 1) * (n - 2));
+  out.z = S / Math.sqrt(varS);
+  out.p = 2 * normCdf(-Math.abs(out.z));
+  return out;
+}
+
+/* The two pairings that keep both columns' values and push r to its
+   extremes: smallest with smallest (the largest r these two sets of
+   values allow) and smallest with largest (the most negative). */
+function frechetPairings(x, y) {
+  var xs = x.slice().sort(function (a, b) { return a - b; });
+  var ys = y.slice().sort(function (a, b) { return a - b; });
+  return { together: pairCorr(xs, ys), opposite: pairCorr(xs, ys.slice().reverse()) };
+}
+
+/* A Fisher-Yates shuffle of a copy, driven by the page's own generator. */
+function shuffleWith(u, y) {
+  var out = y.slice();
+  for (var i = out.length - 1; i > 0; i--) {
+    var j = Math.floor(u() * (i + 1)), t = out[i];
+    out[i] = out[j]; out[j] = t;
+  }
+  return out;
+}
+
+/* Least squares for y = a + b x, with what lm and confint report. */
+function olsSimple(x, y, level) {
+  var n = x.length, i, mx = 0, my = 0, sxx = 0, sxy = 0;
+  var out = { n: n, a: NaN, b: NaN, seA: NaN, seB: NaN, ciA: [NaN, NaN], ciB: [NaN, NaN],
+              r2: NaN, s: NaN, fitted: [], resid: [], tB: NaN, pB: NaN, df: n - 2 };
+  if (n < 3 || y.length !== n) return out;
+  for (i = 0; i < n; i++) { mx += x[i]; my += y[i]; }
+  mx /= n; my /= n;
+  for (i = 0; i < n; i++) { sxx += (x[i] - mx) * (x[i] - mx); sxy += (x[i] - mx) * (y[i] - my); }
+  if (!(sxx > 0)) return out;
+  var b = sxy / sxx, a = my - b * mx, rss = 0, mss = 0;
+  for (i = 0; i < n; i++) {
+    var f = a + b * x[i], e = y[i] - f;
+    out.fitted.push(f); out.resid.push(e);
+    rss += e * e; mss += (f - my) * (f - my);
+  }
+  var df = n - 2, s = Math.sqrt(rss / df);
+  var q = tQuantile2(1 - (level || 0.95), df);
+  out.a = a; out.b = b; out.s = s;
+  out.seB = s / Math.sqrt(sxx);
+  out.seA = s * Math.sqrt(1 / n + mx * mx / sxx);
+  out.ciA = [a - q * out.seA, a + q * out.seA];
+  out.ciB = [b - q * out.seB, b + q * out.seB];
+  out.r2 = mss + rss > 0 ? mss / (mss + rss) : NaN;
+  out.tB = out.seB > 0 ? b / out.seB : (b === 0 ? NaN : b > 0 ? Infinity : -Infinity);
+  out.pB = tTwoSided(out.tB, df);
+  return out;
+}
+
+/* The Breusch-Pagan test in Koenker's studentized form (lmtest::bptest's
+   default): n times the R squared of the squared residuals regressed on x,
+   referred to chi-square with one degree of freedom.  A small p-value
+   says the spread of y around the line changes with x. */
+function breuschPagan(x, resid) {
+  var n = x.length, w = [];
+  for (var i = 0; i < n; i++) w.push(resid[i] * resid[i]);
+  var r = pairCorr(x, w);
+  if (!Number.isFinite(r)) return { stat: NaN, df: 1, p: NaN };
+  var stat = n * r * r;
+  return { stat: stat, df: 1, p: gammaQ(0.5, stat / 2) };
+}
+
+/* The mean of a fitted model, shift and mirror included: closed form for
+   every family that has one, and otherwise the average of the quantile
+   function over (0, 1), which is the mean of any distribution.  Infinite
+   where the family's mean does not exist at the fitted shape. */
+function fitMean(fit) {
+  var p = fit.p, k = fit.dist.key, m;
+  switch (k) {
+    case 'expo': m = p[0]; break;
+    case 'gamma': case 'erlang': m = p[0] * p[1]; break;
+    case 'weibull': m = p[0] * Math.exp(logGamma(1 + 1 / p[1])); break;
+    case 'lognormal': m = Math.exp(p[0] + p[1] * p[1] / 2); break;
+    case 'loglogistic': m = p[0] > 1 ? p[1] * (Math.PI / p[0]) / Math.sin(Math.PI / p[0]) : Infinity; break;
+    case 'pearson5': m = p[0] > 1 ? p[1] / (p[0] - 1) : Infinity; break;
+    case 'pearson6': m = p[1] > 1 ? p[2] * p[0] / (p[1] - 1) : Infinity; break;
+    case 'normal': m = p[0]; break;
+    case 'uniform': case 'discreteUniform': m = (p[0] + p[1]) / 2; break;
+    case 'triangular': m = (p[0] + p[1] + p[2]) / 3; break;
+    case 'pert': m = (p[0] + 4 * p[1] + p[2]) / 6; break;
+    case 'beta': m = p[2] + (p[3] - p[2]) * p[0] / (p[0] + p[1]); break;
+    case 'poisson': m = p[0]; break;
+    case 'geometric': m = (1 - p[0]) / p[0]; break;
+    case 'johnsonSU': m = p[2] - p[3] * Math.exp(1 / (2 * p[1] * p[1])) * Math.sinh(p[0] / p[1]); break;
+    default: {
+      /* The bounded families without a closed form (Johnson S_B and the
+         two empirical ones), where the midpoint rule converges cleanly. */
+      var N = 20000, s = 0;
+      for (var i = 0; i < N; i++) s += fit.dist.quantile((i + 0.5) / N, p);
+      m = s / N;
+    }
+  }
+  if (!Number.isFinite(m)) return fit.reflect ? -Infinity : Infinity;
+  return fit.reflect ? fit.shift - m : (fit.shift || 0) + m;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    16.  CSV BUILDERS
    ─────────────────────────────────────────────────────────────────────
    Every export carries the seed and the settings that produced it, so a
@@ -5686,6 +5967,10 @@ var IA = {
   ARRIVAL_PROCESSES: ARRIVAL_PROCESSES, ARRIVAL_KEYS: ARRIVAL_KEYS,
   validateArrivalParams: validateArrivalParams, generateArrivals: generateArrivals,
   expressions: expressions, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES, arenaGamma: arenaGamma,
+  rowValues: rowValues, pairedColumns: pairedColumns, ranks: ranks, tTwoSided: tTwoSided, tQuantile2: tQuantile2,
+  pairCorr: pairCorr, pearson: pearson, spearman: spearman, kendallTauB: kendallTauB,
+  frechetPairings: frechetPairings, shuffleWith: shuffleWith, olsSimple: olsSimple,
+  breuschPagan: breuschPagan, fitMean: fitMean,
   num: num, toCsv: toCsv
 };
 /* ===== IA-CORE-END ===== */

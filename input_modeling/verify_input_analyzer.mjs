@@ -19,6 +19,9 @@ import path from 'node:path';
 /* The core loader and the slow Monte Carlo loops live in the jobs module,
    which also runs them on worker threads; see its header. */
 import { HTML, loadCore, makePool } from './verify_input_analyzer_jobs.mjs';
+/* Sections 19 onward, for the two dependence tabs, live in their own module,
+   which also runs on its own. */
+import { runDependence } from './verify_input_analyzer_dependence.mjs';
 
 /* ── Tiny test harness ─────────────────────────────────────────────── */
 let pass = 0, fail = 0, group = '';
@@ -2059,6 +2062,8 @@ section('18. export expressions');
     ok(csv === 'a,"b,c","d""e"\n1,2,3\n', 'CSV quoting', JSON.stringify(csv));
   }
 }
+
+runDependence(IA, { section, ok, close });
 
 /* ══════════════════════════════════════════════════════════════════════
    Summary
