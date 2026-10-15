@@ -12459,6 +12459,199 @@ function initSeriesTab() {
   S_LOADER.loadText(sampleCsv(s0), s0.name, 'built-in sample "' + s0.name + '"');
 }
 
+/* Section 5: an AR(1) for what the cycle leaves, or for the readings when
+   no cycle is fitted, checked by the correlogram of its innovations. */
+function renderAr(md) {
+  var host = $('s-ar-out'), ih = $('s-innov-host'), ar = md.ar, n = SST.y.length;
+  var what = md.hf ? 'what the cycle leaves' : 'the readings';
+  if (!ar || !Number.isFinite(ar.phi)) {
+    host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+      card('<span class="lit">&phi;</span>', '—') + card('Innovation sd', '—') + '</div>';
+    ih.innerHTML = '<div class="plot-empty">' + (n < MIN_SERIES ? 'Load at least ' + MIN_SERIES + ' readings.'
+      : 'The readings do not vary, and so there is nothing to fit.') + '</div>';
+    $('s-send-innov').disabled = true;
+    return;
+  }
+  var ni = ar.innov.length, m = Math.min(SST.m, ni - 2), q = IA.ljungBox(IA.acf(ar.innov, m), ni, m, 1);
+  var says = [
+    'The innovations look independent (p ≥ 0.05), and so one lag is enough: ' + what + ' behaves like an AR(1).',
+    'The innovations are still correlated (p < 0.05), and so one lag is not enough. Look for a cycle the model ' +
+    'misses (section 4), or a longer memory than an AR(1) has.'
+  ];
+  host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+    card('<span class="lit">&phi;</span>', fmt(ar.phi, 4)) +
+    card('Innovation sd', fmt(ar.sigmaE, 4)) +
+    card('Ljung–Box <span class="lit">Q</span>', fmt(q.Q, 4)) +
+    card('p-value (' + q.df + ' df)', fmtP(q.p)) + '</div>' +
+    '<div class="plot-cap" style="text-align:left;margin-top:5px">Fitted to ' + what + '; ' +
+    (md.hf ? 'its mean is 0.' : 'the mean, ' + fmt(ar.mean, 4) + ', is taken off first.') +
+    ' The test loses one degree of freedom for the estimated &phi;.</div>' +
+    '<div class="note ' + (q.p < 0.05 ? 'warn' : 'quiet') + '" id="s-ar-say" style="margin-top:8px">' +
+    says[q.p < 0.05 ? 1 : 0] + '</div>';
+  reserveHeight($('s-ar-say'), says);
+  drawCorrelogram(ih, IA.acf(ar.innov, Math.max(1, Math.min(Math.floor(ni / 4), 60))), ni, 0,
+    'Correlogram of the AR(1) innovations', 'Autocorrelation of the AR(1) innovations, with the 95% band for independent values');
+  $('s-send-innov').disabled = false;
+}
+
+/* Sends readings, what the cycle leaves, or the AR(1) innovations to tab 1.
+   A fit made there to the last two becomes the export's noise term. */
+function sendSeriesToFit(kind) {
+  var md = seriesModel(), v, label, unit, vname = SST.table ? SST.table.names[SST.vi] : 'readings';
+  if (kind === 'y') { v = SST.y; label = vname; unit = 'the ' + vname + ' readings from tab ④'; }
+  else if (kind === 'resid') {
+    if (!md.hf) return;
+    v = md.hf.resid; label = 'What the cycle leaves in ' + vname;
+    unit = 'the readings of ' + vname + ' minus the fitted cycle, from tab ④';
+  } else {
+    if (!md.ar || !md.ar.innov.length) return;
+    v = md.ar.innov; label = 'AR(1) innovations of ' + vname;
+    unit = 'the AR(1) innovations of ' + (md.hf ? 'what the cycle leaves in ' : '') + vname + ', from tab ④';
+  }
+  showTab('fit');
+  ST.unit = unit;
+  ST.binAuto = true;
+  LOADER.loadText(v.map(function (x) { return IA.num(x, 10); }).join('\n'), label + ' from tab ④',
+                  label + ', computed on the Look for Patterns over Time tab from ' + (SST.src || 'pasted data'));
+  if (kind !== 'y') ST.handoff = { from: 'time', kind: kind, sig: seriesModelSig() };
+  $('tab-fit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+/* The data and the cycle settings a hand-off belongs to: a fit to the
+   residuals of one cycle is no use as the noise of another. */
+function seriesModelSig() {
+  return [SST.sig, SST.cyc ? 1 : 0, SST.P, SST.H, SST.trend ? 1 : 0].join('|');
+}
+function seriesHandoff(kind) {
+  var h = ST.handoff, r = pickedRow();
+  if (!h || h.from !== 'time' || h.kind !== kind || !r || h.sig !== seriesModelSig()) return null;
+  return { fit: r.fit, dist: r.dist };
+}
+
+function renderSeriesExport(md) {
+  var host = $('s-export-out'), say = $('s-noise-say'), n = SST.y.length;
+  if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">No model yet.</div>'; say.innerHTML = ''; return; }
+  var clip = $('s-clip'), useAr = $('s-use-ar').checked && md.ar && Number.isFinite(md.ar.phi);
+  if (!clip.dataset.user) clip.checked = SST.y.every(function (v) { return v >= 0; });
+  var sy = IA.summarize(SST.y), hf = md.hf, msgs = [];
+  var model = {
+    m: hf ? hf.m : sy.mean, c: hf ? hf.c : [], s: hf ? hf.s : [], P: SST.P,
+    g: hf && SST.trend ? hf.g : null, unit: SST.unit, t0: Number($('s-t0').value) || 0,
+    sd: hf ? hf.sd : sy.sd, noise: null, ar: null, clip: clip.checked
+  };
+  if (useAr) {
+    var hi = seriesHandoff('innov');
+    model.ar = { phi: md.ar.phi, sigmaE: md.ar.sigmaE, noise: hi ? { fit: hi.fit } : null };
+    if (hi && !Number.isFinite(IA.centeringMean(hi.fit))) { model.ar.noise = null; hi = null; }
+    msgs.push('Noise: an AR(1) variable Z with φ = ' + fmt(md.ar.phi, 4) + ', whose innovations are ' +
+      (hi ? 'the ' + esc(distLower(hi.dist)) + ' fitted on tab ① to them, centered by its mean.'
+          : 'normal with standard deviation ' + fmt(md.ar.sigmaE, 4) + '.'));
+  } else {
+    var hr = hf ? seriesHandoff('resid') : null;
+    if (hr && Number.isFinite(IA.centeringMean(hr.fit))) {
+      model.noise = { fit: hr.fit };
+      msgs.push('Noise: the ' + esc(distLower(hr.dist)) + ' fitted on tab ① to what the cycle leaves, centered by its mean.');
+    } else {
+      msgs.push('Noise: normal with mean 0 and standard deviation ' + fmt(model.sd, 4) + ', ' +
+        (hf ? 'what the cycle leaves.' : 'the readings’ own.') +
+        (hf ? ' To use another distribution, send what the cycle leaves to tab ① and pick a fit there.' : ''));
+    }
+  }
+  if (!hf) msgs.push(useAr ? 'No cycle is fitted, and so the value is the mean plus Z.'
+    : 'No cycle is fitted and the AR(1) is not included, and so this is one draw from a single distribution: ' +
+      'tab ① is the place to fit it.');
+  if (hf) msgs.push(SST.unit === 'other'
+    ? 'The clock is used as it is, and so the model’s time unit must match the data’s.'
+    : 'The clock is read in ' + SST.unit + ', whatever time unit the model runs in.');
+  say.innerHTML = msgs.join(' ');
+
+  var ex = IA.timeExpressions(model), h = '', i;
+  for (i = 0; i < TOOLS.length; i++) {
+    var key = TOOLS[i][0];
+    if (!ex[key]) continue;
+    h += '<div class="exp-row"><div class="exp-tool">' + esc(TOOLS[i][1]) +
+      (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div><div>' +
+      (ex.ar && ex.ar[key] ? '<div class="exp-code" id="sar-' + key + '">' + esc(ex.ar[key]) + '</div>' +
+        '<div class="plot-cap" style="text-align:left;margin:3px 0 6px">' +
+        ({ arena: 'An Assign module, run once per draw before the value is used; Z starts at 0.',
+           simio: 'An Assign step on a state variable Z, run once per draw; Z starts at 0.',
+           anylogic: 'Run once per draw, with Z a double variable that starts at 0.',
+           r: 'n values in sequence.', matlab: 'n values in sequence.', python: 'n values in sequence.' }[key]) + '</div>' : '') +
+      '<div class="exp-code" id="sexp-' + key + '">' + esc(ex[key]) + '</div>' +
+      (ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
+      '</div><button class="copy-btn" data-copy="' + (ex.ar && ex.ar[key] ? 'sexp2-' : 'sexp-') + key + '" type="button">Copy</button></div>';
+    if (ex.ar && ex.ar[key]) h += '<div id="sexp2-' + key + '" hidden>' + esc(ex.ar[key] + '\n' + ex[key]) + '</div>';
+  }
+  var sc = IA.timeScripts({ t: SST.t, y: SST.y }, { maxLag: seriesMaxLag(), m: Math.min(SST.m, n - 2), cycle: !!hf,
+    P: SST.P, H: SST.H, trend: SST.trend, ar: true, span: SST.span, src: SST.src });
+  h += '<div class="plot-hd" style="margin-top:14px">Recompute this tab from the raw data</div>' +
+       '<div class="plot-cap" style="text-align:left;margin-bottom:7px">Each script prints every number on ' +
+       'this tab beside the value shown here, and says whether the two agree.</div>';
+  var st = [['r', 'R'], ['matlab', 'MATLAB'], ['python', 'Python']];
+  for (var j = 0; j < st.length; j++) {
+    h += '<div class="exp-row" style="align-items:start"><div class="exp-tool">' + st[j][1] +
+      '<span>full script</span></div><div><div class="exp-code" id="sscr-' + st[j][0] +
+      '" style="max-height:190px;overflow:auto">' + esc(sc[st[j][0]]) + '</div></div>' +
+      '<button class="copy-btn" data-copy="sscr-' + st[j][0] + '" type="button">Copy</button></div>';
+  }
+  host.innerHTML = h;
+  var btns = host.querySelectorAll('[data-copy]');
+  for (var b = 0; b < btns.length; b++) btns[b].addEventListener('click', copyHandler);
+}
+
+function seriesProvenance() {
+  return [
+    ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# data source: ' + (SST.src || 'pasted or typed by the user')],
+    ['# readings column: ' + (SST.table ? SST.table.names[SST.vi] : '') + '; time: ' +
+     (SST.ti === null ? 'equally spaced, every ' + SST.delta : SST.table.names[SST.ti] + (SST.clock ? ' (minutes past midnight)' : ''))],
+    ['# time unit: ' + SST.unit],
+    ['# cycle: ' + (SST.cyc ? 'period ' + SST.P + ', ' + SST.H + ' harmonic' + (SST.H > 1 ? 's' : '') + (SST.trend ? ', with a trend' : '') : 'none')],
+    []
+  ];
+}
+function csvSeriesData() {
+  var n = SST.y.length;
+  if (!n) return;
+  var md = seriesModel(), rows = seriesProvenance();
+  rows.push(md.hf ? ['t', 'y', 'cycle', 'left'] : ['t', 'y']);
+  for (var i = 0; i < n; i++) {
+    var r = [IA.num(SST.t[i], 12), IA.num(SST.y[i], 12)];
+    if (md.hf) r.push(IA.num(md.hf.fitted[i], 12), IA.num(md.hf.resid[i], 12));
+    rows.push(r);
+  }
+  download('input-analyzer-series.csv', IA.toCsv(rows));
+}
+function csvSeriesResults() {
+  var n = SST.y.length;
+  if (n < MIN_SERIES) return;
+  var md = seriesModel(), rows = seriesProvenance(), N = function (v) { return IA.num(v, 12); };
+  var a0 = IA.acf(SST.y, seriesMaxLag()), m = Math.min(SST.m, n - 2), q0 = IA.ljungBox(a0, n, m, 0);
+  rows.push(['quantity', 'value']);
+  rows.push(['Ljung-Box Q (readings)', N(q0.Q)], ['Ljung-Box df', q0.df], ['Ljung-Box p-value', N(q0.p)]);
+  if (md.hf) {
+    rows.push(['mean level m', N(md.hf.m)]);
+    for (var k = 0; k < SST.H; k++) rows.push(['harmonic ' + (k + 1) + ' cos coefficient', N(md.hf.c[k])],
+      ['harmonic ' + (k + 1) + ' sin coefficient', N(md.hf.s[k])], ['harmonic ' + (k + 1) + ' amplitude', N(md.hf.amp[k])],
+      ['harmonic ' + (k + 1) + ' peak at', N(md.hf.peakAt[k])]);
+    if (SST.trend) rows.push(['trend per time unit', N(md.hf.g)]);
+    rows.push(['cycle R squared', N(md.hf.r2)], ['cycle residual sd', N(md.hf.sd)], ['cycle F', N(md.hf.F)], ['cycle F p-value', N(md.hf.p)]);
+  }
+  if (md.ar && Number.isFinite(md.ar.phi)) rows.push(['AR(1) phi', N(md.ar.phi)], ['AR(1) innovation sd', N(md.ar.sigmaE)]);
+  for (var j = 1; j < a0.length; j++) rows.push(['autocorrelation at lag ' + j, N(a0[j])]);
+  download('input-analyzer-series-results.csv', IA.toCsv(rows));
+}
+
+function initSeriesModel() {
+  $('s-send-y').addEventListener('click', function () { sendSeriesToFit('y'); });
+  $('s-send-left').addEventListener('click', function () { sendSeriesToFit('resid'); });
+  $('s-send-innov').addEventListener('click', function () { sendSeriesToFit('innov'); });
+  $('s-t0').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
+  $('s-use-ar').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
+  $('s-clip').addEventListener('change', function () { this.dataset.user = '1'; renderSeriesExport(seriesModel()); });
+  $('s-csv-data').addEventListener('click', csvSeriesData);
+  $('s-csv-res').addEventListener('click', csvSeriesResults);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    TABS AND WIRING
    ═══════════════════════════════════════════════════════════════════ */
