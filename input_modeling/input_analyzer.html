@@ -12604,17 +12604,23 @@ function initSeriesTab() {
 function renderAr(md) {
   var host = $('s-ar-out'), ih = $('s-innov-host'), lede = $('s-ar-lede'), ar = md.ar, n = SST.y.length;
   var what = md.hf ? 'what the cycle leaves' : 'the readings';
+  /* The generic model is written once, in the opening paragraph, and the
+     fitted one with its numbers sits under the cards. */
+  var form = '<span class="mono" style="white-space:nowrap">Z<sub>t</sub> = &phi; &middot; Z<sub>t&minus;1</sub> + ' +
+    'e<sub>t</sub></span>';
   var ledes = [
     'Section 4’s cycle explains the part of the readings that follows the clock. What it leaves (the ' +
     'readings minus the fitted cycle) can still carry over from one reading to the next, the way a tank’s ' +
     'temperature changes only a little from one minute to the next. This section measures that carry-over ' +
-    'with an AR(1): each leftover value is &phi; times the one before it plus a fresh random step. A &phi; ' +
-    'near 0 means no carry-over, and a &phi; near 1 means each value is almost the one before it.',
+    'with an AR(1), ' + form + ': each leftover value Z<sub>t</sub> is &phi; times the one before it plus a ' +
+    'fresh random step e<sub>t</sub>. A &phi; near 0 means no carry-over, and a &phi; near 1 means each value ' +
+    'is almost the one before it.',
     'No cycle is fitted in section 4, and so this section works on the readings themselves, measured from ' +
     'their mean. Readings can carry over from one to the next, the way a tank’s temperature changes only ' +
-    'a little from one minute to the next. This section measures that carry-over with an AR(1): each value is ' +
-    '&phi; times the one before it plus a fresh random step. A &phi; near 0 means no carry-over, and a &phi; ' +
-    'near 1 means each value is almost the one before it.'
+    'a little from one minute to the next. This section measures that carry-over with an AR(1), ' + form +
+    ': each value Z<sub>t</sub>, measured from the mean, is &phi; times the one before it plus a fresh random ' +
+    'step e<sub>t</sub>. A &phi; near 0 means no carry-over, and a &phi; near 1 means each value is almost the ' +
+    'one before it.'
   ];
   reserveHeight(lede, ledes);
   lede.innerHTML = ledes[md.hf ? 0 : 1];
@@ -12640,7 +12646,17 @@ function renderAr(md) {
     'The test needs at least two lags, one more than the AR(1) uses: raise the number of lags in section 3.'
   ];
   var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
-  host.innerHTML = cards(fmt(ar.phi, 3), fmt(ar.sigmaE, 4), fmtP(q.p)) +
+  var eq = function (l, r) {
+    return '<div class="eq"><span class="eq-l" style="min-width:7em">' + l + '</span><span class="eq-r">' + r + '</span></div>';
+  };
+  var model = '<div class="plot-hd" style="margin-top:10px">The fitted model</div>' +
+    eq('Each reading', md.hf ? 'Y<sub>t</sub> = cycle(t) + Z<sub>t</sub>'
+                             : 'Y<sub>t</sub> = ' + fmt(ar.mean, 4) + ' + Z<sub>t</sub>') +
+    eq('Carry-over', 'Z<sub>t</sub> = ' + fmt(ar.phi, 3) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>') +
+    eq('Fresh step', 'e<sub>t</sub> independent, mean 0, sd ' + fmt(ar.sigmaE, 4)) +
+    (md.hf ? '<div class="plot-cap" style="text-align:left">cycle(t) is the fit from section 4.</div>' :
+             '<div class="plot-cap" style="text-align:left">' + fmt(ar.mean, 4) + ' is the readings\u2019 mean.</div>');
+  host.innerHTML = cards(fmt(ar.phi, 3), fmt(ar.sigmaE, 4), fmtP(q.p)) + model +
     '<div class="plot-cap" style="text-align:left;margin-top:5px">The fresh step size is its standard ' +
     'deviation. The test asks whether any correlation is left once the carry-over is taken out (Ljung–Box ' +
     'over the lags set in section 3).</div>' +
