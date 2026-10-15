@@ -481,6 +481,7 @@ footer a:hover { text-decoration: underline; }
 .seg input:checked + span { color: var(--accent); font-weight: 600; }
 .seg label:has(input:checked) { background: var(--accent-wash); }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg label.off { cursor: default; opacity: .5; }
 .btn-mini.on { color: var(--accent); border-color: var(--accent); background: var(--accent-wash); }
 </style>
 </head>
@@ -497,11 +498,13 @@ footer a:hover { text-decoration: underline; }
     <a class="tab active" href="#fit" data-tab="fit">① Fit a Distribution</a>
     <a class="tab" href="#arr" data-tab="arr">② Fit Poisson Arrivals</a>
     <a class="tab" href="#pair" data-tab="pair">③ Relate Two Variables</a>
+    <a class="tab" href="#time" data-tab="time">④ Look for Patterns over Time</a>
   </nav>
   <select id="tab-select" class="tab-select" aria-label="Choose a tab">
     <option value="fit">① Fit a Distribution</option>
     <option value="arr">② Fit Poisson Arrivals</option>
     <option value="pair">③ Relate Two Variables</option>
+    <option value="time">④ Look for Patterns over Time</option>
   </select>
 
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -1694,6 +1697,269 @@ footer a:hover { text-decoration: underline; }
     </details>
   </section>
 
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     TAB ④: LOOK FOR PATTERNS OVER TIME
+     ══════════════════════════════════════════════════════════════════ -->
+<section id="tab-time" class="tp">
+
+  <p class="tab-lede">Tab ① ignores the order of a sample: shuffle the numbers and nothing it
+  reports changes. This tab checks whether the order carried information. Readings taken one after
+  another can drift together, as a tank's temperature does, or follow the clock, as hourly orders
+  do. When they do, the tab builds a model that keeps that pattern: a cycle fitted to the clock,
+  and an AR(1) for what the cycle leaves. Arrivals whose rate changes over the day belong on
+  <a class="tab-link" href="#arr" data-tab="arr">tab ②</a> instead.</p>
+
+  <section class="sec">
+    <div class="sec-hd">1 &middot; Data <span class="sec-note">paste readings in time order, with or without a time column</span></div>
+    <div class="data-grid">
+      <div class="data-input">
+        <div class="drop" id="s-drop">
+          <textarea id="s-data-in" class="data-in" spellcheck="false" autocomplete="off"
+            aria-label="Readings in time order, one per line, optionally with a time column"
+            placeholder="Paste readings in the order they were taken, for example&#10;&#10;hour,orders&#10;0,23&#10;1,19&#10;2,17&#10;&#10;A time column is optional: without one, the readings are taken to be equally spaced. Clock times (HH:MM) are read as minutes past midnight."></textarea>
+          <div class="drop-hint">Drop the file to load it</div>
+        </div>
+      </div>
+      <div class="data-tools">
+        <div class="samples">
+          <span class="file-lbl" style="align-self:center">Samples:</span>
+          <button class="btn2" data-ssample="orders" type="button">Hourly orders</button>
+          <button class="btn2" data-ssample="tank" type="button">Tank temperature</button>
+          <button class="btn2" data-ssample="service" type="button">Service times in order</button>
+        </div>
+        <div class="samples" style="margin-top:6px">
+          <label class="btn2" for="s-file-in" style="display:inline-block">Choose a file&hellip;</label>
+          <input id="s-file-in" type="file" accept=".csv,.txt,.dat,.tsv,text/plain,text/csv"
+                 style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+          <button class="btn2" id="s-btn-clear" type="button">Clear</button>
+        </div>
+        <div class="parse-msg" id="s-parse-msg" role="status" aria-live="polite"></div>
+      </div>
+      <div class="data-info">
+        <div class="ctrl-row">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="s-val">Readings</label>
+            <select id="s-val"></select>
+          </span>
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="s-time">Time</label>
+            <select id="s-time"></select>
+          </span>
+        </div>
+        <div class="ctrl-row">
+          <span class="ctrl-grp" id="s-delta-grp">
+            <label class="ctrl-lbl" for="s-delta">Every</label>
+            <input type="number" id="s-delta" class="mono-in" value="1" min="0" step="any" style="width:6em">
+          </span>
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="s-unit">Time unit</label>
+            <select id="s-unit">
+              <option value="seconds">seconds</option>
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="other">other</option>
+            </select>
+          </span>
+        </div>
+        <div class="hint" id="s-about" style="margin-top:10px">Load some data to begin.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">2 &middot; The readings in order <span class="sec-note">each value at its time, with the fitted cycle once section 4 has one</span></div>
+    <div class="plot-card">
+      <div class="plot-hd" id="s-run-hd">Readings over time</div>
+      <div id="s-run-host"><div class="plot-empty">Load readings to plot them.</div></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">3 &middot; Are successive readings independent? <span class="sec-note">each reading against the one k steps earlier, and the correlation at every k</span></div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl" id="s-view-lbl">Show</span>
+      <div class="seg" role="radiogroup" aria-labelledby="s-view-lbl">
+        <label><input type="radio" name="s-view" value="data" checked><span>the readings</span></label>
+        <label id="s-view-left-lbl"><input type="radio" name="s-view" value="left" disabled><span>what the cycle leaves</span></label>
+      </div>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-lag">Lag <span class="lit">k</span></label>
+        <input type="range" id="s-lag" min="1" max="20" step="1" value="1">
+        <input type="number" id="s-lag-n" class="mono-in" min="1" max="20" step="1" value="1" style="width:4.5em" aria-label="Lag k">
+      </span>
+    </div>
+    <div class="plot-wrap">
+      <div class="plot-card" style="flex:1 1 300px">
+        <div class="plot-hd" id="s-lag-hd">Each reading against the one k steps earlier</div>
+        <div id="s-lag-host"><div class="plot-empty">Load readings.</div></div>
+      </div>
+      <div class="plot-card" style="flex:1.4 1 400px">
+        <div class="plot-hd">Correlogram</div>
+        <div id="s-acf-host"><div class="plot-empty">Load readings.</div></div>
+      </div>
+    </div>
+    <div class="ctrl-row" style="margin-top:10px">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-m">Ljung&ndash;Box test over lags 1 to</label>
+        <input type="number" id="s-m" class="mono-in" min="1" step="1" value="20" style="width:4.5em">
+      </span>
+    </div>
+    <div id="s-lb"></div>
+    <div class="ctrl-row" style="margin-top:10px">
+      <button class="btn2" id="s-send-y" type="button">Fit the readings on tab ①</button>
+    </div>
+    <details class="why">
+      <summary>Reading a correlogram</summary>
+      <div class="why-body">
+        <p>The bar at lag <code>k</code> is the correlation between each reading and the reading
+        <code>k</code> steps earlier. The lag plot beside it shows the pairs that correlation is
+        computed from. For independent readings every bar is near 0, and the dashed band
+        (&plusmn;1.96/&radic;n) is where 95% of them should fall. About one bar in twenty crosses it by
+        chance alone, which is why the Ljung&ndash;Box test below combines the first several bars
+        into one test rather than judging them one at a time.</p>
+        <p>A tank that warms and cools slowly gives bars that start high and die away: a reading is
+        like the one before it, a little less like the one before that, and so on. A daily cycle
+        gives bars that rise and fall as a slow wave, positive at a lag of a whole day and negative
+        at half a day, because readings a day apart sit at the same point of the cycle.</p>
+        <p>The lag counts readings, not time. With equally spaced readings the two agree; with
+        irregular gaps, a lag of 1 is the previous reading however long ago it was.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">4 &middot; Remove a cycle <span class="sec-note">a pattern that repeats with a known period, such as a day or a week</span></div>
+    <div class="ctrl-row">
+      <label class="chk"><input type="checkbox" id="s-cyc"> Fit a cycle</label>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-P">Period</label>
+        <input type="number" id="s-P" class="mono-in" min="0" step="any" value="24" style="width:6em">
+        <span class="ctrl-note" id="s-P-unit"></span>
+      </span>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-H">Harmonics</label>
+        <select id="s-H"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </span>
+      <label class="chk"><input type="checkbox" id="s-trend"> Add a straight-line trend</label>
+    </div>
+    <div id="s-cyc-out"></div>
+    <div class="ctrl-row" style="margin-top:10px">
+      <button class="btn2" id="s-send-left" type="button" disabled>Fit what the cycle leaves on tab ①</button>
+    </div>
+    <details class="why" id="s-pg-details">
+      <summary>Find a period you do not know</summary>
+      <div class="why-body">
+        <p>The periodogram breaks the readings into waves of every frequency the record can show
+        and measures how much each one contributes. A cycle shows up as a peak at its frequency.
+        The raw periodogram is noisy, and so it is averaged over a few neighboring frequencies
+        (the span below). A wider span gives a smoother curve but can shift a peak to a
+        neighboring frequency. In practice the period is usually known from the calendar, and this
+        is a check that it is there.</p>
+        <div class="ctrl-row" style="margin-top:8px">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="s-span">Average over</label>
+            <select id="s-span">
+              <option value="1">1 frequency (none)</option>
+              <option value="3" selected>3 frequencies</option>
+              <option value="5">5 frequencies</option>
+              <option value="7">7 frequencies</option>
+            </select>
+          </span>
+          <button class="btn2" id="s-use-P" type="button" disabled>Use this period</button>
+        </div>
+        <div class="plot-card" style="margin-top:8px">
+          <div class="plot-hd">Periodogram</div>
+          <div id="s-pg-host"><div class="plot-empty">Load equally spaced readings.</div></div>
+        </div>
+      </div>
+    </details>
+    <details class="why">
+      <summary>How the cycle is fitted</summary>
+      <div class="why-body">
+        <p>The cycle is <code>m + c&#8321; cos(2&pi;t/P) + s&#8321; sin(2&pi;t/P)</code>, plus the same
+        pair at twice and three times the frequency for a second and third harmonic, fitted by least
+        squares. A cosine and a sine of one frequency together make a wave of any height and any
+        timing, and the cards report each one as its amplitude (half the distance from trough to
+        peak) and the time of its peak. One harmonic gives one smooth peak per period; a second
+        lets the shape have two humps, such as a lunch and a dinner rush.</p>
+        <p>The F test compares the fit with a flat line at the mean. Afterward, section 3's
+        correlogram can be switched to what the cycle leaves: if those bars sit inside the band, the
+        cycle plus independent noise is a complete model, and the noise can go to tab ① to be
+        fitted.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">5 &middot; An AR(1) for what is left <span class="sec-note">each value pulled toward the one before it</span></div>
+    <div class="plot-wrap">
+      <div style="flex:1 1 280px;min-width:0">
+        <div id="s-ar-out"></div>
+        <div class="ctrl-row" style="margin-top:10px">
+          <button class="btn2" id="s-send-innov" type="button">Fit the AR(1) innovations on tab ①</button>
+        </div>
+      </div>
+      <div class="plot-card" style="flex:1.4 1 400px">
+        <div class="plot-hd">Correlogram of the innovations</div>
+        <div id="s-innov-host"><div class="plot-empty">Load readings.</div></div>
+      </div>
+    </div>
+    <details class="why">
+      <summary>A model that follows the clock, or one that remembers the last value</summary>
+      <div class="why-body">
+        <p>An AR(1) writes each value, measured from its mean, as <code>Z = &phi; &middot; (previous Z) +
+        e</code>, where <code>e</code> is a fresh, independent draw called the innovation. With &phi;
+        near 1 the series wanders slowly; with &phi; near 0 it is close to independent. The
+        innovations' correlogram checks the fit: if its bars sit inside the band, one lag was
+        enough.</p>
+        <p>The cycle in section 4 reads the clock, and so it needs no memory: a model can draw a
+        value at any time from the time alone. An AR(1) remembers the previous draw, and so a model
+        needs a variable that it updates every time it draws. Its lag then means one draw ago,
+        which matches the data only if the model draws at the data's own spacing (once a minute for
+        a reading taken once a minute). None of the three simulation tools below has a built-in
+        AR(1), and so the export writes the update as its own line. When a time-based pattern
+        explains the data, it is the simpler model to build.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">6 &middot; Export <span class="sec-note">paste straight into your model or your analysis script</span></div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-t0">The model's time 0 is data time</label>
+        <input type="number" id="s-t0" class="mono-in" value="0" step="any" style="width:6em">
+      </span>
+      <label class="chk"><input type="checkbox" id="s-use-ar"> Include the AR(1)</label>
+      <label class="chk"><input type="checkbox" id="s-clip"> Never below zero</label>
+    </div>
+    <div class="hint" id="s-noise-say" style="margin-top:8px"></div>
+    <div id="s-export-out" style="margin-top:8px"><div class="plot-empty">No model yet.</div></div>
+    <div class="ctrl-row" style="margin-top:12px">
+      <button class="btn2" id="s-csv-data" type="button">Download the series (CSV)</button>
+      <button class="btn2" id="s-csv-res" type="button">Download the results (CSV)</button>
+    </div>
+    <details class="why">
+      <summary>Reading the expressions, and the clock in each tool</summary>
+      <div class="why-body">
+        <p>Each line draws one value at the moment it is evaluated. The cycle reads the
+        simulation clock in the data's time unit whatever unit the model itself runs in: Arena's
+        <code>TNOW</code> is in the model's base time unit, and the line divides it by
+        <code>HoursToBaseTime(1)</code> (or the minutes, seconds, or days form) to get hours; Simio's
+        <code>Run.TimeNow</code> is always in hours and is scaled from there; AnyLogic's
+        <code>time(HOUR)</code> returns hours directly. With the time unit set to "other" the bare
+        clock is used, and the model's own time unit must then match the data's.</p>
+        <p>If the data's time 0 is not the moment the simulation starts, set the box above: a model
+        that starts at 6 a.m. against data timed from midnight in hours needs a 6 there.</p>
+        <p>With the AR(1) included, the noise is a variable <code>Z</code> that the second line updates
+        each time a value is drawn, and the value is the cycle plus <code>Z</code>. Give
+        <code>Z</code> a starting value of 0.</p>
+      </div>
+    </details>
+  </section>
 </section>
 
 </div>
@@ -11797,6 +12063,403 @@ function initPairModel() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   TAB 4: LOOK FOR PATTERNS OVER TIME
+   ═══════════════════════════════════════════════════════════════════ */
+var SST = {
+  table: null,
+  vi: 0,              /* the readings column                              */
+  ti: null,           /* the time column, or null for equal steps          */
+  delta: 1,           /* the step when there is no time column             */
+  unit: 'other',      /* seconds | minutes | hours | days | other          */
+  y: [], t: [], dropped: 0, sorted: true, gapCV: NaN, clock: false,
+  view: 'data',       /* what section 3 shows: data | left                 */
+  lag: 1, m: 20,
+  cyc: false, P: 24, H: 1, trend: false,
+  span: 3,
+  src: null, about: null, sig: ''
+};
+var MIN_SERIES = 10;
+
+/* Columns readable as times: numbers, or clock times throughout. */
+function timeColumns(t) {
+  var out = [];
+  if (!t) return out;
+  for (var j = 0; j < t.cols.length; j++) {
+    var v = IA.timeRowValues(t.cols[j]).values, k = 0;
+    for (var i = 0; i < v.length; i++) if (Number.isFinite(v[i])) k++;
+    if (k >= 2) out.push(j);
+  }
+  return out;
+}
+function strictlyIncreasing(col) {
+  var v = IA.timeRowValues(col).values.filter(Number.isFinite);
+  for (var i = 1; i < v.length; i++) if (!(v[i] > v[i - 1])) return false;
+  return v.length > 1;
+}
+/* Minutes past midnight as a clock reading. */
+function clockStr(v) {
+  var m = ((v % 1440) + 1440) % 1440, h = Math.floor(m / 60), mm = Math.round(m - 60 * h);
+  if (mm === 60) { h = (h + 1) % 24; mm = 0; }
+  return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+function unitName() { return SST.unit === 'other' ? 'time units' : SST.unit; }
+
+var S_LOADER = makeTableLoader({
+  ta: 's-data-in', file: 's-file-in', clearBtn: 's-btn-clear', drop: 's-drop', msg: 's-parse-msg',
+  state: function () { return SST; },
+  accept: function (t) {
+    var nc = numericColumns(t), tc = timeColumns(t), s = SST.about;
+    var vs = $('s-val'), ts = $('s-time'), i, o;
+    vs.innerHTML = ''; ts.innerHTML = '';
+    for (i = 0; i < nc.length; i++) {
+      o = document.createElement('option'); o.value = String(nc[i]); o.textContent = t.names[nc[i]]; vs.appendChild(o);
+    }
+    o = document.createElement('option'); o.value = ''; o.textContent = 'equally spaced'; ts.appendChild(o);
+    for (i = 0; i < tc.length; i++) {
+      o = document.createElement('option'); o.value = String(tc[i]); o.textContent = t.names[tc[i]]; ts.appendChild(o);
+    }
+    if (!nc.length) { SST.y = []; SST.t = []; renderSeriesAll(); return; }
+    /* A sample says which column is which.  Otherwise a first column that
+       only increases, beside another column of numbers, is taken to be the
+       time, and the reader can say otherwise. */
+    if (s) {
+      SST.ti = s.timeCol; SST.vi = s.cols.length - 1; SST.delta = s.delta || 1; SST.unit = s.unit;
+    } else {
+      var firstTime = tc.length && nc.length > 1 && tc[0] === 0 && strictlyIncreasing(t.cols[0]);
+      SST.ti = firstTime ? 0 : null;
+      SST.vi = firstTime ? nc.filter(function (j) { return j !== 0; })[0] : nc[0];
+      var clockCol = SST.ti !== null && IA.timeRowValues(t.cols[SST.ti]).clock;
+      SST.unit = clockCol ? 'minutes' : 'other';
+    }
+    vs.value = String(SST.vi);
+    ts.value = SST.ti === null ? '' : String(SST.ti);
+    $('s-delta').value = String(SST.delta);
+    $('s-unit').value = SST.unit;
+    seriesUse();
+  },
+  clear: function () { SST.y = []; SST.t = []; SST.table = null; $('s-val').innerHTML = ''; $('s-time').innerHTML = ''; renderSeriesAll(); }
+});
+
+function seriesMaxLag() { return Math.max(1, Math.min(Math.floor(SST.y.length / 4), 60)); }
+
+function seriesUse() {
+  if (!SST.table) return;
+  var sr = IA.seriesFrom(SST.table, SST.vi, SST.ti, SST.delta);
+  SST.y = sr.y; SST.t = sr.t; SST.dropped = sr.dropped; SST.sorted = sr.sorted; SST.gapCV = sr.gapCV; SST.clock = sr.clock;
+  var L = seriesMaxLag();
+  SST.lag = Math.min(Math.max(1, SST.lag), L);
+  SST.m = Math.max(1, Math.min(20, Math.floor(sr.y.length / 5)));
+  var s = 0;
+  for (var i = 0; i < sr.y.length; i++) s += sr.y[i] + 1e-3 * sr.t[i];
+  SST.sig = [SST.vi, SST.ti, SST.delta, sr.y.length, s].join('|');
+  $('s-lag').max = String(L); $('s-lag-n').max = String(L);
+  $('s-lag').value = String(SST.lag); $('s-lag-n').value = String(SST.lag);
+  $('s-m').max = String(Math.max(1, sr.y.length - 2)); $('s-m').value = String(SST.m);
+  $('s-delta-grp').style.display = SST.ti === null ? '' : 'none';
+  renderSeriesAll();
+}
+
+/* The fitted cycle (when one is asked for and can be fitted), what it
+   leaves, and the AR(1) of that. */
+function seriesModel() {
+  var y = SST.y, out = { hf: null, left: y, ar: null };
+  if (y.length < MIN_SERIES) return out;
+  if (SST.cyc && SST.P > 0) {
+    var hf = IA.harmonicFit(SST.t, y, SST.P, SST.H, SST.trend);
+    if (Number.isFinite(hf.m)) { out.hf = hf; out.left = hf.resid; }
+  }
+  out.ar = IA.ar1(out.left);
+  return out;
+}
+function seriesShown(md) { return SST.view === 'left' && md.hf ? md.hf.resid : SST.y; }
+
+function renderSeriesAll() {
+  var md = seriesModel();
+  var leftOk = !!md.hf;
+  var lr = document.querySelector('input[name="s-view"][value="left"]');
+  lr.disabled = !leftOk;
+  var ll = $('s-view-left-lbl');
+  ll.classList.toggle('off', !leftOk);
+  if (leftOk) ll.removeAttribute('data-tip');
+  else ll.setAttribute('data-tip', 'Fit a cycle in section 4 first; this view shows what it leaves.');
+  if (!leftOk && SST.view === 'left') {
+    SST.view = 'data';
+    document.querySelector('input[name="s-view"][value="data"]').checked = true;
+  }
+  $('s-P-unit').textContent = unitName();
+  renderSeriesAbout();
+  renderRun(md);
+  renderLagPlot(md);
+  renderSeriesAcf(md);
+  renderCycle(md);
+  renderPeriodogram();
+  if (typeof renderAr === 'function') renderAr(md);
+  if (typeof renderSeriesExport === 'function') renderSeriesExport(md);
+  armPlotDownloads();
+}
+
+function renderSeriesAbout() {
+  var el = $('s-about'), n = SST.y.length;
+  if (!SST.table || !n) { el.innerHTML = 'Load some data to begin.'; return; }
+  var s = SST.about, h = '';
+  if (s) h += '<strong>' + esc(s.name) + '.</strong> ' + esc(s.about.charAt(0).toUpperCase() + s.about.slice(1)) +
+    '. <strong>How it was made:</strong> ' + esc(s.truth) + '<br>';
+  h += n + ' reading' + (n === 1 ? '' : 's') + ' in use' +
+    (SST.ti === null ? ', taken to be equally spaced.' : ', timed by the ' + esc(SST.table.names[SST.ti]) + ' column' +
+     (SST.clock ? ' (clock times, read as minutes past midnight).' : '.'));
+  if (SST.dropped) h += ' ' + SST.dropped + ' row' + (SST.dropped === 1 ? ' was' : 's were') + ' left out because a cell was blank or not a number.';
+  if (!SST.sorted) h += ' <strong>The times are not in order.</strong> The readings are used in the order they were pasted, which is what the correlogram needs; sort them first if that is not the order they were taken in.';
+  else if (SST.ti !== null && SST.gapCV > 0.05) h += ' The gaps between times vary, and so a lag counts readings, not a fixed stretch of time.';
+  if (n < MIN_SERIES) h += ' <strong>At least ' + MIN_SERIES + ' readings are needed.</strong>';
+  el.innerHTML = h;
+}
+
+/* A plot's width from its container, so that labels keep their size. */
+function hostW(host, lo, hi, dflt) { return Math.max(lo, Math.min(hi, host.clientWidth || dflt)); }
+
+function renderRun(md) {
+  var host = $('s-run-host'), y = SST.y, t = SST.t, n = y.length;
+  var vname = SST.table ? SST.table.names[SST.vi] : 'value';
+  $('s-run-hd').textContent = vname + ' over time';
+  if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>'; return; }
+  var sy = IA.summarize(y), lo = sy.min, hi = sy.max, i;
+  if (md.hf) for (i = 0; i < n; i++) { lo = Math.min(lo, md.hf.fitted[i]); hi = Math.max(hi, md.hf.fitted[i]); }
+  var pad = Math.max((hi - lo) * 0.06, 1e-9), t0 = Math.min.apply(null, t), t1 = Math.max.apply(null, t);
+  if (!(t1 > t0)) t1 = t0 + 1;
+  var W = hostW(host, 330, 980, 900), H = W < 520 ? 250 : 280;
+  var P = Plot(W, H, { l: 50, r: 12, t: 30, b: 44 }).domain(t0, t1, lo - pad, hi + pad);
+  var xt = tickPair(t0, t1, W < 520 ? 5 : 9), yt = tickPair(lo - pad, hi + pad, 5);
+  P.frame().axes(xt.ticks, yt.ticks, SST.clock ? clockStr : xt.fmt, yt.fmt);
+  var pts = [];
+  for (i = 0; i < n; i++) pts.push([t[i], y[i]]);
+  P.line(pts, 'var(--obs)', 1.1);
+  if (n <= 200) P.dots(pts, 'var(--obs)', 2.2);
+  var leg = [{ mark: 'line', color: 'var(--obs)', label: 'readings' }];
+  if (md.hf) {
+    var fp = [];
+    for (i = 0; i < n; i++) fp.push([t[i], md.hf.fitted[i]]);
+    P.line(fp, 'var(--fit)', 2.2);
+    leg.push({ mark: 'line', color: 'var(--fit)', label: 'fitted cycle' + (SST.trend ? ' and trend' : '') });
+  }
+  P.labels(SST.ti === null ? 'time (' + unitName() + ')' : SST.table.names[SST.ti] + (SST.clock ? ' (clock time)' : ''), vname);
+  /* The legend sits in a strip above the frame, where no reading can be
+     under it. */
+  for (i = 0; i < leg.length; i++) P.legend(P.mL + i * 150, 14, [leg[i]]);
+  host.innerHTML = P.svg('Run sequence of ' + vname, 'The readings of ' + vname + ' plotted against time' +
+    (md.hf ? ', with the fitted cycle' : '')) +
+    '<div class="plot-cap">' + n + ' readings' + (md.hf ? ' · cycle of period ' + fmt(SST.P, 4) + ' ' + esc(unitName()) : '') + '</div>';
+}
+
+function renderLagPlot(md) {
+  var host = $('s-lag-host'), v = seriesShown(md), n = v.length, k = SST.lag;
+  $('s-lag-hd').textContent = (SST.view === 'left' ? 'What the cycle leaves' : 'Each reading') + ' against ' +
+    (k === 1 ? 'the one before' : 'the one ' + k + ' steps earlier');
+  if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>'; return; }
+  var s = IA.summarize(v), pad = Math.max((s.max - s.min) * 0.05, 1e-9), lo = s.min - pad, hi = s.max + pad;
+  var W = hostW(host, 300, 440, 380), P = Plot(W, W, { l: 50, r: 12, t: 12, b: 44 }).domain(lo, hi, lo, hi);
+  var tk = tickPair(lo, hi, 5);
+  P.frame().axes(tk.ticks, tk.ticks, tk.fmt, tk.fmt);
+  var pts = [];
+  for (var i = k; i < n; i++) pts.push([v[i - k], v[i]]);
+  P.dots(pts, 'var(--obs)', 2.4);
+  P.labels(k === 1 ? 'previous reading' : 'reading ' + k + ' steps earlier', 'reading');
+  var r = IA.acf(v, k)[k];
+  host.innerHTML = P.svg('Lag plot of ' + (SST.view === 'left' ? 'what the cycle leaves' : 'the readings'),
+    'Each reading plotted against the reading ' + k + ' steps earlier') +
+    '<div class="plot-cap">' + pts.length + ' pairs · lag-' + k + ' correlation ' + fmt(r, 3) + '</div>';
+}
+
+/* A correlogram into host: stems at lags 1..L inside a fixed [-1, 1]
+   frame, the 95% band for independent values dashed, and one stem
+   highlighted.  A tap or click on the plot picks the nearest lag when
+   onPick is given. */
+function drawCorrelogram(host, r, n, mark, title, aria, onPick) {
+  var L = r.length - 1;
+  var W = hostW(host, 330, 620, 520), H = Math.round(W * 0.52) + 18;
+  var P = Plot(W, H, { l: 46, r: 12, t: 30, b: 44 }).domain(0, L + 0.5, -1, 1);
+  var xt = tickPair(0, L, W < 420 ? 5 : 8);
+  P.frame().axes(xt.ticks.filter(function (v) { return Number.isInteger(v); }), [-1, -0.5, 0, 0.5, 1],
+                 function (v) { return String(v); }, function (v) { return String(v); });
+  var band = 1.96 / Math.sqrt(n), out = 0;
+  P.seg(0, 0, L + 0.5, 0, 'var(--border)', 1);
+  P.seg(0, band, L + 0.5, band, 'var(--alt)', 1.3, '5 4');
+  P.seg(0, -band, L + 0.5, -band, 'var(--alt)', 1.3, '5 4');
+  for (var k = 1; k <= L; k++) {
+    if (!Number.isFinite(r[k])) continue;
+    if (Math.abs(r[k]) > band) out++;
+    if (k !== mark) P.seg(k, 0, k, r[k], 'var(--obs)', 2);
+  }
+  if (mark >= 1 && mark <= L && Number.isFinite(r[mark])) P.seg(mark, 0, mark, r[mark], 'var(--accent)', 3.2);
+  P.labels('lag k', 'correlation');
+  P.legend(P.mL, 14, [{ mark: 'line', color: 'var(--obs)', label: 'correlation at lag k' }]);
+  P.legend(P.mL + (W < 420 ? 140 : 160), 14, [{ mark: 'line', color: 'var(--alt)', dash: '5 4', label: '95% band if independent' }]);
+  host.innerHTML = P.svg(title, aria) +
+    '<div class="plot-cap">' + out + ' of ' + L + ' bars outside the band (about ' + fmt(L * 0.05, 2) +
+    ' expected by chance)' + (onPick ? ' · tap a bar to pick its lag' : '') + '</div>';
+  if (onPick) {
+    var svg = host.querySelector('svg');
+    svg.addEventListener('click', function (e) {
+      var ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      var p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      if (p.x < P.mL || p.x > P.mL + P.pw) return;
+      var lag = Math.round((p.x - P.mL) / P.pw * (L + 0.5));
+      if (lag >= 1 && lag <= L) onPick(lag);
+    });
+  }
+}
+
+function renderSeriesAcf(md) {
+  var host = $('s-acf-host'), v = seriesShown(md), n = v.length;
+  var lb = $('s-lb');
+  if (n < MIN_SERIES) {
+    host.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>';
+    lb.innerHTML = ''; return;
+  }
+  var r = IA.acf(v, seriesMaxLag());
+  var what = SST.view === 'left' ? 'what the cycle leaves' : 'the readings';
+  drawCorrelogram(host, r, n, SST.lag, 'Correlogram of ' + what,
+    'Autocorrelation of ' + what + ' at lags 1 to ' + (r.length - 1) + ', with the 95% band for independent values',
+    function (lag) { setLag(lag); });
+  var m = Math.min(SST.m, n - 2), q = IA.ljungBox(IA.acf(v, m), n, m, 0);
+  var verdicts = [
+    'The correlations are no larger than independent values would give (p ≥ 0.05). Tab ① may treat ' +
+    'these readings as a sample, and the button below sends them there.',
+    'The correlations are too large for independent values (p < 0.05). Tab ① would treat the readings as ' +
+    'interchangeable, and they are not: a model has to keep the pattern, through a cycle (section 4), an ' +
+    'AR(1) (section 5), or both.'
+  ];
+  lb.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:6px">' +
+    card('Ljung–Box <span class="lit">Q</span>', fmt(q.Q, 4)) +
+    card('df', String(q.df)) +
+    card('p-value', fmtP(q.p)) + '</div><div class="note ' + (q.p < 0.05 ? 'warn' : 'quiet') +
+    '" id="s-lb-say" style="margin-top:8px">' + verdicts[q.p < 0.05 ? 1 : 0] + '</div>';
+  reserveHeight($('s-lb-say'), verdicts);
+}
+
+function setLag(k) {
+  SST.lag = Math.max(1, Math.min(seriesMaxLag(), Math.round(k) || 1));
+  $('s-lag').value = String(SST.lag); $('s-lag-n').value = String(SST.lag);
+  var md = seriesModel();
+  renderLagPlot(md); renderSeriesAcf(md); armPlotDownloads();
+}
+
+function renderCycle(md) {
+  var host = $('s-cyc-out'), hf = md.hf, u = unitName();
+  var peak = function (v) { return SST.clock && SST.unit === 'minutes' ? clockStr(v) : fmt(v, 4) + ' ' + esc(u); };
+  /* Three rows always, so that the page keeps its height as harmonics are
+     added and the cycle is switched on and off. */
+  var rows = '';
+  for (var k = 0; k < 3; k++) {
+    var on = hf && k < SST.H;
+    rows += '<tr><td>' + ['First', 'Second', 'Third'][k] + ' (period ' + fmt(SST.P / (k + 1), 4) + ')</td>' +
+      '<td class="num">' + (on ? fmt(hf.amp[k], 4) : '—') + '</td><td class="num">' + (on ? peak(hf.peakAt[k]) : '—') + '</td></tr>';
+  }
+  var caps = [
+    'Tick \u201cFit a cycle\u201d and give its period in ' + esc(u) + '.',
+    'The cycle could not be fitted: check the period, or load more readings.',
+    'Residual standard deviation ' + (hf ? fmt(hf.sd, 4) : '0.0000') + '. The F test compares the fit with a flat ' +
+    'line at the mean, and each peak time is within one period of that harmonic.'
+  ];
+  host.innerHTML = '<div class="plot-wrap" style="margin-top:4px">' +
+    '<div style="flex:1 1 280px;min-width:0"><div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+    card('Mean level <span class="lit">m</span>', hf ? fmt(hf.m, 4) : '—') +
+    card('<span class="lit">R²</span>', hf ? fmt(hf.r2, 4) : '—') +
+    card('F test p-value', hf ? fmtP(hf.p) : '—') +
+    card('Trend per ' + (SST.unit === 'other' ? 'unit' : SST.unit.replace(/s$/, '')), hf && SST.trend ? fmt(hf.g, 4) : '—') +
+    '</div></div>' +
+    '<div style="flex:1.3 1 320px;min-width:0"><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Harmonic</th>' +
+    '<th class="num">Amplitude</th><th class="num">Peak at</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
+    '</div><div class="plot-cap" id="s-cyc-cap" style="text-align:left;margin-top:5px">' +
+    (hf ? caps[2] : SST.cyc ? caps[1] : caps[0]) + '</div>';
+  reserveHeight($('s-cyc-cap'), caps);
+  $('s-send-left').disabled = !hf;
+}
+
+function renderPeriodogram() {
+  var det = $('s-pg-details'), host = $('s-pg-host'), y = SST.y, n = y.length;
+  $('s-use-P').disabled = true;
+  if (!det.open) return;
+  var even = SST.ti === null || (SST.sorted && !(SST.gapCV > 0.05));
+  if (n < MIN_SERIES || !even) {
+    host.innerHTML = '<div class="plot-empty">' + (n < MIN_SERIES ? 'Load at least ' + MIN_SERIES + ' readings.'
+      : 'The periodogram needs equally spaced readings, and these are not.') + '</div>';
+    return;
+  }
+  var step = SST.ti === null ? SST.delta : (SST.t[n - 1] - SST.t[0]) / (n - 1);
+  var pg = IA.periodogram(y, SST.span), K = pg.freq.length, kmax = 0, i;
+  for (i = 1; i < K; i++) if (pg.spec[i] > pg.spec[kmax]) kmax = i;
+  var fr = pg.freq.map(function (f) { return f / step; }), smax = pg.spec[kmax] * 1.12 || 1;
+  var W = hostW(host, 270, 900, 700), H = W < 520 ? 220 : 250;
+  var P = Plot(W, H, { l: 56, r: 12, t: 12, b: 44 }).domain(0, fr[K - 1], 0, smax);
+  var xt = tickPair(0, fr[K - 1], W < 520 ? 5 : 8), yt = tickPair(0, smax, 5);
+  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  var pts = [];
+  for (i = 0; i < K; i++) pts.push([fr[i], pg.spec[i]]);
+  P.line(pts, 'var(--obs)', 1.6);
+  var per = pg.period[kmax] * step;
+  P.dots([[fr[kmax], pg.spec[kmax]]], 'var(--accent)', 4);
+  P.text(fr[kmax], pg.spec[kmax], '  period ' + fmt(per, 4) + ' ' + unitName(), { fill: 'var(--text)', size: 11,
+    anchor: fr[kmax] > fr[K - 1] * 0.6 ? 'end' : 'start' });
+  P.labels('cycles per ' + (SST.unit === 'other' ? 'time unit' : SST.unit.replace(/s$/, '')), 'power');
+  host.innerHTML = P.svg('Periodogram of the readings', 'Smoothed periodogram against frequency, with the tallest peak marked') +
+    '<div class="plot-cap">The tallest peak, marked, is a cycle of period ' + fmt(per, 4) + ' ' + esc(unitName()) +
+    ' (frequency ' + fmt(fr[kmax], 4) + ').</div>';
+  var b = $('s-use-P');
+  b.disabled = false;
+  b.dataset.period = String(Number(per.toPrecision(6)));
+  armPlotDownloads();
+}
+
+function initSeriesTab() {
+  S_LOADER.wire();
+  var sb = document.querySelectorAll('[data-ssample]');
+  for (var i = 0; i < sb.length; i++) sb[i].addEventListener('click', function () {
+    var s = TIME_SAMPLES[this.getAttribute('data-ssample')];
+    SST.about = s;
+    SST.cyc = false; $('s-cyc').checked = false;
+    S_LOADER.loadText(sampleCsv(s), s.name, 'built-in sample "' + s.name + '"');
+  });
+  $('s-val').addEventListener('change', function () { SST.vi = Number(this.value); seriesUse(); });
+  $('s-time').addEventListener('change', function () { SST.ti = this.value === '' ? null : Number(this.value); seriesUse(); });
+  $('s-delta').addEventListener('change', function () {
+    var v = Number(this.value);
+    SST.delta = v > 0 ? v : 1; this.value = String(SST.delta); seriesUse();
+  });
+  $('s-unit').addEventListener('change', function () { SST.unit = this.value; renderSeriesAll(); });
+  var vr = document.querySelectorAll('input[name="s-view"]');
+  for (i = 0; i < vr.length; i++) vr[i].addEventListener('change', function () {
+    SST.view = this.value; var md = seriesModel(); renderLagPlot(md); renderSeriesAcf(md); armPlotDownloads();
+  });
+  $('s-lag').addEventListener('input', function () { setLag(Number(this.value)); });
+  $('s-lag-n').addEventListener('change', function () { setLag(Number(this.value)); });
+  $('s-m').addEventListener('change', function () {
+    var v = Math.round(Number(this.value));
+    SST.m = Math.max(1, Math.min(v || 1, Math.max(1, SST.y.length - 2))); this.value = String(SST.m);
+    renderSeriesAll();
+  });
+  $('s-cyc').addEventListener('change', function () { SST.cyc = this.checked; renderSeriesAll(); });
+  $('s-P').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (v > 0) SST.P = v; else this.value = String(SST.P);
+    renderSeriesAll();
+  });
+  $('s-H').addEventListener('change', function () { SST.H = Number(this.value); renderSeriesAll(); });
+  $('s-trend').addEventListener('change', function () { SST.trend = this.checked; renderSeriesAll(); });
+  $('s-span').addEventListener('change', function () { SST.span = Number(this.value); renderPeriodogram(); });
+  $('s-pg-details').addEventListener('toggle', renderPeriodogram);
+  $('s-use-P').addEventListener('click', function () {
+    SST.P = Number(this.dataset.period); $('s-P').value = String(SST.P);
+    SST.cyc = true; $('s-cyc').checked = true;
+    renderSeriesAll();
+  });
+  if (typeof initSeriesModel === 'function') initSeriesModel();
+  var s0 = TIME_SAMPLES.orders;
+  SST.about = s0;
+  S_LOADER.loadText(sampleCsv(s0), s0.name, 'built-in sample "' + s0.name + '"');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    TABS AND WIRING
    ═══════════════════════════════════════════════════════════════════ */
 function showTab(name) {
@@ -11815,6 +12478,7 @@ function showTab(name) {
    while the tab is hidden, and so a tab is redrawn as it is shown. */
 function onTabShown(name) {
   if (name === 'pair' && PST.table) renderPairAll();
+  if (name === 'time' && SST.table) renderSeriesAll();
 }
 var RESIZE_TIMER = null, RESIZE_W = window.innerWidth;
 /* Only a change of width redraws: a phone fires resize as its address bar
@@ -12044,6 +12708,7 @@ document.addEventListener('DOMContentLoaded', function () {
   A_LOADER.loadText(a0.v.join('\n'), a0.name, 'built-in sample "' + a0.name + '"');
 
   initPairTab();
+  initSeriesTab();
   /* Heights reserved before the web font arrives are measured in the
      fallback font, and so the shown tab is redrawn once fonts are ready. */
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () {
