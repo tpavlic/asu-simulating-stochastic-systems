@@ -302,6 +302,8 @@ export function runExports(IA, { section, ok, close }) {
     const rs = IA.pairExpressions(Object.assign({}, base, { noise: { kind: 'resid', fit: g } }));
     ok(rs.arena === '1.5 + 0.25*Items + (GAMM(1.3, 2) - 2.6)', 'residuals fitted on tab 1 are centered by their mean', rs.arena);
     ok(/\(stats\.gamma\(a=2, loc=0, scale=1\.3\)\.rvs\(size=n\) - 2\.6\)/.test(rs.python), 'Python draws from the frozen fit', rs.python);
+    const nr = IA.pairExpressions(Object.assign({}, base, { noise: { kind: 'resid', fit: { dist: D.normal, p: [-3e-12, 1.1], shift: 0 } } }));
+    ok(nr.arena === '1.5 + 0.25*Items + NORM(-3e-12, 1.1)', 'a fitted mean that is rounding error is not subtracted', nr.arena);
     const pu = IA.pairExpressions(Object.assign({}, base, { noise: { kind: 'perunit', fit: g } }));
     ok(pu.arena === 'Items*GAMM(1.3, 2)', 'the per-unit model multiplies X by a draw', pu.arena);
   }

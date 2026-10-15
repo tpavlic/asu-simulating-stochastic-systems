@@ -1617,6 +1617,83 @@ footer a:hover { text-decoration: underline; }
       </div>
     </details>
   </section>
+  <section class="sec">
+    <div class="sec-hd">4 &middot; A model of Y given X <span class="sec-note">a straight line, what it leaves over, and where to fit that</span></div>
+    <div class="plot-wrap">
+      <div class="plot-card" style="flex:1 1 440px">
+        <div class="plot-hd" id="p-res-hd">Residuals against X</div>
+        <div id="p-res-host"><div class="plot-empty">Load paired data.</div></div>
+      </div>
+      <div style="flex:1 1 300px;min-width:0">
+        <div id="p-model"></div>
+        <div id="p-model-notes" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="ctrl-row" style="margin-top:12px">
+      <button class="btn2" id="p-send-x" type="button">Fit X on tab ①</button>
+      <button class="btn2" id="p-send-y" type="button">Fit Y on tab ①</button>
+      <button class="btn2" id="p-send-res" type="button">Fit the residuals on tab ①</button>
+      <button class="btn2" id="p-send-per" type="button">Fit Y per unit of X on tab ①</button>
+    </div>
+    <div class="plot-cap" style="text-align:left;margin-top:4px">Each button loads those numbers on
+    <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> and opens it. A fit made there to the
+    residuals, or to Y per unit of X, becomes the noise term in the export below.</div>
+    <details class="why">
+      <summary>Reading the residual plot, and when Y per unit of X is the better model</summary>
+      <div class="why-body">
+        <p>A residual is what the line leaves over: the observed Y minus the line's value at that
+        X. The model <code>Y = a + bX + noise</code> assumes the noise has one distribution for every
+        X. On the residual plot that looks like a band of even width around the zero line.</p>
+        <p>A band that fans out, narrow at small X and wide at large X, says the noise grows with X.
+        Checkout times behave this way: each item adds its own variable time, and so a long
+        order varies more than a short one. The Breusch&ndash;Pagan test checks for this by asking whether
+        the squared residuals rise or fall with X. When they do, a model in which X multiplies the
+        noise usually fits better: fit Y/X, the time per item, on tab ①, and draw
+        <code>Y = X &middot; (a draw of Y/X)</code>.</p>
+        <p>That model has no fixed part, and so it fits best when the line passes near the origin.
+        A checkout also has a payment step that takes about the same time whatever the order size.
+        When the intercept is clearly above zero, Y/X carries that fixed time spread over the items,
+        and so small orders show a larger Y/X than large ones and no single distribution fits Y/X
+        exactly. The note beside the cards says when that is the case.</p>
+        <p>A curve in the residual plot (a U, or an arch) says a straight line is the wrong shape.
+        The line-speed sample shows one.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="sec">
+    <div class="sec-hd">5 &middot; Export <span class="sec-note">paste straight into your model or your analysis script</span></div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="p-xattr">X in the model is called</label>
+        <input type="text" id="p-xattr" class="mono-in" style="width:10em" spellcheck="false" autocomplete="off">
+      </span>
+      <label class="chk"><input type="checkbox" id="p-clip"> Never below zero</label>
+    </div>
+    <div class="hint" id="p-noise-say" style="margin-top:8px"></div>
+    <div id="p-export-out" style="margin-top:8px"><div class="plot-empty">No model yet.</div></div>
+    <div class="ctrl-row" style="margin-top:12px">
+      <button class="btn2" id="p-csv-data" type="button">Download the pairs (CSV)</button>
+      <button class="btn2" id="p-csv-res" type="button">Download the results (CSV)</button>
+    </div>
+    <details class="why">
+      <summary>Reading the expressions</summary>
+      <div class="why-body">
+        <p>Each line draws one value of Y for an entity whose X is already known, held in the
+        attribute named above. Change the name to match your model. The noise term is a single draw
+        written exactly as tab ① writes that distribution for each tool, and so the same
+        parameterization notes apply: Arena and Simio take a normal's mean and then its standard
+        deviation, and AnyLogic takes the standard deviation first.</p>
+        <p>A residual has mean 0, but most fitted distributions do not, and so a fit to the residuals
+        is centered by subtracting its own mean. "Never below zero" wraps the line in a maximum with
+        0, which suits a duration; it changes the distribution slightly wherever the line plus the
+        noise can go negative, which the residual plot shows.</p>
+        <p>The scripts recompute every number on this tab from your data and print each beside the
+        value shown here, so running one checks this page rather than repeating it.</p>
+      </div>
+    </details>
+  </section>
+
 </section>
 
 </div>
@@ -6316,10 +6393,20 @@ function clipAtZero(tool, e) {
             matlab: 'max(0, ', python: 'np.maximum(0, ' }[tool];
   return f + e + ')';
 }
+/* The mean to subtract when centering a fit to residuals: 0 when the
+   fitted mean is rounding error against the model's own spread (a normal
+   fitted to least-squares residuals lands within about 1e-12 of 0), so that
+   the expression does not carry a meaningless "+ 3e-12". */
+function centeringMean(fit) {
+  var mu = fitMean(fit);
+  if (!Number.isFinite(mu)) return mu;
+  var q = fitQuantile(fit), spread = Math.abs(q(0.75) - q(0.25));
+  return Math.abs(mu) <= 1e-9 * spread ? 0 : mu;
+}
 /* The noise term per tool: the fitted draw itself, or that draw with its
    model mean taken off when the fit was to residuals, which have mean 0. */
 function noiseTerms(fit, center) {
-  var dr = toolDraws(fit), mu = center ? fitMean(fit) : 0, out = { notes: dr.notes };
+  var dr = toolDraws(fit), mu = center ? centeringMean(fit) : 0, out = { notes: dr.notes };
   for (var i = 0; i < DEP_TOOLS.length; i++) {
     var t = DEP_TOOLS[i], d = dr[t];
     if (!d) { out[t] = null; continue; }
@@ -6805,7 +6892,7 @@ var IA = {
   breuschPagan: breuschPagan, fitMean: fitMean,
   timeRowValues: timeRowValues, seriesFrom: seriesFrom, acf: acf, ljungBox: ljungBox, lsq: lsq,
   harmonicFit: harmonicFit, ar1: ar1, periodogram: periodogram,
-  toolDraws: toolDraws, pairExpressions: pairExpressions, timeExpressions: timeExpressions,
+  toolDraws: toolDraws, centeringMean: centeringMean, pairExpressions: pairExpressions, timeExpressions: timeExpressions,
   pairScripts: pairScripts, timeScripts: timeScripts,
   num: num, toCsv: toCsv
 };
@@ -7326,7 +7413,8 @@ var ST = {
   gof: null,        /* last bootstrap result                           */
   gofFor: null,     /* the fit signature that result belongs to        */
   seed: 20260818,
-  B: 2000
+  B: 2000,
+  handoff: null     /* { from, kind, sig } when tab 3 or 4 sent these data */
 };
 var AST = {          /* tab 2 */
   table: null, col: 0, times: [], gaps: [], clock: false, unit: null,
@@ -7342,6 +7430,9 @@ var AST = {          /* tab 2 */
 function makeLoader(cfg) {
   var api = {};
   api.loadText = function (text, sourceLabel, srcLine) {
+    /* New data on the fitting tab ends any hand-off from tab 3 or 4: the
+       sender sets it again after this call when the data are its own. */
+    if (cfg.state() === ST) ST.handoff = null;
     if (!sourceLabel) cfg.state().unit = null;
     /* Every export carries a "# data source:" line, and this is where it
        is recorded -- BEFORE useColumn renders anything downstream, and so the
@@ -7432,7 +7523,7 @@ function makeLoader(cfg) {
       /* Hand-editing breaks any provenance chain: whatever the box held
          before, its contents are now the user's. */
       cfg.state().src = 'pasted or typed by the user';
-      if (cfg.state() === ST) { ST.genTruth = null; genSay(''); }
+      if (cfg.state() === ST) { ST.genTruth = null; ST.handoff = null; genSay(''); }
       if (cfg.state() === AST) { AST.truth = null; aGenSay(''); }
       cfg.state().table = IA.parseTable(this.value);
       api.buildPicker();
@@ -11466,6 +11557,7 @@ function renderPairCoef() {
 
 function initPairTab() {
   P_LOADER.wire();
+  initPairModel();
   var sb = document.querySelectorAll('[data-psample]');
   for (var i = 0; i < sb.length; i++) sb[i].addEventListener('click', function () {
     var s = PAIR_SAMPLES[this.getAttribute('data-psample')];
@@ -11488,6 +11580,220 @@ function initPairTab() {
   var s0 = PAIR_SAMPLES.checkout;
   PST.about = s0;
   P_LOADER.loadText(sampleCsv(s0), s0.name, 'built-in sample "' + s0.name + '"');
+}
+
+/* An identifier a simulation tool accepts as an attribute name. */
+function attrName(s) {
+  var t = String(s || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!t) t = 'X';
+  if (/^[0-9]/.test(t)) t = 'X_' + t;
+  return t;
+}
+
+/* The fit made on tab 1 to numbers this tab sent there, when tab 1 still
+   holds exactly those numbers and the pairs here have not changed since. */
+function pairHandoff() {
+  var h = ST.handoff, r = pickedRow();
+  if (!h || h.from !== 'pair' || !r || h.sig !== PST.sig) return null;
+  if (h.kind === 'perunit' && !PST.x.every(function (v) { return v > 0; })) return null;
+  return { kind: h.kind, fit: r.fit, dist: r.dist };
+}
+
+function renderPairModel() {
+  var n = PST.x.length, nm = pairNames();
+  $('p-res-hd').textContent = 'Residuals against ' + nm.x;
+  $('p-send-x').textContent = 'Fit ' + nm.x + ' on tab ①';
+  $('p-send-y').textContent = 'Fit ' + nm.y + ' on tab ①';
+  $('p-send-per').textContent = 'Fit ' + nm.y + ' per unit of ' + nm.x + ' on tab ①';
+  var f = n >= 4 ? IA.olsSimple(PST.x, PST.y, 0.95) : null, ok = f && Number.isFinite(f.b);
+  var allPos = n > 0 && PST.x.every(function (v) { return v > 0; });
+  $('p-send-x').disabled = $('p-send-y').disabled = n < 4;
+  $('p-send-res').disabled = !ok;
+  $('p-send-per').disabled = !ok || !allPos;
+  if (!ok) {
+    $('p-res-host').innerHTML = '<div class="plot-empty">' +
+      (n < 4 ? 'Load at least 4 pairs.' : 'X takes a single value, and so no line can be fitted.') + '</div>';
+    $('p-model').innerHTML = ''; $('p-model-notes').innerHTML = '';
+    renderPairExport(null);
+    return;
+  }
+  var bp = IA.breuschPagan(PST.x, f.resid);
+
+  /* The residual plot shares the joint plot's x range and jitter, so the
+     two read side by side. */
+  var host = $('p-res-host');
+  var sx = IA.summarize(PST.x), sr = IA.summarize(f.resid);
+  var padX = Math.max((sx.max - sx.min) * 0.05, PST.xCount ? 0.6 : 0, 1e-9);
+  var rmax = Math.max(Math.abs(sr.min), Math.abs(sr.max)) * 1.08 || 1;
+  var W = Math.max(330, Math.min(560, host.clientWidth || 440)), H = Math.round(W * 0.66);
+  var P = Plot(W, H, { l: 50, r: 12, t: 12, b: 44 }).domain(sx.min - padX, sx.max + padX, -rmax, rmax);
+  var xt = tickPair(sx.min - padX, sx.max + padX, 6), yt = tickPair(-rmax, rmax, 6);
+  P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  P.seg(sx.min - padX, 0, sx.max + padX, 0, 'var(--alt)', 1.6, '6 4');
+  var pts = [];
+  for (var i = 0; i < n; i++) pts.push([PST.x[i] + (PST.xCount && PST.jitter ? PST.jit[i] : 0), f.resid[i]]);
+  P.dots(pts, 'var(--obs)');
+  P.labels(nm.x, 'Residual');
+  host.innerHTML = P.svg('Residuals of ' + nm.y + ' against ' + nm.x,
+    'Residuals from the least-squares line plotted against ' + nm.x + ', with a dashed line at zero') +
+    '<div class="plot-cap">Observed ' + esc(nm.y) + ' minus the line’s value · dashed line at 0</div>';
+
+  $('p-model').innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">' +
+    card('Intercept <span class="lit">a</span>', fmt(f.a, 4)) +
+    card('Slope <span class="lit">b</span>', fmt(f.b, 4)) +
+    card('<span class="lit">R²</span>', fmt(f.r2, 4)) +
+    card('Residual sd <span class="lit">s</span>', fmt(f.s, 4)) +
+    card('Spread test p-value', fmtP(bp.p)) + '</div>' +
+    '<div class="plot-cap" style="text-align:left;margin-top:5px">95% intervals: <span class="lit">a</span> from ' +
+    fmt(f.ciA[0], 4) + ' to ' + fmt(f.ciA[1], 4) + ', <span class="lit">b</span> from ' + fmt(f.ciB[0], 4) +
+    ' to ' + fmt(f.ciB[1], 4) + '. The spread test is Breusch–Pagan’s.</div>';
+
+  var notes = '';
+  if (bp.p < 0.05) {
+    notes += '<div class="note warn"><strong>The spread of the residuals changes with ' + esc(nm.x) +
+      '</strong> (Breusch–Pagan p ' + (bp.p < 0.0001 ? '< 0.0001' : '= ' + fmtP(bp.p)) +
+      '). One noise term for every value of ' + esc(nm.x) + ' would understate the spread at one end and ' +
+      'overstate it at the other.' + (allPos ? ' When ' + esc(nm.y) + ' grows in proportion to ' + esc(nm.x) +
+      ', model ' + esc(nm.y) + ' per unit of ' + esc(nm.x) + ' instead, with the last button below.' : '') + '</div>';
+  } else {
+    notes += '<div class="note quiet">The spread of the residuals does not change detectably with ' +
+      esc(nm.x) + ' (Breusch–Pagan p = ' + fmtP(bp.p) + '), and so one noise term for every value of ' +
+      esc(nm.x) + ' is consistent with these data.</div>';
+  }
+  if (allPos && (f.ciA[0] > 0 || f.ciA[1] < 0)) {
+    notes += '<div class="note quiet" style="margin-top:8px">The intercept is clearly not 0 (95% interval ' +
+      fmt(f.ciA[0], 3) + ' to ' + fmt(f.ciA[1], 3) + '). Dividing ' + esc(nm.y) + ' by ' + esc(nm.x) +
+      ' then spreads that fixed part over the units, and so the ratio runs larger for small values of ' +
+      esc(nm.x) + ' than for large ones, and a single distribution fits it only approximately.</div>';
+  }
+  $('p-model-notes').innerHTML = notes;
+  renderPairExport(f);
+}
+
+/* Sends one set of numbers to tab 1.  A fit made there to the residuals or
+   to Y per unit of X is then picked up by this tab's export, which knows it
+   by the signature of the pairs it came from. */
+function sendPairToFit(kind) {
+  var n = PST.x.length, nm = pairNames(), f = IA.olsSimple(PST.x, PST.y, 0.95), v, label, unit;
+  if (kind === 'x') { v = PST.x; label = nm.x; unit = 'the ' + nm.x + ' column from tab ③'; }
+  else if (kind === 'y') { v = PST.y; label = nm.y; unit = 'the ' + nm.y + ' column from tab ③'; }
+  else if (kind === 'resid') {
+    v = f.resid; label = 'Residuals of ' + nm.y + ' on ' + nm.x;
+    unit = 'the residuals of ' + nm.y + ' about its least-squares line in ' + nm.x + ', from tab ③';
+  } else {
+    v = PST.y.map(function (y, i) { return y / PST.x[i]; });
+    label = nm.y + ' per unit of ' + nm.x; unit = nm.y + ' divided by ' + nm.x + ', from tab ③';
+  }
+  if (!n || !v.length) return;
+  showTab('fit');
+  ST.unit = unit;
+  ST.binAuto = true;
+  LOADER.loadText(v.map(function (x) { return IA.num(x, 10); }).join('\n'), label + ' from tab ③',
+                  label + ', computed on the Relate Two Variables tab from ' + (PST.src || 'pasted data'));
+  if (kind === 'resid' || kind === 'perunit') ST.handoff = { from: 'pair', kind: kind, sig: PST.sig };
+  $('tab-fit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderPairExport(f) {
+  var host = $('p-export-out'), say = $('p-noise-say'), nm = pairNames();
+  if (!f) { host.innerHTML = '<div class="plot-empty">No model yet.</div>'; say.innerHTML = ''; return; }
+  var xa = $('p-xattr'), clip = $('p-clip');
+  if (!xa.dataset.user) xa.value = attrName(nm.x);
+  /* A column that is never negative is usually a duration or a count, and
+     so the clip starts on for it until the reader says otherwise. */
+  if (!clip.dataset.user) clip.checked = PST.y.every(function (v) { return v >= 0; });
+  var ho = pairHandoff(), noise = null, msg;
+  if (ho) {
+    var mu = IA.centeringMean(ho.fit);
+    if (ho.kind === 'resid' && !Number.isFinite(mu)) {
+      msg = 'The ' + esc(distLower(ho.dist)) + ' fitted on tab ① to these residuals has no finite mean, ' +
+        'and so it cannot be centered. The noise below is normal with standard deviation s = ' + fmt(f.s, 4) + '.';
+    } else {
+      noise = { kind: ho.kind, fit: ho.fit };
+      msg = ho.kind === 'resid'
+        ? 'Noise: the ' + esc(distLower(ho.dist)) + ' fitted on tab ① to these residuals' +
+          (mu === 0 ? ', whose mean is already 0.' : ', centered by subtracting its mean, ' + fmt(mu, 4) + '.')
+        : 'Each draw is ' + esc(nm.x) + ' times the ' + esc(distLower(ho.dist)) + ' fitted on tab ① to ' +
+          esc(nm.y) + ' per unit of ' + esc(nm.x) + '.';
+    }
+  } else {
+    msg = 'Noise: normal with mean 0 and the residual standard deviation, s = ' + fmt(f.s, 4) +
+      '. To use another distribution, send the residuals (or ' + esc(nm.y) + ' per unit of ' + esc(nm.x) +
+      ') to tab ① and pick a fit there.';
+  }
+  say.innerHTML = msg;
+  var ex = IA.pairExpressions({ a: f.a, b: f.b, s: f.s, xName: attrName(xa.value), clip: clip.checked, noise: noise });
+  var h = '';
+  for (var i = 0; i < TOOLS.length; i++) {
+    var key = TOOLS[i][0];
+    if (!ex[key]) continue;
+    h += '<div class="exp-row"><div class="exp-tool">' + esc(TOOLS[i][1]) +
+      (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div>' +
+      '<div><div class="exp-code" id="pexp-' + key + '">' + esc(ex[key]) + '</div>' +
+      (ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
+      '</div><button class="copy-btn" data-copy="pexp-' + key + '" type="button">Copy</button></div>';
+  }
+  var sc = IA.pairScripts(PST.x, PST.y, { xName: nm.x, yName: nm.y, level: 0.95, src: PST.src });
+  h += '<div class="plot-hd" style="margin-top:14px">Recompute this tab from the raw data</div>' +
+       '<div class="plot-cap" style="text-align:left;margin-bottom:7px">Each script prints every number on ' +
+       'this tab beside the value shown here, and says whether the two agree.</div>';
+  var st = [['r', 'R'], ['matlab', 'MATLAB'], ['python', 'Python']];
+  for (var j = 0; j < st.length; j++) {
+    h += '<div class="exp-row" style="align-items:start"><div class="exp-tool">' + st[j][1] +
+      '<span>full script</span></div><div><div class="exp-code" id="pscr-' + st[j][0] +
+      '" style="max-height:190px;overflow:auto">' + esc(sc[st[j][0]]) + '</div></div>' +
+      '<button class="copy-btn" data-copy="pscr-' + st[j][0] + '" type="button">Copy</button></div>';
+  }
+  host.innerHTML = h;
+  var btns = host.querySelectorAll('[data-copy]');
+  for (var b = 0; b < btns.length; b++) btns[b].addEventListener('click', copyHandler);
+}
+
+function pairProvenance() {
+  var nm = pairNames();
+  return [
+    ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# data source: ' + (PST.src || 'pasted or typed by the user')],
+    ['# x column: ' + nm.x + '; y column: ' + nm.y],
+    ['# pairs: ' + PST.x.length + '; rows left out: ' + PST.dropped],
+    []
+  ];
+}
+function csvPairData() {
+  if (!PST.x.length) return;
+  var rows = pairProvenance();
+  rows.push(['x', 'y']);
+  for (var i = 0; i < PST.x.length; i++) rows.push([IA.num(PST.x[i], 12), IA.num(PST.y[i], 12)]);
+  download('input-analyzer-pairs.csv', IA.toCsv(rows));
+}
+function csvPairResults() {
+  var n = PST.x.length;
+  if (n < 4) return;
+  var pr = IA.pearson(PST.x, PST.y, 0.95), sp = IA.spearman(PST.x, PST.y), kt = IA.kendallTauB(PST.x, PST.y);
+  var fr = IA.frechetPairings(PST.x, PST.y), f = IA.olsSimple(PST.x, PST.y, 0.95), bp = IA.breuschPagan(PST.x, f.resid);
+  var rows = pairProvenance(), N = function (v) { return IA.num(v, 12); };
+  rows.push(['quantity', 'value']);
+  [['Pearson r', pr.r], ['Pearson p-value', pr.p], ['Pearson 95% interval, lower', pr.lo],
+   ['Pearson 95% interval, upper', pr.hi], ['Spearman rho', sp.rho], ['Spearman p-value', sp.p],
+   ['Kendall tau-b', kt.tau], ['Kendall p-value', kt.p], ['Kendall p-value exact', kt.exact ? 'yes' : 'no'],
+   ['r sorted together', fr.together], ['r sorted opposite', fr.opposite],
+   ['intercept a', f.a], ['slope b', f.b], ['se of a', f.seA], ['se of b', f.seB],
+   ['a 95% interval, lower', f.ciA[0]], ['a 95% interval, upper', f.ciA[1]],
+   ['b 95% interval, lower', f.ciB[0]], ['b 95% interval, upper', f.ciB[1]],
+   ['R squared', f.r2], ['residual sd', f.s], ['Breusch-Pagan statistic', bp.stat], ['Breusch-Pagan p-value', bp.p]
+  ].forEach(function (q) { rows.push([q[0], typeof q[1] === 'number' ? N(q[1]) : q[1]]); });
+  download('input-analyzer-pair-results.csv', IA.toCsv(rows));
+}
+
+function initPairModel() {
+  $('p-send-x').addEventListener('click', function () { sendPairToFit('x'); });
+  $('p-send-y').addEventListener('click', function () { sendPairToFit('y'); });
+  $('p-send-res').addEventListener('click', function () { sendPairToFit('resid'); });
+  $('p-send-per').addEventListener('click', function () { sendPairToFit('perunit'); });
+  $('p-xattr').addEventListener('input', function () { this.dataset.user = this.value ? '1' : ''; renderPairModel(); });
+  $('p-clip').addEventListener('change', function () { this.dataset.user = '1'; renderPairModel(); });
+  $('p-csv-data').addEventListener('click', csvPairData);
+  $('p-csv-res').addEventListener('click', csvPairResults);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
