@@ -9167,7 +9167,8 @@ function renderDensity() {
   if (!(ymax > 0)) ymax = 1;
   var yhi = ymax * 1.12;
 
-  var P = Plot(460, 330, { l: 46, r: 62, t: 12, b: 46 }).domain(xlo, xhi, 0, yhi);
+  /* The right margin holds the density axis, which only the fit needs. */
+  var P = Plot(460, 330, { l: 46, r: showFit ? 62 : 14, t: 12, b: 46 }).domain(xlo, xhi, 0, yhi);
   var xt = tickPair(xlo, xhi, 6);
   var yt = niceCountTicks(yhi, 5);
   P.frame().axes(xt.ticks, yt, xt.fmt, function (t) { return String(Math.round(t)); });
@@ -9181,9 +9182,12 @@ function renderDensity() {
   } else if (showFit) {
     P.line(curve, 'var(--fit)', 2.2);
   }
-  /* The right-hand scale: the same heights read as a density. */
-  P.rightTicks(yt, function (t) { return fmt(t / scale, 3); });
-  P.rightLabel(discrete ? 'Probability' : 'Probability density');
+  /* The right-hand scale: the same heights read as a density, so that the
+     bars can be compared with the fitted curve. */
+  if (showFit) {
+    P.rightTicks(yt, function (t) { return fmt(t / scale, 3); });
+    P.rightLabel(discrete ? 'Probability' : 'Probability density');
+  }
   P.labels('Value', 'Frequency (count)');
   var lc = legendCorner(P, b.counts, yhi, 168);
   var items = [
@@ -9199,19 +9203,24 @@ function renderDensity() {
     densityCaption(discrete, n, b, scale, showFit);
 }
 
-/* The histogram's caption.  With the fit hidden, the sentences about the
-   model drop out, and an invisible copy of the full caption keeps its
-   height, so that the cards and the page below do not move on the toggle. */
+/* The histogram's caption.  With the fit hidden, the right-hand axis is
+   gone and the caption says only what a bar counts, and an invisible copy
+   of the full caption keeps its height, so that the cards and the page
+   below do not move on the toggle. */
 function densityCaption(discrete, n, b, scale, showFit) {
   var text = function (fit) {
+    if (!fit) return 'Each bar counts how many of the ' + n + ' observations ' +
+      (!discrete ? 'fall in its bin of width ' + fmt(b.width, 3) + '.'
+        : b.width > 1 ? 'fall in its bin, which spans ' + fmt(b.width, 3) + ' whole numbers.'
+        : 'take its value.');
     return 'Bars are counts, on the left axis. The same heights read on the right as ' +
       (discrete ? 'probabilities' : 'a density') + ': ' +
       (discrete
         ? 'each bar is ' + (b.width > 1 ? 'its bin\'s' : 'that value\'s') + ' share of the ' + n +
-          ' observations' + (fit ? ', and each marker is the probability the fitted model gives it.' : '.')
+          ' observations, and each marker is the probability the fitted model gives it.'
         : 'with n = ' + n + ' and bins of width ' + fmt(b.width, 3) + ', one unit of density is ' +
           fmt(scale, 4) + ' observations.') +
-      (fit && discrete && b.width > 1
+      (discrete && b.width > 1
         ? ' Each marker is the model\'s expected count for a whole bin, summed over the ' +
           fmt(b.width, 3) + ' whole numbers it spans.'
         : '');
