@@ -350,6 +350,14 @@ td.best-p { font-weight: 700; color: var(--accent); }
 
 /* ── Plots ───────────────────────────────────────────────────────────── */
 .plot-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+/* Two plot cards side by side share one height, so that their borders end
+   together; their plots share one aspect ratio, so that the frames line up. */
+.plot-wrap.plot-pair { align-items: stretch; }
+/* A caption that holds the height of a longer version of itself: both
+   versions share one grid cell, and the longer one is invisible. */
+.cap-hold { display: grid; }
+.cap-hold > * { grid-area: 1 / 1; }
+.cap-ghost { visibility: hidden; }
 .plot-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px;
              padding: 10px; min-width: 0; flex: 1 1 380px; position: relative; }
 .plot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap: 12px; }
@@ -816,15 +824,16 @@ footer a:hover { text-decoration: underline; }
       </span>
       <button class="btn2" id="bins-auto" type="button" data-tip="Sturges' rule: 1 + log2(n) bins" data-tip-press>Auto</button>
       <span class="ctrl-note" id="bins-hint"></span>
+      <label class="chk" id="show-fit-wrap"><input type="checkbox" id="show-fit" checked autocomplete="off"> Show the fitted distribution on both plots</label>
     </div>
 
-    <div class="plot-wrap">
+    <div class="plot-wrap plot-pair">
       <div class="plot-card">
-        <div class="plot-hd">Histogram with the fitted density</div>
+        <div class="plot-hd" id="dens-hd">Histogram with the fitted density</div>
         <div id="dens-host"><div class="plot-empty">No fit yet.</div></div>
       </div>
       <div class="plot-card">
-        <div class="plot-hd">Empirical vs. fitted CDF</div>
+        <div class="plot-hd" id="cdf-hd">Empirical vs. fitted CDF</div>
         <div id="cdf-host"><div class="plot-empty">No fit yet.</div></div>
       </div>
     </div>
@@ -1803,7 +1812,7 @@ footer a:hover { text-decoration: underline; }
         <input type="number" id="s-lag-n" class="mono-in" min="1" max="20" step="1" value="1" style="width:4.5em" aria-label="Lag k">
       </span>
     </div>
-    <div class="plot-wrap">
+    <div class="plot-wrap plot-pair">
       <div class="plot-card" style="flex:1 1 300px">
         <div class="plot-hd" id="s-lag-hd">Each reading against the one k steps earlier</div>
         <div id="s-lag-host"><div class="plot-empty">Load readings.</div></div>
@@ -7813,6 +7822,7 @@ var ST = {
   bins: null,
   binK: 10,
   binAuto: true,
+  showFit: true,    /* draw the fit over the histogram and the empirical CDF */
   gof: null,        /* last bootstrap result                           */
   gofFor: null,     /* the fit signature that result belongs to        */
   seed: 20260818,
@@ -9111,6 +9121,8 @@ function renderDensity() {
   var pad = (hi - lo) * 0.04;
   var xlo = lo - pad, xhi = hi + pad;
   var discrete = f.dist.kind === 'discrete';
+  var showFit = ST.showFit;
+  $('dens-hd').textContent = showFit ? 'Histogram with the fitted density' : 'Histogram';
 
   /* The bars are drawn in COUNTS, which is the axis a student has met
      before and the only one that shows quantization: a bin holding three
@@ -9131,7 +9143,9 @@ function renderDensity() {
      probability, and dividing by the width would invent a "probability per
      unit" that means nothing. */
   var scale = discrete ? n : n * b.width;
-  if (discrete) {
+  /* With the fit hidden, the scale is the bars' own, so that it does not
+     change with a candidate nobody can see. */
+  if (showFit && discrete) {
     /* One marker per BIN at its expected count, not one per integer: when
        a bin spans several whole numbers the model's claim about that bin
        is the sum over them, and that sum is what the bar can be compared
@@ -9142,7 +9156,7 @@ function renderDensity() {
       if (y > ymax) ymax = y;
       curve.push([0.5 * (b.edges[i] + b.edges[i + 1]), y]);
     }
-  } else {
+  } else if (showFit) {
     var pdf = IA.fitPdf(f);
     for (i = 0; i <= NPT; i++) {
       v = xlo + (xhi - xlo) * i / NPT;
@@ -9161,10 +9175,10 @@ function renderDensity() {
     if (b.counts[i] === 0) continue;
     P.rect(b.edges[i], 0, b.edges[i + 1], b.counts[i], 'var(--obs-fill)', 'var(--obs)');
   }
-  if (discrete) {
+  if (showFit && discrete) {
     for (i = 0; i < curve.length; i++) P.seg(curve[i][0], 0, curve[i][0], curve[i][1], 'var(--fit)', 2);
     P.dots(curve, 'var(--fit)', 3.2);
-  } else {
+  } else if (showFit) {
     P.line(curve, 'var(--fit)', 2.2);
   }
   /* The right-hand scale: the same heights read as a density. */
@@ -9172,24 +9186,45 @@ function renderDensity() {
   P.rightLabel(discrete ? 'Probability' : 'Probability density');
   P.labels('Value', 'Frequency (count)');
   var lc = legendCorner(P, b.counts, yhi, 168);
-  P.legend(lc.x, lc.y, [
-    { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your data (' + b.k + ' bins)' },
-    { mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
-      label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') }
-  ]);
-  host.innerHTML = P.svg('Histogram of the data with the fitted ' + r.dist.name + ' density',
-    'Histogram of the data in counts, with the fitted density over it') +
-    '<div class="plot-cap" style="text-align:left">Bars are counts, on the left axis. The same ' +
-    'heights read on the right as ' + (discrete ? 'probabilities' : 'a density') + ': ' +
-    (discrete
-      ? 'each bar is that value\'s share of the ' + n + ' observations, and each marker is the ' +
-        'probability the fitted model gives it.'
-      : 'with n = ' + n + ' and bins of width ' + fmt(b.width, 3) + ', one unit of density is ' +
-        fmt(scale, 4) + ' observations.') +
-    (discrete && b.width > 1
-      ? ' Each marker is the model\'s expected count for a whole bin, summed over the ' +
-        fmt(b.width, 3) + ' whole numbers it spans.'
-      : '') + '</div>';
+  var items = [
+    { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your data (' + b.k + ' bins)' }
+  ];
+  if (showFit) items.push({ mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
+    label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') });
+  P.legend(lc.x, lc.y, items);
+  host.innerHTML = (showFit
+      ? P.svg('Histogram of the data with the fitted ' + r.dist.name + ' density',
+          'Histogram of the data in counts, with the fitted density over it')
+      : P.svg('Histogram of the data', 'Histogram of the data in counts')) +
+    densityCaption(discrete, n, b, scale, showFit);
+}
+
+/* The histogram's caption.  With the fit hidden, the sentences about the
+   model drop out, and an invisible copy of the full caption keeps its
+   height, so that the cards and the page below do not move on the toggle. */
+function densityCaption(discrete, n, b, scale, showFit) {
+  var text = function (fit) {
+    return 'Bars are counts, on the left axis. The same heights read on the right as ' +
+      (discrete ? 'probabilities' : 'a density') + ': ' +
+      (discrete
+        ? 'each bar is ' + (b.width > 1 ? 'its bin\'s' : 'that value\'s') + ' share of the ' + n +
+          ' observations' + (fit ? ', and each marker is the probability the fitted model gives it.' : '.')
+        : 'with n = ' + n + ' and bins of width ' + fmt(b.width, 3) + ', one unit of density is ' +
+          fmt(scale, 4) + ' observations.') +
+      (fit && discrete && b.width > 1
+        ? ' Each marker is the model\'s expected count for a whole bin, summed over the ' +
+          fmt(b.width, 3) + ' whole numbers it spans.'
+        : '');
+  };
+  return heldCaption(text(showFit), text(true));
+}
+
+/* A left-aligned caption showing `shown` that keeps the height of `full`,
+   the version with the fit, by holding an invisible copy of it. */
+function heldCaption(shown, full) {
+  if (shown === full) return '<div class="plot-cap" style="text-align:left">' + shown + '</div>';
+  return '<div class="plot-cap cap-hold" style="text-align:left"><span>' + shown +
+    '</span><span class="cap-ghost" aria-hidden="true">' + full + '</span></div>';
 }
 
 function renderChi() {
@@ -9629,6 +9664,8 @@ function drawCDF() {
   var f = r.fit, n = ST.s.n, F = IA.fitCdf(f), i;
   var lo = ST.s.min, hi = ST.s.max, pad = (hi - lo) * 0.05 || 1;
   var xlo = lo - pad, xhi = hi + pad;
+  var showFit = ST.showFit;
+  $('cdf-hd').textContent = showFit ? 'Empirical vs. fitted CDF' : 'Empirical CDF';
 
   /* The empirical CDF as a genuine step function: horizontal to the next
      observation, then vertical. Drawing it as a polyline through the
@@ -9640,22 +9677,42 @@ function drawCDF() {
   }
   step.push([xhi, 1]);
 
+  /* The fitted curve is sampled even when it is hidden, because the
+     legend's corner is chosen with it, and so the corner does not change
+     when the fit is toggled. */
   var curve = [], NPT = 300;
   for (i = 0; i <= NPT; i++) {
     var v = xlo + (xhi - xlo) * i / NPT;
     curve.push([v, F(v)]);
   }
 
-  var ks = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f));
-  var P = Plot(420, 330, { l: 52, r: 14, t: 12, b: 46 }).domain(xlo, xhi, 0, 1.02);
+  /* 460 wide, as the histogram beside it is, so that the two cards are one
+     height and their frames line up. */
+  var P = Plot(460, 330, { l: 52, r: 14, t: 12, b: 46 }).domain(xlo, xhi, 0, 1.02);
   var xt = tickPair(xlo, xhi, 5), yt = tickPair(0, 1, 5);
   P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
   P.line(step, 'var(--obs)', 1.6);
+  var stepNote = 'The empirical CDF steps up by 1/' + n + ' for each observation.';
+  var gapNote = ' The marked gap between it and the fitted CDF is exactly the K–S statistic.';
+  /* The data's entry is the legend's last row, which is where it stays,
+     alone, when the fit is hidden. */
+  var LW = 152, LH = 42;
+  var leg = legendCornerCdf(P, step, curve);
+  var dataItem = { mark: 'line', color: 'var(--obs)', width: 1.6, label: 'your data (step)' };
+  if (!showFit) {
+    P.labels('Value', 'Cumulative probability');
+    P.legend(leg.x, leg.y + 28, [dataItem]);
+    host.innerHTML = P.svg('Empirical cumulative distribution function',
+      'Empirical step CDF of the data') +
+      heldCaption(stepNote, stepNote + gapNote);
+    return;
+  }
   P.line(curve, 'var(--fit)', 2.2);
 
   /* Mark D where it occurs: the number in the panel above becomes a place
      on the picture, which is what tells you whether the misfit is in the
      body or in a tail. */
+  var ks = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f));
   var Fat = F(ks.at);
   var eLo = 0, eHi = 0;
   for (i = 0; i < n; i++) {
@@ -9664,24 +9721,6 @@ function drawCDF() {
   }
   var y1 = ks.sign > 0 ? eHi : eLo, y2 = Fat;
   P.seg(ks.at, y1, ks.at, y2, 'var(--alt)', 3);
-
-  /* The legend goes in whichever of two empty corners the curves leave
-     alone.  A right-skewed fit climbs early and runs along the top, which
-     leaves the bottom right empty; a left-skewed one stays low until late
-     and climbs at the right, straight through that corner, leaving the
-     top left empty instead.  Each candidate box is scored by how many
-     points of either curve fall inside it, and the bottom right wins
-     ties.  A box spans 152 by 42 pixels around its first row. */
-  var LW = 152, LH = 42;
-  var boxes = [{ x: P.mL + P.pw - LW, y: P.mT + P.ph - 48 }, { x: P.mL + 12, y: P.mT + 14 }];
-  var inBox = function (bx, px, py) { return px >= bx.x - 4 && px <= bx.x + LW && py >= bx.y - 11 && py <= bx.y + LH - 4; };
-  var hits = boxes.map(function (bx) {
-    var h = 0, k;
-    for (k = 0; k < curve.length; k++) if (inBox(bx, P.X(curve[k][0]), P.Y(curve[k][1]))) h++;
-    for (k = 0; k < step.length; k++) if (inBox(bx, P.X(step[k][0]), P.Y(step[k][1]))) h++;
-    return h;
-  });
-  var leg = hits[1] < hits[0] ? boxes[1] : boxes[0];
 
   /* The D label sits right of the gap, unless it would run into the
      legend or past the frame; then it goes to the left, and if that
@@ -9711,13 +9750,34 @@ function drawCDF() {
   P.text(spot.x, spot.y, dTxt, { raw: true, size: 10, fill: 'var(--alt)', weight: '700', anchor: spot.anchor });
   P.labels('Value', 'Cumulative probability');
   P.legend(leg.x, leg.y, [
-    { mark: 'line', color: 'var(--obs)', width: 1.6, label: 'your data (step)' },
     { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
-    { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' }
+    { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' },
+    dataItem
   ]);
   host.innerHTML = P.svg('Empirical and fitted cumulative distribution functions',
     'Empirical step CDF against the fitted CDF, with the largest gap marked') +
-    '<div class="plot-cap">The marked gap is exactly the K–S statistic</div>';
+    heldCaption(stepNote + gapNote, stepNote + gapNote);
+}
+
+/* Where the CDF plot's legend goes: whichever of two empty corners the
+   curves leave alone.  A right-skewed sample climbs early and runs along
+   the top, which leaves the bottom right empty; a left-skewed one stays low
+   until late and climbs at the right, straight through that corner, leaving
+   the top left empty instead.  Each candidate box is scored by how many
+   points of either curve fall inside it, and the bottom right wins ties.  A
+   box spans 152 by 42 pixels around its first row, the full legend's three
+   rows. */
+function legendCornerCdf(P, step, curve) {
+  var LW = 152, LH = 42;
+  var boxes = [{ x: P.mL + P.pw - LW, y: P.mT + P.ph - 48 }, { x: P.mL + 12, y: P.mT + 14 }];
+  var inBox = function (bx, px, py) { return px >= bx.x - 4 && px <= bx.x + LW && py >= bx.y - 11 && py <= bx.y + LH - 4; };
+  var hits = boxes.map(function (bx) {
+    var h = 0, k;
+    for (k = 0; k < curve.length; k++) if (inBox(bx, P.X(curve[k][0]), P.Y(curve[k][1]))) h++;
+    for (k = 0; k < step.length; k++) if (inBox(bx, P.X(step[k][0]), P.Y(step[k][1]))) h++;
+    return h;
+  });
+  return hits[1] < hits[0] ? boxes[1] : boxes[0];
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -12412,10 +12472,12 @@ function renderLagPlot(md) {
 /* A correlogram into host: stems at lags 1..L inside a fixed [-1, 1]
    frame, the 95% band for independent values dashed, and one stem
    highlighted.  A tap or click on the plot picks the nearest lag when
-   onPick is given. */
-function drawCorrelogram(host, r, n, mark, title, aria, onPick) {
+   onPick is given.  A matchH in pixels makes the drawn plot at least that
+   tall on screen, to stand level with a plot beside it. */
+function drawCorrelogram(host, r, n, mark, title, aria, onPick, matchH) {
   var L = r.length - 1;
   var W = hostW(host, 330, 620, 520), H = Math.round(W * 0.52) + 18;
+  if (matchH > 0 && host.clientWidth > 0) H = Math.max(H, Math.round(matchH * W / host.clientWidth));
   var P = Plot(W, H, { l: 46, r: 12, t: 30, b: 44 }).domain(0, L + 0.5, -1, 1);
   var xt = tickPair(0, L, W < 420 ? 5 : 8);
   P.frame().axes(xt.ticks.filter(function (v) { return Number.isInteger(v); }), [-1, -0.5, 0, 0.5, 1],
@@ -12458,9 +12520,14 @@ function renderSeriesAcf(md) {
   }
   var r = IA.acf(v, seriesMaxLag());
   var what = SST.view === 'left' ? 'what the cycle leaves' : 'the readings';
+  /* Beside the lag plot (not stacked under it), the correlogram is drawn
+     as tall as the lag plot, so that the two frames stand level. */
+  var lagSvg = $('s-lag-host').querySelector('svg'), matchH = 0;
+  var cardTop = function (el) { return el.closest('.plot-card').getBoundingClientRect().top; };
+  if (lagSvg && Math.abs(cardTop(lagSvg) - cardTop(host)) < 2) matchH = lagSvg.getBoundingClientRect().height;
   drawCorrelogram(host, r, n, SST.lag, 'Correlogram of ' + what,
     'Autocorrelation of ' + what + ' at lags 1 to ' + (r.length - 1) + ', with the 95% band for independent values',
-    function (lag) { setLag(lag); });
+    function (lag) { setLag(lag); }, matchH);
   var m = Math.min(SST.m, n - 2), q = IA.ljungBox(IA.acf(v, m), n, m, 0);
   var verdicts = [
     'The correlations are no larger than independent values would give (p ≥ 0.05). Tab ① may treat ' +
@@ -13004,6 +13071,11 @@ document.addEventListener('DOMContentLoaded', function () {
   $('bins-auto').addEventListener('click', function () {
     ST.binAuto = true;
     refitAll();
+  });
+  /* Only the two plots change; the fit, the ranking, and the tests stand. */
+  $('show-fit').addEventListener('change', function () {
+    ST.showFit = this.checked;
+    renderDensity(); drawCDF(); armPlotDownloads();
   });
 
   $('boot-run').addEventListener('click', startBootstrap);
