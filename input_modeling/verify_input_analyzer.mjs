@@ -1645,8 +1645,10 @@ section('17. arrival-process analysis');
     close(r.lamGap, 1 / ef.p[0], 1e-13,
       'the gap-route rate is exactly 1 / (the exponential MLE fitted to the gaps)');
     close(r.meanGap, ef.p[0], 1e-13, 'and the mean gap is exactly that fitted mean');
-    /* The count route is the pooled Poisson MLE: total count over total width. */
-    close(r.lamCount, r.n / r.T, 1e-15, 'the count-route rate is n / T');
+    /* The count route is the pooled Poisson MLE: total count over total
+       width, where the window read off the data opens at the first arrival
+       and so holds the m = n - 1 arrivals after it. */
+    close(r.lamCount, r.m / r.T, 1e-15, 'the count-route rate is (n - 1) / T');
     /* Pooling the section-3 block estimates must give the same thing. */
     {
       const prof = IA.rateProfile(g.times, 200, g.times[0], g.times[g.times.length - 1]);
@@ -1655,9 +1657,17 @@ section('17. arrival-process analysis');
       close(tot / wid, r.lamCount, 1e-12,
         'and pooling the per-block Poisson estimates gives that same number');
     }
-    /* The two routes differ by exactly one arrival's worth. */
-    close(r.lamGap / r.lamCount, r.m / r.n, 1e-13,
-      'the gap and count routes differ by exactly the factor (n-1)/n');
+    /* Counting the same arrivals, the two routes give the same rate. */
+    close(r.lamGap, r.lamCount, 1e-13, 'the gap and count routes give the same rate');
+    /* A window read off the data leaves its opening arrival out of the
+       counts, and one known to open earlier counts every arrival. */
+    {
+      const own = IA.rateProfile([0, 1, 2, 2, 5], 5, 0, 5);
+      ok(own.rows[0].n === 4 && own.n === 4,
+        'the arrival that opens the window is not counted in it (one of several tied there)');
+      const known = IA.rateProfile([1, 2, 2, 5], 5, 0, 5);
+      ok(known.rows[0].n === 4 && known.n === 4, 'a window opening before the first arrival counts all of them');
+    }
     /* Both must bracket the truth. */
     ok(r.loGap < 0.25 && r.hiGap > 0.25, `gap interval [${r.loGap.toFixed(5)}, ${r.hiGap.toFixed(5)}] covers the true 0.25`);
     ok(r.loCount < 0.25 && r.hiCount > 0.25, `count interval [${r.loCount.toFixed(5)}, ${r.hiCount.toFixed(5)}] covers the true 0.25`);

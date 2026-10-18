@@ -1441,13 +1441,14 @@ footer a:hover { text-decoration: underline; }
         the total count over the total width. Which is the same arithmetic, reached from the other
         end. <em>The rate table in section 3 is exactly this calculation</em>, done one block at a
         time.</p>
-        <p>The two differ only in what they do at the ends of the window, and that difference is
-        one arrival: the gaps between <code>n</code> arrivals number <code>n &minus; 1</code>, and
-        they span the time from the first arrival to the last. If you know the window you actually
-        watched (say you started at 08:00 and stopped at 16:00), use that, count all <code>n</code>
-        arrivals, and the ambiguity goes away. With a few hundred arrivals the two agree to well
-        inside their own confidence intervals anyway.</p>
-        <p><strong>The count route is also far easier to collect.</strong> Recording the exact
+        <p>The two estimation methods count the same arrivals, and so they give the same rate. A window read
+        off the data runs from the first arrival to the last, and the first arrival opens it
+        rather than arriving during it. Of <code>N</code> recorded arrivals, then, the window holds
+        the <code>N &minus; 1</code> after the first, one at the end of each gap. Counting all
+        <code>N</code> would put in the window an arrival it did not contain. If you know the
+        window you actually watched (say you started at 08:00 and stopped at 16:00), count every
+        arrival inside it over its whole length.</p>
+        <p><strong>The counts are also far easier to collect.</strong> Recording the exact
         moment of every arrival takes a stopwatch and steady attention; counting how many arrived
         in each ten-minute block takes a tally sheet. If the counts are Poisson, the rate falls out
         of them directly and no timestamp is ever needed. That shortcut rests on an
@@ -1455,8 +1456,8 @@ footer a:hover { text-decoration: underline; }
         across your chosen subintervals are independent and identically distributed, and that is
         exactly what the histogram and the variance-to-mean ratio below let you check. It
         is worth knowing that the easier data collection is available and what it assumes.</p>
-        <p><strong>So why bother with the count route otherwise?</strong> Because it is the one
-        that survives the rate not being constant. Each block can carry its own <code>&lambda;</code>; a single
+        <p><strong>So why bother with the counts otherwise?</strong> Because they survive the
+        rate not being constant. Each block can carry its own <code>&lambda;</code>; a single
         exponential fitted to all the gaps cannot and will hand you an average that describes no
         particular moment of the day. When the test in section 2 says the rate is constant, take
         the one-line gap estimate. When it says otherwise, the block counts are the whole answer,
@@ -4933,7 +4934,14 @@ function interarrivals(times) {
 /* Counts and rate estimates on equal-width intervals spanning the whole
    observation window.  lambda-hat = N_j / w is the maximum-likelihood
    estimate of a rate held constant inside each interval, with standard
-   error sqrt(N_j)/w. */
+   error sqrt(N_j)/w.
+
+   When the window is read off the data, it opens AT the first arrival,
+   and that arrival is the one that opens it, not one that arrived inside
+   it: the window (t0, t1] holds one arrival per gap.  So an arrival at t0
+   (one of them, if several are tied there) is left out of the counts.  A
+   window that opens before the first arrival, because the moment the
+   watching began is known, counts every arrival. */
 function rateProfile(times, width, t0, t1) {
   var t = times.slice().sort(function (a, b) { return a - b; });
   if (t0 === undefined) t0 = t[0];
@@ -4942,7 +4950,8 @@ function rateProfile(times, width, t0, t1) {
   if (!(span > 0) || !(width > 0)) return null;
   var k = Math.max(1, Math.ceil(span / width));
   var counts = new Array(k).fill(0), i, j;
-  for (i = 0; i < t.length; i++) {
+  var first = t.length && t[0] <= t0 ? 1 : 0;
+  for (i = first; i < t.length; i++) {
     j = Math.floor((t[i] - t0) / width);
     if (j >= k) j = k - 1;
     if (j < 0) j = 0;
@@ -4957,8 +4966,8 @@ function rateProfile(times, width, t0, t1) {
     rows.push({ i: j + 1, from: a, to: b, n: counts[j], width: w,
                 rate: counts[j] / w, se: Math.sqrt(counts[j]) / w });
   }
-  return { rows: rows, k: k, width: width, t0: t0, t1: t1, n: t.length,
-           overall: t.length / span };
+  return { rows: rows, k: k, width: width, t0: t0, t1: t1, n: t.length - first,
+           overall: (t.length - first) / span };
 }
 
 /* Is the rate really constant?  Conditional on the total number of
@@ -5010,13 +5019,15 @@ function stationarityTest(prof) {
    a block is Poisson(lambda w), the maximum-likelihood estimate of a
    Poisson mean is the sample mean of the counts, and dividing by w gives
    lambda-hat = (total count)/(total width), which over the whole window is
-   simply n/T -- the same arithmetic arrived at from the other end, and not
-   dependent on how the window was chopped up, or on whether it was.
+   the arrivals in the window over T -- the same arithmetic arrived at from
+   the other end, and not dependent on how the window was chopped up, or on
+   whether it was.
 
-   The two differ only in what they do with the ends of the window, which
-   is a difference of one arrival: m = n - 1 complete gaps span the time
-   between the first and last arrival, whereas the count route uses all n.
-   Say which window you actually watched and the ambiguity disappears.
+   The two count the same arrivals.  A window read off the data opens at
+   the first arrival, which marks where the watching began rather than
+   arriving in the window, and so the window (t0, t1] holds m = n - 1
+   arrivals, one at the end of each complete gap, and both routes give
+   m/T.  A window known to open before the first arrival holds all n.
 
    Why bother with the count route at all, when the gap route is a single
    division?  Because it is the one that survives the rate NOT being
@@ -5044,11 +5055,13 @@ function rateMLE(times, alpha) {
   var loG = chiSqQuantile(alpha / 2, 2 * m) / (2 * T);
   var hiG = chiSqQuantile(1 - alpha / 2, 2 * m) / (2 * T);
 
-  /* Count route, treating [t0, t1] as the window and n as the count.
-     Garwood's exact interval for a Poisson mean. */
-  var lamCount = n / T;
-  var loC = n > 0 ? chiSqQuantile(alpha / 2, 2 * n) / (2 * T) : 0;
-  var hiC = chiSqQuantile(1 - alpha / 2, 2 * n + 2) / (2 * T);
+  /* Count route, treating (t0, t1] as the window: the first arrival opens
+     it rather than arriving in it, and so the count is m, one arrival per
+     gap, and the two routes give the same rate.  Garwood's exact interval
+     for a Poisson mean. */
+  var lamCount = m / T;
+  var loC = m > 0 ? chiSqQuantile(alpha / 2, 2 * m) / (2 * T) : 0;
+  var hiC = chiSqQuantile(1 - alpha / 2, 2 * m + 2) / (2 * T);
 
   return { n: n, m: m, T: T, meanGap: meanGap,
            lamGap: lamGap, loGap: loG, hiGap: hiG, seGap: lamGap / Math.sqrt(m),
@@ -10958,10 +10971,13 @@ function renderArrivals() {
   }
   var t0 = t[0], t1 = t[t.length - 1], span = t1 - t0;
   var gs = IA.summarize(AST.gaps);
-  set('a-st-n', String(t.length));
+  /* Durations were added up from an origin at 0, which is where the first
+     duration starts and not an arrival; each duration ends in one. */
+  var nArr = AST.flags && AST.flags.fromGaps ? t.length - 1 : t.length;
+  set('a-st-n', String(nArr));
   set('a-st-t0', fmtTime(t0));
   set('a-st-t1', fmtTime(t1));
-  set('a-st-rate', fmt(t.length / span, 4) + ' /' + unitWord());
+  set('a-st-rate', fmt((t.length - 1) / span, 4) + ' /' + unitWord());
   set('a-st-gap', fmt(gs.mean, 4));
   set('a-st-cv', fmt(gs.sd / gs.mean, 3));
 
@@ -11007,7 +11023,7 @@ function renderArrivals() {
   var cvg = gs.sd / gs.mean;
   $('a-kind').innerHTML = warn +
     (AST.unit ? '<div style="margin-bottom:6px">These are ' + esc(AST.unit) + '.</div>' : '') +
-    '<strong>' + t.length + ' arrivals over ' + fmt(span, 4) + ' ' +
+    '<strong>' + nArr + ' arrivals over ' + fmt(span, 4) + ' ' +
       (AST.minutes ? 'minutes' : 'units of time') + '.</strong> ' +
     'The gaps between them have coefficient of variation ' + fmt(cvg, 3) + '. ' +
     (Math.abs(cvg - 1) < 0.2
@@ -11097,6 +11113,12 @@ function fmtTime(v) {
 function drawCumulative() {
   var t = AST.times, n = t.length, i;
   var t0 = t[0], t1 = t[n - 1];
+  /* Durations were added up from an origin at 0 that is not an arrival,
+     and so the count starts after it; timestamps count their first
+     arrival as 1.  Either way the count rises by one per gap from there,
+     and the constant-rate line has the slope section 4 estimates. */
+  var skip = AST.flags && AST.flags.fromGaps ? 1 : 0;
+  var c0 = 1 - skip, cEnd = n - skip;
   /* A rug of the arrivals themselves runs along the bottom, inside the
      same frame and on the same x-axis as the cumulative count. It is the
      one view that shows the raw event times rather than a summary of
@@ -11107,12 +11129,12 @@ function drawCumulative() {
      RUG is reserved in DATA units at the bottom of the y-range, so the
      count curve never runs down into the strip. */
   var RUG_FRAC = 0.12;
-  var yTop = n * 1.03;
+  var yTop = cEnd * 1.03;
   var yLo = -RUG_FRAC * yTop;
   /* The extra bottom margin is for the rug's own caption, which sits
      between the frame and the time labels rather than on top of them. */
   var P = Plot(440, 332, { l: 52, r: 12, t: 12, b: 58 }).domain(t0, t1, yLo, yTop);
-  var xt = tickPair(t0, t1, 6), yt = tickPair(0, n, 5);
+  var xt = tickPair(t0, t1, 6), yt = tickPair(0, cEnd, 5);
   P.frame().axes(xt.ticks, yt.ticks, AST.clock ? fmtTime : xt.fmt, yt.fmt, 27);
 
   /* The strip itself, separated by a hairline so it reads as its own band
@@ -11123,20 +11145,20 @@ function drawCumulative() {
      darken: with a few hundred arrivals in a narrow window the individual
      marks stop being separable, and density is the thing worth reading. */
   var rugTop = -0.18 * RUG_FRAC * yTop, rugBot = -0.86 * RUG_FRAC * yTop;
-  var rug = [];
-  for (i = 0; i < n; i++) {
+  var rug = [], tArr = t.slice(skip);
+  for (i = skip; i < n; i++) {
     rug.push('<line x1="' + P.X(t[i]).toFixed(2) + '" y1="' + P.Y(rugTop).toFixed(1) +
              '" x2="' + P.X(t[i]).toFixed(2) + '" y2="' + P.Y(rugBot).toFixed(1) +
              '" stroke="var(--obs)" stroke-width="1" stroke-opacity="0.45"/>');
   }
   P.add(rug.join(''));
-  P.record({ kind: 'segments', x0: t.slice(), x1: t.slice(), y0: t.map(function () { return rugBot; }), y1: t.map(function () { return rugTop; }),
+  P.record({ kind: 'segments', x0: tArr, x1: tArr.slice(), y0: tArr.map(function () { return rugBot; }), y1: tArr.map(function () { return rugTop; }),
              color: 'var(--obs)', width: 1, label: 'one tick per arrival' });
 
   /* Constant-rate reference: the straight line the count would follow. */
-  P.seg(t0, 0, t1, n, 'var(--alt)', 1.8, '6 4');
-  var step = [];
-  for (i = 0; i < n; i++) { step.push([t[i], i]); step.push([t[i], i + 1]); }
+  P.seg(t0, c0, t1, cEnd, 'var(--alt)', 1.8, '6 4');
+  var step = [[t0, 0]];
+  for (i = skip; i < n; i++) { step.push([t[i], i - skip]); step.push([t[i], i - skip + 1]); }
   P.line(step, 'var(--obs)', 1.8);
   P.labels(AST.clock ? 'Clock time' : 'Time', 'Arrivals so far');
   P.legend(P.mL + 12, P.mT + 14, [
@@ -11227,7 +11249,7 @@ function renderStationarity() {
   var reject = st.p < 0.05;
   host.innerHTML = '<div class="note' + (reject ? '' : ' quiet') + '">' +
     '<strong>' + (reject ? 'The arrival rate is not constant.' : 'No evidence that the rate changes.') +
-    '</strong> Spreading ' + AST.times.length + ' arrivals over ' + st.k + ' equal intervals gives ' +
+    '</strong> Spreading ' + Math.round(st.nbar * st.k) + ' arrivals over ' + st.k + ' equal intervals gives ' +
     '<span class="mono">X² = ' + fmt(st.X2, 4) + '</span> on ' + st.df + ' degrees of freedom, ' +
     '<span class="mono">p = ' + fmtP(st.p) + '</span>. ' +
     (st.nbar < 5
@@ -11257,9 +11279,11 @@ function renderRateMLE() {
   if (!r) { host.innerHTML = '<div class="plot-empty">Load arrival times.</div>'; return; }
   var st = IA.stationarityTest(AST.prof);
   var constant = st && st.ok && st.p >= 0.05;
-  var uw = AST.clock ? 'min' : 'unit';
+  /* The window's unit, plural for an amount and singular after "per". */
+  var uws = AST.clock ? 'min' : 'time units', uw = AST.clock ? 'min' : 'time unit';
 
-  /* The two routes side by side because the point is that they agree. */
+  /* The two estimates side by side because the point is that they agree. */
+  var gapsIn = !!(AST.flags && AST.flags.fromGaps);
   var cards =
     '<div class="plot-wrap">' +
       '<div style="flex:1 1 300px;min-width:0">' +
@@ -11270,33 +11294,43 @@ function renderRateMLE() {
           card('95% interval', fmt(r.loGap, 4) + '–' + fmt(r.hiGap, 4)) +
         '</div>' +
         '<div class="plot-cap" style="text-align:left;margin-top:5px">' + r.m +
-        ' complete gaps spanning ' + fmt(r.T, 5) + ' ' + uw + '. Exact interval from ' +
+        ' complete gaps spanning ' + fmt(r.T, 5) + ' ' + uws + '. Exact interval from ' +
         '<span class="mono">2λS ~ χ²(' + (2 * r.m) + ')</span>.</div>' +
       '</div>' +
       '<div style="flex:1 1 300px;min-width:0">' +
         '<div class="plot-hd">From the counts: the Poisson MLE</div>' +
         '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(104px,1fr))">' +
           card('<span class="lit">λ̂ = n/T</span>', fmt(r.lamCount, 5)) +
-          card('Arrivals <span class="lit">n</span>', String(r.n)) +
+          card('In window <span class="lit">n</span>', String(r.m)) +
           card('95% interval', fmt(r.loCount, 4) + '–' + fmt(r.hiCount, 4)) +
         '</div>' +
-        '<div class="plot-cap" style="text-align:left;margin-top:5px">The total count over the ' +
-        'total time. No blocking is involved: n is every arrival and T is the whole window. ' +
-        'Garwood exact interval.</div>' +
+        '<div class="plot-cap" style="text-align:left;margin-top:5px"><span class="lit">n</span> = ' +
+        r.m + ' arrivals' +
+        (gapsIn
+          ? ', one at the end of each duration, over the <span class="lit">T</span> = ' + fmt(r.T, 5) +
+            ' ' + uws + ' the durations add up to'
+          : ' after the first, over the <span class="lit">T</span> = ' + fmt(r.T, 5) + ' ' + uws +
+            ' from the first arrival (at ' + fmtTime(AST.times[0]) + ') to the last (at ' +
+            fmtTime(AST.times[AST.times.length - 1]) + ')') +
+        '. Garwood exact interval.</div>' +
       '</div>' +
     '</div>';
 
-  /* How far apart the two routes landed, in units of their own precision. */
-  var gap = Math.abs(r.lamGap - r.lamCount);
-  var rel = r.lamGap > 0 ? 100 * gap / r.lamGap : 0;
-  var agree =
-    '<div class="hint" style="margin-top:10px"><strong>The two estimates differ by ' +
-    fmt(rel, 2) + '%</strong>, and they differ for one reason only: the ' + r.n +
-    ' arrivals leave ' + r.m + ' complete gaps between them, and so the gap route uses ' + r.m +
-    ' and the count route uses ' + r.n + '. That is one arrival, and it shrinks as 1/n. ' +
-    'If you know the window you actually watched (rather than reading it off the first and ' +
-    'last arrival, as this page must), use that window with all ' + r.n +
-    ' arrivals and the ambiguity disappears entirely.</div>';
+  /* Why the two estimates agree: they count the same arrivals, and which
+     arrivals the stretch holds is the one subtle step in getting a rate. */
+  var agree = '<div class="hint" style="margin-top:10px"><strong>Both estimation methods count the ' +
+    'same arrivals.</strong> ' +
+    (gapsIn
+      ? 'The data are ' + r.m + ' interarrival durations, and each one ends in an arrival. The first ' +
+        'duration starts at an earlier arrival or at the start of the watching, a moment that opens ' +
+        'the stretch rather than falling in it, and so both MLEs use ' + r.m + ': the ' + r.m +
+        ' durations and the ' + r.m + ' arrivals that end them.'
+      : 'The data are ' + r.n + ' arrival times, with no record of when the watching began or ended, ' +
+        'and so the page uses only the stretch from the first arrival to the last. The exponential ' +
+        'MLE uses the ' + r.m + ' gaps between those arrivals, and the Poisson MLE counts the ' + r.m +
+        ' arrivals after the first. The first arrival marks where the stretch begins, and so it is ' +
+        'not counted in it.') +
+    '</div>';
 
   /* And which of the two is worth anything, given what the test found. */
   var verdict = constant
@@ -11531,7 +11565,7 @@ function drawCounts() {
     '</div>' +
     '<div class="plot-cap" style="text-align:left;margin-top:5px">The Poisson mean is a count per ' +
     'interval, and so dividing by the interval width ' + fmt(prof.width, 4) + ' turns it back into ' +
-    'a rate. That is not a third estimate. It is the count route from the cards above, with the ' +
+    'a rate. That is not a third estimate. It is the count estimate from the cards above, with the ' +
     'blocking left in: averaging the counts and dividing by the width is the same arithmetic as ' +
     'dividing the total count by the total time, which is why the number matches.</div>' +
     '<div class="note' + (st && st.ok && st.p < 0.05 && k >= 5 ? '' : ' quiet') + '" style="margin-top:10px">' +
@@ -11604,7 +11638,7 @@ function csvRates() {
   var rows = [
     ['# Input Analyzer, arrival rate table - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
     ['# data source: ' + (AST.src || 'pasted or typed by the user')],
-    ['# arrivals: ' + prof.n],
+    ['# arrivals in the window (after the first, which opens it): ' + prof.n],
     ['# window: ' + IA.num(prof.t0, 10) + ' to ' + IA.num(prof.t1, 10)],
     ['# interval width: ' + IA.num(prof.width, 10)],
     ['# overall rate: ' + IA.num(prof.overall, 10)],
