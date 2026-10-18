@@ -1176,6 +1176,17 @@ footer a:hover { text-decoration: underline; }
               <option value="gaps">interarrival gaps (durations)</option>
             </select>
           </span>
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="a-unit">Time unit</label>
+            <select id="a-unit">
+              <option value="seconds">seconds</option>
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="other">other</option>
+            </select>
+            <span class="ctrl-note" id="a-unit-note"></span>
+          </span>
         </div>
         <div class="ctrl-row" id="a-clock-row" style="display:none">
           <span class="ctrl-grp">
@@ -7379,7 +7390,7 @@ var SAMPLES = {
   ] },
 };
 var ARRIVAL_SAMPLES = {
-  steady: { name: "Steady arrivals", unit: "arrival times in minutes over an 8-hour shift", v: [
+  steady: { name: "Steady arrivals", unit: "about 8 hours of arrival times, in minutes", tunit: "minutes", v: [
     0.34,5.16,6.86,14.64,19.16,20.31,20.67,22.13,23,24.46,26.25,35.87,37.64,41.07,45.96,48.39,
     49.68,55.96,65.91,71.17,74.9,75.58,76.4,87.88,88.28,90.48,99.58,101.82,104.82,109.95,114.03,
     114.76,120.32,124.33,124.72,125.03,128.14,129.04,137.81,139.42,140.02,148.28,149.2,153.16,
@@ -7391,7 +7402,7 @@ var ARRIVAL_SAMPLES = {
     428.77,434.98,436.3,436.57,440.16,444.82,447.58,447.75,450.26,452.38,457.4,461.02,463.99,
     468.53
   ] },
-  rush: { name: "Lunch rush", unit: "arrival times in minutes over an 8-hour shift", v: [
+  rush: { name: "Lunch rush", unit: "about 8 hours of arrival times, in minutes", tunit: "minutes", v: [
     2.76,3.46,41.88,42.96,44.1,50.79,51.48,53.55,58.55,61.86,71.54,80.41,90.73,104.49,105.29,
     117.84,118.23,133.83,149.34,150.89,150.9,152.59,154.61,161.6,162.79,166.01,172.46,173.81,
     175.23,175.75,177.48,178.91,179.72,184.25,190.07,191.04,191.39,192.17,199.7,199.93,200.17,
@@ -7415,7 +7426,7 @@ var ARRIVAL_SAMPLES = {
     "11:48:52","11:49:08","11:50:10","11:55:42","12:00:34","12:07:05","12:11:00","12:12:53",
     "12:18:52","12:22:49","12:23:45","12:30:05","12:36:12","12:40:43","12:46:34","12:55:54"
   ] },
-  gaps: { name: "Clinic gaps", mode: "gaps",
+  gaps: { name: "Clinic gaps", mode: "gaps", tunit: "minutes",
     unit: "minutes between consecutive walk-in arrivals, as durations rather than clock times",
     v: SAMPLES.iat.v },
 };
@@ -7845,7 +7856,10 @@ var AST = {          /* tab 2 */
   ladderSpan: null, prof: null, cprof: null,
   mode: 'times',    /* whether the pasted column is times or durations */
   clockConv: 'hm',  /* a clock string is a time of day by default here  */
-  minutes: false,   /* whether the values are known to be in minutes    */
+  tunit: 'other',   /* the time unit the reader states (or the clock sets) */
+  tunitLocked: false, /* clock readings are converted to minutes          */
+  tunitSrc: null,   /* the data source the unit was chosen for           */
+  tunitNext: null,  /* the unit a sample brings, applied when it loads    */
   flags: null,      /* the sanity checks from interarrivals()          */
   truth: null       /* the process the generator last produced, if any */
 };
@@ -10872,7 +10886,17 @@ var A_LOADER = makeLoader({
     /* Elapsed clock readings are minutes just as much as times of day are;
        only the wall-clock DISPLAY differs, so the unit word follows the
        parse and not the display. */
-    AST.minutes = !!(cv.clock || cv.elapsed);
+    /* Clock readings are converted to minutes, and so they fix the unit.
+       Otherwise the unit is the reader's to state: new data start at
+       "other" (or at the unit a sample brings), and re-reading the same
+       data (another mode or column) keeps whatever was chosen. */
+    var wasLocked = AST.tunitLocked;
+    AST.tunitLocked = !!(cv.clock || cv.elapsed);
+    if (AST.tunitLocked) AST.tunit = 'minutes';
+    else if (AST.src !== AST.tunitSrc) AST.tunit = AST.tunitNext || 'other';
+    else if (wasLocked) AST.tunit = 'other';
+    AST.tunitSrc = AST.src; AST.tunitNext = null;
+    syncUnitControl();
     $('a-clock-row').style.display = (cv.parsed || cv.clock) ? 'flex' : 'none';
     if (cv.parsed || cv.clock) {
       $('a-clock-note').textContent = AST.mode === 'gaps'
@@ -10977,7 +11001,7 @@ function renderArrivals() {
   set('a-st-n', String(nArr));
   set('a-st-t0', fmtTime(t0));
   set('a-st-t1', fmtTime(t1));
-  set('a-st-rate', fmt((t.length - 1) / span, 4) + ' /' + unitWord());
+  set('a-st-rate', fmt((t.length - 1) / span, 4) + ' /' + A_TUNITS[AST.tunit].card);
   set('a-st-gap', fmt(gs.mean, 4));
   set('a-st-cv', fmt(gs.sd / gs.mean, 3));
 
@@ -11024,7 +11048,7 @@ function renderArrivals() {
   $('a-kind').innerHTML = warn +
     (AST.unit ? '<div style="margin-bottom:6px">These are ' + esc(AST.unit) + '.</div>' : '') +
     '<strong>' + nArr + ' arrivals over ' + fmt(span, 4) + ' ' +
-      (AST.minutes ? 'minutes' : 'units of time') + '.</strong> ' +
+      unitLong() + '.</strong> ' +
     'The gaps between them have coefficient of variation ' + fmt(cvg, 3) + '. ' +
     (Math.abs(cvg - 1) < 0.2
       ? 'That is close to 1, which is what a Poisson process gives, but a cv near 1 is necessary, ' +
@@ -11100,10 +11124,31 @@ function showWidthCount(which, prof) {
     ? prof.rows.filter(function (r) { return r.width >= prof.width * 0.999; }).length
     : prof.rows.length;
   $(A_WIDTH_IDS[which] + '-unit').textContent =
-    (AST.minutes ? 'min' : prof.width === 1 ? 'time unit' : 'time units') +
+    unitAmount(prof.width) +
     '  (' + k + ' interval' + (k === 1 ? '' : 's') + ')';
 }
-function unitWord() { return AST.minutes ? 'min' : 'unit'; }
+/* The stated time unit, as the tab writes it: after "per" or "/", after
+   an amount, spelled out in a sentence, and in the narrow summary card,
+   whose value cannot wrap.  "Other" is a unit the reader has not named,
+   written as "time units". */
+var A_TUNITS = {
+  seconds: { one: 'sec', many: 'sec', long: 'seconds', card: 's' },
+  minutes: { one: 'min', many: 'min', long: 'minutes', card: 'min' },
+  hours: { one: 'hour', many: 'hours', long: 'hours', card: 'hr' },
+  days: { one: 'day', many: 'days', long: 'days', card: 'day' },
+  other: { one: 'time unit', many: 'time units', long: 'units of time', card: 'unit' }
+};
+function unitWord() { return A_TUNITS[AST.tunit].one; }
+function unitAmount(v) { var u = A_TUNITS[AST.tunit]; return v === 1 ? u.one : u.many; }
+function unitLong() { return A_TUNITS[AST.tunit].long; }
+/* The selector shows the unit, and is grayed while a clock reading fixes
+   it, with the reason said beside it. */
+function syncUnitControl() {
+  var sel = $('a-unit');
+  sel.value = AST.tunit;
+  sel.disabled = AST.tunitLocked;
+  $('a-unit-note').textContent = AST.tunitLocked ? 'set by the clock reading' : '';
+}
 function fmtTime(v) {
   if (!AST.clock) return fmt(v, 5);
   var h = Math.floor(v / 60), m = Math.floor(v % 60);
@@ -11280,7 +11325,7 @@ function renderRateMLE() {
   var st = IA.stationarityTest(AST.prof);
   var constant = st && st.ok && st.p >= 0.05;
   /* The window's unit, plural for an amount and singular after "per". */
-  var uws = AST.clock ? 'min' : 'time units', uw = AST.clock ? 'min' : 'time unit';
+  var uws = unitAmount(r.T), uw = unitWord();
 
   /* The two estimates side by side because the point is that they agree. */
   var gapsIn = !!(AST.flags && AST.flags.fromGaps);
@@ -11641,6 +11686,7 @@ function csvRates() {
     ['# arrivals in the window (after the first, which opens it): ' + prof.n],
     ['# window: ' + IA.num(prof.t0, 10) + ' to ' + IA.num(prof.t1, 10)],
     ['# interval width: ' + IA.num(prof.width, 10)],
+    ['# time unit: ' + unitLong()],
     ['# overall rate: ' + IA.num(prof.overall, 10)],
     []
   ];
@@ -13279,6 +13325,7 @@ document.addEventListener('DOMContentLoaded', function () {
       AST.mode = d.mode || 'times';
       $('a-mode').value = AST.mode;
       AST.unit = d.unit;
+      AST.tunitNext = d.tunit || null;
       A_LOADER.loadText(d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"');
     });
   }
@@ -13307,6 +13354,10 @@ document.addEventListener('DOMContentLoaded', function () {
     AST.clockConv = this.value;
     AST.truth = null; aGenSay('');
     A_LOADER.useColumn(AST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
+  });
+  $('a-unit').addEventListener('change', function () {
+    AST.tunit = this.value;
+    renderArrivals();
   });
   $('a-mode').addEventListener('change', function () {
     AST.mode = this.value;
@@ -13355,6 +13406,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var a0 = ARRIVAL_SAMPLES.rush;
   AST.unit = a0.unit;
+  AST.tunitNext = a0.tunit;
   A_LOADER.loadText(a0.v.join('\n'), a0.name, 'built-in sample "' + a0.name + '"');
 
   initPairTab();
