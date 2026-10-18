@@ -562,6 +562,10 @@ footer a:hover { text-decoration: underline; }
       </div>
 
       <div class="data-info">
+        <div class="ctrl-row" id="col-row" style="display:none">
+          <label class="ctrl-lbl" for="col-pick">Column</label>
+          <select id="col-pick"></select>
+        </div>
         <div class="ctrl-row" id="clock-row" style="display:none">
           <span class="ctrl-grp">
             <label class="ctrl-lbl" for="clock-conv">Clock times mean</label>
@@ -571,10 +575,6 @@ footer a:hover { text-decoration: underline; }
             </select>
           </span>
           <span class="ctrl-note" id="clock-note"></span>
-        </div>
-        <div class="ctrl-row" id="col-row" style="display:none">
-          <label class="ctrl-lbl" for="col-pick">Column</label>
-          <select id="col-pick"></select>
         </div>
         <div class="sg" id="stats-grid">
           <div class="sc"><div class="sc-lbl">Sample size <span class="lit">n</span></div><div class="sc-val" id="st-n">&mdash;</div></div>
@@ -1168,6 +1168,10 @@ footer a:hover { text-decoration: underline; }
         <div class="parse-msg" id="a-parse-msg" role="status" aria-live="polite"></div>
       </div>
       <div class="data-info">
+        <div class="ctrl-row" id="a-col-row" style="display:none">
+          <label class="ctrl-lbl" for="a-col-pick">Column</label>
+          <select id="a-col-pick"></select>
+        </div>
         <div class="ctrl-row">
           <span class="ctrl-grp">
             <label class="ctrl-lbl" for="a-mode">These numbers are</label>
@@ -1194,10 +1198,6 @@ footer a:hover { text-decoration: underline; }
             <select id="a-clock-conv"></select>
           </span>
           <span class="ctrl-note" id="a-clock-note"></span>
-        </div>
-        <div class="ctrl-row" id="a-col-row" style="display:none">
-          <label class="ctrl-lbl" for="a-col-pick">Column</label>
-          <select id="a-col-pick"></select>
         </div>
         <div class="sg">
           <div class="sc"><div class="sc-lbl">Arrivals</div><div class="sc-val" id="a-st-n">&mdash;</div></div>
