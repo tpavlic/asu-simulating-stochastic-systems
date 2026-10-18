@@ -1332,7 +1332,7 @@ footer a:hover { text-decoration: underline; }
     <div class="sec-hd">3 &middot; A rate that can change <span class="sec-note">estimating &lambda;(t) one interval at a time, which is what a nonhomogeneous Poisson process needs</span></div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="a-width">Estimate a rate every</label>
+        <label class="ctrl-lbl" for="a-width">Estimate a rate every (<span class="lit">w</span>)</label>
         <input type="range" id="a-width" min="0" max="20" step="1" value="0">
         <input class="mono-in" type="number" id="a-width-val" step="any" min="0"
                style="width:6.5em" aria-label="Estimate a rate every">
@@ -1411,7 +1411,7 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="a-cwidth">Counting interval</label>
+        <label class="ctrl-lbl" for="a-cwidth">Counting interval (<span class="lit">τ</span>)</label>
         <input type="range" id="a-cwidth" min="0" max="20" step="1" value="0">
         <input class="mono-in" type="number" id="a-cwidth-val" step="any" min="0"
                style="width:6.5em" aria-label="Counting interval">
@@ -1446,12 +1446,12 @@ footer a:hover { text-decoration: underline; }
         different hat. That is worth doing once: it is a rare chance to check a numerical fitting
         routine against a formula you can do by hand.</p>
         <p><strong>From the counts.</strong> Chop the window into blocks. The number of arrivals in
-        a block of width <code>w</code> is Poisson with mean <code>&lambda;w</code>, and the
+        a block of width <code>&tau;</code> is Poisson with mean <code>&lambda;&tau;</code>, and the
         maximum-likelihood estimate of a Poisson mean is the sample mean of the counts. For a single block,
-        then, <code>&lambda;&#770; = N/w</code>, and pooled over every block it is
+        then, <code>&lambda;&#770; = N/&tau;</code>, and pooled over every block it is
         the total count over the total width. Which is the same arithmetic, reached from the other
         end. <em>The rate table in section 3 is exactly this calculation</em>, done one block at a
-        time.</p>
+        time with blocks of width <code>w</code>.</p>
         <p>The two estimation methods count the same arrivals, and so they give the same rate. A window read
         off the data runs from the first arrival to the last, and the first arrival opens it
         rather than arriving during it. Of <code>N</code> recorded arrivals, then, the window holds
@@ -11603,13 +11603,13 @@ function drawCounts() {
        the histogram, and four labels squeezed into that width each wrap to
        three lines. */
     '<div class="sg" style="margin-top:10px;grid-template-columns:repeat(2,minmax(0,1fr))">' +
-      card('Mean count <span class="lit">λ̂w</span>', fmt(mean, 4)) +
-      card('Implied rate <span class="lit">λ̂</span>', fmt(mean / prof.width, 5)) +
+      card('Mean count <span class="lit">n̄</span>', fmt(mean, 4)) +
+      card('Rate <span class="lit">λ̂ = n̄/τ</span>', fmt(mean / prof.width, 5)) +
       card('Variance', fmt(v, 4)) +
       card('Variance / mean', fmt(ratio, 3)) +
     '</div>' +
     '<div class="plot-cap" style="text-align:left;margin-top:5px">The Poisson mean is a count per ' +
-    'interval, and so dividing by the interval width ' + fmt(prof.width, 4) + ' turns it back into ' +
+    'interval, and so dividing by the counting interval <span class="lit">τ</span> = ' + fmt(prof.width, 4) + ' turns it back into ' +
     'a rate. That is not a third estimate. It is the count estimate from the cards above, with the ' +
     'blocking left in: averaging the counts and dividing by the width is the same arithmetic as ' +
     'dividing the total count by the total time, which is why the number matches.</div>' +
