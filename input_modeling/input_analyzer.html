@@ -9731,31 +9731,99 @@ function drawCDF() {
   var y1 = ks.sign > 0 ? eHi : eLo, y2 = Fat;
   P.seg(ks.at, y1, ks.at, y2, 'var(--alt)', 3);
 
-  /* The D label sits right of the gap, unless it would run into the
-     legend or past the frame; then it goes to the left, and if that
-     collides too, above or below the gap, on the side away from the
-     legend.  Its width is estimated at 6 pixels a character, which is
-     generous for 10px bold digits. */
+  /* The D label goes in the first of several spots around the gap that
+     stays inside the frame, off the legend, and 4 pixels clear of both
+     curves: right of the gap, left of it, a little further out on either
+     side, then diagonally above-left and below-right of it, which a rising
+     CDF leaves empty even when the two curves run together and the gap is
+     too small to hold anything.  If no spot is clear, the one crossing the
+     fewest curve segments wins.  Its width is estimated at 6 pixels a
+     character, which is generous for 10px bold digits. */
   var dTxt = 'D = ' + fmt(ks.D, 3), dW = 6 * dTxt.length;
   var gx = P.X(ks.at), gyTop = P.Y(Math.max(y1, y2)), gyBot = P.Y(Math.min(y1, y2));
   var gyMid = 0.5 * (gyTop + gyBot);
-  var clash = function (x0, yMid) {
-    var x1 = x0 + dW, yt = yMid - 9, yb = yMid + 3;
-    var off = x0 < P.mL || x1 > P.mL + P.pw;
+  var paths = [step, curve, [[ks.at, y1], [ks.at, y2]]].map(function (pts) {
+    return pts.map(function (q) { return [P.X(q[0]), P.Y(q[1])]; });
+  });
+  var crossings = function (x0, x1, yt, yb) {
+    var c = 0;
+    for (var a = 0; a < paths.length; a++) {
+      var pts = paths[a];
+      for (var k = 1; k < pts.length; k++)
+        if (segHitsBox(pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1], x0, x1, yt, yb)) c++;
+    }
+    return c;
+  };
+  var score = function (sp) {
+    var x0 = sp.anchor === 'end' ? sp.x - dW : sp.x, x1 = x0 + dW, yt = sp.y - 9, yb = sp.y + 3;
+    if (x0 < P.mL || x1 > P.mL + P.pw || yt < P.mT || yb > P.mT + P.ph) return Infinity;
     var lx0 = leg.x - 4, lx1 = leg.x + LW, ly0 = leg.y - 11, ly1 = leg.y + LH - 4;
-    return off || (x1 > lx0 && x0 < lx1 && yb > ly0 && yt < ly1);
+    if (x1 > lx0 && x0 < lx1 && yb > ly0 && yt < ly1) return Infinity;
+    return crossings(x0 - 4, x1 + 4, yt - 4, yb + 4);
   };
   var spots = [
     { x: gx + 6, y: gyMid + 3.5, anchor: 'start' },
-    { x: gx - 6, y: gyMid + 3.5, anchor: 'end' }
+    { x: gx - 6, y: gyMid + 3.5, anchor: 'end' },
+    { x: gx + 14, y: gyMid + 3.5, anchor: 'start' },
+    { x: gx - 14, y: gyMid + 3.5, anchor: 'end' },
+    { x: gx - 4, y: gyTop - 6, anchor: 'end' },
+    { x: gx + 4, y: gyBot + 14, anchor: 'start' },
+    { x: gx - 10, y: gyTop - 16, anchor: 'end' },
+    { x: gx + 10, y: gyBot + 24, anchor: 'start' },
+    { x: gx - dW / 2, y: gyTop - 6, anchor: 'start' },
+    { x: gx - dW / 2, y: gyBot + 14, anchor: 'start' }
   ];
-  var legBelow = leg.y > gyMid;
-  spots.push({ x: gx - dW / 2, y: legBelow ? gyTop - 6 : gyBot + 14, anchor: 'start' });
-  var spot = spots[spots.length - 1];
-  for (var sp = 0; sp < spots.length; sp++) {
-    var left = spots[sp].anchor === 'end' ? spots[sp].x - dW : spots[sp].x;
-    if (!clash(left, spots[sp].y - 3.5)) { spot = spots[sp]; break; }
+  var spot = null, best = Infinity, sp;
+  for (sp = 0; sp < spots.length; sp++) {
+    var sc = score(spots[sp]);
+    if (sc < best) { best = sc; spot = spots[sp]; }
+    if (sc === 0) break;
   }
+  /* Near a corner, or where the curves crowd the gap on every side, none
+     of those spots is clear.  The label then goes to the clear spot on a
+     5-pixel grid nearest the gap, preferring one whose leader line back to
+     the gap stays off the curves, and the leader is drawn when the label
+     sits more than 12 pixels from the gap. */
+  var leader = null;
+  if (best > 0) {
+    var near = paths.map(function (pts) {
+      return pts.filter(function (q) { return Math.abs(q[0] - gx) < 160 && Math.abs(q[1] - gyMid) < 120; });
+    });
+    var all = paths;
+    paths = near;
+    var found = null, foundCost = Infinity;
+    for (var dy = -100; dy <= 100; dy += 5) {
+      for (var dx = -140; dx <= 140; dx += 5) {
+        var cand = { x: gx + dx - dW / 2, y: gyMid + dy + 3.5, anchor: 'start' };
+        if (score(cand) !== 0) continue;
+        /* The nearest point of the box to the gap's middle, and the leader
+           from just off the gap to it. */
+        var bx0 = cand.x - 2, bx1 = cand.x + dW + 2, by0 = cand.y - 11, by1 = cand.y + 5;
+        var nx = Math.max(bx0, Math.min(gx, bx1)), ny = Math.max(by0, Math.min(gyMid, by1));
+        var dist = Math.hypot(nx - gx, ny - gyMid);
+        var ux = dist > 0 ? (nx - gx) / dist : 0, uy = dist > 0 ? (ny - gyMid) / dist : 0;
+        if (dist >= foundCost) continue;
+        /* A leader that runs along a curve is as hard to see as one that
+           crosses it, and so it is sampled every 2 pixels, from 4 pixels
+           off the gap, for any curve within 3 pixels. */
+        var hits = 0;
+        if (dist > 12)
+          for (var t = 4; t <= dist; t += 2)
+            if (crossings(gx + t * ux - 3, gx + t * ux + 3, gyMid + t * uy - 3, gyMid + t * uy + 3) > 0) hits++;
+        var cost = dist + 10 * hits;
+        if (cost < foundCost) { foundCost = cost; found = { spot: cand, line: [gx + 4 * ux, gyMid + 4 * uy, nx, ny] }; }
+      }
+    }
+    paths = all;
+    if (found) {
+      spot = found.spot;
+      if (Math.hypot(found.line[2] - gx, found.line[3] - gyMid) > 12) leader = found.line;
+    }
+  }
+  if (!spot) spot = spots[0];
+  if (leader)
+    P.add('<line x1="' + leader[0].toFixed(1) + '" y1="' + leader[1].toFixed(1) + '" x2="' + leader[2].toFixed(1) +
+          '" y2="' + leader[3].toFixed(1) + '" stroke="var(--alt)" stroke-width="1"/>');
   P.text(spot.x, spot.y, dTxt, { raw: true, size: 10, fill: 'var(--alt)', weight: '700', anchor: spot.anchor });
   P.labels('Value', 'Cumulative probability');
   P.legend(leg.x, leg.y, [
@@ -9766,6 +9834,20 @@ function drawCDF() {
   host.innerHTML = P.svg('Empirical and fitted cumulative distribution functions',
     'Empirical step CDF against the fitted CDF, with the largest gap marked') +
     heldCaption(stepNote + gapNote, stepNote + gapNote);
+}
+
+/* Whether the segment (ax, ay)-(bx, by) meets the box [x0, x1] x [yt, yb],
+   by clipping the segment's parameter range to each slab in turn. */
+function segHitsBox(ax, ay, bx, by, x0, x1, yt, yb) {
+  var t0 = 0, t1 = 1, dx = bx - ax, dy = by - ay;
+  var clip = function (p, q) {
+    if (p === 0) return q >= 0;
+    var t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+    return true;
+  };
+  return clip(-dx, ax - x0) && clip(dx, x1 - ax) && clip(-dy, ay - yt) && clip(dy, yb - ay);
 }
 
 /* Where the CDF plot's legend goes: whichever of two empty corners the
