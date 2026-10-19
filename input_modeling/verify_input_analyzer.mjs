@@ -357,6 +357,21 @@ section('7. parseTable / columnValues');
   p = IA.parseTable('1 2\n3 4\n5 6\n');
   ok(p.delim === null && p.cols.length === 2, 'whitespace-separated columns',
      String(p.delim) + ' / ' + p.cols.length);
+  p = IA.parseTable('05:12.3\n06:01.7\n07:15.0\n');
+  ok(!p.header && p.cols[0].length === 3, 'an MM:SS.s first row is data, not a header',
+     String(p.header) + ' / ' + p.cols[0].length);
+  p = IA.parseTable('75:12\n80:01\n');
+  ok(!p.header && p.cols[0].length === 2, 'an MM:SS first row past 23 minutes is data, not a header',
+     String(p.header) + ' / ' + p.cols[0].length);
+  {
+    const d = IA.columnDurations(['05:12.3', '0:04.5'], 'ms');
+    ok(d.clock && Math.abs(d.values[0] - (5 + 12.3 / 60)) < 1e-12 && Math.abs(d.values[1] - 4.5 / 60) < 1e-12,
+       'MM:SS.s durations keep the fraction of a second', JSON.stringify(d.values));
+    const e = IA.columnTimes(['05:12.3', '06:01.7'], 'hm');
+    const f = IA.columnTimes(['05:12.3', '06:01.7'], 'ms');
+    ok(!e.parsed && f.elapsed && Math.abs(f.values[1] - (6 + 1.7 / 60)) < 1e-12,
+       'MM:SS.s is no time of day, and reads as time elapsed', JSON.stringify([e.parsed, f.values]));
+  }
 
   r = vals('4.2\nNA\n5.1\nn/a\n6.0\n');
   ok(r.v.join(',') === '4.2,5.1,6', 'NA and n/a are skipped, not read as zero', JSON.stringify(r.v));

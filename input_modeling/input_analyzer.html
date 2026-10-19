@@ -1172,7 +1172,7 @@ footer a:hover { text-decoration: underline; }
         <div class="drop" id="a-drop">
           <textarea id="a-data-in" class="data-in" spellcheck="false" autocomplete="off"
             aria-label="Arrival times or interarrival durations, one per line"
-            placeholder="Paste one value per line, for example&#10;&#10;0.7&#10;2.1&#10;2.9&#10;5.4&#10;&#10;A header row, blank lines, and trailing commas are all fine. Several columns are fine too, and a picker appears so you can choose which one to analyze.&#10;&#10;Clock times work as well (HH:MM or HH:MM:SS, as in 8:05 or 08:05:30), and they are read as minutes past midnight."></textarea>
+            placeholder="Paste one value per line, for example&#10;&#10;0.7&#10;2.1&#10;2.9&#10;5.4&#10;&#10;A header row, blank lines, and trailing commas are all fine. Several columns are fine too, and a picker appears so you can choose which one to analyze.&#10;&#10;Clock times work as well (HH:MM or HH:MM:SS, as in 8:05 or 08:05:30). A menu then says how to read them, and the time unit converts them."></textarea>
           <div class="drop-hint">Drop the file to load it</div>
         </div>
       </div>
@@ -1205,17 +1205,6 @@ footer a:hover { text-decoration: underline; }
               <option value="gaps">interarrival gaps (durations)</option>
             </select>
           </span>
-          <span class="ctrl-grp">
-            <label class="ctrl-lbl" for="a-unit">Time unit</label>
-            <select id="a-unit">
-              <option value="seconds">seconds</option>
-              <option value="minutes">minutes</option>
-              <option value="hours">hours</option>
-              <option value="days">days</option>
-              <option value="other">other</option>
-            </select>
-            <span class="ctrl-note" id="a-unit-note"></span>
-          </span>
         </div>
         <div class="ctrl-row" id="a-clock-row" style="display:none">
           <span class="ctrl-grp">
@@ -1223,6 +1212,31 @@ footer a:hover { text-decoration: underline; }
             <select id="a-clock-conv"></select>
           </span>
           <span class="ctrl-note" id="a-clock-note"></span>
+        </div>
+        <div class="ctrl-row" id="a-srcunit-row" style="display:none">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="a-srcunit">Numbers are in</label>
+            <select id="a-srcunit">
+              <option value="seconds">seconds</option>
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="other">not stated</option>
+            </select>
+          </span>
+        </div>
+        <div class="ctrl-row">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="a-unit">Time unit</label>
+            <select id="a-unit">
+              <option value="seconds">seconds</option>
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+              <option value="other">not stated</option>
+            </select>
+            <span class="ctrl-note" id="a-unit-note"></span>
+          </span>
         </div>
         <div class="sg">
           <div class="sc"><div class="sc-lbl">Arrivals</div><div class="sc-val" id="a-st-n">&mdash;</div></div>
@@ -2545,11 +2559,13 @@ function parseTable(text) {
   /* Header row: the first row counts as a header when at least one of its
      cells is present but is neither a number nor a clock time. Clock
      times have to be allowed through, or the first arrival in a column of
-     "08:05:30" values is silently eaten as a column name. */
+     "08:05:30" values is silently eaten as a column name.  So do clock
+     durations no time of day can be, such as "05:12.3" or "75:12". */
   var head = rows[0], isHeader = false;
   for (var h = 0; h < head.length; h++) {
     var t = String(head[h]).trim();
-    if (t !== '' && Number.isNaN(toNum(t)) && Number.isNaN(toClockMinutes(t))) { isHeader = true; break; }
+    if (t !== '' && Number.isNaN(toNum(t)) && Number.isNaN(toClockMinutes(t)) &&
+        Number.isNaN(toClockDuration(t, 'ms'))) { isHeader = true; break; }
   }
   var names = [];
   for (var c = 0; c < ncol; c++) {
@@ -7889,8 +7905,12 @@ var AST = {          /* tab 2 */
   ladderSpan: null, prof: null, cprof: null,
   mode: 'times',    /* whether the pasted column is times or durations */
   clockConv: 'hm',  /* a clock string is a time of day by default here  */
-  tunit: 'other',   /* the time unit the reader states (or the clock sets) */
-  tunitLocked: false, /* clock readings are converted to minutes          */
+  clockAuto: false, /* the page, not the reader, moved clockConv to 'ms' */
+  tunit: 'other',   /* the time unit the tab works in, converted to     */
+  srcUnit: 'other', /* the unit plain numbers are in, as stated         */
+  clockKnown: false, /* clock readings, which are held in minutes       */
+  tunitChosen: false, /* the reader picked the unit for this source    */
+  rawTimes: null,   /* the arrival times as read, before conversion    */
   tunitSrc: null,   /* the data source the unit was chosen for           */
   tunitNext: null,  /* the unit a sample brings, applied when it loads    */
   flags: null,      /* the sanity checks from interarrivals()          */
@@ -7960,10 +7980,11 @@ function makeLoader(cfg) {
     var bits = ['Read ' + cv.values.length + ' value' + (cv.values.length === 1 ? '' : 's')];
     if (t.names.length > 1) bits.push('from column “' + t.names[i] + '” of ' + t.names.length);
     if (t.header) bits.push('header row skipped');
-    if (cv.clock && cfg.state() === AST && AST.mode !== 'gaps')
-      bits.push('read as HH:MM or HH:MM:SS clock times, converted to minutes past midnight');
-    else if (cv.elapsed)
-      bits.push('read as MM:SS or HH:MM:SS, converted to minutes elapsed');
+    if (cfg.state() === AST && (cv.clock || cv.elapsed))
+      bits.push(AST.mode === 'gaps'
+        ? 'read as ' + (AST.clockConv === 'hm' ? 'HH:MM' : 'MM:SS') + ' durations'
+        : cv.clock ? 'read as HH:MM or HH:MM:SS times of day'
+        : 'read as MM:SS or HH:MM:SS time elapsed');
     else if (cv.clock || cv.unit)
       bits.push('read as ' +
         ((cfg.state() === AST ? AST.clockConv : ST.clockConv) === 'hm' ? 'HH:MM' : 'MM:SS') +
@@ -10927,8 +10948,29 @@ var A_LOADER = makeLoader({
   /* Durations go through the duration reader, moments through the clock
      reader; both take the same convention. */
   extract: function (col) {
-    return AST.mode === 'gaps' ? IA.columnDurations(col, AST.clockConv === 'hm' ? 'hm' : 'ms')
-                               : IA.columnTimes(col, AST.clockConv);
+    /* New data start at the mode's own reading, as they start at their own
+       unit; re-reading the same data keeps the reading chosen for them. */
+    if (AST.src !== AST.tunitSrc || AST.clockAuto) {
+      AST.clockConv = AST.mode === 'gaps' ? 'ms' : 'hm';
+      $('a-clock-conv').value = AST.clockConv;
+    }
+    AST.clockAuto = false;
+    if (AST.mode === 'gaps') return IA.columnDurations(col, AST.clockConv === 'hm' ? 'hm' : 'ms');
+    var cv = IA.columnTimes(col, AST.clockConv);
+    /* A column of clock values that no time of day can be ("05:12.3", or
+       "75:12") has only the elapsed reading, and so the menu moves to it
+       rather than leaving the column unread with the menu hidden.  The
+       move is the page's, not the reader's, and so the next data read
+       start again from a time of day. */
+    if (AST.clockConv === 'hm' && !cv.parsed) {
+      var el = IA.columnTimes(col, 'ms');
+      if (el.parsed) {
+        AST.clockConv = 'ms'; AST.clockAuto = true;
+        $('a-clock-conv').value = 'ms';
+        return el;
+      }
+    }
+    return cv;
   },
   accept: function (cv) {
     /* Gaps and timestamps hold the same thing apart from where the zero
@@ -10937,6 +10979,12 @@ var A_LOADER = makeLoader({
        lands at the sum of the first i gaps. Everything downstream then
        works on timestamps and needs no special case. */
     var vals = cv.values, negGaps = 0, i;
+    /* A clock reading fixes how long each value is.  Every reading comes
+       out in minutes except an HH:MM duration, which comes out in hours
+       and is brought to minutes here, and the time unit converts from
+       there. */
+    var known = !!(cv.clock || cv.elapsed);
+    if (known && cv.unit === 'hours') vals = vals.map(function (v) { return v * 60; });
     if (AST.mode === 'gaps') {
       /* n gaps sit BETWEEN n+1 arrivals, so the first arrival goes at the
          origin and each gap steps forward from it. Starting the sum at the
@@ -10953,35 +11001,41 @@ var A_LOADER = makeLoader({
       vals = times;
     }
     var ia = IA.interarrivals(vals);
+    AST.rawTimes = ia.sorted;
     AST.times = ia.sorted;
     AST.gaps = ia.gaps;
     /* Wall-clock display only for values that really are times of day: a
        duration is never one, and neither is an elapsed MM:SS reading. */
     AST.clock = AST.mode === 'gaps' ? false : !!cv.clock;
-    /* Elapsed clock readings are minutes just as much as times of day are;
-       only the wall-clock DISPLAY differs, so the unit word follows the
-       parse and not the display. */
-    /* Clock readings are converted to minutes, and so they fix the unit.
-       Otherwise the unit is the reader's to state: new data start at
-       "other" (or at the unit a sample brings), and re-reading the same
-       data (another mode or column) keeps whatever was chosen. */
-    var wasLocked = AST.tunitLocked;
-    AST.tunitLocked = !!(cv.clock || cv.elapsed);
-    if (AST.tunitLocked) AST.tunit = 'minutes';
-    else if (AST.src !== AST.tunitSrc) AST.tunit = AST.tunitNext || 'other';
-    else if (wasLocked) AST.tunit = 'other';
+    /* The data's own unit comes first: clock readings are minutes, and
+       plain numbers are in whatever unit the reader states (new data start
+       unstated, or at the unit a sample brings; re-reading the same data
+       keeps it).  The time unit then converts from it.  For clock readings
+       it starts at the largest unit in which the mean gap is at least 1,
+       for plain numbers at their own unit, unless the reader has picked
+       one for these data; with no stated unit there is nothing to convert
+       from, and it stays unstated. */
+    var newSrc = AST.src !== AST.tunitSrc;
+    if (newSrc) {
+      AST.tunitChosen = false;
+      if (!known) AST.srcUnit = AST.tunitNext || 'other';
+    }
+    AST.clockKnown = known;
+    var base = baseUnit();
+    if (base === 'other') AST.tunit = 'other';
+    else if (newSrc && AST.tunitNext) AST.tunit = AST.tunitNext;
+    else if (!AST.tunitChosen || AST.tunit === 'other') AST.tunit = known ? autoTimeUnit(ia.sorted) : base;
+    scaleTimes();
     AST.tunitSrc = AST.src; AST.tunitNext = null;
     syncUnitControl();
     $('a-clock-row').style.display = (cv.parsed || cv.clock) ? 'flex' : 'none';
+    $('a-srcunit-row').style.display = (cv.parsed || cv.clock) ? 'none' : 'flex';
     if (cv.parsed || cv.clock) {
       $('a-clock-note').textContent = AST.mode === 'gaps'
-        ? 'Durations, added up into arrival times. Everything here works on differences, so the ' +
-          'reading sets the units and changes nothing else.'
+        ? 'Durations, added up into arrival times from 0.'
         : (AST.clockConv === 'hm'
-          ? 'Read as times of day and shown on a clock. Everything here works on differences, so ' +
-            'the reading changes the units of the rate and the axis labels and nothing else.'
-          : 'Read as minutes elapsed, and shown as plain numbers rather than on a clock, which is ' +
-            'what an elapsed time deserves.');
+          ? 'Read as times of day, and shown on a clock.'
+          : 'Read as time elapsed, and shown as plain numbers rather than on a clock.');
     }
     AST.flags = ia;
     AST.flags.negGaps = negGaps;
@@ -10989,11 +11043,13 @@ var A_LOADER = makeLoader({
     renderArrivals();
   },
   clear: function () {
-    AST.table = null; AST.times = []; AST.gaps = []; AST.unit = null;
+    AST.table = null; AST.times = []; AST.gaps = []; AST.unit = null; AST.rawTimes = null;
     AST.flags = null; AST.truth = null;
     $('a-clock-row').style.display = 'none';
+    $('a-srcunit-row').style.display = 'none';
     $('a-col-row').style.display = 'none';
     A_LOADER.say('');
+    syncUnitControl();
     renderArrivals();
   }
 });
@@ -11223,19 +11279,48 @@ var A_TUNITS = {
   days: { one: 'day', many: 'days', long: 'days', card: 'day' },
   other: { one: 'time unit', many: 'time units', long: 'units of time', card: 'unit' }
 };
+/* How many of each unit there are in a minute, for converting. */
+var A_PER_MINUTE = { seconds: 60, minutes: 1, hours: 1 / 60, days: 1 / 1440 };
+/* The unit the data were read in: minutes for clock readings, and the
+   stated unit for plain numbers ("other" when none is stated). */
+function baseUnit() { return AST.clockKnown ? 'minutes' : AST.srcUnit; }
+/* How many of the tab's units there are in one of the data's own. */
+function unitFactor() {
+  var b = baseUnit();
+  return b === 'other' || AST.tunit === 'other' ? 1 : A_PER_MINUTE[AST.tunit] / A_PER_MINUTE[b];
+}
+/* The largest unit in which the mean gap is at least 1, so that "0:05"
+   read as five seconds opens as 5 seconds rather than 0.0833 minutes. */
+function autoTimeUnit(minutes) {
+  var n = minutes.length, g = n > 1 ? (minutes[n - 1] - minutes[0]) / (n - 1) : 1;
+  return g >= 1440 ? 'days' : g >= 60 ? 'hours' : g >= 1 ? 'minutes' : 'seconds';
+}
+/* The arrival times as read, in the time unit the tab works in. */
+function scaleTimes() {
+  var f = unitFactor(), t = AST.rawTimes.map(function (v) { return v * f; }), g = [];
+  for (var i = 1; i < t.length; i++) g.push(t[i] - t[i - 1]);
+  AST.times = t; AST.gaps = g;
+}
 function unitWord() { return A_TUNITS[AST.tunit].one; }
 function unitAmount(v) { var u = A_TUNITS[AST.tunit]; return v === 1 ? u.one : u.many; }
 function unitLong() { return A_TUNITS[AST.tunit].long; }
-/* The selector shows the unit, and is grayed while a clock reading fixes
-   it, with the reason said beside it. */
+/* The time unit converts from the data's own unit, and so it is grayed
+   at "not stated" until there is one, and "not stated" is grayed after. */
 function syncUnitControl() {
-  var sel = $('a-unit');
+  var sel = $('a-unit'), known = baseUnit() !== 'other', loaded = AST.times.length > 0;
+  $('a-srcunit').value = AST.srcUnit;
   sel.value = AST.tunit;
-  sel.disabled = AST.tunitLocked;
-  $('a-unit-note').textContent = AST.tunitLocked ? 'set by the clock reading' : '';
+  sel.disabled = !known;
+  sel.querySelector('option[value="other"]').disabled = known;
+  $('a-unit-note').textContent = !loaded ? ''
+    : !known ? 'State the unit the numbers are in, above, to convert them.'
+    : AST.clockKnown ? 'The clock readings are converted to this unit.'
+    : 'The numbers are converted to this unit.';
 }
+/* A time of day, from a value in the reader's unit. */
 function fmtTime(v) {
   if (!AST.clock) return fmt(v, 5);
+  v /= A_PER_MINUTE[AST.tunit];
   var h = Math.floor(v / 60), m = Math.floor(v % 60);
   return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
@@ -11309,7 +11394,10 @@ function drawRate() {
   for (i = 0; i < rows.length; i++) ymax = Math.max(ymax, rows[i].rate + rows[i].se);
   /* The true curve can peak above every estimated bar, so it has to be
      inside the range before the scale is fixed. */
-  if (AST.truth && AST.truth.max) ymax = Math.max(ymax, AST.truth.max);
+  /* The generator's rate is in the data's own unit, and the plot in the
+     tab's: time scales by f, and so a rate per unit scales by 1/f. */
+  var tf = unitFactor();
+  if (AST.truth && AST.truth.max) ymax = Math.max(ymax, AST.truth.max / tf);
   if (!(ymax > 0)) ymax = 1;
   var P = Plot(420, 290, { l: 56, r: 12, t: 12, b: 46 })
     .domain(prof.t0, prof.t1, 0, ymax * 1.1);
@@ -11335,7 +11423,7 @@ function drawRate() {
     var curve = [], NPT = 240, tv;
     for (i = 0; i <= NPT; i++) {
       tv = prof.t0 + (prof.t1 - prof.t0) * i / NPT;
-      curve.push([tv, AST.truth.rate(tv)]);
+      curve.push([tv, AST.truth.rate(tv / tf) / tf]);
     }
     P.line(curve, 'var(--fit)', 2.2);
     legend.push({ mark: 'line', color: 'var(--fit)', label: 'true λ(t) that generated these' });
@@ -13472,9 +13560,11 @@ document.addEventListener('DOMContentLoaded', function () {
       var d = ARRIVAL_SAMPLES[this.getAttribute('data-asample')];
       AST.truth = null; aGenSay('');
       /* Each sample knows whether it is a column of times or of durations,
-         and sets the dropdown accordingly. */
+         and sets the dropdown accordingly, with that mode's default reading
+         of clock times. */
       AST.mode = d.mode || 'times';
       $('a-mode').value = AST.mode;
+      buildArrivalClockOptions();
       AST.unit = d.unit;
       AST.tunitNext = d.tunit || null;
       A_LOADER.loadText(d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"');
@@ -13488,8 +13578,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function buildArrivalClockOptions() {
     var sel = $('a-clock-conv'), gaps = AST.mode === 'gaps';
     var opts = gaps
-      ? [['ms', 'MM:SS (and HH:MM:SS) → minutes'], ['hm', 'HH:MM (and HH:MM:SS) → hours']]
-      : [['hm', 'HH:MM (and HH:MM:SS) → time of day'], ['ms', 'MM:SS (and HH:MM:SS) → minutes elapsed']];
+      ? [['ms', 'MM:SS (or HH:MM:SS)'], ['hm', 'HH:MM (or HH:MM:SS)']]
+      : [['hm', 'HH:MM (or HH:MM:SS), a time of day'], ['ms', 'MM:SS (or HH:MM:SS), time elapsed']];
     sel.innerHTML = '';
     for (var i = 0; i < opts.length; i++) {
       var o = document.createElement('option');
@@ -13503,11 +13593,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
   $('a-clock-conv').addEventListener('change', function () {
     AST.clockConv = this.value;
+    AST.clockAuto = false;
     AST.truth = null; aGenSay('');
     A_LOADER.useColumn(AST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
   });
+  /* A new unit converts the data, and both interval widths are carried
+     over so that every result stays the same. */
   $('a-unit').addEventListener('change', function () {
+    var old = AST.tunit;
     AST.tunit = this.value;
+    AST.tunitChosen = true;
+    if (baseUnit() !== 'other' && old !== 'other' && AST.rawTimes) {
+      var r = A_PER_MINUTE[AST.tunit] / A_PER_MINUTE[old];
+      if (AST.prof) AST.widths.rate.custom = AST.prof.width * r;
+      if (AST.cprof) AST.widths.count.custom = AST.cprof.width * r;
+      scaleTimes();
+      var t = AST.times;
+      AST.ladderSpan = t.length > 1 ? t[t.length - 1] - t[0] : null;
+    }
+    renderArrivals();
+  });
+  /* Stating the numbers' unit says what they already are, and converts
+     nothing: the time unit follows it unless the reader has picked one. */
+  $('a-srcunit').addEventListener('change', function () {
+    AST.srcUnit = this.value;
+    if (AST.srcUnit === 'other') { AST.tunit = 'other'; AST.tunitChosen = false; }
+    else if (!AST.tunitChosen || AST.tunit === 'other') AST.tunit = AST.srcUnit;
+    if (AST.rawTimes) scaleTimes();
+    syncUnitControl();
     renderArrivals();
   });
   $('a-mode').addEventListener('change', function () {
