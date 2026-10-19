@@ -347,6 +347,13 @@ section('7. parseTable / columnValues');
   ok(p.delim === ';' && p.cols.length === 2, 'semicolon delimiter detected', String(p.delim));
   p = IA.parseTable('a\tb\n1\t2\n3\t4\n');
   ok(p.delim === '\t' && p.cols.length === 2, 'tab delimiter detected', JSON.stringify(p.delim));
+  /* A column that runs longer than those before it pastes with leading
+     tabs on its extra rows; they are empty cells, not padding. */
+  p = IA.parseTable('a\tb\tc\n1\t2\t3\n4\t5\t6\n7\t8\t9\n\t\t10\n\t\t11\n');
+  ok(p.cols.length === 3 && IA.columnValues(p.cols[0]).values.length === 3 &&
+     IA.columnValues(p.cols[2]).values.join(',') === '3,6,9,10,11',
+     'leading empty tab cells keep a longer column\'s values in that column',
+     p.cols.map(c => IA.columnValues(c).values.join(' ')).join(' | '));
   p = IA.parseTable('1 2\n3 4\n5 6\n');
   ok(p.delim === null && p.cols.length === 2, 'whitespace-separated columns',
      String(p.delim) + ' / ' + p.cols.length);

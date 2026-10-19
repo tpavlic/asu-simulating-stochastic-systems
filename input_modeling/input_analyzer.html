@@ -2467,7 +2467,13 @@ function parseTable(text) {
        at all, so it is correctly detected as whitespace-separated -- and
        then the trailing comma still has to come off, or every value parses
        as NaN. */
-    var body = delim ? trimmed : trimmed.replace(/[,;|\t]+$/, '');
+    /* With tabs as the delimiter, a row whose first cells are empty starts
+       with tabs, and trim() would take them for padding and slide every
+       value left into the wrong column (a spreadsheet column that runs
+       longer than those before it pastes this way).  So a tab-separated
+       row is trimmed of every whitespace but the tab. */
+    var body = delim === '\t' ? lines[j].replace(/^[^\S\t]+|[^\S\t]+$/g, '')
+             : delim ? trimmed : trimmed.replace(/[,;|\t]+$/, '');
     rows.push(delim ? body.split(delim) : body.split(/\s+/));
   }
   if (!rows.length) return { names: [], cols: [], nLines: 0, delim: delim, ragged: 0, dropped: dropped };
