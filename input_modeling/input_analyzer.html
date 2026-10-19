@@ -324,6 +324,25 @@ table.tbl td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--grid); ver
 table.tbl td.num { font-family: 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
 table.tbl tr:last-child td { border-bottom: none; }
 table.tbl tr.picked td { background: var(--accent-wash); }
+/* The rate table scrolls inside its own box.  Its header row stays in
+   view (a sticky cell drops a collapsed border, so the rule under it is a
+   shadow), and its scrollbar is styled, which keeps it shown where the
+   system would hide an idle one, with its width reserved so that the
+   numbers do not shift when it appears.  Firefox takes only the standard
+   properties, and Chrome ignores its own styling once those are set, so
+   they are given to Firefox alone. */
+#rate-tbl { scrollbar-gutter: stable; }
+#rate-tbl thead th { position: sticky; top: 0; z-index: 1; background: var(--card);
+                     border-bottom: none; box-shadow: inset 0 -1.5px 0 var(--border); }
+#rate-tbl::-webkit-scrollbar { width: 9px; height: 9px; }
+#rate-tbl::-webkit-scrollbar-track { background: var(--grid); border-radius: 5px; }
+#rate-tbl::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 5px;
+                                     border: 2px solid var(--grid); }
+@supports (-moz-appearance: none) {
+  #rate-tbl { scrollbar-width: thin; scrollbar-color: var(--muted) var(--grid); }
+}
+#rate-more { min-height: 1.4em; margin-top: 4px; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; }
 table.tbl tr.clickable { cursor: pointer; }
 table.tbl tr.clickable:hover td { background: var(--accent-tint); }
 /* Keyboard focus on a selectable row.  :focus-visible rather than :focus, so
@@ -1247,7 +1266,7 @@ footer a:hover { text-decoration: underline; }
     <details class="why">
       <summary>What generating an arrival process is for</summary>
       <div class="why-body">
-        <p>The test below can only tell you that a rate <em>looks</em> constant or does not. What it
+        <p>The dispersion test in section 3 can only tell you that a rate <em>looks</em> constant or does not. What it
         cannot tell you is how big a departure has to be before it notices, and that is the thing
         worth knowing because it decides whether "no evidence the rate changes" is reassurance or
         just a small sample. Generating a process whose rate you set answers it directly.</p>
@@ -1309,7 +1328,7 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">2 &middot; Arrivals over time <span class="sec-note">a straight cumulative count means a constant rate</span></div>
+    <div class="sec-hd">2 &middot; Do these arrivals have a constant rate? <span class="sec-note">a straight cumulative count means a constant rate</span></div>
     <div class="plot-wrap">
       <div class="plot-card" style="flex:1 1 440px">
         <div id="cum-host"><div class="plot-empty">Load arrival times to plot them.</div></div>
@@ -1329,13 +1348,13 @@ footer a:hover { text-decoration: underline; }
           script that redraws it in MATLAB, R, or Python, and the pointer over a plot (or a finger
           on it) reads values off both axes.
         </div>
-        <div id="nonstat-out" style="margin-top:10px"></div>
+        <div id="nonstat-peek" style="margin-top:10px"></div>
       </div>
     </div>
   </section>
 
   <section class="sec">
-    <div class="sec-hd">3 &middot; A rate that can change <span class="sec-note">estimating &lambda;(t) one interval at a time, which is what a nonhomogeneous Poisson process needs</span></div>
+    <div class="sec-hd">3 &middot; How might the arrival rate change over time? <span class="sec-note">estimating &lambda;(t) one interval at a time for a nonhomogeneous Poisson process, and testing whether it changes at all</span></div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="a-width">Estimate a rate every (<span class="lit">w</span>)</label>
@@ -1352,14 +1371,17 @@ footer a:hover { text-decoration: underline; }
         <div class="plot-hd">Estimated rate in each interval</div>
         <div id="rate-host"><div class="plot-empty">Load arrival times.</div></div>
       </div>
-      <div style="flex:1 1 300px;min-width:0">
+      <div id="rate-col" style="flex:1 1 300px;min-width:0">
         <div class="plot-hd">Rate table</div>
         <div class="tbl-scroll" id="rate-tbl" style="max-height:340px;overflow-y:auto"></div>
+        <div class="ctrl-note" id="rate-more"></div>
+        <div class="ctrl-row" style="margin-top:6px">
+          <button class="btn2" id="a-csv" type="button">Download the rate table (CSV)</button>
+        </div>
       </div>
     </div>
-    <div class="ctrl-row" style="margin-top:12px">
-      <button class="btn2" id="a-csv" type="button">Download the rate table (CSV)</button>
-    </div>
+    <div class="plot-hd" style="margin-top:14px">Is the rate constant? The Poisson dispersion test</div>
+    <div id="nonstat-out"></div>
     <details class="why">
       <summary>How the rate is estimated, and how to use it in a model</summary>
       <div class="why-body">
@@ -1384,7 +1406,7 @@ footer a:hover { text-decoration: underline; }
 
   <!-- ── 4. ESTIMATING THE RATE ───────────────────────────────────── -->
   <section class="sec">
-    <div class="sec-hd">4 &middot; One rate for the whole window <span class="sec-note">what to do instead when the rate does not change, and how to tell whether you may</span></div>
+    <div class="sec-hd">4 &middot; What is the best choice for a single arrival rate? <span class="sec-note">what to use when the rate does not change, and how to tell whether you may</span></div>
     <div id="rate-mle"><div class="plot-empty">Load arrival times.</div></div>
 
     <div class="split"><span>Diagnostic checks: exponential interarrivals and Poisson counts</span></div>
@@ -1476,7 +1498,7 @@ footer a:hover { text-decoration: underline; }
         <p><strong>So why bother with the counts otherwise?</strong> Because they survive the
         rate not being constant. Each block can carry its own <code>&lambda;</code>; a single
         exponential fitted to all the gaps cannot and will hand you an average that describes no
-        particular moment of the day. When the test in section 2 says the rate is constant, take
+        particular moment of the day. When the dispersion test in section 3 finds no change, take
         the one-line gap estimate. When it says otherwise, the block counts are the whole answer,
         and the single number above is worth nothing but a sanity check.</p>
       </div>
@@ -1496,7 +1518,7 @@ footer a:hover { text-decoration: underline; }
         <div class="eq"><span class="eq-l">Counts</span>
           <span class="eq-r">N(a, b] ~ Poisson( &Lambda;(b) &minus; &Lambda;(a) )</span>
           <span class="eq-n">Counts in non-overlapping intervals are independent. This is the
-          fact the block-count estimate rests on, and the one the dispersion test in section 2
+          fact the block-count estimate rests on, and the one the dispersion test in section 3
           checks.</span></div>
         <div class="eq"><span class="eq-l">Gaps, constant rate</span>
           <span class="eq-r">f(x) = &lambda; exp(&minus;&lambda;x),&nbsp; mean 1/&lambda;</span>
@@ -5001,9 +5023,10 @@ function rateProfile(times, width, t0, t1) {
                                             on k-1 degrees of freedom.
 
    This is the Poisson dispersion test.  It only uses intervals of the full
-   width, since a short final stub would register as a fake dip.  A second,
-   blunter comparison of the first and second halves of the window is
-   returned alongside it because a student can check that one by eye. */
+   width, since a short final stub would register as a fake dip.  The
+   lowest and highest of the tested intervals' rates are returned beside
+   it, because a range describes a peak or a dip as well as a drift; a
+   comparison of the window's two halves would miss a peak in the middle. */
 function stationarityTest(prof) {
   if (!prof) return null;
   var full = prof.rows.filter(function (r) { return r.width >= prof.width * 0.999; });
@@ -5016,12 +5039,10 @@ function stationarityTest(prof) {
   for (i = 0; i < k; i++) { var d = full[i].n - nbar; X2 += d * d / nbar; }
   var df = k - 1;
   var p = gammaQ(df / 2, X2 / 2);
-  /* Halves, for a check that can be done by eye on the cumulative plot. */
-  var mid = Math.floor(k / 2), n1 = 0, n2 = 0;
-  for (i = 0; i < mid; i++) n1 += full[i].n;
-  for (i = k - mid; i < k; i++) n2 += full[i].n;
-  return { ok: true, X2: X2, df: df, p: p, k: k, nbar: nbar,
-           firstHalfRate: n1 / (mid * prof.width), lastHalfRate: n2 / (mid * prof.width) };
+  var lo = Infinity, hi = -Infinity;
+  for (i = 0; i < k; i++) { lo = Math.min(lo, full[i].rate); hi = Math.max(hi, full[i].rate); }
+  return { ok: true, X2: X2, df: df, p: p, k: k, nbar: nbar, n: tot,
+           left: prof.rows.length - k, minRate: lo, maxRate: hi };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -7862,7 +7883,7 @@ var ST = {
 var AST = {          /* tab 2 */
   table: null, col: 0, times: [], gaps: [], clock: false, unit: null,
   /* Two interval widths, each set by its own control: `rate` slices the
-     window for the rate table in section 3 (and the test in section 2),
+     window for the rate table and the dispersion test in section 3,
      and `count` is the tally interval of the counts in section 4. */
   widths: { rate: { idx: 0, custom: null }, count: { idx: 0, custom: null } },
   ladderSpan: null, prof: null, cprof: null,
@@ -11036,6 +11057,7 @@ function renderArrivals() {
     $('cum-host').innerHTML = '<div class="plot-empty">Load arrival times to plot them.</div>';
     $('rate-host').innerHTML = '<div class="plot-empty">Load arrival times.</div>';
     $('rate-tbl').innerHTML = '';
+    $('rate-more').textContent = '';
     $('rate-mle').innerHTML = '<div class="plot-empty">Load arrival times.</div>';
     $('counts-host').innerHTML = '<div class="plot-empty">Load arrival times.</div>';
     $('counts-note').innerHTML = '';
@@ -11043,6 +11065,7 @@ function renderArrivals() {
     $('gapscdf-host').innerHTML = '<div class="plot-empty">Load arrival times.</div>';
     $('gaps-note').textContent = '';
     $('nonstat-out').innerHTML = '';
+    $('nonstat-peek').innerHTML = '';
     ['a-width', 'a-cwidth'].forEach(function (id) {
       $(id + '-val').value = ''; $(id + '-unit').textContent = '';
     });
@@ -11326,12 +11349,45 @@ function drawRate() {
     '<span class="mono">√Nⱼ/w</span>, which is how well one interval knows its rate from the arrivals ' +
     'inside it. The dashed line is not an average of the bars: it is <span class="mono">n/T</span>, ' +
     'every arrival over the whole window, which is the single number section 4 estimates. Bars ' +
-    'straying far from it are what the test in section 2 measures.</div>';
+    'straying far from it are what the dispersion test below measures.</div>';
+}
+
+/* Beside the rate plot (not stacked under it), the table scrolls only past
+   the height of the plot card, so that its column stands level with the
+   card; stacked under it, the table keeps a fixed cap. */
+function fitRateTable() {
+  var tbl = $('rate-tbl'), card = $('rate-host').closest('.plot-card'), col = $('rate-col');
+  var c = card.getBoundingClientRect(), k = col.getBoundingClientRect(), cap = 340;
+  if (c.height > 0 && Math.abs(c.top - k.top) < 2) {
+    /* What the column holds besides the table: its heading and the button. */
+    var rest = k.height - tbl.getBoundingClientRect().height;
+    cap = Math.max(200, Math.floor(c.height - rest));
+  }
+  tbl.style.maxHeight = cap + 'px';
+  rateTableMore();
+}
+/* Which intervals the table's box shows, said under it whenever some are
+   scrolled out of view: an idle scrollbar is hidden on a phone and, by
+   default, on a Mac.  A row counts as shown when half of it is in view. */
+function rateTableMore() {
+  var tbl = $('rate-tbl'), line = $('rate-more');
+  var rows = tbl.querySelectorAll('tbody tr'), k = rows.length;
+  if (!k || tbl.scrollHeight <= tbl.clientHeight + 1) { line.textContent = ''; return; }
+  var head = tbl.querySelector('thead'), box = tbl.getBoundingClientRect();
+  var top = box.top + (head ? head.getBoundingClientRect().height : 0), bot = box.top + tbl.clientHeight;
+  var first = 0, last = 0, i, r, mid;
+  for (i = 0; i < k; i++) {
+    r = rows[i].getBoundingClientRect(); mid = (r.top + r.bottom) / 2;
+    if (mid >= top && mid <= bot) { if (!first) first = i + 1; last = i + 1; }
+  }
+  if (!first) { line.textContent = ''; return; }
+  line.textContent = 'Intervals ' + first + '–' + last + ' of ' + k + ' shown; scroll ' +
+    (last === k ? 'up' : 'the table') + ' for more.';
 }
 
 function renderRateTable() {
   var prof = AST.prof;
-  if (!prof) { $('rate-tbl').innerHTML = ''; return; }
+  if (!prof) { $('rate-tbl').innerHTML = ''; $('rate-more').textContent = ''; return; }
   var h = '<table class="tbl"><thead><tr><th>#</th><th>From</th><th>To</th>' +
           '<th class="num">Arrivals</th><th class="num">Rate</th></tr></thead><tbody>';
   for (var i = 0; i < prof.rows.length; i++) {
@@ -11342,6 +11398,7 @@ function renderRateTable() {
   }
   h += '</tbody></table>';
   $('rate-tbl').innerHTML = h;
+  fitRateTable();
 
   var mean = prof.n / prof.k;
   $('a-width-hint').textContent = prof.k + ' intervals, about ' + fmt(mean, 3) +
@@ -11349,31 +11406,62 @@ function renderRateTable() {
     fmt(mean > 0 ? 100 / Math.sqrt(mean) : 0, 2) + '%';
 }
 
+/* "p = 0.0123", or "p < 0.0001" where fmtP gives a bound rather than a
+   value, with no-break spaces so that a line never ends after the "p". */
+function pText(p) {
+  var f = fmtP(p);
+  return 'p\u00a0' + (f.charAt(0) === '<' ? '<\u00a0' + f.slice(2) : '=\u00a0' + f);
+}
+
+/* The test runs on the rate intervals of section 3 and is reported there;
+   section 2 asks the same question of the cumulative plot, and so it gets
+   the answer in one line with a pointer to the full report. */
 function renderStationarity() {
-  var st = IA.stationarityTest(AST.prof), host = $('nonstat-out');
-  if (!st) { host.innerHTML = ''; return; }
-  if (!st.ok) { host.innerHTML = '<div class="note quiet">' + esc(st.msg) + '</div>'; return; }
-  var reject = st.p < 0.05;
+  var prof = AST.prof, st = IA.stationarityTest(prof), host = $('nonstat-out'), peek = $('nonstat-peek');
+  if (!st) { host.innerHTML = peek.innerHTML = ''; return; }
+  if (!st.ok) {
+    host.innerHTML = '<div class="note quiet">' + esc(st.msg) + '</div>';
+    peek.innerHTML = '<div class="note quiet">The Poisson dispersion test in section 3 answers this ' +
+      'question but cannot run on the intervals set there. ' + esc(st.msg) + '</div>';
+    return;
+  }
+  var reject = st.p < 0.05, uw = unitWord();
+  peek.innerHTML = '<div class="note' + (reject ? '' : ' quiet') + '">' +
+    (reject
+      ? '<strong>No, the rate changes.</strong> The Poisson dispersion test in section 3 finds far ' +
+        'more spread between intervals than one rate allows (' + pText(st.p) + '). Section 3 ' +
+        'estimates how the rate changes over the window.'
+      : '<strong>No evidence that the rate changes.</strong> The Poisson dispersion test in section 3 ' +
+        'finds no more spread between intervals than one rate allows (' + pText(st.p) + '). Section 4 ' +
+        'estimates that single rate.') +
+    '</div>';
+  var last = prof.rows[prof.rows.length - 1];
   host.innerHTML = '<div class="note' + (reject ? '' : ' quiet') + '">' +
     '<strong>' + (reject ? 'The arrival rate is not constant.' : 'No evidence that the rate changes.') +
-    '</strong> Spreading ' + Math.round(st.nbar * st.k) + ' arrivals over ' + st.k + ' equal intervals gives ' +
-    '<span class="mono">X² = ' + fmt(st.X2, 4) + '</span> on ' + st.df + ' degrees of freedom, ' +
-    '<span class="mono">p = ' + fmtP(st.p) + '</span>. ' +
+    '</strong> Under a constant rate, the count in every interval of the table is Poisson with one ' +
+    'shared mean. The test uses the ' + st.k + ' full intervals of width <span class="lit">w</span> = ' +
+    fmt(prof.width, 4) + ' ' + unitAmount(prof.width) +
+    (st.left
+      ? ' (the last, from ' + fmtTime(last.from) + ' to ' + fmtTime(last.to) + ', is shorter and is ' +
+        'left out, because its smaller count would look like a dip)'
+      : '') +
+    ', which hold ' + st.n + ' arrivals, ' + fmt(st.nbar, 3) + ' each on average. Their spread gives ' +
+    '<span class="mono">X² = Σ(Nⱼ − N̄)²/N̄ = ' + fmt(st.X2, 4) + '</span> on ' + st.df +
+    ' degrees of freedom, <span class="mono">' + pText(st.p) + '</span>. ' +
     (st.nbar < 5
       ? '<em>The intervals hold only ' + fmt(st.nbar, 3) + ' arrivals each on average, which is ' +
         'thin for a chi-square approximation. Widen the interval before believing this p-value.</em> '
       : '') +
+    'The interval rates run from ' + fmt(st.minRate, 4) + ' to ' + fmt(st.maxRate, 4) + ' per ' + uw +
+    ', against ' + fmt(prof.overall, 4) + ' for the window as a whole' +
     (reject
-      ? 'The counts vary far more between intervals than a constant rate could explain: the first ' +
-        'half of the window ran at ' + fmt(st.firstHalfRate, 4) + ' per ' + unitWord() +
-        ' and the last half at ' + fmt(st.lastHalfRate, 4) + '. Fitting a single exponential to the ' +
+      ? ', far more spread than a constant rate could explain. Fitting a single exponential to the ' +
         'gaps would give the right average and the wrong system: it would never build the queue ' +
-        'that the busy stretch builds. Use the rate table below instead.'
-      : 'The counts are about as even as a constant rate would make them (' +
-        fmt(st.firstHalfRate, 4) + ' per ' + unitWord() + ' in the first half against ' +
-        fmt(st.lastHalfRate, 4) + ' in the last). Sending the gaps to tab ① with the button in section 4 and fitting an ' +
-        'exponential is defensible. Widen and narrow the interval below before you settle: a peak ' +
-        'much shorter than the interval width can hide inside one interval.') +
+        'that the busy stretch builds. Use the rate table above instead.'
+      : ', about the spread a constant rate gives by chance. Sending the gaps to tab ① with the ' +
+        'button in section 4 and fitting an exponential is defensible. Widen and narrow ' +
+        '<span class="lit">w</span> before you settle: a peak much shorter than the interval ' +
+        'width can hide inside one interval.') +
     '</div>';
 }
 
@@ -11441,16 +11529,16 @@ function renderRateMLE() {
 
   /* And which of the two is worth anything, given what the test found. */
   var verdict = constant
-    ? '<div class="note quiet"><strong>The test in section 2 found no evidence the rate changes,</strong> ' +
+    ? '<div class="note quiet"><strong>The dispersion test in section 3 found no evidence the rate changes,</strong> ' +
       'and so this single number is a fair description of the whole window. Send the gaps to tab ① ' +
       'with the button below and fit an exponential: it will return a mean of ' + fmt(r.meanGap, 5) + ' because the ' +
       'maximum-likelihood estimate of an exponential mean <em>is</em> the sample mean. Confirming ' +
       'that once is a good use of five seconds: it is a rare chance to check a numerical fitting ' +
       'routine against arithmetic you can do by hand.</div>'
-    : '<div class="note"><strong>The test in section 2 says the rate is not constant, and so treat the ' +
+    : '<div class="note"><strong>The dispersion test in section 3 says the rate is not constant, and so treat the ' +
       'numbers above as a sanity check and nothing more.</strong> A single <span class="lit">λ̂</span> of ' + fmt(r.lamGap, 5) +
-      ' per ' + uw + ' is the average over a window in which the true rate went from about ' +
-      fmt(st.firstHalfRate, 4) + ' to about ' + fmt(st.lastHalfRate, 4) + ', and it describes no ' +
+      ' per ' + uw + ' is the average over a window in which the interval rates ran from ' +
+      fmt(st.minRate, 4) + ' to ' + fmt(st.maxRate, 4) + ', and it describes no ' +
       'particular moment of it. The interval rates in section 3 are the answer here; fitting one ' +
       'exponential to these gaps would give a model that reproduces the daily total and never ' +
       'builds the queue the busy stretch builds.</div>';
@@ -11519,7 +11607,7 @@ function drawGapsHist() {
   if (note) {
     var st = IA.stationarityTest(AST.prof);
     note.innerHTML = st && st.ok && st.p < 0.05
-      ? 'These two plots assume one rate for the whole window, which the test in section 2 says is ' +
+      ? 'These two plots assume one rate for the whole window, which the dispersion test in section 3 says is ' +
         'wrong here. Expect them to look poor, and expect a fit on <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> to be poor for the same reason.'
       : '<a class="tab-link" href="#fit" data-tab="fit">Tab ①</a> fits all eighteen candidates to these gaps and tests them properly. The exponential ' +
         'it returns will have mean ' + fmt(r.meanGap, 5) + ', the number above.';
@@ -11660,7 +11748,7 @@ function drawCounts() {
   note.innerHTML =
     '<div class="hint">A Poisson process puts a Poisson distribution on the count in any fixed ' +
     'window, and so if the rate is constant these bars should sit under those spikes. This is the ' +
-    'claim the test in section 2 scores, drawn here at the counting interval.</div>' +
+    'claim the dispersion test in section 3 scores, drawn here at the counting interval.</div>' +
     /* Two across rather than auto-fit: this grid sits in a column beside
        the histogram, and four labels squeezed into that width each wrap to
        three lines. */
@@ -11686,7 +11774,7 @@ function drawCounts() {
       ? (ratio > 1.5
           ? 'At ' + fmt(ratio, 3) + ' the counts are <em>overdispersed</em>: they vary more between ' +
             'intervals than a constant rate can explain, which is the same thing the dispersion ' +
-            'test in section 2 measures.'
+            'test in section 3 measures.'
           : (ratio < 0.6
             ? 'At ' + fmt(ratio, 3) + ' the counts are <em>under</em>dispersed: more evenly spread ' +
               'between intervals than chance would make them. Appointments and scheduled deliveries ' +
@@ -11697,9 +11785,9 @@ function drawCounts() {
     'per arrival. Narrow the counting interval to get more of them, and each will rest on fewer ' +
     'arrivals; widen it for the opposite.' +
     (st && st.ok
-      ? ' The dispersion test of section 2, run on these counts, is this ratio times ' + (k - 1) +
+      ? ' The dispersion test of section 3, run on these counts, is this ratio times ' + (k - 1) +
         ': <span class="mono">X² = ' + fmt(st.X2, 4) + '</span> on ' + st.df + ' degrees of freedom, ' +
-        '<span class="mono">p = ' + fmtP(st.p) + '</span>.'
+        '<span class="mono">' + pText(st.p) + '</span>.'
       : '') + '</div>';
 }
 
@@ -13227,6 +13315,7 @@ function showTab(name) {
 /* A tab's plots size themselves to their containers, which have no width
    while the tab is hidden, and so a tab is redrawn as it is shown. */
 function onTabShown(name) {
+  if (name === 'arr' && AST.prof) fitRateTable();
   if (name === 'pair' && PST.table) renderPairAll();
   if (name === 'time' && SST.table) renderSeriesAll();
 }
@@ -13466,6 +13555,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('a-send').addEventListener('click', sendGapsToFit);
   $('a-send-counts').addEventListener('click', sendCountsToFit);
   $('a-csv').addEventListener('click', csvRates);
+  $('rate-tbl').addEventListener('scroll', rateTableMore, { passive: true });
 
   /* ── Open on something, rather than on a blank form ───────────── */
   var s0 = SAMPLES.iat;
