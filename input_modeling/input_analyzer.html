@@ -10988,16 +10988,19 @@ var A_LOADER = makeLoader({
    a window measured in minutes, and their multiples elsewhere. That
    matters beyond taste, because an arrival schedule typed into Arena or
    Simio is usually in hour or ten-minute blocks and the table below is
-   what gets typed. Widths leaving fewer than 2 or more than 60 intervals
-   are dropped as unusable. */
-function widthLadder(span) {
+   what gets typed. Widths leaving fewer than 2 or more than maxK intervals
+   are dropped as unusable: 60 for the rate plot and table, and for the
+   counting interval twice the arrivals, where an interval holds half an
+   arrival on average and the counts are nearly all 0 or 1. */
+function widthLadder(span, maxK) {
+  maxK = maxK || 60;
   var mult = [1, 2, 5, 10, 15, 20, 30, 60], out = [], e, i, w, k;
   for (e = -6; e <= 9; e++) {
     var pw = Math.pow(10, e);
     for (i = 0; i < mult.length; i++) {
       w = mult[i] * pw;
       k = span / w;
-      if (k >= 2 && k <= 60) out.push(Number(w.toPrecision(12)));
+      if (k >= 2 && k <= maxK) out.push(Number(w.toPrecision(12)));
     }
   }
   out.sort(function (a, b) { return a - b; });
@@ -11008,11 +11011,12 @@ function widthLadder(span) {
   if (!uniq.length) uniq = [span / 10, span / 5, span / 2];
   return uniq;
 }
-/* The entry nearest ten intervals, which is where a rate estimate has
-   enough arrivals behind it to mean something and still enough intervals
-   to show a peak. */
-function defaultWidthIdx(ladder, span) {
-  var want = span / 10, best = 0, bestD = Infinity, i, d;
+/* The entry nearest k intervals.  For the rate, ten: a rate estimate then
+   has enough arrivals behind it to mean something, and there are still
+   enough intervals to show a peak.  For the counts, more, because each
+   interval is one observation in the histogram of counts. */
+function defaultWidthIdx(ladder, span, k) {
+  var want = span / (k || 10), best = 0, bestD = Infinity, i, d;
   for (i = 0; i < ladder.length; i++) {
     d = Math.abs(Math.log(ladder[i] / want));
     if (d < bestD) { bestD = d; best = i; }
@@ -11117,16 +11121,20 @@ function renderArrivals() {
 
   /* Rebuilt whenever the span changes, so the sliders always offer widths
      that suit the data in front of it. */
-  var ladder = widthLadder(span);
+  var ladders = { rate: widthLadder(span, 60),
+                  count: widthLadder(span, Math.max(60, 2 * (t.length - 1))) };
   if (AST.ladderSpan !== span) {
     AST.ladderSpan = span;
-    /* A new dataset gets the ladder's default for both widths. */
+    /* A new dataset gets each ladder's default: ten rate intervals, and
+       thirty counting intervals, or one per arrival when there are fewer,
+       so that a typical count is at least about one. */
+    var kDefault = { rate: 10, count: Math.max(10, Math.min(30, t.length - 1)) };
     ['rate', 'count'].forEach(function (k) {
-      AST.widths[k] = { idx: defaultWidthIdx(ladder, span), custom: null };
+      AST.widths[k] = { idx: defaultWidthIdx(ladders[k], span, kDefault[k]), custom: null };
     });
   }
-  AST.prof = IA.rateProfile(t, syncWidth('rate', ladder), t0, t1);
-  AST.cprof = IA.rateProfile(t, syncWidth('count', ladder), t0, t1);
+  AST.prof = IA.rateProfile(t, syncWidth('rate', ladders.rate), t0, t1);
+  AST.cprof = IA.rateProfile(t, syncWidth('count', ladders.count), t0, t1);
   showWidthCount('rate', AST.prof);
   showWidthCount('count', AST.cprof);
   drawCumulative();
@@ -13429,17 +13437,23 @@ document.addEventListener('DOMContentLoaded', function () {
       aWidthSay(which, '');
       renderArrivals();
     });
-    /* A typed width is taken as given, within the bounds that keep the
-       rate table and the plots drawable. */
+    /* A typed width is taken as given, within bounds.  The rate width is
+       capped at 500 intervals, past which the rate plot gives each one
+       less than a pixel and the table runs to hundreds of rows.  The
+       counting interval only sets how many counts the histogram holds, and
+       so its cap guards against a mistyped width and nothing else. */
     $(id + '-val').addEventListener('change', function () {
       var span = AST.times.length > 1 ? AST.times[AST.times.length - 1] - AST.times[0] : 0;
       var v = Number(this.value);
       if (!(v > 0) || !(span > 0)) { AST.widths[which].custom = null; renderArrivals(); return; }
-      var MAX_INTERVALS = 500;
+      var MAX_INTERVALS = which === 'rate' ? 500 : 100000;
       if (span / v > MAX_INTERVALS) {
         v = span / MAX_INTERVALS;
-        aWidthSay(which, 'That width would make more than ' + MAX_INTERVALS + ' intervals, which is ' +
-                  'more than the table or the test can use. Widened to ' + IA.num(v, 6) + '.');
+        aWidthSay(which, 'That width would make more than ' + MAX_INTERVALS.toLocaleString('en-US') +
+                  ' intervals, ' + (which === 'rate'
+                    ? 'more than the rate plot can draw or the table can usefully list'
+                    : 'far more than a histogram of counts needs') +
+                  '. Widened to ' + IA.num(v, 6) + '.');
       } else if (v >= span) {
         v = span / 2;
         aWidthSay(which, 'A width at or above the whole window leaves nothing to compare. Set to half of it.');
