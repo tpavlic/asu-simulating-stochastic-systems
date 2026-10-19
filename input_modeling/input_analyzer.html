@@ -8310,13 +8310,35 @@ function activeKeys() {
   if (fam === 'discrete') return IA.DISCRETE_KEYS;
   return ST.johnson ? IA.CONTINUOUS_KEYS.concat(IA.JOHNSON_KEYS) : IA.CONTINUOUS_KEYS;
 }
-/* Both Johnson members are continuous, and so under the discrete family
-   the box has nothing to add and is grayed, as Arena grays its own menu
-   entries that do not apply to the data. */
-function syncJohnsonBox() {
+/* A fit option that cannot apply is grayed, as Arena grays its own menu
+   entries that do not apply to the data, and its tip then says why.  No
+   discrete candidate is shifted, mirrored, or a Johnson member, and so
+   under the discrete family all three boxes have nothing to do.  The shift
+   is also grayed while the mirror image is on, since a mirrored fit
+   estimates its own end point, and when the picked model takes no shift. */
+function setTip(el, text) {
+  if (el.dataset.tipBase === undefined) el.dataset.tipBase = el.getAttribute('data-tip') || '';
+  var t = text || el.dataset.tipBase;
+  el.setAttribute('data-tip', t);
+  var id = el.getAttribute('aria-describedby'), sp = id && document.getElementById(id);
+  if (sp) sp.innerHTML = t;
+}
+function setBoxOff(wrapId, chkId, why) {
+  $(wrapId).classList.toggle('off', !!why);
+  $(chkId).disabled = !!why;
+  setTip($(wrapId), why);
+}
+function syncFitBoxes() {
   var disc = !!ST.s && activeFamily() === 'discrete';
-  $('johnson-wrap').classList.toggle('off', disc);
-  $('johnson-chk').disabled = disc;
+  var r = pickedRow(), d = r && r.dist;
+  var toCont = ' Set Family to Continuous to use it.';
+  setBoxOff('shift-wrap', 'shift-chk',
+    disc ? 'None of the discrete candidates takes a shift.' + toCont
+    : ST.reflect ? 'The mirror image estimates its own end point, and so a shift has nothing to add while it is on.'
+    : d && !d.shiftable ? 'The picked model, the ' + esc(distLower(d)) + ', takes no separate shift; section 3 says why.'
+    : null);
+  setBoxOff('reflect-wrap', 'reflect-chk', disc ? 'None of the discrete candidates is mirrored.' + toCont : null);
+  setBoxOff('johnson-wrap', 'johnson-chk', disc ? 'Both Johnson members are continuous.' + toCont : null);
 }
 
 function currentBinK() {
@@ -8325,7 +8347,7 @@ function currentBinK() {
 }
 
 function refitAll() {
-  syncJohnsonBox();
+  syncFitBoxes();
   if (!ST.x || ST.x.length < 2) { renderAllEmpty(); return; }
   var k = currentBinK();
   $('bins').value = String(k);
@@ -8561,14 +8583,10 @@ function renderDisagreement(bAic, bBic, bLl, bSqe) {
 function renderShiftNote() {
   var r = pickedRow();
   var el = $('shift-note');
-  var wrap = $('shift-wrap');
   if (!r) { el.innerHTML = 'Load some data first.'; return; }
   var d = r.dist;
-  /* The mirror image always estimates its own end point c, and so while it
-     is on, the shift box has nothing to say about any candidate. */
-  wrap.classList.toggle('off', !d.shiftable || ST.reflect);
-  $('shift-chk').disabled = !d.shiftable || ST.reflect;
-  var mirrorNA = !ST.reflect ? ''
+  syncFitBoxes();
+  var mirrorNA = !ST.reflect || d.kind === 'discrete' ? ''
     : d.key === 'pearson6'
       ? ' It is not mirrored either, because a mirrored fit estimates an end point just as the shift does.'
       : ' The mirror image does not apply to it either: it flips only the candidates that start at ' +
