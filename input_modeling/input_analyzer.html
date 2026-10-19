@@ -703,7 +703,7 @@ footer a:hover { text-decoration: underline; }
         <select id="fam-pick">
           <option value="auto">Choose for me</option>
           <option value="continuous">Continuous</option>
-          <option value="discrete">Discrete (counts)</option>
+          <option value="discrete">Discrete</option>
         </select>
       </span>
     </div>
@@ -3588,7 +3588,7 @@ function lowerBound(q, v) {
 /* ══ Poisson(lambda) ═══════════════════════════════════════════════ */
 DISTS.poisson = {
   key: 'poisson', name: 'Poisson', lower: 'Poisson', kind: 'discrete', np: 1, shiftable: false,
-  params: [{ sym: 'λ', name: 'mean count' }],
+  params: [{ sym: 'α', name: 'mean count' }],
   lo: function () { return 0; },
   fit: function (x) {
     for (var i = 0; i < x.length; i++)
@@ -4772,7 +4772,7 @@ var AD_TABLE = { 0.10: 1.933, 0.05: 2.492, 0.025: 3.070, 0.01: 3.857 };
    constraints the fit itself would impose.  Distributions with no typed
    parameters (the two empirical ones) are absent, and so are not offered. */
 var GEN_SPEC = {
-  expo:      [{ sym: 'β', name: 'mean',          def: 5,   min: 1e-12 }],
+  expo:      [{ sym: 'β', also: '= 1/λ', name: 'mean',          def: 5,   min: 1e-12 }],
   gamma:     [{ sym: 'α', name: 'shape',         def: 2,   min: 1e-6 },
               { sym: 'β', name: 'scale',         def: 1.5, min: 1e-12 }],
   erlang:    [{ sym: 'k', name: 'stages',        def: 3,   min: 1, int: true },
@@ -4802,7 +4802,7 @@ var GEN_SPEC = {
               { sym: 'β', name: 'shape 2',       def: 5,  min: 1e-6 },
               { sym: 'L', name: 'lower end',     def: 0 },
               { sym: 'U', name: 'upper end',     def: 1,  gt: 2 }],
-  poisson:   [{ sym: 'λ', name: 'mean count',    def: 4,  min: 1e-9, max: 1e5 }],
+  poisson:   [{ sym: 'α', name: 'mean count',    def: 4,  min: 1e-9, max: 1e5 }],
   geometric: [{ sym: 'p', name: 'success prob.', def: 0.3, min: 1e-9, max: 1 }],
   discreteUniform: [{ sym: 'a', name: 'smallest', def: 1, int: true },
                     { sym: 'b', name: 'largest',  def: 6, int: true, gt: 0 }],
@@ -8070,9 +8070,11 @@ function renderStats() {
 
   var msg;
   if (isCountData(s)) {
-    msg = '<strong>These look like counts.</strong> Every value is a whole number and there are ' +
-      'only ' + s.nUnique + ' distinct ones, and so the discrete candidates are the right family. ' +
-      'Continuous fits are still offered, and are a reasonable approximation once the counts get large.';
+    msg = '<strong>These look like counts.</strong> Every value is a whole number at or above zero, ' +
+      'and ' + s.nUnique + ' distinct values among ' + s.n + ' repeat the way counts do, and so ' +
+      '<em>Choose for me</em> fits the discrete candidates. If they are measurements recorded to ' +
+      'whole units instead, set <em>Family</em> to <em>Continuous</em>; continuous fits are a ' +
+      'reasonable approximation to counts once the counts get large.';
   } else if (s.min < 0) {
     msg = '<strong>Some values are negative,</strong> so the candidates that live on the positive ' +
       'half-line (the exponential, gamma, Erlang, Weibull, lognormal, log-logistic, and Pearson type V) can ' +
@@ -8090,6 +8092,12 @@ function renderStats() {
                 : 'A cv below 1 means the data is less variable than an exponential. Look at the ' +
                   'gamma, the Erlang, or a Weibull with a shape above 1.'))
         : '');
+    if (wholeNonNeg(s) && !ST.clockUnit) {
+      msg += ' <strong>Every value is a whole number, but these are read as measurements</strong> ' +
+        'recorded to whole units rather than as counts: ' + s.nUnique + ' distinct values among ' +
+        s.n + ' are more than counts this size would take. If they are counts, set <em>Family</em> ' +
+        'to <em>Discrete</em>.';
+    }
     if (s.nUnique < s.n * 0.5) {
       msg += ' <strong>Many values repeat</strong> (' + s.nUnique + ' distinct out of ' + s.n +
         '), which usually means the data was rounded when it was recorded. That is fine for fitting, ' +
@@ -8159,7 +8167,9 @@ function buildGenParams() {
     wrap.className = 'gen-p';
     var lab = document.createElement('label');
     lab.setAttribute('for', 'gen-p' + i);
-    lab.textContent = q.sym;
+    /* A label may carry a second name for the parameter (the exponential's
+       mean beside the rate most texts write it with), shown only here. */
+    lab.textContent = q.also ? q.sym + ' (' + q.also + ')' : q.sym;
     // The symbol alone does not say what it is, so the word rides along as a tip
     // rather than as a title, which a phone would never show.
     lab.className = 'tip';
@@ -8272,9 +8282,23 @@ function runGenerator() {
    recording granularity -- never a count -- so it is never offered the
    discrete candidates whatever the seconds field happened to be. */
 var DISCRETE_MAX_SPAN = 5000;
+/* Few distinct values is the plain case.  Counts with a larger mean take
+   more of them -- a Poisson's values spread over about 8 standard
+   deviations, 8 sqrt(mean) values -- and so a count column with mean 60
+   has thirty-odd, which a fixed cap of 30 would call continuous.  Such a
+   column still repeats its values, as counts do, and stays within the
+   spread a count of that size has room for; a measurement recorded to
+   whole units (seconds, say) has almost every value distinct, or spreads
+   far wider than sqrt(mean).  Allowing 10 sqrt(mean) leaves room for counts
+   somewhat more dispersed than a Poisson. */
+function wholeNonNeg(s) {
+  return !!(s && s.allInt && s.min >= 0 && (s.max - s.min) <= DISCRETE_MAX_SPAN);
+}
 function isCountData(s) {
   if (ST.clockUnit) return false;   /* known to be a duration, not a count */
-  return !!(s && s.allInt && s.nUnique <= 30 && s.min >= 0 && (s.max - s.min) <= DISCRETE_MAX_SPAN);
+  if (!wholeNonNeg(s)) return false;
+  if (s.nUnique <= 30) return true;
+  return s.nUnique <= 10 * Math.sqrt(Math.max(s.mean, 1)) && 2 * s.nUnique <= s.n;
 }
 function activeFamily() {
   var fam = ST.family;
@@ -9110,7 +9134,7 @@ function derivedRows(d, f) {
     out.push(['model median', fmt(medJ, 5), 'compare it with the sample median of ' + fmt(ST.s.med, 5)]);
   }
   if (d.key === 'poisson') {
-    out.push(['s² / λ̂ &nbsp;<span class="p-what">variance over mean</span>',
+    out.push(['s² / α̂ &nbsp;<span class="p-what">variance over mean</span>',
       fmt(ST.s.sd * ST.s.sd / p[0], 4),
       'the sample variance divided by the fitted mean. A Poisson has variance equal to its mean, ' +
       'and so this should be near 1. Well above it means the counts are overdispersed and a ' +
