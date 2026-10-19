@@ -188,7 +188,7 @@ a:focus-visible, textarea:focus-visible {
 /* ── Data entry ──────────────────────────────────────────────────────── */
 /* On a wide screen the paste box stretches to the height of the summary
    cards beside it, and the sample and file buttons run across both columns
-   underneath.  On a narrow one the column order is box, buttons, cards. */
+   underneath. On a narrow one the column order is box, buttons, cards. */
 .data-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px 13px;
              grid-template-areas: "input info" "tools tools"; }
 .data-input { grid-area: input; display: flex; flex-direction: column; }
@@ -308,9 +308,9 @@ table.tbl th { text-align: left; font-size: .68rem; font-weight: 700; color: var
    one needs the same escape hatch. */
 table.tbl th .lit { text-transform: none; letter-spacing: 0; }
 /* A header that carries an explanation needs a finger-sized way in, and a
-   line of 11px type gives it 14 pixels.  The padding grows the hit area to
+   line of 11px type gives it 14 pixels. The padding grows the hit area to
    the 24 the guideline asks for and the negative margin takes the space
-   back, so the row is laid out exactly as it was before.  Sideways the
+   back, so the row is laid out exactly as it was before. Sideways the
    padding stops at 4px, which is inside the 8px gutter between columns:
    any wider and two headers would overlap and a tap near the boundary
    would open the wrong one. */
@@ -324,11 +324,11 @@ table.tbl td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--grid); ver
 table.tbl td.num { font-family: 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
 table.tbl tr:last-child td { border-bottom: none; }
 table.tbl tr.picked td { background: var(--accent-wash); }
-/* The rate table scrolls inside its own box.  Its header row stays in
+/* The rate table scrolls inside its own box. Its header row stays in
    view (a sticky cell drops a collapsed border, so the rule under it is a
    shadow), and its scrollbar is styled, which keeps it shown where the
    system would hide an idle one, with its width reserved so that the
-   numbers do not shift when it appears.  Firefox takes only the standard
+   numbers do not shift when it appears. Firefox takes only the standard
    properties, and Chrome ignores its own styling once those are set, so
    they are given to Firefox alone. */
 #rate-tbl { scrollbar-gutter: stable; }
@@ -347,11 +347,11 @@ table.tbl tr.clickable { cursor: pointer; }
 table.tbl tr.clickable:hover td { background: var(--accent-tint); }
 /* Keyboard focus on a selectable row.  :focus-visible rather than :focus, so
    the ring answers a Tab key and never a mouse click, and the table looks
-   exactly as it did before to a reader using a pointer.  The offset is
+   exactly as it did before to a reader using a pointer. The offset is
    negative because a collapsed border leaves no room outside the row box. */
 table.tbl tr.clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Holding a parameter: a checkbox and, once ticked, the value to hold it
-   at.  Kept in the parameter table rather than in a panel of its own, so
+   at. Kept in the parameter table rather than in a panel of its own, so
    the estimate you are replacing is on the same line as the replacement. */
 .hold-cell { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .hold-cell { min-height: 26px; }
@@ -675,7 +675,7 @@ footer a:hover { text-decoration: underline; }
         they are fitted only on request (the box in section 2), never by default. That is what they
         are for here. Every other
         choice here rewards the ranking table for recovering a distribution that is genuinely on
-        its menu, which is a flattering test; real data is never on anybody's menu. A Johnson
+        its menu, which is a flattering test; real data are never on anybody's menu. A Johnson
         sample gives the table nothing to recover; what you see is how well the best available
         approximation does, which is the situation you are actually in every time you fit a
         distribution to something you measured.</p>
@@ -761,7 +761,7 @@ footer a:hover { text-decoration: underline; }
     <details class="why">
       <summary>Why the criteria disagree, and which one to believe</summary>
       <div class="why-body">
-        <p><strong>Log-likelihood</strong> asks how probable your data is under each fitted model.
+        <p><strong>Log-likelihood</strong> asks how probable your data are under each fitted model.
         It always improves when a distribution has more parameters, because each one adds modeling
         flexibility. On its own it would therefore pick the most flexible candidate every time,
         whether or not that flexibility described anything real.</p>
@@ -839,7 +839,7 @@ footer a:hover { text-decoration: underline; }
 
   <!-- ── 4. GOODNESS OF FIT ───────────────────────────────────────── -->
   <section class="sec">
-    <div class="sec-hd">4 &middot; Goodness of fit <span class="sec-note">what the data looks like, and whether the fitted model matches it</span></div>
+    <div class="sec-hd">4 &middot; Goodness of fit <span class="sec-note">what the data look like, and whether the fitted model matches them</span></div>
 
     <div class="ctrl-row">
       <span class="ctrl-grp">
@@ -939,7 +939,7 @@ footer a:hover { text-decoration: underline; }
         correction belongs to 2&times;2 tables and would be out of place here.)</p>
         <p>So the slider moves the p-value for two reasons at once: it changes which observations
         share a bin, and it changes how many groups survive pooling. Push the bin count high enough
-        and the group count stops rising because there is only so much data to spread.</p>
+        and the group count stops rising because there are only so many observations to spread.</p>
         <p>Chi-square does correct for having fitted the distribution to the same data, in the
         only place it can: it subtracts one degree of freedom per estimated parameter. Two details
         of that subtraction are worth knowing, and the readout applies both.</p>
@@ -1081,7 +1081,7 @@ footer a:hover { text-decoration: underline; }
         axis against the fitted distribution's quantile at that same probability on the horizontal
         axis. A perfect fit puts every point on the 45&deg; line.</p>
         <p>The shape of the departure tells you what is wrong. Points bending <em>above</em> the
-        line at the right-hand end mean your data has a heavier upper tail than the fitted
+        line at the right-hand end mean your data have a heavier upper tail than the fitted
         distribution: the big values are bigger than the model expects, which for a queueing
         model is usually the departure that matters. An S-shape means the fitted distribution has
         the wrong skewness. A few stray points at the very ends, with everything else on the line,
@@ -2038,8 +2038,8 @@ footer a:hover { text-decoration: underline; }
 <footer>&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></footer>
 
 <!-- ════════════════════════════════════════════════════════════════════
-     CORE NUMERICS.  Everything between the IA-CORE sentinels is pure: no
-     DOM, no globals beyond the IA namespace at the end.  Two things read
+     CORE NUMERICS. Everything between the IA-CORE sentinels is pure: no
+     DOM, no globals beyond the IA namespace at the end. Two things read
      this block directly, which is why it is fenced and given an id:
 
        * verify_input_analyzer.mjs (not shipped with the page) slices it
@@ -2055,11 +2055,11 @@ footer a:hover { text-decoration: underline; }
 'use strict';
 
 /* ─────────────────────────────────────────────────────────────────────
-   1.  PSEUDORANDOM NUMBER GENERATOR
+   1. PSEUDORANDOM NUMBER GENERATOR
    ─────────────────────────────────────────────────────────────────────
    MRG32k3a, from P. L'Ecuyer, "Good parameters and implementations for
    combined multiple recursive random number generators", Operations
-   Research 47(1):159-164, 1999.  Two combined multiple-recursive
+   Research 47(1):159-164, 1999. Two combined multiple-recursive
    generators of order 3, period about 2^191.
 
    Chosen over a bit-twiddling generator because every intermediate
@@ -2077,7 +2077,7 @@ var MRG_A21 = 527612,  MRG_A23N = 1370589;
 var MRG_NORM = 2.328306549295728e-10;   /* 1 / (m1 + 1) */
 
 /* splitmix32: used only to spread one typed seed across the six state
-   words.  Not used to generate any variate. */
+   words. Not used to generate any variate. */
 function splitmix32(a) {
   return function () {
     a = (a + 0x9e3779b9) | 0;
@@ -2123,13 +2123,13 @@ function MRG32k3a(seed) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   2.  SPECIAL FUNCTIONS
+   2. SPECIAL FUNCTIONS
    ───────────────────────────────────────────────────────────────────── */
 
 /* log Gamma(x), Lanczos approximation with g = 7 and 9 coefficients.
    Coefficients as published by Boost / the widely circulated Lanczos g=7
    set (Press et al., Numerical Recipes 3rd ed., section 6.1, uses the same
-   scheme).  Relative accuracy about 1e-15 on the positive real axis. */
+   scheme). Relative accuracy about 1e-15 on the positive real axis. */
 var LANCZOS_G7 = [
   0.99999999999980993, 676.5203681218851, -1259.1392167224028,
   771.32342877765313, -176.61502916214059, 12.507343278686905,
@@ -2156,7 +2156,7 @@ function logBeta(a, b) { return logGamma(a) + logGamma(b) - logGamma(a + b); }
    each converges fastest. */
 /* Both the series and the continued fraction need roughly sqrt(a) terms
    when x sits near a, so the iteration cap is what really bounds the
-   usable range of a.  At 2000 that covers a up to a few million, which
+   usable range of a. At 2000 that covers a up to a few million, which
    comfortably contains every Poisson mean the page will accept; a 300
    cap silently returned wrong answers above a ~ 1e4 instead of failing.
    The cost is paid only when it is needed: every loop below breaks on
@@ -2200,7 +2200,7 @@ function gcf(a, x) {
   return Math.exp(-x + a * Math.log(x) - logGamma(a)) * h;
 }
 
-/* Regularized incomplete beta I_x(a,b).  Numerical Recipes 3rd ed.,
+/* Regularized incomplete beta I_x(a,b). Numerical Recipes 3rd ed.,
    section 6.4: the continued fraction of Lentz, applied to whichever of
    x and 1-x puts the argument on the fast side of (a+1)/(a+b+2). */
 function betaInc(a, b, x) {
@@ -2233,7 +2233,7 @@ function betacf(a, b, x) {
 }
 
 /* erf and erfc, expressed through the incomplete gamma functions:
-   erf(x) = P(1/2, x^2) and erfc(x) = Q(1/2, x^2) for x >= 0.  Reusing
+   erf(x) = P(1/2, x^2) and erfc(x) = Q(1/2, x^2) for x >= 0. Reusing
    gammaP/gammaQ keeps one continued fraction to verify instead of two. */
 function erf(x)  { return x < 0 ? -gammaP(0.5, x * x) : gammaP(0.5, x * x); }
 function erfc(x) { return x < 0 ? 1 + gammaP(0.5, x * x) : gammaQ(0.5, x * x); }
@@ -2242,7 +2242,7 @@ var SQRT2 = Math.SQRT2;
 function normPdf(z) { return Math.exp(-0.5 * z * z) / 2.5066282746310002; }
 function normCdf(z) { return 0.5 * erfc(-z / SQRT2); }
 
-/* Inverse standard normal CDF.  Peter Acklam's rational approximation
+/* Inverse standard normal CDF. Peter Acklam's rational approximation
    (relative error < 1.15e-9), followed by one Halley refinement step
    against erfc, which takes it to full double precision. */
 var ACK_A = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
@@ -2277,11 +2277,11 @@ function normInv(p) {
 }
 
 /* digamma and trigamma: recurrence up to 6, then the standard asymptotic
-   expansions (Abramowitz & Stegun 6.3.18 and 6.4.12).  Needed by the
+   expansions (Abramowitz & Stegun 6.3.18 and 6.4.12). Needed by the
    gamma and beta maximum-likelihood equations. */
 function digamma(x) {
   /* The asymptotic series is truncated after the 1/x^10 term, whose first
-     omitted term is 691/(32760 x^12).  Recurring up to 14 rather than the
+     omitted term is 691/(32760 x^12). Recurring up to 14 rather than the
      more common 6 puts that below 1e-15, which the verification script
      checks against psi(1) = -gamma and the recurrence psi(x+1)-psi(x)=1/x. */
   var r = 0;
@@ -2303,12 +2303,12 @@ function trigamma(x) {
 
 
 /* ─────────────────────────────────────────────────────────────────────
-   3.  GENERAL-PURPOSE NUMERICAL TOOLS
+   3. GENERAL-PURPOSE NUMERICAL TOOLS
    ───────────────────────────────────────────────────────────────────── */
 
-/* Bisection on a function known to change sign on [lo, hi].  Used for the
+/* Bisection on a function known to change sign on [lo, hi]. Used for the
    Weibull shape equation, which is monotone, so bisection is both certain
-   to converge and easy to reason about.  55 halvings take any starting
+   to converge and easy to reason about. 55 halvings take any starting
    bracket down to relative width 3e-17. */
 function bisect(f, lo, hi, iters) {
   var flo = f(lo), fhi = f(hi), mid = 0, fm;
@@ -2335,7 +2335,7 @@ function bracketRoot(f, lo, hi, grow, tries) {
 }
 
 /* Safeguarded Newton for inverting a CDF: Newton where it behaves, a
-   bisection step whenever Newton would leave the bracket or stall.  This
+   bisection step whenever Newton would leave the bracket or stall. This
    is the standard way to get a quantile function out of a CDF that has no
    closed-form inverse (gamma, beta) without paying for 200 bisections at
    every point of a Q-Q plot. */
@@ -2358,13 +2358,13 @@ function invertCdf(cdf, pdf, u, lo, hi, x0) {
   return x;
 }
 
-/* Nelder-Mead simplex search, minimizing f over R^d.  Used for the fits
+/* Nelder-Mead simplex search, minimizing f over R^d. Used for the fits
    with no likelihood equations worth solving -- the triangular, whose
    log-likelihood is only piecewise smooth in its parameters, so a
    derivative method has nothing reliable to hold onto.
 
    Standard coefficients (Nelder & Mead 1965): reflection 1, expansion 2,
-   contraction 1/2, shrink 1/2.  The initial simplex offsets each
+   contraction 1/2, shrink 1/2. The initial simplex offsets each
    coordinate by 5%, or by 0.05 where the coordinate is zero. */
 function nelderMead(f, x0, opts) {
   opts = opts || {};
@@ -2415,7 +2415,7 @@ function nelderMead(f, x0, opts) {
   return { x: simplex[0], f: fv[0] };
 }
 
-/* Sum of exp(v_i) computed as exp(max) * sum(exp(v_i - max)).  The Weibull
+/* Sum of exp(v_i) computed as exp(max) * sum(exp(v_i - max)). The Weibull
    shape equation needs sum(x^k) for k that can reach the hundreds, where
    the naive product overflows to Infinity and takes the fit with it. */
 function logSumExp(v) {
@@ -2427,7 +2427,7 @@ function logSumExp(v) {
   return m + Math.log(s);
 }
 /* ─────────────────────────────────────────────────────────────────────
-   4.  DATA PARSING
+   4. DATA PARSING
    ─────────────────────────────────────────────────────────────────────
    Deliberately forgiving: students arrive with a column copied out of a
    spreadsheet, a CSV with a header row, a file whose lines end in a
@@ -2506,7 +2506,7 @@ function parseTable(text) {
     /* With tabs as the delimiter, a row whose first cells are empty starts
        with tabs, and trim() would take them for padding and slide every
        value left into the wrong column (a spreadsheet column that runs
-       longer than those before it pastes this way).  So a tab-separated
+       longer than those before it pastes this way). So a tab-separated
        row is trimmed of every whitespace but the tab. */
     var body = delim === '\t' ? lines[j].replace(/^[^\S\t]+|[^\S\t]+$/g, '')
              : delim ? trimmed : trimmed.replace(/[,;|\t]+$/, '');
@@ -2559,7 +2559,7 @@ function parseTable(text) {
   /* Header row: the first row counts as a header when at least one of its
      cells is present but is neither a number nor a clock time. Clock
      times have to be allowed through, or the first arrival in a column of
-     "08:05:30" values is silently eaten as a column name.  So do clock
+     "08:05:30" values is silently eaten as a column name. So do clock
      durations no time of day can be, such as "05:12.3" or "75:12". */
   var head = rows[0], isHeader = false;
   for (var h = 0; h < head.length; h++) {
@@ -2594,7 +2594,7 @@ function columnValues(col) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   5.  SUMMARY STATISTICS
+   5. SUMMARY STATISTICS
    ───────────────────────────────────────────────────────────────────── */
 function summarize(x) {
   var n = x.length;
@@ -2630,7 +2630,7 @@ function uniqueCount(sorted) {
 }
 
 /* Clock times for the arrival tab: "8:05", "08:05:30", optionally with an
-   am/pm suffix, converted to minutes past midnight.  Returns NaN for
+   am/pm suffix, converted to minutes past midnight. Returns NaN for
    anything that is not a clock time, so a caller can fall back to toNum. */
 function toClockMinutes(cell) {
   var s = String(cell).trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase();
@@ -2726,11 +2726,11 @@ function columnTimes(col, conv) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   6.  DISTRIBUTIONS
+   6. DISTRIBUTIONS
    ─────────────────────────────────────────────────────────────────────
    Each entry supplies pdf (pmf for the discrete ones), cdf, quantile,
    loglik, and sample on its own parameters, plus a fit() that receives
-   data ALREADY shifted by any location offset.  fit() returns
+   data ALREADY shifted by any location offset. fit() returns
    { ok, p, msg } so a refusal ("gamma needs strictly positive values")
    can be shown to the reader rather than turning into a silent NaN
    somewhere downstream.
@@ -2738,7 +2738,7 @@ function columnTimes(col, conv) {
    Parameters are named and ORDERED the way the course text and Arena name
    them -- Exponential(beta) with beta the MEAN rather than the rate,
    Weibull(beta, alpha) with the scale first -- because the point of the
-   page is to type the answer into a simulation model.  The export panel
+   page is to type the answer into a simulation model. The export panel
    re-orders and re-expresses them per tool.
 
    Fields:
@@ -2797,7 +2797,7 @@ DISTS.expo = {
 
 /* ══ Gamma(alpha shape, beta scale) ════════════════════════════════
    The likelihood equation reduces to  ln(alpha) - psi(alpha) = s, where
-   s = ln(xbar) - mean(ln x), and then beta = xbar/alpha.  The starting
+   s = ln(xbar) - mean(ln x), and then beta = xbar/alpha. The starting
    value is the closed-form approximation of Choi & Wette (1969), which is
    good to a few percent, after which Newton on the one remaining equation
    converges in three or four steps. */
@@ -2808,7 +2808,7 @@ DISTS.gamma = {
   fit: function (x) {
     if (!allPositive(x)) return { ok: false, msg: 'Gamma needs strictly positive values. Try the location shift.' };
     var xbar = meanOf(x), s = Math.log(xbar) - meanLog(x);
-    /* s > 0 always, by Jensen; a tiny or negative s means the data is
+    /* s > 0 always, by Jensen; a tiny or negative s means the data are
        essentially constant and the shape runs off to infinity. */
     if (!(s > 1e-12)) return { ok: false, msg: 'These values are too nearly identical for a gamma fit.' };
     var a = (3 - s + Math.sqrt((s - 3) * (s - 3) + 24 * s)) / (12 * s);
@@ -2847,7 +2847,7 @@ DISTS.gamma = {
     return (a - 1) * sl - s / b - n * (a * Math.log(b) + logGamma(a));
   },
   /* Marsaglia & Tsang (2000), "A simple method for generating gamma
-     variables", ACM TOMS 26(3):363-372.  The a<1 case is handled by the
+     variables", ACM TOMS 26(3):363-372. The a<1 case is handled by the
      standard boost:  G(a) = G(a+1) * U^(1/a). */
   sample: function (u01, p) { return gammaVariate(u01, p[0]) * p[1]; }
 };
@@ -2867,7 +2867,7 @@ function gammaVariate(u01, a) {
 
 /* ══ Erlang(k integer shape, beta scale) ═══════════════════════════
    A gamma constrained to a whole-number shape, which is what a queueing
-   model wants when a task is a sequence of k identical stages.  The MLE
+   model wants when a task is a sequence of k identical stages. The MLE
    over the integers is found by fitting the unconstrained gamma and then
    comparing the two neighboring integers -- the profile likelihood in the
    shape is unimodal, so the integer optimum is one of those two. */
@@ -2901,9 +2901,9 @@ DISTS.erlang = {
 
 /* ══ Weibull(beta scale, alpha shape) ══════════════════════════════
    Arena writes WEIB(scale, shape), so the parameters are held in that
-   order.  Eliminating the scale from the two likelihood equations leaves
+   order. Eliminating the scale from the two likelihood equations leaves
    one equation in the shape alone, monotone increasing, solved by
-   bisection.  Sums of x^k are accumulated through logSumExp because k can
+   bisection. Sums of x^k are accumulated through logSumExp because k can
    reach the hundreds on tightly clustered data, where x^k overflows. */
 DISTS.weibull = {
   key: 'weibull', name: 'Weibull', lower: 'Weibull', kind: 'continuous', np: 2, shiftable: true,
@@ -2958,9 +2958,9 @@ DISTS.weibull = {
 
 /* ══ Lognormal(mu, sigma) of the LOG ═══════════════════════════════
    mu and sigma are the mean and standard deviation of ln(X), which is what
-   R, MATLAB, and scipy want.  Arena's LOGN instead takes the mean and
+   R, MATLAB, and scipy want. Arena's LOGN instead takes the mean and
    standard deviation of X itself; both are reported, and the export panel
-   uses whichever each tool expects.  The MLE is the sample mean and the
+   uses whichever each tool expects. The MLE is the sample mean and the
    sample standard deviation of the logs, the latter with the n divisor. */
 DISTS.lognormal = {
   key: 'lognormal', name: 'Lognormal', lower: 'lognormal', kind: 'continuous', np: 2, shiftable: true,
@@ -2998,7 +2998,7 @@ DISTS.lognormal = {
    CDF is the logistic curve in the logarithm:
      F(x) = 1 / (1 + (x/beta)^-alpha),   median beta.
    The mean is finite only for alpha > 1, and the variance only for
-   alpha > 2.  Its right tail falls off as a power of x, slower than any
+   alpha > 2. Its right tail falls off as a power of x, slower than any
    gamma or Weibull, and for alpha > 1 its hazard rate rises and then
    falls.
 
@@ -3082,7 +3082,7 @@ DISTS.loglogistic = {
      f(x) = beta^alpha x^-(alpha+1) e^(-beta/x) / Gamma(alpha),
    which is Law's parameterization (and scipy's invgamma with scale beta).
    Its left end is pushed hard against zero by the e^(-beta/x) factor and
-   its right tail falls off as a power of x.  The mean beta/(alpha - 1)
+   its right tail falls off as a power of x. The mean beta/(alpha - 1)
    exists only for alpha > 1.
 
    The Jacobian of x -> 1/x does not involve the parameters, and so the
@@ -3129,14 +3129,14 @@ DISTS.pearson5 = {
    T = X/(X + beta) is beta(alpha1, alpha2) distributed, and so for a
    fixed scale beta the two shapes are a beta fit to t = x/(x + beta), and
    the log-likelihood of x is that beta's plus the Jacobian
-   Sum ln(beta/(x + beta)^2).  The fit profiles over ln(beta): a coarse
+   Sum ln(beta/(x + beta)^2). The fit profiles over ln(beta): a coarse
    grid, followed by a root of the profile's derivative inside the
-   bracketing cells.  By the envelope theorem that derivative is the partial
+   bracketing cells. By the envelope theorem that derivative is the partial
    derivative at the profile's own shapes,
      d ll / d ln(beta) = n ((alpha1 + alpha2) mean(t) - alpha1),
    and so it comes free with every profile evaluation.
 
-   It takes no location shift.  With a shift, it would have four
+   It takes no location shift. With a shift, it would have four
    parameters, and samples of a few hundred do not pin down four: in
    trials, the shift and the shapes traded off against each other along a
    nearly flat ridge, and the fit, run once per bootstrap resample, took
@@ -3145,7 +3145,7 @@ DISTS.pearson5 = {
    The gamma and the Pearson type V are both limits of this family (as
    beta and alpha2 grow together, and as beta shrinks while alpha1 grows),
    and data from either one drives the profile to the matching end of
-   the search, where the likelihood is still creeping upward.  The fit
+   the search, where the likelihood is still creeping upward. The fit
    then stops at that end, a valid Pearson VI within a hair of the limit,
    and flags `edge` so the page can say which limit it is approaching. */
 var PT6_SPAN = 9;   /* ln(beta) searched over ln(median) +/- this */
@@ -3261,10 +3261,10 @@ DISTS.normal = {
 /* ══ Uniform(a, b) ═════════════════════════════════════════════════
    The likelihood is (b-a)^-n on any interval covering the data and zero
    otherwise, so it is maximized by the tightest such interval: a = min,
-   b = max.  Both endpoints count as estimated parameters. */
+   b = max. Both endpoints count as estimated parameters. */
 DISTS.uniform = {
   key: 'uniform', name: 'Uniform', lower: 'uniform', kind: 'continuous', np: 2, shiftable: false,
-  /* a and b are the sample minimum and maximum.  See ORDER_STAT_NOTE. */
+  /* a and b are the sample minimum and maximum. See ORDER_STAT_NOTE. */
   orderStat: [0, 1], locParam: 0,
   params: [{ sym: 'a', name: 'minimum' }, { sym: 'b', name: 'maximum' }],
   lo: function (p) { return p[0]; },
@@ -3287,8 +3287,8 @@ DISTS.uniform = {
    The density is zero at a and at b, so -- unlike the uniform -- the
    endpoints are NOT the sample minimum and maximum: putting a at min(x)
    would give the smallest observation zero density and drive the whole
-   likelihood to zero.  The maximum is therefore strictly inside
-   a < min(x), b > max(x), and there is no formula for it.  Nelder-Mead
+   likelihood to zero. The maximum is therefore strictly inside
+   a < min(x), b > max(x), and there is no formula for it. Nelder-Mead
    searches an unconstrained parameterization that cannot violate
    a < m < b or step inside the data:
 
@@ -3368,10 +3368,10 @@ DISTS.triangular = {
    The beta-PERT: a beta on [a, b] whose two shapes are fixed by where the
    most likely value m sits,
        alpha1 = 1 + 4 (m - a)/(b - a),   alpha2 = 1 + 4 (b - m)/(b - a),
-   and so its mode is exactly m and its mean is (a + 4m + b)/6.  It is
+   and so its mode is exactly m and its mean is (a + 4m + b)/6. It is
    specified like the triangular, by three numbers, but its density falls
-   to zero smoothly at both ends, and its tails are thinner.  Simio has it
-   as Random.Pert(a, m, b).  Both shapes lie between 1 and 5, and so the
+   to zero smoothly at both ends, and its tails are thinner. Simio has it
+   as Random.Pert(a, m, b). Both shapes lie between 1 and 5, and so the
    density is bounded and, unless m sits on an end, zero at a and b: as for
    the triangular, the maximum-likelihood endpoints lie strictly outside
    the data, and the same unconstrained Nelder-Mead search finds them. */
@@ -3453,8 +3453,8 @@ DISTS.pert = {
 /* The two beta shapes from the sufficient statistics of a sample on
    (0,1): ml and m1l are the means of ln y and ln(1 - y), and my and vy the
    mean and the n-divisor variance of y, which give the method-of-moments
-   start.  Newton on the 2x2 system whose Jacobian is built from trigamma.
-   Returns [a, b], or null if the iteration fails.  Shared by the beta,
+   start. Newton on the 2x2 system whose Jacobian is built from trigamma.
+   Returns [a, b], or null if the iteration fails. Shared by the beta,
    whose y is the data rescaled to [L, U], and by the Pearson type VI,
    whose y is x/(x + beta). */
 function betaShapes(ml, m1l, my, vy) {
@@ -3481,14 +3481,14 @@ function betaShapes(ml, m1l, my, vy) {
 
 /* ══ Beta(alpha, beta) rescaled onto [L, U] ════════════════════════
    A beta lives on a bounded interval, and its density is either zero or
-   infinite at the two ends, so the data cannot sit exactly on them.  The
+   infinite at the two ends, so the data cannot sit exactly on them. The
    interval is taken as the data range widened by half the average gap
-   between consecutive order statistics, R/(2(n-1)) at each end.  That is a
+   between consecutive order statistics, R/(2(n-1)) at each end. That is a
    convention rather than a derivation -- there is no agreed best answer --
    but it scales with the data and it degrades gracefully as n grows.
 
-   L and U are read off the data, so they ARE estimated from it, and
-   np = 4 counts them.  Reporting np = 2 would let the beta win AIC
+   L and U are read off the data, so they ARE estimated from them, and
+   np = 4 counts them. Reporting np = 2 would let the beta win AIC
    comparisons on flexibility it did not pay for.
 
    alpha and beta then follow from the two likelihood equations
@@ -3497,10 +3497,10 @@ function betaShapes(ml, m1l, my, vy) {
    trigamma, started from the method-of-moments estimate. */
 DISTS.beta = {
   key: 'beta', name: 'Beta', lower: 'beta', kind: 'continuous', np: 4, shiftable: false,
-  /* L and U come from the sample range.  See ORDER_STAT_NOTE. */
+  /* L and U come from the sample range. See ORDER_STAT_NOTE. */
   orderStat: [2, 3], locParam: 2,
   /* Only the first two parameters are found by maximizing the likelihood;
-     L and U are read off the data range.  They still count toward np
+     L and U are read off the data range. They still count toward np
      because they are estimated from the data either way -- but a check
      that perturbing a fitted parameter cannot improve the likelihood
      applies to the first two only. */
@@ -3563,15 +3563,15 @@ DISTS.beta = {
    Law & Kelton's continuous empirical distribution: the CDF passes through
    the order statistics with F(x_(i)) = (i-1)/(n-1), joined by straight
    lines, so the density is a step function that is constant between
-   consecutive observations.  This is Arena's CONT() and Simio's
+   consecutive observations. This is Arena's CONT() and Simio's
    Random.Continuous.
 
-   It is not a candidate in the same sense as the others.  It has as many
-   parameters as you have data, it cannot produce a value outside the range
+   It is not a candidate in the same sense as the others. It has as many
+   parameters as you have observations, it cannot produce a value outside the range
    you already observed, and its "fit" to your sample is by construction
    almost perfect -- which is exactly why AIC, BIC, and the goodness-of-fit
    tests are withheld for it (noCriteria) rather than reported and quietly
-   believed.  It earns its place as an export option and as the thing to
+   believed. It earns its place as an export option and as the thing to
    fall back on when no named distribution will sit on the data. */
 DISTS.empirical = {
   key: 'empirical', name: 'Empirical (piecewise linear)', lower: 'empirical (piecewise linear)', kind: 'continuous',
@@ -3625,7 +3625,7 @@ function lowerBound(q, v) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Discrete candidates.  cdf(v) is P(X <= floor(v)), so the same histogram
+   Discrete candidates. cdf(v) is P(X <= floor(v)), so the same histogram
    and goodness-of-fit machinery works on bin edges without special cases.
    ───────────────────────────────────────────────────────────────────── */
 
@@ -3670,9 +3670,9 @@ DISTS.poisson = {
 };
 
 /* ══ Geometric(p), counting FAILURES BEFORE the first success ══════
-   Support {0, 1, 2, ...}.  Stated explicitly because the other convention
+   Support {0, 1, 2, ...}. Stated explicitly because the other convention
    -- counting trials, support {1, 2, ...} -- is equally common, and R's
-   rgeom uses this one while scipy's geom uses the other.  The export panel
+   rgeom uses this one while scipy's geom uses the other. The export panel
    adjusts for each tool. */
 DISTS.geometric = {
   key: 'geometric', name: 'Geometric', lower: 'geometric', kind: 'discrete', np: 1, shiftable: false,
@@ -3738,7 +3738,7 @@ DISTS.discreteUniform = {
 };
 
 /* ══ Discrete empirical ════════════════════════════════════════════
-   The observed relative frequencies, Arena's DISC().  Like the continuous
+   The observed relative frequencies, Arena's DISC(). Like the continuous
    empirical it is withheld from the criteria columns: with one parameter
    per distinct value it will always describe the sample it was built from
    better than any two-parameter law can. */
@@ -3786,33 +3786,33 @@ DISTS.discreteEmpirical = {
 
 /* ══ The Johnson translation system: S_B and S_U ═══════════════════
    N. L. Johnson, "Systems of frequency curves generated by methods of
-   translation", Biometrika 36:149-176, 1949.  Each member is a normal
+   translation", Biometrika 36:149-176, 1949. Each member is a normal
    variable put through a monotone transformation, so if
    Z ~ Normal(0,1) then
 
      S_B (bounded):    X = xi + lambda / (1 + exp(-(Z - gamma)/delta))
      S_U (unbounded):  X = xi + lambda sinh((Z - gamma)/delta)
 
-   with delta > 0 and lambda > 0.  Between them the two cover almost the
+   with delta > 0 and lambda > 0. Between them the two cover almost the
    whole plane of skewness and kurtosis a distribution can have, which is
    what they are for.
 
-   THEY ARE FITTED ONLY ON REQUEST (optIn), never by default.  The
+   THEY ARE FITTED ONLY ON REQUEST (optIn), never by default. The
    generator offers them so that a reader can make data that nothing on
    the default fitting menu matches exactly, and watch the best fit be
    genuinely, honestly wrong rather than secretly right; every dataset
    drawn from a fitted family rewards the ranking table for recovering the
-   truth, and Johnson data rewards it for nothing, which is what real data
-   does.  With the box ticked they join the ranking, where four parameters
+   truth, and Johnson data reward it for nothing, which is what real data
+   do. With the box ticked they join the ranking, where four parameters
    that reach almost any skewness and kurtosis tend to win on flexibility
    alone, and the row note says so every time.
 
-   FITTING.  Both members are fitted by maximum likelihood over all four
-   parameters.  Given the location and scale (xi, lambda), the two shapes
+   FITTING. Both members are fitted by maximum likelihood over all four
+   parameters. Given the location and scale (xi, lambda), the two shapes
    are closed form: with w_i the transformed observation (the logit of
    y_i = (x_i - xi)/lambda for S_B, asinh(y_i) for S_U), z = gamma +
    delta w is standard normal, and so delta = 1/sd(w) and
-   gamma = -mean(w)/sd(w), with the population standard deviation.  The
+   gamma = -mean(w)/sd(w), with the population standard deviation. The
    profile log-likelihood in (xi, lambda) is then
 
      n ln delta - n ln lambda + J - n/2 - n ln sqrt(2 pi),
@@ -3825,19 +3825,19 @@ DISTS.discreteEmpirical = {
    ln(xi + lambda - max), because its profile falls to -infinity as either
    endpoint reaches an observation (the Jacobian term wins), so the
    maximum is always strictly outside the data and the gaps are the
-   natural coordinates.  Both endpoints are therefore ESTIMATED, unlike
+   natural coordinates. Both endpoints are therefore ESTIMATED, unlike
    the beta's, which are read off the range, and all four parameters are
    regular ones for the chi-square degrees of freedom.
 
-   LIMITS.  As lambda grows with delta, both members turn into the
+   LIMITS. As lambda grows with delta, both members turn into the
    normal; as one S_B endpoint recedes, or S_U's location recedes with
-   its scale, they turn into the lognormal (Johnson's S_L).  On data that
+   its scale, they turn into the lognormal (Johnson's S_L). On data that
    are close to either limit the profile keeps rising in that direction
    without a maximum, and so the search is capped at JOHNSON_CAP ranges
    from the data and a fit that ends past JOHNSON_EDGE ranges is reported
    with `edge` set, the way the Pearson type VI reports its own limits;
    which limit is named by comparing the fit's log-likelihood with the
-   closed-form normal and lognormal fits of the same sample.  S_U reaches
+   closed-form normal and lognormal fits of the same sample. S_U reaches
    the lognormal a second way, as lambda shrinks toward zero with gamma
    running off, which puts the whole sample on one exponential arm of the
    sinh; its scale is capped below at sd/JOHNSON_CAP, and a fitted
@@ -3996,7 +3996,7 @@ DISTS.johnsonSU = {
     if (!best) return { ok: false, msg: 'The Johnson Sᵤ fit did not converge.' };
     var out = { ok: true, p: best.p };
     /* Far out in location or scale, the fit is a limiting member, named by
-       comparing it with the closed-form normal and lognormal fits.  Nearer
+       comparing it with the closed-form normal and lognormal fits. Nearer
        in, a shape ratio |gamma|/delta above 2.5 puts the whole sample on
        one exponential arm of the sinh, where S_U is the three-parameter
        lognormal (mirrored when gamma is positive). */
@@ -4037,7 +4037,7 @@ DISTS.johnsonSU = {
 function discreteQuantile(dist, u, p, guess) {
   var lo = Math.max(0, Math.floor(dist.lo(p)));
   if (!(u > 0)) return lo;
-  /* Bracket by doubling outward from the guess, then bisect.  A one-step
+  /* Bracket by doubling outward from the guess, then bisect. A one-step
      walk is fine for a Poisson with a mean of 4 and catastrophic for one
      with a mean of a million -- and the difference between those is a
      number the reader types, not something this function can assume. */
@@ -4055,7 +4055,7 @@ function discreteQuantile(dist, u, p, guess) {
 
 /* Ordered candidate lists, which is also the order the ranking table falls
    back on when two candidates tie. */
-/* The fitting candidates.  The two Johnson members are not on the default
+/* The fitting candidates. The two Johnson members are not on the default
    list on purpose (see the comment on DISTS.johnsonSB); the page appends
    JOHNSON_KEYS to the continuous list only when the reader asks. */
 var CONTINUOUS_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic',
@@ -4064,7 +4064,7 @@ var DISCRETE_KEYS = ['poisson', 'geometric', 'discreteUniform', 'discreteEmpiric
 var JOHNSON_KEYS = ['johnsonSB', 'johnsonSU'];
 
 /* ─────────────────────────────────────────────────────────────────────
-   7.  FITTING, WITH AN OPTIONAL LOCATION SHIFT
+   7. FITTING, WITH AN OPTIONAL LOCATION SHIFT
    ─────────────────────────────────────────────────────────────────────
    With the shift on, the fitted model is  gamma + D(theta), and the fit
    maximizes the PROFILE log-likelihood over gamma: for each candidate
@@ -4081,24 +4081,24 @@ var JOHNSON_KEYS = ['johnsonSB', 'johnsonSU'];
 
      * The profile log-likelihood CONVERGES as gamma approaches min(x).
        That is the shifted exponential: its maximum-likelihood estimate of
-       the threshold really is the sample minimum.  Nothing is wrong; the
+       the threshold really is the sample minimum. Nothing is wrong; the
        fit is reported with atBound set, and the reader is told that the
        threshold is an order statistic, so it inherits that statistic's
        optimistic bias.
 
      * The profile log-likelihood DIVERGES to infinity as gamma approaches
-       min(x).  That is what a gamma, Weibull, or lognormal fit does when
+       min(x). That is what a gamma, Weibull, or lognormal fit does when
        the fitted shape drops below 1: the density blows up at its own
        left endpoint, and the likelihood can be run up without limit by
        putting that spike on the smallest observation and abandoning the
-       rest of the sample.  There is no maximum to find.  The fit is
+       rest of the sample. There is no maximum to find. The fit is
        reported with degenerate set and falls back to a conservative
        gamma, so the numbers stay usable while the UI says plainly that
        the three-parameter fit is not identified by this sample.
 
    The two are separated by shrinking d by a further factor of 1000 at the
    bottom of the range and asking whether the log-likelihood is still
-   climbing.  A converging profile gains essentially nothing; a diverging
+   climbing. A converging profile gains essentially nothing; a diverging
    one gains about as much again on every decade. */
 var D_MIN_FRAC = 1e-10;   /* smallest  min(x) - gamma, as a fraction of the range */
 var D_MAX_FRAC = 3;       /* largest   min(x) - gamma, as a multiple of the range */
@@ -4108,7 +4108,7 @@ var DIVERGE_GAIN = 0.05;  /* log-likelihood units per extra factor of 1000 in d 
 
 /* ── Holding parameters at values you choose ───────────────────────
    `fixed` is an array parallel to the distribution's parameters: null for
-   "estimate this one", a number for "hold it here".  Holding changes two
+   "estimate this one", a number for "hold it here". Holding changes two
    things that matter far beyond the parameter itself.
 
    It changes k, and so AIC, BIC, and the chi-square degrees of freedom: a
@@ -4116,16 +4116,16 @@ var DIVERGE_GAIN = 0.05;  /* log-likelihood units per extra factor of 1000 in d 
 
    And when EVERY parameter is held, nothing at all has been estimated
    from the sample -- which is exactly the assumption the published K-S
-   and A-D tables are built on.  In that case the table column becomes the
+   and A-D tables are built on. In that case the table column becomes the
    correct p-value, and the bootstrap should agree with it to within
-   bootstrap noise.  That is the control condition for everything this
+   bootstrap noise. That is the control condition for everything this
    page says about the two columns: the table is not broken, estimating
    parameters is what breaks it, and holding them fixed puts it right
-   again.  It is worth doing once.
+   again. It is worth doing once.
 
    With some but not all parameters held there is no closed form left, so
    the free ones are found by Nelder-Mead on the profile, started from the
-   unconstrained fit with the held values written over it.  Any parameter
+   unconstrained fit with the held values written over it. Any parameter
    vector the distribution cannot accept scores as a large penalty rather
    than as an error, which is what keeps the search inside the region
    where the likelihood exists. */
@@ -4137,7 +4137,7 @@ function fitWithHolds(dist, x, fixed) {
     var pf = fixed.slice();
     var llf = dist.loglik(x, pf);
     if (!Number.isFinite(llf))
-      return { ok: false, msg: 'The values you held cannot have produced this data: at least one ' +
+      return { ok: false, msg: 'The values you held cannot have produced these data: at least one ' +
         'observation has zero probability under them.' };
     return { ok: true, p: pf, freeCount: 0 };
   }
@@ -4173,15 +4173,15 @@ function hasHolds(fixed) {
 /* ── The mirror image ───────────────────────────────────────────────
    With `reflect` set, a candidate that starts at zero is fitted as
    X = c - Y instead of X = gamma + Y: the same shape flipped, ending at c
-   with its long tail on the left.  That is the shifted fit run on -x, whose
+   with its long tail on the left. That is the shifted fit run on -x, whose
    estimated start gamma' is -c, and so the profile search, the at-bound
    and divergence diagnosis, and the holds all carry over unchanged; a held
    c arrives here in the data's own units and is negated on the way in.
    A reflection has a Jacobian of 1, and so the log-likelihood of x under
    c - Y equals that of -x under gamma' + Y, and AIC and BIC stay
-   comparable with every unreflected row.  The result stores c in `shift`
+   comparable with every unreflected row. The result stores c in `shift`
    and sets `reflect`; fitCdf, fitPdf, fitQuantile, and fitSampler below
-   read the two together.  Candidates that do not start at zero (the
+   read the two together. Candidates that do not start at zero (the
    normal, uniform, triangular, beta, empirical, and the Pearson type VI,
    which takes no shift) are fitted as usual. */
 /* Set by fitDist for the duration of a fit: a distribution whose own fit
@@ -4251,7 +4251,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   if (!(range > 0)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
   var dMin = D_MIN_FRAC * range, dMax = D_MAX_FRAC * range;
   /* Inside the bootstrap this profile runs once per resample, so the grid
-     is coarsened there.  The estimate it returns is the same to within far
+     is coarsened there. The estimate it returns is the same to within far
      less than the sampling noise the bootstrap is measuring. */
   var gridN = fast ? 32 : GRID_N, golden = fast ? 40 : 80;
 
@@ -4290,7 +4290,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   if (!Number.isFinite(fin.ll))
     return { ok: false, msg: 'The location-shifted fit did not converge.' };
 
-  /* At the bound?  Then find out which of the two situations this is. */
+  /* At the bound? Then find out which of the two situations this is. */
   var atBound = dOpt <= dMin * 1.5, degenerate = false;
   if (atBound) {
     var deeper = score(dMin * 1e-3);
@@ -4309,7 +4309,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
 }
 
 /* The fitted model's CDF, pdf, and quantile ON THE DATA'S OWN SCALE, that
-   is with the location shift folded back in.  Everything downstream --
+   is with the location shift folded back in. Everything downstream --
    plots, goodness of fit, export -- goes through these three, so the shift
    is handled in exactly one place. */
 function fitCdf(fit) {
@@ -4334,37 +4334,37 @@ function fitLo(fit) { return fit.reflect ? -Infinity : fit.shift + fit.dist.lo(f
 /* ─────────────────────────────────────────────────────────────────────
    ORDER_STAT_NOTE: why two different parameter counts
    ─────────────────────────────────────────────────────────────────────
-   A uniform's endpoints are the sample minimum and maximum.  A beta's
-   interval is read off the same two numbers.  A shifted exponential's
-   threshold is the sample minimum.  These are not ordinary estimates:
+   A uniform's endpoints are the sample minimum and maximum. A beta's
+   interval is read off the same two numbers. A shifted exponential's
+   threshold is the sample minimum. These are not ordinary estimates:
    an extreme order statistic converges to what it is estimating at rate
    1/n rather than the usual 1/sqrt(n), so asymptotically it behaves like
    a constant that was known all along.
 
-   That matters for the chi-square test.  The familiar correction --
+   That matters for the chi-square test. The familiar correction --
    subtract one degree of freedom per estimated parameter -- comes from
    those parameters absorbing one dimension each of the discrepancy
    between observed and expected counts, and it is derived for parameters
-   that are asymptotically normal.  A super-efficient endpoint absorbs
+   that are asymptotically normal. A super-efficient endpoint absorbs
    nothing asymptotically, so subtracting for it is simply wrong, and it
-   costs the test power for nothing.  kChi therefore counts only the
+   costs the test power for nothing. kChi therefore counts only the
    regular parameters.
 
-   AIC and BIC keep the full count.  Their penalty is a charge for
-   complexity, and a number read off the data is a number the data paid
-   for however fast it converged.  (Strictly, the AIC expansion assumes
+   AIC and BIC keep the full count. Their penalty grows with
+   complexity, and a number read off the data was estimated from them,
+   however fast it converged. (Strictly, the AIC expansion assumes
    regularity too, and no standard replacement exists for this case; the
    full count is the conservative choice and is stated rather than hidden.)
 
    None of this affects the K-S and A-D bootstrap p-values, which never
    count parameters at all -- they re-estimate whatever was estimated and
-   measure the consequences directly.  That is also why the chi-square
+   measure the consequences directly. That is also why the chi-square
    statistic is bootstrapped here alongside them: it turns the whole
    question above into something a reader can check rather than take on
    trust.
    ───────────────────────────────────────────────────────────────────── */
 
-/* Log-likelihood, AIC, BIC.  k counts every quantity estimated from the
+/* Log-likelihood, AIC, BIC. k counts every quantity estimated from the
    data, the location shift included when it was estimated. */
 function infoCriteria(ll, k, n) {
   return { ll: ll, k: k, aic: 2 * k - 2 * ll, bic: k * Math.log(n) - 2 * ll };
@@ -4386,9 +4386,9 @@ function regularCount(fit) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   8.  PLOTTING POSITIONS
+   8. PLOTTING POSITIONS
    ─────────────────────────────────────────────────────────────────────
-   p_i = (i - 0.5)/n, the Hazen positions.  Chosen over i/(n+1) because
+   p_i = (i - 0.5)/n, the Hazen positions. Chosen over i/(n+1) because
    they are symmetric, never reach 0 or 1, and are what most textbooks
    show for a Q-Q plot. */
 function plottingPositions(n) {
@@ -4403,11 +4403,11 @@ function theoreticalQuantiles(dist, fit, n) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   9.  HISTOGRAM BINS
+   9. HISTOGRAM BINS
    ─────────────────────────────────────────────────────────────────────
    One binning serves the histogram, the fitted-density overlay, the
    chi-square test, and the square-error criterion, so that dragging the
-   bin slider visibly moves all four together.  That coupling is the point:
+   bin slider visibly moves all four together. That coupling is the point:
    it is what makes "the square-error criterion depends on the binning"
    something a reader can watch happen rather than take on trust. */
 function makeBins(x, k) {
@@ -4415,12 +4415,12 @@ function makeBins(x, k) {
   if (!(hi > lo)) hi = lo + 1;
   var edges = [], counts, width, integer = false;
 
-  /* Count data gets bins on the half-integers, so that no observation ever
-     sits on a bin edge.  With equal-width bins over [min, max] a boundary
+  /* Count data get bins on the half-integers, so that no observation ever
+     sits on a bin edge. With equal-width bins over [min, max] a boundary
      lands on a whole number, and then the histogram counts that value in
      one bin while the fitted model's probability puts it in the other --
      a mismatch that shows up as a large chi-square on a fit that is in
-     fact perfect.  The count is a demand rather than a request, so the
+     fact perfect. The count is a demand rather than a request, so the
      realized number of bins can be smaller than the slider asks for. */
   if (s.allInt && (hi - lo) < 5000) {
     integer = true;
@@ -4454,14 +4454,14 @@ function makeBins(x, k) {
 /* Sturges' rule, the default in most textbooks and in Arena. */
 function sturges(n) { return Math.max(3, Math.min(40, Math.round(1 + Math.log2(n)))); }
 
-/* Probability the fitted model assigns to each bin.  The first bin is
+/* Probability the fitted model assigns to each bin. The first bin is
    extended down to the model's own lower limit and the last bin up to
    infinity, so the probabilities sum to exactly 1 and the chi-square test
    is not quietly missing the tails. */
 function binProbabilities(fit, edges) {
   var F = fitCdf(fit), k = edges.length - 1, p = new Array(k), i;
-  /* Bins are half-open, [a, b).  For a continuous model that distinction
-     carries no probability and F(b) - F(a) is right either way.  For a
+  /* Bins are half-open, [a, b). For a continuous model that distinction
+     carries no probability and F(b) - F(a) is right either way. For a
      discrete one it carries a whole atom, so the probability wanted is
      P(X < b) - P(X < a), obtained by evaluating the step CDF just below
      each edge. */
@@ -4478,7 +4478,7 @@ function binProbabilities(fit, edges) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   10.  GOODNESS-OF-FIT STATISTICS
+   10. GOODNESS-OF-FIT STATISTICS
    ───────────────────────────────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -4487,7 +4487,7 @@ function binProbabilities(fit, edges) {
    ─────────────────────────────────────────────────────────────────────
    The chi-square approximation to the distribution of the statistic
    depends on each cell holding enough expected observations for the
-   normal approximation inside it to hold.  The long-standing rule of
+   normal approximation inside it to hold. The long-standing rule of
    thumb is an expected count of at least 5 per cell, and it is enforced
    here rather than merely warned about: adjacent bins are merged, left to
    right, until each group clears 5.
@@ -4495,17 +4495,17 @@ function binProbabilities(fit, edges) {
    Merging changes the test, so it is reported rather than done quietly:
    the readout names the number of groups, the degrees of freedom follow
    the GROUPS and not the bins, and the bin table shows which display bins
-   ended up together.  The slider still moves the p-value because more
+   ended up together. The slider still moves the p-value because more
    bins still means more groups until pooling saturates -- and now it does
    so while the test stays valid.
 
-   No continuity correction is applied.  Yates' correction is for 2x2
+   No continuity correction is applied. Yates' correction is for 2x2
    tables and would be out of place here.
    ───────────────────────────────────────────────────────────────────── */
 var CHI_MIN_EXPECTED = 5;
 
 /* One left-to-right sweep: accumulate bins into the current group until
-   its expected count reaches the floor, then start a new one.  A final
+   its expected count reaches the floor, then start a new one. A final
    group left short is merged backwards into its neighbor, which is the
    only direction left to go. */
 function poolBins(counts, probs, n, minExpected) {
@@ -4574,11 +4574,11 @@ function ksStat(sorted, F, atom) {
      Repeated values must be handled as a block: the empirical CDF rises by
      the whole weight of a tied run in a single step, so comparing against
      i/n at the first member and (i+1)/n at the last is what the definition
-     asks for.  Walking one element at a time would credit the fit with a
+     asks for. Walking one element at a time would credit the fit with a
      gap the step function never has, and inflate D on any rounded data.
 
      And the comparison just BELOW a value must use the fitted CDF just
-     below it too.  For a continuous fit those are the same number.  For a
+     below it too. For a continuous fit those are the same number. For a
      discrete one they differ by the whole atom at that value, and using
      F(v) on both sides would overstate D by the largest probability the
      distribution puts on any single point -- which for a Poisson fit is
@@ -4620,12 +4620,12 @@ function adStat(sorted, F) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   11.  PARAMETRIC BOOTSTRAP FOR THE K-S AND A-D P-VALUES
+   11. PARAMETRIC BOOTSTRAP FOR THE K-S AND A-D P-VALUES
    ─────────────────────────────────────────────────────────────────────
    The published K-S critical values assume the distribution was fully
-   specified before the data was seen.  Estimating the parameters from the
+   specified before the data were seen. Estimating the parameters from the
    same sample pulls the fitted curve toward the data and makes D smaller
-   than that table expects, so the table is too forgiving.  The correction
+   than that table expects, so the table is too forgiving. The correction
    depends on which distribution was fitted and on how many parameters were
    estimated, so there is no single table to borrow.
 
@@ -4637,7 +4637,7 @@ function adStat(sorted, F) {
          record D and A-squared of the new sample against the NEW fit
 
    Refitting inside the loop is the step that makes this work; skipping it
-   would reproduce the borrowed table's error.  The p-value is then
+   would reproduce the borrowed table's error. The p-value is then
    (1 + #{statistic at least as large as the observed one}) / (B + 1) --
    the +1 in both places keeps a p-value from ever being reported as
    exactly zero, which with B replications it cannot be known to be.
@@ -4673,7 +4673,7 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
       if (a2 >= obsA) geA++;
       /* The chi-square is bootstrapped on the resample's OWN bins, with
          the same bin count the reader chose: replicating the procedure
-         means re-binning as well as re-fitting.  This is what lets the
+         means re-binning as well as re-fitting. This is what lets the
          degrees-of-freedom convention be checked rather than argued about
          -- if the convention is right, the bootstrap p-value and the
          table p-value will agree. */
@@ -4714,11 +4714,11 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
 function ksTableCritical(n) { return 1.358 / (Math.sqrt(n) + 0.12 + 0.11 / Math.sqrt(n)); }
 
 /* ─────────────────────────────────────────────────────────────────────
-   11b.  THE CLASSICAL P-VALUES, FOR A FULLY SPECIFIED NULL
+   11b. THE CLASSICAL P-VALUES, FOR A FULLY SPECIFIED NULL
    ─────────────────────────────────────────────────────────────────────
    These are the p-values a table gives, and the ones a student computes by
-   hand.  Both assume the distribution was named AND its parameters fixed
-   before the data was seen.  They are reported beside the bootstrap
+   hand. Both assume the distribution was named AND its parameters fixed
+   before the data were seen. They are reported beside the bootstrap
    p-values rather than withheld because seeing the two disagree is the
    only way to understand what the assumption was buying.
 
@@ -4731,7 +4731,7 @@ function ksTableCritical(n) { return 1.358 / (Math.sqrt(n) + 0.12 + 0.11 / Math.
 /* Kolmogorov's limiting distribution of the K-S statistic,
    Q(lambda) = 2 sum_{j>=1} (-1)^{j-1} exp(-2 j^2 lambda^2), evaluated by
    the routine in Press et al., Numerical Recipes 3rd ed., section 14.3
-   (probks).  The argument carries Stephens' (1970) finite-sample
+   (probks). The argument carries Stephens' (1970) finite-sample
    adjustment, lambda = (sqrt(n) + 0.12 + 0.11/sqrt(n)) D, which is what
    makes the asymptotic formula usable at the sample sizes a course deals
    with -- and is the same adjustment behind the printed tables. */
@@ -4755,9 +4755,9 @@ function ksPvalueClassical(D, n) {
 /* Anderson-Darling: the distribution of A-squared for a fully specified
    null, from G. Marsaglia and J. Marsaglia, "Evaluating the
    Anderson-Darling Distribution", Journal of Statistical Software 9(2),
-   2004.  adInf is their fit to the limiting CDF and adErrFix their
+   2004. adInf is their fit to the limiting CDF and adErrFix their
    finite-n correction; together they give P(A^2 <= z) to about 1e-6 for
-   n >= 5.  Vendored as published, with only the formatting changed. */
+   n >= 5. Vendored as published, with only the formatting changed. */
 function adInf(z) {
   if (z < 2) {
     return Math.pow(z, -0.5) * Math.exp(-1.2337141 / z) *
@@ -4791,17 +4791,17 @@ function adPvalueClassical(A2, n) {
 var AD_TABLE = { 0.10: 1.933, 0.05: 2.492, 0.025: 3.070, 0.01: 3.857 };
 
 /* ─────────────────────────────────────────────────────────────────────
-   11c.  GENERATING DATA FROM A DISTRIBUTION YOU CHOOSE
+   11c. GENERATING DATA FROM A DISTRIBUTION YOU CHOOSE
    ─────────────────────────────────────────────────────────────────────
    The counterpart to fitting: pick a distribution, type its parameters,
-   and draw a sample of whatever size you like.  Two things this makes
+   and draw a sample of whatever size you like. Two things this makes
    possible that a fixed set of example datasets cannot:
 
-     * You know the answer.  Generate from a gamma with shape 2, then see
+     * You know the answer. Generate from a gamma with shape 2, then see
        whether the ranking table finds it, and whether the runner-up is
        close enough to matter.
 
-     * You can vary n and watch statistical power appear.  At n = 30 no
+     * You can vary n and watch statistical power appear. At n = 30 no
        goodness-of-fit test can tell a gamma from a lognormal; at
        n = 5000 every test rejects every distribution that is not exactly
        right, including ones that would serve a simulation perfectly well.
@@ -4813,7 +4813,7 @@ var AD_TABLE = { 0.10: 1.933, 0.05: 2.492, 0.025: 3.070, 0.01: 3.857 };
    ───────────────────────────────────────────────────────────────────── */
 
 /* Per-distribution generator inputs: symbol, plain name, default, and the
-   constraints the fit itself would impose.  Distributions with no typed
+   constraints the fit itself would impose. Distributions with no typed
    parameters (the two empirical ones) are absent, and so are not offered. */
 var GEN_SPEC = {
   expo:      [{ sym: 'β', also: '= 1/λ', name: 'mean',          def: 5,   min: 1e-12 }],
@@ -4863,7 +4863,7 @@ var GEN_SPEC = {
               { sym: 'ξ', name: 'location',  def: 1.5 },
               { sym: 'λ', name: 'scale',     def: 0.9, min: 1e-9 }]
 };
-/* The order the generator's menu is drawn in.  Johnson sits at the end,
+/* The order the generator's menu is drawn in. Johnson sits at the end,
    under a separator, because it is fitted only on request. */
 var GEN_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic', 'pearson5', 'pearson6', 'normal',
                 'uniform', 'triangular', 'pert', 'beta', 'poisson', 'geometric', 'discreteUniform',
@@ -4888,7 +4888,7 @@ function validateGenParams(key, p) {
   return null;
 }
 
-/* Draws n values.  Rounding to `dp` decimal places is applied last, and
+/* Draws n values. Rounding to `dp` decimal places is applied last, and
    deliberately: it is what a stopwatch or a spreadsheet does to real
    measurements, and its effects are part of what there is to learn here.
    dp === null leaves the values at full precision. */
@@ -4909,7 +4909,7 @@ function generateSample(key, p, shift, n, seed, dp) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   12.  RANKING THE CANDIDATES
+   12. RANKING THE CANDIDATES
    ───────────────────────────────────────────────────────────────────── */
 function rankAll(x, keys, useShift, bins, holds, holdShift, reflect) {
   var rows = [], n = x.length, i;
@@ -4932,7 +4932,7 @@ function rankAll(x, keys, useShift, bins, holds, holdShift, reflect) {
 }
 
 /* Smaller is better for AIC, BIC, and square error; larger is better for
-   the log-likelihood.  Candidates that failed to fit, and the empirical
+   the log-likelihood. Candidates that failed to fit, and the empirical
    ones that are withheld from the criteria, always sort to the bottom. */
 function sortRows(rows, by) {
   var sign = (by === 'll') ? -1 : 1;
@@ -4953,7 +4953,7 @@ function bestBy(rows, by) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   13.  ARRIVAL PROCESSES
+   13. ARRIVAL PROCESSES
    ───────────────────────────────────────────────────────────────────── */
 
 /* Gaps between consecutive arrivals, from timestamps that are sorted
@@ -4962,20 +4962,20 @@ function bestBy(rows, by) {
    Three things are noticed on the way past, none of which is an error but
    each of which is worth telling the reader about:
 
-     wasAscending  whether the input ARRIVED in order.  Timestamps almost
+     wasAscending  whether the input ARRIVED in order. Timestamps almost
                    always do; a column that does not is very often a
                    column of interarrival GAPS pasted into the wrong tab,
                    where every number would then be silently reinterpreted
-                   as a clock reading.  This is the one check that catches
+                   as a clock reading. This is the one check that catches
                    the mistake this whole tab exists to prevent.
-     negatives     how many times are below zero.  Not wrong: a time
+     negatives     how many times are below zero. Not wrong: a time
                    origin is arbitrary, and arrivals recorded relative to
                    noon or to the start of a shift legitimately run
-                   negative.  Every quantity computed here uses only
-                   differences, so it is unaffected.  But it is also what a
+                   negative. Every quantity computed here uses only
+                   differences, so it is unaffected. But it is also what a
                    mis-parsed column looks like, so it is surfaced rather
                    than passed over.
-     ties          exactly simultaneous arrivals.  A Poisson process
+     ties          exactly simultaneous arrivals. A Poisson process
                    produces these with probability zero, so they mean
                    either rounding or genuine batch arrivals -- and a batch
                    arrival breaks the Poisson assumption outright, which
@@ -4993,14 +4993,14 @@ function interarrivals(times) {
 }
 
 /* Counts and rate estimates on equal-width intervals spanning the whole
-   observation window.  lambda-hat = N_j / w is the maximum-likelihood
+   observation window. lambda-hat = N_j / w is the maximum-likelihood
    estimate of a rate held constant inside each interval, with standard
    error sqrt(N_j)/w.
 
    When the window is read off the data, it opens AT the first arrival,
    and that arrival is the one that opens it, not one that arrived inside
-   it: the window (t0, t1] holds one arrival per gap.  So an arrival at t0
-   (one of them, if several are tied there) is left out of the counts.  A
+   it: the window (t0, t1] holds one arrival per gap. So an arrival at t0
+   (one of them, if several are tied there) is left out of the counts. A
    window that opens before the first arrival, because the moment the
    watching began is known, counts every arrival. */
 function rateProfile(times, width, t0, t1) {
@@ -5031,15 +5031,15 @@ function rateProfile(times, width, t0, t1) {
            overall: (t.length - first) / span };
 }
 
-/* Is the rate really constant?  Conditional on the total number of
+/* Is the rate really constant? Conditional on the total number of
    arrivals, a homogeneous Poisson process spreads them over equal-width
    intervals like a multinomial with equal cell probabilities, so
 
        X^2 = sum (N_j - Nbar)^2 / Nbar      is approximately chi-square
                                             on k-1 degrees of freedom.
 
-   This is the Poisson dispersion test.  It only uses intervals of the full
-   width, since a short final stub would register as a fake dip.  The
+   This is the Poisson dispersion test. It only uses intervals of the full
+   width, since a short final stub would register as a fake dip. The
    lowest and highest of the tested intervals' rates are returned beside
    it, because a range describes a peak or a dip as well as a drift; a
    comparison of the window's two halves would miss a peak in the middle. */
@@ -5062,20 +5062,20 @@ function stationarityTest(prof) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   13a.  ESTIMATING A CONSTANT RATE, THE TWO EQUIVALENT WAYS
+   13a. ESTIMATING A CONSTANT RATE, THE TWO EQUIVALENT WAYS
    ─────────────────────────────────────────────────────────────────────
    If the rate really is constant, there are two routes to it that look
    quite different and land in the same place, and seeing that they agree
    is worth more than either one alone.
 
-   From the GAPS.  Complete interarrival times are independent
+   From the GAPS. Complete interarrival times are independent
    Exponential(1/lambda), and the maximum-likelihood estimate of an
-   exponential mean is the sample mean, so lambda-hat = 1/xbar.  With m
+   exponential mean is the sample mean, so lambda-hat = 1/xbar. With m
    complete gaps summing to S this is exactly m/S -- no search, no
    iteration, and identical to what fitting an exponential on tab 1
    returns because it is the same estimator.
 
-   From the COUNTS.  Chop the window into blocks of width w.  The count in
+   From the COUNTS. Chop the window into blocks of width w. The count in
    a block is Poisson(lambda w), the maximum-likelihood estimate of a
    Poisson mean is the sample mean of the counts, and dividing by w gives
    lambda-hat = (total count)/(total width), which over the whole window is
@@ -5083,16 +5083,16 @@ function stationarityTest(prof) {
    the other end, and not dependent on how the window was chopped up, or on
    whether it was.
 
-   The two count the same arrivals.  A window read off the data opens at
+   The two count the same arrivals. A window read off the data opens at
    the first arrival, which marks where the watching began rather than
    arriving in the window, and so the window (t0, t1] holds m = n - 1
    arrivals, one at the end of each complete gap, and both routes give
-   m/T.  A window known to open before the first arrival holds all n.
+   m/T. A window known to open before the first arrival holds all n.
 
    Why bother with the count route at all, when the gap route is a single
-   division?  Because it is the one that survives the rate NOT being
-   constant.  Blocks can each have their own lambda; a single exponential
-   fitted to all the gaps cannot.  That is the whole of section 3 on the
+   division? Because it is the one that survives the rate NOT being
+   constant. Blocks can each have their own lambda; a single exponential
+   fitted to all the gaps cannot. That is the whole of section 3 on the
    arrival tab, and this function exists to make the connection explicit.
 
    Both intervals below are exact rather than normal approximations:
@@ -5117,7 +5117,7 @@ function rateMLE(times, alpha) {
 
   /* Count route, treating (t0, t1] as the window: the first arrival opens
      it rather than arriving in it, and so the count is m, one arrival per
-     gap, and the two routes give the same rate.  Garwood's exact interval
+     gap, and the two routes give the same rate. Garwood's exact interval
      for a Poisson mean. */
   var lamCount = m / T;
   var loC = m > 0 ? chiSqQuantile(alpha / 2, 2 * m) / (2 * T) : 0;
@@ -5130,10 +5130,10 @@ function rateMLE(times, alpha) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   13b.  GENERATING AN ARRIVAL PROCESS
+   13b. GENERATING AN ARRIVAL PROCESS
    ─────────────────────────────────────────────────────────────────────
    The counterpart to the fitting tab's generator, and the way to feel
-   what the stationarity test can and cannot see.  Generate a genuinely
+   what the stationarity test can and cannot see. Generate a genuinely
    constant rate and the test should leave it alone; add a lunchtime peak
    and it should catch it -- but shrink the peak, or shorten the window,
    and there is a point where it stops being able to, which is worth
@@ -5247,16 +5247,16 @@ function generateArrivals(key, p, T, seed) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   14.  EXPORT EXPRESSIONS
+   14. EXPORT EXPRESSIONS
    ─────────────────────────────────────────────────────────────────────
-   The same fitted distribution written six ways.  The tools disagree about
+   The same fitted distribution written six ways. The tools disagree about
    which parameters to take and in what order, and the disagreements are
    the silent kind: hand a rate to a function that wants a mean and the
    model runs perfectly while simulating the wrong system.
 
    Every line therefore ships with a `note` naming what each number is, so
    the expression can be checked against the reader's own version of the
-   tool rather than trusted.  Where a tool has no primitive for a
+   tool rather than trusted. Where a tool has no primitive for a
    distribution (Arena has no geometric), an inverse-transform expression
    in that tool's own functions is given instead.
    ───────────────────────────────────────────────────────────────────── */
@@ -5267,10 +5267,10 @@ function generateArrivals(key, p, T, seed) {
 function num(v, sig) {
   if (!Number.isFinite(v)) return String(v);
   if (v === 0) return '0';
-  /* Round to `sig` figures, then let JavaScript choose the notation.  Going
+  /* Round to `sig` figures, then let JavaScript choose the notation. Going
      through toPrecision alone would emit "9.00000e+7" for 90 million
      because the value needs more digits than the requested precision --
-     and Arena's expression parser does not read that.  Number() collapses
+     and Arena's expression parser does not read that. Number() collapses
      the rounded value back to its shortest exact form, which stays in
      plain decimal until 1e21 and drops trailing zeros for free. */
   var r = Number(v.toPrecision(sig || 6));
@@ -5281,15 +5281,15 @@ function num(v, sig) {
 function pre(shift) { return shift ? num(shift) + ' + ' : ''; }
 
 /* A gamma with shape a and scale 1 for Arena, built so that it does not
-   depend on Arena's GAMM, ERLA, or BETA for its lower tail.  In checks of
+   depend on Arena's GAMM, ERLA, or BETA for its lower tail. In checks of
    100,000 draws each, GAMM and ERLA left out the bottom few tenths of a
    percent of their distributions, and a small-shape BETA left out most of
    its draws below 0.001, whereas EXPO and products of UNIF matched their
-   distributions down to 1e-5.  The whole part of a is therefore an exact
+   distributions down to 1e-5. The whole part of a is therefore an exact
    Erlang, -LN of a product of uniforms, and only the fraction f of a uses
-   BETA(f, 1 - f) * EXPO(1), a gamma with shape f.  Added to an Erlang of
+   BETA(f, 1 - f) * EXPO(1), a gamma with shape f. Added to an Erlang of
    at least one phase, that piece's missing values barely move the sum's
-   lower tail.  Arena accepted a product of 20 uniforms; past 20 the line
+   lower tail. Arena accepted a product of 20 uniforms; past 20 the line
    falls back to GAMM, whose gap matters less as the shape grows. */
 var ARENA_MAX_UNIF = 20;
 function arenaGamma(a) {
@@ -5310,7 +5310,7 @@ function arenaGamma(a) {
 function expressions(fit, sample) {
   /* A mirrored fit is c minus a draw from the unmirrored model, and every
      tool can write that as a subtraction around the expression it already
-     has.  scipy's frozen distributions have no general mirror, and so the
+     has. scipy's frozen distributions have no general mirror, and so the
      Python line draws from the unmirrored one and subtracts. */
   if (fit.reflect) {
     var inner = expressions(Object.assign({}, fit, { shift: 0, reflect: false }), sample);
@@ -5345,8 +5345,8 @@ function expressions(fit, sample) {
     /* Arena's gamma generator leaves out the bottom of its own
        distribution: over 100,000 draws, GAMM(1, 3) never went below
        0.3588, where a true gamma puts 0.58% of its draws, and GAMM(1, 5)
-       never below 0.954 (0.29%).  ERLA and BETA showed the same shortfall
-       when divided into.  The mean moves by about 0.1%, but a model that
+       never below 0.954 (0.29%). ERLA and BETA showed the same shortfall
+       when divided into. The mean moves by about 0.1%, but a model that
        depends on how often very short values occur sees too few of them,
        and a reciprocal or a ratio turns the gap into a bias in the mean. */
     var arenaGap = ' Arena\'s ' + (isEr ? 'Erlang' : 'gamma') + ' generator never returns its lowest few ' +
@@ -5408,11 +5408,11 @@ function expressions(fit, sample) {
         's is sigma of ln X; scale is exp(mu).');
   } else if (k === 'loglogistic') {
     /* Simio has a native Random.LogLogistic(shape, scale) and, for the
-       Pearson type VI below, Random.PearsonVI(shapeA, shapeB, scale).  Its
+       Pearson type VI below, Random.PearsonVI(shapeA, shapeB, scale). Its
        reference guide lists both, and the input-modeling appendix of
        Simio's workbook maps EasyFit's Log-Logistic(alpha, beta) and
        Pearson6(alpha1, alpha2, beta), which use Law's parameterizations,
-       onto them argument for argument.  Neither has been checked by a run.
+       onto them argument for argument. Neither has been checked by a run.
        If one ever turns out to use another scale, these constructions use
        only Random.Uniform, Random.Gamma(shape, scale), and the ^ operator,
        whose meanings are documented:
@@ -5547,7 +5547,7 @@ function expressions(fit, sample) {
     var zs = function (z) { return '(' + z + (g2 < 0 ? ' + ' + N(-g2) : ' - ' + N(g2)) + ')'; };
     /* Arena's JOHN(G, D, L, X) is this page's (gamma, delta, lambda, xi)
        with the same transformation, X = xi + lambda f^-1((Z - gamma)/delta);
-       a negative D selects the unbounded member.  Simio names the two
+       a negative D selects the unbounded member. Simio names the two
        members, each taking the two shapes and then its own support
        parameters: the interval for S_B, the location and scale for S_U. */
     set('arena', 'JOHN(' + N(g2) + ', ' + N(isSB ? dl : -dl) + ', ' + N(lj) + ', ' + N(xj) + ')',
@@ -5579,7 +5579,7 @@ function expressions(fit, sample) {
   } else if (k === 'geometric') {
     var pr = p[0];
     /* Arena has no geometric primitive, so this is the inverse transform
-       written in Arena's own functions.  AINT truncates toward zero, and
+       written in Arena's own functions. AINT truncates toward zero, and
        both logarithms are negative, so the quotient is positive and AINT
        acts as the floor the inverse transform needs. */
     set('arena', 'AINT( LN(UNIF(0,1)) / LN(' + N(1 - pr) + ') )',
@@ -5650,7 +5650,7 @@ function expressions(fit, sample) {
   } else if (k === 'empirical') {
     /* A piecewise-linear empirical CDF through every order statistic would
        run to hundreds of arguments, which no one is going to paste into a
-       dialog box.  It is thinned to at most 21 breakpoints at equally
+       dialog box. It is thinned to at most 21 breakpoints at equally
        spaced cumulative probabilities, and the thinning is stated. */
     var q = p[0], nq = q.length, MAXBP = 21;
     var m = Math.min(MAXBP, nq), bp = [], cp = [];
@@ -5672,10 +5672,10 @@ function expressions(fit, sample) {
     /* A piecewise-linear CDF has constant density between breakpoints,
        which is what AnyLogic's continuous custom distribution in Ranges form
        draws: CustomDistributionContinuous(starts, ends, weights, random),
-       each weight the probability between its two breakpoints.  A run
+       each weight the probability between its two breakpoints. A run
        through (1, 0), (2, 0.5), (4, 1) gave the right mean, median, and
-       quartiles.  (Its Frequency-table form joins densities, not CDFs, by
-       straight lines, which is a different distribution.)  A repeated
+       quartiles. (Its Frequency-table form joins densities, not CDFs, by
+       straight lines, which is a different distribution.) A repeated
        breakpoint is a range of zero width, which a range cannot hold, and so
        its probability joins the next range of positive width. */
     var rS = [], rE = [], rW = [], carry = 0;
@@ -5736,12 +5736,12 @@ var FIT_NAMES = {
 };
 
 /* ─────────────────────────────────────────────────────────────────────
-   15.  SNIPPETS THAT REPRODUCE THE FIT AND THE TEST
+   15. SNIPPETS THAT REPRODUCE THE FIT AND THE TEST
    ─────────────────────────────────────────────────────────────────────
-   These are not restatements of the numbers above.  Each one refits the
+   These are not restatements of the numbers above. Each one refits the
    distribution from the raw data in its own tool and runs the same
    parametric bootstrap, so running it is an independent check of what this
-   page reported rather than an echo of it.  Two consequences are stated in
+   page reported rather than an echo of it. Two consequences are stated in
    the snippets themselves: the naive kstest p-value each tool hands you is
    too large because the parameters were estimated, and each tool's random
    number generator is not MRG32k3a, so the bootstrap p-value will agree
@@ -5750,11 +5750,11 @@ var FIT_NAMES = {
    Each full snippet also prints AIC and BIC for its refit (model selection
    by hand: swap the family name, rerun, compare) and redraws the page's
    two main figures, and so a student who wants a report-quality plot gets
-   one in a tool whose axes and labels they can edit.  The stub branches for
+   one in a tool whose axes and labels they can edit. The stub branches for
    families a tool cannot refit stay minimal on purpose.
    ───────────────────────────────────────────────────────────────────── */
 
-/* Per-distribution glue for the R snippet.  MASS::fitdistr covers most of
+/* Per-distribution glue for the R snippet. MASS::fitdistr covers most of
    the list; where it does not, the entry is null and a direct estimate is
    emitted instead, without the bootstrap. */
 var R_FIT = {
@@ -5824,7 +5824,7 @@ function dataLiteral(x, style) {
 
 function reproScripts(fit, x, seed, B, src) {
   /* A mirrored fit is refitted as what it is underneath: the unmirrored
-     family on y = c - x, which starts at zero.  Each script says so first,
+     family on y = c - x, which starts at zero. Each script says so first,
      and the Python one still counts c when this page estimated it. */
   if (fit.reflect) {
     var c = fit.shift, y = x.map(function (v) { return c - v; });
@@ -6206,15 +6206,15 @@ function reproScripts(fit, x, seed, B, src) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   15b.  TWO VARIABLES
+   15b. TWO VARIABLES
    ─────────────────────────────────────────────────────────────────────
    How strongly two columns move together, and a straight-line model of
-   one given the other.  Each procedure is the one R runs (cor.test, lm,
+   one given the other. Each procedure is the one R runs (cor.test, lm,
    and lmtest::bptest), and the verification checks them against R to the
    last few digits. */
 
 /* One column read cell by cell and kept aligned with its rows, NaN where a
-   cell is blank or unreadable.  The column is read as clock-shaped
+   cell is blank or unreadable. The column is read as clock-shaped
    durations only when every non-empty cell is one, as columnDurations
    decides, so that one series never mixes two units. */
 function rowValues(col, conv) {
@@ -6226,7 +6226,7 @@ function rowValues(col, conv) {
   return { values: out, clock: cd.clock, unit: cd.unit };
 }
 
-/* The pairs in columns i and j.  A row counts only when both of its cells
+/* The pairs in columns i and j. A row counts only when both of its cells
    are numbers: dropping blanks column by column, as the one-column tabs
    do, would slide one column against the other and pair values that never
    belonged together. */
@@ -6315,10 +6315,10 @@ function spearman(x, y) {
 }
 
 /* P(T <= q) for the number of concordant pairs among n untied values
-   under independence.  T has the distribution of the number of
+   under independence. T has the distribution of the number of
    inversions in a random permutation, built up one element at a time:
    adding the m-th element adds 0 to m - 1 inversions, each equally
-   likely.  Cached by n because a page redraw asks for the same n again. */
+   likely. Cached by n because a page redraw asks for the same n again. */
 var KENDALL_CDF = {};
 function kendallCdf(q, n) {
   if (!KENDALL_CDF[n]) {
@@ -6354,7 +6354,7 @@ function tieGroups(x) {
 
 /* Concordant minus discordant pairs, by Knight's method: sort by x (ties
    broken by y), count the inversions left in y with a merge sort, and
-   correct for the pairs tied in x, in y, or in both.  O(n log n), where the
+   correct for the pairs tied in x, in y, or in both. O(n log n), where the
    pair-by-pair count is O(n^2) and takes seconds at a few tens of thousands
    of pairs. */
 function kendallS(x, y) {
@@ -6477,7 +6477,7 @@ function olsSimple(x, y, level) {
 
 /* The Breusch-Pagan test in Koenker's studentized form (lmtest::bptest's
    default): n times the R squared of the squared residuals regressed on x,
-   referred to chi-square with one degree of freedom.  A small p-value
+   referred to chi-square with one degree of freedom. A small p-value
    says the spread of y around the line changes with x. */
 function breuschPagan(x, resid) {
   var n = x.length, w = [];
@@ -6490,7 +6490,7 @@ function breuschPagan(x, resid) {
 
 /* The mean of a fitted model, shift and mirror included: closed form for
    every family that has one, and otherwise the average of the quantile
-   function over (0, 1), which is the mean of any distribution.  Infinite
+   function over (0, 1), which is the mean of any distribution. Infinite
    where the family's mean does not exist at the fitted shape. */
 function fitMean(fit) {
   var p = fit.p, k = fit.dist.key, m;
@@ -6523,7 +6523,7 @@ function fitMean(fit) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   15c.  ONE VARIABLE IN TIME ORDER
+   15c. ONE VARIABLE IN TIME ORDER
    ─────────────────────────────────────────────────────────────────────
    Whether the order of a sample carries information: the correlogram and
    the Ljung-Box test, a cycle of known period fitted by least squares, an
@@ -6531,7 +6531,7 @@ function fitMean(fit) {
    Each matches R (acf, Box.test, lm, ar.yw, and spec.pgram), which the
    verification checks. */
 
-/* A time column read cell by cell and kept aligned with its rows.  Clock
+/* A time column read cell by cell and kept aligned with its rows. Clock
    times are read as minutes past midnight when every non-empty cell is
    one, as columnTimes decides. */
 function timeRowValues(col) {
@@ -6545,7 +6545,7 @@ function timeRowValues(col) {
 
 /* The series in column vj, timed by column tj or, when tj is null, by
    equal steps of delta counted over the original rows (so a reading that
-   was dropped leaves its gap in time).  gapCV is the coefficient of
+   was dropped leaves its gap in time). gapCV is the coefficient of
    variation of the gaps between successive times: 0 for an equally
    spaced series. */
 function seriesFrom(table, vj, tj, delta) {
@@ -6571,7 +6571,7 @@ function seriesFrom(table, vj, tj, delta) {
 }
 
 /* Sample autocorrelations r_0 .. r_maxLag, mean-centered with divisor n,
-   as R's acf.  All NaN past r_0 when the series is constant. */
+   as R's acf. All NaN past r_0 when the series is constant. */
 function acf(x, maxLag) {
   var n = x.length, m = 0, i, k, out = [];
   for (i = 0; i < n; i++) m += x[i];
@@ -6599,7 +6599,7 @@ function ljungBox(r, n, m, fitdf) {
 }
 
 /* Least squares by modified Gram-Schmidt on the columns of X (an array of
-   columns, the first usually all ones).  QR rather than the normal
+   columns, the first usually all ones). QR rather than the normal
    equations, because cos and sin columns over a long record, with a trend
    beside them, are nearly collinear enough to lose digits the other way. */
 function lsq(X, y) {
@@ -6668,7 +6668,7 @@ function harmonicFit(t, y, P, H, trend) {
   /* A sum of squares below 1e-24 of the data's own sum of squares is
      rounding error, not variation: a constant series has no cycle to find
      (F undefined), and a series the model reproduces exactly has an
-     infinite F.  Without this, rounding noise in both sums gives a
+     infinite F. Without this, rounding noise in both sums gives a
      plausible-looking F for data that hold no information at all. */
   var tiny = 1e-24 * sy2;
   out.m = f.beta[0];
@@ -6693,7 +6693,7 @@ function harmonicFit(t, y, P, H, trend) {
 
 /* An AR(1) by Yule-Walker, as ar.yw(x, aic = FALSE, order.max = 1):
    phi is the lag-one autocorrelation, and the innovation variance is
-   c0 (1 - phi^2) scaled by n / (n - 2).  innov holds e_t = z_t - phi
+   c0 (1 - phi^2) scaled by n / (n - 2). innov holds e_t = z_t - phi
    z_(t-1) for the centered series z, one per reading after the first. */
 function ar1(x) {
   var n = x.length, m = 0, i;
@@ -6716,7 +6716,7 @@ function ar1(x) {
 /* The discrete Fourier transform of a real sequence of any length:
    radix-2 when the length is a power of two, and Bluestein's chirp
    method otherwise, which rewrites the transform as a convolution done
-   with power-of-two FFTs.  Either way O(n log n). */
+   with power-of-two FFTs. Either way O(n log n). */
 function fft2(re, im, inverse) {
   var n = re.length, i, j, k, len, t;
   for (i = 1, j = 0; i < n; i++) {
@@ -6770,11 +6770,11 @@ function dftReal(x) {
 }
 
 /* The periodogram, smoothed by a modified Daniell kernel of the given odd
-   span (1 for none), as R's spec.pgram with taper = 0 and no padding.  As
+   span (1 for none), as R's spec.pgram with taper = 0 and no padding. As
    there, a straight line is fitted and removed first: a trend puts its
    power at the lowest frequencies, and left in, it would outrank any cycle
-   and report the length of the record as the period.  freq is in cycles
-   per reading and period = 1 / freq in readings.  The kernel wraps around
+   and report the length of the record as the period. freq is in cycles
+   per reading and period = 1 / freq in readings. The kernel wraps around
    the ends, as R's does, and the zero frequency is replaced by the average
    of its two neighbors first. */
 function periodogram(y, span) {
@@ -6804,16 +6804,16 @@ function periodogram(y, span) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   15d.  EXPORTS FOR THE TWO DEPENDENCE TABS
+   15d. EXPORTS FOR THE TWO DEPENDENCE TABS
    ─────────────────────────────────────────────────────────────────────
-   A model with dependence in it is a deterministic part plus noise.  The
+   A model with dependence in it is a deterministic part plus noise. The
    deterministic part is written here, per tool; the noise is one draw from
    a fitted distribution, written by expressions() exactly as the fitting
    tab writes it, so that every parameterization trap it handles is handled
    here too. */
 var DEP_TOOLS = ['arena', 'simio', 'anylogic', 'r', 'matlab', 'python'];
 
-/* One draw per tool from a fitted model.  The Python form is a frozen
+/* One draw per tool from a fitted model. The Python form is a frozen
    SciPy distribution, and so it is turned into n draws; the empirical
    families already write an array. */
 function toolDraws(fit) {
@@ -6865,7 +6865,7 @@ function noiseTerms(fit, center) {
   return out;
 }
 
-/* Y given X:  a + b*X + noise, or X times a per-unit draw.  m carries
+/* Y given X:  a + b*X + noise, or X times a per-unit draw. m carries
    a, b, s (the residual sd), xName (the attribute that holds X in the
    simulation model), clip (wrap in a maximum with 0), and noise, either
    null for normal noise with sd s, or { kind: 'resid' | 'perunit', fit }
@@ -6890,7 +6890,7 @@ function pairExpressions(m) {
   return out;
 }
 
-/* The clock, in the data's time unit, as each tool reads it.  Arena's TNOW
+/* The clock, in the data's time unit, as each tool reads it. Arena's TNOW
    is in the model's base time unit, and the *ToBaseTime functions convert
    a duration into it; Simio's Run.TimeNow is always in hours; AnyLogic's
    time(UNIT) returns the elapsed time in the unit named. */
@@ -6910,7 +6910,7 @@ var DEP_TRIG = {
 /* A value that follows the clock:
      m + sum_k (c_k cos(w_k T) + s_k sin(w_k T)) [+ g T] + noise,
    with w_k = 2 pi k / P and T the clock in the data's unit (shifted by t0
-   when the data's time 0 is not the model's).  With an AR(1), the noise is
+   when the data's time 0 is not the model's). With an AR(1), the noise is
    a variable Z updated once per draw by its own line, returned in `ar`. */
 function timeExpressions(m) {
   var out = { notes: {}, ar: null }, H = m.c.length, i, k;
@@ -6953,7 +6953,7 @@ function timeExpressions(m) {
 }
 
 /* The two tabs' data files: provenance lines, a blank line, a header,
-   and one row per pair or reading.  The scripts below read exactly these. */
+   and one row per pair or reading. The scripts below read exactly these. */
 function pairCsv(x, y, prov) {
   var rows = (prov || []).map(function (l) { return [l]; });
   rows.push([], ['x', 'y']);
@@ -6971,7 +6971,7 @@ function seriesCsv(t, y, cyc, prov) {
   return toCsv(rows);
 }
 /* Python's reader for those files: the standard library's csv module,
-   skipping the # lines and the blank one.  numpy.genfromtxt would take
+   skipping the # lines and the blank one. numpy.genfromtxt would take
    the first # line as the header. */
 var READ_CSV_PY =
   'def read_csv(path):\n' +
@@ -6982,7 +6982,7 @@ var READ_CSV_PY =
 /* ── Scripts that recompute every number on the two tabs ─────────────
    Each prints one line per number, beside the value this page showed and
    the word "agrees" or "DIFFERS", so that running it is a check of the
-   page rather than a restatement of it.  Data are written into the script
+   page rather than a restatement of it. Data are written into the script
    up to MAX_INLINE values per column, and read from the tab's CSV download
    beyond that. */
 function depLiteral(x, style) {
@@ -7135,7 +7135,7 @@ function pairScripts(x, y, o) {
 
 /* o: maxLag, m (Ljung-Box lags), cycle (fit one), P, H, trend, ar (fit an
    AR(1) to what the cycle leaves, or to the data), span (periodogram), and
-   src.  series: { t, y }. */
+   src. series: { t, y }. */
 function timeScripts(series, o) {
   var y = series.y, t = series.t, n = y.length, P = pageNum, i;
   var rows = [], a0 = acf(y, o.maxLag), lb0 = ljungBox(a0, n, o.m, 0);
@@ -7308,7 +7308,7 @@ function timeScripts(series, o) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   16.  CSV BUILDERS
+   16. CSV BUILDERS
    ─────────────────────────────────────────────────────────────────────
    Every export carries the seed and the settings that produced it, so a
    number in a lab report can be traced back to the run that made it. */
@@ -7329,7 +7329,7 @@ function toCsv(rows) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   17.  NAMESPACE
+   17. NAMESPACE
    ───────────────────────────────────────────────────────────────────── */
 var IA = {
   MRG32k3a: MRG32k3a,
@@ -7380,7 +7380,7 @@ var IA = {
 
 <script>
 /* ════════════════════════════════════════════════════════════════════
-   PAGE SCRIPT.  DOM wiring, plotting, and formatting.  All numerics live
+   PAGE SCRIPT. DOM wiring, plotting, and formatting. All numerics live
    in the IA core block above; nothing here recomputes them.
    ════════════════════════════════════════════════════════════════════ */
 'use strict';
@@ -7388,7 +7388,7 @@ var IA = {
 /* ── Built-in sample data ───────────────────────────────────────────
    Synthetic, generated once with the MRG32k3a stream above from known
    distributions, then rounded and frozen into the page so every reader
-   sees the same numbers.  Which distribution each came from is
+   sees the same numbers. Which distribution each came from is
    deliberately not printed: recovering it is the exercise. */
 var SAMPLES = {
   iat: { name: "Clinic interarrivals", unit: "minutes between successive walk-in arrivals at a clinic front desk", v: [
@@ -7480,10 +7480,10 @@ var ARRIVAL_SAMPLES = {
     v: SAMPLES.iat.v },
 };
 /* Samples for the two dependence tabs, generated once with MRG32k3a from the
-   model stated in each one's truth line, and frozen here.  Unlike the fitting
+   model stated in each one's truth line, and frozen here. Unlike the fitting
    tab's samples, the truth is printed: these samples exist to show what a
    kind of dependence looks like, and so the reader needs to know what went
-   in.  Columns are stored side by side and joined into CSV on load. */
+   in. Columns are stored side by side and joined into CSV on load. */
 var PAIR_SAMPLES = {
   checkout: { name: "Grocery checkout", cols: ["items", "minutes"],
     unit: "items bought and minutes at the register for 120 customers",
@@ -7626,7 +7626,7 @@ function esc(s) {
 }
 
 /* ── SVG plot builder ───────────────────────────────────────────────
-   Plain SVG assembled as a string.  SVG rather than canvas because these
+   Plain SVG assembled as a string. SVG rather than canvas because these
    plots are static between fits: it stays crisp at any zoom and on any
    display with no devicePixelRatio bookkeeping, and it needs no redraw
    when the container resizes. */
@@ -7661,7 +7661,7 @@ function Plot(W, H, m) {
              '" fill="var(--chart-bg)" stroke="var(--border)" stroke-width="1"/>');
       return api;
     },
-    /* Gridlines and tick labels on both axes.  fx and fy format a tick. */
+    /* Gridlines and tick labels on both axes. fx and fy format a tick. */
     axes: function (xt, yt, fx, fy, xDy) {
       var i, t;
       fmtX = fx; fmtY = fy;
@@ -7685,7 +7685,7 @@ function Plot(W, H, m) {
       return api;
     },
     /* A second y-axis on the right, for the same bars read in different
-       units.  This is only honest when the two scales are related by a
+       units. This is only honest when the two scales are related by a
        constant factor -- here count = density x n x w, with n and w fixed
        across the plot -- which holds because every bin has equal width.
        Unequal bins would make the two axes disagree about the same bar,
@@ -7768,7 +7768,7 @@ function Plot(W, H, m) {
              (opt.weight ? ' font-weight="' + opt.weight + '"' : '') + '>' + esc(s) + '</text>');
       return api;
     },
-    /* A key placed inside the frame.  Every entry carries a drawn mark, not
+    /* A key placed inside the frame. Every entry carries a drawn mark, not
        just a colored swatch, so the reading never depends on hue alone. */
     legend: function (x, y, items) {
       for (var i = 0; i < items.length; i++) {
@@ -7845,10 +7845,10 @@ function niceCountTicks(hi, target) {
   for (var v = 0; v <= hi + 1e-9; v++) out.push(v);
   return out;
 }
-/* Which top corner of a histogram is free.  A right-skewed sample piles
+/* Which top corner of a histogram is free. A right-skewed sample piles
    its bars against the left, a left-skewed one against the right, and a
    legend parked in a fixed corner will sit on top of the tallest bar for
-   one of them.  Compares the tallest bar in the left third with the
+   one of them. Compares the tallest bar in the left third with the
    tallest in the right third and returns the emptier side. */
 function legendCorner(P, heights, yhi, width) {
   var k = heights.length, i, l = 0, r = 0;
@@ -7948,10 +7948,10 @@ function makeLoader(cfg) {
       sel.appendChild(o);
     }
     /* Default to the first column that holds numbers AND does not look
-       like a row index or an order number.  A strictly increasing column
+       like a row index or an order number. A strictly increasing column
        of whole numbers is almost always an identifier, and fitting a
        distribution to order numbers is a confusing thing to show someone
-       first.  The picker still lists it, so the guess is never final.
+       first. The picker still lists it, so the guess is never final.
        On the arrival tab this heuristic is skipped: an increasing column
        of times is exactly what that tab wants. */
     var pick = -1, firstNumeric = -1;
@@ -8024,7 +8024,7 @@ function makeLoader(cfg) {
     $(cfg.pick).addEventListener('change', function () { api.useColumn(Number(this.value), null); });
     $(cfg.file).addEventListener('change', function () { api.readFile(this.files && this.files[0]); });
     $(cfg.clearBtn).addEventListener('click', function () { $(cfg.ta).value = ''; cfg.clear(); });
-    /* Drag and drop.  dragover must be canceled or the browser navigates
+    /* Drag and drop. dragover must be canceled or the browser navigates
        to the dropped file instead of handing it over. */
     var drop = $(cfg.drop);
     ['dragenter', 'dragover'].forEach(function (ev) {
@@ -8135,9 +8135,9 @@ function renderStats() {
         ? (Math.abs(cv - 1) < 0.15
             ? 'A cv near 1 is the fingerprint of an exponential distribution, which has cv exactly 1.'
             : (cv > 1
-                ? 'A cv above 1 means the data is more variable than an exponential. Look at the ' +
+                ? 'A cv above 1 means the data are more variable than an exponential. Look at the ' +
                   'lognormal, or at a gamma or Weibull with a shape below 1.'
-                : 'A cv below 1 means the data is less variable than an exponential. Look at the ' +
+                : 'A cv below 1 means the data are less variable than an exponential. Look at the ' +
                   'gamma, the Erlang, or a Weibull with a shape above 1.'))
         : '');
     if (wholeNonNeg(s) && !ST.clockUnit) {
@@ -8148,7 +8148,7 @@ function renderStats() {
     }
     if (s.nUnique < s.n * 0.5) {
       msg += ' <strong>Many values repeat</strong> (' + s.nUnique + ' distinct out of ' + s.n +
-        '), which usually means the data was rounded when it was recorded. That is fine for fitting, ' +
+        '), which usually means the data were rounded when they were recorded. That is fine for fitting, ' +
         'but it inflates the K–S and A–D statistics; read their bootstrap p-values rather than ' +
         'the statistics themselves.';
     }
@@ -8196,7 +8196,7 @@ function initGenerator() {
 }
 
 /* Math.random is used here and nowhere else on the page, and only to pick
-   WHICH seed the next sample will use.  Every value the generator and the
+   WHICH seed the next sample will use. Every value the generator and the
    bootstrap produce comes from MRG32k3a seeded with the number in the box.
    Six digits, always: short enough to read aloud or copy into a lab
    notebook, and a constant width so the field never jumps. */
@@ -8299,7 +8299,7 @@ function runGenerator() {
   }
 
   /* The sample just drawn always used the seed that was on screen while it
-     was drawn.  With the box ticked a fresh one is queued afterwards, and
+     was drawn. With the box ticked a fresh one is queued afterwards, and
      named, so the field changing under the reader is never a surprise. */
   if ($('gen-newseed').checked) {
     var next = randomSeed();
@@ -8313,7 +8313,7 @@ function runGenerator() {
    FITTING PIPELINE
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Which candidates to offer.  "Choose for me" reads the data: whole
+/* Which candidates to offer. "Choose for me" reads the data: whole
    numbers with few distinct values are counts. */
 /* Whole numbers alone do not make data discrete in any useful sense. Ten
    readings of a counter in the hundreds of millions are integers, and
@@ -8330,14 +8330,14 @@ function runGenerator() {
    recording granularity -- never a count -- so it is never offered the
    discrete candidates whatever the seconds field happened to be. */
 var DISCRETE_MAX_SPAN = 5000;
-/* Few distinct values is the plain case.  Counts with a larger mean take
+/* Few distinct values is the plain case. Counts with a larger mean take
    more of them -- a Poisson's values spread over about 8 standard
    deviations, 8 sqrt(mean) values -- and so a count column with mean 60
-   has thirty-odd, which a fixed cap of 30 would call continuous.  Such a
+   has thirty-odd, which a fixed cap of 30 would call continuous. Such a
    column still repeats its values, as counts do, and stays within the
    spread a count of that size has room for; a measurement recorded to
    whole units (seconds, say) has almost every value distinct, or spreads
-   far wider than sqrt(mean).  Allowing 10 sqrt(mean) leaves room for counts
+   far wider than sqrt(mean). Allowing 10 sqrt(mean) leaves room for counts
    somewhat more dispersed than a Poisson. */
 function wholeNonNeg(s) {
   return !!(s && s.allInt && s.min >= 0 && (s.max - s.min) <= DISCRETE_MAX_SPAN);
@@ -8359,11 +8359,11 @@ function activeKeys() {
   return ST.johnson ? IA.CONTINUOUS_KEYS.concat(IA.JOHNSON_KEYS) : IA.CONTINUOUS_KEYS;
 }
 /* A fit option that cannot apply is grayed, as Arena grays its own menu
-   entries that do not apply to the data, and its tip then says why.  No
+   entries that do not apply to the data, and its tip then says why. No
    discrete candidate is shifted, mirrored, or a Johnson member, and so
-   under the discrete family all three boxes have nothing to do.  The shift
+   under the discrete family all three boxes have nothing to do. The shift
    is also grayed while the mirror image is on, since a mirrored fit
-   estimates its own end point.  It is never grayed for the picked model:
+   estimates its own end point. It is never grayed for the picked model:
    the box sets how every candidate is fitted, and section 3 says why the
    picked one takes no shift when it does not. */
 function setTip(el, text) {
@@ -8452,8 +8452,8 @@ function renderRanking() {
   /* These five are the only bare abbreviations in the widget that nothing
      beside them explains, and the disclosure that does explain them sits
      below the table, collapsed, and runs several hundred words on which
-     criterion to believe.  A header tip answers the smaller question the
-     reader actually has while scanning a row: what is this number.  The
+     criterion to believe. A header tip answers the smaller question the
+     reader actually has while scanning a row: what is this number. The
      text is written here rather than passed through esc() so that it can
      carry markup, which the tip box renders; it therefore must not contain
      a double quote. */
@@ -8462,10 +8462,10 @@ function renderRanking() {
            '" tabindex="0" data-tip="' + tip + '">' + label + '</span></th>';
   };
   /* Choosing a candidate was a click and nothing else, which left the whole
-     table unreachable without a mouse.  A tab stop per selectable row plus
+     table unreachable without a mouse. A tab stop per selectable row plus
      Enter and Space is the least invasive fix: the table keeps its native
      semantics, and so a screen reader still announces it as a table and its
-     own arrow keys still walk the cells.  aria-current marks which fit the
+     own arrow keys still walk the cells. aria-current marks which fit the
      panels below are showing, which until now was carried by a background
      tint alone. */
   var rowAttrs = function (r) {
@@ -8478,7 +8478,7 @@ function renderRanking() {
         'the chi-square test subtracts a smaller count that leaves out endpoints read straight ' +
         'off the sample range.', 'narrow') +
     hdr('Log-likelihood',
-        'How probable your data is under this fitted model. Bigger is better, but adding ' +
+        'How probable your data are under this fitted model. Bigger is better, but adding ' +
         'parameters to a distribution always raises it as more parameters provide more ' +
         'modeling flexibility. However, the increased ability of the model to represent a ' +
         'given data set can decrease its ability to describe generic patterns in real data.') +
@@ -8557,9 +8557,9 @@ function renderRanking() {
   $('rank-host').innerHTML = h;
 
   /* renderRanking rebuilds this table from a string, and so the row that was
-     focused stops existing the moment it is chosen.  A keyboard user would be
+     focused stops existing the moment it is chosen. A keyboard user would be
      dropped back at the top of the document on every pick, so focus is put
-     back on the replacement row.  Only for a keyboard pick: calling focus()
+     back on the replacement row. Only for a keyboard pick: calling focus()
      after a mouse click would be gratuitous. */
   function pick(key, refocus) {
     ST.pick = key;
@@ -8834,7 +8834,7 @@ function renderFit() {
   }
   if (r.noCriteria) {
     pin += '<div class="note quiet"><strong>Why this one is not scored.</strong> The empirical ' +
-      'distribution is built from the data rather than fitted to it: it carries ' +
+      'distribution is built from the data rather than fitted to them: it carries ' +
       (d.key === 'discreteEmpirical' ? 'a free probability for every distinct value'
                                      : 'one breakpoint per observation') +
       ', and so it will always describe your sample better than any two-parameter law can, ' +
@@ -8891,7 +8891,7 @@ function holdNote(r) {
     'large, but by less than it was.</div>';
 }
 
-/* Reading a hold box.  A blank or unreadable value means "not held", which
+/* Reading a hold box. A blank or unreadable value means "not held", which
    is friendlier than refusing to render while someone is mid-keystroke. */
 function wireHoldControls() {
   var r = pickedRow();
@@ -8934,7 +8934,7 @@ function wireHoldControls() {
    and the bootstrap result is discarded because it was computed under a
    different set of holds.
 
-   The redraw is deferred by one turn of the event loop.  A `change` event
+   The redraw is deferred by one turn of the event loop. A `change` event
    on a number box fires as part of the blur that commits it, and rebuilding
    the table's innerHTML from inside that handler removes the very element
    the browser is still dispatching on, which Chrome reports as "the node
@@ -8955,7 +8955,7 @@ function applyHolds() {
    The less familiar candidates are explained by the transformation that
    relates each to a familiar one, which is also the reason a reader
    rarely needs to transform the data by hand: fitting one of these is
-   fitting the familiar distribution to the transformed data.  The text
+   fitting the familiar distribution to the transformed data. The text
    carries markup for the tip box and so must not contain a double quote. */
 var NAME_TIPS = {
   johnsonSB: 'A standard normal put through a logistic curve: Z = γ + δ ln(y/(1 − y)) with y = (X − ξ)/λ, ' +
@@ -8984,7 +8984,7 @@ var NAME_TIPS = {
    about as well, and the extra shape parameter is not earning its place.
    For an Erlang the restriction is to a whole number, which the test
    treats only approximately, and the tip says "about as well" for that
-   reason.  Rows with held parameters are skipped, because a hold changes
+   reason. Rows with held parameters are skipped, because a hold changes
    what is being compared. */
 var LR_CRIT_1DF = 3.841, LR_CRIT_2DF = 5.991;
 function nearSpecialCase(r, rows) {
@@ -9002,7 +9002,7 @@ function nearSpecialCase(r, rows) {
   };
   /* A Johnson row always carries a note: four free parameters that reach
      almost any shape are a warning in a ranking, whatever the numbers
-     say.  The note names the limit the fit ran toward when it did, and
+     say. The note names the limit the fit ran toward when it did, and
      otherwise says when the normal or the lognormal row, two parameters
      lighter, fits about as well (two degrees of freedom, 5.99). */
   if (r.key === 'johnsonSB' || r.key === 'johnsonSU') {
@@ -9231,7 +9231,7 @@ function renderBinPanel() {
   armPlotDownloads();
 }
 
-/* Histogram with the fitted density laid over it.  The bars are drawn as
+/* Histogram with the fitted density laid over it. The bars are drawn as
    relative frequency per unit, the same units as a density, so the two are
    directly comparable rather than merely adjacent. */
 function renderDensity() {
@@ -9324,7 +9324,7 @@ function renderDensity() {
     densityCaption(discrete, n, b, scale, showFit);
 }
 
-/* The histogram's caption.  With the fit hidden, the right-hand axis is
+/* The histogram's caption. With the fit hidden, the right-hand axis is
    gone and the caption says only what a bar counts, and an invisible copy
    of the full caption keeps its height, so that the cards and the page
    below do not move on the toggle. */
@@ -9363,7 +9363,7 @@ function renderChi() {
   if (r.noCriteria) {
     host.innerHTML = '<div class="note quiet">The empirical distribution is not tested. It was ' +
       'built from these bins’ own data, and a chi-square test of it against them would be asking ' +
-      'whether the data agrees with itself.</div>';
+      'whether the data agree with themselves.</div>';
     return;
   }
   var chi = IA.chiSquareGOF(ST.x, r.fit, ST.bins);
@@ -9441,9 +9441,9 @@ function renderChi() {
 
 /* ── The bootstrap ─────────────────────────────────────────────────
    Run in a Web Worker where one can be built, and in timed slices on the
-   main thread where one cannot.  A page opened by double-clicking it has
+   main thread where one cannot. A page opened by double-clicking it has
    the opaque origin "null", and some browsers refuse to construct a
-   Worker from a blob: URL there.  The fallback is not a lesser
+   Worker from a blob: URL there. The fallback is not a lesser
    calculation -- it is the same bootstrapRun driven by a timer, yielding
    between chunks so the progress bar keeps moving. */
 var BOOT = { running: false, worker: null, timer: null, canceled: false };
@@ -9583,7 +9583,7 @@ function fitSignature() {
 
 /* The K-S statistic against the 5% critical value the bootstrap finds for
    the fit actually performed, which is the only valid one when parameters
-   were estimated.  The table's value is shown only to measure its error,
+   were estimated. The table's value is shown only to measure its error,
    and D is set against it only where it would have given the other answer:
    the two are not two tests to choose between. */
 function critCompare(n, tableCrit, bootCrit, D) {
@@ -9608,8 +9608,8 @@ function renderGof() {
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   if (r.noCriteria) {
     host.innerHTML = '<div class="note quiet">Not tested, for the same reason it is not scored: the ' +
-      'empirical distribution was built from this data, and testing it against the same data would ' +
-      'only confirm that the data agrees with itself.</div>';
+      'empirical distribution was built from these data, and testing it against the same data would ' +
+      'only confirm that the data agree with themselves.</div>';
     return;
   }
   var f = r.fit, F = IA.fitCdf(f), n = ST.s.n;
@@ -9647,7 +9647,7 @@ function renderGof() {
   var tieNote = tied
     ? '<div class="note quiet" style="margin-top:8px"><strong>' + (f.dist.kind === 'discrete'
         ? 'This is a discrete fit, and ties are unavoidable.'
-        : 'Your data has many repeated values (' + ST.s.nUnique + ' distinct out of ' + ST.s.n +
+        : 'Your data have many repeated values (' + ST.s.nUnique + ' distinct out of ' + ST.s.n +
           '), and it was almost certainly rounded when it was recorded.') +
       '</strong> Both statistics are built for continuous data with no ties, and ties push them up; ' +
       'neither the usual rules of thumb nor the table column applies here. ' +
@@ -9857,8 +9857,8 @@ function drawCDF() {
      curves: right of the gap, left of it, a little further out on either
      side, then diagonally above-left and below-right of it, which a rising
      CDF leaves empty even when the two curves run together and the gap is
-     too small to hold anything.  If no spot is clear, the one crossing the
-     fewest curve segments wins.  Its width is estimated at 6 pixels a
+     too small to hold anything. If no spot is clear, the one crossing the
+     fewest curve segments wins. Its width is estimated at 6 pixels a
      character, which is generous for 10px bold digits. */
   var dTxt = 'D = ' + fmt(ks.D, 3), dW = 6 * dTxt.length;
   var gx = P.X(ks.at), gyTop = P.Y(Math.max(y1, y2)), gyBot = P.Y(Math.min(y1, y2));
@@ -9901,7 +9901,7 @@ function drawCDF() {
     if (sc === 0) break;
   }
   /* Near a corner, or where the curves crowd the gap on every side, none
-     of those spots is clear.  The label then goes to the clear spot on a
+     of those spots is clear. The label then goes to the clear spot on a
      5-pixel grid nearest the gap, preferring one whose leader line back to
      the gap stays off the curves, and the leader is drawn when the label
      sits more than 12 pixels from the gap. */
@@ -9972,11 +9972,11 @@ function segHitsBox(ax, ay, bx, by, x0, x1, yt, yb) {
 }
 
 /* Where the CDF plot's legend goes: whichever of two empty corners the
-   curves leave alone.  A right-skewed sample climbs early and runs along
+   curves leave alone. A right-skewed sample climbs early and runs along
    the top, which leaves the bottom right empty; a left-skewed one stays low
    until late and climbs at the right, straight through that corner, leaving
-   the top left empty instead.  Each candidate box is scored by how many
-   points of either curve fall inside it, and the bottom right wins ties.  A
+   the top left empty instead. Each candidate box is scored by how many
+   points of either curve fall inside it, and the bottom right wins ties. A
    box spans 152 by 42 pixels around its first row, the full legend's three
    rows. */
 function legendCornerCdf(P, step, curve) {
@@ -10076,10 +10076,10 @@ function legacyCopy(text, done) {
    on-screen size, which is enough to drop into a report without it
    looking soft.
 
-   Two things have to be repaired on the way out.  The SVG's colors are
+   Two things have to be repaired on the way out. The SVG's colors are
    written as var(--token) so the page can be re-themed, and a var()
    reference means nothing in a standalone file, so each one is resolved
-   to the literal it currently stands for.  And the text inherits its font
+   to the literal it currently stands for. And the text inherits its font
    from the page, which a detached image does not inherit, so the font
    stack is written onto the clone.
    ────────────────────────────────────────────────────────────────── */
@@ -10857,8 +10857,8 @@ function csvGof() {
              IA.num(IA.ksTableCritical(n), 8),
              res ? IA.num(res.critD, 8) : '',
              'The table columns assume the distribution and its parameters were fixed before the ' +
-             'data was seen. ' + r.fit.k + ' parameter(s) were estimated from this sample, which ' +
-             'makes D smaller than the table expects, so the table p-value runs TOO LARGE and the ' +
+             'data were seen. ' + r.fit.k + ' parameter(s) were estimated from this sample, which ' +
+             'makes D smaller than the table expects, and so the table p-value runs TOO LARGE and the ' +
              'test built on it is too permissive. Use the bootstrap columns.']);
   rows.push(['Anderson-Darling', IA.num(A, 8), '',
              IA.num(IA.adPvalueClassical(A, n), 6),
@@ -10959,7 +10959,7 @@ var A_LOADER = makeLoader({
     var cv = IA.columnTimes(col, AST.clockConv);
     /* A column of clock values that no time of day can be ("05:12.3", or
        "75:12") has only the elapsed reading, and so the menu moves to it
-       rather than leaving the column unread with the menu hidden.  The
+       rather than leaving the column unread with the menu hidden. The
        move is the page's, not the reader's, and so the next data read
        start again from a time of day. */
     if (AST.clockConv === 'hm' && !cv.parsed) {
@@ -10979,7 +10979,7 @@ var A_LOADER = makeLoader({
        lands at the sum of the first i gaps. Everything downstream then
        works on timestamps and needs no special case. */
     var vals = cv.values, negGaps = 0, i;
-    /* A clock reading fixes how long each value is.  Every reading comes
+    /* A clock reading fixes how long each value is. Every reading comes
        out in minutes except an HH:MM duration, which comes out in hours
        and is brought to minutes here, and the time unit converts from
        there. */
@@ -11010,7 +11010,7 @@ var A_LOADER = makeLoader({
     /* The data's own unit comes first: clock readings are minutes, and
        plain numbers are in whatever unit the reader states (new data start
        unstated, or at the unit a sample brings; re-reading the same data
-       keeps it).  The time unit then converts from it.  For clock readings
+       keeps it). The time unit then converts from it. For clock readings
        it starts at the largest unit in which the mean gap is at least 1,
        for plain numbers at their own unit, unless the reader has picked
        one for these data; with no stated unit there is nothing to convert
@@ -11088,9 +11088,9 @@ function widthLadder(span, maxK) {
   if (!uniq.length) uniq = [span / 10, span / 5, span / 2];
   return uniq;
 }
-/* The entry nearest k intervals.  For the rate, ten: a rate estimate then
+/* The entry nearest k intervals. For the rate, ten: a rate estimate then
    has enough arrivals behind it to mean something, and there are still
-   enough intervals to show a peak.  For the counts, more, because each
+   enough intervals to show a peak. For the counts, more, because each
    interval is one observation in the histogram of counts. */
 function defaultWidthIdx(ladder, span, k) {
   var want = span / (k || 10), best = 0, bestD = Infinity, i, d;
@@ -11199,7 +11199,7 @@ function renderArrivals() {
           'them. A scheduled or appointment-driven system often looks like this.'));
 
   /* Rebuilt whenever the span changes, so the sliders always offer widths
-     that suit the data in front of it. */
+     that suit the data loaded. */
   var ladders = { rate: widthLadder(span, 60),
                   count: widthLadder(span, Math.max(60, 2 * (t.length - 1))) };
   if (AST.ladderSpan !== span) {
@@ -11255,9 +11255,9 @@ function syncWidth(which, ladder) {
   if (document.activeElement !== wv) wv.value = IA.num(w, 8);
   return w;
 }
-/* The width's unit, and the number of intervals it makes.  With no clock
+/* The width's unit, and the number of intervals it makes. With no clock
    to name the unit, the width is in "time units", so that the control
-   still reads as a sentence.  The counts use only the full intervals (a
+   still reads as a sentence. The counts use only the full intervals (a
    short final stub would read as a quiet one), and so the counting
    interval reports those. */
 function showWidthCount(which, prof) {
@@ -11270,7 +11270,7 @@ function showWidthCount(which, prof) {
 }
 /* The stated time unit, as the tab writes it: after "per" or "/", after
    an amount, spelled out in a sentence, and in the narrow summary card,
-   whose value cannot wrap.  "Other" is a unit the reader has not named,
+   whose value cannot wrap. "Other" is a unit the reader has not named,
    written as "time units". */
 var A_TUNITS = {
   seconds: { one: 'sec', many: 'sec', long: 'seconds', card: 's' },
@@ -11330,7 +11330,7 @@ function drawCumulative() {
   var t0 = t[0], t1 = t[n - 1];
   /* Durations were added up from an origin at 0 that is not an arrival,
      and so the count starts after it; timestamps count their first
-     arrival as 1.  Either way the count rises by one per gap from there,
+     arrival as 1. Either way the count rises by one per gap from there,
      and the constant-rate line has the slope section 4 estimates. */
   var skip = AST.flags && AST.flags.fromGaps ? 1 : 0;
   var c0 = 1 - skip, cEnd = n - skip;
@@ -11413,7 +11413,7 @@ function drawRate() {
   P.seg(prof.t0, prof.overall, prof.t1, prof.overall, 'var(--alt)', 2, '6 4');
 
   /* When the arrivals came from the generator, the rate that produced them
-     is known exactly, so it is drawn over the estimate.  Nothing else on
+     is known exactly, so it is drawn over the estimate. Nothing else on
      this page can show a reader what their estimate is an estimate OF. */
   var legend = [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'estimated rate ±1 s.e.' },
@@ -11456,7 +11456,7 @@ function fitRateTable() {
 }
 /* Which intervals the table's box shows, said under it whenever some are
    scrolled out of view: an idle scrollbar is hidden on a phone and, by
-   default, on a Mac.  A row counts as shown when half of it is in view. */
+   default, on a Mac. A row counts as shown when half of it is in view. */
 function rateTableMore() {
   var tbl = $('rate-tbl'), line = $('rate-more');
   var rows = tbl.querySelectorAll('tbody tr'), k = rows.length;
@@ -11635,12 +11635,12 @@ function renderRateMLE() {
 }
 
 /* The gaps as a distribution, next to the exponential that section 4
-   estimates from them.  Both plots use the SAME rate as the cards above --
+   estimates from them. Both plots use the SAME rate as the cards above --
    they are a picture of that estimate, not a second one.
 
    They belong on this tab even though tab ① can draw richer versions
    because the button that sends them across should sit beside the thing it
-   sends.  If these two plots already look wrong, there is no point going. */
+   sends. If these two plots already look wrong, there is no point going. */
 function drawGapsHist() {
   var host = $('gaps-host'), note = $('gaps-note');
   var g = AST.gaps;
@@ -11743,7 +11743,7 @@ function drawGapsCDF() {
     '<div class="plot-cap">The same fit as the histogram, where the tail is easier to judge</div>';
 }
 
-/* The block counts as a distribution rather than as a time series.  The
+/* The block counts as a distribution rather than as a time series. The
    rate plot shows WHEN the arrivals came; this shows how the per-interval
    counts are spread, which is the thing a Poisson is a claim about.
 
@@ -12079,7 +12079,7 @@ var PST = {
   sig: ''             /* identifies these pairs, for the hand-off to tab 1 */
 };
 
-/* A loader for the tabs that read several columns at once.  The paste,
+/* A loader for the tabs that read several columns at once. The paste,
    file, and drop paths match the one-column loader's; what differs is that
    the whole table is handed on and each section picks its own columns. */
 function makeTableLoader(cfg) {
@@ -12171,7 +12171,7 @@ function sampleCsv(s) {
 }
 
 /* An element's tallest height over every text it can show, so that
-   switching between them never moves anything below it.  Each text is
+   switching between them never moves anything below it. Each text is
    laid out in a hidden clone of the element at its current width. */
 function reserveHeight(el, htmls) {
   if (!el || !el.offsetWidth) return;
@@ -12240,7 +12240,7 @@ function pairNames() {
   return { x: t ? t.names[PST.xi] : 'X', y: t ? t.names[PST.yi] : 'Y' };
 }
 
-/* The pairs as the pairing switch shows them.  Every setting keeps both
+/* The pairs as the pairing switch shows them. Every setting keeps both
    sets of values; only the matching changes. */
 function pairShown() {
   var x = PST.x, y = PST.y, asc = function (a, b) { return a - b; };
@@ -12321,8 +12321,8 @@ function clipLine(a, b, x0, x1, ylo, yhi) {
 
 /* The joint plot: the pairs, with X's histogram along the top and Y's up
    the right side, drawn as one SVG so that an exported image carries all
-   three.  The margins come from the scatter's own scales, and so a bar
-   sits exactly over (or beside) the stretch of axis it counts.  The frame
+   three. The margins come from the scatter's own scales, and so a bar
+   sits exactly over (or beside) the stretch of axis it counts. The frame
    is fixed by the observed values, which every pairing shares, and so it
    never moves when the pairing switch does. */
 function renderJoint() {
@@ -12571,7 +12571,7 @@ function renderPairModel() {
   renderPairExport(f);
 }
 
-/* Sends one set of numbers to tab 1.  A fit made there to the residuals or
+/* Sends one set of numbers to tab 1. A fit made there to the residuals or
    to Y per unit of X is then picked up by this tab's export, which knows it
    by the signature of the pairs it came from. */
 function sendPairToFit(kind) {
@@ -12752,7 +12752,7 @@ var S_LOADER = makeTableLoader({
       o = document.createElement('option'); o.value = String(tc[i]); o.textContent = t.names[tc[i]]; ts.appendChild(o);
     }
     if (!nc.length) { SST.y = []; SST.t = []; renderSeriesAll(); return; }
-    /* A sample says which column is which.  Otherwise a first column that
+    /* A sample says which column is which. Otherwise a first column that
        only increases, beside another column of numbers, is taken to be the
        time, and the reader can say otherwise. */
     if (s) {
@@ -12904,8 +12904,8 @@ function renderLagPlot(md) {
 
 /* A correlogram into host: stems at lags 1..L inside a fixed [-1, 1]
    frame, the 95% band for independent values dashed, and one stem
-   highlighted.  A tap or click on the plot picks the nearest lag when
-   onPick is given.  A matchH in pixels makes the drawn plot at least that
+   highlighted. A tap or click on the plot picks the nearest lag when
+   onPick is given. A matchH in pixels makes the drawn plot at least that
    tall on screen, to stand level with a plot beside it. */
 function drawCorrelogram(host, r, n, mark, title, aria, onPick, matchH) {
   var L = r.length - 1;
@@ -13154,7 +13154,7 @@ function renderAr(md) {
   ];
   var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
   /* The noise term's distribution is not estimated here: phi and sigma
-     come from correlations alone.  The model names the one the export uses,
+     come from correlations alone. The model names the one the export uses,
      a normal unless the AR(1) residuals have been fitted on tab 1. */
   var stepFit = seriesHandoff('innov');
   if (stepFit && !Number.isFinite(IA.centeringMean(stepFit.fit))) stepFit = null;
@@ -13420,7 +13420,7 @@ window.addEventListener('resize', function () {
   }, 150);
 });
 function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
-/* A mention of the other tab in the text is a link to it.  The router alone
+/* A mention of the other tab in the text is a link to it. The router alone
    would switch tabs but leave the scroll where it was, landing the reader
    halfway down the other tab, and so the click also brings the tab strip
    (or, on a narrow screen, the tab picker) back into view. */
@@ -13484,7 +13484,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  /* Bin slider.  Everything downstream of the bins is recomputed on the
+  /* Bin slider. Everything downstream of the bins is recomputed on the
      spot, which is what makes the chi-square p-value and the square-error
      ranking visibly move together as the slider is dragged. */
   $('bins').addEventListener('input', function () {
@@ -13495,7 +13495,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.bins = IA.makeBins(ST.x, ST.binK);
     /* Square error is a function of the binning, so the ranking is
        recomputed too -- and if the reader is sorting by square error, the
-       order on screen can change under the slider.  That is the lesson. */
+       order on screen can change under the slider. That is the lesson. */
     ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
     if (!ST.userPicked) ST.pick = IA.bestBy(ST.rows, ST.rankBy) || firstOk();
     /* The chi-square null was built on the old bin count, so it no longer
@@ -13639,9 +13639,9 @@ document.addEventListener('DOMContentLoaded', function () {
       aWidthSay(which, '');
       renderArrivals();
     });
-    /* A typed width is taken as given, within bounds.  The rate width is
+    /* A typed width is taken as given, within bounds. The rate width is
        capped at 500 intervals, past which the rate plot gives each one
-       less than a pixel and the table runs to hundreds of rows.  The
+       less than a pixel and the table runs to hundreds of rows. The
        counting interval only sets how many counts the histogram holds, and
        so its cap guards against a mistyped width and nothing else. */
     $(id + '-val').addEventListener('change', function () {

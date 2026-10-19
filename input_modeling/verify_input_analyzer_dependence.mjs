@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════
    Verification of the dependence numerics (the Relate Two Variables and
-   Look for Patterns over Time tabs).  NOT shipped with the widget.
+   Look for Patterns over Time tabs). NOT shipped with the widget.
 
    verify_input_analyzer.mjs runs these sections with the rest; this file
    also runs on its own, which takes a few seconds:
@@ -9,7 +9,7 @@
 
    The reference values come from verify_dependence_reference.R, which
    generates every dataset with a fixed seed and writes the data and R's
-   results to verify_dependence_reference.json.  Regenerate the JSON only by
+   results to verify_dependence_reference.json. Regenerate the JSON only by
    re-running that script.
    ══════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
@@ -276,7 +276,7 @@ export function runTimeOrder(IA, { section, ok, close }) {
 }
 
 /* Runs a generated script and returns what it printed, or null when the
-   language is not installed.  Each script prints one line per reported
+   language is not installed. Each script prints one line per reported
    number, marked "agrees" or "DIFFERS" against the value the page showed. */
 function runScript(cmd, args, code, ext, files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-dep-'));

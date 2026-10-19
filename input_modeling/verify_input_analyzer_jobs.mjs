@@ -1,9 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════
    The slow loops of verify_input_analyzer.mjs, as jobs that can run on
-   worker threads.  NOT shipped with the widget.
+   worker threads. NOT shipped with the widget.
 
    Each job is the body of one of the verify script's Monte Carlo loops,
-   moved here unchanged: the same seeds, the same draws, the same fits.  A
+   moved here unchanged: the same seeds, the same draws, the same fits. A
    job takes a range of replications (or one distribution) and returns
    plain counts and numbers, and the verify script adds the counts up and
    makes its checks on the totals, and so a parallel run prints exactly
@@ -69,7 +69,7 @@ export const JOBS = {
   },
 
   /* Section 15c: a shifted Weibull survives the generate-and-refit round
-     trip.  A profile over the shift on 40,000 points takes most of a
+     trip. A profile over the shift on 40,000 points takes most of a
      minute, which is why it is a job. */
   shiftRoundTrip(IA) {
     const g = IA.generateSample('weibull', [3, 1.6], 2.5, 40000, 4242, null);
@@ -209,13 +209,13 @@ export const JOBS = {
 
 /* ── A pool of worker threads, or a serial stand-in ────────────────────
    run(job, args) records a job and returns a promise of its result, and
-   start() sets them all going.  The whole list goes to every worker once,
+   start() sets them all going. The whole list goes to every worker once,
    and each worker claims the next unclaimed job from a shared counter, so
    that a worker never waits on the main thread for its next job: the main
    thread is busy with sections of its own for minutes at a time, and a
    pool that handed out jobs from there left its workers idle meanwhile.
    Workers number one fewer than the machine's cores (IA_WORKERS
-   overrides).  With IA_SERIAL=1, or fewer than two workers, start() runs
+   overrides). With IA_SERIAL=1, or fewer than two workers, start() runs
    every job on the calling thread instead. */
 export function makePool() {
   const cores = (os.availableParallelism ? os.availableParallelism() : os.cpus().length);

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /* ══════════════════════════════════════════════════════════════════════
-   Verification for input_analyzer.html.  NOT shipped with the widget.
+   Verification for input_analyzer.html. NOT shipped with the widget.
 
      node input_modeling/verify_input_analyzer.mjs
 
    The script slices the block between the IA-CORE sentinels out of
    input_analyzer.html and runs it in a Node vm context, so the code under
-   test is byte-for-byte the code the page ships.  There is no second copy
+   test is byte-for-byte the code the page ships. There is no second copy
    of the numerics to drift out of sync.
 
    Reference values are exact identities wherever one exists -- Gamma(1/2)
    = sqrt(pi), P(1,x) = 1 - e^-x, I_x(2,3) = 11/16 at x = 1/2, psi(1) =
    -Euler's gamma -- rather than digits copied from a table, so a reader
-   can check the check.  Where a published constant is used instead, the
+   can check the check. Where a published constant is used instead, the
    source is named on the line.
    ══════════════════════════════════════════════════════════════════════ */
 import path from 'node:path';
@@ -60,9 +60,9 @@ console.log(C.d(`core block: ${lines} lines, sliced from ${path.relative(process
    Sections 15c, 15f, 15g, and 16 spend nearly all of the run in Monte Carlo
    loops whose replications are independent, and so the loops are handed
    to worker threads here, at the start, and each section waits for its own
-   results when it reaches them.  The jobs use the same seeds as a serial
+   results when it reaches them. The jobs use the same seeds as a serial
    loop and their counts are summed before any check, and so the output is
-   the same either way.  Jobs are queued in the order the sections need
+   the same either way. Jobs are queued in the order the sections need
    them, so that the main thread can work through the sections in between
    (15d to 15f do a minute of their own work) while the workers carry on
    with the long calibrations of 15g and 16. */
@@ -105,7 +105,7 @@ for (const [key, truth] of BOOT_FAMILIES)
 pool.start();
 
 /* ══════════════════════════════════════════════════════════════════════
-   1.  LOG GAMMA
+   1. LOG GAMMA
    ══════════════════════════════════════════════════════════════════════ */
 section('1. logGamma — against exact identities');
 {
@@ -140,7 +140,7 @@ section('1. logGamma — against exact identities');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   2.  INCOMPLETE GAMMA
+   2. INCOMPLETE GAMMA
    ══════════════════════════════════════════════════════════════════════ */
 section('2. gammaP / gammaQ — against exact identities');
 {
@@ -164,7 +164,7 @@ section('2. gammaP / gammaQ — against exact identities');
     close(IA.gammaP(a, x) + IA.gammaQ(a, x), 1, 1e-14, `P + Q = 1 at a=${a}, x=${x}`);
   }
   /* Chi-square percentage points, Abramowitz & Stegun table 26.8:
-     the 0.95 point of chi-square with df degrees of freedom.  The
+     the 0.95 point of chi-square with df degrees of freedom. The
      chi-square CDF is P(df/2, x/2). */
   const CHI95 = { 1: 3.841459, 2: 5.991465, 5: 11.070498, 10: 18.307038, 30: 43.772972 };
   for (const df of Object.keys(CHI95)) {
@@ -179,7 +179,7 @@ section('2. gammaP / gammaQ — against exact identities');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   3.  INCOMPLETE BETA
+   3. INCOMPLETE BETA
    ══════════════════════════════════════════════════════════════════════ */
 section('3. betaInc — against exact identities');
 {
@@ -204,13 +204,13 @@ section('3. betaInc — against exact identities');
     close(IA.betaInc(a, b, x), s, 1e-12, `I_${x}(${a},${b}) = binomial tail`);
   }
   /* Student t: the two-sided 95% point for 10 df is 2.228139 (published,
-     A&S table 26.10).  P(|T| > t) = I_{df/(df+t^2)}(df/2, 1/2). */
+     A&S table 26.10). P(|T| > t) = I_{df/(df+t^2)}(df/2, 1/2). */
   close(IA.betaInc(5, 0.5, 10 / (10 + 2.228139 ** 2)), 0.05, 5e-7,
     't(10) two-sided tail at the published 97.5% point');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   4.  NORMAL CDF AND ITS INVERSE
+   4. NORMAL CDF AND ITS INVERSE
    ══════════════════════════════════════════════════════════════════════ */
 section('4. normCdf / normInv');
 {
@@ -236,7 +236,7 @@ section('4. normCdf / normInv');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   5.  DIGAMMA AND TRIGAMMA
+   5. DIGAMMA AND TRIGAMMA
    ══════════════════════════════════════════════════════════════════════ */
 section('5. digamma / trigamma');
 {
@@ -260,7 +260,7 @@ section('5. digamma / trigamma');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   6.  PSEUDORANDOM NUMBER GENERATOR
+   6. PSEUDORANDOM NUMBER GENERATOR
    ══════════════════════════════════════════════════════════════════════ */
 section('6. MRG32k3a');
 {
@@ -317,7 +317,7 @@ section('6. MRG32k3a');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   7.  PARSER
+   7. PARSER
    ══════════════════════════════════════════════════════════════════════ */
 section('7. parseTable / columnValues');
 {
@@ -453,7 +453,7 @@ section('7. parseTable / columnValues');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   8.  SUMMARY STATISTICS
+   8. SUMMARY STATISTICS
    ══════════════════════════════════════════════════════════════════════ */
 section('8. summarize');
 {
@@ -469,11 +469,11 @@ section('8. summarize');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   9.  THE EXPONENTIAL AND ITS LOCATION SHIFT, IN DETAIL
+   9. THE EXPONENTIAL AND ITS LOCATION SHIFT, IN DETAIL
    ══════════════════════════════════════════════════════════════════════
    Each distribution is sampled at a known parameter value with a fixed
    seed, refitted, and the estimate is required to land within a few
-   standard errors of the truth.  The tolerance is stated as a multiple of
+   standard errors of the truth. The tolerance is stated as a multiple of
    the asymptotic standard error, not as a bare number, so the test says
    something about the estimator rather than about one lucky sample. */
 section('9. The exponential and its location shift, in detail');
@@ -499,7 +499,7 @@ section('9. The exponential and its location shift, in detail');
     close(ic.bic, Math.log(N) - 2 * f.ll, 1e-14, 'BIC = k ln n - 2 logL');
   }
 
-  /* Shifted exponential: gamma + Expo(beta).  The MLE of the threshold is
+  /* Shifted exponential: gamma + Expo(beta). The MLE of the threshold is
      the sample minimum, whose bias is beta/n -- so the recovery test on
      gamma is a bias test, and it must land within a few beta/n of truth. */
   {
@@ -544,7 +544,7 @@ section('9. The exponential and its location shift, in detail');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   10.  EXPONENTIAL QUANTILE / CDF, TO THE LAST DIGIT
+   10. EXPONENTIAL QUANTILE / CDF, TO THE LAST DIGIT
    ══════════════════════════════════════════════════════════════════════ */
 section('10. exponential cdf and quantile, to the last digit');
 {
@@ -563,11 +563,11 @@ section('10. exponential cdf and quantile, to the last digit');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   11.  MLE RECOVERY FOR EVERY SUPPORTED DISTRIBUTION
+   11. MLE RECOVERY FOR EVERY SUPPORTED DISTRIBUTION
    ══════════════════════════════════════════════════════════════════════
    Each distribution is sampled at known parameter values with a fixed
    seed, refitted, and every estimate is required to land within a stated
-   tolerance.  Where an asymptotic standard error is easy to state the
+   tolerance. Where an asymptotic standard error is easy to state the
    tolerance is a multiple of it; otherwise it is a relative tolerance
    chosen to be comfortably tighter than the estimator's own spread at
    this n, so a real regression shows up rather than being absorbed.
@@ -627,12 +627,12 @@ section('11. MLE recovery, every distribution');
     ok(Number.isInteger(f.p[0]), 'erlang: the fitted shape really is a whole number');
   }
 
-  /* Beta.  Its interval is READ OFF the data rather than estimated, and
+  /* Beta. Its interval is READ OFF the data rather than estimated, and
      that convention -- not the solver -- is what limits how well the true
      shapes come back: for shapes above 1 the density vanishes at the ends,
      so no finite sample reaches them, the fitted interval is narrower than
-     the true one, and the shapes absorb the difference.  The page says so
-     in as many words.  So the solver is checked against the equations it
+     the true one, and the shapes absorb the difference. The page says so
+     in as many words. So the solver is checked against the equations it
      is supposed to solve, and the recovery is checked only loosely. */
   {
     const u = IA.MRG32k3a(111), truth = [2.2, 5.4, 0, 1], x = [];
@@ -691,7 +691,7 @@ section('11. MLE recovery, every distribution');
     close(f.ll, g.ll + jac, 1e-11, 'Pearson V: log-likelihood = gamma log-likelihood of 1/x + Jacobian');
   }
 
-  /* Pearson type VI.  Its three parameters are weakly identified (the
+  /* Pearson type VI. Its three parameters are weakly identified (the
      shapes and the scale trade off), and so recovery is checked loosely and
      the solver against its own optimality conditions: at the fit the two
      beta likelihood equations hold for t = x/(x + beta), and the profile's
@@ -779,7 +779,7 @@ section('11. MLE recovery, every distribution');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   12.  CDF / QUANTILE / PDF CONSISTENCY, EVERY DISTRIBUTION
+   12. CDF / QUANTILE / PDF CONSISTENCY, EVERY DISTRIBUTION
    ══════════════════════════════════════════════════════════════════════ */
 section('12. cdf / quantile / pdf consistency, every distribution');
 {
@@ -807,7 +807,7 @@ section('12. cdf / quantile / pdf consistency, every distribution');
     ok(worst < (d.kind === 'discrete' ? 0.5 : 1e-8),
        `${key}: F(F^-1(u)) = u across the range (worst ${worst.toExponential(2)} at u = ${worstU})`);
 
-    /* The pdf must integrate to the cdf.  For a discrete distribution the
+    /* The pdf must integrate to the cdf. For a discrete distribution the
        pmf must instead SUM to it. */
     if (d.kind === 'discrete') {
       let acc = 0;
@@ -835,7 +835,7 @@ section('12. cdf / quantile / pdf consistency, every distribution');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   13.  SAMPLERS AGREE WITH THEIR OWN DISTRIBUTIONS
+   13. SAMPLERS AGREE WITH THEIR OWN DISTRIBUTIONS
    ══════════════════════════════════════════════════════════════════════
    A sampler that quietly disagrees with its own cdf would corrupt every
    bootstrap p-value on the page while leaving the fits looking correct,
@@ -869,7 +869,7 @@ section('13. samplers match their own cdf');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   14.  BINS, CHI-SQUARE, AND SQUARE ERROR
+   14. BINS, CHI-SQUARE, AND SQUARE ERROR
    ══════════════════════════════════════════════════════════════════════ */
 section('14. binning and the chi-square test');
 {
@@ -944,7 +944,7 @@ section('14. binning and the chi-square test');
   const ui = IA.MRG32k3a(701), xi = [];
   for (let i = 0; i < 4000; i++) xi.push(IA.DISTS.poisson.sample(ui, [3.6]));
   const bi = IA.makeBins(xi, 10);
-  ok(bi.integer === true, 'count data is detected and binned on the half-integers');
+  ok(bi.integer === true, 'count data are detected and binned on the half-integers');
   let onEdge = false;
   for (const e of bi.edges) if (Number.isInteger(e)) onEdge = true;
   ok(!onEdge, 'no bin edge falls on a whole number');
@@ -969,7 +969,7 @@ section('14. binning and the chi-square test');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15.  KOLMOGOROV-SMIRNOV AND ANDERSON-DARLING
+   15. KOLMOGOROV-SMIRNOV AND ANDERSON-DARLING
    ══════════════════════════════════════════════════════════════════════ */
 section('15. K-S and A-D statistics');
 {
@@ -996,7 +996,7 @@ section('15. K-S and A-D statistics');
     sA += (2 * (i + 1) - 1) * (Math.log(xr[i]) + Math.log(1 - xr[n - 1 - i]));
   close(IA.adStat(xr, IA.fitCdf(unif)), -n - sA / n, 1e-12, 'A-squared matches its own definition');
 
-  /* Ties must not inflate D.  Rounding a sample changes D a little, but
+  /* Ties must not inflate D. Rounding a sample changes D a little, but
      an implementation that walked tied values one at a time would inflate
      it by roughly the weight of the largest tied run. */
   const u = IA.MRG32k3a(800), raw = [];
@@ -1008,7 +1008,7 @@ section('15. K-S and A-D statistics');
   ok(Dr < 0.06, `rounded data (${su.nUnique} distinct of ${su.n}): D = ${Dr.toFixed(5)} stays small`);
 
   /* For a discrete fit the comparison just below an atom must use the cdf
-     just below it.  Without that correction D is roughly the largest
+     just below it. Without that correction D is roughly the largest
      single-point probability -- about 0.2 for this Poisson -- whatever
      the fit is doing. */
   const up = IA.MRG32k3a(801), xp = [];
@@ -1023,7 +1023,7 @@ section('15. K-S and A-D statistics');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15b.  THE CLASSICAL P-VALUES, FOR A FULLY SPECIFIED NULL
+   15b. THE CLASSICAL P-VALUES, FOR A FULLY SPECIFIED NULL
    ══════════════════════════════════════════════════════════════════════
    These are the p-values the page prints in its "from the table" column.
    Two things have to be true of them: they must reproduce the published
@@ -1086,7 +1086,7 @@ section('15b. classical K-S and A-D p-values');
   /* Now the same measurement with the parameters ESTIMATED from each
      sample, which is what the page's readers will actually be doing.
      The claim is that the table p-value is then far too LARGE -- the test
-     is too permissive, not too strict.  This is the assertion the whole
+     is too permissive, not too strict. This is the assertion the whole
      "why your textbook table does not apply" note rests on, so it is
      stated as a bound in the direction the note claims. */
   {
@@ -1114,7 +1114,7 @@ section('15b. classical K-S and A-D p-values');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15c.  THE DATA GENERATOR
+   15c. THE DATA GENERATOR
    ══════════════════════════════════════════════════════════════════════ */
 section('15c. generating data from typed parameters');
 {
@@ -1131,7 +1131,7 @@ section('15c. generating data from typed parameters');
     /* The beta gets a wider band, and the reason is the convention rather
        than the solver: its interval is read off the data range, which for
        shapes above 1 is narrower than the true support, and the shapes
-       absorb the difference.  Section 11 checks the solver itself against
+       absorb the difference. Section 11 checks the solver itself against
        the likelihood equations it is supposed to satisfy; what matters
        here is that the fitted curve still describes the sample. */
     const tol = key === 'beta' ? 0.25 : 0.12;
@@ -1200,10 +1200,10 @@ section('15c. generating data from typed parameters');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15d.  THE JOHNSON SYSTEM
+   15d. THE JOHNSON SYSTEM
    ══════════════════════════════════════════════════════════════════════
    Generate-only by design: it exists so that a reader can make data that
-   no fitting candidate can match exactly.  What has to be true is that it
+   no fitting candidate can match exactly. What has to be true is that it
    generates correctly, that its closed forms agree with each other, and
    that it stays off the fitting menu.
    ══════════════════════════════════════════════════════════════════════ */
@@ -1232,7 +1232,7 @@ section('15d. Johnson S_B and S_U');
     for (let m = 0; m < M; m++) acc += d.pdf(lo + (m + 0.5) * h, p) * h;
     close(acc, d.cdf(hi, p) - d.cdf(lo, p), 5e-4, `${key}: the pdf integrates to the cdf`);
 
-    /* The sampler must match its own cdf.  Parameters are fixed, so the
+    /* The sampler must match its own cdf. Parameters are fixed, so the
        published critical value applies. */
     const u01 = IA.MRG32k3a(6100 + key.length);
     const y = [];
@@ -1263,8 +1263,8 @@ section('15d. Johnson S_B and S_U');
     const fs = IA.fitDist(IA.DISTS.gamma, g.values, true, false);
     ok(fs.ok === true, 'while the same gamma fits once the location shift is on');
   }
-  /* The limits.  On normal data both members run toward the normal and
-     say so; on lognormal data toward the lognormal.  The log-likelihood
+  /* The limits. On normal data both members run toward the normal and
+     say so; on lognormal data toward the lognormal. The log-likelihood
      of each limiting fit must sit within a few units of the limit's own. */
   {
     const draw = (key, p, n, seed) => { const u = IA.MRG32k3a(seed), x = []; for (let i = 0; i < n; i++) x.push(IA.DISTS[key].sample(u, p)); return x; };
@@ -1298,12 +1298,12 @@ section('15d. Johnson S_B and S_U');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15e.  HOLDING PARAMETERS
+   15e. HOLDING PARAMETERS
    ══════════════════════════════════════════════════════════════════════
    Holding every parameter is the control condition for everything the
    page claims about estimated parameters: with nothing estimated, the
    published table is the correct reference, and the bootstrap must agree
-   with it.  That is asserted here rather than asserted in prose.
+   with it. That is asserted here rather than asserted in prose.
    ══════════════════════════════════════════════════════════════════════ */
 section('15e. holding parameters fixed');
 {
@@ -1344,7 +1344,7 @@ section('15e. holding parameters fixed');
     ok(!beaten, 'with the shape held, the free scale is still at its maximum');
   }
 
-  /* THE CONTROL CONDITION.  With everything held, the bootstrap null and
+  /* THE CONTROL CONDITION. With everything held, the bootstrap null and
      the classical null are the same distribution, so the two p-values
      must agree -- and with nothing held they must not. */
   {
@@ -1380,7 +1380,7 @@ section('15e. holding parameters fixed');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15f.  THE MIRROR IMAGE, c - X
+   15f. THE MIRROR IMAGE, c - X
    ══════════════════════════════════════════════════════════════════════
    A mirrored fit is the shifted fit run on -x, read back with c = -gamma.
    A flip has a Jacobian of 1, and both K-S and A-D are unchanged when the
@@ -1457,7 +1457,7 @@ section('15f. the mirror image, c - X');
   ok(sc.python.includes('K = len(D_ARGS)       # loc is pinned at 0 on y = c - x, but c was estimated'),
      'the Python script counts the estimated c in its AIC');
 
-  /* The bootstrap refits mirrored.  A mirrored resample is exactly the
+  /* The bootstrap refits mirrored. A mirrored resample is exactly the
      negative of the shifted fit's resample on -x (the same uniforms, with
      c = -gamma), and K-S and A-D are unchanged by the flip, and so the two
      bootstraps must return identical p-values, not merely similar ones. */
@@ -1472,13 +1472,13 @@ section('15f. the mirror image, c - X');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   15g.  THE CHI-SQUARE DEGREES OF FREEDOM
+   15g. THE CHI-SQUARE DEGREES OF FREEDOM
    ══════════════════════════════════════════════════════════════════════
    The page counts only REGULAR parameters against the chi-square degrees
    of freedom, on the grounds that an extreme order statistic converges
-   too fast to absorb any.  That is a claim about the size of the test, so
+   too fast to absorb any. That is a claim about the size of the test, so
    it is measured: under a true null, a correctly specified df gives a
-   p-value that rejects about 5% of the time.  Both conventions are run,
+   p-value that rejects about 5% of the time. Both conventions are run,
    and the numbers are printed either way.
    ══════════════════════════════════════════════════════════════════════ */
 section('15g. chi-square degrees of freedom');
@@ -1517,7 +1517,7 @@ section('15g. chi-square degrees of freedom');
     ok(c.kChi === 1, `a held parameter is not estimated, so kChi drops to ${c.kChi}`);
   }
 
-  /* The measurement.  Uniform data, uniform fit: the endpoints are order
+  /* The measurement. Uniform data, uniform fit: the endpoints are order
      statistics, so the page's convention subtracts nothing and the naive
      one subtracts two. */
   {
@@ -1548,17 +1548,17 @@ section('15g. chi-square degrees of freedom');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   16.  THE BOOTSTRAP REJECTS AT THE NOMINAL RATE UNDER A TRUE NULL
+   16. THE BOOTSTRAP REJECTS AT THE NOMINAL RATE UNDER A TRUE NULL
    ══════════════════════════════════════════════════════════════════════
    The claim the page makes is that the bootstrap p-value is calibrated
-   where the borrowed table is not.  That is checked here by simulation:
+   where the borrowed table is not. That is checked here by simulation:
    draw a fresh sample from a known distribution, fit it, run the
-   bootstrap, and record whether the p-value falls below 0.05.  Under a
+   bootstrap, and record whether the p-value falls below 0.05. Under a
    true null that should happen about 5% of the time.
 
    With R replications the standard error of the measured rate is
    sqrt(.05 x .95 / R), so the test is stated as a confidence band around
-   0.05 rather than as a fixed threshold.  The same loop also measures
+   0.05 rather than as a fixed threshold. The same loop also measures
    what the TEXTBOOK critical value would have rejected, which is the
    number the page's explanation is really about.
    ══════════════════════════════════════════════════════════════════════ */
@@ -1606,7 +1606,7 @@ section('16. bootstrap calibration under a true null');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   17.  ARRIVAL PROCESSES
+   17. ARRIVAL PROCESSES
    ══════════════════════════════════════════════════════════════════════ */
 section('17. arrival-process analysis');
 {
@@ -1714,7 +1714,7 @@ section('17. arrival-process analysis');
     ok(g.ok, `${key}: generates`, g.ok ? '' : g.msg);
     if (!g.ok) continue;
     /* Thinning must produce about the number of arrivals the rate function
-       integrates to.  The integral is done by fine quadrature, which is an
+       integrates to. The integral is done by fine quadrature, which is an
        independent calculation from the generator's own. */
     const lam = spec.rate(p, T);
     let expected = 0;
@@ -1852,7 +1852,7 @@ section('17. arrival-process analysis');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   18.  EXPORT EXPRESSIONS
+   18. EXPORT EXPRESSIONS
    ══════════════════════════════════════════════════════════════════════
    These cannot be checked against the tools themselves, so what is
    checked is that every candidate produces every line, that the numbers
