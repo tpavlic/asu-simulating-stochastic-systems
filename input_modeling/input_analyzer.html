@@ -8363,7 +8363,9 @@ function activeKeys() {
    discrete candidate is shifted, mirrored, or a Johnson member, and so
    under the discrete family all three boxes have nothing to do.  The shift
    is also grayed while the mirror image is on, since a mirrored fit
-   estimates its own end point, and when the picked model takes no shift. */
+   estimates its own end point.  It is never grayed for the picked model:
+   the box sets how every candidate is fitted, and section 3 says why the
+   picked one takes no shift when it does not. */
 function setTip(el, text) {
   if (el.dataset.tipBase === undefined) el.dataset.tipBase = el.getAttribute('data-tip') || '';
   var t = text || el.dataset.tipBase;
@@ -8378,12 +8380,10 @@ function setBoxOff(wrapId, chkId, why) {
 }
 function syncFitBoxes() {
   var disc = !!ST.s && activeFamily() === 'discrete';
-  var r = pickedRow(), d = r && r.dist;
   var toCont = ' Set Family to Continuous to use it.';
   setBoxOff('shift-wrap', 'shift-chk',
     disc ? 'None of the discrete candidates takes a shift.' + toCont
     : ST.reflect ? 'The mirror image estimates its own end point, and so a shift has nothing to add while it is on.'
-    : d && !d.shiftable ? 'The picked model, the ' + esc(distLower(d)) + ', takes no separate shift; section 3 says why.'
     : null);
   setBoxOff('reflect-wrap', 'reflect-chk', disc ? 'None of the discrete candidates is mirrored.' + toCont : null);
   setBoxOff('johnson-wrap', 'johnson-chk', disc ? 'Both Johnson members are continuous.' + toCont : null);
