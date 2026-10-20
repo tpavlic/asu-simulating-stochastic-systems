@@ -10828,10 +10828,34 @@ return { matlabScript: matlabScript, rScript: rScript, pythonScript: pythonScrip
 })();
 
 /* ── CSV downloads ─────────────────────────────────────────────────
-   A blob URL and a synthetic click, which works from file:// as well as
-   over http, and needs no server. */
+   Every file is written in plain ASCII. A spreadsheet opening a UTF-8 file
+   with no byte-order mark reads it in the system's legacy encoding, and
+   so the page's Greek letters and dashes came out as debris (β as "Œ≤" in
+   Excel on a Mac); a byte-order mark would fix the spreadsheet but keep R
+   and Python from seeing the first "#" line as a comment. The page's own
+   symbols are spelled out, accents are dropped from letters, and anything
+   else becomes "?". */
+var ASCII_MAP = {
+  'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'δ': 'delta', 'ε': 'epsilon', 'θ': 'theta',
+  'κ': 'kappa', 'λ': 'lambda', 'μ': 'mu', 'ν': 'nu', 'ξ': 'xi', 'π': 'pi', 'ρ': 'rho',
+  'σ': 'sigma', 'τ': 'tau', 'φ': 'phi', 'χ': 'chi', 'ψ': 'psi', 'ω': 'omega',
+  'Γ': 'Gamma', 'Δ': 'Delta', 'Λ': 'Lambda', 'Σ': 'Sigma', 'Φ': 'Phi', 'Ω': 'Omega',
+  '–': '-', '—': '--', '−': '-', '≈': '~', '≤': '<=', '≥': '>=', '≠': '!=', '×': 'x',
+  '·': '*', '±': '+/-', '√': 'sqrt', '∞': 'Inf', '→': '->', '…': '...', '★': '*',
+  '“': '"', '”': '"', '‘': "'", '’': "'", '\u00a0': ' ', '²': '^2', '³': '^3',
+  '①': '1', '②': '2', '③': '3', '④': '4', 'ᵦ': '_B', 'ᵤ': '_U', 'ᵢ': '_i', '°': ' deg'
+};
+function asciiCsv(text) {
+  return text.replace(/[^\x00-\x7f]/g, function (c) {
+    if (ASCII_MAP[c] !== undefined) return ASCII_MAP[c];
+    var bare = c.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /^[\x00-\x7f]+$/.test(bare) ? bare : '?';
+  });
+}
+/* The download itself is a blob URL and a synthetic click, which works
+   from file:// as well as over http, and needs no server. */
 function download(name, text) {
-  var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  var blob = new Blob([asciiCsv(text)], { type: 'text/csv;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url; a.download = name;
@@ -10846,17 +10870,22 @@ function download(name, text) {
    included, that regenerates them. The bootstrap lines describe how the
    bootstrap p-values were computed, and so they appear only in the export
    that contains bootstrap results (withBoot). */
-function provenance(withBoot) {
+function provenance(withBoot, dataOnly) {
   var rows = [
     ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
     ['# data source: ' + (ST.src || 'pasted or typed by the user')],
-    ['# observations: ' + (ST.s ? ST.s.n : 0)],
+    ['# observations: ' + (ST.s ? ST.s.n : 0)]
+  ];
+  /* The data file holds the data alone, and so the fit settings, which
+     change nothing in it, stay out of its header. */
+  if (dataOnly) { rows.push([]); return rows; }
+  rows = rows.concat([
     ['# family: ' + (ST.family === 'auto' ? 'chosen automatically' : ST.family)],
     ['# location shift: ' + (ST.shift && !ST.reflect ? 'estimated' : 'off')],
     ['# mirror image c - X for the candidates that start at zero: ' + (ST.reflect ? 'on' : 'off')],
     ['# Johnson system fitted on request: ' + (ST.johnson ? 'on' : 'off')],
     ['# histogram bins: ' + (ST.bins ? ST.bins.k : '')]
-  ];
+  ]);
   if (withBoot) {
     rows.push(['# bootstrap seed: ' + ST.seed]);
     rows.push(['# bootstrap replications: ' + ST.B]);
@@ -10965,7 +10994,7 @@ function csvGof() {
 
 function csvData() {
   if (!ST.x.length) return;
-  var rows = provenance();
+  var rows = provenance(false, true);
   rows.push(['index', 'value']);
   for (var i = 0; i < ST.x.length; i++) rows.push([i + 1, IA.num(ST.x[i], 12)]);
   download('input-analyzer-data.csv', IA.toCsv(rows));
