@@ -582,6 +582,7 @@ footer a:hover { text-decoration: underline; }
           <input id="file-in" type="file" accept=".csv,.txt,.dat,.tsv,text/plain,text/csv"
                  style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
           <button class="btn2" id="btn-clear" type="button">Clear</button>
+          <button class="btn2" id="btn-dl-data" type="button" disabled>Download the data (CSV)</button>
         </div>
         <div class="parse-msg" id="parse-msg" role="status" aria-live="polite"></div>
       </div>
@@ -1196,6 +1197,7 @@ footer a:hover { text-decoration: underline; }
           <input id="a-file-in" type="file" accept=".csv,.txt,.dat,.tsv,text/plain,text/csv"
                  style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
           <button class="btn2" id="a-btn-clear" type="button">Clear</button>
+          <button class="btn2" id="a-btn-dl" type="button" disabled>Download the arrivals (CSV)</button>
         </div>
         <div class="parse-msg" id="a-parse-msg" role="status" aria-live="polite"></div>
       </div>
@@ -8110,6 +8112,7 @@ var LOADER = makeLoader({
 function renderStats() {
   var s = ST.s;
   var set = function (id, v) { $(id).textContent = v; };
+  $('btn-dl-data').disabled = !s || !s.n;
   if (!s || !s.n) {
     ['st-n', 'st-mean', 'st-sd', 'st-min', 'st-med', 'st-max'].forEach(function (k) { set(k, '—'); });
     $('data-kind').innerHTML = 'Load some data to begin. The samples are synthetic, generated ' +
@@ -11115,6 +11118,7 @@ function aWidthSay(which, msg) { $(A_WIDTH_IDS[which] + '-msg').textContent = ms
 function renderArrivals() {
   var t = AST.times;
   var set = function (id, v) { $(id).textContent = v; };
+  $('a-btn-dl').disabled = !t || !t.length;
   if (!t || t.length < 3) {
     ['a-st-n', 'a-st-t0', 'a-st-t1', 'a-st-rate', 'a-st-gap', 'a-st-cv'].forEach(function (k) { set(k, '—'); });
     $('cum-host').innerHTML = '<div class="plot-empty">Load arrival times to plot them.</div>';
@@ -11948,6 +11952,41 @@ function csvRates() {
                IA.num(r.rate, 10), IA.num(r.se, 10)]);
   }
   download('input-analyzer-rates.csv', IA.toCsv(rows));
+}
+
+/* The arrivals as the tab holds them: each time in the tab's time unit and
+   the gap that ends at it. Durations were added up from an origin at 0
+   that is not an arrival, and so their first row is the first duration's
+   end; timestamps start with the first arrival, which ends no gap. Times
+   of day also carry the clock reading. */
+function clockText(v) {
+  var sec = v / A_PER_MINUTE[AST.tunit] * 60;
+  var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec - 3600 * h - 60 * m;
+  var xs = (Math.round(x * 1000) / 1000).toFixed(3).replace(/\.?0+$/, '');
+  if (Number(xs) >= 60) xs = '59.999';
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' +
+    (Number(xs) < 10 ? '0' : '') + xs;
+}
+function csvArrivals() {
+  var t = AST.times;
+  if (!t || !t.length) return;
+  var fromGaps = !!(AST.flags && AST.flags.fromGaps), skip = fromGaps ? 1 : 0;
+  var rows = [
+    ['# Input Analyzer, arrivals - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# data source: ' + (AST.src || 'pasted or typed by the user')],
+    ['# arrivals: ' + (t.length - skip)],
+    ['# time unit: ' + (AST.tunit === 'other' ? 'not stated' : unitLong())]
+  ];
+  if (fromGaps) rows.push(['# times: the durations added up, starting from 0']);
+  else if (AST.clock) rows.push(['# times: times of day, counted from midnight']);
+  rows.push([]);
+  rows.push(AST.clock ? ['arrival', 'time', 'gap', 'clock'] : ['arrival', 'time', 'gap']);
+  for (var i = skip; i < t.length; i++) {
+    var r = [i - skip + 1, IA.num(t[i], 12), i > 0 ? IA.num(AST.gaps[i - 1], 12) : ''];
+    if (AST.clock) r.push(clockText(t[i]));
+    rows.push(r);
+  }
+  download('input-analyzer-arrivals.csv', IA.toCsv(rows));
 }
 
 /* Hand the interarrival gaps to tab ①, which is the right next step once
@@ -13548,6 +13587,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('csv-rank').addEventListener('click', csvRanking);
   $('csv-gof').addEventListener('click', csvGof);
   $('csv-data').addEventListener('click', csvData);
+  $('btn-dl-data').addEventListener('click', csvData);
   $('csv-plots').addEventListener('click', csvPlotData);
 
   /* ── Tab ② ────────────────────────────────────────────────────── */
@@ -13675,6 +13715,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('a-send').addEventListener('click', sendGapsToFit);
   $('a-send-counts').addEventListener('click', sendCountsToFit);
   $('a-csv').addEventListener('click', csvRates);
+  $('a-btn-dl').addEventListener('click', csvArrivals);
   $('rate-tbl').addEventListener('scroll', rateTableMore, { passive: true });
 
   /* ── Open on something, rather than on a blank form ───────────── */
