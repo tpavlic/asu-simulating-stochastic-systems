@@ -8294,18 +8294,18 @@ function runGenerator() {
     (shift ? ', shifted by γ = ' + IA.num(shift, 6) : '') +
     (dp === null ? ', at full precision' : ', rounded to ' +
       (dp === 0 ? 'whole numbers' : dp + ' decimal place' + (dp === 1 ? '' : 's'))) +
-    ', seed ' + seed + '. ';
-  msg += !d.optIn
-    ? 'Now see whether the table below finds it.'
-    : ST.johnson
+    ', seed ' + seed + '.';
+  if (d.optIn) msg += ' ' + (ST.johnson
       ? 'This distribution is in the ranking below only because the Johnson box in section 2 is ticked; ' +
         'untick it to see how close the best default candidate gets.'
       : '<strong>Nothing on the default menu below is this distribution</strong>, which is why it is here: ' +
         'see how close the best candidate gets, and how large n has to be before the tests notice ' +
-        'that it is wrong. The Johnson box in section 2 adds it.';
-  if (neg) {
-    msg += ' Note that ' + neg + ' value' + (neg === 1 ? '' : 's') + ' came out negative, and so the ' +
-      'candidates that live on the positive half-line will refuse until you turn the shift on.';
+        'that it is wrong. The Johnson box in section 2 adds it.');
+  /* With the shift on, or the mirror image, those candidates take the
+     negative values in stride; only with both off do they refuse. */
+  if (neg && !ST.shift && !ST.reflect) {
+    msg += ' Because ' + neg + ' of the values came out negative, the candidates that live on the ' +
+      'positive half-line refuse unless the shift is on.';
   }
 
   /* The sample just drawn always used the seed that was on screen while it
