@@ -435,12 +435,14 @@ section('7. parseTable / columnValues');
   }
 
   /* CSV comments go out as lines, not as a row whose first cell starts
-     with a hash. */
+     with a hash, and unquoted, so that R and Python still see the hash.
+     A spreadsheet would split the line at a comma, and so commas become
+     semicolons. */
   {
     const csv = IA.toCsv([['# a comment, with a comma in it'], ['a', 'b'], [1, 2]]);
     const lines = csv.split('\n');
-    ok(lines[0] === '# a comment, with a comma in it',
-       'a comment row is emitted verbatim, unquoted and unsplit', JSON.stringify(lines[0]));
+    ok(lines[0] === '# a comment; with a comma in it',
+       'a comment row is emitted unquoted, with its commas as semicolons', JSON.stringify(lines[0]));
     ok(lines[1] === 'a,b' && lines[2] === '1,2', 'and ordinary rows are unaffected');
     ok(IA.toCsv([['#hash', 'second cell']]).split('\n')[0] === '#hash,second cell',
        'a multi-cell row starting with a hash is still a row');

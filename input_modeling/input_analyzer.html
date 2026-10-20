@@ -386,6 +386,12 @@ td.best-p { font-weight: 700; color: var(--accent); }
    picked row keeps its own tint and the mark. */
 table.tbl tr.tie td { background: var(--alt-wash); }
 table.tbl tr.tie.picked td { background: var(--accent-wash); }
+/* The picked row's tint alone is hard to pick out beside a shaded near-tie,
+   and so a bar down its left edge marks it as well. Every row's first cell
+   is indented by the same amount, and so the bar takes no room from the
+   name and nothing moves when the pick changes. */
+#rank-host table.tbl th:first-child, #rank-host table.tbl td:first-child { padding-left: 10px; }
+#rank-host table.tbl tr.picked td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
 .near::after { content: ' ≈'; font-weight: 700; color: var(--alt); }
 .rank-name { font-weight: 600; white-space: nowrap; }
 .rank-sub { display: block; font-weight: 400; color: var(--muted); font-size: .72rem;
@@ -2892,15 +2898,18 @@ function gammaVariate(u01, a) {
   }
 }
 
-/* ══ Erlang(k integer shape, beta scale) ═══════════════════════════
+/* ══ Erlang(m integer shape, beta scale) ═══════════════════════════
    A gamma constrained to a whole-number shape, which is what a queueing
-   model wants when a task is a sequence of k identical stages. The MLE
+   model wants when a task is a sequence of m identical stages. The
+   stage count is m, as in Law and Kelton's m-Erlang, rather than the k
+   that Arena and Simio use, because k on this page is the number of
+   estimated parameters that AIC and BIC count. The MLE
    over the integers is found by fitting the unconstrained gamma and then
    comparing the two neighboring integers -- the profile likelihood in the
    shape is unimodal, so the integer optimum is one of those two. */
 DISTS.erlang = {
   key: 'erlang', name: 'Erlang', lower: 'Erlang', kind: 'continuous', np: 2, shiftable: true,
-  params: [{ sym: 'k', name: 'stages (whole number)' }, { sym: 'β', name: 'scale' }],
+  params: [{ sym: 'm', name: 'stages (whole number)' }, { sym: 'β', name: 'scale' }],
   lo: function () { return 0; },
   fit: function (x) {
     var g = DISTS.gamma.fit(x);
@@ -3772,7 +3781,7 @@ DISTS.discreteUniform = {
 DISTS.discreteEmpirical = {
   key: 'discreteEmpirical', name: 'Empirical (discrete)', lower: 'empirical (discrete)', kind: 'discrete',
   np: 0, shiftable: false, noCriteria: true,
-  params: [{ sym: 'k', name: 'distinct values' }],
+  params: [{ sym: 'm', name: 'distinct values' }],
   lo: function (p) { return p[0][0]; },
   fit: function (x) {
     var s = summarize(x), vals = [], probs = [], i;
@@ -4846,7 +4855,7 @@ var GEN_SPEC = {
   expo:      [{ sym: 'β', also: '= 1/λ', name: 'mean',          def: 5,   min: 1e-12 }],
   gamma:     [{ sym: 'α', name: 'shape',         def: 2,   min: 1e-6 },
               { sym: 'β', name: 'scale',         def: 1.5, min: 1e-12 }],
-  erlang:    [{ sym: 'k', name: 'stages',        def: 3,   min: 1, int: true },
+  erlang:    [{ sym: 'm', name: 'stages',        def: 3,   min: 1, int: true },
               { sym: 'β', name: 'scale',         def: 1,   min: 1e-12 }],
   weibull:   [{ sym: 'β', name: 'scale',         def: 4,   min: 1e-12 },
               { sym: 'α', name: 'shape',         def: 1.8, min: 1e-6 }],
@@ -5385,7 +5394,7 @@ function expressions(fit, sample) {
        the K exponential phases having mean Mean/K. */
     if (isEr)
       set('simio', 'Random.Erlang(' + N(a * b) + ', ' + N(a) + ')' + (g ? ' + ' + N(g) : ''),
-          'Simio takes the mean of the whole, k × β = ' + N(a * b) + ', and then the number of phases k.');
+          'Simio takes the mean of the whole, m × β = ' + N(a * b) + ', and then the number of phases m.');
     else
       set('simio', 'Random.Gamma(' + N(a) + ', ' + N(b) + ')' + (g ? ' + ' + N(g) : ''),
           'shape ' + N(a) + ', scale ' + N(b) + '.');
@@ -7349,8 +7358,12 @@ function toCsv(rows) {
        goes out as a line of text. Splitting it across cells put the
        provenance into a spreadsheet's columns as though it were data, and
        the quoting rules then wrapped anything containing a comma. A
-       comment is not meant to be rendered in cells at all. */
-    if (r.length === 1 && typeof r[0] === 'string' && r[0].charAt(0) === '#') return r[0];
+       comment is not meant to be rendered in cells at all. A spreadsheet
+       does not know the line is a comment, though, and splits it at every
+       comma, and quoting it would hide the "#" from R and Python, which
+       skip a line only when it starts with one. Its commas therefore
+       become semicolons. */
+    if (r.length === 1 && typeof r[0] === 'string' && r[0].charAt(0) === '#') return r[0].replace(/,/g, ';');
     return r.map(csvEscape).join(',');
   }).join('\n') + '\n';
 }
@@ -8496,21 +8509,27 @@ function renderRanking() {
   var rows = IA.sortRows(ST.rows, ST.rankBy);
   var bAic = IA.bestBy(ST.rows, 'aic'), bBic = IA.bestBy(ST.rows, 'bic');
   var bLl = IA.bestBy(ST.rows, 'll'), bSqe = IA.bestBy(ST.rows, 'sqe');
-  /* Under AIC or BIC, a candidate within 2 of the leader is one the data
-     cannot really tell from it (Burnham and Anderson for AIC, Raftery for
-     BIC), and its row is marked. A log-likelihood gap means nothing until
-     it is adjusted for the parameter counts, which is what AIC and BIC do,
-     and square error has no scale, and so neither marks anything. */
+  /* A candidate whose AIC or BIC is within 2 of that column's leader is one
+     the data cannot really tell from it (Burnham and Anderson for AIC,
+     Raftery for BIC). Like the stars, the ≈ marks belong to their column
+     and show whatever the table is sorted by; the row shading follows the
+     sort criterion, and so it shows only under AIC or BIC. A
+     log-likelihood gap means nothing until it is adjusted for the parameter
+     counts, which is what AIC and BIC do, and square error has no scale,
+     and so neither column marks anything. */
   var crit = ST.rankBy, tieBy = crit === 'aic' || crit === 'bic' ? crit : null;
-  var lead = tieBy && IA.bestBy(ST.rows, tieBy);
-  var leadVal = lead ? ST.rows.filter(function (q) { return q.key === lead; })[0][tieBy] : NaN;
-  var within = function (r) {
-    return Number.isFinite(leadVal) && r.ok && !r.noCriteria && Number.isFinite(r[tieBy]) &&
-      r[tieBy] - leadVal <= 2;
+  var nearTest = function (col, best) {
+    var lead = best ? ST.rows.filter(function (q) { return q.key === best; })[0][col] : NaN;
+    var within = function (r) {
+      return Number.isFinite(lead) && r.ok && !r.noCriteria && Number.isFinite(r[col]) &&
+        r[col] - lead <= 2;
+    };
+    /* A leader with no company is not a tie, and so nothing is marked. */
+    var n = ST.rows.filter(within).length;
+    return { n: n, has: function (r) { return n > 1 && within(r); } };
   };
-  /* A leader with no company is not a tie, and so nothing is marked. */
-  var nTies = ST.rows.filter(within).length;
-  var isTie = function (r) { return nTies > 1 && within(r); };
+  var nearBy = { aic: nearTest('aic', bAic), bic: nearTest('bic', bBic) };
+  var nTies = tieBy ? nearBy[tieBy].n : 0;
 
   /* These five are the only bare abbreviations in the widget that nothing
      beside them explains, and the disclosure that does explain them sits
@@ -8582,10 +8601,10 @@ function renderRanking() {
            '<td class="num">—</td><td class="num">' + fmt(r.sqe, 3) + '</td></tr>';
       continue;
     }
-    var tie = isTie(r);
+    var tie = tieBy && nearBy[tieBy].has(r);
     var cls = function (key, best, col) {
       return key === best ? ' class="num best"'
-        : tie && col === tieBy ? ' class="num near"' : ' class="num"';
+        : col && nearBy[col].has(r) ? ' class="num near"' : ' class="num"';
     };
     h += '<tr class="clickable' + sel + (tie ? ' tie' : '') + '" data-key="' + esc(r.key) + '"' +
       rowAttrs(r) + '>' +
@@ -8613,13 +8632,16 @@ function renderRanking() {
     '<div class="plot-cap" style="text-align:left;margin-top:7px">Click any row to see that fit in ' +
     'full below. ★ marks the leader under each criterion. A name or note with a dotted underline ' +
     'explains itself when you hover over it, or press and hold it on a touch screen. ' +
-    (nTies > 1
-      ? 'Shading and ≈ mark the candidates whose ' + tieBy.toUpperCase() + ' is within 2 of the ' +
-        'leader’s: the data cannot really tell them apart, and so among them, prefer the one with ' +
-        'fewer parameters, or one with a mechanism behind it, such as an Erlang for a sum of stages ' +
-        'or a Weibull for wear-out. '
-      : tieBy ? 'No other candidate’s ' + tieBy.toUpperCase() + ' is within 2 of the leader’s. '
-      : 'Sort by AIC or BIC to mark the candidates the data cannot tell from the leader. ') +
+    (nearBy.aic.n > 1 || nearBy.bic.n > 1
+      ? '≈ marks an AIC or BIC within 2 of that column’s leader: the data cannot really tell ' +
+        'those candidates apart, and so among them, prefer the one with fewer parameters, or one ' +
+        'with a mechanism behind it, such as an Erlang for a sum of stages or a Weibull for ' +
+        'wear-out. ' +
+        (nTies > 1 ? 'Shading marks them under ' + tieBy.toUpperCase() + ', the criterion the table is sorted by. '
+         : tieBy ? 'No other candidate’s ' + tieBy.toUpperCase() + ' is within 2 of the leader’s, ' +
+                   'and so no row is shaded. '
+         : 'Sort by AIC or BIC to shade those rows. ')
+      : 'No other candidate’s AIC or BIC is within 2 of its leader’s. ') +
     'Square error is computed on the ' +
     ST.bins.k + ' histogram bins set in section 4.' +
     (ST.rows.some(function (q) { return q.noCriteria && Number.isFinite(q.sqe); })
@@ -9115,16 +9137,30 @@ function nearSpecialCase(r, rows) {
     } else if (k >= 2) {
       var er = find('erlang'), ge = er && er.fit.p[0] === k ? gap(er) : NaN;
       if (ge < LR_CRIT_1DF)
-        return { label: 'close to Erlang, k = ' + k,
+        return { label: 'close to Erlang, m = ' + k,
                  tip: 'The fitted shape α = ' + fmt(r.fit.p[0], 4) + ' is close to the whole number ' + k +
                       '. An Erlang with ' + k + ' stages, a gamma whose shape is held at ' + k + ', fits ' +
                       'about as well: twice the difference in log-likelihood is ' + fmt(ge, 3) + ', below ' +
                       'the 3.84 a likelihood-ratio test would need at the 5% level. If the task really is ' +
                       k + ' identical exponential stages, the Erlang says so with one fewer parameter, and ' +
-                      'what you know about the process should decide between them.' };
+                      'what you know about the process should decide between them.' + shiftCaveat(r.fit) };
     }
   }
   return null;
+}
+/* A shift and the shape partly stand in for each other: on Erlang data
+   with four stages and 200 values, the gamma's shape rounded to 4 in 80% of
+   samples without a shift and in 35% with one. A whole-number shape read
+   off a shifted fit is therefore a weaker hint of a stage count, and the
+   note says so. */
+function shiftCaveat(f) {
+  if (!f.shift) return '';
+  return f.reflect
+    ? ' This fit also estimated its right end c = ' + fmt(f.shift, 4) + '. That end and the shape can ' +
+      'partly stand in for each other, and so the stage count is less certain than it looks.'
+    : ' This fit also estimated a shift of ' + fmt(f.shift, 4) + '. A shift and the shape can partly ' +
+      'stand in for each other, and so the stage count is less certain than it looks. If the task ' +
+      'starts at time zero, turn the shift off and see whether the count holds.';
 }
 var EDGE_NAME = { gamma: 'gamma', pearson5: 'Pearson type V', normal: 'normal', lognormal: 'lognormal' };
 function edgeTip(edge, key) {
@@ -9172,7 +9208,7 @@ function paramGloss(key, i, f) {
     gamma:     ['above 1 means the density rises from zero to a hump; below 1 means it is unbounded at zero',
                 'stretches the whole distribution; the mean is shape × scale'],
     erlang:    ['the number of identical exponential stages the task is modeled as',
-                'the mean of each stage; the mean of the whole is k × scale'],
+                'the mean of each stage; the mean of the whole is m × scale'],
     weibull:   ['stretches the distribution; about 63% of values fall below it',
                 'below 1 means failures get rarer over time, above 1 means they get more likely'],
     lognormal: ['the mean of the LOGARITHM, not of the data',
@@ -9246,7 +9282,7 @@ function derivedRows(d, f) {
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
   }
   if (d.key === 'erlang') {
-    out.push([lbl('k × β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0] * p[1]), 5),
+    out.push([lbl('m × β') + ' &nbsp;<span class="p-what">model mean</span>', fmt(at(p[0] * p[1]), 5),
       'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
   }
   /* The three heavy-tailed families have a mean only for a large enough
@@ -12026,9 +12062,9 @@ function csvRates() {
   var prof = AST.prof;
   if (!prof) return;
   var rows = [
-    ['# Input Analyzer, arrival rate table - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# Input Analyzer arrival rate table - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
     ['# data source: ' + (AST.src || 'pasted or typed by the user')],
-    ['# arrivals in the window (after the first, which opens it): ' + prof.n],
+    ['# arrivals in the window (not counting the first one that opens it): ' + prof.n],
     ['# window: ' + IA.num(prof.t0, 10) + ' to ' + IA.num(prof.t1, 10)],
     ['# interval width: ' + IA.num(prof.width, 10)],
     ['# time unit: ' + unitLong()],
@@ -12068,13 +12104,13 @@ function csvArrivals() {
   if (!t || !t.length) return;
   var fromGaps = !!(AST.flags && AST.flags.fromGaps), skip = fromGaps ? 1 : 0;
   var rows = [
-    ['# Input Analyzer, arrivals - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
+    ['# Input Analyzer arrivals - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
     ['# data source: ' + (AST.src || 'pasted or typed by the user')],
     ['# arrivals: ' + (t.length - skip)],
     ['# time unit: ' + (AST.tunit === 'other' ? 'not stated' : unitLong())]
   ];
-  if (fromGaps) rows.push(['# times: the durations added up, starting from 0']);
-  else if (AST.clock) rows.push(['# times: times of day, counted from midnight']);
+  if (fromGaps) rows.push(['# times: the durations added up from 0']);
+  else if (AST.clock) rows.push(['# times: times of day counted from midnight']);
   rows.push([]);
   rows.push(AST.clock ? ['arrival', 'time', 'gap', 'clock'] : ['arrival', 'time', 'gap']);
   for (var i = skip; i < t.length; i++) {
@@ -13488,9 +13524,9 @@ function seriesProvenance() {
     ['# Input Analyzer - https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer.html'],
     ['# data source: ' + (SST.src || 'pasted or typed by the user')],
     ['# readings column: ' + (SST.table ? SST.table.names[SST.vi] : '') + '; time: ' +
-     (SST.ti === null ? 'equally spaced, every ' + SST.delta : SST.table.names[SST.ti] + (SST.clock ? ' (minutes past midnight)' : ''))],
+     (SST.ti === null ? 'equally spaced every ' + SST.delta : SST.table.names[SST.ti] + (SST.clock ? ' (minutes past midnight)' : ''))],
     ['# time unit: ' + SST.unit],
-    ['# cycle: ' + (SST.cyc ? 'period ' + SST.P + ', ' + SST.H + ' harmonic' + (SST.H > 1 ? 's' : '') + (SST.trend ? ', with a trend' : '') : 'none')],
+    ['# cycle: ' + (SST.cyc ? 'period ' + SST.P + ' with ' + SST.H + ' harmonic' + (SST.H > 1 ? 's' : '') + (SST.trend ? ' and a trend' : '') : 'none')],
     []
   ];
 }
