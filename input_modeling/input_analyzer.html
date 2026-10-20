@@ -870,12 +870,15 @@ footer a:hover { text-decoration: underline; }
       it from its data, and the pointer over a plot (or a finger on it) reads values off both axes.</strong>
     </div>
 
-    <div class="note quiet" style="margin-top:13px"><strong>Choose the test that decides before you
-      look at the results.</strong> Use Anderson&ndash;Darling when the tails matter, as they usually
-      do for service and interarrival times; Kolmogorov&ndash;Smirnov when only the middle of the
-      distribution matters; and chi-square for counts, or when the bins mean something in the
-      process. The three ask different questions about the same fit, and going by whichever one
-      happens to pass lets a wrong fit survive more often than the 5% level says.</div>
+    <div class="note quiet" style="margin-top:13px"><strong>Choose the test before you look at the
+      results.</strong> The Kolmogorov&ndash;Smirnov test gives a valid
+      answer even at small sample sizes, and it is most sensitive to differences in the middle of
+      the distribution. The Anderson&ndash;Darling test is similar but shifts its focus to the tails.
+      When there are enough observations to meet its assumptions, the chi-square test can be used;
+      it is less sensitive, meaning it may tolerate larger deviations than the other two. However,
+      with a large enough sample, all three tests tend to reject (see "Why a large sample rejects
+      every distribution you try" below). To avoid inflated error rates, choose the test before
+      looking at the results, and commit to its result (regardless of what the other tests say).</div>
 
     <div class="plot-wrap" style="margin-top:13px">
       <div style="flex:1 1 340px;min-width:0">
@@ -9648,7 +9651,7 @@ function renderGof() {
     ? '<div class="note quiet" style="margin-top:8px"><strong>' + (f.dist.kind === 'discrete'
         ? 'This is a discrete fit, and ties are unavoidable.'
         : 'Your data have many repeated values (' + ST.s.nUnique + ' distinct out of ' + ST.s.n +
-          '), and it was almost certainly rounded when it was recorded.') +
+          '), and they were almost certainly rounded when they were recorded.') +
       '</strong> Both statistics are built for continuous data with no ties, and ties push them up; ' +
       'neither the usual rules of thumb nor the table column applies here. ' +
       (f.dist.kind === 'discrete'
