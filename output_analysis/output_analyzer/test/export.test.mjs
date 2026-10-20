@@ -36,6 +36,15 @@ test('provenanceLines keeps insertion order', () => {
   );
 });
 
+test('provenanceLines turns commas into semicolons and stays unquoted', () => {
+  // A spreadsheet would split a comma into a new column; quoting the line
+  // would hide its '#' from R and Python.
+  assert.deepEqual(
+    provenanceLines({ dataset: 'Queue, "A"', datasets: ['a', 'b'], 'x, y': 1 }),
+    ['# dataset: Queue; "A"', '# datasets: a; b', '# x; y: 1']
+  );
+});
+
 test('repSummaryCsv for tally data carries sd, min, and max', () => {
   const out = lines(repSummaryCsv(tally, { dataset: 'wait' }));
   assert.equal(out[0], '# dataset: wait');
@@ -138,9 +147,9 @@ test('all-dataset replications: blank mean for an empty replication', () => {
 
 test('provenance names every dataset and the time-persistent end time', () => {
   const datasetLines = [
-    '# dataset 1: Queue, "A" (tally, response wait, source queue.csv)',
-    '# dataset 2: Busy (time-persistent, response busy, end time 10)',
-    '# dataset 3: Open (time-persistent, response busy, end time none)'
+    '# dataset 1: Queue; "A" (tally; response wait; source queue.csv)',
+    '# dataset 2: Busy (time-persistent; response busy; end time 10)',
+    '# dataset 3: Open (time-persistent; response busy; end time none)'
   ];
   const head = write => lines(write([allTally, allTime, allOpen], { exported: '2026-10-07 12:00:00' })).filter(l => l.startsWith('#'));
   assert.deepEqual(head(datasetsObservationsCsv), [...datasetLines, '# exported: 2026-10-07 12:00:00']);
