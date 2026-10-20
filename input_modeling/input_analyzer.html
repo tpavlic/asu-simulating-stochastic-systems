@@ -657,7 +657,8 @@ footer a:hover { text-decoration: underline; }
         <p>Fitting is easier to trust once you have watched it work on data whose answer you
         already know. Generate 200 values from a gamma with shape 2, and see whether the ranking
         table picks the gamma out, and how close the runner-up gets. Add a location shift and see
-        whether turning the shift box on recovers it.</p>
+        whether the fitted &gamma; recovers it, and what turning the shift box off does to the
+        ranking.</p>
         <p>Then change <code>n</code> and leave everything else alone. At <code>n = 30</code> no
         goodness-of-fit test on this page can tell your gamma from a lognormal or a Weibull;
         every p-value is comfortable and every candidate survives. At <code>n = 5000</code> the
@@ -694,7 +695,7 @@ footer a:hover { text-decoration: underline; }
           transformation, <code>X = ξ + λ sinh((Z−γ)/δ)</code>, whose support is the whole real
           line. It is the member with genuinely heavy tails, which is why a large enough sample
           from it contains a negative value or two, and why the positive-only candidates then
-          refuse until you turn the shift on.</li>
+          refuse unless the shift is on.</li>
         </ul>
         <p>Johnson's system has two more members, and between them the four cover the plane: the
         lognormal is <code>S&#7473;</code>, and the normal itself is <code>S&#8345;</code>. Which
@@ -730,7 +731,7 @@ footer a:hover { text-decoration: underline; }
          are long, and side by side they wrapped at arbitrary points. -->
     <div class="ctrl-row ctrl-stack">
       <label class="chk" id="shift-wrap" data-tip="Each candidate that starts at zero gets its own γ, estimated inside its own fit" data-tip-press>
-        <input type="checkbox" id="shift-chk"> <span class="tip">Estimate a location shift γ (each candidate gets its own)</span>
+        <input type="checkbox" id="shift-chk" checked autocomplete="off"> <span class="tip">Estimate a location shift γ (each candidate gets its own)</span>
       </label>
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
@@ -822,10 +823,13 @@ footer a:hover { text-decoration: underline; }
         zero (the exponential, gamma, Erlang, Weibull, lognormal, log-logistic, and Pearson
         type V) because the others already carry a location parameter of their own and a second one
         would be redundant. The Pearson type VI also begins at zero but takes no shift: with one,
-        it would have four parameters, more than a sample of a few hundred can pin down. Turn the shift on
-        when the process has an unavoidable minimum: a fixed setup time, a mandatory inspection,
-        a walk down a corridor that cannot be done in zero seconds. Turn it off otherwise because
-        it adds a parameter and it is estimated from the smallest value you happened to see.</p>
+        it would have four parameters, more than a sample of a few hundred can pin down. The shift
+        is on by default because most service and processing times have an unavoidable minimum: a
+        fixed setup time, a mandatory inspection, a walk down a corridor that cannot be done in zero
+        seconds. Turn it off when the process truly starts at zero, as interarrival times usually
+        do. Otherwise, each of these candidates still gets a &gamma; estimated from the smallest
+        value you happened to see (for the exponential, exactly that value), a small floor that
+        means nothing, and one more parameter.</p>
         <p>The <strong>mirror image</strong> flips the same candidates the other way. Each one is
         fitted as <code>c &minus; X</code>: the shape turned around to end at a right end
         <code>c</code>, with its long tail on the left, which suits data that pile up near a
@@ -7879,7 +7883,7 @@ var ST = {
   clockUnit: null,  /* the unit that reading produced, when one was used */
   genTruth: null,   /* what the generator last produced, for the readout */
   family: 'auto',
-  shift: false,
+  shift: true,
   reflect: false,   /* fit each zero-based candidate as c - X instead */
   johnson: false,   /* add the two Johnson members to the continuous ranking */
   rankBy: 'aic',
