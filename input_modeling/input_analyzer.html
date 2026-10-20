@@ -202,19 +202,24 @@ a:focus-visible, textarea:focus-visible {
 }
 .drop { position: relative; flex: 1 1 auto; display: flex; }
 textarea.data-in {
-  width: 100%; height: auto; min-height: 168px; flex: 1 1 auto; resize: vertical;
+  width: 100%; height: auto; flex: 1 1 auto; resize: vertical;
   font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: .8rem; line-height: 1.45; padding: 8px 10px;
   border: 1.5px dashed var(--border); border-radius: 7px; background: var(--chart-bg);
   color: var(--text);
 }
 textarea.data-in:focus { border-style: solid; }
-/* Tab 1's box does not follow the height of the cards beside it, whose
-   hint changes length with the data; it shows eleven whole lines whatever
-   was loaded, and so it never shrinks under a new sample or cuts a line
-   in half. The 19px is the padding and the border. */
-#tab-fit .data-input { align-self: start; }
-#data-in { min-height: calc(11 * 1.45 * .8rem + 19px); }
+/* The box does not follow the height of the cards beside it, whose notes
+   change length with the data; it shows a whole number of lines whatever
+   was loaded, and so it never resizes under a new sample or cuts a line
+   in half. The 19px is the padding and the border. Tab 2's cards run
+   taller than the others', and so on a wide screen its box shows more
+   lines. */
+.data-input { align-self: start; }
+textarea.data-in { min-height: calc(11 * 1.45 * .8rem + 19px); }
+@media (min-width: 721px) {
+  #a-data-in { min-height: calc(20 * 1.45 * .8rem + 19px); }
+}
 /* Rows of columns read as a table only if a row stays on one line, and so
    pasted data scroll sideways rather than wrap. The placeholder is prose,
    and so it keeps wrapping while the box is empty. */
