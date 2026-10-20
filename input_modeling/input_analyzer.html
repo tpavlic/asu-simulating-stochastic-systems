@@ -1295,6 +1295,12 @@ footer a:hover { text-decoration: underline; }
         <span class="gen-p">
           <label for="a-gen-T" style="font-family:inherit">over</label>
           <input type="number" id="a-gen-T" value="480" min="1" step="any">
+          <select id="a-gen-unit" aria-label="Time unit of the generated arrivals">
+            <option value="seconds">seconds</option>
+            <option value="minutes" selected>minutes</option>
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+          </select>
         </span>
         <span class="gen-p">
           <label for="a-gen-seed" style="font-family:inherit">seed</label>
@@ -12152,6 +12158,32 @@ function initArrivalGenerator() {
   sel.value = 'peak';
   buildArrivalParams();
 }
+/* The generator's parameters are in the unit chosen beside the window
+   length, and so their tips say so: a rate (its symbol a λ) is arrivals
+   per that unit, and every other parameter is a time in it. */
+var A_GEN_ONE = { seconds: 'second', minutes: 'minute', hours: 'hour', days: 'day' };
+function aGenUnit() { return $('a-gen-unit').value; }
+function aGenParamName(q) {
+  var u = aGenUnit();
+  if (q.sym.charAt(0) === 'λ') {
+    var base = q.name.replace(' per unit time', '');
+    return base === 'arrivals' ? 'arrivals per ' + A_GEN_ONE[u] : base + ' (arrivals per ' + A_GEN_ONE[u] + ')';
+  }
+  return q.name + ' (' + A_TUNITS[u].long + ')';
+}
+function aGenDescribe(spec, p) {
+  return spec.describe(p).replace('per unit time', 'per ' + A_GEN_ONE[aGenUnit()]);
+}
+function syncArrivalParamTips() {
+  var key = $('a-gen-proc').value, spec = IA.ARRIVAL_PROCESSES[key];
+  for (var i = 0; i < spec.params.length; i++) {
+    var lab = document.querySelector('label[for="a-gen-p' + i + '"]');
+    if (lab) lab.setAttribute('data-tip', aGenParamName(spec.params[i]));
+    var inp = $('a-gen-p' + i);
+    if (inp) inp.setAttribute('aria-label', spec.name + ' ' + aGenParamName(spec.params[i]));
+  }
+  renderLambdaFormula();
+}
 function buildArrivalParams() {
   var key = $('a-gen-proc').value, spec = IA.ARRIVAL_PROCESSES[key];
   var host = $('a-gen-params');
@@ -12167,10 +12199,10 @@ function buildArrivalParams() {
     // rather than as a title, which a phone would never show.
     lab.className = 'tip';
     lab.tabIndex = 0;
-    lab.setAttribute('data-tip', q.name);
+    lab.setAttribute('data-tip', aGenParamName(q));
     var inp = document.createElement('input');
     inp.type = 'number'; inp.id = 'a-gen-p' + i; inp.value = String(q.def); inp.step = 'any';
-    inp.setAttribute('aria-label', spec.name + ' ' + q.name);
+    inp.setAttribute('aria-label', spec.name + ' ' + aGenParamName(q));
     wrap.appendChild(lab); wrap.appendChild(inp);
     host.appendChild(wrap);
     /* Retyping a parameter updates the formula under the row, so the two
@@ -12191,11 +12223,11 @@ function renderLambdaFormula() {
   var T = Number($('a-gen-T').value);
   var f;
   try { f = spec.formula(p, T); } catch (e) { host.innerHTML = ''; return; }
-  var names = spec.params.map(function (q) { return q.sym + ' = ' + q.name; }).join(' · ');
+  var names = spec.params.map(function (q) { return q.sym + ' = ' + aGenParamName(q); }).join(' · ');
   host.innerHTML = esc(f.sym) +
     '<span class="lam-num">' + esc(f.num) + '</span>' +
     '<span class="lam-num" style="color:var(--muted);font-family:inherit;font-size:.92em">' +
-    esc(names) + ' · T = the window length</span>';
+    esc(names) + ' · T = the window length (' + A_TUNITS[aGenUnit()].long + ')</span>';
 }
 function aGenSay(msg, bad) {
   var el = $('a-gen-msg');
@@ -12216,17 +12248,21 @@ function runArrivalGenerator() {
   AST.mode = 'times';          /* the generator always produces timestamps */
   $('a-mode').value = 'times';
   AST.ladderSpan = null;       /* let the ladder re-center on the new span */
+  /* The times are in the generator's unit, which the tab then reads them
+     in, as a sample brings its own. */
+  var gu = aGenUnit();
+  AST.tunitNext = gu;
   /* The full recipe, and so an export can say how to regenerate the data. */
   A_LOADER.loadText(g.times.map(function (v) { return IA.num(v, 8); }).join('\n'),
                     'Generated ' + spec.name,
-                    'generated ' + spec.name + ' arrivals (' + spec.describe(p) +
-                    ') over T = ' + IA.num(T, 5) + ', MRG32k3a seed ' + seed);
+                    'generated ' + spec.name + ' arrivals (' + aGenDescribe(spec, p) +
+                    ') over T = ' + IA.num(T, 5) + ' ' + A_TUNITS[gu].long + ', MRG32k3a seed ' + seed);
   /* Kept so the rate plot can draw the truth over the estimate. */
   AST.truth = { key: key, p: p.slice(), T: T, rate: g.rate, max: g.lambdaMax };
   renderArrivals();
 
   var msg = 'Generated <strong>' + g.times.length + '</strong> arrivals over ' + IA.num(T, 5) +
-    ' units of time from ' + esc(spec.describe(p)) + ', seed ' + seed + '. ';
+    ' ' + A_TUNITS[gu].long + ' from ' + esc(aGenDescribe(spec, p)) + ', seed ' + seed + '. ';
   msg += key === 'homog'
     ? 'This one really is constant, and so the test below should leave it alone. Press Generate a few ' +
       'more times and count how often it wrongly says otherwise.'
@@ -13738,6 +13774,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initArrivalGenerator();
   $('a-gen-proc').addEventListener('change', buildArrivalParams);
   $('a-gen-T').addEventListener('input', renderLambdaFormula);
+  $('a-gen-unit').addEventListener('change', syncArrivalParamTips);
   $('a-gen-run').addEventListener('click', runArrivalGenerator);
   $('a-gen-params').addEventListener('keydown', function (e) { if (e.key === 'Enter') runArrivalGenerator(); });
   ['a-gen-T', 'a-gen-seed'].forEach(function (id) {
