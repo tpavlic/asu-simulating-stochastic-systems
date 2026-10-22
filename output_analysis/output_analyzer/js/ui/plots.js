@@ -1473,15 +1473,56 @@ function swatchSvg(kind, c) {
 
 const EXPORT_TOKENS = ['--accent', '--text', '--muted', '--border', '--card', '--chart-bg', '--truth', '--est', '--est-pale', '--miss', '--ok', '--band', '--pair', '--warn'];
 
+// An SVG drawn as an image, as the PNG and COPY buttons draw it, cannot reach
+// the fonts the page loaded, and so its text fell back to a wider system font
+// and a legend that fit on the page could run past the frame. The page's font
+// is therefore embedded in every exported figure: the Google Fonts stylesheet
+// is fetched once (from the browser's cache of the page's own fonts), its
+// basic Latin Outfit face kept, and the file inlined as a data URL. Outfit is
+// a variable font, and the stylesheet names one file under every weight, and
+// so it is embedded once as a face spanning the weights. Offline, or wherever
+// a fetch fails, the export goes out without it.
+let exportFontPromise = null;
+function exportFontCss() {
+  if (exportFontPromise) return exportFontPromise;
+  const link = document.querySelector('link[href*="fonts.googleapis.com"]');
+  if (!link || typeof fetch !== 'function') return (exportFontPromise = Promise.resolve(''));
+  const asDataUrl = blob => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+  exportFontPromise = fetch(link.href).then(r => (r.ok ? r.text() : '')).then(css => {
+    const faces = (css.match(/@font-face\s*\{[^}]*\}/g) || [])
+      .filter(f => /font-family:\s*'Outfit'/.test(f) && /unicode-range:\s*U\+0000-00FF/.test(f));
+    const range = new Map();
+    for (const f of faces) {
+      const m = /url\(([^)]+)\)/.exec(f);
+      if (!m) continue;
+      const w = Number((/font-weight:\s*(\d+)/.exec(f) || [])[1]) || 400;
+      const r = range.get(m[1]) || [w, w];
+      range.set(m[1], [Math.min(r[0], w), Math.max(r[1], w)]);
+    }
+    return Promise.all([...range].map(([u, [lo, hi]]) => fetch(u)
+      .then(r => { if (!r.ok) throw new Error(u); return r.blob(); })
+      .then(asDataUrl)
+      .then(data => "@font-face{font-family:'Outfit';font-style:normal;font-weight:" + lo + ' ' + hi +
+        ";src:url(" + data + ") format('woff2')}"))).then(list => list.join(''));
+  }).catch(() => '');
+  return exportFontPromise;
+}
+
 /**
  * Serializes a figure as a standalone SVG document: the readout and the
  * drag handle's hit stroke are left out, a white background is added, and
- * an inline <style> carries the font families and the page's tokens
- * resolved to literal colors.
+ * an inline <style> carries the font families, the font itself when it is
+ * given, and the page's tokens resolved to literal colors.
  * @param {Figure} fig
+ * @param {string} [fontCss] `@font-face` rules to embed (see exportFontCss)
  * @returns {string}
  */
-export function figureToSvgString(fig) {
+export function figureToSvgString(fig, fontCss = '') {
   const clone = fig.svg.cloneNode(true);
   clone.querySelectorAll('[data-noexport]').forEach(n => n.remove());
   clone.setAttribute('xmlns', SVGNS);
@@ -1492,7 +1533,7 @@ export function figureToSvgString(fig) {
   const css = getComputedStyle(document.documentElement);
   const vars = EXPORT_TOKENS.map(n => n + ':' + css.getPropertyValue(n).trim()).join(';');
   const style = document.createElementNS(SVGNS, 'style');
-  style.textContent = 'svg{' + vars + '} text{font-family:' + FONT + '} .tick,.tabular{font-variant-numeric:tabular-nums} .mono{font-family:' + MONO + '}';
+  style.textContent = fontCss + 'svg{' + vars + '} text{font-family:' + FONT + '} .tick,.tabular{font-variant-numeric:tabular-nums} .mono{font-family:' + MONO + '}';
   const bg = document.createElementNS(SVGNS, 'rect');
   bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', css.getPropertyValue('--card').trim() || '#fff');
   clone.insertBefore(bg, clone.firstChild);
@@ -1509,7 +1550,9 @@ export function figureToSvgString(fig) {
  */
 export function figureToPngBlob(fig, scale) {
   const s = scale || window.devicePixelRatio || 1;
-  const str = figureToSvgString(fig);
+  return exportFontCss().then(css => svgPng(figureToSvgString(fig, css), fig, s));
+}
+function svgPng(str, fig, s) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml;charset=utf-8' }));
@@ -1582,6 +1625,9 @@ export function exportButtons(container, fig, baseName) {
   const row = document.createElement('div');
   row.className = 'fig-tools';
   const name = safeName(baseName);
+  // The font is fetched once, soon after the first figure gets its buttons,
+  // so that the first COPY does not wait on it.
+  if (!exportFontPromise) setTimeout(exportFontCss, 1500);
   const mk = (label, desc, fn) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn-mini'; b.textContent = label;
@@ -1589,7 +1635,8 @@ export function exportButtons(container, fig, baseName) {
     b.addEventListener('click', fn);
     row.appendChild(b);
   };
-  mk('SVG', 'Download this figure as SVG', () => download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
+  mk('SVG', 'Download this figure as SVG', () => exportFontCss().then(css =>
+    download(name + '.svg', new Blob([figureToSvgString(fig, css)], { type: 'image/svg+xml;charset=utf-8' }))));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
   if (canCopyImage()) {
     // The status shows under the buttons, over the figure (see .fig-status).
