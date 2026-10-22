@@ -8091,7 +8091,11 @@ function makeLoader(cfg) {
     if (i >= t.cols.length) i = 0;
     cfg.state().col = i;
     var cv = cfg.extract(t.cols[i]);
-    var bits = ['Read ' + cv.values.length + ' value' + (cv.values.length === 1 ? '' : 's')];
+    /* How many of the values are distinct, since repeats are the first sign
+       of rounding, of discrete outcomes, or of arrivals at the same instant. */
+    var nd = new Set(cv.values).size;
+    var bits = ['Read ' + cv.values.length + ' value' + (cv.values.length === 1 ? '' : 's') +
+                (cv.values.length > 1 ? ' (' + nd + ' distinct)' : '')];
     if (t.names.length > 1) bits.push('from column “' + t.names[i] + '” of ' + t.names.length);
     if (t.header) bits.push('header row skipped');
     if (cfg.state() === AST && (cv.clock || cv.elapsed))
