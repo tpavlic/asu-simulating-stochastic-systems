@@ -968,6 +968,42 @@ section('14. binning and the chi-square test');
   ok(new Set(sq.map(v => v.toPrecision(6))).size === sq.length,
      'square error changes with every bin count: ' + sq.map(v => v.toExponential(2)).join(', '));
   ok(new Set(lls).size === 1, 'the log-likelihood does not depend on the binning');
+
+  /* Under a discrete fit, one bin per outcome. Whole numbers get a unit
+     bin for every integer from the smallest to the largest, empty ones
+     included, and the slider's count is ignored. */
+  const pv = IA.makeBins(xi, 4, true);
+  ok(pv.perValue && pv.integer && pv.width === 1 && pv.k === Math.max(...xi) - Math.min(...xi) + 1,
+     'whole numbers get one unit bin per integer from the minimum to the maximum', `k = ${pv.k}`);
+  ok(pv.values.every((v, i) => v === Math.min(...xi) + i) && pv.counts.reduce((a, c) => a + c, 0) === xi.length,
+     'each bin names its integer and every observation is counted once');
+  ok(pv.counts.every((c, i) => c === xi.filter(v => v === pv.values[i]).length),
+     'each integer bin counts exactly the observations equal to it');
+  const chipv = IA.chiSquareGOF(xi, fi, pv);
+  ok(chipv.p > 0.01 && chipv.groups.every(g => g.exp >= chipv.minExpected),
+     `a correct Poisson fit is not rejected on one bin per value (p = ${chipv.p.toFixed(4)})`);
+  /* Values that are not whole numbers: one bin per distinct value, its
+     edges halfway to the neighbors. */
+  const xs = [3.14, 2, 3.14, 2, 2, 6.75, 2, 3.14, 6.75];
+  const ps = IA.makeBins(xs, 10, true);
+  ok(ps.perValue && !ps.integer && ps.k === 3 && JSON.stringify(ps.values) === '[2,3.14,6.75]',
+     'other values get one bin per distinct value', JSON.stringify(ps.values));
+  ok(JSON.stringify(ps.counts) === '[4,3,2]', 'and each counts its own value', JSON.stringify(ps.counts));
+  ok(ps.edges.length === 4 && ps.edges.every((e, i) => i === 0 || e > ps.edges[i - 1]) &&
+     ps.values.every((v, i) => ps.edges[i] < v && v < ps.edges[i + 1]),
+     'each value sits strictly inside its own bin', JSON.stringify(ps.edges));
+  const fe = IA.fitDist(IA.DISTS.discreteEmpirical, xs, false, false);
+  const pe = IA.binProbabilities(fe, ps.edges);
+  ok(pe.every((q, i) => Math.abs(q - ps.counts[i] / xs.length) < 1e-12),
+     'the empirical (discrete) puts exactly the observed share in each bin', JSON.stringify(pe));
+  /* Too many outcomes for a readable bar each, and the ordinary binning
+     takes over. */
+  const many = Array.from({ length: 400 }, (_, i) => i * 1.5);
+  ok(!IA.makeBins(many, 12, true).perValue, 'past 150 distinct values the ordinary bins return');
+  const wide = Array.from({ length: 400 }, (_, i) => i);
+  const wb = IA.makeBins(wide, 12, true);
+  ok(!wb.perValue && wb.integer && wb.k <= 150, 'a wide run of whole numbers is grouped into at most 150 bins', `k = ${wb.k}`);
+  ok(!IA.makeBins(xi, 10).perValue && IA.makeBins(xi, 10).k <= 10, 'without the flag, the slider count still sets the bins');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1033,6 +1069,17 @@ section('15. K-S and A-D statistics');
    they must be correctly calibrated when nothing was estimated and
    badly calibrated when something was.
    ══════════════════════════════════════════════════════════════════════ */
+/* The empirical (discrete) matches its own sample's steps exactly, and
+   the rounding left in the summed shares is no gap at all. */
+section('15a. K-S D of a model that matches the steps');
+{
+  const xs = [3.14, 2, 3.14, 2, 2, 2, 2, 3.14, 6.75, 6.75, 2, 2, 2, 3.14, 3.14, 3.14, 3.14, 6.75, 6.75,
+              3.14, 3.14, 2, 2, 2, 2, 2, 2, 3.14, 6.75].sort((a, b) => a - b);
+  const fe = IA.fitDist(IA.DISTS.discreteEmpirical, xs, false, false);
+  const ks = IA.ksStat(xs, IA.fitCdf(fe), IA.fitAtom(fe));
+  ok(ks.D === 0, 'D is exactly 0 for the empirical (discrete) against its own data', `D = ${ks.D}`);
+}
+
 section('15b. classical K-S and A-D p-values');
 {
   /* Feeding the published 5% critical value back in must return 0.05. */

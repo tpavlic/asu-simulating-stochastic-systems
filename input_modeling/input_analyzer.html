@@ -433,6 +433,14 @@ details.why .why-body { padding: 9px 11px 10px 33px; font-size: .81rem; color: v
 details.why .why-body p + p { margin-top: 7px; }
 details.why .why-body ul { margin: 6px 0 0 18px; }
 details.why .why-body li { margin-bottom: 4px; }
+/* The distinct values of a sample with few of them: a table rather than a
+   note, and so a disclosure arrow rather than the question mark. */
+details.vals > summary::before { content: '▸'; background: none; color: var(--accent);
+  width: auto; height: auto; border-radius: 0; font-size: .85rem; }
+details.vals[open] > summary::before { content: '▾'; }
+#uniq-tbl { max-height: 240px; overflow-y: auto; padding: 0 11px 6px; }
+#uniq-tbl thead th { position: sticky; top: 0; z-index: 1; background: var(--chart-bg);
+                     border-bottom: none; box-shadow: inset 0 -1.5px 0 var(--border); }
 code, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .95em; }
 details.why .why-body code { background: var(--accent-wash); padding: 1px 4px; border-radius: 3px; }
 
@@ -638,6 +646,10 @@ footer a:hover { text-decoration: underline; }
           Load some data to begin. The samples are synthetic, generated from known
           distributions, so that you can check whether the fit recovers what went in.
         </div>
+        <details class="why vals" id="uniq-wrap" style="display:none">
+          <summary id="uniq-sum">The distinct values</summary>
+          <div class="tbl-scroll" id="uniq-tbl"></div>
+        </details>
       </div>
     </div>
 
@@ -899,7 +911,7 @@ footer a:hover { text-decoration: underline; }
       it from its data, and the pointer over a plot (or a finger on it) reads values off both axes.</strong>
     </div>
 
-    <div class="note quiet" style="margin-top:13px"><strong>Choose the test before you look at the
+    <div class="note quiet" id="choose-test-note" style="margin-top:13px"><strong>Choose the test before you look at the
       results.</strong> The Kolmogorov&ndash;Smirnov test gives a valid
       answer even at small sample sizes, and it is most sensitive to differences in the middle of
       the distribution. The Anderson&ndash;Darling test is similar but shifts its focus to the tails.
@@ -920,7 +932,7 @@ footer a:hover { text-decoration: underline; }
       </div>
     </div>
 
-    <div class="ctrl-row" style="margin-top:12px">
+    <div class="ctrl-row" id="boot-row" style="margin-top:12px">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="boot-b">Bootstrap replications</label>
         <select id="boot-b">
@@ -945,7 +957,7 @@ footer a:hover { text-decoration: underline; }
       <span class="prog-txt" id="boot-prog-txt"></span>
     </div>
 
-    <details class="why">
+    <details class="why" id="why-bins">
       <summary>Why the bin slider moves the chi-square p-value</summary>
       <div class="why-body">
         <p>The chi-square test compares the count that landed in each histogram bin with the count
@@ -997,7 +1009,7 @@ footer a:hover { text-decoration: underline; }
       </div>
     </details>
 
-    <details class="why">
+    <details class="why" id="why-boot">
       <summary>What a bootstrap is and what this one is doing</summary>
       <div class="why-body">
         <p>A bootstrap answers a question about a statistic when nobody can write down its
@@ -1030,7 +1042,7 @@ footer a:hover { text-decoration: underline; }
       </div>
     </details>
 
-    <details class="why">
+    <details class="why" id="why-boot-table">
       <summary>Why the table p-value and the bootstrap p-value differ, and which is too big</summary>
       <div class="why-body">
         <p>The published Kolmogorov&ndash;Smirnov table (the one you can use by hand, and the
@@ -1060,7 +1072,7 @@ footer a:hover { text-decoration: underline; }
       </div>
     </details>
 
-    <details class="why">
+    <details class="why" id="why-large-n">
       <summary>Why a large sample rejects every distribution you try</summary>
       <div class="why-body">
         <p>A goodness-of-fit test asks whether your data could plausibly have come from the fitted
@@ -4452,8 +4464,52 @@ function theoreticalQuantiles(dist, fit, n) {
    bin slider visibly moves all four together. That coupling is the point:
    it is what makes "the square-error criterion depends on the binning"
    something a reader can watch happen rather than take on trust. */
-function makeBins(x, k) {
+/* Under a discrete fit the histogram has one bin per outcome, as a pmf
+   is read: one bin per whole number from the smallest observation to the
+   largest when the values are whole numbers (outcomes that never occurred
+   included, as empty bins), and otherwise one bin per distinct value, its
+   edges halfway to the neighboring values. Grouping outcomes into wider
+   bins would hide the very atoms a discrete model describes. Past
+   VALUE_BINS_MAX outcomes the bars would be too thin to read, and the
+   ordinary binning takes over. Each per-value bin carries its outcome in
+   `values`. */
+var VALUE_BINS_MAX = 150;
+function valueBins(x, s) {
+  var i, j, edges = [], counts, values = [];
+  if (s.allInt && s.max - s.min + 1 <= VALUE_BINS_MAX) {
+    var nb = s.max - s.min + 1;
+    for (i = 0; i <= nb; i++) edges.push(s.min - 0.5 + i);
+    for (i = 0; i < nb; i++) values.push(s.min + i);
+    counts = new Array(nb).fill(0);
+    for (i = 0; i < s.n; i++) counts[x[i] - s.min]++;
+    return { edges: edges, counts: counts, k: nb, n: s.n, width: 1, integer: true,
+             perValue: true, values: values };
+  }
+  if (s.allInt || s.nUnique > VALUE_BINS_MAX) return null;
+  var u = s.sorted, idx = {};
+  for (i = 0; i < u.length; i++) if (!i || u[i] !== u[i - 1]) values.push(u[i]);
+  var m = values.length;
+  if (m === 1) edges = [values[0] - 0.5, values[0] + 0.5];
+  else {
+    edges.push(values[0] - 0.5 * (values[1] - values[0]));
+    for (i = 1; i < m; i++) edges.push(0.5 * (values[i - 1] + values[i]));
+    edges.push(values[m - 1] + 0.5 * (values[m - 1] - values[m - 2]));
+  }
+  for (i = 0; i < m; i++) idx[values[i]] = i;
+  counts = new Array(m).fill(0);
+  for (j = 0; j < s.n; j++) counts[idx[x[j]]]++;
+  return { edges: edges, counts: counts, k: m, n: s.n, width: null, integer: false,
+           perValue: true, values: values };
+}
+function makeBins(x, k, perValue) {
   var s = summarize(x), lo = s.min, hi = s.max, i, j;
+  if (perValue) {
+    var vb = valueBins(x, s);
+    if (vb) return vb;
+    /* Too many whole numbers for a bar each: the ordinary count binning,
+       at the most bins a bar can stay readable at. */
+    if (s.allInt) k = VALUE_BINS_MAX;
+  }
   if (!(hi > lo)) hi = lo + 1;
   var edges = [], counts, width, integer = false;
 
@@ -4635,6 +4691,10 @@ function ksStat(sorted, F, atom) {
     if (dMinus > D) { D = dMinus; at = v; sign = -1; }
     i = j + 1;
   }
+  /* A model that matches the steps exactly, as the empirical does, leaves
+     only the rounding in (j + 1)/n and in the model's summed atoms, about
+     1e-16, which is no gap at all. */
+  if (D < 1e-12) D = 0;
   return { D: D, at: at, sign: sign };
 }
 
@@ -4687,7 +4747,7 @@ function adStat(sorted, F) {
    This is written as a resumable chunk so the same code can drive a Web
    Worker (posting progress between chunks) or, when a page opened from
    file:// cannot construct one, a timer on the main thread. */
-function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift, reflect) {
+function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift, reflect, perValue) {
   var u01 = MRG32k3a(seed);
   var dist = fit.dist;
   var geD = 0, geA = 0, geC = 0, done = 0, usedChi = 0;
@@ -4720,7 +4780,7 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
          -- if the convention is right, the bootstrap p-value and the
          table p-value will agree. */
       if (doChi) {
-        var cs = chiSquareGOF(y, rf, makeBins(y, binK));
+        var cs = chiSquareGOF(y, rf, makeBins(y, binK, perValue));
         if (Number.isFinite(cs.stat)) {
           nullC.push(cs.stat);
           usedChi++;
@@ -7658,6 +7718,9 @@ function fmt(v, sig) {
      for a number the reader typed as 0.02. */
   return v.toFixed(Math.min(dp, 8)).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }
+/* An observed value as the data hold it (3.14 stays 3.14, where fmt would
+   keep four figures), for labeling a discrete sample's outcomes. */
+function valueText(v) { return String(Number(v.toPrecision(10))); }
 /* p-values get their own format: below 0.0001 the digits are noise, and a
    bootstrap p-value can never be smaller than 1/(B+1) anyway. */
 function fmtP(p, floor) {
@@ -7686,7 +7749,7 @@ function Plot(W, H, m) {
      mark (consecutive segments and rectangles of one color merge), the axis
      labels, and the legend's labels, which svg() attaches to the records
      of the same color and kind. */
-  var recs = [], legendItems = [], xlab = '', ylab = '', fmtX = null, fmtY = null;
+  var recs = [], legendItems = [], xlab = '', ylab = '', fmtX = null, fmtY = null, snaps = null;
   function last(kind, color, extra) {
     var r = recs.length ? recs[recs.length - 1] : null;
     if (!r || r.kind !== kind || r.color !== color) return null;
@@ -7696,6 +7759,9 @@ function Plot(W, H, m) {
   var api = {
     W: W, H: H, mL: mL, mR: mR, mT: mT, mB: mB, pw: pw, ph: ph,
     domain: function (a, b, c, d) { xlo = a; xhi = b; ylo = c; yhi = d; return api; },
+    /* Points the probe jumps to, each with its own readout: the outcomes of
+       a discrete sample. See armProbe. */
+    snap: function (list) { snaps = list; return api; },
     X: function (v) { return mL + (v - xlo) / (xhi - xlo) * pw; },
     Y: function (v) { return mT + ph - (v - ylo) / (yhi - ylo) * ph; },
     add: function (s) { g.push(s); return api; },
@@ -7850,7 +7916,8 @@ function Plot(W, H, m) {
       }
       PLOT_SPECS[title] = { name: 'input-analyzer-' + title, title: title, xLabel: xlab, yLabel: ylab,
                             xlim: [xlo, xhi], ylim: [ylo, yhi], series: recs, by: 'the Input Analyzer',
-                            frame: { W: W, H: H, l: mL, t: mT, w: pw, h: ph }, fmtX: fmtX, fmtY: fmtY };
+                            frame: { W: W, H: H, l: mL, t: mT, w: pw, h: ph }, fmtX: fmtX, fmtY: fmtY,
+                            snap: snaps };
       return '<svg class="plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' +
              esc(aria || title) + '"><title>' + esc(title) + '</title>' + g.join('') + '</svg>';
     }
@@ -8170,6 +8237,7 @@ function renderStats() {
   var s = ST.s;
   var set = function (id, v) { $(id).textContent = v; };
   $('btn-dl-data').disabled = !s || !s.n;
+  renderDistinct(s);
   if (!s || !s.n) {
     ['st-n', 'st-mean', 'st-sd', 'st-min', 'st-med', 'st-max'].forEach(function (k) { set(k, '—'); });
     $('data-kind').innerHTML = 'Load some data to begin. The samples are synthetic, generated ' +
@@ -8190,6 +8258,13 @@ function renderStats() {
       '<em>Choose for me</em> fits the discrete candidates. If they are measurements recorded to ' +
       'whole units instead, set <em>Family</em> to <em>Continuous</em>; continuous fits are a ' +
       'reasonable approximation to counts once the counts get large.';
+  } else if (isFewValues(s)) {
+    msg = '<strong>These look like a few distinct outcomes.</strong> The ' + s.n + ' observations take ' +
+      'only ' + s.nUnique + ' distinct value' + (s.nUnique === 1 ? '' : 's') + ', each seen ' +
+      fmt(s.n / s.nUnique, 3) + ' times on average, and so <em>Choose for me</em> fits the discrete ' +
+      'candidates. ' + (s.allInt ? '' : 'Of those, only the empirical (discrete) takes values that are ' +
+      'not whole numbers. ') + 'If these are a measurement rounded to a coarse step, set ' +
+      '<em>Family</em> to <em>Continuous</em>.';
   } else if (s.min < 0) {
     msg = '<strong>Some values are negative,</strong> so the candidates that live on the positive ' +
       'half-line (the exponential, gamma, Erlang, Weibull, lognormal, log-logistic, and Pearson type V) can ' +
@@ -8223,7 +8298,7 @@ function renderStats() {
   /* A long left tail is the one shape no zero-based candidate has, and the
      box that handles it is easy to miss, and so a clearly left-skewed
      sample says where it is. */
-  if (!isCountData(s) && s.n >= 10 && s.skew < -0.5) {
+  if (!isDiscreteData(s) && s.n >= 10 && s.skew < -0.5) {
     msg += ' <strong>The sample leans left</strong> (skewness ' + fmt(s.skew, 2) + '): its long tail ' +
       'runs below the bulk of the data. Every candidate that starts at zero has its long tail on the ' +
       'right; tick <strong>Fit the mirror image</strong> in section 2 to fit those as ' +
@@ -8231,6 +8306,29 @@ function renderStats() {
   }
   $('data-kind').innerHTML =
     (ST.unit ? '<div style="margin-bottom:6px">These are ' + esc(ST.unit) + '.</div>' : '') + msg;
+}
+
+/* Every distinct value with its count, its share, and the share at or
+   below it, for a sample with few enough of them to list: what a discrete
+   model's support and probabilities are read against. */
+var DISTINCT_LIST_MAX = 30;
+function renderDistinct(s) {
+  var wrap = $('uniq-wrap');
+  if (!s || !s.n || s.nUnique > DISTINCT_LIST_MAX) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  $('uniq-sum').textContent = 'The ' + s.nUnique + ' distinct value' + (s.nUnique === 1 ? '' : 's') +
+    ', with counts and proportions';
+  var rows = '', i = 0, cum = 0, v, c;
+  while (i < s.n) {
+    v = s.sorted[i]; c = 0;
+    while (i < s.n && s.sorted[i] === v) { c++; i++; }
+    cum += c;
+    rows += '<tr><td class="num">' + esc(valueText(v)) + '</td><td class="num">' + c + '</td>' +
+      '<td class="num">' + fmt(c / s.n, 4) + '</td><td class="num">' + fmt(cum / s.n, 4) + '</td></tr>';
+  }
+  $('uniq-tbl').innerHTML = '<table class="tbl"><thead><tr><th class="num">Value</th>' +
+    '<th class="num">Count</th><th class="num">Proportion</th><th class="num">Cumulative</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -8415,11 +8513,28 @@ function isCountData(s) {
   if (s.nUnique <= 30) return true;
   return s.nUnique <= 10 * Math.sqrt(Math.max(s.mean, 1)) && 2 * s.nUnique <= s.n;
 }
+/* A handful of exact values, each repeated many times, are outcomes
+   rather than measurements, whole numbers or not (2, 3.14, and 6.75, say).
+   The test is on the number of distinct values and not on their share of
+   the sample, because a measurement rounded to a fixed step runs out of
+   new values as n grows: a normal sample rounded to tenths has about 55
+   distinct values whether n is 1000 or 10000, and so any share falls
+   below any threshold once n is large enough. At most 10 distinct values,
+   each seen at least 3 times on average, leaves those alone. */
+var FEW_VALUES_MAX = 10;
+function isFewValues(s) {
+  if (ST.clockUnit || !s) return false;
+  return s.nUnique <= FEW_VALUES_MAX && s.n >= 3 * s.nUnique;
+}
+function isDiscreteData(s) { return isCountData(s) || isFewValues(s); }
 function activeFamily() {
   var fam = ST.family;
-  if (fam === 'auto') fam = isCountData(ST.s) ? 'discrete' : 'continuous';
+  if (fam === 'auto') fam = isDiscreteData(ST.s) ? 'discrete' : 'continuous';
   return fam;
 }
+/* The histogram's bins: one per outcome under a discrete family, and
+   otherwise the slider's count. */
+function binsFor(k) { return IA.makeBins(ST.x, k, activeFamily() === 'discrete'); }
 function activeKeys() {
   var fam = activeFamily();
   if (fam === 'discrete') return IA.DISCRETE_KEYS;
@@ -8468,7 +8583,7 @@ function refitAll() {
   $('bins').value = String(k);
   $('bins-val').textContent = String(k);
   ST.binK = k;
-  ST.bins = IA.makeBins(ST.x, k);
+  ST.bins = binsFor(k);
   ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
 
   /* Keep the reader's own choice across a refit; otherwise follow the
@@ -8648,8 +8763,8 @@ function renderRanking() {
                    'and so no row is shaded. '
          : 'Sort by AIC or BIC to shade those rows. ')
       : 'No other candidate’s AIC or BIC is within 2 of its leader’s. ') +
-    'Square error is computed on the ' +
-    ST.bins.k + ' histogram bins set in section 4.' +
+    (ST.bins.perValue ? 'Square error is computed on the histogram in section 4, one bin per value.'
+      : 'Square error is computed on the ' + ST.bins.k + ' histogram bins set in section 4.') +
     (ST.rows.some(function (q) { return q.noCriteria && Number.isFinite(q.sqe); })
       ? ' The empirical row is unscored in the first four columns but still carries a square ' +
         'error, and it is normally the smallest on the table by a wide margin. That is not a ' +
@@ -8736,9 +8851,14 @@ function renderDisagreement(bAic, bBic, bLl, bSqe) {
 function renderShiftNote() {
   var r = pickedRow();
   var el = $('shift-note');
+  el.style.display = '';
   if (!r) { el.innerHTML = 'Load some data first.'; return; }
   var d = r.dist;
   syncFitBoxes();
+  /* Under a discrete family the shift and mirror boxes are grayed, and
+     their tips already say why, and so there is nothing for this note to
+     add about the picked model. */
+  if (activeFamily() === 'discrete') { el.innerHTML = ''; el.style.display = 'none'; return; }
   var mirrorNA = !ST.reflect || d.kind === 'discrete' ? ''
     : d.key === 'pearson6'
       ? ' It is not mirrored either, because a mirrored fit estimates an end point just as the shift does.'
@@ -8804,8 +8924,13 @@ function renderFit() {
   /* `idx` is the parameter's position, or null for a derived quantity that
      cannot be held (the shift, the rate form of an exponential). */
   var shiftHold = ST.holdShift[r.key];
+  /* The rows are collected first, because a model with nothing to hold
+     (the two empirical distributions) gets no Hold column at all, and its
+     one number is a value read off the data rather than an estimate. */
+  var items = [], anyHold = false;
   var add = function (sym, est, what, idx) {
     var hold = '<td></td>';
+    if (idx !== null && idx !== undefined) anyHold = true;
     if (idx !== null && idx !== undefined) {
       var isShift = idx === 'shift';
       var on = isShift
@@ -8819,8 +8944,7 @@ function renderFit() {
         '<input type="number" step="any" data-holdval="' + idx + '" value="' +
         esc(IA.num(val, 8)) + '"' + (on ? '' : ' disabled') + '></span></td>';
     }
-    rows += '<tr><td class="p-name">' + sym + '</td><td class="num">' + est + '</td>' +
-            hold + '<td class="p-what">' + what + '</td></tr>';
+    items.push({ sym: sym, est: est, hold: hold, what: what });
   };
   if (f.reflect) {
     add('c &nbsp;<span class="p-what">right end</span>', fmt(f.shift, 5),
@@ -8849,6 +8973,10 @@ function renderFit() {
      and so have nothing to hold. */
   var extras = derivedRows(d, f);
   for (var e = 0; e < extras.length; e++) add(extras[e][0], extras[e][1], extras[e][2], null);
+  for (var it = 0; it < items.length; it++) {
+    rows += '<tr><td class="p-name">' + items[it].sym + '</td><td class="num">' + items[it].est + '</td>' +
+            (anyHold ? items[it].hold : '') + '<td class="p-what">' + items[it].what + '</td></tr>';
+  }
 
   var ic = IA.infoCriteria(f.ll, f.k, ST.s.n);
   var cards = r.noCriteria
@@ -8952,9 +9080,9 @@ function renderFit() {
   out.innerHTML =
     '<div class="plot-wrap">' +
       '<div style="flex:1 1 420px;min-width:0"><div class="tbl-scroll">' +
-        '<table class="tbl"><thead><tr><th>Parameter</th><th class="num">Estimate</th>' +
-        '<th>Hold at</th><th>What it is</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-        holdNote(r) + '</div>' +
+        '<table class="tbl"><thead><tr><th>Parameter</th><th class="num">' + (anyHold ? 'Estimate' : 'Value') +
+        '</th>' + (anyHold ? '<th>Hold at</th>' : '') + '<th>What it is</th></tr></thead><tbody>' + rows +
+        '</tbody></table></div>' + (anyHold ? holdNote(r) : '') + '</div>' +
       '<div style="flex:1 1 240px;min-width:0">' +
         '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + cards + '</div></div>' +
     '</div>' + pin;
@@ -9337,14 +9465,34 @@ function derivedRows(d, f) {
    4: GOODNESS OF FIT
    ═══════════════════════════════════════════════════════════════════ */
 
+/* The bin count Sturges' rule gives, worked for this sample, beside the
+   square-root rule's, which is the other one a reader is likely to know. */
+function sturgesTip(n) {
+  var raw = 1 + Math.log2(n), k = IA.sturges(n), r = Math.sqrt(n);
+  return 'Sturges’ rule: <code>k = 1 + log₂ n</code>, rounded and kept between 3 and 40. ' +
+    'With n = ' + n + ', 1 + log₂ ' + n + ' = ' + fmt(raw, 3) + ', and so ' + k + ' bins. ' +
+    'The square-root rule, <code>k = √n</code>, gives √' + n + ' = ' + fmt(r, 3) + ', or ' +
+    Math.round(r) + '. The two agree near n = 30, and Sturges’ rule grows more slowly: at n = 1000 ' +
+    'it gives 11 bins where the square-root rule gives 32.';
+}
 function renderBinPanel() {
   var r = pickedRow();
-  if (!r || !ST.bins) { $('bins-hint').textContent = ''; return; }
-  var b = ST.bins;
-  var hint = b.k + ' bin' + (b.k === 1 ? '' : 's') + ' of width ' + fmt(b.width, 3);
-  if (b.integer) hint += ', on the half-integers so no count sits on an edge';
-  if (ST.binAuto) hint += ' · Sturges’ rule';
-  $('bins-hint').textContent = hint;
+  var b = ST.bins, perValue = !!(b && b.perValue);
+  /* One bin per outcome leaves the slider nothing to set. */
+  $('bins').disabled = perValue;
+  $('bins-auto').disabled = perValue;
+  if (!r || !b) { $('bins-hint').textContent = ''; return; }
+  var hint;
+  if (perValue) {
+    hint = 'One bin per ' + (b.integer ? 'whole number from ' + fmt(b.values[0]) + ' to ' +
+      fmt(b.values[b.k - 1]) : 'distinct value') + ' (' + b.k + '), as a discrete model is read. ' +
+      'The slider sets the bins for a continuous fit.';
+  } else {
+    hint = b.k + ' bin' + (b.k === 1 ? '' : 's') + ' of width ' + fmt(b.width, 3);
+    if (b.integer) hint += ', on the half-integers so no count sits on an edge';
+    if (ST.binAuto) hint += ' · ' + tipSpan('', 'Sturges’ rule', sturgesTip(b.n));
+  }
+  $('bins-hint').innerHTML = hint;
   renderDensity();
   renderChi();
   armPlotDownloads();
@@ -9394,7 +9542,7 @@ function renderDensity() {
     for (i = 0; i < b.k; i++) {
       y = n * bp[i];
       if (y > ymax) ymax = y;
-      curve.push([0.5 * (b.edges[i] + b.edges[i + 1]), y]);
+      curve.push([b.perValue ? b.values[i] : 0.5 * (b.edges[i] + b.edges[i + 1]), y]);
     }
   } else if (showFit) {
     var pdf = IA.fitPdf(f);
@@ -9410,11 +9558,44 @@ function renderDensity() {
   /* The right margin holds the density axis, which only the fit needs. */
   var P = Plot(460, 330, { l: 46, r: showFit ? 62 : 14, t: 12, b: 46 }).domain(xlo, xhi, 0, yhi);
   var xt = tickPair(xlo, xhi, 6);
+  /* With a few outcomes, the ticks are the outcomes themselves, so that
+     2, 3.14, and 6.75 are labeled where their bars stand; a label too close
+     to the one before it is dropped rather than overprinted. */
+  if (b.perValue && b.k <= 12) {
+    var vt = [], lastPx = -Infinity;
+    for (i = 0; i < b.k; i++) {
+      if (P.X(b.values[i]) - lastPx < 34) continue;
+      vt.push(b.values[i]); lastPx = P.X(b.values[i]);
+    }
+    xt = { ticks: vt, fmt: valueText };
+  }
   var yt = niceCountTicks(yhi, 5);
   P.frame().axes(xt.ticks, yt, xt.fmt, function (t) { return String(Math.round(t)); });
+  /* Whole-number outcomes fill their unit bins, as a count histogram is
+     drawn. Other outcomes stand as bars of one drawn width centered on
+     their values, since bins reaching halfway to the neighbors would make
+     a value with a lonely neighbor look wider, and wider reads as more. */
+  var half = 0;
+  if (b.perValue && !b.integer) {
+    var gap = Infinity;
+    for (i = 1; i < b.k; i++) gap = Math.min(gap, b.values[i] - b.values[i - 1]);
+    half = 0.3 * (Number.isFinite(gap) ? gap : 1);
+  }
   for (i = 0; i < b.k; i++) {
     if (b.counts[i] === 0) continue;
-    P.rect(b.edges[i], 0, b.edges[i + 1], b.counts[i], 'var(--obs-fill)', 'var(--obs)');
+    if (half) P.rect(b.values[i] - half, 0, b.values[i] + half, b.counts[i], 'var(--obs-fill)', 'var(--obs)');
+    else P.rect(b.edges[i], 0, b.edges[i + 1], b.counts[i], 'var(--obs-fill)', 'var(--obs)');
+  }
+  /* The probe snaps to the outcomes, so that a value is read off exactly
+     rather than estimated from where the pointer happens to be. */
+  if (b.perValue) {
+    var snaps = [];
+    for (i = 0; i < b.k; i++) {
+      snaps.push({ x: b.values[i], y: b.counts[i], xText: valueText(b.values[i]), yText: String(b.counts[i]),
+        note: valueText(b.values[i]) + ': ' + b.counts[i] + ' of ' + n + ' (' + fmt(b.counts[i] / n, 3) + ')' +
+              (showFit ? ' · model ' + fmt(curve[i][1] / n, 3) : '') });
+    }
+    P.snap(snaps);
   }
   if (showFit && discrete) {
     for (i = 0; i < curve.length; i++) P.seg(curve[i][0], 0, curve[i][0], curve[i][1], 'var(--fit)', 2);
@@ -9431,7 +9612,8 @@ function renderDensity() {
   P.labels('Value', 'Frequency (count)');
   var lc = legendCorner(P, b.counts, yhi, 168);
   var items = [
-    { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your data (' + b.k + ' bins)' }
+    { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)',
+      label: b.perValue ? 'your data, one bin per value' : 'your data (' + b.k + ' bins)' }
   ];
   if (showFit) items.push({ mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
     label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') });
@@ -9546,10 +9728,12 @@ function renderChi() {
   for (var i = 0; i < chi.groups.length; i++) {
     var g = chi.groups[i];
     var contrib = g.exp > 0 ? (g.obs - g.exp) * (g.obs - g.exp) / g.exp : (g.obs > 0 ? Infinity : 0);
-    var span = g.to - g.from + 1;
+    var span = g.to - g.from + 1, vals = ST.bins.perValue ? ST.bins.values : null;
+    /* With one bin per outcome, a group is named by its outcomes. */
     t += '<tr><td class="mono" style="font-size:.75rem">' +
-         fmt(chi.edges[g.from], 3) + '–' + fmt(chi.edges[g.to + 1], 3) +
-         (span > 1 ? '<span class="rank-sub">' + span + ' bins pooled</span>' : '') +
+         (vals ? valueText(vals[g.from]) + (span > 1 ? '–' + valueText(vals[g.to]) : '')
+               : fmt(chi.edges[g.from], 3) + '–' + fmt(chi.edges[g.to + 1], 3)) +
+         (span > 1 ? '<span class="rank-sub">' + span + (vals ? ' values' : ' bins') + ' pooled</span>' : '') +
          '</td><td class="num">' + g.obs + '</td>' +
          '<td class="num"' + (g.exp < chi.minExpected ? ' style="color:var(--warn);font-weight:600"' : '') +
          '>' + fmt(g.exp, 3) + '</td><td class="num">' + fmt(contrib, 3) + '</td></tr>';
@@ -9578,7 +9762,7 @@ function bootWorkerSource() {
     '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
     '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
-    '                         m.obsChi, m.binK, m.fixedShift, m.reflect);\n' +
+    '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
     '  var done = 0;\n' +
     '  while (done < m.B) {\n' +
@@ -9613,7 +9797,7 @@ function startBootstrap() {
   var msg = { distKey: f.dist.key, p: f.p, shift: f.shift, k: f.k, n: ST.s.n,
               B: ST.B, seed: seed, useShift: ST.shift && f.dist.shiftable,
               obsD: obsD, obsA: obsA, fixed: f.fixed || null,
-              obsChi: obsChi, binK: ST.bins.k,
+              obsChi: obsChi, binK: ST.bins.k, perValue: !!ST.bins.perValue,
               fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect };
 
   function finish(res) {
@@ -9662,7 +9846,7 @@ function runOnMainThread(msg, obsD, obsA, finish) {
   var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
               fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
-                            msg.obsChi, msg.binK, msg.fixedShift, msg.reflect);
+                            msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue);
   var chunk = Math.max(5, Math.round(msg.B / 80));
   function tick() {
     if (BOOT.canceled) { finish(null); return; }
@@ -9724,6 +9908,21 @@ function critCompare(n, tableCrit, bootCrit, D) {
 
 function renderGof() {
   var r = pickedRow(), host = $('gof-out');
+  /* The empirical distributions are not tested, and so a bootstrap would
+     have nothing to compute; its row is hidden, unless a run is under way
+     and its Stop button is still wanted. */
+  var untested = r && r.noCriteria && !BOOT.running;
+  $('boot-row').style.display = untested ? 'none' : '';
+  /* The explainers about the bootstrap go with it, and the one about the
+     bin slider goes whenever there is no chi-square to move or no slider
+     to move it (one bin per outcome). */
+  $('why-boot').style.display = untested ? 'none' : '';
+  $('why-boot-table').style.display = untested ? 'none' : '';
+  $('why-bins').style.display = (r && r.noCriteria) || (ST.bins && ST.bins.perValue) ? 'none' : '';
+  /* With no test run, the advice on choosing one, and on why a large
+     sample rejects them all, has nothing to apply to. */
+  $('choose-test-note').style.display = r && r.noCriteria ? 'none' : '';
+  $('why-large-n').style.display = r && r.noCriteria ? 'none' : '';
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   if (r.noCriteria) {
     host.innerHTML = '<div class="note quiet">Not tested, for the same reason it is not scored: the ' +
@@ -9893,18 +10092,37 @@ function drawPP() {
   if (!r || !ST.s) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   var f = r.fit, n = ST.s.n, F = IA.fitCdf(f);
   var pp = IA.plottingPositions(n), pts = [], i;
-  for (i = 0; i < n; i++) pts.push([pp[i], F(ST.s.sorted[i])]);
+  /* A discrete model puts its probability in steps, and every observation
+     tied at one value shares one fitted F(x); against the plotting
+     positions, which keep climbing through the tie, a run of them would lie
+     flat, off the diagonal, even under a perfect fit. Under a discrete fit,
+     then, each distinct value is one point: the share of the sample at or
+     below it against the fitted probability at or below it, the comparison
+     the K–S statistic makes at the top of each step. */
+  var discrete = f.dist.kind === 'discrete';
+  if (discrete) {
+    for (i = 0; i < n; i++) {
+      if (i + 1 < n && ST.s.sorted[i + 1] === ST.s.sorted[i]) continue;
+      pts.push([(i + 1) / n, F(ST.s.sorted[i])]);
+    }
+  } else {
+    for (i = 0; i < n; i++) pts.push([pp[i], F(ST.s.sorted[i])]);
+  }
 
   var P = Plot(360, 360, { l: 48, r: 12, t: 12, b: 44 }).domain(0, 1, 0, 1);
   var t = tickPair(0, 1, 5);
   P.frame().axes(t.ticks, t.ticks, t.fmt, t.fmt);
   P.seg(0, 0, 1, 1, 'var(--fit)', 2);
   P.dots(pts, 'var(--obs)', 2.4);
-  P.labels('Empirical probability (i − 0.5)/n', 'Fitted probability F(x)');
+  P.labels(discrete ? 'Empirical probability, share at or below x' : 'Empirical probability (i − 0.5)/n',
+    'Fitted probability F(x)');
   host.innerHTML = P.svg('P–P plot: fitted probability against empirical probability',
     'P-P plot of fitted against empirical probabilities') +
-    '<div class="plot-cap">Compresses the tails and stretches the middle, the opposite emphasis ' +
-    'from the Q–Q plot</div>';
+    '<div class="plot-cap">' + (discrete
+      ? 'One point per distinct value: the share of the sample at or below it against the fitted ' +
+        'probability at or below it'
+      : 'Compresses the tails and stretches the middle, the opposite emphasis from the Q–Q plot') +
+    '</div>';
 }
 
 function drawCDF() {
@@ -9939,7 +10157,33 @@ function drawCDF() {
      height and their frames line up. */
   var P = Plot(460, 330, { l: 52, r: 14, t: 12, b: 46 }).domain(xlo, xhi, 0, 1.02);
   var xt = tickPair(xlo, xhi, 5), yt = tickPair(0, 1, 5);
+  /* Under a discrete fit, as on the histogram, a few outcomes label the
+     axis themselves and the probe snaps to each step, reading the share of
+     the sample at or below it. */
+  var b = ST.bins, outcomes = null;
+  if (b && b.perValue) {
+    outcomes = [];
+    for (i = 0; i < n; i++) if (!i || ST.s.sorted[i] !== ST.s.sorted[i - 1]) outcomes.push(ST.s.sorted[i]);
+    if (outcomes.length <= 12) {
+      var vt = [], lastPx = -Infinity;
+      for (i = 0; i < outcomes.length; i++) {
+        if (P.X(outcomes[i]) - lastPx < 34) continue;
+        vt.push(outcomes[i]); lastPx = P.X(outcomes[i]);
+      }
+      xt = { ticks: vt, fmt: valueText };
+    }
+  }
   P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
+  if (outcomes) {
+    var snaps = [], cum = 0, si = 0;
+    for (i = 0; i < outcomes.length; i++) {
+      while (si < n && ST.s.sorted[si] === outcomes[i]) { cum++; si++; }
+      snaps.push({ x: outcomes[i], y: cum / n, xText: valueText(outcomes[i]), yText: fmt(cum / n, 3),
+        note: 'at or below ' + valueText(outcomes[i]) + ': ' + cum + ' of ' + n + ' (' + fmt(cum / n, 3) + ')' +
+              (showFit ? ' · model ' + fmt(F(outcomes[i]), 3) : '') });
+    }
+    P.snap(snaps);
+  }
   P.line(step, 'var(--obs)', 1.6);
   var stepNote = 'The empirical CDF steps up by 1/' + n + ' for each observation.';
   var gapNote = ' The marked gap between it and the fitted CDF is exactly the K–S statistic.';
@@ -9962,6 +10206,20 @@ function drawCDF() {
      on the picture, which is what tells you whether the misfit is in the
      body or in a tail. */
   var ks = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f));
+  /* A fit that matches every step, as the empirical does, has no gap to
+     mark, and the caption says so instead. */
+  if (ks.D === 0) {
+    P.labels('Value', 'Cumulative probability');
+    P.legend(leg.x, leg.y + 14, [
+      { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
+      dataItem
+    ]);
+    var noGap = ' The fitted CDF matches every step, and so the K–S statistic is 0.';
+    host.innerHTML = P.svg('Empirical and fitted cumulative distribution functions',
+      'Empirical step CDF against the fitted CDF, which matches it') +
+      heldCaption(stepNote + noGap, stepNote + noGap);
+    return;
+  }
   var Fat = F(ks.at);
   var eLo = 0, eHi = 0;
   for (i = 0; i < n; i++) {
@@ -10219,9 +10477,57 @@ function resolveVars(el) {
   for (i = 0; i < el.children.length; i++) resolveVars(el.children[i]);
 }
 
+/* An SVG drawn as an image, as the PNG and COPY buttons draw it, cannot
+   reach the fonts the page loaded, and so its text fell back to a wider
+   system font and a legend that fit on the page ran past the frame. The
+   page's font is therefore embedded in every exported plot: the Google
+   Fonts stylesheet is fetched once, its Outfit faces kept, and each face's
+   file inlined as a data URL. Offline, or wherever a fetch fails, the
+   export goes out without it, as it did before. */
+var EXPORT_FONT_CSS = null;
+function exportFontCss() {
+  if (EXPORT_FONT_CSS) return EXPORT_FONT_CSS;
+  var link = document.querySelector('link[href*="fonts.googleapis.com"]');
+  if (!link || !window.fetch) return (EXPORT_FONT_CSS = Promise.resolve(''));
+  var asDataUrl = function (blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = reject;
+      fr.readAsDataURL(blob);
+    });
+  };
+  /* Outfit is a variable font, and the stylesheet names the same file
+     under every weight; it is embedded once, as one face spanning the
+     weights. Only the basic Latin subset is kept, which holds every
+     character a plot's labels use, the minus sign included. */
+  EXPORT_FONT_CSS = fetch(link.href).then(function (r) { return r.ok ? r.text() : ''; }).then(function (css) {
+    var faces = (css.match(/@font-face\s*\{[^}]*\}/g) || []).filter(function (f) {
+      return /font-family:\s*'Outfit'/.test(f) && /unicode-range:\s*U\+0000-00FF/.test(f);
+    });
+    var urls = [], lo = {}, hi = {};
+    faces.forEach(function (f) {
+      var m = /url\(([^)]+)\)/.exec(f), w = Number((/font-weight:\s*(\d+)/.exec(f) || [])[1]) || 400;
+      if (!m) return;
+      if (urls.indexOf(m[1]) < 0) { urls.push(m[1]); lo[m[1]] = w; hi[m[1]] = w; }
+      lo[m[1]] = Math.min(lo[m[1]], w); hi[m[1]] = Math.max(hi[m[1]], w);
+    });
+    return Promise.all(urls.map(function (u) {
+      return fetch(u).then(function (r) { if (!r.ok) throw new Error(u); return r.blob(); }).then(asDataUrl);
+    })).then(function (data) {
+      return urls.map(function (u, i) {
+        return "@font-face { font-family: 'Outfit'; font-style: normal; font-weight: " + lo[u] + ' ' + hi[u] +
+          "; src: url(" + data[i] + ") format('woff2'); }";
+      }).join('\n');
+    });
+  }).catch(function () { return ''; });
+  return EXPORT_FONT_CSS;
+}
+
 /* The plot as a standalone SVG document: the page's color tokens resolved
-   to literals, the font stack written on, and an opaque page-colored ground. */
-function standaloneSvg(svg) {
+   to literals, the font stack written on (with the font itself when it
+   could be fetched), and an opaque page-colored ground. */
+function standaloneSvg(svg, fontCss) {
   var vb = (svg.getAttribute('viewBox') || '0 0 400 300').split(/\s+/).map(Number);
   var W = vb[2], H = vb[3];
   var clone = svg.cloneNode(true);
@@ -10237,6 +10543,11 @@ function standaloneSvg(svg) {
   bg.setAttribute('width', W); bg.setAttribute('height', H);
   bg.setAttribute('fill', cssToken('--card') || '#ffffff');
   clone.insertBefore(bg, clone.firstChild);
+  if (fontCss) {
+    var st = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    st.textContent = fontCss;
+    clone.insertBefore(st, clone.firstChild);
+  }
   return { W: W, H: H, text: '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone) };
 }
 function downloadBlob(name, blob) {
@@ -10246,12 +10557,20 @@ function downloadBlob(name, blob) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function () { URL.revokeObjectURL(u); }, 1000);
 }
+/* Fetched soon after load, from the browser's cache of the page's own
+   fonts, so that the first COPY does not wait on it. */
+window.addEventListener('load', function () { setTimeout(exportFontCss, 1500); });
 function exportSvg(svg, name) {
-  downloadBlob(name, new Blob([standaloneSvg(svg).text], { type: 'image/svg+xml;charset=utf-8' }));
+  exportFontCss().then(function (css) {
+    downloadBlob(name, new Blob([standaloneSvg(svg, css).text], { type: 'image/svg+xml;charset=utf-8' }));
+  });
 }
 /* The plot as a PNG blob, for the PNG button and the COPY button. */
 function plotPngBlob(svg) {
-  var doc = standaloneSvg(svg), W = doc.W, H = doc.H;
+  return exportFontCss().then(function (css) { return svgPngBlob(standaloneSvg(svg, css)); });
+}
+function svgPngBlob(doc) {
+  var W = doc.W, H = doc.H;
   /* Render at the display's own pixel density, so a plot saved on a phone
      is as sharp as the phone can show and one saved on an ordinary monitor
      is not needlessly large. Floored at 2 so a low-density screen still
@@ -10392,6 +10711,19 @@ function armProbe(svg) {
     /* Four significant figures, rather than the tick labels' rounding; a
        clock-time axis keeps its clock format. */
     var xs = (typeof fmtTime === 'function' && spec.fmtX === fmtTime ? fmtTime : fmt4)(xv), ys = fmt4(yv);
+    /* A plot of a discrete sample snaps to its nearest outcome and says
+       what is there, instead of reading out wherever the pointer sits. */
+    var note = null;
+    if (spec.snap && spec.snap.length) {
+      var best = null, bd = Infinity;
+      for (var si = 0; si < spec.snap.length; si++) {
+        var sx = F.l + (spec.snap[si].x - spec.xlim[0]) / (spec.xlim[1] - spec.xlim[0]) * F.w;
+        if (Math.abs(sx - px) < bd) { bd = Math.abs(sx - px); best = spec.snap[si]; }
+      }
+      px = F.l + (best.x - spec.xlim[0]) / (spec.xlim[1] - spec.xlim[0]) * F.w;
+      py = F.t + F.h - (best.y - spec.ylim[0]) / (spec.ylim[1] - spec.ylim[0]) * F.h;
+      xs = best.xText; ys = best.yText; note = best.note;
+    }
     hide();
     g = document.createElementNS(NS, 'g');
     g.setAttribute('class', 'probe');
@@ -10411,6 +10743,13 @@ function armProbe(svg) {
     parts.push('<text x="' + (bx + wx / 2).toFixed(1) + '" y="' + (by + 10.5) + '" text-anchor="middle" font-size="' + fs + '" fill="' + cT + '">' + esc(xs) + '</text>');
     parts.push('<rect x="' + lx + '" y="' + ly.toFixed(1) + '" width="' + wy.toFixed(1) + '" height="14" rx="3" fill="' + cC + '" stroke="' + cB + '" stroke-width="1"/>');
     parts.push('<text x="' + (lx + 4) + '" y="' + (ly + 10.5).toFixed(1) + '" font-size="' + fs + '" fill="' + cT + '">' + esc(ys) + '</text>');
+    if (note) {
+      /* Just above the point, kept inside the frame. */
+      var wn = note.length * fs * 0.6 + 10, nx = Math.max(F.l, Math.min(F.l + F.w - wn, px - wn / 2));
+      var ny = Math.max(F.t + 2, Math.min(F.t + F.h - 34, py - 24));
+      parts.push('<rect x="' + nx.toFixed(1) + '" y="' + ny.toFixed(1) + '" width="' + wn.toFixed(1) + '" height="15" rx="3" fill="' + cC + '" stroke="' + cB + '" stroke-width="1"/>');
+      parts.push('<text x="' + (nx + wn / 2).toFixed(1) + '" y="' + (ny + 11).toFixed(1) + '" text-anchor="middle" font-size="' + fs + '" fill="' + cT + '">' + esc(note) + '</text>');
+    }
     g.innerHTML = parts.join('');
     svg.appendChild(g);
   }
@@ -11060,13 +11399,16 @@ function csvPlotData() {
   rows.push([]);
   var b = ST.bins, n = b.n, i;
   var bp = r.noCriteria ? null : IA.binProbabilities(r.fit, b.edges);
-  rows.push(['# histogram (the ' + b.k + ' bins on screen): chart observed_count and ' +
-             'expected_count against bin_midpoint']);
-  rows.push(['bin_lower', 'bin_upper', 'bin_midpoint', 'observed_count',
+  /* With one bin per outcome, the outcome itself is the column to chart
+     against, and it is not the bin's midpoint when the outcomes are uneven. */
+  var mid = b.perValue ? 'value' : 'bin_midpoint';
+  rows.push(['# histogram (the ' + (b.perValue ? b.k + ' bins on screen, one per value' : b.k + ' bins on screen') +
+             '): chart observed_count and expected_count against ' + mid]);
+  rows.push(['bin_lower', 'bin_upper', mid, 'observed_count',
              'observed_relative_frequency', 'model_bin_probability', 'expected_count']);
   for (i = 0; i < b.k; i++) {
     rows.push([IA.num(b.edges[i], 8), IA.num(b.edges[i + 1], 8),
-               IA.num(0.5 * (b.edges[i] + b.edges[i + 1]), 8),
+               IA.num(b.perValue ? b.values[i] : 0.5 * (b.edges[i] + b.edges[i + 1]), 8),
                b.counts[i], IA.num(b.counts[i] / n, 8),
                bp ? IA.num(bp[i], 8) : '', bp ? IA.num(n * bp[i], 8) : '']);
   }
@@ -13716,7 +14058,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.binK = Number(this.value);
     $('bins-val').textContent = this.value;
     if (!ST.x.length) return;
-    ST.bins = IA.makeBins(ST.x, ST.binK);
+    ST.bins = binsFor(ST.binK);
     /* Square error is a function of the binning, so the ranking is
        recomputed too -- and if the reader is sorting by square error, the
        order on screen can change under the slider. That is the lesson. */
