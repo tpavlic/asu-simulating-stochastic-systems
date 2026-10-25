@@ -108,8 +108,8 @@ const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p clas
 
 // The card's markup: its heading, the mode switch, and the two panes, each
 // with its own controls above the shared outputs.
-function planMarkup(p, hwControls, powerControlsHtml) {
-  return '<div class="sec-hd">How many replications</div>' +
+function planMarkup(p, hwControls, powerControlsHtml, heading = 'How many replications', note = '') {
+  return '<div class="sec-hd">' + heading + '</div>' + note +
     '<div class="ctrl-row plan-mode-row"><span class="ctrl-lbl" id="' + p + '-plan-lbl">Set the number</span>' +
       '<span class="seg" role="group" aria-labelledby="' + p + '-plan-lbl">' +
         '<button type="button" class="seg-btn" data-plan="hw" aria-pressed="true">by half-width</button>' +
@@ -284,10 +284,11 @@ export function render(rootEl) {
   root.appendChild(res);
 
   // The variance: a chi-square interval on the system's variability as a
-  // performance measure, shown for replication outcomes only.
-  const varSec = el('div', 'sec');
+  // performance measure, shown for replication outcomes only. It and the
+  // quantile are sub-sections of the same card as the mean's interval.
+  const varSec = el('div');
   varSec.hidden = true;
-  varSec.appendChild(el('div', 'sec-hd', 'Confidence interval on the variance'));
+  varSec.appendChild(el('div', 'ctrl-grp-lbl sub-hd', 'Confidence interval on the variance'));
   varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
@@ -295,13 +296,13 @@ export function render(rootEl) {
     '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
     '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for outcomes with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
-  root.appendChild(varSec);
+  res.appendChild(varSec);
 
   // A quantile: the order-statistic estimate and its distribution-free
   // interval, for a performance measure that is a percentile rather than a mean.
-  const qSec = el('div', 'sec');
+  const qSec = el('div');
   qSec.hidden = true;
-  const qHd = el('div', 'sec-hd', 'A quantile of the replication outcomes');
+  const qHd = el('div', 'ctrl-grp-lbl sub-hd', 'Confidence interval on a quantile of the replication outcomes');
   qSec.appendChild(qHd);
   qSec.appendChild(el('p', 'exp-note', 'A performance measure is sometimes a percentile rather than a mean: the value that nine runs in ten stay below. The p quantile is estimated by an order statistic of the sorted outcomes, and its interval is built from two more order statistics with no assumption about the distribution.'));
   const qCtrl = el('div', 'ctrl-row');
@@ -313,7 +314,8 @@ export function render(rootEl) {
     '<p>Sort the R outcomes, Y₍₁₎ ≤ Y₍₂₎ ≤ … ≤ Y₍R₎. The p quantile is estimated by Y₍ₖ₎ with k = ⌈pR⌉, the smallest outcome with at least a fraction p of the sample at or below it. The interpolated estimate, R’s and NumPy’s default, averages the two order statistics around the position (R − 1)p + 1; the two agree as R grows.</p>' +
     '<p>The interval is [Y₍ᵣ₎, Y₍ₛ₎] for two ranks r &lt; s. Whatever the distribution, the number of outcomes at or below the true quantile is binomial with R trials and success probability p, and so the probability that the true quantile lies between those two order statistics is a binomial sum that depends only on r, s, R, and p. The ranks put α/2 in each tail: r is the largest rank whose chance of lying above the true quantile is at most α/2, and s the smallest whose chance of lying at or below it is at most α/2. That is the interval that inverting the sign test gives, and the one SciPy’s quantile test returns. The achieved level is the binomial sum between the two ranks, a little above the level asked for because the ranks are whole numbers.</p>' +
     '<p>An extreme quantile needs many replications. The upper end exists only when the chance that every outcome falls below the true quantile, pᴿ, is at most α/2, and the lower end only when (1 − p)ᴿ is; for the 90th percentile at 95% both first hold at R = 36. With fewer, the section gives the one bound the sample can support, at confidence 1 − α/2 or better, and says how many replications both ends would take.</p>'));
-  root.appendChild(qSec);
+  res.appendChild(qSec);
+
 
   // Planning.
   const planSec = el('div', 'sec plan-card');
@@ -327,7 +329,9 @@ export function render(rootEl) {
       '<span class="ctrl-pair"><span id="rp-tgt-box"></span><span class="ctrl-note" id="rp-tgt-unit"></span></span>' +
     '</div>',
     powerControls('one', 'Shift to detect δ',
-      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'));
+      'The difference between the true mean and a reference value, such as a target or a known baseline, that a two-sided one-sample t test should detect, in the response’s units. The default is 10% of the sample mean; under the log transform, it is ln 1.1 ≈ 0.095, a ratio of 1.1.'),
+    'How many replications for the confidence interval on the mean',
+    '<p class="exp-note">Sized for the confidence interval on the mean, by the half-width you want, or for the t test against a stated mean, by the power you want. The note under the quantile’s table says how many replications both ends of its interval need.</p>');
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
@@ -609,19 +613,38 @@ function tipHd(label, text) { return '<span class="tip" tabindex="0" data-tip="'
 // A results table whose first column may wrap, because its labels are sentences.
 function tbl(headers, rows) { const t = table(headers, rows); t.classList.add('one-tab'); return t; }
 
-// The quantile interval's two cells: the two-sided interval and its achieved
-// level, or the one bound the sample supports and that bound's confidence.
-function quantileCells(q) {
-  return [boundsText(q.lo, q.hi), q.bounds === 'none' ? dash : pct(q.achieved, 1)];
+// The quantile interval as text, in brackets even when the sample supports
+// one end only, the missing end shown as a dash.
+function quantileBounds(lo, hi, bounds) {
+  if (bounds === 'both') return boundsText(lo, hi);
+  if (bounds === 'lower') return '[' + num(lo) + ', ' + dash + ']';
+  if (bounds === 'upper') return '[' + dash + ', ' + num(hi) + ']';
+  return dash;
 }
 
-// Which order statistics the quantile interval's ends are, for the footnote.
-function quantileEnds(q) {
-  const Y = r => 'Y₍' + intl(r) + '₎';
-  if (q.bounds === 'both') return 'its ends are ' + Y(q.r) + ' and ' + Y(q.s) + ', with α/2 of the binomial probability beyond each';
-  if (q.bounds === 'lower') return 'only its lower end, ' + Y(q.r) + ', exists, and the achieved level is that one bound’s';
-  if (q.bounds === 'upper') return 'only its upper end, ' + Y(q.s) + ', exists, and the achieved level is that one bound’s';
-  return 'no order statistic bounds either end';
+// The ranks the interval's ends are read from, in the same form.
+function quantileRanks(q) {
+  if (q.bounds === 'both') return '[' + intl(q.r) + ', ' + intl(q.s) + ']';
+  if (q.bounds === 'lower') return '[' + intl(q.r) + ', ' + dash + ']';
+  if (q.bounds === 'upper') return '[' + dash + ', ' + intl(q.s) + ']';
+  return dash;
+}
+
+// The note under the quantile table: how the point estimate and the ranks
+// were chosen, and what a missing end would take.
+function quantileFoot(q, p, level, nWord, pooled) {
+  const what = pooled ? 'observations' : 'outcomes';
+  const Y = r => 'Y<sub>(' + intl(r) + ')</sub>';
+  let t = 'The point estimate is the ' + ordinal(q.k) + ' smallest of the ' + intl(q.n) + ' sorted ' + what + ' (⌈p' + nWord + '⌉ = ' + intl(q.k) + '); R’s quantile() with its default interpolation gives ' + num(q.interp) + '. ';
+  if (q.bounds === 'both') {
+    t += 'The interval’s ends are ' + Y(q.r) + ' and ' + Y(q.s) + ', the ranks with at most α/2 of the binomial(' + nWord + ', p) probability below r and above s, and it holds with confidence ' + pct(q.achieved, 1) + ', the nearest a sample of ' + intl(q.n) + ' comes to ' + lvl(level) + ' from above.';
+  } else if (q.bounds === 'none') {
+    t += 'With ' + nWord + ' = ' + intl(q.n) + ' no order statistic bounds either end of the ' + lvl(level) + ' interval; both ends need ' + nWord + ' ≥ ' + intl(q.minN) + ' at p = ' + num(p, 2) + '.';
+  } else {
+    const have = q.bounds === 'lower' ? 'lower end is ' + Y(q.r) : 'upper end is ' + Y(q.s);
+    t += 'The interval’s ' + have + ', but with ' + nWord + ' = ' + intl(q.n) + ' no ' + (pooled ? 'observation' : 'outcome') + ' can bound the ' + (q.bounds === 'lower' ? 'upper end, since p' : 'lower end, since (1 − p)') + '<sup>' + nWord + '</sup> exceeds α/2; the one bound holds with confidence ' + pct(q.achieved, 1) + ', and both ends need ' + nWord + ' ≥ ' + intl(q.minN) + ' at p = ' + num(p, 2) + '.';
+  }
+  return t;
 }
 
 /** Redraws the page from the current state. */
@@ -794,22 +817,22 @@ function draw() {
   // The quantile, on the same scale.
   const q = quantileInterval(x, extra.qp, level);
   els.qSec.hidden = false;
-  els.qHd.textContent = 'A quantile of the ' + (pooled ? 'pooled observations' : 'replication outcomes');
+  els.qHd.textContent = 'Confidence interval on a quantile of the ' + (pooled ? 'pooled observations' : 'replication outcomes');
   const pctile = ordinal(Math.round(extra.qp * 100)) + ' percentile';
-  const qCells = quantileCells(q);
-  const qRows = [['Quantile p = ' + num(extra.qp, 2) + ', the ' + pctile + esc(scale), num(q.order), qCells[0], qCells[1], intl(q.k) + ' of ' + intl(q.n), num(q.interp), nWord + ' ≥ ' + intl(q.minN)]];
+  const qRows = [['Quantile p = ' + num(extra.qp, 2) + ', the ' + pctile + esc(scale), num(q.order), quantileBounds(q.lo, q.hi, q.bounds), quantileRanks(q), q.bounds === 'none' ? dash : pct(q.achieved, 1)]];
   if (tf !== 'none') {
     const bq = backInterval(q.lo, q.hi, tf);
-    qRows.push(['Carried back to the response’s units' + unitH + (T.decreasing ? ', the ' + num(1 - extra.qp, 2) + ' quantile' : ''), num(backTransform(q.order, tf)), boundsText(bq.lo, bq.hi, stat), dash, dash, num(backTransform(q.interp, tf)), dash]);
+    qRows.push(['Carried back to the response’s units' + unitH + (T.decreasing ? ', the ' + num(1 - extra.qp, 2) + ' quantile' : ''), num(backTransform(q.order, tf)), quantileBounds(bq.lo, bq.hi, q.bounds), dash, dash]);
   }
-  els.qTab.replaceChildren(tbl(['', 'Order statistic ' + S('Y₍ₖ₎'), lvl(level) + ' interval', 'Achieved level', S('k') + ' = ⌈' + S('p' + nWord) + '⌉', 'Interpolated', 'Both ends need'], qRows),
-    foot('The interval is distribution-free: ' + quantileEnds(q) + '. The interpolated quantile is R’s type 7, the default of most software.'));
+  const Yk = S('Y<sub>(⌈p' + nWord + '⌉)</sub>');
+  els.qTab.replaceChildren(tbl(['',
+      tipHd('Point estimate ' + Yk, 'The ⌈p' + nWord + '⌉th smallest ' + (pooled ? 'observation' : 'outcome') + ', the sample quantile: the smallest value with at least a fraction p of the sample at or below it.'),
+      tipHd(lvl(level) + ' confidence interval', 'Two of the sorted ' + (pooled ? 'observations' : 'outcomes') + ', Y(r) and Y(s), chosen so that the true quantile lies between them with at least this confidence whatever the distribution.'),
+      tipHd('Ranks ' + S('[r, s]'), 'The positions in the sorted ' + (pooled ? 'observations' : 'outcomes') + ' the interval’s ends are read from: at most α/2 of the binomial(' + nWord + ', p) probability lies below r, and at most α/2 above s.'),
+      tipHd('Achieved confidence', 'The exact probability, from the binomial, that the quantile lies between the two ranks; whole-number ranks cannot give the level asked for exactly, and so it is a little above it.')],
+    qRows),
+    foot(quantileFoot(q, extra.qp, level, nWord, pooled)));
   els.qNote.replaceChildren();
-  if (q.bounds !== 'both') {
-    els.qNote.appendChild(para('exp-note', q.bounds === 'none'
-      ? 'With ' + nWord + ' = ' + intl(q.n) + ' no order statistic bounds either end of the ' + lvl(level) + ' interval: both ends need ' + nWord + ' ≥ ' + intl(q.minN) + ' at p = ' + num(extra.qp, 2) + '.'
-      : 'With ' + nWord + ' = ' + intl(q.n) + ' no outcome can bound the ' + (q.bounds === 'lower' ? 'upper end, since pᴿ' : 'lower end, since (1 − p)ᴿ') + ' exceeds α/2, and so the one bound stands alone at confidence ' + pct(q.achieved, 1) + '; both ends need ' + nWord + ' ≥ ' + intl(q.minN) + ' at p = ' + num(extra.qp, 2) + '.'));
-  }
   if (T.decreasing && tf !== 'none') els.qNote.appendChild(para('exp-note', 'The ' + T.label.toLowerCase() + ' reverses the order of the outcomes, and so the quantile carried back is the ' + num(1 - extra.qp, 2) + ' quantile of the response.'));
   if (pooled) els.qNote.appendChild(notice('warn', 'The interval counts each pooled observation as independent; within a run they are not, and so it is narrower than the data justify.'));
 

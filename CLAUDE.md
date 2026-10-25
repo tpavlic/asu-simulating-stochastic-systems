@@ -1060,14 +1060,16 @@ better.
   section (a field for μ₀ and a "Show μ₀ on the plot" box that draws it on the figure as a dashed
   line that can be dragged, the field and the test following it; a one-row table with the
   one-sample t statistic, its p-value, and a verdict tied to the interval; the signed-rank test at
-  μ₀ under the rank procedure), the chi-square interval on the variance as a one-row table, a
-  "quantile" section (the order statistic at ⌈pR⌉, the
-  interpolated quantile, and the distribution-free interval from two order statistics with α/2
-  of the binomial probability in each tail, the ranks SciPy's `quantile_test` returns; when the
-  sample is too small for both ends it gives the one bound it can, with its confidence, and the
-  smallest R at which both ends exist),
-  and a "How many replications" card by target half-width or by target power of the
-  one-sample t test), ④ Two Systems (the relative analysis: Welch by default, with the
+  μ₀ under the rank procedure), and in the same card a "Confidence interval on the variance"
+  sub-section (the chi-square interval as a one-row table) and a "Confidence interval on a
+  quantile" sub-section (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free
+  interval from two order statistics with α/2 of the binomial probability in each tail, the
+  ranks SciPy's `quantile_test` returns, shown in brackets beside the ranks [r, s] and the
+  achieved confidence, with the interpolated quantile and the choice of ranks in a footnote;
+  when the sample is too small for both ends it gives the one bound it can in brackets with a
+  dash for the other, its confidence, and the smallest R at which both ends exist),
+  and a "How many replications for the confidence interval on the mean" card by target
+  half-width or by target power of the one-sample t test), ④ Two Systems (the relative analysis: Welch by default, with the
   pooled-variance t as a Procedure choice whose checks line adds Levene's test; paired
   only when the reader declares it, never inferred from the data: the Independent/Paired switch
   opens Paired exactly when both datasets come from one load whose ids are blocks
