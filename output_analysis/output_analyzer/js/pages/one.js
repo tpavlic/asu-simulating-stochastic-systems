@@ -20,7 +20,7 @@ import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, table, para, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
 import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
-import { makeFigure, exportButtons, legend, dotPlot, dragLine, extent, svgEl, tok } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, dotPlot, dragLine, extent, svgEl, tok, estTextWidth } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -1092,6 +1092,14 @@ function drawFigure(d) {
     // One replication gives one outcome, and a mean line through it would
     // pretend to an average across replications that does not exist.
     dotPlot(f, values, { labels: labels || undefined, mean: values.length > 1, r: values.length > 300 ? 2 : undefined, axes: false });
+    // The mean's label sits to the right of its line; when the stated mean's
+    // line would cross it there, it moves to the left of the line instead.
+    const mlbl = d.mu0 && f.inner.querySelector('.m-mean-lbl');
+    if (mlbl) {
+      const mx = Number(mlbl.getAttribute('x')) - 5, x0 = f.sx(d.mu0.value);
+      const w = estTextWidth(mlbl.textContent, 11) + 10;
+      if (x0 > mx && x0 < mx + w && mx - w > 0) { mlbl.setAttribute('x', mx - 5); mlbl.setAttribute('text-anchor', 'end'); }
+    }
     f.ih = fullH;
     const dotFn = f.readoutFn;
     if (hasInt) {

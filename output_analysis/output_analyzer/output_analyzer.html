@@ -37394,7 +37394,7 @@ import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, table, para, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
 import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
-import { makeFigure, exportButtons, legend, dotPlot, dragLine, extent, svgEl, tok } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, dotPlot, dragLine, extent, svgEl, tok, estTextWidth } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -38466,6 +38466,14 @@ function drawFigure(d) {
     // One replication gives one outcome, and a mean line through it would
     // pretend to an average across replications that does not exist.
     dotPlot(f, values, { labels: labels || undefined, mean: values.length > 1, r: values.length > 300 ? 2 : undefined, axes: false });
+    // The mean's label sits to the right of its line; when the stated mean's
+    // line would cross it there, it moves to the left of the line instead.
+    const mlbl = d.mu0 && f.inner.querySelector('.m-mean-lbl');
+    if (mlbl) {
+      const mx = Number(mlbl.getAttribute('x')) - 5, x0 = f.sx(d.mu0.value);
+      const w = estTextWidth(mlbl.textContent, 11) + 10;
+      if (x0 > mx && x0 < mx + w && mx - w > 0) { mlbl.setAttribute('x', mx - 5); mlbl.setAttribute('text-anchor', 'end'); }
+    }
     f.ih = fullH;
     const dotFn = f.readoutFn;
     if (hasInt) {
@@ -48397,7 +48405,7 @@ function linePathD(px, py) {
   }
   return d;
 }
-function estTextWidth(s, size) { return String(s).length * size * 0.56; }
+export function estTextWidth(s, size) { return String(s).length * size * 0.56; }
 
 // ── Figure registry and width watching ────────────────────────────────────
 
@@ -49003,7 +49011,7 @@ export function dotPlot(fig, values, o = {}) {
     const m = s / Math.max(1, idx.length);
     const mx = r1(sx(m));
     svgEl('line', { x1: mx, x2: mx, y1: 6, y2: fig.ih - 6, stroke: tok('--truth'), 'stroke-width': 2, class: 'm-mean' }, fig.inner);
-    text(fig.inner, mx + 5, 16, 'sample mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
+    text(fig.inner, mx + 5, 16, 'sample mean ' + num(m), { 'font-size': 11, fill: tok('--truth'), class: 'm-mean-lbl' });
     fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'sample mean ' + num(m) });
   }
   const g = svgEl('g', { class: 'm-dots' }, fig.inner);

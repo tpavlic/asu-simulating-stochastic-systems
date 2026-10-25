@@ -256,7 +256,7 @@ function linePathD(px, py) {
   }
   return d;
 }
-function estTextWidth(s, size) { return String(s).length * size * 0.56; }
+export function estTextWidth(s, size) { return String(s).length * size * 0.56; }
 
 // ── Figure registry and width watching ────────────────────────────────────
 
@@ -862,7 +862,7 @@ export function dotPlot(fig, values, o = {}) {
     const m = s / Math.max(1, idx.length);
     const mx = r1(sx(m));
     svgEl('line', { x1: mx, x2: mx, y1: 6, y2: fig.ih - 6, stroke: tok('--truth'), 'stroke-width': 2, class: 'm-mean' }, fig.inner);
-    text(fig.inner, mx + 5, 16, 'sample mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
+    text(fig.inner, mx + 5, 16, 'sample mean ' + num(m), { 'font-size': 11, fill: tok('--truth'), class: 'm-mean-lbl' });
     fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'sample mean ' + num(m) });
   }
   const g = svgEl('g', { class: 'm-dots' }, fig.inner);
