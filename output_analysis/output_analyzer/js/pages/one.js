@@ -13,7 +13,8 @@
 
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
-import { summary } from '../stats/descriptive.js';
+import { summary, sortedCopy } from '../stats/descriptive.js';
+import { normInv } from '../stats/special.js';
 import { tInterval, varianceInterval, oneSampleT, predictionInterval, quantileInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, table, para, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
@@ -310,10 +311,8 @@ export function render(rootEl) {
     '<input type="text" id="rp-qp" aria-label="Quantile p"></span>';
   const qTab = el('div'), qNote = el('div');
   qSec.append(qCtrl, qTab, qNote);
-  qSec.appendChild(details('How the quantile and its interval are found',
-    '<p>Sort the R outcomes, Y₍₁₎ ≤ Y₍₂₎ ≤ … ≤ Y₍R₎. The p quantile is estimated by Y₍ₖ₎ with k = ⌈pR⌉, the smallest outcome with at least a fraction p of the sample at or below it. The interpolated estimate, R’s and NumPy’s default, averages the two order statistics around the position (R − 1)p + 1; the two agree as R grows.</p>' +
-    '<p>The interval is [Y₍ᵣ₎, Y₍ₛ₎] for two ranks r &lt; s. Whatever the distribution, the number of outcomes at or below the true quantile is binomial with R trials and success probability p, and so the probability that the true quantile lies between those two order statistics is a binomial sum that depends only on r, s, R, and p. The ranks put α/2 in each tail: r is the largest rank whose chance of lying above the true quantile is at most α/2, and s the smallest whose chance of lying at or below it is at most α/2. That is the interval that inverting the sign test gives, and the one SciPy’s quantile test returns. The achieved level is the binomial sum between the two ranks, a little above the level asked for because the ranks are whole numbers.</p>' +
-    '<p>An extreme quantile needs many replications. The upper end exists only when the chance that every outcome falls below the true quantile, pᴿ, is at most α/2, and the lower end only when (1 − p)ᴿ is; for the 90th percentile at 95% both first hold at R = 36. With fewer, the section gives the one bound the sample can support, at confidence 1 − α/2 or better, and says how many replications both ends would take.</p>'));
+  const qHow = details('How the quantile and its interval are found', '<div id="rp-q-how"></div>');
+  qSec.appendChild(qHow);
   res.appendChild(qSec);
 
 
@@ -336,7 +335,7 @@ export function render(rootEl) {
   root.appendChild(planSec);
 
   els = { varSec, vTab, testBlk, tRow1, tRow2, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
-          mu0Box: testBlk.querySelector('#rp-mu0-box'), mu0Unit: testBlk.querySelector('#rp-mu0-unit'), mu0Show: testBlk.querySelector('#rp-mu0-show'), qp: qSec.querySelector('#rp-qp'),
+          qHow: qHow.querySelector('#rp-q-how'), mu0Box: testBlk.querySelector('#rp-mu0-box'), mu0Unit: testBlk.querySelector('#rp-mu0-unit'), mu0Show: testBlk.querySelector('#rp-mu0-show'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -630,6 +629,35 @@ function quantileRanks(q) {
   return dash;
 }
 
+// The explainer under the quantile table: the one assumption, the textbook's
+// normal-approximation rule for the ranks worked at this R and p, and the
+// exact binomial rule the table uses, which it approximates.
+function quantileHow(x, q, p, level, nWord, pooled) {
+  const what = pooled ? 'observations' : 'outcomes', one = pooled ? 'observation' : 'outcome';
+  const R = q.n, z = normInv(1 - (1 - level) / 2), a2 = num((1 - level) / 2, 4);
+  const Y = r => 'Y<sub>(' + intl(r) + ')</sub>';
+  const sub = h => '<sub>' + h + '</sub>';
+  const hw = z * Math.sqrt(p * (1 - p) / (R - 1));
+  const pl = p - hw, pu = p + hw;
+  const lo = Math.floor(R * pl), hi = Math.ceil(R * pu);
+  const s = sortedCopy(x);
+  const loOk = lo >= 1, hiOk = hi <= R;
+  let worked;
+  if (R < 2) worked = 'With ' + nWord + ' = ' + intl(R) + ' there is nothing to work.';
+  else {
+    worked = 'Here, with ' + nWord + ' = ' + intl(R) + ' and p = ' + num(p, 2) + ': p' + sub('ℓ') + ' = ' + num(p, 2) + ' − ' + num(z, 3) + ' √(' + num(p, 2) + ' × ' + num(1 - p, 2) + ' / ' + intl(R - 1) + ') = ' + num(pl, 3) +
+      ' and p' + sub('u') + ' = ' + num(pu, 3) + ', so the ranks are ⌊' + intl(R) + ' × ' + num(pl, 3) + '⌋ = ' + intl(lo) + ' and ⌈' + intl(R) + ' × ' + num(pu, 3) + '⌉ = ' + intl(hi) + '. ';
+    if (loOk && hiOk) worked += 'The interval is [' + Y(lo) + ', ' + Y(hi) + '] = [' + num(s[lo - 1]) + ', ' + num(s[hi - 1]) + ']' +
+      (q.bounds === 'both' && lo === q.r && hi === q.s ? ', the same ranks the table shows.' : (q.bounds === 'both' ? ', beside the table’s [' + Y(q.r) + ', ' + Y(q.s) + ']; the two rules differ by a rank or so at small ' + nWord + ' and agree as it grows.' : '.'));
+    else worked += 'Rank ' + (loOk ? intl(hi) + ' is past the largest ' + one : intl(lo) + ' is below the smallest ' + one) + ', and so this rule, like the exact one, gives ' + (loOk ? 'no upper end' : 'no lower end') + ' at this ' + nWord + '.';
+  }
+  return '<p>Sort the ' + nWord + ' ' + what + ', Y<sub>(1)</sub> ≤ Y<sub>(2)</sub> ≤ … ≤ Y<sub>(' + nWord + ')</sub>. The point estimate of the p quantile is Y<sub>(k)</sub> with k = ⌈p' + nWord + '⌉, the smallest ' + one + ' with at least a fraction p of the sample at or below it. (The interpolated estimate, R’s and NumPy’s default, averages the two order statistics around the position (' + nWord + ' − 1)p + 1; the two agree as ' + nWord + ' grows.)</p>' +
+    '<p><b>The one assumption.</b> The ' + what + ' are independent draws from one distribution, whatever its shape. Each then falls below the true p quantile with probability p, and so the number that fall below it, B, is binomial(' + nWord + ', p). The interval [Y<sub>(r)</sub>, Y<sub>(s)</sub>] contains the quantile exactly when r ≤ B &lt; s, and so its confidence is the binomial probability of that, which depends only on r, s, ' + nWord + ', and p.</p>' +
+    '<p><b>The simple rule.</b> For large ' + nWord + ', B/' + nWord + ' is nearly normal with mean p and standard deviation √(p(1 − p)/' + nWord + '), and so the fraction of ' + what + ' below the quantile lies in p ± z' + sub('α/2') + ' √(p(1 − p)/(' + nWord + ' − 1)) with probability about 1 − α. Call the ends p' + sub('ℓ') + ' and p' + sub('u') + '; the interval is from the ⌊' + nWord + ' p' + sub('ℓ') + '⌋th smallest ' + one + ' to the ⌈' + nWord + ' p' + sub('u') + '⌉th. ' + worked + '</p>' +
+    '<p><b>What the table uses.</b> The same idea with the binomial counted exactly rather than approximated: r is the largest rank with P(B ≤ r − 1) ≤ α/2, s the smallest with P(B ≥ s) ≤ α/2, each found by summing binomial(' + nWord + ', p) probabilities, with α/2 = ' + a2 + ' here. That is the interval inverting the sign test gives and the one SciPy’s quantile test returns; its achieved confidence is the binomial probability between the two ranks, a little above the level asked for because ranks are whole numbers. At small ' + nWord + ' it differs from the simple rule by a rank or so, and at large ' + nWord + ' the two agree.</p>' +
+    '<p>An extreme quantile needs many ' + what + '. The upper end exists only when the chance that every ' + one + ' falls below the true quantile, p<sup>' + nWord + '</sup>, is at most α/2, and the lower end only when (1 − p)<sup>' + nWord + '</sup> is; for the 90th percentile at 95% both first hold at ' + nWord + ' = 36. With fewer, the table gives the one bound the sample can support, at confidence 1 − α/2 or better, and says how many both ends would take.</p>';
+}
+
 // The note under the quantile table: how the point estimate and the ranks
 // were chosen, and what a missing end would take.
 function quantileFoot(q, p, level, nWord, pooled) {
@@ -833,6 +861,7 @@ function draw() {
     qRows),
     foot(quantileFoot(q, extra.qp, level, nWord, pooled)));
   els.qNote.replaceChildren();
+  els.qHow.innerHTML = quantileHow(x, q, extra.qp, level, nWord, pooled);
   if (T.decreasing && tf !== 'none') els.qNote.appendChild(para('exp-note', 'The ' + T.label.toLowerCase() + ' reverses the order of the outcomes, and so the quantile carried back is the ' + num(1 - extra.qp, 2) + ' quantile of the response.'));
   if (pooled) els.qNote.appendChild(notice('warn', 'The interval counts each pooled observation as independent; within a run they are not, and so it is narrower than the data justify.'));
 

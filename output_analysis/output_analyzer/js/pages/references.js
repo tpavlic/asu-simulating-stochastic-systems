@@ -18,7 +18,8 @@ const GROUPS = [
   ['One System and Two Systems', [
     'B. L. Welch, “The generalization of “Student’s” problem when several different population variances are involved,” <i>Biometrika</i> 34 (1947) 28–35: the two-sample t procedure with unequal variances and the Welch–Satterthwaite degrees of freedom.',
     'F. Wilcoxon, “Individual comparisons by ranking methods,” <i>Biometrics Bulletin</i> 1 (1945) 80–83; H. B. Mann and D. R. Whitney, “On a test of whether one of two random variables is stochastically larger than the other,” <i>Annals of Mathematical Statistics</i> 18 (1947) 50–60: the signed-rank and rank-sum tests.',
-    'J. L. Hodges and E. L. Lehmann, “Estimates of location based on rank tests,” <i>Annals of Mathematical Statistics</i> 34 (1963) 598–611: the pseudo-median and shift estimates behind the Wilcoxon intervals.'
+    'J. L. Hodges and E. L. Lehmann, “Estimates of location based on rank tests,” <i>Annals of Mathematical Statistics</i> 34 (1963) 598–611: the pseudo-median and shift estimates behind the Wilcoxon intervals.',
+    'W. J. Conover, <i>Practical Nonparametric Statistics</i>, 3rd ed. (Wiley, 1999), section 3.2: the distribution-free confidence interval on a quantile from two order statistics, with the binomial ranks the table uses and the normal approximation to them.'
   ]],
   ['Several Systems', [
     'J. W. Tukey, “Comparing individual means in the analysis of variance,” <i>Biometrics</i> 5 (1949) 99–114; C. Y. Kramer, “Extension of multiple range tests to group means with unequal numbers of replications,” <i>Biometrics</i> 12 (1956) 307–310.',

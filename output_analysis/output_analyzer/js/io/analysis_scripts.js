@@ -526,6 +526,8 @@ function oneBody(r, L) {
     out.push(c + 'The order statistic at rank ceil(n p) and the interpolated quantile (type 7), with the pair of order');
     out.push(c + 'statistics that puts alpha/2 of the binomial probability in each tail. An end the sample cannot bound is');
     out.push(c + 'NaN (its rank too), achieved is then the one bound\'s confidence, and minN is the smallest n with both ends.');
+    out.push(c + 'The textbook rule takes the ranks from a normal approximation, floor(n p_l) and ceil(n p_u) with');
+    out.push(c + 'p_l, p_u = p -/+ z_(alpha/2) sqrt(p (1 - p) / (n - 1)); the exact binomial ranks here agree with it at large n.');
     out.push(L.assign('qi', 'quantile_interval(x, quantile_p, level)'));
     for (const [name, k] of [['quantile rank k', 'k'], ['quantile order statistic', 'order'], ['quantile interpolated', 'interp'],
       ['quantile lower rank', 'r'], ['quantile upper rank', 's'], ['quantile lower', 'lo'], ['quantile upper', 'hi'],
