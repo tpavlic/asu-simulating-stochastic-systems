@@ -38249,7 +38249,7 @@ function draw() {
   if (vi) {
     const nb = els.checks.querySelector('.notice');
     const shade = !nb ? null : nb.classList.contains('notice-warn') ? 'gold' : nb.classList.contains('notice-ok') ? 'blue' : 'maroon';
-    els.varLede.textContent = 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. Although the t interval tolerates non-normal outcomes as R grows, this interval does not. Consequently, the normality check ' +
+    els.varLede.textContent = 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. Although the t interval on the mean tolerates non-normal outcomes as R grows, this interval does not. Consequently, the normality check ' +
       (shade ? 'in the ' + shade + ' notice above is particularly important here.' : 'is particularly important here; the Normality section of Summary and Plots runs it on these outcomes.');
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     els.vTab.replaceChildren(tbl(['', lvl(level) + ' interval for ' + S('σ'), lvl(level) + ' interval for ' + S('σ²'), S('s'), S('s²'), 'R (' + DF_LABEL + ')', S('χ²') + ' quantiles'],
