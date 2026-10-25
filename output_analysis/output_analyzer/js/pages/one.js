@@ -600,8 +600,11 @@ function boundsText(lo, hi, fmt = num) {
   return hasLo && hasHi ? '[' + fmt(lo) + ', ' + fmt(hi) + ']' : hasLo ? '≥ ' + fmt(lo) : hasHi ? '≤ ' + fmt(hi) : dash;
 }
 
-// A sub-label under a table cell's value.
-function sub(html) { return '<span class="tab-sub">' + html + '</span>'; }
+// A note under a table: the formulas behind its columns, which keep the cells to their numbers.
+function foot(html) { return para('tab-foot', html); }
+
+// A column header with a tooltip, as the df header has.
+function tipHd(label, text) { return '<span class="tip" tabindex="0" data-tip="' + esc(text) + '">' + label + '</span>'; }
 
 // A results table whose first column may wrap, because its labels are sentences.
 function tbl(headers, rows) { const t = table(headers, rows); t.classList.add('one-tab'); return t; }
@@ -609,11 +612,16 @@ function tbl(headers, rows) { const t = table(headers, rows); t.classList.add('o
 // The quantile interval's two cells: the two-sided interval and its achieved
 // level, or the one bound the sample supports and that bound's confidence.
 function quantileCells(q) {
+  return [boundsText(q.lo, q.hi), q.bounds === 'none' ? dash : pct(q.achieved, 1)];
+}
+
+// Which order statistics the quantile interval's ends are, for the footnote.
+function quantileEnds(q) {
   const Y = r => 'Y₍' + intl(r) + '₎';
-  if (q.bounds === 'both') return [boundsText(q.lo, q.hi) + sub(Y(q.r) + ' to ' + Y(q.s)), pct(q.achieved, 1)];
-  if (q.bounds === 'lower') return [boundsText(q.lo, q.hi) + sub('lower bound only, ' + Y(q.r)), pct(q.achieved, 1) + sub('of the one bound')];
-  if (q.bounds === 'upper') return [boundsText(q.lo, q.hi) + sub('upper bound only, ' + Y(q.s)), pct(q.achieved, 1) + sub('of the one bound')];
-  return [dash + sub('no order statistic bounds either end'), dash];
+  if (q.bounds === 'both') return 'its ends are ' + Y(q.r) + ' and ' + Y(q.s) + ', with α/2 of the binomial probability beyond each';
+  if (q.bounds === 'lower') return 'only its lower end, ' + Y(q.r) + ', exists, and the achieved level is that one bound’s';
+  if (q.bounds === 'upper') return 'only its upper end, ' + Y(q.s) + ', exists, and the achieved level is that one bound’s';
+  return 'no order statistic bounds either end';
 }
 
 /** Redraws the page from the current state. */
@@ -732,18 +740,23 @@ function draw() {
   const oneWord = pooled ? 'one further observation' : 'one further outcome';
   if (np) {
     const basis = sr.exact ? 'exact signed-rank distribution' : 'normal approximation' + (sr.ties ? ', ties present' : '');
-    const rows = [['Interval on the pseudo-median' + esc(scale), boundsText(sr.lo, sr.hi, stat), num(sr.estimate) + sub('Hodges–Lehmann'),
+    const rows = [['Interval on the pseudo-median' + esc(scale), boundsText(sr.lo, sr.hi, stat), num(sr.estimate),
       sr.exact && Number.isFinite(sr.achieved) ? pct(sr.achieved, 1) : dash, intl(s.n), basis]];
     // Under a transform, the same interval carried back to the response's units.
-    if (back) rows.push(['Carried back to the response’s units' + unitH, boundsText(back.lo, back.hi, stat), num(back.center) + sub(esc(back.name)), dash, dash, dash]);
-    els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', 'Pseudo-median', 'Achieved level', S(nWord), 'Basis'], rows));
+    if (back) rows.push(['Carried back to the response’s units' + unitH + ', ' + esc(back.name), boundsText(back.lo, back.hi, stat), num(back.center), dash, dash, dash]);
+    const hl = 'The Hodges–Lehmann estimate: the median of the averages of every pair of outcomes.';
+    els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', tipHd('Pseudo-median', hl), 'Achieved level', S(nWord), 'Basis'], rows),
+      foot('The pseudo-median is the Hodges–Lehmann estimate, the median of the averages of every pair of outcomes.'));
   } else {
-    const rows = [['Interval on the mean' + esc(scale), boundsText(ti.lo, ti.hi), num(ti.hw), intl(s.n), num(s.mean), num(s.sd), num(s.se), intl(ti.df), num(ti.t) + sub(tSub(level, ti.df))]];
+    const rows = [['Interval on the mean' + esc(scale), boundsText(ti.lo, ti.hi), num(ti.hw), intl(s.n), num(s.mean), num(s.sd), num(s.se), intl(ti.df), num(ti.t)]];
     // Under a transform, each interval carried back to the response's units follows its row.
-    if (back) rows.push(['Carried back to the response’s units' + unitH, boundsText(back.lo, back.hi, stat), dash, dash, num(back.center) + sub(esc(back.name)), dash, dash, dash, dash]);
-    if (pi) rows.push(['Prediction interval, ' + oneWord, boundsText(pi.lo, pi.hi), num(pi.hw), intl(s.n), num(s.mean), num(s.sd), num(s.sd * Math.sqrt(1 + 1 / s.n)) + sub('s · √(1 + 1/' + nWord + ')'), intl(pi.df), num(ti.t)]);
+    if (back) rows.push(['Carried back to the response’s units' + unitH + ', ' + esc(back.name), boundsText(back.lo, back.hi, stat), dash, dash, num(back.center), dash, dash, dash, dash]);
+    if (pi) rows.push(['Prediction interval, ' + oneWord, boundsText(pi.lo, pi.hi), num(pi.hw), intl(s.n), num(s.mean), num(s.sd), num(s.sd * Math.sqrt(1 + 1 / s.n)), intl(pi.df), num(ti.t)]);
     if (backPi) rows.push(['Prediction interval, carried back' + unitH, boundsText(backPi.lo, backPi.hi, stat), dash, dash, dash, dash, dash, dash, dash]);
-    els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', 'Half-width', S(nWord), 'Mean', 'SD', 'SE', DF_LABEL, S('t')], rows));
+    const seF = 's/√' + nWord, piF = 's · √(1 + 1/' + nWord + ')';
+    const seTip = 'What t multiplies to give the half-width: ' + seF + ' for the mean' + (pi ? ', and ' + piF + ', the standard deviation of its error, for ' + oneWord : '') + '.';
+    els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', 'Half-width', S(nWord), 'Mean', 'SD', tipHd('SE', seTip), DF_LABEL, tipHd(S('t'), 'The t quantile at 1 − α/2 on df degrees of freedom')], rows),
+      foot('SE is ' + seF + ' on the interval on the mean' + (pi ? ' and ' + piF + ' on the prediction interval' : '') + '; ' + S('t') + ' is ' + tSub(level, ti.df) + '.'));
   }
 
   els.testBlk.hidden = false;
@@ -751,11 +764,14 @@ function draw() {
   const mu0Unit = tf !== 'none' ? T.scale + ' scale' : ds.unit ? esc(ds.unit) : '';
   const whatMean = np ? 'pseudo-median' : 'mean';
   const verdictCell = rejects === null ? 'nothing to decide' : rejects ? '<span class="cmp-flag">rejected</span> at α = ' + num(alpha, 3) : 'not rejected at α = ' + num(alpha, 3);
-  els.tRow1.replaceChildren(np
-    ? tbl(['Stated ' + whatMean + ' ' + S('μ₀'), 'Verdict', 'Two-sided ' + S('p'), S('V'), 'Basis'],
-        [[num(mu0) + (mu0Unit ? sub(mu0Unit) : ''), verdictCell, stat(srT.p), num(srT.V) + sub('signed ranks above μ₀'), srT.exact ? 'exact signed-rank distribution' : 'normal approximation']])
-    : tbl(['Stated mean ' + S('μ₀'), 'Verdict', 'Two-sided ' + S('p'), S('t₀'), DF_LABEL, 'Critical ' + S('t')],
-        [[num(mu0) + (mu0Unit ? sub(mu0Unit) : ''), verdictCell, stat(tt.p), stat(tt.t) + sub('(' + num(s.mean) + ' − ' + num(mu0) + ') / ' + num(s.se)), intl(tt.df) + sub(nWord + ' − 1'), num(ti.t) + sub(tSub(level, ti.df))]]));
+  const mu0Hd = 'Stated ' + whatMean + ' ' + S('μ₀') + (mu0Unit ? ' (' + mu0Unit + ')' : '');
+  els.tRow1.replaceChildren(...(np
+    ? [tbl([mu0Hd, 'Verdict', 'Two-sided ' + S('p'), S('V'), 'Basis'],
+        [[num(mu0), verdictCell, stat(srT.p), num(srT.V), srT.exact ? 'exact signed-rank distribution' : 'normal approximation']]),
+       foot(S('V') + ' is the sum of the ranks of |outcome − μ₀| over the outcomes above μ₀.')]
+    : [tbl([mu0Hd, 'Verdict', 'Two-sided ' + S('p'), S('t₀'), DF_LABEL, 'Critical ' + S('t')],
+        [[num(mu0), verdictCell, stat(tt.p), stat(tt.t), intl(tt.df), num(ti.t)]]),
+       foot(S('t₀') + ' = (mean − μ₀)/SE = (' + num(s.mean) + ' − ' + num(mu0) + ')/' + num(s.se) + '; df = ' + nWord + ' − 1; the critical ' + S('t') + ' is ' + tSub(level, ti.df) + ', the interval’s own.')]));
   const verdict = rejects === null ? 'The test has nothing to decide: the outcomes are all equal to μ₀.'
     : rejects ? 'Rejected at α = ' + num(alpha, 3) + ': the ' + whatMean + ' differs from ' + num(mu0) + ' (p ' + (testP < 0.001 ? '< 0.001' : '= ' + num(testP, 3)) + '), and μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the ' + lvl(level) + ' interval.'
       : 'Not rejected at α = ' + num(alpha, 3) + ': μ₀ = ' + num(mu0) + ' is among the values the ' + lvl(level) + ' interval does not rule out (p = ' + num(testP, 3) + '). That is not evidence that the ' + whatMean + ' equals μ₀.';
@@ -767,8 +783,10 @@ function draw() {
   if (vi) {
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     els.vTab.replaceChildren(tbl(['', lvl(level) + ' interval for ' + S('σ'), lvl(level) + ' interval for ' + S('σ²'), S('s'), S('s²'), 'R (' + DF_LABEL + ')', S('χ²') + ' quantiles'],
-      [['Variance of the replication outcomes' + esc(scale), boundsText(vi.loS, vi.hiS) + sub('square roots'), boundsText(vi.lo2, vi.hi2) + sub('(R − 1) s² / χ²'), num(vi.s), num(vi.s2),
-        intl(vi.n) + ' (' + intl(vi.df) + ')', num(vi.chiLo) + ', ' + num(vi.chiHi) + sub('χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub>')]]));
+      [['Variance of the replication outcomes' + esc(scale), boundsText(vi.loS, vi.hiS), boundsText(vi.lo2, vi.hi2), num(vi.s), num(vi.s2),
+        intl(vi.n) + ' (' + intl(vi.df) + ')', num(vi.chiLo) + ', ' + num(vi.chiHi)]]),
+      foot('The interval for ' + S('σ²') + ' is (R − 1) s² / χ² at the two quantiles, χ²<sub>' + num(pLo, 4) + ', ' + intl(vi.df) + '</sub> = ' + num(vi.chiLo) + ' and χ²<sub>' + num(pHi, 4) + ', ' + intl(vi.df) + '</sub> = ' + num(vi.chiHi) +
+        ', the larger giving the lower end; the interval for ' + S('σ') + ' is its square roots.'));
   }
 
   // The quantile, on the same scale.
@@ -777,12 +795,13 @@ function draw() {
   els.qHd.textContent = 'A quantile of the ' + (pooled ? 'pooled observations' : 'replication outcomes');
   const pctile = ordinal(Math.round(extra.qp * 100)) + ' percentile';
   const qCells = quantileCells(q);
-  const qRows = [[num(extra.qp, 2) + sub(pctile), num(q.order) + (scale ? sub(esc(scale.slice(2))) : ''), qCells[0], qCells[1], intl(q.k) + ' of ' + intl(q.n), num(q.interp) + sub('type 7'), nWord + ' ≥ ' + intl(q.minN)]];
+  const qRows = [['Quantile p = ' + num(extra.qp, 2) + ', the ' + pctile + esc(scale), num(q.order), qCells[0], qCells[1], intl(q.k) + ' of ' + intl(q.n), num(q.interp), nWord + ' ≥ ' + intl(q.minN)]];
   if (tf !== 'none') {
     const bq = backInterval(q.lo, q.hi, tf);
-    qRows.push([(T.decreasing ? num(1 - extra.qp, 2) : num(extra.qp, 2)) + sub('carried back' + unitH), num(backTransform(q.order, tf)), boundsText(bq.lo, bq.hi, stat), dash, dash, num(backTransform(q.interp, tf)), dash]);
+    qRows.push(['Carried back to the response’s units' + unitH + (T.decreasing ? ', the ' + num(1 - extra.qp, 2) + ' quantile' : ''), num(backTransform(q.order, tf)), boundsText(bq.lo, bq.hi, stat), dash, dash, num(backTransform(q.interp, tf)), dash]);
   }
-  els.qTab.replaceChildren(tbl(['Quantile ' + S('p'), 'Order statistic ' + S('Y₍ₖ₎'), lvl(level) + ' interval', 'Achieved level', S('k') + ' = ⌈' + S('p' + nWord) + '⌉', 'Interpolated', 'Both ends need'], qRows));
+  els.qTab.replaceChildren(tbl(['', 'Order statistic ' + S('Y₍ₖ₎'), lvl(level) + ' interval', 'Achieved level', S('k') + ' = ⌈' + S('p' + nWord) + '⌉', 'Interpolated', 'Both ends need'], qRows),
+    foot('The interval is distribution-free: ' + quantileEnds(q) + '. The interpolated quantile is R’s type 7, the default of most software.'));
   els.qNote.replaceChildren();
   if (q.bounds !== 'both') {
     els.qNote.appendChild(para('exp-note', q.bounds === 'none'
