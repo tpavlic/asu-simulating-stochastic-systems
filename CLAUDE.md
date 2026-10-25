@@ -1040,7 +1040,10 @@ better.
   takes at most 150 bars, with a table of the distinct values, their counts, and proportions under
   the plots while it is on (at most 30 values); otherwise k equal-width bins from the smallest value
   to the largest, Sturges' rule (`sturgesBins`, ⌈log₂ n + 1⌉ as R's `hist` takes by default, kept
-  between 3 and 40) unless the slider or spinner sets k, with a button back to Sturges; the choice is
+  between 3 and 40) unless the slider or spinner sets k, the row's note giving the count and width of
+  the bins, and an Auto button, pressed while the count is Sturges', that puts it back, its tooltip
+  the one place the rule is named with its formula (the page is not there to teach the rule, as the
+  Input Analyzer's note beside its Auto button is); the choice is
   kept per dataset (`hist:<ds id>`), and the regenerate scripts carry it as `hist_per_value` and
   `hist_bins` in their Settings and form the edges with `fig_value_edges` when a bar per value is on;
   a lag plot at

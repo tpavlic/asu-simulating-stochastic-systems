@@ -633,6 +633,10 @@ function buildDistribution(api, { ds, estF }) {
   const pickKey = 'hist:' + ds.id;
   const pick = Object.assign({}, state.getPick(id, pickKey) || {});
   let hc = histChoice(values, pick);
+  let hb = histBins(values, hc.perValue ? { perValue: true } : { bins: hc.bins });
+  const autoBins = histChoice(values, null).bins;
+  const nSym = usePooled ? 'n' : 'R';
+  const autoTip = 'Sturges’ rule: ⌈log₂ ' + nSym + ' + 1⌉ bins: ' + plural(autoBins, 'bin') + ' with ' + nSym + ' = ' + intl(values.length) + '.';
   const remember = () => state.setPick(id, pickKey, { mode: pick.mode, bins: pick.bins });
   const row = el('div', 'ctrl-row ex-tight');
   row.innerHTML = (hc.canValue
@@ -640,11 +644,11 @@ function buildDistribution(api, { ds, estF }) {
       '<span class="seg" role="group" aria-labelledby="ex-hist-lbl"><button type="button" class="seg-btn" data-hist="value">One per value</button><button type="button" class="seg-btn" data-hist="width">Equal width</button></span></span>'
     : '') +
     '<span class="ctrl-pair ex-hist-width"><label class="ctrl-lbl" for="ex-bins">' +
-      (hc.canValue ? '' : '<span class="tip" tabindex="0" data-tip="The number of equal-width bins from the smallest value to the largest. Sturges’ rule, ⌈log₂ n + 1⌉, is the default, as it is in R.">Bins</span> ') + '<span class="sym">k</span></label>' +
+      (hc.canValue ? '' : '<span class="tip" tabindex="0" data-tip="The number of equal-width bins from the smallest value to the largest. Auto sets it by Sturges’ rule.">Bins</span> ') + '<span class="sym">k</span></label>' +
       '<input type="range" id="ex-bins-rng" min="' + HIST_BINS_MIN + '" max="' + HIST_BINS_MAX + '" step="1" value="' + hc.bins + '" aria-label="Bins k, as a slider">' +
       '<input type="text" id="ex-bins" value="' + hc.bins + '">' +
       '<span class="ctrl-note" id="ex-bins-note"></span>' +
-      '<button type="button" class="xp-btn" id="ex-bins-auto">Sturges’ rule</button></span>';
+      '<button type="button" class="xp-btn" id="ex-bins-auto" data-tip="' + autoTip + '" data-tip-press>Auto</button></span>';
   sec.appendChild(row);
   const rng = row.querySelector('#ex-bins-rng'), widthPair = row.querySelector('.ex-hist-width');
   const note = row.querySelector('#ex-bins-note'), autoBtn = row.querySelector('#ex-bins-auto');
@@ -652,7 +656,7 @@ function buildDistribution(api, { ds, estF }) {
   const pair = el('div', 'ex-pair');
   sec.appendChild(pair);
   const base = slug(ds.name) + (usePooled ? '-observations' : '-outcomes');
-  const drawHist = f => histogram(f, histBins(values, hc.perValue ? { perValue: true } : { bins: hc.bins }));
+  const drawHist = f => histogram(f, hb);
   const histFig = figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
     drawHist, [{ swatch: 'bar', color: '--est', label: esc(what) }]);
   figure(api, pair, base + '-ecdf', { height: 260, narrowHeight: 260, xLabel, ariaLabel: 'Empirical cdf of the ' + what },
@@ -670,7 +674,7 @@ function buildDistribution(api, { ds, estF }) {
           : 'Each distinct value has a bar of its own, as asked; these values do not look discrete, and Equal width is the usual choice for them.');
     } else {
       bars = 'Each bar counts the ' + esc(what) + ' in its bin, ' + n + ' in all in ' + plural(hc.bins, 'equal-width bin') + ' from the smallest value to the largest' +
-        (hc.auto ? ' (Sturges’ rule, ⌈log₂ n + 1⌉)' : ' (set by the slider)') + ', and the cdf rises by ' + per + ' at each one.' +
+        (hc.auto ? ' (Sturges’ rule)' : ' (set by the slider)') + ', and the cdf rises by ' + per + ' at each one.' +
         (hc.discrete ? ' The values look discrete, and One per value gives each its own bar.' : '');
     }
     cap.innerHTML = bars + (usePooled
@@ -694,13 +698,14 @@ function buildDistribution(api, { ds, estF }) {
 
   const sync = () => {
     hc = histChoice(values, pick);
+    hb = histBins(values, hc.perValue ? { perValue: true } : { bins: hc.bins });
     if (distinct) distinct.hidden = !hc.perValue;
     row.querySelectorAll('[data-hist]').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.hist === 'value') === hc.perValue)));
     widthPair.hidden = hc.perValue;
     rng.value = String(hc.bins);
     spin.set(hc.bins, false);
-    note.textContent = hc.auto ? 'Sturges’ rule for n = ' + intl(values.length) : 'Sturges’ rule gives ' + intl(histChoice(values, null).bins);
-    autoBtn.hidden = hc.auto;
+    note.textContent = hc.perValue ? '' : plural(hb.counts.length, 'bin') + ' of width ' + num(hb.binWidth, 3);
+    autoBtn.setAttribute('aria-pressed', String(hc.auto));
     setCap();
   };
   const setBins = v => {
