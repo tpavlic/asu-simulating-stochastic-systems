@@ -1,7 +1,7 @@
 // The One System page: the Student t interval on the mean, formed from one
 // estimate per replication, drawn first as a dot plot of the estimates with
 // the interval under them, and then set out as one table beside the
-// prediction interval for one further outcome; the t test against a stated
+// prediction interval for the next outcome; the t test against a stated
 // mean, whose value can be dragged on the plot; the chi-square interval on
 // the variance; a quantile with its distribution-free interval; and a card
 // that plans the number of replications by a target half-width or by a
@@ -240,7 +240,7 @@ export function render(rootEl) {
   // and the prediction interval as one table beneath them, and the test
   // against a stated mean as a control row and a one-row table.
   const res = el('div', 'sec');
-  const resHd = el('div', 'sec-hd', 'Interval on the mean');
+  const resHd = el('div', 'sec-hd', 'Interval estimates');
   res.appendChild(resHd);
   const unitBox = el('div'), warnBox = el('div'), ovrBox = el('div');
   const figBox = el('div'), leg = el('div'), cap = el('p', 'rv-cap');
@@ -287,7 +287,7 @@ export function render(rootEl) {
   // performance measure, shown for replication outcomes only.
   const varSec = el('div', 'sec');
   varSec.hidden = true;
-  varSec.appendChild(el('div', 'sec-hd', 'Interval on the variance'));
+  varSec.appendChild(el('div', 'sec-hd', 'Confidence interval on the variance'));
   varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
@@ -586,7 +586,7 @@ function placeholderRows(label) {
   if (els.checks) els.checks.replaceChildren();
   const note = label ? ' (' + label + ')' : '';
   els.mainTab.replaceChildren(tbl(['', lvl(state.settings.level) + ' interval', 'Half-width', 'R', 'Mean', 'SD', 'SE', DF_LABEL, S('t')],
-    [['Interval on the mean' + esc(note), '[' + dash + ', ' + dash + ']', dash, dash, dash, dash, dash, dash, dash]]));
+    [['Confidence interval on the mean' + esc(note), '[' + dash + ', ' + dash + ']', dash, dash, dash, dash, dash, dash, dash]]));
 }
 
 // Card labels are set in capitals; a symbol keeps its own case, and so σ
@@ -702,7 +702,7 @@ function draw() {
   const np = proc === 'np' && !pooled;
   if (proc === 'np' && pooled) els.warnBox.appendChild(notice('info', 'The Wilcoxon interval is offered on replication outcomes; the pooled observations use the t interval.'));
   const sr = np ? signedRank(x, { level }) : null;
-  els.resHd.textContent = np ? 'Interval on the pseudo-median (Wilcoxon signed-rank)' : 'Interval on the mean';
+  els.resHd.textContent = 'Interval estimates' + (np ? ' (Wilcoxon signed-rank)' : '');
   els.npNote.textContent = np ? NP_PLAN : '';
   els.npNote.hidden = !np;
   // The pooled override's own warning says what is wrong with it; the
@@ -727,7 +727,7 @@ function draw() {
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np, tf,
     mu0: extra.showMu0 ? { value: mu0, step: extra.mu0Step } : null });
 
-  // The prediction interval for one further outcome, under the t procedure,
+  // The prediction interval for the next outcome, under the t procedure,
   // and under a transform every interval carried back to the response's units.
   const pi = np ? null : predictionInterval(x, level);
   let back = null, backPi = null;
@@ -737,10 +737,12 @@ function draw() {
     back = { name: ctrName, center: backTransform(np ? sr.estimate : s.mean, tf), lo: bi.lo, hi: bi.hi };
     if (pi) backPi = backInterval(pi.lo, pi.hi, tf);
   }
-  const oneWord = pooled ? 'one further observation' : 'one further outcome';
+  const nextWord = pooled ? 'the next observation' : 'the next outcome';
+  const piTip = 'Where the outcome of one more ' + (pooled ? 'observation' : 'replication') + ' would fall, with this confidence. It is wider than the confidence interval on the mean because a single ' + (pooled ? 'observation' : 'outcome') + ' carries the spread of the ' + (pooled ? 'observations' : 'outcomes') + ', s, as well as the uncertainty in the mean, s/√' + (pooled ? 'n' : 'R') + '.';
+  const piLabel = '<span class="tip" tabindex="0" data-tip="' + esc(piTip) + '">Prediction interval for ' + nextWord + '</span>';
   if (np) {
     const basis = sr.exact ? 'exact signed-rank distribution' : 'normal approximation' + (sr.ties ? ', ties present' : '');
-    const rows = [['Interval on the pseudo-median' + esc(scale), boundsText(sr.lo, sr.hi, stat), num(sr.estimate),
+    const rows = [['Confidence interval on the pseudo-median' + esc(scale), boundsText(sr.lo, sr.hi, stat), num(sr.estimate),
       sr.exact && Number.isFinite(sr.achieved) ? pct(sr.achieved, 1) : dash, intl(s.n), basis]];
     // Under a transform, the same interval carried back to the response's units.
     if (back) rows.push(['Carried back to the response’s units' + unitH + ', ' + esc(back.name), boundsText(back.lo, back.hi, stat), num(back.center), dash, dash, dash]);
@@ -748,15 +750,15 @@ function draw() {
     els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', tipHd('Pseudo-median', hl), 'Achieved level', S(nWord), 'Basis'], rows),
       foot('The pseudo-median is the Hodges–Lehmann estimate, the median of the averages of every pair of outcomes.'));
   } else {
-    const rows = [['Interval on the mean' + esc(scale), boundsText(ti.lo, ti.hi), num(ti.hw), intl(s.n), num(s.mean), num(s.sd), num(s.se), intl(ti.df), num(ti.t)]];
+    const rows = [['Confidence interval on the mean' + esc(scale), boundsText(ti.lo, ti.hi), num(ti.hw), intl(s.n), num(s.mean), num(s.sd), num(s.se), intl(ti.df), num(ti.t)]];
     // Under a transform, each interval carried back to the response's units follows its row.
     if (back) rows.push(['Carried back to the response’s units' + unitH + ', ' + esc(back.name), boundsText(back.lo, back.hi, stat), dash, dash, num(back.center), dash, dash, dash, dash]);
-    if (pi) rows.push(['Prediction interval, ' + oneWord, boundsText(pi.lo, pi.hi), num(pi.hw), intl(s.n), num(s.mean), num(s.sd), num(s.sd * Math.sqrt(1 + 1 / s.n)), intl(pi.df), num(ti.t)]);
-    if (backPi) rows.push(['Prediction interval, carried back' + unitH, boundsText(backPi.lo, backPi.hi, stat), dash, dash, dash, dash, dash, dash, dash]);
+    if (pi) rows.push([piLabel, boundsText(pi.lo, pi.hi), num(pi.hw), intl(s.n), num(s.mean), num(s.sd), num(s.sd * Math.sqrt(1 + 1 / s.n)), intl(pi.df), num(ti.t)]);
+    if (backPi) rows.push(['Prediction interval for ' + nextWord + ', carried back' + unitH, boundsText(backPi.lo, backPi.hi, stat), dash, dash, dash, dash, dash, dash, dash]);
     const seF = 's/√' + nWord, piF = 's · √(1 + 1/' + nWord + ')';
-    const seTip = 'What t multiplies to give the half-width: ' + seF + ' for the mean' + (pi ? ', and ' + piF + ', the standard deviation of its error, for ' + oneWord : '') + '.';
+    const seTip = 'What t multiplies to give the half-width: ' + seF + ' for the mean' + (pi ? ', and ' + piF + ', the standard deviation of its error, for ' + nextWord : '') + '.';
     els.mainTab.replaceChildren(tbl(['', lvl(level) + ' interval', 'Half-width', S(nWord), 'Mean', 'SD', tipHd('SE', seTip), DF_LABEL, tipHd(S('t'), 'The t quantile at 1 − α/2 on df degrees of freedom')], rows),
-      foot('SE is ' + seF + ' on the interval on the mean' + (pi ? ' and ' + piF + ' on the prediction interval' : '') + '; ' + S('t') + ' is ' + tSub(level, ti.df) + '.'));
+      foot('SE is ' + seF + ' on the confidence interval' + (pi ? ' and ' + piF + ' on the prediction interval' : '') + '; ' + S('t') + ' is ' + tSub(level, ti.df) + '.'));
   }
 
   els.testBlk.hidden = false;

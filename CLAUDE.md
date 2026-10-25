@@ -1052,7 +1052,7 @@ better.
   reader leaves them, even at one or none, with a line saying the test needs two or more
   (`initialTicks` in `js/ui/rules.js`)), ③ One System (the
   absolute analysis, laid out as Several Systems' sections are, each a figure or a control row
-  over a table rather than a grid of cards: the replication outcomes drawn first, then one table
+  over a table rather than a grid of cards: an "Interval estimates" section with the replication outcomes drawn first, then one table
   holding the t interval on one system's replication outcomes, or the Wilcoxon signed-rank
   interval on the pseudo-median behind a Procedure switch, and the prediction interval for one
   further outcome, with the pooled-observations override behind a warning; under a transform, the
@@ -1139,7 +1139,7 @@ better.
   (the sources behind every page, grouped by page, with the simulation package's own textbook
   under "Simulation software"; the only place a book or paper is named, so that no page text
   ever calls anything "the textbook"). The former Variance and Correlation page is retired: the
-  chi-square interval on one system's variance is an "Interval on the variance" section of One
+  chi-square interval on one system's variance is a "Confidence interval on the variance" section of One
   System, the F ratio of two variances a "Variances of A and B" section of Two Systems
   (independent mode), and the correlation lives only in Two Systems' paired Correlation r card;
   the hash `#variance` lands on One System. Each row of the Import page's table of loaded datasets
