@@ -129,14 +129,18 @@ FIG_TIDY.intervals = `
 # Flagged rows are red and dashed, muted rows gray and dashed (both with a hollow dot), ok rows
 # green. Optional texts stand to the right of the rows, with brackets joining pairs of rows.
 fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
-                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL,
+                          boxes = NULL, dots = NULL) {
+  # boxes: a list of value vectors, one per row, drawn as box plots in place of the
+  # intervals (mid is then the center, a diamond); dots: a list of value vectors drawn
+  # as small dots behind each row's interval.
   n <- length(mid)
   if (n == 0) return(fig_empty(title, xlab))
   lo <- fig_num(lo, n); hi <- fig_num(hi, n); mid <- as.numeric(mid)
   flagged <- fig_flag(flagged, n); muted <- fig_flag(muted, n); ok <- fig_flag(ok, n)
   right <- if (is.null(right)) rep("", n) else as.character(right)
   right[is.na(right)] <- ""
-  xr <- fig_span(c(mid, lo, hi, ref))
+  xr <- fig_span(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)))
   span <- diff(xr)
   rows <- tibble(row = seq_len(n), y = n - seq_len(n) + 1, mid = mid, lo = lo, hi = hi,
                  right = right) %>%
@@ -164,17 +168,56 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
   seg <- filter(rows, !is.na(a), !is.na(b))
   p <- ggplot()
   if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
-  p <- p +
-    geom_segment(data = seg, aes(x = a, xend = b, y = y, yend = y, color = col, linetype = lt),
-                 linewidth = 0.6) +
-    geom_segment(data = filter(rows, is.finite(lo)),
-                 aes(x = lo, xend = lo, y = y - 0.15, yend = y + 0.15, color = col),
-                 linewidth = 0.6) +
-    geom_segment(data = filter(rows, is.finite(hi)),
-                 aes(x = hi, xend = hi, y = y - 0.15, yend = y + 0.15, color = col),
-                 linewidth = 0.6) +
-    geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col, fill = fillc),
-               shape = 21, size = 2.6, stroke = 0.8)
+  finite_row <- function(v) { v <- as.numeric(v); v[is.finite(v)] }
+  if (!is.null(dots)) {
+    dd <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- sort(finite_row(dots[[i]]))
+      tibble(x = v, y = (n - i + 1) + ((seq_along(v) - 1) %% 4) * 0.06 - 0.09)
+    }))
+    if (nrow(dd)) p <- p + geom_point(data = dd, aes(x = x, y = y), color = FIG_EST, alpha = 0.5, size = 1.3)
+  }
+  if (is.null(boxes)) {
+    p <- p +
+      geom_segment(data = seg, aes(x = a, xend = b, y = y, yend = y, color = col, linetype = lt),
+                   linewidth = 0.6) +
+      geom_segment(data = filter(rows, is.finite(lo)),
+                   aes(x = lo, xend = lo, y = y - 0.15, yend = y + 0.15, color = col),
+                   linewidth = 0.6) +
+      geom_segment(data = filter(rows, is.finite(hi)),
+                   aes(x = hi, xend = hi, y = y - 0.15, yend = y + 0.15, color = col),
+                   linewidth = 0.6) +
+      geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col, fill = fillc),
+                 shape = 21, size = 2.6, stroke = 0.8)
+  } else {
+    # Tukey's box per row: hinges and median from fivenum, whiskers to the last value
+    # inside 1.5 hinge spreads, the values beyond as hollow dots, the center as a diamond.
+    bx <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- finite_row(boxes[[i]])
+      if (!length(v)) return(NULL)
+      f <- fivenum(v); reach <- 1.5 * (f[4] - f[2])
+      inside <- v[v >= f[2] - reach & v <= f[4] + reach]
+      tibble(y = n - i + 1, q1 = f[2], med = f[3], q3 = f[4], wl = min(inside), wh = max(inside),
+             col = rows$col[i], lt = rows$lt[i])
+    }))
+    ox <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- finite_row(boxes[[i]])
+      if (!length(v)) return(NULL)
+      f <- fivenum(v); reach <- 1.5 * (f[4] - f[2])
+      tibble(x = v[v < f[2] - reach | v > f[4] + reach], y = n - i + 1, col = rows$col[i])
+    }))
+    p <- p +
+      geom_segment(data = bx, aes(x = wl, xend = q1, y = y, yend = y, color = col, linetype = lt)) +
+      geom_segment(data = bx, aes(x = q3, xend = wh, y = y, yend = y, color = col, linetype = lt)) +
+      geom_segment(data = bx, aes(x = wl, xend = wl, y = y - 0.12, yend = y + 0.12, color = col)) +
+      geom_segment(data = bx, aes(x = wh, xend = wh, y = y - 0.12, yend = y + 0.12, color = col)) +
+      geom_rect(data = bx, aes(xmin = q1, xmax = q3, ymin = y - 0.28, ymax = y + 0.28, color = col,
+                               fill = col, linetype = lt), alpha = 0.15) +
+      geom_segment(data = bx, aes(x = med, xend = med, y = y - 0.28, yend = y + 0.28, color = col),
+                   linewidth = 1.2) +
+      geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col),
+                 shape = 23, fill = "white", size = 3)
+    if (nrow(ox)) p <- p + geom_point(data = ox, aes(x = x, y = y, color = col), shape = 1, size = 2)
+  }
   if (has_text) {
     p <- p + geom_text(data = filter(rows, nzchar(right)),
                        aes(x = xr[2] + 0.02 * span, y = y, label = right, color = textcol),

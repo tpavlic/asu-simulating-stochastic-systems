@@ -1086,7 +1086,14 @@ better.
   with its Wilcoxon interval and the letters; and "Screen for the best", the textbook's subset-selection
   screen with indifference zone ε (its control lives in this section, since nothing else uses it)
   and Rinott second-stage sizes, drawn as the design plot with the
-  survivors in color and the eliminated designs muted; a "Replications are" switch declares that replication i of every
+  survivors in color and the eliminated designs muted; a page-wide "Show designs as" switch draws
+  each design on every design plot as its center with its interval (the default) or as a Tukey
+  box plot of its replication outcomes with the center as a diamond (the convention R,
+  Matplotlib, and MATLAB's `boxchart` share, so that the four regenerated figures agree:
+  `boxes` on the scripts' `fig_intervals`), with an "also each outcome" box that, under
+  intervals, draws every outcome as a faint dot behind its row (`dots`); the intervals, the
+  letters, the brackets, and every verdict are unchanged by the switch, and each caption says
+  so; a "Replications are" switch declares that replication i of every
   design shares a block (common random numbers, or the same subject, batch, or day); it opens
   Paired exactly when every checked design comes from one load whose ids are blocks
   (`pairingDefault`), with a note saying why, and keeps the reader's choice per set of checked

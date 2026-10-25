@@ -217,6 +217,12 @@ function bracketsFromPairs(L, pairs) {
 function severalFigures(r, L) {
   const S = r.several, F = r.fig, resp = tfResp(r, r.groups.response), calls = [], fig = [], notes = [];
   calls.push(L.lang === 'm' ? 'design_labels = ' + strsOf(L, F.labels) + ';' : L.assign('design_labels', strsOf(L, F.labels)));
+  // How each design is drawn: as its interval, with every outcome as a dot
+  // behind it, or as a box plot of its outcomes; the outcome vectors are
+  // handed to the helper, in the rows' order where the rows are ordered.
+  const marks = ordered => (F.box ? { boxes: ordered ? inOrd(L, 'groups', true) : 'groups' } : F.points ? { dots: ordered ? inOrd(L, 'groups', true) : 'groups' } : {});
+  const markNote = F.box ? ' Each design is drawn as a box plot of its outcomes (median and quartiles, whiskers to the last outcome within 1.5 interquartile ranges, outliers as hollow dots, and the center as a diamond) in place of its interval.'
+    : F.points ? ' Every replication outcome is a dot behind its design\'s interval.' : '';
   const items = fld(L, 'sm', 'items');
   if (F.section === 'means') {
     const src = S.np ? 'srs' : items;
@@ -226,6 +232,7 @@ function severalFigures(r, L) {
       calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
       Object.assign(opts, { ref: 'benchmark', flagged: 'bench_flag' });
     }
+    Object.assign(opts, marks(false));
     calls.push(...call(L, 'fig_intervals', [pluck(L, src, S.np ? 'estimate' : 'mean'), 'iv_lo', 'iv_hi', 'design_labels',
       L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
     fig.push('intervals');
@@ -250,7 +257,7 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
-    { right, brackets: 'brackets' }));
+    Object.assign({ right, brackets: 'brackets' }, marks(true))));
     const pp = fld(L, 'ph', 'pairs');
     const lab = L.lang === 'R' ? 'sapply(' + pp + ', function(p) paste(p$i, "-", p$j))' : L.lang === 'py' ? '[f"{p[\'i\'] + 1} - {p[\'j\'] + 1}" for p in ' + pp + ']'
       : "cellfun(@(p) sprintf('%d - %d', p.i, p.j), " + pp + ", 'UniformOutput', false)";
@@ -270,7 +277,7 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, 'hl', 'lo')), L.assign('iv_hi', pluck(L, 'hl', 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Pseudo-median of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
-    { right: inOrd(L, 'rank_cld', true), brackets: 'brackets' }));
+    Object.assign({ right: inOrd(L, 'rank_cld', true), brackets: 'brackets' }, marks(true))));
     fig.push('intervals');
     notes.push('The designs, best first, each with its pseudo-median and Wilcoxon signed-rank interval, its letters, and a bracket joining each pair declared different.');
   } else if (F.section === 'subset' && S.subset && S.subset.ok) {
@@ -283,10 +290,11 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Screen for the best')],
-    { right, ok: 'survives', muted: L.lang === 'py' ? '~survives' : '!survives'.replace('!', L.lang === 'm' ? '~' : '!') }));
+    Object.assign({ right, ok: 'survives', muted: L.lang === 'py' ? '~survives' : '!survives'.replace('!', L.lang === 'm' ? '~' : '!') }, marks(true))));
     fig.push('intervals');
     notes.push('The designs, best first, each with its simultaneous interval: the survivors of the screen in green, and the eliminated designs in gray.');
   } else return { calls: [] };
+  if (markNote && F.section !== 'diffs') notes.push(markNote);
   return { notes, calls, fig };
 }
 

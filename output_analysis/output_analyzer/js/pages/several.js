@@ -20,7 +20,8 @@ import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFam
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
 import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
-import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, boxPlot, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
+import { boxStats } from '../stats/descriptive.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -71,6 +72,11 @@ let ruleW = 'gameshowell';
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
+// How the design plots draw each design: 'int', its center with its interval,
+// or 'box', a box plot of its outcomes with the center as a diamond; and
+// whether, with intervals, every outcome is drawn as a dot behind its row.
+let designPlot = 'int';
+let showPts = false;
 const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
 // 'independent' or 'paired': whether replication i of every design shares a
 // block (common random numbers across designs, or the same subject, batch, or
@@ -230,6 +236,51 @@ function figure(parent, opts, name, draw, legendItems, captionHtml) {
   return fig;
 }
 
+// A design row's extra marks in the mode the Show-designs-as switch chose:
+// the box statistics of its outcomes with its center, or the outcomes
+// themselves to draw as dots behind its interval.
+function rowMarks(g, center) {
+  if (designPlot === 'box') return { box: Object.assign({}, boxStats(g), { mean: center }) };
+  if (showPts) return { values: g };
+  return {};
+}
+
+// The legend entries for the design marks: in box mode the box and the
+// center's diamond in place of `base` (null where the caller adds its own
+// per-row entries), and with the outcome dots a dot entry before `base`.
+function markLegend(base, centerWord) {
+  if (designPlot === 'box') {
+    return [{ swatch: 'bar', color: '--est', label: 'box: median and quartiles of the design’s outcomes; whiskers to the last outcome within 1.5 IQR; hollow dots: outliers' },
+            { swatch: 'diamond', color: '--truth', label: 'design ' + centerWord }];
+  }
+  return (showPts ? [{ swatch: 'dot', color: '--est', label: 'one replication outcome' }] : []).concat(base ? [base] : []);
+}
+
+// The sentence a caption adds for the design marks, or nothing.
+function markCaption(centerWord) {
+  if (designPlot === 'box') return ' Each design is drawn as a box plot of its replication outcomes, with its ' + centerWord + ' as a diamond, in place of its interval; the interval is in the table, and every verdict is read from it, never from the box.';
+  if (showPts) return ' The small dots are the design’s replication outcomes, the spread its interval was formed from.';
+  return '';
+}
+
+// The Benchmark section's design plot: each design's center with its
+// interval, the same with every outcome as a dot behind it, or a box plot of
+// its outcomes with the center as a diamond, with the benchmark line in every mode.
+function meansFigure(b, name, xLabel, items, groups, bm, k, short, readoutOf, baseLegend, caption, centerWord) {
+  const box = designPlot === 'box';
+  const legendItems = box ? markLegend(null, centerWord).concat(bm.on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []) : markLegend(null, centerWord).concat(bm.legend(baseLegend));
+  const cap = box
+    ? 'Each row is one design’s replication outcomes as a box plot, with the design’s ' + centerWord + ' as a diamond. The intervals, and whether each design is above or below the benchmark, are in the table below: a verdict is read from the interval, never from the box.' + (bm.on ? ' Drag the dashed line, or type a value, to move the benchmark.' : '')
+    : caption + markCaption(centerWord);
+  figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel }, name,
+    fg => {
+      rowReadout(fg, k, readoutOf);
+      if (box) boxPlot(fg, items.map((it, i) => ({ label: numLabel(i, short), stats: Object.assign({}, boxStats(groups[i]), { mean: it.center }) })), { rowPx: 38, markerLabel: centerWord });
+      else intervals(fg, items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.center, flagged: bm.flag(i), values: showPts ? groups[i] : undefined })), { rowPx: showPts ? 32 : 30 });
+      bm.line(fg);
+    }, legendItems, cap);
+}
+
 // Each checked design's number, 1 to k in checklist order, as a small badge.
 const badge = i => '<span class="sev-num">' + (i + 1) + '</span>';
 // A design's row label: its number and then its short name when there is room
@@ -305,7 +356,15 @@ function designRows(fig, rows, pairs) {
   const room = Math.floor(fig.w * (fig.narrow ? 0.22 : 0.18));
   const colW = cols ? Math.max(3, Math.min(9, (room - 8) / cols)) : 0;
   fig.setMargin({ l: lw + 8, r: 10 + letW + (cols ? 8 + cols * colW : 0) });
-  const lo = Math.min(...rows.map(r => r.lo)), hi = Math.max(...rows.map(r => r.hi));
+  // The x range covers the intervals, and in box mode the whiskers and
+  // outliers, and with outcome dots the outcomes.
+  let lo = Infinity, hi = -Infinity;
+  const take = v => { if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+  for (const r of rows) {
+    take(r.mean);
+    if (r.box) { take(r.box.whiskerLo); take(r.box.whiskerHi); for (const v of r.box.outliers) take(v); }
+    else { take(r.lo); take(r.hi); if (r.values) for (const v of r.values) take(v); }
+  }
   const sx = fig.x([lo, hi], { pad: 0.05, nice: true });
   fig.axes({ y: false });
   const rowH = fig.ih / n;
@@ -324,26 +383,63 @@ function designRows(fig, rows, pairs) {
     if (!recs.has(c)) {
       const gone = what === 'eliminated';
       recs.set(c, { segs: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, dash: gone, label: what + ' interval' },
-                    means: { kind: 'points', x: [], y: [], color: c, hollow: gone, label: what + ' mean' } });
+                    means: { kind: 'points', x: [], y: [], color: c, hollow: gone, label: what + ' mean' },
+                    // In box mode: the box from hinge to hinge, the whiskers and the median, and the outliers.
+                    rects: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: what + ' box from q1 to q3' },
+                    whisk: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, dash: gone, label: what + ' whiskers to 1.5 IQR' },
+                    med: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, width: 3, label: what + ' median' },
+                    out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: what + ' outlier' } });
     }
     return recs.get(c);
   };
+  const pts = { kind: 'points', x: [], y: [], color: cEst, label: 'one outcome' };
   const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
   rows.forEach((r, i) => {
     const y = cy(i);
     const c = r.keep === undefined ? cEst : r.keep ? cOk : cMuted;
-    const { segs, means } = recFor(c, r.keep === undefined ? '' : r.keep ? 'surviving' : 'eliminated');
+    const rec = recFor(c, r.keep === undefined ? '' : r.keep ? 'surviving' : 'eliminated');
+    const { segs, means } = rec;
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
-    const g = svgEl('g', { class: 'm-int' }, fig.inner);
-    const x0 = sx(r.lo), x1 = sx(r.hi);
     const gone = r.keep === false;
-    svgEl('line', Object.assign({ x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, gone ? { 'stroke-dasharray': '5,4' } : {}), g);
-    for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
-    if (gone) svgEl('circle', { cx: sx(r.mean), cy: y, r: 4, fill: cCard, stroke: c, 'stroke-width': 2 }, g);
-    else svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
     const yy = ry(i);
-    segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
-    means.x.push(r.mean); means.y.push(yy);
+    if (r.values) {
+      // The outcomes as faint dots behind the interval, ties spread over four heights.
+      const srt = Array.from(r.values).filter(Number.isFinite).sort((a, b) => a - b);
+      srt.forEach((v, j) => {
+        const off = (j % 4) * 0.06 - 0.09;
+        svgEl('circle', { cx: sx(v), cy: y + off * rowH, r: 3, fill: cEst, 'fill-opacity': 0.5, class: 'm-pt' }, fig.inner);
+        pts.x.push(v); pts.y.push(yy + off);
+      });
+    }
+    if (r.box) {
+      // The box plot of the outcomes, with the center as a hollow diamond.
+      const b = r.box, g = svgEl('g', { class: 'm-box' }, fig.inner), bh = Math.min(22, rowH * 0.56);
+      const dash = gone ? { 'stroke-dasharray': '5,4' } : {};
+      svgEl('line', Object.assign({ x1: sx(b.whiskerLo), x2: sx(b.q1), y1: y, y2: y, stroke: c, 'stroke-width': 1.5 }, dash), g);
+      svgEl('line', Object.assign({ x1: sx(b.q3), x2: sx(b.whiskerHi), y1: y, y2: y, stroke: c, 'stroke-width': 1.5 }, dash), g);
+      for (const w of [b.whiskerLo, b.whiskerHi]) svgEl('line', { x1: sx(w), x2: sx(w), y1: y - bh / 4, y2: y + bh / 4, stroke: c, 'stroke-width': 1.5 }, g);
+      svgEl('rect', Object.assign({ x: sx(b.q1), y: y - bh / 2, width: Math.max(1, sx(b.q3) - sx(b.q1)), height: bh, fill: c, 'fill-opacity': 0.15, stroke: c, 'stroke-width': 1.5, rx: 2 }, dash), g);
+      svgEl('line', { x1: sx(b.median), x2: sx(b.median), y1: y - bh / 2, y2: y + bh / 2, stroke: c, 'stroke-width': 3 }, g);
+      for (const v of b.outliers) svgEl('circle', { cx: sx(v), cy: y, r: 3.2, fill: cCard, stroke: c, 'stroke-width': 1.4 }, g);
+      const mx = sx(r.mean);
+      svgEl('path', { d: 'M' + mx + ',' + (y - 6) + 'l6,6l-6,6l-6,-6z', fill: cCard, stroke: c, 'stroke-width': 2 }, g);
+      rec.whisk.x0.push(b.whiskerLo, b.q3, b.whiskerLo, b.whiskerHi); rec.whisk.x1.push(b.q1, b.whiskerHi, b.whiskerLo, b.whiskerHi);
+      rec.whisk.y0.push(yy, yy, yy - 0.12, yy - 0.12); rec.whisk.y1.push(yy, yy, yy + 0.12, yy + 0.12);
+      rec.rects.x0.push(b.q1); rec.rects.x1.push(b.q3); rec.rects.y0.push(yy - 0.28); rec.rects.y1.push(yy + 0.28);
+      rec.med.x0.push(b.median); rec.med.x1.push(b.median); rec.med.y0.push(yy - 0.28); rec.med.y1.push(yy + 0.28);
+      for (const v of b.outliers) { rec.out.x.push(v); rec.out.y.push(yy); }
+      means.marker = 'd'; means.hollow = true;
+      means.x.push(r.mean); means.y.push(yy);
+    } else {
+      const g = svgEl('g', { class: 'm-int' }, fig.inner);
+      const x0 = sx(r.lo), x1 = sx(r.hi);
+      svgEl('line', Object.assign({ x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, gone ? { 'stroke-dasharray': '5,4' } : {}), g);
+      for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
+      if (gone) svgEl('circle', { cx: sx(r.mean), cy: y, r: 4, fill: cCard, stroke: c, 'stroke-width': 2 }, g);
+      else svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
+      segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
+      means.x.push(r.mean); means.y.push(yy);
+    }
     const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep === false ? cMuted : cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
@@ -353,7 +449,14 @@ function designRows(fig, rows, pairs) {
       letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
     }
   });
-  for (const r of recs.values()) { r.segs.label = r.segs.label.trim(); r.means.label = r.means.label.trim(); fig.series.push(r.segs, r.means); }
+  if (pts.x.length) fig.series.push(pts);
+  for (const r of recs.values()) {
+    for (const k of ['segs', 'means', 'rects', 'whisk', 'med', 'out']) r[k].label = r[k].label.trim();
+    if (r.segs.x0.length) fig.series.push(r.segs);
+    if (r.rects.x0.length) fig.series.push(r.whisk, r.rects, r.med);
+    if (r.out.x.length) fig.series.push(r.out);
+    fig.series.push(r.means);
+  }
   if (letters.text.length) fig.series.push(letters);
   const x0 = fig.iw + 10 + letW + 6;
   const tick = Math.max(2, Math.min(5, colW - 1.5));
@@ -371,6 +474,7 @@ function designRows(fig, rows, pairs) {
     if (i < 0 || i >= n) return null;
     const r = rows[i];
     const out = [r.full, 'mean ' + num(r.mean), 'interval ' + interval(r.lo, r.hi)];
+    if (r.box) out.push('median ' + num(r.box.median) + ', quartiles ' + num(r.box.q1) + ', ' + num(r.box.q3));
     if (r.note) out.push(r.note);
     return out;
   });
@@ -565,6 +669,10 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+  rootEl.querySelectorAll('[data-dplot]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dplot === designPlot)));
+  // The outcome dots sit behind intervals; a box plot holds the outcomes already.
+  rootEl.querySelector('#sev-pts-lbl').style.display = designPlot === 'box' ? 'none' : '';
+  rootEl.querySelector('#sev-pts').checked = showPts;
   // The post-hoc rule serves the t procedures, the adjustment the rank ones.
   rootEl.querySelector('#sev-rule-host').style.display = proc === 'np' ? 'none' : '';
   rootEl.querySelector('#sev-var-row').style.display = proc === 'np' || pairMode === 'paired' ? 'none' : '';
@@ -783,15 +891,11 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, 'several-pseudo-medians',
-      fg => {
-        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
-        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
-        bm.line(fg);
-      },
-      bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
+    meansFigure(b, 'several-pseudo-medians', 'Pseudo-median of ' + respName(list), hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), groups, bm, k, short,
+      i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)],
+      'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval',
       'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
+      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
@@ -805,15 +909,11 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-means',
-      fg => {
-        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
-        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
-        bm.line(fg);
-      },
-      bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
+    meansFigure(b, 'several-means', 'Mean of ' + respName(list), sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), groups, bm, k, short,
+      i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)],
+      'design mean with its ' + levelPct(sm.perLevel) + ' t interval',
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
+      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
@@ -1017,17 +1117,17 @@ function update() {
       const pos = [];
       order.forEach((i, r) => { pos[i] = r; });
       const letterOf = i => (ph.letters ? ph.letters[i] : i === ctrlIdx ? 'control' : '');
-      const rowsD = order.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: letterOf(i) }));
+      const rowsD = order.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: letterOf(i) }, rowMarks(groups[i], sm.items[i].mean)));
       const pairsD = ph.pairs.filter(p => p.flagged).map(p => [Math.min(pos[p.i], pos[p.j]), Math.max(pos[p.i], pos[p.j])]);
       b.appendChild(para('sev-fig-title', 'Designs, best first, with letter groups and the pairs declared different'));
-      const legD = [{ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }];
+      const legD = markLegend({ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }, 'mean');
       if (pairsD.length) legD.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by the rule (bracket)' });
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-design-groups',
         fg => designRows(fg, rowsD, pairsD), legD,
         (ph.letters
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
-        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' +
+        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' + markCaption('mean') +
         ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
@@ -1094,14 +1194,14 @@ function update() {
     const orderN = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
     const posN = [];
     orderN.forEach((i, r) => { posN[i] = r; });
-    const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
+    const rowsN = orderN.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }, rowMarks(groups[i], hl[i].estimate)));
     const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
     b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
-    const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
+    const legN = markLegend({ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }, 'pseudo-median');
     if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
     figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
       fg => designRows(fg, rowsN, pairsN), legN,
-      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down.' + markCaption('pseudo-median') + ' ' +
       'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
     const labN = p => pairLabel(p.i, p.j);
     const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
@@ -1137,13 +1237,13 @@ function update() {
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
       const orderS = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
-      const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
-        note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
+      const rowsS = orderS.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
+        note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }, rowMarks(groups[i], sm.items[i].mean)));
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-best-subset',
         fg => designRows(fg, rowsS, []),
-        [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
-          nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean),
-        'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section. ' +
+        markLegend(null, 'mean').concat([nSurv ? { swatch: designPlot === 'box' ? 'bar' : 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
+          nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean)),
+        'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section.' + markCaption('mean') + ' ' +
         'The screen compares the means: a design is eliminated when another design’s mean beats it by more than the screen allows for the two designs’ spread, and the designs still in color cannot be ruled out as the best within ε at this confidence. ' +
         'Whether a design survives is written at the right of its row, drawn solid in color when it does and dashed and hollow in gray when it does not, and never read from whether intervals overlap.');
       const rows = list.map((_, i) => [badge(i) + ' ' + esc(short[i]), intl(ss.n[i]), num(ss.means[i]), num(Math.sqrt(ss.s2[i])),
@@ -1180,6 +1280,7 @@ function update() {
       variances: np ? 'not applicable' : welch ? 'unequal (Welch)' : 'pooled',
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
+      'designs drawn as': designPlot === 'box' ? 'box plots' : showPts ? 'intervals with each outcome' : 'intervals',
       control: list[ctrlIdx].name,
       benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
       'indifference zone': Number.isFinite(eps) ? eps : '',
@@ -1340,7 +1441,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
   const regen = recipeIn && c
-    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection() } })),
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection(), box: designPlot === 'box', points: showPts && designPlot !== 'box' } })),
       files: recipeIn.list.map(d => ({ ds: d, form: 'replications' })) }
     : undefined;
   state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
@@ -1390,6 +1491,14 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
           '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
         '</span>' +
+      '</div>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl" id="sev-plot-lbl"><span class="tip" tabindex="0" data-tip="How each design is drawn on the design plots. Intervals: its mean (or pseudo-median) with its interval, which is what every comparison reads. Box plots: the median and quartiles of its replication outcomes, whiskers to the last outcome within 1.5 interquartile ranges, outliers as hollow dots, and the mean as a diamond, showing the spread and skew the intervals summarize. The comparisons and the tables do not change.">Show designs as</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-plot-lbl">' +
+          '<button type="button" class="seg-btn" data-dplot="int" aria-pressed="true">intervals</button>' +
+          '<button type="button" class="seg-btn" data-dplot="box" aria-pressed="false">box plots</button>' +
+        '</span>' +
+        '<label class="ctrl-chk" id="sev-pts-lbl"><input type="checkbox" id="sev-pts"> <span class="tip" tabindex="0" data-tip="Draws every replication outcome as a small dot on its design’s row behind the interval, so that the spread the interval was formed from stays in view.">also each outcome</span></label>' +
       '</div>' +
       '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
@@ -1499,6 +1608,8 @@ export function render(root) {
     schedule();
   }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
+  root.querySelectorAll('[data-dplot]').forEach(b => b.addEventListener('click', () => { designPlot = b.dataset.dplot; state.setPick(id, 'designPlot', designPlot); schedule(); }));
+  root.querySelector('#sev-pts').addEventListener('change', e => { showPts = e.target.checked; state.setPick(id, 'showPts', showPts); schedule(); });
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
 
@@ -1542,6 +1653,8 @@ function applyStored() {
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
+  if (get('designPlot') === 'int' || get('designPlot') === 'box') designPlot = get('designPlot');
+  if (get('showPts') === true) showPts = true;
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   if (get('benchOn') === true) benchOn = true;

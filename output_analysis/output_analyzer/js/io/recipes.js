@@ -612,7 +612,9 @@ export function severalRecipe(o) {
   // The figures of the section the page showed (means unless a view says otherwise), each design
   // labeled by its number and short name as on the page.
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
-  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
+  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n),
+    // The designs drawn as box plots of their outcomes, or as intervals with each outcome as a dot behind them.
+    box: !!(o.view && o.view.box), points: !!(o.view && o.view.points) && !(o.view && o.view.box) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });

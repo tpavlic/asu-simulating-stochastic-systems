@@ -144,11 +144,16 @@ def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.n
 
 FIG_PY.intervals = `
 def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, muted=None,
-                  right=None, brackets=None, ok=None):
-    """A forest plot: one interval per row, with optional texts and brackets at the right."""
+                  right=None, brackets=None, ok=None, boxes=None, dots=None):
+    """A forest plot: one interval per row, with optional texts and brackets at the right.
+    boxes: a list of value arrays, one per row, drawn as box plots in place of the intervals
+    (mid is then the center, a diamond); dots: a list of value arrays drawn as small dots
+    behind each row's interval."""
     import matplotlib.pyplot as plt
     mid, lo, hi = [np.asarray(a, dtype=float).ravel() for a in (mid, lo, hi)]
     n = max(mid.size, lo.size, hi.size)
+    boxes = None if boxes is None else [fig_vec(v) for v in boxes]
+    dots = None if dots is None else [fig_vec(v) for v in dots]
     fig, ax = plt.subplots(figsize=(7.0, 1.0 + 0.35 * max(n, 1) + 0.4))
     if n == 0:
         fig_empty(ax, title, xlab)
@@ -157,7 +162,7 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
     pad = lambda a: np.concatenate([a, np.full(n - a.size, np.nan)])
     mid, lo, hi = pad(mid), pad(lo), pad(hi)
     flagged, muted, ok = fig_flags(flagged, n), fig_flags(muted, n), fig_flags(ok, n)
-    xlo, xhi = fig_range([mid, lo, hi, np.array([ref])], 0.05)
+    xlo, xhi = fig_range([mid, lo, hi, np.array([ref])] + (boxes or []) + (dots or []), 0.05)
     # Place each bracket in the leftmost column where its rows are free.
     placed = []   # (first row, last row, column), rows counted from 0
     pairs = [] if brackets is None else [tuple(sorted((int(p[0]) - 1, int(p[1]) - 1)))
@@ -178,17 +183,47 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
             else FIG_TRUTH
         weak = muted[i] or flagged[i]
         style = "--" if weak else "-"
-        if np.isfinite(lo[i]) or np.isfinite(hi[i]):
-            a = lo[i] if np.isfinite(lo[i]) or np.isnan(lo[i]) else xlo
-            b = hi[i] if np.isfinite(hi[i]) or np.isnan(hi[i]) else xhi
-            ends = [e for e in (a, b) if not np.isnan(e)]
-            ax.plot([min(ends), max(ends)], [i, i], color=color, linestyle=style, linewidth=1.5)
-            for e, real in ((a, lo[i]), (b, hi[i])):
-                if np.isfinite(real):
-                    ax.plot([e, e], [i - 0.2, i + 0.2], color=color, linewidth=1.5)
-        if np.isfinite(mid[i]):
-            ax.plot([mid[i]], [i], "o", color=color, markersize=5,
-                    markerfacecolor="white" if weak else color)
+        if dots is not None and i < len(dots) and dots[i].size:
+            v = np.sort(dots[i])
+            ax.plot(v, i + (np.arange(v.size) % 4) * 0.06 - 0.09, "o", color=FIG_EST, alpha=0.5,
+                    markersize=3.5, linestyle="none")
+        if boxes is not None:
+            # Tukey's box: hinges and median, whiskers to the last value inside 1.5 hinge
+            # spreads, the values beyond as hollow dots, and the center as a diamond.
+            v = np.sort(boxes[i]) if i < len(boxes) else np.array([])
+            if v.size:
+                m = v.size
+                n4 = np.floor((m + 3) / 2.0) / 2.0
+                d = np.array([1.0, n4, (m + 1) / 2.0, m + 1 - n4, float(m)]) - 1.0
+                five = 0.5 * (v[np.floor(d).astype(int)] + v[np.ceil(d).astype(int)])
+                h1, med, h2 = five[1], five[2], five[3]
+                step = 1.5 * (h2 - h1)
+                inside = v[(v >= h1 - step) & (v <= h2 + step)]
+                w1, w2 = inside.min(), inside.max()
+                ax.plot([w1, h1], [i, i], color=color, linestyle=style, linewidth=1.5)
+                ax.plot([h2, w2], [i, i], color=color, linestyle=style, linewidth=1.5)
+                for w in (w1, w2):
+                    ax.plot([w, w], [i - 0.12, i + 0.12], color=color, linewidth=1.5)
+                ax.add_patch(plt.Rectangle((h1, i - 0.28), h2 - h1, 0.56, facecolor="white",
+                                           edgecolor=color, linewidth=1.5, linestyle=style))
+                ax.plot([med, med], [i - 0.28, i + 0.28], color=color, linewidth=2.5)
+                out = v[(v < w1) | (v > w2)]
+                ax.plot(out, np.full(out.size, i), "o", markerfacecolor="white", color=color,
+                        markersize=4, linestyle="none")
+            if np.isfinite(mid[i]):
+                ax.plot([mid[i]], [i], "D", markerfacecolor="white", color=color, markersize=6)
+        else:
+            if np.isfinite(lo[i]) or np.isfinite(hi[i]):
+                a = lo[i] if np.isfinite(lo[i]) or np.isnan(lo[i]) else xlo
+                b = hi[i] if np.isfinite(hi[i]) or np.isnan(hi[i]) else xhi
+                ends = [e for e in (a, b) if not np.isnan(e)]
+                ax.plot([min(ends), max(ends)], [i, i], color=color, linestyle=style, linewidth=1.5)
+                for e, real in ((a, lo[i]), (b, hi[i])):
+                    if np.isfinite(real):
+                        ax.plot([e, e], [i - 0.2, i + 0.2], color=color, linewidth=1.5)
+            if np.isfinite(mid[i]):
+                ax.plot([mid[i]], [i], "o", color=color, markersize=5,
+                        markerfacecolor="white" if weak else color)
     if np.isfinite(ref):
         ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
     for i, t in enumerate(texts[:n]):

@@ -113,13 +113,17 @@ FIG_R.intervals = `
 # green. right gives a text for each row to the right of the plot, and brackets (a
 # two-column matrix of row numbers) are drawn to the right of those texts.
 fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
-                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL,
+                          boxes = NULL, dots = NULL) {
+  # boxes: a list of value vectors, one per row, drawn as box plots in place of the
+  # intervals (mid is then the center, a diamond); dots: a list of value vectors drawn
+  # as small dots behind each row's interval.
   mid <- as.numeric(mid)
   lo <- as.numeric(lo)
   hi <- as.numeric(hi)
   n <- length(mid)
-  rng <- fig_span(c(mid, lo, hi, ref), 0.05)
-  if (n == 0 || length(fig_finite(c(mid, lo, hi, ref))) == 0) {
+  rng <- fig_span(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)), 0.05)
+  if (n == 0 || length(fig_finite(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)))) == 0) {
     fig_empty(title, xlab)
     return(invisible(NULL))
   }
@@ -168,18 +172,44 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
     kind <- if (muted[i]) "muted" else if (flagged[i]) "flagged" else if (ok[i]) "ok" else "plain"
     color <- c(plain = FIG_TRUTH, flagged = FIG_MISS, muted = FIG_MUTED, ok = FIG_OK)[[kind]]
     dashed <- kind %in% c("muted", "flagged")
-    # An infinite end runs to the edge of the data range and gets no end tick.
-    a <- if (is.nan(lo[i]) || is.na(lo[i])) NA else if (lo[i] == -Inf) rng[1] else lo[i]
-    z <- if (is.nan(hi[i]) || is.na(hi[i])) NA else if (hi[i] == Inf) rng[2] else hi[i]
-    a_seg <- if (is.na(a)) mid[i] else a
-    z_seg <- if (is.na(z)) mid[i] else z
-    if (is.finite(a_seg) && is.finite(z_seg)) {
-      segments(a_seg, i, z_seg, i, col = color, lwd = 1.8, lty = if (dashed) 2 else 1)
+    if (!is.null(dots)) {
+      v <- sort(fig_finite(as.numeric(dots[[i]])))
+      if (length(v)) points(v, i + ((seq_along(v) - 1) %% 4) * 0.06 - 0.09, pch = 19, cex = 0.7,
+                            col = adjustcolor(FIG_EST, 0.5))
     }
-    if (is.finite(lo[i])) segments(lo[i], i - 0.15, lo[i], i + 0.15, col = color, lwd = 1.8)
-    if (is.finite(hi[i])) segments(hi[i], i - 0.15, hi[i], i + 0.15, col = color, lwd = 1.8)
-    if (is.finite(mid[i])) {
-      points(mid[i], i, pch = if (dashed) 21 else 19, col = color, bg = "white", cex = 1.2)
+    if (!is.null(boxes)) {
+      # Tukey's box: hinges and median from fivenum, whiskers to the last value inside
+      # 1.5 hinge spreads, the values beyond as hollow dots, and the center as a diamond.
+      v <- fig_finite(as.numeric(boxes[[i]]))
+      if (length(v)) {
+        f <- fivenum(v)
+        reach <- 1.5 * (f[4] - f[2])
+        inside <- v[v >= f[2] - reach & v <= f[4] + reach]
+        wl <- min(inside)
+        wh <- max(inside)
+        segments(c(wl, f[4]), i, c(f[2], wh), i, col = color, lwd = 1.5, lty = if (dashed) 2 else 1)
+        segments(c(wl, wh), i - 0.12, c(wl, wh), i + 0.12, col = color, lwd = 1.5)
+        rect(f[2], i - 0.28, f[4], i + 0.28, col = adjustcolor(color, 0.15), border = color, lwd = 1.5,
+             lty = if (dashed) 2 else 1)
+        segments(f[3], i - 0.28, f[3], i + 0.28, col = color, lwd = 3)
+        out <- v[v < wl | v > wh]
+        if (length(out)) points(out, rep(i, length(out)), pch = 1, col = color)
+      }
+      if (is.finite(mid[i])) points(mid[i], i, pch = 5, cex = 1.3, lwd = 2, col = color)
+    } else {
+      # An infinite end runs to the edge of the data range and gets no end tick.
+      a <- if (is.nan(lo[i]) || is.na(lo[i])) NA else if (lo[i] == -Inf) rng[1] else lo[i]
+      z <- if (is.nan(hi[i]) || is.na(hi[i])) NA else if (hi[i] == Inf) rng[2] else hi[i]
+      a_seg <- if (is.na(a)) mid[i] else a
+      z_seg <- if (is.na(z)) mid[i] else z
+      if (is.finite(a_seg) && is.finite(z_seg)) {
+        segments(a_seg, i, z_seg, i, col = color, lwd = 1.8, lty = if (dashed) 2 else 1)
+      }
+      if (is.finite(lo[i])) segments(lo[i], i - 0.15, lo[i], i + 0.15, col = color, lwd = 1.8)
+      if (is.finite(hi[i])) segments(hi[i], i - 0.15, hi[i], i + 0.15, col = color, lwd = 1.8)
+      if (is.finite(mid[i])) {
+        points(mid[i], i, pch = if (dashed) 21 else 19, col = color, bg = "white", cex = 1.2)
+      }
     }
     if (nzchar(right[i])) {
       text_col <- if (kind == "ok") FIG_OK else if (kind == "muted") FIG_MUTED else FIG_ACCENT

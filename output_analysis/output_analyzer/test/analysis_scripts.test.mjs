@@ -1096,6 +1096,17 @@ function sevRecipe(list, over = {}) {
   return severalRecipe(Object.assign({}, o, { list, groups, match, title: 'Several Systems', provenance: sevProv(list, o, match) }));
 }
 
+test('severalRecipe draws the designs as the view showed them: intervals, with each outcome, or as box plots', () => {
+  const plain = sevRecipe(FOUR, { view: { section: 'means' } });
+  assert.equal(plain.fig.box, false); assert.equal(plain.fig.points, false);
+  const pts = sevRecipe(FOUR, { view: { section: 'anova', points: true } });
+  assert.equal(pts.fig.points, true); assert.equal(pts.fig.box, false);
+  // Box plots replace the intervals, and the outcomes are inside the boxes, so the two are never both on.
+  const both = sevRecipe(FOUR, { view: { section: 'subset', box: true, points: true } });
+  assert.equal(both.fig.box, true); assert.equal(both.fig.points, false);
+  assert.equal(sevRecipe(FOUR, {}).fig.box, false, 'no view draws intervals');
+});
+
 test('severalRecipe carries every design, the family, and the planning keys', () => {
   const r = sevRecipe(FOUR);
   assert.equal(r.title, 'Several Systems');
@@ -2732,14 +2743,20 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],
     ['Several Systems, means with a benchmark', sevRecipe(FOUR, { bench: 2.4, view: { section: 'means' } }), 1],
+    ['Several Systems, means as box plots with a benchmark', sevRecipe(FOUR, { bench: 2.4, view: { section: 'means', box: true } }), 1],
+    ['Several Systems, means with each outcome', sevRecipe(FOUR, { view: { section: 'means', points: true } }), 1, true],
+    ['Several Systems, pseudo-medians as box plots', sevRecipe(FOUR, { proc: 'np', view: { section: 'means', box: true } }), 1],
     ['Several Systems, pairwise differences', sevRecipe(FOUR, { view: { section: 'diffs' } }), 1, true],
     ['Several Systems, paired rank differences', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, view: { section: 'diffs' } }), 1],
     ['Several Systems, analysis of variance with Tukey', sevRecipe(SIX_D, { view: { section: 'anova' } }), 3, true],
     ['Several Systems, analysis of variance with Dunnett', sevRecipe(FOUR, { rule: 'dunnett', ctrlIdx: 1, view: { section: 'anova' } }), 3],
+    ['Several Systems, analysis of variance as box plots', sevRecipe(SIX_D, { view: { section: 'anova', box: true } }), 3],
+    ['Several Systems, Kruskal-Wallis groups with each outcome', sevRecipe(SIX_D, { proc: 'np', view: { section: 'anova', points: true } }), 1],
     ['Several Systems, Welch analysis', sevRecipe(FOUR, { varMode: 'welch', view: { section: 'anova' } }), 3],
     ['Several Systems, Kruskal-Wallis groups', sevRecipe(SIX_D, { proc: 'np', view: { section: 'anova' } }), 1],
     ['Several Systems, Friedman groups', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, view: { section: 'anova' } }), 1],
     ['Several Systems, the screen', sevRecipe(SIX_D, { dir: 'min', view: { section: 'subset' } }), 1],
+    ['Several Systems, the screen as box plots', sevRecipe(SIX_D, { dir: 'min', view: { section: 'subset', box: true } }), 1],
     ['Steady State, warm-up by index', stRecipe(TRANSIENT, { cut: 30, view: { section: 'warmup' } }), 1],
     ['Steady State, warm-up by time', stRecipe(QLEN, { align: 'time', cut: 100, view: { section: 'warmup' } }), 1],
     ['Steady State, warm-up with each replication and the band', stRecipe(QLEN, { align: 'time', cut: 100, view: { section: 'warmup', reps: true, band: true } }), 1, true],

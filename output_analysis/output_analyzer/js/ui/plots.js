@@ -675,7 +675,8 @@ export function boxPlot(fig, stats, o = {}) {
   const hasLabels = labels.some(Boolean);
   let lw = 0;
   if (hasLabels) lw = labelColumn(fig, labels, 11.5);
-  rowsHeight(fig, rows.length, 64);
+  rowsHeight(fig, rows.length, o.rowPx || 64);
+  const centerLabel = o.markerLabel || 'mean';
   const vals = [];
   for (const r of rows) {
     const s = r.stats;
@@ -691,7 +692,7 @@ export function boxPlot(fig, stats, o = {}) {
     box: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: 'box from q1 to q3' },
     med: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, width: 3, label: 'median' },
     out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: 'outlier' },
-    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: 'mean' } };
+    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: centerLabel } };
   rows.forEach((r, i) => {
     const s = r.stats, cy = (i + 0.5) * rowH, bh = Math.min(34, rowH * 0.5);
     const yy = ry(i);
@@ -721,7 +722,7 @@ export function boxPlot(fig, stats, o = {}) {
     const i = Math.min(rows.length - 1, Math.max(0, Math.floor(py / rowH)));
     const s = rows[i].stats;
     const out = [(rows[i].label ? rows[i].label + ': ' : '') + 'median ' + num(s.median), 'quartiles ' + num(s.q1) + ', ' + num(s.q3)];
-    if (Number.isFinite(s.mean)) out.push('mean ' + num(s.mean));
+    if (Number.isFinite(s.mean)) out.push(centerLabel + ' ' + num(s.mean));
     return out;
   });
 }
@@ -888,12 +889,16 @@ export function intervals(fig, items, o = {}) {
   const lw = labelColumn(fig, items.map(it => it.label), 11.5);
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
-  for (const it of items) vals.push(it.lo, it.hi);
+  for (const it of items) { vals.push(it.lo, it.hi); if (it.values) for (const v of it.values) vals.push(v); }
   if (o.ref !== undefined && o.ref !== null) vals.push(o.ref);
   const [lo, hi] = extent(vals);
   const sx = fig.sx || fig.x([lo, hi], { pad: 0.05, nice: true });
   ensureAxes(fig, o, { y: false });
   const rowH = fig.ih / Math.max(1, n);
+  // An item's `values` are drawn as small faint dots behind its interval, the
+  // ties spread over four heights as the strips helpers spread them.
+  const cPts = tok('--est');
+  const pts = { kind: 'points', x: [], y: [], color: cPts, label: 'one outcome' };
   const ry = recordRows(fig, items.map(it => it.label));
   if (o.ref !== undefined && o.ref !== null && Number.isFinite(o.ref)) {
     const x = r1(sx(o.ref));
@@ -913,6 +918,14 @@ export function intervals(fig, items, o = {}) {
     rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
     rr.dot.x.push(cc); rr.dot.y.push(yy);
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
+    if (it.values) {
+      const srt = Array.from(it.values).filter(Number.isFinite).sort((a, b) => a - b);
+      srt.forEach((v, j) => {
+        const off = (j % 4) * 0.06 - 0.09;
+        svgEl('circle', { cx: r1(sx(v)), cy: r1(cy + off * rowH), r: 3, fill: cPts, 'fill-opacity': 0.5, class: 'm-pt' }, fig.inner);
+        pts.x.push(v); pts.y.push(yy + off);
+      });
+    }
     // An interval without finite ends keeps its row and label and draws nothing.
     if (!Number.isFinite(it.lo) || !Number.isFinite(it.hi)) return;
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
@@ -923,6 +936,7 @@ export function intervals(fig, items, o = {}) {
     if (it.flagged) svgEl('circle', { cx: r1(sx(center)), cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
   });
+  if (pts.x.length) fig.series.push(pts);
   for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);

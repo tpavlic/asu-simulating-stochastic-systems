@@ -26158,7 +26158,10 @@ function fig_intervals(mid, lo, hi, labels, xlab, ttl, o)
 % A forest plot: one interval per row from lo to hi with a dot at mid, row 1
 % at the top. Options: ref (a dashed reference line), flagged, muted, and ok
 % (logical per row), right (a cell array of texts printed right of the
-% intervals), and brackets (an n-by-2 matrix of rows joined by a bracket).
+% intervals), brackets (an n-by-2 matrix of rows joined by a bracket), boxes
+% (a cell array of value vectors, one per row, drawn as box plots in place of
+% the intervals, mid then being the center, a diamond), and dots (a cell
+% array of value vectors drawn as small dots behind each row's interval).
 if nargin < 7, o = struct(); end
 c = fig_colors();
 mid = mid(:);
@@ -26173,6 +26176,11 @@ ok = fig_flags(fig_opt(o, 'ok', []), n);
 right = fig_opt(o, 'right', {});
 if ~iscell(right), right = cellstr(right); end
 brackets = fig_opt(o, 'brackets', zeros(0, 2));
+boxes = fig_opt(o, 'boxes', {});
+dots = fig_opt(o, 'dots', {});
+extra = [];
+for q = 1:numel(boxes), v = boxes{q}(:); extra = [extra; v(isfinite(v))]; end %#ok<AGROW>
+for q = 1:numel(dots), v = dots{q}(:); extra = [extra; v(isfinite(v))]; end %#ok<AGROW>
 figure;
 fig_size(6.5, max(1.8, 1.0 + 0.35 * n));
 if n == 0
@@ -26181,7 +26189,7 @@ if n == 0
 end
 hold on;
 box on;
-xr = fig_pad(fig_range([mid; lo; hi; ref]), 0.05);
+xr = fig_pad(fig_range([mid; lo; hi; ref; extra]), 0.05);
 ylim([0.5, n + 0.5]);
 set(gca, 'YDir', 'reverse', 'YTick', 1:n, 'YTickLabel', labels, ...
          'TickLabelInterpreter', 'none');
@@ -26241,22 +26249,61 @@ for i = 1:n
     if ok(i), color = c.ok; face = c.ok; end
     if flagged(i), color = c.miss; style = '--'; face = 'w'; end
     if muted(i), color = c.muted; style = '--'; face = 'w'; end
-    a = lo(i);
-    b = hi(i);
-    if ~isnan(a) && ~isnan(b)
-        % An infinite end runs to the edge of the data area, with no tick.
-        plot([max(a, xr(1)), min(b, xr(2))], [i, i], 'Color', color, ...
-             'LineStyle', style, 'LineWidth', 2);
-        if isfinite(a)
-            plot([a, a], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
-        end
-        if isfinite(b)
-            plot([b, b], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+    if numel(dots) >= i
+        v = sort(dots{i}(:));
+        v = v(isfinite(v));
+        if ~isempty(v)
+            plot(v, i + mod((1:numel(v))' - 1, 4) * 0.06 - 0.09, 'o', 'Color', c.est, ...
+                 'MarkerFaceColor', c.est, 'MarkerSize', 3.5, 'LineStyle', 'none');
         end
     end
-    if isfinite(mid(i))
-        plot(mid(i), i, 'o', 'Color', color, 'MarkerFaceColor', face, ...
-             'MarkerSize', 6, 'LineWidth', 1.5);
+    if ~isempty(boxes)
+        % Tukey's box: hinges and median (as R's fivenum), whiskers to the
+        % last value inside 1.5 hinge spreads, the values beyond as hollow
+        % dots, and the center as a diamond.
+        v = sort(boxes{i}(:));
+        v = v(isfinite(v));
+        m = numel(v);
+        if m > 0
+            depth = [1, floor((m + 3) / 2) / 2, (m + 1) / 2, m + 1 - floor((m + 3) / 2) / 2, m];
+            five = 0.5 * (v(floor(depth)) + v(ceil(depth)));
+            q1 = five(2); med = five(3); q3 = five(4);
+            reach = 1.5 * (q3 - q1);
+            inside = v(v >= q1 - reach & v <= q3 + reach);
+            w_lo = min(inside); w_hi = max(inside);
+            plot([w_lo, q1], [i, i], 'Color', color, 'LineStyle', style, 'LineWidth', 1.5);
+            plot([q3, w_hi], [i, i], 'Color', color, 'LineStyle', style, 'LineWidth', 1.5);
+            plot([w_lo, w_lo], i + [-0.12, 0.12], 'Color', color, 'LineWidth', 1.5);
+            plot([w_hi, w_hi], i + [-0.12, 0.12], 'Color', color, 'LineWidth', 1.5);
+            patch([q1, q3, q3, q1], i + [-0.28, -0.28, 0.28, 0.28], color, 'FaceAlpha', 0.15, ...
+                  'EdgeColor', color, 'LineWidth', 1.5, 'LineStyle', style);
+            plot([med, med], i + [-0.28, 0.28], 'Color', color, 'LineWidth', 3);
+            outside = v(v < w_lo | v > w_hi);
+            if ~isempty(outside)
+                plot(outside, i * ones(size(outside)), 'o', 'Color', color, 'MarkerFaceColor', 'w', 'MarkerSize', 4);
+            end
+        end
+        if isfinite(mid(i))
+            plot(mid(i), i, 'd', 'Color', color, 'MarkerFaceColor', 'w', 'MarkerSize', 8, 'LineWidth', 1.5);
+        end
+    else
+        a = lo(i);
+        b = hi(i);
+        if ~isnan(a) && ~isnan(b)
+            % An infinite end runs to the edge of the data area, with no tick.
+            plot([max(a, xr(1)), min(b, xr(2))], [i, i], 'Color', color, ...
+                 'LineStyle', style, 'LineWidth', 2);
+            if isfinite(a)
+                plot([a, a], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+            end
+            if isfinite(b)
+                plot([b, b], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+            end
+        end
+        if isfinite(mid(i))
+            plot(mid(i), i, 'o', 'Color', color, 'MarkerFaceColor', face, ...
+                 'MarkerSize', 6, 'LineWidth', 1.5);
+        end
     end
     if numel(right) >= i && ~isempty(right{i})
         tc = c.accent;
@@ -26982,11 +27029,16 @@ def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.n
 
 FIG_PY.intervals = `
 def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, muted=None,
-                  right=None, brackets=None, ok=None):
-    """A forest plot: one interval per row, with optional texts and brackets at the right."""
+                  right=None, brackets=None, ok=None, boxes=None, dots=None):
+    """A forest plot: one interval per row, with optional texts and brackets at the right.
+    boxes: a list of value arrays, one per row, drawn as box plots in place of the intervals
+    (mid is then the center, a diamond); dots: a list of value arrays drawn as small dots
+    behind each row's interval."""
     import matplotlib.pyplot as plt
     mid, lo, hi = [np.asarray(a, dtype=float).ravel() for a in (mid, lo, hi)]
     n = max(mid.size, lo.size, hi.size)
+    boxes = None if boxes is None else [fig_vec(v) for v in boxes]
+    dots = None if dots is None else [fig_vec(v) for v in dots]
     fig, ax = plt.subplots(figsize=(7.0, 1.0 + 0.35 * max(n, 1) + 0.4))
     if n == 0:
         fig_empty(ax, title, xlab)
@@ -26995,7 +27047,7 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
     pad = lambda a: np.concatenate([a, np.full(n - a.size, np.nan)])
     mid, lo, hi = pad(mid), pad(lo), pad(hi)
     flagged, muted, ok = fig_flags(flagged, n), fig_flags(muted, n), fig_flags(ok, n)
-    xlo, xhi = fig_range([mid, lo, hi, np.array([ref])], 0.05)
+    xlo, xhi = fig_range([mid, lo, hi, np.array([ref])] + (boxes or []) + (dots or []), 0.05)
     # Place each bracket in the leftmost column where its rows are free.
     placed = []   # (first row, last row, column), rows counted from 0
     pairs = [] if brackets is None else [tuple(sorted((int(p[0]) - 1, int(p[1]) - 1)))
@@ -27016,17 +27068,47 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
             else FIG_TRUTH
         weak = muted[i] or flagged[i]
         style = "--" if weak else "-"
-        if np.isfinite(lo[i]) or np.isfinite(hi[i]):
-            a = lo[i] if np.isfinite(lo[i]) or np.isnan(lo[i]) else xlo
-            b = hi[i] if np.isfinite(hi[i]) or np.isnan(hi[i]) else xhi
-            ends = [e for e in (a, b) if not np.isnan(e)]
-            ax.plot([min(ends), max(ends)], [i, i], color=color, linestyle=style, linewidth=1.5)
-            for e, real in ((a, lo[i]), (b, hi[i])):
-                if np.isfinite(real):
-                    ax.plot([e, e], [i - 0.2, i + 0.2], color=color, linewidth=1.5)
-        if np.isfinite(mid[i]):
-            ax.plot([mid[i]], [i], "o", color=color, markersize=5,
-                    markerfacecolor="white" if weak else color)
+        if dots is not None and i < len(dots) and dots[i].size:
+            v = np.sort(dots[i])
+            ax.plot(v, i + (np.arange(v.size) % 4) * 0.06 - 0.09, "o", color=FIG_EST, alpha=0.5,
+                    markersize=3.5, linestyle="none")
+        if boxes is not None:
+            # Tukey's box: hinges and median, whiskers to the last value inside 1.5 hinge
+            # spreads, the values beyond as hollow dots, and the center as a diamond.
+            v = np.sort(boxes[i]) if i < len(boxes) else np.array([])
+            if v.size:
+                m = v.size
+                n4 = np.floor((m + 3) / 2.0) / 2.0
+                d = np.array([1.0, n4, (m + 1) / 2.0, m + 1 - n4, float(m)]) - 1.0
+                five = 0.5 * (v[np.floor(d).astype(int)] + v[np.ceil(d).astype(int)])
+                h1, med, h2 = five[1], five[2], five[3]
+                step = 1.5 * (h2 - h1)
+                inside = v[(v >= h1 - step) & (v <= h2 + step)]
+                w1, w2 = inside.min(), inside.max()
+                ax.plot([w1, h1], [i, i], color=color, linestyle=style, linewidth=1.5)
+                ax.plot([h2, w2], [i, i], color=color, linestyle=style, linewidth=1.5)
+                for w in (w1, w2):
+                    ax.plot([w, w], [i - 0.12, i + 0.12], color=color, linewidth=1.5)
+                ax.add_patch(plt.Rectangle((h1, i - 0.28), h2 - h1, 0.56, facecolor="white",
+                                           edgecolor=color, linewidth=1.5, linestyle=style))
+                ax.plot([med, med], [i - 0.28, i + 0.28], color=color, linewidth=2.5)
+                out = v[(v < w1) | (v > w2)]
+                ax.plot(out, np.full(out.size, i), "o", markerfacecolor="white", color=color,
+                        markersize=4, linestyle="none")
+            if np.isfinite(mid[i]):
+                ax.plot([mid[i]], [i], "D", markerfacecolor="white", color=color, markersize=6)
+        else:
+            if np.isfinite(lo[i]) or np.isfinite(hi[i]):
+                a = lo[i] if np.isfinite(lo[i]) or np.isnan(lo[i]) else xlo
+                b = hi[i] if np.isfinite(hi[i]) or np.isnan(hi[i]) else xhi
+                ends = [e for e in (a, b) if not np.isnan(e)]
+                ax.plot([min(ends), max(ends)], [i, i], color=color, linestyle=style, linewidth=1.5)
+                for e, real in ((a, lo[i]), (b, hi[i])):
+                    if np.isfinite(real):
+                        ax.plot([e, e], [i - 0.2, i + 0.2], color=color, linewidth=1.5)
+            if np.isfinite(mid[i]):
+                ax.plot([mid[i]], [i], "o", color=color, markersize=5,
+                        markerfacecolor="white" if weak else color)
     if np.isfinite(ref):
         ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
     for i, t in enumerate(texts[:n]):
@@ -27590,13 +27672,17 @@ FIG_R.intervals = `
 # green. right gives a text for each row to the right of the plot, and brackets (a
 # two-column matrix of row numbers) are drawn to the right of those texts.
 fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
-                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL,
+                          boxes = NULL, dots = NULL) {
+  # boxes: a list of value vectors, one per row, drawn as box plots in place of the
+  # intervals (mid is then the center, a diamond); dots: a list of value vectors drawn
+  # as small dots behind each row's interval.
   mid <- as.numeric(mid)
   lo <- as.numeric(lo)
   hi <- as.numeric(hi)
   n <- length(mid)
-  rng <- fig_span(c(mid, lo, hi, ref), 0.05)
-  if (n == 0 || length(fig_finite(c(mid, lo, hi, ref))) == 0) {
+  rng <- fig_span(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)), 0.05)
+  if (n == 0 || length(fig_finite(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)))) == 0) {
     fig_empty(title, xlab)
     return(invisible(NULL))
   }
@@ -27645,18 +27731,44 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
     kind <- if (muted[i]) "muted" else if (flagged[i]) "flagged" else if (ok[i]) "ok" else "plain"
     color <- c(plain = FIG_TRUTH, flagged = FIG_MISS, muted = FIG_MUTED, ok = FIG_OK)[[kind]]
     dashed <- kind %in% c("muted", "flagged")
-    # An infinite end runs to the edge of the data range and gets no end tick.
-    a <- if (is.nan(lo[i]) || is.na(lo[i])) NA else if (lo[i] == -Inf) rng[1] else lo[i]
-    z <- if (is.nan(hi[i]) || is.na(hi[i])) NA else if (hi[i] == Inf) rng[2] else hi[i]
-    a_seg <- if (is.na(a)) mid[i] else a
-    z_seg <- if (is.na(z)) mid[i] else z
-    if (is.finite(a_seg) && is.finite(z_seg)) {
-      segments(a_seg, i, z_seg, i, col = color, lwd = 1.8, lty = if (dashed) 2 else 1)
+    if (!is.null(dots)) {
+      v <- sort(fig_finite(as.numeric(dots[[i]])))
+      if (length(v)) points(v, i + ((seq_along(v) - 1) %% 4) * 0.06 - 0.09, pch = 19, cex = 0.7,
+                            col = adjustcolor(FIG_EST, 0.5))
     }
-    if (is.finite(lo[i])) segments(lo[i], i - 0.15, lo[i], i + 0.15, col = color, lwd = 1.8)
-    if (is.finite(hi[i])) segments(hi[i], i - 0.15, hi[i], i + 0.15, col = color, lwd = 1.8)
-    if (is.finite(mid[i])) {
-      points(mid[i], i, pch = if (dashed) 21 else 19, col = color, bg = "white", cex = 1.2)
+    if (!is.null(boxes)) {
+      # Tukey's box: hinges and median from fivenum, whiskers to the last value inside
+      # 1.5 hinge spreads, the values beyond as hollow dots, and the center as a diamond.
+      v <- fig_finite(as.numeric(boxes[[i]]))
+      if (length(v)) {
+        f <- fivenum(v)
+        reach <- 1.5 * (f[4] - f[2])
+        inside <- v[v >= f[2] - reach & v <= f[4] + reach]
+        wl <- min(inside)
+        wh <- max(inside)
+        segments(c(wl, f[4]), i, c(f[2], wh), i, col = color, lwd = 1.5, lty = if (dashed) 2 else 1)
+        segments(c(wl, wh), i - 0.12, c(wl, wh), i + 0.12, col = color, lwd = 1.5)
+        rect(f[2], i - 0.28, f[4], i + 0.28, col = adjustcolor(color, 0.15), border = color, lwd = 1.5,
+             lty = if (dashed) 2 else 1)
+        segments(f[3], i - 0.28, f[3], i + 0.28, col = color, lwd = 3)
+        out <- v[v < wl | v > wh]
+        if (length(out)) points(out, rep(i, length(out)), pch = 1, col = color)
+      }
+      if (is.finite(mid[i])) points(mid[i], i, pch = 5, cex = 1.3, lwd = 2, col = color)
+    } else {
+      # An infinite end runs to the edge of the data range and gets no end tick.
+      a <- if (is.nan(lo[i]) || is.na(lo[i])) NA else if (lo[i] == -Inf) rng[1] else lo[i]
+      z <- if (is.nan(hi[i]) || is.na(hi[i])) NA else if (hi[i] == Inf) rng[2] else hi[i]
+      a_seg <- if (is.na(a)) mid[i] else a
+      z_seg <- if (is.na(z)) mid[i] else z
+      if (is.finite(a_seg) && is.finite(z_seg)) {
+        segments(a_seg, i, z_seg, i, col = color, lwd = 1.8, lty = if (dashed) 2 else 1)
+      }
+      if (is.finite(lo[i])) segments(lo[i], i - 0.15, lo[i], i + 0.15, col = color, lwd = 1.8)
+      if (is.finite(hi[i])) segments(hi[i], i - 0.15, hi[i], i + 0.15, col = color, lwd = 1.8)
+      if (is.finite(mid[i])) {
+        points(mid[i], i, pch = if (dashed) 21 else 19, col = color, bg = "white", cex = 1.2)
+      }
     }
     if (nzchar(right[i])) {
       text_col <- if (kind == "ok") FIG_OK else if (kind == "muted") FIG_MUTED else FIG_ACCENT
@@ -28183,14 +28295,18 @@ FIG_TIDY.intervals = `
 # Flagged rows are red and dashed, muted rows gray and dashed (both with a hollow dot), ok rows
 # green. Optional texts stand to the right of the rows, with brackets joining pairs of rows.
 fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = NULL,
-                          muted = NULL, right = NULL, brackets = NULL, ok = NULL) {
+                          muted = NULL, right = NULL, brackets = NULL, ok = NULL,
+                          boxes = NULL, dots = NULL) {
+  # boxes: a list of value vectors, one per row, drawn as box plots in place of the
+  # intervals (mid is then the center, a diamond); dots: a list of value vectors drawn
+  # as small dots behind each row's interval.
   n <- length(mid)
   if (n == 0) return(fig_empty(title, xlab))
   lo <- fig_num(lo, n); hi <- fig_num(hi, n); mid <- as.numeric(mid)
   flagged <- fig_flag(flagged, n); muted <- fig_flag(muted, n); ok <- fig_flag(ok, n)
   right <- if (is.null(right)) rep("", n) else as.character(right)
   right[is.na(right)] <- ""
-  xr <- fig_span(c(mid, lo, hi, ref))
+  xr <- fig_span(c(mid, lo, hi, ref, unlist(boxes), unlist(dots)))
   span <- diff(xr)
   rows <- tibble(row = seq_len(n), y = n - seq_len(n) + 1, mid = mid, lo = lo, hi = hi,
                  right = right) %>%
@@ -28218,17 +28334,56 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
   seg <- filter(rows, !is.na(a), !is.na(b))
   p <- ggplot()
   if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
-  p <- p +
-    geom_segment(data = seg, aes(x = a, xend = b, y = y, yend = y, color = col, linetype = lt),
-                 linewidth = 0.6) +
-    geom_segment(data = filter(rows, is.finite(lo)),
-                 aes(x = lo, xend = lo, y = y - 0.15, yend = y + 0.15, color = col),
-                 linewidth = 0.6) +
-    geom_segment(data = filter(rows, is.finite(hi)),
-                 aes(x = hi, xend = hi, y = y - 0.15, yend = y + 0.15, color = col),
-                 linewidth = 0.6) +
-    geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col, fill = fillc),
-               shape = 21, size = 2.6, stroke = 0.8)
+  finite_row <- function(v) { v <- as.numeric(v); v[is.finite(v)] }
+  if (!is.null(dots)) {
+    dd <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- sort(finite_row(dots[[i]]))
+      tibble(x = v, y = (n - i + 1) + ((seq_along(v) - 1) %% 4) * 0.06 - 0.09)
+    }))
+    if (nrow(dd)) p <- p + geom_point(data = dd, aes(x = x, y = y), color = FIG_EST, alpha = 0.5, size = 1.3)
+  }
+  if (is.null(boxes)) {
+    p <- p +
+      geom_segment(data = seg, aes(x = a, xend = b, y = y, yend = y, color = col, linetype = lt),
+                   linewidth = 0.6) +
+      geom_segment(data = filter(rows, is.finite(lo)),
+                   aes(x = lo, xend = lo, y = y - 0.15, yend = y + 0.15, color = col),
+                   linewidth = 0.6) +
+      geom_segment(data = filter(rows, is.finite(hi)),
+                   aes(x = hi, xend = hi, y = y - 0.15, yend = y + 0.15, color = col),
+                   linewidth = 0.6) +
+      geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col, fill = fillc),
+                 shape = 21, size = 2.6, stroke = 0.8)
+  } else {
+    # Tukey's box per row: hinges and median from fivenum, whiskers to the last value
+    # inside 1.5 hinge spreads, the values beyond as hollow dots, the center as a diamond.
+    bx <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- finite_row(boxes[[i]])
+      if (!length(v)) return(NULL)
+      f <- fivenum(v); reach <- 1.5 * (f[4] - f[2])
+      inside <- v[v >= f[2] - reach & v <= f[4] + reach]
+      tibble(y = n - i + 1, q1 = f[2], med = f[3], q3 = f[4], wl = min(inside), wh = max(inside),
+             col = rows$col[i], lt = rows$lt[i])
+    }))
+    ox <- bind_rows(lapply(seq_len(n), function(i) {
+      v <- finite_row(boxes[[i]])
+      if (!length(v)) return(NULL)
+      f <- fivenum(v); reach <- 1.5 * (f[4] - f[2])
+      tibble(x = v[v < f[2] - reach | v > f[4] + reach], y = n - i + 1, col = rows$col[i])
+    }))
+    p <- p +
+      geom_segment(data = bx, aes(x = wl, xend = q1, y = y, yend = y, color = col, linetype = lt)) +
+      geom_segment(data = bx, aes(x = q3, xend = wh, y = y, yend = y, color = col, linetype = lt)) +
+      geom_segment(data = bx, aes(x = wl, xend = wl, y = y - 0.12, yend = y + 0.12, color = col)) +
+      geom_segment(data = bx, aes(x = wh, xend = wh, y = y - 0.12, yend = y + 0.12, color = col)) +
+      geom_rect(data = bx, aes(xmin = q1, xmax = q3, ymin = y - 0.28, ymax = y + 0.28, color = col,
+                               fill = col, linetype = lt), alpha = 0.15) +
+      geom_segment(data = bx, aes(x = med, xend = med, y = y - 0.28, yend = y + 0.28, color = col),
+                   linewidth = 1.2) +
+      geom_point(data = filter(rows, is.finite(mid)), aes(x = mid, y = y, color = col),
+                 shape = 23, fill = "white", size = 3)
+    if (nrow(ox)) p <- p + geom_point(data = ox, aes(x = x, y = y, color = col), shape = 1, size = 2)
+  }
   if (has_text) {
     p <- p + geom_text(data = filter(rows, nzchar(right)),
                        aes(x = xr[2] + 0.02 * span, y = y, label = right, color = textcol),
@@ -28822,6 +28977,12 @@ function bracketsFromPairs(L, pairs) {
 function severalFigures(r, L) {
   const S = r.several, F = r.fig, resp = tfResp(r, r.groups.response), calls = [], fig = [], notes = [];
   calls.push(L.lang === 'm' ? 'design_labels = ' + strsOf(L, F.labels) + ';' : L.assign('design_labels', strsOf(L, F.labels)));
+  // How each design is drawn: as its interval, with every outcome as a dot
+  // behind it, or as a box plot of its outcomes; the outcome vectors are
+  // handed to the helper, in the rows' order where the rows are ordered.
+  const marks = ordered => (F.box ? { boxes: ordered ? inOrd(L, 'groups', true) : 'groups' } : F.points ? { dots: ordered ? inOrd(L, 'groups', true) : 'groups' } : {});
+  const markNote = F.box ? ' Each design is drawn as a box plot of its outcomes (median and quartiles, whiskers to the last outcome within 1.5 interquartile ranges, outliers as hollow dots, and the center as a diamond) in place of its interval.'
+    : F.points ? ' Every replication outcome is a dot behind its design\'s interval.' : '';
   const items = fld(L, 'sm', 'items');
   if (F.section === 'means') {
     const src = S.np ? 'srs' : items;
@@ -28831,6 +28992,7 @@ function severalFigures(r, L) {
       calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
       Object.assign(opts, { ref: 'benchmark', flagged: 'bench_flag' });
     }
+    Object.assign(opts, marks(false));
     calls.push(...call(L, 'fig_intervals', [pluck(L, src, S.np ? 'estimate' : 'mean'), 'iv_lo', 'iv_hi', 'design_labels',
       L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
     fig.push('intervals');
@@ -28855,7 +29017,7 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
-    { right, brackets: 'brackets' }));
+    Object.assign({ right, brackets: 'brackets' }, marks(true))));
     const pp = fld(L, 'ph', 'pairs');
     const lab = L.lang === 'R' ? 'sapply(' + pp + ', function(p) paste(p$i, "-", p$j))' : L.lang === 'py' ? '[f"{p[\'i\'] + 1} - {p[\'j\'] + 1}" for p in ' + pp + ']'
       : "cellfun(@(p) sprintf('%d - %d', p.i, p.j), " + pp + ", 'UniformOutput', false)";
@@ -28875,7 +29037,7 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, 'hl', 'lo')), L.assign('iv_hi', pluck(L, 'hl', 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Pseudo-median of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
-    { right: inOrd(L, 'rank_cld', true), brackets: 'brackets' }));
+    Object.assign({ right: inOrd(L, 'rank_cld', true), brackets: 'brackets' }, marks(true))));
     fig.push('intervals');
     notes.push('The designs, best first, each with its pseudo-median and Wilcoxon signed-rank interval, its letters, and a bracket joining each pair declared different.');
   } else if (F.section === 'subset' && S.subset && S.subset.ok) {
@@ -28888,10 +29050,11 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, items, 'lo')), L.assign('iv_hi', pluck(L, items, 'hi')));
     calls.push(...call(L, 'fig_intervals', [inOrd(L, 'row_means'), inOrd(L, 'iv_lo'), inOrd(L, 'iv_hi'),
       inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Screen for the best')],
-    { right, ok: 'survives', muted: L.lang === 'py' ? '~survives' : '!survives'.replace('!', L.lang === 'm' ? '~' : '!') }));
+    Object.assign({ right, ok: 'survives', muted: L.lang === 'py' ? '~survives' : '!survives'.replace('!', L.lang === 'm' ? '~' : '!') }, marks(true))));
     fig.push('intervals');
     notes.push('The designs, best first, each with its simultaneous interval: the survivors of the screen in green, and the eliminated designs in gray.');
   } else return { calls: [] };
+  if (markNote && F.section !== 'diffs') notes.push(markNote);
   return { notes, calls, fig };
 }
 
@@ -30096,7 +30259,9 @@ export function severalRecipe(o) {
   // The figures of the section the page showed (means unless a view says otherwise), each design
   // labeled by its number and short name as on the page.
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
-  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n) };
+  r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n),
+    // The designs drawn as box plots of their outcomes, or as intervals with each outcome as a dot behind them.
+    box: !!(o.view && o.view.box), points: !!(o.view && o.view.points) && !(o.view && o.view.box) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
@@ -38342,7 +38507,8 @@ import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFam
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
 import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
-import { makeFigure, exportButtons, legend, intervals, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
+import { makeFigure, exportButtons, legend, intervals, boxPlot, recordRows, svgEl, tok, extent, qqPlot, dragLine } from '../ui/plots.js';
+import { boxStats } from '../stats/descriptive.js';
 import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
@@ -38393,6 +38559,11 @@ let ruleW = 'gameshowell';
 let adjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
+// How the design plots draw each design: 'int', its center with its interval,
+// or 'box', a box plot of its outcomes with the center as a diamond; and
+// whether, with intervals, every outcome is drawn as a dot behind its row.
+let designPlot = 'int';
+let showPts = false;
 const NP_PLAN = 'Under the rank procedures, the counts here are the t plan inflated by π/3 ≈ 1.047, the reciprocal of the Wilcoxon procedures’ efficiency relative to the t under normal data (about 5% more replications); under heavy tails, they need fewer, and the inflation is then conservative.';
 // 'independent' or 'paired': whether replication i of every design shares a
 // block (common random numbers across designs, or the same subject, batch, or
@@ -38552,6 +38723,51 @@ function figure(parent, opts, name, draw, legendItems, captionHtml) {
   return fig;
 }
 
+// A design row's extra marks in the mode the Show-designs-as switch chose:
+// the box statistics of its outcomes with its center, or the outcomes
+// themselves to draw as dots behind its interval.
+function rowMarks(g, center) {
+  if (designPlot === 'box') return { box: Object.assign({}, boxStats(g), { mean: center }) };
+  if (showPts) return { values: g };
+  return {};
+}
+
+// The legend entries for the design marks: in box mode the box and the
+// center's diamond in place of `base` (null where the caller adds its own
+// per-row entries), and with the outcome dots a dot entry before `base`.
+function markLegend(base, centerWord) {
+  if (designPlot === 'box') {
+    return [{ swatch: 'bar', color: '--est', label: 'box: median and quartiles of the design’s outcomes; whiskers to the last outcome within 1.5 IQR; hollow dots: outliers' },
+            { swatch: 'diamond', color: '--truth', label: 'design ' + centerWord }];
+  }
+  return (showPts ? [{ swatch: 'dot', color: '--est', label: 'one replication outcome' }] : []).concat(base ? [base] : []);
+}
+
+// The sentence a caption adds for the design marks, or nothing.
+function markCaption(centerWord) {
+  if (designPlot === 'box') return ' Each design is drawn as a box plot of its replication outcomes, with its ' + centerWord + ' as a diamond, in place of its interval; the interval is in the table, and every verdict is read from it, never from the box.';
+  if (showPts) return ' The small dots are the design’s replication outcomes, the spread its interval was formed from.';
+  return '';
+}
+
+// The Benchmark section's design plot: each design's center with its
+// interval, the same with every outcome as a dot behind it, or a box plot of
+// its outcomes with the center as a diamond, with the benchmark line in every mode.
+function meansFigure(b, name, xLabel, items, groups, bm, k, short, readoutOf, baseLegend, caption, centerWord) {
+  const box = designPlot === 'box';
+  const legendItems = box ? markLegend(null, centerWord).concat(bm.on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []) : markLegend(null, centerWord).concat(bm.legend(baseLegend));
+  const cap = box
+    ? 'Each row is one design’s replication outcomes as a box plot, with the design’s ' + centerWord + ' as a diamond. The intervals, and whether each design is above or below the benchmark, are in the table below: a verdict is read from the interval, never from the box.' + (bm.on ? ' Drag the dashed line, or type a value, to move the benchmark.' : '')
+    : caption + markCaption(centerWord);
+  figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel }, name,
+    fg => {
+      rowReadout(fg, k, readoutOf);
+      if (box) boxPlot(fg, items.map((it, i) => ({ label: numLabel(i, short), stats: Object.assign({}, boxStats(groups[i]), { mean: it.center }) })), { rowPx: 38, markerLabel: centerWord });
+      else intervals(fg, items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.center, flagged: bm.flag(i), values: showPts ? groups[i] : undefined })), { rowPx: showPts ? 32 : 30 });
+      bm.line(fg);
+    }, legendItems, cap);
+}
+
 // Each checked design's number, 1 to k in checklist order, as a small badge.
 const badge = i => '<span class="sev-num">' + (i + 1) + '</span>';
 // A design's row label: its number and then its short name when there is room
@@ -38627,7 +38843,15 @@ function designRows(fig, rows, pairs) {
   const room = Math.floor(fig.w * (fig.narrow ? 0.22 : 0.18));
   const colW = cols ? Math.max(3, Math.min(9, (room - 8) / cols)) : 0;
   fig.setMargin({ l: lw + 8, r: 10 + letW + (cols ? 8 + cols * colW : 0) });
-  const lo = Math.min(...rows.map(r => r.lo)), hi = Math.max(...rows.map(r => r.hi));
+  // The x range covers the intervals, and in box mode the whiskers and
+  // outliers, and with outcome dots the outcomes.
+  let lo = Infinity, hi = -Infinity;
+  const take = v => { if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
+  for (const r of rows) {
+    take(r.mean);
+    if (r.box) { take(r.box.whiskerLo); take(r.box.whiskerHi); for (const v of r.box.outliers) take(v); }
+    else { take(r.lo); take(r.hi); if (r.values) for (const v of r.values) take(v); }
+  }
   const sx = fig.x([lo, hi], { pad: 0.05, nice: true });
   fig.axes({ y: false });
   const rowH = fig.ih / n;
@@ -38646,26 +38870,63 @@ function designRows(fig, rows, pairs) {
     if (!recs.has(c)) {
       const gone = what === 'eliminated';
       recs.set(c, { segs: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, dash: gone, label: what + ' interval' },
-                    means: { kind: 'points', x: [], y: [], color: c, hollow: gone, label: what + ' mean' } });
+                    means: { kind: 'points', x: [], y: [], color: c, hollow: gone, label: what + ' mean' },
+                    // In box mode: the box from hinge to hinge, the whiskers and the median, and the outliers.
+                    rects: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: what + ' box from q1 to q3' },
+                    whisk: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, dash: gone, label: what + ' whiskers to 1.5 IQR' },
+                    med: { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: c, width: 3, label: what + ' median' },
+                    out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: what + ' outlier' } });
     }
     return recs.get(c);
   };
+  const pts = { kind: 'points', x: [], y: [], color: cEst, label: 'one outcome' };
   const letters = { kind: 'text', x: [], y: [], text: [], color: cAcc, anchor: 'start' };
   rows.forEach((r, i) => {
     const y = cy(i);
     const c = r.keep === undefined ? cEst : r.keep ? cOk : cMuted;
-    const { segs, means } = recFor(c, r.keep === undefined ? '' : r.keep ? 'surviving' : 'eliminated');
+    const rec = recFor(c, r.keep === undefined ? '' : r.keep ? 'surviving' : 'eliminated');
+    const { segs, means } = rec;
     svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
-    const g = svgEl('g', { class: 'm-int' }, fig.inner);
-    const x0 = sx(r.lo), x1 = sx(r.hi);
     const gone = r.keep === false;
-    svgEl('line', Object.assign({ x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, gone ? { 'stroke-dasharray': '5,4' } : {}), g);
-    for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
-    if (gone) svgEl('circle', { cx: sx(r.mean), cy: y, r: 4, fill: cCard, stroke: c, 'stroke-width': 2 }, g);
-    else svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
     const yy = ry(i);
-    segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
-    means.x.push(r.mean); means.y.push(yy);
+    if (r.values) {
+      // The outcomes as faint dots behind the interval, ties spread over four heights.
+      const srt = Array.from(r.values).filter(Number.isFinite).sort((a, b) => a - b);
+      srt.forEach((v, j) => {
+        const off = (j % 4) * 0.06 - 0.09;
+        svgEl('circle', { cx: sx(v), cy: y + off * rowH, r: 3, fill: cEst, 'fill-opacity': 0.5, class: 'm-pt' }, fig.inner);
+        pts.x.push(v); pts.y.push(yy + off);
+      });
+    }
+    if (r.box) {
+      // The box plot of the outcomes, with the center as a hollow diamond.
+      const b = r.box, g = svgEl('g', { class: 'm-box' }, fig.inner), bh = Math.min(22, rowH * 0.56);
+      const dash = gone ? { 'stroke-dasharray': '5,4' } : {};
+      svgEl('line', Object.assign({ x1: sx(b.whiskerLo), x2: sx(b.q1), y1: y, y2: y, stroke: c, 'stroke-width': 1.5 }, dash), g);
+      svgEl('line', Object.assign({ x1: sx(b.q3), x2: sx(b.whiskerHi), y1: y, y2: y, stroke: c, 'stroke-width': 1.5 }, dash), g);
+      for (const w of [b.whiskerLo, b.whiskerHi]) svgEl('line', { x1: sx(w), x2: sx(w), y1: y - bh / 4, y2: y + bh / 4, stroke: c, 'stroke-width': 1.5 }, g);
+      svgEl('rect', Object.assign({ x: sx(b.q1), y: y - bh / 2, width: Math.max(1, sx(b.q3) - sx(b.q1)), height: bh, fill: c, 'fill-opacity': 0.15, stroke: c, 'stroke-width': 1.5, rx: 2 }, dash), g);
+      svgEl('line', { x1: sx(b.median), x2: sx(b.median), y1: y - bh / 2, y2: y + bh / 2, stroke: c, 'stroke-width': 3 }, g);
+      for (const v of b.outliers) svgEl('circle', { cx: sx(v), cy: y, r: 3.2, fill: cCard, stroke: c, 'stroke-width': 1.4 }, g);
+      const mx = sx(r.mean);
+      svgEl('path', { d: 'M' + mx + ',' + (y - 6) + 'l6,6l-6,6l-6,-6z', fill: cCard, stroke: c, 'stroke-width': 2 }, g);
+      rec.whisk.x0.push(b.whiskerLo, b.q3, b.whiskerLo, b.whiskerHi); rec.whisk.x1.push(b.q1, b.whiskerHi, b.whiskerLo, b.whiskerHi);
+      rec.whisk.y0.push(yy, yy, yy - 0.12, yy - 0.12); rec.whisk.y1.push(yy, yy, yy + 0.12, yy + 0.12);
+      rec.rects.x0.push(b.q1); rec.rects.x1.push(b.q3); rec.rects.y0.push(yy - 0.28); rec.rects.y1.push(yy + 0.28);
+      rec.med.x0.push(b.median); rec.med.x1.push(b.median); rec.med.y0.push(yy - 0.28); rec.med.y1.push(yy + 0.28);
+      for (const v of b.outliers) { rec.out.x.push(v); rec.out.y.push(yy); }
+      means.marker = 'd'; means.hollow = true;
+      means.x.push(r.mean); means.y.push(yy);
+    } else {
+      const g = svgEl('g', { class: 'm-int' }, fig.inner);
+      const x0 = sx(r.lo), x1 = sx(r.hi);
+      svgEl('line', Object.assign({ x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, gone ? { 'stroke-dasharray': '5,4' } : {}), g);
+      for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 5, y2: y + 5, stroke: c, 'stroke-width': 2 }, g);
+      if (gone) svgEl('circle', { cx: sx(r.mean), cy: y, r: 4, fill: cCard, stroke: c, 'stroke-width': 2 }, g);
+      else svgEl('circle', { cx: sx(r.mean), cy: y, r: 4.2, fill: c }, g);
+      segs.x0.push(r.lo, r.lo, r.hi); segs.x1.push(r.hi, r.lo, r.hi); segs.y0.push(yy, yy - 0.18, yy - 0.18); segs.y1.push(yy, yy + 0.18, yy + 0.18);
+      means.x.push(r.mean); means.y.push(yy);
+    }
     const t = svgEl('text', { x: -10, y: y + 4, 'text-anchor': 'end', 'font-size': fs, fill: r.keep === false ? cMuted : cText }, fig.layers.axes);
     t.textContent = clip(r.label, lw - 6, fs);
     if (r.letter) {
@@ -38675,7 +38936,14 @@ function designRows(fig, rows, pairs) {
       letters.x.push(dx1 + span * 0.02); letters.y.push(yy); letters.text.push(r.letter);
     }
   });
-  for (const r of recs.values()) { r.segs.label = r.segs.label.trim(); r.means.label = r.means.label.trim(); fig.series.push(r.segs, r.means); }
+  if (pts.x.length) fig.series.push(pts);
+  for (const r of recs.values()) {
+    for (const k of ['segs', 'means', 'rects', 'whisk', 'med', 'out']) r[k].label = r[k].label.trim();
+    if (r.segs.x0.length) fig.series.push(r.segs);
+    if (r.rects.x0.length) fig.series.push(r.whisk, r.rects, r.med);
+    if (r.out.x.length) fig.series.push(r.out);
+    fig.series.push(r.means);
+  }
   if (letters.text.length) fig.series.push(letters);
   const x0 = fig.iw + 10 + letW + 6;
   const tick = Math.max(2, Math.min(5, colW - 1.5));
@@ -38693,6 +38961,7 @@ function designRows(fig, rows, pairs) {
     if (i < 0 || i >= n) return null;
     const r = rows[i];
     const out = [r.full, 'mean ' + num(r.mean), 'interval ' + interval(r.lo, r.hi)];
+    if (r.box) out.push('median ' + num(r.box.median) + ', quartiles ' + num(r.box.q1) + ', ' + num(r.box.q3));
     if (r.note) out.push(r.note);
     return out;
   });
@@ -38887,6 +39156,10 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+  rootEl.querySelectorAll('[data-dplot]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dplot === designPlot)));
+  // The outcome dots sit behind intervals; a box plot holds the outcomes already.
+  rootEl.querySelector('#sev-pts-lbl').style.display = designPlot === 'box' ? 'none' : '';
+  rootEl.querySelector('#sev-pts').checked = showPts;
   // The post-hoc rule serves the t procedures, the adjustment the rank ones.
   rootEl.querySelector('#sev-rule-host').style.display = proc === 'np' ? 'none' : '';
   rootEl.querySelector('#sev-var-row').style.display = proc === 'np' || pairMode === 'paired' ? 'none' : '';
@@ -39105,15 +39378,11 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, 'several-pseudo-medians',
-      fg => {
-        rowReadout(fg, k, i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)]);
-        intervals(fg, hl.map((r, i) => ({ label: numLabel(i, short), lo: r.lo, hi: r.hi, center: r.estimate, flagged: bm.flag(i) })), { rowPx: 30 });
-        bm.line(fg);
-      },
-      bm.legend('design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval'),
+    meansFigure(b, 'several-pseudo-medians', 'Pseudo-median of ' + respName(list), hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), groups, bm, k, short,
+      i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)],
+      'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval',
       'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption());
+      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
@@ -39127,15 +39396,11 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-means',
-      fg => {
-        rowReadout(fg, k, i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)]);
-        intervals(fg, sm.items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.mean, flagged: bm.flag(i) })), { rowPx: 30 });
-        bm.line(fg);
-      },
-      bm.legend('design mean with its ' + levelPct(sm.perLevel) + ' t interval'),
+    meansFigure(b, 'several-means', 'Mean of ' + respName(list), sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), groups, bm, k, short,
+      i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)],
+      'design mean with its ' + levelPct(sm.perLevel) + ' t interval',
       'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption());
+      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
@@ -39339,17 +39604,17 @@ function update() {
       const pos = [];
       order.forEach((i, r) => { pos[i] = r; });
       const letterOf = i => (ph.letters ? ph.letters[i] : i === ctrlIdx ? 'control' : '');
-      const rowsD = order.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: letterOf(i) }));
+      const rowsD = order.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: letterOf(i) }, rowMarks(groups[i], sm.items[i].mean)));
       const pairsD = ph.pairs.filter(p => p.flagged).map(p => [Math.min(pos[p.i], pos[p.j]), Math.max(pos[p.i], pos[p.j])]);
       b.appendChild(para('sev-fig-title', 'Designs, best first, with letter groups and the pairs declared different'));
-      const legD = [{ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }];
+      const legD = markLegend({ swatch: 'interval', color: '--est', label: 'design mean with its simultaneous interval' }, 'mean');
       if (pairsD.length) legD.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by the rule (bracket)' });
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-design-groups',
         fg => designRows(fg, rowsD, pairsD), legD,
         (ph.letters
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
-        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' +
+        ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' + markCaption('mean') +
         ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
@@ -39416,14 +39681,14 @@ function update() {
     const orderN = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? hl[x].estimate - hl[y].estimate : hl[y].estimate - hl[x].estimate);
     const posN = [];
     orderN.forEach((i, r) => { posN[i] = r; });
-    const rowsN = orderN.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }));
+    const rowsN = orderN.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: hl[i].estimate, lo: hl[i].lo, hi: hl[i].hi, letter: dn.letters[i] }, rowMarks(groups[i], hl[i].estimate)));
     const pairsN = dn.pairs.filter(p => p.flagged).map(p => [Math.min(posN[p.i], posN[p.j]), Math.max(posN[p.i], posN[p.j])]);
     b.appendChild(para('sev-fig-title', 'Designs, best first, with the letter groups and the pairs declared different'));
-    const legN = [{ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }];
+    const legN = markLegend({ swatch: 'interval', color: '--est', label: 'design pseudo-median with its own ' + L + ' Wilcoxon signed-rank interval' }, 'pseudo-median');
     if (pairsN.length) legN.push({ svg: bracketSwatch(tok('--miss')), label: 'pairs declared different by ' + pairTest + ' (bracket)' });
     figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Pseudo-median of ' + respName(list) }, paired ? 'several-friedman-groups' : 'several-dunn-groups',
       fg => designRows(fg, rowsN, pairsN), legN,
-      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down. ' +
+      'Each row is one design’s pseudo-median, the Hodges–Lehmann estimate (the median of the pairwise averages of its outcomes), with its own ' + L + ' Wilcoxon signed-rank interval, from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' down.' + markCaption('pseudo-median') + ' ' +
       'The letters and brackets come from ' + pairTest + ' on the ranks, not from the intervals: designs that share a letter are not declared different, and a bracket joins a pair that is.');
     const labN = p => pairLabel(p.i, p.j);
     const fullN = p => list[p.i].name + ' − ' + list[p.j].name;
@@ -39459,13 +39724,13 @@ function update() {
           '. Running the additional replications listed would let a second stage choose among them.';
       b.appendChild(para('cmp-verdict', esc(verdict)));
       const orderS = list.map((_, i) => i).sort((x, y) => dirS === 'min' ? ss.means[x] - ss.means[y] : ss.means[y] - ss.means[x]);
-      const rowsS = orderS.map(i => ({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
-        note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }));
+      const rowsS = orderS.map(i => Object.assign({ label: numLabel(i, short), full: list[i].name, mean: sm.items[i].mean, lo: sm.items[i].lo, hi: sm.items[i].hi, letter: ss.survivors[i] ? 'survives' : 'eliminated', letterColor: ss.survivors[i] ? tok('--ok') : tok('--muted'), keep: ss.survivors[i],
+        note: (ss.survivors[i] ? 'survives the screen' : 'eliminated by the screen') + '; its mean had to reach ' + num(ss.cutoff[i]) }, rowMarks(groups[i], sm.items[i].mean)));
       figure(b, { height: 8 + 40 + k * 30, narrowHeight: 8 + 40 + k * 32, margin: { t: 8, b: 40 }, xLabel: 'Mean of ' + respName(list) }, 'several-best-subset',
         fg => designRows(fg, rowsS, []),
-        [nSurv ? { swatch: 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
-          nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean),
-        'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section. ' +
+        markLegend(null, 'mean').concat([nSurv ? { swatch: designPlot === 'box' ? 'bar' : 'interval', color: '--ok', label: 'survives the screen: cannot be ruled out as the best' } : null,
+          nSurv < k ? { swatch: 'flagged', color: '--muted', label: 'eliminated by the screen (dashed, hollow)' } : null].filter(Boolean)),
+        'Each row is one design, best sample mean first, with its mean and the same ' + levelPct(sm.perLevel) + ' simultaneous interval as the Means section.' + markCaption('mean') + ' ' +
         'The screen compares the means: a design is eliminated when another design’s mean beats it by more than the screen allows for the two designs’ spread, and the designs still in color cannot be ruled out as the best within ε at this confidence. ' +
         'Whether a design survives is written at the right of its row, drawn solid in color when it does and dashed and hollow in gray when it does not, and never read from whether intervals overlap.');
       const rows = list.map((_, i) => [badge(i) + ' ' + esc(short[i]), intl(ss.n[i]), num(ss.means[i]), num(Math.sqrt(ss.s2[i])),
@@ -39502,6 +39767,7 @@ function update() {
       variances: np ? 'not applicable' : welch ? 'unequal (Welch)' : 'pooled',
       replications: paired ? 'paired across designs, matched by ' + (match.by === 'id' ? 'replication id' : 'position') + ' (' + plural(match.blocks.length, 'block') + ')' : 'independent',
       'Dunn adjustment': adjust === 'holm' ? 'Holm' : 'Bonferroni',
+      'designs drawn as': designPlot === 'box' ? 'box plots' : showPts ? 'intervals with each outcome' : 'intervals',
       control: list[ctrlIdx].name,
       benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
       'indifference zone': Number.isFinite(eps) ? eps : '',
@@ -39662,7 +39928,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = { meansH, diffsH, delta: planDelta, power: plan.power };
   const regen = recipeIn && c
-    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection() } })),
+    ? { tooBig: false, build: () => severalRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { section: currentSection(), box: designPlot === 'box', points: showPts && designPlot !== 'box' } })),
       files: recipeIn.list.map(d => ({ ds: d, form: 'replications' })) }
     : undefined;
   state.setResult('several', Object.assign(result, { provenance: prov, tables: result.tables.concat(tables), regen }));
@@ -39712,6 +39978,14 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
           '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
         '</span>' +
+      '</div>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl" id="sev-plot-lbl"><span class="tip" tabindex="0" data-tip="How each design is drawn on the design plots. Intervals: its mean (or pseudo-median) with its interval, which is what every comparison reads. Box plots: the median and quartiles of its replication outcomes, whiskers to the last outcome within 1.5 interquartile ranges, outliers as hollow dots, and the mean as a diamond, showing the spread and skew the intervals summarize. The comparisons and the tables do not change.">Show designs as</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-plot-lbl">' +
+          '<button type="button" class="seg-btn" data-dplot="int" aria-pressed="true">intervals</button>' +
+          '<button type="button" class="seg-btn" data-dplot="box" aria-pressed="false">box plots</button>' +
+        '</span>' +
+        '<label class="ctrl-chk" id="sev-pts-lbl"><input type="checkbox" id="sev-pts"> <span class="tip" tabindex="0" data-tip="Draws every replication outcome as a small dot on its design’s row behind the interval, so that the spread the interval was formed from stays in view.">also each outcome</span></label>' +
       '</div>' +
       '<div id="sev-pairnote"></div>' +
       '<div id="sev-excluded"></div>' +
@@ -39821,6 +40095,8 @@ export function render(root) {
     schedule();
   }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
+  root.querySelectorAll('[data-dplot]').forEach(b => b.addEventListener('click', () => { designPlot = b.dataset.dplot; state.setPick(id, 'designPlot', designPlot); schedule(); }));
+  root.querySelector('#sev-pts').addEventListener('change', e => { showPts = e.target.checked; state.setPick(id, 'showPts', showPts); schedule(); });
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
   applyStored();
 
@@ -39864,6 +40140,8 @@ function applyStored() {
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
+  if (get('designPlot') === 'int' || get('designPlot') === 'box') designPlot = get('designPlot');
+  if (get('showPts') === true) showPts = true;
   if (get('match') === 'id' || get('match') === 'position') matchChoice = get('match');
   if (typeof get('control') === 'string') controlId = get('control');
   if (get('benchOn') === true) benchOn = true;
@@ -48063,7 +48341,8 @@ export function boxPlot(fig, stats, o = {}) {
   const hasLabels = labels.some(Boolean);
   let lw = 0;
   if (hasLabels) lw = labelColumn(fig, labels, 11.5);
-  rowsHeight(fig, rows.length, 64);
+  rowsHeight(fig, rows.length, o.rowPx || 64);
+  const centerLabel = o.markerLabel || 'mean';
   const vals = [];
   for (const r of rows) {
     const s = r.stats;
@@ -48079,7 +48358,7 @@ export function boxPlot(fig, stats, o = {}) {
     box: { kind: 'rects', x0: [], y0: [], x1: [], y1: [], color: c, label: 'box from q1 to q3' },
     med: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, width: 3, label: 'median' },
     out: { kind: 'points', x: [], y: [], color: c, hollow: true, label: 'outlier' },
-    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: 'mean' } };
+    mean: { kind: 'points', x: [], y: [], color: cT, marker: 'd', hollow: true, label: centerLabel } };
   rows.forEach((r, i) => {
     const s = r.stats, cy = (i + 0.5) * rowH, bh = Math.min(34, rowH * 0.5);
     const yy = ry(i);
@@ -48109,7 +48388,7 @@ export function boxPlot(fig, stats, o = {}) {
     const i = Math.min(rows.length - 1, Math.max(0, Math.floor(py / rowH)));
     const s = rows[i].stats;
     const out = [(rows[i].label ? rows[i].label + ': ' : '') + 'median ' + num(s.median), 'quartiles ' + num(s.q1) + ', ' + num(s.q3)];
-    if (Number.isFinite(s.mean)) out.push('mean ' + num(s.mean));
+    if (Number.isFinite(s.mean)) out.push(centerLabel + ' ' + num(s.mean));
     return out;
   });
 }
@@ -48276,12 +48555,16 @@ export function intervals(fig, items, o = {}) {
   const lw = labelColumn(fig, items.map(it => it.label), 11.5);
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
-  for (const it of items) vals.push(it.lo, it.hi);
+  for (const it of items) { vals.push(it.lo, it.hi); if (it.values) for (const v of it.values) vals.push(v); }
   if (o.ref !== undefined && o.ref !== null) vals.push(o.ref);
   const [lo, hi] = extent(vals);
   const sx = fig.sx || fig.x([lo, hi], { pad: 0.05, nice: true });
   ensureAxes(fig, o, { y: false });
   const rowH = fig.ih / Math.max(1, n);
+  // An item's `values` are drawn as small faint dots behind its interval, the
+  // ties spread over four heights as the strips helpers spread them.
+  const cPts = tok('--est');
+  const pts = { kind: 'points', x: [], y: [], color: cPts, label: 'one outcome' };
   const ry = recordRows(fig, items.map(it => it.label));
   if (o.ref !== undefined && o.ref !== null && Number.isFinite(o.ref)) {
     const x = r1(sx(o.ref));
@@ -48301,6 +48584,14 @@ export function intervals(fig, items, o = {}) {
     rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
     rr.dot.x.push(cc); rr.dot.y.push(yy);
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
+    if (it.values) {
+      const srt = Array.from(it.values).filter(Number.isFinite).sort((a, b) => a - b);
+      srt.forEach((v, j) => {
+        const off = (j % 4) * 0.06 - 0.09;
+        svgEl('circle', { cx: r1(sx(v)), cy: r1(cy + off * rowH), r: 3, fill: cPts, 'fill-opacity': 0.5, class: 'm-pt' }, fig.inner);
+        pts.x.push(v); pts.y.push(yy + off);
+      });
+    }
     // An interval without finite ends keeps its row and label and draws nothing.
     if (!Number.isFinite(it.lo) || !Number.isFinite(it.hi)) return;
     const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
@@ -48311,6 +48602,7 @@ export function intervals(fig, items, o = {}) {
     if (it.flagged) svgEl('circle', { cx: r1(sx(center)), cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
     else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
   });
+  if (pts.x.length) fig.series.push(pts);
   for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);

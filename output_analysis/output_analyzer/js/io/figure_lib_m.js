@@ -212,7 +212,10 @@ function fig_intervals(mid, lo, hi, labels, xlab, ttl, o)
 % A forest plot: one interval per row from lo to hi with a dot at mid, row 1
 % at the top. Options: ref (a dashed reference line), flagged, muted, and ok
 % (logical per row), right (a cell array of texts printed right of the
-% intervals), and brackets (an n-by-2 matrix of rows joined by a bracket).
+% intervals), brackets (an n-by-2 matrix of rows joined by a bracket), boxes
+% (a cell array of value vectors, one per row, drawn as box plots in place of
+% the intervals, mid then being the center, a diamond), and dots (a cell
+% array of value vectors drawn as small dots behind each row's interval).
 if nargin < 7, o = struct(); end
 c = fig_colors();
 mid = mid(:);
@@ -227,6 +230,11 @@ ok = fig_flags(fig_opt(o, 'ok', []), n);
 right = fig_opt(o, 'right', {});
 if ~iscell(right), right = cellstr(right); end
 brackets = fig_opt(o, 'brackets', zeros(0, 2));
+boxes = fig_opt(o, 'boxes', {});
+dots = fig_opt(o, 'dots', {});
+extra = [];
+for q = 1:numel(boxes), v = boxes{q}(:); extra = [extra; v(isfinite(v))]; end %#ok<AGROW>
+for q = 1:numel(dots), v = dots{q}(:); extra = [extra; v(isfinite(v))]; end %#ok<AGROW>
 figure;
 fig_size(6.5, max(1.8, 1.0 + 0.35 * n));
 if n == 0
@@ -235,7 +243,7 @@ if n == 0
 end
 hold on;
 box on;
-xr = fig_pad(fig_range([mid; lo; hi; ref]), 0.05);
+xr = fig_pad(fig_range([mid; lo; hi; ref; extra]), 0.05);
 ylim([0.5, n + 0.5]);
 set(gca, 'YDir', 'reverse', 'YTick', 1:n, 'YTickLabel', labels, ...
          'TickLabelInterpreter', 'none');
@@ -295,22 +303,61 @@ for i = 1:n
     if ok(i), color = c.ok; face = c.ok; end
     if flagged(i), color = c.miss; style = '--'; face = 'w'; end
     if muted(i), color = c.muted; style = '--'; face = 'w'; end
-    a = lo(i);
-    b = hi(i);
-    if ~isnan(a) && ~isnan(b)
-        % An infinite end runs to the edge of the data area, with no tick.
-        plot([max(a, xr(1)), min(b, xr(2))], [i, i], 'Color', color, ...
-             'LineStyle', style, 'LineWidth', 2);
-        if isfinite(a)
-            plot([a, a], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
-        end
-        if isfinite(b)
-            plot([b, b], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+    if numel(dots) >= i
+        v = sort(dots{i}(:));
+        v = v(isfinite(v));
+        if ~isempty(v)
+            plot(v, i + mod((1:numel(v))' - 1, 4) * 0.06 - 0.09, 'o', 'Color', c.est, ...
+                 'MarkerFaceColor', c.est, 'MarkerSize', 3.5, 'LineStyle', 'none');
         end
     end
-    if isfinite(mid(i))
-        plot(mid(i), i, 'o', 'Color', color, 'MarkerFaceColor', face, ...
-             'MarkerSize', 6, 'LineWidth', 1.5);
+    if ~isempty(boxes)
+        % Tukey's box: hinges and median (as R's fivenum), whiskers to the
+        % last value inside 1.5 hinge spreads, the values beyond as hollow
+        % dots, and the center as a diamond.
+        v = sort(boxes{i}(:));
+        v = v(isfinite(v));
+        m = numel(v);
+        if m > 0
+            depth = [1, floor((m + 3) / 2) / 2, (m + 1) / 2, m + 1 - floor((m + 3) / 2) / 2, m];
+            five = 0.5 * (v(floor(depth)) + v(ceil(depth)));
+            q1 = five(2); med = five(3); q3 = five(4);
+            reach = 1.5 * (q3 - q1);
+            inside = v(v >= q1 - reach & v <= q3 + reach);
+            w_lo = min(inside); w_hi = max(inside);
+            plot([w_lo, q1], [i, i], 'Color', color, 'LineStyle', style, 'LineWidth', 1.5);
+            plot([q3, w_hi], [i, i], 'Color', color, 'LineStyle', style, 'LineWidth', 1.5);
+            plot([w_lo, w_lo], i + [-0.12, 0.12], 'Color', color, 'LineWidth', 1.5);
+            plot([w_hi, w_hi], i + [-0.12, 0.12], 'Color', color, 'LineWidth', 1.5);
+            patch([q1, q3, q3, q1], i + [-0.28, -0.28, 0.28, 0.28], color, 'FaceAlpha', 0.15, ...
+                  'EdgeColor', color, 'LineWidth', 1.5, 'LineStyle', style);
+            plot([med, med], i + [-0.28, 0.28], 'Color', color, 'LineWidth', 3);
+            outside = v(v < w_lo | v > w_hi);
+            if ~isempty(outside)
+                plot(outside, i * ones(size(outside)), 'o', 'Color', color, 'MarkerFaceColor', 'w', 'MarkerSize', 4);
+            end
+        end
+        if isfinite(mid(i))
+            plot(mid(i), i, 'd', 'Color', color, 'MarkerFaceColor', 'w', 'MarkerSize', 8, 'LineWidth', 1.5);
+        end
+    else
+        a = lo(i);
+        b = hi(i);
+        if ~isnan(a) && ~isnan(b)
+            % An infinite end runs to the edge of the data area, with no tick.
+            plot([max(a, xr(1)), min(b, xr(2))], [i, i], 'Color', color, ...
+                 'LineStyle', style, 'LineWidth', 2);
+            if isfinite(a)
+                plot([a, a], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+            end
+            if isfinite(b)
+                plot([b, b], i + [-0.18, 0.18], 'Color', color, 'LineWidth', 2);
+            end
+        end
+        if isfinite(mid(i))
+            plot(mid(i), i, 'o', 'Color', color, 'MarkerFaceColor', face, ...
+                 'MarkerSize', 6, 'LineWidth', 1.5);
+        end
     end
     if numel(right) >= i && ~isempty(right{i})
         tc = c.accent;
