@@ -249,22 +249,18 @@ export function render(rootEl) {
   const npNote = el('p', 'exp-note');
   npNote.hidden = true;
   const checks = el('div');
-  res.append(unitBox, warnBox, ovrBox, figBox, leg, cap, mainTab, npNote, checks);
+  // The stated mean: the interval read as a test of one value. Its field
+  // sits above the plot, which draws the value when its box is ticked, and
+  // the test's statistic, p-value, and verdict are a note under the
+  // interval's own row of the table.
+  const testCtrl = el('div', 'ctrl-row');
+  testCtrl.hidden = true;
+  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="A value to test the mean against: a measurement from the real system, a requirement, or a benchmark. The test, written under the interval’s row of the table, rejects it when it lies outside the interval.">Stated mean&nbsp;<span class="sym">μ₀</span></span></span>' +
+    '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>' +
+    '<label class="ctrl-chk"><input type="checkbox" id="rp-mu0-show"> <span class="tip" tabindex="0" data-tip="Draws μ₀ on the plot as a dashed line that can be dragged (the arrow keys move it when it has focus); the field and the test follow it.">Show μ₀ on the plot</span></label>';
+  res.append(unitBox, warnBox, ovrBox, testCtrl, figBox, leg, cap, mainTab, npNote, checks);
   fig = makeFigure(figBox, { height: 160, narrowHeight: 180, margin: { t: 10, b: 42 }, xLabel: 'Replication outcome', ariaLabel: 'Replication outcomes with the interval on their mean' });
   exportButtons(figBox, fig, 'replication-outcomes');
-  // The test against a stated mean: the interval read as a test of one
-  // value, with its statistic and p-value written out, and the value drawn
-  // on the plot above when its box is ticked.
-  const testBlk = el('div');
-  testBlk.hidden = true;
-  testBlk.appendChild(el('div', 'ctrl-grp-lbl sub-hd', 'Test against a stated mean'));
-  const testCtrl = el('div', 'ctrl-row');
-  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean&nbsp;<span class="sym">μ₀</span></span></span>' +
-    '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>' +
-    '<label class="ctrl-chk"><input type="checkbox" id="rp-mu0-show"> <span class="tip" tabindex="0" data-tip="Draws μ₀ on the plot above as a dashed line that can be dragged (the arrow keys move it when it has focus); the field and the test follow it.">Show μ₀ on the plot</span></label>';
-  const tRow1 = el('div'), tRow2 = el('div');
-  testBlk.append(testCtrl, tRow1, tRow2);
-  res.appendChild(testBlk);
   res.appendChild(details('What the half-width means',
     '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R outcomes and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>An interval is a test turned around: the ' + lvl(state.settings.level) + ' interval holds exactly the values a two-sided t test at α = ' + num(1 - state.settings.level, 3) + ' would not reject, and so reading whether it contains a value is that test. This holds for every interval in this tool unless its page says otherwise.</p>' +
@@ -289,7 +285,7 @@ export function render(rootEl) {
   // quantile are sub-sections of the same card as the mean's interval.
   const varSec = el('div');
   varSec.hidden = true;
-  varSec.appendChild(el('div', 'ctrl-grp-lbl sub-hd', 'Confidence interval on the variance'));
+  varSec.appendChild(el('div', 'sub-hd', 'Confidence interval on the variance'));
   varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
@@ -303,7 +299,7 @@ export function render(rootEl) {
   // interval, for a performance measure that is a percentile rather than a mean.
   const qSec = el('div');
   qSec.hidden = true;
-  const qHd = el('div', 'ctrl-grp-lbl sub-hd', 'Confidence interval on a quantile of the replication outcomes');
+  const qHd = el('div', 'sub-hd', 'Confidence interval on a quantile of the replication outcomes');
   qSec.appendChild(qHd);
   qSec.appendChild(el('p', 'exp-note', 'A performance measure is sometimes a percentile rather than a mean: the value that nine runs in ten stay below. The p quantile is estimated by an order statistic of the sorted outcomes, and its interval is built from two more order statistics with no assumption about the distribution.'));
   const qCtrl = el('div', 'ctrl-row');
@@ -334,8 +330,8 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vTab, testBlk, tRow1, tRow2, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
-          qHow: qHow.querySelector('#rp-q-how'), mu0Box: testBlk.querySelector('#rp-mu0-box'), mu0Unit: testBlk.querySelector('#rp-mu0-unit'), mu0Show: testBlk.querySelector('#rp-mu0-show'), qp: qSec.querySelector('#rp-qp'),
+  els = { varSec, vTab, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
+          qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0Show: testCtrl.querySelector('#rp-mu0-show'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -610,7 +606,28 @@ function foot(html) { return para('tab-foot', html); }
 function tipHd(label, text) { return '<span class="tip" tabindex="0" data-tip="' + esc(text) + '">' + label + '</span>'; }
 
 // A results table whose first column may wrap, because its labels are sentences.
-function tbl(headers, rows) { const t = table(headers, rows); t.classList.add('one-tab'); return t; }
+function tbl(headers, rows, rowClass) { const t = table(headers, rows, rowClass); t.classList.add('one-tab'); return t; }
+
+// A line under row `i` of the table in `box`, spanning every column: that
+// row's own note, such as the test the interval's row is read as. On a
+// narrow screen the table scrolls sideways, and the note's text sticks to
+// the visible width rather than running off with the columns.
+let rowNoteRO = null;
+function rowNote(box, i, html) {
+  const tbody = box.querySelector('tbody'), wrap = box.querySelector('.tab-wrap');
+  if (!tbody || !tbody.rows[i]) return;
+  const row = tbody.rows[i];
+  row.classList.add('has-note');
+  const tr = document.createElement('tr');
+  tr.className = 'row-note';
+  tr.innerHTML = '<td colspan="' + row.cells.length + '"><div>' + html + '</div></td>';
+  row.after(tr);
+  const text = tr.querySelector('div');
+  if (rowNoteRO) rowNoteRO.disconnect();
+  const fit = () => { text.style.maxWidth = Math.max(120, wrap.clientWidth - 44) + 'px'; };
+  if (wrap && typeof ResizeObserver !== 'undefined') { rowNoteRO = new ResizeObserver(fit); rowNoteRO.observe(wrap); }
+  fit();
+}
 
 // The quantile interval as text, in brackets even when the sample supports
 // one end only, the missing end shown as a dash.
@@ -681,7 +698,7 @@ function draw() {
   const ds = currentDataset();
   const level = state.settings.level;
   els.varSec.hidden = true;
-  els.testBlk.hidden = true;
+  els.testCtrl.hidden = true;
   els.qSec.hidden = true;
 
   els.unitBox.replaceChildren(unitLine(ds));
@@ -812,23 +829,16 @@ function draw() {
       foot('SE is ' + seF + ' on the confidence interval' + (pi ? ' and ' + piF + ' on the prediction interval' : '') + '; ' + S('t') + ' is ' + tSub(level, ti.df) + '.'));
   }
 
-  els.testBlk.hidden = false;
+  els.testCtrl.hidden = false;
   els.mu0Show.checked = extra.showMu0;
-  const mu0Unit = tf !== 'none' ? T.scale + ' scale' : ds.unit ? esc(ds.unit) : '';
   const whatMean = np ? 'pseudo-median' : 'mean';
-  const verdictCell = rejects === null ? 'nothing to decide' : rejects ? '<span class="cmp-flag">rejected</span> at α = ' + num(alpha, 3) : 'not rejected at α = ' + num(alpha, 3);
-  const mu0Hd = 'Stated ' + whatMean + ' ' + S('μ₀') + (mu0Unit ? ' (' + mu0Unit + ')' : '');
-  els.tRow1.replaceChildren(...(np
-    ? [tbl([mu0Hd, 'Verdict', 'Two-sided ' + S('p'), S('V'), 'Basis'],
-        [[num(mu0), verdictCell, stat(srT.p), num(srT.V), srT.exact ? 'exact signed-rank distribution' : 'normal approximation']]),
-       foot(S('V') + ' is the sum of the ranks of |outcome − μ₀| over the outcomes above μ₀.')]
-    : [tbl([mu0Hd, 'Verdict', 'Two-sided ' + S('p'), S('t₀'), DF_LABEL, 'Critical ' + S('t')],
-        [[num(mu0), verdictCell, stat(tt.p), stat(tt.t), intl(tt.df), num(ti.t)]]),
-       foot(S('t₀') + ' = (mean − μ₀)/SE = (' + num(s.mean) + ' − ' + num(mu0) + ')/' + num(s.se) + '; df = ' + nWord + ' − 1; the critical ' + S('t') + ' is ' + tSub(level, ti.df) + ', the interval’s own.')]));
-  const verdict = rejects === null ? 'The test has nothing to decide: the outcomes are all equal to μ₀.'
-    : rejects ? 'Rejected at α = ' + num(alpha, 3) + ': the ' + whatMean + ' differs from ' + num(mu0) + ' (p ' + (testP < 0.001 ? '< 0.001' : '= ' + num(testP, 3)) + '), and μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the ' + lvl(level) + ' interval.'
-      : 'Not rejected at α = ' + num(alpha, 3) + ': μ₀ = ' + num(mu0) + ' is among the values the ' + lvl(level) + ' interval does not rule out (p = ' + num(testP, 3) + '). That is not evidence that the ' + whatMean + ' equals μ₀.';
-  els.tRow2.replaceChildren(para('cmp-lead', esc(verdict)));
+  const verdict = rejects === null ? 'nothing to decide, since every ' + (pooled ? 'observation' : 'outcome') + ' equals μ₀.'
+    : rejects ? '<span class="cmp-flag">rejected</span> at α = ' + num(alpha, 3) + ', the ' + whatMean + ' differing from ' + num(mu0) + '; μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the interval.'
+      : 'not rejected at α = ' + num(alpha, 3) + ': μ₀ is among the values the interval does not rule out, which is not evidence that the ' + whatMean + ' equals it.';
+  const testLine = np
+    ? 'Signed-rank test against μ₀ = ' + num(mu0) + ': ' + S('V') + ' = ' + num(srT.V) + ', the sum of the ranks of |outcome − μ₀| over the outcomes above μ₀; two-sided p = ' + stat(srT.p) + ' (' + (srT.exact ? 'exact signed-rank distribution' : 'normal approximation') + '); ' + verdict
+    : 'Test against μ₀ = ' + num(mu0) + ': ' + S('t₀') + ' = (' + num(s.mean) + ' − ' + num(mu0) + ')/' + num(s.se) + ' = ' + stat(tt.t) + ' on ' + intl(tt.df) + ' df, against the critical ' + tSub(level, ti.df) + ' = ' + num(ti.t) + '; two-sided p = ' + stat(tt.p) + '; ' + verdict;
+  rowNote(els.mainTab, 0, testLine);
 
   // The variance interval, on replication outcomes only.
   const vi = pooled ? null : varianceInterval(x, level);

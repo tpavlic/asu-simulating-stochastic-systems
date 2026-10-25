@@ -477,7 +477,7 @@ function buildSummary(api, { ds }) {
 
   const e = sm.est;
   const v = x => (e ? num(x) : dash);
-  sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'Descriptives of the ' + esc(estimateWord(ds))));
+  sec.appendChild(el('div', 'sub-hd ex-sub', 'Descriptives of the ' + esc(estimateWord(ds))));
   sec.appendChild(cardRow([
     card('<span class="sym">n</span>', e ? intl(e.n) : dash), card('Mean', v(e && e.mean)), card('<span class="sym">sd</span>', v(e && e.sd)),
     card('<span class="sym">se</span>', v(e && e.se)), card('Min', v(e && e.min)), card('<span class="sym">q1</span>', v(e && e.q1)),
@@ -488,7 +488,7 @@ function buildSummary(api, { ds }) {
     const obs = observations(ds);
     const p = obs.length ? summary(obs) : null;
     const w = x => (p ? num(x) : dash);
-    sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'Pooled observations, for description only'));
+    sec.appendChild(el('div', 'sub-hd ex-sub', 'Pooled observations, for description only'));
     sec.appendChild(cardRow([
       card('<span class="sym">n</span>', p ? intl(p.n) : dash), card('Mean', w(p && p.mean)), card('<span class="sym">sd</span>', w(p && p.sd)),
       card('Min', w(p && p.min)), card('<span class="sym">q1</span>', w(p && p.q1)), card('Median', w(p && p.median)),
@@ -497,7 +497,7 @@ function buildSummary(api, { ds }) {
     sec.appendChild(el('p', 'ex-cap', 'The pooled observations come from within runs and are correlated with their neighbors, and so they carry no standard error here.'));
   } else if (ds.kind === 'time') {
     const tw = timeWeightedOverall(ds);
-    sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'All replications together, time-weighted'));
+    sec.appendChild(el('div', 'sub-hd ex-sub', 'All replications together, time-weighted'));
     sec.appendChild(cardRow([
       card('Time-weighted mean', num(tw.mean), 'every value weighted by how long it held'),
       card('Time covered', num(tw.duration), 'summed over the replications')
@@ -1058,7 +1058,7 @@ function buildNormality(api, { ds, estF }) {
     const okN = total >= 3 && total <= SW_MAX;
     const verdict = !sw ? dash : sw.p < alpha ? 'rejects normality' : 'no evidence against it';
     const note = !sw ? (okN ? 'every value is the same' : total < 3 ? 'needs at least three values' : 'defined for at most ' + intl(SW_MAX) + ' values') : 'at α = ' + num(alpha, 2);
-    sec.appendChild(el('div', 'ctrl-grp-lbl ex-sub', 'Shapiro–Wilk test of the ' + esc(what)));
+    sec.appendChild(el('div', 'sub-hd ex-sub', 'Shapiro–Wilk test of the ' + esc(what)));
     sec.appendChild(cardRow([
       card('<span class="sym">n</span>', intl(total)),
       card('<span class="sym">W</span>', sw ? num(sw.W, 4) : dash, 'ranges from 0 to 1, and 1 means the sorted values lie on the line'),
