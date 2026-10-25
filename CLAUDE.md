@@ -1028,7 +1028,20 @@ better.
   replication selected is read as padding, not data; and a table of the loaded datasets, described
   below), ② Summary and Plots (descriptives, a raw table that
   for time-persistent data can instead sample the state on a time grid with the replications side
-  by side (`sampleDataset` in `js/data/model.js`, blank where nothing holds, with its own CSV), nine plot types offered only where meaningful for the data's kind, among them a lag plot at
+  by side (`sampleDataset` in `js/data/model.js`, blank where nothing holds, with its own CSV), nine plot types offered only where meaningful for the data's kind, among them a
+  Distribution section whose histogram bins by `histChoice` in `js/ui/rules.js`: one bar per value
+  (`histogram(values, { perValue: true })` in `js/stats/descriptive.js`, on the half-integers across
+  the span of whole numbers and otherwise halfway between neighboring distinct values) by default when
+  the values look discrete by the Input Analyzer's rules (`looksDiscrete`: whole non-negative numbers
+  each seen twice on average with at most 30 distinct values or at most 10√mean of them, or at most
+  ten exact values each seen three times on average), offered as a "One per value" switch whenever it
+  takes at most 150 bars, with a table of the distinct values, their counts, and proportions under
+  the plots while it is on (at most 30 values); otherwise k equal-width bins from the smallest value
+  to the largest, Sturges' rule (`sturgesBins`, ⌈log₂ n + 1⌉ as R's `hist` takes by default, kept
+  between 3 and 40) unless the slider or spinner sets k, with a button back to Sturges; the choice is
+  kept per dataset (`hist:<ds id>`), and the regenerate scripts carry it as `hist_per_value` and
+  `hist_bins` in their Settings and form the edges with `fig_value_edges` when a bar per value is on;
+  a lag plot at
   a chosen lag k beside a correlogram to 400 lags with lag k highlighted, the lag set by a slider,
   a spinner, or a tap on a stem, and a Normality section
   with the normal quantile–quantile plot and the Shapiro–Wilk test of the replication outcomes, the
@@ -1405,7 +1418,8 @@ better.
      call of a helper the script carries, `fig_strips`, `fig_intervals`, `fig_pairs_by_rep`,
      `fig_pairs_slopes`, `fig_hist`, `fig_ecdf`, `fig_box`, `fig_qq`, `fig_series`,
      `fig_running`, `fig_lag`, `fig_acf`, `fig_warmup` (which takes the replications' rows and
-     the band when the view showed them), or `fig_batches`, each written once per
+     the band when the view showed them), or `fig_batches`, with `fig_value_edges` giving the
+     histogram one bin per value, each written once per
      dialect in `js/io/figure_lib_r.js`, `figure_lib_tidy.js` (ggplot2), `figure_lib_py.js`
      (Matplotlib, imported only inside the helpers, with one `show_figures()` at the end and a
      guard that skips the figures when Matplotlib is missing), and `figure_lib_m.js` (core

@@ -5,6 +5,7 @@
 // Pure functions, no DOM.
 
 import { transformLabel } from '../stats/transform.js';
+import { looksDiscrete, sturgesBins, HIST_BINS_MIN, HIST_BINS_MAX, VALUE_BINS_MAX } from '../stats/descriptive.js';
 
 /**
  * The ticks a dataset checklist opens with. A stored list stands at any
@@ -121,4 +122,26 @@ export function shortNames(list) {
   if (parts.some(p => !p) || parts.some(p => p[0] !== parts[0][0])) return names;
   const tails = parts.map(p => p[1]);
   return new Set(tails).size === tails.length ? tails : names;
+}
+
+/**
+ * How the Distribution section bins a histogram of `values`, given the reader's
+ * stored choice `pick` ({ mode: 'value' | 'width', bins }, or nothing). A bar per
+ * value is offered whenever it takes at most VALUE_BINS_MAX bars (`canValue`), and
+ * is the default when the values look discrete by `looksDiscrete`; otherwise, and
+ * on request, the bins are equal-width, `bins` of them, Sturges' rule unless the
+ * reader set a count, kept in the slider's range.
+ * @param {ArrayLike<number>} values
+ * @param {{mode?: string, bins?: number}|null|undefined} pick
+ * @returns {{perValue: boolean, bins: number, canValue: boolean, discrete: boolean,
+ *   rule: 'count'|'few'|null, nUnique: number, auto: boolean}}
+ *   `auto` says the bin count is Sturges' rather than the reader's.
+ */
+export function histChoice(values, pick) {
+  const info = looksDiscrete(values);
+  const canValue = info.nUnique >= 1 && info.bars <= VALUE_BINS_MAX;
+  const mode = pick && (pick.mode === 'width' || pick.mode === 'value') ? pick.mode : info.discrete ? 'value' : 'width';
+  const asked = pick && Number.isFinite(pick.bins) && pick.bins > 0 ? Math.round(pick.bins) : null;
+  const bins = asked ? Math.max(HIST_BINS_MIN, Math.min(HIST_BINS_MAX, asked)) : sturgesBins(values.length);
+  return { perValue: mode === 'value' && canValue, bins, canValue, discrete: info.discrete, rule: info.rule, nUnique: info.nUnique, auto: !asked };
 }

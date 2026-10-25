@@ -131,14 +131,85 @@ export function ecdf(a) {
   return { x: Float64Array.from(xs), p: Float64Array.from(ps) };
 }
 
+/** The fewest and the most equal-width bins a histogram takes, the range of the page's slider. */
+export const HIST_BINS_MIN = 3;
+export const HIST_BINS_MAX = 40;
+
 /**
- * Equal-width histogram over [min, max]. Each bin is [edges[b], edges[b+1]) except the
- * last, which is closed on the right, and so the maximum is counted. A constant sample
+ * Sturges' rule for the number of equal-width bins, ceiling(log2(n) + 1) as R's
+ * nclass.Sturges gives it and hist() takes by default, kept between HIST_BINS_MIN
+ * and HIST_BINS_MAX.
+ * @param {number} n
+ * @returns {number}
+ */
+export function sturgesBins(n) {
+  const k = n > 0 ? Math.ceil(Math.log2(n) + 1) : HIST_BINS_MIN;
+  return Math.max(HIST_BINS_MIN, Math.min(HIST_BINS_MAX, k));
+}
+
+/**
+ * Each distinct value of a sample once, in ascending order, with how often it occurs.
+ * @param {ArrayLike<number>} a
+ * @returns {{values: Float64Array, counts: Float64Array, n: number}}
+ */
+export function distinctValues(a) {
+  const s = sortedCopy(a), n = s.length, vs = [], cs = [];
+  for (let i = 0; i < n; i++) {
+    if (i && s[i] === s[i - 1]) cs[cs.length - 1]++;
+    else { vs.push(s[i]); cs.push(1); }
+  }
+  return { values: Float64Array.from(vs), counts: Float64Array.from(cs), n };
+}
+
+/** The most bins a histogram draws one per value; past this the bars are too thin to read. */
+export const VALUE_BINS_MAX = 150;
+/** Whole numbers spread wider than this are not counted as counts. */
+const COUNT_SPAN_MAX = 5000;
+
+/**
+ * Whether a sample reads as discrete, by the rules the Input Analyzer applies.
+ * Counts: whole numbers, none negative, over a span of at most 5000, each distinct
+ * value seen twice on average (2 * nUnique <= n) and either at most 30 distinct
+ * values or at most 10 * sqrt(mean) of them, the room a count of that size has to
+ * vary in (a measurement recorded to whole units spreads wider, or has almost every
+ * value distinct). Few values: at most 10 distinct values, whole numbers or not,
+ * each seen at least 3 times on average, which are outcomes rather than
+ * measurements. Either way the sample needs no more than VALUE_BINS_MAX bars, one
+ * per whole number across the span or one per distinct value.
+ * @param {ArrayLike<number>} a
+ * @returns {{discrete: boolean, rule: 'count'|'few'|null, nUnique: number, bars: number}}
+ *   `bars` is how many bins a bar per value takes: one per whole number across the
+ *   span, or one per distinct value.
+ */
+export function looksDiscrete(a) {
+  const n = a.length;
+  if (!n) return { discrete: false, rule: null, nUnique: 0, bars: 0 };
+  const { values } = distinctValues(a);
+  const nUnique = values.length;
+  const min = values[0], max = values[nUnique - 1];
+  const allInt = values.every(Number.isInteger);
+  const bars = allInt ? max - min + 1 : nUnique;
+  let rule = null;
+  if (allInt && min >= 0 && max - min <= COUNT_SPAN_MAX && bars <= VALUE_BINS_MAX && 2 * nUnique <= n) {
+    if (nUnique <= 30 || nUnique <= 10 * Math.sqrt(Math.max(mean(a), 1))) rule = 'count';
+  }
+  if (!rule && nUnique <= 10 && n >= 3 * nUnique) rule = 'few';
+  return { discrete: rule !== null, rule, nUnique, bars };
+}
+
+/**
+ * Histogram of a sample. By default the bins are equal-width over [min, max], Sturges'
+ * count of them unless `bins` says otherwise. With `perValue`, one bin per value: on
+ * the half-integers across the span when every value is a whole number (a value that
+ * never occurred gets an empty bin), and otherwise one per distinct value with its
+ * edges halfway to its neighbors (the end bins mirroring the gap inside them); each
+ * bin's value is in `values`. Each bin is [edges[b], edges[b+1]) except the last,
+ * which is closed on the right, and so the maximum is counted. A constant sample
  * gives one bin of width 1 centered on its value; an empty sample gives one empty bin
  * on [0, 1]. Always edges.length === counts.length + 1.
  * @param {ArrayLike<number>} a
- * @param {{bins?: number}} [opts] bin count; default max(5, ceil(sqrt(n)))
- * @returns {{edges: Float64Array, counts: Float64Array, binWidth: number}}
+ * @param {{bins?: number, perValue?: boolean}} [opts]
+ * @returns {{edges: Float64Array, counts: Float64Array, binWidth: number, perValue?: true, values?: Float64Array}}
  */
 export function histogram(a, opts) {
   const n = a.length;
@@ -147,8 +218,9 @@ export function histogram(a, opts) {
   if (!(max > min)) {
     return { edges: Float64Array.of(min - 0.5, min + 0.5), counts: Float64Array.of(n), binWidth: 1 };
   }
+  if (opts && opts.perValue) return valueHistogram(a);
   const want = opts && opts.bins;
-  const bins = want > 0 ? Math.floor(want) : Math.max(5, Math.ceil(Math.sqrt(n)));
+  const bins = want > 0 ? Math.floor(want) : sturgesBins(n);
   const w = (max - min) / bins;
   const edges = new Float64Array(bins + 1);
   for (let b = 0; b <= bins; b++) edges[b] = min + b * w;
@@ -164,6 +236,24 @@ export function histogram(a, opts) {
     counts[b]++;
   }
   return { edges, counts, binWidth: w };
+}
+
+// One bin per value; see histogram(). The sample has at least two distinct values.
+function valueHistogram(a) {
+  const d = distinctValues(a), u = d.values, m = u.length;
+  if (u.every(Number.isInteger)) {
+    const lo = u[0], k = u[m - 1] - lo + 1;
+    const edges = new Float64Array(k + 1), counts = new Float64Array(k), values = new Float64Array(k);
+    for (let b = 0; b <= k; b++) edges[b] = lo - 0.5 + b;
+    for (let b = 0; b < k; b++) values[b] = lo + b;
+    for (let i = 0; i < m; i++) counts[u[i] - lo] = d.counts[i];
+    return { edges, counts, binWidth: 1, perValue: true, values };
+  }
+  const edges = new Float64Array(m + 1);
+  edges[0] = u[0] - (u[1] - u[0]) / 2;
+  for (let i = 1; i < m; i++) edges[i] = (u[i - 1] + u[i]) / 2;
+  edges[m] = u[m - 1] + (u[m - 1] - u[m - 2]) / 2;
+  return { edges, counts: d.counts, binWidth: NaN, perValue: true, values: u };
 }
 
 /**

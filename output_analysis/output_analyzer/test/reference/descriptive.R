@@ -15,14 +15,26 @@ samples <- list(
   normal  = rnorm(20, 10, 2),
   expo    = rexp(37, 0.5),
   spiked  = c(rnorm(30), 8, -6),        # guaranteed outliers on both sides
-  ties    = as.numeric(sample(1:6, 15, replace = TRUE))
+  ties    = as.numeric(sample(1:6, 15, replace = TRUE)),
+  fewvals = sample(c(2, 3.14, 6.75), 24, replace = TRUE)   # a few exact values, not whole numbers
 )
+# One bin per distinct value: on the half-integers when the values are whole
+# numbers (a value that never occurred gets an empty bin), and otherwise with
+# edges halfway between neighboring values.
+value_edges <- function(x) {
+  u <- sort(unique(x)); m <- length(u)
+  if (m == 1) return(u + c(-0.5, 0.5))
+  if (all(u == round(u))) return(seq(min(u) - 0.5, max(u) + 0.5, by = 1))
+  c(u[1] - (u[2] - u[1]) / 2, (u[-1] + u[-m]) / 2, u[m] + (u[m] - u[m - 1]) / 2)
+}
 
 describe <- function(name, x) {
   bs <- boxplot.stats(x)                # Tukey's hinges, 1.5 hinge-spread fences
-  b <- max(5, ceiling(sqrt(length(x))))
+  b <- max(3, min(40, nclass.Sturges(x)))     # Sturges' rule, ceiling(log2(n) + 1)
   br <- seq(min(x), max(x), length.out = b + 1)
   h <- hist(x, breaks = br, right = FALSE, include.lowest = TRUE, plot = FALSE)
+  ve <- value_edges(x)
+  vh <- hist(x, breaks = ve, right = FALSE, include.lowest = TRUE, plot = FALSE)
   e <- ecdf(x); u <- sort(unique(x))
   rm <- cumsum(x) / seq_along(x)
   list(
@@ -33,7 +45,8 @@ describe <- function(name, x) {
     q10 = quantile(x, 0.1, type = 7), q90 = quantile(x, 0.9, type = 7),
     acf = v(acf(x, lag.max = 5, plot = FALSE)$acf),
     box = v(bs$stats), out = v(sort(bs$out)),
-    histEdges = v(br), histCounts = v(h$counts),
+    histEdges = v(br), histCounts = v(h$counts), sturges = b,
+    valueEdges = v(ve), valueCounts = v(vh$counts),
     ecdfX = v(u), ecdfP = v(e(u)),
     runMean = v(rm),
     lag1cor = cor(x[-length(x)], x[-1])

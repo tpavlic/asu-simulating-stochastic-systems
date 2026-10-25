@@ -69,14 +69,23 @@ test('boxStats matches boxplot.stats (hinges, whiskers, outliers)', () => {
   }
 });
 
-test('histogram matches hist on equal-width breaks, last bin closed', () => {
+test('histogram matches hist on equal-width breaks, Sturges by default, last bin closed', () => {
   for (const s of ref.sets) {
     const h = D.histogram(s.x);
     assert.equal(h.edges.length, h.counts.length + 1);
+    assert.equal(h.counts.length, s.sturges, `${s.name} Sturges count`);
+    assert.equal(D.sturgesBins(s.x.length), s.sturges, `${s.name} sturgesBins`);
     closeVec(h.edges, s.histEdges, 1e-13, `${s.name} edges`);
     closeVec(h.counts, s.histCounts, 0, `${s.name} counts`);
     assert.equal(h.counts.reduce((a, b) => a + b, 0), s.x.length);
+    assert.ok(!h.perValue && !h.values, `${s.name} equal-width bins carry no values`);
   }
+  assert.equal(D.sturgesBins(1), 3, 'never fewer than 3 bins');
+  assert.equal(D.sturgesBins(2), 3);
+  assert.equal(D.sturgesBins(16), 5);
+  assert.equal(D.sturgesBins(17), 6, 'the ceiling, as nclass.Sturges');
+  assert.equal(D.sturgesBins(5000), 14);
+  assert.equal(D.sturgesBins(2 ** 45), 40, 'never more than 40');
   const c = D.histogram([4, 4, 4]);
   assert.deepEqual([...c.edges], [3.5, 4.5]);
   assert.deepEqual([...c.counts], [3]);
@@ -84,6 +93,74 @@ test('histogram matches hist on equal-width breaks, last bin closed', () => {
   const k = D.histogram([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], { bins: 10 });
   assert.equal(k.counts.length, 10);
   assert.deepEqual([...k.counts], [1, 1, 1, 1, 1, 1, 1, 1, 1, 2], 'edge values go right; the max goes in the last bin');
+});
+
+test('histogram with perValue puts one bin on each distinct value, as the reference does', () => {
+  for (const s of ref.sets) {
+    const h = D.histogram(s.x, { perValue: true });
+    assert.ok(h.perValue, `${s.name} flagged`);
+    closeVec(h.edges, s.valueEdges, 1e-13, `${s.name} value edges`);
+    closeVec(h.counts, s.valueCounts, 0, `${s.name} value counts`);
+    assert.equal(h.values.length, h.counts.length, `${s.name} one value per bin`);
+    assert.equal(h.counts.reduce((a, b) => a + b, 0), s.x.length);
+  }
+  // Whole numbers: the half-integers across the span, an unseen value getting an empty bin.
+  const w = D.histogram([2, 2, 3, 5, 5, 5], { perValue: true });
+  assert.deepEqual([...w.edges], [1.5, 2.5, 3.5, 4.5, 5.5]);
+  assert.deepEqual([...w.counts], [2, 1, 0, 3]);
+  assert.deepEqual([...w.values], [2, 3, 4, 5]);
+  assert.equal(w.binWidth, 1);
+  // Other values: edges halfway between neighbors, the end bins mirroring the gap inside them.
+  const f = D.histogram([0.5, 0.5, 1.5, 1.5, 1.5, 4], { perValue: true });
+  assert.deepEqual([...f.edges], [0, 1, 2.75, 5.25]);
+  assert.deepEqual([...f.counts], [2, 3, 1]);
+  assert.deepEqual([...f.values], [0.5, 1.5, 4]);
+  // One distinct value, and no values at all, as the equal-width case gives them.
+  assert.deepEqual([...D.histogram([4, 4, 4], { perValue: true }).edges], [3.5, 4.5]);
+  assert.deepEqual([...D.histogram([], { perValue: true }).edges], [0, 1]);
+  // A negative whole number is still a whole number.
+  assert.deepEqual([...D.histogram([-1, 1], { perValue: true }).edges], [-1.5, -0.5, 0.5, 1.5]);
+});
+
+test('distinctValues lists each value once, sorted, with its count', () => {
+  const d = D.distinctValues([3, 1, 3, 2, 3]);
+  assert.deepEqual([...d.values], [1, 2, 3]);
+  assert.deepEqual([...d.counts], [1, 1, 3]);
+  assert.equal(d.n, 5);
+  assert.equal(D.distinctValues([]).values.length, 0);
+});
+
+test('looksDiscrete follows the Input Analyzer\'s count and few-values rules', () => {
+  const rule = x => D.looksDiscrete(x).rule;
+  const ties = ref.sets.find(s => s.name === 'ties'), few = ref.sets.find(s => s.name === 'fewvals'), norm = ref.sets.find(s => s.name === 'normal');
+  assert.equal(rule(ties.x), 'count', 'whole numbers 1 to 6, repeated');
+  assert.equal(rule(few.x), 'few', 'three exact values, each many times');
+  assert.equal(rule(norm.x), null, 'twenty distinct measurements');
+  assert.equal(D.looksDiscrete(norm.x).discrete, false);
+  assert.equal(D.looksDiscrete(ties.x).discrete, true);
+  // Counts need repeats, each value seen twice on average: twenty whole numbers all
+  // different, or twelve among twenty, are measurements to whole units, or counts
+  // too spread for a bar each to show anything.
+  assert.equal(rule(Array.from({ length: 20 }, (_, i) => 30 + i)), null);
+  assert.equal(rule(Array.from({ length: 20 }, (_, i) => 30 + (i % 12))), null, 'twelve values among twenty');
+  assert.equal(rule(Array.from({ length: 20 }, (_, i) => 30 + (i % 10))), 'count', 'ten values among twenty');
+  // Proportions of 0 and 1 are counts with two values.
+  assert.equal(rule([0, 1, 1, 0, 1, 0, 0, 1]), 'count');
+  // A negative whole number is not a count, but a few exact values still are discrete.
+  assert.equal(rule([-2, -2, -2, 5, 5, 5, 9, 9, 9]), 'few');
+  assert.equal(rule([-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]), null);
+  // Many whole numbers spread far wider than a count of that size would be: measurements.
+  const wide = Array.from({ length: 400 }, (_, i) => 1000 + (i * 37) % 160);
+  assert.equal(rule(wide), null, '160 values near 1000, far more than 10 sqrt(mean)');
+  const narrow = Array.from({ length: 400 }, (_, i) => 1000 + (i * 37) % 60);
+  assert.equal(rule(narrow), 'count', '60 values near 1000, within 10 sqrt(mean)');
+  // Too many values for a bar each: continuous bins instead.
+  const long = Array.from({ length: 600 }, (_, i) => (i * 7) % 200);
+  assert.equal(rule(long), null, '200 whole numbers would be 200 bars');
+  // Too few to say: a single value, or an empty sample, is not called discrete.
+  assert.equal(rule([]), null);
+  assert.equal(D.looksDiscrete([7, 7, 7]).rule, 'count');
+  assert.equal(D.looksDiscrete([7, 7, 7]).nUnique, 1);
 });
 
 test('ecdf, running mean, lag pairs, and pearson match R', () => {

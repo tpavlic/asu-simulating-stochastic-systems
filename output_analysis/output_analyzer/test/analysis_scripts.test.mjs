@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { analysisScript as writeScript, parseReport, scriptFileName, ascii, sectionLine, ANALYSIS_WRITERS, tolFor } from '../js/io/analysis_scripts.js';
 import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
 import { makeDataset } from '../js/data/model.js';
+import { sturgesBins } from '../js/stats/descriptive.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
 import { EXAMPLES } from '../js/data/examples.js';
 
@@ -1950,6 +1951,31 @@ const exSpread = (...list) => ({ names: list.map(d => d.name), groups: list.map(
 const exRecipe = (ds, spread = null, level = 0.95, view = undefined) =>
   exploreRecipe({ ds, spread, level, title: 'Summary of ' + ds.name, provenance: { dataset: ds.name }, view });
 const exChecks = { also: noWarning };
+// Replication outcomes that are counts (seven values, repeated), and a few exact values.
+const COUNT_REPS = makeDataset({ name: 'Rejected calls', response: 'rejected', kind: 'reps', reps: Array.from({ length: 24 }, (_, i) => ({ id: i + 1, v: [(i * 5) % 7] })) });
+const FEW_REPS = makeDataset({ name: 'Batch size', response: 'size', kind: 'reps', reps: Array.from({ length: 24 }, (_, i) => ({ id: i + 1, v: [[2, 3.14, 6.75][(i * 5) % 3]] })) });
+
+test('exploreRecipe carries the histogram\'s bins: one per value for discrete data, else the count shown', () => {
+  const r = exRecipe(COUNT_REPS, null, 0.95, { section: 'dist' });
+  assert.deepEqual(r.fig.hist, { perValue: true, bins: 6 }, 'counts get a bar each; Sturges gives 6 for 24');
+  assert.equal(r.settings.hist_per_value, true);
+  assert.equal(r.settings.hist_bins, 6);
+  const w = exRecipe(COUNT_REPS, null, 0.95, { section: 'dist', hist: { mode: 'width', bins: 9 } });
+  assert.deepEqual(w.fig.hist, { perValue: false, bins: 9 }, 'the reader\'s equal-width choice is kept');
+  assert.equal(w.settings.hist_bins, 9);
+  const c = exRecipe(TRANSIENT, null, 0.95, { section: 'dist' });
+  assert.deepEqual(c.fig.hist, { perValue: false, bins: sturgesBins(TRANSIENT.reps.length) }, 'measurements get Sturges\' equal-width bins');
+  assert.deepEqual(exRecipe(TRANSIENT, null, 0.95, { section: 'dist', hist: { mode: 'value' } }).fig.hist, { perValue: true, bins: 5 }, 'a bar per value on request, where the values are few enough');
+  assert.equal(exRecipe(TRANSIENT, null, 0.95, { section: 'dist', pooled: true, hist: { mode: 'value' } }).fig.hist.perValue, false, 'too many distinct observations for a bar each');
+  assert.equal(exRecipe(FEW_REPS, null, 0.95, { section: 'dist' }).fig.hist.perValue, true);
+  assert.deepEqual(exRecipe(TRANSIENT, null, 0.95, { section: 'dist', hist: { mode: 'width', bins: 1000 } }).fig.hist, { perValue: false, bins: 40 }, 'the count is kept in the slider\'s range');
+  assert.ok(!('hist_bins' in exRecipe(TRANSIENT, null, 0.95, { section: 'run' }).settings), 'no histogram settings where no histogram is drawn');
+  for (const lang of LANGS) {
+    assert.ok(/fig_value_edges\(/.test(analysisScript(r, lang)), lang + ' draws a bar per value');
+    const txt = analysisScript(w, lang);
+    assert.ok(/hist_bins/.test(txt) && /hist_per_value/.test(txt), lang + ' reads the bins from the settings');
+  }
+});
 
 test('exploreRecipe carries the replications, the outcomes, the check, and the spread test', () => {
   const r = exRecipe(TRANSIENT, exSpread(TRANSIENT, LONG));
@@ -2152,9 +2178,9 @@ test('scripts end with their figures, import what they use, and say what the pag
   assert.ok(reps.includes('one value v per replication') && !reps.includes('tally observations v'));
   // The page's histogram bins, in every language.
   const dist = exRecipe(TRANSIENT, null, 0.95, { section: 'dist' });
-  assert.ok(analysisScript(dist, 'py').includes('np.linspace(plot_v.min(), plot_v.max(), nb + 1)'));
-  assert.ok(analysisScript(dist, 'm').includes('linspace(min(plot_v), max(plot_v), nb + 1)'));
-  assert.ok(analysisScript(dist, 'R').includes('seq(min(plot_v), max(plot_v), length.out = nb + 1)'));
+  assert.ok(analysisScript(dist, 'py').includes('np.linspace(plot_v.min(), plot_v.max(), hist_bins + 1)'));
+  assert.ok(analysisScript(dist, 'm').includes('linspace(min(plot_v), max(plot_v), hist_bins + 1)'));
+  assert.ok(analysisScript(dist, 'R').includes('seq(min(plot_v), max(plot_v), length.out = hist_bins + 1)'));
   // Python's Requires line names Matplotlib only where the script draws a figure.
   const pyNeeds = r => analysisScript(r, 'py').split('\n\n')[0].replace(/\n# +/g, ' ');
   for (const r of withFigure) assert.ok(pyNeeds(r).includes('SciPy 1.11 or later (Matplotlib, if installed, draws the figures).'), r.page + ': Matplotlib named');
@@ -2780,6 +2806,9 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['Summary and Plots, distribution', exRecipe(TRANSIENT, null, 0.95, { section: 'dist' }), 3, true],
     ['Summary and Plots, distribution of pooled observations', exRecipe(TRANSIENT, null, 0.95, { section: 'dist', pooled: true }), 3],
     ['Summary and Plots, distribution of constant outcomes', exRecipe(flatReps, null, 0.95, { section: 'dist' }), 3],
+    ['Summary and Plots, distribution of counts, a bar per value', exRecipe(COUNT_REPS, null, 0.95, { section: 'dist' }), 3, true],
+    ['Summary and Plots, distribution of a few exact values', exRecipe(FEW_REPS, null, 0.95, { section: 'dist' }), 3],
+    ['Summary and Plots, distribution with a chosen bin count', exRecipe(TRANSIENT, null, 0.95, { section: 'dist', hist: { mode: 'width', bins: 9 } }), 3],
     ['Summary and Plots, a run with its lag plot', exRecipe(TRANSIENT, null, 0.95, { section: 'run', rep: 2, lag: 3, axis: 'time' }), 4, true],
     ['Summary and Plots, a run too short for a correlogram', exRecipe(shortRun, null, 0.95, { section: 'run', rep: 2 }), 2],
     ['Summary and Plots, a time-persistent run', exRecipe(QLEN, null, 0.95, { section: 'run', rep: 3 }), 2],

@@ -465,6 +465,26 @@ hold off;
 end
 `;
 
+// ── value_edges ──────────────────────────────────────────────────────────
+
+FIG_M.value_edges = `
+function edges = fig_value_edges(x)
+% Bin edges giving one bin per value: the half-integers across the span when
+% every value is a whole number, and otherwise edges halfway between neighbors.
+u = unique(x(isfinite(x)));
+u = u(:)';
+if isempty(u)
+    edges = [0 1];
+elseif numel(u) == 1
+    edges = u + [-0.5 0.5];
+elseif all(u == round(u))
+    edges = (u(1) - 0.5):(u(end) + 0.5);
+else
+    edges = [u(1) - (u(2) - u(1)) / 2, (u(1:end-1) + u(2:end)) / 2, u(end) + (u(end) - u(end-1)) / 2];
+end
+end
+`;
+
 // ── hist ─────────────────────────────────────────────────────────────────
 
 FIG_M.hist = `

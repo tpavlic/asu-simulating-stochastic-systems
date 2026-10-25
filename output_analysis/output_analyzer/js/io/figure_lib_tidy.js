@@ -298,6 +298,19 @@ fig_pairs_slopes <- function(a, b, label_a = "A", label_b = "B", title = "Pairs 
 }
 `;
 
+FIG_TIDY.value_edges = `
+# Bin edges giving one bin per value: the half-integers across the span when every
+# value is a whole number, and otherwise edges halfway between neighboring values.
+fig_value_edges <- function(x) {
+  u <- sort(unique(as.numeric(x)[is.finite(as.numeric(x))]))
+  m <- length(u)
+  if (m == 0) return(c(0, 1))
+  if (m == 1) return(u + c(-0.5, 0.5))
+  if (all(u == round(u))) return(seq(u[1] - 0.5, u[m] + 0.5, by = 1))
+  c(u[1] - (u[2] - u[1]) / 2, (u[-1] + u[-m]) / 2, u[m] + (u[m] - u[m - 1]) / 2)
+}
+`;
+
 FIG_TIDY.hist = `
 # A histogram of x over the given bin edges: each bin holds its left edge, and the last both.
 fig_hist <- function(x, edges, xlab, title) {

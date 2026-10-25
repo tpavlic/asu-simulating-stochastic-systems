@@ -27,6 +27,9 @@
 //   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs.
 //   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
 //   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
+//   fig_value_edges(x): bin edges giving one bin per value, on the
+//     half-integers across the span of whole numbers, and otherwise halfway
+//     between neighboring distinct values.
 //   fig_series(x, y, xlab, ylab, title; type "points" | "line" | "step", fence)
 //   and fig_running(x, y, xlab, ylab, title): a run and its running mean.
 //   fig_lag(x, k, xlab, ylab, title) and fig_acf(r; step, band, xlab, title,
@@ -379,17 +382,17 @@ function exploreFigures(r, L) {
   const tally = F.kind === 'tally', resp = F.response;
   if (F.section === 'dist') {
     calls.push(...valuesLine(L, F.pooledDist));
-    calls.push(by(L, 'nb <- max(5, ceiling(sqrt(length(plot_v))))', 'nb = max(5, int(np.ceil(np.sqrt(len(plot_v)))))', 'nb = max(5, ceil(sqrt(numel(plot_v))));'));
-    calls.push(by(L, 'edges <- if (max(plot_v) > min(plot_v)) seq(min(plot_v), max(plot_v), length.out = nb + 1) else plot_v[1] + c(-0.5, 0.5)',
-      'edges = np.linspace(plot_v.min(), plot_v.max(), nb + 1) if plot_v.max() > plot_v.min() else plot_v[0] + np.array([-0.5, 0.5])',
-      'if max(plot_v) > min(plot_v), edges = linspace(min(plot_v), max(plot_v), nb + 1); else, edges = plot_v(1) + [-0.5, 0.5]; end'));
+    calls.push(by(L, 'edges <- if (hist_per_value) fig_value_edges(plot_v) else if (max(plot_v) > min(plot_v)) seq(min(plot_v), max(plot_v), length.out = hist_bins + 1) else plot_v[1] + c(-0.5, 0.5)',
+      'edges = fig_value_edges(plot_v) if hist_per_value else (np.linspace(plot_v.min(), plot_v.max(), hist_bins + 1) if plot_v.max() > plot_v.min() else plot_v[0] + np.array([-0.5, 0.5]))',
+      'if hist_per_value, edges = fig_value_edges(plot_v); elseif max(plot_v) > min(plot_v), edges = linspace(min(plot_v), max(plot_v), hist_bins + 1); else, edges = plot_v(1) + [-0.5, 0.5]; end'));
     const xlab = F.pooledDist ? resp : F.outcomeAxis, what = F.pooledDist ? 'Pooled observations' : 'Replication outcomes';
     calls.push(...call(L, 'fig_hist', ['plot_v', 'edges', L.str(xlab), L.str(what + ': histogram')]));
     calls.push(...call(L, 'fig_ecdf', ['plot_v', L.str(xlab), L.str(what + ': empirical CDF')]));
-    fig.push('hist', 'ecdf');
+    fig.push('value_edges', 'hist', 'ecdf');
     if (F.nOut >= 5) { calls.push(...call(L, 'fig_box', ['x', L.str(F.outcomeAxis), L.str('Replication outcomes: box plot')])); fig.push('box'); }
-    notes.push('The histogram has max(5, ceiling(sqrt(n))) equal-width bins from the smallest value to the largest, as the page draws it' +
-      (F.nOut >= 5 ? '; the box plot is always of the replication outcomes.' : '.'));
+    notes.push('The histogram\'s bins follow the page, from the Settings: with hist_per_value, one bin per value (on the half-integers for whole numbers, and otherwise halfway between neighboring values), which the page chooses for discrete data; ' +
+      'otherwise hist_bins equal-width bins from the smallest value to the largest, Sturges\' rule, ceiling(log2(n) + 1), unless the page\'s slider was moved' +
+      (F.nOut >= 5 ? '. The box plot is always of the replication outcomes.' : '.'));
   } else if (F.section === 'run') {
     const k = F.rep;
     calls.push(by(L, 'rv <- reps[[' + k + ']]$v; rt <- reps[[' + k + ']]$t', 'rv = np.asarray(reps[' + (k - 1) + ']["v"], float); rt = reps[' + (k - 1) + ']["t"]',

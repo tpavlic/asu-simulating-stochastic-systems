@@ -28,7 +28,7 @@ import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand } from '../stats/steadystate.js';
 import { slug } from './export.js';
 import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
-import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
+import { roleLabels, outcomeAxis, shortNames, estimateAxis, histChoice } from '../ui/rules.js';
 
 /** The sentence that says how a replication outcome was formed, per kind. */
 export const OUTCOME_HOW = {
@@ -970,8 +970,9 @@ export function exploreTooBig({ ds, spread }) {
 // The figures Summary and Plots shows in its open section, with the choices
 // that shape them: the pooled observations in place of the outcomes (forced
 // on tally data with too few outcomes, as the page forces it), the
-// replication shown in the run section, its horizontal axis, and the lag.
-// A section the data cannot fill draws nothing, as on the page.
+// replication shown in the run section, its horizontal axis, and the lag;
+// the histogram's bins (`hist`) are added by exploreRecipe, which has the
+// values. A section the data cannot fill draws nothing, as on the page.
 function exploreView(ds, view, nOut) {
   const v = view || {};
   const tally = ds.kind === 'tally';
@@ -1112,6 +1113,15 @@ export function exploreRecipe(o) {
                 normTf: r.transform !== 'none' && !normRefused };
   r.fig = Object.assign(exploreView(ds, o.view, ov.values.length), { qqAxis: estimateAxis(ds, r.explore.normTf ? tf : 'none') });
   r.settings = { kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime };
+  // The histogram's bins, chosen as the page chooses them for the values it
+  // plots (the pooled observations or the outcomes), and read by the script
+  // from its Settings.
+  if (r.fig.section === 'dist') {
+    const hc = histChoice(r.fig.pooledDist ? observations(ds) : x, o.view && o.view.hist);
+    r.fig.hist = { perValue: hc.perValue, bins: hc.bins };
+    r.settings.hist_per_value = hc.perValue;
+    r.settings.hist_bins = hc.bins;
+  }
   r.settingsNote = [dataNote(ds.kind)].concat(r.settingsNote || []);
   return r;
 }

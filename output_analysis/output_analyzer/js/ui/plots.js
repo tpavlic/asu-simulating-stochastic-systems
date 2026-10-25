@@ -626,6 +626,8 @@ export function histogram(fig, h, o = {}) {
   }
   if (!fig.readoutFn) fig.readout(dx => {
     for (let i = 0; i < k; i++) if (dx >= h.edges[i] && dx <= h.edges[i + 1]) {
+      // A bar per value reads out its value and share rather than its bin.
+      if (h.perValue && h.values) return ['value ' + num(h.values[i]), 'count ' + h.counts[i] + (total > 0 ? ' (' + num(100 * h.counts[i] / total, 3) + '%)' : '')];
       return ['[' + num(h.edges[i]) + ', ' + num(h.edges[i + 1]) + ')', (o.fraction ? 'fraction ' + num(ys[i], 3) : 'count ' + h.counts[i])];
     }
     return null;

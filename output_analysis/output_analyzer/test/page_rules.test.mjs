@@ -8,7 +8,7 @@
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault } from '../js/ui/rules.js';
+import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault, histChoice } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
@@ -115,4 +115,22 @@ test('pairingDefault: paired only for datasets of one load whose ids are blocks'
   assert.equal(pairingDefault([d(null, true), d(null, true)]).paired, false);
   // A truncated dataset keeps its replication ids, and so it still pairs.
   assert.equal(pairingDefault([Object.assign(d('L1', true), { derivedFrom: { id: 'x', truncate: { by: 'time', at: 5 } } }), d('L1', true)]).paired, true);
+});
+
+test('histChoice: a bar per value for discrete data, Sturges\' equal-width bins otherwise, the reader\'s choice kept in range', () => {
+  const counts = Array.from({ length: 24 }, (_, i) => (i * 5) % 7);
+  const c = histChoice(counts, null);
+  assert.deepEqual([c.perValue, c.bins, c.canValue, c.discrete, c.rule, c.nUnique, c.auto], [true, 6, true, true, 'count', 7, true]);
+  const w = histChoice(counts, { mode: 'width', bins: 9 });
+  assert.deepEqual([w.perValue, w.bins, w.auto], [false, 9, false]);
+  assert.deepEqual([histChoice(counts, { mode: 'width', bins: 1 }).bins, histChoice(counts, { mode: 'width', bins: 99 }).bins], [3, 40]);
+  assert.equal(histChoice(counts, { mode: 'width', bins: 7.4 }).bins, 7, 'a fractional count is rounded');
+  assert.equal(histChoice(counts, { bins: 'nine' }).auto, true, 'a bad count falls back to Sturges');
+  const meas = Array.from({ length: 20 }, (_, i) => 2 + Math.sqrt(i + 1));
+  const m = histChoice(meas, null);
+  assert.deepEqual([m.perValue, m.bins, m.canValue, m.discrete, m.rule], [false, 6, true, false, null]);
+  assert.equal(histChoice(meas, { mode: 'value' }).perValue, true, 'offered where the values are few enough');
+  const many = Array.from({ length: 400 }, (_, i) => Math.sqrt(i + 1));
+  assert.deepEqual([histChoice(many, { mode: 'value' }).perValue, histChoice(many, null).canValue], [false, false], 'too many values for a bar each');
+  assert.deepEqual([histChoice([], null).perValue, histChoice([], null).canValue], [false, false]);
 });

@@ -315,6 +315,20 @@ def fig_pairs_slopes(a, b, label_a="A", label_b="B", title="Pairs as slopes"):
     return fig
 `;
 
+FIG_PY.value_edges = `
+def fig_value_edges(x):
+    """Bin edges giving one bin per value: the half-integers across the span when
+    every value is a whole number, and otherwise edges halfway between neighbors."""
+    u = np.unique(fig_vec(x))
+    if u.size == 0:
+        return np.array([0.0, 1.0])
+    if u.size == 1:
+        return u[0] + np.array([-0.5, 0.5])
+    if np.all(u == np.round(u)):
+        return u[0] - 0.5 + np.arange(int(round(u[-1] - u[0])) + 2)
+    return np.concatenate(([u[0] - (u[1] - u[0]) / 2], (u[1:] + u[:-1]) / 2, [u[-1] + (u[-1] - u[-2]) / 2]))
+`;
+
 FIG_PY.hist = `
 def fig_hist(x, edges, xlab, title):
     """A histogram of counts over the given bin edges."""

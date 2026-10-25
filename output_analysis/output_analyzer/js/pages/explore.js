@@ -15,7 +15,7 @@ import { repEstimates, repIds, datasetSummary, observations, truncationView, sam
 import { exploreRecipe, exploreTooBig } from '../io/recipes.js';
 import { sampledCsv, downloadText, slug } from '../io/export.js';
 import {
-  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean
+  summary, histogram as histBins, ecdf as ecdfOf, boxStats, acf, lagPairs, mean, distinctValues, HIST_BINS_MIN, HIST_BINS_MAX
 } from '../stats/descriptive.js';
 import { tInterval } from '../stats/intervals.js';
 import { shapiroWilk, normalQQ } from '../stats/normality.js';
@@ -31,7 +31,7 @@ import {
 import { transformSets, transformOf, isTransform } from '../stats/transform.js';
 import { num, stat, esc, intl, plural, pct, pValue, dash, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
-import { initialTicks, estimateAxis } from '../ui/rules.js';
+import { initialTicks, estimateAxis, histChoice } from '../ui/rules.js';
 import { setSectionAvailable, currentSection } from '../ui/tabs.js';
 import { installExportRow, datasetFiles, dataFilesHelp } from '../ui/exportrow.js';
 
@@ -56,6 +56,8 @@ const QQ_CAP = 2000;
 
 const RAW_CAP = 2000;
 const FOREST_CAP = 60;
+/** The Distribution section lists the distinct values when there are at most this many. */
+const DISTINCT_LIST_MAX = 30;
 
 let rootEl = null;
 let els = {};
@@ -440,7 +442,7 @@ function storeResult(ds, est) {
     title,
     provenance,
     tables,
-    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), pooled, rep: repIndex, axis: xMode, lag } })),
+    regen: { tooBig: exploreTooBig(recipeIn), build: () => exploreRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), pooled, rep: repIndex, axis: xMode, lag, hist: state.getPick(id, 'hist:' + ds.id) || undefined } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] },
     summaryHtml: '<p><b>' + esc(ds.name) + '</b> (' + esc(KIND_LABEL[ds.kind]) + '): ' + esc(plural(sm.nReps, 'replication')) + ', ' +
       esc(plural(sm.nObs, ds.kind === 'time' ? 'record' : 'observation')) +
@@ -623,20 +625,97 @@ function buildDistribution(api, { ds, estF }) {
   const values = usePooled ? observations(ds) : estF;
   const what = usePooled ? 'pooled observations' : estimateWord(ds);
   const xLabel = usePooled ? ds.response : estimateAxis(ds);
+
+  // The histogram's bins: one per value where the values are few enough for
+  // that, the default when they look discrete, or k of equal width, Sturges'
+  // rule unless the slider is moved. The choice is kept per dataset, and the
+  // regenerate scripts read it at the press of a button.
+  const pickKey = 'hist:' + ds.id;
+  const pick = Object.assign({}, state.getPick(id, pickKey) || {});
+  let hc = histChoice(values, pick);
+  const remember = () => state.setPick(id, pickKey, { mode: pick.mode, bins: pick.bins });
+  const row = el('div', 'ctrl-row ex-tight');
+  row.innerHTML = (hc.canValue
+    ? '<span class="ctrl-pair"><span class="ctrl-lbl" id="ex-hist-lbl"><span class="tip" tabindex="0" data-tip="One per value gives each distinct value its own bar, which is how a count or a handful of outcomes is read; it is the default when the values look discrete: whole numbers that repeat, or a few exact values. Equal width cuts the range into k bins of one width, as a histogram of a measurement is drawn.">Bins</span></span>' +
+      '<span class="seg" role="group" aria-labelledby="ex-hist-lbl"><button type="button" class="seg-btn" data-hist="value">One per value</button><button type="button" class="seg-btn" data-hist="width">Equal width</button></span></span>'
+    : '') +
+    '<span class="ctrl-pair ex-hist-width"><label class="ctrl-lbl" for="ex-bins">' +
+      (hc.canValue ? '' : '<span class="tip" tabindex="0" data-tip="The number of equal-width bins from the smallest value to the largest. Sturges’ rule, ⌈log₂ n + 1⌉, is the default, as it is in R.">Bins</span> ') + '<span class="sym">k</span></label>' +
+      '<input type="range" id="ex-bins-rng" min="' + HIST_BINS_MIN + '" max="' + HIST_BINS_MAX + '" step="1" value="' + hc.bins + '" aria-label="Bins k, as a slider">' +
+      '<input type="text" id="ex-bins" value="' + hc.bins + '">' +
+      '<span class="ctrl-note" id="ex-bins-note"></span>' +
+      '<button type="button" class="xp-btn" id="ex-bins-auto">Sturges’ rule</button></span>';
+  sec.appendChild(row);
+  const rng = row.querySelector('#ex-bins-rng'), widthPair = row.querySelector('.ex-hist-width');
+  const note = row.querySelector('#ex-bins-note'), autoBtn = row.querySelector('#ex-bins-auto');
+
   const pair = el('div', 'ex-pair');
   sec.appendChild(pair);
   const base = slug(ds.name) + (usePooled ? '-observations' : '-outcomes');
-  figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
-    f => histogram(f, histBins(values)),
-    [{ swatch: 'bar', color: '--est', label: esc(what) }]);
+  const drawHist = f => histogram(f, histBins(values, hc.perValue ? { perValue: true } : { bins: hc.bins }));
+  const histFig = figure(api, pair, base + '-histogram', { height: 260, narrowHeight: 260, xLabel, yLabel: 'Frequency', ariaLabel: 'Histogram of the ' + what },
+    drawHist, [{ swatch: 'bar', color: '--est', label: esc(what) }]);
   figure(api, pair, base + '-ecdf', { height: 260, narrowHeight: 260, xLabel, ariaLabel: 'Empirical cdf of the ' + what },
     f => ecdf(f, ecdfOf(values)),
     [{ swatch: 'line', color: '--est', label: 'empirical cdf' }]);
-  if (usePooled) {
-    caption(sec, 'Each bar counts the pooled observations in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/n at each one. Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.');
-  } else {
-    caption(sec, 'Each bar counts the ' + esc(what) + ' in its bin, ' + intl(values.length) + ' in all, and the cdf rises by 1/R at each one. A bar that holds one or two values says little about the shape. These outcomes, one per replication, are the values every interval on the other pages is built from.');
+  const cap = caption(sec, '');
+  const per = usePooled ? '1/n' : '1/R';
+  const setCap = () => {
+    const n = intl(values.length);
+    let bars;
+    if (hc.perValue) {
+      bars = 'Each bar counts the ' + esc(what) + ' equal to its value, ' + n + ' in all over ' + plural(hc.nUnique, 'distinct value') + ', and the cdf rises by ' + per + ' at each one. ' +
+        (hc.rule === 'count' ? 'The values are whole numbers that repeat, as counts do, and so each has a bar of its own; Equal width bins them as a measurement would be.'
+          : hc.rule === 'few' ? 'The values are a few exact outcomes, each seen several times, and so each has a bar of its own.'
+          : 'Each distinct value has a bar of its own, as asked; these values do not look discrete, and Equal width is the usual choice for them.');
+    } else {
+      bars = 'Each bar counts the ' + esc(what) + ' in its bin, ' + n + ' in all in ' + plural(hc.bins, 'equal-width bin') + ' from the smallest value to the largest' +
+        (hc.auto ? ' (Sturges’ rule, ⌈log₂ n + 1⌉)' : ' (set by the slider)') + ', and the cdf rises by ' + per + ' at each one.' +
+        (hc.discrete ? ' The values look discrete, and One per value gives each its own bar.' : '');
+    }
+    cap.innerHTML = bars + (usePooled
+      ? ' Pooled observations are not independent: each run’s values are correlated with their neighbors, and so these plots describe their spread but support no interval.'
+      : ' A bar that holds one or two values says little about the shape. These outcomes, one per replication, are the values every interval on the other pages is built from.');
+  };
+
+  // Every distinct value with its count and share, when there are few enough
+  // to list and the bars are one per value: what the bars show, as numbers.
+  let distinct = null;
+  if (hc.nUnique >= 1 && hc.nUnique <= DISTINCT_LIST_MAX) {
+    const dv = distinctValues(values);
+    let cum = 0;
+    const rows = Array.from(dv.values, (v, i) => { cum += dv.counts[i]; return '<tr><td>' + num(v, 8) + '</td><td>' + intl(dv.counts[i]) + '</td><td>' + num(dv.counts[i] / dv.n, 4) + '</td><td>' + num(cum / dv.n, 4) + '</td></tr>'; });
+    const d = details('The ' + plural(hc.nUnique, 'distinct value') + ', with counts and proportions',
+      '<div class="scroll-box"><table class="ptab"><thead><tr><th>Value</th><th>Count</th><th>Proportion</th><th>Cumulative</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>');
+    d.classList.add('ex-raw-panel');
+    sec.appendChild(d);
+    distinct = d;
   }
+
+  const sync = () => {
+    hc = histChoice(values, pick);
+    if (distinct) distinct.hidden = !hc.perValue;
+    row.querySelectorAll('[data-hist]').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.hist === 'value') === hc.perValue)));
+    widthPair.hidden = hc.perValue;
+    rng.value = String(hc.bins);
+    spin.set(hc.bins, false);
+    note.textContent = hc.auto ? 'Sturges’ rule for n = ' + intl(values.length) : 'Sturges’ rule gives ' + intl(histChoice(values, null).bins);
+    autoBtn.hidden = hc.auto;
+    setCap();
+  };
+  const setBins = v => {
+    v = Math.min(HIST_BINS_MAX, Math.max(HIST_BINS_MIN, Math.round(v)));
+    if (!Number.isFinite(v) || v === hc.bins) { sync(); return; }
+    pick.bins = v; remember(); sync(); histFig.render(drawHist);
+  };
+  const spin = spinner(row.querySelector('#ex-bins'), { min: HIST_BINS_MIN, max: HIST_BINS_MAX, step: 1, onChange: setBins });
+  rng.addEventListener('input', () => setBins(Number(rng.value)));
+  autoBtn.addEventListener('click', () => { pick.bins = null; remember(); sync(); histFig.render(drawHist); });
+  row.querySelectorAll('[data-hist]').forEach(b => b.addEventListener('click', () => {
+    if (pick.mode === b.dataset.hist) return;
+    pick.mode = b.dataset.hist; remember(); sync(); histFig.render(drawHist);
+  }));
+  sync();
 }
 
 function buildBox(api, { ds, estF }) {
