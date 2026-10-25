@@ -37666,7 +37666,7 @@ export function render(rootEl) {
   const varSec = el('div');
   varSec.hidden = true;
   varSec.appendChild(el('div', 'sub-hd', 'Confidence interval on the variance'));
-  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. The checks line above applies here too and matters more.'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. The normality check in the blue notice above is the one to read first here: the t interval tolerates non-normal outcomes as R grows, and this interval does not.'));
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
   varSec.appendChild(details('Why the variance interval is fragile',
