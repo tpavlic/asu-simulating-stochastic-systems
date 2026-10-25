@@ -124,9 +124,10 @@ function oneFigures(r, L) {
       : [fld(L, 'd', 'mean'), fld(L, 'ti', 'lo'), fld(L, 'ti', 'hi')];
     Object.assign(opts, { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]) });
   }
+  if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
   return {
-    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them.' : '.')],
+    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line.' : '.')],
     calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
     fig: ['strips']
   };

@@ -81,44 +81,44 @@ function binomCdf(k, n, p) {
  * The p quantile estimated from a sample, with the distribution-free interval
  * built from two order statistics. The point estimates are the order statistic
  * X(k), k = ceil(n p), and the interpolated quantile (R's type 7). The interval
- * [X(r), X(s)] is chosen among every pair r < s whose coverage
- * P(X(r) ≤ θ_p < X(s)) = pbinom(s − 1, n, p) − pbinom(r − 1, n, p) is at least
- * the level: the narrowest (smallest s − r), then the one whose middle is
- * nearest n p + 1/2, then the lowest. No pair reaches the level for a small
- * sample or an extreme p; `minN` is the smallest n at which the widest pair,
- * (1, n), does, from 1 − pⁿ − (1 − p)ⁿ ≥ level.
+ * [X(r), X(s)] puts α/2 in each tail: with B ~ Binomial(n, p) the number of
+ * outcomes at or below the true quantile, r is the largest rank with
+ * P(B ≤ r − 1) ≤ α/2 and s the smallest with P(B ≥ s) ≤ α/2, so that the
+ * coverage P(X(r) ≤ θ_p < X(s)) = pbinom(s − 1, n, p) − pbinom(r − 1, n, p) is at
+ * least the level. This is the interval that inverting the sign test gives,
+ * and the one SciPy's quantile_test returns. A small sample, or an extreme p,
+ * cannot bound one end or either: that rank is null and its end NaN, `bounds`
+ * says which ends exist ('both', 'lower', 'upper', or 'none'), and `achieved`
+ * is the coverage of what remains (the two-sided interval, or the one bound's
+ * confidence, at least 1 − α/2). `minN` is the smallest n at which both ends
+ * exist, where (1 − p)ⁿ and pⁿ are both at most α/2.
  * @param {ArrayLike<number>} x
  * @param {number} p strictly between 0 and 1
  * @param {number} [level=0.95]
  * @returns {{n: number, p: number, level: number, k: number, order: number, interp: number,
- *   r: number|null, s: number|null, lo: number, hi: number, achieved: number, minN: number}}
+ *   r: number|null, s: number|null, lo: number, hi: number, achieved: number,
+ *   bounds: 'both'|'lower'|'upper'|'none', minN: number}}
  */
 export function quantileInterval(x, p, level = 0.95) {
   if (!(p > 0 && p < 1)) throw new RangeError('quantileInterval: p must lie strictly between 0 and 1');
   const srt = Array.from(x).filter(Number.isFinite).sort((a, b) => a - b);
   const n = srt.length;
+  const tail = (1 - level) / 2;
   let minN = 2;
-  while (1 - Math.pow(p, minN) - Math.pow(1 - p, minN) < level) minN++;
-  if (n === 0) return { n, p, level, k: NaN, order: NaN, interp: NaN, r: null, s: null, lo: NaN, hi: NaN, achieved: NaN, minN };
+  while (Math.pow(1 - p, minN) > tail || Math.pow(p, minN) > tail) minN++;
+  const none = { n, p, level, k: NaN, order: NaN, interp: NaN, r: null, s: null, lo: NaN, hi: NaN, achieved: NaN, bounds: 'none', minN };
+  if (n === 0) return none;
   const k = Math.max(1, Math.ceil(n * p));
   const order = srt[k - 1], interp = quantile(srt, p);
-  // The cumulative probabilities F(j) = P(X ≤ j) for j = −1 … n − 1, so that
-  // the coverage of (r, s) is F(s − 1) − F(r − 1).
-  const F = new Float64Array(n + 1);
-  for (let j = 0; j <= n; j++) F[j] = binomCdf(j - 1, n, p);
-  const mid = n * p + 0.5;
-  let best = null;
-  for (let r = 1; r < n; r++) {
-    for (let s = r + 1; s <= n; s++) {
-      const cov = F[s] - F[r];
-      if (cov < level) continue;
-      const key = [s - r, Math.abs((r + s) / 2 - mid), r];
-      if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))) best = { key, r, s, cov };
-      break;   // a wider s for this r is never narrower
-    }
-  }
-  if (!best) return { n, p, level, k, order, interp, r: null, s: null, lo: NaN, hi: NaN, achieved: NaN, minN };
-  return { n, p, level, k, order, interp, r: best.r, s: best.s, lo: srt[best.r - 1], hi: srt[best.s - 1], achieved: best.cov, minN };
+  // F[j] = P(B ≤ j) for j = 0 … n − 1.
+  const F = new Float64Array(n);
+  for (let j = 0; j < n; j++) F[j] = binomCdf(j, n, p);
+  let r = null, s = null;
+  for (let i = 1; i <= n; i++) if (F[i - 1] <= tail) r = i;          // the largest rank whose lower tail fits
+  for (let i = n; i >= 1; i--) if (1 - F[i - 1] <= tail) s = i;      // the smallest rank whose upper tail fits
+  const bounds = r !== null && s !== null ? 'both' : r !== null ? 'lower' : s !== null ? 'upper' : 'none';
+  const achieved = bounds === 'both' ? F[s - 1] - F[r - 1] : bounds === 'lower' ? 1 - F[r - 1] : bounds === 'upper' ? F[s - 1] : NaN;
+  return { n, p, level, k, order, interp, r, s, lo: r !== null ? srt[r - 1] : NaN, hi: s !== null ? srt[s - 1] : NaN, achieved, bounds, minN };
 }
 
 // The t quantile for planning. Past 10^6 degrees of freedom the first-order

@@ -156,7 +156,7 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
  *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
  *   block holds no values.
  */
-export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform, mu0, qp }) {
+export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform, mu0, qp, view }) {
   // The transform applies to replication outcomes, never to the pooled observations.
   const tf = !pooled && isTransform(transform) ? transform : 'none';
   const raw = Array.from(x);
@@ -226,8 +226,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     Object.assign(e, { s2: vi.s2, 'chi2 lower quantile': vi.chiLo, 'chi2 upper quantile': vi.chiHi,
                        'variance lower': vi.lo2, 'variance upper': vi.hi2, 'sd lower': vi.loS, 'sd upper': vi.hiS });
   }
-  // The p quantile with its distribution-free interval; the ranks are null,
-  // and the ends NaN, where no pair of order statistics reaches the level.
+  // The p quantile with its distribution-free interval; a rank is null, and
+  // its end NaN, where the sample is too small to bound that end.
   const quant = interval && qp > 0 && qp < 1 ? { p: qp } : null;
   if (quant) {
     const q = quantileInterval(xs, qp, level);
@@ -249,6 +249,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
             center: np ? 'back-transformed pseudo-median' : transformOf(tf).center };
   // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
   r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
+  // The stated mean as a dashed line, when the page drew it.
+  r.fig.mu0 = !!(view && view.mu0) && !!test;
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}

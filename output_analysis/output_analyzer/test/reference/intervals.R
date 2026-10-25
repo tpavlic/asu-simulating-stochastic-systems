@@ -68,37 +68,38 @@ pi_levels <- lapply(levels, function(L) {
   list(level = L, lo = unname(pr[1, "lwr"]), hi = unname(pr[1, "upr"]))
 })
 
-# The distribution-free interval for the p quantile from two order statistics:
-# among every pair r < s with P(X(r) <= theta_p < X(s)) = pbinom(s - 1, n, p) -
-# pbinom(r - 1, n, p) at least the level, the narrowest (smallest s - r), and
-# of those the one whose middle is nearest n p + 1/2, and of those the lowest.
-# The point estimates are the book's order statistic X(ceiling(n p)) and R's
-# default (type 7) interpolated quantile. minN is the smallest n at which the
-# widest pair, (1, n), reaches the level.
+# The distribution-free interval for the p quantile from two order statistics,
+# with alpha/2 in each tail: r is the largest rank with P(B <= r - 1) <= alpha/2
+# and s the smallest with P(B >= s) <= alpha/2, B ~ Binomial(n, p) counting the
+# outcomes at or below the true quantile, so that P(X(r) <= theta_p < X(s)) =
+# pbinom(s - 1, n, p) - pbinom(r - 1, n, p) is at least the level. This is the
+# interval that inverting the sign test gives and the one SciPy's quantile_test
+# returns. An end the sample is too small to bound is NA (its rank too), and
+# `achieved` is then the confidence of the one bound that remains, or NA when
+# neither tail can be bounded. The point estimates are the book's order
+# statistic X(ceiling(n p)) and R's default (type 7) interpolated quantile.
+# minN is the smallest n at which both ends exist: (1 - p)^n and p^n both at
+# most alpha/2.
 z <- rnorm(60, 20, 3)
-better <- function(a, b) {   # a before b in lexicographic order
-  for (i in seq_along(a)) { if (a[i] < b[i]) return(TRUE); if (a[i] > b[i]) return(FALSE) }
-  FALSE
-}
+tiny <- x[1:4]
 q_int <- function(v, p, L) {
-  n <- length(v); srt <- sort(v)
-  best <- NULL
-  for (r in 1:(n - 1)) for (s in (r + 1):n) {
-    cov <- pbinom(s - 1, n, p) - pbinom(r - 1, n, p)
-    if (cov >= L) {
-      cand <- c(s - r, abs((r + s) / 2 - (n * p + 0.5)), r)
-      if (is.null(best) || better(cand, best$key)) best <- list(key = cand, r = r, s = s, cov = cov)
-    }
-  }
+  n <- length(v); srt <- sort(v); tail <- (1 - L) / 2
+  Fc <- pbinom(0:n, n, p)                       # Fc[j + 1] = P(B <= j)
+  rs <- which(Fc[1:n] <= tail)                  # ranks r with P(B <= r - 1) <= tail
+  ss <- which(1 - Fc[1:n] <= tail)              # ranks s with P(B >= s) <= tail
+  r <- if (length(rs)) max(rs) else NA
+  s <- if (length(ss)) min(ss) else NA
+  ach <- if (!is.na(r) && !is.na(s)) Fc[s] - Fc[r] else if (!is.na(r)) 1 - Fc[r] else if (!is.na(s)) Fc[s] else NA
+  bounds <- if (!is.na(r) && !is.na(s)) "both" else if (!is.na(r)) "lower" else if (!is.na(s)) "upper" else "none"
   m <- 2
-  while (1 - p^m - (1 - p)^m < L) m <- m + 1
+  while ((1 - p)^m > tail || p^m > tail) m <- m + 1
   list(p = p, level = L, n = n, order = srt[ceiling(n * p)], interp = unname(quantile(v, p, type = 7)),
-       r = if (is.null(best)) NA else best$r, s = if (is.null(best)) NA else best$s,
-       lo = if (is.null(best)) NA else srt[best$r], hi = if (is.null(best)) NA else srt[best$s],
-       achieved = if (is.null(best)) NA else best$cov, minN = m)
+       r = r, s = s, lo = if (is.na(r)) NA else srt[r], hi = if (is.na(s)) NA else srt[s],
+       achieved = ach, bounds = bounds, minN = m)
 }
 quant <- list(q_int(z, 0.5, 0.95), q_int(z, 0.9, 0.95), q_int(z, 0.25, 0.90), q_int(z, 0.95, 0.99),
-              q_int(x, 0.5, 0.95), q_int(x, 0.9, 0.95), q_int(x, 0.9, 0.99))   # the last two: n = 15 cannot reach it at p = 0.9
+              q_int(x, 0.5, 0.95), q_int(x, 0.9, 0.95), q_int(x, 0.9, 0.99),   # n = 15 bounds p = 0.9 from below only
+              q_int(tiny, 0.5, 0.95))                                        # n = 4 bounds neither end
 
 cat(j(list(
   x = v(x), y = v(y), u = v(u), w = v(w), small = v(small),
@@ -106,5 +107,5 @@ cat(j(list(
   fSwap = list(F = unname(vtSwap$statistic), p = vtSwap$p.value, ci = v(vtSwap$conf.int)),
   corSmall = list(t = unname(ctSmall$statistic), p = ctSmall$p.value),
   plan = plan,
-  z = v(z), oneT = one_t, pi = pi_levels, quant = quant
+  z = v(z), tiny = v(tiny), oneT = one_t, pi = pi_levels, quant = quant
 )))

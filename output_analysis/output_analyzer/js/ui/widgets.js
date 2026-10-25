@@ -88,6 +88,36 @@ export function spinner(input, opts = {}) {
 }
 
 /**
+ * A results table in a horizontally scrolling wrapper, in the style of the
+ * comparison pages' tables. Headers and cells are HTML.
+ * @param {string[]} headers
+ * @param {string[][]} rows
+ * @param {(i: number) => string} [rowClass] a class for row i, or ''
+ * @returns {HTMLDivElement}
+ */
+export function table(headers, rows, rowClass) {
+  const w = document.createElement('div');
+  w.className = 'tab-wrap cmp-tab';
+  w.innerHTML = '<table class="ptab"><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map((r, i) => '<tr' + (rowClass && rowClass(i) ? ' class="' + rowClass(i) + '"' : '') + '>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table>';
+  return w;
+}
+
+/**
+ * A paragraph of HTML with a class.
+ * @param {string} cls
+ * @param {string} html
+ * @returns {HTMLParagraphElement}
+ */
+export function para(cls, html) {
+  const p = document.createElement('p');
+  p.className = cls;
+  p.innerHTML = html;
+  return p;
+}
+
+/**
  * A result card: a small uppercase label on top, the value below in the
  * monospace face, and an optional note under it.
  * @param {string} label HTML

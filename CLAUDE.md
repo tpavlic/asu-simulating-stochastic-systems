@@ -1036,14 +1036,21 @@ better.
   section running Levene's test across a checklist of loaded datasets, whose ticks stand as the
   reader leaves them, even at one or none, with a line saying the test needs two or more
   (`initialTicks` in `js/ui/rules.js`)), ③ One System (the
-  absolute analysis: t interval on one system's replication outcomes, or the Wilcoxon signed-rank
-  interval on the pseudo-median behind a Procedure switch, the pooled-observations override behind
-  a warning, the prediction interval for one further outcome beside the interval on the mean, a
-  "Test against a stated mean" section (a field for μ₀, the one-sample t statistic, its p-value,
-  and a verdict tied to the interval; the signed-rank test at μ₀ under the rank procedure), the
-  chi-square interval on the variance, a "quantile" section (the order statistic at ⌈pR⌉, the
-  interpolated quantile, and the distribution-free interval from the narrowest pair of order
-  statistics whose binomial coverage reaches the level, or the smallest R that could reach it),
+  absolute analysis, laid out as Several Systems' sections are, each a figure or a control row
+  over a table rather than a grid of cards: the replication outcomes drawn first, then one table
+  holding the t interval on one system's replication outcomes, or the Wilcoxon signed-rank
+  interval on the pseudo-median behind a Procedure switch, and the prediction interval for one
+  further outcome, with the pooled-observations override behind a warning; under a transform, the
+  carried-back values are the table's last columns; a "Test against a stated mean" row in the same
+  section (a field for μ₀ and a "Show μ₀ on the plot" box that draws it on the figure as a dashed
+  line that can be dragged, the field and the test following it; a one-row table with the
+  one-sample t statistic, its p-value, and a verdict tied to the interval; the signed-rank test at
+  μ₀ under the rank procedure), the chi-square interval on the variance as a one-row table, a
+  "quantile" section (the order statistic at ⌈pR⌉, the
+  interpolated quantile, and the distribution-free interval from two order statistics with α/2
+  of the binomial probability in each tail, the ranks SciPy's `quantile_test` returns; when the
+  sample is too small for both ends it gives the one bound it can, with its confidence, and the
+  smallest R at which both ends exist),
   and a "How many replications" card by target half-width or by target power of the
   one-sample t test), ④ Two Systems (the relative analysis: Welch by default, with the
   pooled-variance t as a Procedure choice whose checks line adds Levene's test; paired

@@ -148,30 +148,32 @@ test('predictionInterval matches predict.lm(interval = "prediction") at 90, 95, 
   assert.ok(Number.isNaN(I.predictionInterval([1], 0.95).hw), 'n = 1 gives NaN');
 });
 
-test('quantileInterval: the order statistics, the interpolated quantile, and the narrowest pbinom pair', () => {
+test('quantileInterval: the order statistics, the interpolated quantile, and the equal-tails pbinom ranks', () => {
+  const sample = { 60: ref.z, 15: ref.x, 4: ref.tiny };
   for (const q of ref.quant) {
-    const v = q.n === 60 ? ref.z : ref.x;
-    const r = I.quantileInterval(v, q.p, q.level);
+    const r = I.quantileInterval(sample[q.n], q.p, q.level);
+    const tag = `p=${q.p} L=${q.level} n=${q.n}`;
     assert.equal(r.n, q.n);
-    close(r.order, q.order, 1e-14, `order statistic p=${q.p}`);
-    close(r.interp, q.interp, 1e-12, `interpolated p=${q.p}`);
-    assert.equal(r.minN, q.minN, `minN p=${q.p} L=${q.level}`);
-    if (q.r === null) {
-      assert.equal(r.r, null, `no pair p=${q.p} L=${q.level} n=${q.n}`);
-      assert.equal(r.s, null);
-      assert.ok(Number.isNaN(r.lo) && Number.isNaN(r.hi) && Number.isNaN(r.achieved));
-    } else {
-      assert.equal(r.r, q.r, `r p=${q.p} L=${q.level}`);
-      assert.equal(r.s, q.s, `s p=${q.p} L=${q.level}`);
-      close(r.lo, q.lo, 1e-14, 'lo');
-      close(r.hi, q.hi, 1e-14, 'hi');
-      close(r.achieved, q.achieved, 1e-12, 'achieved');
-      assert.ok(r.achieved >= q.level);
+    close(r.order, q.order, 1e-14, `order statistic ${tag}`);
+    close(r.interp, q.interp, 1e-12, `interpolated ${tag}`);
+    assert.equal(r.minN, q.minN, `minN ${tag}`);
+    assert.equal(r.bounds, q.bounds, `bounds ${tag}`);
+    assert.equal(r.r, q.r, `r ${tag}`);
+    assert.equal(r.s, q.s, `s ${tag}`);
+    if (q.r === null) assert.ok(Number.isNaN(r.lo), `lo NaN ${tag}`); else close(r.lo, q.lo, 1e-14, `lo ${tag}`);
+    if (q.s === null) assert.ok(Number.isNaN(r.hi), `hi NaN ${tag}`); else close(r.hi, q.hi, 1e-14, `hi ${tag}`);
+    if (q.achieved === null) assert.ok(Number.isNaN(r.achieved), `achieved NaN ${tag}`);
+    else {
+      close(r.achieved, q.achieved, 1e-12, `achieved ${tag}`);
+      // A two-sided interval reaches the level; a one-sided bound reaches 1 - alpha/2.
+      assert.ok(r.achieved >= (q.bounds === 'both' ? q.level : 1 - (1 - q.level) / 2) - 1e-12, `achieved reaches the level ${tag}`);
     }
   }
   // The rank of the order statistic is ceil(n p), and p at the ends is refused.
   assert.equal(I.quantileInterval(ref.z, 0.9, 0.95).k, 54);
   assert.throws(() => I.quantileInterval(ref.z, 0, 0.95), RangeError);
   assert.throws(() => I.quantileInterval(ref.z, 1, 0.95), RangeError);
-  assert.equal(I.quantileInterval([5], 0.5, 0.95).r, null);
+  const one = I.quantileInterval([5], 0.5, 0.95);
+  assert.equal(one.r, null); assert.equal(one.s, null); assert.equal(one.bounds, 'none');
+  assert.equal(I.quantileInterval([], 0.5, 0.95).bounds, 'none');
 });

@@ -462,78 +462,62 @@ end
 
 LIB.R.quantileInterval = `
 quantile_interval <- function(x, p, level) {
-  srt <- sort(x); n <- length(srt)
+  # The p quantile by order statistics, with the distribution-free interval that puts
+  # alpha/2 in each tail: the same ranks that inverting the sign test gives.
+  srt <- sort(x); n <- length(srt); tail <- (1 - level) / 2
   min_n <- 2
-  while (1 - p^min_n - (1 - p)^min_n < level) min_n <- min_n + 1
+  while ((1 - p)^min_n > tail || p^min_n > tail) min_n <- min_n + 1
   k <- max(1, ceiling(n * p))
   out <- list(k = k, order = srt[k], interp = unname(quantile(srt, p, type = 7)),
               r = NaN, s = NaN, lo = NaN, hi = NaN, achieved = NaN, minN = min_n)
-  if (n < 2) return(out)
-  Fc <- pbinom((0:n) - 1, n, p)   # Fc[j + 1] = P(X <= j - 1), so a pair (r, s) covers Fc[s + 1] - Fc[r + 1]
-  mid <- n * p + 0.5; best <- NULL
-  for (r in 1:(n - 1)) {
-    s <- r + 1
-    while (s <= n && Fc[s + 1] - Fc[r + 1] < level) s <- s + 1
-    if (s > n) next
-    key <- c(s - r, abs((r + s) / 2 - mid), r)
-    if (is.null(best) || key[1] < best$key[1] || (key[1] == best$key[1] && (key[2] < best$key[2] ||
-        (key[2] == best$key[2] && key[3] < best$key[3])))) best <- list(key = key, r = r, s = s, cov = Fc[s + 1] - Fc[r + 1])
-  }
-  if (!is.null(best)) { out$r <- best$r; out$s <- best$s; out$lo <- srt[best$r]; out$hi <- srt[best$s]; out$achieved <- best$cov }
+  Fc <- pbinom(0:(n - 1), n, p)              # Fc[j + 1] = P(B <= j), B the count at or below the quantile
+  rs <- which(Fc <= tail); ss <- which(1 - Fc <= tail)
+  if (length(rs)) { out$r <- max(rs); out$lo <- srt[out$r] }
+  if (length(ss)) { out$s <- min(ss); out$hi <- srt[out$s] }
+  if (length(rs) && length(ss)) out$achieved <- Fc[out$s] - Fc[out$r]
+  else if (length(rs)) out$achieved <- 1 - Fc[out$r]
+  else if (length(ss)) out$achieved <- Fc[out$s]
   out
 }
 `;
 LIB.py.quantileInterval = `
 def quantile_interval(x, p, level):
-    """The p quantile by order statistics, with the narrowest pair that covers it at the level."""
-    srt = np.sort(np.asarray(x, float)); n = len(srt)
+    """The p quantile by order statistics, with the distribution-free interval that puts
+    alpha/2 in each tail (the ranks scipy.stats.quantile_test's confidence_interval gives)."""
+    srt = np.sort(np.asarray(x, float)); n = len(srt); tail = (1 - level) / 2
     min_n = 2
-    while 1 - p ** min_n - (1 - p) ** min_n < level: min_n += 1
+    while (1 - p) ** min_n > tail or p ** min_n > tail: min_n += 1
     k = max(1, int(np.ceil(n * p)))
     out = dict(k=k, order=srt[k - 1], interp=float(np.quantile(srt, p)), r=np.nan, s=np.nan,
                lo=np.nan, hi=np.nan, achieved=np.nan, minN=min_n)
-    if n < 2: return out
-    F = stats.binom.cdf(np.arange(-1, n), n, p)   # F[j] = P(X <= j - 1): a pair (r, s) covers F[s] - F[r]
-    mid = n * p + 0.5; best = None
-    for r in range(1, n):
-        s = r + 1
-        while s <= n and F[s] - F[r] < level: s += 1
-        if s > n: continue
-        key = (s - r, abs((r + s) / 2 - mid), r)
-        if best is None or key < best[0]: best = (key, r, s, F[s] - F[r])
-    if best is not None:
-        out.update(r=best[1], s=best[2], lo=srt[best[1] - 1], hi=srt[best[2] - 1], achieved=best[3])
+    F = stats.binom.cdf(np.arange(n), n, p)   # F[j] = P(B <= j), B the count at or below the quantile
+    rs = np.flatnonzero(F <= tail) + 1; ss = np.flatnonzero(1 - F <= tail) + 1
+    if rs.size: out.update(r=int(rs.max()), lo=srt[rs.max() - 1])
+    if ss.size: out.update(s=int(ss.min()), hi=srt[ss.min() - 1])
+    if rs.size and ss.size: out['achieved'] = F[out['s'] - 1] - F[out['r'] - 1]
+    elif rs.size: out['achieved'] = 1 - F[out['r'] - 1]
+    elif ss.size: out['achieved'] = F[out['s'] - 1]
     return out
 `;
 LIB.m.quantileInterval = `
 function r = quantile_interval(x, p, level)
-% The p quantile by order statistics, with the narrowest pair that covers it at the level.
-srt = sort(x(:)); n = numel(srt);
+% The p quantile by order statistics, with the distribution-free interval that puts
+% alpha/2 in each tail: the same ranks that inverting the sign test gives.
+srt = sort(x(:)); n = numel(srt); tail = (1 - level) / 2;
 min_n = 2;
-while 1 - p^min_n - (1 - p)^min_n < level, min_n = min_n + 1; end
+while (1 - p)^min_n > tail || p^min_n > tail, min_n = min_n + 1; end
 k = max(1, ceil(n * p));
 % R's type 7: linear interpolation between the order statistics around h = (n - 1) p + 1.
 h = (n - 1) * p + 1; i0 = floor(h); i1 = min(n, i0 + 1);
 interp = srt(i0) + (h - i0) * (srt(i1) - srt(i0));
 r = struct('k', k, 'order', srt(k), 'interp', interp, 'r', NaN, 's', NaN, 'lo', NaN, 'hi', NaN, 'achieved', NaN, 'minN', min_n);
-if n < 2, return; end
-F = binocdf((0:n) - 1, n, p);   % F(j + 1) = P(X <= j - 1): a pair (rr, ss) covers F(ss + 1) - F(rr + 1)
-mid = n * p + 0.5; best = [];
-for rr = 1:(n - 1)
-    ss = rr + 1;
-    while ss <= n && F(ss + 1) - F(rr + 1) < level, ss = ss + 1; end
-    if ss > n, continue; end
-    key = [ss - rr, abs((rr + ss) / 2 - mid), rr];
-    better = isempty(best);
-    if ~better
-        for i = 1:3
-            if key(i) < best.key(i), better = true; break; elseif key(i) > best.key(i), break; end
-        end
-    end
-    if better, best = struct('key', key, 'r', rr, 's', ss, 'cov', F(ss + 1) - F(rr + 1)); end
-end
-if ~isempty(best)
-    r.r = best.r; r.s = best.s; r.lo = srt(best.r); r.hi = srt(best.s); r.achieved = best.cov;
+F = binocdf(0:(n - 1), n, p);   % F(j + 1) = P(B <= j), B the count at or below the quantile
+rs = find(F <= tail); ss = find(1 - F <= tail);
+if ~isempty(rs), r.r = max(rs); r.lo = srt(r.r); end
+if ~isempty(ss), r.s = min(ss); r.hi = srt(r.s); end
+if ~isempty(rs) && ~isempty(ss), r.achieved = F(r.s) - F(r.r);
+elseif ~isempty(rs), r.achieved = 1 - F(r.r);
+elseif ~isempty(ss), r.achieved = F(r.s);
 end
 end
 `;

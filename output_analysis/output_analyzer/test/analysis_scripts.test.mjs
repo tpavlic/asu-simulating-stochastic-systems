@@ -600,6 +600,9 @@ test('oneRecipe carries the stated-mean test, the prediction interval, and the q
     'quantile lower', 'quantile upper', 'quantile achieved level', 'quantile smallest n']) assert.ok(k in r.expect, k);
   assert.equal(r.settings.mu0, 3);
   assert.equal(r.settings.quantile_p, 0.5);
+  // The figure draws the stated mean only when the view showed it.
+  assert.equal(r.fig.mu0, false);
+  assert.equal(oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN, mu0: 3, qp: 0.5, view: { mu0: true } }).fig.mu0, true);
   assert.equal(r.one.test.mu0, 3);
   assert.equal(r.one.quantile.p, 0.5);
   assert.ok(r.one.pi);
@@ -607,11 +610,14 @@ test('oneRecipe carries the stated-mean test, the prediction interval, and the q
   // quantile's ranks bracket its order statistic.
   assert.ok(r.expect['prediction half-width'] > r.expect['half-width']);
   assert.ok(r.expect['quantile lower rank'] <= r.expect['quantile rank k'] && r.expect['quantile rank k'] <= r.expect['quantile upper rank']);
-  // The 90th percentile of 20 outcomes has no 95% interval: the largest outcome
-  // is never covered by a pair, and the widest pair first reaches 95% at R = 29.
+  // The 90th percentile of 20 outcomes has a lower bound but no upper one: the
+  // chance that every outcome falls below it, 0.9^20, exceeds alpha/2, and both
+  // ends first exist at R = 36.
   const r9 = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN, mu0: 3, qp: 0.9 });
-  assert.equal(r9.expect['quantile lower rank'], null);
-  assert.equal(r9.expect['quantile smallest n'], 29);
+  assert.equal(r9.expect['quantile lower rank'], 15, 'P(B <= 14) is the largest lower tail under 0.025 at R = 20, p = 0.9');
+  assert.equal(r9.expect['quantile upper rank'], null, '0.9^20 exceeds 0.025, so no rank bounds the upper end');
+  assert.ok(Number.isNaN(r9.expect['quantile upper']));
+  assert.equal(r9.expect['quantile smallest n'], 36);
   assert.ok(analysisScript(r, 'R').includes('t.test(x, mu = mu0'), 'R tests with t.test(mu = mu0)');
   assert.ok(analysisScript(r, 'py').includes('ttest_1samp'), 'Python tests with ttest_1samp');
   for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
@@ -624,9 +630,10 @@ test('oneRecipe carries the stated-mean test, the prediction interval, and the q
   const r0 = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN });
   assert.ok(!('t statistic' in r0.expect) && !('quantile rank k' in r0.expect));
   assert.ok(!('mu0' in r0.settings));
-  // A quantile no pair of order statistics can bracket at this R reports NaN ends and null ranks.
+  // A quantile the sample bounds from below only reports a NaN upper end and a null upper rank.
   const rq = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99, provenance: prov, plan: null, mu0: 3, qp: 0.95 });
-  assert.ok(Number.isNaN(rq.expect['quantile lower']) && rq.expect['quantile lower rank'] === null);
+  assert.ok(Number.isNaN(rq.expect['quantile upper']) && rq.expect['quantile upper rank'] === null);
+  assert.ok(rq.expect['quantile lower rank'] > 0 && Number.isFinite(rq.expect['quantile lower']));
   assert.ok(rq.expect['quantile smallest n'] > 20);
 });
 
@@ -653,7 +660,7 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
     plan: { relative: false, rel: 10, abs: 0.25, delta: 0.5, power: 0.9 }, mu0: 2.5, qp: 0.5 });
   checkRecipe('One System, Wilcoxon with the signed-rank test at mu0 and the median', rxn, { smoke: true });
   const rxq = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99, provenance: oneProv(QUEUE, 0.99, 't'), plan: null, mu0: 3.2, qp: 0.95 });
-  checkRecipe('One System, a quantile no pair of order statistics reaches at this R', rxq, { smoke: true });
+  checkRecipe('One System, a quantile the sample bounds from below only', rxq, { smoke: true });
 }
 
 // A replication that gave no outcome is left out and named.
@@ -2720,6 +2727,7 @@ test('Levene groups too large to embed are left out of a script that reads its f
   const views = [
     ['One System, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null }), 1, true],
     ['One System, pooled', oneRecipe({ ds: TRANSIENT, x: TRANSIENT.reps.flatMap(p => Array.from(p.v)), ids: null, pooled: true, proc: 't', level: 0.95, plan: null }), 1],
+    ['One System, t with the stated mean on the plot', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 3, qp: 0.5, view: { mu0: true } }), 1],
     ['Two Systems, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, null), 2],
     ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],
