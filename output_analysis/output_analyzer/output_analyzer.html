@@ -37666,7 +37666,10 @@ export function render(rootEl) {
   const varSec = el('div');
   varSec.hidden = true;
   varSec.appendChild(el('div', 'sub-hd', 'Confidence interval on the variance'));
-  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. The normality check in the blue notice above is the one to read first here: the t interval tolerates non-normal outcomes as R grows, and this interval does not.'));
+  // The lede's last sentence points at the checks notice by its color, which
+  // draw() writes once the notice is rendered, since the color is its verdict's.
+  const varLede = el('p', 'exp-note');
+  varSec.appendChild(varLede);
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
   varSec.appendChild(details('Why the variance interval is fragile',
@@ -37710,7 +37713,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vTab, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
+  els = { varSec, vTab, varLede, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
           qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0On: testCtrl.querySelector('#rp-mu0-on'), mu0Pair: testCtrl.querySelector('#rp-mu0-pair'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
@@ -38244,6 +38247,10 @@ function draw() {
   const vi = pooled ? null : varianceInterval(x, level);
   els.varSec.hidden = !vi;
   if (vi) {
+    const nb = els.checks.querySelector('.notice');
+    const shade = !nb ? null : nb.classList.contains('notice-warn') ? 'gold' : nb.classList.contains('notice-ok') ? 'blue' : 'maroon';
+    els.varLede.textContent = 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. Although the t interval tolerates non-normal outcomes as R grows, this interval does not. Consequently, the normality check ' +
+      (shade ? 'in the ' + shade + ' notice above is particularly important here.' : 'is particularly important here; the Normality section of Summary and Plots runs it on these outcomes.');
     const pLo = (1 - level) / 2, pHi = 1 - pLo;
     els.vTab.replaceChildren(tbl(['', lvl(level) + ' interval for ' + S('σ'), lvl(level) + ' interval for ' + S('σ²'), S('s'), S('s²'), 'R (' + DF_LABEL + ')', S('χ²') + ' quantiles'],
       [['Variance of the replication outcomes' + esc(scale), boundsText(vi.loS, vi.hiS), boundsText(vi.lo2, vi.hi2), num(vi.s), num(vi.s2),
