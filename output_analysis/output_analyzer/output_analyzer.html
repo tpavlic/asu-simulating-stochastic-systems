@@ -42844,7 +42844,7 @@ function renderIndependent(res, notes, d, level, blank) {
   const fr = d ? fRatio(d.eA.v, d.eB.v, level) : null;
   const vs = sec('Variances of A and B');
   res.appendChild(vs);
-  vs.appendChild(caption('Which design is more variable: the ratio of the two sample variances with its F interval. The equal-variances assumption of the pooled t is a different question, answered by Levene’s test on the checks line above.'));
+  vs.appendChild(caption('Which design is more variable: the ratio of the two sample variances with its F interval. The equal-variances assumption of the pooled t is a different question, answered by Levene’s test, which the notice under the pooled-variance t’s result reports when that procedure is chosen.'));
   const vv = (x, f = num) => (fr ? f(x) : dash);
   vs.appendChild(cardRow([
     card(S('F = s²<sub>A</sub> / s²<sub>B</sub>'), vv(fr && fr.F, stat), 'ratio of sample variances'),
@@ -42860,7 +42860,7 @@ function renderIndependent(res, notes, d, level, blank) {
   vs.appendChild(vVerdict);
   if (d) vs.appendChild(assumptionChecks({ sets: [{ name: 'A', values: d.eA.v, dsId: d.dsA.id }, { name: 'B', values: d.eB.v, dsId: d.dsB.id }], alpha: 1 - state.settings.base,
     procedure: 'the F ratio', declared: 'between the two designs cannot be checked from the data, and the F ratio assumes it; it is what the Independent setting declares.' }));
-  vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, on the checks line above and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
+  vs.appendChild(notice('warn', 'The F ratio and its interval assume both sets of replication outcomes are normally distributed; unlike the Welch interval for a difference of means, they do not become safe as R grows, and heavy tails alone make the F test reject. Levene’s test, reported in the notice under the pooled-variance t’s result and in the Equal variances section of Summary and Plots, asks the same question without assuming normality.'));
 
   if (!w) {
     resultBase = null;
