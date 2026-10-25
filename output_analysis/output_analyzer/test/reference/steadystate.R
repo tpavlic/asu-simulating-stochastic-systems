@@ -8,7 +8,8 @@ j <- function(x) {
   if (is.list(x) && !is.null(names(x))) paste0("{", paste(sprintf('"%s":%s', names(x), sapply(x, j)), collapse = ","), "}")
   else if (is.list(x) || length(x) > 1) paste0("[", paste(sapply(x, j), collapse = ","), "]")
   else if (is.character(x)) sprintf('"%s"', x)
-  else if (is.logical(x)) tolower(as.character(x))
+  else if (is.logical(x) && !is.na(x)) tolower(as.character(x))
+  else if (length(x) == 1 && is.na(x)) "null"
   else sprintf("%.17g", as.numeric(x))
 }
 
@@ -123,6 +124,19 @@ mC <- t(sapply(reps, function(r) sapply(1:8, function(i) {
 alignTally <- list(edges = edgesC, ybar = apply(mC, 2, function(c) mean(c[!is.na(c)])),
                    counts = apply(mC, 2, function(c) sum(!is.na(c))))
 
+# ---- The spread across replications at each bin or index, and the t band on the mean ----------
+# sd is the sample standard deviation over the replications that give a value (NA below two of
+# them), and the band's half-width is qt(1 - a/2, count - 1) * sd / sqrt(count) at 95%.
+col_sd <- function(M) apply(M, 2, function(c) { c <- c[!is.na(c)]; if (length(c) >= 2) sd(c) else NA })
+band_hw <- function(sdv, counts, L) ifelse(counts >= 2, qt(1 - (1 - L) / 2, counts - 1) * sdv / sqrt(counts), NA)
+mI <- matrix(NA, length(reps), Lmax)
+for (q in seq_along(reps)) mI[q, seq_along(reps[[q]]$v)] <- reps[[q]]$v
+spread <- list(
+  time = list(sd = col_sd(mT), hw95 = band_hw(col_sd(mT), alignTime$counts, 0.95)),
+  tally = list(sd = col_sd(mC), hw95 = band_hw(col_sd(mC), alignTally$counts, 0.95), hw90 = band_hw(col_sd(mC), alignTally$counts, 0.90)),
+  index = list(sd = col_sd(mI), hw95 = band_hw(col_sd(mI), idxC, 0.95))
+)
+
 # ---- Welch's moving average on a short vector, by hand (1-based i = 1 .. m - w) ---------------
 y <- c(3, 7, 2, 9, 4, 6, 8, 1, 5, 7, 3, 6)
 welch <- function(y, w) {
@@ -152,6 +166,7 @@ out <- list(
   tallyReps = lapply(reps, function(r) list(t = r$t, v = r$v)),
   alignIndex = list(L = Lmax, ybar = idxY, counts = idxC),
   alignTally = alignTally,
+  spread = spread,
   welch = list(y = y, w2 = welch(y, 2), w5 = welch(y, 5), cum = cumsum(y) / seq_along(y)),
   mc = list(b20 = mc20, b10 = mc10, N = 20000, crit = qnorm(0.95))
 )

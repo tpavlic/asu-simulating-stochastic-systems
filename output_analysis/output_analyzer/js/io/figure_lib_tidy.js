@@ -443,7 +443,10 @@ fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelati
 FIG_TIDY.warmup = `
 # Welch's warm-up plot: the raw average across replications, its moving average, and its
 # cumulative average, with the chosen cut marked and the stretch before it shaded.
-fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA,
+                       reps = NULL, lo = NULL, hi = NULL) {
+  # reps: a matrix with one replication's series per row, drawn thin behind the averages;
+  # lo and hi: the band on the average at each point, as a ribbon under everything.
   x <- as.numeric(x)
   if (length(x) == 0) return(fig_empty(title, xlab, ylab))
   nm <- c("average across replications", "moving average", "cumulative average")
@@ -465,6 +468,16 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   if (cut_on) {
     p <- p + annotate("rect", xmin = -Inf, xmax = cut, ymin = -Inf, ymax = Inf,
                       fill = FIG_MUTED, alpha = 0.2)
+  }
+  if (!is.null(lo) && !is.null(hi)) {
+    db <- tibble(x = x, lo = as.numeric(lo), hi = as.numeric(hi)) %>% filter(is.finite(lo), is.finite(hi))
+    if (nrow(db)) p <- p + geom_ribbon(data = db, aes(x, ymin = lo, ymax = hi), fill = FIG_EST, alpha = 0.15)
+  }
+  if (!is.null(reps) && nrow(reps) > 0) {
+    dr <- bind_rows(lapply(seq_len(nrow(reps)), function(q) tibble(x = x, y = as.numeric(reps[q, ]), rep = q))) %>%
+      filter(is.finite(x))
+    p <- p + geom_line(data = dr, aes(x, y, group = rep), color = FIG_MUTED, alpha = 0.5,
+                       linewidth = 0.3, na.rm = TRUE)
   }
   p <- p + geom_line(data = d, aes(x, y, color = what, linetype = what, linewidth = what),
                      na.rm = TRUE)

@@ -753,11 +753,15 @@ function fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, ttl, o)
 % Welch's warm-up plot: the average across replications (thin gray), its
 % moving average (blue), and the cumulative average (dashed), with the
 % warm-up period up to cut shaded and the cut marked. When o.end_lo is
-% finite, a dotted line marks where the shortest run ends.
+% finite, a dotted line marks where the shortest run ends. o.reps, a matrix
+% with one replication's series per row, draws each thin behind the
+% averages, and o.lo and o.hi shade the band on the average under everything.
 if nargin < 9, o = struct(); end
 c = fig_colors();
 x = x(:);
 end_lo = fig_opt(o, 'end_lo', NaN);
+reps = fig_opt(o, 'reps', []);
+lo = fig_opt(o, 'lo', []); hi = fig_opt(o, 'hi', []);
 figure;
 fig_size(6.5, 4.8);
 if ~any(isfinite(x) & isfinite(ybar(:)))
@@ -767,11 +771,35 @@ end
 hold on;
 box on;
 xlim(fig_pad(fig_range([x; cut; end_lo]), 0.02));
-ylim(fig_pad(fig_range([ybar(:); smooth(:); cumavg(:)]), 0.05));
+ylim(fig_pad(fig_range([ybar(:); smooth(:); cumavg(:); reps(:); lo(:); hi(:)]), 0.05));
 handles = gobjects(0);
 names = {};
 if cut > min(x)
     fig_band(min(xlim), cut, c.muted);
+end
+% The band, one patch per run of points that have one, under everything.
+if ~isempty(lo) && ~isempty(hi)
+    lo = lo(:); hi = hi(:);
+    ok = isfinite(lo) & isfinite(hi);
+    i = 1; first = true;
+    while i <= numel(x)
+        while i <= numel(x) && ~ok(i), i = i + 1; end
+        j = i;
+        while j <= numel(x) && ok(j), j = j + 1; end
+        if j - i >= 2
+            hp = patch([x(i:j-1); flipud(x(i:j-1))], [hi(i:j-1); flipud(lo(i:j-1))], c.est, ...
+                       'FaceAlpha', 0.15, 'EdgeColor', 'none');
+            if first, handles(end + 1) = hp; names{end + 1} = 'band on the average'; first = false; end
+        end
+        i = j;
+    end
+end
+% Each replication's own series, thin and light, behind the averages.
+if ~isempty(reps)
+    for q = 1:size(reps, 1)
+        hr = plot(x, reps(q, :), 'Color', [c.muted, 0.5], 'LineWidth', 0.5);
+        if q == 1, handles(end + 1) = hr; names{end + 1} = 'one replication'; end
+    end
 end
 % NaN entries leave gaps in the lines rather than being joined across.
 handles(end + 1) = plot(x, ybar(:), 'Color', c.muted, 'LineWidth', 0.75);

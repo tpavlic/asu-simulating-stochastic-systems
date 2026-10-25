@@ -25,8 +25,7 @@ import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPoole
          anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
-import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
-         resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand } from '../stats/steadystate.js';
 import { slug } from './export.js';
 import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
 import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
@@ -834,18 +833,20 @@ export function steadyRecipe(o) {
   const kind = ds.kind === 'time' ? 'time' : 'tally';
   const lumped = !!o.lumped && ds.reps.length > 1;
 
-  // Warm-up: the average across replications, smoothed as the page smooths it.
-  let ybar, edges = null;
-  if (align === 'index') ybar = alignByIndex(ds.reps).ybar;
-  else ({ ybar, edges } = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start));
+  // Warm-up: the average across replications, smoothed as the page smooths
+  // it, with the spread across the replications and the band on the average.
+  const al = align === 'index' ? alignByIndex(ds.reps) : alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start);
+  const ybar = al.ybar, edges = align === 'index' ? null : al.edges;
   const L = ybar.length, mid = Math.ceil(L / 2);
   let gaps = 0;
   for (let i = 0; i < L; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w), cum = cumulativeAverage(ybar);
+  const band = ensembleBand(ybar, al.sd, al.counts, level);
   e['warm-up points'] = L;
   if (L) {
     Object.assign(e, { 'warm-up ybar at 1': ybar[0], 'warm-up ybar at mid': ybar[mid - 1],
-      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1] });
+      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1],
+      'warm-up sd at mid': al.sd[mid - 1], 'warm-up band half-width at mid': band.hw[mid - 1] });
   }
   if (edges) Object.assign(e, { 'warm-up bin width': edges[1] - edges[0], 'warm-up empty bins': gaps });
 
@@ -900,7 +901,10 @@ export function steadyRecipe(o) {
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
   // The figures of the section the page showed: the warm-up plot, or the correlogram, the
   // neighboring batch means, and the batches.
-  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response };
+  // The figure follows the view: which section, and on the warm-up plot
+  // whether each replication's series and the band were shown.
+  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response,
+            reps: !!(o.view && o.view.reps) && ds.reps.length > 1, band: !!(o.view && o.view.band) && ds.reps.length > 1 };
   r.settings = {
     kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime,
     align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,

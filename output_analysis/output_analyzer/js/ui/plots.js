@@ -1237,7 +1237,10 @@ export function welchPlot(fig, d) {
   const xs = d.x;
   const n = xs.length;
   if (!fig.sx) fig.x(extent(xs));
-  if (!fig.sy) fig.y(extent(d.raw, d.smooth, d.cumulative), { pad: 0.05, nice: true });
+  // The replications' own series and the band, when shown, widen the y range.
+  const reps = Array.isArray(d.reps) ? d.reps : [];
+  const band = d.band && d.band.lo && d.band.hi ? d.band : null;
+  if (!fig.sy) fig.y(extent(d.raw, d.smooth, d.cumulative, ...(band ? [band.lo, band.hi] : []), ...reps.map(r => r.y)), { pad: 0.05, nice: true });
   ensureAxes(fig, d);
   const sx = fig.sx, sy = fig.sy;
   // The cut rests at `cutMin` when none is given and cannot go below it: the
@@ -1248,6 +1251,28 @@ export function welchPlot(fig, d) {
   const shade = d.shade ? svgEl('rect', { x: xLo, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
   const shadeRec = d.shade ? { kind: 'span', x0: lo, x1: lo, color: tok('--muted'), label: 'excluded by the cut' } : null;
   if (shadeRec) fig.series.push(shadeRec);
+  // The band under every line, drawn as one polygon per run of points that
+  // have one, and each replication's series as a thin gray line beneath the
+  // averages.
+  if (band) {
+    const cBand = tok('--pair');
+    let i = 0;
+    while (i < n) {
+      while (i < n && !(Number.isFinite(band.lo[i]) && Number.isFinite(band.hi[i]))) i++;
+      const start = i;
+      while (i < n && Number.isFinite(band.lo[i]) && Number.isFinite(band.hi[i])) i++;
+      if (i - start < 2) continue;
+      const pts = [];
+      for (let k = start; k < i; k++) pts.push(r1(sx(xs[k])) + ',' + r1(sy(band.hi[k])));
+      for (let k = i - 1; k >= start; k--) pts.push(r1(sx(xs[k])) + ',' + r1(sy(band.lo[k])));
+      svgEl('polygon', { points: pts.join(' '), fill: cBand, 'fill-opacity': 0.18, stroke: 'none', class: 'm-band' }, fig.inner);
+    }
+    fig.series.push({ kind: 'band', x: Array.from(xs), lo: Array.from(band.lo), hi: Array.from(band.hi), color: cBand, label: band.label || 'confidence band' });
+  }
+  for (const r of reps) {
+    drawSeries(fig, xs, r.y, { stroke: tok('--muted'), 'stroke-width': 0.9, opacity: 0.55 }, 'm-rep');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(r.y), color: tok('--muted'), width: 0.8, label: r.label || 'one replication' });
+  }
   if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
   if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
   if (d.smooth) {

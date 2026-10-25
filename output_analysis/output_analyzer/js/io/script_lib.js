@@ -2733,33 +2733,54 @@ end
 // ── Steady State: the warm-up plot's averages ────────────────────────────
 
 LIB.R.alignment = `
-align_by_index <- function(reps) {
-  # ybar[i] is the mean of observation i over the replications that have one.
+col_mean_nan <- function(M) apply(M, 2, function(cl) { cl <- cl[!is.nan(cl)]; if (length(cl)) mean(cl) else NaN })
+align_rows_by_index <- function(reps) {
+  # One row per replication: its observation i in column i, NaN past its end.
   L <- max(0, vapply(reps, function(r) length(r$v), numeric(1)))
   M <- matrix(NaN, length(reps), L)
   for (q in seq_along(reps)) { n <- length(reps[[q]]$v); if (n) M[q, 1:n] <- reps[[q]]$v }
-  colMeans(M, na.rm = TRUE)
+  M
 }
-align_by_time <- function(reps, kind, n_bins, end_time, start) {
+align_by_index <- function(reps) {
+  # ybar[i] is the mean of observation i over the replications that have one.
+  col_mean_nan(align_rows_by_index(reps))
+}
+align_rows_by_time <- function(reps, kind, n_bins, end_time, start) {
   # Equal bins of simulation time from start to T, T the end time or, when there is none, the
-  # latest last record. In each bin a replication gives its time average over the part of the bin
-  # it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-  # the right (tally); ybar averages the replications that give a value, and is NaN where none does.
-  reps <- Filter(function(r) length(r$t) > 0, reps)
-  t_end <- if (!is.nan(end_time)) end_time else if (length(reps)) max(vapply(reps, function(r) r$t[length(r$t)], numeric(1))) else 0
+  # latest last record. One row per replication: in each bin its time average over the part of the
+  # bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+  # on the right (tally), NaN where it gives none. A replication with no records is a row of NaN.
+  t_reps <- Filter(function(r) length(r$t) > 0, reps)
+  t_end <- if (!is.nan(end_time)) end_time else if (length(t_reps)) max(vapply(t_reps, function(r) r$t[length(r$t)], numeric(1))) else 0
   B <- max(1, floor(n_bins))
   t0 <- if (is.finite(start) && start < t_end) start else 0
   edges <- c(t0 + (t_end - t0) * (0:(B - 1)) / B, t_end)
-  ybar <- vapply(seq_len(B), function(b) {
-    vals <- vapply(reps, function(r) {
-      if (kind == "time") return(tw_mean(r$t, r$v, trajectory_end(r$t, end_time), edges[b], edges[b + 1]))
+  M <- matrix(NaN, length(reps), B)
+  for (q in seq_along(reps)) {
+    r <- reps[[q]]
+    if (!length(r$t)) next
+    for (b in seq_len(B)) {
+      if (kind == "time") { M[q, b] <- tw_mean(r$t, r$v, trajectory_end(r$t, end_time), edges[b], edges[b + 1]); next }
       inb <- r$t >= edges[b] & (r$t < edges[b + 1] | (b == B & r$t <= edges[b + 1]))
-      if (any(inb)) mean(r$v[inb]) else NaN
-    }, numeric(1))
-    vals <- vals[!is.nan(vals)]
-    if (length(vals)) mean(vals) else NaN
-  }, numeric(1))
-  list(edges = edges, ybar = ybar)
+      if (any(inb)) M[q, b] <- mean(r$v[inb])
+    }
+  }
+  list(edges = edges, rows = M)
+}
+align_by_time <- function(reps, kind, n_bins, end_time, start) {
+  # ybar averages the replications that give a value in each bin, and is NaN where none does.
+  a <- align_rows_by_time(reps, kind, n_bins, end_time, start)
+  list(edges = a$edges, ybar = col_mean_nan(a$rows))
+}
+ensemble_band <- function(rows, level) {
+  # At each column: the count of replications with a value, their sample standard deviation (NaN
+  # below two), and the t interval on their mean, qt(1 - a/2, count - 1) * sd / sqrt(count).
+  cnt <- colSums(!is.nan(rows))
+  sdv <- apply(rows, 2, function(cl) { cl <- cl[!is.nan(cl)]; if (length(cl) >= 2) sd(cl) else NaN })
+  ybar <- col_mean_nan(rows)
+  hw <- rep(NaN, ncol(rows)); ok <- cnt >= 2
+  hw[ok] <- qt(1 - (1 - level) / 2, cnt[ok] - 1) * sdv[ok] / sqrt(cnt[ok])
+  list(count = cnt, sd = sdv, hw = hw, lo = ybar - hw, hi = ybar + hw)
 }
 moving_average <- function(y, w) {
   # Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
@@ -2780,38 +2801,67 @@ cumulative_average <- function(y) {
 }
 `;
 LIB.py.alignment = `
-def align_by_index(reps):
-    """ybar[i] is the mean of observation i over the replications that have one."""
+def col_mean_nan(M):
+    """The mean down each column over the values that are not nan; nan where none is."""
+    cnt = np.sum(~np.isnan(M), axis=0)
+    out = np.full(M.shape[1], np.nan)
+    np.divide(np.nansum(M, axis=0), cnt, out=out, where=cnt > 0)
+    return out
+
+def align_rows_by_index(reps):
+    """One row per replication: its observation i in column i, nan past its end."""
     L = max([len(r["v"]) for r in reps] + [0])
     M = np.full((len(reps), L), np.nan)
     for q, r in enumerate(reps):
         M[q, :len(r["v"])] = r["v"]
-    return np.nansum(M, axis=0) / np.sum(~np.isnan(M), axis=0)
+    return M
 
-def align_by_time(reps, kind, n_bins, end_time, start):
+def align_by_index(reps):
+    """ybar[i] is the mean of observation i over the replications that have one."""
+    return col_mean_nan(align_rows_by_index(reps))
+
+def align_rows_by_time(reps, kind, n_bins, end_time, start):
     """Equal bins of simulation time from start to T, T the end time or, when there is none, the
-    latest last record. In each bin a replication gives its time average over the part of the bin
-    it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-    the right (tally); ybar averages the replications that give a value, and is nan where none does."""
-    reps = [r for r in reps if r["t"] is not None and len(r["t"]) > 0]
+    latest last record. One row per replication: in each bin its time average over the part of the
+    bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+    on the right (tally), nan where it gives none. A replication with no records is a row of nan."""
+    timed = [r for r in reps if r["t"] is not None and len(r["t"]) > 0]
     if not np.isnan(end_time): t_end = end_time
-    else: t_end = max(r["t"][-1] for r in reps) if reps else 0.0
+    else: t_end = max(r["t"][-1] for r in timed) if timed else 0.0
     B = max(1, int(np.floor(n_bins)))
     t0 = start if np.isfinite(start) and start < t_end else 0.0
     edges = np.append(t0 + (t_end - t0) * np.arange(B) / B, t_end)
-    ybar = np.full(B, np.nan)
-    for b in range(B):
-        vals = []
-        for r in reps:
-            t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+    M = np.full((len(reps), B), np.nan)
+    for q, r in enumerate(reps):
+        if r["t"] is None or len(r["t"]) == 0: continue
+        t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+        for b in range(B):
             if kind == "time":
-                x = tw_mean(t, v, trajectory_end(t, end_time), edges[b], edges[b + 1])
+                M[q, b] = tw_mean(t, v, trajectory_end(t, end_time), edges[b], edges[b + 1])
             else:
                 inb = (t >= edges[b]) & ((t < edges[b + 1]) | ((b == B - 1) & (t <= edges[b + 1])))
-                x = v[inb].mean() if inb.any() else np.nan
-            if not np.isnan(x): vals.append(x)
-        if vals: ybar[b] = np.mean(vals)
-    return edges, ybar
+                if inb.any(): M[q, b] = v[inb].mean()
+    return edges, M
+
+def align_by_time(reps, kind, n_bins, end_time, start):
+    """ybar averages the replications that give a value in each bin, and is nan where none does."""
+    edges, M = align_rows_by_time(reps, kind, n_bins, end_time, start)
+    return edges, col_mean_nan(M)
+
+def ensemble_band(rows, level):
+    """At each column: the count of replications with a value, their sample standard deviation (nan
+    below two), and the t interval on their mean, t.ppf(1 - a/2, count - 1) * sd / sqrt(count)."""
+    M = np.asarray(rows, float)
+    cnt = np.sum(~np.isnan(M), axis=0)
+    ybar = col_mean_nan(M)
+    ss = np.nansum((M - ybar) ** 2, axis=0)
+    sd = np.full(M.shape[1], np.nan)
+    np.divide(ss, np.maximum(cnt - 1, 1), out=sd, where=cnt >= 2)
+    sd = np.sqrt(sd)
+    hw = np.full(M.shape[1], np.nan)
+    ok = cnt >= 2
+    if ok.any(): hw[ok] = stats.t.ppf(1 - (1 - level) / 2, cnt[ok] - 1) * sd[ok] / np.sqrt(cnt[ok])
+    return dict(count=cnt, sd=sd, hw=hw, lo=ybar - hw, hi=ybar + hw)
 
 def moving_average(y, w):
     """Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
@@ -2831,41 +2881,60 @@ def cumulative_average(y):
     return np.where(c > 0, s / np.maximum(c, 1), np.nan)
 `;
 LIB.m.alignment = `
-function ybar = align_by_index(reps)
-% ybar(i) is the mean of observation i over the replications that have one.
+function M = align_rows_by_index(reps)
+% One row per replication: its observation i in column i, NaN past its end.
 L = max([0, arrayfun(@(r) numel(r.v), reps)]);
 M = nan(numel(reps), L);
 for q = 1:numel(reps), M(q, 1:numel(reps(q).v)) = reps(q).v; end
-ybar = mean(M, 1, 'omitnan');
 end
 
-function [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start)
+function ybar = align_by_index(reps)
+% ybar(i) is the mean of observation i over the replications that have one.
+ybar = mean(align_rows_by_index(reps), 1, 'omitnan');
+end
+
+function [edges, M] = align_rows_by_time(reps, kind, n_bins, end_time, start)
 % Equal bins of simulation time from start to T, T the end time or, when there is none, the
-% latest last record. In each bin a replication gives its time average over the part of the bin
-% it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-% the right (tally); ybar averages the replications that give a value, and is NaN where none does.
-reps = reps(arrayfun(@(r) ~isempty(r.t), reps));
+% latest last record. One row per replication: in each bin its time average over the part of the
+% bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+% on the right (tally), NaN where it gives none. A replication with no records is a row of NaN.
+timed = reps(arrayfun(@(r) ~isempty(r.t), reps));
 if ~isnan(end_time), t_end = end_time;
-elseif ~isempty(reps), t_end = max(arrayfun(@(r) r.t(end), reps));
+elseif ~isempty(timed), t_end = max(arrayfun(@(r) r.t(end), timed));
 else, t_end = 0; end
 B = max(1, floor(n_bins));
 if isfinite(start) && start < t_end, t0 = start; else, t0 = 0; end
 edges = [t0 + (t_end - t0) * (0:B-1) / B, t_end];
-ybar = nan(1, B);
-for b = 1:B
-    vals = [];
-    for q = 1:numel(reps)
-        t = reps(q).t(:)'; v = reps(q).v(:)';
+M = nan(numel(reps), B);
+for q = 1:numel(reps)
+    t = reps(q).t(:)'; v = reps(q).v(:)';
+    if isempty(t), continue; end
+    for b = 1:B
         if strcmp(kind, 'time')
-            x = tw_mean(t, v, trajectory_end(t, end_time), edges(b), edges(b + 1));
+            M(q, b) = tw_mean(t, v, trajectory_end(t, end_time), edges(b), edges(b + 1));
         else
             inb = t >= edges(b) & (t < edges(b + 1) | (b == B & t <= edges(b + 1)));
-            x = NaN; if any(inb), x = mean(v(inb)); end
+            if any(inb), M(q, b) = mean(v(inb)); end
         end
-        if ~isnan(x), vals(end + 1) = x; end %#ok<AGROW>
     end
-    if ~isempty(vals), ybar(b) = mean(vals); end
 end
+end
+
+function [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start)
+% ybar averages the replications that give a value in each bin, and is NaN where none does.
+[edges, M] = align_rows_by_time(reps, kind, n_bins, end_time, start);
+ybar = mean(M, 1, 'omitnan');
+end
+
+function r = ensemble_band(rows, level)
+% At each column: the count of replications with a value, their sample standard deviation (NaN
+% below two), and the t interval on their mean, tinv(1 - a/2, count - 1) * sd / sqrt(count).
+cnt = sum(~isnan(rows), 1);
+ybar = mean(rows, 1, 'omitnan');
+sd = std(rows, 0, 1, 'omitnan'); sd(cnt < 2) = NaN;
+hw = nan(1, size(rows, 2)); ok = cnt >= 2;
+hw(ok) = tinv(1 - (1 - level) / 2, cnt(ok) - 1) .* sd(ok) ./ sqrt(cnt(ok));
+r = struct('count', cnt, 'sd', sd, 'hw', hw, 'lo', ybar - hw, 'hi', ybar + hw);
 end
 
 function out = moving_average(y, w)

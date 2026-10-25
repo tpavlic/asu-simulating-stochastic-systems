@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  alignByIndex, alignByTime, movingAverage, cumulativeAverage, lag1, lag1Test, batchMeans,
+  alignByIndex, alignByTime, ensembleBand, movingAverage, cumulativeAverage, lag1, lag1Test, batchMeans,
 } from '../js/stats/steadystate.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -213,4 +213,57 @@ test("Fishman's test rejects near the R Monte Carlo rate under independence", ()
   assert.ok(Math.abs(rate - R.mc.b20) <= 0.02, `JS rate ${rate} vs R ${R.mc.b20}`);
   // The R rates themselves sit near the nominal 0.05 at b = 20 and b = 10.
   assert.ok(Math.abs(R.mc.b20 - 0.05) < 0.01 && Math.abs(R.mc.b10 - 0.05) < 0.01);
+});
+
+// The spread across replications at each bin or index, and the t band on the
+// ensemble average: sd over the replications that give a value (NaN below two),
+// and a half-width of t_{1-a/2, count-1} * sd / sqrt(count). The rows are each
+// replication's own values on the shared axis, NaN where it gives none.
+const naNull = v => (v === null ? NaN : v);
+const closeOrNaN = (got, want, tol, label) => {
+  if (Number.isNaN(want)) assert.ok(Number.isNaN(got), `${label}: expected NaN, got ${got}`);
+  else close(got, want, tol, label);
+};
+
+test('alignByIndex keeps each replication as a row and the spread across them (R)', () => {
+  const reps = R.tallyReps.map(r => ({ t: r.t, v: r.v }));
+  const res = alignByIndex(reps);
+  assert.equal(res.rows.length, reps.length);
+  for (let q = 0; q < reps.length; q++) {
+    assert.equal(res.rows[q].length, res.L);
+    closeAll(Array.from(res.rows[q]).slice(0, reps[q].v.length), Array.from(reps[q].v), 0, 'row ' + q);
+    for (let i = reps[q].v.length; i < res.L; i++) assert.ok(Number.isNaN(res.rows[q][i]), 'NaN past the end');
+  }
+  for (let i = 0; i < res.L; i++) closeOrNaN(res.sd[i], naNull(R.spread.index.sd[i]), 1e-12, 'sd ' + i);
+  const band = ensembleBand(res.ybar, res.sd, res.counts, 0.95);
+  for (let i = 0; i < res.L; i++) {
+    closeOrNaN(band.hw[i], naNull(R.spread.index.hw95[i]), 1e-12, 'hw ' + i);
+    if (Number.isFinite(band.hw[i])) { close(band.lo[i], res.ybar[i] - band.hw[i], 1e-12, 'lo'); close(band.hi[i], res.ybar[i] + band.hw[i], 1e-12, 'hi'); }
+    else assert.ok(Number.isNaN(band.lo[i]) && Number.isNaN(band.hi[i]));
+  }
+});
+
+test('alignByTime keeps the rows and the spread, tally and time-persistent (R)', () => {
+  const tally = alignByTime(R.tallyReps.map(r => ({ t: r.t, v: r.v })), 'tally', 8, null);
+  assert.equal(tally.rows.length, R.tallyReps.length);
+  for (let b = 0; b < 8; b++) {
+    closeOrNaN(tally.sd[b], naNull(R.spread.tally.sd[b]), 1e-12, 'tally sd ' + b);
+    // The mean of the finite row values is the ensemble average.
+    const vals = tally.rows.map(r => r[b]).filter(Number.isFinite);
+    close(vals.reduce((a, c) => a + c, 0) / vals.length, tally.ybar[b], 1e-12, 'rows average to ybar');
+  }
+  const b95 = ensembleBand(tally.ybar, tally.sd, tally.counts, 0.95), b90 = ensembleBand(tally.ybar, tally.sd, tally.counts, 0.90);
+  for (let b = 0; b < 8; b++) {
+    closeOrNaN(b95.hw[b], naNull(R.spread.tally.hw95[b]), 1e-12, 'hw95 ' + b);
+    closeOrNaN(b90.hw[b], naNull(R.spread.tally.hw90[b]), 1e-12, 'hw90 ' + b);
+  }
+  const time = alignByTime([{ t: R.traj.t, v: R.traj.v }, { t: R.traj3.t, v: R.traj3.v }], 'time', 5, null);
+  for (let b = 0; b < 5; b++) closeOrNaN(time.sd[b], naNull(R.spread.time.sd[b]), 1e-12, 'time sd ' + b);
+  const bt = ensembleBand(time.ybar, time.sd, time.counts, 0.95);
+  for (let b = 0; b < 5; b++) closeOrNaN(bt.hw[b], naNull(R.spread.time.hw95[b]), 1e-12, 'time hw ' + b);
+  // One replication: rows hold it, and the spread and the band are NaN throughout.
+  const one = alignByTime([{ t: R.traj.t, v: R.traj.v }], 'time', 5, null);
+  assert.equal(one.rows.length, 1);
+  assert.ok(Array.from(one.sd).every(Number.isNaN));
+  assert.ok(Array.from(ensembleBand(one.ybar, one.sd, one.counts, 0.95).hw).every(Number.isNaN));
 });

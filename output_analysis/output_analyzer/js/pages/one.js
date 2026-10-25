@@ -270,7 +270,7 @@ export function render(rootEl) {
   testSec.appendChild(el('div', 'sec-hd', 'Test against a stated mean'));
   testSec.appendChild(el('p', 'exp-note', 'The interval above answers every question of the form “could the true mean be μ₀?” at once. This section asks it of one value, such as the mean measured on the real system when the model is being validated, and writes out the statistic the answer rests on.'));
   const testCtrl = el('div', 'ctrl-row');
-  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean <span class="sym">μ₀</span></span></span>' +
+  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean&nbsp;<span class="sym">μ₀</span></span></span>' +
     '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>';
   const tRow1 = el('div'), tRow2 = el('div');
   testSec.append(testCtrl, tRow1, tRow2);

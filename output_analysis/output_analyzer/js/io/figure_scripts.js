@@ -31,7 +31,9 @@
 //   and fig_running(x, y, xlab, ylab, title): a run and its running mean.
 //   fig_lag(x, k, xlab, ylab, title) and fig_acf(r; step, band, xlab, title,
 //     mark, mark_label): the lag plot and the correlogram from lag 1.
-//   fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title; end_lo).
+//   fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title; end_lo, reps,
+//     lo, hi): reps is a matrix with one replication's series per row, drawn
+//     thin behind the averages, and lo and hi the band on the average.
 //   fig_batches(x, y, starts, ends, means, xlab, ylab, title; step,
 //     exclude_to, joins).
 // Colors: EST #2b6cb0 for data, TRUTH #1a1a1a for intervals and means, MISS
@@ -303,8 +305,10 @@ function steadyFigures(r, L) {
       : L.lang === 'py' ? '"Observation index" if align == "index" else "Simulation time (bin centers)"' : null;
     if (L.lang === 'm') calls.push("xlab = 'Simulation time (bin centers)'; if strcmp(align, 'index'), xlab = 'Observation index'; end");
     calls.push(...call(L, 'fig_warmup', ['x', 'ybar', 'smooth', 'cum', 'cut', xlab || 'xlab',
-      L.str(F.nReps > 1 ? 'Average ' + resp + ' across replications' : resp), L.str('Warm-up: the average across replications')]));
-    return { notes: ['Welch\'s warm-up plot: the average across replications, its moving average over w points on each side, and its cumulative average, with the stretch before the cut shaded.'],
+      L.str(F.nReps > 1 ? 'Average ' + resp + ' across replications' : resp), L.str('Warm-up: the average across replications')],
+      { reps: F.reps ? 'rows' : undefined, lo: F.band ? fld(L, 'eb', 'lo') : undefined, hi: F.band ? fld(L, 'eb', 'hi') : undefined }));
+    const extras = [F.reps ? 'each replication\'s own series behind them' : null, F.band ? 'the band on the average at each point' : null].filter(Boolean);
+    return { notes: ['Welch\'s warm-up plot: the average across replications, its moving average over w points on each side, and its cumulative average, with the stretch before the cut shaded' + (extras.length ? ', and ' + extras.join(' and ') : '') + '.'],
       calls, fig: ['warmup'] };
   }
   if (!S.batchOk) return { calls: [] };

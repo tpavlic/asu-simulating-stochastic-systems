@@ -1014,7 +1014,10 @@ better.
   `js/io/arena.js` without a dialog because their header names the statistic and its kind
   (unless "Open Arena files in a dialog" under the drop zone is ticked, which opens each in a
   short dialog holding only the antithetic-pairs box),
-  each treated as the Output Analyzer treats it: 201 time-persistent, 207 frequency, and 206
+  and the text that analyzer's File, Data File, Export command writes (All or Lumped), which
+  `isArenaText` tells apart by its content, never by a `.txt` name, since a delimited file may
+  carry one, and a lumped output file is read as one value per replication numbered by each
+  record's time; each treated as the Output Analyzer treats it: 201 time-persistent, 207 frequency, and 206
   counter all as a step function with no dataset end time, so each replication's last record
   (Arena's closing record, or a counter's last increment) holds for no time and every time
   average runs over that replication's own run, the counter starting at 0 from time 0 and a
@@ -1035,8 +1038,14 @@ better.
   (`initialTicks` in `js/ui/rules.js`)), ③ One System (the
   absolute analysis: t interval on one system's replication outcomes, or the Wilcoxon signed-rank
   interval on the pseudo-median behind a Procedure switch, the pooled-observations override behind
-  a warning, and a "How many replications" card by target half-width or by target power of the
-  one-sample t test, and the chi-square interval on the variance), ④ Two Systems (the relative analysis: Welch by default, with the
+  a warning, the prediction interval for one further outcome beside the interval on the mean, a
+  "Test against a stated mean" section (a field for μ₀, the one-sample t statistic, its p-value,
+  and a verdict tied to the interval; the signed-rank test at μ₀ under the rank procedure), the
+  chi-square interval on the variance, a "quantile" section (the order statistic at ⌈pR⌉, the
+  interpolated quantile, and the distribution-free interval from the narrowest pair of order
+  statistics whose binomial coverage reaches the level, or the smallest R that could reach it),
+  and a "How many replications" card by target half-width or by target power of the
+  one-sample t test), ④ Two Systems (the relative analysis: Welch by default, with the
   pooled-variance t as a Procedure choice whose checks line adds Levene's test; paired
   only when the reader declares it, never inferred from the data: the Independent/Paired switch
   opens Paired exactly when both datasets come from one load whose ids are blocks
@@ -1082,7 +1091,11 @@ better.
   differences and the blocked F test), ⑥ Steady
   State (Welch moving-average warm-up plot, the ensemble average across replications aligned by
   time bins (the default wherever the data carry time stamps, since a warm-up period is set in
-  simulation software as a time) or by observation index, with a draggable cut that is never
+  simulation software as a time) or by observation index, two "Also show" boxes that draw each
+  replication's own series thin behind the averages and the t band on the ensemble average at
+  each point (the textbook's mean plot with its control limits; `ensembleBand` in
+  `js/stats/steadystate.js`, from the per-replication `rows` and `sd` the alignment functions
+  return), with a draggable cut that is never
   computed for the reader and the excluded stretch shaded; "Save truncated set" producing a derived
   dataset, which the page then shows as the run it came from with a fence at the saved cut
   (`truncationView` in `js/data/model.js`), so that the fence can be moved back or forward and saved
@@ -1229,7 +1242,8 @@ better.
      and Moving Average (`arena_output_analyzer_behavior.md`, `arena_dat_followup_experiments.md`;
      its moving average is a trailing forecast, not a Welch window), a standard-library Python
      reference parser (`arena_dat.py`), and in `samples/` the files those were checked against,
-     written by a deterministic model whose every value is known: `equal20/` (three 20-minute
+     written by a deterministic model whose every value is known, plus `text/`, two small
+     files in the shape of the analyzer's own text export: `equal20/` (three 20-minute
      replications, with the Analyzer's batch, truncated-batch, observation-batch, moving-average,
      and malformed all-replications files), `unequal/` (replications ending at 10, 20, and 30,
      with the Analyzer's lumped `.flt`, an artifact kept as a fixture), and `warmup5/` (a 5-minute
@@ -1372,7 +1386,8 @@ better.
      `figureBlock` in `js/io/figure_scripts.js` writes from `FIGURES[page]`: each figure is one
      call of a helper the script carries, `fig_strips`, `fig_intervals`, `fig_pairs_by_rep`,
      `fig_pairs_slopes`, `fig_hist`, `fig_ecdf`, `fig_box`, `fig_qq`, `fig_series`,
-     `fig_running`, `fig_lag`, `fig_acf`, `fig_warmup`, or `fig_batches`, each written once per
+     `fig_running`, `fig_lag`, `fig_acf`, `fig_warmup` (which takes the replications' rows and
+     the band when the view showed them), or `fig_batches`, each written once per
      dialect in `js/io/figure_lib_r.js`, `figure_lib_tidy.js` (ggplot2), `figure_lib_py.js`
      (Matplotlib, imported only inside the helpers, with one `show_figures()` at the end and a
      guard that skips the figures when Matplotlib is missing), and `figure_lib_m.js` (core

@@ -1361,11 +1361,15 @@ function steadyBody(r, L) {
   out.push(L.sect('Warm-up: the average across replications, smoothed'));
   out.push(...commentLines(c, 'ybar, the ensemble average, is the mean across the replications at each observation index or time bin; the moving average smooths it, and the cumulative average is the mean of ybar so far. The page draws all three; the first point, the middle one, and the last are reported here.', c));
   const warmLines = [rep(L, r, 'warm-up ybar at 1', at('ybar', 1)), rep(L, r, 'warm-up ybar at mid', at('ybar', 'mid')),
-    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end'))];
+    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end')),
+    rep(L, r, 'warm-up sd at mid', at(FIELD[lang]('eb', 'sd'), 'mid')), rep(L, r, 'warm-up band half-width at mid', at(FIELD[lang]('eb', 'hw'), 'mid'))];
   if (lang === 'R') {
     out.push('if (align == "index") {', '  ybar <- align_by_index(reps)', '} else {',
       '  al <- align_by_time(reps, kind, n_bins, end_time, start)', '  ybar <- al$ybar', '}',
       'L <- length(ybar); mid <- ceiling(L / 2)', 'smooth <- moving_average(ybar, w); cum <- cumulative_average(ybar)',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      'rows <- if (align == "index") align_rows_by_index(reps) else align_rows_by_time(reps, kind, n_bins, end_time, start)$rows',
+      'eb <- ensemble_band(rows, level)',
       rep(L, r, 'warm-up points', 'L'), 'if (L > 0) {', ...warmLines.map(x => ind + x), '}',
       'if (align == "time") {', ind + rep(L, r, 'warm-up bin width', 'al$edges[2] - al$edges[1]'),
       ind + rep(L, r, 'warm-up empty bins', 'sum(!is.finite(ybar))'), '}');
@@ -1373,6 +1377,9 @@ function steadyBody(r, L) {
     out.push('if align == "index":', '    ybar = align_by_index(reps)', 'else:',
       '    edges, ybar = align_by_time(reps, kind, n_bins, end_time, start)',
       'L = len(ybar); mid = int(np.ceil(L / 2))', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar)',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      'rows = align_rows_by_index(reps) if align == "index" else align_rows_by_time(reps, kind, n_bins, end_time, start)[1]',
+      'eb = ensemble_band(rows, level)',
       rep(L, r, 'warm-up points', 'L'), 'if L > 0:', ...warmLines.map(x => ind + x),
       'if align == "time":', ind + rep(L, r, 'warm-up bin width', 'edges[1] - edges[0]'),
       ind + rep(L, r, 'warm-up empty bins', 'int(np.sum(~np.isfinite(ybar)))'));
@@ -1380,6 +1387,9 @@ function steadyBody(r, L) {
     out.push("if strcmp(align, 'index')", '    ybar = align_by_index(reps);', 'else',
       '    [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start);', 'end',
       'L = numel(ybar); mid = ceil(L / 2);', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar);',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      "if strcmp(align, 'index'), rows = align_rows_by_index(reps); else, [~, rows] = align_rows_by_time(reps, kind, n_bins, end_time, start); end",
+      'eb = ensemble_band(rows, level);',
       rep(L, r, 'warm-up points', 'L'), 'if L > 0', ...warmLines.map(x => ind + x), 'end',
       "if strcmp(align, 'time')", ind + rep(L, r, 'warm-up bin width', 'edges(2) - edges(1)'),
       ind + rep(L, r, 'warm-up empty bins', 'sum(~isfinite(ybar))'), 'end');

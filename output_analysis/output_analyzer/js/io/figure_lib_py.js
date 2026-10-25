@@ -528,22 +528,39 @@ def fig_acf(r, step=1, band=np.nan, xlab="Lag", title="Autocorrelation", mark=np
 `;
 
 FIG_PY.warmup = `
-def fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo=np.nan):
-    """Welch's warm-up plot: the raw average, its moving average, and the cumulative average."""
+def fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo=np.nan, reps=None, lo=None,
+               hi=None):
+    """Welch's warm-up plot: the raw average, its moving average, and the cumulative average,
+    with each replication's series (one row of reps) thin behind them and the band lo..hi on the
+    average shaded under everything, where given."""
     import matplotlib.pyplot as plt
     x = np.asarray(x, dtype=float).ravel()
     ybar, smooth, cumavg = [np.asarray(a, dtype=float).ravel() for a in (ybar, smooth, cumavg)]
+    reps = None if reps is None else np.atleast_2d(np.asarray(reps, dtype=float))
+    band = lo is not None and hi is not None
+    if band:
+        lo = np.asarray(lo, dtype=float).ravel(); hi = np.asarray(hi, dtype=float).ravel()
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     if fig_vec(x).size == 0:
         fig_empty(ax, title, xlab, ylab)
         fig.tight_layout()
         return fig
     xlo, xhi = fig_range([x, np.array([cut, end_lo])], 0.02)
-    ylo, yhi = fig_range([ybar, smooth, cumavg], 0.05)
+    extra = ([reps.ravel()] if reps is not None else []) + ([lo, hi] if band else [])
+    ylo, yhi = fig_range([ybar, smooth, cumavg] + extra, 0.05)
     if np.isfinite(cut) and cut > np.nanmin(x):
         ax.axvspan(xlo, cut, color=FIG_MUTED, alpha=0.15, linewidth=0)
         ax.axvline(cut, color=FIG_ACCENT, linestyle="--", linewidth=1.5,
                    label="cut at " + format(cut, ".6g"))
+    if band and np.any(np.isfinite(lo) & np.isfinite(hi)):
+        n = min(x.size, lo.size, hi.size)
+        ax.fill_between(x[:n], lo[:n], hi[:n], where=np.isfinite(lo[:n]) & np.isfinite(hi[:n]),
+                        color=FIG_EST, alpha=0.15, linewidth=0, label="band on the average")
+    if reps is not None and reps.shape[0] > 0:
+        n = min(x.size, reps.shape[1])
+        for q in range(reps.shape[0]):
+            ax.plot(x[:n], reps[q, :n], color=FIG_MUTED, linewidth=0.6, alpha=0.5,
+                    label="one replication" if q == 0 else None)
     ax.plot(x[:ybar.size], ybar[:x.size], color=FIG_MUTED, linewidth=0.8,
             label="average across replications")
     ax.plot(x[:smooth.size], smooth[:x.size], color=FIG_EST, linewidth=2.0,

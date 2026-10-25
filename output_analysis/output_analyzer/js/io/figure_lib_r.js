@@ -460,9 +460,12 @@ fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelati
 FIG_R.warmup = `
 # Welch's warm-up plot: the raw average, its moving average, and the cumulative average
 # against x, with the excluded stretch left of cut shaded and a dashed line at the cut.
-fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA,
+                       reps = NULL, lo = NULL, hi = NULL) {
+  # reps: a matrix with one replication's series per row, drawn thin behind the averages;
+  # lo and hi: the band on the average at each point, shaded under everything.
   x <- as.numeric(x)
-  allv <- c(ybar, smooth, cumavg)
+  allv <- c(ybar, smooth, cumavg, if (!is.null(reps)) as.numeric(reps), lo, hi)
   if (length(fig_finite(x)) == 0 || length(fig_finite(allv)) == 0) {
     fig_empty(title, xlab, ylab)
     return(invisible(NULL))
@@ -471,6 +474,15 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   plot(fig_span(c(x, if (show_cut) cut, end_lo), 0.03), fig_ylim(allv, 0.3), type = "n",
        xlab = xlab, ylab = ylab, main = title, las = 1, xaxs = "i")
   if (show_cut) fig_band(-Inf, cut)
+  show_band <- !is.null(lo) && !is.null(hi) && any(is.finite(lo) & is.finite(hi))
+  if (show_band) {
+    # One polygon per run of points that have a band; NA splits the polygon.
+    ok <- is.finite(lo) & is.finite(hi)
+    polygon(c(x, rev(x)), c(ifelse(ok, hi, NA), rev(ifelse(ok, lo, NA))),
+            col = adjustcolor(FIG_EST, 0.15), border = NA)
+  }
+  show_reps <- !is.null(reps) && nrow(reps) > 0
+  if (show_reps) for (q in seq_len(nrow(reps))) lines(x, reps[q, ], col = adjustcolor(FIG_MUTED, 0.5), lwd = 0.6)
   lines(x, ybar, col = FIG_MUTED, lwd = 1)
   lines(x, smooth, col = FIG_EST, lwd = 2)
   lines(x, cumavg, col = FIG_TRUTH, lty = 2)
@@ -484,11 +496,21 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   cols <- c(FIG_MUTED, FIG_EST, FIG_TRUTH)
   ltys <- c(1, 1, 2)
   lwds <- c(1, 2, 1)
+  if (show_reps) {
+    names <- c("one replication", names); cols <- c(adjustcolor(FIG_MUTED, 0.5), cols)
+    ltys <- c(1, ltys); lwds <- c(0.6, lwds)
+  }
   if (show_cut) {
     names <- c(names, "warm-up cut")
     cols <- c(cols, FIG_ACCENT)
     ltys <- c(ltys, 2)
     lwds <- c(lwds, 1.5)
+  }
+  if (show_band) {
+    names <- c(names, "band on the average")
+    cols <- c(cols, adjustcolor(FIG_EST, 0.15))
+    ltys <- c(ltys, 1)
+    lwds <- c(lwds, 8)
   }
   legend("top", legend = names, col = cols, lty = ltys, lwd = lwds, ncol = 2, bty = "n",
          cex = 0.85)

@@ -7,14 +7,14 @@
 // starts at no truncation and moves only when the reader moves it.
 
 import * as state from '../state.js';
-import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, ensembleBand, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
-import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
+import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { currentSection } from '../ui/tabs.js';
 
@@ -36,6 +36,10 @@ let dsId = '';
 let align = 'index';        // 'index' | 'time'
 let nBins = 50;
 let w = 5;
+// What the warm-up plot shows besides the averages: each replication's own
+// series, and the confidence band on the ensemble average at each point.
+let showReps = false;
+let showBand = false;
 let cut = 0;                // observations deleted (index) or the cut time (time)
 let repIdx = 0;
 let lumped = false;         // batch every replication joined end to end
@@ -135,20 +139,21 @@ function fmtCut(v) {
 function computeWarm(ds) {
   // `xMin` is where the series start: zero, or the cut of a truncated dataset
   // shown on its own because the run it came from is no longer loaded.
-  let x, ybar, counts, xMin = 0, xMax, step, dec, edges = null;
+  let x, ybar, counts, sd, rows, xMin = 0, xMax, step, dec, edges = null;
   if (align === 'index') {
     const a = alignByIndex(ds.reps);
     x = new Float64Array(a.L);
     for (let i = 0; i < a.L; i++) x[i] = i + 1;
-    ybar = a.ybar; counts = a.counts; xMax = a.L; step = 1; dec = 0;
+    ybar = a.ybar; counts = a.counts; sd = a.sd; rows = a.rows; xMax = a.L; step = 1; dec = 0;
   } else {
     const a = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, startTime(ds));
-    edges = a.edges; x = a.centers; ybar = a.ybar; counts = a.counts;
+    edges = a.edges; x = a.centers; ybar = a.ybar; counts = a.counts; sd = a.sd; rows = a.rows;
     xMin = edges[0];
     xMax = edges[edges.length - 1];
     dec = timeDecimals(xMax);
     step = Math.max(Math.pow(10, -dec), niceStep((xMax - xMin) || 1, 100));
   }
+  const band = ensembleBand(ybar, sd, counts, state.settings.level);
   let gaps = 0;
   for (let i = 0; i < ybar.length; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w);
@@ -163,7 +168,7 @@ function computeWarm(ds) {
     if (Number.isFinite(e)) { endLo = Math.min(endLo, e); endHi = Math.max(endHi, e); }
   }
   const unequalEnds = align === 'time' && ds.reps.length > 1 && Number.isFinite(endLo) && endHi - endLo > 0.02 * Math.abs(endHi);
-  return { x, ybar, counts, smooth, cum, xMin, xMax, step, dec, edges, gaps, endLo, endHi, unequalEnds };
+  return { x, ybar, counts, sd, rows, band, smooth, cum, xMin, xMax, step, dec, edges, gaps, endLo, endHi, unequalEnds };
 }
 
 // ── Markup ────────────────────────────────────────────────────────────────
@@ -172,6 +177,8 @@ const TIP = {
   w: 'Each point of the moving average is the mean of the 2w + 1 averaged points centered on it, with a shorter symmetric window near the start. A larger w smooths more and blurs where the curve levels off.',
   bins: 'The replications’ observations do not fall at the same instants, and so there is no observation i to average across replications at a given time. The run is split instead into this many equal intervals of simulation time, and each replication is summarized within each one: a time-persistent value by its time average over the bin, tally observations by the mean of those falling in it. The ensemble average is then taken bin by bin, and the moving average runs across bins. More bins give finer time resolution and a noisier curve.',
   align: 'By simulation time, each replication is first summarized in equal intervals of simulation time (the bins), and the cut is a time, which is how a warm-up period is set in simulation software. By observation index, observation i of every replication is averaged with observation i of the others, and the cut is a count of observations.',
+  reps: 'Each replication’s own series on the shared axis, drawn thin and gray behind the averages: the paths the ensemble average is the mean of, and how far they scatter around it.',
+  band: 'At each time bin or observation index, the t interval on the ensemble average across the replications contributing there, at the page’s confidence level. The band says how well the average is known at each point, not where one run would fall. Where it is wide, more replications would steady the curve; its width says nothing about where the warm-up ends.',
   r1: 'The sample autocorrelation at lag one: the correlation between each batch mean and the next, a signed correlation (approximately the signed square root of R²). Independent batch means give a value near zero. C is Fishman’s test statistic, r₁ with an end correction scaled by √((b² − 1)/(b − 2)), which is close to standard normal when the batch means are independent, and p is its one-sided p-value for the test of no positive correlation.',
   cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.'
 };
@@ -215,6 +222,11 @@ export function render(rootEl) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ss-w">' + tipSpan('Moving-average half-window <span class="sym">w</span>', TIP.w) + '</label><span id="ss-w-h"></span></span>' +
       '</div>' +
       '<p class="ctrl-note ss-align-note" id="ss-align-note"></p>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl">Also show</span>' +
+        '<label class="ctrl-chk"><input type="checkbox" id="ss-reps"> ' + tipSpan('each replication', TIP.reps) + '</label>' +
+        '<label class="ctrl-chk"><input type="checkbox" id="ss-band"> ' + tipSpan('<span id="ss-band-lbl">the confidence band</span> at each point', TIP.band) + '</label>' +
+      '</div>' +
       '<p class="ss-contrib" id="ss-contrib">Replications contributing: ' + dash + '</p>' +
       '<div id="ss-wwarn"></div>' +
       '<div id="ss-one"></div>' +
@@ -271,7 +283,7 @@ export function render(rootEl) {
       '<div class="tab-wrap scroll-box ss-btab" id="ss-btab"></div>' +
     '</div>';
 
-  for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied',
+  for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied', 'reps', 'band', 'band-lbl',
     'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns', 'lfig', 'lleg', 'lcap', 'wwarn',
     'afig', 'aleg', 'acap', 'bfig', 'bleg', 'bcap', 'btab']) {
     el[k] = root.querySelector('#ss-' + k);
@@ -351,6 +363,11 @@ export function render(rootEl) {
   }));
   el.apply.addEventListener('click', applyTruncation);
 
+  // Like w and the bin count, what the plot also shows is a page-wide choice,
+  // kept across datasets rather than per dataset.
+  el.reps.addEventListener('change', () => { showReps = el.reps.checked; state.setPick(id, 'showReps', showReps); drawWarm(); restoreResult(); });
+  el.band.addEventListener('change', () => { showBand = el.band.checked; state.setPick(id, 'showBand', showBand); drawWarm(); restoreResult(); });
+
   // Spinners that do not depend on the dataset.
   spins.w = mountSpinner(root.querySelector('#ss-w-h'), 'ss-w', w, { min: 0, max: 200, step: 1, onChange: v => { w = v; state.setPick(id, 'w', v); drawWarm(); restoreResult(); } });
   spins.bins = mountSpinner(root.querySelector('#ss-bins-h'), 'ss-bins', nBins, { min: 10, max: 400, step: 1, onChange: v => { nBins = v; state.setPick(id, 'bins', v); drawWarm(); syncCutControls(); restoreResult(); } });
@@ -366,7 +383,8 @@ export function render(rootEl) {
     refreshSelect();
     if (visible()) update();
   });
-  state.on('settings', () => { if (visible()) drawBatch(); });
+  // The confidence level sets the warm-up plot's band as well as the batch interval.
+  state.on('settings', () => { if (visible()) { drawWarm(); drawBatch(); } });
 
   refreshSelect();
   resetFor(shown());
@@ -417,6 +435,9 @@ function applyStored() {
   const sw = state.getPick(id, 'w'), sb = state.getPick(id, 'bins');
   if (Number.isInteger(sw) && sw >= 0 && sw <= 200 && sw !== w) { w = sw; if (spins.w) spins.w.set(w, false); }
   if (Number.isInteger(sb) && sb >= 10 && sb <= 400 && sb !== nBins) { nBins = sb; if (spins.bins) spins.bins.set(nBins, false); }
+  const sr = state.getPick(id, 'showReps'), sbd = state.getPick(id, 'showBand');
+  if (typeof sr === 'boolean') { showReps = sr; if (el.reps) el.reps.checked = sr; }
+  if (typeof sbd === 'boolean') { showBand = sbd; if (el.band) el.band.checked = sbd; }
 }
 
 /**
@@ -765,12 +786,15 @@ function nearest(xs, dx) {
 function warmLegend(ds) {
   const R = ds ? ds.reps.length : 0;
   const per = align === 'index' ? 'one point per observation index' : 'one point per time bin';
-  const items = [
+  const items = [];
+  if (ds && showReps && R > 1) items.push({ swatch: 'thin', color: '--muted', label: 'one replication’s own series' });
+  if (ds && showBand && R > 1) items.push({ swatch: 'shade', color: '--pair', label: lvl(state.settings.level) + ' band on the ensemble average, point by point' });
+  items.push(
     { swatch: 'thin', color: '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
     { swatch: 'line', color: '--est', label: 'moving average over 2<span class="sym">w</span> + 1 = ' + intl(2 * w + 1) + ' points' },
     { swatch: 'dash', color: '--truth', label: R === 1 ? 'cumulative average from the start' : 'cumulative average of the ensemble average, from the start' },
     { swatch: 'dash', color: '--accent', label: 'your cut (drag it, click the plot, or use the arrow keys)' }
-  ];
+  );
   if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the cut' });
   if (ds && warm && warm.unequalEnds) items.push({ swatch: 'dotted', color: '--muted', label: 'end of the shortest run; later bins average fewer runs' });
   legend(el.wleg, items);
@@ -783,6 +807,8 @@ function drawWarm(computed) {
   if (!ds) {
     warm = null;
     wp = null;
+    el.reps.disabled = true;
+    el.band.disabled = true;
     warmLegend(ds);
     el.contrib.textContent = 'Replications contributing: ' + dash;
     el.wwarn.innerHTML = '';
@@ -791,6 +817,11 @@ function drawWarm(computed) {
   }
   if (!computed) warm = computeWarm(ds);
   const W = warm;
+  // One replication has no spread across replications: the two extras are off.
+  const several = ds.reps.length > 1;
+  el.reps.disabled = !several;
+  el.band.disabled = !several;
+  el['band-lbl'].textContent = 'the ' + lvl(state.settings.level) + ' confidence band';
   warmLegend(ds);
   const resp = ds.response && ds.response !== 'value' ? ds.response : 'value';
   warmFig.opts.xLabel = align === 'index' ? 'Observation index' : 'Simulation time (bin centers)';
@@ -808,6 +839,8 @@ function drawWarm(computed) {
     f.x([W.xMin, W.xMax > W.xMin ? W.xMax : W.xMin + 1]);
     wp = welchPlot(f, {
       x: W.x, raw: W.ybar, smooth: W.smooth, cumulative: W.cum, cut, cutMin: W.xMin, step: W.step, shade: true,
+      reps: showReps && several ? W.rows.map((row, q) => ({ y: row, label: 'replication ' + ds.reps[q].id })) : null,
+      band: showBand && several ? { lo: W.band.lo, hi: W.band.hi, label: lvl(state.settings.level) + ' band on the ensemble average' } : null,
       cutLabel: v => {
         const c = roundCut(v);
         if (!(c > 0)) return 'no cut yet';
@@ -846,12 +879,14 @@ function drawWarm(computed) {
       const head = align === 'index'
         ? 'observation ' + intl(i + 1)
         : 'time ' + fixed(W.edges[i], W.dec) + '–' + fixed(W.edges[i + 1], W.dec);
-      return [
+      const lines = [
         head,
         'average ' + num(W.ybar[i]) + ' (' + plural(W.counts[i], 'replication') + ')',
         'moving average ' + num(W.smooth[i]),
         'cumulative average ' + num(W.cum[i])
       ];
+      if (showBand && several) lines.push(Number.isFinite(W.band.hw[i]) ? lvl(state.settings.level) + ' band ' + num(W.band.lo[i]) + ' to ' + num(W.band.hi[i]) + ' (sd ' + num(W.sd[i]) + ')' : 'band: fewer than two replications here');
+      return lines;
     });
   });
 }
@@ -1306,7 +1341,8 @@ function storeResult(ds, src, res, rows) {
     'confidence level': pct(res.level, 0),
     'lag-one r1': Number(res.lag1.toPrecision(6)),
     'warm-up alignment': align === 'index' ? 'by observation index' : 'by simulation time, ' + nBins + ' bins',
-    'moving-average half-window': w
+    'moving-average half-window': w,
+    'warm-up plot also shows': [showReps ? 'each replication' : null, showBand ? 'the confidence band' : null].filter(Boolean).join(' and ') || 'the averages only'
   };
   const interval = [
     ['batch count', res.b],
@@ -1342,7 +1378,7 @@ function storeResult(ds, src, res, rows) {
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
     summaryHtml,
-    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection() } })),
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), reps: showReps && ds.reps.length > 1, band: showBand && ds.reps.length > 1 } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] }
   });
 }

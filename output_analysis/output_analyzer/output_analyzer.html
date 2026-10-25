@@ -24290,11 +24290,15 @@ function steadyBody(r, L) {
   out.push(L.sect('Warm-up: the average across replications, smoothed'));
   out.push(...commentLines(c, 'ybar, the ensemble average, is the mean across the replications at each observation index or time bin; the moving average smooths it, and the cumulative average is the mean of ybar so far. The page draws all three; the first point, the middle one, and the last are reported here.', c));
   const warmLines = [rep(L, r, 'warm-up ybar at 1', at('ybar', 1)), rep(L, r, 'warm-up ybar at mid', at('ybar', 'mid')),
-    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end'))];
+    rep(L, r, 'warm-up moving average at mid', at('smooth', 'mid')), rep(L, r, 'warm-up cumulative average at end', at('cum', 'end')),
+    rep(L, r, 'warm-up sd at mid', at(FIELD[lang]('eb', 'sd'), 'mid')), rep(L, r, 'warm-up band half-width at mid', at(FIELD[lang]('eb', 'hw'), 'mid'))];
   if (lang === 'R') {
     out.push('if (align == "index") {', '  ybar <- align_by_index(reps)', '} else {',
       '  al <- align_by_time(reps, kind, n_bins, end_time, start)', '  ybar <- al$ybar', '}',
       'L <- length(ybar); mid <- ceiling(L / 2)', 'smooth <- moving_average(ybar, w); cum <- cumulative_average(ybar)',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      'rows <- if (align == "index") align_rows_by_index(reps) else align_rows_by_time(reps, kind, n_bins, end_time, start)$rows',
+      'eb <- ensemble_band(rows, level)',
       rep(L, r, 'warm-up points', 'L'), 'if (L > 0) {', ...warmLines.map(x => ind + x), '}',
       'if (align == "time") {', ind + rep(L, r, 'warm-up bin width', 'al$edges[2] - al$edges[1]'),
       ind + rep(L, r, 'warm-up empty bins', 'sum(!is.finite(ybar))'), '}');
@@ -24302,6 +24306,9 @@ function steadyBody(r, L) {
     out.push('if align == "index":', '    ybar = align_by_index(reps)', 'else:',
       '    edges, ybar = align_by_time(reps, kind, n_bins, end_time, start)',
       'L = len(ybar); mid = int(np.ceil(L / 2))', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar)',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      'rows = align_rows_by_index(reps) if align == "index" else align_rows_by_time(reps, kind, n_bins, end_time, start)[1]',
+      'eb = ensemble_band(rows, level)',
       rep(L, r, 'warm-up points', 'L'), 'if L > 0:', ...warmLines.map(x => ind + x),
       'if align == "time":', ind + rep(L, r, 'warm-up bin width', 'edges[1] - edges[0]'),
       ind + rep(L, r, 'warm-up empty bins', 'int(np.sum(~np.isfinite(ybar)))'));
@@ -24309,6 +24316,9 @@ function steadyBody(r, L) {
     out.push("if strcmp(align, 'index')", '    ybar = align_by_index(reps);', 'else',
       '    [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start);', 'end',
       'L = numel(ybar); mid = ceil(L / 2);', 'smooth = moving_average(ybar, w); cum = cumulative_average(ybar);',
+      c + 'Each replication on the shared axis (one row each), the spread across them, and the band on the average.',
+      "if strcmp(align, 'index'), rows = align_rows_by_index(reps); else, [~, rows] = align_rows_by_time(reps, kind, n_bins, end_time, start); end",
+      'eb = ensemble_band(rows, level);',
       rep(L, r, 'warm-up points', 'L'), 'if L > 0', ...warmLines.map(x => ind + x), 'end',
       "if strcmp(align, 'time')", ind + rep(L, r, 'warm-up bin width', 'edges(2) - edges(1)'),
       ind + rep(L, r, 'warm-up empty bins', 'sum(~isfinite(ybar))'), 'end');
@@ -26686,11 +26696,15 @@ function fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, ttl, o)
 % Welch's warm-up plot: the average across replications (thin gray), its
 % moving average (blue), and the cumulative average (dashed), with the
 % warm-up period up to cut shaded and the cut marked. When o.end_lo is
-% finite, a dotted line marks where the shortest run ends.
+% finite, a dotted line marks where the shortest run ends. o.reps, a matrix
+% with one replication's series per row, draws each thin behind the
+% averages, and o.lo and o.hi shade the band on the average under everything.
 if nargin < 9, o = struct(); end
 c = fig_colors();
 x = x(:);
 end_lo = fig_opt(o, 'end_lo', NaN);
+reps = fig_opt(o, 'reps', []);
+lo = fig_opt(o, 'lo', []); hi = fig_opt(o, 'hi', []);
 figure;
 fig_size(6.5, 4.8);
 if ~any(isfinite(x) & isfinite(ybar(:)))
@@ -26700,11 +26714,35 @@ end
 hold on;
 box on;
 xlim(fig_pad(fig_range([x; cut; end_lo]), 0.02));
-ylim(fig_pad(fig_range([ybar(:); smooth(:); cumavg(:)]), 0.05));
+ylim(fig_pad(fig_range([ybar(:); smooth(:); cumavg(:); reps(:); lo(:); hi(:)]), 0.05));
 handles = gobjects(0);
 names = {};
 if cut > min(x)
     fig_band(min(xlim), cut, c.muted);
+end
+% The band, one patch per run of points that have one, under everything.
+if ~isempty(lo) && ~isempty(hi)
+    lo = lo(:); hi = hi(:);
+    ok = isfinite(lo) & isfinite(hi);
+    i = 1; first = true;
+    while i <= numel(x)
+        while i <= numel(x) && ~ok(i), i = i + 1; end
+        j = i;
+        while j <= numel(x) && ok(j), j = j + 1; end
+        if j - i >= 2
+            hp = patch([x(i:j-1); flipud(x(i:j-1))], [hi(i:j-1); flipud(lo(i:j-1))], c.est, ...
+                       'FaceAlpha', 0.15, 'EdgeColor', 'none');
+            if first, handles(end + 1) = hp; names{end + 1} = 'band on the average'; first = false; end
+        end
+        i = j;
+    end
+end
+% Each replication's own series, thin and light, behind the averages.
+if ~isempty(reps)
+    for q = 1:size(reps, 1)
+        hr = plot(x, reps(q, :), 'Color', [c.muted, 0.5], 'LineWidth', 0.5);
+        if q == 1, handles(end + 1) = hr; names{end + 1} = 'one replication'; end
+    end
 end
 % NaN entries leave gaps in the lines rather than being joined across.
 handles(end + 1) = plot(x, ybar(:), 'Color', c.muted, 'LineWidth', 0.75);
@@ -27325,22 +27363,39 @@ def fig_acf(r, step=1, band=np.nan, xlab="Lag", title="Autocorrelation", mark=np
 `;
 
 FIG_PY.warmup = `
-def fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo=np.nan):
-    """Welch's warm-up plot: the raw average, its moving average, and the cumulative average."""
+def fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo=np.nan, reps=None, lo=None,
+               hi=None):
+    """Welch's warm-up plot: the raw average, its moving average, and the cumulative average,
+    with each replication's series (one row of reps) thin behind them and the band lo..hi on the
+    average shaded under everything, where given."""
     import matplotlib.pyplot as plt
     x = np.asarray(x, dtype=float).ravel()
     ybar, smooth, cumavg = [np.asarray(a, dtype=float).ravel() for a in (ybar, smooth, cumavg)]
+    reps = None if reps is None else np.atleast_2d(np.asarray(reps, dtype=float))
+    band = lo is not None and hi is not None
+    if band:
+        lo = np.asarray(lo, dtype=float).ravel(); hi = np.asarray(hi, dtype=float).ravel()
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     if fig_vec(x).size == 0:
         fig_empty(ax, title, xlab, ylab)
         fig.tight_layout()
         return fig
     xlo, xhi = fig_range([x, np.array([cut, end_lo])], 0.02)
-    ylo, yhi = fig_range([ybar, smooth, cumavg], 0.05)
+    extra = ([reps.ravel()] if reps is not None else []) + ([lo, hi] if band else [])
+    ylo, yhi = fig_range([ybar, smooth, cumavg] + extra, 0.05)
     if np.isfinite(cut) and cut > np.nanmin(x):
         ax.axvspan(xlo, cut, color=FIG_MUTED, alpha=0.15, linewidth=0)
         ax.axvline(cut, color=FIG_ACCENT, linestyle="--", linewidth=1.5,
                    label="cut at " + format(cut, ".6g"))
+    if band and np.any(np.isfinite(lo) & np.isfinite(hi)):
+        n = min(x.size, lo.size, hi.size)
+        ax.fill_between(x[:n], lo[:n], hi[:n], where=np.isfinite(lo[:n]) & np.isfinite(hi[:n]),
+                        color=FIG_EST, alpha=0.15, linewidth=0, label="band on the average")
+    if reps is not None and reps.shape[0] > 0:
+        n = min(x.size, reps.shape[1])
+        for q in range(reps.shape[0]):
+            ax.plot(x[:n], reps[q, :n], color=FIG_MUTED, linewidth=0.6, alpha=0.5,
+                    label="one replication" if q == 0 else None)
     ax.plot(x[:ybar.size], ybar[:x.size], color=FIG_MUTED, linewidth=0.8,
             label="average across replications")
     ax.plot(x[:smooth.size], smooth[:x.size], color=FIG_EST, linewidth=2.0,
@@ -27879,9 +27934,12 @@ fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelati
 FIG_R.warmup = `
 # Welch's warm-up plot: the raw average, its moving average, and the cumulative average
 # against x, with the excluded stretch left of cut shaded and a dashed line at the cut.
-fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA,
+                       reps = NULL, lo = NULL, hi = NULL) {
+  # reps: a matrix with one replication's series per row, drawn thin behind the averages;
+  # lo and hi: the band on the average at each point, shaded under everything.
   x <- as.numeric(x)
-  allv <- c(ybar, smooth, cumavg)
+  allv <- c(ybar, smooth, cumavg, if (!is.null(reps)) as.numeric(reps), lo, hi)
   if (length(fig_finite(x)) == 0 || length(fig_finite(allv)) == 0) {
     fig_empty(title, xlab, ylab)
     return(invisible(NULL))
@@ -27890,6 +27948,15 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   plot(fig_span(c(x, if (show_cut) cut, end_lo), 0.03), fig_ylim(allv, 0.3), type = "n",
        xlab = xlab, ylab = ylab, main = title, las = 1, xaxs = "i")
   if (show_cut) fig_band(-Inf, cut)
+  show_band <- !is.null(lo) && !is.null(hi) && any(is.finite(lo) & is.finite(hi))
+  if (show_band) {
+    # One polygon per run of points that have a band; NA splits the polygon.
+    ok <- is.finite(lo) & is.finite(hi)
+    polygon(c(x, rev(x)), c(ifelse(ok, hi, NA), rev(ifelse(ok, lo, NA))),
+            col = adjustcolor(FIG_EST, 0.15), border = NA)
+  }
+  show_reps <- !is.null(reps) && nrow(reps) > 0
+  if (show_reps) for (q in seq_len(nrow(reps))) lines(x, reps[q, ], col = adjustcolor(FIG_MUTED, 0.5), lwd = 0.6)
   lines(x, ybar, col = FIG_MUTED, lwd = 1)
   lines(x, smooth, col = FIG_EST, lwd = 2)
   lines(x, cumavg, col = FIG_TRUTH, lty = 2)
@@ -27903,11 +27970,21 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   cols <- c(FIG_MUTED, FIG_EST, FIG_TRUTH)
   ltys <- c(1, 1, 2)
   lwds <- c(1, 2, 1)
+  if (show_reps) {
+    names <- c("one replication", names); cols <- c(adjustcolor(FIG_MUTED, 0.5), cols)
+    ltys <- c(1, ltys); lwds <- c(0.6, lwds)
+  }
   if (show_cut) {
     names <- c(names, "warm-up cut")
     cols <- c(cols, FIG_ACCENT)
     ltys <- c(ltys, 2)
     lwds <- c(lwds, 1.5)
+  }
+  if (show_band) {
+    names <- c(names, "band on the average")
+    cols <- c(cols, adjustcolor(FIG_EST, 0.15))
+    ltys <- c(ltys, 1)
+    lwds <- c(lwds, 8)
   }
   legend("top", legend = names, col = cols, lty = ltys, lwd = lwds, ncol = 2, bty = "n",
          cex = 0.85)
@@ -28417,7 +28494,10 @@ fig_acf <- function(r, step = 1, band = NA, xlab = "Lag", title = "Autocorrelati
 FIG_TIDY.warmup = `
 # Welch's warm-up plot: the raw average across replications, its moving average, and its
 # cumulative average, with the chosen cut marked and the stretch before it shaded.
-fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA) {
+fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo = NA,
+                       reps = NULL, lo = NULL, hi = NULL) {
+  # reps: a matrix with one replication's series per row, drawn thin behind the averages;
+  # lo and hi: the band on the average at each point, as a ribbon under everything.
   x <- as.numeric(x)
   if (length(x) == 0) return(fig_empty(title, xlab, ylab))
   nm <- c("average across replications", "moving average", "cumulative average")
@@ -28439,6 +28519,16 @@ fig_warmup <- function(x, ybar, smooth, cumavg, cut, xlab, ylab, title, end_lo =
   if (cut_on) {
     p <- p + annotate("rect", xmin = -Inf, xmax = cut, ymin = -Inf, ymax = Inf,
                       fill = FIG_MUTED, alpha = 0.2)
+  }
+  if (!is.null(lo) && !is.null(hi)) {
+    db <- tibble(x = x, lo = as.numeric(lo), hi = as.numeric(hi)) %>% filter(is.finite(lo), is.finite(hi))
+    if (nrow(db)) p <- p + geom_ribbon(data = db, aes(x, ymin = lo, ymax = hi), fill = FIG_EST, alpha = 0.15)
+  }
+  if (!is.null(reps) && nrow(reps) > 0) {
+    dr <- bind_rows(lapply(seq_len(nrow(reps)), function(q) tibble(x = x, y = as.numeric(reps[q, ]), rep = q))) %>%
+      filter(is.finite(x))
+    p <- p + geom_line(data = dr, aes(x, y, group = rep), color = FIG_MUTED, alpha = 0.5,
+                       linewidth = 0.3, na.rm = TRUE)
   }
   p <- p + geom_line(data = d, aes(x, y, color = what, linetype = what, linewidth = what),
                      na.rm = TRUE)
@@ -28543,7 +28633,9 @@ fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FAL
 //   and fig_running(x, y, xlab, ylab, title): a run and its running mean.
 //   fig_lag(x, k, xlab, ylab, title) and fig_acf(r; step, band, xlab, title,
 //     mark, mark_label): the lag plot and the correlogram from lag 1.
-//   fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title; end_lo).
+//   fig_warmup(x, ybar, smooth, cumavg, cut, xlab, ylab, title; end_lo, reps,
+//     lo, hi): reps is a matrix with one replication's series per row, drawn
+//     thin behind the averages, and lo and hi the band on the average.
 //   fig_batches(x, y, starts, ends, means, xlab, ylab, title; step,
 //     exclude_to, joins).
 // Colors: EST #2b6cb0 for data, TRUTH #1a1a1a for intervals and means, MISS
@@ -28815,8 +28907,10 @@ function steadyFigures(r, L) {
       : L.lang === 'py' ? '"Observation index" if align == "index" else "Simulation time (bin centers)"' : null;
     if (L.lang === 'm') calls.push("xlab = 'Simulation time (bin centers)'; if strcmp(align, 'index'), xlab = 'Observation index'; end");
     calls.push(...call(L, 'fig_warmup', ['x', 'ybar', 'smooth', 'cum', 'cut', xlab || 'xlab',
-      L.str(F.nReps > 1 ? 'Average ' + resp + ' across replications' : resp), L.str('Warm-up: the average across replications')]));
-    return { notes: ['Welch\'s warm-up plot: the average across replications, its moving average over w points on each side, and its cumulative average, with the stretch before the cut shaded.'],
+      L.str(F.nReps > 1 ? 'Average ' + resp + ' across replications' : resp), L.str('Warm-up: the average across replications')],
+      { reps: F.reps ? 'rows' : undefined, lo: F.band ? fld(L, 'eb', 'lo') : undefined, hi: F.band ? fld(L, 'eb', 'hi') : undefined }));
+    const extras = [F.reps ? 'each replication\'s own series behind them' : null, F.band ? 'the band on the average at each point' : null].filter(Boolean);
+    return { notes: ['Welch\'s warm-up plot: the average across replications, its moving average over w points on each side, and its cumulative average, with the stretch before the cut shaded' + (extras.length ? ', and ' + extras.join(' and ') : '') + '.'],
       calls, fig: ['warmup'] };
   }
   if (!S.batchOk) return { calls: [] };
@@ -29411,8 +29505,7 @@ import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPoole
          anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { bonferroniFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
-import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps,
-         resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand } from '../stats/steadystate.js';
 import { slug } from './export.js';
 import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
 import { roleLabels, outcomeAxis, shortNames, estimateAxis } from '../ui/rules.js';
@@ -30220,18 +30313,20 @@ export function steadyRecipe(o) {
   const kind = ds.kind === 'time' ? 'time' : 'tally';
   const lumped = !!o.lumped && ds.reps.length > 1;
 
-  // Warm-up: the average across replications, smoothed as the page smooths it.
-  let ybar, edges = null;
-  if (align === 'index') ybar = alignByIndex(ds.reps).ybar;
-  else ({ ybar, edges } = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start));
+  // Warm-up: the average across replications, smoothed as the page smooths
+  // it, with the spread across the replications and the band on the average.
+  const al = align === 'index' ? alignByIndex(ds.reps) : alignByTime(ds.reps, ds.kind, nBins, ds.endTime, start);
+  const ybar = al.ybar, edges = align === 'index' ? null : al.edges;
   const L = ybar.length, mid = Math.ceil(L / 2);
   let gaps = 0;
   for (let i = 0; i < L; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w), cum = cumulativeAverage(ybar);
+  const band = ensembleBand(ybar, al.sd, al.counts, level);
   e['warm-up points'] = L;
   if (L) {
     Object.assign(e, { 'warm-up ybar at 1': ybar[0], 'warm-up ybar at mid': ybar[mid - 1],
-      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1] });
+      'warm-up moving average at mid': smooth[mid - 1], 'warm-up cumulative average at end': cum[L - 1],
+      'warm-up sd at mid': al.sd[mid - 1], 'warm-up band half-width at mid': band.hw[mid - 1] });
   }
   if (edges) Object.assign(e, { 'warm-up bin width': edges[1] - edges[0], 'warm-up empty bins': gaps });
 
@@ -30286,7 +30381,10 @@ export function steadyRecipe(o) {
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };
   // The figures of the section the page showed: the warm-up plot, or the correlogram, the
   // neighboring batch means, and the batches.
-  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response };
+  // The figure follows the view: which section, and on the warm-up plot
+  // whether each replication's series and the band were shown.
+  r.fig = { section: o.view && o.view.section === 'batch' ? 'batch' : 'warmup', nReps: ds.reps.length, response: ds.response,
+            reps: !!(o.view && o.view.reps) && ds.reps.length > 1, band: !!(o.view && o.view.band) && ds.reps.length > 1 };
   r.settings = {
     kind: ds.kind, end_time: ds.endTime == null ? NaN : ds.endTime,
     align, n_bins: nBins, w, cut, start, lumped, replication: (ds.reps[repIdx] ? repIdx : 0) + 1,
@@ -33220,33 +33318,54 @@ end
 // ── Steady State: the warm-up plot's averages ────────────────────────────
 
 LIB.R.alignment = `
-align_by_index <- function(reps) {
-  # ybar[i] is the mean of observation i over the replications that have one.
+col_mean_nan <- function(M) apply(M, 2, function(cl) { cl <- cl[!is.nan(cl)]; if (length(cl)) mean(cl) else NaN })
+align_rows_by_index <- function(reps) {
+  # One row per replication: its observation i in column i, NaN past its end.
   L <- max(0, vapply(reps, function(r) length(r$v), numeric(1)))
   M <- matrix(NaN, length(reps), L)
   for (q in seq_along(reps)) { n <- length(reps[[q]]$v); if (n) M[q, 1:n] <- reps[[q]]$v }
-  colMeans(M, na.rm = TRUE)
+  M
 }
-align_by_time <- function(reps, kind, n_bins, end_time, start) {
+align_by_index <- function(reps) {
+  # ybar[i] is the mean of observation i over the replications that have one.
+  col_mean_nan(align_rows_by_index(reps))
+}
+align_rows_by_time <- function(reps, kind, n_bins, end_time, start) {
   # Equal bins of simulation time from start to T, T the end time or, when there is none, the
-  # latest last record. In each bin a replication gives its time average over the part of the bin
-  # it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-  # the right (tally); ybar averages the replications that give a value, and is NaN where none does.
-  reps <- Filter(function(r) length(r$t) > 0, reps)
-  t_end <- if (!is.nan(end_time)) end_time else if (length(reps)) max(vapply(reps, function(r) r$t[length(r$t)], numeric(1))) else 0
+  # latest last record. One row per replication: in each bin its time average over the part of the
+  # bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+  # on the right (tally), NaN where it gives none. A replication with no records is a row of NaN.
+  t_reps <- Filter(function(r) length(r$t) > 0, reps)
+  t_end <- if (!is.nan(end_time)) end_time else if (length(t_reps)) max(vapply(t_reps, function(r) r$t[length(r$t)], numeric(1))) else 0
   B <- max(1, floor(n_bins))
   t0 <- if (is.finite(start) && start < t_end) start else 0
   edges <- c(t0 + (t_end - t0) * (0:(B - 1)) / B, t_end)
-  ybar <- vapply(seq_len(B), function(b) {
-    vals <- vapply(reps, function(r) {
-      if (kind == "time") return(tw_mean(r$t, r$v, trajectory_end(r$t, end_time), edges[b], edges[b + 1]))
+  M <- matrix(NaN, length(reps), B)
+  for (q in seq_along(reps)) {
+    r <- reps[[q]]
+    if (!length(r$t)) next
+    for (b in seq_len(B)) {
+      if (kind == "time") { M[q, b] <- tw_mean(r$t, r$v, trajectory_end(r$t, end_time), edges[b], edges[b + 1]); next }
       inb <- r$t >= edges[b] & (r$t < edges[b + 1] | (b == B & r$t <= edges[b + 1]))
-      if (any(inb)) mean(r$v[inb]) else NaN
-    }, numeric(1))
-    vals <- vals[!is.nan(vals)]
-    if (length(vals)) mean(vals) else NaN
-  }, numeric(1))
-  list(edges = edges, ybar = ybar)
+      if (any(inb)) M[q, b] <- mean(r$v[inb])
+    }
+  }
+  list(edges = edges, rows = M)
+}
+align_by_time <- function(reps, kind, n_bins, end_time, start) {
+  # ybar averages the replications that give a value in each bin, and is NaN where none does.
+  a <- align_rows_by_time(reps, kind, n_bins, end_time, start)
+  list(edges = a$edges, ybar = col_mean_nan(a$rows))
+}
+ensemble_band <- function(rows, level) {
+  # At each column: the count of replications with a value, their sample standard deviation (NaN
+  # below two), and the t interval on their mean, qt(1 - a/2, count - 1) * sd / sqrt(count).
+  cnt <- colSums(!is.nan(rows))
+  sdv <- apply(rows, 2, function(cl) { cl <- cl[!is.nan(cl)]; if (length(cl) >= 2) sd(cl) else NaN })
+  ybar <- col_mean_nan(rows)
+  hw <- rep(NaN, ncol(rows)); ok <- cnt >= 2
+  hw[ok] <- qt(1 - (1 - level) / 2, cnt[ok] - 1) * sdv[ok] / sqrt(cnt[ok])
+  list(count = cnt, sd = sdv, hw = hw, lo = ybar - hw, hi = ybar + hw)
 }
 moving_average <- function(y, w) {
   # Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
@@ -33267,38 +33386,67 @@ cumulative_average <- function(y) {
 }
 `;
 LIB.py.alignment = `
-def align_by_index(reps):
-    """ybar[i] is the mean of observation i over the replications that have one."""
+def col_mean_nan(M):
+    """The mean down each column over the values that are not nan; nan where none is."""
+    cnt = np.sum(~np.isnan(M), axis=0)
+    out = np.full(M.shape[1], np.nan)
+    np.divide(np.nansum(M, axis=0), cnt, out=out, where=cnt > 0)
+    return out
+
+def align_rows_by_index(reps):
+    """One row per replication: its observation i in column i, nan past its end."""
     L = max([len(r["v"]) for r in reps] + [0])
     M = np.full((len(reps), L), np.nan)
     for q, r in enumerate(reps):
         M[q, :len(r["v"])] = r["v"]
-    return np.nansum(M, axis=0) / np.sum(~np.isnan(M), axis=0)
+    return M
 
-def align_by_time(reps, kind, n_bins, end_time, start):
+def align_by_index(reps):
+    """ybar[i] is the mean of observation i over the replications that have one."""
+    return col_mean_nan(align_rows_by_index(reps))
+
+def align_rows_by_time(reps, kind, n_bins, end_time, start):
     """Equal bins of simulation time from start to T, T the end time or, when there is none, the
-    latest last record. In each bin a replication gives its time average over the part of the bin
-    it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-    the right (tally); ybar averages the replications that give a value, and is nan where none does."""
-    reps = [r for r in reps if r["t"] is not None and len(r["t"]) > 0]
+    latest last record. One row per replication: in each bin its time average over the part of the
+    bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+    on the right (tally), nan where it gives none. A replication with no records is a row of nan."""
+    timed = [r for r in reps if r["t"] is not None and len(r["t"]) > 0]
     if not np.isnan(end_time): t_end = end_time
-    else: t_end = max(r["t"][-1] for r in reps) if reps else 0.0
+    else: t_end = max(r["t"][-1] for r in timed) if timed else 0.0
     B = max(1, int(np.floor(n_bins)))
     t0 = start if np.isfinite(start) and start < t_end else 0.0
     edges = np.append(t0 + (t_end - t0) * np.arange(B) / B, t_end)
-    ybar = np.full(B, np.nan)
-    for b in range(B):
-        vals = []
-        for r in reps:
-            t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+    M = np.full((len(reps), B), np.nan)
+    for q, r in enumerate(reps):
+        if r["t"] is None or len(r["t"]) == 0: continue
+        t = np.asarray(r["t"], float); v = np.asarray(r["v"], float)
+        for b in range(B):
             if kind == "time":
-                x = tw_mean(t, v, trajectory_end(t, end_time), edges[b], edges[b + 1])
+                M[q, b] = tw_mean(t, v, trajectory_end(t, end_time), edges[b], edges[b + 1])
             else:
                 inb = (t >= edges[b]) & ((t < edges[b + 1]) | ((b == B - 1) & (t <= edges[b + 1])))
-                x = v[inb].mean() if inb.any() else np.nan
-            if not np.isnan(x): vals.append(x)
-        if vals: ybar[b] = np.mean(vals)
-    return edges, ybar
+                if inb.any(): M[q, b] = v[inb].mean()
+    return edges, M
+
+def align_by_time(reps, kind, n_bins, end_time, start):
+    """ybar averages the replications that give a value in each bin, and is nan where none does."""
+    edges, M = align_rows_by_time(reps, kind, n_bins, end_time, start)
+    return edges, col_mean_nan(M)
+
+def ensemble_band(rows, level):
+    """At each column: the count of replications with a value, their sample standard deviation (nan
+    below two), and the t interval on their mean, t.ppf(1 - a/2, count - 1) * sd / sqrt(count)."""
+    M = np.asarray(rows, float)
+    cnt = np.sum(~np.isnan(M), axis=0)
+    ybar = col_mean_nan(M)
+    ss = np.nansum((M - ybar) ** 2, axis=0)
+    sd = np.full(M.shape[1], np.nan)
+    np.divide(ss, np.maximum(cnt - 1, 1), out=sd, where=cnt >= 2)
+    sd = np.sqrt(sd)
+    hw = np.full(M.shape[1], np.nan)
+    ok = cnt >= 2
+    if ok.any(): hw[ok] = stats.t.ppf(1 - (1 - level) / 2, cnt[ok] - 1) * sd[ok] / np.sqrt(cnt[ok])
+    return dict(count=cnt, sd=sd, hw=hw, lo=ybar - hw, hi=ybar + hw)
 
 def moving_average(y, w):
     """Welch's moving average with half-width w: at point i the mean of the 2h + 1 points centered
@@ -33318,41 +33466,60 @@ def cumulative_average(y):
     return np.where(c > 0, s / np.maximum(c, 1), np.nan)
 `;
 LIB.m.alignment = `
-function ybar = align_by_index(reps)
-% ybar(i) is the mean of observation i over the replications that have one.
+function M = align_rows_by_index(reps)
+% One row per replication: its observation i in column i, NaN past its end.
 L = max([0, arrayfun(@(r) numel(r.v), reps)]);
 M = nan(numel(reps), L);
 for q = 1:numel(reps), M(q, 1:numel(reps(q).v)) = reps(q).v; end
-ybar = mean(M, 1, 'omitnan');
 end
 
-function [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start)
+function ybar = align_by_index(reps)
+% ybar(i) is the mean of observation i over the replications that have one.
+ybar = mean(align_rows_by_index(reps), 1, 'omitnan');
+end
+
+function [edges, M] = align_rows_by_time(reps, kind, n_bins, end_time, start)
 % Equal bins of simulation time from start to T, T the end time or, when there is none, the
-% latest last record. In each bin a replication gives its time average over the part of the bin
-% it covers (time-persistent), or the mean of its observations in the bin, the last bin closed on
-% the right (tally); ybar averages the replications that give a value, and is NaN where none does.
-reps = reps(arrayfun(@(r) ~isempty(r.t), reps));
+% latest last record. One row per replication: in each bin its time average over the part of the
+% bin it covers (time-persistent), or the mean of its observations in the bin, the last bin closed
+% on the right (tally), NaN where it gives none. A replication with no records is a row of NaN.
+timed = reps(arrayfun(@(r) ~isempty(r.t), reps));
 if ~isnan(end_time), t_end = end_time;
-elseif ~isempty(reps), t_end = max(arrayfun(@(r) r.t(end), reps));
+elseif ~isempty(timed), t_end = max(arrayfun(@(r) r.t(end), timed));
 else, t_end = 0; end
 B = max(1, floor(n_bins));
 if isfinite(start) && start < t_end, t0 = start; else, t0 = 0; end
 edges = [t0 + (t_end - t0) * (0:B-1) / B, t_end];
-ybar = nan(1, B);
-for b = 1:B
-    vals = [];
-    for q = 1:numel(reps)
-        t = reps(q).t(:)'; v = reps(q).v(:)';
+M = nan(numel(reps), B);
+for q = 1:numel(reps)
+    t = reps(q).t(:)'; v = reps(q).v(:)';
+    if isempty(t), continue; end
+    for b = 1:B
         if strcmp(kind, 'time')
-            x = tw_mean(t, v, trajectory_end(t, end_time), edges(b), edges(b + 1));
+            M(q, b) = tw_mean(t, v, trajectory_end(t, end_time), edges(b), edges(b + 1));
         else
             inb = t >= edges(b) & (t < edges(b + 1) | (b == B & t <= edges(b + 1)));
-            x = NaN; if any(inb), x = mean(v(inb)); end
+            if any(inb), M(q, b) = mean(v(inb)); end
         end
-        if ~isnan(x), vals(end + 1) = x; end %#ok<AGROW>
     end
-    if ~isempty(vals), ybar(b) = mean(vals); end
 end
+end
+
+function [edges, ybar] = align_by_time(reps, kind, n_bins, end_time, start)
+% ybar averages the replications that give a value in each bin, and is NaN where none does.
+[edges, M] = align_rows_by_time(reps, kind, n_bins, end_time, start);
+ybar = mean(M, 1, 'omitnan');
+end
+
+function r = ensemble_band(rows, level)
+% At each column: the count of replications with a value, their sample standard deviation (NaN
+% below two), and the t interval on their mean, tinv(1 - a/2, count - 1) * sd / sqrt(count).
+cnt = sum(~isnan(rows), 1);
+ybar = mean(rows, 1, 'omitnan');
+sd = std(rows, 0, 1, 'omitnan'); sd(cnt < 2) = NaN;
+hw = nan(1, size(rows, 2)); ok = cnt >= 2;
+hw(ok) = tinv(1 - (1 - level) / 2, cnt(ok) - 1) .* sd(ok) ./ sqrt(cnt(ok));
+r = struct('count', cnt, 'sd', sd, 'hw', hw, 'lo', ybar - hw, 'hi', ybar + hw);
 end
 
 function out = moving_average(y, w)
@@ -37106,7 +37273,7 @@ export function render(rootEl) {
   testSec.appendChild(el('div', 'sec-hd', 'Test against a stated mean'));
   testSec.appendChild(el('p', 'exp-note', 'The interval above answers every question of the form “could the true mean be μ₀?” at once. This section asks it of one value, such as the mean measured on the real system when the model is being validated, and writes out the statistic the answer rests on.'));
   const testCtrl = el('div', 'ctrl-row');
-  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean <span class="sym">μ₀</span></span></span>' +
+  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean&nbsp;<span class="sym">μ₀</span></span></span>' +
     '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>';
   const tRow1 = el('div'), tRow2 = el('div');
   testSec.append(testCtrl, tRow1, tRow2);
@@ -39776,14 +39943,14 @@ export default { id, title, sections, render, onShow, onShowSection };
 // starts at no truncation and moves only when the reader moves it.
 
 import * as state from '../state.js';
-import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, ensembleBand, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { steadyRecipe, recordCount, MAX_NUMBERS } from '../io/recipes.js';
 import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } from '../ui/widgets.js';
-import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq } from '../ui/format.js';
+import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { currentSection } from '../ui/tabs.js';
 
@@ -39805,6 +39972,10 @@ let dsId = '';
 let align = 'index';        // 'index' | 'time'
 let nBins = 50;
 let w = 5;
+// What the warm-up plot shows besides the averages: each replication's own
+// series, and the confidence band on the ensemble average at each point.
+let showReps = false;
+let showBand = false;
 let cut = 0;                // observations deleted (index) or the cut time (time)
 let repIdx = 0;
 let lumped = false;         // batch every replication joined end to end
@@ -39904,20 +40075,21 @@ function fmtCut(v) {
 function computeWarm(ds) {
   // `xMin` is where the series start: zero, or the cut of a truncated dataset
   // shown on its own because the run it came from is no longer loaded.
-  let x, ybar, counts, xMin = 0, xMax, step, dec, edges = null;
+  let x, ybar, counts, sd, rows, xMin = 0, xMax, step, dec, edges = null;
   if (align === 'index') {
     const a = alignByIndex(ds.reps);
     x = new Float64Array(a.L);
     for (let i = 0; i < a.L; i++) x[i] = i + 1;
-    ybar = a.ybar; counts = a.counts; xMax = a.L; step = 1; dec = 0;
+    ybar = a.ybar; counts = a.counts; sd = a.sd; rows = a.rows; xMax = a.L; step = 1; dec = 0;
   } else {
     const a = alignByTime(ds.reps, ds.kind, nBins, ds.endTime, startTime(ds));
-    edges = a.edges; x = a.centers; ybar = a.ybar; counts = a.counts;
+    edges = a.edges; x = a.centers; ybar = a.ybar; counts = a.counts; sd = a.sd; rows = a.rows;
     xMin = edges[0];
     xMax = edges[edges.length - 1];
     dec = timeDecimals(xMax);
     step = Math.max(Math.pow(10, -dec), niceStep((xMax - xMin) || 1, 100));
   }
+  const band = ensembleBand(ybar, sd, counts, state.settings.level);
   let gaps = 0;
   for (let i = 0; i < ybar.length; i++) if (!Number.isFinite(ybar[i])) gaps++;
   const smooth = gaps ? gapAwareAverage(ybar, w) : movingAverage(ybar, w);
@@ -39932,7 +40104,7 @@ function computeWarm(ds) {
     if (Number.isFinite(e)) { endLo = Math.min(endLo, e); endHi = Math.max(endHi, e); }
   }
   const unequalEnds = align === 'time' && ds.reps.length > 1 && Number.isFinite(endLo) && endHi - endLo > 0.02 * Math.abs(endHi);
-  return { x, ybar, counts, smooth, cum, xMin, xMax, step, dec, edges, gaps, endLo, endHi, unequalEnds };
+  return { x, ybar, counts, sd, rows, band, smooth, cum, xMin, xMax, step, dec, edges, gaps, endLo, endHi, unequalEnds };
 }
 
 // ── Markup ────────────────────────────────────────────────────────────────
@@ -39941,6 +40113,8 @@ const TIP = {
   w: 'Each point of the moving average is the mean of the 2w + 1 averaged points centered on it, with a shorter symmetric window near the start. A larger w smooths more and blurs where the curve levels off.',
   bins: 'The replications’ observations do not fall at the same instants, and so there is no observation i to average across replications at a given time. The run is split instead into this many equal intervals of simulation time, and each replication is summarized within each one: a time-persistent value by its time average over the bin, tally observations by the mean of those falling in it. The ensemble average is then taken bin by bin, and the moving average runs across bins. More bins give finer time resolution and a noisier curve.',
   align: 'By simulation time, each replication is first summarized in equal intervals of simulation time (the bins), and the cut is a time, which is how a warm-up period is set in simulation software. By observation index, observation i of every replication is averaged with observation i of the others, and the cut is a count of observations.',
+  reps: 'Each replication’s own series on the shared axis, drawn thin and gray behind the averages: the paths the ensemble average is the mean of, and how far they scatter around it.',
+  band: 'At each time bin or observation index, the t interval on the ensemble average across the replications contributing there, at the page’s confidence level. The band says how well the average is known at each point, not where one run would fall. Where it is wide, more replications would steady the curve; its width says nothing about where the warm-up ends.',
   r1: 'The sample autocorrelation at lag one: the correlation between each batch mean and the next, a signed correlation (approximately the signed square root of R²). Independent batch means give a value near zero. C is Fishman’s test statistic, r₁ with an end correction scaled by √((b² − 1)/(b − 2)), which is close to standard normal when the batch means are independent, and p is its one-sided p-value for the test of no positive correlation.',
   cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.'
 };
@@ -39984,6 +40158,11 @@ export function render(rootEl) {
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="ss-w">' + tipSpan('Moving-average half-window <span class="sym">w</span>', TIP.w) + '</label><span id="ss-w-h"></span></span>' +
       '</div>' +
       '<p class="ctrl-note ss-align-note" id="ss-align-note"></p>' +
+      '<div class="ctrl-row">' +
+        '<span class="ctrl-lbl">Also show</span>' +
+        '<label class="ctrl-chk"><input type="checkbox" id="ss-reps"> ' + tipSpan('each replication', TIP.reps) + '</label>' +
+        '<label class="ctrl-chk"><input type="checkbox" id="ss-band"> ' + tipSpan('<span id="ss-band-lbl">the confidence band</span> at each point', TIP.band) + '</label>' +
+      '</div>' +
       '<p class="ss-contrib" id="ss-contrib">Replications contributing: ' + dash + '</p>' +
       '<div id="ss-wwarn"></div>' +
       '<div id="ss-one"></div>' +
@@ -40040,7 +40219,7 @@ export function render(rootEl) {
       '<div class="tab-wrap scroll-box ss-btab" id="ss-btab"></div>' +
     '</div>';
 
-  for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied',
+  for (const k of ['ds', 'lvl', 'ds-note', 'align-note', 'contrib', 'one', 'wfig', 'wleg', 'cut-text', 'cuta-lbl', 'cuta-unit', 'apply', 'applied', 'reps', 'band', 'band-lbl',
     'bins-pair', 'rep-note', 'lump-row', 'lump-note', 'rep-pair', 'rep-of', 'cutb-lbl', 'cutb-unit', 'bn-lbl', 'bn-unit', 'unit', 'cards', 'warns', 'lfig', 'lleg', 'lcap', 'wwarn',
     'afig', 'aleg', 'acap', 'bfig', 'bleg', 'bcap', 'btab']) {
     el[k] = root.querySelector('#ss-' + k);
@@ -40120,6 +40299,11 @@ export function render(rootEl) {
   }));
   el.apply.addEventListener('click', applyTruncation);
 
+  // Like w and the bin count, what the plot also shows is a page-wide choice,
+  // kept across datasets rather than per dataset.
+  el.reps.addEventListener('change', () => { showReps = el.reps.checked; state.setPick(id, 'showReps', showReps); drawWarm(); restoreResult(); });
+  el.band.addEventListener('change', () => { showBand = el.band.checked; state.setPick(id, 'showBand', showBand); drawWarm(); restoreResult(); });
+
   // Spinners that do not depend on the dataset.
   spins.w = mountSpinner(root.querySelector('#ss-w-h'), 'ss-w', w, { min: 0, max: 200, step: 1, onChange: v => { w = v; state.setPick(id, 'w', v); drawWarm(); restoreResult(); } });
   spins.bins = mountSpinner(root.querySelector('#ss-bins-h'), 'ss-bins', nBins, { min: 10, max: 400, step: 1, onChange: v => { nBins = v; state.setPick(id, 'bins', v); drawWarm(); syncCutControls(); restoreResult(); } });
@@ -40135,7 +40319,8 @@ export function render(rootEl) {
     refreshSelect();
     if (visible()) update();
   });
-  state.on('settings', () => { if (visible()) drawBatch(); });
+  // The confidence level sets the warm-up plot's band as well as the batch interval.
+  state.on('settings', () => { if (visible()) { drawWarm(); drawBatch(); } });
 
   refreshSelect();
   resetFor(shown());
@@ -40186,6 +40371,9 @@ function applyStored() {
   const sw = state.getPick(id, 'w'), sb = state.getPick(id, 'bins');
   if (Number.isInteger(sw) && sw >= 0 && sw <= 200 && sw !== w) { w = sw; if (spins.w) spins.w.set(w, false); }
   if (Number.isInteger(sb) && sb >= 10 && sb <= 400 && sb !== nBins) { nBins = sb; if (spins.bins) spins.bins.set(nBins, false); }
+  const sr = state.getPick(id, 'showReps'), sbd = state.getPick(id, 'showBand');
+  if (typeof sr === 'boolean') { showReps = sr; if (el.reps) el.reps.checked = sr; }
+  if (typeof sbd === 'boolean') { showBand = sbd; if (el.band) el.band.checked = sbd; }
 }
 
 /**
@@ -40534,12 +40722,15 @@ function nearest(xs, dx) {
 function warmLegend(ds) {
   const R = ds ? ds.reps.length : 0;
   const per = align === 'index' ? 'one point per observation index' : 'one point per time bin';
-  const items = [
+  const items = [];
+  if (ds && showReps && R > 1) items.push({ swatch: 'thin', color: '--muted', label: 'one replication’s own series' });
+  if (ds && showBand && R > 1) items.push({ swatch: 'shade', color: '--pair', label: lvl(state.settings.level) + ' band on the ensemble average, point by point' });
+  items.push(
     { swatch: 'thin', color: '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
     { swatch: 'line', color: '--est', label: 'moving average over 2<span class="sym">w</span> + 1 = ' + intl(2 * w + 1) + ' points' },
     { swatch: 'dash', color: '--truth', label: R === 1 ? 'cumulative average from the start' : 'cumulative average of the ensemble average, from the start' },
     { swatch: 'dash', color: '--accent', label: 'your cut (drag it, click the plot, or use the arrow keys)' }
-  ];
+  );
   if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the cut' });
   if (ds && warm && warm.unequalEnds) items.push({ swatch: 'dotted', color: '--muted', label: 'end of the shortest run; later bins average fewer runs' });
   legend(el.wleg, items);
@@ -40552,6 +40743,8 @@ function drawWarm(computed) {
   if (!ds) {
     warm = null;
     wp = null;
+    el.reps.disabled = true;
+    el.band.disabled = true;
     warmLegend(ds);
     el.contrib.textContent = 'Replications contributing: ' + dash;
     el.wwarn.innerHTML = '';
@@ -40560,6 +40753,11 @@ function drawWarm(computed) {
   }
   if (!computed) warm = computeWarm(ds);
   const W = warm;
+  // One replication has no spread across replications: the two extras are off.
+  const several = ds.reps.length > 1;
+  el.reps.disabled = !several;
+  el.band.disabled = !several;
+  el['band-lbl'].textContent = 'the ' + lvl(state.settings.level) + ' confidence band';
   warmLegend(ds);
   const resp = ds.response && ds.response !== 'value' ? ds.response : 'value';
   warmFig.opts.xLabel = align === 'index' ? 'Observation index' : 'Simulation time (bin centers)';
@@ -40577,6 +40775,8 @@ function drawWarm(computed) {
     f.x([W.xMin, W.xMax > W.xMin ? W.xMax : W.xMin + 1]);
     wp = welchPlot(f, {
       x: W.x, raw: W.ybar, smooth: W.smooth, cumulative: W.cum, cut, cutMin: W.xMin, step: W.step, shade: true,
+      reps: showReps && several ? W.rows.map((row, q) => ({ y: row, label: 'replication ' + ds.reps[q].id })) : null,
+      band: showBand && several ? { lo: W.band.lo, hi: W.band.hi, label: lvl(state.settings.level) + ' band on the ensemble average' } : null,
       cutLabel: v => {
         const c = roundCut(v);
         if (!(c > 0)) return 'no cut yet';
@@ -40615,12 +40815,14 @@ function drawWarm(computed) {
       const head = align === 'index'
         ? 'observation ' + intl(i + 1)
         : 'time ' + fixed(W.edges[i], W.dec) + '–' + fixed(W.edges[i + 1], W.dec);
-      return [
+      const lines = [
         head,
         'average ' + num(W.ybar[i]) + ' (' + plural(W.counts[i], 'replication') + ')',
         'moving average ' + num(W.smooth[i]),
         'cumulative average ' + num(W.cum[i])
       ];
+      if (showBand && several) lines.push(Number.isFinite(W.band.hw[i]) ? lvl(state.settings.level) + ' band ' + num(W.band.lo[i]) + ' to ' + num(W.band.hi[i]) + ' (sd ' + num(W.sd[i]) + ')' : 'band: fewer than two replications here');
+      return lines;
     });
   });
 }
@@ -41075,7 +41277,8 @@ function storeResult(ds, src, res, rows) {
     'confidence level': pct(res.level, 0),
     'lag-one r1': Number(res.lag1.toPrecision(6)),
     'warm-up alignment': align === 'index' ? 'by observation index' : 'by simulation time, ' + nBins + ' bins',
-    'moving-average half-window': w
+    'moving-average half-window': w,
+    'warm-up plot also shows': [showReps ? 'each replication' : null, showBand ? 'the confidence band' : null].filter(Boolean).join(' and ') || 'the averages only'
   };
   const interval = [
     ['batch count', res.b],
@@ -41111,7 +41314,7 @@ function storeResult(ds, src, res, rows) {
       { name: 'Interval', headers: ['quantity', 'value'], rows: interval }
     ],
     summaryHtml,
-    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection() } })),
+    regen: { tooBig: recordCount(ds) > MAX_NUMBERS, build: () => steadyRecipe(Object.assign({}, recipeIn, { view: { section: currentSection(), reps: showReps && ds.reps.length > 1, band: showBand && ds.reps.length > 1 } })),
       files: [{ ds, form: 'observations' }, { ds, form: 'replications' }] }
   });
 }
@@ -45932,23 +46135,45 @@ function tlBins(t, v, edges) {
 // Aligning replications
 // ---------------------------------------------------------------------------------------------
 
+// The mean, the count, and the sample standard deviation down each column of
+// the rows (one row per replication, NaN where it gives no value): the
+// ensemble average, how many replications it averages, and their spread,
+// which is NaN below two of them. The deviations are summed from the mean
+// rather than found by subtraction, so that a column of equal values gives 0.
+function columnStats(rows, L) {
+  const ybar = new Float64Array(L), counts = new Int32Array(L), sd = new Float64Array(L);
+  for (let i = 0; i < L; i++) {
+    let sum = 0, c = 0;
+    for (const row of rows) if (!Number.isNaN(row[i])) { sum += row[i]; c++; }
+    counts[i] = c;
+    ybar[i] = c > 0 ? sum / c : NaN;
+    if (c >= 2) {
+      let ss = 0;
+      for (const row of rows) if (!Number.isNaN(row[i])) { const d = row[i] - ybar[i]; ss += d * d; }
+      sd[i] = Math.sqrt(ss / (c - 1));
+    } else sd[i] = NaN;
+  }
+  return { ybar, counts, sd };
+}
+
 /**
  * Average across replications at each observation index.
  * @param {{t: ArrayLike<number>|null, v: ArrayLike<number>}[]} reps
- * @returns {{ybar: Float64Array, counts: Int32Array, L: number}} ybar[i] is the mean of v[i]
- *   over the replications with more than i observations, counts[i] how many there are, and L the
- *   longest replication's length.
+ * @returns {{ybar: Float64Array, counts: Int32Array, sd: Float64Array, rows: Float64Array[], L: number}}
+ *   ybar[i] is the mean of v[i] over the replications with more than i observations, counts[i]
+ *   how many there are, sd[i] their sample standard deviation (NaN below two), rows[q] replication
+ *   q's values on the shared axis (NaN past its end), and L the longest replication's length.
  */
 export function alignByIndex(reps) {
   let L = 0;
   for (const r of reps) L = Math.max(L, r.v.length);
-  const sum = new Float64Array(L), counts = new Int32Array(L);
-  for (const r of reps) {
-    for (let i = 0; i < r.v.length; i++) { sum[i] += r.v[i]; counts[i] += 1; }
-  }
-  const ybar = new Float64Array(L);
-  for (let i = 0; i < L; i++) ybar[i] = counts[i] > 0 ? sum[i] / counts[i] : NaN;
-  return { ybar, counts, L };
+  const rows = reps.map(r => {
+    const row = new Float64Array(L).fill(NaN);
+    for (let i = 0; i < r.v.length; i++) row[i] = r.v[i];
+    return row;
+  });
+  const { ybar, counts, sd } = columnStats(rows, L);
+  return { ybar, counts, sd, rows, L };
 }
 
 /**
@@ -45963,9 +46188,11 @@ export function alignByIndex(reps) {
  * @param {number} nBins
  * @param {number|null} endTime
  * @param {number} [start=0] the time the bins start from, the cut for a series already truncated by time
- * @returns {{edges: Float64Array, centers: Float64Array, ybar: Float64Array, counts: Int32Array}}
- *   ybar[b] averages the replications that contribute to bin b (NaN when none do), and counts[b]
- *   is how many contribute.
+ * @returns {{edges: Float64Array, centers: Float64Array, ybar: Float64Array, counts: Int32Array,
+ *   sd: Float64Array, rows: Float64Array[]}} ybar[b] averages the replications that contribute to
+ *   bin b (NaN when none do), counts[b] is how many contribute, sd[b] their sample standard
+ *   deviation (NaN below two), and rows[q] replication q's value in each bin (NaN where it gives
+ *   none); a replication with no records has a row of NaN.
  */
 export function alignByTime(reps, kind, nBins, endTime, start = 0) {
   let T = endTime;
@@ -45982,18 +46209,39 @@ export function alignByTime(reps, kind, nBins, endTime, start = 0) {
   const edges = new Float64Array(B + 1), centers = new Float64Array(B);
   for (let b = 0; b <= B; b++) edges[b] = b === 0 ? t0 : b === B ? T : t0 + ((T - t0) * b) / B;
   for (let b = 0; b < B; b++) centers[b] = 0.5 * (edges[b] + edges[b + 1]);
-  const sum = new Float64Array(B), counts = new Int32Array(B);
-  for (const r of reps) {
+  const rows = reps.map(r => {
     if (!r.t) throw new Error('Aligning by time needs time stamps on every replication.');
-    if (!r.t.length) continue;
-    const m = kind === 'time'
+    if (!r.t.length) return new Float64Array(B).fill(NaN);
+    return kind === 'time'
       ? twBins(r.t, r.v, endTime ?? r.t[r.t.length - 1], edges)
       : tlBins(r.t, r.v, edges);
-    for (let b = 0; b < B; b++) if (!Number.isNaN(m[b])) { sum[b] += m[b]; counts[b] += 1; }
+  });
+  const { ybar, counts, sd } = columnStats(rows, B);
+  return { edges, centers, ybar, counts, sd, rows };
+}
+
+/**
+ * The confidence band on the ensemble average at each point: ybar ± t_{1−α/2, count−1} · sd / √count,
+ * NaN wherever fewer than two replications contribute.
+ * @param {ArrayLike<number>} ybar
+ * @param {ArrayLike<number>} sd
+ * @param {ArrayLike<number>} counts
+ * @param {number} level
+ * @returns {{lo: Float64Array, hi: Float64Array, hw: Float64Array}}
+ */
+export function ensembleBand(ybar, sd, counts, level) {
+  const L = ybar.length;
+  const lo = new Float64Array(L), hi = new Float64Array(L), hw = new Float64Array(L);
+  const p = 1 - (1 - level) / 2;
+  const tq = new Map();
+  for (let i = 0; i < L; i++) {
+    const c = counts[i];
+    if (!(c >= 2) || !Number.isFinite(sd[i])) { lo[i] = hi[i] = hw[i] = NaN; continue; }
+    if (!tq.has(c)) tq.set(c, tQuantile(p, c - 1));
+    hw[i] = tq.get(c) * sd[i] / Math.sqrt(c);
+    lo[i] = ybar[i] - hw[i]; hi[i] = ybar[i] + hw[i];
   }
-  const ybar = new Float64Array(B);
-  for (let b = 0; b < B; b++) ybar[b] = counts[b] > 0 ? sum[b] / counts[b] : NaN;
-  return { edges, centers, ybar, counts };
+  return { lo, hi, hw };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -48395,7 +48643,10 @@ export function welchPlot(fig, d) {
   const xs = d.x;
   const n = xs.length;
   if (!fig.sx) fig.x(extent(xs));
-  if (!fig.sy) fig.y(extent(d.raw, d.smooth, d.cumulative), { pad: 0.05, nice: true });
+  // The replications' own series and the band, when shown, widen the y range.
+  const reps = Array.isArray(d.reps) ? d.reps : [];
+  const band = d.band && d.band.lo && d.band.hi ? d.band : null;
+  if (!fig.sy) fig.y(extent(d.raw, d.smooth, d.cumulative, ...(band ? [band.lo, band.hi] : []), ...reps.map(r => r.y)), { pad: 0.05, nice: true });
   ensureAxes(fig, d);
   const sx = fig.sx, sy = fig.sy;
   // The cut rests at `cutMin` when none is given and cannot go below it: the
@@ -48406,6 +48657,28 @@ export function welchPlot(fig, d) {
   const shade = d.shade ? svgEl('rect', { x: xLo, y: 0, height: fig.ih, width: 0, fill: tok('--muted'), 'fill-opacity': SHADE_OPACITY, class: 'm-shade' }, fig.inner) : null;
   const shadeRec = d.shade ? { kind: 'span', x0: lo, x1: lo, color: tok('--muted'), label: 'excluded by the cut' } : null;
   if (shadeRec) fig.series.push(shadeRec);
+  // The band under every line, drawn as one polygon per run of points that
+  // have one, and each replication's series as a thin gray line beneath the
+  // averages.
+  if (band) {
+    const cBand = tok('--pair');
+    let i = 0;
+    while (i < n) {
+      while (i < n && !(Number.isFinite(band.lo[i]) && Number.isFinite(band.hi[i]))) i++;
+      const start = i;
+      while (i < n && Number.isFinite(band.lo[i]) && Number.isFinite(band.hi[i])) i++;
+      if (i - start < 2) continue;
+      const pts = [];
+      for (let k = start; k < i; k++) pts.push(r1(sx(xs[k])) + ',' + r1(sy(band.hi[k])));
+      for (let k = i - 1; k >= start; k--) pts.push(r1(sx(xs[k])) + ',' + r1(sy(band.lo[k])));
+      svgEl('polygon', { points: pts.join(' '), fill: cBand, 'fill-opacity': 0.18, stroke: 'none', class: 'm-band' }, fig.inner);
+    }
+    fig.series.push({ kind: 'band', x: Array.from(xs), lo: Array.from(band.lo), hi: Array.from(band.hi), color: cBand, label: band.label || 'confidence band' });
+  }
+  for (const r of reps) {
+    drawSeries(fig, xs, r.y, { stroke: tok('--muted'), 'stroke-width': 0.9, opacity: 0.55 }, 'm-rep');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(r.y), color: tok('--muted'), width: 0.8, label: r.label || 'one replication' });
+  }
   if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
   if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
   if (d.smooth) {

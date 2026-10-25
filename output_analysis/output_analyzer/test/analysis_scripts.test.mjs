@@ -1725,7 +1725,19 @@ const stChecks = { also: noWarning };
 test('steadyRecipe carries the records, the warm-up, the batches, and the autocorrelation', () => {
   const r = stRecipe(LONG);
   assert.equal(r.records.reps.length, 1);
-  for (const k of ['warm-up points', 'warm-up moving average at mid', 'batches', 'batch 1 mean', 'batch 20 mean', 'half-width', 'fishman C', 'acf lag 1', 'acf lag 5']) assert.ok(k in r.expect, k);
+  for (const k of ['warm-up points', 'warm-up moving average at mid', 'warm-up sd at mid', 'warm-up band half-width at mid', 'batches', 'batch 1 mean', 'batch 20 mean', 'half-width', 'fishman C', 'acf lag 1', 'acf lag 5']) assert.ok(k in r.expect, k);
+  // One replication has no spread across replications, and so no band.
+  assert.ok(Number.isNaN(r.expect['warm-up sd at mid']) && Number.isNaN(r.expect['warm-up band half-width at mid']));
+  const rt = stRecipe(TRANSIENT, { view: { section: 'warmup', reps: true, band: true } });
+  assert.ok(rt.expect['warm-up sd at mid'] > 0 && rt.expect['warm-up band half-width at mid'] > 0);
+  assert.equal(rt.fig.reps, true);
+  assert.equal(rt.fig.band, true);
+  assert.ok(!stRecipe(TRANSIENT).fig.reps && !stRecipe(TRANSIENT).fig.band, 'off unless the view says so');
+  for (const lang of LANGS) {
+    const txt = analysisScript(rt, lang);
+    assert.ok(/ensemble_band\(/.test(txt), lang + ' computes the band');
+    assert.ok(/fig_warmup\(/.test(txt), lang + ' draws the warm-up plot');
+  }
   assert.equal(r.expect.batches, 20);
   assert.equal(r.provenance['moving-average half-window'], 5, 'the page\'s own provenance is carried');
   for (const lang of LANGS) {
@@ -2722,6 +2734,8 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['Several Systems, the screen', sevRecipe(SIX_D, { dir: 'min', view: { section: 'subset' } }), 1],
     ['Steady State, warm-up by index', stRecipe(TRANSIENT, { cut: 30, view: { section: 'warmup' } }), 1],
     ['Steady State, warm-up by time', stRecipe(QLEN, { align: 'time', cut: 100, view: { section: 'warmup' } }), 1],
+    ['Steady State, warm-up with each replication and the band', stRecipe(QLEN, { align: 'time', cut: 100, view: { section: 'warmup', reps: true, band: true } }), 1, true],
+    ['Steady State, warm-up by index with the band', stRecipe(TRANSIENT, { cut: 30, view: { section: 'warmup', band: true } }), 1],
     ['Steady State, batches of tally data', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10, view: { section: 'batch' } }), 3, true],
     ['Steady State, batches of time-persistent data', stRecipe(QLEN, { align: 'time', cut: 100, count: 10, view: { section: 'batch' } }), 3],
     ['Steady State, batches of a flat run', stRecipe(flatRun, { count: 10, view: { section: 'batch' } }), 3],

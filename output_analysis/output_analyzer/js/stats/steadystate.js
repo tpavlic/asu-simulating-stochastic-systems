@@ -93,23 +93,45 @@ function tlBins(t, v, edges) {
 // Aligning replications
 // ---------------------------------------------------------------------------------------------
 
+// The mean, the count, and the sample standard deviation down each column of
+// the rows (one row per replication, NaN where it gives no value): the
+// ensemble average, how many replications it averages, and their spread,
+// which is NaN below two of them. The deviations are summed from the mean
+// rather than found by subtraction, so that a column of equal values gives 0.
+function columnStats(rows, L) {
+  const ybar = new Float64Array(L), counts = new Int32Array(L), sd = new Float64Array(L);
+  for (let i = 0; i < L; i++) {
+    let sum = 0, c = 0;
+    for (const row of rows) if (!Number.isNaN(row[i])) { sum += row[i]; c++; }
+    counts[i] = c;
+    ybar[i] = c > 0 ? sum / c : NaN;
+    if (c >= 2) {
+      let ss = 0;
+      for (const row of rows) if (!Number.isNaN(row[i])) { const d = row[i] - ybar[i]; ss += d * d; }
+      sd[i] = Math.sqrt(ss / (c - 1));
+    } else sd[i] = NaN;
+  }
+  return { ybar, counts, sd };
+}
+
 /**
  * Average across replications at each observation index.
  * @param {{t: ArrayLike<number>|null, v: ArrayLike<number>}[]} reps
- * @returns {{ybar: Float64Array, counts: Int32Array, L: number}} ybar[i] is the mean of v[i]
- *   over the replications with more than i observations, counts[i] how many there are, and L the
- *   longest replication's length.
+ * @returns {{ybar: Float64Array, counts: Int32Array, sd: Float64Array, rows: Float64Array[], L: number}}
+ *   ybar[i] is the mean of v[i] over the replications with more than i observations, counts[i]
+ *   how many there are, sd[i] their sample standard deviation (NaN below two), rows[q] replication
+ *   q's values on the shared axis (NaN past its end), and L the longest replication's length.
  */
 export function alignByIndex(reps) {
   let L = 0;
   for (const r of reps) L = Math.max(L, r.v.length);
-  const sum = new Float64Array(L), counts = new Int32Array(L);
-  for (const r of reps) {
-    for (let i = 0; i < r.v.length; i++) { sum[i] += r.v[i]; counts[i] += 1; }
-  }
-  const ybar = new Float64Array(L);
-  for (let i = 0; i < L; i++) ybar[i] = counts[i] > 0 ? sum[i] / counts[i] : NaN;
-  return { ybar, counts, L };
+  const rows = reps.map(r => {
+    const row = new Float64Array(L).fill(NaN);
+    for (let i = 0; i < r.v.length; i++) row[i] = r.v[i];
+    return row;
+  });
+  const { ybar, counts, sd } = columnStats(rows, L);
+  return { ybar, counts, sd, rows, L };
 }
 
 /**
@@ -124,9 +146,11 @@ export function alignByIndex(reps) {
  * @param {number} nBins
  * @param {number|null} endTime
  * @param {number} [start=0] the time the bins start from, the cut for a series already truncated by time
- * @returns {{edges: Float64Array, centers: Float64Array, ybar: Float64Array, counts: Int32Array}}
- *   ybar[b] averages the replications that contribute to bin b (NaN when none do), and counts[b]
- *   is how many contribute.
+ * @returns {{edges: Float64Array, centers: Float64Array, ybar: Float64Array, counts: Int32Array,
+ *   sd: Float64Array, rows: Float64Array[]}} ybar[b] averages the replications that contribute to
+ *   bin b (NaN when none do), counts[b] is how many contribute, sd[b] their sample standard
+ *   deviation (NaN below two), and rows[q] replication q's value in each bin (NaN where it gives
+ *   none); a replication with no records has a row of NaN.
  */
 export function alignByTime(reps, kind, nBins, endTime, start = 0) {
   let T = endTime;
@@ -143,18 +167,39 @@ export function alignByTime(reps, kind, nBins, endTime, start = 0) {
   const edges = new Float64Array(B + 1), centers = new Float64Array(B);
   for (let b = 0; b <= B; b++) edges[b] = b === 0 ? t0 : b === B ? T : t0 + ((T - t0) * b) / B;
   for (let b = 0; b < B; b++) centers[b] = 0.5 * (edges[b] + edges[b + 1]);
-  const sum = new Float64Array(B), counts = new Int32Array(B);
-  for (const r of reps) {
+  const rows = reps.map(r => {
     if (!r.t) throw new Error('Aligning by time needs time stamps on every replication.');
-    if (!r.t.length) continue;
-    const m = kind === 'time'
+    if (!r.t.length) return new Float64Array(B).fill(NaN);
+    return kind === 'time'
       ? twBins(r.t, r.v, endTime ?? r.t[r.t.length - 1], edges)
       : tlBins(r.t, r.v, edges);
-    for (let b = 0; b < B; b++) if (!Number.isNaN(m[b])) { sum[b] += m[b]; counts[b] += 1; }
+  });
+  const { ybar, counts, sd } = columnStats(rows, B);
+  return { edges, centers, ybar, counts, sd, rows };
+}
+
+/**
+ * The confidence band on the ensemble average at each point: ybar ± t_{1−α/2, count−1} · sd / √count,
+ * NaN wherever fewer than two replications contribute.
+ * @param {ArrayLike<number>} ybar
+ * @param {ArrayLike<number>} sd
+ * @param {ArrayLike<number>} counts
+ * @param {number} level
+ * @returns {{lo: Float64Array, hi: Float64Array, hw: Float64Array}}
+ */
+export function ensembleBand(ybar, sd, counts, level) {
+  const L = ybar.length;
+  const lo = new Float64Array(L), hi = new Float64Array(L), hw = new Float64Array(L);
+  const p = 1 - (1 - level) / 2;
+  const tq = new Map();
+  for (let i = 0; i < L; i++) {
+    const c = counts[i];
+    if (!(c >= 2) || !Number.isFinite(sd[i])) { lo[i] = hi[i] = hw[i] = NaN; continue; }
+    if (!tq.has(c)) tq.set(c, tQuantile(p, c - 1));
+    hw[i] = tq.get(c) * sd[i] / Math.sqrt(c);
+    lo[i] = ybar[i] - hw[i]; hi[i] = ybar[i] + hw[i];
   }
-  const ybar = new Float64Array(B);
-  for (let b = 0; b < B; b++) ybar[b] = counts[b] > 0 ? sum[b] / counts[b] : NaN;
-  return { edges, centers, ybar, counts };
+  return { lo, hi, hw };
 }
 
 // ---------------------------------------------------------------------------------------------
