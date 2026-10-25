@@ -1032,9 +1032,11 @@ better.
   Distribution section whose histogram bins by `histChoice` in `js/ui/rules.js`: one bar per value
   (`histogram(values, { perValue: true })` in `js/stats/descriptive.js`, on the half-integers across
   the span of whole numbers and otherwise halfway between neighboring distinct values) by default when
-  the values look discrete by the Input Analyzer's rules (`looksDiscrete`: whole non-negative numbers
-  each seen twice on average with at most 30 distinct values or at most 10√mean of them, or at most
-  ten exact values each seen three times on average), offered as a "One per value" switch whenever it
+  the values look discrete by rules adapted from the Input Analyzer's, with its repeat requirement
+  at every size because a few replications would otherwise be called discrete too often
+  (`looksDiscrete`: whole non-negative numbers each seen twice on average with at most 30 distinct
+  values or at most 10√mean of them, or at most ten exact values each seen three times on average),
+  offered as a "One per value" switch whenever it
   takes at most 150 bars, with a table of the distinct values, their counts, and proportions under
   the plots while it is on (at most 30 values); otherwise k equal-width bins from the smallest value
   to the largest, Sturges' rule (`sturgesBins`, ⌈log₂ n + 1⌉ as R's `hist` takes by default, kept

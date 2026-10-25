@@ -130,7 +130,7 @@ test('distinctValues lists each value once, sorted, with its count', () => {
   assert.equal(D.distinctValues([]).values.length, 0);
 });
 
-test('looksDiscrete follows the Input Analyzer\'s count and few-values rules', () => {
+test('looksDiscrete follows the count and few-values rules adapted from the Input Analyzer\'s', () => {
   const rule = x => D.looksDiscrete(x).rule;
   const ties = ref.sets.find(s => s.name === 'ties'), few = ref.sets.find(s => s.name === 'fewvals'), norm = ref.sets.find(s => s.name === 'normal');
   assert.equal(rule(ties.x), 'count', 'whole numbers 1 to 6, repeated');

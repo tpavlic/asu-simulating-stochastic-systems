@@ -167,7 +167,11 @@ export const VALUE_BINS_MAX = 150;
 const COUNT_SPAN_MAX = 5000;
 
 /**
- * Whether a sample reads as discrete, by the rules the Input Analyzer applies.
+ * Whether a sample reads as discrete, by rules adapted from the Input Analyzer's.
+ * The Input Analyzer calls any thirty or fewer distinct whole numbers counts; here
+ * the repeat requirement holds at every size, because a sample of twenty
+ * replication outcomes with twelve distinct values is better read in equal-width
+ * bins than as a bar each, and nothing is being fitted to it.
  * Counts: whole numbers, none negative, over a span of at most 5000, each distinct
  * value seen twice on average (2 * nUnique <= n) and either at most 30 distinct
  * values or at most 10 * sqrt(mean) of them, the room a count of that size has to
