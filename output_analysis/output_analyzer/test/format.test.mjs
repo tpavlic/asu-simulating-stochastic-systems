@@ -4,7 +4,7 @@
 // decimal value, and so no R reference is involved.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { num, stat, fixed, pct, pValue, plural, intl, dash, esc, breakPoints } from '../js/ui/format.js';
+import { num, stat, fixed, pct, pValue, plural, intl, dash, esc, breakPoints, ordinal } from '../js/ui/format.js';
 
 test('dash is the en dash', () => {
   assert.equal(dash, '–');
@@ -96,4 +96,9 @@ test('breakPoints: after an underscore or a period before a letter, never inside
   assert.equal(breakPoints('v2.0.flt · tally'), 'v2.0.<wbr>flt · tally');
   assert.equal(breakPoints('end.'), 'end.');
   assert.equal(breakPoints(esc('a&b_c.txt')), 'a&amp;b_<wbr>c.<wbr>txt');
+});
+
+test('ordinal: 1st, 2nd, 3rd, the teens all th, and the hundreds like the ones', () => {
+  assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 50, 90, 101, 111, 112, 1003].map(ordinal),
+    ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '50th', '90th', '101st', '111th', '112th', '1,003rd']);
 });

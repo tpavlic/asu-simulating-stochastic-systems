@@ -384,6 +384,160 @@ r = struct('df', st.df, 't', tq, 'hw', (ci(2) - ci(1)) / 2, 'lo', ci(1), 'hi', c
 end
 `;
 
+// ── The one-sample t test against a stated mean ──────────────────────────
+// t.test(mu = mu0), ttest_1samp, and ttest. A constant sample has se = 0,
+// where each language's test stops or warns; t is then +/-Inf with p = 0 off
+// mu0 and NaN at it, as the analyzer reports.
+
+LIB.R.oneSampleT = `
+one_sample_t <- function(x, mu0) {
+  n <- length(x); d <- mean(x) - mu0
+  if (min(x) == max(x)) {
+    if (d == 0) return(list(t = NaN, p = NaN, df = n - 1, test = NULL))
+    return(list(t = sign(d) * Inf, p = 0, df = n - 1, test = NULL))
+  }
+  tt <- t.test(x, mu = mu0)
+  list(t = unname(tt$statistic), p = tt$p.value, df = unname(tt$parameter), test = tt)
+}
+`;
+LIB.py.oneSampleT = `
+def one_sample_t(x, mu0):
+    """t = (mean - mu0) / (s / sqrt(n)) on n - 1 df with the two-sided p, as stats.ttest_1samp."""
+    x = np.asarray(x, float); n = len(x); d = x.mean() - mu0
+    if x.min() == x.max():
+        if d == 0: return dict(t=np.nan, p=np.nan, df=n - 1)
+        return dict(t=np.sign(d) * np.inf, p=0.0, df=n - 1)
+    res = stats.ttest_1samp(x, mu0)
+    return dict(t=float(res.statistic), p=float(res.pvalue), df=n - 1)
+`;
+LIB.m.oneSampleT = `
+function r = one_sample_t(x, mu0)
+% t = (mean - mu0) / (s / sqrt(n)) on n - 1 df with the two-sided p, as ttest.
+x = x(:); n = numel(x); d = mean(x) - mu0;
+if min(x) == max(x)
+    if d == 0, r = struct('t', NaN, 'p', NaN, 'df', n - 1); else, r = struct('t', sign(d) * Inf, 'p', 0, 'df', n - 1); end
+    return;
+end
+[~, p, ~, st] = ttest(x, mu0);
+r = struct('t', st.tstat, 'p', p, 'df', st.df);
+end
+`;
+
+// ── The prediction interval for one further outcome ──────────────────────
+// mean +/- t * s * sqrt(1 + 1/n). R takes it from predict.lm on an
+// intercept-only fit, an independent route to the same formula.
+
+LIB.R.predictionInterval = `
+prediction_interval <- function(x, level) {
+  n <- length(x); tq <- qt(1 - (1 - level) / 2, n - 1)
+  pr <- suppressWarnings(predict(lm(x ~ 1), newdata = data.frame(one = 1), interval = "prediction", level = level))
+  list(hw = tq * sd(x) * sqrt(1 + 1 / n), lo = unname(pr[1, "lwr"]), hi = unname(pr[1, "upr"]))
+}
+`;
+LIB.py.predictionInterval = `
+def prediction_interval(x, level):
+    """mean +/- t * s * sqrt(1 + 1/n), for one further outcome."""
+    x = np.asarray(x, float); n = len(x)
+    s = 0.0 if x.min() == x.max() else x.std(ddof=1)
+    hw = stats.t.ppf(1 - (1 - level) / 2, n - 1) * s * np.sqrt(1 + 1 / n)
+    return dict(hw=hw, lo=x.mean() - hw, hi=x.mean() + hw)
+`;
+LIB.m.predictionInterval = `
+function r = prediction_interval(x, level)
+% mean +/- t * s * sqrt(1 + 1/n), for one further outcome.
+x = x(:); n = numel(x);
+if min(x) == max(x), s = 0; else, s = std(x); end
+hw = tinv(1 - (1 - level) / 2, n - 1) * s * sqrt(1 + 1 / n);
+r = struct('hw', hw, 'lo', mean(x) - hw, 'hi', mean(x) + hw);
+end
+`;
+
+// ── A quantile and its distribution-free interval ────────────────────────
+// The order statistic at rank ceil(n p), the interpolated quantile (R's
+// type 7, NumPy's default; written out in MATLAB, whose quantile uses
+// another rule), and the narrowest pair of order statistics (r, s) whose
+// binomial coverage pbinom(s - 1, n, p) - pbinom(r - 1, n, p) reaches the
+// level, ties going to the pair centered nearest n p + 1/2 and then to the
+// lowest. No pair may reach it; minN is the smallest n at which (1, n) does.
+
+LIB.R.quantileInterval = `
+quantile_interval <- function(x, p, level) {
+  srt <- sort(x); n <- length(srt)
+  min_n <- 2
+  while (1 - p^min_n - (1 - p)^min_n < level) min_n <- min_n + 1
+  k <- max(1, ceiling(n * p))
+  out <- list(k = k, order = srt[k], interp = unname(quantile(srt, p, type = 7)),
+              r = NaN, s = NaN, lo = NaN, hi = NaN, achieved = NaN, minN = min_n)
+  if (n < 2) return(out)
+  Fc <- pbinom((0:n) - 1, n, p)   # Fc[j + 1] = P(X <= j - 1), so a pair (r, s) covers Fc[s + 1] - Fc[r + 1]
+  mid <- n * p + 0.5; best <- NULL
+  for (r in 1:(n - 1)) {
+    s <- r + 1
+    while (s <= n && Fc[s + 1] - Fc[r + 1] < level) s <- s + 1
+    if (s > n) next
+    key <- c(s - r, abs((r + s) / 2 - mid), r)
+    if (is.null(best) || key[1] < best$key[1] || (key[1] == best$key[1] && (key[2] < best$key[2] ||
+        (key[2] == best$key[2] && key[3] < best$key[3])))) best <- list(key = key, r = r, s = s, cov = Fc[s + 1] - Fc[r + 1])
+  }
+  if (!is.null(best)) { out$r <- best$r; out$s <- best$s; out$lo <- srt[best$r]; out$hi <- srt[best$s]; out$achieved <- best$cov }
+  out
+}
+`;
+LIB.py.quantileInterval = `
+def quantile_interval(x, p, level):
+    """The p quantile by order statistics, with the narrowest pair that covers it at the level."""
+    srt = np.sort(np.asarray(x, float)); n = len(srt)
+    min_n = 2
+    while 1 - p ** min_n - (1 - p) ** min_n < level: min_n += 1
+    k = max(1, int(np.ceil(n * p)))
+    out = dict(k=k, order=srt[k - 1], interp=float(np.quantile(srt, p)), r=np.nan, s=np.nan,
+               lo=np.nan, hi=np.nan, achieved=np.nan, minN=min_n)
+    if n < 2: return out
+    F = stats.binom.cdf(np.arange(-1, n), n, p)   # F[j] = P(X <= j - 1): a pair (r, s) covers F[s] - F[r]
+    mid = n * p + 0.5; best = None
+    for r in range(1, n):
+        s = r + 1
+        while s <= n and F[s] - F[r] < level: s += 1
+        if s > n: continue
+        key = (s - r, abs((r + s) / 2 - mid), r)
+        if best is None or key < best[0]: best = (key, r, s, F[s] - F[r])
+    if best is not None:
+        out.update(r=best[1], s=best[2], lo=srt[best[1] - 1], hi=srt[best[2] - 1], achieved=best[3])
+    return out
+`;
+LIB.m.quantileInterval = `
+function r = quantile_interval(x, p, level)
+% The p quantile by order statistics, with the narrowest pair that covers it at the level.
+srt = sort(x(:)); n = numel(srt);
+min_n = 2;
+while 1 - p^min_n - (1 - p)^min_n < level, min_n = min_n + 1; end
+k = max(1, ceil(n * p));
+% R's type 7: linear interpolation between the order statistics around h = (n - 1) p + 1.
+h = (n - 1) * p + 1; i0 = floor(h); i1 = min(n, i0 + 1);
+interp = srt(i0) + (h - i0) * (srt(i1) - srt(i0));
+r = struct('k', k, 'order', srt(k), 'interp', interp, 'r', NaN, 's', NaN, 'lo', NaN, 'hi', NaN, 'achieved', NaN, 'minN', min_n);
+if n < 2, return; end
+F = binocdf((0:n) - 1, n, p);   % F(j + 1) = P(X <= j - 1): a pair (rr, ss) covers F(ss + 1) - F(rr + 1)
+mid = n * p + 0.5; best = [];
+for rr = 1:(n - 1)
+    ss = rr + 1;
+    while ss <= n && F(ss + 1) - F(rr + 1) < level, ss = ss + 1; end
+    if ss > n, continue; end
+    key = [ss - rr, abs((rr + ss) / 2 - mid), rr];
+    better = isempty(best);
+    if ~better
+        for i = 1:3
+            if key(i) < best.key(i), better = true; break; elseif key(i) > best.key(i), break; end
+        end
+    end
+    if better, best = struct('key', key, 'r', rr, 's', ss, 'cov', F(ss + 1) - F(rr + 1)); end
+end
+if ~isempty(best)
+    r.r = best.r; r.s = best.s; r.lo = srt(best.r); r.hi = srt(best.s); r.achieved = best.cov;
+end
+end
+`;
+
 // ── Wilcoxon signed-rank with the Hodges-Lehmann estimate and interval ───
 // The exact distribution is used below 50 values when none is tied and none
 // equals mu, and otherwise the normal approximation with continuity and tie

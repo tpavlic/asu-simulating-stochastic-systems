@@ -17,7 +17,7 @@
 
 import { repEstimates, repIds, datasetSummary, observations, timeWeightedOverall } from '../data/model.js';
 import { summary, acf } from '../stats/descriptive.js';
-import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio } from '../stats/intervals.js';
+import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample, fRatio, oneSampleT, predictionInterval, quantileInterval } from '../stats/intervals.js';
 import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } from '../stats/nonparam.js';
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
@@ -157,7 +157,7 @@ export function planExpect(expect, { sd, mean, level, plan, R, np, prefix = 'pla
  *   MAX_NUMBERS observations, the recipe is marked `csvOnly` and its data
  *   block holds no values.
  */
-export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform }) {
+export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, plan, transform, mu0, qp }) {
   // The transform applies to replication outcomes, never to the pooled observations.
   const tf = !pooled && isTransform(transform) ? transform : 'none';
   const raw = Array.from(x);
@@ -201,11 +201,44 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   }
   const checks = interval && !pooled && !np && shapiroOk(xs);
   if (checks) Object.assign(e, shapiroExpect('shapiro ', xs));
+  // The prediction interval for one further outcome, under the t procedure.
+  const pi = interval && !np;
+  if (pi) {
+    const pr = predictionInterval(xs, level);
+    Object.assign(e, { 'prediction half-width': pr.hw, 'prediction lower': pr.lo, 'prediction upper': pr.hi });
+    if (tf !== 'none') {
+      const bi = backInterval(pr.lo, pr.hi, tf);
+      Object.assign(e, { 'back-transformed prediction lower': bi.lo, 'back-transformed prediction upper': bi.hi });
+    }
+  }
+  // The test against a stated mean (the signed-rank test at mu0 under the
+  // rank procedure), on the scale the interval is on.
+  const test = interval && Number.isFinite(mu0) ? { mu0 } : null;
+  if (test && np) {
+    const st = signedRank(xs, { mu: mu0, level });
+    Object.assign(e, { 'signed-rank V at mu0': st.V, 'signed-rank p at mu0': st.p });
+  } else if (test) {
+    const tt = oneSampleT(xs, mu0);
+    Object.assign(e, { 't statistic': tt.t, 't test p': tt.p });
+  }
   const variance = interval && !pooled;
   if (variance) {
     const vi = varianceInterval(xs, level);
     Object.assign(e, { s2: vi.s2, 'chi2 lower quantile': vi.chiLo, 'chi2 upper quantile': vi.chiHi,
                        'variance lower': vi.lo2, 'variance upper': vi.hi2, 'sd lower': vi.loS, 'sd upper': vi.hiS });
+  }
+  // The p quantile with its distribution-free interval; the ranks are null,
+  // and the ends NaN, where no pair of order statistics reaches the level.
+  const quant = interval && qp > 0 && qp < 1 ? { p: qp } : null;
+  if (quant) {
+    const q = quantileInterval(xs, qp, level);
+    Object.assign(e, { 'quantile rank k': q.k, 'quantile order statistic': q.order, 'quantile interpolated': q.interp,
+                       'quantile lower rank': q.r, 'quantile upper rank': q.s, 'quantile lower': q.lo, 'quantile upper': q.hi,
+                       'quantile achieved level': q.achieved, 'quantile smallest n': q.minN });
+    if (tf !== 'none') {
+      const bq = backInterval(q.lo, q.hi, tf);
+      Object.assign(e, { 'back-transformed quantile': backTransform(q.order, tf), 'back-transformed quantile lower': bq.lo, 'back-transformed quantile upper': bq.hi });
+    }
   }
   let planOut = null;
   if (plan && interval && !pooled) {
@@ -213,7 +246,7 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
       plan: { h: plan.abs, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power } });
     planOut = { h, relative: plan.relative, rel: plan.rel, delta: plan.delta, power: plan.power, R: s.n };
   }
-  r.one = { pooled, np, interval, variance, checks, plan: planOut,
+  r.one = { pooled, np, interval, variance, checks, plan: planOut, pi, test, quantile: quant,
             center: np ? 'back-transformed pseudo-median' : transformOf(tf).center };
   // The page's one figure: the outcomes (or pooled observations) as dots, with the interval under them.
   r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
@@ -222,6 +255,8 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   r.settings = !planOut ? {}
     : planOut.relative ? { plan_rel: planOut.rel, plan_delta: planOut.delta, plan_power: planOut.power }
       : { plan_h: planOut.h, plan_delta: planOut.delta, plan_power: planOut.power };
+  if (test) r.settings.mu0 = mu0;
+  if (quant) r.settings.quantile_p = qp;
   return r;
 }
 

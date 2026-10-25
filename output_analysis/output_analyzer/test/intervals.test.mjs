@@ -114,3 +114,64 @@ test('planReplications finds the smallest n by the t half-width', () => {
   assert.equal(I.planReplications({ sd: NaN, target: 1 }).n, null);
   assert.equal(I.planReplications({ sd: 2, target: 0.1, relative: true, mean: 0 }).n, null);
 });
+
+test('oneSampleT matches t.test(mu = mu0) below, near, and far from the mean', () => {
+  for (const o of ref.oneT) {
+    const r = I.oneSampleT(ref.x, o.mu0);
+    close(r.t, o.t, 1e-12, `t @${o.mu0}`);
+    close(r.p, o.p, 1e-11, `p @${o.mu0}`);
+    assert.equal(r.df, o.df);
+    assert.equal(r.mu0, o.mu0);
+    assert.equal(r.n, ref.x.length);
+  }
+  // At the sample mean the statistic is 0 and p is 1; one value gives no test.
+  const atMean = I.oneSampleT(ref.x, I.tInterval(ref.x).mean);
+  close(atMean.t, 0, 1e-12, 't at the mean');
+  close(atMean.p, 1, 1e-12, 'p at the mean');
+  assert.ok(Number.isNaN(I.oneSampleT([3], 2).t));
+  // A constant sample has se = 0: t is infinite off the mean (p = 0) and NaN at it.
+  assert.equal(I.oneSampleT([2, 2, 2], 1).t, Infinity);
+  assert.equal(I.oneSampleT([2, 2, 2], 1).p, 0);
+  assert.ok(Number.isNaN(I.oneSampleT([2, 2, 2], 2).t));
+});
+
+test('predictionInterval matches predict.lm(interval = "prediction") at 90, 95, and 99%', () => {
+  for (const L of ref.pi) {
+    const r = I.predictionInterval(ref.x, L.level);
+    close(r.lo, L.lo, 1e-11, `lo @${L.level}`);
+    close(r.hi, L.hi, 1e-11, `hi @${L.level}`);
+    const ti = I.tInterval(ref.x, L.level);
+    close(r.hw, ti.t * ti.sd * Math.sqrt(1 + 1 / ref.x.length), 1e-12, 'hw = t s sqrt(1 + 1/n)');
+    assert.ok(r.hw > ti.hw, 'wider than the confidence interval');
+    assert.equal(r.df, ref.x.length - 1);
+  }
+  assert.ok(Number.isNaN(I.predictionInterval([1], 0.95).hw), 'n = 1 gives NaN');
+});
+
+test('quantileInterval: the order statistics, the interpolated quantile, and the narrowest pbinom pair', () => {
+  for (const q of ref.quant) {
+    const v = q.n === 60 ? ref.z : ref.x;
+    const r = I.quantileInterval(v, q.p, q.level);
+    assert.equal(r.n, q.n);
+    close(r.order, q.order, 1e-14, `order statistic p=${q.p}`);
+    close(r.interp, q.interp, 1e-12, `interpolated p=${q.p}`);
+    assert.equal(r.minN, q.minN, `minN p=${q.p} L=${q.level}`);
+    if (q.r === null) {
+      assert.equal(r.r, null, `no pair p=${q.p} L=${q.level} n=${q.n}`);
+      assert.equal(r.s, null);
+      assert.ok(Number.isNaN(r.lo) && Number.isNaN(r.hi) && Number.isNaN(r.achieved));
+    } else {
+      assert.equal(r.r, q.r, `r p=${q.p} L=${q.level}`);
+      assert.equal(r.s, q.s, `s p=${q.p} L=${q.level}`);
+      close(r.lo, q.lo, 1e-14, 'lo');
+      close(r.hi, q.hi, 1e-14, 'hi');
+      close(r.achieved, q.achieved, 1e-12, 'achieved');
+      assert.ok(r.achieved >= q.level);
+    }
+  }
+  // The rank of the order statistic is ceil(n p), and p at the ends is refused.
+  assert.equal(I.quantileInterval(ref.z, 0.9, 0.95).k, 54);
+  assert.throws(() => I.quantileInterval(ref.z, 0, 0.95), RangeError);
+  assert.throws(() => I.quantileInterval(ref.z, 1, 0.95), RangeError);
+  assert.equal(I.quantileInterval([5], 0.5, 0.95).r, null);
+});

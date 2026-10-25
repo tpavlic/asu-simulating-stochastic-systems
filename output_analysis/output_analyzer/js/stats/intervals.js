@@ -1,11 +1,13 @@
 // Confidence intervals and tests for one or two samples: the Student t interval
-// for a mean, replication planning for a target half-width, chi-square intervals
-// for a variance, the F ratio of two variances, and Pearson correlation. Pure
-// functions, no DOM. Each matches the corresponding R routine (t.test,
-// var.test, cor.test) on the same data. Replication planning by power follows
-// R's power.t.test(..., strict = TRUE).
+// for a mean, the one-sample t test against a stated mean, the prediction
+// interval for one further outcome, replication planning for a target
+// half-width, chi-square intervals for a variance, the F ratio of two
+// variances, Pearson correlation, and the distribution-free interval for a
+// quantile. Pure functions, no DOM. Each matches the corresponding R routine
+// (t.test, predict.lm, var.test, cor.test, pbinom) on the same data.
+// Replication planning by power follows R's power.t.test(..., strict = TRUE).
 
-import { mean, variance, pearson } from './descriptive.js';
+import { mean, variance, pearson, quantile } from './descriptive.js';
 import { tCdf, tQuantile, normInv, chi2Quantile, fCdf, fQuantile, betaInc, nctCdf, smallestN }
   from './special.js';
 
@@ -24,6 +26,99 @@ export function tInterval(x, level = 0.95) {
   const s = Math.sqrt(variance(x)), se = s / Math.sqrt(n), df = n - 1;
   const t = tQuantile(1 - (1 - level) / 2, df), hw = t * se;
   return { n, mean: m, sd: s, se, df, t, hw, lo: m - hw, hi: m + hw, level };
+}
+
+/**
+ * The one-sample t test of the mean against a stated value mu0, as R's
+ * t.test(x, mu = mu0): t = (mean − mu0) / (s / sqrt(n)) on n − 1 degrees of
+ * freedom with the two-sided p-value. A constant sample has se = 0, and then
+ * t is ±Infinity with p = 0 away from mu0 and NaN at it.
+ * @param {ArrayLike<number>} x
+ * @param {number} mu0
+ * @returns {{n: number, mean: number, sd: number, se: number, df: number, mu0: number,
+ *   t: number, p: number}} NaN fields when n < 2
+ */
+export function oneSampleT(x, mu0) {
+  const n = x.length, m = mean(x);
+  if (n < 2) return { n, mean: m, sd: NaN, se: NaN, df: NaN, mu0, t: NaN, p: NaN };
+  const s = Math.sqrt(variance(x)), se = s / Math.sqrt(n), df = n - 1;
+  const diff = m - mu0;
+  let t, p;
+  if (se > 0) {
+    t = diff / se;
+    p = Math.min(1, 2 * Math.min(tCdf(t, df), tCdf(-t, df)));
+  } else if (diff === 0) { t = NaN; p = NaN; }
+  else { t = diff > 0 ? Infinity : -Infinity; p = 0; }
+  return { n, mean: m, sd: s, se, df, mu0, t, p };
+}
+
+/**
+ * The prediction interval for one further outcome from the same population:
+ * mean ± t_{1−α/2, n−1} · s · sqrt(1 + 1/n), which is what R's predict.lm
+ * gives with interval = "prediction" for an intercept-only fit. Unlike the
+ * confidence interval it does not shrink toward a point as n grows.
+ * @param {ArrayLike<number>} x
+ * @param {number} [level=0.95]
+ * @returns {{n: number, mean: number, sd: number, df: number, t: number, hw: number,
+ *   lo: number, hi: number, level: number}} NaN fields when n < 2
+ */
+export function predictionInterval(x, level = 0.95) {
+  const n = x.length, m = mean(x);
+  if (n < 2) return { n, mean: m, sd: NaN, df: NaN, t: NaN, hw: NaN, lo: NaN, hi: NaN, level };
+  const s = Math.sqrt(variance(x)), df = n - 1;
+  const t = tQuantile(1 - (1 - level) / 2, df), hw = t * s * Math.sqrt(1 + 1 / n);
+  return { n, mean: m, sd: s, df, t, hw, lo: m - hw, hi: m + hw, level };
+}
+
+// P(X ≤ k) for X ~ Binomial(n, p), through the regularized incomplete beta.
+function binomCdf(k, n, p) {
+  if (k < 0) return 0;
+  if (k >= n) return 1;
+  return betaInc(n - k, k + 1, 1 - p);
+}
+
+/**
+ * The p quantile estimated from a sample, with the distribution-free interval
+ * built from two order statistics. The point estimates are the order statistic
+ * X(k), k = ceil(n p), and the interpolated quantile (R's type 7). The interval
+ * [X(r), X(s)] is chosen among every pair r < s whose coverage
+ * P(X(r) ≤ θ_p < X(s)) = pbinom(s − 1, n, p) − pbinom(r − 1, n, p) is at least
+ * the level: the narrowest (smallest s − r), then the one whose middle is
+ * nearest n p + 1/2, then the lowest. No pair reaches the level for a small
+ * sample or an extreme p; `minN` is the smallest n at which the widest pair,
+ * (1, n), does, from 1 − pⁿ − (1 − p)ⁿ ≥ level.
+ * @param {ArrayLike<number>} x
+ * @param {number} p strictly between 0 and 1
+ * @param {number} [level=0.95]
+ * @returns {{n: number, p: number, level: number, k: number, order: number, interp: number,
+ *   r: number|null, s: number|null, lo: number, hi: number, achieved: number, minN: number}}
+ */
+export function quantileInterval(x, p, level = 0.95) {
+  if (!(p > 0 && p < 1)) throw new RangeError('quantileInterval: p must lie strictly between 0 and 1');
+  const srt = Array.from(x).filter(Number.isFinite).sort((a, b) => a - b);
+  const n = srt.length;
+  let minN = 2;
+  while (1 - Math.pow(p, minN) - Math.pow(1 - p, minN) < level) minN++;
+  if (n === 0) return { n, p, level, k: NaN, order: NaN, interp: NaN, r: null, s: null, lo: NaN, hi: NaN, achieved: NaN, minN };
+  const k = Math.max(1, Math.ceil(n * p));
+  const order = srt[k - 1], interp = quantile(srt, p);
+  // The cumulative probabilities F(j) = P(X ≤ j) for j = −1 … n − 1, so that
+  // the coverage of (r, s) is F(s − 1) − F(r − 1).
+  const F = new Float64Array(n + 1);
+  for (let j = 0; j <= n; j++) F[j] = binomCdf(j - 1, n, p);
+  const mid = n * p + 0.5;
+  let best = null;
+  for (let r = 1; r < n; r++) {
+    for (let s = r + 1; s <= n; s++) {
+      const cov = F[s] - F[r];
+      if (cov < level) continue;
+      const key = [s - r, Math.abs((r + s) / 2 - mid), r];
+      if (!best || key[0] < best.key[0] || (key[0] === best.key[0] && (key[1] < best.key[1] || (key[1] === best.key[1] && key[2] < best.key[2])))) best = { key, r, s, cov };
+      break;   // a wider s for this r is never narrower
+    }
+  }
+  if (!best) return { n, p, level, k, order, interp, r: null, s: null, lo: NaN, hi: NaN, achieved: NaN, minN };
+  return { n, p, level, k, order, interp, r: best.r, s: best.s, lo: srt[best.r - 1], hi: srt[best.s - 1], achieved: best.cov, minN };
 }
 
 // The t quantile for planning. Past 10^6 degrees of freedom the first-order

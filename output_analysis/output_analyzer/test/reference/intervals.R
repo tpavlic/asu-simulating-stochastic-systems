@@ -1,12 +1,14 @@
 # Reference values for test/intervals.test.mjs, from R's t.test, var.test,
-# cor.test, qchisq, and qt. The samples are generated here and written into the
+# cor.test, qchisq, qt, predict.lm (the prediction interval), pbinom (the
+# distribution-free quantile interval), and sort (the order statistics). The samples are generated here and written into the
 # JSON, and so the test runs on exactly these numbers.
 # Run:  Rscript intervals.R > intervals.json
 j <- function(x) {
   if (is.list(x) && !is.null(names(x))) paste0("{", paste(sprintf('"%s":%s', names(x), sapply(x, j)), collapse = ","), "}")
   else if (is.list(x) || length(x) > 1) paste0("[", paste(sapply(x, j), collapse = ","), "]")
   else if (is.character(x)) sprintf('"%s"', x)
-  else if (is.logical(x)) tolower(as.character(x))
+  else if (is.logical(x) && !is.na(x)) tolower(as.character(x))
+  else if (length(x) == 1 && is.na(x)) "null"
   else sprintf("%.17g", x)
 }
 v <- function(x) as.list(as.numeric(x))
@@ -51,10 +53,58 @@ need <- function(sd, h, L) {
 plan <- list(need(2, 0.5, 0.95), need(10, 1, 0.90), need(1.3, 0.9, 0.99), need(5, 40, 0.95),
              need(100, 0.01, 0.95))   # n near 3.8e8, past the df where the planner switches to the expansion
 
+# The one-sample t test against a stated mean, from t.test(mu = mu0), at a
+# value below the sample mean, one above it, and one far enough off to reject.
+mu0s <- c(48, 51.5, 56)
+one_t <- lapply(mu0s, function(m) {
+  tt <- t.test(x, mu = m)
+  list(mu0 = m, t = unname(tt$statistic), p = tt$p.value, df = unname(tt$parameter))
+})
+
+# The prediction interval for one further outcome, mean +/- t * s * sqrt(1 + 1/n),
+# as predict.lm gives it for an intercept-only fit.
+pi_levels <- lapply(levels, function(L) {
+  pr <- predict(lm(x ~ 1), newdata = data.frame(a = 1), interval = "prediction", level = L)
+  list(level = L, lo = unname(pr[1, "lwr"]), hi = unname(pr[1, "upr"]))
+})
+
+# The distribution-free interval for the p quantile from two order statistics:
+# among every pair r < s with P(X(r) <= theta_p < X(s)) = pbinom(s - 1, n, p) -
+# pbinom(r - 1, n, p) at least the level, the narrowest (smallest s - r), and
+# of those the one whose middle is nearest n p + 1/2, and of those the lowest.
+# The point estimates are the book's order statistic X(ceiling(n p)) and R's
+# default (type 7) interpolated quantile. minN is the smallest n at which the
+# widest pair, (1, n), reaches the level.
+z <- rnorm(60, 20, 3)
+better <- function(a, b) {   # a before b in lexicographic order
+  for (i in seq_along(a)) { if (a[i] < b[i]) return(TRUE); if (a[i] > b[i]) return(FALSE) }
+  FALSE
+}
+q_int <- function(v, p, L) {
+  n <- length(v); srt <- sort(v)
+  best <- NULL
+  for (r in 1:(n - 1)) for (s in (r + 1):n) {
+    cov <- pbinom(s - 1, n, p) - pbinom(r - 1, n, p)
+    if (cov >= L) {
+      cand <- c(s - r, abs((r + s) / 2 - (n * p + 0.5)), r)
+      if (is.null(best) || better(cand, best$key)) best <- list(key = cand, r = r, s = s, cov = cov)
+    }
+  }
+  m <- 2
+  while (1 - p^m - (1 - p)^m < L) m <- m + 1
+  list(p = p, level = L, n = n, order = srt[ceiling(n * p)], interp = unname(quantile(v, p, type = 7)),
+       r = if (is.null(best)) NA else best$r, s = if (is.null(best)) NA else best$s,
+       lo = if (is.null(best)) NA else srt[best$r], hi = if (is.null(best)) NA else srt[best$s],
+       achieved = if (is.null(best)) NA else best$cov, minN = m)
+}
+quant <- list(q_int(z, 0.5, 0.95), q_int(z, 0.9, 0.95), q_int(z, 0.25, 0.90), q_int(z, 0.95, 0.99),
+              q_int(x, 0.5, 0.95), q_int(x, 0.9, 0.95), q_int(x, 0.9, 0.99))   # the last two: n = 15 cannot reach it at p = 0.9
+
 cat(j(list(
   x = v(x), y = v(y), u = v(u), w = v(w), small = v(small),
   levels = per_level,
   fSwap = list(F = unname(vtSwap$statistic), p = vtSwap$p.value, ci = v(vtSwap$conf.int)),
   corSmall = list(t = unname(ctSmall$statistic), p = ctSmall$p.value),
-  plan = plan
+  plan = plan,
+  z = v(z), oneT = one_t, pi = pi_levels, quant = quant
 )))

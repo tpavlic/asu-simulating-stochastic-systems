@@ -156,3 +156,15 @@ function trimExp(s) {
   const ex = s.slice(k + 1).replace(/^\+/, '');
   return mant + 'e' + ex;
 }
+
+/**
+ * A whole number as an ordinal: 1st, 2nd, 3rd, 4th, and the teens all "th"
+ * (11th, 12th, 13th), which the hundreds follow (111th, 112th).
+ * @param {number} n
+ * @returns {string}
+ */
+export function ordinal(n) {
+  const k = Math.abs(Math.round(n)), last = k % 10, teen = k % 100 >= 11 && k % 100 <= 13;
+  const suffix = teen ? 'th' : last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th';
+  return intl(n) + suffix;
+}

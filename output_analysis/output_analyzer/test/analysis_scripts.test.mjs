@@ -592,6 +592,44 @@ test('oneRecipe carries the data, the choices, and every expect key of the t pat
   for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
 });
 
+test('oneRecipe carries the stated-mean test, the prediction interval, and the quantile, with their settings', () => {
+  const prov = oneProv(QUEUE, 0.95, 't');
+  const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN, mu0: 3, qp: 0.5 });
+  for (const k of ['t statistic', 't test p', 'prediction half-width', 'prediction lower', 'prediction upper',
+    'quantile rank k', 'quantile order statistic', 'quantile interpolated', 'quantile lower rank', 'quantile upper rank',
+    'quantile lower', 'quantile upper', 'quantile achieved level', 'quantile smallest n']) assert.ok(k in r.expect, k);
+  assert.equal(r.settings.mu0, 3);
+  assert.equal(r.settings.quantile_p, 0.5);
+  assert.equal(r.one.test.mu0, 3);
+  assert.equal(r.one.quantile.p, 0.5);
+  assert.ok(r.one.pi);
+  // The prediction interval is wider than the confidence interval, and the
+  // quantile's ranks bracket its order statistic.
+  assert.ok(r.expect['prediction half-width'] > r.expect['half-width']);
+  assert.ok(r.expect['quantile lower rank'] <= r.expect['quantile rank k'] && r.expect['quantile rank k'] <= r.expect['quantile upper rank']);
+  // The 90th percentile of 20 outcomes has no 95% interval: the largest outcome
+  // is never covered by a pair, and the widest pair first reaches 95% at R = 29.
+  const r9 = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN, mu0: 3, qp: 0.9 });
+  assert.equal(r9.expect['quantile lower rank'], null);
+  assert.equal(r9.expect['quantile smallest n'], 29);
+  assert.ok(analysisScript(r, 'R').includes('t.test(x, mu = mu0'), 'R tests with t.test(mu = mu0)');
+  assert.ok(analysisScript(r, 'py').includes('ttest_1samp'), 'Python tests with ttest_1samp');
+  for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
+  // Under the Wilcoxon procedure the test is the signed-rank test at mu0 and there is no prediction interval.
+  const rn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.95, provenance: oneProv(QUEUE, 0.95, 'np'), plan: PLAN, mu0: 3, qp: 0.5 });
+  assert.ok('signed-rank V at mu0' in rn.expect && 'signed-rank p at mu0' in rn.expect);
+  assert.ok(!('t statistic' in rn.expect) && !('prediction lower' in rn.expect));
+  assert.ok(!rn.one.pi);
+  // With no stated mean or quantile given (an older caller), the recipe carries neither.
+  const r0 = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN });
+  assert.ok(!('t statistic' in r0.expect) && !('quantile rank k' in r0.expect));
+  assert.ok(!('mu0' in r0.settings));
+  // A quantile no pair of order statistics can bracket at this R reports NaN ends and null ranks.
+  const rq = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99, provenance: prov, plan: null, mu0: 3, qp: 0.95 });
+  assert.ok(Number.isNaN(rq.expect['quantile lower']) && rq.expect['quantile lower rank'] === null);
+  assert.ok(rq.expect['quantile smallest n'] > 20);
+});
+
 test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-inflated plans', () => {
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'), plan: PLAN });
   assert.equal(r.title, 'Interval on the pseudo-median: ' + QUEUE.name);
@@ -608,6 +646,14 @@ test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-
   const rn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.90, provenance: oneProv(QUEUE, 0.9, 'np'),
     plan: { relative: false, rel: 10, abs: 0.25, delta: 0.5, power: 0.9 } });
   checkRecipe('One System, Wilcoxon on queue-reps (exact)', rn);
+  const rx = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: oneProv(QUEUE, 0.95, 't'), plan: PLAN, mu0: 3, qp: 0.75 });
+  assert.ok(rx.expect['quantile lower rank'] > 0, 'the 0.75 quantile of 20 outcomes has a 95% interval');
+  checkRecipe('One System, t interval with the stated-mean test, the prediction interval, and the 0.75 quantile', rx, { smoke: true });
+  const rxn = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'),
+    plan: { relative: false, rel: 10, abs: 0.25, delta: 0.5, power: 0.9 }, mu0: 2.5, qp: 0.5 });
+  checkRecipe('One System, Wilcoxon with the signed-rank test at mu0 and the median', rxn, { smoke: true });
+  const rxq = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99, provenance: oneProv(QUEUE, 0.99, 't'), plan: null, mu0: 3.2, qp: 0.95 });
+  checkRecipe('One System, a quantile no pair of order statistics reaches at this R', rxq, { smoke: true });
 }
 
 // A replication that gave no outcome is left out and named.

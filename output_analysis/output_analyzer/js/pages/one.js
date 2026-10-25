@@ -1,16 +1,19 @@
 // The One System page: the Student t interval on the mean, formed from one
-// estimate per replication, with its descriptive statistics, a dot plot of
-// the estimates with the interval under it, and a card that plans the number
-// of replications by a target half-width or by a target power. A tally
-// dataset can be analyzed as pooled observations only through an explicit,
-// warned override. Under a transform, every replication outcome is put
-// through it first, and the interval is carried back to the response's
-// units beneath the results; the pooled observations are never transformed.
+// estimate per replication, with its descriptive statistics, the prediction
+// interval for one further outcome, the t test against a stated mean, the
+// chi-square interval on the variance, a quantile with its distribution-free
+// interval, a dot plot of the estimates with the interval under it, and a
+// card that plans the number of replications by a target half-width or by a
+// target power. A tally dataset can be analyzed as pooled observations only
+// through an explicit, warned override. Under a transform, every replication
+// outcome is put through it first, and each interval is carried back to the
+// response's units beneath the results; the pooled observations are never
+// transformed.
 
 import * as state from '../state.js';
 import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
 import { summary } from '../stats/descriptive.js';
-import { tInterval, varianceInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
+import { tInterval, varianceInterval, oneSampleT, predictionInterval, quantileInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
 import { signedRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetSelect, levelSelect, unitLine, details, notice, spinner, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
@@ -20,7 +23,7 @@ import { installExportRow } from '../ui/exportrow.js';
 import { oneRecipe, oneTooBig } from '../io/recipes.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { registerTips } from '../ui/tooltip.js';
-import { num, stat, intl, pct, esc, dash, lvl } from '../ui/format.js';
+import { num, stat, intl, pct, esc, dash, lvl, ordinal } from '../ui/format.js';
 import { outcomeAxis } from '../ui/rules.js';
 
 /** The page's hash id. */
@@ -48,6 +51,10 @@ const plan = { mode: 'hw', target: 'relative', rel: 10, abs: null, absFor: null,
 // draw(), and so a planning control redraws only the planning card.
 let planCtx = null;
 let resultBase = null;
+// The stated mean of the t test, kept per dataset and transform like the
+// planning target (`mu0For` is that key), and the quantile's p, one setting
+// for the page.
+const extra = { mu0: null, mu0For: null, mu0Spin: null, qp: 0.9 };
 // The override is remembered per dataset, and so ticking it on one dataset
 // never silently applies to the next one chosen.
 const override = new Set();
@@ -236,21 +243,42 @@ export function render(rootEl) {
   const unitBox = el('div');
   const warnBox = el('div');
   const ovrBox = el('div');
-  const row1 = el('div'), row2 = el('div'), row3 = el('div'), row4 = el('div');
+  const row1 = el('div'), row2 = el('div'), row3 = el('div'), rowPi = el('div'), row4 = el('div');
   const npNote = el('p', 'exp-note');
   npNote.hidden = true;
   const checks = el('div');
-  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks);
+  res.append(unitBox, warnBox, ovrBox, row1, row2, row3, rowPi, row4, npNote, checks);
   res.appendChild(details('What the half-width means',
     '<p>The half-width is the distance from the mean to either end of the interval: t · s / √R, where s is the standard deviation of the R outcomes and t is the Student t quantile on R − 1 degrees of freedom. The interval is the mean plus or minus the half-width.</p>' +
     '<p>An interval is a test turned around: the ' + lvl(state.settings.level) + ' interval holds exactly the values a two-sided t test at α = ' + num(1 - state.settings.level, 3) + ' would not reject, and so reading whether it contains a value is that test. This holds for every interval in this tool unless its page says otherwise.</p>' +
     '<p>The confidence level describes the procedure, not this one interval: across many repetitions of the whole experiment, each with fresh replications, about that fraction of the intervals formed this way would contain the true mean. A given interval either contains it or does not.</p>' +
     '<p>The half-width shrinks with √R, and so halving it takes about four times as many replications. Dividing it by the absolute value of the mean gives the relative half-width, the precision as a fraction of the quantity estimated.</p>'));
+  res.appendChild(details('Confidence interval or prediction interval?',
+    '<p>The confidence interval is about the mean: it is the range of values for the true mean that the replications do not rule out, and it narrows without limit as replications are added, because the mean is estimated ever more precisely.</p>' +
+    '<p>The prediction interval is about the next outcome: the range a further replication, run the same way, would fall in with the stated probability. Its half-width is t · s · √(1 + 1/R). The 1 is the spread of a single outcome and the 1/R the uncertainty in the mean, and so as R grows the interval settles at about ±2s around the mean rather than shrinking to a point. The confidence interval measures error in an estimate; the prediction interval measures the risk in one more draw.</p>' +
+    '<p>Both assume the replication outcomes are normal. The confidence interval forgives a departure as R grows, because an average becomes normal; the prediction interval does not, because it describes a single outcome.</p>'));
   res.appendChild(details('Why replications are the unit of inference',
     '<p>Each replication runs the model from its own independent random numbers, and so the replication outcomes are independent and identically distributed: exactly the sample the t interval assumes.</p>' +
     '<p>Observations inside one replication are not independent. A customer who waits a long time is usually followed by another who waits a long time because both meet the same queue. Correlated observations carry less information than the same number of independent ones, and the formula s / √n, applied to them, understates the standard error, usually by a wide margin.</p>' +
     '<p>A replication outcome is an average over a whole run, and averages are close to normally distributed even when the observations are skewed, which is why the t interval on replication outcomes holds up well at moderate R.</p>'));
   root.appendChild(res);
+
+  // The test against a stated mean: the interval read as a test of one value,
+  // with its statistic and p-value written out.
+  const testSec = el('div', 'sec');
+  testSec.hidden = true;
+  testSec.appendChild(el('div', 'sec-hd', 'Test against a stated mean'));
+  testSec.appendChild(el('p', 'exp-note', 'The interval above answers every question of the form “could the true mean be μ₀?” at once. This section asks it of one value, such as the mean measured on the real system when the model is being validated, and writes out the statistic the answer rests on.'));
+  const testCtrl = el('div', 'ctrl-row');
+  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="The value the mean is tested against: a measurement from the real system, a requirement, or a benchmark. The test rejects it when it lies outside the interval above.">Stated mean <span class="sym">μ₀</span></span></span>' +
+    '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>';
+  const tRow1 = el('div'), tRow2 = el('div');
+  testSec.append(testCtrl, tRow1, tRow2);
+  testSec.appendChild(details('How the test and the interval agree',
+    '<p>The one-sample t statistic is t₀ = (ȳ − μ₀) / (s / √R), the distance from the sample mean to μ₀ in standard errors, on R − 1 degrees of freedom. The two-sided p-value is the probability of a sample mean at least that far from μ₀, in either direction, when μ₀ is the true mean. The test rejects μ₀ at level α when p < α, which is exactly when μ₀ falls outside the 100(1 − α)% interval.</p>' +
+    '<p>Not rejecting μ₀ is not evidence that the mean equals μ₀: with few replications the interval is wide and many values survive. The planning card below says how many replications a given difference from μ₀ needs to be detected with a given power.</p>' +
+    '<p>Under the Wilcoxon procedure the test is the signed-rank test of the pseudo-median against μ₀, which needs no normality.</p>'));
+  root.appendChild(testSec);
 
   // The variance: a chi-square interval on the system's variability as a
   // performance measure, shown for replication outcomes only.
@@ -265,6 +293,24 @@ export function render(rootEl) {
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
     '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for outcomes with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
   root.appendChild(varSec);
+
+  // A quantile: the order-statistic estimate and its distribution-free
+  // interval, for a performance measure that is a percentile rather than a mean.
+  const qSec = el('div', 'sec');
+  qSec.hidden = true;
+  const qHd = el('div', 'sec-hd', 'A quantile of the replication outcomes');
+  qSec.appendChild(qHd);
+  qSec.appendChild(el('p', 'exp-note', 'A performance measure is sometimes a percentile rather than a mean: the value that nine runs in ten stay below. The p quantile is estimated by an order statistic of the sorted outcomes, and its interval is built from two more order statistics with no assumption about the distribution.'));
+  const qCtrl = el('div', 'ctrl-row');
+  qCtrl.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="rp-qp"><span class="tip rv-tip" tabindex="0" data-tip="The quantile to estimate, as a fraction: 0.5 is the median, 0.9 the 90th percentile, the value below which 90% of outcomes fall.">Quantile <span class="sym">p</span></label>' +
+    '<input type="text" id="rp-qp" aria-label="Quantile p"></span>';
+  const qRow1 = el('div'), qRow2 = el('div'), qRow3 = el('div');
+  qSec.append(qCtrl, qRow1, qRow2, qRow3);
+  qSec.appendChild(details('How the quantile and its interval are found',
+    '<p>Sort the R outcomes, Y₍₁₎ ≤ Y₍₂₎ ≤ … ≤ Y₍R₎. The p quantile is estimated by Y₍ₖ₎ with k = ⌈pR⌉, the smallest outcome with at least a fraction p of the sample at or below it. The interpolated estimate, R’s and NumPy’s default, averages the two order statistics around the position (R − 1)p + 1; the two agree as R grows.</p>' +
+    '<p>The interval is [Y₍ᵣ₎, Y₍ₛ₎] for two ranks r &lt; s. Whatever the distribution, the number of outcomes below the true quantile is binomial with R trials and success probability p, and so the probability that the true quantile lies between those two order statistics is a binomial sum that depends only on r, s, R, and p. The ranks are the narrowest pair whose sum reaches the level, and the achieved level is that sum, which is a little above the level asked for because the ranks are whole numbers.</p>' +
+    '<p>An extreme quantile needs many replications: even the widest pair, the smallest and largest outcomes, covers the true quantile with probability 1 − pᴿ − (1 − p)ᴿ, and for the 90th percentile at 95% that first reaches the level at R = 29. The section says when the current R falls short.</p>'));
+  root.appendChild(qSec);
 
   // Figure.
   const figSec = el('div', 'sec');
@@ -293,7 +339,8 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vRow1, vRow2, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, row4, npNote, checks, leg, cap, planSec,
+  els = { varSec, vRow1, vRow2, testSec, tRow1, tRow2, qSec, qHd, qRow1, qRow2, qRow3, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, row1, row2, row3, rowPi, row4, npNote, checks, leg, cap, planSec,
+          mu0Box: testSec.querySelector('#rp-mu0-box'), mu0Unit: testSec.querySelector('#rp-mu0-unit'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -334,6 +381,10 @@ export function render(rootEl) {
     drawPlan();
   }));
   els.pow.addEventListener('change', () => { plan.power = Number(els.pow.value); state.setPick(id, 'power', plan.power); drawPlan(); });
+  const qp = state.getPick(id, 'quantileP');
+  if (typeof qp === 'number' && qp > 0 && qp < 1) extra.qp = qp;
+  els.qp.value = String(extra.qp);
+  spinner(els.qp, { min: 0.01, max: 0.99, step: 0.05, decimals: 2, onChange: v => { extra.qp = v; state.setPick(id, 'quantileP', v); draw(); } });
   applyStored();
   buildTargetInput();
 
@@ -462,6 +513,40 @@ function buildTargetInput() {
   }
 }
 
+// A stored stated mean for a dataset key, any finite number (zero and
+// negative values are fair statements), or null.
+function storedMu0(key) {
+  const v = key ? state.getPick(id, 'mu0:' + key) : undefined;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+// The stated mean's field: seeded, for a dataset the reader has not set it
+// on, at the sample mean rounded to two significant digits, and rebuilt when
+// the dataset or the transform changes, because a spinner's step is fixed
+// when it is made.
+function syncMu0Input(ds, s) {
+  const key = unitKey(ds);
+  if (extra.mu0For === key && extra.mu0Spin) return;
+  extra.mu0For = key;
+  const kept = storedMu0(key);
+  const def = Math.abs(s.mean) > 0 ? round2(s.mean) : 0;
+  extra.mu0 = kept !== null ? kept : def;
+  els.mu0Box.innerHTML = '';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.id = 'rp-mu0';
+  inp.setAttribute('aria-label', 'Stated mean');
+  els.mu0Box.appendChild(inp);
+  inp.value = String(extra.mu0);
+  extra.mu0Spin = spinner(inp, { step: stepFor(Math.abs(s.mean) > 0 ? Math.abs(s.mean) : s.sd || 1), onChange: v => {
+    extra.mu0 = v;
+    state.setPick(id, 'mu0:' + key, v);
+    draw();
+  } });
+  extra.mu0 = extra.mu0Spin.get();
+  els.mu0Unit.textContent = unitWords(ds);
+}
+
 // The default for a target in the response's units: 10% of the mean of the
 // chosen dataset's estimates to two significant digits, or a quarter of
 // their standard deviation when the mean is zero. Under a transform, the
@@ -519,6 +604,9 @@ function draw() {
   const ds = currentDataset();
   const level = state.settings.level;
   els.varSec.hidden = true;
+  els.testSec.hidden = true;
+  els.qSec.hidden = true;
+  els.rowPi.replaceChildren();
 
   els.unitBox.replaceChildren(unitLine(ds));
   els.warnBox.replaceChildren();
@@ -623,18 +711,93 @@ function draw() {
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np, tf });
 
-  // Under a transform, the interval carried back to the response's units.
-  let back = null;
+  // The prediction interval for one further outcome, under the t procedure.
+  const oneWord = pooled ? 'one further observation' : 'one further replication’s outcome';
+  const pi = np ? null : predictionInterval(x, level);
+  if (pi) {
+    els.rowPi.replaceChildren(cardRow([
+      wide(card(lvl(level) + ' prediction interval', '[' + num(pi.lo) + ', ' + num(pi.hi) + ']', 'for ' + oneWord + (note ? '; ' + note : ''))),
+      card('Prediction half-width', num(pi.hw), 't · s · √(1 + 1/' + (pooled ? 'n' : 'R') + ')'),
+      wide(card('Mean ± prediction half-width', num(pi.mean) + ' ± ' + num(pi.hw), 'wider than the interval on the mean, and it stays wide as ' + (pooled ? 'n' : 'R') + ' grows'))
+    ]));
+  }
+
+  // Under a transform, the intervals carried back to the response's units.
+  let back = null, backPi = null;
   if (tf !== 'none') {
     const ctrName = np ? 'back-transformed pseudo-median' : T.center;
     const bi = np ? backInterval(sr.lo, sr.hi, tf) : backInterval(ti.lo, ti.hi, tf);
     back = { name: ctrName, center: backTransform(np ? sr.estimate : s.mean, tf), lo: bi.lo, hi: bi.hi };
     const cap1 = ctrName.charAt(0).toUpperCase() + ctrName.slice(1);
-    els.row4.replaceChildren(cardRow([
+    const cards = [
       wide(card(lvl(level) + ' interval for the ' + esc(ctrName), '[' + stat(back.lo) + ', ' + stat(back.hi) + ']', 'the interval above, carried back' + (ds.unit ? '; ' + esc(ds.unit) : ''))),
       card(esc(cap1), num(back.center), 'the ' + (np ? 'pseudo-median' : 'mean') + ' above, carried back')
+    ];
+    if (pi) {
+      backPi = backInterval(pi.lo, pi.hi, tf);
+      cards.push(wide(card(lvl(level) + ' prediction interval, carried back', '[' + stat(backPi.lo) + ', ' + stat(backPi.hi) + ']', 'for ' + oneWord + (ds.unit ? '; ' + esc(ds.unit) : ''))));
+    }
+    els.row4.replaceChildren(cardRow(cards));
+  }
+
+  // The test against the stated mean, on the scale the interval is on.
+  syncMu0Input(ds, s);
+  const mu0 = extra.mu0;
+  const alpha = 1 - level;
+  const tt = np ? null : oneSampleT(x, mu0);
+  const srT = np ? signedRank(x, { mu: mu0, level }) : null;
+  const testP = np ? srT.p : tt.p;
+  const rejects = Number.isFinite(testP) ? testP < alpha : null;
+  const inside = np ? (mu0 >= sr.lo && mu0 <= sr.hi) : (mu0 >= ti.lo && mu0 <= ti.hi);
+  els.testSec.hidden = false;
+  const mu0Note = tf !== 'none' ? T.scale + ' scale' : ds.unit ? esc(ds.unit) : '';
+  const whatMean = np ? 'pseudo-median' : 'mean';
+  if (np) {
+    els.tRow1.replaceChildren(cardRow([
+      card('Stated ' + whatMean + ' ' + S('μ₀'), num(mu0), mu0Note),
+      card(S('V'), num(srT.V), 'signed ranks above μ₀' + (srT.exact ? '' : ', normal approximation')),
+      card('Two-sided ' + S('p'), stat(srT.p), 'Wilcoxon signed-rank test'),
+      card('Pseudo-median', num(sr.estimate), 'Hodges–Lehmann')
+    ]));
+  } else {
+    els.tRow1.replaceChildren(cardRow([
+      card('Stated mean ' + S('μ₀'), num(mu0), mu0Note),
+      card(S('t₀'), stat(tt.t), '(mean − μ₀) / se = (' + num(s.mean) + ' − ' + num(mu0) + ') / ' + num(s.se)),
+      card(DF_LABEL, intl(tt.df), (pooled ? 'n' : 'R') + ' − 1'),
+      card('Two-sided ' + S('p'), stat(tt.p), 'one-sample t test'),
+      card('Critical ' + S('t'), num(ti.t), tSub(level, ti.df))
     ]));
   }
+  const verdict = rejects === null ? 'The test has nothing to decide: the outcomes are all equal to μ₀.'
+    : rejects ? 'Rejected at α = ' + num(alpha, 3) + ': the ' + whatMean + ' differs from ' + num(mu0) + ' (p ' + (testP < 0.001 ? '< 0.001' : '= ' + num(testP, 3)) + '), and μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the ' + lvl(level) + ' interval.'
+      : 'Not rejected at α = ' + num(alpha, 3) + ': μ₀ = ' + num(mu0) + ' is among the values the ' + lvl(level) + ' interval does not rule out (p = ' + num(testP, 3) + '). That is not evidence that the ' + whatMean + ' equals μ₀.';
+  els.tRow2.replaceChildren(notice('info', esc(verdict)));
+
+  // The quantile, on the same scale.
+  const q = quantileInterval(x, extra.qp, level);
+  els.qSec.hidden = false;
+  els.qHd.textContent = 'A quantile of the ' + (pooled ? 'pooled observations' : 'replication outcomes');
+  const nWord = pooled ? 'n' : 'R';
+  const pctile = ordinal(Math.round(extra.qp * 100)) + ' percentile';
+  els.qRow1.replaceChildren(cardRow([
+    card('Quantile', num(extra.qp, 2), pctile),
+    card('Order statistic ' + S('Y₍ₖ₎'), num(q.order), 'k = ⌈p' + nWord + '⌉ = ' + intl(q.k) + ' of ' + intl(q.n) + (note ? '; ' + note : '')),
+    card('Interpolated', num(q.interp), 'between the order statistics around (' + nWord + ' − 1)p + 1'),
+    wide(q.r !== null
+      ? card(lvl(level) + ' interval for the quantile', '[' + num(q.lo) + ', ' + num(q.hi) + ']', 'Y₍' + intl(q.r) + '₎ to Y₍' + intl(q.s) + '₎; achieved level ' + pct(q.achieved, 1))
+      : card(lvl(level) + ' interval for the quantile', dash, 'no pair of order statistics reaches ' + lvl(level) + ' with ' + nWord + ' = ' + intl(q.n) + '; at p = ' + num(extra.qp, 2) + ' it needs at least ' + intl(q.minN)))
+  ]));
+  if (tf !== 'none') {
+    const bq = backInterval(q.lo, q.hi, tf);
+    const flipped = T.decreasing;
+    els.qRow2.replaceChildren(cardRow([
+      card('Order statistic, carried back', num(backTransform(q.order, tf)), flipped ? 'the ' + num(1 - extra.qp, 2) + ' quantile of the response: the ' + T.label.toLowerCase() + ' reverses the order' : 'the same rank in the response’s units'),
+      card('Interpolated, carried back', num(backTransform(q.interp, tf)), ds.unit ? esc(ds.unit) : ''),
+      wide(card(lvl(level) + ' interval, carried back', q.r !== null ? '[' + stat(bq.lo) + ', ' + stat(bq.hi) + ']' : dash, 'the interval above, carried back' + (ds.unit ? '; ' + esc(ds.unit) : '')))
+    ]));
+  } else els.qRow2.replaceChildren();
+  els.qRow3.replaceChildren();
+  if (pooled) els.qRow3.appendChild(notice('warn', 'The interval counts each pooled observation as independent; within a run they are not, and so it is narrower than the data justify.'));
 
   // The variance interval, on replication outcomes only.
   const vi = pooled ? null : varianceInterval(x, level);
@@ -667,8 +830,17 @@ function draw() {
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication outcomes', headers: tf !== 'none' ? ['replication', 'estimate', T.label.toLowerCase() + ' of estimate'] : ['replication', 'estimate'], rows: estRows });
   tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
+  if (pi) tables.push({ name: 'Prediction interval', headers: ['statistic', 'value'], rows: [
+    ['level', level], ['half-width', pi.hw], ['lower', pi.lo], ['upper', pi.hi]].concat(backPi ? [['lower, carried back', backPi.lo], ['upper, carried back', backPi.hi]] : []) });
   if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
     ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
+  tables.push({ name: np ? 'Signed-rank test against a stated value' : 'Test against a stated mean', headers: ['statistic', 'value'], rows: np
+    ? [['mu0', mu0], ['V', srT.V], ['two-sided p', srT.p], ['basis', srT.exact ? 'exact signed-rank distribution' : 'normal approximation'], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']]
+    : [['mu0', mu0], ['t', tt.t], ['df', tt.df], ['two-sided p', tt.p], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']] });
+  tables.push({ name: 'Quantile', headers: ['statistic', 'value'], rows: [
+    ['p', extra.qp], ['k = ceil(p n)', q.k], ['order statistic', q.order], ['interpolated', q.interp],
+    ['lower rank r', q.r === null ? '' : q.r], ['upper rank s', q.s === null ? '' : q.s], ['lower', q.lo], ['upper', q.hi],
+    ['achieved level', q.achieved], ['smallest n that reaches the level', q.minN]] });
   if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
     ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
     ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
@@ -681,7 +853,9 @@ function draw() {
       'confidence level': lvl(level),
       procedure: np ? 'Wilcoxon signed-rank (nonparametric)' : 't interval',
       'unit of inference': pooled ? 'pooled observations (override)' : 'replication means',
-      ...(tf !== 'none' ? { transform: T.label.toLowerCase() + ' of each replication outcome' } : {})
+      ...(tf !== 'none' ? { transform: T.label.toLowerCase() + ' of each replication outcome' } : {}),
+      'stated mean': num(mu0),
+      quantile: num(extra.qp, 2)
     },
     tables,
     summaryHtml: np
@@ -691,7 +865,7 @@ function draw() {
         ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ')' +
         (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>',
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf }
+    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf, mu0, qp: extra.qp }
   }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 

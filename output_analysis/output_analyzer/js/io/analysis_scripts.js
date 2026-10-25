@@ -472,6 +472,14 @@ function oneBody(r, L) {
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
     if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
+  if (o.pi) {
+    need.push('predictionInterval');
+    out.push(L.sect('Prediction interval for one further outcome'));
+    out.push(c + 'mean +/- t * s * sqrt(1 + 1/n): the range one more outcome would fall in, which does not');
+    out.push(c + 'shrink to a point as n grows.');
+    out.push(L.assign('pr', 'prediction_interval(x, level)'));
+    out.push(rep(L, r, 'prediction half-width', f('pr', 'hw')), rep(L, r, 'prediction lower', f('pr', 'lo')), rep(L, r, 'prediction upper', f('pr', 'hi')));
+  }
   if (o.interval && tfOn(r)) {
     out.push(L.sect('Back-transformed interval'));
     out.push(...commentLines(c, 'The interval above, carried back to the response\'s units: its center is the ' + ascii(o.center) + '.', c));
@@ -479,6 +487,25 @@ function oneBody(r, L) {
     out.push(L.assign('bt', 'back_interval(' + (o.np ? f('sr', 'lo') : f('ti', 'lo')) + ', ' + (o.np ? f('sr', 'hi') : f('ti', 'hi')) + ', outcome_transform)'));
     out.push(rep(L, r, 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
       rep(L, r, 'back-transformed lower', f('bt', 'lo')), rep(L, r, 'back-transformed upper', f('bt', 'hi')));
+    if (o.pi) {
+      out.push(L.assign('btp', 'back_interval(' + f('pr', 'lo') + ', ' + f('pr', 'hi') + ', outcome_transform)'));
+      out.push(rep(L, r, 'back-transformed prediction lower', f('btp', 'lo')), rep(L, r, 'back-transformed prediction upper', f('btp', 'hi')));
+    }
+  }
+  if (o.test && o.np) {
+    out.push(L.sect('Signed-rank test against the stated value mu0'));
+    out.push(c + 'The Wilcoxon signed-rank test of the pseudo-median against mu0, on the scale the interval is on.');
+    out.push(L.assign('st', 'signed_rank(x, level, mu0)'));
+    out.push(rep(L, r, 'signed-rank V at mu0', f('st', 'V')), rep(L, r, 'signed-rank p at mu0', f('st', 'p')));
+    if (L.tidy) tidyTest(out, L, 'st$test', 'The signed-rank test at mu0 as wilcox.test returns it, tidied by broom into a one-row tibble.');
+  } else if (o.test) {
+    need.push('oneSampleT');
+    out.push(L.sect('Test against the stated mean mu0'));
+    out.push(c + 't0 = (mean - mu0) / (s / sqrt(n)) on n - 1 degrees of freedom, with the two-sided p-value; it rejects');
+    out.push(c + 'mu0 at alpha exactly when mu0 lies outside the interval on the mean.');
+    out.push(L.assign('tt0', 'one_sample_t(x, mu0)'));
+    out.push(rep(L, r, 't statistic', f('tt0', 't')), rep(L, r, 't test p', f('tt0', 'p')));
+    if (L.tidy) tidyTest(out, L, 'tt0$test', 'The test as t.test(mu = mu0) returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
   if (o.checks) {
     need.push('shapiro');
@@ -492,6 +519,22 @@ function oneBody(r, L) {
     out.push(L.assign('vi', 'variance_interval(x, level)'));
     for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
       ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
+  }
+  if (o.quantile) {
+    need.push('quantileInterval');
+    out.push(L.sect('The p quantile and its distribution-free interval'));
+    out.push(c + 'The order statistic at rank ceil(n p) and the interpolated quantile (type 7), with the narrowest pair');
+    out.push(c + 'of order statistics whose binomial coverage of the true quantile reaches the level; the ranks');
+    out.push(c + 'and the ends are NaN when no pair reaches it, and minN is the smallest n at which one would.');
+    out.push(L.assign('qi', 'quantile_interval(x, quantile_p, level)'));
+    for (const [name, k] of [['quantile rank k', 'k'], ['quantile order statistic', 'order'], ['quantile interpolated', 'interp'],
+      ['quantile lower rank', 'r'], ['quantile upper rank', 's'], ['quantile lower', 'lo'], ['quantile upper', 'hi'],
+      ['quantile achieved level', 'achieved'], ['quantile smallest n', 'minN']]) out.push(rep(L, r, name, f('qi', k)));
+    if (tfOn(r)) {
+      out.push(L.assign('btq', 'back_interval(' + f('qi', 'lo') + ', ' + f('qi', 'hi') + ', outcome_transform)'));
+      out.push(rep(L, r, 'back-transformed quantile', 'back_transform(' + f('qi', 'order') + ', outcome_transform)'),
+        rep(L, r, 'back-transformed quantile lower', f('btq', 'lo')), rep(L, r, 'back-transformed quantile upper', f('btq', 'hi')));
+    }
   }
   if (o.plan) {
     need.push('planning');
