@@ -202,7 +202,7 @@ end
 if mean_line
     m = mean(all_values);
     fig_vline(m, c.truth, '-', 1.5);
-    text(m, 0.4, ' mean', 'Color', c.truth, 'VerticalAlignment', 'top', ...
+    text(m, 0.4, ' sample mean', 'Color', c.truth, 'VerticalAlignment', 'top', ...
          'Interpreter', 'none');
 end
 fig_labels(ttl, xlab, '');

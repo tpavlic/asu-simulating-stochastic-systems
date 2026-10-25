@@ -26177,7 +26177,7 @@ end
 if mean_line
     m = mean(all_values);
     fig_vline(m, c.truth, '-', 1.5);
-    text(m, 0.4, ' mean', 'Color', c.truth, 'VerticalAlignment', 'top', ...
+    text(m, 0.4, ' sample mean', 'Color', c.truth, 'VerticalAlignment', 'top', ...
          'Interpreter', 'none');
 end
 fig_labels(ttl, xlab, '');
@@ -49003,8 +49003,8 @@ export function dotPlot(fig, values, o = {}) {
     const m = s / Math.max(1, idx.length);
     const mx = r1(sx(m));
     svgEl('line', { x1: mx, x2: mx, y1: 6, y2: fig.ih - 6, stroke: tok('--truth'), 'stroke-width': 2, class: 'm-mean' }, fig.inner);
-    text(fig.inner, mx + 5, 16, 'mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
-    fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'mean ' + num(m) });
+    text(fig.inner, mx + 5, 16, 'sample mean ' + num(m), { 'font-size': 11, fill: tok('--truth') });
+    fig.series.push({ kind: 'vline', x: m, color: tok('--truth'), label: 'sample mean ' + num(m) });
   }
   const g = svgEl('g', { class: 'm-dots' }, fig.inner);
   for (const i of idx) svgEl('circle', { cx: r1(sx(values[i])), cy: r1(cy - level[i] * gap), r, fill: c, 'fill-opacity': 0.85, stroke: card, 'stroke-width': 1 }, g);
