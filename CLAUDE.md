@@ -1067,15 +1067,16 @@ better.
   verdict on its own line; the signed-rank test at μ₀ under the rank procedure); off, the page, its
   export tables, the Report page, and the scripts carry no test, and the provenance says the stated
   mean is "none", as Several Systems' benchmark does when it is off; the card's sub-sections are headed by `.sub-hd`, the within-card
-  heading style Summary and Plots' sub-sections share; and in the same card a "Confidence interval on the variance"
-  sub-section (the chi-square interval as a one-row table) and a "Confidence interval on a
-  quantile" sub-section (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free
+  heading style Summary and Plots' sub-sections share; and in the same card a "Confidence interval on a quantile" sub-section
+  (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free
   interval from two order statistics with α/2 of the binomial probability in each tail, the
   ranks SciPy's `quantile_test` returns, shown in brackets beside the ranks [r, s] and the
   achieved confidence, with the interpolated quantile and the choice of ranks in a footnote;
   when the sample is too small for both ends it gives the one bound it can in brackets with a
-  dash for the other, its confidence, and the smallest R at which both ends exist),
-  and a "How many replications for the confidence interval on the mean" card by target
+  dash for the other, its confidence, and the smallest R at which both ends exist), then a "Confidence interval on the variance" sub-section (the chi-square
+  interval as a one-row table, last because it is about spread where the mean, the prediction
+  interval, and the quantile are about where outcomes lie, its lede saying it is the variance of
+  the outcomes, not of their mean), and a "How many replications for the confidence interval on the mean" card by target
   half-width or by target power of the one-sample t test), ④ Two Systems (the relative analysis: Welch by default, with the
   pooled-variance t as a Procedure choice whose checks line adds Levene's test; paired
   only when the reader declares it, never inferred from the data: the Independent/Paired switch

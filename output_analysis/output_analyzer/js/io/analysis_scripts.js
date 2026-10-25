@@ -513,13 +513,6 @@ function oneBody(r, L) {
     const w = lit(L, r.expect['shapiro W [optional]']), p = lit(L, r.expect['shapiro p [optional]']);
     out.push(lang === 'm' ? "shapiro_check('shapiro', x, alpha, " + w + ', ' + p + ');' : 'shapiro_check("shapiro", x, ' + w + ', ' + p + ')');
   }
-  if (o.variance) {
-    need.push('varianceInterval');
-    out.push(L.sect('Confidence interval on the variance (chi-square)'));
-    out.push(L.assign('vi', 'variance_interval(x, level)'));
-    for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
-      ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
-  }
   if (o.quantile) {
     need.push('quantileInterval');
     out.push(L.sect('Confidence interval on the p quantile (distribution-free)'));
@@ -537,6 +530,13 @@ function oneBody(r, L) {
       out.push(rep(L, r, 'back-transformed quantile', 'back_transform(' + f('qi', 'order') + ', outcome_transform)'),
         rep(L, r, 'back-transformed quantile lower', f('btq', 'lo')), rep(L, r, 'back-transformed quantile upper', f('btq', 'hi')));
     }
+  }
+  if (o.variance) {
+    need.push('varianceInterval');
+    out.push(L.sect('Confidence interval on the variance (chi-square)'));
+    out.push(L.assign('vi', 'variance_interval(x, level)'));
+    for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
+      ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
   }
   if (o.plan) {
     need.push('planning');

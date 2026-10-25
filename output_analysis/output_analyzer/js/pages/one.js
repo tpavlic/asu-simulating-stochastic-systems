@@ -285,18 +285,20 @@ export function render(rootEl) {
 
   // The variance: a chi-square interval on the system's variability as a
   // performance measure, shown for replication outcomes only. It and the
-  // quantile are sub-sections of the same card as the mean's interval.
+  // quantile are sub-sections of the same card as the mean's interval, the
+  // quantile first because it is, like the mean and the prediction interval,
+  // a statement about where outcomes lie, and the variance last because it
+  // is a statement about their spread.
   const varSec = el('div');
   varSec.hidden = true;
   varSec.appendChild(el('div', 'sub-hd', 'Confidence interval on the variance'));
-  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right: this interval is on the variance of the replication outcomes, σ², and its square root. The checks line above applies here too and matters more.'));
+  varSec.appendChild(el('p', 'exp-note', 'The variability of a system is a performance measure in its own right. This interval is on σ², the variance of the replication outcomes themselves, not on the variance of their mean, which is the SE² in the table above; it is kin to the prediction interval, which also asks how far a single outcome can fall. The interval on σ is its square root. The checks line above applies here too and matters more.'));
   const vTab = el('div');
   varSec.append(vTab, notice('warn', 'These intervals assume the replication outcomes are normally distributed; unlike the t interval for the mean, they do not become safe as R grows.'));
   varSec.appendChild(details('Why the variance interval is fragile',
     '<p>The interval treats (R − 1) s² / σ² as a chi-square variable on R − 1 degrees of freedom. That is exact for normal outcomes and for no other distribution.</p>' +
     '<p>How much s² varies from sample to sample depends on the tails of the distribution, measured by its kurtosis: the variance of s² is about σ⁴ (2 / (R − 1) + κ / R), where κ is the excess kurtosis, zero for the normal. The chi-square interval assumes κ = 0. With heavier tails than the normal, s² varies more than the interval allows for, and the interval misses σ² more often than its level says.</p>' +
     '<p>The t interval for a mean improves as R grows because the sample mean becomes nearly normal whatever the data. No such effect rescues s²: the mismatch between κ / R and zero shrinks at the same rate as the 2 / (R − 1) the interval does allow for, and so for outcomes with heavier tails than the normal the actual coverage settles below the nominal level rather than approaching it. Replication outcomes are averages, and averages are closer to normal than raw observations, which helps but guarantees nothing.</p>'));
-  res.appendChild(varSec);
 
   // A quantile: the order-statistic estimate and its distribution-free
   // interval, for a performance measure that is a percentile rather than a mean.
@@ -313,6 +315,7 @@ export function render(rootEl) {
   const qHow = details('How the quantile and its interval are found', '<div id="rp-q-how"></div>');
   qSec.appendChild(qHow);
   res.appendChild(qSec);
+  res.appendChild(varSec);
 
 
   // Planning.

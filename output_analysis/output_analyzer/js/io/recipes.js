@@ -220,12 +220,6 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
     const tt = oneSampleT(xs, mu0);
     Object.assign(e, { 't statistic': tt.t, 't test p': tt.p });
   }
-  const variance = interval && !pooled;
-  if (variance) {
-    const vi = varianceInterval(xs, level);
-    Object.assign(e, { s2: vi.s2, 'chi2 lower quantile': vi.chiLo, 'chi2 upper quantile': vi.chiHi,
-                       'variance lower': vi.lo2, 'variance upper': vi.hi2, 'sd lower': vi.loS, 'sd upper': vi.hiS });
-  }
   // The p quantile with its distribution-free interval; a rank is null, and
   // its end NaN, where the sample is too small to bound that end.
   const quant = interval && qp > 0 && qp < 1 ? { p: qp } : null;
@@ -238,6 +232,12 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
       const bq = backInterval(q.lo, q.hi, tf);
       Object.assign(e, { 'back-transformed quantile': backTransform(q.order, tf), 'back-transformed quantile lower': bq.lo, 'back-transformed quantile upper': bq.hi });
     }
+  }
+  const variance = interval && !pooled;
+  if (variance) {
+    const vi = varianceInterval(xs, level);
+    Object.assign(e, { s2: vi.s2, 'chi2 lower quantile': vi.chiLo, 'chi2 upper quantile': vi.chiHi,
+                       'variance lower': vi.lo2, 'variance upper': vi.hi2, 'sd lower': vi.loS, 'sd upper': vi.hiS });
   }
   let planOut = null;
   if (plan && interval && !pooled) {
