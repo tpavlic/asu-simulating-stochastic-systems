@@ -1056,12 +1056,17 @@ better.
   holding the t interval on one system's replication outcomes, or the Wilcoxon signed-rank
   interval on the pseudo-median behind a Procedure switch, and the prediction interval for one
   further outcome, with the pooled-observations override behind a warning; under a transform, the
-  carried-back values are the table's last columns; a "Stated mean μ₀" control row above the
-  figure (a field for μ₀ and a "Show μ₀ on the plot" box that draws it on the figure as a dashed
-  line that can be dragged, the field and the test following it), with the test written as a note
-  row under the confidence interval's own row of the table (`rowNote`: the one-sample t statistic,
-  the critical t, its p-value, and a verdict tied to the interval; the signed-rank test at μ₀
-  under the rank procedure); the card's sub-sections are headed by `.sub-hd`, the within-card
+  carried-back values are the table's last columns; a "Test against a stated mean" box above the
+  figure, off by default (ticked, a field for μ₀ appears beside it, the figure draws μ₀ as a dashed
+  line that can be dragged, the field and the test following it, and draws the interval red and
+  dashed with a hollow dot when it excludes μ₀, as Several Systems flags an interval that excludes
+  the benchmark, and the four figure helpers' `fig_strips` do the same for an interval that excludes
+  `ref`), with the test written as a note row under the confidence interval's own row of the table
+  (`rowNote`: a verdict badge, then the one-sample t statistic, the critical t, and its p-value in
+  the verdict's color, red for a rejection and the indigo `--ok` otherwise, and the reading of the
+  verdict on its own line; the signed-rank test at μ₀ under the rank procedure); off, the page, its
+  export tables, the Report page, and the scripts carry no test, and the provenance says the stated
+  mean is "none", as Several Systems' benchmark does when it is off; the card's sub-sections are headed by `.sub-hd`, the within-card
   heading style Summary and Plots' sub-sections share; and in the same card a "Confidence interval on the variance"
   sub-section (the chi-square interval as a one-row table) and a "Confidence interval on a
   quantile" sub-section (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free

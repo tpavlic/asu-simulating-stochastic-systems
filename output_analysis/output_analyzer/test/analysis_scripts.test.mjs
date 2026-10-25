@@ -631,6 +631,10 @@ test('oneRecipe carries the stated-mean test, the prediction interval, and the q
   const r0 = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN });
   assert.ok(!('t statistic' in r0.expect) && !('quantile rank k' in r0.expect));
   assert.ok(!('mu0' in r0.settings));
+  // With the test switched off (a null stated mean), the figure draws no line even when the view asks for one.
+  const rv = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN, mu0: null, qp: 0.5, view: { mu0: true } });
+  assert.equal(rv.fig.mu0, false);
+  assert.ok(!rv.one.test && !('mu0' in rv.settings) && !('t statistic' in rv.expect));
   // A quantile the sample bounds from below only reports a NaN upper end and a null upper rank.
   const rq = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.99, provenance: prov, plan: null, mu0: 3, qp: 0.95 });
   assert.ok(Number.isNaN(rq.expect['quantile upper']) && rq.expect['quantile upper rank'] === null);
@@ -2776,6 +2780,7 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['One System, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null }), 1, true],
     ['One System, pooled', oneRecipe({ ds: TRANSIENT, x: TRANSIENT.reps.flatMap(p => Array.from(p.v)), ids: null, pooled: true, proc: 't', level: 0.95, plan: null }), 1],
     ['One System, t with the stated mean on the plot', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 3, qp: 0.5, view: { mu0: true } }), 1],
+    ['One System, t with a stated mean the interval excludes', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 10, qp: 0.5, view: { mu0: true } }), 1, true],
     ['Two Systems, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, null), 2],
     ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],

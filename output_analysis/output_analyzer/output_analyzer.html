@@ -653,6 +653,21 @@ footer a:hover { text-decoration: underline; }
                        text-align: left; padding: 0 10px 8px 22px; }
 /* The note's text keeps to the visible width of a table that scrolls sideways. */
 .ptab tr.row-note td > div { position: sticky; left: 22px; }
+/* The test against the stated mean, as the interval row's note: a verdict
+   badge, the statistics in the verdict's color, and the reading on its own
+   line. The data red at 5.0:1 on the card is the badge's ground under white
+   text; the running statistics take the darker red small text uses (THEME.md). */
+.rn { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 3px; }
+.rn-badge { display: inline-block; font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+            color: #fff; background: var(--text); border-radius: 999px; padding: 1px 9px; line-height: 1.7; white-space: nowrap; }
+.rn-badge.rn-rej { background: var(--miss); }
+.rn-badge.rn-keep { background: var(--ok); }
+.rn-lead { font-weight: 600; }
+.rn-stats { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rn-stats.rn-rej { color: #BE2020; }
+.rn-stats.rn-keep { color: var(--ok); }
+.rn-sep { color: var(--muted); font-weight: 400; }
+.rn-read { flex-basis: 100%; color: var(--muted); }
 .one-tab .ptab td:first-child { white-space: normal; min-width: 11em; }
 @media (max-width: 480px) { .sc.cmp-span2 { grid-column: 1 / -1; } }
 /* Planning cards */
@@ -26102,7 +26117,8 @@ function fig_strips(values, labels, xlab, ttl, o)
 % Rows of dots, one row per vector in the cell array values, each with its
 % interval from o.lo to o.hi (center o.mid) drawn under the dots, a dashed
 % reference line at o.ref, and a solid line at the mean of all the values
-% when o.mean_line is true.
+% when o.mean_line is true. An interval that excludes o.ref is drawn in the
+% flag color, dashed, with a hollow center dot.
 if nargin < 5, o = struct(); end
 if ~iscell(values), values = {values}; end
 c = fig_colors();
@@ -26144,11 +26160,15 @@ for i = 1:nr
     % The row's interval sits just below its dots.
     if numel(lo) >= i && numel(hi) >= i && isfinite(lo(i)) && isfinite(hi(i))
         yi = i + 0.28;
-        plot([lo(i), hi(i)], [yi, yi], 'Color', c.truth, 'LineWidth', 2);
-        plot([lo(i), lo(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
-        plot([hi(i), hi(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
+        col = c.truth; style = '-'; face = c.truth;
+        if isfinite(ref) && (ref < lo(i) || ref > hi(i))
+            col = c.miss; style = '--'; face = 'w';
+        end
+        plot([lo(i), hi(i)], [yi, yi], 'Color', col, 'LineStyle', style, 'LineWidth', 2);
+        plot([lo(i), lo(i)], yi + [-0.08, 0.08], 'Color', col, 'LineWidth', 2);
+        plot([hi(i), hi(i)], yi + [-0.08, 0.08], 'Color', col, 'LineWidth', 2);
         if numel(mid) >= i && isfinite(mid(i))
-            plot(mid(i), yi, 'o', 'Color', c.truth, 'MarkerFaceColor', c.truth, ...
+            plot(mid(i), yi, 'o', 'Color', col, 'MarkerFaceColor', face, ...
                  'MarkerSize', 6);
         end
     end
@@ -27021,7 +27041,10 @@ def fig_stack(v):
 FIG_PY.strips = `
 def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.nan,
                mean_line=False):
-    """Rows of dots, one row per vector, each with its own interval under the dots."""
+    """Rows of dots, one row per vector, each with its own interval under the dots.
+
+    An interval that excludes ref is drawn in the flag color, dashed, with a hollow dot.
+    """
     import matplotlib.pyplot as plt
     rows = [fig_vec(v) for v in values]
     n = len(rows)
@@ -27039,11 +27062,14 @@ def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.n
             if np.isfinite(lo[i]) and np.isfinite(hi[i]):
                 a, b = lo[i], hi[i]
                 y = i + 0.3
-                ax.plot([a, b], [y, y], color=FIG_TRUTH, linewidth=1.5)
+                flag = bool(np.isfinite(ref)) and (ref < a or ref > b)
+                col = FIG_MISS if flag else FIG_TRUTH
+                ax.plot([a, b], [y, y], color=col, linewidth=1.5, linestyle="--" if flag else "-")
                 for e in (a, b):
-                    ax.plot([e, e], [y - 0.09, y + 0.09], color=FIG_TRUTH, linewidth=1.5)
+                    ax.plot([e, e], [y - 0.09, y + 0.09], color=col, linewidth=1.5)
                 if mid is not None and i < mid.size and np.isfinite(mid[i]):
-                    ax.plot([mid[i]], [y], "o", color=FIG_TRUTH, markersize=5)
+                    ax.plot([mid[i]], [y], "o", color=col, markersize=5,
+                            markerfacecolor="white" if flag else col)
     if np.isfinite(ref):
         ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
     if mean_line:
@@ -27673,7 +27699,8 @@ fig_band <- function(xl, xr) {
 FIG_R.strips = `
 # Rows of dots, one row per element of values (a list), with an optional interval under each
 # row (mid, lo, hi), a dashed reference line at ref, and a solid line at the mean of all the
-# values when mean_line is TRUE.
+# values when mean_line is TRUE. An interval that excludes ref is drawn in the flag color,
+# dashed, with a hollow center dot, as the analyzer draws one that rejects a stated mean.
 fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
                        ref = NA, mean_line = FALSE) {
   if (!is.list(values)) values <- list(values)
@@ -27700,9 +27727,11 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
     }
     if (!is.null(lo) && !is.null(hi) && is.finite(lo[i]) && is.finite(hi[i])) {
       y <- i + 0.28
-      segments(lo[i], y, hi[i], y, col = FIG_TRUTH, lwd = 1.8)
-      segments(c(lo[i], hi[i]), y - 0.08, c(lo[i], hi[i]), y + 0.08, col = FIG_TRUTH, lwd = 1.8)
-      if (!is.null(mid) && is.finite(mid[i])) points(mid[i], y, pch = 19, col = FIG_TRUTH)
+      flag <- is.finite(ref) && (ref < lo[i] || ref > hi[i])
+      col <- if (flag) FIG_MISS else FIG_TRUTH
+      segments(lo[i], y, hi[i], y, col = col, lwd = 1.8, lty = if (flag) 2 else 1)
+      segments(c(lo[i], hi[i]), y - 0.08, c(lo[i], hi[i]), y + 0.08, col = col, lwd = 1.8)
+      if (!is.null(mid) && is.finite(mid[i])) points(mid[i], y, pch = if (flag) 21 else 19, col = col, bg = "white")
     }
   }
   axis(1)
@@ -28302,7 +28331,8 @@ fig_bracket_cols <- function(brackets) {
 
 FIG_TIDY.strips = `
 # Rows of dots (one row per element of values, first row on top), with an optional interval
-# under each row's dots: a line from lo to hi with end ticks and a dot at mid.
+# under each row's dots: a line from lo to hi with end ticks and a dot at mid. An interval
+# that excludes ref is drawn in the flag color, dashed, with a hollow dot.
 fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
                        ref = NA, mean_line = FALSE) {
   if (is.numeric(values)) values <- list(values)
@@ -28322,7 +28352,11 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
     mutate(y = n - row + 1 + 0.12 + ((row_number() - 1) %% 5 - 2) * 0.07) %>%
     ungroup()
   xr <- fig_span(c(dots$value, iv$lo, iv$hi, ref))
-  iv <- iv %>% mutate(y = n - row + 1 - 0.25)
+  iv <- iv %>% mutate(y = n - row + 1 - 0.25,
+                      flag = is.finite(ref) & (ref < lo | ref > hi),
+                      col = ifelse(flag, FIG_MISS, FIG_TRUTH),
+                      lty = ifelse(flag, "dashed", "solid"))
+  ivm <- filter(iv, is.finite(mid))
   p <- ggplot() + geom_point(data = dots, aes(x = value, y = y), color = FIG_EST,
                              alpha = 0.6, size = 2)
   if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
@@ -28331,14 +28365,14 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
   }
   if (nrow(iv) > 0) {
     p <- p +
-      geom_segment(data = iv, aes(x = lo, xend = hi, y = y, yend = y), color = FIG_TRUTH,
-                   linewidth = 0.6) +
+      geom_segment(data = iv, aes(x = lo, xend = hi, y = y, yend = y), color = iv$col,
+                   linetype = iv$lty, linewidth = 0.6) +
       geom_segment(data = iv, aes(x = lo, xend = lo, y = y - 0.1, yend = y + 0.1),
-                   color = FIG_TRUTH, linewidth = 0.6) +
+                   color = iv$col, linewidth = 0.6) +
       geom_segment(data = iv, aes(x = hi, xend = hi, y = y - 0.1, yend = y + 0.1),
-                   color = FIG_TRUTH, linewidth = 0.6) +
-      geom_point(data = filter(iv, is.finite(mid)), aes(x = mid, y = y), color = FIG_TRUTH,
-                 size = 2.4)
+                   color = iv$col, linewidth = 0.6) +
+      geom_point(data = ivm, aes(x = mid, y = y), shape = 21, color = ivm$col,
+                 fill = ifelse(ivm$flag, "white", ivm$col), size = 2.4)
   }
   p <- p +
     scale_y_continuous(breaks = n:1, labels = labels, limits = c(0.45, n + 0.55),
@@ -28851,7 +28885,8 @@ fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FAL
 // of its own, skips NaN values, widens a zero-width range, draws an empty
 // frame for no data, and prints and warns nothing on valid input.
 //   fig_strips(values, labels, xlab, title; mid, lo, hi, ref, mean_line):
-//     a row of dots per vector, each with its interval under it.
+//     a row of dots per vector, each with its interval under it; an interval
+//     that excludes ref is drawn in the flag color, dashed, with a hollow dot.
 //   fig_intervals(mid, lo, hi, labels, xlab, title; ref, flagged, muted,
 //     right, brackets, ok): a forest plot, row 1 at the top; flagged rows red
 //     and dashed, muted rows gray, ok rows green; text at each row's right,
@@ -28963,7 +28998,7 @@ function oneFigures(r, L) {
   if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
   return {
-    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line.' : '.')],
+    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')],
     calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
     fig: ['strips']
   };
@@ -37391,9 +37426,9 @@ let planCtx = null;
 let resultBase = null;
 // The stated mean of the t test, kept per dataset and transform like the
 // planning target (`mu0For` is that key; `mu0Step` is its field's step, which
-// the dragged line on the plot moves by), whether the plot draws it, and the
-// quantile's p, both settings for the page.
-const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, showMu0: false, qp: 0.9 };
+// the dragged line on the plot moves by), whether the test is on at all, and
+// the quantile's p, both settings for the page.
+const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, test: false, qp: 0.9 };
 // The override is remembered per dataset, and so ticking it on one dataset
 // never silently applies to the next one chosen.
 const override = new Set();
@@ -37587,15 +37622,17 @@ export function render(rootEl) {
   const npNote = el('p', 'exp-note');
   npNote.hidden = true;
   const checks = el('div');
-  // The stated mean: the interval read as a test of one value. Its field
-  // sits above the plot, which draws the value when its box is ticked, and
-  // the test's statistic, p-value, and verdict are a note under the
-  // interval's own row of the table.
+  // The stated mean: the interval read as a test of one value, switched on
+  // by its box above the plot. On, its field appears beside the box, the plot
+  // draws the value as a dashed line and the interval red and dashed when it
+  // excludes the value, and the test's statistic, p-value, and verdict are a
+  // note under the interval's own row of the table. Off, the page, its
+  // export, and its scripts carry no test at all.
   const testCtrl = el('div', 'ctrl-row');
   testCtrl.hidden = true;
-  testCtrl.innerHTML = '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip rv-tip" tabindex="0" data-tip="A value to test the mean against: a measurement from the real system, a requirement, or a benchmark. The test, written under the interval’s row of the table, rejects it when it lies outside the interval.">Stated mean&nbsp;<span class="sym">μ₀</span></span></span>' +
-    '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>' +
-    '<label class="ctrl-chk"><input type="checkbox" id="rp-mu0-show"> <span class="tip" tabindex="0" data-tip="Draws μ₀ on the plot as a dashed line that can be dragged (the arrow keys move it when it has focus); the field and the test follow it.">Show μ₀ on the plot</span></label>';
+  testCtrl.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="rp-mu0-on"> <span class="tip" tabindex="0" data-tip="Reads the interval as a test of one value: a measurement from the real system, a requirement, or a benchmark. Ticked, it draws μ₀ on the plot as a dashed line that can be dragged (the arrow keys move it when it has focus), draws the interval red and dashed when it excludes μ₀, and writes the test under the interval’s row of the table.">Test against a stated mean</span></label>' +
+    '<span class="ctrl-pair" id="rp-mu0-pair" hidden><span class="ctrl-lbl"><span class="sym">μ₀</span></span>' +
+    '<span id="rp-mu0-box"></span><span class="ctrl-note" id="rp-mu0-unit"></span></span>';
   res.append(unitBox, warnBox, ovrBox, testCtrl, figBox, leg, cap, mainTab, npNote, checks);
   fig = makeFigure(figBox, { height: 160, narrowHeight: 180, margin: { t: 10, b: 42 }, xLabel: 'Replication outcome', ariaLabel: 'Replication outcomes with the interval on their mean' });
   exportButtons(figBox, fig, 'replication-outcomes');
@@ -37669,7 +37706,7 @@ export function render(rootEl) {
   root.appendChild(planSec);
 
   els = { varSec, vTab, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
-          qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0Show: testCtrl.querySelector('#rp-mu0-show'), qp: qSec.querySelector('#rp-qp'),
+          qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0On: testCtrl.querySelector('#rp-mu0-on'), mu0Pair: testCtrl.querySelector('#rp-mu0-pair'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
           segs: Array.from(planSec.querySelectorAll('[data-target]')),
@@ -37714,9 +37751,9 @@ export function render(rootEl) {
   if (typeof qp === 'number' && qp > 0 && qp < 1) extra.qp = qp;
   els.qp.value = String(extra.qp);
   spinner(els.qp, { min: 0.01, max: 0.99, step: 0.05, decimals: 2, onChange: v => { extra.qp = v; state.setPick(id, 'quantileP', v); draw(); } });
-  extra.showMu0 = state.getPick(id, 'showMu0') === true;
-  els.mu0Show.checked = extra.showMu0;
-  els.mu0Show.addEventListener('change', () => { extra.showMu0 = els.mu0Show.checked; state.setPick(id, 'showMu0', extra.showMu0); draw(); });
+  extra.test = state.getPick(id, 'testMu0') === true;
+  els.mu0On.checked = extra.test;
+  els.mu0On.addEventListener('change', () => { extra.test = els.mu0On.checked; state.setPick(id, 'testMu0', extra.test); draw(); });
   applyStored();
   buildTargetInput();
 
@@ -37967,6 +38004,26 @@ function rowNote(box, i, html) {
   fit();
 }
 
+// The test against the stated mean as the interval row's note: a verdict
+// badge, the statistics in the verdict's color (red for a rejection, the
+// indigo of a decision that is not a flag otherwise; the badge's word carries
+// the meaning, never the color alone), and then the reading of the verdict
+// on a line of its own.
+function testNote(o) {
+  const { np, pooled, mu0, s, tt, srT, ti, level, alpha, rejects, inside, whatMean } = o;
+  const cls = rejects === null ? '' : rejects ? ' rn-rej' : ' rn-keep';
+  const badge = rejects === null ? 'nothing to decide' : rejects ? 'rejected' : 'not rejected';
+  const sep = ' <span class="rn-sep">·</span> ';
+  const stats = np
+    ? [S('V') + ' = ' + num(srT.V), 'two-sided p = ' + stat(srT.p) + ' (' + (srT.exact ? 'exact signed-rank distribution' : 'normal approximation') + ')']
+    : [S('t₀') + ' = (' + num(s.mean) + ' − ' + num(mu0) + ')/' + num(s.se) + ' = ' + stat(tt.t), intl(tt.df) + ' df', 'critical ' + tSub(level, ti.df) + ' = ' + num(ti.t), 'two-sided p = ' + stat(tt.p)];
+  const read = rejects === null ? 'Every ' + (pooled ? 'observation' : 'outcome') + ' equals μ₀, and so there is nothing to decide.'
+    : rejects ? 'The ' + whatMean + ' differs from ' + num(mu0) + ' at this level: μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the interval.'
+      : 'μ₀ is among the values the interval does not rule out, which is not evidence that the ' + whatMean + ' equals it.';
+  const lead = (np ? 'Signed-rank test' : 'Test') + ' against μ₀ = ' + num(mu0) + ' at α = ' + num(alpha, 3) + (np ? ', ' + S('V') + ' the sum of the ranks of |outcome − μ₀| over the outcomes above μ₀' : '') + ':';
+  return '<span class="rn"><span class="rn-badge' + cls + '">' + badge + '</span><span class="rn-lead">' + lead + '</span><span class="rn-stats' + cls + '">' + stats.join(sep) + '</span><span class="rn-read">' + read + '</span></span>';
+}
+
 // The quantile interval as text, in brackets even when the sample supports
 // one end only, the missing end shown as a dash.
 function quantileBounds(lo, hi, bounds) {
@@ -38119,19 +38176,24 @@ function draw() {
   const nWord = pooled ? 'n' : 'R';
   const unitH = ds.unit ? ' (' + esc(ds.unit) + ')' : '';
 
-  // The test against the stated mean, on the scale the interval is on. Its
-  // value comes first because the figure draws it.
-  syncMu0Input(ds, s);
-  const mu0 = extra.mu0;
+  // The test against the stated mean, when it is on, on the scale the
+  // interval is on. Its value comes first because the figure draws it, and
+  // draws the interval as excluding it or not.
+  const testOn = extra.test;
   const alpha = 1 - level;
-  const tt = np ? null : oneSampleT(x, mu0);
-  const srT = np ? signedRank(x, { mu: mu0, level }) : null;
-  const testP = np ? srT.p : tt.p;
-  const rejects = Number.isFinite(testP) ? testP < alpha : null;
-  const inside = np ? (mu0 >= sr.lo && mu0 <= sr.hi) : (mu0 >= ti.lo && mu0 <= ti.hi);
+  let mu0 = null, tt = null, srT = null, rejects = null, inside = null;
+  if (testOn) {
+    syncMu0Input(ds, s);
+    mu0 = extra.mu0;
+    tt = np ? null : oneSampleT(x, mu0);
+    srT = np ? signedRank(x, { mu: mu0, level }) : null;
+    const testP = np ? srT.p : tt.p;
+    rejects = Number.isFinite(testP) ? testP < alpha : null;
+    inside = np ? (mu0 >= sr.lo && mu0 <= sr.hi) : (mu0 >= ti.lo && mu0 <= ti.hi);
+  }
 
   drawFigure({ values: pooled ? x : est, labels: pooled ? null : labels, ti: np ? { lo: sr.lo, hi: sr.hi, mean: sr.estimate, hw: NaN } : ti, ds, pooled, np, tf,
-    mu0: extra.showMu0 ? { value: mu0, step: extra.mu0Step } : null });
+    mu0: testOn ? { value: mu0, step: extra.mu0Step, excluded: !inside } : null });
 
   // The prediction interval for the next outcome, under the t procedure,
   // and under a transform every interval carried back to the response's units.
@@ -38168,15 +38230,10 @@ function draw() {
   }
 
   els.testCtrl.hidden = false;
-  els.mu0Show.checked = extra.showMu0;
+  els.mu0On.checked = extra.test;
+  els.mu0Pair.hidden = !testOn;
   const whatMean = np ? 'pseudo-median' : 'mean';
-  const verdict = rejects === null ? 'nothing to decide, since every ' + (pooled ? 'observation' : 'outcome') + ' equals μ₀.'
-    : rejects ? '<span class="cmp-flag">rejected</span> at α = ' + num(alpha, 3) + ', the ' + whatMean + ' differing from ' + num(mu0) + '; μ₀ lies ' + (inside ? 'inside' : 'outside') + ' the interval.'
-      : 'not rejected at α = ' + num(alpha, 3) + ': μ₀ is among the values the interval does not rule out, which is not evidence that the ' + whatMean + ' equals it.';
-  const testLine = np
-    ? 'Signed-rank test against μ₀ = ' + num(mu0) + ': ' + S('V') + ' = ' + num(srT.V) + ', the sum of the ranks of |outcome − μ₀| over the outcomes above μ₀; two-sided p = ' + stat(srT.p) + ' (' + (srT.exact ? 'exact signed-rank distribution' : 'normal approximation') + '); ' + verdict
-    : 'Test against μ₀ = ' + num(mu0) + ': ' + S('t₀') + ' = (' + num(s.mean) + ' − ' + num(mu0) + ')/' + num(s.se) + ' = ' + stat(tt.t) + ' on ' + intl(tt.df) + ' df, against the critical ' + tSub(level, ti.df) + ' = ' + num(ti.t) + '; two-sided p = ' + stat(tt.p) + '; ' + verdict;
-  rowNote(els.mainTab, 0, testLine);
+  if (testOn) rowNote(els.mainTab, 0, testNote({ np, pooled, mu0, s, tt, srT, ti, level, alpha, rejects, inside, whatMean }));
 
   // The variance interval, on replication outcomes only.
   const vi = pooled ? null : varianceInterval(x, level);
@@ -38231,7 +38288,7 @@ function draw() {
     ['level', level], ['half-width', pi.hw], ['lower', pi.lo], ['upper', pi.hi]].concat(backPi ? [['lower, carried back', backPi.lo], ['upper, carried back', backPi.hi]] : []) });
   if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
     ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
-  tables.push({ name: np ? 'Signed-rank test against a stated value' : 'Test against a stated mean', headers: ['statistic', 'value'], rows: np
+  if (testOn) tables.push({ name: np ? 'Signed-rank test against a stated value' : 'Test against a stated mean', headers: ['statistic', 'value'], rows: np
     ? [['mu0', mu0], ['V', srT.V], ['two-sided p', srT.p], ['basis', srT.exact ? 'exact signed-rank distribution' : 'normal approximation'], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']]
     : [['mu0', mu0], ['t', tt.t], ['df', tt.df], ['two-sided p', tt.p], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']] });
   tables.push({ name: 'Confidence interval on a quantile', headers: ['statistic', 'value'], rows: [
@@ -38252,8 +38309,7 @@ function draw() {
       procedure: np ? 'Wilcoxon signed-rank (nonparametric)' : 't interval',
       'unit of inference': pooled ? 'pooled observations (override)' : 'replication means',
       ...(tf !== 'none' ? { transform: T.label.toLowerCase() + ' of each replication outcome' } : {}),
-      'stated mean': num(mu0),
-      'stated mean on the plot': extra.showMu0 ? 'yes' : 'no',
+      'stated mean': testOn ? num(mu0) : 'none',
       quantile: num(extra.qp, 2)
     },
     tables,
@@ -38264,7 +38320,7 @@ function draw() {
         ' interval [' + num(ti.lo) + ', ' + num(ti.hi) + '], n = ' + intl(s.n) + (pooled ? ' pooled observations' : ' replications') + ')' +
         (back ? ' on the ' + esc(T.scale) + ' scale; ' + esc(back.name) + ' ' + num(back.center) + ' [' + stat(back.lo) + ', ' + stat(back.hi) + ']' : '') + '.</p>',
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf, mu0, qp: extra.qp }
+    recipeIn: { ds, x: pooled ? x : rawEst, ids: pooled ? null : estIds, pooled, proc, transform: tf, mu0: testOn ? mu0 : null, qp: extra.qp }
   }, pooled ? 'Planning counts replications, and so it uses the replication outcomes; it is off while the pooled observations are in use.' : { ds, s, level });
 }
 
@@ -38340,7 +38396,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
   // Past the cap (pooled observations only) the scripts read the CSV file `files` names.
-  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.showMu0 } })),
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.test } })),
     files: [{ ds: recipeIn.ds, form: recipeIn.pooled ? 'observations' : 'replications' }] };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
@@ -38395,6 +38451,7 @@ function drawFigure(d) {
   const { values, labels, ti, ds, pooled, np, tf } = d;
   const intName = np ? ' Wilcoxon interval on the pseudo-median' : ' interval on the mean';
   const hasInt = ti && Number.isFinite(ti.lo);
+  const flagged = hasInt && !!(d.mu0 && d.mu0.excluded);
   const band = hasInt ? 28 : 0;
   fig.render(f => {
     // Many pooled observations stack into a dot histogram, which needs room.
@@ -38412,25 +38469,29 @@ function drawFigure(d) {
     if (hasInt) {
       const y = fullH - band / 2 - 2;
       const x0 = f.sx(ti.lo), x1 = f.sx(ti.hi), xm = f.sx(ti.mean);
-      const c = tok(cTruth);
-      const g = svgEl('g', { class: 'm-int' }, f.inner);
-      svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2.5 }, g);
+      // An interval that excludes the stated mean is flagged as Several
+      // Systems flags one that excludes the benchmark: the flag color,
+      // dashed, with a hollow center dot.
+      const c = tok(flagged ? '--miss' : cTruth);
+      const g = svgEl('g', { class: flagged ? 'm-int flagged' : 'm-int' }, f.inner);
+      svgEl('line', { x1: x0, x2: x1, y1: y, y2: y, stroke: c, 'stroke-width': 2.5, 'stroke-dasharray': flagged ? '5,3' : null }, g);
       for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: y - 6, y2: y + 6, stroke: c, 'stroke-width': 2 }, g);
-      svgEl('circle', { cx: xm, cy: y, r: 4.2, fill: c }, g);
+      svgEl('circle', flagged ? { cx: xm, cy: y, r: 4.2, fill: tok('--card'), stroke: c, 'stroke-width': 2 } : { cx: xm, cy: y, r: 4.2, fill: c }, g);
       // In the exported figure the interval sits one row under the dots.
       const yi = f.yRange[0] - 1;
       f.yRange = [yi - 1, f.yRange[1]];
-      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, label: lvl(level) + intName },
-        { kind: 'points', x: [ti.mean], y: [yi], color: c, label: np ? 'pseudo-median of the replication outcomes' : 'mean of the replication outcomes' });
+      f.series.push({ kind: 'segments', x0: [ti.lo, ti.lo, ti.hi], x1: [ti.hi, ti.lo, ti.hi], y0: [yi, yi - 0.3, yi - 0.3], y1: [yi, yi + 0.3, yi + 0.3], color: c, width: 2.5, dash: flagged, label: lvl(level) + intName + (flagged ? ' (excludes mu0)' : '') },
+        { kind: 'points', x: [ti.mean], y: [yi], color: c, hollow: flagged, label: np ? 'pseudo-median of the replication outcomes' : 'mean of the replication outcomes' });
       f.readout((dx, dy, px, py) => {
         if (py >= fullH - band) {
-          return [lvl(level) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', np ? 'pseudo-median ' + num(ti.mean) : 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)];
+          return [lvl(level) + ' interval: [' + num(ti.lo) + ', ' + num(ti.hi) + ']', np ? 'pseudo-median ' + num(ti.mean) : 'mean ' + num(ti.mean) + ' ± ' + num(ti.hw)]
+            .concat(d.mu0 ? [(flagged ? 'excludes' : 'contains') + ' μ₀ = ' + num(d.mu0.value)] : []);
         }
         return dotFn ? dotFn(dx, dy, px, py) : null;
       });
     }
-    // The stated mean of the test below, dragged here; its field follows the
-    // line as it moves, and the test is recomputed when the drag ends.
+    // The stated mean of the test, dragged here; its field follows the line
+    // as it moves, and the test is recomputed when the drag ends.
     if (d.mu0) {
       dragLine(f, { value: d.mu0.value, step: d.mu0.step, ariaLabel: 'Stated mean μ₀', label: null,
         onMove: v => { if (extra.mu0Spin) extra.mu0Spin.set(v, false); },
@@ -38444,7 +38505,8 @@ function drawFigure(d) {
   });
   const items = [{ swatch: 'dot', color: cEst, label: pooled ? 'one observation' : 'one replication outcome' }];
   if (values.length > 1) items.push({ swatch: 'line', color: cTruth, label: pooled ? 'mean of the pooled observations' : 'mean of the replication outcomes' });
-  if (hasInt) items.push({ swatch: 'interval', color: cTruth, label: lvl(level) + intName });
+  if (hasInt) items.push(flagged ? { swatch: 'flagged', color: '--miss', label: lvl(level) + intName + ': excludes μ₀, and so rejects it' }
+    : { swatch: 'interval', color: cTruth, label: lvl(level) + intName + (d.mu0 ? ': contains μ₀' : '') });
   if (d.mu0) items.push({ swatch: 'dash', color: '--text', label: 'stated mean μ₀ (drag it)' });
   legend(els.leg, items);
   if (pooled) {
@@ -38458,7 +38520,7 @@ function drawFigure(d) {
       ? 'This dataset holds one replication, and so one outcome: the mean of that run’s observations. One outcome is a number, not a sample; nothing can be inferred from it, and an interval needs at least two replications.'
       : 'Each dot is one replication’s outcome; an interval needs at least two of them.';
   }
-  if (d.mu0) els.cap.textContent += ' The dashed line is the stated mean μ₀ of the test below; drag it, or type a value in its field, to move it.';
+  if (d.mu0) els.cap.textContent += ' The dashed line is the stated mean μ₀; drag it, or type a value in its field, to move it. The interval is drawn red and dashed when it excludes μ₀, which is exactly when the test under its row of the table rejects μ₀.';
 }
 
 /** Called each time the page is shown. */

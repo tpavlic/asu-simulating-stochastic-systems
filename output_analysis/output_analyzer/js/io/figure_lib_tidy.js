@@ -76,7 +76,8 @@ fig_bracket_cols <- function(brackets) {
 
 FIG_TIDY.strips = `
 # Rows of dots (one row per element of values, first row on top), with an optional interval
-# under each row's dots: a line from lo to hi with end ticks and a dot at mid.
+# under each row's dots: a line from lo to hi with end ticks and a dot at mid. An interval
+# that excludes ref is drawn in the flag color, dashed, with a hollow dot.
 fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
                        ref = NA, mean_line = FALSE) {
   if (is.numeric(values)) values <- list(values)
@@ -96,7 +97,11 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
     mutate(y = n - row + 1 + 0.12 + ((row_number() - 1) %% 5 - 2) * 0.07) %>%
     ungroup()
   xr <- fig_span(c(dots$value, iv$lo, iv$hi, ref))
-  iv <- iv %>% mutate(y = n - row + 1 - 0.25)
+  iv <- iv %>% mutate(y = n - row + 1 - 0.25,
+                      flag = is.finite(ref) & (ref < lo | ref > hi),
+                      col = ifelse(flag, FIG_MISS, FIG_TRUTH),
+                      lty = ifelse(flag, "dashed", "solid"))
+  ivm <- filter(iv, is.finite(mid))
   p <- ggplot() + geom_point(data = dots, aes(x = value, y = y), color = FIG_EST,
                              alpha = 0.6, size = 2)
   if (is.finite(ref)) p <- p + geom_vline(xintercept = ref, linetype = "dashed", color = FIG_MUTED)
@@ -105,14 +110,14 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
   }
   if (nrow(iv) > 0) {
     p <- p +
-      geom_segment(data = iv, aes(x = lo, xend = hi, y = y, yend = y), color = FIG_TRUTH,
-                   linewidth = 0.6) +
+      geom_segment(data = iv, aes(x = lo, xend = hi, y = y, yend = y), color = iv$col,
+                   linetype = iv$lty, linewidth = 0.6) +
       geom_segment(data = iv, aes(x = lo, xend = lo, y = y - 0.1, yend = y + 0.1),
-                   color = FIG_TRUTH, linewidth = 0.6) +
+                   color = iv$col, linewidth = 0.6) +
       geom_segment(data = iv, aes(x = hi, xend = hi, y = y - 0.1, yend = y + 0.1),
-                   color = FIG_TRUTH, linewidth = 0.6) +
-      geom_point(data = filter(iv, is.finite(mid)), aes(x = mid, y = y), color = FIG_TRUTH,
-                 size = 2.4)
+                   color = iv$col, linewidth = 0.6) +
+      geom_point(data = ivm, aes(x = mid, y = y), shape = 21, color = ivm$col,
+                 fill = ifelse(ivm$flag, "white", ivm$col), size = 2.4)
   }
   p <- p +
     scale_y_continuous(breaks = n:1, labels = labels, limits = c(0.45, n + 0.55),

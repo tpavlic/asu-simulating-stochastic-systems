@@ -143,7 +143,8 @@ function fig_strips(values, labels, xlab, ttl, o)
 % Rows of dots, one row per vector in the cell array values, each with its
 % interval from o.lo to o.hi (center o.mid) drawn under the dots, a dashed
 % reference line at o.ref, and a solid line at the mean of all the values
-% when o.mean_line is true.
+% when o.mean_line is true. An interval that excludes o.ref is drawn in the
+% flag color, dashed, with a hollow center dot.
 if nargin < 5, o = struct(); end
 if ~iscell(values), values = {values}; end
 c = fig_colors();
@@ -185,11 +186,15 @@ for i = 1:nr
     % The row's interval sits just below its dots.
     if numel(lo) >= i && numel(hi) >= i && isfinite(lo(i)) && isfinite(hi(i))
         yi = i + 0.28;
-        plot([lo(i), hi(i)], [yi, yi], 'Color', c.truth, 'LineWidth', 2);
-        plot([lo(i), lo(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
-        plot([hi(i), hi(i)], yi + [-0.08, 0.08], 'Color', c.truth, 'LineWidth', 2);
+        col = c.truth; style = '-'; face = c.truth;
+        if isfinite(ref) && (ref < lo(i) || ref > hi(i))
+            col = c.miss; style = '--'; face = 'w';
+        end
+        plot([lo(i), hi(i)], [yi, yi], 'Color', col, 'LineStyle', style, 'LineWidth', 2);
+        plot([lo(i), lo(i)], yi + [-0.08, 0.08], 'Color', col, 'LineWidth', 2);
+        plot([hi(i), hi(i)], yi + [-0.08, 0.08], 'Color', col, 'LineWidth', 2);
         if numel(mid) >= i && isfinite(mid(i))
-            plot(mid(i), yi, 'o', 'Color', c.truth, 'MarkerFaceColor', c.truth, ...
+            plot(mid(i), yi, 'o', 'Color', col, 'MarkerFaceColor', face, ...
                  'MarkerSize', 6);
         end
     end

@@ -67,7 +67,8 @@ fig_band <- function(xl, xr) {
 FIG_R.strips = `
 # Rows of dots, one row per element of values (a list), with an optional interval under each
 # row (mid, lo, hi), a dashed reference line at ref, and a solid line at the mean of all the
-# values when mean_line is TRUE.
+# values when mean_line is TRUE. An interval that excludes ref is drawn in the flag color,
+# dashed, with a hollow center dot, as the analyzer draws one that rejects a stated mean.
 fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = NULL,
                        ref = NA, mean_line = FALSE) {
   if (!is.list(values)) values <- list(values)
@@ -94,9 +95,11 @@ fig_strips <- function(values, labels, xlab, title, mid = NULL, lo = NULL, hi = 
     }
     if (!is.null(lo) && !is.null(hi) && is.finite(lo[i]) && is.finite(hi[i])) {
       y <- i + 0.28
-      segments(lo[i], y, hi[i], y, col = FIG_TRUTH, lwd = 1.8)
-      segments(c(lo[i], hi[i]), y - 0.08, c(lo[i], hi[i]), y + 0.08, col = FIG_TRUTH, lwd = 1.8)
-      if (!is.null(mid) && is.finite(mid[i])) points(mid[i], y, pch = 19, col = FIG_TRUTH)
+      flag <- is.finite(ref) && (ref < lo[i] || ref > hi[i])
+      col <- if (flag) FIG_MISS else FIG_TRUTH
+      segments(lo[i], y, hi[i], y, col = col, lwd = 1.8, lty = if (flag) 2 else 1)
+      segments(c(lo[i], hi[i]), y - 0.08, c(lo[i], hi[i]), y + 0.08, col = col, lwd = 1.8)
+      if (!is.null(mid) && is.finite(mid[i])) points(mid[i], y, pch = if (flag) 21 else 19, col = col, bg = "white")
     }
   }
   axis(1)

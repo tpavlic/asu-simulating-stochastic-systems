@@ -18,7 +18,8 @@
 // of its own, skips NaN values, widens a zero-width range, draws an empty
 // frame for no data, and prints and warns nothing on valid input.
 //   fig_strips(values, labels, xlab, title; mid, lo, hi, ref, mean_line):
-//     a row of dots per vector, each with its interval under it.
+//     a row of dots per vector, each with its interval under it; an interval
+//     that excludes ref is drawn in the flag color, dashed, with a hollow dot.
 //   fig_intervals(mid, lo, hi, labels, xlab, title; ref, flagged, muted,
 //     right, brackets, ok): a forest plot, row 1 at the top; flagged rows red
 //     and dashed, muted rows gray, ok rows green; text at each row's right,
@@ -130,7 +131,7 @@ function oneFigures(r, L) {
   if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
   return {
-    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line.' : '.')],
+    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')],
     calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
     fig: ['strips']
   };

@@ -103,7 +103,10 @@ def fig_stack(v):
 FIG_PY.strips = `
 def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.nan,
                mean_line=False):
-    """Rows of dots, one row per vector, each with its own interval under the dots."""
+    """Rows of dots, one row per vector, each with its own interval under the dots.
+
+    An interval that excludes ref is drawn in the flag color, dashed, with a hollow dot.
+    """
     import matplotlib.pyplot as plt
     rows = [fig_vec(v) for v in values]
     n = len(rows)
@@ -121,11 +124,14 @@ def fig_strips(values, labels, xlab, title, mid=None, lo=None, hi=None, ref=np.n
             if np.isfinite(lo[i]) and np.isfinite(hi[i]):
                 a, b = lo[i], hi[i]
                 y = i + 0.3
-                ax.plot([a, b], [y, y], color=FIG_TRUTH, linewidth=1.5)
+                flag = bool(np.isfinite(ref)) and (ref < a or ref > b)
+                col = FIG_MISS if flag else FIG_TRUTH
+                ax.plot([a, b], [y, y], color=col, linewidth=1.5, linestyle="--" if flag else "-")
                 for e in (a, b):
-                    ax.plot([e, e], [y - 0.09, y + 0.09], color=FIG_TRUTH, linewidth=1.5)
+                    ax.plot([e, e], [y - 0.09, y + 0.09], color=col, linewidth=1.5)
                 if mid is not None and i < mid.size and np.isfinite(mid[i]):
-                    ax.plot([mid[i]], [y], "o", color=FIG_TRUTH, markersize=5)
+                    ax.plot([mid[i]], [y], "o", color=col, markersize=5,
+                            markerfacecolor="white" if flag else col)
     if np.isfinite(ref):
         ax.axvline(ref, color=FIG_MUTED, linestyle="--", linewidth=1)
     if mean_line:
