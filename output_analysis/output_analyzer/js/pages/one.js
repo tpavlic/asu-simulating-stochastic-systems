@@ -256,6 +256,7 @@ export function render(rootEl) {
   // note under the interval's own row of the table. Off, the page, its
   // export, and its scripts carry no test at all.
   const testCtrl = el('div', 'ctrl-row');
+  testCtrl.id = 'rp-mu0-row';
   testCtrl.hidden = true;
   testCtrl.innerHTML = '<label class="ctrl-chk"><input type="checkbox" id="rp-mu0-on"> <span class="tip" tabindex="0" data-tip="Reads the interval as a test of one value: a measurement from the real system, a requirement, or a benchmark. Ticked, it draws μ₀ on the plot as a dashed line that can be dragged (the arrow keys move it when it has focus), draws the interval red and dashed when it excludes μ₀, and writes the test under the interval’s row of the table.">Test against a stated mean</span></label>' +
     '<span class="ctrl-pair" id="rp-mu0-pair" hidden><span class="ctrl-lbl"><span class="sym">μ₀</span></span>' +
