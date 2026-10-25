@@ -165,7 +165,7 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   const o = outcomeVector(ds);
   const r = baseRecipe({
     page: 'one',
-    title: title || (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
+    title: title || (np ? 'Confidence interval on the pseudo-median: ' : 'Confidence interval on the mean: ') + ds.name,
     provenance: provenance || {},
     level
   });

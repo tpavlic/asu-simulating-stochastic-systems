@@ -458,7 +458,7 @@ function oneBody(r, L) {
   descriptives(r, L, 'x', out, r.data.pooled ? 'observation' : 'outcome');
   if (o.interval && o.np) {
     need.push('signedRank');
-    out.push(L.sect('Interval on the pseudo-median (Wilcoxon signed-rank)'));
+    out.push(L.sect('Confidence interval on the pseudo-median (Wilcoxon signed-rank)'));
     out.push(L.assign('sr', 'signed_rank(x, level)'));
     out.push(rep(L, r, 'pseudo-median', f('sr', 'estimate')), rep(L, r, 'V', f('sr', 'V')), rep(L, r, 'signed-rank p', f('sr', 'p')));
     out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
@@ -467,14 +467,14 @@ function oneBody(r, L) {
     if (L.tidy) tidyTest(out, L, 'sr$test', 'The signed-rank test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   } else if (o.interval) {
     need.push('tInterval');
-    out.push(L.sect('Interval on the mean (t)'));
+    out.push(L.sect('Confidence interval on the mean (t)'));
     out.push(L.assign('ti', 't_interval(x, level)'));
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
     if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
   if (o.pi) {
     need.push('predictionInterval');
-    out.push(L.sect('Prediction interval for one further outcome'));
+    out.push(L.sect('Prediction interval for the next outcome'));
     out.push(c + 'mean +/- t * s * sqrt(1 + 1/n): the range one more outcome would fall in, which does not');
     out.push(c + 'shrink to a point as n grows.');
     out.push(L.assign('pr', 'prediction_interval(x, level)'));
@@ -515,14 +515,14 @@ function oneBody(r, L) {
   }
   if (o.variance) {
     need.push('varianceInterval');
-    out.push(L.sect('Interval on the variance (chi-square)'));
+    out.push(L.sect('Confidence interval on the variance (chi-square)'));
     out.push(L.assign('vi', 'variance_interval(x, level)'));
     for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
       ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
   }
   if (o.quantile) {
     need.push('quantileInterval');
-    out.push(L.sect('The p quantile and its distribution-free interval'));
+    out.push(L.sect('Confidence interval on the p quantile (distribution-free)'));
     out.push(c + 'The order statistic at rank ceil(n p) and the interpolated quantile (type 7), with the pair of order');
     out.push(c + 'statistics that puts alpha/2 of the binomial probability in each tail. An end the sample cannot bound is');
     out.push(c + 'NaN (its rank too), achieved is then the one bound\'s confidence, and minN is the smallest n with both ends.');

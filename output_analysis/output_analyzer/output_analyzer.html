@@ -23390,7 +23390,7 @@ function oneBody(r, L) {
   descriptives(r, L, 'x', out, r.data.pooled ? 'observation' : 'outcome');
   if (o.interval && o.np) {
     need.push('signedRank');
-    out.push(L.sect('Interval on the pseudo-median (Wilcoxon signed-rank)'));
+    out.push(L.sect('Confidence interval on the pseudo-median (Wilcoxon signed-rank)'));
     out.push(L.assign('sr', 'signed_rank(x, level)'));
     out.push(rep(L, r, 'pseudo-median', f('sr', 'estimate')), rep(L, r, 'V', f('sr', 'V')), rep(L, r, 'signed-rank p', f('sr', 'p')));
     out.push(repYesNo(L, r, 'exact', f('sr', 'exact')));
@@ -23399,14 +23399,14 @@ function oneBody(r, L) {
     if (L.tidy) tidyTest(out, L, 'sr$test', 'The signed-rank test as wilcox.test returns it, tidied by broom into a one-row tibble. ' + WILCOX_OWN);
   } else if (o.interval) {
     need.push('tInterval');
-    out.push(L.sect('Interval on the mean (t)'));
+    out.push(L.sect('Confidence interval on the mean (t)'));
     out.push(L.assign('ti', 't_interval(x, level)'));
     for (const [name, k] of [['df', 'df'], ['t quantile', 't'], ['half-width', 'hw'], ['lower', 'lo'], ['upper', 'hi']]) out.push(rep(L, r, name, f('ti', k)));
     if (L.tidy) tidyTest(out, L, 'ti$test', 'The t test as t.test returns it, tidied by broom into a one-row tibble (none when the outcomes are all equal, where t.test stops).', true);
   }
   if (o.pi) {
     need.push('predictionInterval');
-    out.push(L.sect('Prediction interval for one further outcome'));
+    out.push(L.sect('Prediction interval for the next outcome'));
     out.push(c + 'mean +/- t * s * sqrt(1 + 1/n): the range one more outcome would fall in, which does not');
     out.push(c + 'shrink to a point as n grows.');
     out.push(L.assign('pr', 'prediction_interval(x, level)'));
@@ -23447,14 +23447,14 @@ function oneBody(r, L) {
   }
   if (o.variance) {
     need.push('varianceInterval');
-    out.push(L.sect('Interval on the variance (chi-square)'));
+    out.push(L.sect('Confidence interval on the variance (chi-square)'));
     out.push(L.assign('vi', 'variance_interval(x, level)'));
     for (const [name, k] of [['s2', 's2'], ['chi2 lower quantile', 'chiLo'], ['chi2 upper quantile', 'chiHi'], ['variance lower', 'lo2'],
       ['variance upper', 'hi2'], ['sd lower', 'loS'], ['sd upper', 'hiS']]) out.push(rep(L, r, name, f('vi', k)));
   }
   if (o.quantile) {
     need.push('quantileInterval');
-    out.push(L.sect('The p quantile and its distribution-free interval'));
+    out.push(L.sect('Confidence interval on the p quantile (distribution-free)'));
     out.push(c + 'The order statistic at rank ceil(n p) and the interpolated quantile (type 7), with the pair of order');
     out.push(c + 'statistics that puts alpha/2 of the binomial probability in each tail. An end the sample cannot bound is');
     out.push(c + 'NaN (its rank too), achieved is then the one bound\'s confidence, and minN is the smallest n with both ends.');
@@ -29879,7 +29879,7 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   const o = outcomeVector(ds);
   const r = baseRecipe({
     page: 'one',
-    title: title || (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
+    title: title || (np ? 'Confidence interval on the pseudo-median: ' : 'Confidence interval on the mean: ') + ds.name,
     provenance: provenance || {},
     level
   });
@@ -38178,26 +38178,26 @@ function draw() {
   ];
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication outcomes', headers: tf !== 'none' ? ['replication', 'estimate', T.label.toLowerCase() + ' of estimate'] : ['replication', 'estimate'], rows: estRows });
-  tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
-  if (pi) tables.push({ name: 'Prediction interval', headers: ['statistic', 'value'], rows: [
+  tables.push({ name: np ? 'Confidence interval on the pseudo-median (Wilcoxon)' : 'Confidence interval on the mean', headers: ['statistic', 'value'], rows: intervalRows });
+  if (pi) tables.push({ name: 'Prediction interval for the next outcome', headers: ['statistic', 'value'], rows: [
     ['level', level], ['half-width', pi.hw], ['lower', pi.lo], ['upper', pi.hi]].concat(backPi ? [['lower, carried back', backPi.lo], ['upper, carried back', backPi.hi]] : []) });
   if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
     ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
   tables.push({ name: np ? 'Signed-rank test against a stated value' : 'Test against a stated mean', headers: ['statistic', 'value'], rows: np
     ? [['mu0', mu0], ['V', srT.V], ['two-sided p', srT.p], ['basis', srT.exact ? 'exact signed-rank distribution' : 'normal approximation'], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']]
     : [['mu0', mu0], ['t', tt.t], ['df', tt.df], ['two-sided p', tt.p], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']] });
-  tables.push({ name: 'Quantile', headers: ['statistic', 'value'], rows: [
+  tables.push({ name: 'Confidence interval on a quantile', headers: ['statistic', 'value'], rows: [
     ['p', extra.qp], ['k = ceil(p n)', q.k], ['order statistic', q.order], ['interpolated', q.interp],
     ['lower rank r', q.r === null ? '' : q.r], ['upper rank s', q.s === null ? '' : q.s], ['lower', q.lo], ['upper', q.hi],
     ['bounds', q.bounds === 'both' ? 'two-sided' : q.bounds === 'none' ? 'none' : q.bounds + ' bound only'],
     ['achieved level', q.achieved], ['smallest n with both ends', q.minN]] });
-  if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
+  if (vi) tables.push({ name: 'Confidence interval on the variance', headers: ['statistic', 'value'], rows: [
     ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
     ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
   ] });
   // Planning works on replication outcomes only.
   finish({
-    title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
+    title: (np ? 'Confidence interval on the pseudo-median: ' : 'Confidence interval on the mean: ') + ds.name,
     provenance: {
       dataset: ds.name,
       'confidence level': lvl(level),

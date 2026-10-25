@@ -456,19 +456,19 @@ test('the writers refuse an unknown page or language', () => {
 });
 
 test('every script carries the header, the choices, the data, and ASCII only', () => {
-  const r = descRecipe('Interval on the mean: ' + AWKWARD.name, AWKWARD);
+  const r = descRecipe('Confidence interval on the mean: ' + AWKWARD.name, AWKWARD);
   for (const lang of LANGS) {
     const s = analysisScript(r, lang);
     assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
-    assert.ok(s.includes('Interval on the mean'), lang + ' title');
+    assert.ok(s.includes('Confidence interval on the mean'), lang + ' title');
     assert.ok(s.includes('confidence level: 95%'), lang + ' provenance');
     assert.ok(s.includes('3.4'), lang + ' data');
     assert.ok(s.includes('report'), lang + ' report helper');
   }
-  assert.equal(scriptFileName(r, 'R'), 'interval-on-the-mean-queue-a-1-2-analysis.R');
-  assert.equal(scriptFileName(r, 'tidy'), 'interval-on-the-mean-queue-a-1-2-analysis-tidy.R');
-  assert.equal(scriptFileName(r, 'py'), 'interval-on-the-mean-queue-a-1-2-analysis.py');
-  assert.equal(scriptFileName(r, 'm'), 'interval_on_the_mean_queue_a_1_2_analysis.m');
+  assert.equal(scriptFileName(r, 'R'), 'confidence-interval-on-the-mean-queue-a-1-2-analysis.R');
+  assert.equal(scriptFileName(r, 'tidy'), 'confidence-interval-on-the-mean-queue-a-1-2-analysis-tidy.R');
+  assert.equal(scriptFileName(r, 'py'), 'confidence-interval-on-the-mean-queue-a-1-2-analysis.py');
+  assert.equal(scriptFileName(r, 'm'), 'confidence_interval_on_the_mean_queue_a_1_2_analysis.m');
   assert.deepEqual(Object.keys(ANALYSIS_WRITERS), ['m', 'R', 'tidy', 'py']);
   assert.equal(ANALYSIS_WRITERS.m.label, 'MATLAB');
   assert.equal(ANALYSIS_WRITERS.R.label, 'Base R');
@@ -486,14 +486,14 @@ test('ascii folds accents, the micro sign, Greek letters, and symbols', () => {
   assert.equal(ascii('a\u0007b\nc'), 'a b c');
   assert.equal(ascii('日本'), '??');
   assert.equal(ascii('😀'), '?');
-  const r = descRecipe('Interval on the mean: ' + ACCENTED.name, ACCENTED);
+  const r = descRecipe('Confidence interval on the mean: ' + ACCENTED.name, ACCENTED);
   for (const lang of LANGS) {
     const s = analysisScript(r, lang);
     assert.ok(/^[\x00-\x7f]*$/.test(s), lang + ' script is not ASCII');
     assert.ok(s.includes('Cafe delta-queue (delai, us)'), lang + ' folded name');
   }
-  assert.equal(scriptFileName(r, 'R'), 'interval-on-the-mean-cafe-delta-queue-analysis.R');
-  assert.equal(scriptFileName(r, 'm'), 'interval_on_the_mean_cafe_delta_queue_analysis.m');
+  assert.equal(scriptFileName(r, 'R'), 'confidence-interval-on-the-mean-cafe-delta-queue-analysis.R');
+  assert.equal(scriptFileName(r, 'm'), 'confidence_interval_on_the_mean_cafe_delta_queue_analysis.m');
   const long = descRecipe('x'.repeat(80) + ' ' + 'y'.repeat(10), AWKWARD);
   assert.ok(/^x{50}-analysis\.R$/.test(scriptFileName(long, 'R')));
   assert.ok(/^x{50}_analysis\.m$/.test(scriptFileName(long, 'm')));
@@ -569,7 +569,7 @@ test('oneRecipe carries the data, the choices, and every expect key of the t pat
   const prov = oneProv(QUEUE, 0.95, 't');
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, provenance: prov, plan: PLAN });
   assert.equal(r.page, 'one');
-  assert.equal(r.title, 'Interval on the mean: ' + QUEUE.name);
+  assert.equal(r.title, 'Confidence interval on the mean: ' + QUEUE.name);
   assert.deepEqual(r.provenance, prov);
   assert.notEqual(r.provenance, prov, 'the provenance is copied');
   assert.equal(r.data.values.length, 20);
@@ -640,7 +640,7 @@ test('oneRecipe carries the stated-mean test, the prediction interval, and the q
 
 test('oneRecipe under the Wilcoxon procedure: no t interval, no check, and rank-inflated plans', () => {
   const r = oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 'np', level: 0.9, provenance: oneProv(QUEUE, 0.9, 'np'), plan: PLAN });
-  assert.equal(r.title, 'Interval on the pseudo-median: ' + QUEUE.name);
+  assert.equal(r.title, 'Confidence interval on the pseudo-median: ' + QUEUE.name);
   assert.equal(r.expect.exact, 1);
   assert.ok('achieved level' in r.expect && !('df' in r.expect) && !('shapiro W [optional]' in r.expect));
   assert.ok(r.expect['plan n for power (rank)'] >= r.expect['plan n for power']);

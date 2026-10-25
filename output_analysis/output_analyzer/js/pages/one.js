@@ -849,26 +849,26 @@ function draw() {
   ];
   const tables = [];
   if (!pooled) tables.push({ name: 'Replication outcomes', headers: tf !== 'none' ? ['replication', 'estimate', T.label.toLowerCase() + ' of estimate'] : ['replication', 'estimate'], rows: estRows });
-  tables.push({ name: np ? 'Signed-rank interval (Wilcoxon)' : 'Interval', headers: ['statistic', 'value'], rows: intervalRows });
-  if (pi) tables.push({ name: 'Prediction interval', headers: ['statistic', 'value'], rows: [
+  tables.push({ name: np ? 'Confidence interval on the pseudo-median (Wilcoxon)' : 'Confidence interval on the mean', headers: ['statistic', 'value'], rows: intervalRows });
+  if (pi) tables.push({ name: 'Prediction interval for the next outcome', headers: ['statistic', 'value'], rows: [
     ['level', level], ['half-width', pi.hw], ['lower', pi.lo], ['upper', pi.hi]].concat(backPi ? [['lower, carried back', backPi.lo], ['upper, carried back', backPi.hi]] : []) });
   if (back) tables.push({ name: 'Back-transformed interval', headers: ['statistic', 'value'], rows: [
     ['center (' + back.name + ')', back.center], ['lower', back.lo], ['upper', back.hi]] });
   tables.push({ name: np ? 'Signed-rank test against a stated value' : 'Test against a stated mean', headers: ['statistic', 'value'], rows: np
     ? [['mu0', mu0], ['V', srT.V], ['two-sided p', srT.p], ['basis', srT.exact ? 'exact signed-rank distribution' : 'normal approximation'], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']]
     : [['mu0', mu0], ['t', tt.t], ['df', tt.df], ['two-sided p', tt.p], ['rejected at alpha = ' + num(alpha, 3), rejects === null ? '' : rejects ? 'yes' : 'no']] });
-  tables.push({ name: 'Quantile', headers: ['statistic', 'value'], rows: [
+  tables.push({ name: 'Confidence interval on a quantile', headers: ['statistic', 'value'], rows: [
     ['p', extra.qp], ['k = ceil(p n)', q.k], ['order statistic', q.order], ['interpolated', q.interp],
     ['lower rank r', q.r === null ? '' : q.r], ['upper rank s', q.s === null ? '' : q.s], ['lower', q.lo], ['upper', q.hi],
     ['bounds', q.bounds === 'both' ? 'two-sided' : q.bounds === 'none' ? 'none' : q.bounds + ' bound only'],
     ['achieved level', q.achieved], ['smallest n with both ends', q.minN]] });
-  if (vi) tables.push({ name: 'Variance', headers: ['statistic', 'value'], rows: [
+  if (vi) tables.push({ name: 'Confidence interval on the variance', headers: ['statistic', 'value'], rows: [
     ['R', vi.n], ['df', vi.df], ['s^2', vi.s2], ['s', vi.s], ['lower for sigma^2', vi.lo2], ['upper for sigma^2', vi.hi2],
     ['lower for sigma', vi.loS], ['upper for sigma', vi.hiS], ['chi-square ' + num((1 - level) / 2, 4), vi.chiLo], ['chi-square ' + num(1 - (1 - level) / 2, 4), vi.chiHi]
   ] });
   // Planning works on replication outcomes only.
   finish({
-    title: (np ? 'Interval on the pseudo-median: ' : 'Interval on the mean: ') + ds.name,
+    title: (np ? 'Confidence interval on the pseudo-median: ' : 'Confidence interval on the mean: ') + ds.name,
     provenance: {
       dataset: ds.name,
       'confidence level': lvl(level),
