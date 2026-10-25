@@ -888,7 +888,7 @@ footer a:hover { text-decoration: underline; }
         <input type="range" id="bins" min="3" max="40" step="1" value="10">
         <span class="mono" id="bins-val" style="min-width:2.2em;display:inline-block">10</span>
       </span>
-      <button class="btn2" id="bins-auto" type="button" data-tip="Sturges' rule: 1 + log2(n) bins" data-tip-press>Auto</button>
+      <button class="btn2" id="bins-auto" type="button" data-tip="Sturges’ rule: ⌈log₂ n + 1⌉ bins" data-tip-press>Auto</button>
       <span class="ctrl-note" id="bins-hint"></span>
       <label class="chk" id="show-fit-wrap"><input type="checkbox" id="show-fit" checked autocomplete="off"> Show the fitted distribution on both plots</label>
     </div>
@@ -4549,8 +4549,8 @@ function makeBins(x, k, perValue) {
   return { edges: edges, counts: counts, k: k, n: s.n, width: width, integer: false };
 }
 
-/* Sturges' rule, the default in most textbooks and in Arena. */
-function sturges(n) { return Math.max(3, Math.min(40, Math.round(1 + Math.log2(n)))); }
+/* Sturges' rule, the ceiling of log2(n) + 1 as R's hist() takes by default. */
+function sturges(n) { return Math.max(3, Math.min(40, Math.ceil(Math.log2(n) + 1))); }
 
 /* Probability the fitted model assigns to each bin. The first bin is
    extended down to the model's own lower limit and the last bin up to
@@ -9472,11 +9472,11 @@ function derivedRows(d, f) {
 /* The bin count Sturges' rule gives, worked for this sample, beside the
    square-root rule's, which is the other one a reader is likely to know. */
 function sturgesTip(n) {
-  var raw = 1 + Math.log2(n), k = IA.sturges(n), r = Math.sqrt(n);
-  return 'Sturges’ rule: <code>k = 1 + log₂ n</code>, rounded and kept between 3 and 40. ' +
-    'With n = ' + n + ', 1 + log₂ ' + n + ' = ' + fmt(raw, 3) + ', and so ' + k + ' bins. ' +
-    'The square-root rule, <code>k = √n</code>, gives √' + n + ' = ' + fmt(r, 3) + ', or ' +
-    Math.round(r) + '. The two agree near n = 30, and Sturges’ rule grows more slowly: at n = 1000 ' +
+  var raw = Math.log2(n) + 1, k = IA.sturges(n), r = Math.sqrt(n);
+  return 'Sturges’ rule: k = ⌈log₂ n + 1⌉, rounded up and kept between 3 and 40. ' +
+    'With n = ' + n + ', log₂ ' + n + ' + 1 = ' + fmt(raw, 3) + ', and so ' + k + ' bins. ' +
+    'The square-root rule, k = √n, gives √' + n + ' = ' + fmt(r, 3) + ', or ' +
+    Math.round(r) + '. The two are closest near n = 30, and Sturges’ rule grows more slowly: at n = 1000 ' +
     'it gives 11 bins where the square-root rule gives 32.';
 }
 function renderBinPanel() {
