@@ -67,9 +67,14 @@ const GATES = [
   { pages: ['explore', 'one', 'report'],
     ok: () => state.datasets.length > 0,
     tip: 'Load a file or an example on the Import page first.' },
-  { pages: ['two', 'several'],
+  { pages: ['two'],
     ok: () => state.datasets.filter(d => canInfer(d).ok).length >= 2,
     tip: 'Comparing designs needs two or more datasets, each with at least two replication estimates. Load another dataset on the Import page first.' },
+  // One design is enough for the benchmark comparison; the sections that
+  // compare designs wait for a second, which the page says in their place.
+  { pages: ['several'],
+    ok: () => state.datasets.filter(d => canInfer(d).ok).length >= 1,
+    tip: 'This page needs a dataset with at least two replication estimates. Load one on the Import page first.' },
   { pages: ['steady'],
     ok: () => state.datasets.some(d => d.kind === 'tally' || d.kind === 'time'),
     tip: 'The warm-up plot and batch means work on observations within a run. Load a dataset of observations or of a time-persistent state on the Import page first.' }

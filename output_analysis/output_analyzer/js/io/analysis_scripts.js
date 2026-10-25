@@ -800,7 +800,8 @@ function familyPairs(r) {
 function sevBody(r, L) {
   const need = [], out = [];
   sevMeans(r, L, out, need);
-  sevDiffs(r, L, out, need);
+  // One design has no differences, analysis of variance, or screen.
+  if (!r.several.single) sevDiffs(r, L, out, need);
   if (r.several.anova) sevAnova(r, L, out, need);
   if (r.several.rank) sevRank(r, L, out, need);
   if (r.several.subset) sevSubset(r, L, out, need);
@@ -1237,7 +1238,9 @@ function sevPlan(r, L, out, need) {
   out.push(L.assign('sds', PLUCK[lang](lang === 'R' ? 'sm$items' : lang === 'py' ? 'sm["items"]' : 'sm.items', 'sd')));
   out.push(L.assign('hpm', 'plan_half_width(max(sds), 1 - alpha / k, plan_means_h)'));
   out.push(rep(L, r, 'plan means half-width target', 'plan_means_h'), rep(L, r, 'plan means n', f('hpm', 'n')), rep(L, r, 'plan means half-width at n', f('hpm', 'hwAtN')));
-  if (S.paired) {
+  if (S.single) {
+    out.push(c + 'With one design there are no differences to plan for.');
+  } else if (S.paired) {
     need.push('pairedT');
     out.push(...commentLines(c, 'For the differences under pairing: the smallest R at which every paired interval of family_pairs, at 1 - alpha/C, has ' +
       'half-width at most plan_diffs_h. The widest belongs to the pair whose differences vary most, with that standard deviation (paired_t\'s, which is 0 for differences equal up to rounding) held at its current value. ' +
@@ -1268,14 +1271,15 @@ function sevPlan(r, L, out, need) {
     else if (lang === 'py') out.push('widest = "none" if hpd["pair"] is None else "-".join(str(v + 1) for v in hpd["pair"])');
     else out.push("if isnan(hpd.n), widest = 'none'; else, widest = sprintf('%d-%d', hpd.pair); end");
   }
-  out.push(rep(L, r, 'plan diffs half-width target', 'plan_diffs_h'), rep(L, r, 'plan diffs n', f('hpd', 'n')), rep(L, r, 'plan diffs half-width at n', f('hpd', 'hwAtN')),
+  if (!S.single) out.push(rep(L, r, 'plan diffs half-width target', 'plan_diffs_h'), rep(L, r, 'plan diffs n', f('hpd', 'n')), rep(L, r, 'plan diffs half-width at n', f('hpd', 'hwAtN')),
     rep(L, r, 'plan diffs widest pair', 'widest'));
   if (S.anovaPlan) sevPlanAnova(r, L, out, need);
   if (S.np) {
     const inf = k => (lang === 'R' ? 'ceiling(' + k + ' * pi / 3)' : lang === 'py' ? 'np.ceil(' + k + ' * np.pi / 3)' : 'ceil(' + k + ' * pi / 3)');
     out.push(c + 'The rank procedures are sized from the t plans inflated by pi/3, the reciprocal of their efficiency');
     out.push(c + 'relative to the t under normal data.');
-    out.push(rep(L, r, 'plan means n (rank)', inf(f('hpm', 'n'))), rep(L, r, 'plan diffs n (rank)', inf(f('hpd', 'n'))));
+    out.push(rep(L, r, 'plan means n (rank)', inf(f('hpm', 'n'))));
+    if (!S.single) out.push(rep(L, r, 'plan diffs n (rank)', inf(f('hpd', 'n'))));
     if (S.anovaPlan) out.push(rep(L, r, 'plan anova n (rank)', inf(f('ppa', 'n'))));
   }
 }

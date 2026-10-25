@@ -26,7 +26,7 @@ import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
-import { currentSection } from '../ui/tabs.js';
+import { currentSection, setSectionAvailable } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
 import { shortNames, pairingDefault } from '../ui/rules.js';
@@ -670,6 +670,8 @@ function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
   rootEl.querySelectorAll('[data-dplot]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dplot === designPlot)));
+  // One checked design has nothing to pair with.
+  rootEl.querySelector('#sev-pair-lbl').closest('.ctrl-row').style.display = list.length < 2 ? 'none' : '';
   // The outcome dots sit behind intervals; a box plot holds the outcomes already.
   rootEl.querySelector('#sev-pts-lbl').style.display = designPlot === 'box' ? 'none' : '';
   rootEl.querySelector('#sev-pts').checked = showPts;
@@ -793,7 +795,8 @@ function update() {
   tfBox.replaceChildren(...(tfN ? [tfN] : []));
   // Under common random numbers across designs the replications are matched
   // into complete blocks, and every procedure runs on the aligned groups.
-  const paired = pairMode === 'paired';
+  // Pairing needs two designs to pair; one checked design is independent of nothing.
+  const paired = pairMode === 'paired' && list.length >= 2;
   let match = null;
   // Each design's replication ids in step with its outcomes, aligned with them under pairing.
   let blockIds = list.map(finiteIds);
@@ -841,12 +844,13 @@ function update() {
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
   key.innerHTML = list.map((d, i) => '<span class="sev-key-it">' + badge(i) + ' ' + esc(d.name) + '</span>').join(' ');
-  if (k < 2 || (paired && match.blocks.length < 2) || refused) {
-    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 2 ? 'check two or more designs above.' : refused ? 'no result while the transform cannot take every outcome.' : 'too few replications matched across the designs.');
-    const msg = k === 1 ? 'One design is checked. Check at least one more to compare.' : k < 2 ? 'Check two or more designs above to compare them.' : 'Pairing needs at least two replications matched across every design.';
-    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(refused && k >= 2 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
+  if (k < 1 || (paired && match.blocks.length < 2) || refused) {
+    setSectionAvailable(id, null);
+    unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 1 ? 'check a design above.' : refused ? 'no result while the transform cannot take every outcome.' : 'too few replications matched across the designs.');
+    const msg = k < 1 ? 'Check one or more designs above: one for the benchmark comparison, two or more to compare them.' : 'Pairing needs at least two replications matched across every design.';
+    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(refused && k >= 1 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
     resultBase = null;
-    planCtx = { msg: refused ? 'Planning needs replication outcomes the transform can take.' : 'Check two or more designs above to plan replications.' };
+    planCtx = { msg: refused ? 'Planning needs replication outcomes the transform can take.' : 'Check a design above to plan replications.' };
     drawPlan();
     release();
     return;
@@ -857,7 +861,7 @@ function update() {
   unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (paired
     ? 'R = ' + plural(ns[0], 'block') + ' of ' + kw + ' matched across the ' + k + ' designs' + (leftOut ? ' (' + plural(leftOut, 'replication') + ' left out, with no partner in every design)' : '')
     : ns.every(n => n === ns[0])
-      ? 'R = ' + intl(ns[0]) + ' ' + kw + ' for each of the ' + k + ' designs'
+      ? 'R = ' + intl(ns[0]) + ' ' + kw + (k === 1 ? ' for the one design' : ' for each of the ' + k + ' designs')
       : 'R = ' + ns.map(intl).join(', ') + ' ' + kw + ' for ' + esc(short.join(', ')) + ', in that order');
 
   const responses = Array.from(new Set(list.map(d => d.response)));
@@ -887,15 +891,21 @@ function update() {
     const b = bodies[0];
     if (np) {
     const hl = groups.map(g => signedRank(g, { level: sm.perLevel }));
+    if (k === 1) {
+      b.appendChild(para('cmp-lead', 'One design: the Bonferroni correction divides α by k = 1, and so the interval is the ordinary ' + L + ' Wilcoxon signed-rank interval on the Hodges–Lehmann pseudo-median, the same as One System’s, read against the benchmark.'));
+      b.appendChild(para('cmp-banner', 'C = k = 1 comparison with the benchmark, at 1 − α/1 = ' + levelPct(sm.perLevel)));
+    } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s outcomes.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    }
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
     meansFigure(b, 'several-pseudo-medians', 'Pseudo-median of ' + respName(list), hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), groups, bm, k, short,
       i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)],
       'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval',
-      'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
+      k === 1 ? 'The design’s pseudo-median with its ' + L + ' Wilcoxon signed-rank interval.' + bm.caption()
+        : 'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
+          ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
@@ -905,15 +915,21 @@ function update() {
       rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
+    if (k === 1) {
+      b.appendChild(para('cmp-lead', 'One design: the Bonferroni correction divides α by k = 1, and so the interval is the ordinary ' + L + ' t interval on the mean, the same as One System’s, read against the benchmark.'));
+      b.appendChild(para('cmp-banner', 'C = k = 1 comparison with the benchmark, at 1 − α/1 = ' + levelPct(sm.perLevel)));
+    } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
+    }
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
     meansFigure(b, 'several-means', 'Mean of ' + respName(list), sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), groups, bm, k, short,
       i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)],
       'design mean with its ' + levelPct(sm.perLevel) + ' t interval',
-      'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
-      ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
+      k === 1 ? 'The design’s mean with its ' + L + ' t interval.' + bm.caption()
+        : 'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
+          ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
     const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
@@ -923,6 +939,40 @@ function update() {
       rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
       }
+  }
+
+  // One design: the benchmark comparison stands (Bonferroni with k = 1 is
+  // the plain interval, the same as One System's), and the sections that
+  // compare designs wait for a second one.
+  const needTwo = 'Needs two or more checked designs.';
+  setSectionAvailable(id, k === 1 ? { diffs: needTwo, anova: needTwo, subset: needTwo } : null);
+  if (k === 1) {
+    [1, 2, 3].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', 'Pairwise comparisons, the analysis of variance, and the screen for the best need two or more designs; check another design above.')));
+    const unitsOne = Array.from(new Set(list.map(d => d.unit || '')));
+    planCtx = { key: list.map(d => d.id).join('|') + tfKey(), k, ns, short, ctrlIdx, unit: unitsOne.length === 1 ? unitsOne[0] : '', single: true,
+                sds: sm.items.map(it => it.sd), widest: NaN, meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)), sigma: NaN, grandMean: NaN, welch: false, paired: false, sdDs: null };
+    registerTips(rootEl);
+    resultBase = {
+      title: 'Several Systems',
+      provenance: {
+        datasets: list[0].name,
+        'confidence level': lvl(level),
+        direction: dir === 'min' ? 'smaller is better' : 'bigger is better',
+        'comparisons adjusted for': 'one design, no correction',
+        procedure: np ? 'nonparametric (Wilcoxon)' : 't procedures',
+        replications: 'independent',
+        'designs drawn as': designPlot === 'box' ? 'box plots' : showPts ? 'intervals with each outcome' : 'intervals',
+        benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
+        ...(tfNow !== 'none' ? { transform: transformOf(tfNow).label.toLowerCase() + ' of each replication outcome' } : {})
+      },
+      tables,
+      summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
+      recipeIn: { list, groups: rawGroups, paired: false, match: null, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+                  bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps: NaN, transform: tfNow }
+    };
+    drawPlan();
+    release();
+    return;
   }
 
   // Bonferroni family of differences.
@@ -1350,7 +1400,8 @@ function drawPlan() {
     }
     mText = 'h = ' + num(c ? hwVal : NaN) + unit;
     fillPane(sec,
-      'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' mean intervals above (each at 1 − α/k by Bonferroni), with equal replications in each design',
+      c && c.single ? 'Replications needed for a half-width of ' + esc(mText) + ' on the interval above'
+        : 'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' mean intervals above (each at 1 − α/k by Bonferroni), with equal replications in each design',
       planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'for the design with s = ' + num(sMax) }), note);
     if (c) tables.push({ section: 'means', name: 'Replications for the means', headers: PLAN_HEADERS, rows: [planRow('by half-width', mText + ' on each of k = ' + k + ' means', inflate(hp.n), hp.hwAtN, R)] });
   }
@@ -1363,15 +1414,17 @@ function drawPlan() {
       ? 'each design against the control' + (c ? ', ' + c.short[c.ctrlIdx] : '')
       : 'all pairs';
     const hwDef = c ? round2(c.widest / 2) : NaN;
-    const hwVal = c ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
+    const hwVal = c && !c.single ? (plan.hwUser != null ? plan.hwUser : hwDef) : null;
     diffsH = hwVal;
     syncSpin(plan.hwSlot, sec.querySelector('.plan-hw-host'), 'sev-plan-hw', 'Target half-width', stepFor(hwDef), hwVal,
       v => { plan.hwUser = v; if (plan.key) state.setPick(id, 'target:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-hw-unit').textContent = unitNote;
     sec.querySelector('.plan-hw-def').textContent = 'The default' + (c ? ', ' + num(hwDef) + ',' : '') +
       ' is half the widest current half-width; halving a half-width takes about four times the replications.';
-    let hp = { n: null, hwAtN: NaN, pair: [] }, hwNote = esc(msg);
-    if (c && c.paired) {
+    let hp = { n: null, hwAtN: NaN, pair: [] }, hwNote = c && c.single ? 'Planning the differences needs two or more designs.' : esc(msg);
+    if (c && c.single) {
+      // One design has no differences to plan for.
+    } else if (c && c.paired) {
       // The widest paired interval belongs to the pair whose differences vary most.
       const worst = c.sdDs.reduce((a, b) => (b.sd > a.sd ? b : a));
       const pr = planReplications({ sd: worst.sd, level: 1 - (1 - level) / C, target: hwVal });
@@ -1393,7 +1446,7 @@ function drawPlan() {
       'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
         (c && c.paired ? ' paired ' : ' ') + 'pairwise differences above (each at 1 − α/C by Bonferroni; ' + esc(family) + ')' + equalNote,
       planCards('hw', { n: inflate(hp.n), tN: ranked(hp.n), at: hp.hwAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'widest: ' + widestPair }), hwNote);
-    if (c) tables.push({ section: 'diffs', name: 'Replications for the differences', headers: PLAN_HEADERS, rows: [planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', inflate(hp.n), hp.hwAtN, R)] });
+    if (c && !c.single) tables.push({ section: 'diffs', name: 'Replications for the differences', headers: PLAN_HEADERS, rows: [planRow('by half-width', hText + ' on ' + family + ' (C = ' + C + ')', inflate(hp.n), hp.hwAtN, R)] });
   }
 
   // The analysis of variance: the F test's power with one design shifted by δ.
@@ -1401,14 +1454,14 @@ function drawPlan() {
     const sec = cards.anova;
     const g = c ? Math.abs(c.grandMean) : NaN;
     // Under the log, a ratio of 1.1, which means the same in any units.
-    const dDef = !c ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma);
-    const delta = c ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
+    const dDef = !c || c.single ? NaN : tfNow === 'log' ? LOG_DEFAULT_SHIFT : g > 0 ? round2(0.1 * g) : round2(0.25 * c.sigma);
+    const delta = c && !c.single ? (plan.deltaUser != null ? plan.deltaUser : dDef) : null;
     planDelta = delta;
     syncSpin(plan.deltaSlot, sec.querySelector('.plan-delta-host'), 'sev-plan-delta', 'Shift to detect δ', stepFor(dDef), delta,
       v => { plan.deltaUser = v; if (plan.key) state.setPick(id, 'delta:' + plan.key, v); drawPlan(); });
     sec.querySelector('.plan-delta-unit').textContent = unitNote;
-    let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = esc(msg);
-    if (c) {
+    let pp = { n: null, powerAtN: NaN }, cur = NaN, pwNote = c && c.single ? 'Planning the F test needs two or more designs.' : esc(msg);
+    if (c && !c.single) {
       pp = planPowerAnova({ k: c.k, sigma: c.sigma, delta, alpha, power: plan.power, blocked: c.paired });
       cur = c.sigma > 0 ? powerAnova({ n: Rlo, k: c.k, sigma: c.sigma, delta, alpha, blocked: c.paired }) : NaN;
       pwNote = pp.n != null
@@ -1423,7 +1476,7 @@ function drawPlan() {
         ' power, by the ' + (c && c.paired ? 'blocked' : 'one-way') + ' ANOVA F test at α = ' + num(alpha) + equalNote,
       planCards('power', { n: inflate(pp.n), tN: ranked(pp.n), at: pp.powerAtN, nNote: 'per design', perDesign: true, R, rText, atNote: 'at ' + esc(dText), cur,
         curNote: same ? 'at R = ' + intl(Rlo) + ' per design' : 'at the smallest current R = ' + intl(Rlo) }), pwNote);
-    if (c) tables.push({ section: 'anova', name: 'Replications for the F test', headers: PLAN_HEADERS, rows: [planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), inflate(pp.n), pp.powerAtN, R)] });
+    if (c && !c.single) tables.push({ section: 'anova', name: 'Replications for the F test', headers: PLAN_HEADERS, rows: [planRow('by power', dText + ', ' + powerPct(plan.power) + ' power, α = ' + num(alpha), inflate(pp.n), pp.powerAtN, R)] });
   }
 
   if (!resultBase) { state.setResult('several', null); return; }
@@ -1455,7 +1508,7 @@ export function render(root) {
   rootEl = root;
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Compare two or more designs at once on their replication outcomes: each mean with an interval that holds jointly with the others, every difference with a Bonferroni-adjusted interval, ' +
+    '<p class="lede">Compare several designs at once on their replication outcomes: each mean with an interval that holds jointly with the others (one design alone is read against a benchmark), every difference with a Bonferroni-adjusted interval, ' +
     'one-way analysis of variance with a post-hoc rule, and a screen for the designs that could be the best. Every procedure here takes the designs as run independently unless the switch below says the replications are paired across designs (common random numbers, or a shared subject, batch, or day). It opens paired when every checked design comes from one file whose replication ids are marked as blocks on the Import page. Paired, the differences are paired t intervals, the analysis of variance removes the replication effect as a block, and Friedman’s test replaces Kruskal–Wallis.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-grp-lbl">Designs to compare</div>' +

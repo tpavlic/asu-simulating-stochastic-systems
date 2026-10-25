@@ -1286,7 +1286,11 @@ better.
      carries every choice that produced the numbers. Every pill but Import and Storage is grayed
      and inert until the loaded datasets meet that page's requirement (`GATES` in `js/main.js`):
      any dataset for ②, ③, and ⑦; two datasets with at least two replication outcomes each
-     for ④ and ⑤; a tally or time-persistent dataset for ⑥. The tooltip on a gray item says what
+     for ④, one such dataset for ⑤ (one checked design gets the benchmark comparison alone,
+     Bonferroni with k = 1 being the plain interval, and the pairwise, ANOVA, and screen sections
+     are marked unavailable through `setSectionAvailable` until a second design is checked; the
+     recipe then carries `several.single` and the scripts skip those sections and the
+     differences' plan); a tally or time-persistent dataset for ⑥. The tooltip on a gray item says what
      is missing. Page ids are permanent hash slugs (`import, explore, one, two, several,
      steady, report, storage, references`; the retired `variance` redirects to `one`); ③'s slug is `one`, and a sub-section
      is `page/section` (`several/means|diffs|anova|subset`, `explore/summary|dist|run|reps|

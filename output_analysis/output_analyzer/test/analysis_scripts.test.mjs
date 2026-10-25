@@ -1096,6 +1096,17 @@ function sevRecipe(list, over = {}) {
   return severalRecipe(Object.assign({}, o, { list, groups, match, title: 'Several Systems', provenance: sevProv(list, o, match) }));
 }
 
+test('severalRecipe with one design keeps the benchmark comparison and the means plan, and nothing that compares designs', () => {
+  const r = sevRecipe([FOUR[0]], { bench: 2.4 });
+  assert.equal(r.several.single, true);
+  assert.equal(r.expect.k, 1);
+  assert.equal(r.expect['per-interval level'], 0.95, 'Bonferroni with k = 1 is the plain interval');
+  for (const k of ['design 1 mean', 'design 1 lower', 'design 1 upper', 'design 1 vs benchmark', 'plan means n']) assert.ok(k in r.expect, k);
+  for (const k of ['C', 'anova F', 'plan diffs n', 'screen t', 'kruskal H']) assert.ok(!(k in r.expect), k + ' absent');
+  assert.equal(r.several.anova, null); assert.equal(r.several.subset, null);
+  assert.equal(sevRecipe(FOUR, {}).several.single, false);
+});
+
 test('severalRecipe draws the designs as the view showed them: intervals, with each outcome, or as box plots', () => {
   const plain = sevRecipe(FOUR, { view: { section: 'means' } });
   assert.equal(plain.fig.box, false); assert.equal(plain.fig.points, false);
@@ -2744,6 +2755,8 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],
     ['Several Systems, means with a benchmark', sevRecipe(FOUR, { bench: 2.4, view: { section: 'means' } }), 1],
     ['Several Systems, means as box plots with a benchmark', sevRecipe(FOUR, { bench: 2.4, view: { section: 'means', box: true } }), 1],
+    ['Several Systems, one design against a benchmark', sevRecipe([FOUR[0]], { bench: 2.4, view: { section: 'means' } }), 1, true],
+    ['Several Systems, one design, rank procedure, each outcome', sevRecipe([FOUR[1]], { proc: 'np', view: { section: 'means', points: true } }), 1],
     ['Several Systems, means with each outcome', sevRecipe(FOUR, { view: { section: 'means', points: true } }), 1, true],
     ['Several Systems, pseudo-medians as box plots', sevRecipe(FOUR, { proc: 'np', view: { section: 'means', box: true } }), 1],
     ['Several Systems, pairwise differences', sevRecipe(FOUR, { view: { section: 'diffs' } }), 1, true],

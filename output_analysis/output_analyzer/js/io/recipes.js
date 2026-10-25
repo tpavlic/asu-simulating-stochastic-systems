@@ -527,6 +527,9 @@ export function severalRecipe(o) {
   r.csv = list.map((d, i) => csvEntry(d, 'replications', 'group ' + (i + 1)));
   const e = r.expect;
   e.k = k;
+  // One design: the benchmark comparison stands (Bonferroni with k = 1 is the
+  // plain interval), and nothing that compares designs is computed.
+  const single = k === 1;
 
   // Means (or pseudo-medians) with simultaneous intervals, each at 1 - alpha/k.
   const sm = simultaneousMeans(g, level);
@@ -552,7 +555,9 @@ export function severalRecipe(o) {
   }
 
   // The Bonferroni family of differences (or of rank shifts), each at 1 - alpha/C.
-  const fam = bonferroniFamily(g, { mode: diffMode, control: ctrlIdx, level, paired });
+  let fam = null;
+  if (!single) {
+  fam = bonferroniFamily(g, { mode: diffMode, control: ctrlIdx, level, paired });
   e.C = fam.C;
   e['per-comparison level'] = fam.perLevel;
   if (np) {
@@ -577,6 +582,7 @@ export function severalRecipe(o) {
       }
     }
   }
+  }
 
   // The plans: for the means, the design with the largest s at 1 - alpha/k;
   // for the differences, every Welch interval of the family at 1 - alpha/C,
@@ -586,8 +592,10 @@ export function severalRecipe(o) {
   const sds = sm.items.map(it => it.sd);
   const hpM = planReplications({ sd: Math.max(...sds), level: 1 - alpha / k, target: plan.meansH });
   Object.assign(e, { 'plan means half-width target': plan.meansH, 'plan means n': hpM.n == null ? NaN : hpM.n, 'plan means half-width at n': hpM.hwAtN });
-  let hpD;
-  if (paired) {
+  let hpD = null;
+  if (single) {
+    // One design has no differences to plan for.
+  } else if (paired) {
     // Each pair's sd of differences is its standard error times sqrt(n), n = df + 1, as the
     // page reads it back from the pair's interval. The scripts take paired_t's sdD directly,
     // which agrees up to rounding; their comment on the widest pair says how they break a
@@ -599,11 +607,11 @@ export function severalRecipe(o) {
   } else {
     hpD = planHalfWidthBonferroni({ sds, level, mode: diffMode, control: ctrlIdx, target: plan.diffsH });
   }
-  Object.assign(e, { 'plan diffs half-width target': plan.diffsH, 'plan diffs n': hpD.n == null ? NaN : hpD.n, 'plan diffs half-width at n': hpD.hwAtN,
+  if (!single) Object.assign(e, { 'plan diffs half-width target': plan.diffsH, 'plan diffs n': hpD.n == null ? NaN : hpD.n, 'plan diffs half-width at n': hpD.hwAtN,
     'plan diffs widest pair': hpD.n == null ? 'none' : pairLabel(hpD.pair[0], hpD.pair[1]) });
-  if (np) { e['plan means n (rank)'] = inflate(hpM.n); e['plan diffs n (rank)'] = inflate(hpD.n); }
+  if (np) { e['plan means n (rank)'] = inflate(hpM.n); if (!single) e['plan diffs n (rank)'] = inflate(hpD.n); }
 
-  r.several = { k, np, paired, diffMode, ctrlIdx, bench, dir, eps, center: np ? 'back-transformed pseudo-median' : transformOf(tf).center,
+  r.several = { k, single, np, paired, diffMode, ctrlIdx, bench, dir, eps, center: np ? 'back-transformed pseudo-median' : transformOf(tf).center,
     plan: { meansH: plan.meansH, diffsH: plan.diffsH, delta: plan.delta, power: plan.power }, anova: null, rank: null, subset: null };
   // Every choice a reader may edit is a setting; the script forms the pairs it
   // compares from control and family at run time.
@@ -628,9 +636,11 @@ export function severalRecipe(o) {
       'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
       'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
-  severalAnova(r, o, g);
-  severalRank(r, o, g);
-  severalSubset(r, o, g);
+  if (!single) {
+    severalAnova(r, o, g);
+    severalRank(r, o, g);
+    severalSubset(r, o, g);
+  }
   return r;
 }
 
