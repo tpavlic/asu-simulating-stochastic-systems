@@ -139,6 +139,93 @@ export function parseArenaDat(bytes) {
   };
 }
 
+// ── The Output Analyzer's text export ────────────────────────────────────
+// File > Data File > Export in the Output Analyzer writes the same records as
+// text. The header is four lines: the type code, the run date, and a flag;
+// three counts (the first is the number of replications written); the
+// project; and the statistic. Then come "time value" pairs in exponential
+// form, one a line, with the binary file's terminators written the same way:
+// a pair whose time is negative ends a replication under "All", and under
+// "Lumped" every record is written as one replication closed by (−1, −1).
+// A delimited text file is told apart by its content, never by its name.
+
+const TEXT_HEAD_RE = /^\s*(\d{3})\s+(\S+)\s+([A-Za-z])\s*$/;
+const TEXT_COUNTS_RE = /^\s*\d+\s+\d+\s+\d+\s*$/;
+const TEXT_PAIR_RE = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*$/;
+
+/** The text's lines, with a trailing empty line (from the final line break) dropped. */
+function textLines(text) {
+  const lines = String(text).split(/\r\n|\n|\r/);
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+  return lines;
+}
+
+/**
+ * Whether the text is the Output Analyzer's export: a first line of a known
+ * type code, a date, and a flag; a line of three counts; two text lines; and
+ * then at least one numeric pair.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isArenaText(text) {
+  if (typeof text !== 'string' || text.length < 20) return false;
+  const lines = textLines(text.slice(0, 4096));
+  if (lines.length < 5) return false;
+  const h = TEXT_HEAD_RE.exec(lines[0]);
+  if (!h || !TYPE_CODES[Number(h[1])]) return false;
+  if (!TEXT_COUNTS_RE.test(lines[1])) return false;
+  return TEXT_PAIR_RE.test(lines[4]);
+}
+
+/**
+ * Parse the Output Analyzer's text export into the same shape parseArenaDat
+ * gives, with `text: true` and no analyst (the export does not carry one).
+ * The terminators are read as in the binary file; a line that is neither a
+ * pair nor blank stops the reading, and the records before it are kept as an
+ * open replication.
+ * @param {string} text
+ * @returns {ArenaDat & { text: true }}
+ */
+export function parseArenaText(text) {
+  const lines = textLines(text);
+  const h = TEXT_HEAD_RE.exec(lines[0] || '');
+  if (!h) throw new Error('This is not the Output Analyzer’s text export: the first line does not hold a type code, a date, and a flag.');
+  const code = Number(h[1]);
+  const reps = [];
+  let t = [], v = [];
+  let closed = false;
+  for (let i = 4; i < lines.length; i++) {
+    const ln = lines[i];
+    if (ln.trim() === '') continue;
+    const m = TEXT_PAIR_RE.exec(ln);
+    if (!m) break;
+    const a = Number(m[1]), b = Number(m[2]);
+    if (a < 0) {
+      reps.push({ id: reps.length + 1, t, v });
+      t = []; v = [];
+      closed = b === -1;
+    } else {
+      t.push(a); v.push(b);
+      closed = false;
+    }
+  }
+  if (t.length) reps.push({ id: reps.length + 1, t, v });
+  return {
+    typeCode: code,
+    typeName: TYPE_CODES[code] || 'unknown',
+    project: (lines[2] || '').trim(),
+    analyst: '',
+    dataFor: (lines[3] || '').trim(),
+    runDate: h[2],
+    headerLines: lines.slice(0, 4),
+    reps,
+    closed,
+    padding: 0,
+    strayBytes: 0,
+    text: true
+  };
+}
+
 function headerNote(dat) {
   const from = [];
   if (dat.project) from.push('project “' + dat.project + '”');
@@ -235,12 +322,21 @@ export function arenaDataset(dat, opts = {}) {
     kind = 'tally';
     reps = nonEmpty.map(r => ({ id: r.id, t: r.t, v: r.v }));
     notes.push('Written by the Output Analyzer and read as observations: batch means from Batch/Truncate, each at the time of its batch’s middle, or a moving average from Graph, each at the time it forecasts.');
+  } else if (dat.text && nonEmpty.length === 1 && nonEmpty[0].v.length > 1) {
+    // The Output Analyzer's "Lumped" export writes every replication's value
+    // into one replication, each record's time being the replication number.
+    kind = 'reps';
+    const one = nonEmpty[0];
+    const numbered = one.t.every((x, i) => Number.isInteger(x) && x > 0 && (i === 0 || x > one.t[i - 1]));
+    reps = one.v.map((x, i) => ({ id: numbered ? one.t[i] : i + 1, t: null, v: [x] }));
+    notes.push('One value per replication from the Output Analyzer’s text export, written lumped: its ' + one.v.length + ' records were read as ' + one.v.length + ' replications' +
+      (numbered ? ', each numbered by its record’s time' : '') + '.');
   } else {
     kind = 'reps';
     reps = nonEmpty.map(r => ({ id: r.id, t: null, v: [r.v[0]] }));
     const extra = nonEmpty.filter(r => r.v.length > 1).length;
     if (extra) notes.push(extra + (extra === 1 ? ' replication carries' : ' replications carry') + ' more than one output value; the first was kept.');
-    notes.push('One value per replication from an Arena output file.');
+    notes.push('One value per replication from an Arena output file' + (dat.text ? '’s text export' : '') + '.');
   }
   const h = headerNote(dat); if (h) notes.push(h);
 

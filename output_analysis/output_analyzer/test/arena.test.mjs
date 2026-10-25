@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../js/io/arena.js';
+import { isArenaDat, parseArenaDat, isArenaText, parseArenaText, arenaDataset, arenaFinalCounts } from '../js/io/arena.js';
 import { repEstimates, datasetSummary } from '../js/data/model.js';
 import { batchMeans } from '../js/stats/steadystate.js';
 
@@ -259,4 +259,69 @@ test('an unknown type code is refused', () => {
   d.typeCode = 202;
   assert.throws(() => arenaDataset(d), /type code 202/);
   assert.throws(() => arenaFinalCounts(parseArenaDat(read('equal20/tally2.dat'))), /only from a counter/);
+});
+
+// ── The Output Analyzer's own text export ──────────────────────────────
+// File > Data File > Export writes the same records as text: a header of
+// four lines (the type code, the run date, and a flag; three counts; the
+// project; the statistic), then "time value" pairs in exponential form, a
+// pair with a negative time ending each replication under "All" and one
+// pair (-1, -1) ending the whole file under "Lumped". The fixtures in
+// arena/samples/text/ follow the files read off Arena 16.20's analyzer.
+
+const readText = f => fs.readFileSync(path.join(DIR, f), 'latin1');
+
+test('isArenaText: the text export passes, delimited text does not', () => {
+  assert.equal(isArenaText(readText('text/output1_lumped.txt')), true);
+  assert.equal(isArenaText(readText('text/tally2_all.txt')), true);
+  // A spreadsheet export with a .txt name is delimited text, not this format.
+  assert.equal(isArenaText('replication,avg_wait\n1,2.62\n2,3.27\n'), false);
+  assert.equal(isArenaText('1\t2.62\n2\t3.27\n'), false);
+  assert.equal(isArenaText('204 10/05/2026 Y\n1 24 20\nproject\nstat\nnot numbers\n'), false);
+  assert.equal(isArenaText('999 10/05/2026 Y\n1 24 20\nproject\nstat\n1 2\n'), false);
+  assert.equal(isArenaText(''), false);
+  // A file with the four header lines and no records is the format with nothing in it.
+  assert.equal(isArenaText('   204   10/05/2026   Y\r\n     1       24       20\r\nproject\r\nstat\r\n'), false);
+});
+
+test('parseArenaText, lumped output: one record per replication, read as replication values', () => {
+  const d = parseArenaText(readText('text/output1_lumped.txt'));
+  assert.equal(d.typeCode, 204);
+  assert.equal(d.typeName, 'output');
+  assert.equal(d.project, 'Unnamed Project');
+  assert.equal(d.dataFor, 'Output 1');
+  assert.equal(d.runDate, '10/05/2026');
+  assert.equal(d.closed, true);
+  assert.equal(d.text, true);
+  assert.deepEqual(d.reps.map(r => r.t), [[1, 2, 3]]);
+  assert.deepEqual(d.reps.map(r => r.v), [[10.5, 20.5, 30.5]]);
+  const ds = arenaDataset(d, { file: 'output1_lumped.txt' });
+  assert.equal(ds.kind, 'reps');
+  assert.equal(ds.source.format, 'arena');
+  assert.deepEqual(vec(repEstimates(ds)), [10.5, 20.5, 30.5]);
+  assert.deepEqual(ds.reps.map(r => r.id), [1, 2, 3]);
+  assert.ok(ds.source.notes.some(n => /lumped/i.test(n)), 'a note says the file was lumped');
+});
+
+test('parseArenaText, all replications: the same records as the binary tally', () => {
+  const d = parseArenaText(readText('text/tally2_all.txt'));
+  assert.equal(d.typeCode, 203);
+  assert.equal(d.closed, true);
+  assert.equal(d.reps.length, 3);
+  for (const r of d.reps) {
+    assert.deepEqual(r.t, seq(1.5, 2, 4));
+    assert.deepEqual(r.v, seq(1.5, 2, 4));
+  }
+  const ds = arenaDataset(d);
+  assert.equal(ds.kind, 'tally');
+  assert.deepEqual(vec(repEstimates(ds)), [4.5, 4.5, 4.5]);
+});
+
+test('parseArenaText: a file cut off before its terminator keeps the open replication', () => {
+  const whole = readText('text/tally2_all.txt');
+  const cut = whole.slice(0, whole.lastIndexOf('-3.00000000e+000'));
+  const d = parseArenaText(cut);
+  assert.equal(d.closed, false);
+  assert.equal(d.reps.length, 3);
+  assert.deepEqual(d.reps[2].v, seq(1.5, 2, 4));
 });

@@ -7,7 +7,7 @@
 
 import * as state from '../state.js';
 import { sniff, buildDatasets, newLoadId } from '../io/parse.js';
-import { isArenaDat, parseArenaDat, arenaDataset, arenaFinalCounts } from '../io/arena.js';
+import { isArenaDat, parseArenaDat, isArenaText, parseArenaText, arenaDataset, arenaFinalCounts } from '../io/arena.js';
 import { sameData, pairAverages } from '../data/model.js';
 import { EXAMPLES } from '../data/examples.js';
 import { details, issueList, notice, KIND_LABEL } from '../ui/widgets.js';
@@ -93,7 +93,7 @@ export function render(root) {
       '<li><span class="kind-badge">' + KIND_LABEL.time + '</span> a state recorded each time it changes, such as the number in queue, each value holding until the next record; a replication’s outcome is the time-weighted mean.</li>' +
       '<li><span class="kind-badge">' + KIND_LABEL.reps + '</span> one summary per run, such as each day’s average wait, which is that replication’s outcome.</li>' +
     '</ul>' +
-    '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, and the .flt and .fst files that analyzer writes itself, name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
+    '<p class="lede">A file or pasted text can hold any of the three, in the formats listed under <a href="#import" class="im-jump">Text formats</a> below, and opens a dialog where you set the kind and each column’s role before anything loads. The binary .dat files Arena writes for its Output Analyzer, the .flt and .fst files that analyzer writes itself, and the text files its Export command writes all name their kind in their header, and so they load without a dialog. Every row the reader cannot use is listed with its line number and the reason, and nothing is dropped silently.</p>' +
     '<div class="sec">' +
       '<div class="sec-hd">Loaded datasets</div>' +
       '<p class="exp-note">Every loaded dataset, including one read from an Arena file, can be saved as CSV: press Export on its row, or use Export all to save every dataset’s observations in one file and their replication outcomes in another. That observations file loads back in as delimited columns, one dataset per name, when its datasets are of one kind, all have or all lack time stamps, and, for time-persistent data, share one end time, which the file’s # lines give. A replication with no records has no row in the file and does not come back.</p>' +
@@ -124,7 +124,7 @@ export function render(root) {
         '<div class="im-drop" id="im-drop">' +
           '<div class="im-drop-lbl">Drop one or more files here</div>' +
           '<label class="btn-run2 im-file">or choose a file<input type="file" id="im-file" multiple accept=".csv,.txt,.tsv,.dat,.flt,.fst,.prn,text/plain,text/csv"></label>' +
-          '<div class="ctrl-note im-drop-note">A plain-text file (.csv, .tsv, .txt, or .prn) with its columns separated by commas, tabs, semicolons, or spaces and laid out as under Text formats above; save a spreadsheet as CSV first. Also supported are Arena Output Analyzer .dat, .flt, and .fst files.</div>' +
+          '<div class="ctrl-note im-drop-note">A plain-text file (.csv, .tsv, .txt, or .prn) with its columns separated by commas, tabs, semicolons, or spaces and laid out as under Text formats above; save a spreadsheet as CSV first. Also supported are Arena Output Analyzer .dat, .flt, and .fst files, and the text that analyzer’s File, Data File, Export command writes (All or Lumped), which is told apart by its content.</div>' +
         '</div>' +
         '<label class="ctrl-chk im-arena-opt"><input type="checkbox" id="im-arena-dlg"> ' +
           '<span class="tip" tabindex="0" data-tip="An Arena file names its statistic and its kind, and so it loads without a dialog. Tick this to open each one in a short dialog first, where its replications can be loaded as antithetic pairs.">Open Arena files in a dialog, for loading antithetic pairs</span></label>' +
@@ -200,7 +200,10 @@ export function render(root) {
     const s = els.paste.value;
     if (!s.trim()) { els.pasteNote.textContent = 'The box is empty; paste some data first.'; return; }
     els.pasteNote.textContent = '';
-    enqueue('pasted data', s);
+    if (isArenaText(s)) {
+      if (els.arenaDlg.checked) enqueueArena('pasted data', { text: s });
+      else loadArena('pasted data', { text: s });
+    } else enqueue('pasted data', s);
   });
 
   // One group per page the examples are for, in the pages' own order, so a
@@ -245,7 +248,9 @@ export function onShow() {
 
 // Every file is read as bytes first because an Arena output file is binary
 // after its header and is told apart by its first bytes; anything else is
-// decoded as UTF-8 text and queued for the mapping dialog.
+// decoded as UTF-8 text, which is the Output Analyzer's own text export when
+// its content says so (never its name: a .txt may well be delimited text)
+// and is otherwise queued for the mapping dialog.
 function readFiles(fileList) {
   const files = Array.from(fileList);
   Promise.all(files.map(f => f.arrayBuffer().then(buf => ({ name: f.name, bytes: new Uint8Array(buf) }), err => ({ name: f.name, error: err }))))
@@ -255,10 +260,14 @@ function readFiles(fileList) {
           lastImport = { error: 'The file ' + it.name + ' could not be read: ' + (it.error.message || it.error) + '.' };
           renderStatus();
         } else if (isArenaDat(it.bytes)) {
-          if (els.arenaDlg.checked) enqueueArena(it.name, it.bytes);
-          else loadArena(it.name, it.bytes);
+          if (els.arenaDlg.checked) enqueueArena(it.name, { bytes: it.bytes });
+          else loadArena(it.name, { bytes: it.bytes });
         } else {
-          enqueue(it.name, new TextDecoder().decode(it.bytes));
+          const text = new TextDecoder().decode(it.bytes);
+          if (isArenaText(text)) {
+            if (els.arenaDlg.checked) enqueueArena(it.name, { text });
+            else loadArena(it.name, { text });
+          } else enqueue(it.name, text);
         }
       }
     });
@@ -268,16 +277,17 @@ function readFiles(fileList) {
 // says whether the records are observations, a state over time, or one
 // value per replication. A counter loads twice, as the running count the
 // Output Analyzer reads and as the final count per replication.
-function arenaList(fileName, bytes) {
-  const dat = parseArenaDat(bytes);
+// `src` is the file's bytes ({ bytes }) or, for the analyzer's text export, its text ({ text }).
+function arenaList(fileName, src) {
+  const dat = src.text != null ? parseArenaText(src.text) : parseArenaDat(src.bytes);
   const list = [arenaDataset(dat, { file: fileName })];
   if (dat.typeCode === 206) list.push(arenaFinalCounts(dat, { file: fileName }));
   return list;
 }
 
-function loadArena(fileName, bytes) {
+function loadArena(fileName, src) {
   try {
-    const list = arenaList(fileName, bytes);
+    const list = arenaList(fileName, src);
     const { added, skipped } = addNew(list);
     lastImport = { what: fileName, datasets: added, skipped, issues: [], notes: collectNotes(added) };
   } catch (err) {
@@ -288,8 +298,8 @@ function loadArena(fileName, bytes) {
 
 // Queues an Arena file for its short dialog, which offers only the
 // antithetic pairs, and shows it when nothing else is waiting.
-function enqueueArena(fileName, bytes) {
-  queue.push({ arena: true, fileName, bytes });
+function enqueueArena(fileName, src) {
+  queue.push({ arena: true, fileName, src });
   if (!pending) nextPending();
   else updateWaiting();
 }
@@ -312,7 +322,7 @@ function nextPending() {
   if (!it) { pending = null; renderDialog(); return; }
   if (it.arena) {
     let list;
-    try { list = arenaList(it.fileName, it.bytes); } catch (err) {
+    try { list = arenaList(it.fileName, it.src); } catch (err) {
       lastImport = { error: 'The file ' + it.fileName + ' could not be loaded: ' + err.message };
       renderStatus();
       nextPending();
