@@ -9696,9 +9696,17 @@ function renderChi() {
           ' observations that leaves too few groups. More bins will not help; more data would.'
         : 'Drag the slider to the right.') + '</div>';
   } else {
+    /* A rejected pmf leaves the reader with nothing to use unless the page
+       names the fallback, and a ranking's leader is the fit most often
+       kept after its test rejects it. */
+    var hasEmpirical = ST.rows.some(function (row) { return row.key === 'discreteEmpirical' && row.ok; });
     var verdict = chi.p < 0.05
       ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(distLower(r.dist)) +
-        ' on this binning.'
+        ' on this binning.' +
+        (r.dist.kind === 'discrete' && hasEmpirical
+          ? ' If no standard pmf passes its tests, use the <em>Empirical (discrete)</em> row ' +
+            'of the ranking instead, which gives each observed value its observed proportion.'
+          : '')
       : 'At the 5% level this <strong>does not reject</strong> the fitted ' +
         esc(distLower(r.dist)) + ' on this binning.';
     var bres = (ST.gof && ST.gofFor === fitSignature()) ? ST.gof.res : null;
