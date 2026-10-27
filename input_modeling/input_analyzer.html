@@ -8066,14 +8066,23 @@ function makeLoader(cfg) {
        of whole numbers is almost always an identifier, and fitting a
        distribution to order numbers is a confusing thing to show someone
        first. The picker still lists it, so the guess is never final.
-       On the arrival tab this heuristic is skipped: an increasing column
-       of times is exactly what that tab wants. */
+       On the arrival tab this heuristic is narrowed: an increasing column
+       of times is exactly what that tab wants, and so only a counter
+       (1, 2, 3, ... in steps of exactly 1, such as the index or arrival
+       column of this page's own downloads) is passed over. */
     var pick = -1, firstNumeric = -1;
     for (var j = 0; j < t.cols.length; j++) {
       var v = cfg.extract(t.cols[j]).values;
       if (v.length < 2) continue;
       if (firstNumeric < 0) firstNumeric = j;
-      if (cfg.allowMonotone) { pick = j; break; }
+      if (cfg.allowMonotone) {
+        var counter = true;
+        for (var c = 0; c < v.length; c++) {
+          if (!Number.isInteger(v[c]) || (c > 0 && v[c] - v[c - 1] !== 1)) { counter = false; break; }
+        }
+        if (!counter) { pick = j; break; }
+        continue;
+      }
       var looksLikeId = true;
       for (var q = 0; q < v.length; q++) {
         if (!Number.isInteger(v[q]) || (q > 0 && v[q] <= v[q - 1])) { looksLikeId = false; break; }
@@ -8123,7 +8132,12 @@ function makeLoader(cfg) {
   api.readFile = function (file) {
     if (!file) return;
     var fr = new FileReader();
-    fr.onload = function () { api.loadText(String(fr.result), 'uploaded file "' + file.name + '"'); };
+    /* loadText keeps the unit when given a label, which is how a sample
+       keeps its description, and so a file clears the one left behind. */
+    fr.onload = function () {
+      cfg.state().unit = null;
+      api.loadText(String(fr.result), 'uploaded file "' + file.name + '"');
+    };
     fr.onerror = function () { api.say('Could not read that file.', true); };
     fr.readAsText(file);
   };
@@ -11799,6 +11813,9 @@ function scaleTimes() {
 function unitWord() { return A_TUNITS[AST.tunit].one; }
 function unitAmount(v) { var u = A_TUNITS[AST.tunit]; return v === 1 ? u.one : u.many; }
 function unitLong() { return A_TUNITS[AST.tunit].long; }
+/* An axis title with the time unit in parentheses, left bare when the unit
+   is not stated. */
+function withUnit(label) { return AST.tunit === 'other' ? label : label + ' (' + A_TUNITS[AST.tunit].many + ')'; }
 /* The time unit converts from the data's own unit, and so it is grayed
    at "not stated" until there is one, and "not stated" is grayed after. */
 function syncUnitControl() {
@@ -11870,7 +11887,7 @@ function drawCumulative() {
   var step = [[t0, 0]];
   for (i = skip; i < n; i++) { step.push([t[i], i - skip]); step.push([t[i], i - skip + 1]); }
   P.line(step, 'var(--obs)', 1.8);
-  P.labels(AST.clock ? 'Clock time' : 'Time', 'Arrivals so far');
+  P.labels(AST.clock ? 'Clock time' : withUnit('Time'), 'Arrivals so far');
   P.legend(P.mL + 12, P.mT + 14, [
     { mark: 'line', color: 'var(--obs)', width: 1.8, label: 'your arrivals' },
     { mark: 'line', color: 'var(--alt)', width: 1.8, dash: '6 4', label: 'constant rate' }
@@ -11923,7 +11940,7 @@ function drawRate() {
     P.line(curve, 'var(--fit)', 2.2);
     legend.push({ mark: 'line', color: 'var(--fit)', label: 'true λ(t) that generated these' });
   }
-  P.labels(AST.clock ? 'Clock time' : 'Time', 'Arrivals per ' + unitWord());
+  P.labels(AST.clock ? 'Clock time' : withUnit('Time'), 'Arrivals per ' + unitWord());
   P.legend(P.mL + 10, P.mT + 14, legend);
   $('rate-host').innerHTML = P.svg('Estimated arrival rate in each interval',
     'Step plot of the estimated arrival rate in each interval, with the single-rate line marked') +
@@ -12176,7 +12193,7 @@ function drawGapsHist() {
   P.line(curve, 'var(--fit)', 2.2);
   P.rightTicks(yt, function (t) { return fmt(t / scale, 3); });
   P.rightLabel('Probability density');
-  P.labels('Gap between arrivals', 'Frequency (count)');
+  P.labels(withUnit('Gap between arrivals'), 'Frequency (count)');
   var lc = legendCorner(P, bins.counts, yhi, 176);
   P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your ' + s.n + ' gaps' },
@@ -12224,7 +12241,7 @@ function drawGapsCDF() {
   P.frame().axes(xt.ticks, yt.ticks, xt.fmt, yt.fmt);
   P.line(step, 'var(--obs)', 1.6);
   P.line(curve, 'var(--fit)', 2.2);
-  P.labels('Gap between arrivals', 'Cumulative probability');
+  P.labels(withUnit('Gap between arrivals'), 'Cumulative probability');
   /* Bottom right, not top left: a CDF runs from the bottom left to the top
      right, and for the right-skewed gaps this plot always shows it rises
      steeply and levels off, filling the top left exactly where a legend
@@ -12309,7 +12326,7 @@ function drawCounts() {
   P.dots(pts, 'var(--fit)', 3);
   P.rightTicks(yt, function (t) { return fmt(t / k, 3); });
   P.rightLabel('Proportion of intervals');
-  P.labels('Arrivals in an interval', 'Number of intervals');
+  P.labels('Arrivals in an interval of ' + IA.num(prof.width, 4) + ' ' + unitAmount(prof.width), 'Number of intervals');
   var lc = legendCorner(P, obs, yhi, 172);
   P.legend(lc.x, lc.y, [
     { mark: 'box', color: 'var(--obs-fill)', stroke: 'var(--obs)', label: 'your ' + k + ' intervals' },
