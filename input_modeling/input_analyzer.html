@@ -4556,16 +4556,21 @@ function sturges(n) { return Math.max(3, Math.min(40, Math.ceil(Math.log2(n) + 1
    extended down to the model's own lower limit and the last bin up to
    infinity, so the probabilities sum to exactly 1 and the chi-square test
    is not quietly missing the tails. */
+/* Bins are half-open, [a, b). For a continuous model that distinction
+   carries no probability and F(b) - F(a) is right either way. For a
+   discrete one it carries a whole atom, so the probability wanted is
+   P(X < b) - P(X < a), obtained by evaluating the step CDF just below
+   each edge. */
+function cdfBelow(fit) {
+  var F = fitCdf(fit);
+  return fit.dist.kind === 'discrete' ? function (v) { return F(v - 1e-9); } : F;
+}
+
+/* The first bin runs from minus infinity and the last to plus infinity,
+   so that the probabilities cover every outcome the model allows and sum
+   to 1, not only the stretch of it the sample happened to reach. */
 function binProbabilities(fit, edges) {
-  var F = fitCdf(fit), k = edges.length - 1, p = new Array(k), i;
-  /* Bins are half-open, [a, b). For a continuous model that distinction
-     carries no probability and F(b) - F(a) is right either way. For a
-     discrete one it carries a whole atom, so the probability wanted is
-     P(X < b) - P(X < a), obtained by evaluating the step CDF just below
-     each edge. */
-  var below = fit.dist.kind === 'discrete'
-    ? function (v) { return F(v - 1e-9); }
-    : F;
+  var below = cdfBelow(fit), k = edges.length - 1, p = new Array(k), i;
   for (i = 0; i < k; i++) {
     var lo = i === 0 ? 0 : below(edges[i]);
     var hi = i === k - 1 ? 1 : below(edges[i + 1]);
@@ -4643,7 +4648,11 @@ function chiSquareGOF(x, fit, bins) {
   }
   var df = groups.length - 1 - regularCount(fit);
   var pv = df >= 1 && Number.isFinite(stat) ? gammaQ(df / 2, stat / 2) : NaN;
-  return { stat: stat, df: df, p: pv, groups: groups,
+  /* Whether the end groups take in a tail beyond the histogram's range,
+     which their labels then have to say. */
+  var below = cdfBelow(fit);
+  var openLo = below(bins.edges[0]) > 1e-12, openHi = 1 - below(bins.edges[bins.k]) > 1e-12;
+  return { stat: stat, df: df, p: pv, groups: groups, openLo: openLo, openHi: openHi,
            nGroups: groups.length, nBins: bins.k, kChi: regularCount(fit),
            pooled: bins.k - groups.length, short: short_,
            minExpected: CHI_MIN_EXPECTED, edges: bins.edges };
@@ -9795,11 +9804,20 @@ function renderChi() {
     var g = chi.groups[i];
     var contrib = g.exp > 0 ? (g.obs - g.exp) * (g.obs - g.exp) / g.exp : (g.obs > 0 ? Infinity : 0);
     var span = g.to - g.from + 1, vals = ST.bins.perValue ? ST.bins.values : null;
+    /* An end group that takes in the model's tail beyond the data is named
+       as open, since its expected count includes every outcome out there. */
+    var lo = i === 0 && chi.openLo, hi = i === chi.groups.length - 1 && chi.openHi;
     /* With one bin per outcome, a group is named by its outcomes. */
-    t += '<tr><td class="mono" style="font-size:.75rem">' +
-         (vals ? valueText(vals[g.from]) + (span > 1 ? '–' + valueText(vals[g.to]) : '')
-               : fmt(chi.edges[g.from], 3) + '–' + fmt(chi.edges[g.to + 1], 3)) +
-         (span > 1 ? '<span class="rank-sub">' + span + (vals ? ' values' : ' bins') + ' pooled</span>' : '') +
+    var name = lo && hi ? 'every value'
+      : vals ? (lo ? '≤ ' + valueText(vals[g.to]) : hi ? '≥ ' + valueText(vals[g.from])
+                : valueText(vals[g.from]) + (span > 1 ? '–' + valueText(vals[g.to]) : ''))
+      : lo ? '< ' + fmt(chi.edges[g.to + 1], 3) : hi ? '≥ ' + fmt(chi.edges[g.from], 3)
+      : fmt(chi.edges[g.from], 3) + '–' + fmt(chi.edges[g.to + 1], 3);
+    var tail = lo && hi ? 'both tails' : lo || hi ? 'the tail' : '';
+    var sub = span > 1 ? span + (vals ? ' values' : ' bins') + (tail ? ' and ' + tail : ' pooled')
+      : tail ? 'includes ' + tail : '';
+    t += '<tr><td class="mono" style="font-size:.75rem">' + name +
+         (sub ? '<span class="rank-sub">' + sub + '</span>' : '') +
          '</td><td class="num">' + g.obs + '</td>' +
          '<td class="num"' + (g.exp < chi.minExpected ? ' style="color:var(--warn);font-weight:600"' : '') +
          '>' + fmt(g.exp, 3) + '</td><td class="num">' + fmt(contrib, 3) + '</td></tr>';
@@ -11436,7 +11454,8 @@ function csvGof() {
     rows.push(['group_lower', 'group_upper', 'bins_pooled', 'observed', 'expected', 'contribution']);
     for (var i = 0; i < chi.groups.length; i++) {
       var g = chi.groups[i];
-      rows.push([IA.num(chi.edges[g.from], 8), IA.num(chi.edges[g.to + 1], 8),
+      rows.push([i === 0 && chi.openLo ? '-Inf' : IA.num(chi.edges[g.from], 8),
+                 i === chi.groups.length - 1 && chi.openHi ? 'Inf' : IA.num(chi.edges[g.to + 1], 8),
                  g.to - g.from + 1, g.obs, IA.num(g.exp, 8),
                  g.exp > 0 ? IA.num((g.obs - g.exp) * (g.obs - g.exp) / g.exp, 8) : '']);
     }
