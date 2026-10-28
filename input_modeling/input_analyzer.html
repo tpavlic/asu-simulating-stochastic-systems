@@ -8675,8 +8675,9 @@ function renderRanking() {
      reject, a verdict otherwise shown only once that row is opened. Only
      discrete rows carry it: their bins are one per value, and so the verdict
      does not move with a slider, and their table p-value needs no bootstrap.
-     When every standard pmf is rejected, the empirical row says that it is
-     the one left. */
+     When every standard pmf is rejected, the empirical row says so, and its
+     tip weighs that against the sample size, since thousands of counts are
+     enough for the test to reject misses too small to matter. */
   var rejected = {}, nPmf = 0, nRejected = 0;
   ST.rows.forEach(function (q) {
     if (!q.ok || q.noCriteria || q.dist.kind !== 'discrete') return;
@@ -8689,15 +8690,20 @@ function renderRanking() {
       'The ranking compares the candidates with one another and does not say that any of them ' +
       'fits. This one fails the chi-square goodness-of-fit test at the 5% level: χ² = ' +
       fmt(chi.stat, 4) + ' on ' + chi.df + ' degrees of freedom. Click the row to see which ' +
-      'values it misses. If every standard pmf here is rejected, use the Empirical (discrete) row.');
+      'values it misses. If every standard pmf here is rejected, the Empirical (discrete) row is the ' +
+      'usual fallback, unless the sample runs to thousands and the misses are too small to matter.');
     nRejected++;
   });
   var fallback = nPmf > 0 && nRejected === nPmf
-    ? tipSpan('rank-sub', 'every standard pmf is rejected: use this one',
-        'The chi-square test rejects every standard pmf in this table, and so none of them ' +
-        'describes these data. The empirical pmf gives each observed value its observed proportion. ' +
-        'It reproduces the sample’s frequencies exactly, and it never produces a value the sample ' +
-        'did not take.')
+    ? tipSpan('rank-sub', 'every standard pmf is rejected',
+        'The chi-square test rejects every standard pmf in this table. With a few hundred ' +
+        'observations, that means each one misses the observed frequencies by more than chance ' +
+        'would, and the empirical pmf, which gives each observed value its observed proportion, is ' +
+        'the safer model. With thousands, the test also rejects misses too small to matter: click ' +
+        'the leading row and compare the observed and expected counts in its chi-square test, and ' +
+        'if every value is close, the leading pmf may still serve. The empirical pmf never produces ' +
+        'a value the sample did not take, which matters when a rare large count would change how ' +
+        'the system behaves.')
     : '';
 
   /* These five are the only bare abbreviations in the widget that nothing
@@ -9736,8 +9742,10 @@ function renderChi() {
       ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(distLower(r.dist)) +
         ' on this binning.' +
         (r.dist.kind === 'discrete' && hasEmpirical
-          ? ' If no standard pmf passes its tests, use the <em>Empirical (discrete)</em> row ' +
-            'of the ranking instead, which gives each observed value its observed proportion.'
+          ? ' If no standard pmf passes its tests, the <em>Empirical (discrete)</em> row of the ' +
+            'ranking, which gives each observed value its observed proportion, is the usual ' +
+            'fallback. With thousands of observations, compare the observed and expected counts ' +
+            'below first: the test then rejects misses too small to matter.'
           : '')
       : 'At the 5% level this <strong>does not reject</strong> the fitted ' +
         esc(distLower(r.dist)) + ' on this binning.';
