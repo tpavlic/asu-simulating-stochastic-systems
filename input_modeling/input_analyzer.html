@@ -8670,6 +8670,36 @@ function renderRanking() {
   var nearBy = { aic: nearTest('aic', bAic), bic: nearTest('bic', bBic) };
   var nTies = tieBy ? nearBy[tieBy].n : 0;
 
+  /* A ranking only compares the candidates with each other, and on counts
+     its leader is usually a Poisson that the chi-square test may still
+     reject, a verdict otherwise shown only once that row is opened. Only
+     discrete rows carry it: their bins are one per value, and so the verdict
+     does not move with a slider, and their table p-value needs no bootstrap.
+     When every standard pmf is rejected, the empirical row says that it is
+     the one left. */
+  var rejected = {}, nPmf = 0, nRejected = 0;
+  ST.rows.forEach(function (q) {
+    if (!q.ok || q.noCriteria || q.dist.kind !== 'discrete') return;
+    nPmf++;
+    var chi = IA.chiSquareGOF(ST.x, q.fit, ST.bins);
+    if (chi.df < 1 || chi.short || !(chi.p < 0.05 || chi.stat === Infinity)) return;
+    var ps = fmtP(Number.isFinite(chi.p) ? chi.p : 0);
+    rejected[q.key] = tipSpan('rank-sub',
+      'the chi-square test rejects it (p ' + (ps.charAt(0) === '<' ? ps : '= ' + ps) + ')',
+      'The ranking compares the candidates with one another and does not say that any of them ' +
+      'fits. This one fails the chi-square goodness-of-fit test at the 5% level: χ² = ' +
+      fmt(chi.stat, 4) + ' on ' + chi.df + ' degrees of freedom. Click the row to see which ' +
+      'values it misses. If every standard pmf here is rejected, use the Empirical (discrete) row.');
+    nRejected++;
+  });
+  var fallback = nPmf > 0 && nRejected === nPmf
+    ? tipSpan('rank-sub', 'every standard pmf is rejected: use this one',
+        'The chi-square test rejects every standard pmf in this table, and so none of them ' +
+        'describes these data. The empirical pmf gives each observed value its observed proportion. ' +
+        'It reproduces the sample’s frequencies exactly, and it never produces a value the sample ' +
+        'did not take.')
+    : '';
+
   /* These five are the only bare abbreviations in the widget that nothing
      beside them explains, and the disclosure that does explain them sits
      below the table, collapsed, and runs several hundred words on which
@@ -8735,7 +8765,8 @@ function renderRanking() {
         : 'not scored: one breakpoint per observation';
       h += '<tr class="clickable' + sel + '" data-key="' + esc(r.key) + '"' + rowAttrs(r) + '>' +
            '<td class="rank-name">' + esc(r.dist.name) +
-           '<span class="rank-sub">' + why + '</span></td>' +
+           '<span class="rank-sub">' + why + '</span>' +
+           (r.key === 'discreteEmpirical' ? fallback : '') + '</td>' +
            '<td class="num">' + freeK + '</td><td class="num">—</td><td class="num">—</td>' +
            '<td class="num">—</td><td class="num">' + fmt(r.sqe, 3) + '</td></tr>';
       continue;
@@ -8751,6 +8782,7 @@ function renderRanking() {
         (tie ? '<span class="sr-only">Within 2 of the best ' + tieBy.toUpperCase() + '. </span>' : '') +
         (NAME_TIPS[r.key] ? '<span class="tip" data-tip="' + NAME_TIPS[r.key] + '" data-tip-press>' +
                             esc(r.dist.name) + '</span>' : esc(r.dist.name)) +
+        (rejected[r.key] || '') +
         ((r.key === 'johnsonSB' || r.key === 'johnsonSU') && (near = nearSpecialCase(r, ST.rows))
            ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.degenerate ? '<span class="rank-sub">the ' + (r.fit.reflect ? 'mirrored' : 'shifted') +
