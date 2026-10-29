@@ -4762,16 +4762,17 @@ function ocChartKey() {
   return JSON.stringify([ST.oc.test, ocParams(), ST.oc.alpha, ocSided()]);
 }
 
-/* Start the lookup from the chart's own test: its default sample size and
-   the effect of its parameters, with β following from the pair. */
+/* Start the lookup from the chart's own test at the conventional 80%
+   power: the effect of its parameters and β = 0.2, with n solved from the
+   pair. */
+var OC_BETA_DEFAULT = 0.2;
 function seedOCLookup() {
   var t = ocTest();
-  ST.ocN = N_DEFAULT[t.id] || t.nMin;
   ST.ocEff = Math.abs(t.effect.get(ocParams()));
-  ST.ocBeta = Math.min(0.995, Math.max(0.005,
-    1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, ocParams(), ST.oc.alpha, ocSided())));
+  ST.ocBeta = OC_BETA_DEFAULT;
+  ST.ocN = ocSolveN(ocSigned(ST.ocEff), ST.ocBeta);
   ST.ocKey = ocChartKey();
-  $('oc-n').value = ST.ocN;
+  $('oc-n').value = Number.isFinite(ST.ocN) ? ST.ocN : '';
   $('oc-eff').value = N(ST.ocEff, 4);
   $('oc-beta').value = N(ST.ocBeta, 4);
 }
