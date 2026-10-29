@@ -2945,7 +2945,7 @@ function gammaVariate(u01, a) {
    shape is unimodal, so the integer optimum is one of those two. */
 DISTS.erlang = {
   key: 'erlang', name: 'Erlang', lower: 'Erlang', kind: 'continuous', np: 2, shiftable: true,
-  params: [{ sym: 'm', name: 'stages (whole number)' }, { sym: 'β', name: 'scale' }],
+  params: [{ sym: 'm', name: 'stages (whole number)', whole: true }, { sym: 'β', name: 'scale' }],
   lo: function () { return 0; },
   fit: function (x) {
     var g = DISTS.gamma.fit(x);
@@ -3780,7 +3780,7 @@ DISTS.geometric = {
 DISTS.discreteUniform = {
   key: 'discreteUniform', name: 'Discrete uniform', lower: 'discrete uniform', kind: 'discrete', np: 2, shiftable: false,
   orderStat: [0, 1], locParam: 0,
-  params: [{ sym: 'a', name: 'smallest value' }, { sym: 'b', name: 'largest value' }],
+  params: [{ sym: 'a', name: 'smallest value', whole: true }, { sym: 'b', name: 'largest value', whole: true }],
   lo: function (p) { return p[0]; },
   fit: function (x) {
     for (var i = 0; i < x.length; i++)
@@ -4209,8 +4209,9 @@ function fitWithHolds(dist, x, fixed) {
     var pf = fixed.slice();
     var llf = dist.loglik(x, pf);
     if (!Number.isFinite(llf))
-      return { ok: false, msg: 'The values you held cannot have produced these data: at least one ' +
-        'observation has zero probability under them.' };
+      return { ok: false, msg: 'The values you held cannot have produced these data: either a value ' +
+        'is outside the range this distribution allows, or at least one observation has zero ' +
+        'probability under them.' };
     return { ok: true, p: pf, freeCount: 0 };
   }
 
@@ -8257,7 +8258,7 @@ var LOADER = makeLoader({
     }
     ST.userPicked = false;
     /* Values held for one dataset mean nothing for the next one. */
-    ST.holds = {}; ST.holdShift = {};
+    ST.holds = {}; ST.holdShift = {}; ST.holdRefused = null;
     renderStats();
     refitAll();
   },
@@ -9071,6 +9072,7 @@ function renderRanking() {
     ST.pick = key;
     ST.userPicked = true;
     ST.gof = null;
+    ST.holdRefused = null;
     renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
     if (refocus) {
       var again = $('rank-host').querySelector('tr[data-key="' + key + '"]');
@@ -9227,7 +9229,8 @@ function renderFit() {
       hold = '<td><span class="hold-cell">' +
         '<input type="checkbox" data-hold="' + idx + '"' + (on ? ' checked' : '') +
         ' aria-label="Hold ' + esc(label) + ' fixed"> ' +
-        '<input type="number" step="any" data-holdval="' + idx + '" value="' +
+        '<input type="number" step="' + holdStep(val, !isShift && d.params[idx].whole) +
+        '" data-holdval="' + idx + '" value="' +
         esc(IA.num(val, 8)) + '"' + (on ? '' : ' disabled') + '></span></td>';
     }
     items.push({ sym: sym, est: est, hold: hold, what: what });
@@ -9368,7 +9371,7 @@ function renderFit() {
       '<div style="flex:1 1 420px;min-width:0"><div class="tbl-scroll">' +
         '<table class="tbl"><thead><tr><th>Parameter</th><th class="num">' + (anyHold ? 'Estimate' : 'Value') +
         '</th>' + (anyHold ? '<th>Hold at</th>' : '') + '<th>What it is</th></tr></thead><tbody>' + rows +
-        '</tbody></table></div>' + (anyHold ? holdNote(r) : '') + '</div>' +
+        '</tbody></table></div>' + (anyHold ? refusedHoldNote(r) + holdNote(r) : '') + '</div>' +
       '<div style="flex:1 1 240px;min-width:0">' +
         '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + cards + '</div></div>' +
     '</div>' + pin;
@@ -9376,6 +9379,25 @@ function renderFit() {
 }
 function card(lbl, val) {
   return '<div class="sc"><div class="sc-lbl">' + lbl + '</div><div class="sc-val">' + val + '</div></div>';
+}
+
+/* The spinner step for a hold box. With step="any" a browser's spinner
+   moves by 1, which takes a probability out of its range in one press, and
+   so the step is a tenth of the value's order of magnitude (0.01 for 0.45,
+   0.1 for 1.2, 1 for 15) and 1 for a parameter that must be whole. */
+function holdStep(v, whole) {
+  if (whole) return '1';
+  if (!Number.isFinite(v) || v === 0) return 'any';
+  return String(Number(Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1).toPrecision(1)));
+}
+
+/* A hold that left the picked row with no fit was put back (applyHolds),
+   and this says which value was refused and why. */
+function refusedHoldNote(r) {
+  var m = ST.holdRefused;
+  if (!m || m.key !== r.key) return '';
+  return '<div class="note"><strong>' + esc(m.label) + ' = ' + esc(IA.num(m.value, 6)) +
+    ' was not applied.</strong> ' + esc(m.msg) + ' The hold box is back at its previous value.</div>';
 }
 
 /* What holding parameters has done, said in the place where it was done.
@@ -9421,6 +9443,7 @@ function wireHoldControls() {
       var raw = this.getAttribute('data-hold');
       var valEl = $('fit-out').querySelector('[data-holdval="' + raw + '"]');
       var v = Number(valEl.value);
+      holdSnapshot(raw, v);
       if (raw === 'shift') {
         ST.holdShift[ST.pick] = this.checked && Number.isFinite(v) ? v : null;
       } else {
@@ -9435,6 +9458,7 @@ function wireHoldControls() {
     vals[j].addEventListener('change', function () {
       var raw = this.getAttribute('data-holdval');
       var v = Number(this.value);
+      holdSnapshot(raw, v);
       if (raw === 'shift') {
         if (ST.holdShift[ST.pick] === null || ST.holdShift[ST.pick] === undefined) return;
         ST.holdShift[ST.pick] = Number.isFinite(v) ? v : null;
@@ -9460,12 +9484,42 @@ function wireHoldControls() {
    to be removed is no longer a child of this node". Letting the event
    finish first costs nothing and avoids it. */
 var holdTimer = null;
+
+/* The holds as they stood before a change, kept so that a value under which
+   the picked row cannot be fitted can be put back. Without that, the row
+   would drop out of the ranking and take the hold boxes with it, leaving
+   nothing on the page to undo the change with. Only the first snapshot
+   before a redraw is kept, because that is the last state that fitted. */
+var holdPrev = null;
+function holdSnapshot(raw, v) {
+  if (holdPrev) return;
+  var r = pickedRow();
+  holdPrev = {
+    key: ST.pick,
+    holds: (ST.holds[ST.pick] || []).slice(),
+    shift: ST.holdShift[ST.pick],
+    label: raw === 'shift' ? (r && r.fit.reflect ? 'c' : 'γ') : (r ? r.dist.params[Number(raw)].sym : raw),
+    value: v
+  };
+}
+
 function applyHolds() {
   if (holdTimer) clearTimeout(holdTimer);
   holdTimer = setTimeout(function () {
     holdTimer = null;
+    var prev = holdPrev;
+    holdPrev = null;
     ST.gof = null;
+    ST.holdRefused = null;
     ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+    if (prev && prev.key === ST.pick && !pickedRow()) {
+      var failed = ST.rows.filter(function (row) { return row.key === ST.pick; })[0];
+      ST.holds[ST.pick] = prev.holds;
+      ST.holdShift[ST.pick] = prev.shift;
+      ST.holdRefused = { key: ST.pick, label: prev.label, value: prev.value,
+                         msg: failed && failed.msg ? failed.msg : 'No fit is possible with it.' };
+      ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+    }
     renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
   }, 0);
 }
@@ -12690,7 +12744,7 @@ function sendCountsToFit() {
   if (full.length < 3) { aGenSay('Too few full intervals to send. Narrow the counting interval first.', true); return; }
   showTab('fit');
   ST.genTruth = null;
-  ST.holds = {}; ST.holdShift = {};
+  ST.holds = {}; ST.holdShift = {}; ST.holdRefused = null;
   ST.unit = 'the number of arrivals in each of ' + full.length + ' intervals of width ' +
             IA.num(prof.width, 5) + ', from tab ②';
   ST.binAuto = true;
