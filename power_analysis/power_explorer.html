@@ -762,7 +762,10 @@ footer a:hover { text-decoration: underline; }
     <div class="ctrl-note" style="margin-bottom:8px">The effect and β are the two coordinates of
       the orange dot; n is the answer the chart gives back, the smallest sample size whose curve
       passes at or below the dot. That curve is drawn in orange. Typing an n instead
-      runs the lookup the other way, putting the dot on that curve to read its β. On the chart
+      runs the lookup the other way: β stays where it is, and the dot slides along the horizontal
+      dashed line onto that n's curve, where the effect axis reads off the smallest effect that n
+      detects with power 1 − β. When no effect on the axis reaches that β, the effect stays
+      instead, and the dot moves along the vertical line to read that curve's β. On the chart
       itself, drag the dot to move both coordinates at once, or drag either dashed projection line
       to move one coordinate with the other held. Reading the chart never moves the lookup: with a
       mouse, hovering anywhere reads off the β, effect, and implied n at that point, and with a
@@ -4713,6 +4716,46 @@ function ocSolveN(e, beta) {
   return hi;
 }
 
+/* The effect axis of the chart for test t, as [low, high]. */
+function ocAxis(t) {
+  if (t.id === 'p') return [0.01, 0.99];
+  if (t.id === 'var') return [0.1, 4];
+  return [0, Math.max(Math.abs(t.effect.max), 0.5)];
+}
+
+/* Smallest departure from the null whose power at n reaches 1 − beta, or
+   null when no effect on the axis reaches it.  The search runs outward from
+   the null on one side: on the proportion and variance-ratio axes, the side
+   the dot is on for a two-sided test and the alternative's side for a
+   one-sided one.  The exact binomial's power need not be monotone in p₁,
+   and so the axis is scanned for the first crossing and only that step is
+   bisected.  A β at or above 1 − α is met at the null itself, which is no
+   effect at all, and so it counts as out of reach. */
+function ocSolveEff(n, beta) {
+  var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
+  var target = 1 - beta, ax = ocAxis(t);
+  var pw = function (e) { return t.powerAtEffect(ocSigned(e), n, p, a, sided); };
+  var e0 = t.id === 'p' ? p.p0 : (t.id === 'var' ? 1 : ax[0]);
+  var up = true;
+  if (t.id === 'p' || t.id === 'var')
+    up = sided === 'two' ? !(ST.ocEff < e0) : sided === 'right';
+  var span = (up ? ax[1] : ax[0]) - e0;
+  if (!(up ? span > 0 : span < 0) || pw(e0) >= target) return null;
+  var lo = e0;
+  for (var i = 1; i <= 400; i++) {
+    var hi = e0 + span * i / 400;
+    if (pw(hi) >= target) {
+      for (var k = 0; k < 50; k++) {
+        var mid = 0.5 * (lo + hi);
+        if (pw(mid) >= target) hi = mid; else lo = mid;
+      }
+      return hi;
+    }
+    lo = hi;
+  }
+  return null;
+}
+
 /* Everything that decides which chart is drawn.  A stored n is the answer
    for one chart only, and so it is solved again once any of these moves. */
 function ocChartKey() {
@@ -4737,8 +4780,7 @@ function renderOC() {
   var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
   /* The classic chart runs the |effect| axis from 0 (β = 1 − α) upward;
      for the proportion test the natural axis is p₁ itself. */
-  var xlo = t.id === 'p' ? 0.01 : (t.id === 'var' ? 0.1 : 0);
-  var xhi = t.id === 'p' ? 0.99 : (t.id === 'var' ? 4 : Math.max(Math.abs(t.effect.max), 0.5));
+  var ax = ocAxis(t), xlo = ax[0], xhi = ax[1];
   var svg = $('oc-plot');
   var gm = plotGeom(svg, 940, 430, 1.22, 620);
   var W = gm.W, H = gm.H;
@@ -4880,7 +4922,8 @@ function drawOCSolvedCurve(n, betaDot) {
 /* Position the dot and its projections from the committed lookup (or from
    live drag values), refresh the readout, and keep the three boxes in
    step with each other.  The effect and β are what the dot carries; n is
-   solved from them by whoever moved it and arrives here already decided. */
+   solved from them by whoever moved it (or, when n is typed, the effect is
+   solved from n and β) and arrives here already decided. */
 function updateOCOverlay(live, extraMsg) {
   if (!OCV) return;
   var t = ocTest(), p = ocParams(), a = ST.oc.alpha, sided = ocSided();
@@ -6401,17 +6444,26 @@ document.addEventListener('DOMContentLoaded', function () {
     TAB_DIRTY.curves = true; renderVisibleTab();
   });
 
-  /* Typing a sample size runs the lookup the other way, dropping the dot
-     onto that curve to read its β; the other two boxes move the dot and
-     leave n to be solved, exactly as their dashed lines do. */
+  /* β is the requirement, and so it moves only when it is typed or
+     dragged.  Typing a sample size keeps it and slides the dot along its
+     line onto that n's curve, reading off the smallest effect that n
+     detects; the other two boxes move the dot and leave n to be solved,
+     exactly as their dashed lines do.  Where no effect on the axis reaches
+     β at the typed n, the effect stays instead and β is read off the curve. */
   $('oc-n').addEventListener('change', function () {
-    var v = Math.floor(Number(this.value)), t = curTest();
-    if (Number.isFinite(v) && Number.isFinite(ST.ocEff)) {
+    var v = Math.floor(Number(this.value)), t = ocTest(), msg = '';
+    if (Number.isFinite(v) && Number.isFinite(ST.ocEff) && Number.isFinite(ST.ocBeta)) {
       ST.ocN = Math.max(t.nMin, v);
-      ST.ocBeta = Math.min(0.995, Math.max(0.005,
-        1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, curParams(), ST.alpha, curSided())));
+      var e = ocSolveEff(ST.ocN, ST.ocBeta);
+      if (e !== null) ST.ocEff = e;
+      else {
+        msg = 'No effect on the axis reaches β = ' + N(ST.ocBeta, 4) + ' at n = ' + ST.ocN +
+              ', and so β is read at the effect held:';
+        ST.ocBeta = Math.min(0.995, Math.max(0.005,
+          1 - t.powerAtEffect(ocSigned(ST.ocEff), ST.ocN, ocParams(), ST.oc.alpha, ocSided())));
+      }
     }
-    updateOCOverlay();
+    updateOCOverlay(null, msg);
   });
   $('oc-eff').addEventListener('change', function () {
     var v = Number(this.value);
