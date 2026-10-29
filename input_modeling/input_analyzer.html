@@ -608,6 +608,7 @@ footer a:hover { text-decoration: underline; }
           <button class="btn2" data-sample="rep" type="button">CNC repair times</button>
           <button class="btn2" data-sample="ins" type="button">Inspection times</button>
           <button class="btn2" data-sample="dem" type="button">Parts demand (counts)</button>
+          <button class="btn2" data-sample="tbl" type="button">Board defects (table)</button>
         </div>
         <div class="samples" style="margin-top:6px">
           <label class="btn2" for="file-in" style="display:inline-block">Choose a file&hellip;</label>
@@ -623,6 +624,23 @@ footer a:hover { text-decoration: underline; }
         <div class="ctrl-row" id="col-row" style="display:none">
           <label class="ctrl-lbl" for="col-pick">Column</label>
           <select id="col-pick"></select>
+        </div>
+        <div class="ctrl-row" id="freq-row" style="display:none">
+          <span class="ctrl-grp">
+            <label class="ctrl-lbl" for="freq-mode">Each value is</label>
+            <select id="freq-mode">
+              <option value="obs">one observation</option>
+              <option value="count">how many times an outcome was seen</option>
+            </select>
+          </span>
+          <span class="ctrl-grp" id="freq-out-grp" style="display:none">
+            <label class="ctrl-lbl" for="freq-out">Outcomes are in</label>
+            <select id="freq-out"></select>
+          </span>
+          <span class="ctrl-note" id="freq-note" style="display:none">Each outcome is repeated as many
+            times as its count, and the fits run on those observations. This is for discrete outcomes:
+            a table of measurements counted by bin, such as 14 times between 10 and 20 minutes, is not
+            supported, since it would put every observation in a bin at one value.</span>
         </div>
         <div class="ctrl-row" id="clock-row" style="display:none">
           <span class="ctrl-grp">
@@ -7552,6 +7570,11 @@ var SAMPLES = {
     2,4,6,2,7,1,7,3,4,4,3,2,3,2,6,3,3,5,2,7,4,1,3,3,3,7,2,6,8,3,2,3,2,2,2,1,4,3,0,0,3,5,5,2,5,3,
     2,5,4,3,5,1,4,5,2,2,5,6,2
   ] },
+  /* A frequency table rather than a column of observations: each outcome
+     once, beside how many boards showed it. It loads with "Each value is"
+     already on counts, since here the page knows what the column holds. */
+  tbl: { name: "Board defects (table)", unit: "defects found on one inspected circuit board",
+    table: "defects,boards\n0,52\n1,84\n2,88\n3,43\n4,20\n5,7\n6,4\n7,1\n8,1", col: 1 },
 };
 var ARRIVAL_SAMPLES = {
   steady: { name: "Steady arrivals", unit: "about 8 hours of arrival times, in minutes", tunit: "minutes", v: [
@@ -7996,6 +8019,8 @@ var ST = {
   unit: null,       /* description of a loaded sample, null if pasted  */
   clockConv: 'ms',  /* how to read a duration written as clock time    */
   clockUnit: null,  /* the unit that reading produced, when one was used */
+  freq: { mode: 'obs', out: null }, /* whether the column holds counts of outcomes,
+                       and which column (or -1, row order from 0) names them */
   genTruth: null,   /* what the generator last produced, for the readout */
   family: 'auto',
   shift: true,
@@ -8053,10 +8078,14 @@ function makeLoader(cfg) {
        exports and snippets built during this call already see it. srcLine
        is the richer description (a built-in sample's name, a generator's
        full recipe); sourceLabel doubles as the fallback. */
-    cfg.state().src = srcLine || sourceLabel || 'pasted or typed by the user';
+    cfg.state().src = cfg.state().srcBase = srcLine || sourceLabel || 'pasted or typed by the user';
+    /* New data are read as observations until the reader says otherwise:
+       a column headed "Frequency" can hold the observations themselves. */
+    if (cfg.state() === ST) ST.freq = (opts && opts.freq) || { mode: 'obs', out: null };
     $(cfg.ta).value = text;
     cfg.state().table = IA.parseTable(text);
     api.buildPicker();
+    if (opts && opts.col !== undefined) { cfg.state().col = opts.col; $(cfg.pick).value = String(opts.col); }
     api.useColumn(cfg.state().col, sourceLabel);
   };
   api.buildPicker = function () {
@@ -8131,7 +8160,7 @@ function makeLoader(cfg) {
     var bad = cv.values.length < need;
     api.say((sourceLabel ? sourceLabel + ': ' : '') + bits.join(', ') + '.' +
             (bad ? ' At least ' + need + ' are needed.' : ''), bad);
-    cfg.accept(cv);
+    cfg.accept(cv, sourceLabel);
   };
   api.say = function (msg, bad) {
     var el = $(cfg.msg);
@@ -8155,7 +8184,7 @@ function makeLoader(cfg) {
       cfg.state().unit = null;
       /* Hand-editing breaks any provenance chain: whatever the box held
          before, its contents are now the user's. */
-      cfg.state().src = 'pasted or typed by the user';
+      cfg.state().src = cfg.state().srcBase = 'pasted or typed by the user';
       if (cfg.state() === ST) { ST.genTruth = null; ST.handoff = null; genSay(''); }
       if (cfg.state() === AST) { AST.truth = null; aGenSay(''); }
       cfg.state().table = IA.parseTable(this.value);
@@ -8194,7 +8223,9 @@ var LOADER = makeLoader({
      rather than a guess, and the control appears only once a column that
      needs it turns up. */
   extract: function (col) { return IA.columnDurations(col, ST.clockConv); },
-  accept: function (cv) {
+  accept: function (cv, sourceLabel) {
+    cv = freqAccept(cv, sourceLabel);
+    if (!cv) return;
     ST.x = cv.values;
     ST.s = ST.x.length ? IA.summarize(ST.x) : null;
     ST.clockUnit = cv.clock ? cv.unit : null;
@@ -8234,13 +8265,203 @@ var LOADER = makeLoader({
     shiftForData(false);
     ST.table = null; ST.x = []; ST.s = null; ST.rows = []; ST.pick = null;
     ST.gof = null; ST.unit = null; ST.clockUnit = null;
+    ST.freq = { mode: 'obs', out: null };
     $('col-row').style.display = 'none';
+    $('freq-row').style.display = 'none';
     $('clock-row').style.display = 'none';
     LOADER.say('');
     renderStats();
     renderAllEmpty();
   }
 });
+
+/* ── A frequency table ───────────────────────────────────────────────
+   Count data often arrive as a table: each outcome once, beside how many
+   times it was seen. The switch offering to read a column that way shows
+   only for a column of whole numbers 0 or above, which every count column
+   is, and it starts on "one observation" every time new data load, since
+   the page cannot tell counts of outcomes from observations that happen to
+   be counts. Read as a table, the column is expanded into the observations
+   it stands for, and everything downstream runs on those unchanged. */
+var FREQ_MAX = 200000;   /* observations a table may expand into */
+
+function freqEligible(cv) {
+  if (cv.clock || !cv.values.length) return false;
+  for (var i = 0; i < cv.values.length; i++) {
+    if (!Number.isInteger(cv.values[i]) || cv.values[i] < 0) return false;
+  }
+  return true;
+}
+
+/* The other columns that can name the outcomes: any that is not empty.
+   One holding text, such as bin ranges, is listed too, so that choosing it
+   says why it cannot be read rather than falling back on row order. */
+function freqOutcomeColumns(t, col) {
+  var out = [];
+  for (var j = 0; j < t.cols.length; j++) {
+    if (j === col) continue;
+    if (t.cols[j].some(function (c) { return String(c).trim() !== ''; })) out.push(j);
+  }
+  return out;
+}
+
+/* Row by row, so that each count stays with its own outcome. Returns the
+   expanded observations, or the problems that stopped it. */
+function freqExpand(t, col, outCol) {
+  var cc = t.cols[col], oc = outCol >= 0 ? t.cols[outCol] : null;
+  var rows = Math.max(cc.length, oc ? oc.length : 0);
+  var errs = [], seen = {}, values = [], k = 0, blank = 0, zero = 0, nOut = 0, ranges = false, r;
+  var cell = function (c, i) { return c && c[i] !== undefined ? String(c[i]).trim() : ''; };
+  for (r = 0; r < rows; r++) {
+    var cs = cell(cc, r), os = cell(oc, r);
+    if (cs === '' && os === '') {
+      /* Numbered by row, a skipped row would move every outcome below it
+         up by one. */
+      if (!oc) { errs.push('row ' + (r + 1) + ' has no count'); continue; }
+      blank++; continue;
+    }
+    if (cs === '') { errs.push('row ' + (r + 1) + ' has an outcome but no count'); continue; }
+    var c = IA.toNum(cs);
+    if (!Number.isInteger(c) || c < 0) {
+      errs.push('row ' + (r + 1) + '’s count “' + cs + '” is not a whole number 0 or above');
+      continue;
+    }
+    var o;
+    if (oc) {
+      if (os === '') { errs.push('row ' + (r + 1) + ' has a count but no outcome'); continue; }
+      o = IA.toNum(os);
+      if (Number.isNaN(o)) {
+        errs.push('row ' + (r + 1) + '’s outcome “' + os + '” is not a number');
+        if (/\d\s*[-–—]\s*\d/.test(os)) ranges = true;
+        continue;
+      }
+    } else {
+      o = k++;
+    }
+    var key = String(o);
+    if (seen[key] !== undefined) {
+      errs.push('rows ' + seen[key] + ' and ' + (r + 1) + ' both give the outcome ' + valueText(o));
+      continue;
+    }
+    seen[key] = r + 1;
+    nOut++;
+    if (c === 0) zero++;
+    if (values.length + c > FREQ_MAX) {
+      return { error: 'the counts add up to more than ' + FREQ_MAX.toLocaleString('en-US') +
+                      ' observations, more than this page fits' };
+    }
+    for (var q = 0; q < c; q++) values.push(o);
+  }
+  if (errs.length) {
+    return { error: errs.slice(0, 3).join('; ') +
+                    (errs.length > 3 ? '; and ' + (errs.length - 3) + ' more' : '') +
+                    (ranges ? '. A table of counts by bin is not supported' : '') };
+  }
+  return { values: values, nOut: nOut, blank: blank, zero: zero };
+}
+
+/* Which column holds the counts, guessed once, when the reader switches to
+   reading the table as counts, since the Column menu's first guess passes
+   over a column that looks like a row number and so can land on outcomes
+   listed in any other order. A header that names counts decides it;
+   otherwise, between two columns of whole numbers, the counts are the
+   column with the larger total. The Column menu still overrides it. */
+var FREQ_HEADER = /count|freq|times|tally|observed|occurrences|number of times/i;
+function freqGuessCounts(t, col) {
+  var cand = [], j;
+  for (j = 0; j < t.cols.length; j++) {
+    var cv = IA.columnDurations(t.cols[j], ST.clockConv);
+    if (freqEligible(cv)) cand.push({ j: j, sum: cv.values.reduce(function (a, b) { return a + b; }, 0) });
+  }
+  if (!cand.length) return col;
+  for (j = 0; j < cand.length; j++) if (FREQ_HEADER.test(t.names[cand[j].j])) return cand[j].j;
+  if (t.cols.length === 2 && cand.length === 2) return cand[0].sum >= cand[1].sum ? cand[0].j : cand[1].j;
+  return col;
+}
+
+/* Shows or hides the switch for the column just read, and when the switch
+   says counts, hands back the expanded observations in place of the
+   column's own values, or null after reporting why it could not. */
+function freqAccept(cv, sourceLabel) {
+  var t = ST.table, col = ST.col, row = $('freq-row');
+  var eligible = !!t && freqEligible(cv);
+  /* In a two-column table, the column picked may be the outcomes, which
+     need not be whole numbers, beside a column of counts; the switch is
+     offered there too, and choosing counts moves to the other column. */
+  var other = t && t.cols.length === 2 ? 1 - col : -1;
+  var otherCounts = !eligible && other >= 0 && freqEligible(IA.columnDurations(t.cols[other], ST.clockConv));
+  row.style.display = eligible || otherCounts ? 'flex' : 'none';
+  if (!eligible && ST.freq.mode === 'count' && otherCounts) {
+    ST.freq.out = col;
+    $('col-pick').value = String(other);
+    LOADER.useColumn(other, sourceLabel);
+    return null;
+  }
+  if (!eligible) ST.freq.mode = 'obs';
+  var counts = ST.freq.mode === 'count';
+  $('freq-mode').value = ST.freq.mode;
+  $('freq-out-grp').style.display = counts ? '' : 'none';
+  $('freq-note').style.display = counts ? '' : 'none';
+  ST.src = ST.srcBase || ST.src;
+  if (!counts) return cv;
+
+  var others = freqOutcomeColumns(t, col);
+  if (ST.freq.out === null || ST.freq.out === col ||
+      (ST.freq.out >= 0 && others.indexOf(ST.freq.out) < 0)) {
+    ST.freq.out = others.length ? others[0] : -1;
+  }
+  var sel = $('freq-out');
+  sel.innerHTML = '';
+  others.forEach(function (j) {
+    var o = document.createElement('option');
+    o.value = String(j); o.textContent = 'column “' + t.names[j] + '”';
+    sel.appendChild(o);
+  });
+  var o0 = document.createElement('option');
+  o0.value = '-1'; o0.textContent = '0, 1, 2, … by row';
+  sel.appendChild(o0);
+  sel.value = String(ST.freq.out);
+
+  /* A built-in sample's description is of its observations, not of a
+     table made from them, unless the sample is itself a table. */
+  ST.unit = ST.freq.unit || null;
+  var pre = sourceLabel ? sourceLabel + ': ' : '';
+  var ex = freqExpand(t, col, ST.freq.out);
+  /* The table is read with its blank lines already gone, and so a count
+     left blank for an outcome never seen leaves no row behind. Numbered by
+     row, that would label every later outcome one too low; a blank line
+     anywhere after the table starts is refused instead. */
+  if (!ex.error && ST.freq.out < 0) {
+    var lines = $('data-in').value.split(/\r\n|\r|\n/), first = -1, last = -1, gaps = 0, li;
+    for (li = 0; li < lines.length; li++) {
+      if (lines[li].trim() !== '') { if (first < 0) first = li; last = li; }
+    }
+    for (li = first + 1; li < last; li++) if (lines[li].trim() === '') gaps++;
+    if (gaps) ex.error = gaps + ' blank line' + (gaps === 1 ? '' : 's') + ' inside the table';
+  }
+  if (ex.error && ST.freq.out < 0)
+    ex.error += '. Numbered 0, 1, 2, … by row, a missing count would shift every outcome after ' +
+                'it; type 0 for an outcome never seen, or give the outcomes a column of their own';
+  if (!ex.error && ex.values.length < 2) ex.error = 'the counts add up to fewer than 2 observations';
+  if (ex.error) {
+    LOADER.say(pre + 'Could not read column “' + t.names[col] + '” as counts: ' + ex.error + '.', true);
+    ST.x = []; ST.s = null; ST.rows = []; ST.pick = null; ST.gof = null;
+    renderStats(); renderAllEmpty();
+    return null;
+  }
+  var whence = ST.freq.out >= 0 ? 'outcomes from column “' + t.names[ST.freq.out] + '”'
+                                : 'outcomes 0, 1, 2, … by row';
+  var bits = ['Read a frequency table of ' + ex.nOut + ' outcome' + (ex.nOut === 1 ? '' : 's') +
+              ', ' + ex.values.length + ' observations', 'counts from column “' + t.names[col] + '”',
+              whence];
+  if (t.header) bits.push('header row skipped');
+  if (ex.blank) bits.push(ex.blank + ' blank row' + (ex.blank === 1 ? '' : 's') + ' skipped');
+  if (ex.zero) bits.push(ex.zero + ' outcome' + (ex.zero === 1 ? '' : 's') + ' counted 0 times');
+  LOADER.say(pre + bits.join(', ') + '.', false);
+  ST.src = (ST.srcBase || 'pasted or typed by the user') + '; read as a frequency table, counts from column "' +
+           t.names[col] + '", ' + whence.replace(/[“”]/g, '"');
+  return { values: ex.values, clock: false, unit: null, skipped: 0 };
+}
 
 /* Data sent over that have no floor -- residuals centered on 0, and
    interarrival gaps, which usually start at zero -- arrive with the
@@ -14104,6 +14325,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ── Tab ① ────────────────────────────────────────────────────── */
   LOADER.wire();
+  $('freq-mode').addEventListener('change', function () {
+    ST.freq.mode = this.value;
+    if (this.value === 'count' && ST.table) {
+      var c = freqGuessCounts(ST.table, ST.col);
+      if (c !== ST.col) { ST.freq.out = ST.col; $('col-pick').value = String(c); }
+      LOADER.useColumn(c, null);
+      return;
+    }
+    LOADER.useColumn(ST.col, null);
+  });
+  $('freq-out').addEventListener('change', function () {
+    ST.freq.out = Number(this.value); LOADER.useColumn(ST.col, null);
+  });
   $('clock-conv').addEventListener('change', function () {
     ST.clockConv = this.value;
     LOADER.useColumn(ST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
@@ -14136,7 +14370,8 @@ document.addEventListener('DOMContentLoaded', function () {
       ST.genTruth = null; genSay('');
       ST.unit = d.unit;          /* loadText keeps this when given a label */
       ST.binAuto = true;
-      LOADER.loadText(d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"');
+      LOADER.loadText(d.table || d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"',
+        d.table ? { col: d.col, freq: { mode: 'count', out: 1 - d.col, unit: d.unit } } : undefined);
     });
   }
 
