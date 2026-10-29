@@ -704,7 +704,14 @@ better.
   four tabs, one fitting eighteen candidate distributions to a pasted sample (with the two Johnson
   members, S_B and S_U, fitted only when a checkbox in the Candidates card asks for them, off by
   default because four parameters that reach almost any shape win a ranking on flexibility alone;
-  their rows always carry a note saying so), one estimating a piecewise-constant arrival rate
+  their rows always carry a note saying so) and reading a frequency table (a column of whole
+  numbers 0 or above offers an "Each value is" switch, which opens on one observation for every
+  data source but the Board defects (table) sample, since a column headed Frequency can hold the
+  observations themselves; read as counts, the table is expanded into its observations before
+  anything is fitted, the count column is guessed by its header or, between two columns of whole
+  numbers, by the larger total, and the outcomes come from another column or are numbered
+  0, 1, 2, … by row, which refuses a missing count or a blank line inside the table because either
+  would shift every later outcome), one estimating a piecewise-constant arrival rate
   from timestamps, one relating two variables (a scatter with each column's histogram on its
   margins, a pairing switch that keeps both histograms while it shows the pairs shuffled or sorted
   together or opposite, with the range of r those values allow, the three correlation
