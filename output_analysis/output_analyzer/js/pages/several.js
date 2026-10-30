@@ -37,8 +37,8 @@ export const id = 'several';
 export const title = 'Several Systems';
 /** The page's sections, shown one at a time under the controls. */
 export const sections = [
-  { id: 'means', label: 'Benchmark comparison', tip: 'Every design against a benchmark at once: each design’s mean with its own interval, all k holding together by the Bonferroni correction (each at level 1 − α/k), which holds the chance of any false rejection at α. Draw the benchmark on the plot, or read the intervals against one you have in mind.' },
-  { id: 'diffs', label: 'Pairwise comparisons', tip: 'Every pair’s difference, or each design against a control, each with its own interval, all holding together by the Bonferroni correction (each at level 1 − α/C): nothing pooled and no analysis of variance first.' },
+  { id: 'means', label: 'Benchmark comparison', tip: 'Every design against a benchmark at once: each design’s mean with its own interval, all k holding together by the Bonferroni correction (each at level 1 − α/k). Draw the benchmark on the plot, and each design is declared above or below it by Bonferroni or by Holm’s step-down, or read the intervals against one you have in mind.' },
+  { id: 'diffs', label: 'Pairwise comparisons', tip: 'Every pair’s difference, or each design against a control, each with its own interval, all holding together by the Bonferroni correction (each at level 1 − α/C): nothing pooled and no analysis of variance first. Each pair is declared different or not by Bonferroni or by Holm’s step-down.' },
   { id: 'anova', label: 'ANOVA and post hoc', tip: 'One F test of whether any means differ and then a post-hoc rule that judges each pair on the pooled (or Welch) variance.' },
   { id: 'subset', label: 'Screen for the best', tip: 'Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.' }
 ];
@@ -1013,7 +1013,6 @@ function update() {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s outcomes.'));
     b.appendChild(para('cmp-banner', benchStepsOn(k) ? stepBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
       : 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
-    b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     }
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0],
       bHolm ? v => benchmarkFamilyRank(groups, { value: v, level, adjust: 'holm' }) : null,
@@ -1044,7 +1043,6 @@ function update() {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
     b.appendChild(para('cmp-banner', benchStepsOn(k) ? stepBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
       : 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
-    b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     }
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0],
       bHolm ? v => benchmarkFamily(groups, { value: v, level, adjust: 'holm' }) : null,
@@ -1765,7 +1763,7 @@ export function render(root) {
     '<p class="sev-key" id="sev-key"></p>' +
     '<div class="ctrl-grp-lbl subnav-lbl">Analysis</div>' +
     '<div class="subnav" data-subnav></div>' +
-    '<div class="sec" data-section="means"><h3 class="sec-title">Benchmark comparison</h3><p class="sec-lede">Every design against a benchmark at once. Each design’s mean comes with its own interval, and the k intervals hold together by the Bonferroni correction, each at level 1 − α/k, which holds the chance of any false rejection across the k tests at α. The designs are not compared with each other here. The benchmark can be drawn on the plot, which marks every interval that excludes it, or kept in mind and read against the intervals.</p>' +
+    '<div class="sec" data-section="means"><h3 class="sec-title">Benchmark comparison</h3><p class="sec-lede">Every design against a benchmark at once. Each design’s mean comes with its own interval, and the k intervals hold together by the Bonferroni correction, each at level 1 − α/k. The designs are not compared with each other here. The benchmark can be drawn on the plot or kept in mind and read against the intervals. Drawn, it is the reference for a decision on each design (above it, below it, or neither) by one of two rules, each holding the chance of any false declaration across the k tests at α or below: Bonferroni declares a design whose interval excludes the benchmark, and Holm’s step-down, applied to each design’s own test against the benchmark, can declare more.</p>' +
       '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="The benchmark is a target or requirement for the response, in its units, and the k intervals are built for it whether or not it is drawn. Drawn, it is a dashed line that can be dragged (the arrow keys move it when it has focus), and every design whose interval excludes it is marked above or below it.">Show benchmark on plot</span></label>' +
         '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span>' +
         '<span class="ctrl-pair" id="sev-badj" hidden><span class="ctrl-lbl" id="sev-badj-lbl"><span class="tip" tabindex="0" data-tip="How a design is declared above or below the benchmark. Bonferroni: when its interval at 1 − α/k excludes the benchmark. Holm: by Holm’s step-down on the k tests against the benchmark, which holds the same chance of any false declaration; under the t procedures, it declares every design Bonferroni does and possibly more. The intervals stay Bonferroni’s either way.">Decide by</span></span>' +
@@ -1776,7 +1774,7 @@ export function render(root) {
         '<label class="ctrl-chk" id="sev-bsteps-lbl" style="display:none"><input type="checkbox" id="sev-bsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each design’s interval at the level of its own step in Holm’s step-down at the benchmark, in place of its Bonferroni interval: the design with the r-th smallest p-value at 1 − α/(k − r + 1). The designs past the step where it stops are drawn as their center alone. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
       '</div>' +
       '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
-    '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
+    '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first. A pair is declared different by one of two rules, each holding the chance of any false declaration across the C tests at α or below: Bonferroni declares a pair whose interval excludes 0, and Holm’s step-down, applied to each pair’s own test, can declare more.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
         '<button type="button" class="seg-btn" data-diff="pairs" aria-pressed="true">all pairs</button>' +
         '<button type="button" class="seg-btn" data-diff="control" aria-pressed="false">versus control</button>' +
