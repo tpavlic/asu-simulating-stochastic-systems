@@ -1237,6 +1237,31 @@ checkRecipe('Several Systems, Holm on Welch pairs on six-designs, 90%', HOLM.wel
 checkRecipe('Several Systems, rank procedures with Holm decisions versus control, 90%', HOLM.rank, Object.assign({ smoke: true }, sevPinned(HOLM.rank)));
 checkRecipe('Several Systems, paired with Holm decisions and the blocked Holm post hoc', HOLM.paired, sevPinned(HOLM.paired));
 
+// The step-down intervals in the figures. The first three fixtures' step-downs
+// reject at least one comparison, stop at another, and leave at least one not
+// reached, and so every kind of row is drawn; under common random numbers every
+// pair is declared, and the paired fixtures check the paired intervals.
+import { stepDownLevels } from '../js/stats/compare.js';
+const STEPS = [
+  ['means', sevRecipe(FOUR, { bench: 2.5, benchAdjust: 'holm', view: { section: 'means', benchSteps: true } }), / bench p$/, 0.05, true],
+  ['rank means', sevRecipe(SIX_D, { proc: 'np', level: 0.9, benchAdjust: 'holm', bench: 2.4, view: { section: 'means', benchSteps: true } }), / bench p$/, 0.1],
+  ['Welch differences', sevRecipe(SIX_D, { level: 0.9, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^diff \d+-\d+ p$/, 0.1, true],
+  ['paired differences', sevRecipe(FOUR_CRN, { paired: true, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^diff \d+-\d+ p$/, 0.05],
+  ['paired rank differences', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^shift \d+-\d+ p$/, 0.05]
+];
+test('the step-down fixtures reject, stop, and leave a comparison not reached', () => {
+  for (const [label, r] of STEPS) assert.equal(r.fig.steps, true, label);
+  for (const [label, r, key, alpha] of STEPS.slice(0, 3)) {
+    const lv = stepDownLevels(Object.keys(r.expect).filter(k => key.test(k)).map(k => r.expect[k]), alpha);
+    assert.ok(lv.some(l => l.rejected), label + ': a rejection');
+    assert.ok(lv.some(l => l.level !== null && !l.rejected), label + ': a stop');
+    assert.ok(lv.some(l => l.level === null), label + ': a comparison not reached');
+  }
+  // Under Bonferroni the box has no effect, and so the recipe draws Bonferroni's intervals.
+  assert.equal(sevRecipe(FOUR, { bench: 3.12, view: { section: 'means', benchSteps: true } }).fig.steps, false);
+});
+for (const [label, r, , , smoke] of STEPS) checkRecipe('Figures: Several Systems, step-down intervals, ' + label, r, Object.assign({ smoke: !!smoke, also: noWarning }, sevPinned(r)));
+
 // The benchmark's three decisions appear across these fixtures.
 test('the benchmark fixtures declare designs above, below, and containing it', () => {
   const words = new Set();

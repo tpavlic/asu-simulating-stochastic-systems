@@ -1130,8 +1130,15 @@ better.
   while the intervals stay Bonferroni's, and so a declared row whose interval excludes the
   reference is red and dashed, one declared by Holm alone is drawn plainly with a red "(Holm)"
   decision at its right edge (`note` on `intervals` in `js/ui/plots.js`), and every row carries
-  its decision (`benchmarkFamily`, `adjustP`, and `declareFamily` in `js/stats/compare.js`,
-  `benchmarkFamilyRank` in `js/stats/nonparam.js`), and each section has a
+  its decision under either rule, so that the plot keeps its width as the switch moves
+  (`benchmarkFamily`, `adjustP`, and `declareFamily` in `js/stats/compare.js`,
+  `benchmarkFamilyRank` in `js/stats/nonparam.js`); under Holm, a "Show step-down intervals"
+  box, off by default, draws each row's interval at the level of its own step in the step-down
+  (the r-th smallest p-value at 1 − α/(C − r + 1), `stepDownLevels` in `js/stats/compare.js`)
+  and a row past the stop as its center alone, "not reached", with the axis held to the
+  Bonferroni intervals and the rows redrawn in place as the benchmark line is dragged (the
+  `update` that `intervals` returns); the captions say these are not confidence intervals, the
+  table keeps Bonferroni's, and the scripts draw them through `step_down_levels`; and each section has a
   "How many replications" card at its foot sized by a target half-width, as the ANOVA section has
   one sized by the F test's target power (under Welch's analysis, that plan still takes σ and the
   grand mean from the ordinary one-way analysis, and the card says it assumes a common σ; the

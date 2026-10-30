@@ -1642,6 +1642,48 @@ out = zeros(1, C); out(order) = stepped;
 end
 `;
 
+// ── Holm's step-down as the level of each step, for the figures ──────────
+// The comparison with the r-th smallest p-value is tested at alpha/(C - r + 1),
+// and the step-down stops at the first that is not below its threshold: each
+// comparison it reached gets the level 1 - alpha/(C - r + 1) of its interval,
+// and the rest a missing level. A missing p-value sorts last; ties keep their order.
+
+LIB.R.stepDown = `
+step_down_levels <- function(p, alpha) {
+  C <- length(p); lv <- rep(NA_real_, C); o <- order(p, na.last = TRUE)
+  for (r in seq_len(C)) {
+    i <- o[r]; a <- alpha / (C - r + 1)
+    lv[i] <- 1 - a
+    if (!isTRUE(p[i] < a)) break
+  }
+  lv
+}
+`;
+LIB.py.stepDown = `
+def step_down_levels(p, alpha):
+    # Each comparison's level in Holm's step-down, or NaN past the step where it stops.
+    p = np.asarray(p, float); C = len(p); lv = np.full(C, np.nan)
+    order = sorted(range(C), key=lambda i: (bool(np.isnan(p[i])), 0.0 if np.isnan(p[i]) else p[i]))
+    for r, i in enumerate(order):
+        a = alpha / (C - r)
+        lv[i] = 1 - a
+        if not p[i] < a:
+            break
+    return lv
+`;
+LIB.m.stepDown = `
+function lv = step_down_levels(p, alpha)
+% Each comparison's level in Holm's step-down, or NaN past the step where it stops.
+C = numel(p); lv = nan(1, C);
+[~, order] = sort(p(:)');   % stable, with any NaN last
+for r = 1:C
+    i = order(r); a = alpha / (C - r + 1);
+    lv(i) = 1 - a;
+    if ~(p(i) < a), break; end
+end
+end
+`;
+
 // ── Planning for several designs ─────────────────────────────────────────
 // For a family of Welch intervals with n replications in every design, the
 // smallest n at which the widest comparison meets the target. The widest is

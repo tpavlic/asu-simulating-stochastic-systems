@@ -78,6 +78,34 @@ export function adjustP(ps, method) {
 }
 
 /**
+ * Holm's step-down written as the level of each step: the comparison with the
+ * r-th smallest p-value (r = 1, 2, …, C) is tested at α/(C − r + 1), and the
+ * step-down stops at the first that is not below its threshold. A comparison
+ * the step-down reached gets its step and the level 1 − α/(C − r + 1) of an
+ * interval that excludes the reference exactly when a t test at that step
+ * rejects; one past the stop gets its step and a level of null. A NaN p-value
+ * sorts last, and ties keep their input order. The rejected comparisons are
+ * exactly those whose Holm-adjusted p (adjustP) is below α.
+ * @param {ArrayLike<number>} ps
+ * @param {number} alpha
+ * @returns {{step: number, level: number|null, rejected: boolean}[]}
+ */
+export function stepDownLevels(ps, alpha) {
+  const C = ps.length, out = new Array(C);
+  const ids = Array.from(ps, (_, i) => i);
+  const order = ids.filter(i => !Number.isNaN(ps[i])).sort((a, b) => ps[a] - ps[b]).concat(ids.filter(i => Number.isNaN(ps[i])));
+  let stopped = false;
+  order.forEach((idx, r) => {
+    const a = alpha / (C - r);
+    if (stopped) { out[idx] = { step: r + 1, level: null, rejected: false }; return; }
+    const rejected = ps[idx] < a;
+    out[idx] = { step: r + 1, level: 1 - a, rejected };
+    if (!rejected) stopped = true;
+  });
+  return out;
+}
+
+/**
  * Welch's two-sample t procedure for mean(x) − mean(y), with the
  * Welch–Satterthwaite degrees of freedom, as R's t.test(x, y).
  * @param {number[]|Float64Array} x

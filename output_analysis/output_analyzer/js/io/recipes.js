@@ -648,7 +648,9 @@ export function severalRecipe(o) {
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
   r.fig = { section, labels: shortNames(list).map((n, i) => (i + 1) + ' ' + n),
     // The designs drawn as box plots of their outcomes, or as intervals with each outcome as a dot behind them.
-    box: !!(o.view && o.view.box), points: !!(o.view && o.view.points) && !(o.view && o.view.box) };
+    box: !!(o.view && o.view.box), points: !!(o.view && o.view.points) && !(o.view && o.view.box),
+    // Under Holm, the section's figure drew each interval at the level of its step in the step-down.
+    steps: !!(o.view && (section === 'means' ? o.view.benchSteps && benchAdj === 'holm' && bench != null && !single : section === 'diffs' && o.view.diffSteps && diffAdj === 'holm' && !single)) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
   Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });

@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { adjustP, benchmarkFamily, bonferroniFamily, posthoc, posthocWelch, simultaneousMeans } from '../js/stats/compare.js';
+import { adjustP, stepDownLevels, benchmarkFamily, bonferroniFamily, posthoc, posthocWelch, simultaneousMeans } from '../js/stats/compare.js';
 import { benchmarkFamilyRank, bonferroniFamilyRank } from '../js/stats/nonparam.js';
 
 const REF = JSON.parse(readFileSync(new URL('./reference/holm.json', import.meta.url), 'utf8'));
@@ -28,6 +28,35 @@ test('adjustP matches p.adjust, counting a missing p-value in C', () => {
   each(adjustP(ps, 'holm'), REF.adjust.holm, 1e-15, 'holm');
   each(adjustP(ps, 'bonferroni'), REF.adjust.bonferroni, 1e-15, 'bonferroni');
   assert.throws(() => adjustP(ps, 'hochberg'), RangeError);
+});
+
+test('stepDownLevels gives each step its level and stops at the first that fails', () => {
+  // Sorted: 0.01 (step 1, against 0.05/4), 0.03 (step 2, against 0.05/3, fails), then 0.04 and the NaN past the stop.
+  const lv = stepDownLevels([0.01, 0.04, 0.03, NaN], 0.05);
+  assert.deepEqual(lv.map(l => l.step), [1, 3, 2, 4]);
+  assert.deepEqual(lv.map(l => l.rejected), [true, false, false, false]);
+  near(lv[0].level, 1 - 0.05 / 4, 1e-15, 'step 1');
+  near(lv[2].level, 1 - 0.05 / 3, 1e-15, 'step 2');
+  assert.equal(lv[1].level, null);
+  assert.equal(lv[3].level, null);
+  // Ties keep their input order.
+  assert.deepEqual(stepDownLevels([0.02, 0.02], 0.05).map(l => l.step), [1, 2]);
+});
+
+test('stepDownLevels rejects what Holm declares, and its t intervals agree with the tests', () => {
+  for (const value of [REF.benchT.value, REF.benchT.value + 0.3, REF.benchT.value - 0.3]) {
+    const fam = benchmarkFamily(REF.groups, { value, level: LEVEL, adjust: 'holm' });
+    const lv = stepDownLevels(fam.tests.map(t => t.p), A);
+    lv.forEach((l, i) => {
+      assert.equal(l.rejected, fam.tests[i].declared, `design ${i} at ${value}`);
+      if (l.level === null) return;
+      const it = simultaneousMeans([REF.groups[i]], l.level).items[0];
+      assert.equal(it.lo > value || it.hi < value, l.rejected, `design ${i}'s interval at ${value}`);
+    });
+    // Exactly one comparison stops the step-down unless every one is rejected.
+    const failed = lv.filter(l => l.level !== null && !l.rejected).length;
+    assert.equal(failed, lv.every(l => l.rejected) ? 0 : 1);
+  }
 });
 
 test('benchmarkFamily matches t.test(x, mu) with Holm adjustment, and declares more than the intervals', () => {

@@ -880,24 +880,32 @@ export function dotPlot(fig, values, o = {}) {
  * A forest plot: one row per item with its label in a left column, a line
  * from lo to hi with end caps, and a dot at the center. A flagged item is
  * drawn in the flag color, dashed, with a hollow dot, and so it reads
- * without color. A vertical reference line marks `ref` (zero for a
- * difference) when given. An item's `note`, when any item has one, is
- * written past the right end of the plotting area on its row, in the color
- * token `noteColor` (the flag color by default): a decision that the interval
- * alone does not show, such as a declaration by Holm's step-down.
+ * without color. An item without finite ends keeps its row and label and
+ * draws nothing, or only its center when `dot` is set. A vertical reference
+ * line marks `ref` (zero for a difference) when given. An item's `note`, when
+ * any item has one, is written past the right end of the plotting area on its
+ * row, in the color token `noteColor` (the flag color by default): a decision
+ * that the interval alone does not show, such as a declaration by Holm's
+ * step-down. `extent` adds values the axis must cover, and `notes` adds notes
+ * the right margin must fit, so that a later `update` (which redraws the
+ * intervals, centers, and notes of new items on the same rows, while a line is
+ * dragged) never changes the axis or the margin.
  * @param {Figure} fig
  * @param {{label: string, lo: number, hi: number, center?: number, flagged?: boolean, color?: string,
- *   note?: string, noteColor?: string}[]} items
- * @param {{ ref?: number|null, axes?: boolean, rowPx?: number }} [o]
+ *   note?: string, noteColor?: string, dot?: boolean}[]} items
+ * @param {{ ref?: number|null, axes?: boolean, rowPx?: number, extent?: number[], notes?: string[] }} [o]
+ * @returns {{update: function(object[]): void}}
  */
 export function intervals(fig, items, o = {}) {
   const n = items.length;
   const lw = labelColumn(fig, items.map(it => it.label), 11.5);
   const nfs = 11, noted = items.some(it => it.note);
-  if (noted) fig.setMargin({ r: Math.ceil(Math.max(...items.map(it => estTextWidth(it.note || '', nfs)))) + 18 });
+  const noteTexts = items.map(it => it.note || '').concat(o.notes || []);
+  if (noted) fig.setMargin({ r: Math.ceil(Math.max(...noteTexts.map(t => estTextWidth(t, nfs)))) + 18 });
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
-  for (const it of items) { vals.push(it.lo, it.hi); if (it.values) for (const v of it.values) vals.push(v); }
+  for (const it of items) { vals.push(it.lo, it.hi); if (it.dot) vals.push(it.center); if (it.values) for (const v of it.values) vals.push(v); }
+  if (o.extent) vals.push(...o.extent);
   if (o.ref !== undefined && o.ref !== null) vals.push(o.ref);
   const [lo, hi] = extent(vals);
   const sx = fig.sx || fig.x([lo, hi], { pad: 0.05, nice: true });
@@ -914,6 +922,8 @@ export function intervals(fig, items, o = {}) {
     fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: tok('--truth'), label: 'reference' });
   }
   const cMiss = tok('--miss'), card = tok('--card'), cText = tok('--text');
+  const ends = it => Number.isFinite(it.lo) && Number.isFinite(it.hi);
+  const centerOf = it => (Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2);
   const recOf = new Map();
   items.forEach((it, i) => {
     const cy = r1((i + 0.5) * rowH);
@@ -922,9 +932,11 @@ export function intervals(fig, items, o = {}) {
     if (!recOf.has(key)) recOf.set(key, {
       seg: { kind: 'segments', x0: [], y0: [], x1: [], y1: [], color: c, dash: !!it.flagged, label: it.flagged ? 'interval (flagged)' : 'interval' },
       dot: { kind: 'points', x: [], y: [], color: c, hollow: !!it.flagged, label: it.flagged ? 'center (flagged)' : 'center' } });
-    const rr = recOf.get(key), yy = ry(i), cc = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
-    rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
-    rr.dot.x.push(cc); rr.dot.y.push(yy);
+    const rr = recOf.get(key), yy = ry(i);
+    if (ends(it)) {
+      rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
+    }
+    if (ends(it) || (it.dot && Number.isFinite(it.center))) { rr.dot.x.push(centerOf(it)); rr.dot.y.push(yy); }
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
     if (it.values) {
       const srt = Array.from(it.values).filter(Number.isFinite).sort((a, b) => a - b);
@@ -934,18 +946,33 @@ export function intervals(fig, items, o = {}) {
         pts.x.push(v); pts.y.push(yy + off);
       });
     }
-    // An interval without finite ends keeps its row and label and draws nothing.
-    if (!Number.isFinite(it.lo) || !Number.isFinite(it.hi)) return;
-    const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
-    const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi));
-    const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
-    svgEl('line', { x1: x0, x2: x1, y1: cy, y2: cy, stroke: c, 'stroke-width': 2, 'stroke-dasharray': it.flagged ? '5,3' : null }, g);
-    for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
-    if (it.flagged) svgEl('circle', { cx: r1(sx(center)), cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
-    else svgEl('circle', { cx: r1(sx(center)), cy, r: 4.2, fill: c }, g);
   });
   if (pts.x.length) fig.series.push(pts);
-  for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
+  for (const rr of recOf.values()) {
+    if (rr.seg.x0.length) fig.series.push(rr.seg);
+    if (rr.dot.x.length) fig.series.push(rr.dot);
+  }
+  // The intervals, centers, and notes sit in one group, which `update` redraws.
+  const layer = svgEl('g', { class: 'm-rows' }, fig.inner);
+  let cur = items;
+  const draw = list => {
+    list.forEach((it, i) => {
+      const cy = r1((i + 0.5) * rowH);
+      const c = it.flagged ? cMiss : col(it.color, '--est');
+      if (ends(it)) {
+        const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, layer);
+        const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi)), cx = r1(sx(centerOf(it)));
+        svgEl('line', { x1: x0, x2: x1, y1: cy, y2: cy, stroke: c, 'stroke-width': 2, 'stroke-dasharray': it.flagged ? '5,3' : null }, g);
+        for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
+        if (it.flagged) svgEl('circle', { cx, cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
+        else svgEl('circle', { cx, cy, r: 4.2, fill: c }, g);
+      } else if (it.dot && Number.isFinite(it.center)) {
+        svgEl('circle', { cx: r1(sx(it.center)), cy, r: 4.2, fill: c, class: 'm-int' }, layer);
+      }
+      if (noted && it.note) text(layer, fig.iw + 8, cy + 4, it.note, { 'font-size': nfs, 'font-weight': 600, fill: col(it.noteColor, '--miss'), class: 'm-note' });
+    });
+  };
+  draw(items);
   if (noted) {
     // For the script exports, the notes sit inside a widened x range rather than in the margin.
     const [dx0, dx1] = sx.domain, span = dx1 - dx0;
@@ -955,7 +982,6 @@ export function intervals(fig, items, o = {}) {
     items.forEach((it, i) => {
       if (!it.note) return;
       const nc = col(it.noteColor, '--miss');
-      text(fig.inner, fig.iw + 8, (i + 0.5) * rowH + 4, it.note, { 'font-size': nfs, 'font-weight': 600, fill: nc, class: 'm-note' });
       if (!byColor.has(nc)) byColor.set(nc, { kind: 'text', x: [], y: [], text: [], color: nc, anchor: 'start' });
       const rec = byColor.get(nc);
       rec.x.push(dx1 + span * 0.02); rec.y.push(ry(i)); rec.text.push(it.note);
@@ -965,10 +991,17 @@ export function intervals(fig, items, o = {}) {
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
-    const it = items[i];
-    const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
-    return [it.label, num(center) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']'].concat(it.note ? [it.note] : []);
+    const it = cur[i];
+    const where = ends(it) ? num(centerOf(it)) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']' : Number.isFinite(it.center) ? num(it.center) : '';
+    return [it.label, where].concat(it.note ? [it.note] : []);
   });
+  return {
+    update(list) {
+      cur = list;
+      while (layer.firstChild) layer.removeChild(layer.firstChild);
+      draw(list);
+    }
+  };
 }
 
 /**
