@@ -13,10 +13,10 @@
 
 import * as state from '../state.js';
 import { repEstimates, repIds, canInfer } from '../data/model.js';
-import { simultaneousMeans, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
+import { simultaneousMeans, benchmarkFamily, bonferroniFamily, matchBlocks, anova, posthoc, posthocWelch, levene, planHalfWidthBonferroni, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
 import { planReplications } from '../stats/intervals.js';
 import { subsetSelection } from '../stats/select.js';
-import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank } from '../stats/nonparam.js';
+import { kruskalWallis, dunn, friedman, friedmanPairs, signedRank, bonferroniFamilyRank, benchmarkFamilyRank } from '../stats/nonparam.js';
 import { card, cardRow, datasetChecklist, levelSelect, spinner, details, notice, DF_LABEL,
          transformSelect, transformNote, transformRefusal, TRANSFORM_LABEL } from '../ui/widgets.js';
 import { transformSets, transformOf, isTransform, backTransform, backInterval, LOG_DEFAULT_SHIFT } from '../stats/transform.js';
@@ -47,13 +47,22 @@ const RULES = {
   tukey: 'Tukey’s HSD',
   lsd: 'Fisher’s LSD (protected)',
   bonferroni: 'Bonferroni (pooled variance)',
+  holm: 'Holm (pooled variance)',
   dunnett: 'Dunnett vs control'
 };
 // The post-hoc rules under Welch's analysis of variance, where every design keeps its own variance.
 const WELCH_RULES = {
   gameshowell: 'Games–Howell',
-  bonferroniWelch: 'Bonferroni (Welch pairs)'
+  bonferroniWelch: 'Bonferroni (Welch pairs)',
+  holmWelch: 'Holm (Welch pairs)'
 };
+// Under the rank procedures, the rule is how the pairwise p-values are adjusted.
+const RANK_RULES = {
+  bonferroni: 'Bonferroni',
+  holm: 'Holm’s step-down'
+};
+// The Holm rules give decisions without intervals.
+const holmRule = r => r === 'holm' || r === 'holmWelch';
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 let rootEl = null;
@@ -70,6 +79,13 @@ let varMode = 'pooled';
 let ruleW = 'gameshowell';
 // How Dunn's pairwise p-values are adjusted: 'bonferroni' or 'holm'.
 let adjust = 'bonferroni';
+// How the Benchmark comparison and the Pairwise comparisons declare a design
+// or a pair: 'bonferroni', by whether its interval at 1 − α/C excludes the
+// reference, or 'holm', by Holm's step-down on the C tests, which under the
+// t procedures declares those and possibly more (a rank test and its own
+// interval do not always agree). The intervals are Bonferroni's either way.
+let benchAdjust = 'bonferroni';
+let diffAdjust = 'bonferroni';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
 // How the design plots draw each design: 'int', its center with its interval,
@@ -115,6 +131,11 @@ let epsTf = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
+// How Holm's step-down reads, for the C tests of a family against its reference.
+const holmHow = (C, what, intervals = true) => 'Holm’s step-down sorts the ' + C + ' p-values from smallest to largest and compares the smallest with α/' + C + ', the next with α/' + (C - 1) +
+  ', and so on, stopping at the first that is not below its threshold; the Holm p in the table is the smallest α at which ' + what + ' would be declared.' +
+  (intervals ? ' The intervals stay Bonferroni’s at 1 − α/' + C + ', because Holm’s step-down has no intervals of matching width.' : '');
+
 // The response as the axes name it: "wait", or under a transform "the log of wait".
 const respName = list => (tfNow === 'none' ? list[0].response : 'the ' + transformOf(tfNow).label.toLowerCase() + ' of ' + list[0].response);
 // A key suffix for a value typed in the response's units, which a transform puts on another scale.
@@ -147,8 +168,8 @@ const allOf = k => (k === 2 ? 'both' : 'all ' + word(k));
 // A list in running text: "A and B", "A, B, and C".
 const andList = xs => (xs.length < 3 ? xs.join(' and ') : xs.slice(0, -1).join(', ') + ', and ' + xs[xs.length - 1]);
 // Each post-hoc rule as a sentence names it.
-const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', dunnett: 'Dunnett’s procedure' };
-const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs' };
+const RULE_PROSE = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s protected LSD', bonferroni: 'the Bonferroni rule', holm: 'Holm’s step-down', dunnett: 'Dunnett’s procedure' };
+const WELCH_RULE_PROSE = { gameshowell: 'the Games–Howell rule', bonferroniWelch: 'Bonferroni on Welch pairs', holmWelch: 'Holm’s step-down on Welch pairs' };
 
 // Two significant digits, for a default target that reads as a round number.
 function round2(v) {
@@ -258,7 +279,7 @@ function markLegend(base, centerWord) {
 
 // The sentence a caption adds for the design marks, or nothing.
 function markCaption(centerWord) {
-  if (designPlot === 'box') return ' Each design is drawn as a box plot of its replication outcomes, with its ' + centerWord + ' as a diamond, in place of its interval; the interval is in the table, and every verdict is read from it, never from the box.';
+  if (designPlot === 'box') return ' Each design is drawn as a box plot of its replication outcomes, with its ' + centerWord + ' as a diamond, in place of its interval; the interval is in the table, and every decision is read from it, never from the box.';
   if (showPts) return ' The small dots are the design’s replication outcomes, the spread its interval was formed from.';
   return '';
 }
@@ -270,13 +291,14 @@ function meansFigure(b, name, xLabel, items, groups, bm, k, short, readoutOf, ba
   const box = designPlot === 'box';
   const legendItems = box ? markLegend(null, centerWord).concat(bm.on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []) : markLegend(null, centerWord).concat(bm.legend(baseLegend));
   const cap = box
-    ? 'Each row is one design’s replication outcomes as a box plot, with the design’s ' + centerWord + ' as a diamond. The intervals, and whether each design is above or below the benchmark, are in the table below: a verdict is read from the interval, never from the box.' + (bm.on ? ' Drag the dashed line, or type a value, to move the benchmark.' : '')
+    ? 'Each row is one design’s replication outcomes as a box plot, with the design’s ' + centerWord + ' as a diamond. The intervals, and whether each design is above or below the benchmark, are in the table below: a decision is read from ' + (bm.holm ? 'Holm’s step-down on the tests against the benchmark' : 'the interval') + ', never from the box.' + (bm.on ? ' Drag the dashed line, or type a value, to move the benchmark.' : '')
     : caption + markCaption(centerWord);
   figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel }, name,
     fg => {
       rowReadout(fg, k, readoutOf);
       if (box) boxPlot(fg, items.map((it, i) => ({ label: numLabel(i, short), stats: Object.assign({}, boxStats(groups[i]), { mean: it.center }) })), { rowPx: 38, markerLabel: centerWord });
-      else intervals(fg, items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.center, flagged: bm.flag(i), values: showPts ? groups[i] : undefined })), { rowPx: showPts ? 32 : 30 });
+      else intervals(fg, items.map((it, i) => ({ label: numLabel(i, short), lo: it.lo, hi: it.hi, center: it.center, flagged: bm.flag(i), values: showPts ? groups[i] : undefined,
+        note: bm.note(i), noteColor: bm.noteColor(i) })), { rowPx: showPts ? 32 : 30 });
       bm.line(fg);
     }, legendItems, cap);
 }
@@ -496,6 +518,8 @@ const PLAN_WHY =
   '<p>A half-width target sets how precisely a mean, or a difference of means, is estimated. A power target sets how reliably a shift of a given size would be detected by a two-sided test at α = 1 − the confidence level.</p>' +
   '<p>Both scale with s²/n: the half-width is proportional to s/√n, and the power depends on the shift δ only through δ√n/s. That is why four times the replications halve the half-width, and why a shift half as large needs about four times the replications to be detected with the same power.</p>';
 const PLAN_OUT = '<p class="plan-head"></p><div class="plan-cards"></div><p class="plan-note"></p>';
+// Under Holm's decisions the intervals stay Bonferroni's, and so does a plan for their half-width.
+const HOLM_PLAN = 'The decisions above are Holm’s, but the intervals, and so this plan, stay Bonferroni’s.';
 
 // A section's planning card: its heading, its controls, the outputs, and a
 // line for the rank procedures' note.
@@ -614,7 +638,12 @@ function ensureEpsSpinner(step) {
 // The benchmark the means (or pseudo-medians) are tested against: the
 // control's state, the flag for each interval, and the pieces of the plot,
 // the table, and the caption that depend on it. Off, every piece is empty.
-function benchmark(items, ds) {
+// The benchmark the designs are judged against: its control, its line on
+// the plot, and every decision. testsFor(value), when given, returns Holm's
+// family of tests against the benchmark (benchmarkFamily or
+// benchmarkFamilyRank), and a design is then declared by its test; otherwise
+// it is declared when its interval excludes the benchmark.
+function benchmark(items, ds, testsFor) {
   const pair = rootEl.querySelector('#sev-bench-pair');
   const on = benchOn && items.length > 0;
   rootEl.querySelector('#sev-bench-on').checked = benchOn;
@@ -630,7 +659,7 @@ function benchmark(items, ds) {
     const span = Math.max(...items.map(it => it.hi)) - Math.min(...items.map(it => it.lo));
     const step = stepFor(span || Math.abs(value) || 1);
     // The value is kept at the spinner's own precision, and so the field,
-    // the line, and the verdict all show the same number.
+    // the line, and the decision all show the same number.
     value = Number((Math.round(value / step) * step).toFixed(Math.max(0, -Math.floor(Math.log10(step)))));
     benchVal = value;
     if (!benchSpin || benchSpin.step !== step || benchSpin.key !== key) {
@@ -642,23 +671,50 @@ function benchmark(items, ds) {
     } else benchSpin.spin.set(value, false);
     rootEl.querySelector('#sev-bench-unit').textContent = tfNow !== 'none' ? 'on the ' + transformOf(tfNow).scale + ' scale' : ds && ds.unit ? ds.unit : 'in the response’s units';
   }
-  const flag = i => on && (items[i].lo > value || items[i].hi < value);
-  const word = i => (!on ? '' : items[i].lo > value ? 'above the benchmark' : items[i].hi < value ? 'below the benchmark' : 'contains the benchmark');
+  const fam = on && testsFor ? testsFor(value) : null;
+  const holm = !!fam;
+  const excludes = i => on && (items[i].lo > value || items[i].hi < value);
+  // Above or below: under Holm, by the design's own test; otherwise by its interval.
+  const side = i => (!on ? null : holm ? fam.tests[i].side : items[i].lo > value ? 'above' : items[i].hi < value ? 'below' : null);
+  const declared = i => side(i) !== null;
+  // Declared by Holm alone: its interval at 1 − α/k still contains the benchmark.
+  const holmOnly = i => holm && declared(i) && !excludes(i);
+  // Under Holm, a rank interval can exclude the benchmark while its test, at the edge, does not reject.
+  const word = i => (!on ? '' : declared(i) ? side(i) + ' the benchmark' + (holmOnly(i) ? ' (Holm)' : '') : excludes(i) ? 'not declared' : 'contains the benchmark');
+  const ids = which => items.map((it, i) => i).filter(i => side(i) === which);
   return {
-    on, value: on ? value : null, flag, word,
-    cell: i => (flag(i) ? '<span class="cmp-flag">' + word(i).replace(' the benchmark', '') + '</span>' : 'contains'),
+    on, holm, fam, value: on ? value : null, word, declared, holmOnly,
+    flag: i => declared(i) && excludes(i),
+    // Every row carries its decision at the right under either rule, and so the
+    // figure keeps its width as the "Decide by" switch moves.
+    note: i => (!on ? undefined : declared(i) ? side(i) + (holmOnly(i) ? ' (Holm)' : '') : excludes(i) ? 'not declared' : 'contains'),
+    noteColor: i => (declared(i) ? '--miss' : '--muted'),
+    cell: i => (declared(i) ? '<span class="cmp-flag">' + word(i).replace(' the benchmark', '') + '</span>' : excludes(i) ? 'not declared' : 'contains'),
     // The spinner shows the value as the line moves, and so the line carries no label of its own.
     line: fg => { if (on) dragLine(fg, { value, step: benchSpin.step, ariaLabel: 'Benchmark', label: null, onMove: v => benchSpin.spin.set(v, false), onEnd: v => { benchVal = v; state.setPick(id, key, v); benchSpin.spin.set(v, false); schedule(); } }); },
     legend: base => [{ swatch: 'interval', color: '--est', label: base + (on ? ', contains the benchmark' : '') }]
-      .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }, { swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
-    caption: () => (on ? ' A red dashed interval excludes the benchmark, and that design is declared above or below it; with every interval at 1 − α/k, the chance of any false declaration across the k designs is at most α. Drag the dashed line, or type a value, to move the benchmark.' : ''),
+      .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }] : [])
+      .concat(on && holm && items.some((it, i) => holmOnly(i)) ? [{ swatch: 'interval', color: '--est', label: 'labeled “(Holm)”: declared by Holm’s step-down although the interval contains the benchmark' }] : [])
+      .concat(on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
+    caption: () => (!on ? ''
+      : holm ? ' A red dashed interval excludes the benchmark, and that design is declared above or below it. The decision at the right of each row comes from Holm’s step-down on the k tests against the benchmark, which holds the chance of any false declaration at α or below' +
+        (proc === 'np' ? '. A design marked “(Holm)” is declared although its interval still contains the benchmark. A signed-rank test and its own interval do not always agree, and so a design whose interval excludes the benchmark can read “not declared”.'
+          : ' and declares every design whose interval excludes the benchmark and possibly more: a design marked “(Holm)” is declared although its interval still contains the benchmark.') +
+        ' Drag the dashed line, or type a value, to move the benchmark.'
+        : ' A red dashed interval excludes the benchmark, and that design is declared above or below it, as the decision at the right of each row says; with every interval at 1 − α/k, the chance of any false declaration across the k designs is at most α. Drag the dashed line, or type a value, to move the benchmark.'),
     verdict: short => {
-      const above = items.map((it, i) => i).filter(i => items[i].lo > value), below = items.map((it, i) => i).filter(i => items[i].hi < value);
-      const name = ids => ids.map(i => short[i]).join(', ');
-      if (!above.length && !below.length) return 'No design’s interval excludes the benchmark ' + num(value) + ': none is declared above or below it at this family-wise level.';
-      return 'Against the benchmark ' + num(value) + ': ' + (above.length ? plural(above.length, 'design') + ' above it (' + name(above) + ')' : '') +
+      const above = ids('above'), below = ids('below');
+      const name = q => q.map(i => short[i]).join(', ');
+      if (!above.length && !below.length) return holm
+        ? 'No design is declared above or below the benchmark ' + num(value) + ' by Holm’s step-down at this family-wise level.'
+        : 'No design’s interval excludes the benchmark ' + num(value) + ': none is declared above or below it at this family-wise level.';
+      const alone = items.map((it, i) => i).filter(holmOnly);
+      return 'Against the benchmark ' + num(value) + (holm ? ', by Holm’s step-down' : '') + ': ' + (above.length ? plural(above.length, 'design') + ' above it (' + name(above) + ')' : '') +
         (above.length && below.length ? ', ' : '') + (below.length ? plural(below.length, 'design') + ' below it (' + name(below) + ')' : '') +
-        ', each declared with the family-wise error held at α.';
+        ', each declared with the family-wise error held at α' +
+        (!holm ? '.' : alone.length
+          ? '. Holm alone declares ' + name(alone) + ', whose ' + (alone.length === 1 ? 'interval still contains' : 'intervals still contain') + ' the benchmark.'
+          : '. The interval of each of them also excludes the benchmark.');
     }
   };
 }
@@ -666,7 +722,6 @@ function benchmark(items, ds) {
 function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
-  rootEl.querySelectorAll('[data-adj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.adj === adjust)));
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
   rootEl.querySelectorAll('[data-dplot]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dplot === designPlot)));
@@ -675,12 +730,9 @@ function syncControls(list, groups) {
   // The outcome dots sit behind intervals; a box plot holds the outcomes already.
   rootEl.querySelector('#sev-pts-lbl').style.display = designPlot === 'box' ? 'none' : '';
   rootEl.querySelector('#sev-pts').checked = showPts;
-  // The post-hoc rule serves the t procedures, the adjustment the rank ones.
-  rootEl.querySelector('#sev-rule-host').style.display = proc === 'np' ? 'none' : '';
   rootEl.querySelector('#sev-var-row').style.display = proc === 'np' || pairMode === 'paired' ? 'none' : '';
   rootEl.querySelectorAll('[data-var]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.var === varMode)));
   fillRuleSelect();
-  rootEl.querySelector('#sev-adj-row').style.display = proc === 'np' ? '' : 'none';
   rootEl.querySelector('#sev-match-row').style.display = pairMode === 'paired' ? '' : 'none';
 
   // The control picker offers the checked designs.
@@ -695,7 +747,13 @@ function syncControls(list, groups) {
   }
   // The picker shows only beside the control that uses it.
   rootEl.querySelector('#sev-ctrl-diff').style.display = diffMode === 'control' ? '' : 'none';
-  rootEl.querySelector('#sev-ctrl-rule').style.display = rule === 'dunnett' && !welchOn() ? '' : 'none';
+  rootEl.querySelector('#sev-ctrl-rule').style.display = rule === 'dunnett' && !welchOn() && proc !== 'np' ? '' : 'none';
+  // The "Decide by" switches: with one design against the benchmark, or one comparison in the
+  // family, Holm and Bonferroni agree, and so the switch is left out.
+  rootEl.querySelectorAll('[data-badj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.badj === benchAdjust)));
+  rootEl.querySelectorAll('[data-dadj]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dadj === diffAdjust)));
+  rootEl.querySelector('#sev-badj').hidden = !(benchOn && list.length >= 2);
+  rootEl.querySelector('#sev-dadj').hidden = (diffMode === 'pairs' ? list.length * (list.length - 1) / 2 : list.length - 1) < 2;
 
   // The indifference zone, its units, and where its default comes from.
   const note = rootEl.querySelector('#sev-eps-note');
@@ -881,8 +939,10 @@ function update() {
   const tables = [];
   const summary = [];
 
-  // Means with simultaneous intervals.
+  // Means with simultaneous intervals. With two or more designs and the
+  // benchmark on, Holm's step-down may judge them against it instead.
   const sm = simultaneousMeans(groups, level);
+  const bHolm = benchOn && k >= 2 && benchAdjust === 'holm';
   // One set per design for the checks lines of the t procedures that take
   // each design's outcomes as normal, each a dataset the Normality link opens.
   const designSets = groups.map((g, i) => ({ name: short[i], values: g, dsId: list[i].id }));
@@ -899,7 +959,8 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     }
-    const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0]);
+    const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0],
+      bHolm ? v => benchmarkFamilyRank(groups, { value: v, level, adjust: 'holm' }) : null);
     meansFigure(b, 'several-pseudo-medians', 'Pseudo-median of ' + respName(list), hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), groups, bm, k, short,
       i => [list[i].name, num(hl[i].estimate) + '  ' + interval(hl[i].lo, hl[i].hi), bm.word(i)],
       'design pseudo-median with its ' + levelPct(sm.perLevel) + ' Wilcoxon interval',
@@ -907,12 +968,15 @@ function update() {
         : 'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
           ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
+    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own Wilcoxon signed-rank test against the benchmark gives its p-value. ' + holmHow(k, 'a design')));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
-    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
-    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
+    const ht = i => bm.fam.tests[i];
+    const rows = hl.map((r, i) => [badge(i) + ' ' + esc(short[i]), intl(r.n), num(r.estimate), interval(r.lo, r.hi), basis(r)].concat(bk[i] ? bk[i].cells : [],
+      bm.holm ? [num(ht(i).V), pValue(ht(i).p), pValue(ht(i).pAdj)] : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Pseudo-median', levelPct(sm.perLevel) + ' interval', 'Basis'].concat(bk[0] ? bk[0].heads : [], bm.holm ? ['V', 'p', 'Holm p'] : [], bm.on ? ['vs benchmark'] : []), rows));
+    tables.push({ section: 'means', name: 'Pseudo-medians with simultaneous intervals', headers: ['design', 'R', 'pseudo-median', 'per-interval level', 'lower', 'upper', 'basis'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark'] : [], bm.holm ? ['V', 'p', 'Holm adjusted p'] : [], bm.on ? ['vs benchmark'] : []),
+      rows: hl.map((r, i) => [list[i].name, r.n, r.estimate, sm.perLevel, r.lo, r.hi, basis(r)].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value] : [], bm.holm ? [ht(i).V, ht(i).p, ht(i).pAdj] : [], bm.on ? [bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
     } else {
     if (k === 1) {
@@ -923,7 +987,8 @@ function update() {
     b.appendChild(para('cmp-banner', 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     b.appendChild(para('cmp-lead', 'Each at 1 − ' + aTxt + '/' + k + ', and so ' + allOf(k) + ' hold at once with probability at least ' + L + ' (Bonferroni).'));
     }
-    const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0]);
+    const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0],
+      bHolm ? v => benchmarkFamily(groups, { value: v, level, adjust: 'holm' }) : null);
     meansFigure(b, 'several-means', 'Mean of ' + respName(list), sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), groups, bm, k, short,
       i => [list[i].name, num(sm.items[i].mean) + '  ' + interval(sm.items[i].lo, sm.items[i].hi), bm.word(i)],
       'design mean with its ' + levelPct(sm.perLevel) + ' t interval',
@@ -931,12 +996,15 @@ function update() {
         : 'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
           ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
+    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own one-sample t test against the benchmark gives its p-value. ' + holmHow(k, 'a design')));
     const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
-    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [], bm.on ? [bm.cell(i)] : []));
-    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bk[0] ? bk[0].heads : [], bm.on ? ['vs benchmark'] : []), rows));
+    const ht = i => bm.fam.tests[i];
+    const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [],
+      bm.holm ? [stat(ht(i).t), pValue(ht(i).p), pValue(ht(i).pAdj)] : [], bm.on ? [bm.cell(i)] : []));
+    b.appendChild(table(['Design', 'R', 'Mean', 'SD', 'SE', 'df', levelPct(sm.perLevel) + ' interval'].concat(bk[0] ? bk[0].heads : [], bm.holm ? ['t', 'p', 'Holm p'] : [], bm.on ? ['vs benchmark'] : []), rows));
     b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the benchmark comparison', declared: INDEP_REPS }));
-    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark', 'vs benchmark'] : []),
-      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value, bm.word(i)] : [])) });
+    tables.push({ section: 'means', name: 'Means with simultaneous intervals', headers: ['design', 'R', 'mean', 'sd', 'se', 'df', 'per-interval level', 'lower', 'upper'].concat(bk[0] ? bk[0].csvHeads : [], bm.on ? ['benchmark'] : [], bm.holm ? ['t', 'p', 'Holm adjusted p'] : [], bm.on ? ['vs benchmark'] : []),
+      rows: sm.items.map((it, i) => [list[i].name, it.n, it.mean, it.sd, it.se, it.df, sm.perLevel, it.lo, it.hi].concat(bk[i] ? bk[i].values : [], bm.on ? [bm.value] : [], bm.holm ? [ht(i).t, ht(i).p, ht(i).pAdj] : [], bm.on ? [bm.word(i)] : [])) });
     if (bm.on) summary.push(bm.verdict(short));
       }
   }
@@ -967,7 +1035,7 @@ function update() {
       },
       tables,
       summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
-      recipeIn: { list, groups: rawGroups, paired: false, match: null, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+      recipeIn: { list, groups: rawGroups, paired: false, match: null, proc, varMode, rule, ruleW, adjust, benchAdjust: 'bonferroni', diffAdjust: 'bonferroni', diffMode, ctrlIdx, dir,
                   bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps: NaN, transform: tfNow }
     };
     drawPlan();
@@ -975,13 +1043,39 @@ function update() {
     return;
   }
 
-  // Bonferroni family of differences.
-  const fam = bonferroniFamily(groups, { mode: diffMode, control: ctrlIdx, level, paired });
+  // Bonferroni family of differences. Under Holm (where the family has two or
+  // more comparisons, since with one the two rules agree), a pair is declared
+  // by its adjusted p rather than by its interval, which stays Bonferroni's.
+  const dHolm = diffAdjust === 'holm' && (diffMode === 'pairs' ? k * (k - 1) / 2 : k - 1) >= 2;
+  const dAdj = dHolm ? 'holm' : 'bonferroni';
+  const fam = bonferroniFamily(groups, { mode: diffMode, control: ctrlIdx, level, paired, adjust: dAdj });
   const famName = paired ? 'paired t interval' : 'Welch interval';
+  // A comparison's decision, its note at the right of its row (under either rule, and so the
+  // figure keeps its width as the "Decide by" switch moves), and its table cell.
+  const dWord = c => (c.declared ? (c.flagged ? 'excludes 0' : 'declared (Holm)') : c.flagged ? 'not declared' : 'contains 0');
+  const dNote = c => (c.declared ? (c.flagged ? 'different' : 'different (Holm)') : c.flagged ? 'not declared' : 'contains 0');
+  const dCell = c => (c.declared ? '<span class="cmp-flag">' + dWord(c) + '</span>' : dWord(c));
+  const dItem = c => ({ label: pairLabel(c.i, c.j), lo: c.lo, hi: c.hi, center: c.diff, flagged: c.declared && c.flagged, note: dNote(c), noteColor: c.declared ? '--miss' : '--muted' });
+  const dLegend = (cs, name, at) => {
+    const items = [];
+    if (cs.some(c => !(c.declared && c.flagged))) items.push({ swatch: 'interval', color: '--est', label: name + ' at ' + at + ', contains 0' });
+    if (cs.some(c => c.declared && c.flagged)) items.push({ swatch: 'flagged', color: '--miss', label: name + ' at ' + at + ', excludes 0' });
+    if (cs.some(c => c.declared && !c.flagged)) items.push({ swatch: 'interval', color: '--est', label: 'labeled “different (Holm)”: declared by Holm’s step-down although the interval contains 0' });
+    return items;
+  };
+  const dCaption = (C, test, rank) => (!dHolm ? ' A pair whose interval excludes 0 is declared different, as the decision at the right of each row says.'
+    : ' The decision at the right of each row comes from Holm’s step-down on the ' + C + ' ' + test + ', which holds the chance of any false declaration at ' + aTxt + ' or below' +
+      (rank ? '. A pair marked “different (Holm)” is declared although its interval still contains 0. A rank test and its own interval do not always agree, and so a pair whose interval excludes 0 can read “not declared”.'
+        : ' and declares every pair whose interval excludes 0 and possibly more: a pair marked “different (Holm)” is declared although its interval still contains 0.'));
+  const dSummary = (cs, C, what) => {
+    const nd = cs.filter(c => c.declared).length, alone = cs.filter(c => c.declared && !c.flagged).length;
+    const head = (dHolm ? 'Holm' : 'Bonferroni') + what + ' (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + C + '): ';
+    return dHolm ? head + plural(nd, 'pair') + ' declared different' + (alone ? ', ' + alone + ' by Holm alone' : '') + '.' : null;
+  };
   {
     const b = bodies[1];
     if (np) {
-    const famR = bonferroniFamilyRank(groups, { mode: diffMode, control: ctrlIdx, level, paired });
+    const famR = bonferroniFamilyRank(groups, { mode: diffMode, control: ctrlIdx, level, paired, adjust: dAdj });
     const rName = paired ? 'Wilcoxon signed-rank interval' : 'Wilcoxon rank-sum interval';
     b.appendChild(para('cmp-banner', 'C = ' + famR.C + ' comparison' + (famR.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(famR.perLevel)));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand with ranks: every pair’s own ' + rName + ' for the shift in location at level 1 − α/C, ' +
@@ -989,55 +1083,55 @@ function update() {
     if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
     const lab = c => pairLabel(c.i, c.j);
     const full = c => list[c.i].name + ' − ' + list[c.j].name;
-    const anyFlag = famR.comparisons.some(c => c.flagged), anyPlain = famR.comparisons.some(c => !c.flagged);
-    const legItems = [];
-    if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: rName + ' at ' + levelPct(famR.perLevel) + ', contains 0' });
-    if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: rName + ' at ' + levelPct(famR.perLevel) + ', excludes 0' });
+    const legItems = dLegend(famR.comparisons, rName, levelPct(famR.perLevel));
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero shift' });
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Shift in location of ' + respName(list) }, 'several-rank-differences',
       fg => {
         const cs = famR.comparisons;
-        rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
-        intervals(fg, cs.map(c => ({ label: lab(c), lo: c.lo, hi: c.hi, center: c.diff, flagged: c.flagged })), { ref: 0, rowPx: 28 });
+        rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), dWord(cs[i])]);
+        intervals(fg, cs.map(dItem), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is one pair’s Hodges–Lehmann shift with its ' + rName + ' at ' + levelPct(famR.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
+      'Each row is one pair’s Hodges–Lehmann shift with its ' + rName + ' at ' + levelPct(famR.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.' +
+      dCaption(famR.C, paired ? 'signed-rank tests' : 'rank-sum tests', true));
     const statName = paired ? 'V' : 'W';
     const rk = famR.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
     const rows = famR.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [pValue(c.p), pValue(c.pAdj),
-      c.exact ? 'exact' : 'normal approx.', c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
-    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval'].concat(rk[0] ? rk[0].heads : [], ['p', 'Adjusted p', 'Basis', 'Flag']), rows));
-    b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ' +
+      c.exact ? 'exact' : 'normal approx.', dCell(c)]));
+    b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval'].concat(rk[0] ? rk[0].heads : [], ['p', dHolm ? 'Holm p' : 'Adjusted p', 'Basis', dHolm ? 'Decision' : 'Flag']), rows));
+    b.appendChild(para('exp-note', (dHolm ? holmHow(famR.C, 'a pair') + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful than Bonferroni on the same p-values. '
+      : 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ') +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
-    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (Bonferroni)', headers: ['pair', 'shift', statName, 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['p', 'adjusted p', 'basis', 'flag']),
-      rows: famR.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', c.flagged ? 'excludes 0' : 'contains 0'])) });
+    tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (' + (dHolm ? 'Holm' : 'Bonferroni') + ')', headers: ['pair', 'shift', statName, 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['p', dHolm ? 'Holm adjusted p' : 'adjusted p', 'basis', 'flag']),
+      rows: famR.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.stat, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.p, c.pAdj, c.exact ? 'exact' : 'normal approximation', dWord(c)])) });
     const nf = famR.comparisons.filter(c => c.flagged).length;
-    summary.push('Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
+    summary.push(dSummary(famR.comparisons, famR.C, ' rank') || 'Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
     } else {
     b.appendChild(para('cmp-banner', 'C = ' + fam.C + ' comparison' + (fam.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(fam.perLevel)));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand: every pair’s own ' + famName + ' at level 1 − α/C, with no pooled variance and no analysis of variance in front; each interval contains 0 exactly when that pair’s t test at α/C does not reject. The Bonferroni rule in the ANOVA section is the other kind: the same α/C, on the pooled variance.'));
     if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
     const lab = c => pairLabel(c.i, c.j);
     const full = c => list[c.i].name + ' − ' + list[c.j].name;
-    const anyFlag = fam.comparisons.some(c => c.flagged), anyPlain = fam.comparisons.some(c => !c.flagged);
-    const legItems = [];
-    if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: famName + ' at ' + levelPct(fam.perLevel) + ', contains 0' });
-    if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: famName + ' at ' + levelPct(fam.perLevel) + ', excludes 0' });
+    const legItems = dLegend(fam.comparisons, famName, levelPct(fam.perLevel));
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
     figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-differences',
       fg => {
         const cs = fam.comparisons;
-        rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), cs[i].flagged ? 'excludes 0' : 'contains 0']);
-        intervals(fg, cs.map(c => ({ label: lab(c), lo: c.lo, hi: c.hi, center: c.diff, flagged: c.flagged })), { ref: 0, rowPx: 28 });
+        rowReadout(fg, cs.length, i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(cs[i].lo, cs[i].hi), dWord(cs[i])]);
+        intervals(fg, cs.map(dItem), { ref: 0, rowPx: 28 });
       },
       legItems,
-      'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.');
+      'Each row is one difference of means with its ' + famName + ' at ' + levelPct(fam.perLevel) + '. A red dashed row excludes 0, and so that pair is declared different with the family-wise error rate held at ' + aTxt + ' or below.' +
+      dCaption(fam.C, paired ? 'paired t tests' : 'Welch t tests'));
     const rk = fam.comparisons.map(c => ratioCols(c.diff, c.lo, c.hi));
     const rows = fam.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.se), num(c.df), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [stat(c.t), pValue(c.p), pValue(c.pAdj),
-      c.flagged ? '<span class="cmp-flag">excludes 0</span>' : 'contains 0']));
-    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval'].concat(rk[0] ? rk[0].heads : [], ['t', 'p', 'Adjusted p', 'Flag']), rows));
-    b.appendChild(para('exp-note', 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
-      'The adjusted p is C·p capped at 1. Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
+      dCell(c)]));
+    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval'].concat(rk[0] ? rk[0].heads : [], ['t', 'p', dHolm ? 'Holm p' : 'Adjusted p', dHolm ? 'Decision' : 'Flag']), rows));
+    b.appendChild(para('exp-note', (dHolm
+      ? holmHow(fam.C, 'a pair') + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful. '
+      : 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
+        'The adjusted p is C·p capped at 1. ') +
+      'Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
     // Welch intervals take each design's outcomes as normal; paired t intervals take each pair's differences as normal.
     b.appendChild(assumptionChecks({
       sets: paired
@@ -1049,10 +1143,10 @@ function update() {
       alpha, procedure: 'the pairwise comparisons', linkDs: list[0].id,
       declared: paired ? 'between blocks cannot be checked from the data; the pairing within each replication is what the Replications switch declares.'
         : 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
-    tables.push({ section: 'diffs', name: 'Pairwise comparisons (Bonferroni)', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['t', 'p', 'adjusted p', 'flag']),
-      rows: fam.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.t, c.p, c.pAdj, c.flagged ? 'excludes 0' : 'contains 0'])) });
+    tables.push({ section: 'diffs', name: 'Pairwise comparisons (' + (dHolm ? 'Holm' : 'Bonferroni') + ')', headers: ['pair', 'difference', 'se', 'df', 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['t', 'p', dHolm ? 'Holm adjusted p' : 'adjusted p', 'flag']),
+      rows: fam.comparisons.map((c, i) => [list[c.i].name + ' - ' + list[c.j].name, c.diff, c.se, c.df, c.lo, c.hi].concat(rk[i] ? rk[i].values : [], [c.t, c.p, c.pAdj, dWord(c)])) });
     const nf = fam.comparisons.filter(c => c.flagged).length;
-    summary.push('Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
+    summary.push(dSummary(fam.comparisons, fam.C, '') || 'Bonferroni (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + fam.C + '): ' + plural(nf, 'difference excludes', 'differences exclude') + ' 0.');
       }
   }
 
@@ -1144,11 +1238,15 @@ function update() {
       'The residuals are what ' + (welch ? 'Welch’s F' : 'the F test') + ' and the post-hoc rules take as normal, and the Shapiro–Wilk check above tests them together. Points that follow the line are consistent with normality; a bend at either end is a heavier or lighter tail. The Normality section of Summary and Plots shows each design’s outcomes on its own.');
     b = bodies[4];
     let critTxt;
-    if (welch && ruleW === 'gameshowell') critTxt = 'Games–Howell: each pair’s critical difference is q·SE<sub>ij</sub>/√2, with q the studentized range quantile (k = ' + k + ') on that pair’s own Welch degrees of freedom.';
+    // The Holm rules judge each pair by its adjusted p and give no intervals.
+    const hRule = holmRule(welch ? ruleW : rule);
+    if (welch && ruleW === 'holmWelch') critTxt = 'Holm’s step-down on Welch pairs: each pair’s t = difference/SE<sub>ij</sub> on its own Welch degrees of freedom, and the C = ' + ph.pairs.length + ' two-sided p-values adjusted by Holm’s step-down; a pair is declared different when its Holm p is below α = ' + aTxt + '.';
+    else if (welch && ruleW === 'gameshowell') critTxt = 'Games–Howell: each pair’s critical difference is q·SE<sub>ij</sub>/√2, with q the studentized range quantile (k = ' + k + ') on that pair’s own Welch degrees of freedom.';
     else if (welch) critTxt = 'Bonferroni on Welch pairs: t at 1 − α/(2C) with C = ' + ph.pairs.length + ' on each pair’s own Welch degrees of freedom, and each pair’s critical difference is t·SE<sub>ij</sub>.';
     else if (rule === 'tukey') critTxt = 'Tukey–Kramer: the studentized range quantile is q = ' + num(ph.crit) + ' (k = ' + k + ', ' + av.dfw + ' df), and each pair’s critical difference is q·SE/√2.';
     else if (rule === 'lsd') critTxt = 'Fisher’s LSD: t = ' + num(ph.crit) + ' at 1 − α/2 on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
     else if (rule === 'bonferroni') critTxt = 'Bonferroni: t = ' + num(ph.crit) + ' at 1 − α/(2C) with C = ' + ph.pairs.length + ' on ' + av.dfw + ' df, and each pair’s critical difference is t·SE.';
+    else if (rule === 'holm') critTxt = 'Holm’s step-down: each pair’s t = difference/SE on ' + av.dfw + ' df, and the C = ' + ph.pairs.length + ' two-sided p-values adjusted by Holm’s step-down; a pair is declared different when its Holm p is below α = ' + aTxt + '.';
     else critTxt = 'Dunnett: each design against the control, ' + esc(short[ctrlIdx]) + ', with the two-sided critical value d = ' + num(ph.crit) + ' on ' + av.dfw + ' df; each pair’s critical difference is d·SE.';
     b.appendChild(para('cmp-lead', critTxt + (welch ? ' SE<sub>ij</sub> = √(s<sub>i</sub>²/R<sub>i</sub> + s<sub>j</sub>²/R<sub>j</sub>) uses each design’s own variance.' : paired ? ' SE = √(MSE · 2/R) uses the residual mean square, with the replication effect removed.' : ' SE = √(MSW (1/R<sub>i</sub> + 1/R<sub>j</sub>)) uses the pooled mean square within.')));
     if (rule === 'lsd' && ph.protected === false) b.appendChild(notice('warn', esc(ph.note)));
@@ -1178,14 +1276,20 @@ function update() {
           ? 'Designs that share a letter are not declared different; a bracket joins a pair that is.'
           : 'Dunnett’s procedure compares each design with the control only, and so it gives no letters; a bracket joins a design to the control when the pair is declared different.') +
         ' Each interval is the ' + levelPct(sm.perLevel) + ' simultaneous interval from the Means section, and the rows run from the ' + (dirS === 'min' ? 'smallest' : 'largest') + ' mean down.' + markCaption('mean') +
-        ' Whether two designs differ is read from the intervals on their difference below, never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
+        ' Whether two designs differ is read from ' + (hRule ? 'the Holm p-values in the table below' : 'the intervals on their difference below') + ', never from whether their own intervals overlap: two overlapping intervals can belong to a pair declared different, and two that do not overlap are not a test of anything.');
     }
 
+    if (hRule) {
+      // Holm's step-down has no critical difference, and so no interval per pair is drawn.
+      b.appendChild(para('exp-note', holmHow(ph.pairs.length, 'a pair', false) + ' Holm’s step-down gives no interval on each difference, and so this rule has no figure of differences; the Pairwise comparisons section draws Bonferroni’s intervals beside the same kind of decision.'));
+      const rowsH = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se)].concat(welch ? [num(p.df)] : [], [stat(p.t), pValue(p.p), pValue(p.pAdj), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']));
+      b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['t', 'p', 'Holm p', 'Different?']), rowsH));
+    }
     const legItems = [];
     if (anyPlain) legItems.push({ swatch: 'interval', color: '--est', label: 'not declared different' });
     if (anyFlag) legItems.push({ swatch: 'flagged', color: '--miss', label: 'declared different' });
     legItems.push({ swatch: 'dash', color: '--truth', label: 'zero difference' });
-    figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-posthoc',
+    if (!hRule) figure(b, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in means of ' + respName(list) }, 'several-posthoc',
       fg => {
         const ps = ph.pairs;
         rowReadout(fg, ps.length, i => [full(ps[i]), num(ps[i].diff) + '  ' + interval(ps[i].lo, ps[i].hi), ps[i].flagged ? 'declared different' : 'not declared different']);
@@ -1197,13 +1301,15 @@ function update() {
       (welch ? 'These procedures assume normal replication outcomes and let each design keep its own variance.'
         : 'These procedures assume normal replication outcomes with equal variances across designs; when the variances clearly differ, switch Variances to unequal above or use the Welch intervals of the Pairwise comparisons section.'));
     const rows = ph.pairs.map(p => ['<span class="sev-pair">' + esc(lab(p)) + '</span>', '<span class="sev-full">' + esc(full(p)) + '</span>', num(p.diff), num(p.se)].concat(welch ? [num(p.df)] : [], [num(p.hw), interval(p.lo, p.hi), p.flagged ? '<span class="cmp-flag">yes</span>' : 'no']));
-    b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['Critical difference', 'Interval', 'Different?']), rows));
+    if (!hRule) b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE'].concat(welch ? [DF_LABEL] : [], ['Critical difference', 'Interval', 'Different?']), rows));
     if (welch) tables.push({ section: 'anova', name: 'Welch ANOVA', headers: ['test', 'F', 'df1', 'df2', 'p'], rows: [['Welch F for equal means', av.F, av.df1, av.df2, av.p]] });
     else tables.push({ section: 'anova', name: paired ? 'ANOVA (replication as block)' : 'ANOVA', headers: ['source', 'SS', 'df', 'MS', 'F', 'p'], rows: [
       ['between designs', av.ssb, av.dfb, av.msb, av.F, av.p],
       paired ? ['between replications (blocks)', av.ssblk, av.dfblk, av.msblk, av.Fblock, av.pBlock] : null,
       [paired ? 'residual' : 'within designs', av.ssw, av.dfw, av.msw, '', ''], ['total', av.sst, totalDf, '', '', '']].filter(Boolean) });
-    tables.push({ section: 'anova', name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 'critical value', 'critical difference', 'lower', 'upper', 'p', 'different'],
+    if (hRule) tables.push({ section: 'anova', name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 't', 'p', 'Holm adjusted p', 'different'],
+      rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, welch ? p.df : av.dfw, p.t, p.p, p.pAdj, p.flagged ? 'yes' : 'no']) });
+    else tables.push({ section: 'anova', name: 'Post-hoc: ' + ruleName, headers: ['pair', 'difference', 'se', 'df', 'critical value', 'critical difference', 'lower', 'upper', 'p', 'different'],
       rows: ph.pairs.map(p => [list[p.i].name + ' - ' + list[p.j].name, p.diff, p.se, welch ? p.df : av.dfw, welch ? p.crit : ph.crit, p.hw, p.lo, p.hi, welch ? p.p : '', p.flagged ? 'yes' : 'no']) });
     // The letters are read off the design plot; the table exists only as an
     // export, where nothing can be hovered.
@@ -1214,7 +1320,7 @@ function update() {
     summary.push('Levene: ' + levTxt + '. ' + (welch ? 'Welch ANOVA' : 'ANOVA') + ': ' + (Number.isNaN(av.F) ? 'F cannot be computed' : 'F = ' + stat(av.F) + ', ' + pEq(av.p)) + '. ' + ruleName + ': ' +
       plural(ph.pairs.filter(p => p.flagged).length, 'pair', 'pairs') + ' declared different.');
   } else {
-    const b = bodies[2];
+    let b = bodies[2];
     const kwr = paired ? null : kruskalWallis(groups);
     const fr = paired ? friedman(groups) : null;
     const dn = paired ? friedmanPairs(groups, { alpha, adjust }) : dunn(groups, { alpha, adjust });
@@ -1233,6 +1339,8 @@ function update() {
       (omni.p < alpha ? (paired ? 'the designs do not all rank alike across the replications at this level.' : 'the designs do not all share one distribution at this level.') : 'insufficient evidence at this level that the designs differ.')));
     const adjName = adjust === 'holm' ? 'Holm’s step-down' : 'Bonferroni';
     const pairTest = paired ? 'Friedman’s pairwise comparison' : 'Dunn’s test';
+    // The pairwise comparisons follow the rule picker, which sits between the two bodies.
+    b = bodies[4];
     b.appendChild(para('cmp-lead', (paired
       ? 'Each pair’s difference of rank sums is standardized by √(R·k·(k + 1)/6), Siegel and Castellan’s procedure'
       : 'Dunn’s test compares each pair’s mean rank with a z statistic on the pooled rank variance' + (omni.ties ? ', tie-corrected' : '')) +
@@ -1325,6 +1433,8 @@ function update() {
       direction: dir === 'min' ? 'smaller is better' : 'bigger is better',
       'comparisons adjusted for': fam.C,
       'difference family': diffMode === 'pairs' ? 'all pairs' : 'versus control',
+      'benchmark decided by': !(benchOn && Number.isFinite(benchVal)) ? 'none' : bHolm ? 'Holm' : 'Bonferroni',
+      'pairwise decided by': dHolm ? 'Holm' : 'Bonferroni',
       procedure: np ? 'nonparametric (Wilcoxon, ' + (paired ? 'Friedman' : 'Kruskal–Wallis and Dunn') + ')' : 't procedures',
       'post-hoc rule': np ? 'not applicable' : welch ? WELCH_RULES[ruleW] : RULES[rule],
       variances: np ? 'not applicable' : welch ? 'unequal (Welch)' : 'pooled',
@@ -1339,7 +1449,7 @@ function update() {
     tables,
     summaryHtml: summary.map(s => '<p>' + s + '</p>').join(''),
     // What the regenerate scripts are built from; drawPlan() keeps it out of the registered result.
-    recipeIn: { list, groups: rawGroups, paired, match, proc, varMode, rule, ruleW, adjust, diffMode, ctrlIdx, dir,
+    recipeIn: { list, groups: rawGroups, paired, match, proc, varMode, rule, ruleW, adjust, benchAdjust: bHolm ? 'holm' : 'bonferroni', diffAdjust: dAdj, diffMode, ctrlIdx, dir,
                 bench: benchOn && Number.isFinite(benchVal) ? benchVal : null, eps, transform: tfNow }
   };
   drawPlan();
@@ -1399,6 +1509,7 @@ function drawPlan() {
         : esc(hp.reason || 'No replication count meets this target; choose a larger half-width.');
     }
     mText = 'h = ' + num(c ? hwVal : NaN) + unit;
+    if (c && !c.single && benchOn && benchAdjust === 'holm' && hp.n != null) note += ' ' + HOLM_PLAN;
     fillPane(sec,
       c && c.single ? 'Replications needed for a half-width of ' + esc(mText) + ' on the interval above'
         : 'Replications per design needed for a half-width of ' + esc(mText) + ' on every one of the k = ' + (c ? intl(k) : dash) + ' mean intervals above (each at 1 − α/k by Bonferroni), with equal replications in each design',
@@ -1441,6 +1552,7 @@ function drawPlan() {
         : esc(hp.reason);
     }
     hText = 'h = ' + num(c ? hwVal : NaN) + unit;
+    if (c && !c.single && diffAdjust === 'holm' && C >= 2 && hp.n != null) hwNote += ' ' + HOLM_PLAN;
     const widestPair = hp.n != null ? esc(c.short[hp.pair[0]] + ' − ' + c.short[hp.pair[1]]) : dash;
     fillPane(sec,
       'Replications per design needed for a half-width of ' + esc(hText) + ' on every one of the C = ' + (c ? intl(C) : dash) +
@@ -1564,7 +1676,13 @@ export function render(root) {
     '<div class="subnav" data-subnav></div>' +
     '<div class="sec" data-section="means"><h3 class="sec-title">Benchmark comparison</h3><p class="sec-lede">Every design against a benchmark at once. Each design’s mean comes with its own interval, and the k intervals hold together by the Bonferroni correction, each at level 1 − α/k, which holds the chance of any false rejection across the k tests at α. The designs are not compared with each other here. The benchmark can be drawn on the plot, which marks every interval that excludes it, or kept in mind and read against the intervals.</p>' +
       '<div class="ctrl-row" id="sev-bench-row"><label class="ctrl-chk"><input type="checkbox" id="sev-bench-on"> <span class="tip" tabindex="0" data-tip="The benchmark is a target or requirement for the response, in its units, and the k intervals are built for it whether or not it is drawn. Drawn, it is a dashed line that can be dragged (the arrow keys move it when it has focus), and every design whose interval excludes it is marked above or below it.">Show benchmark on plot</span></label>' +
-        '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span></div>' +
+        '<span class="ctrl-pair" id="sev-bench-pair" hidden><label class="ctrl-lbl" for="sev-bench">Benchmark</label><span id="sev-bench-host"></span><span class="ctrl-note" id="sev-bench-unit"></span></span>' +
+        '<span class="ctrl-pair" id="sev-badj" hidden><span class="ctrl-lbl" id="sev-badj-lbl"><span class="tip" tabindex="0" data-tip="How a design is declared above or below the benchmark. Bonferroni: when its interval at 1 − α/k excludes the benchmark. Holm: by Holm’s step-down on the k tests against the benchmark, which holds the same chance of any false declaration; under the t procedures, it declares every design Bonferroni does and possibly more. The intervals stay Bonferroni’s either way.">Decide by</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-badj-lbl">' +
+          '<button type="button" class="seg-btn" data-badj="bonferroni" aria-pressed="true">Bonferroni</button>' +
+          '<button type="button" class="seg-btn" data-badj="holm" aria-pressed="false">Holm</button>' +
+        '</span></span>' +
+      '</div>' +
       '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
     '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first.</p>' +
       '<div class="ctrl-row"><span class="ctrl-lbl" id="sev-diff-lbl">Compare</span><span class="seg" role="group" aria-labelledby="sev-diff-lbl">' +
@@ -1572,14 +1690,14 @@ export function render(root) {
         '<button type="button" class="seg-btn" data-diff="control" aria-pressed="false">versus control</button>' +
       '</span>' +
       '<span class="ctrl-pair" id="sev-ctrl-diff"><label class="ctrl-lbl" for="sev-ctrl"><span class="tip" tabindex="0" data-tip="The design every other design is compared with, usually the current system.">Control</span></label><select id="sev-ctrl" data-control></select></span>' +
+      '<span class="ctrl-pair" id="sev-dadj" hidden><span class="ctrl-lbl" id="sev-dadj-lbl"><span class="tip" tabindex="0" data-tip="How a pair is declared different. Bonferroni: when its interval at 1 − α/C excludes 0. Holm: by Holm’s step-down on the C tests, which holds the same chance of any false declaration; under the t procedures, it declares every pair Bonferroni does and possibly more. The intervals stay Bonferroni’s either way.">Decide by</span></span>' +
+        '<span class="seg" role="group" aria-labelledby="sev-dadj-lbl">' +
+          '<button type="button" class="seg-btn" data-dadj="bonferroni" aria-pressed="true">Bonferroni</button>' +
+          '<button type="button" class="seg-btn" data-dadj="holm" aria-pressed="false">Holm</button>' +
+        '</span></span>' +
       '</div>' +
       '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
     '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ and then a post-hoc rule that judges each pair.</p>' +
-      '<div class="ctrl-row" id="sev-adj-row" style="display:none"><span class="ctrl-lbl" id="sev-adj-lbl"><span class="tip" tabindex="0" data-tip="How the pairwise p-values are adjusted for the number of pairs. Bonferroni multiplies each by the number of pairs; Holm’s step-down holds the same family-wise error and is never less powerful.">Adjustment</span></span>' +
-        '<span class="seg" role="group" aria-labelledby="sev-adj-lbl">' +
-          '<button type="button" class="seg-btn" data-adj="bonferroni" aria-pressed="true">Bonferroni</button>' +
-          '<button type="button" class="seg-btn" data-adj="holm" aria-pressed="false">Holm</button>' +
-        '</span></div>' +
       '<div class="ctrl-row" id="sev-var-row"><span class="ctrl-lbl" id="sev-var-lbl"><span class="tip" tabindex="0" data-tip="Pooled: the classical analysis of variance, one variance across designs, with Tukey, LSD, Bonferroni, and Dunnett post-hoc rules on the pooled mean square. Unequal: Welch’s analysis of variance, each design keeping its own variance, with Games–Howell or Bonferroni on Welch pairs; the choice when the heteroscedasticity check rejects. Pairing has no Welch form, and so the switch is withheld under paired replications.">Variances</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-var-lbl">' +
           '<button type="button" class="seg-btn" data-var="pooled" aria-pressed="true">Pooled (one variance)</button>' +
@@ -1619,7 +1737,7 @@ export function render(root) {
   // outside both redrawn bodies, and so it keeps focus across a redraw.
   const ruleRow = document.createElement('div');
   ruleRow.className = 'ctrl-row cmp-rule-row';
-  ruleRow.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-rule">Post-hoc rule</label><select id="sev-rule">' +
+  ruleRow.innerHTML = '<span class="ctrl-pair"><label class="ctrl-lbl" for="sev-rule" id="sev-rule-lbl">Post-hoc rule</label><select id="sev-rule">' +
     Object.keys(RULES).map(r => '<option value="' + r + '">' + RULES[r] + '</option>').join('') + '</select></span>' +
     '<span class="ctrl-pair" id="sev-ctrl-rule"><label class="ctrl-lbl" for="sev-ctrl2"><span class="tip" tabindex="0" data-tip="The design Dunnett’s procedure compares every other design with, usually the current system.">Control</span></label><select id="sev-ctrl2" data-control></select></span>';
   root.querySelector('#sev-rule-host').appendChild(ruleRow);
@@ -1645,7 +1763,8 @@ export function render(root) {
   ctrlSels = Array.from(root.querySelectorAll('select[data-control]'));
   for (const sel of ctrlSels) sel.addEventListener('change', () => { controlId = sel.value || null; state.setPick(id, 'control', controlId); schedule(); });
   root.querySelector('#sev-rule').addEventListener('change', e => {
-    if (welchOn()) { ruleW = e.target.value; state.setPick(id, 'ruleW', ruleW); } else { rule = e.target.value; state.setPick(id, 'rule', rule); }
+    if (proc === 'np') { adjust = e.target.value; state.setPick(id, 'adjust', adjust); }
+    else if (welchOn()) { ruleW = e.target.value; state.setPick(id, 'ruleW', ruleW); } else { rule = e.target.value; state.setPick(id, 'rule', rule); }
     schedule();
   });
   root.querySelectorAll('[data-var]').forEach(b => b.addEventListener('click', () => { varMode = b.dataset.var; state.setPick(id, 'variances', varMode); schedule(); }));
@@ -1653,7 +1772,8 @@ export function render(root) {
   root.querySelector('#sev-bench-on').addEventListener('change', e => { benchOn = e.target.checked; state.setPick(id, 'benchOn', benchOn); schedule(); });
   root.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => { dir = b.dataset.dir; state.setPick(id, 'dir', dir); schedule(); }));
   root.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => { diffMode = b.dataset.diff; state.setPick(id, 'diff', diffMode); schedule(); }));
-  root.querySelectorAll('[data-adj]').forEach(b => b.addEventListener('click', () => { adjust = b.dataset.adj; state.setPick(id, 'adjust', adjust); schedule(); }));
+  root.querySelectorAll('[data-badj]').forEach(b => b.addEventListener('click', () => { benchAdjust = b.dataset.badj; state.setPick(id, 'benchAdjust', benchAdjust); schedule(); }));
+  root.querySelectorAll('[data-dadj]').forEach(b => b.addEventListener('click', () => { diffAdjust = b.dataset.dadj; state.setPick(id, 'diffAdjust', diffAdjust); schedule(); }));
   root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => {
     pairMode = b.dataset.pair;
     const list = checkedList();
@@ -1684,13 +1804,16 @@ function welchOn() { return varMode === 'welch' && pairMode !== 'paired' && proc
 // Variances switch says, and shows the choice in force for that set.
 function fillRuleSelect() {
   const sel = rootEl.querySelector('#sev-rule');
-  const set = welchOn() ? WELCH_RULES : RULES;
+  const np = proc === 'np';
+  // Under the rank procedures, the rule is how the pairwise p-values are adjusted.
+  rootEl.querySelector('#sev-rule-lbl').textContent = np ? 'Pairwise adjustment' : 'Post-hoc rule';
+  const set = np ? RANK_RULES : welchOn() ? WELCH_RULES : RULES;
   const want = Object.keys(set).map(r => r + '=' + set[r]).join('|');
   if (sel.dataset.set !== want) {
     sel.innerHTML = Object.keys(set).map(r => '<option value="' + r + '">' + set[r] + '</option>').join('');
     sel.dataset.set = want;
   }
-  sel.value = welchOn() ? ruleW : rule;
+  sel.value = np ? adjust : welchOn() ? ruleW : rule;
 }
 
 // Brings back the settings the reader made on this page (kept with the
@@ -1705,6 +1828,8 @@ function applyStored() {
   if (get('dir') === 'max' || get('dir') === 'min') dir = get('dir');
   if (get('diff') === 'pairs' || get('diff') === 'control') diffMode = get('diff');
   if (get('adjust') === 'bonferroni' || get('adjust') === 'holm') adjust = get('adjust');
+  if (get('benchAdjust') === 'bonferroni' || get('benchAdjust') === 'holm') benchAdjust = get('benchAdjust');
+  if (get('diffAdjust') === 'bonferroni' || get('diffAdjust') === 'holm') diffAdjust = get('diffAdjust');
   if (get('proc') === 't' || get('proc') === 'np') proc = get('proc');
   if (get('designPlot') === 'int' || get('designPlot') === 'box') designPlot = get('designPlot');
   if (get('showPts') === true) showPts = true;

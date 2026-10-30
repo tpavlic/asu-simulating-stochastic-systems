@@ -881,14 +881,20 @@ export function dotPlot(fig, values, o = {}) {
  * from lo to hi with end caps, and a dot at the center. A flagged item is
  * drawn in the flag color, dashed, with a hollow dot, and so it reads
  * without color. A vertical reference line marks `ref` (zero for a
- * difference) when given.
+ * difference) when given. An item's `note`, when any item has one, is
+ * written past the right end of the plotting area on its row, in the color
+ * token `noteColor` (the flag color by default): a decision that the interval
+ * alone does not show, such as a declaration by Holm's step-down.
  * @param {Figure} fig
- * @param {{label: string, lo: number, hi: number, center?: number, flagged?: boolean, color?: string}[]} items
+ * @param {{label: string, lo: number, hi: number, center?: number, flagged?: boolean, color?: string,
+ *   note?: string, noteColor?: string}[]} items
  * @param {{ ref?: number|null, axes?: boolean, rowPx?: number }} [o]
  */
 export function intervals(fig, items, o = {}) {
   const n = items.length;
   const lw = labelColumn(fig, items.map(it => it.label), 11.5);
+  const nfs = 11, noted = items.some(it => it.note);
+  if (noted) fig.setMargin({ r: Math.ceil(Math.max(...items.map(it => estTextWidth(it.note || '', nfs)))) + 18 });
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
   for (const it of items) { vals.push(it.lo, it.hi); if (it.values) for (const v of it.values) vals.push(v); }
@@ -940,12 +946,28 @@ export function intervals(fig, items, o = {}) {
   });
   if (pts.x.length) fig.series.push(pts);
   for (const rr of recOf.values()) fig.series.push(rr.seg, rr.dot);
+  if (noted) {
+    // For the script exports, the notes sit inside a widened x range rather than in the margin.
+    const [dx0, dx1] = sx.domain, span = dx1 - dx0;
+    const longest = Math.max(...items.map(it => (it.note || '').length));
+    fig.xRange = [dx0, dx1 + span * Math.min(0.6, 0.04 + 0.022 * longest)];
+    const byColor = new Map();
+    items.forEach((it, i) => {
+      if (!it.note) return;
+      const nc = col(it.noteColor, '--miss');
+      text(fig.inner, fig.iw + 8, (i + 0.5) * rowH + 4, it.note, { 'font-size': nfs, 'font-weight': 600, fill: nc, class: 'm-note' });
+      if (!byColor.has(nc)) byColor.set(nc, { kind: 'text', x: [], y: [], text: [], color: nc, anchor: 'start' });
+      const rec = byColor.get(nc);
+      rec.x.push(dx1 + span * 0.02); rec.y.push(ry(i)); rec.text.push(it.note);
+    });
+    for (const rec of byColor.values()) fig.series.push(rec);
+  }
   if (!fig.readoutFn) fig.readout((dx, dy, px, py) => {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
     const it = items[i];
     const center = Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2;
-    return [it.label, num(center) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']'];
+    return [it.label, num(center) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']'].concat(it.note ? [it.note] : []);
   });
 }
 

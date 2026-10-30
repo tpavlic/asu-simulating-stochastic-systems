@@ -1616,7 +1616,8 @@ end
 // ── Holm's step-down adjustment (R has p.adjust) ─────────────────────────
 
 LIB.R.holm = `
-adjust_p <- function(p, method) p.adjust(p, method = method)   # "bonferroni" or "holm"
+# "bonferroni" or "holm"; every comparison counts in C, one whose p-value is missing included.
+adjust_p <- function(p, method) p.adjust(p, method = method, n = length(p))
 `;
 LIB.py.holm = `
 def adjust_p(p, method):
@@ -2039,18 +2040,111 @@ if q <= 26, s = char('a' + q - 1); elseif q <= 52, s = char('A' + q - 27); else,
 end
 `;
 
+// ── Each design against the benchmark, by its own test ───────────────────
+// The one-sample t test, or under the rank procedures the Wilcoxon
+// signed-rank test at mu = benchmark, for every design, with the k p-values
+// adjusted by bench_adjust. A design is declared above or below the
+// benchmark when its adjusted p is below alpha, on the side its estimate
+// falls. Under Bonferroni the page reads the verdict from the interval
+// (bench_word), which for the t procedures is the same thing; under Holm it
+// reads it from the test, and a design whose interval still contains the
+// benchmark is marked "(Holm)". These use one_sample_t or signed_rank, and
+// adjust_p.
+
+LIB.R.benchTests = `
+bench_tests <- function(groups, bench, alpha, adjust, rank) {
+  tests <- lapply(groups, function(x) if (rank) signed_rank(x, 1 - alpha, bench) else one_sample_t(x, bench))
+  est <- if (rank) sapply(tests, function(t) t$estimate) else sapply(groups, mean)
+  p <- sapply(tests, function(t) t$p)
+  p_adj <- adjust_p(p, adjust)
+  declared <- p_adj < alpha & !is.na(p_adj)
+  side <- ifelse(!declared, "", ifelse(est > bench, "above", ifelse(est < bench, "below", "")))
+  list(stat = sapply(tests, function(t) if (rank) t$V else t$t), p = p, p_adj = p_adj, declared = declared, side = side)
+}
+bench_decision <- function(lo, hi, bench, bt, i, adjust) {
+  # The word in the page's table: under Bonferroni, where the interval stands; under Holm, the
+  # design's own adjusted test, marked "(Holm)" when its interval still contains the benchmark.
+  if (adjust != "holm") return(bench_word(lo, hi, bench))
+  excl <- isTRUE(lo > bench) || isTRUE(hi < bench)
+  if (bt$declared[i]) paste0(bt$side[i], if (excl) "" else " (Holm)") else if (excl) "not declared" else "contains"
+}
+`;
+LIB.py.benchTests = `
+def bench_tests(groups, bench, alpha, adjust, rank):
+    tests = [signed_rank(x, 1 - alpha, bench) if rank else one_sample_t(x, bench) for x in groups]
+    est = np.array([t["estimate"] for t in tests]) if rank else np.array([np.mean(x) for x in groups])
+    p = np.array([t["p"] for t in tests], float)
+    p_adj = adjust_p(p, adjust)
+    declared = [bool(v < alpha) for v in p_adj]
+    side = ["" if not d else "above" if e > bench else "below" if e < bench else "" for d, e in zip(declared, est)]
+    return dict(stat=[t["V"] if rank else t["t"] for t in tests], p=p, p_adj=p_adj, declared=declared, side=side)
+
+def bench_decision(lo, hi, bench, bt, i, adjust):
+    """The word in the page's table: under Bonferroni, where the interval stands; under Holm, the
+    design's own adjusted test, marked "(Holm)" when its interval still contains the benchmark."""
+    if adjust != "holm": return bench_word(lo, hi, bench)
+    excl = bool(lo > bench or hi < bench)
+    if bt["declared"][i]: return bt["side"][i] + ("" if excl else " (Holm)")
+    return "not declared" if excl else "contains"
+`;
+LIB.m.benchTests = `
+function r = bench_tests(groups, bench, alpha, adjust, rank)
+k = numel(groups); stat = zeros(1, k); p = zeros(1, k); est = zeros(1, k);
+for i = 1:k
+    if rank
+        t = signed_rank(groups{i}, 1 - alpha, bench); stat(i) = t.V; est(i) = t.estimate;
+    else
+        t = one_sample_t(groups{i}, bench); stat(i) = t.t; est(i) = mean(groups{i});
+    end
+    p(i) = t.p;
+end
+p_adj = adjust_p(p, adjust);
+declared = p_adj < alpha;
+side = repmat({''}, 1, k);
+side(declared & est > bench) = {'above'}; side(declared & est < bench) = {'below'};
+r = struct('stat', stat, 'p', p, 'p_adj', p_adj, 'declared', declared, 'side', {side});
+end
+
+function w = bench_decision(lo, hi, bench, bt, i, adjust)
+% The word in the page's table: under Bonferroni, where the interval stands; under Holm, the
+% design's own adjusted test, marked '(Holm)' when its interval still contains the benchmark.
+if ~strcmp(adjust, 'holm'), w = bench_word(lo, hi, bench); return; end
+excl = lo > bench || hi < bench;
+if bt.declared(i)
+    w = bt.side{i}; if ~excl, w = [w ' (Holm)']; end
+elseif excl
+    w = 'not declared';
+else
+    w = 'contains';
+end
+end
+`;
+
 // ── Post-hoc rules on the pooled mean square ─────────────────────────────
 // Every rule works on diff = mean_i - mean_j with se = sqrt(msw (1/R_i +
 // 1/R_j)), msw being the pooled mean square within or, with blocks, the
 // residual mean square, on its degrees of freedom. The half-width is the
 // critical value times se, divided by sqrt(2) for Tukey-Kramer, whose
 // critical value is the studentized range q. Fisher's LSD declares nothing
-// unless the F test rejects at alpha.
+// unless the F test rejects at alpha. Holm's step-down has no critical value:
+// each pair's t = diff / se on those degrees of freedom gives its two-sided
+// p-value, the p-values are adjusted by adjust_p, and a pair is declared
+// different when its adjusted p is below alpha.
 
 LIB.R.posthoc = `
 posthoc_pooled <- function(groups, av, rule, alpha, pairs, control) {
   # pairs: a list of c(i, j); control: the control design, for Dunnett.
   k <- length(groups); C <- length(pairs); scale <- 1
+  if (rule == "holm") {
+    out <- lapply(pairs, function(p) {
+      diff <- av$means[p[1]] - av$means[p[2]]; se <- sqrt(av$msw * (1 / av$n[p[1]] + 1 / av$n[p[2]]))
+      t <- if (se > 0) diff / se else if (diff == 0) NaN else sign(diff) * Inf
+      list(i = p[1], j = p[2], diff = diff, se = se, t = t, p = if (is.nan(t)) NaN else 2 * pt(-abs(t), av$dfw))
+    })
+    p_adj <- adjust_p(sapply(out, function(q) q$p), "holm")
+    for (q in seq_along(out)) { out[[q]]$pAdj <- p_adj[q]; out[[q]]$flagged <- isTRUE(p_adj[q] < alpha) }
+    return(list(crit = NaN, protected = NA, pairs = out))
+  }
   if (rule == "tukey") {
     # R's qtukey is approximate on few degrees of freedom (about 1% or more off at 2, several
     # percent with many designs), and below 2 it is not defined (it returns NaN with a
@@ -2085,6 +2179,13 @@ def posthoc_pooled(groups, av, rule, alpha, pairs, control):
     blocked = av["blockMeans"] is not None
     I = np.array([i for i, j in pairs]); J = np.array([j for i, j in pairs])
     diff = means[I] - means[J]; se = np.sqrt(msw * (1 / n[I] + 1 / n[J]))
+    if rule == "holm":
+        # With no spread left (se = 0), t is infinite off zero and undefined at it.
+        t = np.array([d / s if s > 0 else np.nan if d == 0 else np.sign(d) * np.inf for d, s in zip(diff, se)])
+        p = np.where(np.isnan(t), np.nan, 2 * stats.t.sf(np.abs(np.nan_to_num(t, nan=0.0)), dfw))
+        p_adj = adjust_p(p, "holm")
+        out = [dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se[q], t=t[q], p=p[q], pAdj=p_adj[q], flagged=bool(p_adj[q] < alpha)) for q in range(C)]
+        return dict(crit=np.nan, protected=None, pairs=out)
     protected = bool(av["p"] < alpha) if rule == "lsd" else None
     if rule == "tukey":
         crit = stats.studentized_range.ppf(1 - alpha, k, dfw); hw = crit * se / np.sqrt(2)
@@ -2118,6 +2219,20 @@ function r = posthoc_pooled(~, av, rule, alpha, pairs, control)
 % there), and Tukey-Kramer's studentized range only approximately on few degrees of freedom
 % (about 1e-4 off at 2), and so those two are computed here.
 C = size(pairs, 1); means = av.means; n = av.n; msw = av.msw;
+if strcmp(rule, 'holm')
+    out = cell(1, C); p = zeros(1, C);
+    for q = 1:C
+        i = pairs(q, 1); j = pairs(q, 2); d = means(i) - means(j); se = sqrt(msw * (1 / n(i) + 1 / n(j)));
+        % With no spread left (se = 0), t is infinite off zero and undefined at it.
+        if se > 0, t = d / se; elseif d == 0, t = NaN; else, t = sign(d) * Inf; end
+        p(q) = 2 * tcdf(-abs(t), av.dfw);
+        out{q} = struct('i', i, 'j', j, 'diff', d, 'se', se, 't', t, 'p', p(q));
+    end
+    p_adj = adjust_p(p, 'holm');
+    for q = 1:C, out{q}.pAdj = p_adj(q); out{q}.flagged = p_adj(q) < alpha; end
+    r = struct('crit', NaN, 'protected', [], 'pairs', {out});
+    return;
+end
 if strcmp(rule, 'lsd'), protected = av.p < alpha; else, protected = []; end
 if strcmp(rule, 'dunnett')
     crit = qdunnett(1 - alpha, sqrt(n(pairs(:, 1)) / n(control)), av.dfw);
@@ -2154,8 +2269,9 @@ end
 
 // ── Post-hoc rules that keep each design's variance (Welch) ──────────────
 // Games-Howell is the studentized range on each pair's own Welch degrees of
-// freedom; the other rule is Bonferroni on each pair's own Welch t interval
-// at 1 - alpha/C.
+// freedom; Bonferroni is on each pair's own Welch t interval at 1 - alpha/C,
+// its p already adjusted; and Holm's step-down adjusts the pairs' own Welch t
+// p-values with adjust_p and gives no intervals.
 
 LIB.R.posthocWelch = `
 posthoc_welch <- function(groups, rule, alpha, pairs) {
@@ -2165,6 +2281,10 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     a1 <- var(xi) / length(xi); a2 <- var(xj) / length(xj)
     se <- sqrt(a1 + a2); df <- (a1 + a2)^2 / (a1^2 / (length(xi) - 1) + a2^2 / (length(xj) - 1))
     diff <- mean(xi) - mean(xj)
+    if (rule == "holmWelch") {
+      t <- if (se > 0) diff / se else if (diff == 0) NaN else sign(diff) * Inf
+      return(list(i = p[1], j = p[2], diff = diff, se = se, df = df, t = t, p = if (is.nan(t)) NaN else 2 * pt(-abs(t), df)))
+    }
     if (rule == "gameshowell") {
       # R's qtukey and ptukey are approximate on few degrees of freedom (about 1% or more off at 2,
       # several percent with many designs), and below 2, as between two designs of 2 replications
@@ -2179,6 +2299,10 @@ posthoc_welch <- function(groups, rule, alpha, pairs) {
     list(i = p[1], j = p[2], diff = diff, se = se, df = df, crit = crit, hw = hw, lo = diff - hw, hi = diff + hw, p = pval,
          flagged = isTRUE(diff - hw > 0 || diff + hw < 0))
   })
+  if (rule == "holmWelch") {
+    p_adj <- adjust_p(sapply(out, function(q) q$p), "holm")
+    for (q in seq_along(out)) { out[[q]]$pAdj <- p_adj[q]; out[[q]]$flagged <- isTRUE(p_adj[q] < alpha) }
+  }
   list(pairs = out)
 }
 `;
@@ -2191,6 +2315,12 @@ def posthoc_welch(groups, rule, alpha, pairs):
     a1, a2 = v[I] / n[I], v[J] / n[J]
     se = np.sqrt(a1 + a2); df = (a1 + a2) ** 2 / (a1 ** 2 / (n[I] - 1) + a2 ** 2 / (n[J] - 1))
     diff = m[I] - m[J]
+    if rule == "holmWelch":
+        t = diff / se
+        p = 2 * stats.t.sf(np.abs(t), df)
+        p_adj = adjust_p(p, "holm")
+        return dict(pairs=[dict(i=int(I[q]), j=int(J[q]), diff=diff[q], se=se[q], df=df[q], t=t[q], p=p[q], pAdj=p_adj[q],
+                                flagged=bool(p_adj[q] < alpha)) for q in range(C)])
     if rule == "gameshowell":
         crit = stats.studentized_range.ppf(1 - alpha, k, df); hw = crit * se / np.sqrt(2)
         p = np.minimum(1, stats.studentized_range.sf(np.abs(diff) / (se / np.sqrt(2)), k, df))
@@ -2210,6 +2340,11 @@ for q = 1:C
     a1 = var(xi) / numel(xi); a2 = var(xj) / numel(xj);
     se = sqrt(a1 + a2); df = (a1 + a2)^2 / (a1^2 / (numel(xi) - 1) + a2^2 / (numel(xj) - 1));
     d = mean(xi) - mean(xj);
+    if strcmp(rule, 'holmWelch')
+        t = d / se;
+        out{q} = struct('i', i, 'j', j, 'diff', d, 'se', se, 'df', df, 't', t, 'p', 2 * tcdf(-abs(t), df));
+        continue;
+    end
     if strcmp(rule, 'gameshowell')
         crit = studrange_inv(1 - alpha, k, df); hw = crit * se / sqrt(2);
         p = 1 - studrange_cdf(abs(d) / (se / sqrt(2)), k, df);
@@ -2219,6 +2354,10 @@ for q = 1:C
     end
     out{q} = struct('i', i, 'j', j, 'diff', d, 'se', se, 'df', df, 'crit', crit, 'hw', hw, 'lo', d - hw, 'hi', d + hw, 'p', p, ...
                     'flagged', d - hw > 0 || d + hw < 0);
+end
+if strcmp(rule, 'holmWelch')
+    p_adj = adjust_p(cellfun(@(e) e.p, out), 'holm');
+    for q = 1:C, out{q}.pAdj = p_adj(q); out{q}.flagged = p_adj(q) < alpha; end
 end
 r = struct('pairs', {out});
 end

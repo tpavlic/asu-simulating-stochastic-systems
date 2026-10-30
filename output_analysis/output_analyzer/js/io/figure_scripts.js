@@ -235,17 +235,36 @@ function severalFigures(r, L) {
     if (S.bench != null) {
       calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
       Object.assign(opts, { ref: 'benchmark', flagged: 'bench_flag' });
+      // Every row carries its decision at the right. Under Holm, a design is red only when its
+      // test declares it and its interval excludes the benchmark, "(Holm)" marking a design
+      // declared although its interval contains the benchmark.
+      if (S.single) {
+        if (L.lang === 'R') calls.push('bench_note <- sapply(seq_len(k), function(i) bench_word(iv_lo[i], iv_hi[i], benchmark))');
+        else if (L.lang === 'py') calls.push('bench_note = [bench_word(iv_lo[i], iv_hi[i], benchmark) for i in range(k)]');
+        else calls.push("bench_note = arrayfun(@(i) bench_word(iv_lo(i), iv_hi(i), benchmark), 1:k, 'UniformOutput', false);");
+      } else if (L.lang === 'R') calls.push('bench_note <- sapply(seq_len(k), function(i) bench_decision(iv_lo[i], iv_hi[i], benchmark, bench_res, i, bench_adjust))',
+        'if (bench_adjust == "holm") bench_flag <- bench_flag & bench_res$declared');
+      else if (L.lang === 'py') calls.push('bench_note = [bench_decision(iv_lo[i], iv_hi[i], benchmark, bench_res, i, bench_adjust) for i in range(k)]',
+        'if bench_adjust == "holm": bench_flag = bench_flag & np.array(bench_res["declared"])');
+      else calls.push("bench_note = arrayfun(@(i) bench_decision(iv_lo(i), iv_hi(i), benchmark, bench_res, i, bench_adjust), 1:k, 'UniformOutput', false);",
+        "if strcmp(bench_adjust, 'holm'), bench_flag = bench_flag & bench_res.declared; end");
+      opts.right = 'bench_note';
     }
     Object.assign(opts, marks(false));
     calls.push(...call(L, 'fig_intervals', [pluck(L, src, S.np ? 'estimate' : 'mean'), 'iv_lo', 'iv_hi', 'design_labels',
       L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
     fig.push('intervals');
-    notes.push('Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its simultaneous interval' + (S.bench != null ? ', drawn in red when it excludes the benchmark (the dashed line).' : '.'));
+    notes.push('Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its simultaneous interval' + (S.bench != null ? ', drawn in red when it is declared and its interval excludes the benchmark (the dashed line), with its decision written at its right.' : '.'));
   } else if (F.section === 'diffs') {
+    // A comparison is red when it is declared and its interval excludes 0, and every row carries
+    // its decision at the right, "(Holm)" marking one declared although its interval contains 0.
+    if (L.lang === 'R') calls.push('fam_note <- ifelse(fam_decl, ifelse(fam_excl, "different", "different (Holm)"), ifelse(fam_excl, "not declared", "contains 0"))');
+    else if (L.lang === 'py') calls.push('fam_note = [("different" if x else "different (Holm)") if d else ("not declared" if x else "contains 0") for d, x in zip(fam_decl, fam_excl)]');
+    else calls.push("words = {'contains 0', 'not declared'; 'different (Holm)', 'different'};", "fam_note = arrayfun(@(q) words{fam_decl(q) + 1, fam_excl(q) + 1}, 1:numel(fam_decl), 'UniformOutput', false);");
     calls.push(...call(L, 'fig_intervals', ['fam_mid', 'fam_lo', 'fam_hi', 'fam_lab', L.str((S.np ? 'Shift in location of ' : 'Difference in means of ') + resp),
-      L.str('Pairwise comparisons (Bonferroni)')], { ref: '0', flagged: L.lang === 'R' ? '(fam_lo > 0) %in% TRUE | (fam_hi < 0) %in% TRUE' : L.lang === 'py' ? '(np.array(fam_lo) > 0) | (np.array(fam_hi) < 0)' : '(fam_lo > 0) | (fam_hi < 0)' }));
+      L.str('Pairwise comparisons')], { ref: '0', flagged: L.lang === 'R' ? 'fam_decl & fam_excl' : L.lang === 'py' ? 'np.array(fam_decl) & np.array(fam_excl)' : 'fam_decl & fam_excl', right: 'fam_note' }));
     fig.push('intervals');
-    notes.push('Every comparison of the family with its interval, collected as the comparisons above ran, drawn in red when it excludes zero.');
+    notes.push('Every comparison of the family with its interval, collected as the comparisons above ran, drawn in red when it is declared different and its interval excludes zero, with each row\'s decision written at its right.');
   } else if (F.section === 'anova' && S.anova && !S.anova.welchBad.length) {
     const A = S.anova, dunnett = !A.welch && A.rule === 'dunnett';
     calls.push(...call(L, 'fig_qq', [fld(L, 'av', 'resid'), L.str('Residual'), L.str('Residuals, normal quantile-quantile plot')]));
@@ -263,13 +282,16 @@ function severalFigures(r, L) {
       inOrd(L, 'design_labels', true), L.str('Mean of ' + resp), L.str('Designs, best first, with letter groups and the pairs declared different')],
     Object.assign({ right, brackets: 'brackets' }, marks(true))));
     const pp = fld(L, 'ph', 'pairs');
+    const holmRule = A.rule === 'holm' || A.rule === 'holmWelch';
     const lab = L.lang === 'R' ? 'sapply(' + pp + ', function(p) paste(p$i, "-", p$j))' : L.lang === 'py' ? '[f"{p[\'i\'] + 1} - {p[\'j\'] + 1}" for p in ' + pp + ']'
       : "cellfun(@(p) sprintf('%d - %d', p.i, p.j), " + pp + ", 'UniformOutput', false)";
     const flag = L.lang === 'R' ? 'sapply(' + pp + ', function(p) isTRUE(p$flagged))' : L.lang === 'py' ? '[bool(p["flagged"]) for p in ' + pp + ']' : 'cellfun(@(p) logical(p.flagged), ' + pp + ')';
-    calls.push(...call(L, 'fig_intervals', [pluck(L, pp, 'diff'), pluck(L, pp, 'lo'), pluck(L, pp, 'hi'), lab, L.str('Difference in means of ' + resp),
+    // Holm's step-down gives no interval on a difference, and so it has no figure of differences.
+    if (!holmRule) calls.push(...call(L, 'fig_intervals', [pluck(L, pp, 'diff'), pluck(L, pp, 'lo'), pluck(L, pp, 'hi'), lab, L.str('Difference in means of ' + resp),
       L.str('Post-hoc comparisons')], { ref: '0', flagged: flag }));
     fig.push('qq', 'intervals');
-    notes.push('The residuals\' normal quantile-quantile plot; the designs, best first, each with its simultaneous interval, its letters, and a bracket joining each pair the post-hoc rule declared different; and the post-hoc intervals, red where a pair was declared different.');
+    notes.push('The residuals\' normal quantile-quantile plot; the designs, best first, each with its simultaneous interval, its letters, and a bracket joining each pair the post-hoc rule declared different' +
+      (holmRule ? '.' : '; and the post-hoc intervals, red where a pair was declared different.'));
   } else if (F.section === 'anova' && S.rank) {
     if (L.lang === 'R') calls.push('hl <- lapply(groups, function(x) signed_rank(x, level))');
     else if (L.lang === 'py') calls.push('hl = [signed_rank(x, level) for x in groups]');

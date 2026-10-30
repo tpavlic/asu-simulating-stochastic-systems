@@ -22,8 +22,8 @@ import { signedRank, rankSum, kruskalWallis, dunn, friedman, friedmanPairs } fro
 import { shapiroWilk } from '../stats/normality.js';
 import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPooled, powerWelch, powerPooled,
          planPowerWelch, planPowerPooled, simultaneousMeans, bonferroniFamily, planHalfWidthBonferroni,
-         anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences } from '../stats/compare.js';
-import { bonferroniFamilyRank } from '../stats/nonparam.js';
+         anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences, benchmarkFamily } from '../stats/compare.js';
+import { bonferroniFamilyRank, benchmarkFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
 import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand } from '../stats/steadystate.js';
 import { slug } from './export.js';
@@ -474,6 +474,13 @@ export const pairLabel = (i, j) => (i + 1) + '-' + (j + 1);
 // table uses: above it, below it, or containing it (an end that is not a
 // number never declares a side).
 const benchWord = (lo, hi, bench) => (lo > bench ? 'above' : hi < bench ? 'below' : 'contains');
+// Under Holm, the word is the design's own adjusted test, marked "(Holm)" when
+// its interval still contains the benchmark; the scripts' bench_decision.
+const benchDecision = (lo, hi, bench, t, holm) => {
+  if (!holm) return benchWord(lo, hi, bench);
+  const excl = lo > bench || hi < bench;
+  return t.declared ? t.side + (excl ? '' : ' (Holm)') : excl ? 'not declared' : 'contains';
+};
 
 /**
  * The Several Systems recipe: the designs' outcomes, the means (or
@@ -484,7 +491,8 @@ const benchWord = (lo, hi, bench) => (lo > bench ? 'above' : hi < bench ? 'below
  * @param {{ list: object[], groups: ArrayLike<number>[], paired: boolean,
  *   match: null|{ by: 'id'|'position', blocks: number[][], unmatched: number[][], keys: any[] },
  *   level: number, proc: 't'|'np', varMode: 'pooled'|'welch', rule: string, ruleW: string,
- *   adjust: 'bonferroni'|'holm', diffMode: 'pairs'|'control', ctrlIdx: number, dir: 'min'|'max',
+ *   adjust: 'bonferroni'|'holm', benchAdjust?: 'bonferroni'|'holm', diffAdjust?: 'bonferroni'|'holm',
+ *   diffMode: 'pairs'|'control', ctrlIdx: number, dir: 'min'|'max',
  *   bench: number|null, eps: number, plan: { meansH: number, diffsH: number, delta: number, power: number },
  *   title?: string, provenance?: object }} o
  *   `list` is the checked datasets in order and `groups` the outcomes the page
@@ -492,7 +500,9 @@ const benchWord = (lo, hi, bench) => (lo > bench ? 'above' : hi < bench ? 'below
  *   the outcomes aligned block by block by `match` (matchBlocks's result with
  *   `by`). `level` is the stated level (state.settings.base), which the page
  *   divides by its own family sizes. `bench` is the benchmark, or null when
- *   it is off. `plan` is the planning cards' targets. `title` and
+ *   it is off. `benchAdjust` and `diffAdjust` say how the benchmark comparison
+ *   and the pairwise comparisons declare a design or a pair: by Bonferroni's
+ *   intervals (the default) or by Holm's step-down on their tests. `plan` is the planning cards' targets. `title` and
  *   `provenance` are the page's own, copied into the recipe. A pure function
  *   of its argument, and so a page can call it lazily.
  */
@@ -530,17 +540,30 @@ export function severalRecipe(o) {
   // One design: the benchmark comparison stands (Bonferroni with k = 1 is the
   // plain interval), and nothing that compares designs is computed.
   const single = k === 1;
+  // How the benchmark comparison and the pairwise family declare: with one
+  // design there is nothing to adjust, and the setting is left out.
+  const benchAdj = o.benchAdjust === 'holm' ? 'holm' : 'bonferroni';
+  const diffAdj = o.diffAdjust === 'holm' ? 'holm' : 'bonferroni';
+  const benchTests = bench != null && !single
+    ? (np ? benchmarkFamilyRank : benchmarkFamily)(g, { value: bench, level, adjust: benchAdj }).tests : null;
 
   // Means (or pseudo-medians) with simultaneous intervals, each at 1 - alpha/k.
   const sm = simultaneousMeans(g, level);
   e['per-interval level'] = sm.perLevel;
+  // Each design's own test against the benchmark, before its decision.
+  const benchExpect = (d, i) => {
+    if (!benchTests) return;
+    const t = benchTests[i];
+    Object.assign(e, { [d + (np ? 'bench V' : 'bench t')]: np ? t.V : t.t, [d + 'bench p']: t.p, [d + 'bench adjusted p']: t.pAdj });
+  };
   if (np) {
     g.forEach((x, i) => {
       const sr = signedRank(x, { level: sm.perLevel }), d = 'design ' + (i + 1) + ' ';
       Object.assign(e, { [d + 'R']: x.length, [d + 'pseudo-median']: sr.estimate, [d + 'wilcoxon lower']: sr.lo,
                          [d + 'wilcoxon upper']: sr.hi, [d + 'exact']: ex(sr.exact) });
       backExpect(e, d, tf, sr.estimate, sr.lo, sr.hi);
-      if (bench != null) e[d + 'vs benchmark'] = benchWord(sr.lo, sr.hi, bench);
+      benchExpect(d, i);
+      if (bench != null) e[d + 'vs benchmark'] = benchDecision(sr.lo, sr.hi, bench, benchTests && benchTests[i], benchAdj === 'holm' && !!benchTests);
     });
   } else {
     sm.items.forEach((it, i) => {
@@ -548,7 +571,8 @@ export function severalRecipe(o) {
       Object.assign(e, { [d + 'R']: it.n, [d + 'mean']: it.mean, [d + 'sd']: it.sd, [d + 'se']: it.se, [d + 'df']: it.df,
                          [d + 'lower']: it.lo, [d + 'upper']: it.hi });
       backExpect(e, d, tf, it.mean, it.lo, it.hi);
-      if (bench != null) e[d + 'vs benchmark'] = benchWord(it.lo, it.hi, bench);
+      benchExpect(d, i);
+      if (bench != null) e[d + 'vs benchmark'] = benchDecision(it.lo, it.hi, bench, benchTests && benchTests[i], benchAdj === 'holm' && !!benchTests);
     });
     // The checks line under the means tests each design's outcomes.
     g.forEach((x, i) => Object.assign(e, shapiroExpect('shapiro design ' + (i + 1) + ' ', x)));
@@ -557,23 +581,23 @@ export function severalRecipe(o) {
   // The Bonferroni family of differences (or of rank shifts), each at 1 - alpha/C.
   let fam = null;
   if (!single) {
-  fam = bonferroniFamily(g, { mode: diffMode, control: ctrlIdx, level, paired });
+  fam = bonferroniFamily(g, { mode: diffMode, control: ctrlIdx, level, paired, adjust: diffAdj });
   e.C = fam.C;
   e['per-comparison level'] = fam.perLevel;
   if (np) {
-    const famR = bonferroniFamilyRank(g, { mode: diffMode, control: ctrlIdx, level, paired });
+    const famR = bonferroniFamilyRank(g, { mode: diffMode, control: ctrlIdx, level, paired, adjust: diffAdj });
     for (const c of famR.comparisons) {
       const p = 'shift ' + pairLabel(c.i, c.j);
       Object.assign(e, { [p]: c.diff, [p + ' stat']: c.stat, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
       if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
-      Object.assign(e, { [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' exact']: ex(c.exact), [p + ' excludes 0']: ex(c.flagged), [p + ' declared']: ex(c.declared) });
     }
   } else {
     for (const c of fam.comparisons) {
       const p = 'diff ' + pairLabel(c.i, c.j);
       Object.assign(e, { [p]: c.diff, [p + ' se']: c.se, [p + ' df']: c.df, [p + ' lower']: c.lo, [p + ' upper']: c.hi });
       if (tf === 'log') Object.assign(e, { [p + ' ratio']: Math.exp(c.diff), [p + ' ratio lower']: Math.exp(c.lo), [p + ' ratio upper']: Math.exp(c.hi) });
-      Object.assign(e, { [p + ' t']: c.t, [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged) });
+      Object.assign(e, { [p + ' t']: c.t, [p + ' p']: c.p, [p + ' adjusted p']: c.pAdj, [p + ' excludes 0']: ex(c.flagged), [p + ' declared']: ex(c.declared) });
       // Under pairing the checks line tests each pair's differences; otherwise it
       // repeats the designs' own checks, reported once under the means.
       if (paired) {
@@ -617,6 +641,8 @@ export function severalRecipe(o) {
   // compares from control and family at run time.
   r.settings = { control: ctrlIdx + 1, family: diffMode === 'control' ? 'control' : 'pairs' };
   if (bench != null) r.settings.benchmark = bench;
+  if (bench != null && !single) r.settings.bench_adjust = benchAdj;
+  if (!single) r.settings.diff_adjust = diffAdj;
   // The figures of the section the page showed (means unless a view says otherwise), each design
   // labeled by its number and short name as on the page.
   const section = o.view && ['means', 'diffs', 'anova', 'subset'].includes(o.view.section) ? o.view.section : 'means';
@@ -631,7 +657,9 @@ export function severalRecipe(o) {
     'Edit any of these and rerun. level is the confidence that each family of intervals keeps as a whole. ' +
       'family chooses the pairwise comparisons: "pairs" compares every pair of designs, and "control" compares each design with the control, ' +
       'the design numbered control in the list below (numbered from 1, as on the page)' + (dunnett ? ', which Dunnett\'s post-hoc rule also compares every design with' : '') + '. ' +
-      (bench != null ? 'benchmark is the value each design\'s interval is checked against. ' : '') +
+      (bench != null ? 'benchmark is the value each design is checked against' + (single ? ', by its interval. '
+        : ', and bench_adjust says how: "bonferroni" declares a design above or below it when its interval excludes it, and "holm" when Holm\'s step-down on the designs\' own tests against it rejects. ') : '') +
+      (!single ? 'diff_adjust says how a pairwise comparison is declared different: "bonferroni" when its interval excludes 0, and "holm" when Holm\'s step-down on the comparisons\' own tests rejects; the intervals are Bonferroni\'s either way. ' : '') +
       (np ? 'rank_adjust is the rule that adjusts the rank tests\' pairwise p-values: "holm" (Holm\'s step-down) or "bonferroni". ' : '') +
       'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
       'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
@@ -649,7 +677,8 @@ export function severalRecipe(o) {
 
 // The post-hoc rules' names in report keys, which the test harness's
 // tolerances match on.
-const RULE_SLUG = { tukey: 'tukey', lsd: 'lsd', bonferroni: 'bonferroni', dunnett: 'dunnett', gameshowell: 'gameshowell', bonferroniWelch: 'bonferroniwelch' };
+const RULE_SLUG = { tukey: 'tukey', lsd: 'lsd', bonferroni: 'bonferroni', holm: 'holm', dunnett: 'dunnett', gameshowell: 'gameshowell', bonferroniWelch: 'bonferroniwelch',
+  holmWelch: 'holmwelch' };
 
 /**
  * The analysis of variance section, as the page computes it: Levene's test,
@@ -690,14 +719,21 @@ function severalAnova(r, o, g) {
       g.forEach((x, i) => { for (let t = 0; t < x.length; t++) resid.push(av.ssw === 0 ? 0 : x[t] - av.means[i] - (paired ? av.blockMeans[t] - av.grandMean : 0)); });
       Object.assign(e, shapiroExpect('shapiro residuals ', resid));
       e['posthoc rule'] = slug;
-      if (!welch) e['posthoc ' + slug + ' critical value'] = ph.crit;
+      // Holm's step-down gives each pair a t, a p, and an adjusted p, and no interval.
+      const holm = (welch ? ruleW : rule) === (welch ? 'holmWelch' : 'holm');
+      if (!welch && !holm) e['posthoc ' + slug + ' critical value'] = ph.crit;
       if (!welch && rule === 'lsd') { section.protectedLsd = ph.protected; e['posthoc lsd protected'] = ex(ph.protected); }
       for (const p of ph.pairs) {
         const key = 'posthoc ' + slug + ' ' + pairLabel(p.i, p.j);
         Object.assign(e, { [key + ' diff']: p.diff, [key + ' se']: p.se });
-        if (welch) Object.assign(e, { [key + ' df']: p.df, [key + ' crit']: p.crit });
-        Object.assign(e, { [key + ' hw']: p.hw, [key + ' lower']: p.lo, [key + ' upper']: p.hi });
-        if (welch) e[key + ' p'] = p.p;
+        if (holm) {
+          if (welch) e[key + ' df'] = p.df;
+          Object.assign(e, { [key + ' t']: p.t, [key + ' p']: p.p, [key + ' adjusted p']: p.pAdj });
+        } else {
+          if (welch) Object.assign(e, { [key + ' df']: p.df, [key + ' crit']: p.crit });
+          Object.assign(e, { [key + ' hw']: p.hw, [key + ' lower']: p.lo, [key + ' upper']: p.hi });
+          if (welch) e[key + ' p'] = p.p;
+        }
         e[key + ' different'] = ex(p.flagged);
         section.pairs.push([p.i, p.j]);
       }

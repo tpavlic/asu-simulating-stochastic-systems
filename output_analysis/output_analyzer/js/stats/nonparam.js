@@ -13,7 +13,7 @@
 // software report.
 
 import { normCdf, normInv, chi2Cdf } from './special.js';
-import { letterGroups } from './compare.js';
+import { letterGroups, adjustP, declareFamily } from './compare.js';
 
 /**
  * Midranks of the values, with the sizes of the tied groups.
@@ -364,18 +364,8 @@ export function dunn(groups, { alpha, adjust = 'bonferroni' }) {
     pairs.push({ i, j, diff, se, z, p, pAdj: NaN, flagged: false });
   }
   const C = pairs.length;
-  if (adjust === 'holm') {
-    const order = pairs.map((_, i) => i).sort((a, b) => pairs[a].p - pairs[b].p);
-    let running = 0;
-    order.forEach((idx, rank) => {
-      const adj = Math.min(1, (C - rank) * pairs[idx].p);
-      running = Math.max(running, adj);
-      pairs[idx].pAdj = running;
-    });
-  } else {
-    for (const pr of pairs) pr.pAdj = Math.min(1, C * pr.p);
-  }
-  for (const pr of pairs) pr.flagged = pr.pAdj < alpha;
+  const pAdj = adjustP(pairs.map(pr => pr.p), adjust);
+  pairs.forEach((pr, q) => { pr.pAdj = pAdj[q]; pr.flagged = pAdj[q] < alpha; });
   const letters = letterGroups(k, pairs.filter(pr => pr.flagged).map(pr => [pr.i, pr.j]));
   return { k, C, adjust, pairs, letters, kw };
 }
@@ -430,18 +420,8 @@ export function friedmanPairs(groups, { alpha, adjust = 'bonferroni' }) {
     pairs.push({ i, j, diff, se, z, p, pAdj: NaN, flagged: false });
   }
   const C = pairs.length;
-  if (adjust === 'holm') {
-    const order = pairs.map((_, i) => i).sort((a, b) => pairs[a].p - pairs[b].p);
-    let running = 0;
-    order.forEach((idx, rank) => {
-      const adj = Math.min(1, (C - rank) * pairs[idx].p);
-      running = Math.max(running, adj);
-      pairs[idx].pAdj = running;
-    });
-  } else {
-    for (const pr of pairs) pr.pAdj = Math.min(1, C * pr.p);
-  }
-  for (const pr of pairs) pr.flagged = pr.pAdj < alpha;
+  const pAdj = adjustP(pairs.map(pr => pr.p), adjust);
+  pairs.forEach((pr, q) => { pr.pAdj = pAdj[q]; pr.flagged = pAdj[q] < alpha; });
   const letters = letterGroups(k, pairs.filter(pr => pr.flagged).map(pr => [pr.i, pr.j]));
   return { k, C, adjust, pairs, letters, fr };
 }
@@ -449,18 +429,48 @@ export function friedmanPairs(groups, { alpha, adjust = 'bonferroni' }) {
 // ── Bonferroni families of Wilcoxon intervals ─────────────────────────────
 
 /**
+ * Every design's pseudo-median tested against a benchmark, one design at a
+ * time, each by the Wilcoxon signed-rank test at mu = value, with the C = k
+ * p-values adjusted by `adjust`. A design is declared above or below the
+ * benchmark, by the side its Hodges–Lehmann estimate falls on, when its
+ * adjusted p is below α = 1 − level.
+ * @param {(number[]|Float64Array)[]} groups
+ * @param {{value: number, level: number, adjust: 'bonferroni'|'holm'}} opts
+ * @returns {{C: number, adjust: string, tests: {V: number, p: number, pAdj: number, exact: boolean,
+ *   declared: boolean, side: 'above'|'below'|null}[]}}
+ */
+export function benchmarkFamilyRank(groups, { value, level, adjust }) {
+  const alpha = 1 - level;
+  const raw = groups.map(g => signedRank(g, { mu: value, level }));
+  const pAdj = adjustP(raw.map(r => r.p), adjust);
+  const tests = raw.map((r, i) => {
+    const declared = pAdj[i] < alpha;
+    return { V: r.V, p: r.p, pAdj: pAdj[i], exact: r.exact, declared,
+             side: declared ? (r.estimate > value ? 'above' : r.estimate < value ? 'below' : null) : null };
+  });
+  return { C: groups.length, adjust, tests };
+}
+
+/**
  * The Bonferroni family of differences done with rank procedures: every
  * pair i < j (C = k(k − 1)/2) or every design against a control (C = k − 1),
  * each on its own Wilcoxon rank-sum interval for the shift, or, when the
  * groups are aligned block by block, its own signed-rank interval on the
  * paired differences, at level 1 − α/C. A comparison is flagged when its
- * interval excludes 0, and pAdj = min(1, C·p).
+ * interval excludes 0, and pAdj is its p-value adjusted by `adjust`
+ * (Bonferroni's min(1, C·p) by default). A comparison is declared different
+ * when it is flagged under Bonferroni, and under Holm when its adjusted p is
+ * below α = 1 − level. The Wilcoxon interval and test can disagree at the edge
+ * (the exact distributions are discrete), and so a Holm declaration is read
+ * from the test alone.
  * @param {(number[]|Float64Array)[]} groups
- * @param {{mode: 'pairs'|'control', control?: number, level: number, paired?: boolean}} opts
- * @returns {{C: number, perLevel: number, paired: boolean, comparisons: {i: number, j: number, diff: number,
- *   stat: number, lo: number, hi: number, p: number, pAdj: number, flagged: boolean, exact: boolean, achieved: number}[]}}
+ * @param {{mode: 'pairs'|'control', control?: number, level: number, paired?: boolean,
+ *   adjust?: 'bonferroni'|'holm'}} opts
+ * @returns {{C: number, perLevel: number, paired: boolean, adjust: string, comparisons: {i: number, j: number, diff: number,
+ *   stat: number, lo: number, hi: number, p: number, pAdj: number, flagged: boolean, declared: boolean,
+ *   exact: boolean, achieved: number}[]}}
  */
-export function bonferroniFamilyRank(groups, { mode, control = 0, level, paired = false }) {
+export function bonferroniFamilyRank(groups, { mode, control = 0, level, paired = false, adjust = 'bonferroni' }) {
   const k = groups.length, list = [];
   if (mode === 'control') {
     for (let i = 0; i < k; i++) if (i !== control) list.push([i, control]);
@@ -478,8 +488,9 @@ export function bonferroniFamilyRank(groups, { mode, control = 0, level, paired 
       r = rankSum(groups[i], groups[j], { level: perLevel });
       stat = r.W;
     }
-    return { i, j, diff: r.estimate, stat, lo: r.lo, hi: r.hi, p: r.p, pAdj: Math.min(1, C * r.p),
+    return { i, j, diff: r.estimate, stat, lo: r.lo, hi: r.hi, p: r.p,
              flagged: r.lo > 0 || r.hi < 0, exact: r.exact, achieved: r.achieved };
   });
-  return { C, perLevel, paired, comparisons };
+  declareFamily(comparisons, adjust, 1 - level);
+  return { C, perLevel, paired, adjust, comparisons };
 }

@@ -1129,12 +1129,12 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.equal(r.provenance['difference family'], 'all pairs');
   assert.equal(r.expect.k, 4);
   assert.equal(r.expect.C, 6);
-  for (const k of ['design 1 mean', 'design 4 upper', 'design 2 df', 'diff 1-2', 'diff 3-4 adjusted p', 'diff 1-2 excludes 0', 'plan means n',
+  for (const k of ['design 1 mean', 'design 4 upper', 'design 2 df', 'diff 1-2', 'diff 3-4 adjusted p', 'diff 1-2 excludes 0', 'diff 1-2 declared', 'plan means n',
     'plan diffs widest pair', 'shapiro design 2 W [optional]']) assert.ok(k in r.expect, k);
-  assert.ok(!('design 1 vs benchmark' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
+  assert.ok(!('design 1 vs benchmark' in r.expect) && !('design 1 bench t' in r.expect) && !('plan means n (rank)' in r.expect) && !('shapiro diff 1-2 W [optional]' in r.expect));
   assert.deepEqual(Object.keys(r.groups).sort(), ['by', 'dropped', 'how', 'ids', 'names', 'paired', 'response', 'unit', 'unmatched', 'values']);
-  assert.deepEqual(Object.keys(r.settings), ['control', 'family', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
-  assert.deepEqual([r.settings.family, r.settings.epsilon, r.settings.direction], ['pairs', 0.5, 'max']);
+  assert.deepEqual(Object.keys(r.settings), ['control', 'family', 'diff_adjust', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.deepEqual([r.settings.family, r.settings.diff_adjust, r.settings.epsilon, r.settings.direction], ['pairs', 'bonferroni', 0.5, 'max']);
   assert.equal(r.several.rank, null);
   assert.deepEqual(r.several.subset, { ok: true, reason: '' }, 'the screen runs under every procedure');
   // A pure function of its argument: built twice, the same recipe.
@@ -1153,7 +1153,7 @@ test('severalRecipe carries every design, the family, and the planning keys', ()
   assert.equal(rc.expect.C, 3);
   assert.ok('diff 1-3' in rc.expect && 'diff 4-3' in rc.expect && !('diff 1-2' in rc.expect));
   assert.equal(rc.settings.benchmark, 2.4);
-  assert.deepEqual(Object.keys(rc.settings), ['control', 'family', 'benchmark', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
+  assert.deepEqual(Object.keys(rc.settings), ['control', 'family', 'benchmark', 'bench_adjust', 'diff_adjust', 'epsilon', 'direction', 'plan_means_h', 'plan_diffs_h', 'plan_delta', 'plan_power']);
   assert.equal(rc.settings.family, 'control');
   assert.ok(analysisScript(rc, 'R').includes('ref = benchmark'));
   // Under the rank procedures: pseudo-medians, shifts, and the inflated plans.
@@ -1203,7 +1203,41 @@ checkRecipe('Several Systems, paired versus control by position, 99%', sevRecipe
 checkRecipe('Several Systems, paired rank procedures versus control', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', diffMode: 'control', ctrlIdx: 1 }), sevChecks);
 checkRecipe('Several Systems, paired rank procedures over all pairs with a benchmark', sevRecipe(FOUR_CRN, { paired: true, proc: 'np', bench: 2.5 }), sevChecks);
 
-// The benchmark's three verdicts appear across these fixtures.
+// Holm's decisions. Each fixture is set where Holm declares strictly more than
+// Bonferroni (a design or pair whose interval still contains the reference),
+// which is the case the "(Holm)" mark exists for.
+const HOLM = {
+  means: sevRecipe(FOUR, { bench: 3.12, benchAdjust: 'holm', view: { section: 'means' } }),
+  diffs: sevRecipe(SIX_D, { level: 0.9, diffAdjust: 'holm', benchAdjust: 'holm', bench: 2.89, rule: 'holm', view: { section: 'diffs' } }),
+  welch: sevRecipe(SIX_D, { level: 0.9, varMode: 'welch', ruleW: 'holmWelch', diffAdjust: 'holm', view: { section: 'anova' } }),
+  rank: sevRecipe(SIX_D, { proc: 'np', level: 0.9, diffMode: 'control', ctrlIdx: 1, diffAdjust: 'holm', benchAdjust: 'holm', bench: 3.28, view: { section: 'means' } }),
+  paired: sevRecipe(FOUR_CRN, { paired: true, rule: 'holm', diffAdjust: 'holm', benchAdjust: 'holm', bench: 3.44, view: { section: 'anova' } })
+};
+test('the Holm fixtures declare designs and pairs whose intervals still contain the reference', () => {
+  const words = k => Object.keys(HOLM[k].expect).filter(x => / vs benchmark$/.test(x)).map(x => HOLM[k].expect[x]);
+  for (const k of ['means', 'diffs', 'rank', 'paired']) assert.ok(words(k).some(w => / \(Holm\)$/.test(w)), k + ': a design declared by Holm alone');
+  const holmOnly = (r, P) => Object.keys(r.expect).filter(x => new RegExp('^' + P + ' \\d+-\\d+ declared$').test(x))
+    .filter(x => r.expect[x] === 1 && r.expect[x.replace(/declared$/, 'excludes 0')] === 0);
+  assert.ok(holmOnly(HOLM.diffs, 'diff').length > 0, 'a pair declared by Holm alone');
+  assert.ok(holmOnly(HOLM.rank, 'shift').length > 0, 'a rank shift declared by Holm alone');
+  assert.equal(HOLM.diffs.settings.diff_adjust, 'holm');
+  assert.equal(HOLM.diffs.settings.bench_adjust, 'holm');
+  assert.ok('posthoc holm 1-2 adjusted p' in HOLM.diffs.expect && !('posthoc holm critical value' in HOLM.diffs.expect));
+  assert.ok('posthoc holmwelch 1-2 t' in HOLM.welch.expect && !('posthoc holmwelch 1-2 lower' in HOLM.welch.expect));
+  assert.ok('design 1 bench V' in HOLM.rank.expect && 'design 1 bench t' in HOLM.means.expect);
+  // Under Bonferroni, the benchmark tests are still reported and the decision is the interval's.
+  const b = sevRecipe(FOUR, { bench: 3.12 });
+  assert.equal(b.settings.bench_adjust, 'bonferroni');
+  assert.ok(Object.keys(b.expect).filter(x => / vs benchmark$/.test(x)).every(x => ['above', 'below', 'contains'].includes(b.expect[x])));
+  for (const r of Object.values(HOLM)) for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
+});
+checkRecipe('Several Systems, Holm against the benchmark on four-designs', HOLM.means, Object.assign({ smoke: true }, sevPinned(HOLM.means)));
+checkRecipe('Several Systems, Holm decisions and post hoc on six-designs, 90%', HOLM.diffs, Object.assign({ smoke: true }, sevPinned(HOLM.diffs)));
+checkRecipe('Several Systems, Holm on Welch pairs on six-designs, 90%', HOLM.welch, sevPinned(HOLM.welch));
+checkRecipe('Several Systems, rank procedures with Holm decisions versus control, 90%', HOLM.rank, Object.assign({ smoke: true }, sevPinned(HOLM.rank)));
+checkRecipe('Several Systems, paired with Holm decisions and the blocked Holm post hoc', HOLM.paired, sevPinned(HOLM.paired));
+
+// The benchmark's three decisions appear across these fixtures.
 test('the benchmark fixtures declare designs above, below, and containing it', () => {
   const words = new Set();
   for (const r of [sevRecipe(FOUR, { diffMode: 'control', ctrlIdx: 2, bench: 2.4, level: 0.9 }), sevRecipe(FOUR, { proc: 'np', diffMode: 'control', ctrlIdx: 3, bench: 1.9 })]) {

@@ -996,8 +996,10 @@ function sevAnova(r, L, out, need) {
     ') are what ' + (A.welch ? 'Welch\'s F' : 'the F test') + ' and the post-hoc rules take as normal.', c));
   out.push(shapiroLine(r, L, 'shapiro residuals', f('av', 'resid')));
 
-  const rules = { tukey: 'Tukey-Kramer', lsd: 'Fisher\'s protected LSD', bonferroni: 'Bonferroni on the pooled variance', dunnett: 'Dunnett against the control',
-    gameshowell: 'Games-Howell', bonferroniwelch: 'Bonferroni on the Welch pairs' };
+  const rules = { tukey: 'Tukey-Kramer', lsd: 'Fisher\'s protected LSD', bonferroni: 'Bonferroni on the pooled variance', holm: 'Holm\'s step-down on the pooled variance',
+    dunnett: 'Dunnett against the control', gameshowell: 'Games-Howell', bonferroniwelch: 'Bonferroni on the Welch pairs', holmwelch: 'Holm\'s step-down on the Welch pairs' };
+  // Holm's step-down judges each pair by its adjusted p and gives no interval.
+  const holm = slug === 'holm' || slug === 'holmwelch';
   const dunnett = !A.welch && A.rule === 'dunnett';
   const ind = lang === 'R' ? '  ' : '    ';
   need.push('pageAt');
@@ -1005,11 +1007,13 @@ function sevAnova(r, L, out, need) {
   out.push(...commentLines(c, 'Each pair\'s difference of means, mean_i - mean_j, with ' + (A.welch
     ? 'its own standard error sqrt(s_i^2/R_i + s_j^2/R_j) on its own Welch degrees of freedom'
     : 'the standard error sqrt(MS (1/R_i + 1/R_j)), where MS is the ' + (A.blocked ? 'residual mean square' : 'pooled mean square within')) +
-    '; a pair whose interval excludes 0 is declared different' + (slug === 'lsd' ? ', but only when the F test rejects at alpha' : '') + '.' +
+    (holm ? '; its t is the difference over that standard error, its two-sided p-value is adjusted by Holm\'s step-down across the pairs, and a pair whose adjusted p is below alpha is declared different'
+      : '; a pair whose interval excludes 0 is declared different' + (slug === 'lsd' ? ', but only when the F test rejects at alpha' : '')) + '.' +
     (dunnett ? ' posthoc_pairs holds each design against the control, the design numbered control in the settings.' : ' posthoc_pairs holds every pair of designs.') +
     (lang === 'py' ? ' The designs are counted from 0 here.' : ''), c));
   out.push(L.assign('posthoc_pairs', pairsExpr(lang, dunnett)));
   out.push(rep(L, r, 'posthoc rule', L.str(slug)));
+  if (holm) need.push('holm');
   if (A.welch) {
     out.push(L.assign('ph', 'posthoc_welch(groups, ' + L.str(A.rule) + ', alpha, posthoc_pairs)'));
   } else {
@@ -1018,7 +1022,7 @@ function sevAnova(r, L, out, need) {
     if (A.rule === 'tukey' && lang === 'm') need.push('studrange');
     // control is numbered from 1, as on the page; the Python helper counts from 0.
     out.push(L.assign('ph', 'posthoc_pooled(groups, av, ' + L.str(A.rule) + ', alpha, posthoc_pairs, ' + (lang === 'py' ? 'control - 1' : 'control') + ')'));
-    out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
+    if (!holm) out.push(rep(L, r, 'posthoc ' + slug + ' critical value', f('ph', 'crit')));
     if (A.rule === 'lsd') out.push(repYesNo(L, r, 'posthoc lsd protected', f('ph', 'protected')));
     if (lang === 'R' && A.rule === 'tukey' && !L.tidy) {
       out.push(...commentLines(c, 'R\'s own TukeyHSD gives the same intervals (its diff is the later design less the earlier), where its qtukey is defined.', c));
@@ -1027,9 +1031,14 @@ function sevAnova(r, L, out, need) {
   }
   // Each pair's report keys: [suffix, field, yes/no].
   const keys = [[' diff', 'diff'], [' se', 'se']];
-  if (A.welch) keys.push([' df', 'df'], [' crit', 'crit']);
-  keys.push([' hw', 'hw'], [' lower', 'lo'], [' upper', 'hi']);
-  if (A.welch) keys.push([' p', 'p']);
+  if (holm) {
+    if (A.welch) keys.push([' df', 'df']);
+    keys.push([' t', 't'], [' p', 'p'], [' adjusted p', 'pAdj']);
+  } else {
+    if (A.welch) keys.push([' df', 'df'], [' crit', 'crit']);
+    keys.push([' hw', 'hw'], [' lower', 'lo'], [' upper', 'hi']);
+    if (A.welch) keys.push([' p', 'p']);
+  }
   keys.push([' different', 'flagged', true]);
   const prefix = 'posthoc ' + slug;
   const varOf = suffix => 'page_posthoc' + suffix.replace(/ /g, '_');
@@ -1097,9 +1106,19 @@ function sevMeans(r, L, out, need) {
   out.push(L.sect(S.np ? 'Pseudo-medians with simultaneous intervals (Wilcoxon signed-rank)' : 'Means with simultaneous intervals'));
   out.push(...commentLines(c, 'Each design\'s own ' + (S.np ? 'Wilcoxon signed-rank interval on its pseudo-median (the Hodges-Lehmann estimate, the median of its Walsh averages)' : 't interval on its mean') +
     ' at 1 - alpha/k, and so all k hold at once with confidence at least level (Bonferroni).' +
-    (S.bench != null ? ' A design is above or below the benchmark when its interval excludes it.' : ''), c));
+    (S.bench == null ? '' : S.single ? ' The design is above or below the benchmark when its interval excludes it.'
+      : ' Each design is also tested against the benchmark by its own ' + (S.np ? 'Wilcoxon signed-rank test' : 'one-sample t test') +
+        ', and the k p-values are adjusted by bench_adjust. Under "bonferroni", a design is above or below the benchmark when its interval excludes it; ' +
+        'under "holm", when its Holm-adjusted p is below alpha, a design whose interval still contains it being marked "(Holm)". ' +
+        (S.np ? 'A signed-rank test and its own interval do not always agree, and so under "holm" a design whose interval excludes the benchmark can be left undeclared.'
+          : 'Under "holm", every design whose interval excludes the benchmark is declared, and possibly more.')), c));
   out.push(L.assign('sm', 'simultaneous_means(groups, level)'));
   out.push(rep(L, r, 'k', 'k'), rep(L, r, 'per-interval level', f('sm', 'perLevel')));
+  const benchTests = S.bench != null && !S.single;
+  if (benchTests) {
+    need.push('holm', S.np ? 'signedRank' : 'oneSampleT', 'benchTests');
+    out.push(L.assign('bench_res', 'bench_tests(groups, benchmark, alpha, bench_adjust, ' + L.bool(S.np) + ')'));
+  }
   if (S.np) {
     need.push('signedRank');
     out.push(L.assign('srs', lang === 'R' ? 'lapply(groups, function(x) signed_rank(x, sm$perLevel))'
@@ -1124,7 +1143,12 @@ function sevMeans(r, L, out, need) {
       out.push(rep(L, r, d + 'back-transformed center', 'back_transform(' + ctr + ', outcome_transform)'),
         rep(L, r, d + 'back-transformed lower', f('bt', 'lo')), rep(L, r, d + 'back-transformed upper', f('bt', 'hi')));
     }
-    if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
+    if (benchTests) {
+      const at = (v, q) => (lang === 'R' ? v + '[' + (q + 1) + ']' : lang === 'py' ? v + '[' + q + ']' : v + '(' + (q + 1) + ')');
+      out.push(rep(L, r, d + (S.np ? 'bench V' : 'bench t'), at(f('bench_res', 'stat'), i)), rep(L, r, d + 'bench p', at(f('bench_res', 'p'), i)),
+        rep(L, r, d + 'bench adjusted p', at(f('bench_res', 'p_adj'), i)));
+      out.push(rep(L, r, d + 'vs benchmark', 'bench_decision(' + lo + ', ' + hi + ', benchmark, bench_res, ' + (lang === 'py' ? i : i + 1) + ', bench_adjust)'));
+    } else if (S.bench != null) out.push(rep(L, r, d + 'vs benchmark', 'bench_word(' + lo + ', ' + hi + ', benchmark)'));
   }
   if (L.tidy && S.np) {
     out.push(...commentLines(c, 'Each design\'s signed-rank test as wilcox.test returns it, tidied by broom and bound into one tibble, a row per design, ' +
@@ -1147,12 +1171,15 @@ function sevDiffs(r, L, out, need) {
   const labels = familyPairs(r).map(([i, j]) => pairLabel(i, j));
   const ind = lang === 'R' ? '  ' : '    ';
   need.push('pageAt');
-  out.push(L.sect(S.np ? 'Pairwise rank comparisons (Bonferroni)' : 'Pairwise comparisons (Bonferroni)'));
+  out.push(L.sect(S.np ? 'Pairwise rank comparisons (Bonferroni intervals)' : 'Pairwise comparisons (Bonferroni intervals)'));
   const each = S.np ? (S.paired ? 'Wilcoxon signed-rank interval on the pseudo-median of the paired differences' : 'Wilcoxon rank-sum interval on the shift (the Hodges-Lehmann estimate)')
     : (S.paired ? 'paired t interval on the differences within each block' : 'Welch interval');
   out.push(...commentLines(c, 'Every comparison\'s own ' + each + ' at 1 - alpha/C, for the comparisons in family_pairs' +
     (lang === 'py' ? ' (its designs counted from 0)' : '') + ': each design against the control when family is "control", and every pair of designs when it is "pairs". ' +
-    'The adjusted p is C p capped at 1, and a comparison whose interval excludes 0 is declared different.', c));
+    'Every comparison\'s p-value is then adjusted by diff_adjust. Under "bonferroni", the adjusted p is C p capped at 1, and a comparison whose interval excludes 0 is declared different; ' +
+    'under "holm", the adjusted p is Holm\'s step-down, and a comparison whose adjusted p is below alpha is declared different' +
+    (S.np ? '; a rank test and its own interval do not always agree, and so a comparison whose interval excludes 0 can be left undeclared. ' : ', which declares every comparison whose interval excludes 0 and possibly more. ') +
+    'The intervals are Bonferroni\'s either way.', c));
   if (lang === 'R') out.push('family_pairs <- if (family == "control") ' + pairsExpr(lang, true) + ' else ' + pairsExpr(lang, false));
   else if (lang === 'py') out.push('family_pairs = ' + pairsExpr(lang, true) + ' if family == "control" else ' + pairsExpr(lang, false));
   else out.push("if strcmp(family, 'control'), family_pairs = " + pairsExpr(lang, true) + '; else, family_pairs = ' + pairsExpr(lang, false) + '; end');
@@ -1165,7 +1192,6 @@ function sevDiffs(r, L, out, need) {
   // The report keys of one comparison, in the page's order: [suffix, the
   // script's value, the variable holding the analyzer's, yes/no].
   const P = S.np ? 'shift' : 'diff';
-  const adj = lang === 'R' ? 'min(1, C * ' + f('cmp', 'p') + ')' : lang === 'py' ? 'np.minimum(1, C * ' + f('cmp', 'p') + ')' : "min(1, C * " + f('cmp', 'p') + ", 'includenan')";
   const lo = f('cmp', 'lo'), hi = f('cmp', 'hi');
   const excl = lang === 'R' ? 'isTRUE(' + lo + ' > 0) || isTRUE(' + hi + ' < 0)' : lang === 'py' ? 'bool(' + lo + ' > 0 or ' + hi + ' < 0)' : lo + ' > 0 || ' + hi + ' < 0';
   // Under the log, each comparison's estimate and interval carried back as a ratio, after its interval.
@@ -1174,16 +1200,18 @@ function sevDiffs(r, L, out, need) {
     ? [[' ratio', null, 'back_transform(' + mid + ', outcome_transform)'], [' ratio lower', null, 'back_transform(' + lo + ', outcome_transform)'],
       [' ratio upper', null, 'back_transform(' + hi + ', outcome_transform)']] : [];
   const keys = S.np
-    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' p', 'p'], [' adjusted p', null, adj], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
-    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' t', 't'], [' p', 'p'], [' adjusted p', null, adj], [' excludes 0', null, excl, true]];
+    ? [['', 'estimate'], [' stat', S.paired ? 'V' : 'W'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' p', 'p'], [' exact', 'exact', null, true], [' excludes 0', null, excl, true]]
+    : [['', S.paired ? 'meanD' : 'diff'], [' se', 'se'], [' df', 'df'], [' lower', 'lo'], [' upper', 'hi'], ...ratio, [' t', 't'], [' p', 'p'], [' excludes 0', null, excl, true]];
+  // Read after every comparison has run: its adjusted p and whether it is declared.
+  const after = [[' adjusted p', false], [' declared', true]];
   const varOf = suffix => 'page_' + P + suffix.replace(/ /g, '_');
-  const items = keys.map(([suffix, , , yesno]) => [suffix, varOf(suffix), !!yesno]);
+  const items = keys.map(([suffix, , , yesno]) => [suffix, varOf(suffix), !!yesno]).concat(after.map(([suffix, yesno]) => [suffix, varOf(suffix), yesno]));
   const shapiro = !S.np && S.paired;
   if (shapiro) items.push([' W', 'page_shapiro_diff_W', false], [' p', 'page_shapiro_diff_p', false]);
   out.push(...commentLines(c, 'The analyzer\'s values for the comparisons the page made, in the order of page_family_pairs, printed beside the script\'s; ' +
     'a comparison the page did not make (after family or control is edited) prints alone.', c));
-  pageVectors(L, r, out, { prefix: P, labels, labelsVar: 'page_family_pairs', items: items.slice(0, keys.length) });
-  if (shapiro) pageVectors(L, r, out, { prefix: 'shapiro diff', labels, labelsVar: 'page_family_pairs', items: items.slice(keys.length) });
+  pageVectors(L, r, out, { prefix: P, labels, labelsVar: 'page_family_pairs', items: items.slice(0, keys.length + after.length) });
+  if (shapiro) pageVectors(L, r, out, { prefix: 'shapiro diff', labels, labelsVar: 'page_family_pairs', items: items.slice(keys.length + after.length) });
   if (L.tidy) {
     out.push(...commentLines(c, 'family_tests collects each comparison\'s test object, for the tibble after the last one' +
       (S.np ? '.' : '; t.test stops on two constant designs, and so such a comparison has no test object and is left out.'), c), 'family_tests <- list()');
@@ -1202,6 +1230,11 @@ function sevDiffs(r, L, out, need) {
   }
   const body = [L.assign('cmp', call)];
   keys.forEach(([suffix, k, expr]) => body.push(pairRep(L, P, suffix, expr || f('cmp', k), varOf(suffix))));
+  // Each comparison's p-value and whether its interval excludes 0, for the adjustment after the loop.
+  if (lang === 'R') body.push('fam_p <- c(fam_p, ' + f('cmp', 'p') + '); fam_excl <- c(fam_excl, ' + excl + ')');
+  else if (lang === 'py') body.push('fam_p.append(' + f('cmp', 'p') + '); fam_excl.append(' + excl + ')');
+  else body.push('fam_p(end + 1) = ' + f('cmp', 'p') + '; fam_excl(end + 1) = ' + excl + ';');
+  out.push(lang === 'R' ? 'fam_p <- numeric(0); fam_excl <- logical(0)' : lang === 'py' ? 'fam_p, fam_excl = [], []' : 'fam_p = []; fam_excl = false(1, 0);');
   // The figure of this section draws every comparison, and so each one's interval is collected as it runs.
   const collect = r.fig && r.fig.section === 'diffs';
   if (collect) {
@@ -1222,6 +1255,23 @@ function sevDiffs(r, L, out, need) {
   if (lang === 'R') out.push('for (p in family_pairs) {', ind + 'i <- p[1]; j <- p[2]; ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), '}');
   else if (lang === 'py') out.push('for i, j in family_pairs:', ind + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x));
   else out.push('for row = 1:C', ind + 'i = family_pairs(row, 1); j = family_pairs(row, 2); ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...body.map(x => ind + x), 'end');
+
+  // The adjustment needs every p-value of the family, and so it follows the loop.
+  need.push('holm');
+  out.push(c + 'Every comparison\'s adjusted p, by diff_adjust, and whether it is declared different.');
+  out.push(L.assign('fam_adj', 'adjust_p(fam_p, diff_adjust)'));
+  const decl = lang === 'R' ? 'if (diff_adjust == "holm") isTRUE(fam_adj[q] < alpha) else fam_excl[q]'
+    : lang === 'py' ? 'bool(fam_adj[q] < alpha) if diff_adjust == "holm" else fam_excl[q]'
+      : "fam_excl(q); if strcmp(diff_adjust, 'holm'), decl = fam_adj(q) < alpha; end";
+  const adjAt = lang === 'R' ? 'fam_adj[q]' : lang === 'py' ? 'fam_adj[q]' : 'fam_adj(q)';
+  const tail = [L.assign('decl', decl), pairRep(L, P, ' adjusted p', adjAt, varOf(' adjusted p')), pairRep(L, P, ' declared', 'decl', varOf(' declared'))];
+  if (lang === 'R') tail.push('fam_decl <- c(fam_decl, decl)');
+  else if (lang === 'py') tail.push('fam_decl.append(decl)');
+  else tail.push('fam_decl(end + 1) = decl;');
+  out.push(lang === 'R' ? 'fam_decl <- logical(0)' : lang === 'py' ? 'fam_decl = []' : 'fam_decl = false(1, 0);');
+  if (lang === 'R') out.push('for (q in seq_along(family_pairs)) {', ind + 'i <- family_pairs[[q]][1]; j <- family_pairs[[q]][2]; ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...tail.map(x => ind + x), '}');
+  else if (lang === 'py') out.push('for q, (i, j) in enumerate(family_pairs):', ind + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...tail.map(x => ind + x));
+  else out.push('for q = 1:C', ind + 'i = family_pairs(q, 1); j = family_pairs(q, 2); ' + pairLabelLine(L, 'i', 'j', 'page_family_pairs'), ...tail.map(x => ind + x), 'end');
 
   if (L.tidy) {
     out.push(...commentLines(c, 'Every comparison\'s test as ' + (S.np ? 'wilcox.test' : 't.test') + ' returns it, at 1 - alpha/C, tidied by broom and bound into one tibble, a row per pair; its p-values are not adjusted.' +

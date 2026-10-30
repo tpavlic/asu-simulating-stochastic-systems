@@ -1123,21 +1123,32 @@ better.
   ("Benchmark comparison", Bonferroni simultaneous means with an optional benchmark drawn as a
   draggable line that declares each design above or below it when its interval excludes it, and
   "Pairwise comparisons", Bonferroni differences, all pairs or versus a control, the sections
-  titled by the question asked rather than by the correction, each with a
+  titled by the question asked rather than by the correction, each with a "Decide by" switch
+  (Bonferroni by default, or Holm, shown where the family has two or more comparisons) that
+  declares a design or pair by Holm's step-down on its own test (the one-sample t or signed-rank
+  test against the benchmark, the Welch, paired, rank-sum, or signed-rank test between designs)
+  while the intervals stay Bonferroni's, and so a declared row whose interval excludes the
+  reference is red and dashed, one declared by Holm alone is drawn plainly with a red "(Holm)"
+  decision at its right edge (`note` on `intervals` in `js/ui/plots.js`), and every row carries
+  its decision (`benchmarkFamily`, `adjustP`, and `declareFamily` in `js/stats/compare.js`,
+  `benchmarkFamilyRank` in `js/stats/nonparam.js`), and each section has a
   "How many replications" card at its foot sized by a target half-width, as the ANOVA section has
   one sized by the F test's target power (under Welch's analysis, that plan still takes σ and the
   grand mean from the ordinary one-way analysis, and the card says it assumes a common σ; the
   scripts do the same), the rank procedures taking the t plan inflated by π/3;
   one-way ANOVA opened by
   Levene's test of equal variances (Brown–Forsythe, median-centered), with Tukey–Kramer, protected
-  LSD, Bonferroni, and Dunnett post-hoc tests and a compact letter display carried on a
+  LSD, Bonferroni, Holm, and Dunnett post-hoc tests and a compact letter display carried on a
   design-level plot with letters and brackets for the pairs declared different, designs and pairs
   numbered 1…k throughout, and a Variances switch whose unequal setting runs Welch's analysis of
-  variance with Games–Howell or Bonferroni-on-Welch-pairs post-hoc rules (withheld under pairing,
-  which has no Welch form); a page-wide Procedure switch whose nonparametric setting turns the
+  variance with Games–Howell, Bonferroni-on-Welch-pairs, or Holm-on-Welch-pairs post-hoc rules
+  (withheld under pairing, which has no Welch form); the two Holm rules give each pair a t, a p,
+  and an adjusted p and no interval, and so under them the section draws no figure of
+  differences; a page-wide Procedure switch whose nonparametric setting turns the
   Bonferroni means and differences into Wilcoxon intervals on pseudo-medians and shifts and the
   analysis section into the Kruskal–Wallis test (Friedman under pairing) with Dunn's or Friedman's
-  pairwise comparisons under Bonferroni or Holm, drawn as each design's Hodges–Lehmann pseudo-median
+  pairwise comparisons under Bonferroni or Holm (the post-hoc rule select, relabeled "Pairwise
+  adjustment", carries the choice), drawn as each design's Hodges–Lehmann pseudo-median
   with its Wilcoxon interval and the letters; and "Screen for the best", the textbook's subset-selection
   screen with indifference zone ε (its control lives in this section, since nothing else uses it)
   and Rinott second-stage sizes, drawn as the design plot with the
@@ -1298,7 +1309,10 @@ better.
      against `aov(y ~ g + block)` with `TukeyHSD`, the paired Bonferroni family against paired
      `t.test`, Friedman against `friedman.test`, the blocked F power against `pf`, Welch's
      analysis of variance against `oneway.test(var.equal = FALSE)`, and Games–Howell against a
-     by-hand `ptukey`/`qtukey` computation on each pair's Welch degrees of freedom. On one to three
+     by-hand `ptukey`/`qtukey` computation on each pair's Welch degrees of freedom. Holm's step-down
+     is pinned in `holm.R` against `p.adjust(n = length(p))`, `t.test(x, mu)`, `wilcox.test(x, mu)`,
+     `pairwise.t.test` (pooled and not), and a by-hand blocked computation on `aov`'s residual mean
+     square, on data drawn so that Holm declares strictly more than Bonferroni in every family. On one to three
      degrees of freedom, the Tukey and Dunnett quantiles and Rinott's constant are pinned against
      a nested `integrate`/`uniroot` solution in `lowdf.R`, not R's own `qtukey`, which is about 1%
      off at 2, and against exact identities in `special.test.mjs` (Tukey's q with two designs is
@@ -1440,7 +1454,11 @@ better.
      identical and in the same order across the four scripts. Every choice a reader may edit is
      assigned in the script's Settings block; Several Systems' scripts form their pairwise and
      post-hoc comparisons from its `control` and `family` settings at run time and look up the
-     analyzer's value for each pair by its label. `test/analysis_scripts.test.mjs` writes each
+     analyzer's value for each pair by its label. They read the "Decide by" switches as `bench_adjust`
+     and `diff_adjust` at run time too, and so a script reports each design's test against the
+     benchmark under either rule, and adjusts the pairwise p-values in a second loop once every
+     comparison has run (`bench_tests`, `bench_decision`, and `adjust_p` in `js/io/script_lib.js`).
+     `test/analysis_scripts.test.mjs` writes each
      fixture's scripts, runs them, and compares every line with `recipe.expect` (the analyzer's own
      values, not convention 3's R references). With no flag, it runs only the fixtures marked
      `smoke: true` (a subset on every page) in Base R, Tidy R, and Python (with SciPy 1.11 or later)

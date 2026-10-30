@@ -50,6 +50,34 @@ function twoSidedP(t, df) {
 }
 
 /**
+ * A family of C p-values adjusted for multiplicity. Bonferroni multiplies each
+ * by C. Holm’s step-down multiplies the r-th smallest (r = 0, 1, …) by C − r
+ * and keeps each adjusted value no smaller than the one before it, as R's
+ * p.adjust(p, "holm", n = length(p)) does; a comparison is declared when its
+ * adjusted p is below α, which is the same as stepping through the sorted
+ * p-values against α/C, α/(C − 1), … and stopping at the first that is not
+ * below its threshold. Both cap at 1. C counts every comparison, including one
+ * whose p-value is NaN (constant data at the reference), and that one's
+ * adjusted value stays NaN.
+ * @param {ArrayLike<number>} ps
+ * @param {'bonferroni'|'holm'} method
+ * @returns {number[]}
+ */
+export function adjustP(ps, method) {
+  const C = ps.length;
+  if (method === 'bonferroni') return Array.from(ps, p => Math.min(1, C * p));
+  if (method !== 'holm') throw new RangeError(`adjustP: unknown method ${method}`);
+  const out = new Array(C).fill(NaN);
+  const order = Array.from(ps, (_, i) => i).filter(i => !Number.isNaN(ps[i])).sort((a, b) => ps[a] - ps[b]);
+  let running = 0;
+  order.forEach((idx, r) => {
+    running = Math.max(running, Math.min(1, (C - r) * ps[idx]));
+    out[idx] = running;
+  });
+  return out;
+}
+
+/**
  * Welch's two-sample t procedure for mean(x) − mean(y), with the
  * Welch–Satterthwaite degrees of freedom, as R's t.test(x, y).
  * @param {number[]|Float64Array} x
@@ -230,17 +258,55 @@ export function simultaneousMeans(groups, level) {
 }
 
 /**
+ * Every design's mean tested against a benchmark, one design at a time, each by
+ * the one-sample t test, as R's t.test(x, mu = value), with the C = k p-values
+ * adjusted by `adjust`. A design is declared above or below the benchmark, by
+ * the sign of its mean's distance from it, when its adjusted p is below
+ * α = 1 − level. Under Bonferroni that is exactly when its interval from
+ * simultaneousMeans excludes the benchmark; Holm’s step-down declares those
+ * and possibly more. A constant design has t = ±∞ and p = 0 away from the
+ * benchmark, and NaN at it.
+ * @param {(number[]|Float64Array)[]} groups
+ * @param {{value: number, level: number, adjust: 'bonferroni'|'holm'}} opts
+ * @returns {{C: number, adjust: string, tests: {t: number, df: number, p: number, pAdj: number,
+ *   declared: boolean, side: 'above'|'below'|null}[]}}
+ */
+export function benchmarkFamily(groups, { value, level, adjust }) {
+  const alpha = 1 - level;
+  const raw = groups.map(g => {
+    const n = g.length, m = mean(g), df = n - 1;
+    const se = n < 2 ? NaN : Math.sqrt(variance(g)) / Math.sqrt(n), diff = m - value;
+    let t;
+    if (!(se >= 0)) t = NaN;
+    else if (se > 0) t = diff / se;
+    else t = diff === 0 ? NaN : diff > 0 ? Infinity : -Infinity;
+    return { t, df, p: Number.isNaN(t) ? NaN : twoSidedP(t, df), diff };
+  });
+  const pAdj = adjustP(raw.map(r => r.p), adjust);
+  const tests = raw.map((r, i) => {
+    const declared = pAdj[i] < alpha;
+    return { t: r.t, df: r.df, p: r.p, pAdj: pAdj[i], declared, side: declared ? (r.diff > 0 ? 'above' : 'below') : null };
+  });
+  return { C: groups.length, adjust, tests };
+}
+
+/**
  * A Bonferroni family of Welch intervals: every pair i < j (C = k(k − 1)/2),
  * or every design against a control (C = k − 1, j = control). Each interval is
  * at level 1 − α/C, a comparison is flagged when its interval excludes 0, and
- * pAdj = min(1, C·p).
+ * pAdj is the p-value adjusted by `adjust` (Bonferroni's min(1, C·p) by
+ * default). A comparison is declared different when its adjusted p is below
+ * α = 1 − level: under Bonferroni that is exactly when it is flagged, and
+ * Holm’s step-down declares every flagged comparison and possibly more, whose
+ * intervals at 1 − α/C still contain 0.
  * @param {(number[]|Float64Array)[]} groups
- * @param {{mode: 'pairs'|'control', control?: number, level: number}} opts
- * @returns {{C: number, perLevel: number, comparisons: {i: number, j: number, diff: number,
+ * @param {{mode: 'pairs'|'control', control?: number, level: number, paired?: boolean,
+ *   adjust?: 'bonferroni'|'holm'}} opts
+ * @returns {{C: number, perLevel: number, adjust: string, comparisons: {i: number, j: number, diff: number,
  *   se: number, df: number, hw: number, lo: number, hi: number, t: number, p: number,
- *   pAdj: number, flagged: boolean}[]}}
+ *   pAdj: number, flagged: boolean, declared: boolean}[]}}
  */
-export function bonferroniFamily(groups, { mode, control = 0, level, paired = false }) {
+export function bonferroniFamily(groups, { mode, control = 0, level, paired = false, adjust = 'bonferroni' }) {
   const k = groups.length, list = [];
   if (mode === 'control') {
     for (let i = 0; i < k; i++) if (i !== control) list.push([i, control]);
@@ -254,13 +320,31 @@ export function bonferroniFamily(groups, { mode, control = 0, level, paired = fa
       // interval is the paired t on its differences.
       const w = pairedT(groups[i], groups[j], perLevel);
       return { i, j, diff: w.meanD, se: w.se, df: w.df, hw: w.hw, lo: w.lo, hi: w.hi, t: w.t, p: w.p, r: w.r,
-               pAdj: Math.min(1, C * w.p), flagged: w.lo > 0 || w.hi < 0 };
+               flagged: w.lo > 0 || w.hi < 0 };
     }
     const w = welch(groups[i], groups[j], perLevel);
     return { i, j, diff: w.diff, se: w.se, df: w.df, hw: w.hw, lo: w.lo, hi: w.hi, t: w.t, p: w.p,
-             pAdj: Math.min(1, C * w.p), flagged: w.lo > 0 || w.hi < 0 };
+             flagged: w.lo > 0 || w.hi < 0 };
   });
-  return { C, perLevel, comparisons };
+  declareFamily(comparisons, adjust, 1 - level);
+  return { C, perLevel, adjust, comparisons };
+}
+
+/**
+ * Sets each comparison's adjusted p and whether it is declared, in place.
+ * Under Bonferroni a comparison is declared when its interval at 1 − α/C
+ * excludes 0 (`flagged`), which for the t procedures is the same as C·p < α;
+ * under Holm, when its step-down adjusted p is below α.
+ * @param {{p: number, flagged: boolean}[]} comparisons
+ * @param {'bonferroni'|'holm'} adjust
+ * @param {number} alpha
+ */
+export function declareFamily(comparisons, adjust, alpha) {
+  const pAdj = adjustP(comparisons.map(c => c.p), adjust);
+  comparisons.forEach((c, q) => {
+    c.pAdj = pAdj[q];
+    c.declared = adjust === 'holm' ? pAdj[q] < alpha : c.flagged;
+  });
 }
 
 // "No spread within the groups": a within (or residual) sum of squares at or
@@ -386,11 +470,15 @@ export function welchAnova(groups) {
  * those pairwise quantities (critical difference q · SE / √2, with q the
  * studentized range quantile for k means on the pair's degrees of freedom,
  * and p from the studentized range distribution); `'bonferroniWelch'` is
- * the Bonferroni rule on the pairs' own t intervals at level 1 − α/C.
+ * the Bonferroni rule on the pairs' own t intervals at level 1 − α/C, whose p is
+ * already adjusted (min(1, C·p)); `'holmWelch'` is Holm's step-down on the pairs'
+ * own two-sided Welch t tests, which gives no intervals (crit, hw, lo, and hi are
+ * NaN), a raw p and t for each pair, its Holm-adjusted pAdj, and a pair flagged
+ * when pAdj is below α.
  * @param {ArrayLike<number>[]} groups
- * @param {{rule: 'gameshowell'|'bonferroniWelch', alpha: number}} o
+ * @param {{rule: 'gameshowell'|'bonferroniWelch'|'holmWelch', alpha: number}} o
  * @returns {{rule: string, alpha: number, pairs: {i: number, j: number, diff: number, se: number, df: number,
- *   crit: number, hw: number, lo: number, hi: number, p: number, flagged: boolean}[],
+ *   crit: number, hw: number, lo: number, hi: number, p: number, flagged: boolean, t?: number, pAdj?: number}[],
  *   letters: string[], note: string, anova: ReturnType<typeof welchAnova>}}
  */
 export function posthocWelch(groups, { rule, alpha }) {
@@ -407,6 +495,9 @@ export function posthocWelch(groups, { rule, alpha }) {
   } else if (rule === 'bonferroniWelch') {
     note = C === 1 ? `With one difference, the Bonferroni interval is the plain Welch interval at ${pct}.`
       : `Bonferroni intervals at level 1 − α/${C}, each a Welch interval on its own degrees of freedom, hold all ${C} differences at ${pct} or more.`;
+  } else if (rule === 'holmWelch') {
+    note = C === 1 ? `With one difference, Holm’s step-down is the plain Welch t test at α = ${fmtAlpha(alpha)}.`
+      : `Each pair’s Welch t test, on its own degrees of freedom, with the ${C} p-values adjusted by Holm’s step-down, holds the chance of any false declaration at ${fmtAlpha(alpha)} or below.`;
   } else {
     throw new RangeError(`posthocWelch: unknown rule ${rule}`);
   }
@@ -416,6 +507,10 @@ export function posthocWelch(groups, { rule, alpha }) {
     const se = Math.sqrt(a1 + a2);
     const df = (a1 + a2) * (a1 + a2) / (a1 * a1 / (n[i] - 1) + a2 * a2 / (n[j] - 1));
     let crit, hw, p;
+    if (rule === 'holmWelch') {
+      const t = se > 0 ? diff / se : diff === 0 ? NaN : diff > 0 ? Infinity : -Infinity;
+      return { i, j, diff, se, df, crit: NaN, hw: NaN, lo: NaN, hi: NaN, t, p: Number.isNaN(t) ? NaN : twoSidedP(t, df), flagged: false };
+    }
     if (rule === 'gameshowell') {
       crit = qtukey(1 - alpha, k, df);
       hw = crit * Math.SQRT1_2 * se;
@@ -428,6 +523,10 @@ export function posthocWelch(groups, { rule, alpha }) {
     const lo = diff - hw, hi = diff + hw;
     return { i, j, diff, se, df, crit, hw, lo, hi, p, flagged: lo > 0 || hi < 0 };
   });
+  if (rule === 'holmWelch') {
+    const pAdj = adjustP(pairs.map(p => p.p), 'holm');
+    pairs.forEach((p, q) => { p.pAdj = pAdj[q]; p.flagged = pAdj[q] < alpha; });
+  }
   const letters = letterGroups(k, pairs.filter(p => p.flagged).map(p => [p.i, p.j]));
   return { rule, alpha, pairs, letters, note, anova: a };
 }
@@ -520,15 +619,18 @@ export function anovaBlocked(groups) {
  * - 'dunnett': every design i ≠ control against the control (j = control),
  *   with the two-sided critical value of Dunnett's distribution at the exact
  *   λ_i = sqrt(n_i / n_control); no letter display.
+ * - 'holm': every pair's two-sided t test, t = diff/se on dfw, with the
+ *   p-values adjusted by Holm's step-down, all pairs. It gives no intervals:
+ *   crit, hw, lo, and hi are NaN, and each pair carries t, p, and pAdj instead.
  *
  * diff = mean_i − mean_j throughout, and a pair is flagged when its interval
- * excludes 0. For the three all-pairs rules, letters is the compact letter
- * display of the flagged pairs.
+ * excludes 0, or under Holm when its adjusted p is below α. For the four
+ * all-pairs rules, letters is the compact letter display of the flagged pairs.
  * @param {(number[]|Float64Array)[]} groups
- * @param {{rule: 'tukey'|'lsd'|'bonferroni'|'dunnett', alpha: number, control?: number}} opts
+ * @param {{rule: 'tukey'|'lsd'|'bonferroni'|'holm'|'dunnett', alpha: number, control?: number}} opts
  * @returns {{rule: string, alpha: number, crit: number, msw: number, dfw: number,
  *   protected: boolean|null, pairs: {i: number, j: number, diff: number, se: number,
- *   hw: number, lo: number, hi: number, flagged: boolean}[], letters: string[]|null,
+ *   hw: number, lo: number, hi: number, flagged: boolean, t?: number, p?: number, pAdj?: number}[], letters: string[]|null,
  *   note: string, anova: object}}
  */
 export function posthoc(groups, { rule, alpha, control = 0, blocked = false }) {
@@ -558,6 +660,10 @@ export function posthoc(groups, { rule, alpha, control = 0, blocked = false }) {
     crit = tQuantile(1 - alpha / (2 * C), dfw);
     note = C === 1 ? `With one difference, the Bonferroni interval on the pooled variance is the plain interval at ${pct}.`
       : `Bonferroni intervals at level 1 − α/${C} on the pooled variance hold all ${C} differences at ${pct} or more.`;
+  } else if (rule === 'holm') {
+    crit = NaN;
+    note = list.length === 1 ? `With one difference, Holm’s step-down is the plain t test at α = ${fmtAlpha(alpha)} on the pooled variance.`
+      : `Each pair’s t test on the pooled variance, with the ${list.length} p-values adjusted by Holm’s step-down, holds the chance of any false declaration at ${fmtAlpha(alpha)} or below.`;
   } else if (rule === 'dunnett') {
     const lambdas = list.map(([i]) => Math.sqrt(n[i] / n[control]));
     crit = qdunnett(1 - alpha, lambdas, dfw, true);
@@ -565,6 +671,18 @@ export function posthoc(groups, { rule, alpha, control = 0, blocked = false }) {
       : `Dunnett intervals hold all ${list.length} comparisons with the control at ${pct} simultaneous confidence.`;
   } else {
     throw new RangeError(`posthoc: unknown rule ${rule}`);
+  }
+  if (rule === 'holm') {
+    const pairs = list.map(([i, j]) => {
+      const diff = means[i] - means[j];
+      const se = Math.sqrt(msw * (1 / n[i] + 1 / n[j]));
+      const t = se > 0 ? diff / se : diff === 0 ? NaN : diff > 0 ? Infinity : -Infinity;
+      return { i, j, diff, se, hw: NaN, lo: NaN, hi: NaN, t, p: Number.isNaN(t) ? NaN : twoSidedP(t, dfw), flagged: false };
+    });
+    const pAdj = adjustP(pairs.map(p => p.p), 'holm');
+    pairs.forEach((p, q) => { p.pAdj = pAdj[q]; p.flagged = pAdj[q] < alpha; });
+    const letters = letterGroups(k, pairs.filter(p => p.flagged).map(p => [p.i, p.j]));
+    return { rule, alpha, crit, msw, dfw, protected: prot, pairs, letters, note, anova: a };
   }
   const pairs = list.map(([i, j]) => {
     const diff = means[i] - means[j];
