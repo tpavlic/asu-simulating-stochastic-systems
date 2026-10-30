@@ -233,18 +233,18 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, src, 'lo')), L.assign('iv_hi', pluck(L, src, 'hi')));
     const opts = {};
     // The step-down intervals: each design's interval at the level of its step in Holm's
-    // step-down at the benchmark, and only its center past the step where it stops.
+    // step-down at the benchmark, and the whole line (from -Inf to Inf) past the step where it stops.
     const steps = !!F.steps && S.bench != null && !S.single && !F.box;
     if (steps) {
       need.push('stepDown');
       const at = S.np ? { R: 'signed_rank(groups[[i]], sd_level[i])', py: 'signed_rank(groups[i], sd_level[i])', m: 'signed_rank(groups{i}, sd_level(i))' }
         : { R: 'simultaneous_means(list(groups[[i]]), sd_level[i])$items[[1]]', py: 'simultaneous_means([groups[i]], sd_level[i])["items"][0]', m: 'simultaneous_means(groups(i), sd_level(i)); sd_iv = sd_iv.items{1}' };
       calls.push(L.assign('sd_level', 'step_down_levels(' + fld(L, 'bench_res', 'p') + ', alpha)'));
-      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_len(k), function(i) if (is.na(sd_level[i])) list(lo = NA_real_, hi = NA_real_) else ' + at.R + ')',
+      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_len(k), function(i) if (is.na(sd_level[i])) list(lo = -Inf, hi = Inf) else ' + at.R + ')',
         'iv_lo <- sapply(sd_iv, function(s) s$lo); iv_hi <- sapply(sd_iv, function(s) s$hi)');
       else if (L.lang === 'py') calls.push('sd_iv = [None if np.isnan(sd_level[i]) else ' + at.py + ' for i in range(k)]',
-        'iv_lo = np.array([np.nan if s is None else s["lo"] for s in sd_iv]); iv_hi = np.array([np.nan if s is None else s["hi"] for s in sd_iv])');
-      else calls.push('for i = 1:k, if isnan(sd_level(i)), iv_lo(i) = NaN; iv_hi(i) = NaN; else, sd_iv = ' + at.m + '; iv_lo(i) = sd_iv.lo; iv_hi(i) = sd_iv.hi; end, end');
+        'iv_lo = np.array([-np.inf if s is None else s["lo"] for s in sd_iv]); iv_hi = np.array([np.inf if s is None else s["hi"] for s in sd_iv])');
+      else calls.push('for i = 1:k, if isnan(sd_level(i)), iv_lo(i) = -Inf; iv_hi(i) = Inf; else, sd_iv = ' + at.m + '; iv_lo(i) = sd_iv.lo; iv_hi(i) = sd_iv.hi; end, end');
     }
     if (S.bench != null) {
       calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
@@ -263,7 +263,7 @@ function severalFigures(r, L) {
       else calls.push("bench_note = arrayfun(@(i) bench_decision(iv_lo(i), iv_hi(i), benchmark, bench_res, i, bench_adjust), 1:k, 'UniformOutput', false);",
         "if strcmp(bench_adjust, 'holm'), bench_flag = bench_flag & bench_res.declared; end");
       if (steps) {
-        // A design past the stop is drawn muted, as its center alone.
+        // A design past the stop is drawn muted, across the whole axis.
         if (L.lang === 'R') calls.push('bench_note[is.na(sd_level)] <- "not reached"');
         else if (L.lang === 'py') calls.push('bench_note = ["not reached" if np.isnan(v) else w for v, w in zip(sd_level, bench_note)]');
         else calls.push("bench_note(isnan(sd_level)) = {'not reached'};");
@@ -276,11 +276,11 @@ function severalFigures(r, L) {
       L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
     fig.push('intervals');
     notes.push(steps
-      ? 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its interval at the level of its step in Holm\'s step-down at the benchmark (the dashed line), drawn in red when it is declared and its interval excludes the benchmark, and as its center alone, muted, past the step where the step-down stops, with its decision written at its right. These are not confidence intervals: each width depends on the benchmark and on the other designs\' p-values.'
+      ? 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its interval at the level of its step in Holm\'s step-down at the benchmark (the dashed line), drawn in red when it is declared and its interval excludes the benchmark, and muted across the whole axis past the step where the step-down stops (never tested, and so at 100%), with its decision written at its right. These are not confidence intervals: each width depends on the benchmark and on the other designs\' p-values.'
       : 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its simultaneous interval' + (S.bench != null ? ', drawn in red when it is declared and its interval excludes the benchmark (the dashed line), with its decision written at its right.' : '.'));
   } else if (F.section === 'diffs') {
     // The step-down intervals: each comparison's interval at the level of its step in Holm's
-    // step-down, and only its center past the step where it stops.
+    // step-down, and the whole line (from -Inf to Inf) past the step where it stops.
     const steps = !!F.steps;
     if (steps) {
       need.push('stepDown');
@@ -289,13 +289,13 @@ function severalFigures(r, L) {
       const at = S.np ? (S.paired ? 'signed_rank(' + g('i') + ' - ' + g('j') + ', ' + lv + ')' : 'rank_sum(' + g('i') + ', ' + g('j') + ', ' + lv + ')')
         : S.paired ? 'paired_t(' + g('i') + ', ' + g('j') + ', ' + lv + ')' : 'two_sample_t(' + g('i') + ', ' + g('j') + ', ' + lv + ', ' + L.bool(false) + ')';
       calls.push(L.assign('fam_level', 'step_down_levels(fam_p, alpha)'));
-      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_along(family_pairs), function(q) { i <- family_pairs[[q]][1]; j <- family_pairs[[q]][2]; if (is.na(fam_level[q])) list(lo = NA_real_, hi = NA_real_) else ' + at + ' })',
+      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_along(family_pairs), function(q) { i <- family_pairs[[q]][1]; j <- family_pairs[[q]][2]; if (is.na(fam_level[q])) list(lo = -Inf, hi = Inf) else ' + at + ' })',
         'fam_lo <- sapply(sd_iv, function(s) s$lo); fam_hi <- sapply(sd_iv, function(s) s$hi)',
         'fam_sexcl <- (fam_lo > 0) %in% TRUE | (fam_hi < 0) %in% TRUE');
       else if (L.lang === 'py') calls.push('sd_iv = [None if np.isnan(fam_level[q]) else ' + at + ' for q, (i, j) in enumerate(family_pairs)]',
-        'fam_lo = [np.nan if s is None else s["lo"] for s in sd_iv]; fam_hi = [np.nan if s is None else s["hi"] for s in sd_iv]',
+        'fam_lo = [-np.inf if s is None else s["lo"] for s in sd_iv]; fam_hi = [np.inf if s is None else s["hi"] for s in sd_iv]',
         'fam_sexcl = [bool(a > 0 or b < 0) for a, b in zip(fam_lo, fam_hi)]');
-      else calls.push('for q = 1:C, i = family_pairs(q, 1); j = family_pairs(q, 2); if isnan(fam_level(q)), fam_lo(q) = NaN; fam_hi(q) = NaN; else, sd_iv = ' + at + '; fam_lo(q) = sd_iv.lo; fam_hi(q) = sd_iv.hi; end, end',
+      else calls.push('for q = 1:C, i = family_pairs(q, 1); j = family_pairs(q, 2); if isnan(fam_level(q)), fam_lo(q) = -Inf; fam_hi(q) = Inf; else, sd_iv = ' + at + '; fam_lo(q) = sd_iv.lo; fam_hi(q) = sd_iv.hi; end, end',
         'fam_sexcl = (fam_lo > 0) | (fam_hi < 0);');
     }
     const ex = steps ? 'fam_sexcl' : 'fam_excl';
@@ -315,7 +315,7 @@ function severalFigures(r, L) {
       L.str('Pairwise comparisons')], dopts));
     fig.push('intervals');
     notes.push(steps
-      ? 'Every comparison of the family with its interval at the level of its step in Holm\'s step-down, drawn in red when it is declared different and its interval excludes zero, and as its center alone, muted, past the step where the step-down stops, with each row\'s decision written at its right. These are not confidence intervals: each width depends on the other comparisons\' p-values.'
+      ? 'Every comparison of the family with its interval at the level of its step in Holm\'s step-down, drawn in red when it is declared different and its interval excludes zero, and muted across the whole axis past the step where the step-down stops (never tested, and so at 100%), with each row\'s decision written at its right. These are not confidence intervals: each width depends on the other comparisons\' p-values.'
       : 'Every comparison of the family with its interval, collected as the comparisons above ran, drawn in red when it is declared different and its interval excludes zero, with each row\'s decision written at its right.');
   } else if (F.section === 'anova' && S.anova && !S.anova.welchBad.length) {
     const A = S.anova, dunnett = !A.welch && A.rule === 'dunnett';

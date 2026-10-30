@@ -29154,18 +29154,18 @@ function severalFigures(r, L) {
     calls.push(L.assign('iv_lo', pluck(L, src, 'lo')), L.assign('iv_hi', pluck(L, src, 'hi')));
     const opts = {};
     // The step-down intervals: each design's interval at the level of its step in Holm's
-    // step-down at the benchmark, and only its center past the step where it stops.
+    // step-down at the benchmark, and the whole line (from -Inf to Inf) past the step where it stops.
     const steps = !!F.steps && S.bench != null && !S.single && !F.box;
     if (steps) {
       need.push('stepDown');
       const at = S.np ? { R: 'signed_rank(groups[[i]], sd_level[i])', py: 'signed_rank(groups[i], sd_level[i])', m: 'signed_rank(groups{i}, sd_level(i))' }
         : { R: 'simultaneous_means(list(groups[[i]]), sd_level[i])$items[[1]]', py: 'simultaneous_means([groups[i]], sd_level[i])["items"][0]', m: 'simultaneous_means(groups(i), sd_level(i)); sd_iv = sd_iv.items{1}' };
       calls.push(L.assign('sd_level', 'step_down_levels(' + fld(L, 'bench_res', 'p') + ', alpha)'));
-      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_len(k), function(i) if (is.na(sd_level[i])) list(lo = NA_real_, hi = NA_real_) else ' + at.R + ')',
+      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_len(k), function(i) if (is.na(sd_level[i])) list(lo = -Inf, hi = Inf) else ' + at.R + ')',
         'iv_lo <- sapply(sd_iv, function(s) s$lo); iv_hi <- sapply(sd_iv, function(s) s$hi)');
       else if (L.lang === 'py') calls.push('sd_iv = [None if np.isnan(sd_level[i]) else ' + at.py + ' for i in range(k)]',
-        'iv_lo = np.array([np.nan if s is None else s["lo"] for s in sd_iv]); iv_hi = np.array([np.nan if s is None else s["hi"] for s in sd_iv])');
-      else calls.push('for i = 1:k, if isnan(sd_level(i)), iv_lo(i) = NaN; iv_hi(i) = NaN; else, sd_iv = ' + at.m + '; iv_lo(i) = sd_iv.lo; iv_hi(i) = sd_iv.hi; end, end');
+        'iv_lo = np.array([-np.inf if s is None else s["lo"] for s in sd_iv]); iv_hi = np.array([np.inf if s is None else s["hi"] for s in sd_iv])');
+      else calls.push('for i = 1:k, if isnan(sd_level(i)), iv_lo(i) = -Inf; iv_hi(i) = Inf; else, sd_iv = ' + at.m + '; iv_lo(i) = sd_iv.lo; iv_hi(i) = sd_iv.hi; end, end');
     }
     if (S.bench != null) {
       calls.push(L.assign('bench_flag', L.lang === 'R' ? '(iv_lo > benchmark) %in% TRUE | (iv_hi < benchmark) %in% TRUE' : '(iv_lo > benchmark) | (iv_hi < benchmark)'));
@@ -29184,7 +29184,7 @@ function severalFigures(r, L) {
       else calls.push("bench_note = arrayfun(@(i) bench_decision(iv_lo(i), iv_hi(i), benchmark, bench_res, i, bench_adjust), 1:k, 'UniformOutput', false);",
         "if strcmp(bench_adjust, 'holm'), bench_flag = bench_flag & bench_res.declared; end");
       if (steps) {
-        // A design past the stop is drawn muted, as its center alone.
+        // A design past the stop is drawn muted, across the whole axis.
         if (L.lang === 'R') calls.push('bench_note[is.na(sd_level)] <- "not reached"');
         else if (L.lang === 'py') calls.push('bench_note = ["not reached" if np.isnan(v) else w for v, w in zip(sd_level, bench_note)]');
         else calls.push("bench_note(isnan(sd_level)) = {'not reached'};");
@@ -29197,11 +29197,11 @@ function severalFigures(r, L) {
       L.str((S.np ? 'Pseudo-median of ' : 'Mean of ') + resp), L.str((S.np ? 'Pseudo-medians' : 'Means') + ' with simultaneous intervals')], opts));
     fig.push('intervals');
     notes.push(steps
-      ? 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its interval at the level of its step in Holm\'s step-down at the benchmark (the dashed line), drawn in red when it is declared and its interval excludes the benchmark, and as its center alone, muted, past the step where the step-down stops, with its decision written at its right. These are not confidence intervals: each width depends on the benchmark and on the other designs\' p-values.'
+      ? 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its interval at the level of its step in Holm\'s step-down at the benchmark (the dashed line), drawn in red when it is declared and its interval excludes the benchmark, and muted across the whole axis past the step where the step-down stops (never tested, and so at 100%), with its decision written at its right. These are not confidence intervals: each width depends on the benchmark and on the other designs\' p-values.'
       : 'Each design\'s ' + (S.np ? 'pseudo-median' : 'mean') + ' with its simultaneous interval' + (S.bench != null ? ', drawn in red when it is declared and its interval excludes the benchmark (the dashed line), with its decision written at its right.' : '.'));
   } else if (F.section === 'diffs') {
     // The step-down intervals: each comparison's interval at the level of its step in Holm's
-    // step-down, and only its center past the step where it stops.
+    // step-down, and the whole line (from -Inf to Inf) past the step where it stops.
     const steps = !!F.steps;
     if (steps) {
       need.push('stepDown');
@@ -29210,13 +29210,13 @@ function severalFigures(r, L) {
       const at = S.np ? (S.paired ? 'signed_rank(' + g('i') + ' - ' + g('j') + ', ' + lv + ')' : 'rank_sum(' + g('i') + ', ' + g('j') + ', ' + lv + ')')
         : S.paired ? 'paired_t(' + g('i') + ', ' + g('j') + ', ' + lv + ')' : 'two_sample_t(' + g('i') + ', ' + g('j') + ', ' + lv + ', ' + L.bool(false) + ')';
       calls.push(L.assign('fam_level', 'step_down_levels(fam_p, alpha)'));
-      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_along(family_pairs), function(q) { i <- family_pairs[[q]][1]; j <- family_pairs[[q]][2]; if (is.na(fam_level[q])) list(lo = NA_real_, hi = NA_real_) else ' + at + ' })',
+      if (L.lang === 'R') calls.push('sd_iv <- lapply(seq_along(family_pairs), function(q) { i <- family_pairs[[q]][1]; j <- family_pairs[[q]][2]; if (is.na(fam_level[q])) list(lo = -Inf, hi = Inf) else ' + at + ' })',
         'fam_lo <- sapply(sd_iv, function(s) s$lo); fam_hi <- sapply(sd_iv, function(s) s$hi)',
         'fam_sexcl <- (fam_lo > 0) %in% TRUE | (fam_hi < 0) %in% TRUE');
       else if (L.lang === 'py') calls.push('sd_iv = [None if np.isnan(fam_level[q]) else ' + at + ' for q, (i, j) in enumerate(family_pairs)]',
-        'fam_lo = [np.nan if s is None else s["lo"] for s in sd_iv]; fam_hi = [np.nan if s is None else s["hi"] for s in sd_iv]',
+        'fam_lo = [-np.inf if s is None else s["lo"] for s in sd_iv]; fam_hi = [np.inf if s is None else s["hi"] for s in sd_iv]',
         'fam_sexcl = [bool(a > 0 or b < 0) for a, b in zip(fam_lo, fam_hi)]');
-      else calls.push('for q = 1:C, i = family_pairs(q, 1); j = family_pairs(q, 2); if isnan(fam_level(q)), fam_lo(q) = NaN; fam_hi(q) = NaN; else, sd_iv = ' + at + '; fam_lo(q) = sd_iv.lo; fam_hi(q) = sd_iv.hi; end, end',
+      else calls.push('for q = 1:C, i = family_pairs(q, 1); j = family_pairs(q, 2); if isnan(fam_level(q)), fam_lo(q) = -Inf; fam_hi(q) = Inf; else, sd_iv = ' + at + '; fam_lo(q) = sd_iv.lo; fam_hi(q) = sd_iv.hi; end, end',
         'fam_sexcl = (fam_lo > 0) | (fam_hi < 0);');
     }
     const ex = steps ? 'fam_sexcl' : 'fam_excl';
@@ -29236,7 +29236,7 @@ function severalFigures(r, L) {
       L.str('Pairwise comparisons')], dopts));
     fig.push('intervals');
     notes.push(steps
-      ? 'Every comparison of the family with its interval at the level of its step in Holm\'s step-down, drawn in red when it is declared different and its interval excludes zero, and as its center alone, muted, past the step where the step-down stops, with each row\'s decision written at its right. These are not confidence intervals: each width depends on the other comparisons\' p-values.'
+      ? 'Every comparison of the family with its interval at the level of its step in Holm\'s step-down, drawn in red when it is declared different and its interval excludes zero, and muted across the whole axis past the step where the step-down stops (never tested, and so at 100%), with each row\'s decision written at its right. These are not confidence intervals: each width depends on the other comparisons\' p-values.'
       : 'Every comparison of the family with its interval, collected as the comparisons above ran, drawn in red when it is declared different and its interval excludes zero, with each row\'s decision written at its right.');
   } else if (F.section === 'anova' && S.anova && !S.anova.welchBad.length) {
     const A = S.anova, dunnett = !A.welch && A.rule === 'dunnett';
@@ -39509,7 +39509,7 @@ function meansFigure(b, name, xLabel, items, groups, bm, k, short, readoutOf, ba
       const rowsAt = v => bm.rowsAt(v).map((r, i) => Object.assign({ label: numLabel(i, short), values: showPts ? groups[i] : undefined }, r));
       let cur = rowsAt(bm.value);
       // Under the step-down intervals the readout gives the interval drawn, not the Bonferroni one.
-      rowReadout(fg, k, bm.steps ? i => [readoutOf(i)[0], num(cur[i].center) + (Number.isFinite(cur[i].lo) ? '  ' + interval(cur[i].lo, cur[i].hi) : ''), cur[i].note] : readoutOf);
+      rowReadout(fg, k, bm.steps ? i => [readoutOf(i)[0], num(cur[i].center) + '  ' + interval(cur[i].lo, cur[i].hi), cur[i].note] : readoutOf);
       if (box) { boxPlot(fg, items.map((it, i) => ({ label: numLabel(i, short), stats: Object.assign({}, boxStats(groups[i]), { mean: it.center }) })), { rowPx: 38, markerLabel: centerWord }); bm.line(fg); return; }
       // The axis covers the Bonferroni intervals, which the step-down ones never exceed, and so it holds still as the line moves.
       const h = intervals(fg, cur, { rowPx: showPts ? 32 : 30, extent: items.flatMap(it => [it.lo, it.hi]), notes: bm.on ? BENCH_NOTES : [] });
@@ -39897,7 +39897,9 @@ function benchmark(items, ds, testsFor, steps = null) {
   const word = i => (!on ? '' : declared(i) ? side(i) + ' the benchmark' + (holmOnly(i) ? ' (Holm)' : '') : excludes(i) ? 'not declared' : 'contains the benchmark');
   const ids = which => items.map((it, i) => i).filter(i => side(i) === which);
   // The step-down intervals: each design's interval at the level of its step in
-  // Holm's step-down at the benchmark, and only its center past the stop.
+  // Holm's step-down at the benchmark, and past the stop the whole line: a
+  // comparison that is never tested is in effect tested at a threshold of 0,
+  // whose interval is the 100% one.
   const stepped = holm && !!steps && designPlot !== 'box';
   // The figure's rows at a benchmark value v, so that they can be redrawn while
   // the line is dragged: each row's interval (Bonferroni's, or its step-down
@@ -39907,12 +39909,12 @@ function benchmark(items, ds, testsFor, steps = null) {
     const lv = stepped ? stepDownLevels(f.tests.map(t => t.p), steps.alpha) : null;
     return items.map((it, i) => {
       const reached = !lv || lv[i].level !== null;
-      const iv = !lv ? it : reached ? steps.at(i, lv[i].level) : { lo: NaN, hi: NaN };
+      const iv = !lv ? it : reached ? steps.at(i, lv[i].level) : { lo: -Infinity, hi: Infinity };
       const excl = on && (iv.lo > v || iv.hi < v);
       const sd = !on ? null : f ? f.tests[i].side : it.lo > v ? 'above' : it.hi < v ? 'below' : null;
       const decl = sd !== null;
       const note = !on ? undefined : !reached ? 'not reached' : decl ? sd + (excl ? '' : ' (Holm)') : excl ? 'not declared' : 'contains';
-      return { lo: iv.lo, hi: iv.hi, center: it.center, flagged: decl && excl, note, noteColor: decl ? '--miss' : '--muted', dot: !reached, color: reached ? undefined : '--muted' };
+      return { lo: iv.lo, hi: iv.hi, center: it.center, flagged: decl && excl, note, noteColor: decl ? '--miss' : '--muted', color: reached ? undefined : '--muted' };
     });
   };
   return {
@@ -39923,11 +39925,11 @@ function benchmark(items, ds, testsFor, steps = null) {
     line: (fg, live) => { if (on) dragLine(fg, { value, step: benchSpin.step, ariaLabel: 'Benchmark', label: null, onMove: v => { benchSpin.spin.set(v, false); if (live) live(v); }, onEnd: v => { benchVal = v; state.setPick(id, key, v); benchSpin.spin.set(v, false); schedule(); } }); },
     legend: base => [{ swatch: 'interval', color: '--est', label: (stepped ? 'design ' + (proc === 'np' ? 'pseudo-median' : 'mean') + ' with its interval at its step’s level' : base) + (on ? ', contains the benchmark' : '') }]
       .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }] : [])
-      .concat(stepped ? [{ swatch: 'dot', color: '--muted', label: 'not reached: the step-down stopped before this design' }] : [])
+      .concat(stepped ? [{ swatch: 'whole', color: '--muted', label: 'not reached: the step-down stopped before this design, and its interval is the whole line' }] : [])
       .concat(on && holm && !stepped && items.some((it, i) => holmOnly(i)) ? [{ swatch: 'interval', color: '--est', label: 'labeled “(Holm)”: declared by Holm’s step-down although the interval contains the benchmark' }] : [])
       .concat(on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
     stepCaption: (centerWord, ivName) => 'Each design’s ' + centerWord + ' with its own ' + ivName + ' at the level of its step in Holm’s step-down against the benchmark: the design with the r-th smallest p-value is drawn at 1 − α/(k − r + 1). ' +
-      'A red dashed interval excludes the benchmark, and that design is declared above or below it. The step-down stops at the first interval that contains the benchmark, and the designs past it are not reached and are drawn as their ' + centerWord + ' alone.' +
+      'A red dashed interval excludes the benchmark, and that design is declared above or below it. The step-down stops at the first interval that contains the benchmark. The designs past it are not reached: none is tested, which is the same as testing it at a threshold of 0, and so each is drawn with the 100% interval, the whole line, which contains every benchmark.' +
       (proc === 'np' ? ' A signed-rank test and its own interval do not always agree, and so a design whose interval excludes the benchmark can read “not declared”.' : '') +
       stepWhy('design', 'the benchmark') + ' Drag the dashed line, or type a value, to move the benchmark.',
     caption: () => (!on ? ''
@@ -40309,26 +40311,26 @@ function update() {
   const dSteps = dHolm && diffStepsOn(k);
   // The figure's rows: each comparison's Bonferroni interval, or under the
   // step-down intervals its interval at the level of its step (at(c, level)
-  // gives it), and only its center past the stop.
+  // gives it), and the whole line past the stop.
   const dRows = (cs, at) => {
     if (!dSteps) return cs.map(dItem);
     const lv = stepDownLevels(cs.map(c => c.p), alpha);
     return cs.map((c, q) => {
       const reached = lv[q].level !== null;
-      const iv = reached ? at(c, lv[q].level) : { lo: NaN, hi: NaN };
+      const iv = reached ? at(c, lv[q].level) : { lo: -Infinity, hi: Infinity };
       const excl = iv.lo > 0 || iv.hi < 0;
-      return { label: pairLabel(c.i, c.j), lo: iv.lo, hi: iv.hi, center: c.diff, flagged: c.declared && excl, dot: !reached, color: reached ? undefined : '--muted',
+      return { label: pairLabel(c.i, c.j), lo: iv.lo, hi: iv.hi, center: c.diff, flagged: c.declared && excl, color: reached ? undefined : '--muted',
         note: !reached ? 'not reached' : c.declared ? (excl ? 'different' : 'different (Holm)') : excl ? 'not declared' : 'contains 0', noteColor: c.declared ? '--miss' : '--muted' };
     });
   };
   const dStepLegend = name => [{ swatch: 'interval', color: '--est', label: name + ' at its step’s level, contains 0' },
     { swatch: 'flagged', color: '--miss', label: name + ' at its step’s level, excludes 0: declared different' },
-    { swatch: 'dot', color: '--muted', label: 'not reached: the step-down stopped before this pair' }];
+    { swatch: 'whole', color: '--muted', label: 'not reached: the step-down stopped before this pair, and its interval is the whole line' }];
   const dStepCaption = (what, ivName, rank) => 'Each row is one pair’s ' + what + ' with its ' + ivName + ' at the level of its step in Holm’s step-down: the pair with the r-th smallest p-value is drawn at 1 − α/(C − r + 1). ' +
-    'A red dashed interval excludes 0, and so that pair is declared different. The step-down stops at the first interval that contains 0, and the pairs past it are not reached and are drawn as their ' + what + ' alone.' +
+    'A red dashed interval excludes 0, and so that pair is declared different. The step-down stops at the first interval that contains 0. The pairs past it are not reached: none is tested, which is the same as testing it at a threshold of 0, and so each is drawn with the 100% interval, the whole line, which contains 0.' +
     (rank ? ' A rank test and its own interval do not always agree, and so a pair whose interval excludes 0 can read “not declared”.' : '') + stepWhy('pair', '0');
   // The rows' readout: the interval drawn and the decision.
-  const dReadout = (rows, cs, full) => i => [full(cs[i]), num(cs[i].diff) + (Number.isFinite(rows[i].lo) ? '  ' + interval(rows[i].lo, rows[i].hi) : ''), rows[i].note || dWord(cs[i])];
+  const dReadout = (rows, cs, full) => i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(rows[i].lo, rows[i].hi), rows[i].note || dWord(cs[i])];
   const dCaption = (C, test, rank) => (!dHolm ? ' A pair whose interval excludes 0 is declared different, as the decision at the right of each row says.'
     : ' The decision at the right of each row comes from Holm’s step-down on the ' + C + ' ' + test + ', which holds the chance of any false declaration at ' + aTxt + ' or below' +
       (rank ? '. A pair marked “different (Holm)” is declared although its interval still contains 0. A rank test and its own interval do not always agree, and so a pair whose interval excludes 0 can read “not declared”.'
@@ -40955,7 +40957,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-badj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-badj="holm" aria-pressed="false">Holm</button>' +
         '</span></span>' +
-        '<label class="ctrl-chk" id="sev-bsteps-lbl" style="display:none"><input type="checkbox" id="sev-bsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each design’s interval at the level of its own step in Holm’s step-down at the benchmark, in place of its Bonferroni interval: the design with the r-th smallest p-value at 1 − α/(k − r + 1). The designs past the step where it stops are drawn as their center alone. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
+        '<label class="ctrl-chk" id="sev-bsteps-lbl" style="display:none"><input type="checkbox" id="sev-bsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each design’s interval at the level of its own step in Holm’s step-down at the benchmark, in place of its Bonferroni interval: the design with the r-th smallest p-value at 1 − α/(k − r + 1). The designs past the step where it stops are never tested, and so each is drawn with the 100% interval, the whole line. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
       '</div>' +
       '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
     '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first. A pair is declared different by one of two rules, each holding the chance of any false declaration across the C tests at α or below: Bonferroni declares a pair whose interval excludes 0, and Holm’s step-down, applied to each pair’s own test, can declare more.</p>' +
@@ -40969,7 +40971,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-dadj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-dadj="holm" aria-pressed="false">Holm</button>' +
         '</span></span>' +
-      '<label class="ctrl-chk" id="sev-dsteps-lbl" style="display:none"><input type="checkbox" id="sev-dsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each pair’s interval at the level of its own step in Holm’s step-down, in place of its Bonferroni interval: the pair with the r-th smallest p-value at 1 − α/(C − r + 1). The pairs past the step where it stops are drawn as their center alone. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
+      '<label class="ctrl-chk" id="sev-dsteps-lbl" style="display:none"><input type="checkbox" id="sev-dsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each pair’s interval at the level of its own step in Holm’s step-down, in place of its Bonferroni interval: the pair with the r-th smallest p-value at 1 − α/(C − r + 1). The pairs past the step where it stops are never tested, and so each is drawn with the 100% interval, the whole line. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
       '</div>' +
       '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
     '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ and then a post-hoc rule that judges each pair.</p>' +
@@ -49767,8 +49769,10 @@ export function dotPlot(fig, values, o = {}) {
  * A forest plot: one row per item with its label in a left column, a line
  * from lo to hi with end caps, and a dot at the center. A flagged item is
  * drawn in the flag color, dashed, with a hollow dot, and so it reads
- * without color. An item without finite ends keeps its row and label and
- * draws nothing, or only its center when `dot` is set. A vertical reference
+ * without color. An infinite end runs to the edge of the plotting area and
+ * ends in an arrowhead rather than a cap, and so an item from −∞ to ∞ is drawn
+ * across the whole axis. An item with an end that is NaN keeps its row and
+ * label and draws nothing. A vertical reference
  * line marks `ref` (zero for a difference) when given. An item's `note`, when
  * any item has one, is written past the right end of the plotting area on its
  * row, in the color token `noteColor` (the flag color by default): a decision
@@ -49779,7 +49783,7 @@ export function dotPlot(fig, values, o = {}) {
  * dragged) never changes the axis or the margin.
  * @param {Figure} fig
  * @param {{label: string, lo: number, hi: number, center?: number, flagged?: boolean, color?: string,
- *   note?: string, noteColor?: string, dot?: boolean}[]} items
+ *   note?: string, noteColor?: string}[]} items
  * @param {{ ref?: number|null, axes?: boolean, rowPx?: number, extent?: number[], notes?: string[] }} [o]
  * @returns {{update: function(object[]): void}}
  */
@@ -49791,7 +49795,7 @@ export function intervals(fig, items, o = {}) {
   if (noted) fig.setMargin({ r: Math.ceil(Math.max(...noteTexts.map(t => estTextWidth(t, nfs)))) + 18 });
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
-  for (const it of items) { vals.push(it.lo, it.hi); if (it.dot) vals.push(it.center); if (it.values) for (const v of it.values) vals.push(v); }
+  for (const it of items) { vals.push(it.lo, it.hi, it.center); if (it.values) for (const v of it.values) vals.push(v); }
   if (o.extent) vals.push(...o.extent);
   if (o.ref !== undefined && o.ref !== null) vals.push(o.ref);
   const [lo, hi] = extent(vals);
@@ -49809,8 +49813,11 @@ export function intervals(fig, items, o = {}) {
     fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: tok('--truth'), label: 'reference' });
   }
   const cMiss = tok('--miss'), card = tok('--card'), cText = tok('--text');
-  const ends = it => Number.isFinite(it.lo) && Number.isFinite(it.hi);
+  const ends = it => !Number.isNaN(it.lo) && !Number.isNaN(it.hi) && it.lo <= it.hi;
   const centerOf = it => (Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2);
+  // The data ends of an interval, an infinite end at the edge of the axis.
+  const [d0, d1] = sx.domain;
+  const clip = (v, edge) => (Number.isFinite(v) ? v : edge);
   const recOf = new Map();
   items.forEach((it, i) => {
     const cy = r1((i + 0.5) * rowH);
@@ -49821,9 +49828,10 @@ export function intervals(fig, items, o = {}) {
       dot: { kind: 'points', x: [], y: [], color: c, hollow: !!it.flagged, label: it.flagged ? 'center (flagged)' : 'center' } });
     const rr = recOf.get(key), yy = ry(i);
     if (ends(it)) {
-      rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
+      rr.seg.x0.push(clip(it.lo, d0)); rr.seg.x1.push(clip(it.hi, d1)); rr.seg.y0.push(yy); rr.seg.y1.push(yy);
+      for (const e of [it.lo, it.hi]) if (Number.isFinite(e)) { rr.seg.x0.push(e); rr.seg.x1.push(e); rr.seg.y0.push(yy - 0.18); rr.seg.y1.push(yy + 0.18); }
+      if (Number.isFinite(centerOf(it))) { rr.dot.x.push(centerOf(it)); rr.dot.y.push(yy); }
     }
-    if (ends(it) || (it.dot && Number.isFinite(it.center))) { rr.dot.x.push(centerOf(it)); rr.dot.y.push(yy); }
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
     if (it.values) {
       const srt = Array.from(it.values).filter(Number.isFinite).sort((a, b) => a - b);
@@ -49848,13 +49856,17 @@ export function intervals(fig, items, o = {}) {
       const c = it.flagged ? cMiss : col(it.color, '--est');
       if (ends(it)) {
         const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, layer);
-        const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi)), cx = r1(sx(centerOf(it)));
+        const x0 = Number.isFinite(it.lo) ? r1(sx(it.lo)) : 0, x1 = Number.isFinite(it.hi) ? r1(sx(it.hi)) : r1(fig.iw);
         svgEl('line', { x1: x0, x2: x1, y1: cy, y2: cy, stroke: c, 'stroke-width': 2, 'stroke-dasharray': it.flagged ? '5,3' : null }, g);
-        for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
-        if (it.flagged) svgEl('circle', { cx, cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
-        else svgEl('circle', { cx, cy, r: 4.2, fill: c }, g);
-      } else if (it.dot && Number.isFinite(it.center)) {
-        svgEl('circle', { cx: r1(sx(it.center)), cy, r: 4.2, fill: c, class: 'm-int' }, layer);
+        for (const [x, e, dir] of [[x0, it.lo, -1], [x1, it.hi, 1]]) {
+          if (Number.isFinite(e)) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
+          else svgEl('path', { d: 'M' + x + ' ' + cy + 'l' + (-8 * dir) + ' -4.5v9z', fill: c }, g);
+        }
+        if (Number.isFinite(centerOf(it))) {
+          const cx = r1(sx(centerOf(it)));
+          if (it.flagged) svgEl('circle', { cx, cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
+          else svgEl('circle', { cx, cy, r: 4.2, fill: c }, g);
+        }
       }
       if (noted && it.note) text(layer, fig.iw + 8, cy + 4, it.note, { 'font-size': nfs, 'font-weight': 600, fill: col(it.noteColor, '--miss'), class: 'm-note' });
     });
@@ -49879,7 +49891,8 @@ export function intervals(fig, items, o = {}) {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
     const it = cur[i];
-    const where = ends(it) ? num(centerOf(it)) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']' : Number.isFinite(it.center) ? num(it.center) : '';
+    const end = v => (v === Infinity ? '∞' : v === -Infinity ? '−∞' : num(v));
+    const where = ends(it) ? num(centerOf(it)) + '  [' + end(it.lo) + ', ' + end(it.hi) + ']' : Number.isFinite(it.center) ? num(it.center) : '';
     return [it.label, where].concat(it.note ? [it.note] : []);
   });
   return {
@@ -50446,6 +50459,7 @@ function swatchSvg(kind, c) {
     case 'hollow': inner = '<circle cx="12" cy="6" r="4" fill="' + card + '" stroke="' + c + '" stroke-width="2"/>'; break;
     case 'bar': inner = '<rect x="5" y="1" width="14" height="10" fill="' + c + '" fill-opacity=".32" stroke="' + c + '" stroke-width="1"/>'; break;
     case 'interval': inner = '<line x1="2" y1="6" x2="22" y2="6" stroke="' + c + '" stroke-width="2"/><line x1="2" y1="2" x2="2" y2="10" stroke="' + c + '" stroke-width="2"/><line x1="22" y1="2" x2="22" y2="10" stroke="' + c + '" stroke-width="2"/><circle cx="12" cy="6" r="3.6" fill="' + c + '"/>'; break;
+    case 'whole': inner = '<line x1="5" y1="6" x2="19" y2="6" stroke="' + c + '" stroke-width="2"/><path d="M1 6l5 -3.5v7z" fill="' + c + '"/><path d="M23 6l-5 -3.5v7z" fill="' + c + '"/><circle cx="12" cy="6" r="3.4" fill="' + c + '"/>'; break;
     case 'flagged': inner = '<line x1="2" y1="6" x2="22" y2="6" stroke="' + c + '" stroke-width="2" stroke-dasharray="4,2.5"/><line x1="2" y1="2" x2="2" y2="10" stroke="' + c + '" stroke-width="2"/><line x1="22" y1="2" x2="22" y2="10" stroke="' + c + '" stroke-width="2"/><circle cx="12" cy="6" r="3.4" fill="' + card + '" stroke="' + c + '" stroke-width="2"/>'; break;
     default: inner = '<line x1="1" y1="6" x2="23" y2="6" stroke="' + c + '" stroke-width="2.2"/>';
   }

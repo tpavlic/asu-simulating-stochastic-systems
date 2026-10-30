@@ -1135,7 +1135,9 @@ better.
   `benchmarkFamilyRank` in `js/stats/nonparam.js`); under Holm, a "Show step-down intervals"
   box, off by default, draws each row's interval at the level of its own step in the step-down
   (the r-th smallest p-value at 1 − α/(C − r + 1), `stepDownLevels` in `js/stats/compare.js`)
-  and a row past the stop as its center alone, "not reached", with the axis held to the
+  and a row past the stop, "not reached", across the whole axis with an arrowhead at each end
+  (never tested, it is in effect tested at a threshold of 0, whose interval is the 100% one;
+  `intervals` runs an infinite end to the edge), with the axis held to the
   Bonferroni intervals and the rows redrawn in place as the benchmark line is dragged (the
   `update` that `intervals` returns); the captions say these are not confidence intervals, the
   table keeps Bonferroni's, and the scripts draw them through `step_down_levels`; and each section has a

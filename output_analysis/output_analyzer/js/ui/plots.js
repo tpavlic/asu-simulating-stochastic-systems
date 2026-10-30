@@ -880,8 +880,10 @@ export function dotPlot(fig, values, o = {}) {
  * A forest plot: one row per item with its label in a left column, a line
  * from lo to hi with end caps, and a dot at the center. A flagged item is
  * drawn in the flag color, dashed, with a hollow dot, and so it reads
- * without color. An item without finite ends keeps its row and label and
- * draws nothing, or only its center when `dot` is set. A vertical reference
+ * without color. An infinite end runs to the edge of the plotting area and
+ * ends in an arrowhead rather than a cap, and so an item from −∞ to ∞ is drawn
+ * across the whole axis. An item with an end that is NaN keeps its row and
+ * label and draws nothing. A vertical reference
  * line marks `ref` (zero for a difference) when given. An item's `note`, when
  * any item has one, is written past the right end of the plotting area on its
  * row, in the color token `noteColor` (the flag color by default): a decision
@@ -892,7 +894,7 @@ export function dotPlot(fig, values, o = {}) {
  * dragged) never changes the axis or the margin.
  * @param {Figure} fig
  * @param {{label: string, lo: number, hi: number, center?: number, flagged?: boolean, color?: string,
- *   note?: string, noteColor?: string, dot?: boolean}[]} items
+ *   note?: string, noteColor?: string}[]} items
  * @param {{ ref?: number|null, axes?: boolean, rowPx?: number, extent?: number[], notes?: string[] }} [o]
  * @returns {{update: function(object[]): void}}
  */
@@ -904,7 +906,7 @@ export function intervals(fig, items, o = {}) {
   if (noted) fig.setMargin({ r: Math.ceil(Math.max(...noteTexts.map(t => estTextWidth(t, nfs)))) + 18 });
   rowsHeight(fig, n, o.rowPx || 28);
   const vals = [];
-  for (const it of items) { vals.push(it.lo, it.hi); if (it.dot) vals.push(it.center); if (it.values) for (const v of it.values) vals.push(v); }
+  for (const it of items) { vals.push(it.lo, it.hi, it.center); if (it.values) for (const v of it.values) vals.push(v); }
   if (o.extent) vals.push(...o.extent);
   if (o.ref !== undefined && o.ref !== null) vals.push(o.ref);
   const [lo, hi] = extent(vals);
@@ -922,8 +924,11 @@ export function intervals(fig, items, o = {}) {
     fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: tok('--truth'), label: 'reference' });
   }
   const cMiss = tok('--miss'), card = tok('--card'), cText = tok('--text');
-  const ends = it => Number.isFinite(it.lo) && Number.isFinite(it.hi);
+  const ends = it => !Number.isNaN(it.lo) && !Number.isNaN(it.hi) && it.lo <= it.hi;
   const centerOf = it => (Number.isFinite(it.center) ? it.center : (it.lo + it.hi) / 2);
+  // The data ends of an interval, an infinite end at the edge of the axis.
+  const [d0, d1] = sx.domain;
+  const clip = (v, edge) => (Number.isFinite(v) ? v : edge);
   const recOf = new Map();
   items.forEach((it, i) => {
     const cy = r1((i + 0.5) * rowH);
@@ -934,9 +939,10 @@ export function intervals(fig, items, o = {}) {
       dot: { kind: 'points', x: [], y: [], color: c, hollow: !!it.flagged, label: it.flagged ? 'center (flagged)' : 'center' } });
     const rr = recOf.get(key), yy = ry(i);
     if (ends(it)) {
-      rr.seg.x0.push(it.lo, it.lo, it.hi); rr.seg.x1.push(it.hi, it.lo, it.hi); rr.seg.y0.push(yy, yy - 0.18, yy - 0.18); rr.seg.y1.push(yy, yy + 0.18, yy + 0.18);
+      rr.seg.x0.push(clip(it.lo, d0)); rr.seg.x1.push(clip(it.hi, d1)); rr.seg.y0.push(yy); rr.seg.y1.push(yy);
+      for (const e of [it.lo, it.hi]) if (Number.isFinite(e)) { rr.seg.x0.push(e); rr.seg.x1.push(e); rr.seg.y0.push(yy - 0.18); rr.seg.y1.push(yy + 0.18); }
+      if (Number.isFinite(centerOf(it))) { rr.dot.x.push(centerOf(it)); rr.dot.y.push(yy); }
     }
-    if (ends(it) || (it.dot && Number.isFinite(it.center))) { rr.dot.x.push(centerOf(it)); rr.dot.y.push(yy); }
     text(fig.layers.axes, -10, cy + 4, clipLabel(it.label, lw - 6, 11.5), { 'text-anchor': 'end', 'font-size': 11.5, fill: cText });
     if (it.values) {
       const srt = Array.from(it.values).filter(Number.isFinite).sort((a, b) => a - b);
@@ -961,13 +967,17 @@ export function intervals(fig, items, o = {}) {
       const c = it.flagged ? cMiss : col(it.color, '--est');
       if (ends(it)) {
         const g = svgEl('g', { class: it.flagged ? 'm-int flagged' : 'm-int' }, layer);
-        const x0 = r1(sx(it.lo)), x1 = r1(sx(it.hi)), cx = r1(sx(centerOf(it)));
+        const x0 = Number.isFinite(it.lo) ? r1(sx(it.lo)) : 0, x1 = Number.isFinite(it.hi) ? r1(sx(it.hi)) : r1(fig.iw);
         svgEl('line', { x1: x0, x2: x1, y1: cy, y2: cy, stroke: c, 'stroke-width': 2, 'stroke-dasharray': it.flagged ? '5,3' : null }, g);
-        for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
-        if (it.flagged) svgEl('circle', { cx, cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
-        else svgEl('circle', { cx, cy, r: 4.2, fill: c }, g);
-      } else if (it.dot && Number.isFinite(it.center)) {
-        svgEl('circle', { cx: r1(sx(it.center)), cy, r: 4.2, fill: c, class: 'm-int' }, layer);
+        for (const [x, e, dir] of [[x0, it.lo, -1], [x1, it.hi, 1]]) {
+          if (Number.isFinite(e)) svgEl('line', { x1: x, x2: x, y1: cy - 5, y2: cy + 5, stroke: c, 'stroke-width': 2 }, g);
+          else svgEl('path', { d: 'M' + x + ' ' + cy + 'l' + (-8 * dir) + ' -4.5v9z', fill: c }, g);
+        }
+        if (Number.isFinite(centerOf(it))) {
+          const cx = r1(sx(centerOf(it)));
+          if (it.flagged) svgEl('circle', { cx, cy, r: 4, fill: card, stroke: c, 'stroke-width': 2 }, g);
+          else svgEl('circle', { cx, cy, r: 4.2, fill: c }, g);
+        }
       }
       if (noted && it.note) text(layer, fig.iw + 8, cy + 4, it.note, { 'font-size': nfs, 'font-weight': 600, fill: col(it.noteColor, '--miss'), class: 'm-note' });
     });
@@ -992,7 +1002,8 @@ export function intervals(fig, items, o = {}) {
     const i = Math.floor(py / rowH);
     if (i < 0 || i >= n) return null;
     const it = cur[i];
-    const where = ends(it) ? num(centerOf(it)) + '  [' + num(it.lo) + ', ' + num(it.hi) + ']' : Number.isFinite(it.center) ? num(it.center) : '';
+    const end = v => (v === Infinity ? '∞' : v === -Infinity ? '−∞' : num(v));
+    const where = ends(it) ? num(centerOf(it)) + '  [' + end(it.lo) + ', ' + end(it.hi) + ']' : Number.isFinite(it.center) ? num(it.center) : '';
     return [it.label, where].concat(it.note ? [it.note] : []);
   });
   return {
@@ -1559,6 +1570,7 @@ function swatchSvg(kind, c) {
     case 'hollow': inner = '<circle cx="12" cy="6" r="4" fill="' + card + '" stroke="' + c + '" stroke-width="2"/>'; break;
     case 'bar': inner = '<rect x="5" y="1" width="14" height="10" fill="' + c + '" fill-opacity=".32" stroke="' + c + '" stroke-width="1"/>'; break;
     case 'interval': inner = '<line x1="2" y1="6" x2="22" y2="6" stroke="' + c + '" stroke-width="2"/><line x1="2" y1="2" x2="2" y2="10" stroke="' + c + '" stroke-width="2"/><line x1="22" y1="2" x2="22" y2="10" stroke="' + c + '" stroke-width="2"/><circle cx="12" cy="6" r="3.6" fill="' + c + '"/>'; break;
+    case 'whole': inner = '<line x1="5" y1="6" x2="19" y2="6" stroke="' + c + '" stroke-width="2"/><path d="M1 6l5 -3.5v7z" fill="' + c + '"/><path d="M23 6l-5 -3.5v7z" fill="' + c + '"/><circle cx="12" cy="6" r="3.4" fill="' + c + '"/>'; break;
     case 'flagged': inner = '<line x1="2" y1="6" x2="22" y2="6" stroke="' + c + '" stroke-width="2" stroke-dasharray="4,2.5"/><line x1="2" y1="2" x2="2" y2="10" stroke="' + c + '" stroke-width="2"/><line x1="22" y1="2" x2="22" y2="10" stroke="' + c + '" stroke-width="2"/><circle cx="12" cy="6" r="3.4" fill="' + card + '" stroke="' + c + '" stroke-width="2"/>'; break;
     default: inner = '<line x1="1" y1="6" x2="23" y2="6" stroke="' + c + '" stroke-width="2.2"/>';
   }

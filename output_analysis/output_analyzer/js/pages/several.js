@@ -325,7 +325,7 @@ function meansFigure(b, name, xLabel, items, groups, bm, k, short, readoutOf, ba
       const rowsAt = v => bm.rowsAt(v).map((r, i) => Object.assign({ label: numLabel(i, short), values: showPts ? groups[i] : undefined }, r));
       let cur = rowsAt(bm.value);
       // Under the step-down intervals the readout gives the interval drawn, not the Bonferroni one.
-      rowReadout(fg, k, bm.steps ? i => [readoutOf(i)[0], num(cur[i].center) + (Number.isFinite(cur[i].lo) ? '  ' + interval(cur[i].lo, cur[i].hi) : ''), cur[i].note] : readoutOf);
+      rowReadout(fg, k, bm.steps ? i => [readoutOf(i)[0], num(cur[i].center) + '  ' + interval(cur[i].lo, cur[i].hi), cur[i].note] : readoutOf);
       if (box) { boxPlot(fg, items.map((it, i) => ({ label: numLabel(i, short), stats: Object.assign({}, boxStats(groups[i]), { mean: it.center }) })), { rowPx: 38, markerLabel: centerWord }); bm.line(fg); return; }
       // The axis covers the Bonferroni intervals, which the step-down ones never exceed, and so it holds still as the line moves.
       const h = intervals(fg, cur, { rowPx: showPts ? 32 : 30, extent: items.flatMap(it => [it.lo, it.hi]), notes: bm.on ? BENCH_NOTES : [] });
@@ -713,7 +713,9 @@ function benchmark(items, ds, testsFor, steps = null) {
   const word = i => (!on ? '' : declared(i) ? side(i) + ' the benchmark' + (holmOnly(i) ? ' (Holm)' : '') : excludes(i) ? 'not declared' : 'contains the benchmark');
   const ids = which => items.map((it, i) => i).filter(i => side(i) === which);
   // The step-down intervals: each design's interval at the level of its step in
-  // Holm's step-down at the benchmark, and only its center past the stop.
+  // Holm's step-down at the benchmark, and past the stop the whole line: a
+  // comparison that is never tested is in effect tested at a threshold of 0,
+  // whose interval is the 100% one.
   const stepped = holm && !!steps && designPlot !== 'box';
   // The figure's rows at a benchmark value v, so that they can be redrawn while
   // the line is dragged: each row's interval (Bonferroni's, or its step-down
@@ -723,12 +725,12 @@ function benchmark(items, ds, testsFor, steps = null) {
     const lv = stepped ? stepDownLevels(f.tests.map(t => t.p), steps.alpha) : null;
     return items.map((it, i) => {
       const reached = !lv || lv[i].level !== null;
-      const iv = !lv ? it : reached ? steps.at(i, lv[i].level) : { lo: NaN, hi: NaN };
+      const iv = !lv ? it : reached ? steps.at(i, lv[i].level) : { lo: -Infinity, hi: Infinity };
       const excl = on && (iv.lo > v || iv.hi < v);
       const sd = !on ? null : f ? f.tests[i].side : it.lo > v ? 'above' : it.hi < v ? 'below' : null;
       const decl = sd !== null;
       const note = !on ? undefined : !reached ? 'not reached' : decl ? sd + (excl ? '' : ' (Holm)') : excl ? 'not declared' : 'contains';
-      return { lo: iv.lo, hi: iv.hi, center: it.center, flagged: decl && excl, note, noteColor: decl ? '--miss' : '--muted', dot: !reached, color: reached ? undefined : '--muted' };
+      return { lo: iv.lo, hi: iv.hi, center: it.center, flagged: decl && excl, note, noteColor: decl ? '--miss' : '--muted', color: reached ? undefined : '--muted' };
     });
   };
   return {
@@ -739,11 +741,11 @@ function benchmark(items, ds, testsFor, steps = null) {
     line: (fg, live) => { if (on) dragLine(fg, { value, step: benchSpin.step, ariaLabel: 'Benchmark', label: null, onMove: v => { benchSpin.spin.set(v, false); if (live) live(v); }, onEnd: v => { benchVal = v; state.setPick(id, key, v); benchSpin.spin.set(v, false); schedule(); } }); },
     legend: base => [{ swatch: 'interval', color: '--est', label: (stepped ? 'design ' + (proc === 'np' ? 'pseudo-median' : 'mean') + ' with its interval at its step’s level' : base) + (on ? ', contains the benchmark' : '') }]
       .concat(on ? [{ swatch: 'flagged', color: '--miss', label: 'excludes the benchmark: declared above or below it' }] : [])
-      .concat(stepped ? [{ swatch: 'dot', color: '--muted', label: 'not reached: the step-down stopped before this design' }] : [])
+      .concat(stepped ? [{ swatch: 'whole', color: '--muted', label: 'not reached: the step-down stopped before this design, and its interval is the whole line' }] : [])
       .concat(on && holm && !stepped && items.some((it, i) => holmOnly(i)) ? [{ swatch: 'interval', color: '--est', label: 'labeled “(Holm)”: declared by Holm’s step-down although the interval contains the benchmark' }] : [])
       .concat(on ? [{ swatch: 'dash', color: '--text', label: 'benchmark (drag it)' }] : []),
     stepCaption: (centerWord, ivName) => 'Each design’s ' + centerWord + ' with its own ' + ivName + ' at the level of its step in Holm’s step-down against the benchmark: the design with the r-th smallest p-value is drawn at 1 − α/(k − r + 1). ' +
-      'A red dashed interval excludes the benchmark, and that design is declared above or below it. The step-down stops at the first interval that contains the benchmark, and the designs past it are not reached and are drawn as their ' + centerWord + ' alone.' +
+      'A red dashed interval excludes the benchmark, and that design is declared above or below it. The step-down stops at the first interval that contains the benchmark. The designs past it are not reached: none is tested, which is the same as testing it at a threshold of 0, and so each is drawn with the 100% interval, the whole line, which contains every benchmark.' +
       (proc === 'np' ? ' A signed-rank test and its own interval do not always agree, and so a design whose interval excludes the benchmark can read “not declared”.' : '') +
       stepWhy('design', 'the benchmark') + ' Drag the dashed line, or type a value, to move the benchmark.',
     caption: () => (!on ? ''
@@ -1125,26 +1127,26 @@ function update() {
   const dSteps = dHolm && diffStepsOn(k);
   // The figure's rows: each comparison's Bonferroni interval, or under the
   // step-down intervals its interval at the level of its step (at(c, level)
-  // gives it), and only its center past the stop.
+  // gives it), and the whole line past the stop.
   const dRows = (cs, at) => {
     if (!dSteps) return cs.map(dItem);
     const lv = stepDownLevels(cs.map(c => c.p), alpha);
     return cs.map((c, q) => {
       const reached = lv[q].level !== null;
-      const iv = reached ? at(c, lv[q].level) : { lo: NaN, hi: NaN };
+      const iv = reached ? at(c, lv[q].level) : { lo: -Infinity, hi: Infinity };
       const excl = iv.lo > 0 || iv.hi < 0;
-      return { label: pairLabel(c.i, c.j), lo: iv.lo, hi: iv.hi, center: c.diff, flagged: c.declared && excl, dot: !reached, color: reached ? undefined : '--muted',
+      return { label: pairLabel(c.i, c.j), lo: iv.lo, hi: iv.hi, center: c.diff, flagged: c.declared && excl, color: reached ? undefined : '--muted',
         note: !reached ? 'not reached' : c.declared ? (excl ? 'different' : 'different (Holm)') : excl ? 'not declared' : 'contains 0', noteColor: c.declared ? '--miss' : '--muted' };
     });
   };
   const dStepLegend = name => [{ swatch: 'interval', color: '--est', label: name + ' at its step’s level, contains 0' },
     { swatch: 'flagged', color: '--miss', label: name + ' at its step’s level, excludes 0: declared different' },
-    { swatch: 'dot', color: '--muted', label: 'not reached: the step-down stopped before this pair' }];
+    { swatch: 'whole', color: '--muted', label: 'not reached: the step-down stopped before this pair, and its interval is the whole line' }];
   const dStepCaption = (what, ivName, rank) => 'Each row is one pair’s ' + what + ' with its ' + ivName + ' at the level of its step in Holm’s step-down: the pair with the r-th smallest p-value is drawn at 1 − α/(C − r + 1). ' +
-    'A red dashed interval excludes 0, and so that pair is declared different. The step-down stops at the first interval that contains 0, and the pairs past it are not reached and are drawn as their ' + what + ' alone.' +
+    'A red dashed interval excludes 0, and so that pair is declared different. The step-down stops at the first interval that contains 0. The pairs past it are not reached: none is tested, which is the same as testing it at a threshold of 0, and so each is drawn with the 100% interval, the whole line, which contains 0.' +
     (rank ? ' A rank test and its own interval do not always agree, and so a pair whose interval excludes 0 can read “not declared”.' : '') + stepWhy('pair', '0');
   // The rows' readout: the interval drawn and the decision.
-  const dReadout = (rows, cs, full) => i => [full(cs[i]), num(cs[i].diff) + (Number.isFinite(rows[i].lo) ? '  ' + interval(rows[i].lo, rows[i].hi) : ''), rows[i].note || dWord(cs[i])];
+  const dReadout = (rows, cs, full) => i => [full(cs[i]), num(cs[i].diff) + '  ' + interval(rows[i].lo, rows[i].hi), rows[i].note || dWord(cs[i])];
   const dCaption = (C, test, rank) => (!dHolm ? ' A pair whose interval excludes 0 is declared different, as the decision at the right of each row says.'
     : ' The decision at the right of each row comes from Holm’s step-down on the ' + C + ' ' + test + ', which holds the chance of any false declaration at ' + aTxt + ' or below' +
       (rank ? '. A pair marked “different (Holm)” is declared although its interval still contains 0. A rank test and its own interval do not always agree, and so a pair whose interval excludes 0 can read “not declared”.'
@@ -1771,7 +1773,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-badj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-badj="holm" aria-pressed="false">Holm</button>' +
         '</span></span>' +
-        '<label class="ctrl-chk" id="sev-bsteps-lbl" style="display:none"><input type="checkbox" id="sev-bsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each design’s interval at the level of its own step in Holm’s step-down at the benchmark, in place of its Bonferroni interval: the design with the r-th smallest p-value at 1 − α/(k − r + 1). The designs past the step where it stops are drawn as their center alone. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
+        '<label class="ctrl-chk" id="sev-bsteps-lbl" style="display:none"><input type="checkbox" id="sev-bsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each design’s interval at the level of its own step in Holm’s step-down at the benchmark, in place of its Bonferroni interval: the design with the r-th smallest p-value at 1 − α/(k − r + 1). The designs past the step where it stops are never tested, and so each is drawn with the 100% interval, the whole line. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
       '</div>' +
       '<div id="sev-means-body"></div><div class="plan-sub plan-card" id="sev-plan-means"></div></div>' +
     '<div class="sec" data-section="diffs"><h3 class="sec-title">Pairwise comparisons</h3><p class="sec-lede">Every pair’s difference, or each design against a control, each with its own interval. The C intervals hold together by the Bonferroni correction, each at level 1 − α/C: nothing is pooled and no analysis of variance comes first. A pair is declared different by one of two rules, each holding the chance of any false declaration across the C tests at α or below: Bonferroni declares a pair whose interval excludes 0, and Holm’s step-down, applied to each pair’s own test, can declare more.</p>' +
@@ -1785,7 +1787,7 @@ export function render(root) {
           '<button type="button" class="seg-btn" data-dadj="bonferroni" aria-pressed="true">Bonferroni</button>' +
           '<button type="button" class="seg-btn" data-dadj="holm" aria-pressed="false">Holm</button>' +
         '</span></span>' +
-      '<label class="ctrl-chk" id="sev-dsteps-lbl" style="display:none"><input type="checkbox" id="sev-dsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each pair’s interval at the level of its own step in Holm’s step-down, in place of its Bonferroni interval: the pair with the r-th smallest p-value at 1 − α/(C − r + 1). The pairs past the step where it stops are drawn as their center alone. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
+      '<label class="ctrl-chk" id="sev-dsteps-lbl" style="display:none"><input type="checkbox" id="sev-dsteps"> <span class="tip" tabindex="0" data-tip="' + 'Draws each pair’s interval at the level of its own step in Holm’s step-down, in place of its Bonferroni interval: the pair with the r-th smallest p-value at 1 − α/(C − r + 1). The pairs past the step where it stops are never tested, and so each is drawn with the 100% interval, the whole line. These are not confidence intervals, and the table keeps the Bonferroni ones.' + '">Show step-down intervals</span></label>' +
       '</div>' +
       '<div id="sev-diffs-body"></div><div class="plan-sub plan-card" id="sev-plan-diffs"></div></div>' +
     '<div class="sec" data-section="anova"><h3 class="sec-title" id="sev-anova-hd">Analysis of variance and post-hoc tests</h3><p class="sec-lede">One test of whether any of the means differ and then a post-hoc rule that judges each pair.</p>' +
