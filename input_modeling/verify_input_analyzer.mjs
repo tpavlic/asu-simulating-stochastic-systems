@@ -590,6 +590,10 @@ section('11. MLE recovery, every distribution');
     ['triangular',      [1.00, 6.00, 10.0],  [0.10, 0.06, 0.05], 106],
     ['poisson',         [4.30],              [0.03],             107],
     ['geometric',       [0.28],              [0.03],             108],
+    ['negBinomial',     [2.5, 0.4],          [0.06, 0.03],       118],
+    /* The binomial's n is estimated too, and it is the poorly determined
+       parameter of the two even at this size. */
+    ['binomial',        [20, 0.3],           [0.08, 0.08],       119],
     ['discreteUniform', [3, 11],             [0.001, 0.001],     109],
     /* The Johnson members are fitted on request only, by a profile search
        over location and scale with the shapes closed form; both come
@@ -790,7 +794,8 @@ section('12. cdf / quantile / pdf consistency, every distribution');
     lognormal: [0.8, 0.55], normal: [10, 2.5], uniform: [1, 7],
     loglogistic: [3.5, 4], pearson5: [3, 8], pearson6: [3, 5, 4],
     triangular: [1, 4, 9], pert: [1, 4, 9], beta: [2.0, 3.5, 0.5, 6.5],
-    poisson: [4.2], geometric: [0.3], discreteUniform: [2, 9]
+    poisson: [4.2], geometric: [0.3], discreteUniform: [2, 9],
+    negBinomial: [2.5, 0.3], binomial: [15, 0.35]
   };
   for (const key of Object.keys(PS)) {
     const d = IA.DISTS[key], p = PS[key];
@@ -852,7 +857,8 @@ section('13. samplers match their own cdf');
     lognormal: [0.4, 0.7], normal: [5, 1.5], uniform: [2, 6],
     loglogistic: [2.2, 3], pearson5: [2.5, 4], pearson6: [2, 6, 3],
     triangular: [0, 3, 8], pert: [0, 3, 8], beta: [1.7, 2.9, 1, 5],
-    poisson: [3.7], geometric: [0.22], discreteUniform: [1, 6]
+    poisson: [3.7], geometric: [0.22], discreteUniform: [1, 6],
+    negBinomial: [0.8, 0.15], binomial: [9, 0.6]
   };
   const M = 20000;
   for (const key of Object.keys(PS)) {
@@ -1229,7 +1235,10 @@ section('15c. generating data from typed parameters');
     ['geometric', [1.4], 'p must be at most 1'],
     ['gamma', [-1, 2], 'a negative shape is refused'],
     ['normal', [0, 0], 'a zero standard deviation is refused'],
-    ['poisson', [1e7], 'a Poisson mean beyond the accurate range is refused']
+    ['poisson', [1e7], 'a Poisson mean beyond the accurate range is refused'],
+    ['negBinomial', [0, 0.5], 'a negative binomial r of zero is refused'],
+    ['binomial', [7.5, 0.3], 'a binomial n must be a whole number'],
+    ['binomial', [10, 1.2], 'a binomial p must be at most 1']
   ];
   for (const [key, p, why] of bad) {
     ok(IA.validateGenParams(key, p) !== null, `rejected: ${why}`, 'validator returned null');
@@ -1593,6 +1602,135 @@ section('15g. chi-square degrees of freedom');
     const rate = rej / used, se = Math.sqrt(0.05 * 0.95 / used);
     ok(Math.abs(rate - 0.05) < 4 * se + 0.015,
       `bootstrap chi-square rejects ${(100 * rate).toFixed(1)}% of the time (nominal 5%, ${used} reps)`);
+  }
+}
+
+section('15h. the negative binomial and the binomial');
+{
+  const NB = IA.DISTS.negBinomial, BN = IA.DISTS.binomial;
+  /* The injury counts of a textbook exercise: 100 months, mean 1.2,
+     variance 1.78. R's MASS::fitdistr gives size 2.457647 and a
+     log-likelihood of -149.0134 (SciPy agrees). */
+  const tab = [[0, 38], [1, 30], [2, 15], [3, 13], [4, 1], [5, 1], [6, 2]];
+  const x = [];
+  for (const [v, c] of tab) for (let i = 0; i < c; i++) x.push(v);
+  const f = IA.fitDist(NB, x, false, false);
+  close(f.p[0], 2.457647, 2e-6, 'negative binomial r against R\'s fitdistr');
+  close(f.p[1], 2.457647 / (2.457647 + 1.2), 2e-6, 'and p = r/(r + mean)');
+  close(f.ll, -149.0134, 1e-6, 'and the log-likelihood');
+  ok(!f.edge, 'overdispersed counts give an interior fit, not the Poisson limit');
+  const bins = IA.makeBins(x, null, true), c = IA.chiSquareGOF(x, f, bins);
+  ok(c.kChi === 2 && c.df === c.nGroups - 3, `both negative binomial parameters are regular: df = ${c.df}`);
+
+  /* r held at 1 is the geometric, to the last digit. */
+  const f1 = IA.fitDist(NB, x, false, false, [1, null]), fg = IA.fitDist(IA.DISTS.geometric, x, false, false);
+  close(f1.p[1], fg.p[0], 1e-14, 'r held at 1: p is the geometric\'s');
+  close(f1.ll, fg.ll, 1e-9, 'r held at 1: the log-likelihood is the geometric\'s');
+  ok(f1.k === 1, 'r held at 1: one parameter estimated');
+  /* p held: the root in r is where the profile peaks. */
+  const fp = IA.fitDist(NB, x, false, false, [null, 0.7]);
+  const llAt = r => NB.loglik(x, [r, 0.7]);
+  ok(fp.ok && llAt(fp.p[0]) >= llAt(fp.p[0] * 1.001) && llAt(fp.p[0]) >= llAt(fp.p[0] / 1.001),
+     `p held at 0.7: r = ${fp.ok ? fp.p[0].toFixed(5) : '?'} maximizes the likelihood`);
+
+  /* Poisson counts have variance equal to the mean, and so both families
+     run to their Poisson limit and say so, with the Poisson's likelihood. */
+  const up = IA.MRG32k3a(1801), xp = [];
+  for (let i = 0; i < 3000; i++) xp.push(IA.DISTS.poisson.sample(up, [4]));
+  const v = IA.summarize(xp), fpo = IA.fitDist(IA.DISTS.poisson, xp, false, false);
+  const fnb = IA.fitDist(NB, xp, false, false), fbn = IA.fitDist(BN, xp, false, false);
+  const overdispersed = v.sd * v.sd * (xp.length - 1) / xp.length > v.mean;
+  ok(fbn.edge === 'poisson' || !overdispersed,
+     `binomial on Poisson counts: ${fbn.edge === 'poisson' ? 'reported at its Poisson limit' : 'n = ' + fbn.p[0]}`);
+  ok(fnb.edge === 'poisson' || overdispersed,
+     `negative binomial on Poisson counts: ${fnb.edge === 'poisson' ? 'reported at its Poisson limit' : 'r = ' + fnb.p[0]}`);
+  for (const [name, g] of [['negative binomial', fnb], ['binomial', fbn]]) {
+    if (g.edge) ok(Math.abs(g.ll - fpo.ll) < 0.01,
+      `${name} at its Poisson limit: log-likelihood within 0.01 of the Poisson's (gap ${(g.ll - fpo.ll).toExponential(2)})`);
+  }
+
+  /* Binomial counts: the binomial finds the brute-force peak of its
+     profile over n, and the negative binomial goes to its Poisson limit. */
+  for (const [seed, truth, size] of [[1802, [12, 0.3], 400], [1803, [40, 0.8], 300], [1804, [6, 0.55], 150]]) {
+    const ub = IA.MRG32k3a(seed), xb = [];
+    for (let i = 0; i < size; i++) xb.push(BN.sample(ub, truth));
+    const fb = IA.fitDist(BN, xb, false, false), mx = Math.max(...xb), m = xb.reduce((a, b) => a + b) / xb.length;
+    let best = -Infinity, nBest = null;
+    for (let n = mx; n <= mx + 3000; n++) { const l = BN.loglik(xb, [n, m / n]); if (l > best) { best = l; nBest = n; } }
+    ok(fb.ok && (fb.edge ? nBest > mx + 2000 : fb.p[0] === nBest),
+       `binomial(${truth}) sample of ${size}: n = ${fb.ok ? (fb.edge ? 'its Poisson limit' : fb.p[0]) : '?'}, brute force ${nBest}`);
+    if (fb.ok && !fb.edge) {
+      const cb = IA.chiSquareGOF(xb, fb, IA.makeBins(xb, null, true));
+      ok(cb.kChi === (fb.p[0] === mx ? 1 : 2),
+         `  n ${fb.p[0] === mx ? 'on the largest count is an order statistic' : 'inside the range is regular'}: kChi = ${cb.kChi}`);
+    }
+  }
+  {
+    const ub = IA.MRG32k3a(1805), xb = [];
+    for (let i = 0; i < 1000; i++) xb.push(BN.sample(ub, [10, 0.4]));
+    const g = IA.fitDist(NB, xb, false, false);
+    ok(g.edge === 'poisson', 'negative binomial on binomial counts: reported at its Poisson limit');
+    /* n held: p is the mean over n, one parameter is estimated, and a
+       value below the largest count is refused with a reason. */
+    const m = xb.reduce((a, b) => a + b) / xb.length, mx = Math.max(...xb);
+    const h = IA.fitDist(BN, xb, false, false, [10, null]);
+    close(h.p[1], m / 10, 1e-15, 'binomial with n held at 10: p is the mean over 10');
+    ok(h.k === 1 && IA.chiSquareGOF(xb, h, IA.makeBins(xb, null, true)).kChi === 1, 'and one parameter is estimated');
+    const bad = IA.fitDist(BN, xb, false, false, [mx - 1, null]);
+    ok(!bad.ok && /largest count/.test(bad.msg), 'n held below the largest count is refused, naming the reason', bad.msg);
+    const bad2 = IA.fitDist(BN, xb, false, false, [10.5, null]);
+    ok(!bad2.ok, 'n held at a number that is not whole is refused');
+    /* p held: the peak over whole n, against brute force. */
+    const hp = IA.fitDist(BN, xb, false, false, [null, 0.4]);
+    let best = -Infinity, nBest = null;
+    for (let n = mx; n <= mx + 500; n++) { const l = BN.loglik(xb, [n, 0.4]); if (l > best) { best = l; nBest = n; } }
+    ok(hp.ok && hp.p[0] === nBest, `binomial with p held at 0.4: n = ${hp.ok ? hp.p[0] : '?'}, brute force ${nBest}`);
+  }
+
+  /* Arena has neither family, and so both export as a DISC table whose
+     cumulative probabilities rise to exactly 1 over consecutive values,
+     written in plain decimal because Arena does not read 4e-7. */
+  {
+    const e = IA.expressions({ dist: NB, p: [2.457647, 0.671920], shift: 0 });
+    ok(e.anylogic === 'negativeBinomial(0.67192, 2.45765)',
+       'negative binomial: AnyLogic takes the success probability first, and a fractional r', e.anylogic);
+    /* Simio's number of successes is whole: a fractional r becomes a table,
+       value then cumulative probability, the same pairs as Arena's reversed;
+       a whole r keeps the native call. */
+    const pairsA = e.arena.replace(/^DISC\(|\)$/g, '').split(',');
+    const pairsS = e.simio.replace(/^Random\.Discrete\(|\)$/g, '').split(', ');
+    ok(e.simio.startsWith('Random.Discrete(') && pairsS.length === pairsA.length &&
+       pairsS.every((t, i) => t === pairsA[i % 2 === 0 ? i + 1 : i - 1]),
+       'negative binomial with a fractional r: Simio gets the Arena table with each pair reversed');
+    const whole = IA.expressions({ dist: NB, p: [3, 0.4], shift: 0 });
+    ok(whole.simio === 'Random.NegativeBinomial(0.4, 3)', 'and with a whole r, its own NegativeBinomial', whole.simio);
+    const wide = IA.expressions({ dist: NB, p: [25, 0.5], shift: 0 });
+    ok(!/e-/.test(wide.arena) && !/ /.test(wide.arena),
+       'a DISC table is written without spaces or e-notation', wide.arena.slice(0, 60));
+    /* Arena ran a 1274-character DISC and refused a 3603-character one, and
+       so a longer table is cut at a coarser tail, and the note says how much
+       was folded onto each end; past one in a thousand there is no line. */
+    const long = IA.expressions({ dist: NB, p: [0.4, 0.05], shift: 0 });
+    ok(long.arena.length <= IA.ARENA_DISC_MAX && /approximation/.test(long.notes.arena) &&
+       /probability above it, 0\.00098, falls on its last value/.test(long.notes.arena),
+       `a widely spread negative binomial gets a table cut to ${long.arena.length} characters, called an approximation`,
+       long.notes.arena);
+    ok(long.simio.length > long.arena.length && /ten million/.test(long.notes.simio),
+       '  while Simio, with no known limit, keeps the table to one in ten million');
+    const huge = IA.expressions({ dist: NB, p: [2, 0.002], shift: 0 });
+    ok(huge.arena === null && /longer than Arena is known to accept/.test(huge.notes.arena),
+       'a negative binomial too spread out for any table gets no Arena line, and a note saying why', huge.notes.arena);
+  }
+  for (const [key, p] of [['negBinomial', [2.457647, 0.671920]], ['binomial', [12, 0.3]]]) {
+    const e = IA.expressions({ dist: IA.DISTS[key], p, shift: 0 });
+    const nums = e.arena.replace(/^DISC\(|\)$/g, '').split(',').map(Number);
+    const cum = nums.filter((_, i) => i % 2 === 0), val = nums.filter((_, i) => i % 2 === 1);
+    ok(e.arena.startsWith('DISC(') && cum[cum.length - 1] === 1 &&
+       cum.every((q, i) => i === 0 || q >= cum[i - 1]) && val.every((q, i) => i === 0 || q === val[i - 1] + 1),
+       `${key}: Arena's DISC table rises to 1 over consecutive values ${val[0]} to ${val[val.length - 1]}`);
+    if (key === 'binomial')
+      ok(e.simio.includes('(' + IA.num(p[1]) + ', ') && e.anylogic.includes('(' + IA.num(p[1]) + ', '),
+         `${key}: Simio and AnyLogic take the success probability first`);
   }
 }
 
@@ -2068,7 +2206,15 @@ section('18. export expressions');
     const fd = IA.fitDist(IA.DISTS.discreteEmpirical, [1, 2, 2, 3, 3, 3, 5], false, false), ed = IA.expressions(fd);
     ok(ed.simio.startsWith('Random.Discrete(1, ') && ed.simio.endsWith('5, 1)'),
        'Simio Random.Discrete takes value, then cumulative probability', ed.simio);
-    ok(ed.arena.startsWith('DISC(0.14286, 1, '), 'Arena DISC takes cumulative probability, then value', ed.arena);
+    ok(ed.arena.startsWith('DISC(0.14286,1,'), 'Arena DISC takes cumulative probability, then value', ed.arena);
+    /* Past the longest DISC Arena is known to run, the empirical pmf gets
+       no Arena line, and a note giving the number of distinct values. */
+    const many = [];
+    for (let v = 0; v < 150; v++) many.push(v, v);
+    const em = IA.expressions(IA.fitDist(IA.DISTS.discreteEmpirical, many, false, false));
+    ok(em.arena === null && /150 distinct values/.test(em.notes.arena) && em.simio.startsWith('Random.Discrete('),
+       'an empirical pmf of 150 values gets no Arena line and a note, and the other tools still get the table',
+       em.notes.arena);
     const el = IA.expressions({ dist: IA.DISTS.lognormal, p: [0.5, 0.6], shift: 0 });
     ok(el.simio.startsWith('Random.Lognormal('), "Simio's lognormal is written Random.Lognormal, as Simio's examples write it", el.simio);
     const sll = IA.expressions({ dist: IA.DISTS.loglogistic, p: [3, 4], shift: 0 }).simio;

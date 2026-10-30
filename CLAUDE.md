@@ -701,7 +701,7 @@ better.
 ### Input Modeling
 
 - `input_modeling/input_analyzer.html` *(a replacement for and extension of Arena's Input Analyzer:
-  four tabs, one fitting eighteen candidate distributions to a pasted sample (with the two Johnson
+  four tabs, one fitting twenty candidate distributions to a pasted sample (with the two Johnson
   members, S_B and S_U, fitted only when a checkbox in the Candidates card asks for them, off by
   default because four parameters that reach almost any shape win a ranking on flexibility alone;
   their rows always carry a note saying so) and reading a frequency table (a column of whole
@@ -755,7 +755,13 @@ better.
      parameters that are extreme order statistics -- a uniform's endpoints, a beta's interval, a
      shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
-     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%.*
+     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%. A fit can also name its
+     own order-statistic parameters in `fit.orderStat`, which `regularCount` reads before the
+     family's `orderStat`: the binomial's n is one when it lands on the largest count. The negative
+     binomial and the binomial report their Poisson limit as `edge: 'poisson'` (variance not above,
+     or not below, the mean), and a family whose one-held fit is closed form or whose parameter
+     must be whole supplies `fitHeld`, which `fitWithHolds` calls in place of its Nelder–Mead
+     search.*
   4. *The Johnson members are fitted by maximum likelihood over all four parameters: given the
      location and scale, the shapes are closed form (z = γ + δw is standard normal for the
      transformed sample w), and the fit is a two-dimensional Nelder–Mead on that profile, over

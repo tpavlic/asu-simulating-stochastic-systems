@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Input Analyzer – fit distributions, arrival rates, and dependence</title>
-<meta name="description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
+<meta name="description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Twenty candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Input Analyzer – fit distributions, arrival rates, and dependence">
-<meta property="og:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
+<meta property="og:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Twenty candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer-preview.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1200">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Input Analyzer – fit distributions, arrival rates, and dependence">
-<meta name="twitter:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Eighteen candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
+<meta name="twitter:description" content="Fit a probability distribution to sample data, or a Poisson arrival rate to arrival times, and read the result straight into a simulation model. Twenty candidates fitted by maximum likelihood and ranked by AIC, BIC, and Arena's square-error criterion; chi-square, Kolmogorov–Smirnov, and Anderson–Darling tests with bootstrap p-values; Q–Q and P–P plots; a test of whether an arrival rate is constant, with the rate estimated interval by interval when it is not; and, for inputs that are not independent, the correlation between two variables with a model of one given the other, and the correlogram, a fitted cycle, and an AR(1) for readings taken over time.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/input_analyzer-preview.png">
 
 <!-- Google Analytics -->
@@ -3776,6 +3776,223 @@ DISTS.geometric = {
   sample: function (u01, p) { return DISTS.geometric.quantile(u01(), p); }
 };
 
+/* Whole-number counts at or above zero, which every count model needs,
+   summarized for the two-parameter fits below: the total, the largest
+   value, and how many observations take each value. */
+function countSummary(x, name) {
+  var n = x.length, S = 0, S2 = 0, mx = 0, i;
+  for (i = 0; i < n; i++) {
+    var v = x[i];
+    if (!Number.isInteger(v) || v < 0) return { ok: false, msg: name + ' needs whole numbers at or above zero.' };
+    S += v; S2 += v * v; if (v > mx) mx = v;
+  }
+  var m = S / n;
+  if (!(m > 0)) return { ok: false, msg: 'Every count is zero: there is nothing to fit.' };
+  if (m > POISSON_MAX)
+    return { ok: false, msg: 'These counts average ' + Math.round(m) +
+      '. At that size a count model is indistinguishable from a normal; fit a continuous distribution instead.' };
+  var c = new Array(mx + 1).fill(0);
+  for (i = 0; i < n; i++) c[x[i]]++;
+  /* The variance with divisor n, which is what the likelihood equations
+     compare with the mean. */
+  return { ok: true, n: n, S: S, m: m, mx: mx, v: S2 / n - m * m, c: c };
+}
+
+/* Bisection on ln r for the root of a function that is positive below it
+   and negative above it, on [lo, hi]. */
+function rootLog(g, lo, hi) {
+  var a = Math.log(lo), b = Math.log(hi);
+  for (var it = 0; it < 200 && b - a > 1e-13; it++) {
+    var mid = 0.5 * (a + b);
+    if (g(Math.exp(mid)) > 0) a = mid; else b = mid;
+  }
+  return Math.exp(0.5 * (a + b));
+}
+
+/* ══ Negative binomial(r, p), counting FAILURES BEFORE the r-th success ══
+   Support {0, 1, 2, ...}, the convention of R's rnbinom, SciPy's nbinom,
+   and MATLAB's nbinrnd, and of the geometric above, which is the case
+   r = 1. r need not be a whole number (the Polya form), and that is what
+   lets the family describe counts more spread out than a Poisson's by
+   any amount: with mean m = r(1 - p)/p the variance is m(1 + m/r), and as
+   r grows with m held fixed the distribution approaches the Poisson.
+
+   Maximum likelihood: for a given r the best p is r/(r + m), and the
+   profile's derivative in r is
+       g(r) = sum_{j >= 0} G_j / (r + j) - n ln(1 + m/r),
+   where G_j counts the observations above j (the sum of
+   psi(x_i + r) - psi(r) over the sample, written without the digamma).
+   g falls from +infinity as r grows and has a single root when the
+   sample variance (divisor n) exceeds the mean. When it does not, the
+   likelihood keeps rising as r grows, the fit is reported at its Poisson
+   limit (`edge: 'poisson'`), and r is held at a cap large enough that the
+   extra variance m/r is a ten-thousandth of the mean's or less, below
+   the size at which the incomplete beta function behind the cdf would
+   need more than its iteration cap. */
+var NB_R_MAX = 1e6;
+function nbRCap(m) { return Math.min(NB_R_MAX, 1e4 * Math.max(1, m)); }
+function nbSuffix(cs) {
+  /* G_j = number of observations above j, for j = 0 .. max - 1 */
+  var G = new Array(cs.mx), acc = 0;
+  for (var j = cs.mx; j >= 1; j--) { acc += cs.c[j]; G[j - 1] = acc; }
+  return G;
+}
+function nbSumOver(G, r) {
+  var t = 0;
+  for (var j = 0; j < G.length; j++) t += G[j] / (r + j);
+  return t;
+}
+DISTS.negBinomial = {
+  key: 'negBinomial', name: 'Negative binomial', lower: 'negative binomial', kind: 'discrete', np: 2, shiftable: false,
+  params: [{ sym: 'r', name: 'successes awaited' }, { sym: 'p', name: 'success probability' }],
+  lo: function () { return 0; },
+  fit: function (x) {
+    var cs = countSummary(x, 'A negative binomial');
+    if (!cs.ok) return cs;
+    var cap = nbRCap(cs.m), G = nbSuffix(cs);
+    var g = function (r) { return nbSumOver(G, r) - cs.n * Math.log1p(cs.m / r); };
+    if (!(cs.v > cs.m) || g(cap) >= 0)
+      return { ok: true, p: [cap, cap / (cap + cs.m)], edge: 'poisson' };
+    var r = rootLog(g, 1e-8, cap);
+    return { ok: true, p: [r, r / (r + cs.m)] };
+  },
+  /* One parameter held and the other free. With r held, p = r/(r + m) is
+     closed form; with p held, the score in r is sum G_j/(r + j) + n ln p,
+     which falls from +infinity to n ln p < 0 and so has one root. */
+  fitHeld: function (x, fixed) {
+    var cs = countSummary(x, 'A negative binomial');
+    if (!cs.ok) return cs;
+    var rH = fixed[0], pH = fixed[1];
+    if (rH !== null && rH !== undefined) {
+      if (!(rH > 0)) return { ok: false, msg: 'r must be greater than zero.' };
+      return { ok: true, p: [rH, rH / (rH + cs.m)], freeCount: 1 };
+    }
+    if (!(pH > 0) || !(pH < 1)) return { ok: false, msg: 'p must be between 0 and 1, and below 1 when any count is above zero.' };
+    var G = nbSuffix(cs), lp = cs.n * Math.log(pH);
+    var r = rootLog(function (rr) { return nbSumOver(G, rr) + lp; }, 1e-10, 1e12);
+    return { ok: true, p: [r, pH], freeCount: 1 };
+  },
+  pdf: function (k, p) {
+    if (k < 0 || !Number.isInteger(k)) return 0;
+    if (p[1] >= 1) return k === 0 ? 1 : 0;
+    return Math.exp(logGamma(k + p[0]) - logGamma(p[0]) - logGamma(k + 1) +
+                    p[0] * Math.log(p[1]) + k * Math.log1p(-p[1]));
+  },
+  /* P(X <= k) = I_p(r, k + 1), the regularized incomplete beta. */
+  cdf: function (v, p) {
+    var k = Math.floor(v);
+    if (k < 0) return 0;
+    if (p[1] >= 1) return 1;
+    return betaInc(p[0], k + 1, p[1]);
+  },
+  quantile: function (u, p) {
+    return discreteQuantile(DISTS.negBinomial, u, p, Math.round(p[0] * (1 - p[1]) / p[1]));
+  },
+  loglik: function (x, p) {
+    var r = p[0], q = p[1], n = x.length, s = 0, sl = 0, i;
+    if (!(r > 0) || !(q > 0) || !(q <= 1)) return -Infinity;
+    for (i = 0; i < n; i++) {
+      if (!Number.isInteger(x[i]) || x[i] < 0) return -Infinity;
+      s += x[i]; sl += logGamma(x[i] + r) - logGamma(x[i] + 1);
+    }
+    return sl - n * logGamma(r) + n * r * Math.log(q) + (s > 0 ? s * Math.log1p(-q) : 0);
+  },
+  sample: function (u01, p) { return DISTS.negBinomial.quantile(u01(), p); }
+};
+
+/* ══ Binomial(n, p), the successes in n independent trials ══════════
+   Support {0, 1, ..., n}. When n is known (the items in a batch, the
+   seats on a flight), it should be held at that value, and then
+   p = m/n is closed form. Otherwise n is estimated too: for each whole
+   n at or above the largest count the best p is m/n, and the profile
+   likelihood over n has a single peak (DeRiggi, 1983), found here by
+   bracketing and an integer ternary search. The peak is finite only when
+   the sample variance (divisor n) is below the mean; at or above it the
+   likelihood keeps rising as n grows with np fixed, which is the
+   Poisson limit, and the fit is reported there (`edge: 'poisson'`). An
+   estimated n is poorly determined even in large samples, and when it
+   lands on the largest count it is an order statistic, which the
+   chi-square degrees of freedom do not subtract (`orderStat`). */
+var BIN_N_MAX = 1e6;
+function binomProfile(cs, n, pFixed) {
+  var p = pFixed === undefined ? cs.m / n : pFixed, ll = 0;
+  for (var v = 1; v <= cs.mx; v++)
+    if (cs.c[v]) ll += cs.c[v] * (logGamma(n + 1) - logGamma(n - v + 1));
+  return ll + cs.S * Math.log(p) + (cs.n * n - cs.S) * Math.log1p(-p);
+}
+/* The whole number in [lo, cap] at which a single-peaked f is largest. */
+function intArgMax(f, lo, cap, start) {
+  var hi = Math.min(cap, Math.max(lo + 1, Math.ceil(start)));
+  while (hi < cap && f(hi + 1) > f(hi)) hi = Math.min(cap, 2 * hi);
+  var a = lo, b = hi;
+  while (b - a > 2) {
+    var m1 = a + Math.floor((b - a) / 3), m2 = b - Math.floor((b - a) / 3);
+    if (f(m1) < f(m2)) a = m1 + 1; else b = m2 - 1;
+  }
+  var best = a, fb = f(a);
+  for (var k = a + 1; k <= b; k++) { var fk = f(k); if (fk > fb) { fb = fk; best = k; } }
+  return best;
+}
+DISTS.binomial = {
+  key: 'binomial', name: 'Binomial', lower: 'binomial', kind: 'discrete', np: 2, shiftable: false,
+  params: [{ sym: 'n', name: 'trials (whole number)', whole: true }, { sym: 'p', name: 'success probability' }],
+  lo: function () { return 0; },
+  fit: function (x) {
+    var cs = countSummary(x, 'A binomial');
+    if (!cs.ok) return cs;
+    var cap = Math.max(cs.mx, Math.min(BIN_N_MAX, Math.ceil(1e4 * Math.max(1, cs.m))));
+    if (!(cs.v < cs.m)) return { ok: true, p: [cap, cs.m / cap], edge: 'poisson' };
+    var start = cs.m * cs.m / (cs.m - cs.v);
+    var n = intArgMax(function (k) { return binomProfile(cs, k); }, cs.mx, cap, start);
+    if (n >= cap) return { ok: true, p: [cap, cs.m / cap], edge: 'poisson' };
+    return { ok: true, p: [n, cs.m / n], orderStat: n === cs.mx ? [0] : null };
+  },
+  /* One parameter held and the other free. With n held, p = m/n; with p
+     held, the log-likelihood is concave in n, and its peak is found over
+     the whole numbers at or above the largest count. */
+  fitHeld: function (x, fixed) {
+    var cs = countSummary(x, 'A binomial');
+    if (!cs.ok) return cs;
+    var nH = fixed[0], pH = fixed[1];
+    if (nH !== null && nH !== undefined) {
+      if (!Number.isInteger(nH) || nH < cs.mx)
+        return { ok: false, msg: 'n must be a whole number at least as large as your largest count, ' + cs.mx + '.' };
+      return { ok: true, p: [nH, cs.m / nH], freeCount: 1 };
+    }
+    if (!(pH > 0) || !(pH < 1)) return { ok: false, msg: 'p must be between 0 and 1.' };
+    var n = intArgMax(function (k) { return binomProfile(cs, k, pH); }, cs.mx, BIN_N_MAX, cs.m / pH);
+    return { ok: true, p: [n, pH], freeCount: 1, orderStat: n === cs.mx ? [0] : null };
+  },
+  pdf: function (k, p) {
+    var n = p[0], q = p[1];
+    if (k < 0 || k > n || !Number.isInteger(k)) return 0;
+    if (q <= 0) return k === 0 ? 1 : 0;
+    if (q >= 1) return k === n ? 1 : 0;
+    return Math.exp(logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1) +
+                    k * Math.log(q) + (n - k) * Math.log1p(-q));
+  },
+  /* P(X <= k) = I_{1-p}(n - k, k + 1) for k < n. */
+  cdf: function (v, p) {
+    var k = Math.floor(v), n = p[0], q = p[1];
+    if (k < 0) return 0;
+    if (k >= n || q <= 0) return 1;
+    if (q >= 1) return 0;
+    return betaInc(n - k, k + 1, 1 - q);
+  },
+  quantile: function (u, p) { return discreteQuantile(DISTS.binomial, u, p, Math.round(p[0] * p[1])); },
+  loglik: function (x, p) {
+    var n = p[0], q = p[1], N = x.length, s = 0, sl = 0, i;
+    if (!Number.isInteger(n) || n < 0 || !(q >= 0) || !(q <= 1)) return -Infinity;
+    for (i = 0; i < N; i++) {
+      if (!Number.isInteger(x[i]) || x[i] < 0 || x[i] > n) return -Infinity;
+      s += x[i]; sl += logGamma(x[i] + 1) + logGamma(n - x[i] + 1);
+    }
+    var f = N * n - s;
+    return N * logGamma(n + 1) - sl + (s > 0 ? s * Math.log(q) : 0) + (f > 0 ? f * Math.log1p(-q) : 0);
+  },
+  sample: function (u01, p) { return DISTS.binomial.quantile(u01(), p); }
+};
+
 /* ══ Discrete uniform(a, b) over the whole numbers a..b ════════════ */
 DISTS.discreteUniform = {
   key: 'discreteUniform', name: 'Discrete uniform', lower: 'discrete uniform', kind: 'discrete', np: 2, shiftable: false,
@@ -4132,7 +4349,7 @@ function discreteQuantile(dist, u, p, guess) {
    JOHNSON_KEYS to the continuous list only when the reader asks. */
 var CONTINUOUS_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic',
                        'pearson5', 'pearson6', 'normal', 'uniform', 'triangular', 'pert', 'beta', 'empirical'];
-var DISCRETE_KEYS = ['poisson', 'geometric', 'discreteUniform', 'discreteEmpirical'];
+var DISCRETE_KEYS = ['poisson', 'negBinomial', 'geometric', 'binomial', 'discreteUniform', 'discreteEmpirical'];
 var JOHNSON_KEYS = ['johnsonSB', 'johnsonSU'];
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -4204,6 +4421,9 @@ var DIVERGE_GAIN = 0.05;  /* log-likelihood units per extra factor of 1000 in d 
 function fitWithHolds(dist, x, fixed) {
   var np = dist.params.length, i, free = [];
   for (i = 0; i < np; i++) if (fixed[i] === null || fixed[i] === undefined) free.push(i);
+  /* A family whose parameters are not all real numbers, or whose one-held
+     fit is closed form, supplies its own (the binomial's n is whole). */
+  if (free.length > 0 && dist.fitHeld) return dist.fitHeld(x, fixed);
 
   if (free.length === 0) {
     var pf = fixed.slice();
@@ -4301,6 +4521,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
     var ll0 = dist.loglik(x, f.p);
     return { ok: true, dist: dist, p: f.p, shift: 0, k: heldK(f), ll: ll0,
              atBound: false, degenerate: false, shiftHeld: false, edge: f.edge || null,
+             orderStat: f.orderStat || null,
              fixed: held ? fixed.slice() : null, allHeld: held && f.freeCount === 0 };
   }
 
@@ -4446,7 +4667,9 @@ function infoCriteria(ll, k, n) {
 /* How many of a fit's estimated parameters were regular ones, which is
    what the chi-square degrees of freedom should subtract. */
 function regularCount(fit) {
-  var dist = fit.dist, os = dist.orderStat || [], n = 0, i;
+  /* A fit can name its own order-statistic parameters (the binomial's n
+     when it lands on the largest count) in place of its family's. */
+  var dist = fit.dist, os = fit.orderStat || dist.orderStat || [], n = 0, i;
   for (i = 0; i < dist.params.length; i++) {
     if (fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined) continue;  /* held, not estimated */
     if (os.indexOf(i) >= 0) continue;                                                /* order statistic */
@@ -4978,6 +5201,10 @@ var GEN_SPEC = {
               { sym: 'U', name: 'upper end',     def: 1,  gt: 2 }],
   poisson:   [{ sym: 'α', name: 'mean count',    def: 4,  min: 1e-9, max: 1e5 }],
   geometric: [{ sym: 'p', name: 'success prob.', def: 0.3, min: 1e-9, max: 1 }],
+  negBinomial: [{ sym: 'r', name: 'successes awaited', def: 3, min: 1e-6, max: 1e6 },
+                { sym: 'p', name: 'success prob.',     def: 0.4, min: 1e-9, max: 1 }],
+  binomial:  [{ sym: 'n', name: 'trials',        def: 12, int: true, min: 1, max: 1e6 },
+              { sym: 'p', name: 'success prob.', def: 0.3, min: 1e-9, max: 1 }],
   discreteUniform: [{ sym: 'a', name: 'smallest', def: 1, int: true },
                     { sym: 'b', name: 'largest',  def: 6, int: true, gt: 0 }],
   /* Bounded on (xi, xi + lambda), and shaped by the two exponents. */
@@ -4996,8 +5223,8 @@ var GEN_SPEC = {
 /* The order the generator's menu is drawn in. Johnson sits at the end,
    under a separator, because it is fitted only on request. */
 var GEN_KEYS = ['expo', 'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic', 'pearson5', 'pearson6', 'normal',
-                'uniform', 'triangular', 'pert', 'beta', 'poisson', 'geometric', 'discreteUniform',
-                'johnsonSB', 'johnsonSU'];
+                'uniform', 'triangular', 'pert', 'beta', 'poisson', 'negBinomial', 'geometric', 'binomial',
+                'discreteUniform', 'johnsonSB', 'johnsonSU'];
 
 /* Returns null when the parameters are usable, or the reason they are not.
    `gt: i` means "must be strictly greater than parameter i", which is how
@@ -5437,6 +5664,69 @@ function arenaGamma(a) {
   return { expr: parts.join(' + '), gamm: false, fracOnly: k === 0 };
 }
 
+/* Arena has no negative binomial and no binomial, and so their fitted pmf
+   is written as a DISC table, cumulative probability then value, without
+   spaces (Arena strips them anyway), from the first value whose cumulative
+   probability exceeds a tail cutoff to the first at which it reaches 1
+   minus that cutoff, the last pair's probability set to exactly 1, and so
+   what lies outside the range falls on its two ends. The cutoff is one in
+   ten million when the line fits in ARENA_DISC_MAX characters; otherwise it
+   grows tenfold at a time, to at most one in a thousand, and the note gives
+   the probability that was folded onto each end. Arena 17 ran a DISC of
+   100 pairs, 1274 characters, and refused one of 268 pairs, 3603
+   characters with its spaces removed; ARENA_DISC_MAX is the longest known
+   to run. Past the last cutoff there is no table at all (null). Simio's
+   Random.Discrete takes the same pairs the other way around, value then
+   cumulative probability, and has no known limit, and so it is passed
+   maxLen = Infinity. */
+var ARENA_DISC_MAX = 1274;
+var DISC_CUTOFFS = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3];
+function discTable(dist, p, maxLen) {
+  for (var c = 0; c < DISC_CUTOFFS.length; c++) {
+    var e = DISC_CUTOFFS[c];
+    var lo = dist.quantile(e, p), hi = dist.quantile(1 - e, p), args = [], sim = [];
+    for (var k = lo; k <= hi; k++) {
+      var cp = k === hi ? '1' : plainProb(dist.cdf(k, p));
+      args.push(cp + ',' + k);
+      sim.push(k + ', ' + cp);
+    }
+    var expr = 'DISC(' + args.join(',') + ')';
+    if (expr.length <= maxLen)
+      return { expr: expr, simio: 'Random.Discrete(' + sim.join(', ') + ')', lo: lo, hi: hi, cut: e,
+               below: lo > 0 ? dist.cdf(lo - 1, p) : 0, above: 1 - dist.cdf(hi, p) };
+  }
+  return null;
+}
+/* Seven significant figures in plain decimal: below 1e-6 JavaScript would
+   write 4.02e-7, which Arena's expression parser does not read. */
+function plainProb(v) {
+  var r = Number(v.toPrecision(7));
+  return r >= 1e-6 ? String(r) : r.toFixed(13).replace(/0+$/, '');
+}
+/* The note under a DISC or Random.Discrete line, or, with t null, under
+   the Arena row that has no line. `native` lists the tools that generate
+   the family directly. */
+function listOf(items, word) {
+  return items.length < 3 ? items.join(' ' + word + ' ')
+                          : items.slice(0, -1).join(', ') + ', ' + word + ' ' + items[items.length - 1];
+}
+function discNote(name, t, tool, native) {
+  if (!t)
+    return 'Arena has no ' + name + ', and a DISC table of this fit would make a line longer than Arena is ' +
+      'known to accept, even with the outer 0.1% on each side left out. Generate it in ' + listOf(native, 'or') +
+      ', or, for counts this widely spread, consider a continuous distribution.';
+  var head = 'this is the fitted pmf as a ' + (tool === 'arena' ? 'DISC table, cumulative probability then value'
+                                                                 : 'discrete table, value then cumulative probability') +
+    ', from ' + t.lo + ' to ' + t.hi + '. ';
+  if (t.cut === DISC_CUTOFFS[0])
+    return head + 'The values beyond that range, under one chance in ten million on each side, fall on its two ends.';
+  var folded = t.below > 0
+    ? 'the probability beyond it, ' + num(t.below, 2) + ' below and ' + num(t.above, 2) + ' above, falls on its two ends'
+    : 'the probability above it, ' + num(t.above, 2) + ', falls on its last value';
+  return head + 'The whole pmf would make a line longer than Arena is known to accept, and so the table stops there, and ' +
+    folded + '. That makes this an approximation; ' + listOf(native, 'and') + ' generate the ' + name + ' itself.';
+}
+
 function expressions(fit, sample) {
   /* A mirrored fit is c minus a draw from the unmirrored model, and every
      tool can write that as a subtraction around the expression it already
@@ -5724,6 +6014,65 @@ function expressions(fit, sample) {
     set('matlab', 'geornd(' + N(pr) + ', n, 1)', 'geornd counts failures, matching the fit above.');
     set('python', 'stats.geom(p=' + N(pr) + ', loc=-1)',
         "scipy's geom starts at 1; loc=-1 moves it to 0 to match.");
+  } else if (k === 'negBinomial') {
+    /* A Poisson whose mean is a gamma draw with shape r and scale (1 - p)/p
+       is the negative binomial exactly, and Arena 17 does draw POIS's
+       argument afresh for each value (POIS(EXPO(2)), 100,000 draws: mean
+       2.012, variance 6.05, P(0) = 0.331, the geometric it should be). But
+       the gamma's fractional shape would have to come from Arena's BETA,
+       and POIS(19 * BETA(0.4, 0.6) * EXPO(1)), the negative binomial with
+       r = 0.4 and p = 0.05, gave P(0) = 0.253 and a mean of 7.91 against
+       0.302 and 7.6, because BETA leaves out its smallest values. The
+       fitted pmf is therefore written as a DISC table, which uses nothing
+       but Arena's uniform. */
+    var nbT = discTable(DISTS.negBinomial, p, ARENA_DISC_MAX);
+    set('arena', nbT ? nbT.expr : null,
+        (nbT ? 'Arena has no negative binomial, and so ' : '') +
+        discNote('negative binomial', nbT, 'arena', ['AnyLogic', 'R', 'MATLAB', 'Python']));
+    /* The Simio Reference Guide gives Random.NegativeBinomial(ProbabilityOfSuccess,
+       NumberOfSuccesses), "the number of failures before reaching the
+       specified number of successes", and Simio's release notes give
+       Binomial(ProbabilityOfSuccess, NumberTrials). The guide's formula for
+       the mean has the two parameters swapped, and the failure count's mean
+       is r(1 - p)/p. Neither source says whether the number of successes may
+       be fractional, and so it is taken to be whole: a fitted r that is not
+       whole is written as a table of the fitted pmf, as for Arena, rather
+       than rounded, which would change the model. */
+    if (Math.abs(p[0] - Math.round(p[0])) < 1e-9 && p[0] >= 1) {
+      set('simio', 'Random.NegativeBinomial(' + N(p[1]) + ', ' + Math.round(p[0]) + ')',
+          'The success probability p first, then r. Counts failures before the r-th success, as the fit does.');
+    } else {
+      var nbS = discTable(DISTS.negBinomial, p, Infinity);
+      set('simio', nbS.simio,
+          'Simio\'s Random.NegativeBinomial takes only a whole number of successes, and this r is not whole, ' +
+          'and so ' + discNote('negative binomial', nbS, 'simio'));
+    }
+    /* Runs of 1,000,000 draws in AnyLogic 8.9.10: negativeBinomial(0.4, 3)
+       averaged 4.506 with P(0) = 0.0640 and a minimum of 0, and so it counts
+       failures, and negativeBinomial(0.4, 2.5) averaged 3.748 with variance
+       9.378, against 3.75 and 9.375, and so a fractional r is used as is. */
+    set('anylogic', 'negativeBinomial(' + N(p[1]) + ', ' + N(p[0]) + ')',
+        'The success probability p first, then r. Counts failures before the r-th success, as the fit does.');
+    set('r', 'rnbinom(n, size = ' + N(p[0]) + ', prob = ' + N(p[1]) + ')',
+        'rnbinom counts failures, matching the fit above; size is r.');
+    set('matlab', 'nbinrnd(' + N(p[0]) + ', ' + N(p[1]) + ', n, 1)', 'nbinrnd counts failures, matching the fit above.');
+    set('python', 'stats.nbinom(n=' + N(p[0]) + ', p=' + N(p[1]) + ')',
+        "SciPy's nbinom counts failures, matching the fit above; its n is r.");
+  } else if (k === 'binomial') {
+    var bT = discTable(DISTS.binomial, p, ARENA_DISC_MAX);
+    set('arena', bT ? bT.expr : null,
+        (bT ? 'Arena has no binomial, and so ' : '') +
+        discNote('binomial', bT, 'arena', ['Simio', 'AnyLogic', 'R', 'MATLAB', 'Python']));
+    set('simio', 'Random.Binomial(' + N(p[1]) + ', ' + N(p[0]) + ')',
+        'The success probability p first, then the number of trials n.');
+    /* binomial(0.3, 12) in AnyLogic 8.9.10 averaged 3.599 with variance
+       2.528 over 1,000,000 draws: the probability first, then the trials. */
+    set('anylogic', 'binomial(' + N(p[1]) + ', ' + N(p[0]) + ')',
+        'The success probability p first, then the number of trials n.');
+    set('r', 'rbinom(n, size = ' + N(p[0]) + ', prob = ' + N(p[1]) + ')',
+        'size is the number of trials; the first argument, n, is how many draws to make.');
+    set('matlab', 'binornd(' + N(p[0]) + ', ' + N(p[1]) + ', n, 1)', 'The number of trials first, then p.');
+    set('python', 'stats.binom(n=' + N(p[0]) + ', p=' + N(p[1]) + ')', "SciPy's n is the number of trials.");
   } else if (k === 'discreteUniform') {
     var lo = p[0], hi = p[1];
     set('arena', 'AINT( UNIF(' + N(lo) + ', ' + N(hi + 1) + ') )',
@@ -5756,11 +6105,22 @@ function expressions(fit, sample) {
        the same pairs the other way around, (value, cumulative probability). */
     var simioDisc = [];
     for (i = 0; i < vals.length; i++) {
-      discArgs.push(N(cum[i], 5) + ', ' + N(vals[i]));
+      discArgs.push(N(cum[i], 5) + ',' + N(vals[i]));
       simioDisc.push(N(vals[i]) + ', ' + N(cum[i], 5));
     }
-    set('arena', 'DISC(' + discArgs.join(', ') + ')',
-        'Arena takes CUMULATIVE probability and value in pairs.');
+    /* Written without spaces, which Arena strips anyway, and only up to
+       the longest DISC Arena is known to run (see ARENA_DISC_MAX). The
+       observed values have no tail to trim, and so a longer table gets no
+       Arena line, only a note. */
+    var discLine = 'DISC(' + discArgs.join(',') + ')';
+    if (discLine.length <= ARENA_DISC_MAX) {
+      set('arena', discLine, 'Arena takes CUMULATIVE probability and value in pairs.');
+    } else {
+      set('arena', null,
+          'These data have ' + vals.length + ' distinct values, and a DISC table of them would make a line longer ' +
+          'than Arena is known to accept, which is a table of about 100 values. Fit a named distribution instead, or generate this one ' +
+          'in Simio, AnyLogic, R, MATLAB, or Python, each of which takes the table below.');
+    }
     set('simio', 'Random.Discrete(' + simioDisc.join(', ') + ')',
         'Simio takes VALUE then cumulative probability in pairs, the reverse of Arena.');
     /* AnyLogic's CustomDistributionDiscrete(values, probabilities, random)
@@ -5860,6 +6220,10 @@ var FIT_NAMES = {
   beta:            { r: 'beta',        rp: 'pbeta',    scipy: 'beta',        ml: null },
   poisson:         { r: 'poisson',     rp: 'ppois',    scipy: 'poisson',     ml: 'Poisson' },
   geometric:       { r: 'geometric',   rp: 'pgeom',    scipy: 'geom',        ml: null },
+  negBinomial:     { r: 'negative binomial', rp: 'pnbinom', scipy: 'nbinom', ml: 'NegativeBinomial' },
+  /* MATLAB's fitdist fits a binomial only with the number of trials given
+     ('NTrials'), and R's fitdistr not at all; see reproScripts. */
+  binomial:        { r: null,          rp: 'pbinom',   scipy: 'binom',       ml: 'Binomial' },
   discreteUniform: { r: null,          rp: null,       scipy: 'randint',     ml: null },
   empirical:       { r: null,          rp: null,       scipy: null,          ml: null },
   discreteEmpirical: { r: null,        rp: null,       scipy: null,          ml: null }
@@ -5904,7 +6268,11 @@ var R_FIT = {
   poisson:   { name: 'Poisson',     p: 'ppois',    a: 'lambda = f$estimate[["lambda"]]',
                r: 'rpois',    ra: 'lambda = f$estimate[["lambda"]]', discrete: true },
   geometric: { name: 'geometric',   p: 'pgeom',    a: 'prob = f$estimate[["prob"]]',
-               r: 'rgeom',    ra: 'prob = f$estimate[["prob"]]', discrete: true }
+               r: 'rgeom',    ra: 'prob = f$estimate[["prob"]]', discrete: true },
+  negBinomial: { name: 'negative binomial', p: 'pnbinom', a: 'size = f$estimate[["size"]], mu = f$estimate[["mu"]]',
+               r: 'rnbinom',  ra: 'size = f$estimate[["size"]], mu = f$estimate[["mu"]]', discrete: true,
+               note: '# fitdistr reports size, which is this page\'s r, and mu, the mean count;\n' +
+                     '# this page\'s p is size / (size + mu).' }
 };
 
 /* Per-distribution glue for the Python snippet's discrete families. SciPy's
@@ -5922,6 +6290,34 @@ var PY_DISCRETE = {
     show: '"p =", 1.0 / (1.0 + x.mean())',
     note: "# SciPy's geom counts trials (support 1, 2, ...); this page counts failures\n" +
           '# before the first success (support 0, 1, ...), which is loc=-1 in SciPy.'
+  },
+  negBinomial: {
+    pre: 'from scipy import optimize\n\n' +
+         'def nb_fit(v):\n' +
+         '    # For each r the best p is r / (r + mean), and so r is a one-dimensional search.\n' +
+         '    m = v.mean()\n' +
+         '    def nll(lr):\n' +
+         '        r = np.exp(lr)\n' +
+         '        return -stats.nbinom.logpmf(v, r, r / (r + m)).sum()\n' +
+         '    lr = optimize.minimize_scalar(nll, bounds=(np.log(1e-8), np.log(1e6)), method="bounded",\n' +
+         '                                  options={"xatol": 1e-9}).x\n' +
+         '    r = np.exp(lr)\n' +
+         '    return stats.nbinom(r, r / (r + m))',
+    fit: 'nb_fit', kk: 2,
+    show: '"r =", f.args[0], "  p =", f.args[1]',
+    note: "# SciPy's nbinom counts failures before the n-th success, as this page does;\n" +
+          "# its n is this page's r, and it need not be a whole number."
+  },
+  /* The number of trials is held at this page's value, which SciPy cannot
+     estimate, and so the entry depends on the fit. */
+  binomial: function (fit) {
+    var nT = num(fit.p[0]), held = !!(fit.fixed && fit.fixed[0] !== null && fit.fixed[0] !== undefined);
+    return {
+      fit: 'lambda v: stats.binom(' + nT + ', v.mean() / ' + nT + ')', kk: held ? 1 : 2,
+      show: '"n =", ' + nT + ', "  p =", x.mean() / ' + nT,
+      note: '# SciPy has no fit for the number of trials, and so n is held at ' + nT + ',\n' +
+            (held ? '# the value held on this page.' : '# the value this page estimated, which K still counts.')
+    };
   },
   discreteUniform: {
     fit: 'lambda v: stats.randint(int(v.min()), int(v.max()) + 1)', kk: 2,
@@ -5974,6 +6370,9 @@ function reproScripts(fit, x, seed, B, src) {
   }
   var k = fit.dist.key, names = FIT_NAMES[k], g = fit.shift || 0;
   var out = {};
+  var binHeld = k === 'binomial' && !!(fit.fixed && fit.fixed[0] !== null && fit.fixed[0] !== undefined);
+  /* fitdist fits a binomial only with its number of trials given. */
+  var mlArgs = k === 'binomial' ? ", 'NTrials', " + num(fit.p[0]) : '';
   var n = x.length;
   var isDisc = fit.dist.kind === 'discrete';
   var MLC = '[0.549 0.114 0.251]';   /* #8C1D40, the page accent, as an RGB triple */
@@ -6098,6 +6497,35 @@ function reproScripts(fit, x, seed, B, src) {
            'll <- sum(dbeta((x - a) / (b - a), s1, s2, log = TRUE)) - length(x) * log(b - a)\n' +
            'cat("logLik =", ll, "  AIC =", -2 * ll + 6, "  BIC =", -2 * ll + 3 * log(length(x)), "\\n")\n' +
            'ks.test(x, function(q) pbeta((q - a) / (b - a), s1, s2))\n'
+       : k === 'binomial'
+         ? '# With the number of trials N known, the maximum-likelihood p is mean(x) / N.\n' +
+           (binHeld ? '# N is the value held on this page.\n'
+                    : '# N is the value this page estimated, and so K counts it; the bootstrap\n' +
+                      '# below holds it there rather than re-estimating it.\n') +
+           'N <- ' + num(fit.p[0]) + '\n' +
+           'fit_one <- function(v) mean(v) / N\n' +
+           'p <- fit_one(x)\n' +
+           'll <- sum(dbinom(x, N, p, log = TRUE)); K <- ' + (binHeld ? 1 : 2) + '\n' +
+           'cat("p =", p, "  logLik =", ll, "  AIC =", -2 * ll + 2 * K,\n' +
+           '    "  BIC =", -2 * ll + K * log(length(x)), "\\n")\n\n' +
+           '# ks.test computes D as though the data were continuous, and so D runs\n' +
+           '# larger than the atom-aware D on this page, and its own p-value is\n' +
+           '# meaningless here. The bootstrap p-value is calibrated because every\n' +
+           '# resample is scored the same way.\n' +
+           'Dstat <- function(v, q) suppressWarnings(as.numeric(ks.test(v, "pbinom", N, q)$statistic))\n' +
+           'Dobs <- Dstat(x, p); print(Dobs)\n\n' +
+           '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
+           'set.seed(' + seed + '); B <- ' + B + '\n' +
+           'Db <- replicate(B, { y <- rbinom(length(x), N, p); Dstat(y, fit_one(y)) })\n' +
+           'cat("D =", Dobs, "  bootstrap p =", (1 + sum(Db >= Dobs)) / (B + 1), "\\n")\n\n' +
+           '# The page\'s two main figures, in editable form.\n' +
+           'k <- min(x):max(x)\n' +
+           'hist(x, breaks = seq(min(x), max(x) + 1) - 0.5, freq = FALSE,\n' +
+           '     main = "Histogram with the fitted pmf", xlab = "value", col = "grey92")\n' +
+           'points(k, dbinom(k, N, p), pch = 16, type = "b", col = "#8C1D40")\n' +
+           'plot(ecdf(x), main = "Empirical and fitted CDFs", xlab = "value",\n' +
+           '     ylab = "cumulative probability")\n' +
+           'points(k, pbinom(k, N, p), pch = 16, col = "#8C1D40")\n'
        : k === 'beta' ? 'L <- ' + num(fit.p[2]) + '; U <- ' + num(fit.p[3]) + '; y <- (x - L) / (U - L)\n' +
                         'f <- MASS::fitdistr(y, "beta", start = list(shape1 = ' + num(fit.p[0]) +
                         ', shape2 = ' + num(fit.p[1]) + ')); print(f)\n'
@@ -6115,10 +6543,14 @@ function reproScripts(fit, x, seed, B, src) {
       '% Refit and re-test in MATLAB. Needs the Statistics and Machine Learning Toolbox.' +
       (g ? '\n% This page fitted a location shift of ' + num(g) + '; fitdist has no shift, and so subtract it first.' : '') + '\n' +
       mdata + '\n\n' +
-      "pd = fitdist(x(:), '" + names.ml + "');\ndisp(pd)\n\n" +
+      (k === 'binomial'
+        ? "% fitdist has no fit for the number of trials, and so it is held at " + num(fit.p[0]) + ',\n' +
+          (binHeld ? '% the value held on this page.\n' : '% the value this page estimated, which K still counts.\n')
+        : '') +
+      "pd = fitdist(x(:), '" + names.ml + "'" + mlArgs + ");\ndisp(pd)\n\n" +
       '% Model selection by hand: refit with another family name and compare.\n' +
       '% The smaller AIC (or BIC) wins.\n' +
-      'nll = negloglik(pd); K = pd.NumParameters;\n' +
+      'nll = negloglik(pd); K = ' + (k === 'binomial' ? (binHeld ? '1' : '2') : 'pd.NumParameters') + ';\n' +
       "fprintf('logL = %.4f   AIC = %.4f   BIC = %.4f\\n', -nll, 2*nll + 2*K, 2*nll + K*log(numel(x)));\n\n" +
       '% kstest\'s own p-value assumes the parameters were NOT estimated from x,\n' +
       '% so it is too large. The bootstrap below is the honest version.\n' +
@@ -6129,10 +6561,20 @@ function reproScripts(fit, x, seed, B, src) {
         : '') +
       "[~, ~, D] = kstest(x, 'CDF', pd);\n\n" +
       'rng(' + seed + '); B = ' + B + '; Db = zeros(B, 1);\n' +
-      'for b = 1:B\n' +
-      '    y = random(pd, numel(x), 1);\n' +
-      "    [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'));\n" +
-      'end\n' +
+      (k === 'negBinomial'
+        ? '% A resample whose variance is below its mean has no finite r, and fitdist\n' +
+          '% stops on it; it is scored against its Poisson limit, as this page does.\n' +
+          "ws = warning('off', 'all');\n" +
+          'for b = 1:B\n' +
+          '    y = random(pd, numel(x), 1);\n' +
+          "    try, pb = fitdist(y, 'NegativeBinomial'); catch, pb = fitdist(y, 'Poisson'); end\n" +
+          "    [~, ~, Db(b)] = kstest(y, 'CDF', pb);\n" +
+          'end\n' +
+          'warning(ws);\n'
+        : 'for b = 1:B\n' +
+          '    y = random(pd, numel(x), 1);\n' +
+          "    [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'" + mlArgs + "));\n" +
+          'end\n') +
       "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));\n\n" +
       (isDisc
         ? '% The page\'s two main figures, in editable form. The data are counts, and\n' +
@@ -6277,12 +6719,13 @@ function reproScripts(fit, x, seed, B, src) {
       'ax.set(xlabel="value", ylabel="cumulative probability", title="Empirical and fitted CDFs")\n' +
       'plt.show()';
   } else if (names && names.scipy && PY_DISCRETE[k]) {
-    var pyd = PY_DISCRETE[k];
+    var pyd = typeof PY_DISCRETE[k] === 'function' ? PY_DISCRETE[k](fit) : PY_DISCRETE[k];
     out.python =
       "# Refit and re-test with SciPy. SciPy's discrete distributions have no .fit\n" +
       '# method; the maximum-likelihood estimate is closed form.\n' +
       (pyd.note ? pyd.note + '\n' : '') +
       'import numpy as np\nfrom scipy import stats\n\n' + pdata + '\n\n' +
+      (pyd.pre ? pyd.pre + '\n\n' : '') +
       'fit_one = ' + pyd.fit + '\n' +
       'f = fit_one(x)\n' +
       'print(' + pyd.show + ')\n\n' +
@@ -6639,6 +7082,8 @@ function fitMean(fit) {
     case 'beta': m = p[2] + (p[3] - p[2]) * p[0] / (p[0] + p[1]); break;
     case 'poisson': m = p[0]; break;
     case 'geometric': m = (1 - p[0]) / p[0]; break;
+    case 'negBinomial': m = p[0] * (1 - p[1]) / p[1]; break;
+    case 'binomial': m = p[0] * p[1]; break;
     case 'johnsonSU': m = p[2] - p[3] * Math.exp(1 / (2 * p[1] * p[1])) * Math.sinh(p[0] / p[1]); break;
     default: {
       /* The bounded families without a closed form (Johnson S_B and the
@@ -7498,6 +7943,7 @@ var IA = {
   ARRIVAL_PROCESSES: ARRIVAL_PROCESSES, ARRIVAL_KEYS: ARRIVAL_KEYS,
   validateArrivalParams: validateArrivalParams, generateArrivals: generateArrivals,
   expressions: expressions, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES, arenaGamma: arenaGamma,
+  ARENA_DISC_MAX: ARENA_DISC_MAX,
   rowValues: rowValues, pairedColumns: pairedColumns, ranks: ranks, tTwoSided: tTwoSided, tQuantile2: tQuantile2,
   pairCorr: pairCorr, pearson: pearson, spearman: spearman, kendallTauB: kendallTauB,
   frechetPairings: frechetPairings, shuffleWith: shuffleWith, olsSimple: olsSimple,
@@ -9321,6 +9767,14 @@ function renderFit() {
       'systematically too high. If the process has a known minimum (a fixed setup time, a mandatory ' +
       'inspection), type that in as the truth instead of trusting the estimate.</div>';
   }
+  if (d.key === 'binomial' && !f.edge && !(f.fixed && f.fixed[0] !== null && f.fixed[0] !== undefined)) {
+    pin += '<div class="note quiet"><strong>n was estimated' + (f.orderStat ? ' by your largest count' : '') +
+      '.</strong> Counts alone pin down the number of trials poorly: quite different pairs of n and p give ' +
+      'nearly the same mean and variance, and so the estimate can move a long way from one sample to the next' +
+      (f.orderStat ? '. Here it landed on the largest count, which can be below the true n but never above it' : '') +
+      '. If you know how many trials each count comes from (the items in a batch, the seats on a flight), tick ' +
+      '<strong>Hold at</strong> beside n and type that number; p is then the mean count divided by it.</div>';
+  }
   var nearCase = nearSpecialCase(r, ST.rows);
   if (nearCase) {
     pin += '<div class="note quiet"><strong>' + nearCase.label.charAt(0).toUpperCase() +
@@ -9343,7 +9797,9 @@ function renderFit() {
       'would give, because both tests are unchanged when the data and the model go through the same ' +
       'increasing transformation. There is no need to take logarithms of the column yourself.</div>';
   }
-  if (f.edge) {
+  /* Only the Pearson type VI's limit is said here; every other family that
+     can run to a limit says so through nearSpecialCase below. */
+  if (f.edge && d.key === 'pearson6') {
     var toGamma = f.edge === 'gamma';
     pin += '<div class="note quiet"><strong>This fit is close to a ' +
       (toGamma ? 'gamma' : 'Pearson type V') + '.</strong> The likelihood was still rising ' +
@@ -9547,6 +10003,14 @@ var NAME_TIPS = {
   pearson6: 'X/(X + β) has a beta distribution, and X itself is β times the ratio of two ' +
     'independent gammas. The gamma and the Pearson type V are its limits: it approaches a gamma ' +
     'as β and α₂ grow together, and a Pearson type V as β shrinks while α₁ grows.',
+  negBinomial: 'The number of failures before the r-th success in independent trials, each a success with ' +
+    'probability p, where r need not be a whole number. The same distribution is a Poisson whose mean is itself ' +
+    'gamma distributed, which is why it describes counts more spread out than a Poisson&#39;s: for mean m the ' +
+    'variance is m(1 + m/r). The geometric is the case r = 1, and the Poisson is the limit as r grows.',
+  binomial: 'The number of successes in n independent trials, each a success with probability p, and so it ' +
+    'never exceeds n. Its variance, np(1 − p), is below its mean, which makes it the model for counts more ' +
+    'evenly spread than a Poisson&#39;s, such as the defective items in batches of a fixed size. When you know ' +
+    'n, hold it at that value under Fitted model.',
   pert: 'A beta on [a, b] whose two shapes are set by the most likely value m. It is specified ' +
     'like the triangular, by three numbers, but its density falls to zero smoothly at both ends.'
 };
@@ -9560,6 +10024,12 @@ var NAME_TIPS = {
    reason. Rows with held parameters are skipped, because a hold changes
    what is being compared. */
 var LR_CRIT_1DF = 3.841, LR_CRIT_2DF = 5.991;
+/* The Poisson is not a member of the negative binomial or the binomial
+   but their limit, at the edge of the parameter range (r or n infinite).
+   Twice the log-likelihood gap is then zero half the time under the
+   Poisson and a one-degree-of-freedom chi-square the other half, whose
+   5% point is the chi-square's 10% point, 2.71 (Self and Liang, 1987). */
+var LR_CRIT_EDGE = 2.706;
 function nearSpecialCase(r, rows) {
   if (!r.ok || r.held || !r.fit || r.fit.degenerate) return null;
   var find = function (key) {
@@ -9594,6 +10064,27 @@ function nearSpecialCase(r, rows) {
                     fmt(nearer[1], 3) + ', below the 5.99 a likelihood-ratio test with two degrees of freedom ' +
                     'would need at the 5% level, and it has two fewer parameters. ' + warn };
     return { label: 'four free parameters: fits almost anything', tip: warn };
+  }
+  if (r.key === 'negBinomial' || r.key === 'binomial') {
+    if (r.fit.edge) return { label: 'close to its Poisson limit', tip: edgeTip('poisson', r.key) };
+    var gp = gap(find('poisson'));
+    if (gp < LR_CRIT_EDGE)
+      return { label: 'close to Poisson',
+               tip: 'The Poisson row fits about as well: twice the difference in log-likelihood is ' + fmt(gp, 3) +
+                    ', below the 2.71 a likelihood-ratio test needs at the 5% level. That threshold is lower than ' +
+                    'the usual 3.84 because the Poisson is this family&#39;s limit, at the edge of its parameters, ' +
+                    'rather than a member inside them. If nothing about the process calls for the extra parameter, ' +
+                    'prefer the Poisson.' };
+    if (r.key === 'negBinomial') {
+      var gq = gap(find('geometric'));
+      if (gq < LR_CRIT_1DF)
+        return { label: 'close to geometric',
+                 tip: 'The fitted r = ' + fmt(r.fit.p[0], 4) + ' is close to 1, where the negative binomial is ' +
+                      'the geometric. The geometric row fits about as well: twice the difference in ' +
+                      'log-likelihood is ' + fmt(gq, 3) + ', below the 3.84 a likelihood-ratio test would need ' +
+                      'at the 5% level. If the process has no reason for an r other than 1, prefer the geometric ' +
+                      'and its one fewer parameter.' };
+    }
   }
   if (r.key === 'erlang' && r.fit.p[0] === 1)
     return { label: 'one stage: the exponential',
@@ -9636,8 +10127,20 @@ function shiftCaveat(f) {
       'stand in for each other, and so the stage count is less certain than it looks. If the task ' +
       'starts at time zero, turn the shift off and see whether the count holds.';
 }
-var EDGE_NAME = { gamma: 'gamma', pearson5: 'Pearson type V', normal: 'normal', lognormal: 'lognormal' };
+var EDGE_NAME = { gamma: 'gamma', pearson5: 'Pearson type V', normal: 'normal', lognormal: 'lognormal',
+                  poisson: 'Poisson' };
 function edgeTip(edge, key) {
+  if (edge === 'poisson') {
+    return key === 'binomial'
+      ? 'The binomial&#39;s likelihood was still rising as n grew with np held fixed, the direction in which it ' +
+        'turns into the Poisson. These counts are at least as spread out as a Poisson&#39;s (their variance is not ' +
+        'below their mean), and a binomial&#39;s never are. The Poisson row is that limit with one fewer parameter, ' +
+        'and n is shown where the search stopped.'
+      : 'The negative binomial&#39;s likelihood was still rising as r grew, the direction in which it turns into ' +
+        'the Poisson. These counts are no more spread out than a Poisson&#39;s (their variance is not above their ' +
+        'mean), and a negative binomial&#39;s always are. The Poisson row is that limit with one fewer parameter, ' +
+        'and r is shown where the search stopped.';
+  }
   if (edge === 'normal' || edge === 'lognormal') {
     var who = key === 'johnsonSB' ? 'Sᵦ' : 'Sᵤ';
     if (edge === 'normal')
@@ -9709,6 +10212,12 @@ function paramGloss(key, i, f) {
                 'likewise, at the top'],
     poisson:   ['the mean count, and for a Poisson also its variance, which is worth checking against the data'],
     geometric: ['the per-trial success probability; the mean number of failures is (1 − p)/p'],
+    negBinomial: ['the number of successes the count waits for; it need not be whole, and a smaller r means ' +
+                  'counts more spread out, with variance m(1 + m/r) for mean m',
+                  'the per-trial success probability; the mean count is r(1 − p)/p'],
+    binomial:  [f && f.orderStat ? 'the number of trials, estimated by your largest count'
+                                 : 'the number of trials; the counts alone pin it down poorly, and so hold it at the true number when you know it',
+                'the per-trial success probability; the mean count is np'],
     discreteUniform: ['the smallest observation', 'the largest observation'],
     johnsonSB: ['with δ, sets where the density piles up between the two ends; negative pushes it toward the upper end',
                 'with γ, sets the shape; larger means a narrower, more normal-looking hump',
@@ -9791,8 +10300,18 @@ function derivedRows(d, f) {
       fmt(ST.s.sd * ST.s.sd / p[0], 4),
       'the sample variance divided by the fitted mean. A Poisson has variance equal to its mean, ' +
       'and so this should be near 1. Well above it means the counts are overdispersed and a ' +
-      'Poisson is the wrong family; well below means they are more evenly spread than chance ' +
-      'allows, which is what scheduled or appointment-driven arrivals look like']);
+      'Poisson is the wrong family, and the negative binomial row describes such counts. Well below ' +
+      'means they are more evenly spread than chance allows, which is what scheduled or ' +
+      'appointment-driven arrivals look like, and the binomial row describes such counts when each ' +
+      'is the successes among a fixed number of trials']);
+  }
+  if (d.key === 'negBinomial' || d.key === 'binomial') {
+    var mC = d.key === 'binomial' ? p[0] * p[1] : p[0] * (1 - p[1]) / p[1];
+    var vC = d.key === 'binomial' ? mC * (1 - p[1]) : mC * (1 + mC / p[0]);
+    out.push(['mean', fmt(mC, 5), 'compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
+    out.push(['variance', fmt(vC, 5), 'compare it with the sample variance of ' + fmt(ST.s.sd * ST.s.sd, 5) +
+      (d.key === 'binomial' ? '; a binomial&#39;s variance is always below its mean'
+                            : '; a negative binomial&#39;s variance is always above its mean')]);
   }
   if (d.key === 'geometric') {
     out.push(['mean', fmt(f.shift + (1 - p[0]) / p[0], 5),
@@ -10750,6 +11269,14 @@ function renderExport() {
           (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
+    if (!ex[key] && ex.notes[key]) {
+      h += '<div class="exp-row">' +
+        '<div class="exp-tool">' + esc(TOOLS[i][1]) +
+          (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div>' +
+        '<div><div class="plot-cap" style="text-align:left">' + esc(ex.notes[key]) + '</div></div>' +
+        '<span></span></div>';
+      continue;
+    }
     if (!ex[key]) continue;
     h += '<div class="exp-row">' +
       '<div class="exp-tool">' + esc(TOOLS[i][1]) +
@@ -12553,7 +13080,7 @@ function drawGapsHist() {
     note.innerHTML = st && st.ok && st.p < 0.05
       ? 'These two plots assume one rate for the whole window, which the dispersion test in section 3 says is ' +
         'wrong here. Expect them to look poor, and expect a fit on <a class="tab-link" href="#fit" data-tab="fit">tab ①</a> to be poor for the same reason.'
-      : '<a class="tab-link" href="#fit" data-tab="fit">Tab ①</a> fits all eighteen candidates to these gaps and tests them properly. The exponential ' +
+      : '<a class="tab-link" href="#fit" data-tab="fit">Tab ①</a> fits every continuous candidate to these gaps and tests them properly. The exponential ' +
         'it returns will have mean ' + fmt(r.meanGap, 5) + ', the number above.';
   }
 }
