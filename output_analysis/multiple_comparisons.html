@@ -11,8 +11,8 @@
 <meta property="og:title" content="Multiple Comparisons Explorer – interactive explainer">
 <meta property="og:description" content="Interactive explorer for the multiple-comparisons problem: run many tests on one family of simulated designs, watch the family-wise error rate climb past α, apply the Bonferroni correction and watch the intervals widen, and then compare ANOVA with Tukey's and Fisher's post-hoc tests and the two-stage select-the-best procedure.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/multiple_comparisons-preview.png">
-<meta property="og:image:width" content="2040">
-<meta property="og:image:height" content="1020">
+<meta property="og:image:width" content="1628">
+<meta property="og:image:height" content="814">
 <meta property="og:url" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/multiple_comparisons.html">
 <meta property="fb:app_id" content="2385695445236853">
 
@@ -58,7 +58,7 @@
   /* indigo, THEME.md's third data color: a decision that is correct (a true
      detection, a correct selection) and any bar that carries no error. */
   --ok:          #3F4C8C;
-  /* the sampled thing when it is not the one in focus (tab ④'s losers, tab
+  /* the sampled thing when it is not the one in focus (tab ③'s losers, tab
      ⑥'s eliminated designs). */
   --est-muted:   rgba(194,87,10,.45);
 }
@@ -110,12 +110,16 @@ nav.picker { margin: 4px 0 16px; }
 .ctrl-grp-lbl { font-size: .64rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
                 color: var(--muted); margin: 2px 0 6px; }
 .ctrl-grp-lbl .tip { text-decoration-color: var(--muted); }
-/* Both control groups and the run row share one card, the experiment's
+/* The control groups and the run row share one card, the experiment's
    whole setup, with the group labels dividing it the way the picker card's
-   labels divide the pills; the run row sits last, under a rule, because
-   running is the last step of setting up. */
+   labels divide the pills. The order is the order of the work: the settings
+   chosen before the data are gathered, the hidden truth, the run row under a
+   rule (running gathers the data), and last, under a rule of its own, the
+   settings chosen after the data are gathered, which re-judge the families
+   already drawn. */
 .ctrl-card .ctrl-row + .ctrl-grp-lbl { margin-top: 8px; }
 .ctrl-card .ctrl-row:not(.par-row) { margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ctrl-card .ctrl-row:not(.par-row) + .ctrl-grp-lbl { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .ctrl-card .ctrl-row:last-child { margin-bottom: 0; }
 /* min-height, not a bigger glyph: the label is what a finger lands on, and 24px is
    the WCAG 2.5.8 floor. The rows are already taller than this, and so nothing moves. */
@@ -156,7 +160,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .btn-ico { height: .68em; width: auto; fill: currentColor; flex: 0 0 auto; }
 .btn-clear { font-family: 'Outfit', sans-serif; font-size: .82rem; padding: 6px 13px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 6px; cursor: pointer; transition: .15s; }
 .btn-clear:hover { color: var(--accent); border-color: var(--accent); }
-/* Holds the seed label, field and checkbox together so the row does not split
+/* Holds the seed label, field, and checkbox together so the row does not split
    them at ordinary widths; wraps internally only when it genuinely cannot fit. */
 .ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
 .ctrl-row + .ctrl-row { margin-top: -4px; }
@@ -257,7 +261,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* A verdict reads as a sentence and sits better spanning the whole row than sharing it
    with another card, at any width, and so this one is unconditional rather than media-gated. */
 .sc-full { grid-column: 1 / -1; }
-/* Tab ③'s cards are a genuine metric-by-rule matrix, three of each, and so keep
+/* Tab ④'s cards are a genuine metric-by-rule matrix, three of each, and so keep
    three columns wherever they fit rather than reflowing into the two/four-column
    layout the rest of the page's cards use (this rule and the next both come after
    .sg's own declarations above, including its 560-760px media query, and so they
@@ -487,29 +491,29 @@ svg.fig { display: block; width: 100%; height: auto; }
   </div>
   <nav class="picker sec" aria-label="Pages">
     <div class="picker-group">
-      <div class="picker-lbl">The multiple comparisons problem</div>
+      <div class="picker-lbl">The problem and the usual correction</div>
       <div class="pill-row">
-        <a class="tab pill active" data-tab="looks" href="#looks" onclick="showTab('looks',this);return false;"><span class="pill-title">① One Design Against K Requirements</span><span class="pill-sub">One design judged on K requirements at once; the family-wise error rate and the Bonferroni correction</span></a>
-        <a class="tab pill" data-tab="pairs" href="#pairs" onclick="showTab('pairs',this);return false;"><span class="pill-title">② Designs Against Each Other</span><span class="pill-sub">A benchmark design or every pair; dependence and common random numbers</span></a>
-        <a class="tab pill" data-tab="power" href="#power" onclick="showTab('power',this);return false;"><span class="pill-title">③ Power Under Correction</span><span class="pill-sub">What Bonferroni gives up and what Holm recovers</span></a>
-        <a class="tab pill" data-tab="winner" href="#winner" onclick="showTab('winner',this);return false;"><span class="pill-title">④ Reporting the Winner</span><span class="pill-sub">Selection bias in the best design's own interval</span></a>
+        <a class="tab pill active" data-tab="looks" href="#looks" onclick="showTab('looks',this);return false;"><span class="pill-title">① Fishing Across K Responses</span><span class="pill-sub">Test K response variables against a baseline, and the more places you look, the more often one differs by chance alone</span></a>
+        <a class="tab pill" data-tab="pairs" href="#pairs" onclick="showTab('pairs',this);return false;"><span class="pill-title">② Fishing Across K Designs</span><span class="pill-sub">Compare K designs with a benchmark or with each other, and every comparison is another chance to find a difference that is not there</span></a>
+        <a class="tab pill" data-tab="winner" href="#winner" onclick="showTab('winner',this);return false;"><span class="pill-title">③ Can We Just Pick the Best Mean?</span><span class="pill-sub">The design with the best sample mean won a race, and its ordinary interval, which ignores the race, misses the truth more often than α</span></a>
+        <a class="tab pill" data-tab="power" href="#power" onclick="showTab('power',this);return false;"><span class="pill-title">④ Fewer False Alarms, Fewer Detections</span><span class="pill-sub">Correcting every test holds the family-wise error rate at α and makes real differences harder to see; Holm's step-down recovers some of the loss</span></a>
       </div>
     </div>
     <div class="picker-group">
       <div class="picker-lbl">One-shot and sequential alternatives</div>
       <div class="pill-row">
-        <a class="tab pill" data-tab="anova" href="#anova" onclick="showTab('anova',this);return false;"><span class="pill-title">⑤ ANOVA and Post Hoc Tests</span><span class="pill-sub">Any difference in one F test, then which: Tukey, LSD, Bonferroni</span></a>
+        <a class="tab pill" data-tab="anova" href="#anova" onclick="showTab('anova',this);return false;"><span class="pill-title">⑤ ANOVA and Post Hoc Tests</span><span class="pill-sub">Any difference in one F test, and then which: Tukey, LSD, Bonferroni</span></a>
         <a class="tab pill" data-tab="best" href="#best" onclick="showTab('best',this);return false;"><span class="pill-title">⑥ Selecting the Best in Two Stages</span><span class="pill-sub">Screen a pilot sample, add replications to the survivors, pick</span></a>
         <a class="tab pill" data-tab="optim" href="#optim" onclick="showTab('optim',this);return false;"><span class="pill-title">⑦ Simulation Optimization</span><span class="pill-sub">Searching a parameterized family of designs: the adaptive loop, what drives it, and where selection fits</span></a>
       </div>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select page">
-    <optgroup label="The multiple comparisons problem">
-      <option value="looks" selected>① One Design Against K Requirements</option>
-      <option value="pairs">② Designs Against Each Other</option>
-      <option value="power">③ Power Under Correction</option>
-      <option value="winner">④ Reporting the Winner</option>
+    <optgroup label="The problem and the usual correction">
+      <option value="looks" selected>① Fishing Across K Responses</option>
+      <option value="pairs">② Fishing Across K Designs</option>
+      <option value="winner">③ Can We Just Pick the Best Mean?</option>
+      <option value="power">④ Fewer False Alarms, Fewer Detections</option>
     </optgroup>
     <optgroup label="One-shot and sequential alternatives">
       <option value="anova">⑤ ANOVA and Post Hoc Tests</option>
@@ -518,34 +522,20 @@ svg.fig { display: block; width: 100%; height: auto; }
     </optgroup>
   </select>
 
-  <!-- ── TAB ①: one design against K requirements ──────────────────────── -->
+  <!-- ── TAB ①: fishing across K responses ────────────────────────────── -->
   <section id="tab-looks" class="tp active">
-    <p class="lede"><strong>This tab simulates the null hypothesis of one system design that meets all K of its performance requirements</strong>, and it estimates how often the design will be falsely reported as missing at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The K-designs framing, K candidate designs each tested against one target, has the same arithmetic; tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own target, and the report is one yes or no: does the design meet every requirement? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its target, and so every flag is a false alarm; the fraction of runs in which the design is reported as missing a requirement is the family's Type-I error rate.</p>
-    <p class="lede">Judge K requirements at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a requirement flagged as missed when the design meets it exactly. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the design meets the requirement, and a false alarm is a Type-I error. It grows with the number of requirements even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval.</p>
+    <p class="lede"><strong>This tab simulates the null hypothesis of one design that performs exactly at its baseline on every one of K responses</strong>, and it estimates how often the design will be falsely reported as differing on at least one of them. One design is simulated R times and judged on K <span class="tip" tabindex="0" data-tip="The arithmetic is the same for K designs each tested against one baseline, and the same again for K differences between two policies, each tested against zero. Tab ② compares designs with one another.">responses</span> (a mean wait, a utilization, a fill rate, and so on), each against its own <span class="tip" tabindex="0" data-tip="The value a response is tested against: the level the current system is known to run at, a nominal value written into a specification, or zero when the response is the difference between two policies, paired under common random numbers or not.">baseline</span>, and the report is one yes or no: does the design differ from the baseline on any response? Those K tests are a family because the report is wrong whenever any one of them is wrong. Every response's true mean sits exactly at its baseline, and so every flag is a false alarm; the fraction of runs in which the design is reported as differing is the family's Type-I error rate.</p>
+    <p class="lede">Judge K responses at level α each, and the chance that at least one verdict is wrong, called the <span class="tip" tabindex="0" data-tip="The probability that a family of tests contains at least one false alarm: a response flagged as differing from its baseline when it does not. In hypothesis-testing terms, a flag is a rejection of the null hypothesis that the response sits at its baseline, and a false alarm is a Type-I error. It grows with the number of responses even though each interval alone is wrong only α of the time.">family-wise error rate</span>, climbs with K: the more responses you test, the more often one of them differs by chance alone, and looking through all of them for any difference is fishing. This tab counts that rate directly, and the <span class="tip" tabindex="0" data-tip="Testing each of the C comparisons at level α/C instead of α. The family-wise error rate then never exceeds α, whatever the comparisons' own correlation.">Bonferroni</span> correction control shows what holding it at α does to every interval.</p>
     <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of requirements the design is judged on, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Requirements K</span></label>
+          <label class="ctrl-lbl" for="looks-K"><span class="tip" tabindex="0" data-tip="The number of response variables the design is judged on, and so the number of comparisons C in this tab. Arrow keys move it by 1.">Responses K</span></label>
           <input class="par-inp" id="looks-K" type="text" inputmode="numeric" value="5" autocomplete="off" spellcheck="false" onchange="looksKChanged()">
         </span>
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="looks-R"><span class="tip" tabindex="0" data-tip="Replications of the design, each yielding all K responses. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
           <input class="par-inp" id="looks-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="looksRChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="looks-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual test would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
-          <select id="looks-alpha" onchange="looksAlphaChanged()">
-            <option value="0.01">0.01</option>
-            <option value="0.05" selected>0.05</option>
-            <option value="0.1">0.10</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The confidence level of every requirement's interval: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-requirement confidence level</span></label>
-          <select id="looks-level" data-post onchange="looksLevelChanged()">
-            <option value="raw" selected>1 − α (no correction)</option>
-            <option value="bonf">1 − α/K (Bonferroni)</option>
-          </select>
         </span>
       </div>
       <div class="ctrl-row">
@@ -560,27 +550,45 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('looks')">Clear history</button>
       </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="looks-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual test would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
+          <select id="looks-alpha" data-post onchange="looksAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="looks-level"><span class="tip" tabindex="0" data-tip="The confidence level of every response's interval: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-response confidence level</span></label>
+          <select id="looks-level" data-post onchange="looksLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/K (Bonferroni)</option>
+          </select>
+        </span>
+      </div>
     </div>
     <div class="sec">
-      <div class="sec-hd" id="looks-fig-title">Five candidate designs against one target (bigger is better)</div>
+      <div class="sec-hd" id="looks-fig-title">One design on five responses, every true mean at its baseline</div>
       <div class="fig-note" id="looks-level-line"></div>
-      <svg class="fig" id="looks-fig" role="img" aria-label="One small panel per requirement, each on its own scale in its own units with its target as a dashed line; the design's interval for that response is red, dashed, with a hollow dot when it excludes the target (a false alarm) and gray when it contains it"></svg>
+      <svg class="fig" id="looks-fig" role="img" aria-label="One small panel per response, each on its own scale in its own units with its baseline as a dashed line; the design's interval for that response is red, dashed, with a hollow dot when it excludes the baseline (a false alarm) and gray when it contains it"></svg>
       <div class="leg" id="looks-fig-leg"></div>
       <div class="fig-note" id="looks-fig-cap"></div>
     </div>
     <div class="sg sg-two">
       <div class="sc">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="α_j is the level of each requirement's own test: α with no correction, α/K under Bonferroni. The K responses are simulated independently, so this prediction is exact, and under Bonferroni it stays at or below α.">Predicted family-wise error rate</span>: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>K</sup></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="α_j is the level of each response's own test: α with no correction, α/K under Bonferroni. The K responses are simulated independently, and so this prediction is exact; under Bonferroni it stays at or below α.">Predicted family-wise error rate</span>: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>K</sup></div>
         <div class="sc-val" id="looks-c-indep">—</div>
       </div>
       <div class="sc">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The observed family-wise error rate: the fraction of runs in which the design was falsely reported as missing at least one requirement, with a 95% Wilson interval.">Runs with at least one false alarm</span></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The observed family-wise error rate: the fraction of runs in which the design was falsely reported as differing from its baseline on at least one response, with a 95% Wilson interval.">Runs with at least one false alarm</span></div>
         <div class="sc-val" id="looks-c-anyfalse">—</div>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd">False alarms per run of the design</div>
-      <svg class="hsv" id="looks-strip" role="img" aria-label="One column per run of the design, its height equal to the number of requirements flagged in that run, every one a false alarm, colored red when there is at least one and indigo otherwise"></svg>
+      <svg class="hsv" id="looks-strip" role="img" aria-label="One column per run of the design, its height equal to the number of responses flagged in that run, every one a false alarm, colored red when there is at least one and indigo otherwise"></svg>
       <div class="fig-note" id="looks-strip-cap"></div>
     </div>
     <div class="sec">
@@ -592,23 +600,23 @@ svg.fig { display: block; width: 100%; height: auto; }
     <details class="why">
       <summary>When K tests are not a family</summary>
       <div class="why-body">
-        <p>Had the question been which of K separate designs miss a target, each judged and acted on alone, each verdict would carry its own α and no family correction would be wanted: the expected number of wrong verdicts would be αK, and shrinking every test to α/K would only trade false alarms for missed detections. A family matters only when one decision rests on all K tests, as it does here, where the report is a single yes or no, and wherever designs are compared with each other.</p>
+        <p>Had the question been which of K separate responses differ from their baselines, each judged and acted on alone, each verdict would carry its own α and no family correction would be wanted: the expected number of wrong verdicts would be αK, and shrinking every test to α/K would only turn false alarms into missed detections. A family matters only when one decision rests on all K tests, as it does here, where the report is a single yes or no, and wherever designs are compared with each other.</p>
       </div>
     </details>
     <details class="why">
       <summary>Hotelling's T², MANOVA, and where the other tabs go</summary>
       <div class="why-body">
-        <p>The one-shot version of this tab is <span class="tip" tabindex="0" data-tip="The multivariate one-sample t test: one statistic for whether the design's K true means all sit at their targets, in place of K separate intervals.">Hotelling's T²</span>, which judges all K requirements in one statistic; with several designs instead of one it becomes MANOVA, which stands to tab ⑤'s ANOVA as Hotelling's T² stands to this tab.</p>
-        <p>Tab ②, Designs Against Each Other, compares designs with each other, against a benchmark or over every pair; tab ③, Power Under Correction, measures the power the correction gives up; and tab ⑤, ANOVA and Post Hoc Tests, answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
+        <p>The one-shot version of this tab is <span class="tip" tabindex="0" data-tip="The multivariate one-sample t test: one statistic for whether the design's K true means all sit at their baselines, in place of K separate intervals.">Hotelling's T²</span>, which judges all K responses in one statistic; with several designs instead of one it becomes MANOVA, which stands to tab ⑤'s ANOVA as Hotelling's T² stands to this tab.</p>
+        <p>Tab ② (Fishing Across K Designs) compares designs with each other, against a benchmark or over every pair; tab ③ (Can We Just Pick the Best Mean?) shows what choosing the best sample mean does to its own interval; tab ④ (Fewer False Alarms, Fewer Detections) measures the power the correction gives up; and tab ⑤ (ANOVA and Post Hoc Tests) answers whether any design differs with one F test and then which ones differ with a post hoc test.</p>
       </div>
     </details>
   </section>
 
   <!-- ── TAB ②: comparing designs ────────────────────────────────────── -->
   <section id="tab-pairs" class="tp">
-    <p class="lede">Comparing designs means intervals on differences: a benchmark against every other design gives K − 1 of them, and every pair gives K(K − 1)/2. The intervals share data, and so the independent-comparisons formula is no longer exact, but the <span class="tip" tabindex="0" data-tip="The union bound C&middot;α_j on the family-wise error rate. It holds no matter how the comparisons correlate with each other, unlike the independent-comparisons formula, which needs the comparisons to share no data.">Bonferroni bound</span> needs no independence at all, which is why it is the textbook's choice when designs are run with <span class="tip" tabindex="0" data-tip="Draws each replication's own random component once and shares it across every design's r-th replication (an internal correlation of 0.8), the way giving every design the same random-number stream would. The two designs being compared then move together across replications, and so an interval on their difference comes from paired data instead of from two independent samples.">common random numbers</span>.</p>
+    <p class="lede">Comparing designs means intervals on differences: a benchmark against every other design gives K − 1 of them, and every pair gives K(K − 1)/2. The intervals share data, and so the independent-comparisons formula is no longer exact, but the <span class="tip" tabindex="0" data-tip="The union bound C&middot;α_j on the family-wise error rate. It holds no matter how the comparisons correlate with each other, unlike the independent-comparisons formula, which needs the comparisons to share no data.">Bonferroni bound</span> needs no independence at all, which is why it is the textbook's choice when designs are run with <span class="tip" tabindex="0" data-tip="Draws each replication's own random component once and shares it across every design's r-th replication (an internal correlation of 0.8), the way giving every design the same random-number stream would. The two designs being compared then move together across replications, and so an interval on their difference comes from paired data instead of from two independent samples.">common random numbers</span>. Turn common random numbers on, and every difference interval narrows to about half its width, and so a planted difference is detected far more often at the same family-wise error rate: the answer to a conservative correction is variance reduction, not a looser α.</p>
     <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="pairs-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
@@ -618,29 +626,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <label class="ctrl-lbl" for="pairs-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; its degrees of freedom are 2R − 2 for independently sampled designs or R − 1 once common random numbers pair the differences. Arrow keys move it by 1.">Replications R</span></label>
           <input class="par-inp" id="pairs-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="pairsRChanged()">
         </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="pairs-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
-          <select id="pairs-alpha" onchange="pairsAlphaChanged()">
-            <option value="0.01">0.01</option>
-            <option value="0.05" selected>0.05</option>
-            <option value="0.1">0.10</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="pairs-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
-          <select id="pairs-mode" onchange="pairsModeChanged()">
-            <option value="bench" selected>Against design 1</option>
-            <option value="all">All pairs</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison confidence level</span></label>
-          <select id="pairs-level" data-post onchange="pairsLevelChanged()">
-            <option value="raw" selected>1 − α (no correction)</option>
-            <option value="bonf">1 − α/C (Bonferroni)</option>
-          </select>
-        </span>
-        <label class="ctrl-chk ctrl-pair-wide" data-tip="Shares a random component across every design's replication r (correlation 0.8) instead of drawing each design independently, and so switches the difference intervals from pooled two-sample t (2R − 2 degrees of freedom) to paired t on the differences themselves (R − 1 degrees of freedom)." data-tip-press>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Shares a random component across every design's replication r (correlation 0.8) instead of drawing each design independently, and so switches the difference intervals from pooled two-sample t (2R − 2 degrees of freedom) to paired t on the differences themselves (R − 1 degrees of freedom). Feeding one draw into every design would correlate them perfectly, and so a shared component stands in for what a real model does with a shared stream. Each difference interval then narrows to roughly half its width (√(1 − 0.8) ≈ 0.45, less a little for the fewer degrees of freedom), and so a real difference is detected far more often, whereas the false-alarm rate under the null is unchanged and Bonferroni's guarantee holds either way." data-tip-press>
           <input type="checkbox" id="pairs-crn" onchange="pairsCrnChanged()"> <span class="tip">Common random numbers (paired intervals)</span>
         </label>
       </div>
@@ -666,7 +652,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Without common random numbers, each design takes its own successive draws from this one seeded stream, which makes the designs as independent as giving each its own stream; with them, the designs also share a common component drawn once per replication.">Seed</span></label>
           <input class="seed-inp" id="pairs-seed" type="text" inputmode="numeric" value="13579" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('pairs')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('pairs');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="pairs-newseed" checked> <span class="tip">New seed after each run</span>
@@ -675,6 +661,31 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="pairs-run" onclick="runOne('pairs')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('pairs')">Clear history</button>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="pairs-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the flat reference line in the family-wise error plot below.">Significance α</span></label>
+          <select id="pairs-alpha" data-post onchange="pairsAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="pairs-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
+          <select id="pairs-mode" data-post onchange="pairsModeChanged()">
+            <option value="bench" selected>Against design 1</option>
+            <option value="all">All pairs</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="pairs-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/C under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Per-comparison confidence level</span></label>
+          <select id="pairs-level" data-post onchange="pairsLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/C (Bonferroni)</option>
+          </select>
+        </span>
       </div>
     </div>
     <div class="sec">
@@ -685,30 +696,18 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="fig-note" id="pairs-fig-cap"></div>
       <div id="pairs-table"></div>
     </div>
-    <div class="sg">
+    <div class="sg sg-three">
       <div class="sc">
-        <div class="sc-lbl">Comparisons C</div>
+        <div class="sc-lbl">Comparisons C <span class="sym" id="pairs-c-Cf"></span></div>
         <div class="sc-val" id="pairs-c-C">—</div>
       </div>
       <div class="sc">
-        <div class="sc-lbl">Per-comparison <span class="sym">α<sub>j</sub></span></div>
-        <div class="sc-val" id="pairs-c-alphaj">—</div>
-      </div>
-      <div class="sc sc-wide">
-        <div class="sc-lbl">Families with any false alarm</div>
-        <div class="sc-val" id="pairs-c-anyfalse">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl">If the null comparisons were independent: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>C</sup></div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="α_j is the level of each comparison's own test: α with no correction, α/C under Bonferroni. The comparisons share designs, and so this prediction is approximate here; the Bonferroni bound C·α_j holds regardless.">Predicted family-wise error rate, if the comparisons were independent</span>: 1 − (1 − <span class="sym">α<sub>j</sub></span>)<sup>C</sup></div>
         <div class="sc-val" id="pairs-c-indep">—</div>
       </div>
       <div class="sc">
-        <div class="sc-lbl">Bonferroni bound <span class="sym">C&middot;α<sub>j</sub></span></div>
-        <div class="sc-val" id="pairs-c-bonfbound">—</div>
-      </div>
-      <div class="sc sc-wide">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="≥ 1 − α under Bonferroni.">Families with every interval capturing its difference</span></div>
-        <div class="sc-val" id="pairs-c-allcap">—</div>
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The observed family-wise error rate: the fraction of families with at least one comparison flagged although its true difference is zero, with a 95% Wilson interval.">Families with at least one false alarm</span></div>
+        <div class="sc-val" id="pairs-c-anyfalse">—</div>
       </div>
     </div>
     <div class="sec">
@@ -724,11 +723,121 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ③: power loss ───────────────────────────────────────────── -->
-  <section id="tab-power" class="tp">
-    <p class="lede">A correction that makes false alarms rarer also makes true detections rarer. Plant a real difference and watch how often each rule finds it. <span class="tip" tabindex="0" data-tip="Sorts the C raw p-values from smallest to largest and tests each in turn against a threshold that loosens as it goes, α/(C − m) at the m-th smallest (m counted from zero). The first comparison that fails to clear its own threshold, and every one sorted after it, are kept; nothing past that point is tested. Because later thresholds are looser than Bonferroni's flat α/C, a comparison can be flagged under Holm's rule even where Bonferroni would have kept it.">Holm's step-down</span> keeps the same family-wise guarantee as Bonferroni and gives some of the <span class="tip" tabindex="0" data-tip="The chance that a comparison whose true difference is not zero is correctly declared significant. A correction that shrinks the family-wise error rate does so by demanding stronger evidence per comparison, and so it also shrinks this chance for any one real difference.">power</span> back, and because it works on the sorted p-values rather than on the intervals, this is the tab where p-values get a column of their own. Holm's first threshold is Bonferroni's, and so it helps only once more than one comparison is real. At every pair among ten designs, 45 comparisons, each Bonferroni interval is about 1.8 times as wide as the uncorrected one, and only large differences are still detected; that loss is what motivates a one-shot test such as tab ⑤, ANOVA and Post Hoc Tests.</p>
+  <!-- ── TAB ③: pick the winner ──────────────────────────────────────── -->
+  <section id="tab-winner" class="tp">
+    <p class="lede"><strong>After simulating K designs, the natural report is the design with the best sample mean and its confidence interval.</strong> This tab asks how often that interval contains the winning design's true mean. An ordinary 95% interval contains the true mean 95% of the time when the design was named before the data were seen. Here, it was named after: it won because its sample mean came out best, and a sample mean comes out best partly through luck, because the best of K sample means is <span class="tip" tabindex="0" data-tip="The maximum, or the minimum when smaller is better, of K sample means is pulled away from the true means by chance alone, even when every design truly shares the same mean. The design whose luck was best in this experiment is the one that gets picked.">the extreme of K draws</span>. That luck is part of the winner's reported mean, which therefore overstates how good the design is, and its interval, centered on that mean, misses the true mean more often than α.</p>
+    <p class="lede">The tab counts the misses directly, and <span class="tip" tabindex="0" data-tip="Widens the winner's own interval to 1 − α/K, the same correction the earlier tabs use to hold a family of K comparisons at level α: the winner could have been any of the K designs, and so its interval is built as one of a family of K.">the Bonferroni level</span> puts the coverage back. The gap between the winner's sample mean and its true mean, the selection bias, is reported in its own card.</p>
     <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-K"><span class="tip" tabindex="0" data-tip="The number of designs simulated, and so the number of sample means the winner is picked from. Arrow keys move it by 1.">Designs K</span></label>
+          <input class="par-inp" id="winner-K" type="text" inputmode="numeric" value="8" autocomplete="off" spellcheck="false" onchange="winnerKChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
+          <input class="par-inp" id="winner-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="winnerRChanged()">
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-dir"><span class="tip" tabindex="0" data-tip="Which sample mean wins: the smallest, or the largest. A configuration other than All equal moves its design toward being the winner in this same direction.">Direction</span></label>
+          <select id="winner-dir" onchange="winnerDirChanged()">
+            <option value="min">Smaller is better</option>
+            <option value="max" selected>Bigger is better</option>
+          </select>
+        </span>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so the winner is picked from tied designs and its bias comes from selection alone; the other settings move one, two, or every design away from the rest by δ, and so the winner is usually the one actually moved.">Configuration</span></label>
+          <select id="winner-cfg" onchange="winnerCfgChanged()">
+            <option value="all" selected>All equal</option>
+            <option value="one">One design better by δ</option>
+            <option value="two">Two designs better by δ</option>
+            <option value="spread">Evenly spaced across δ</option>
+          </select>
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
+          <input class="par-inp" id="winner-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="winnerDeltaChanged()">
+        </span>
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
+          <input class="par-inp" id="winner-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="winnerSigmaChanged()">
+        </span>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-grp">
+          <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
+          <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
+          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
+            <input type="checkbox" id="winner-newseed" checked> <span class="tip">New seed after each run</span>
+          </label>
+        </span>
+        <button class="btn-run" id="winner-run" onclick="runOne('winner')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
+        <button class="btn-run2" id="winner-run100" onclick="runBatch('winner')" data-tip="Runs 100 families back to back from consecutive seeds. The winner's observed coverage below should settle near the known-σ reference under the raw level, and rise back toward 1 − α/2 under the Bonferroni level." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
+        <button class="btn-clear" onclick="clearHist('winner')">Clear history</button>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="winner-alpha"><span class="tip" tabindex="0" data-tip="The significance level the winner's interval would use with no correction.">Significance α</span></label>
+          <select id="winner-alpha" data-post onchange="winnerAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's confidence level</span></label>
+          <select id="winner-level" data-post onchange="winnerLevelChanged()">
+            <option value="raw" selected>1 − α (no correction)</option>
+            <option value="bonf">1 − α/K (Bonferroni)</option>
+          </select>
+        </span>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Designs and the winner</div>
+      <div class="fig-note" id="winner-level-line"></div>
+      <svg class="fig" id="winner-fig" role="img" aria-label="One vertical interval per design over the design index, each design's true mean shown as a teal tick; every design but the winner is muted, and the design chosen as the winner is colored teal with a filled dot when its interval captures its true mean and red, dashed, with a hollow dot when it misses, ringed in orange as this family's pick"></svg>
+      <div class="leg" id="winner-fig-leg"></div>
+      <div class="fig-note" id="winner-fig-cap"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">History of the winner's interval</div>
+      <div id="winner-hw"><svg class="hsv" id="winner-hist" role="img" aria-label="One interval per family for the design chosen as the winner, colored teal when it captures that design's true mean and red dashed with a hollow dot when it misses, with the true mean drawn as a step line"></svg></div>
+      <div class="fig-note" id="winner-hist-cap"></div>
+    </div>
+    <div class="sg">
+      <div class="sc sc-wide">
+        <div class="sc-lbl">Winner's interval captured its true mean</div>
+        <div class="sc-val" id="winner-c-coverage">—</div>
+      </div>
+      <div class="sc">
+        <div class="sc-lbl">Nominal 1 − <span class="sym">α</span></div>
+        <div class="sc-val" id="winner-c-nominal">—</div>
+      </div>
+      <div class="sc">
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Exact coverage of the winner's interval for a known σ and a large R, when every design truly shares the same mean: the interval misses whenever the extreme of K sample means falls on the wrong side of it. At R = 10 the actual interval uses a t critical value at 9 degrees of freedom, wider than the z this reference assumes, and so the observed coverage can sit a little above it. The reference applies to equal designs, and so any other configuration shows an em dash here.">Known-<span class="sym">σ</span> reference for equal designs</span></div>
+        <div class="sc-val" id="winner-c-knownsigma">—</div>
+      </div>
+      <div class="sc">
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Mean, over this segment's families, of the winner's sample mean minus its own true mean.">Observed selection bias</span></div>
+        <div class="sc-val" id="winner-c-bias">—</div>
+      </div>
+      <div class="sc">
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="−σ/√R times the expected minimum (or, when bigger is better, the maximum) of K independent standard normal draws: the exact selection bias when every design truly shares the same mean, from a numerically integrated order-statistic moment. The reference applies to equal designs, and so any other configuration shows an em dash here.">Expected bias for equal designs</span></div>
+        <div class="sc-val" id="winner-c-expbias">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TAB ④: power loss ───────────────────────────────────────────── -->
+  <section id="tab-power" class="tp">
+    <p class="lede">A correction that makes false alarms rarer also makes true detections rarer. Plant a real difference and watch how often each rule finds it. <span class="tip" tabindex="0" data-tip="Sorts the C raw p-values from smallest to largest and tests each in turn against a threshold that loosens as it goes, α/(C − m) at the m-th smallest (m counted from zero). The first comparison that fails to clear its own threshold, and every one sorted after it, are kept; nothing past that point is tested. Because later thresholds are looser than Bonferroni's flat α/C, a comparison can be flagged under Holm's rule even where Bonferroni would have kept it.">Holm's step-down</span> keeps the same <span class="tip" tabindex="0" data-tip="The chance of even one false alarm anywhere in the family. It is the right target when the family is small and every flag will be acted on, as when a handful of designs is compared. A study that tests thousands of hypotheses at once, such as a genome-wide scan for factors tied to an outcome, controls the false discovery rate instead, the expected fraction of flags that are false, with the Benjamini–Hochberg step-up (not simulated here) on the same sorted p-values that Holm uses.">family-wise guarantee</span> as Bonferroni and gives some of the <span class="tip" tabindex="0" data-tip="The chance that a comparison whose true difference is not zero is correctly declared significant. A correction that shrinks the family-wise error rate does so by demanding stronger evidence per comparison, and so it also shrinks this chance for any one real difference.">power</span> back, and because it works on the sorted p-values rather than on the intervals, this is the tab where p-values get a column of their own. Holm's first threshold is Bonferroni's, and so it helps only once more than one comparison is real. At every pair among ten designs, 45 comparisons, each Bonferroni interval is about 1.8 times as wide as the uncorrected one, and only large differences are still detected; that loss is what motivates a one-shot test such as tab ⑤, ANOVA and Post Hoc Tests.</p>
+    <div class="sec ctrl-card">
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="power-K"><span class="tip" tabindex="0" data-tip="The number of designs compared. Together with the comparisons setting below, it fixes the number of comparisons C in this tab. Arrow keys move it by 1.">Designs K</span></label>
@@ -737,29 +846,6 @@ svg.fig { display: block; width: 100%; height: auto; }
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="power-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval; every comparison here is the pooled two-sample t at 2R − 2 degrees of freedom. Arrow keys move it by 1.">Replications R</span></label>
           <input class="par-inp" id="power-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="powerRChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="power-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the height of none's flat curve in the plot below.">Significance α</span></label>
-          <select id="power-alpha" onchange="powerAlphaChanged()">
-            <option value="0.01">0.01</option>
-            <option value="0.05" selected>0.05</option>
-            <option value="0.1">0.10</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="power-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
-          <select id="power-mode" onchange="powerModeChanged()">
-            <option value="bench" selected>Against design 1</option>
-            <option value="all">All pairs</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="power-rule"><span class="tip" tabindex="0" data-tip="Which rule judges the comparisons drawn below: no correction, the Bonferroni bound, or Holm's step-down. It drives which column is highlighted in the cards, the Holm table, and the height of the history strip.">Rule</span></label>
-          <select id="power-rule" data-post onchange="powerRuleChanged()">
-            <option value="none">None</option>
-            <option value="bonf" selected>Bonferroni</option>
-            <option value="holm">Holm's step-down</option>
-          </select>
         </span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
@@ -775,7 +861,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         </span>
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="power-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal; under the default configuration, this is the real difference planted for the rules to detect. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-          <input class="par-inp" id="power-delta" type="text" inputmode="decimal" value="2.5" autocomplete="off" spellcheck="false" onchange="powerDeltaChanged()">
+          <input class="par-inp" id="power-delta" type="text" inputmode="decimal" value="3" autocomplete="off" spellcheck="false" onchange="powerDeltaChanged()">
         </span>
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="power-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
@@ -794,11 +880,37 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-alarm rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('power')">Clear history</button>
       </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="power-alpha"><span class="tip" tabindex="0" data-tip="The significance level each individual comparison would use with no correction. Also the height of none's flat curve in the plot below.">Significance α</span></label>
+          <select id="power-alpha" data-post onchange="powerAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="power-mode"><span class="tip" tabindex="0" data-tip="Whether every design is compared only against design 1, giving K − 1 comparisons, or every pair of designs is compared, giving K(K − 1)/2 comparisons.">Comparisons</span></label>
+          <select id="power-mode" data-post onchange="powerModeChanged()">
+            <option value="bench">Against design 1</option>
+            <option value="all" selected>All pairs</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="power-rule"><span class="tip" tabindex="0" data-tip="Which rule judges the comparisons drawn below: no correction, the Bonferroni bound, or Holm's step-down. It sets the level the intervals in the figure are drawn at, which column is highlighted in the cards, and the height of the history strip. Under Holm's step-down, each comparison's interval is drawn at the level of its own step, and a comparison past the step where the step-down stopped is never tested, and so is drawn with the 100% interval, the whole line.">Rule</span></label>
+          <select id="power-rule" data-post onchange="powerRuleChanged()">
+            <option value="none">None</option>
+            <option value="bonf" selected>Bonferroni</option>
+            <option value="holm">Holm's step-down</option>
+          </select>
+        </span>
+      </div>
     </div>
     <div class="sec">
-      <div class="sec-hd">Differences between designs, at the Bonferroni level (bigger is better)</div>
+      <div class="sec-hd">Differences between designs, judged by the selected rule (bigger is better)</div>
       <div class="fig-note" id="power-level-line"></div>
-      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the Bonferroni level, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero"></svg>
+      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the level the selected rule gives it: the uncorrected level, the Bonferroni level, or under Holm's step-down the level of its own step, with a comparison the step-down never reached drawn as the whole line. Each comparison's true difference is shown as a teal tick and its interval colored by the rule's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the comparison was flagged"></svg>
       <div class="leg" id="power-fig-leg"></div>
       <div class="fig-note" id="power-fig-cap"></div>
       <div id="power-table"></div>
@@ -860,117 +972,11 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ④: pick the winner ──────────────────────────────────────── -->
-  <section id="tab-winner" class="tp">
-    <p class="lede">Simulate K designs, pick the one with the best sample mean, and report its ordinary confidence interval. The interval was built for a design chosen in advance, not for the winner of a race, and the winner's sample mean is <span class="tip" tabindex="0" data-tip="The minimum, or the maximum when bigger is better, of K sample means is pulled toward the tail by chance alone, even when every design truly shares the same mean. Picking it and then reporting an ordinary interval built as if that design had been chosen in advance ignores exactly that pull.">the extreme of K draws</span>. Watch its interval miss far more often than α, and see <span class="tip" tabindex="0" data-tip="Widens the winner's own interval to 1 − α/K, the same correction the earlier tabs use to hold a family of K comparisons at level α.">the Bonferroni level</span> put the coverage back.</p>
-    <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
-      <div class="ctrl-row par-row">
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="winner-K"><span class="tip" tabindex="0" data-tip="The number of designs simulated, and so the number of sample means the winner is picked from. Arrow keys move it by 1.">Designs K</span></label>
-          <input class="par-inp" id="winner-K" type="text" inputmode="numeric" value="8" autocomplete="off" spellcheck="false" onchange="winnerKChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="winner-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design. A larger R narrows every interval and moves its degrees of freedom, R − 1, further from the t distribution's heavy tails. Arrow keys move it by 1.">Replications R</span></label>
-          <input class="par-inp" id="winner-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="winnerRChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="winner-alpha"><span class="tip" tabindex="0" data-tip="The significance level the winner's interval would use with no correction.">Significance α</span></label>
-          <select id="winner-alpha" onchange="winnerAlphaChanged()">
-            <option value="0.01">0.01</option>
-            <option value="0.05" selected>0.05</option>
-            <option value="0.1">0.10</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="winner-dir"><span class="tip" tabindex="0" data-tip="Which sample mean wins: the smallest, or the largest. A configuration other than All equal moves its design toward being the winner in this same direction.">Direction</span></label>
-          <select id="winner-dir" onchange="winnerDirChanged()">
-            <option value="min">Smaller is better</option>
-            <option value="max" selected>Bigger is better</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="winner-level"><span class="tip" tabindex="0" data-tip="The confidence level of every interval drawn: 1 − α with no correction, or 1 − α/K under Bonferroni, which widens each interval so that the family as a whole errs at most α of the time.">Winner's confidence level</span></label>
-          <select id="winner-level" data-post onchange="winnerLevelChanged()">
-            <option value="raw" selected>1 − α (no correction)</option>
-            <option value="bonf">1 − α/K (Bonferroni)</option>
-          </select>
-        </span>
-      </div>
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
-      <div class="ctrl-row par-row">
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="winner-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal puts every design at the same mean, and so the winner is picked from tied designs and its bias comes from selection alone; the other settings move one, two, or every design away from the rest by δ, and so the winner is usually the one actually moved.">Configuration</span></label>
-          <select id="winner-cfg" onchange="winnerCfgChanged()">
-            <option value="all" selected>All equal</option>
-            <option value="one">One design better by δ</option>
-            <option value="two">Two designs better by δ</option>
-            <option value="spread">Evenly spaced across δ</option>
-          </select>
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="winner-delta"><span class="tip" tabindex="0" data-tip="How far the moved design or designs sit from the rest under a configuration other than All equal. Arrow keys move it by 0.1; hold Shift for 1.">Separation δ</span></label>
-          <input class="par-inp" id="winner-delta" type="text" inputmode="decimal" value="1" autocomplete="off" spellcheck="false" onchange="winnerDeltaChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="winner-sigma"><span class="tip" tabindex="0" data-tip="The standard deviation shared by every design's output. Arrow keys move it by 0.1; hold Shift for 1.">Std. dev. σ</span></label>
-          <input class="par-inp" id="winner-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="winnerSigmaChanged()">
-        </span>
-      </div>
-      <div class="ctrl-row">
-        <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
-          <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
-            <input type="checkbox" id="winner-newseed" checked> <span class="tip">New seed after each run</span>
-          </label>
-        </span>
-        <button class="btn-run" id="winner-run" onclick="runOne('winner')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
-        <button class="btn-run2" id="winner-run100" onclick="runBatch('winner')" data-tip="Runs 100 families back to back from consecutive seeds. The winner's observed coverage below should settle near the known-σ reference under the raw level, and rise back toward 1 − α/2 under the Bonferroni level." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
-        <button class="btn-clear" onclick="clearHist('winner')">Clear history</button>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-hd">Designs and the winner</div>
-      <div class="fig-note" id="winner-level-line"></div>
-      <svg class="fig" id="winner-fig" role="img" aria-label="One vertical interval per design over the design index, each design's true mean shown as a teal tick; every design but the winner is muted, and the design chosen as the winner is colored teal with a filled dot when its interval captures its true mean and red, dashed, with a hollow dot when it misses, ringed in orange as this family's pick"></svg>
-      <div class="leg" id="winner-fig-leg"></div>
-      <div class="fig-note" id="winner-fig-cap"></div>
-    </div>
-    <div class="sec">
-      <div class="sec-hd">History of the winner's interval</div>
-      <div id="winner-hw"><svg class="hsv" id="winner-hist" role="img" aria-label="One interval per family for the design chosen as the winner, colored teal when it captures that design's true mean and red dashed with a hollow dot when it misses, with the true mean drawn as a step line"></svg></div>
-      <div class="fig-note" id="winner-hist-cap"></div>
-    </div>
-    <div class="sg">
-      <div class="sc sc-wide">
-        <div class="sc-lbl">Winner's interval captured its true mean</div>
-        <div class="sc-val" id="winner-c-coverage">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl">Nominal 1 − <span class="sym">α</span></div>
-        <div class="sc-val" id="winner-c-nominal">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Exact coverage of the winner's interval for a known σ and a large R, when every design truly shares the same mean: the interval misses whenever the extreme of K sample means falls on the wrong side of it. At R = 10 the actual interval uses a t critical value at 9 degrees of freedom, wider than the z this reference assumes, and so the observed coverage can sit a little above it. The reference applies to equal designs, and so any other configuration shows an em dash here.">Known-<span class="sym">σ</span> reference for equal designs</span></div>
-        <div class="sc-val" id="winner-c-knownsigma">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Mean, over this segment's families, of the winner's sample mean minus its own true mean.">Observed selection bias</span></div>
-        <div class="sc-val" id="winner-c-bias">—</div>
-      </div>
-      <div class="sc">
-        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="−σ/√R times the expected minimum (or, when bigger is better, the maximum) of K independent standard normal draws: the exact selection bias when every design truly shares the same mean, from a numerically integrated order-statistic moment. The reference applies to equal designs, and so any other configuration shows an em dash here.">Expected bias for equal designs</span></div>
-        <div class="sc-val" id="winner-c-expbias">—</div>
-      </div>
-    </div>
-  </section>
-
   <!-- ── TAB ⑤: anova and post hoc ───────────────────────────────────── -->
   <section id="tab-anova" class="tp">
-    <p class="lede">One-way ANOVA's logic runs in two steps: the F test asks whether any design differs, and a post hoc test asks which. The F test holds α without a correction, but it does not say which designs differ, and each post hoc test here is a single critical difference on the sorted means: Tukey's honestly significant difference from the <span class="tip" tabindex="0" data-tip="The distribution of the largest minus the smallest of K independent sample means, in units of their common standard error. Tukey's honestly significant difference is this distribution's own 1 − α quantile, and so it judges every pair with the one correction built for comparing every pair at once.">studentized range</span>, Fisher's least significant difference run only after a significant F, and Bonferroni's t at α/C. Bonferroni-corrected pairwise intervals (the ones tab ②, Designs Against Each Other, builds) are themselves a legitimate post hoc test, which is why they sit beside Tukey's and Fisher's here. With K responses in place of one, ANOVA becomes MANOVA, the way tab ①'s K one-sample intervals become Hotelling's T².</p>
+    <p class="lede">One-way ANOVA's logic runs in two steps: the F test asks whether any design differs, and a post hoc test asks which. The F test holds α without a correction, but it does not say which designs differ, and each post hoc test here is a single critical difference on the sorted means: Tukey's honestly significant difference from the <span class="tip" tabindex="0" data-tip="The distribution of the largest minus the smallest of K independent sample means, in units of their common standard error. Tukey's honestly significant difference is this distribution's own 1 − α quantile, and so it judges every pair with the one correction built for comparing every pair at once.">studentized range</span>, Fisher's least significant difference run only after a significant F, and Bonferroni's t at α/C. Bonferroni-corrected pairwise intervals (the ones tab ② builds) are themselves a legitimate post hoc test, which is why they sit beside Tukey's and Fisher's here. With K responses in place of one, ANOVA becomes MANOVA, the way tab ①'s K one-sample intervals become Hotelling's T².</p>
     <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="anova-K"><span class="tip" tabindex="0" data-tip="The number of designs entered into the one-way ANOVA, and so the number of groups the F test compares and the number of rows in the K &times; R data table. Arrow keys move it by 1.">Designs K</span></label>
@@ -979,22 +985,6 @@ svg.fig { display: block; width: 100%; height: auto; }
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="anova-R"><span class="tip" tabindex="0" data-tip="Replications drawn from each design, equal across every design so the pooled variance and the post-hoc rules can share one critical difference. Arrow keys move it by 1.">Replications R</span></label>
           <input class="par-inp" id="anova-R" type="text" inputmode="numeric" value="10" autocomplete="off" spellcheck="false" onchange="anovaRChanged()">
-        </span>
-        <span class="ctrl-pair">
-          <label class="ctrl-lbl" for="anova-alpha"><span class="tip" tabindex="0" data-tip="The significance level the F test and every post-hoc rule use. It sets the studentized range, LSD, and Bonferroni critical differences together, and so the three stay comparable.">Significance α</span></label>
-          <select id="anova-alpha" onchange="anovaAlphaChanged()">
-            <option value="0.01">0.01</option>
-            <option value="0.05" selected>0.05</option>
-            <option value="0.1">0.10</option>
-          </select>
-        </span>
-        <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself flags no difference), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
-          <select id="anova-rule" data-post onchange="anovaRuleChanged()">
-            <option value="tukey" selected>Tukey's HSD</option>
-            <option value="lsd">Fisher's protected LSD</option>
-            <option value="bonf">Bonferroni</option>
-          </select>
         </span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
@@ -1028,6 +1018,25 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="anova-run" onclick="runOne('anova')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="anova-run100" onclick="runBatch('anova')" data-tip="Runs 100 families back to back from consecutive seeds. Watch protected LSD's family-wise rate settle above α, whereas Tukey's and Bonferroni's stay at or below it." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('anova')">Clear history</button>
+      </div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
+      <div class="ctrl-row par-row">
+        <span class="ctrl-pair">
+          <label class="ctrl-lbl" for="anova-alpha"><span class="tip" tabindex="0" data-tip="The significance level the F test and every post-hoc rule use. It sets the studentized range, LSD, and Bonferroni critical differences together, and so the three stay comparable.">Significance α</span></label>
+          <select id="anova-alpha" data-post onchange="anovaAlphaChanged()">
+            <option value="0.01">0.01</option>
+            <option value="0.05" selected>0.05</option>
+            <option value="0.1">0.10</option>
+          </select>
+        </span>
+        <span class="ctrl-pair ctrl-pair-wide">
+          <label class="ctrl-lbl" for="anova-rule"><span class="tip" tabindex="0" data-tip="Which critical difference judges every pair: Tukey's honestly significant difference, Fisher's protected least significant difference (switched off whenever the F test itself flags no difference), or Bonferroni's t at α/C. It drives the letters above each design, the pairwise matrix, the strip, and which column is washed in the cards.">Post-hoc rule</span></label>
+          <select id="anova-rule" data-post onchange="anovaRuleChanged()">
+            <option value="tukey" selected>Tukey's HSD</option>
+            <option value="lsd">Fisher's protected LSD</option>
+            <option value="bonf">Bonferroni</option>
+          </select>
+        </span>
       </div>
     </div>
     <div class="viz-row">
@@ -1107,13 +1116,21 @@ svg.fig { display: block; width: 100%; height: auto; }
     <p class="exp-note">Tukey's honestly significant difference and Bonferroni's t both judge every pair at once, and the two critical-difference cards above show the gain is real but modest: Tukey's is the smaller of the two, never the larger, but rarely by much.</p>
     <p class="exp-note">Fisher's <span class="tip" tabindex="0" data-tip="Fisher's least significant difference is only applied after the omnibus F test flags a difference; a family whose F test flags none declares no pair different, whatever the raw mean gaps look like.">protected</span> LSD holds the family-wise error rate at α only when there are exactly three designs (Hayter, 1986); with five, and with the last two designs planted δ above the rest by default, F almost always flags a difference, and so the protection does nothing and the four null pairs (three among the unmoved designs and one between the two moved ones) are each tested at a bare α. Watch its family-wise error rate above settle well past α, whereas Tukey's and Bonferroni's do not.</p>
     <p class="exp-note">ANOVA and all three post-hoc rules here assume every design is sampled independently of every other, an assumption common random numbers break by design: each rule pools a within-design variance across designs that no longer vary independently, Bonferroni's rule included. Under common random numbers, a comparison instead falls back to the paired interval at α/C that tab ② builds, where the Bonferroni inequality still holds because it needs no independence at all. When every comparison is against one benchmark design rather than among all of them, Dunnett's test is the exact many-versus-one counterpart of Tukey's rule here.</p>
+    <details class="why">
+      <summary>When design differences come from choosing different settings of a common set of parameters</summary>
+      <div class="why-body">
+        <p>One-way ANOVA is a linear model: each output is the grand mean, plus a shift for its design, plus noise. The K design shifts are free parameters tied only by their average, which is why the model can ask only whether the designs differ and then, pair by pair, which, and why one residual mean square feeds every post hoc rule above.</p>
+        <p>The differences among the K designs often come from choosing different settings of a common set of parameters, not from K unrelated alternatives. When the designs are the levels of one factor, such as one to five servers, a model with a term for that factor asks one question, whether the response rises with the factor, in place of K(K &minus; 1)/2 pairwise ones; when they are the cells of a factorial, such as two queue disciplines crossed with three staffing levels, it asks for each factor&rsquo;s effect and their interaction, three questions in place of fifteen. Most of the multiple-comparisons burden disappears because the question changed, not because the correction improved, and the fitted model also predicts designs that were never simulated. Fitting such a model to simulation output is called metamodeling.</p>
+        <p>The independence assumption above belongs to the one-way model, not to ANOVA as a whole. When every design&rsquo;s r-th replication shares one random-number stream, the replication is a block, and a model with a term for each replication makes every comparison within a replication, as tab &#9313;&rsquo;s paired intervals do. The correlation that common random numbers create is then part of the model rather than a violation of it.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ── TAB ⑥: selecting the best ───────────────────────────────────── -->
   <section id="tab-best" class="tp">
     <p class="lede">A fixed-sample test cannot add replications where they turn out to be needed. This two-stage procedure can. A pilot stage of R₀ replications per design <span class="tip" tabindex="0" data-tip="Every design's sample mean is compared against every other's, with each pair's gap shrunk by a threshold built from their sample variances; a design survives when it cannot yet be ruled out as the best or as within ε of it. The t here is a Šidák-style correction over the K − 1 comparisons against each design, which behaves like a Bonferroni correction at α/2 split K − 1 ways; the textbook writes it as t at upper-tail probability 1 − (1 − α/2)^{1/(K−1)}.">screens out</span> designs that are clearly worse, a second stage adds replications only to the survivors, as many as each one's variance and <span class="tip" tabindex="0" data-tip="The practically significant difference ε, sometimes called the indifference zone: how close two designs' true means may sit before the procedure treats them as effectively tied.">the practically significant difference ε</span> call for, and the survivor with the best mean is selected. With probability at least 1 − α the selection is the best design or one within ε of it.</p>
     <div class="sec ctrl-card">
-      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are the analyst's decisions, the same ones a real study would have to make.">Chosen by the experimenter</span></div>
+      <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The design of the experiment: these settings decide what data are drawn. A change takes effect on the next run, which opens a new segment of the history.">Chosen by the experimenter before the data are gathered</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair">
           <label class="ctrl-lbl" for="best-K"><span class="tip" tabindex="0" data-tip="The number of candidate designs simulated, and so the number of designs the procedure screens and selects among. Arrow keys move it by 1.">Designs K</span></label>
@@ -1247,7 +1264,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="fig-note" id="optim-fig-cap"></div>
     </div>
     <div class="sec-hd" style="margin-top:18px">What drives the search</div>
-    <p class="exp-note"><span class="tip" tabindex="0" data-tip="A general-purpose search strategy that improves candidates by trial rather than by a problem-specific formula; it makes few assumptions about the objective, and it carries no guarantee of finding the true optimum.">Metaheuristics</span> search by trial and improvement rather than by gradient. <span class="tip" tabindex="0" data-tip="A metaheuristic that keeps a small reference set of diverse, good solutions and combines pairs of them into new candidates, rather than mutating one solution at a time.">Scatter search</span> paired with <span class="tip" tabindex="0" data-tip="A short list of recently visited or forbidden moves that keeps a search from cycling back to the same candidates it just left.">tabu memory</span> is the engine inside OptQuest, which Arena, AnyLogic, and other simulation packages license. The other common families borrow their moves from nature, each keeping a population or a search history that steers the next round of candidates away from ground already covered:</p>
+    <p class="exp-note"><span class="tip" tabindex="0" data-tip="A general-purpose search strategy that improves candidates by trial rather than by a problem-specific formula; it makes few assumptions about the objective, and it carries no guarantee of finding the true optimum.">Metaheuristics</span> search by trial and improvement rather than by gradient. <span class="tip" tabindex="0" data-tip="A metaheuristic that keeps a small reference set of diverse, good solutions and combines pairs of them into new candidates, rather than mutating one solution at a time.">Scatter search</span> paired with <span class="tip" tabindex="0" data-tip="A short list of recently visited or forbidden moves that keeps a search from cycling back to the same candidates it just left.">tabu memory</span> is the engine inside OptQuest, which Arena, AnyLogic, and other simulation packages license. The other common families take their moves from nature, each keeping a population or a search history that steers the next round of candidates away from ground already covered:</p>
     <ul class="exp-list">
       <li><a href="https://en.wikipedia.org/wiki/Genetic_algorithm" target="_blank" rel="noopener">Genetic algorithms</a>: a population of encoded candidates evolves by selection, crossover, and mutation, and the building blocks of good candidates spread through it.</li>
       <li><a href="https://en.wikipedia.org/wiki/Evolution_strategy" target="_blank" rel="noopener">Evolution strategies</a>, including <a href="https://en.wikipedia.org/wiki/CMA-ES" target="_blank" rel="noopener">CMA-ES</a>: real-valued mutation whose step sizes and directions adapt to the shape of the objective as the search proceeds.</li>
@@ -1262,8 +1279,8 @@ svg.fig { display: block; width: 100%; height: auto; }
     <p class="exp-note">The methods above treat the simulation model as a black box that can only be probed. An alternative approach is to build a <span class="tip" tabindex="0" data-tip="A cheap model fitted to the simulation's own outputs, also called a surrogate, that stands in for the simulation where the search needs many evaluations.">meta-model</span> of the simulation model that helps to identify generalizable structure across the parameter space. For example, <span class="tip" tabindex="0" data-tip="A fitted local model, often a low-order polynomial, of how the simulated objective changes near the current candidates.">response-surface</span> and <span class="tip" tabindex="0" data-tip="A family of methods that follow a noisy estimate of the objective's slope toward an optimum, taking smaller steps as the estimate grows more reliable.">stochastic-approximation</span> methods fit a local model of the objective and follow that model toward an optimum.</p>
     <p class="exp-note">Ranking and selection fits into the loop in two places. Page ⑥'s two-stage procedure is the clean-up step, deciding among the search's finalists with a stated guarantee once the search itself has narrowed the field; a lighter screening rule can also sit inside the loop, stopping replications on a candidate that is already clearly worse than the others.</p>
     <div class="sec-hd" style="margin-top:18px">Two consequences of random simulation output</div>
-    <p class="exp-note">The search never sees a candidate's true expected performance. Every value it compares is a sample mean from a finite number of replications. The candidate with the largest sample mean is partly the candidate that happened to draw favorably, and so its sample mean overstates its true performance, as page ④ shows for a fixed set of designs. This is why the loop's last step re-estimates the chosen candidate on fresh replications before reporting it: a sample mean and interval computed from new replications are not biased by the selection that picked the candidate.</p>
-    <p class="exp-note">Every comparison the search makes is one more hypothesis test, and a search makes thousands of them. If the rule were simply to move to any candidate whose interval excludes the current best's at α = 0.05, then one comparison in twenty between two equally good candidates would move the search to the wrong one. Pages ①–③ measure exactly this accumulation of false alarms. The search rules above therefore do not decide each comparison once: they keep replicating candidates that are close and drop only candidates that are clearly worse.</p>
+    <p class="exp-note">The search never sees a candidate's true expected performance. Every value it compares is a sample mean from a finite number of replications. The candidate with the largest sample mean is partly the candidate that happened to draw favorably, and so its sample mean overstates its true performance, as page ③ shows for a fixed set of designs. This is why the loop's last step re-estimates the chosen candidate on fresh replications before reporting it: a sample mean and interval computed from new replications are not biased by the selection that picked the candidate.</p>
+    <p class="exp-note">Every comparison the search makes is one more hypothesis test, and a search makes thousands of them. If the rule were simply to move to any candidate whose interval excludes the current best's at α = 0.05, then one comparison in twenty between two equally good candidates would move the search to the wrong one. Pages ①, ②, and ④ measure exactly this accumulation of false alarms. The search rules above therefore do not decide each comparison once: they keep replicating candidates that are close and drop only candidates that are clearly worse.</p>
     <div class="sec-hd" style="margin-top:18px">How this differs from the rest of this widget</div>
     <p class="exp-note">Pages ①–⑤ compare a fixed set of designs against fixed samples from each. Page ⑥ adds replications adaptively but still to a fixed set of designs chosen in advance. This page searches an open set: the design space itself is not enumerated, and the statistical tools built on the earlier pages (confidence intervals, corrections, and a screening rule) appear here again, now as components inside a search loop rather than as the whole procedure.</p>
   </section>
@@ -1650,20 +1667,30 @@ function chiDensityLog(s, nu) {
   return Math.log(2) + 0.5 * nu * Math.log(nu) + (nu - 1) * Math.log(s) - 0.5 * nu * s * s
        - 0.5 * nu * Math.LN2 - logGamma(0.5 * nu);
 }
-/* Nodes over s where the chi density has its mass: the density is
-   centered near 1 with spread about 1 / sqrt(2 nu), and the interval below
-   reaches 12 spreads each way, floored at 0. */
-function chiNodes(nu, panels, n) {
-  var sd = 1 / Math.sqrt(2 * nu), a = Math.max(1e-9, 1 - 12 * sd), b = 1 + 12 * sd;
-  var g = gaussLegendre(n), h = (b - a) / panels, S = [], W = [];
+/* Nodes over s for integrals against the chi density, as Gauss-Legendre
+   panels in log s. On few degrees of freedom the density keeps its mass down
+   toward 0, and the integrands below rise from 0 to 1 near s = 1/q, far below
+   1 when the quantile q is large; a panel in log s spans the same ratio of s
+   at every scale, and so that rise is resolved wherever it falls. The nodes
+   run from where the density's lower tail holds 1e-12 (from the bound
+   P(S <= s) <= x^(nu/2) / Gamma(nu/2 + 1), x = nu s^2 / 2), or from 12
+   spreads below 1 when that is higher, to 12 spreads above 1, in panels at
+   most one unit of log s wide. Memoized by nu. */
+var CHI_NODES_MEMO = {};
+function chiNodes(nu) {
+  if (nu in CHI_NODES_MEMO) return CHI_NODES_MEMO[nu];
+  var sd = 1 / Math.sqrt(2 * nu), half = 0.5 * nu;
+  var tail = Math.sqrt(2 / nu * Math.exp((Math.log(1e-12) + logGamma(half + 1)) / half));
+  var a = Math.log(Math.max(tail, 1 - 12 * sd)), b = Math.log(1 + 12 * sd);
+  var n = 16, panels = Math.max(12, Math.ceil(b - a)), g = gaussLegendre(n), h = (b - a) / panels, S = [], W = [];
   for (var p = 0; p < panels; p++) {
     var c = a + p * h + 0.5 * h, r = 0.5 * h;
     for (var i = 0; i < n; i++) {
-      var s = c + r * g.x[i];
-      S.push(s); W.push(g.w[i] * r * Math.exp(chiDensityLog(s, nu)));
+      var s = Math.exp(c + r * g.x[i]);
+      S.push(s); W.push(g.w[i] * r * s * Math.exp(chiDensityLog(s, nu)));
     }
   }
-  return { s: S, w: W };
+  return (CHI_NODES_MEMO[nu] = { s: S, w: W });
 }
 /* The range integral's own quadrature nodes over x in [-8, 8], with
    phi(x) and Phi(x) at each one: neither depends on r or on the outer
@@ -1700,7 +1727,7 @@ function rangeCdf(r, k, rn) {
    of the sample standard deviation, q in units of that deviation. */
 function ptukey(q, k, nu) {
   if (!(q > 0)) return 0;
-  var nd = chiNodes(nu, 12, 16), rn = rangeNodes(), s = 0;
+  var nd = chiNodes(nu), rn = rangeNodes(), s = 0;
   for (var i = 0; i < nd.s.length; i++) s += nd.w[i] * rangeCdf(q * nd.s[i], k, rn);
   return Math.min(1, s);
 }
@@ -1722,6 +1749,25 @@ function solveMonotone(f, lo, hi, tol) {
   }
   return c;
 }
+/* Root of an increasing f with f(0) <= 0: the upper end starts at hi and
+   doubles until f there is no longer negative, the lower end following it
+   up, and the root is then found between them, to a bracket width of tol
+   times the lower end once that passes 1. NaN at once when f is NaN at an
+   upper end (an argument out of range, which no doubling would help), and
+   when f stays negative through 60 doublings, that is, when no root exists.
+   On few degrees of freedom the studentized range and Rinott's constant run
+   far past any fixed bracket: q(0.99, 4, 2 df) is 22.3, and a first stage of
+   two replications needs h of 25 and more. */
+function rootAbove(f, hi, tol) {
+  var lo = 0;
+  for (var i = 0; i < 60; i++) {
+    var v = f(hi);
+    if (isNaN(v)) return NaN;
+    if (v >= 0) return solveMonotone(f, lo, hi, tol * Math.max(1, lo));
+    lo = hi; hi *= 2;
+  }
+  return NaN;
+}
 // Memoized like tQuantile above: anovaFamily calls qtukey with the same
 // (p, k, nu) on every replication of a batch (Run x100, or a calibration
 // loop that only resamples the data), and each call brackets and solves a
@@ -1732,8 +1778,7 @@ var Q_TUKEY_MEMO = {};
 function qtukey(p, k, nu) {
   var key = p + '|' + k + '|' + nu;
   if (key in Q_TUKEY_MEMO) return Q_TUKEY_MEMO[key];
-  var f = function (q) { return ptukey(q, k, nu) - p; };
-  var q = f(20) < 0 ? 20 : solveMonotone(f, 0.05, 20, 1e-7);   /* p unreachable in range: saturate rather than report a false root */
+  var q = rootAbove(function (q) { return ptukey(q, k, nu) - p; }, 20, 1e-7);
   return (Q_TUKEY_MEMO[key] = q);
 }
 /* Rinott's constant: the h with
@@ -1753,7 +1798,7 @@ function rinottH(r0, k, pstar) {
   return (RINOTT_H_MEMO[key] = rinottHCompute(r0, k, pstar));
 }
 function rinottHCompute(r0, k, pstar) {
-  var nu = r0 - 1, nd = chiNodes(nu, 12, 16), n = nd.s.length;
+  var nu = r0 - 1, nd = chiNodes(nu), n = nd.s.length;
   /* u*v / sqrt(u^2 + v^2) depends only on the pair of chi nodes, not on
      h, and so it is built once per call rather than once per pcs(h) call
      (root-finding evaluates pcs a dozen times). */
@@ -1771,8 +1816,7 @@ function rinottHCompute(r0, k, pstar) {
     }
     return outer;
   }
-  var f = function (h) { return pcs(h) - pstar; };
-  return solveMonotone(f, 0.5, 12, 1e-6);
+  return rootAbove(function (h) { return pcs(h) - pstar; }, 12, 1e-6);
 }
 /* E[max of k standard normals] = k * int z phi(z) Phi(z)^(k-1) dz. */
 function expectedMaxNormal(k) {
@@ -1814,10 +1858,10 @@ function drawFamily(seed, p) {
 }
 function twoSidedP(t, df) { return 2 * (1 - tCdf(Math.abs(t), df)); }
 
-/* Tab 1: one t interval per design, all tested against a single target
-   theta0 rather than against each other. A rejection is false exactly
-   when the design's own true mean already sits at theta0 because then the
-   only reason to exclude it is sampling error. */
+/* Tab 1: one t interval per response, each tested against a single
+   baseline theta0 rather than against each other. A rejection is false
+   exactly when the response's own true mean already sits at theta0 because
+   then the only reason to exclude it is sampling error. */
 function oneSampleFamily(Y, o) {
   var C = Y.length, R = Y[0].length, df = R - 1;
   var alphaJ = o.level === 'bonf' ? o.alpha / C : o.alpha;
@@ -1839,7 +1883,7 @@ function oneSampleFamily(Y, o) {
   return { C: C, alphaJ: alphaJ, df: df, tcrit: tcrit, items: items,
            nReject: nReject, nFalse: nFalse, anyFalse: nFalse > 0, allCaptured: allCaptured };
 }
-/* Tab 2 (and the raw pass tab 3 reuses): every comparison's interval for a
+/* Tab 2 (and the raw pass tab 4 reuses): every comparison's interval for a
    difference of two means, against a benchmark design (index 0) or over
    all pairs, pooled or paired by common random numbers. A rejection is
    false when the two designs compared truly share a mean; it is a true
@@ -1898,7 +1942,39 @@ function holm(p, alpha) {
   }
   return { reject: reject, order: order, thresholds: thresholds, pAdj: pAdj };
 }
-/* Tab 3: the same raw comparisons judged three ways -- uncorrected,
+/* Holm's step-down drawn on the scale of the differences: each comparison's
+   interval at the level of its own step, the comparison with the m-th
+   smallest p-value (m counted from zero) at 1 - alpha/(C - m), so that the
+   interval excludes zero exactly when that step rejects. The step-down stops
+   at the first step that fails, and every comparison sorted after it is not
+   reached: none is tested, which is the same as testing it at a threshold of
+   0, and so it carries the 100% interval, the whole line (level null, lo
+   -Infinity, hi Infinity), which contains zero and the truth alike. These
+   are not simultaneous confidence intervals, because each width depends on
+   the other comparisons' p-values; they are the step-down's own thresholds
+   made visible. raw is pairFamily's uncorrected family. */
+function holmIntervals(raw, alpha) {
+  var h = holm(raw.items.map(function (it) { return it.p; }), alpha);
+  var C = raw.C, items = raw.items.map(function (it) { return Object.assign({}, it); });
+  var stopped = false, nReached = 0, m, k, it, alphaM, tcrit;
+  for (m = 0; m < C; m++) {
+    k = h.order[m]; it = items[k]; alphaM = alpha / (C - m);
+    it.step = m + 1;
+    if (stopped) {
+      it.reached = false; it.level = null; it.half = Infinity; it.lo = -Infinity; it.hi = Infinity; it.captured = true;
+      it.reject = false; it.falseRej = false; it.trueDet = false;
+      continue;
+    }
+    tcrit = tQuantile(1 - alphaM / 2, raw.df);
+    it.reached = true; it.level = 1 - alphaM; nReached++;
+    it.half = tcrit * it.se; it.lo = it.diff - it.half; it.hi = it.diff + it.half;
+    it.reject = h.reject[k]; it.falseRej = it.reject && it.trueDiff === 0; it.trueDet = it.reject && it.trueDiff !== 0;
+    it.captured = it.lo <= it.trueDiff && it.trueDiff <= it.hi;
+    if (!it.reject) stopped = true;
+  }
+  return { C: C, df: raw.df, items: items, order: h.order, nReached: nReached };
+}
+/* Tab 4: the same raw comparisons judged three ways -- uncorrected,
    Bonferroni, and Holm -- so the three rules can be compared on exactly
    the same data instead of on separate samples. */
 function rulesFamily(Y, o) {
@@ -1931,7 +2007,7 @@ function pairPower(delta, sigma, R, alphaJ) {
   return 1 - nctCdf(tc, df, ncp) + nctCdf(-tc, df, ncp);
 }
 
-/* Tab 4: the analyst who ran a family, picked the design with the best
+/* Tab 3: the analyst who ran a family, picked the design with the best
    sample mean, and reported an ordinary one-sample interval for it as
    though no selection had happened. The winner's interval misses low (for
    'min') more often than its nominal rate because it is drawn from the
@@ -1955,13 +2031,13 @@ function winnerFamily(Y, o) {
    design truly shares the same mean and sigma is known: the interval is
    centered at the minimum (or maximum) of K independent normal sample
    means, and it misses low exactly when at least one of the K falls below
-   theta - h while the winning one is that minimum, which reduces to this
+   theta - h whereas the winning one is that minimum, which reduces to this
    closed form. */
 function winnerCoverage(alpha, K) {
   return Math.pow(1 - alpha / 2, K) - Math.pow(alpha / 2, K);
 }
 
-/* Tab 5: one-way ANOVA on the K x R table, then all pairwise comparisons by
+/* Tab 5: one-way ANOVA on the K x R table, and then all pairwise comparisons by
    one of three post-hoc rules sharing a single critical difference (equal R
    and pooled variance let every pair use the same cutoff). */
 function anovaFamily(Y, o) {
@@ -2099,7 +2175,7 @@ var MCP = { SEED_MAX: SEED_MAX, mulberry32: mulberry32, normalDraw: normalDraw,
   expectedMaxNormal: expectedMaxNormal, gaussLegendre: gaussLegendre, chiDensityLog: chiDensityLog,
   solveMonotone: solveMonotone,
   RHO_CRN: RHO_CRN, trueMeans: trueMeans, drawFamily: drawFamily,
-  oneSampleFamily: oneSampleFamily, pairFamily: pairFamily, holm: holm, rulesFamily: rulesFamily,
+  oneSampleFamily: oneSampleFamily, pairFamily: pairFamily, holm: holm, holmIntervals: holmIntervals, rulesFamily: rulesFamily,
   fwerIndep: fwerIndep, bonfCurve: bonfCurve, bonfBound: bonfBound, pairPower: pairPower,
   winnerFamily: winnerFamily, winnerCoverage: winnerCoverage, anovaFamily: anovaFamily,
   letterGroups: letterGroups, screenStage: screenStage, selectBest: selectBest };
@@ -2156,6 +2232,21 @@ function showTab(name, btn) {
   // copy without growing the back/forward history.
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   renderActive();
+  autoRunFirstVisit(name);
+}
+// The first time a page is shown it runs once by itself, and so a reader lands
+// on a drawn family instead of an empty frame and a Run button still to be
+// found. The run is an ordinary one at the page's own settings (the shown
+// seed, and then a fresh seed if that box is ticked), Clear history removes
+// it like any other, and a page already holding runs is left alone. Page (6)
+// runs its whole procedure, and page (7) takes its first step.
+var AUTO_RAN = {};
+function autoRunFirstVisit(name) {
+  if (AUTO_RAN[name]) return;
+  AUTO_RAN[name] = true;
+  if (name === 'optim') { if (OPTIM_STEP === 0) optimStep(); return; }
+  if (!TABS[name] || hist(name).runs.length) return;
+  if (name === 'best') bestRun(); else runOne(name);
 }
 function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
 // An externally opened #id link, or a back/forward step across one, lands on that tab.
@@ -2456,6 +2547,32 @@ function onSamplingChange(tab) { TABS[tab].render(); }
 // Columns narrow to fit the run count before runs are dropped, and so a 100-run
 // batch is shown whole wherever there is room.
 var HIST_COL_MAX = 56, HIST_COL_MIN = 7;
+// Which shown runs get a label on a history's run axis: the first and the
+// last shown run, every run whose number is a multiple of a step, and any
+// run isBreak marks (a segment divider, a change of sample size), each kept
+// only where it clears the previous label by one label width. The step is
+// the smallest of 1, 5, 10, 25, 50, and 100 whose columns together span
+// three label widths, and so on a wide screen a hundred runs label every
+// tenth and on a phone every twenty-fifth, whereas a short history labels
+// every run. The last shown run outranks a label it would collide with, and
+// so the axis always ends on its true count.
+var RUN_LABEL_STEPS = [1, 5, 10, 25, 50, 100];
+function runTickIndices(shown, firstIdx, colW, isBreak) {
+  var lastN = firstIdx + shown.length - 1, lw = textWidthPx(String(lastN), 10, FF_MONO);
+  var step = RUN_LABEL_STEPS[RUN_LABEL_STEPS.length - 1], k;
+  for (k = 0; k < RUN_LABEL_STEPS.length; k++) {
+    if (RUN_LABEL_STEPS[k] * colW >= 3 * lw) { step = RUN_LABEL_STEPS[k]; break; }
+  }
+  var out = [], lastX = -Infinity, minGap = lw + 6;
+  shown.forEach(function (r, i) {
+    var n = firstIdx + i, last = i === shown.length - 1;
+    if (!(i === 0 || last || n % step === 0 || (isBreak && isBreak(r, i)))) return;
+    var x = (i + 0.5) * colW;
+    if (x - lastX < minGap) { if (!last) return; out.pop(); }
+    out.push(i); lastX = x;
+  });
+  return out;
+}
 function histVisible(runs, cW) {
   var want = Math.min(runs.length, HIST_MAX);
   var colW = HIST_COL_MAX;
@@ -2495,7 +2612,7 @@ var HIST_CANT = 22;
 function histPlot(svgEl, containerEl, runs, opts) {
   var widget = document.querySelector('.widget');
   var W = Math.max(300, containerEl.offsetWidth || (widget ? widget.clientWidth : 600));
-  var pL = 62, pR = 34, pT = 22, pB = 52, cH = 178, cW = W - pL - pR;
+  var pL = 62, pR = 34, pT = 22, pB = 64, cH = 178, cW = W - pL - pR;
   // Legend items, each carrying an estimated pixel width from its own label (the
   // same length-based estimate the true-value label uses below, at this legend's
   // own 10px font: about 5.4 units per character, plus 18 for the marker and its
@@ -2508,9 +2625,17 @@ function histPlot(svgEl, containerEl, runs, opts) {
   ];
   if (opts.starZero) legItems.push({ icon: null, label: '* interval excludes zero' });
   legItems.forEach(function (it) { it.block = it.label.length * 5.4 + 18; });
-  var legRows;
+  var legRows, missLines = [missLabel];
   if (!opts.starZero) {
     legRows = cW < 330 ? 2 : 1;
+    // On a narrow panel a long miss label (tab (3)'s names the raw level)
+    // runs past the panel's right edge even on its own row, and so it is
+    // broken at the space nearest its middle onto a row of its own.
+    if (legRows === 2 && missLabel.length * 5.4 + 18 > cW - 4) {
+      var mid = missLabel.length / 2, cut = -1, sp = missLabel.indexOf(' ');
+      while (sp !== -1) { if (cut === -1 || Math.abs(sp - mid) < Math.abs(cut - mid)) cut = sp; sp = missLabel.indexOf(' ', sp + 1); }
+      if (cut > 0) { missLines = [missLabel.slice(0, cut), missLabel.slice(cut + 1)]; legRows = 3; }
+    }
   } else {
     // Greedy left-to-right wrap: an item starts a new row when it would run
     // past the panel's own width at its current position.
@@ -2590,7 +2715,7 @@ function histPlot(svgEl, containerEl, runs, opts) {
     }
   });
 
-  var hits = 0, expMiss = 0, excl0 = 0, lastLabelX = -Infinity, lastChangeN = null;
+  var hits = 0, expMiss = 0, excl0 = 0;
   if (shown.length === 0) {
     // The prompt splits onto two lines where one would run past the plot's edges.
     if (cW < 400) {
@@ -2601,7 +2726,7 @@ function histPlot(svgEl, containerEl, runs, opts) {
     }
   } else {
     shown.forEach(function (r, i) {
-      var runN = firstRunIdx + i, cx = xC(i);
+      var cx = xC(i);
       var yTop = yP(Math.min(yMax, r.hi)), yBot = yP(Math.max(yMin, r.lo));
       var ym = yP(Math.min(yMax, Math.max(yMin, r.est)));
       if (r.hit) hits++;
@@ -2619,39 +2744,33 @@ function histPlot(svgEl, containerEl, runs, opts) {
       if (opts.starZero && (r.lo > 0 || r.hi < 0)) {
         h += '<text x="' + cx + '" y="' + (pT + 9) + '" text-anchor="middle" fill="' + C.muted + '" font-size="' + (dense ? 9 : 11) + '" font-weight="700" font-family="' + FF_SANS + '">*</text>';
       }
-      var lbl = function (at, ax) {
-        return '<text x="' + ax + '" y="' + (pT + cH + 17) + '" text-anchor="' + at + '" fill="#666" font-size="10" font-family="' + FF_MONO + '">Run ' + runN + '</text>'
-          + '<text x="' + ax + '" y="' + (pT + cH + 29) + '" text-anchor="' + at + '" fill="#aaa" font-size="9" font-family="' + FF_MONO + '">' + opts.nLabel + '=' + r.n.toLocaleString() + '</text>';
-      };
-      if (!dense) {
-        h += '<line x1="' + cx + '" y1="' + (pT + cH) + '" x2="' + cx + '" y2="' + (pT + cH + 4) + '" stroke="#bbb" stroke-width="1"/>' + lbl('middle', cx);
-      } else if (i === 0) {
-        h += lbl('start', pL); lastLabelX = pL;
-      } else if (i === shown.length - 1) {
-        // The end is always labeled, unlike the change-point labels below, and
-        // so carries no 44px spacing check of its own. Its one exception: when
-        // a change-point label to its left already named this same n, a second
-        // label for the same value this close to it would only repeat that one.
-        if (r.n !== lastChangeN) h += lbl('end', pL + cW);
-      } else if (r.n !== shown[i - 1].n) {
-        // A label at the start of every run where n changed. The axis then
-        // shows where a batch of runs at a different sample size began;
-        // skipped when it would sit too close to the previous label to read.
-        var axn = pL + i * colW;
-        if (axn - lastLabelX >= 44) { h += lbl('start', axn); lastLabelX = axn; lastChangeN = r.n; }
+    });
+    // The sample size is written under the first label and under any label
+    // where it changed, and so the axis shows where a batch at a different
+    // size began without repeating the size under every run.
+    var nChanged = function (r, i) { return i > 0 && r.n !== shown[i - 1].n; };
+    runTickIndices(shown, firstRunIdx, colW, nChanged).forEach(function (i) {
+      var r = shown[i], cx = xC(i);
+      h += '<line x1="' + cx + '" y1="' + (pT + cH) + '" x2="' + cx + '" y2="' + (pT + cH + 4) + '" stroke="#bbb" stroke-width="1"/>';
+      h += '<text x="' + cx + '" y="' + (pT + cH + 17) + '" text-anchor="middle" fill="#666" font-size="10" font-family="' + FF_MONO + '">' + (firstRunIdx + i) + '</text>';
+      if (i === 0 || nChanged(r, i)) {
+        h += '<text x="' + cx + '" y="' + (pT + cH + 29) + '" text-anchor="middle" fill="#aaa" font-size="9" font-family="' + FF_MONO + '">' + opts.nLabel + '=' + r.n.toLocaleString() + '</text>';
       }
     });
+    h += '<text x="' + (pL + cW / 2) + '" y="' + (pT + cH + 42) + '" text-anchor="middle" fill="' + C.muted + '" font-size="10" font-family="' + FF_SANS + '">run</text>';
   }
 
   // Legend, and then the true-value label at the right end of its line, drawn
   // last so it sits on top of the bars.
   if (!opts.starZero) {
     var ly = SH - 14 - (legRows - 1) * 14;
-    var mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14;
+    var mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14 - (missLines.length - 1) * 14;
     h += '<circle cx="' + (pL + 7) + '" cy="' + ly + '" r="4" fill="' + C.hit + '"/>';
     h += '<text x="' + (pL + 15) + '" y="' + (ly + 4) + '" fill="#666" font-size="10" font-family="' + FF_SANS + '">interval captures the true value</text>';
     h += '<circle cx="' + mx + '" cy="' + my + '" r="3.6" fill="#fff" stroke="' + C.miss + '" stroke-width="2"/>';
-    h += '<text x="' + (mx + 8) + '" y="' + (my + 4) + '" fill="#666" font-size="10" font-family="' + FF_SANS + '">' + missLabel + '</text>';
+    missLines.forEach(function (line, li) {
+      h += '<text x="' + (mx + 8) + '" y="' + (my + 4 + li * 14) + '" fill="#666" font-size="10" font-family="' + FF_SANS + '">' + line + '</text>';
+    });
   } else {
     legItems.forEach(function (it) {
       var ly2 = SH - 14 - (legRows - 1 - it.row) * 14, x2 = pL + it.ax;
@@ -2690,10 +2809,10 @@ function stripPlot(svgEl, runs, opts) {
   // Tab 6's replication count can run into the thousands, and a four-digit
   // tick needs more room than the three-digit margin the other strips (a
   // count of families or comparisons) ever reach.
-  var pL = yMax >= 1000 ? 50 : 40, pR = 10, pT = 10, pB = 34, cH = 150, cW = W - pL - pR;
+  var pL = yMax >= 1000 ? 50 : 40, pR = 10, pT = 10, pB = 40, cH = 150, cW = W - pL - pR;
   var yP = function (v) { return pT + cH - Math.min(1, Math.max(0, v / yMax)) * cH; };
   var visible = histVisible(runs, cW), shown = visible.shown, colW = visible.colW;
-  var dense = colW < 30, barW = Math.min(16, colW * 0.62);
+  var barW = Math.min(16, colW * 0.62);
   var firstIdx = runs.length - shown.length + 1;
 
   var h = '<rect x="' + pL + '" y="' + pT + '" width="' + cW + '" height="' + cH + '" fill="' + C.bg + '" rx="3"/>';
@@ -2714,9 +2833,8 @@ function stripPlot(svgEl, runs, opts) {
     h += '<text x="' + (pL + cW / 2) + '" y="' + (pT + 24) + '" text-anchor="middle" fill="' + C.muted + '" font-size="12" font-style="italic" font-family="' + FF_SANS + '">Run an experiment to begin collecting results.</text>';
   }
 
-  var lastLabelX = -Infinity;
   shown.forEach(function (r, i) {
-    var runN = firstIdx + i, cx = pL + (i + 0.5) * colW;
+    var cx = pL + (i + 0.5) * colW;
     if (i > 0 && r.divider) {
       var dx = pL + i * colW;
       h += '<line x1="' + dx + '" y1="' + pT + '" x2="' + dx + '" y2="' + (pT + cH) + '" stroke="' + C.muted + '" stroke-width="1" stroke-dasharray="2,3" opacity=".6"/>';
@@ -2739,20 +2857,13 @@ function stripPlot(svgEl, runs, opts) {
       var yTop = yP(v);
       h += '<rect x="' + (cx - barW / 2) + '" y="' + yTop + '" width="' + barW + '" height="' + (pT + cH - yTop) + '" fill="' + col + '"/>';
     }
-    var lbl = function (anchor, ax) {
-      return '<text x="' + ax + '" y="' + (pT + cH + 16) + '" text-anchor="' + anchor + '" fill="#666" font-size="10" font-family="' + FF_MONO + '">Run ' + runN + '</text>';
-    };
-    if (!dense) {
-      h += '<line x1="' + cx + '" y1="' + (pT + cH) + '" x2="' + cx + '" y2="' + (pT + cH + 4) + '" stroke="#bbb" stroke-width="1"/>' + lbl('middle', cx);
-    } else if (i === 0) {
-      h += lbl('start', pL); lastLabelX = pL;
-    } else if (i === shown.length - 1) {
-      h += lbl('end', pL + cW);
-    } else if (r.divider) {
-      var ax = pL + i * colW;
-      if (ax - lastLabelX >= 44) { h += lbl('start', ax); lastLabelX = ax; }
-    }
   });
+  runTickIndices(shown, firstIdx, colW, function (r, i) { return i > 0 && r.divider; }).forEach(function (i) {
+    var cx = pL + (i + 0.5) * colW;
+    h += '<line x1="' + cx + '" y1="' + (pT + cH) + '" x2="' + cx + '" y2="' + (pT + cH + 4) + '" stroke="#bbb" stroke-width="1"/>';
+    h += '<text x="' + cx + '" y="' + (pT + cH + 16) + '" text-anchor="middle" fill="#666" font-size="10" font-family="' + FF_MONO + '">' + (firstIdx + i) + '</text>';
+  });
+  if (shown.length) h += '<text x="' + (pL + cW / 2) + '" y="' + (pT + cH + 31) + '" text-anchor="middle" fill="' + C.muted + '" font-size="10" font-family="' + FF_SANS + '">run</text>';
   var SH = pT + cH + pB;
   svgSet(svgEl, W, SH, h);
   return { shown: shown.length, dropped: runs.length - shown.length };
@@ -2809,16 +2920,23 @@ function forestPlot(svgEl, items, opts) {
     var falseAlarm = it.reject && it.falseRej;
     var col = falseAlarm ? C.miss : (it.reject ? C.ok : C.muted);
     var dash = falseAlarm ? ' stroke-dasharray="4,2.5"' : '';
-    h += '<line x1="' + xP(lo) + '" y1="' + cy + '" x2="' + xP(hi) + '" y2="' + cy + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
-    if (loClipped) h += arrowMark(xP(lo), cy, -1, col);
-    if (hiClipped) h += arrowMark(xP(hi), cy, 1, col);
-    var mx = xP(clip(estV));
-    h += !falseAlarm
-      ? '<circle cx="' + mx + '" cy="' + cy + '" r="4" fill="' + col + '"/>'
-      : '<circle cx="' + mx + '" cy="' + cy + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
-    // The truth tick is drawn after the dot so the dot never hides it.
-    h += '<line x1="' + xP(clip(truth)) + '" y1="' + (cy - 8) + '" x2="' + xP(clip(truth)) + '" y2="' + (cy + 8) + '" stroke="' + C.truth + '" stroke-width="2.5"/>';
-    if (opts.glyph) {
+    // A placeholder row (no family drawn yet) carries no estimate, no
+    // interval, and no true difference worth marking; it holds its row's
+    // height and shows its label alone. A row the step-down never reached
+    // (tab (4) under Holm's rule) carries the whole line, lo and hi infinite,
+    // and so draws as a muted interval clipped at both edges with arrows.
+    if (!it.placeholder) {
+      h += '<line x1="' + xP(lo) + '" y1="' + cy + '" x2="' + xP(hi) + '" y2="' + cy + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
+      if (loClipped) h += arrowMark(xP(lo), cy, -1, col);
+      if (hiClipped) h += arrowMark(xP(hi), cy, 1, col);
+      var mx = xP(clip(estV));
+      h += !falseAlarm
+        ? '<circle cx="' + mx + '" cy="' + cy + '" r="4" fill="' + col + '"/>'
+        : '<circle cx="' + mx + '" cy="' + cy + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
+      // The truth tick is drawn after the dot so the dot never hides it.
+      h += '<line x1="' + xP(clip(truth)) + '" y1="' + (cy - 8) + '" x2="' + xP(clip(truth)) + '" y2="' + (cy + 8) + '" stroke="' + C.truth + '" stroke-width="2.5"/>';
+    }
+    if (opts.glyph && !it.placeholder) {
       var gx = pL + cW + 10, gy = cy - 4;
       h += it.reject
         ? '<rect x="' + gx + '" y="' + gy + '" width="8" height="8" fill="' + C.text + '"/>'
@@ -2874,14 +2992,14 @@ function bindLineDrag(svgEl, onDrag) {
 // design's truth is a teal bar. With opts.decision (tab (1)) the interval and
 // mean dot are colored by the test's decision and its correctness, the same
 // reading the forest plots use: red, dashed, and hollow for a false alarm,
-// indigo for a detection, gray when kept. Without it (tab (4)) they are
+// indigo for a detection, gray when kept. Without it (tab (3)) they are
 // colored by capture: teal and filled when item.captured, red, dashed, and
 // hollow when it is not. opts.neutral is for
 // a bar that is not a confidence interval on the true mean at all (tab (5)'s
 // critical-difference bars around the sample means): it treats every
 // interval as neither captured nor missed and draws it muted instead.
 // opts.winnerIdx
-// marks tab (4)'s one judged design: every other design is drawn muted
+// marks tab (3)'s one judged design: every other design is drawn muted
 // regardless of its own capture (only the winner's interval is being read),
 // and the winner's dot carries an extra orange ring as this family's pick.
 // opts.focus, when given, washes that one design's column so a reader's eye
@@ -2904,7 +3022,7 @@ function designsPlot(svgEl, items, opts) {
   var pL = 46, pR = (typeof opts.target === 'number') ? 30 : 16, pT = 14;
   var pB = opts.glyph ? 36 : 30;
   // The K columns share the frame's whole inner width, however few they
-  // are, so the frame always spans its card. No floor on colW: a floor
+  // are, and so the frame always spans its card. No floor on colW: a floor
   // would let K columns claim more than the frame's own inner width,
   // pushing the rightmost designs' marks and intervals past the drawn rect
   // and out of the viewBox instead of just narrowing to fit.
@@ -2935,18 +3053,23 @@ function designsPlot(svgEl, items, opts) {
     var muted = opts.neutral || (isWinnerTab && !isWinner);
     // Under opts.decision the color says what the test decided and whether
     // that was right (a false alarm, a detection, or kept); otherwise it says
-    // whether the interval captured the truth, which is tab (4)'s question.
+    // whether the interval captured the truth, which is tab (3)'s question.
     var falseAlarm = opts.decision ? (it.reject && it.falseRej) : !it.captured;
     var col = muted ? C.estMuted : (opts.decision ? (falseAlarm ? C.miss : (it.reject ? C.ok : C.muted)) : (it.captured ? C.truth : C.miss));
     var dash = (!muted && falseAlarm) ? ' stroke-dasharray="4,2.5"' : '';
-    h += '<line x1="' + cx + '" y1="' + yP(it.lo) + '" x2="' + cx + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
-    h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.hi) + '" x2="' + (cx + 6) + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"/>';
-    h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.lo) + '" x2="' + (cx + 6) + '" y2="' + yP(it.lo) + '" stroke="' + col + '" stroke-width="1.8"/>';
-    var ym = yP(it.mean);
-    h += (muted || !falseAlarm)
-      ? '<circle cx="' + cx + '" cy="' + ym + '" r="4" fill="' + col + '"/>'
-      : '<circle cx="' + cx + '" cy="' + ym + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
-    if (isWinner) h += '<circle cx="' + cx + '" cy="' + ym + '" r="7.5" fill="none" stroke="' + C.est + '" stroke-width="2"/>';
+    // A placeholder item (no family drawn yet) has no interval and no sample
+    // mean to show: drawing its zero-width interval would put a dot on every
+    // truth bar that reads as a result. Only the truth bar and label are drawn.
+    if (!it.placeholder) {
+      h += '<line x1="' + cx + '" y1="' + yP(it.lo) + '" x2="' + cx + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
+      h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.hi) + '" x2="' + (cx + 6) + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"/>';
+      h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.lo) + '" x2="' + (cx + 6) + '" y2="' + yP(it.lo) + '" stroke="' + col + '" stroke-width="1.8"/>';
+      var ym = yP(it.mean);
+      h += (muted || !falseAlarm)
+        ? '<circle cx="' + cx + '" cy="' + ym + '" r="4" fill="' + col + '"/>'
+        : '<circle cx="' + cx + '" cy="' + ym + '" r="3.6" fill="#fff" stroke="' + col + '" stroke-width="2"/>';
+      if (isWinner) h += '<circle cx="' + cx + '" cy="' + ym + '" r="7.5" fill="none" stroke="' + C.est + '" stroke-width="2"/>';
+    }
     // The truth bar is drawn last so the mean dot, which often sits on it,
     // never hides it. A caller whose truths all sit on the target line
     // (opts.truthMark false) draws none: the line already shows them.
@@ -2954,7 +3077,7 @@ function designsPlot(svgEl, items, opts) {
     if (opts.letters && opts.letters[i]) {
       h += '<text x="' + cx + '" y="' + (yP(it.hi) - 8) + '" text-anchor="middle" fill="' + C.text + '" font-size="10" font-weight="700" font-family="' + FF_SANS + '">' + opts.letters[i] + '</text>';
     }
-    if (opts.glyph) {
+    if (opts.glyph && !it.placeholder) {
       var gy = pT + cH + 5;
       h += it.reject
         ? '<rect x="' + (cx - 3.5) + '" y="' + gy + '" width="7" height="7" fill="' + C.text + '"/>'
@@ -3013,7 +3136,7 @@ function designsPlot(svgEl, items, opts) {
 // opts.order, when given, is the sorted-position-to-design-number
 // permutation TABS.anova.render builds under "Order designs by sample mean":
 // row r and column c then read design order[r] + 1 and order[c + 1] + 1
-// instead of their own plain position, while pairs/rule stay indexed in
+// instead of their own plain position, whereas pairs/rule stay indexed in
 // position space so the grid itself is unaffected by which permutation
 // labels it.
 var MTX_PAD_L = 22, MTX_PAD_T = 20, MTX_PAD_R = 10, MTX_PAD_B = 10;
@@ -3136,6 +3259,7 @@ function swDecision(color, hollow) {
   return legSwatch('<line x1="1" y1="6" x2="23" y2="6" stroke="' + color + '" stroke-width="1.8"' + (hollow ? ' stroke-dasharray="4,2.5"' : '') + '/>'
     + (hollow ? '<circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + color + '" stroke-width="2"/>' : '<circle cx="12" cy="6" r="4" fill="' + color + '"/>'));
 }
+function swWhole(color) { return legSwatch('<line x1="4" y1="6" x2="20" y2="6" stroke="' + color + '" stroke-width="2"/><path d="M4 6l4 -3v6z" fill="' + color + '"/><path d="M20 6l-4 -3v6z" fill="' + color + '"/>'); }
 function swDot(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="' + color + '"/>'); }
 function swDotHollow(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="#fff" stroke="' + color + '" stroke-width="2"/>'); }
 function legendHtml(items) { return items.map(function (it) { return '<span>' + it.sw + it.label + '</span>'; }).join(''); }
@@ -3146,7 +3270,7 @@ function legendHtml(items) { return items.map(function (it) { return '<span>' + 
 // Bonferroni-corrected family-wise error curves, the bound alpha as a flat
 // dashed reference, and the observed rate at the current C with a Wilson bar.
 // In 'power' mode: whatever curves and observed marks the caller passes, and
-// so the same axes serve tab (3)'s per-comparison power sweep. Returns the
+// so the same axes serve tab (4)'s per-comparison power sweep. Returns the
 // legend items; if opts.legendEl is given, also fills it as a symbol-first
 // .leg grid.
 function fwerPlot(svgEl, opts) {
@@ -3282,7 +3406,7 @@ function setCard(id, html) { var el = $(id); if (el) el.innerHTML = html; }
 // Every tab starts with an empty render and a sampling/post pair that draws
 // nothing from the controls, and so the history model and showTab both work
 // before any tab has built its own controls or figures.
-['looks', 'pairs', 'power', 'winner', 'anova', 'best'].forEach(function (tab) {
+['looks', 'pairs', 'winner', 'power', 'anova', 'best'].forEach(function (tab) {
   TABS[tab] = {
     render: function () {},
     derive: function (seed, sp, post) { return {}; },
@@ -3292,35 +3416,35 @@ function setCard(id, html) { var el = $(id); if (el) el.innerHTML = html; }
   };
 });
 
-// ── Tab ①: Many Designs Against One Target ───────────────────────────────
-// One design judged on K requirements: each response gets its own one-sample
-// interval tested against its own target, and every response's true mean is
-// that target, so this tab simulates the null, every flag is a false alarm,
-// and the fraction of runs with any flag is the family's Type-I error rate.
-// Each response is simulated as its deviation from its target in units of
-// its own standard deviation, so the K responses share one axis with every
-// target at zero and sigma is 1 by construction. K, R, and alpha are
-// sampling knobs (a change draws a divider on the next run); the per-interval
-// level is a post-processing knob that re-derives every run already drawn.
+// ── Tab ①: Fishing Across K Responses ────────────────────────────────────
+// One design judged on K responses: each response gets its own one-sample
+// interval tested against its own baseline, and every response's true mean
+// is that baseline, and so this tab simulates the null, every flag is a false
+// alarm, and the fraction of runs with any flag is the family's Type-I error
+// rate. Each response is simulated as its deviation from its baseline in
+// units of its own standard deviation, and so the K responses share one axis with
+// every baseline at zero and sigma is 1 by construction. K and R are sampling
+// knobs (a change draws a divider on the next run); alpha and the per-interval
+// level are post-processing knobs that re-derive every run already drawn.
 var LOOKS_THETA0 = 0;
-// The requirements a design can be judged on, in the order K takes them,
-// each with its own target and standard deviation in its own units. The
-// simulation draws every response as its deviation from its target in units
+// The responses a design can be judged on, in the order K takes them, each
+// with its own baseline and standard deviation in its own units. The
+// simulation draws every response as its deviation from its baseline in units
 // of its standard deviation; the plot maps that back onto each response's
-// own scale, so the panels show different measurements on different axes
+// own scale, and so the panels show different measurements on different axes
 // while the decisions, which depend only on the standardized values, stay
 // exactly what the core computed.
 var LOOKS_RESPONSES = [
-  { name: 'Mean wait (min)', target: 4, sigma: 0.8 },
-  { name: 'Utilization (%)', target: 80, sigma: 4 },
-  { name: 'Fill rate (%)', target: 95, sigma: 2 },
-  { name: 'Throughput (/h)', target: 120, sigma: 10 },
-  { name: 'System time (min)', target: 12, sigma: 2 },
-  { name: 'Inventory (units)', target: 40, sigma: 6 },
-  { name: 'Stockouts (/month)', target: 2, sigma: 0.5 },
-  { name: 'Cycle time (min)', target: 30, sigma: 5 },
-  { name: 'On-time rate (%)', target: 90, sigma: 3 },
-  { name: 'Unit cost ($)', target: 12, sigma: 1.5 }
+  { name: 'Mean wait (min)', baseline: 4, sigma: 0.8 },
+  { name: 'Utilization (%)', baseline: 80, sigma: 4 },
+  { name: 'Fill rate (%)', baseline: 95, sigma: 2 },
+  { name: 'Throughput (/h)', baseline: 120, sigma: 10 },
+  { name: 'System time (min)', baseline: 12, sigma: 2 },
+  { name: 'Inventory (units)', baseline: 40, sigma: 6 },
+  { name: 'Stockouts (/month)', baseline: 2, sigma: 0.5 },
+  { name: 'Cycle time (min)', baseline: 30, sigma: 5 },
+  { name: 'On-time rate (%)', baseline: 90, sigma: 3 },
+  { name: 'Unit cost ($)', baseline: 12, sigma: 1.5 }
 ];
 // The largest of 1, 2, 2.5, or 5 times a power of ten that is at most x.
 function niceStepBelow(x) {
@@ -3328,16 +3452,16 @@ function niceStepBelow(x) {
   [1, 2, 2.5, 5].forEach(function (k) { if (k * mag <= x + 1e-9) best = k * mag; });
   return best;
 }
-// One small panel per requirement, each on its own scale: a titled frame
-// whose axis is centered on the requirement's target (three ticks, the
-// target's in bold), the target as a dashed line across the frame, and the
+// One small panel per response, each on its own scale: a titled frame
+// whose axis is centered on the response's baseline (three ticks, the
+// baseline's in bold), the baseline as a dashed line across the frame, and the
 // design's interval for that response standing in the middle, colored by
 // the decision as designsPlot colors its intervals (red, dashed, and hollow
 // for a false alarm, gray when kept). Panels fill the figure's width in as
 // many rows as a minimum panel width allows, balanced so no row is nearly
 // empty. opts.spanStd is the half-span in standard deviations every panel
-// shares, so intervals of equal standardized width look equally tall.
-function requirementsPlot(svgEl, items, opts) {
+// shares, and so intervals of equal standardized width look equally tall.
+function responsesPlot(svgEl, items, opts) {
   var W = fullCardWidth(svgEl), K = items.length;
   var minPanelW = 118, gap = 10;
   var perRow = Math.max(1, Math.min(K, Math.floor((W + gap) / (minPanelW + gap))));
@@ -3347,27 +3471,30 @@ function requirementsPlot(svgEl, items, opts) {
   var panelH = pT + cH + pB, plotW = panelW - pL - pR, s = opts.spanStd;
   var h = '';
   items.forEach(function (it, i) {
-    var r = opts.responses[i] || { name: 'Response ' + (i + 1), target: 0, sigma: 1 };
+    var r = opts.responses[i] || { name: 'Response ' + (i + 1), baseline: 0, sigma: 1 };
     var row = Math.floor(i / perRow), col = i % perRow;
     var x0 = col * (panelW + gap), y0 = row * (panelH + rowGap);
-    var yLo = r.target - s * r.sigma, yHi = r.target + s * r.sigma;
+    var yLo = r.baseline - s * r.sigma, yHi = r.baseline + s * r.sigma;
     var yP = function (v) { return y0 + pT + cH - (v - yLo) / (yHi - yLo) * cH; };
-    var units = function (d) { return r.target + d * r.sigma; };
+    var units = function (d) { return r.baseline + d * r.sigma; };
     h += '<rect x="' + (x0 + pL) + '" y="' + (y0 + pT) + '" width="' + plotW + '" height="' + cH + '" fill="' + C.bg + '" rx="3"/>';
     h += '<text x="' + (x0 + pL + plotW / 2) + '" y="' + (y0 + 11) + '" text-anchor="middle" fill="' + C.text + '" font-size="10.5" font-weight="600" font-family="' + FF_SANS + '">' + r.name + '</text>';
     var step = niceStepBelow(0.75 * s * r.sigma), dec = stepDecimals(step);
-    [r.target - step, r.target, r.target + step].forEach(function (v, k) {
-      var ty = yP(v), isTarget = k === 1;
+    [r.baseline - step, r.baseline, r.baseline + step].forEach(function (v, k) {
+      var ty = yP(v), isBase = k === 1;
       h += '<line x1="' + (x0 + pL - 4) + '" y1="' + ty + '" x2="' + (x0 + pL) + '" y2="' + ty + '" stroke="#bbb" stroke-width="1"/>';
-      h += '<text x="' + (x0 + pL - 7) + '" y="' + (ty + 3.5) + '" text-anchor="end" fill="' + (isTarget ? C.text : C.muted) + '" font-size="9.5"' + (isTarget ? ' font-weight="700"' : '') + ' font-family="' + FF_MONO + '">' + v.toFixed(dec) + '</text>';
+      h += '<text x="' + (x0 + pL - 7) + '" y="' + (ty + 3.5) + '" text-anchor="end" fill="' + (isBase ? C.text : C.muted) + '" font-size="9.5"' + (isBase ? ' font-weight="700"' : '') + ' font-family="' + FF_MONO + '">' + v.toFixed(dec) + '</text>';
     });
     h += '<line x1="' + (x0 + pL) + '" y1="' + (y0 + pT) + '" x2="' + (x0 + pL) + '" y2="' + (y0 + pT + cH) + '" stroke="#ccc" stroke-width="1"/>';
-    var ty0 = yP(r.target);
+    var ty0 = yP(r.baseline);
     h += '<line x1="' + (x0 + pL) + '" y1="' + ty0 + '" x2="' + (x0 + pL + plotW) + '" y2="' + ty0 + '" stroke="' + C.text + '" stroke-width="1.5" stroke-dasharray="5,3"/>';
     var cx = x0 + pL + plotW / 2;
     var falseAlarm = it.reject && it.falseRej;
     var col = falseAlarm ? C.miss : C.muted;
     var dash = falseAlarm ? ' stroke-dasharray="4,2.5"' : '';
+    // Before the first run the item is a placeholder with no interval and no
+    // sample mean, and the panel shows only its baseline.
+    if (it.placeholder) return;
     var lo = yP(units(it.lo)), hi = yP(units(it.hi)), ym = yP(units(it.mean));
     h += '<line x1="' + cx + '" y1="' + lo + '" x2="' + cx + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
     h += '<line x1="' + (cx - 6) + '" y1="' + hi + '" x2="' + (cx + 6) + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"/>';
@@ -3380,14 +3507,14 @@ function requirementsPlot(svgEl, items, opts) {
 }
 function looksKChanged() { clampParam('looks-K', 2, 10, 0); onSamplingChange('looks'); }
 function looksRChanged() { clampParam('looks-R', 5, 50, 0); onSamplingChange('looks'); }
-function looksAlphaChanged() { onSamplingChange('looks'); }
+function looksAlphaChanged() { rederive('looks'); }
 function looksLevelChanged() { rederive('looks'); }
 registerSpinner('looks-K', { min: 2, max: 10, step: 1, decimals: 0 }, function () { onSamplingChange('looks'); });
 registerSpinner('looks-R', { min: 5, max: 50, step: 1, decimals: 0 }, function () { onSamplingChange('looks'); });
 
 // The half-span every family's figure is drawn on: wide enough that an
 // interval built at up to the 0.9975 quantile of its own t distribution
-// stays inside the frame around the common target at zero, in units of each
+// stays inside the frame around the common baseline at zero, in units of each
 // response's own standard deviation. Depends only on the sampling
 // parameters of the current segment, and so it holds fixed across a whole
 // batch and only moves when a run's own R actually changes.
@@ -3395,27 +3522,41 @@ function looksYSpan(sp) {
   var s = 4 / Math.sqrt(sp.R) * MCP.tQuantile(0.9975, sp.R - 1);
   return [LOOKS_THETA0 - s, LOOKS_THETA0 + s];
 }
+// The span for tabs (4) and (5), whose designs sit around the common true
+// mean 10 in the output's own units: the design farthest from 10 under the
+// segment's own configuration, plus room for a sample mean three standard
+// errors out and an interval at the 0.9995 quantile of its t distribution
+// (the widest the level control reaches, alpha/K at alpha = 0.01 and
+// K = 10). It depends only on the segment's sampling parameters, and so it
+// holds fixed across a batch and moves only when a run's own K, R, sigma,
+// delta, or configuration changes.
+function designsYSpan(sp) {
+  var far = 0;
+  MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).forEach(function (m) { far = Math.max(far, Math.abs(m - 10)); });
+  var s = far + (3 + MCP.tQuantile(0.9995, sp.R - 1)) * sp.sigma / Math.sqrt(sp.R);
+  return [10 - s, 10 + s];
+}
 // The number word a live K spells out in the figure's own title, for K from
 // 2 through 10 (this tab's whole range); a K outside that range (never
 // reachable through the control's own clamp) falls back to the digit.
 var NUM_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' };
 function looksDesignsTitle(K) {
-  return 'One design on ' + (NUM_WORDS[K] || String(K)) + ' requirements, every true mean at its target';
+  return 'One design on ' + (NUM_WORDS[K] || String(K)) + ' responses, every true mean at its baseline';
 }
 function looksFigCaption(el, runIdx, rec, theta0) {
   // A standing sentence, unchanged by any run, states what the figure holds:
-  // K candidate designs of one system, each tested against the one target.
-  var standing = 'Each panel is one of the design\'s K requirements on its own scale, its target the dashed line, and every true mean exactly at its target.';
+  // one design on K responses, each tested against its own baseline.
+  var standing = 'Each panel is one of the design\'s K responses on its own scale, its baseline the dashed line, and every true mean exactly at its baseline.';
   var body;
   if (!rec) {
-    body = 'Run an experiment to simulate the design and judge it on every requirement.';
+    body = 'Run an experiment to simulate the design and test every response.';
   } else {
-    body = 'Run ' + runIdx + ': <strong>' + rec.nReject + ' of ' + rec.C + '</strong> intervals exclude their targets'
+    body = 'Run ' + runIdx + ': <strong>' + rec.nReject + ' of ' + rec.C + '</strong> intervals exclude their baselines'
       + (rec.nReject ? ', every one a false alarm.' : '.');
   }
   el.innerHTML = standing + ' ' + body;
-  reserveCapHeight(el, [standing + ' Run an experiment to simulate the design and judge it on every requirement.',
-    standing + ' Run 100: <strong>10 of 10</strong> intervals exclude their targets, every one a false alarm.'], true);
+  reserveCapHeight(el, [standing + ' Run an experiment to simulate the design and test every response.',
+    standing + ' Run 100: <strong>10 of 10</strong> intervals exclude their baselines, every one a false alarm.'], true);
 }
 // Every strip caption opens with a fixed sentence (unchanged by any run)
 // naming what a column counts and what turns it red, and then a family-level
@@ -3468,21 +3609,21 @@ function looksFwerCaption(el, alpha, K) {
 // The interval level a figure's own intervals are drawn at, stated once as a
 // line under the figure's heading rather than left for a reader to work out
 // from the level select alone: 1 − α with no correction, or 1 − α/denom
-// under Bonferroni. denomSym is 'K' on tabs 1 and 4 (corrected across the K
-// designs) and 'C' on tabs 2 and 3 (corrected across the C comparisons).
+// under Bonferroni. denomSym is 'K' on tabs 1 and 3 (corrected across the K
+// designs) and 'C' on tabs 2 and 4 (corrected across the C comparisons).
 function intervalLevelLine(el, alphaJ, corrected, denomSym) {
   var pct = ((1 - alphaJ) * 100).toFixed(1);
   el.innerHTML = pct + '% (1 − α' + (corrected ? '/' + denomSym : '') + ') confidence intervals shown.';
   reserveCapHeight(el, ['95.0% (1 − α) confidence intervals shown.', '99.9% (1 − α/' + denomSym + ') confidence intervals shown.'], true);
 }
 // A fixed legend for the designs plot's own marks, none of which depend on
-// the data a family produces: the target line, which is also every design's
-// true mean, and the two states an interval and its mean dot can be in.
+// the data a family produces: the baseline line, which is also every
+// response's true mean, and the two states an interval and its mean dot can be in.
 function looksFigLegendHtml() {
   return legendHtml([
-    { sw: swLine(C.text, '5,3'), label: 'the requirement\'s target, which is also its true mean' },
-    { sw: swDecision(C.miss, true), label: 'false alarm: the interval excludes the target' },
-    { sw: swDecision(C.muted, false), label: 'kept: the interval contains the target' }
+    { sw: swLine(C.text, '5,3'), label: 'the response\'s baseline, which is also its true mean' },
+    { sw: swDecision(C.miss, true), label: 'false alarm: the interval excludes the baseline' },
+    { sw: swDecision(C.muted, false), label: 'kept: the interval contains the baseline' }
   ]);
 }
 
@@ -3490,15 +3631,15 @@ TABS.looks = {
   sampling: function () {
     return {
       K: Number($('looks-K').value), R: Number($('looks-R').value), sigma: 1,
-      cfg: 'all', delta: 0, alpha: Number($('looks-alpha').value),
+      cfg: 'all', delta: 0,
       dir: 'max', crn: false
     };
   },
-  post: function () { return { level: $('looks-level').value, theta0: LOOKS_THETA0 }; },
+  post: function () { return { level: $('looks-level').value, alpha: Number($('looks-alpha').value), theta0: LOOKS_THETA0 }; },
   derive: function (seed, sp, post) {
     var means = MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: sp.crn }).Y;
-    var rec = MCP.oneSampleFamily(Y, { alpha: sp.alpha, level: post.level, theta0: post.theta0, means: means });
+    var rec = MCP.oneSampleFamily(Y, { alpha: post.alpha, level: post.level, theta0: post.theta0, means: means });
     rec.means = means;
     return rec;
   },
@@ -3509,7 +3650,7 @@ TABS.looks = {
     var span = looksYSpan(spanSp);
     TABS.looks.ySpan = span;
 
-    var nC = sp.K, alphaJ = post.level === 'bonf' ? sp.alpha / nC : sp.alpha;
+    var nC = sp.K, alphaJ = post.level === 'bonf' ? post.alpha / nC : post.alpha;
     var nSeg = runs.length, nAnyFalse = 0;
     runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; });
 
@@ -3518,9 +3659,9 @@ TABS.looks = {
 
     var latest = runs.length ? runs[runs.length - 1] : null;
     var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir).map(function (t) {
-      return { truth: t, lo: t, hi: t, mean: t, captured: true, reject: false, falseRej: false };
+      return { truth: t, lo: t, hi: t, mean: t, captured: true, reject: false, falseRej: false, placeholder: true };
     });
-    requirementsPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES });
+    responsesPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES });
     $('looks-fig-leg').innerHTML = looksFigLegendHtml();
     looksFigCaption($('looks-fig-cap'), all.length, latest ? latest.rec : null, post.theta0);
 
@@ -3533,7 +3674,7 @@ TABS.looks = {
       ? 'at most ' + (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '% by the Bonferroni bound'
       : (MCP.fwerIndep(alphaJ, nC) * 100).toFixed(1) + '% predicted';
     stripTallyCaption($('looks-strip-cap'),
-      'Each column is one run of the design; its height counts the requirements whose interval excludes its target, every one a false alarm because every true mean is its target, and red marks a run with at least one.',
+      'Each column is one run of the design; its height counts the responses whose interval excludes its baseline, every one a false alarm because every true mean is its baseline, and red marks a run with at least one.',
       stripRes, nSeg, nAnyFalse, 'runs', 'had at least one false alarm', looksRefText,
       ['99.9% predicted', 'at most 99.9% by the Bonferroni bound']);
 
@@ -3542,16 +3683,16 @@ TABS.looks = {
 
     var obs = nSeg > 0 ? MCP.wilson(nAnyFalse, nSeg, 0.95) : null;
     var legEl = $('looks-fwer-leg');
-    fwerPlot($('looks-fwer'), { mode: 'fwer', alpha: sp.alpha, C: nC, obs: obs, legendEl: legEl });
+    fwerPlot($('looks-fwer'), { mode: 'fwer', alpha: post.alpha, C: nC, obs: obs, legendEl: legEl });
     // The legend gains a fourth line, the observed-rate marker, only once a
     // family has run; reserving its height for that four-line case up front
     // keeps the card the same size whether or not a run has happened yet.
     reserveCapHeight(legEl, looksFwerLegendWorst(), true);
-    looksFwerCaption($('looks-fwer-cap'), sp.alpha, nC);
+    looksFwerCaption($('looks-fwer-cap'), post.alpha, nC);
   }
 };
 
-// ── Tab ②: Designs Against Each Other ─────────────────────────────────────
+// ── Tab ②: Fishing Across K Designs ───────────────────────────────────────
 // Every comparison is a two-sample interval on a difference, either against a
 // benchmark design (C = K − 1) or over every pair (C = K(K − 1)/2); a
 // rejection is false exactly when the two designs compared truly share a
@@ -3564,8 +3705,8 @@ function pairsRChanged() { clampParam('pairs-R', 5, 50, 0); onSamplingChange('pa
 function pairsSigmaChanged() { clampParam('pairs-sigma', 0.5, 5, 1); onSamplingChange('pairs'); }
 function pairsDeltaChanged() { clampParam('pairs-delta', 0, 5, 1); onSamplingChange('pairs'); }
 function pairsCfgChanged() { onSamplingChange('pairs'); }
-function pairsAlphaChanged() { onSamplingChange('pairs'); }
-function pairsModeChanged() { onSamplingChange('pairs'); }
+function pairsAlphaChanged() { rederive('pairs'); }
+function pairsModeChanged() { rederive('pairs'); }
 function pairsCrnChanged() { onSamplingChange('pairs'); }
 function pairsLevelChanged() { rederive('pairs'); }
 registerSpinner('pairs-K', { min: 2, max: 10, step: 1, decimals: 0 }, function () { onSamplingChange('pairs'); });
@@ -3588,8 +3729,8 @@ function pairsList(K, mode) {
 // when the first one lands. Every reader-facing value is null rather than
 // zero, and so the table's own formatters can tell a placeholder from a
 // family whose estimate genuinely happens to land on zero.
-function pairsPlaceholderItems(sp) {
-  return pairsList(sp.K, sp.mode).map(function (pr) {
+function pairsPlaceholderItems(K, mode) {
+  return pairsList(K, mode).map(function (pr) {
     return { i: pr[0], j: pr[1], diff: 0, se: 0, half: 0, lo: 0, hi: 0, trueDiff: 0,
              captured: true, reject: false, falseRej: false, trueDet: false, p: null, pBonf: null, placeholder: true };
   });
@@ -3646,15 +3787,15 @@ TABS.pairs = {
   sampling: function () {
     return {
       K: Number($('pairs-K').value), R: Number($('pairs-R').value), sigma: Number($('pairs-sigma').value),
-      cfg: $('pairs-cfg').value, delta: Number($('pairs-delta').value), alpha: Number($('pairs-alpha').value),
-      mode: $('pairs-mode').value, crn: $('pairs-crn').checked, dir: 'max'
+      cfg: $('pairs-cfg').value, delta: Number($('pairs-delta').value),
+      crn: $('pairs-crn').checked, dir: 'max'
     };
   },
-  post: function () { return { level: $('pairs-level').value }; },
+  post: function () { return { level: $('pairs-level').value, alpha: Number($('pairs-alpha').value), mode: $('pairs-mode').value }; },
   derive: function (seed, sp, post) {
     var means = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: sp.crn }).Y;
-    var rec = MCP.pairFamily(Y, { alpha: sp.alpha, level: post.level, mode: sp.mode, paired: sp.crn, means: means });
+    var rec = MCP.pairFamily(Y, { alpha: post.alpha, level: post.level, mode: post.mode, paired: sp.crn, means: means });
     rec.means = means;
     return rec;
   },
@@ -3664,21 +3805,21 @@ TABS.pairs = {
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
     var span = pairsSpan(spanSp);
     TABS.pairs.span = span;
-    var nC = pairsList(sp.K, sp.mode).length;
+    var nC = pairsList(sp.K, post.mode).length;
 
-    var alphaJ = post.level === 'bonf' ? sp.alpha / nC : sp.alpha;
-    var nSeg = runs.length, nAnyFalse = 0, nAllCap = 0;
-    runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; if (r.rec.allCaptured) nAllCap++; });
+    var alphaJ = post.level === 'bonf' ? post.alpha / nC : post.alpha;
+    var nSeg = runs.length, nAnyFalse = 0;
+    runs.forEach(function (r) { if (r.rec.anyFalse) nAnyFalse++; });
     // As on tab 1, the independent-comparisons formula only ever describes
     // the null comparisons, and so it is evaluated at their count rather than
     // at every comparison C, which a non-null configuration inflates.
     var meansP = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
-    var nNullC = pairsList(sp.K, sp.mode).filter(function (pr) { return meansP[pr[0]] === meansP[pr[1]]; }).length;
+    var nNullC = pairsList(sp.K, post.mode).filter(function (pr) { return meansP[pr[0]] === meansP[pr[1]]; }).length;
 
     intervalLevelLine($('pairs-level-line'), alphaJ, post.level === 'bonf', 'C');
 
     var latest = runs.length ? runs[runs.length - 1] : null;
-    var items = latest ? latest.rec.items : pairsPlaceholderItems(sp);
+    var items = latest ? latest.rec.items : pairsPlaceholderItems(sp.K, post.mode);
     forestPlot($('pairs-fig'), items, {
       span: span, hyp: 0, glyph: true, full: true,
       labelOf: function (it) { return (it.i + 1) + ' − ' + (it.j + 1); }
@@ -3688,11 +3829,9 @@ TABS.pairs = {
     pTable($('pairs-table'), items, pairsTableCols());
 
     setCard('pairs-c-C', String(nC));
-    setCard('pairs-c-alphaj', alphaJ.toFixed(4));
+    setCard('pairs-c-Cf', post.mode === 'bench' ? '(K − 1)' : '(K(K − 1)/2)');
     setCard('pairs-c-anyfalse', rateText(nAnyFalse, nSeg));
     setCard('pairs-c-indep', nNullC > 0 ? (MCP.fwerIndep(alphaJ, nNullC) * 100).toFixed(1) + '%' : '—');
-    setCard('pairs-c-bonfbound', (MCP.bonfBound(alphaJ, nC) * 100).toFixed(1) + '%');
-    setCard('pairs-c-allcap', rateText(nAllCap, nSeg));
 
     var stripRes = stripPlot($('pairs-strip'), runs, {
       yMax: nC, yLabel: 'declared different',
@@ -3712,13 +3851,13 @@ TABS.pairs = {
     // 45 is this tab's own largest reachable C (K = 10, all pairs), and so the
     // axis holds every C the comparisons mode and K can produce; the marker
     // never falls off the edge whatever the current comparison count is.
-    fwerPlot($('pairs-fwer'), { mode: 'fwer', alpha: sp.alpha, C: nC, obs: obs, legendEl: legEl, xMax: 45 });
+    fwerPlot($('pairs-fwer'), { mode: 'fwer', alpha: post.alpha, C: nC, obs: obs, legendEl: legEl, xMax: 45 });
     reserveCapHeight(legEl, looksFwerLegendWorst(), true);
-    looksFwerCaption($('pairs-fwer-cap'), sp.alpha, nC);
+    looksFwerCaption($('pairs-fwer-cap'), post.alpha, nC);
   }
 };
 
-// ── Tab ③: Power Under Correction ─────────────────────────────────────────
+// ── Tab ④: Fewer False Alarms, Fewer Detections────────────────────────────────────
 // The same benchmark-or-all-pairs comparisons as tab ②, but with a real
 // difference planted and every raw p-value judged three ways at once: no
 // correction, Bonferroni, and Holm's step-down. K, R, sigma, delta, alpha, the
@@ -3730,31 +3869,55 @@ function powerRChanged() { clampParam('power-R', 5, 50, 0); onSamplingChange('po
 function powerSigmaChanged() { clampParam('power-sigma', 0.5, 5, 1); onSamplingChange('power'); }
 function powerDeltaChanged() { clampParam('power-delta', 0, 5, 1); onSamplingChange('power'); }
 function powerCfgChanged() { onSamplingChange('power'); }
-function powerAlphaChanged() { onSamplingChange('power'); }
-function powerModeChanged() { onSamplingChange('power'); }
+function powerAlphaChanged() { rederive('power'); }
+function powerModeChanged() { rederive('power'); }
 function powerRuleChanged() { rederive('power'); }
 registerSpinner('power-K', { min: 2, max: 10, step: 1, decimals: 0 }, function () { onSamplingChange('power'); });
 registerSpinner('power-R', { min: 5, max: 50, step: 1, decimals: 0 }, function () { onSamplingChange('power'); });
 registerSpinner('power-sigma', { min: 0.5, max: 5, step: 0.1, shiftStep: 1, decimals: 1 }, function () { onSamplingChange('power'); });
 registerSpinner('power-delta', { min: 0, max: 5, step: 0.1, shiftStep: 1, decimals: 1 }, function () { onSamplingChange('power'); });
 
-function powerFigCaption(el) {
-  el.innerHTML = 'Intervals at the Bonferroni level 1 − α/C; the table below judges the same comparisons by all three rules.';
-  reserveCapHeight(el, el.innerHTML, true);
+// The figure follows the Rule select: uncorrected intervals, Bonferroni
+// intervals, or Holm's step-down drawn as each reached comparison's interval
+// at the level of its own step. The level line, the caption, and the legend
+// each say which, and each reserves the height of its longest version so
+// switching the rule moves nothing below the figure.
+var POWER_HOLM_LEVEL = 'Holm\'s step-down shown: the comparison with the m-th smallest p-value (m counted from zero) at 1 − α/(C − m), and the whole line past the step where the step-down stopped.';
+function powerLevelLine(el, post, nC) {
+  if (post.rule === 'holm') el.innerHTML = POWER_HOLM_LEVEL;
+  else {
+    var alphaJ = post.rule === 'bonf' ? post.alpha / nC : post.alpha;
+    el.innerHTML = ((1 - alphaJ) * 100).toFixed(1) + '% (1 − α' + (post.rule === 'bonf' ? '/C' : '') + ') confidence intervals shown.';
+  }
+  reserveCapHeight(el, ['99.9% (1 − α/C) confidence intervals shown.', POWER_HOLM_LEVEL], true);
+}
+var POWER_CAPTIONS = {
+  none: 'Intervals at the uncorrected level 1 − α, each judged on its own; the table below judges the same comparisons by all three rules.',
+  bonf: 'Intervals at the Bonferroni level 1 − α/C; the table below judges the same comparisons by all three rules.',
+  holm: 'Each comparison\'s interval is drawn at the level of its own step, and so it excludes zero exactly when Holm\'s step-down flags that comparison. The step-down stops at the first interval that contains zero. The comparisons sorted after it are not reached: none is tested, which is the same as testing it at a threshold of 0, and so each is drawn with the 100% interval, the whole line, which contains zero. <strong>These are not confidence intervals</strong>: each width depends on the other comparisons\' p-values. The table below judges the same comparisons by all three rules.'
+};
+function powerFigCaption(el, post) {
+  el.innerHTML = POWER_CAPTIONS[post.rule];
+  reserveCapHeight(el, [POWER_CAPTIONS.none, POWER_CAPTIONS.bonf, POWER_CAPTIONS.holm], true);
+}
+function powerFigLegendHtml(rule) {
+  return pairsFigLegendHtml() + (rule === 'holm'
+    ? legendHtml([{ sw: swWhole(C.muted), label: 'not reached: the step-down stopped before this comparison, and its interval is the whole line' }])
+    : '');
 }
 // Placeholder and real rows for the Holm table share one shape: comparison
 // label, raw p, the Holm and Bonferroni thresholds, all three rules'
 // decisions, and the true difference, sorted by raw p ascending (Holm's own
 // order) so a reader can watch the step-down stop at the first non-rejection.
-function powerPlaceholderRows(sp) {
-  return pairsList(sp.K, sp.mode).map(function (pr) {
+function powerPlaceholderRows(sp, post) {
+  return pairsList(sp.K, post.mode).map(function (pr) {
     return { i: pr[0], j: pr[1], label: (pr[0] + 1) + ' − ' + (pr[1] + 1), p: null, holmThr: null, bonfThr: null,
              noneDec: false, bonfDec: false, holmDec: false, trueDiff: 0, placeholder: true, falseRej: false, trueDet: false };
   });
 }
 function powerTableRows(rec, sp, post) {
-  if (!rec) return powerPlaceholderRows(sp);
-  var nC = rec.raw.C, bonfThr = sp.alpha / nC;
+  if (!rec) return powerPlaceholderRows(sp, post);
+  var nC = rec.raw.C, bonfThr = post.alpha / nC;
   var order = rec.holmDetail.order, thresholds = rec.holmDetail.thresholds;
   return order.map(function (k, m) {
     var it = rec.raw.items[k], reject = rec.rules[post.rule].reject[k];
@@ -3794,13 +3957,13 @@ function powerFwerLegendWorst() {
     { sw: swDotHollow(C.warn), label: 'observed Holm power at the current C, with a Wilson interval' }
   ]);
 }
-function powerFwerCaption(el, sp, nC) {
+function powerFwerCaption(el, sp, post, nC) {
   // Follows the cards above it: at delta = 0 there is no real difference for
   // "power" to describe, and both show an em dash rather than the curves'
   // own value at zero.
   el.innerHTML = 'At C = <strong>' + nC + '</strong> comparisons, one comparison\'s analytic power is <strong>'
-    + analyticPowerText(sp.delta, sp.sigma, sp.R, sp.alpha) + '</strong> uncorrected against <strong>'
-    + analyticPowerText(sp.delta, sp.sigma, sp.R, sp.alpha / nC) + '</strong> under Bonferroni.';
+    + analyticPowerText(sp.delta, sp.sigma, sp.R, post.alpha) + '</strong> uncorrected against <strong>'
+    + analyticPowerText(sp.delta, sp.sigma, sp.R, post.alpha / nC) + '</strong> under Bonferroni.';
   reserveCapHeight(el, 'At C = <strong>45</strong> comparisons, one comparison\'s analytic power is <strong>100.0%</strong> uncorrected against <strong>100.0%</strong> under Bonferroni.', true);
 }
 
@@ -3808,18 +3971,19 @@ TABS.power = {
   sampling: function () {
     return {
       K: Number($('power-K').value), R: Number($('power-R').value), sigma: Number($('power-sigma').value),
-      cfg: $('power-cfg').value, delta: Number($('power-delta').value), alpha: Number($('power-alpha').value),
-      mode: $('power-mode').value, crn: false, dir: 'max'
+      cfg: $('power-cfg').value, delta: Number($('power-delta').value),
+      crn: false, dir: 'max'
     };
   },
-  post: function () { return { rule: $('power-rule').value }; },
+  post: function () { return { rule: $('power-rule').value, alpha: Number($('power-alpha').value), mode: $('power-mode').value }; },
   derive: function (seed, sp, post) {
     var means = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: false }).Y;
-    var rec = MCP.rulesFamily(Y, { alpha: sp.alpha, mode: sp.mode, paired: false, means: means });
+    var rec = MCP.rulesFamily(Y, { alpha: post.alpha, mode: post.mode, paired: false, means: means });
     rec.means = means;
-    rec.bonfItems = MCP.pairFamily(Y, { alpha: sp.alpha, level: 'bonf', mode: sp.mode, paired: false, means: means }).items;
-    rec.holmDetail = MCP.holm(rec.raw.items.map(function (it) { return it.p; }), sp.alpha);
+    rec.bonfItems = MCP.pairFamily(Y, { alpha: post.alpha, level: 'bonf', mode: post.mode, paired: false, means: means }).items;
+    rec.holmDetail = MCP.holm(rec.raw.items.map(function (it) { return it.p; }), post.alpha);
+    rec.holmItems = MCP.holmIntervals(rec.raw, post.alpha).items;
     return rec;
   },
   render: function () {
@@ -3828,21 +3992,28 @@ TABS.power = {
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
     var span = pairsSpan(spanSp);
     TABS.power.span = span;
-    var nC = pairsList(sp.K, sp.mode).length;
-    var alphaJ = sp.alpha / nC;
-    intervalLevelLine($('power-level-line'), alphaJ, true, 'C');
+    var nC = pairsList(sp.K, post.mode).length;
+    var alphaJ = post.alpha / nC;
+    powerLevelLine($('power-level-line'), post, nC);
     var dfPair = 2 * sp.R - 2;
-    var widthRatio = MCP.tQuantile(1 - alphaJ / 2, dfPair) / MCP.tQuantile(1 - sp.alpha / 2, dfPair);
+    var widthRatio = MCP.tQuantile(1 - alphaJ / 2, dfPair) / MCP.tQuantile(1 - post.alpha / 2, dfPair);
     setCard('power-c-widthratio', widthRatio.toFixed(2) + '&times;');
 
     var latest = runs.length ? runs[runs.length - 1] : null;
-    var bonfItems = latest ? latest.rec.bonfItems : pairsPlaceholderItems(sp);
-    forestPlot($('power-fig'), bonfItems, {
+    // The uncorrected family is the raw pass itself (pairFamily at level
+    // alpha), the Bonferroni family the derive step kept beside it, and the
+    // Holm items the step-down's own levels.
+    var figItems = !latest ? pairsPlaceholderItems(sp.K, post.mode)
+      : post.rule === 'none' ? latest.rec.raw.items
+      : post.rule === 'bonf' ? latest.rec.bonfItems : latest.rec.holmItems;
+    forestPlot($('power-fig'), figItems, {
       span: span, hyp: 0, glyph: true, full: true,
       labelOf: function (it) { return (it.i + 1) + ' − ' + (it.j + 1); }
     });
-    $('power-fig-leg').innerHTML = pairsFigLegendHtml();
-    powerFigCaption($('power-fig-cap'));
+    var powerLegEl = $('power-fig-leg');
+    powerLegEl.innerHTML = powerFigLegendHtml(post.rule);
+    reserveCapHeight(powerLegEl, powerFigLegendHtml('holm'), true);
+    powerFigCaption($('power-fig-cap'), post);
     pTable($('power-table'), powerTableRows(latest ? latest.rec : null, sp, post), powerTableCols());
 
     var fwerDen = 0, powDen = 0;
@@ -3862,7 +4033,7 @@ TABS.power = {
     setCard('power-c-pow-none', rateText(powNum.none, powDen));
     setCard('power-c-pow-bonf', rateText(powNum.bonf, powDen));
     setCard('power-c-pow-holm', rateText(powNum.holm, powDen));
-    setCard('power-c-an-none', analyticPowerText(sp.delta, sp.sigma, sp.R, sp.alpha));
+    setCard('power-c-an-none', analyticPowerText(sp.delta, sp.sigma, sp.R, post.alpha));
     setCard('power-c-an-bonf', analyticPowerText(sp.delta, sp.sigma, sp.R, alphaJ));
     setCard('power-c-an-holm', '—');
     ['fwer', 'pow', 'an'].forEach(function (row) {
@@ -3879,13 +4050,13 @@ TABS.power = {
     });
     var nSeg = runs.length;
     var powerMeansNow = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
-    var powerNNullC = pairsList(sp.K, sp.mode).filter(function (pr) { return powerMeansNow[pr[0]] === powerMeansNow[pr[1]]; }).length;
+    var powerNNullC = pairsList(sp.K, post.mode).filter(function (pr) { return powerMeansNow[pr[0]] === powerMeansNow[pr[1]]; }).length;
     var powerNBad = 0;
     runs.forEach(function (r) { if (r.rec.rules[post.rule].anyFalse) powerNBad++; });
     var powerRefText = post.rule === 'none'
-      ? (powerNNullC > 0 ? (MCP.fwerIndep(sp.alpha, powerNNullC) * 100).toFixed(1) + '% expected if the comparisons were independent' : 'no null comparisons in this configuration')
-      : (post.rule === 'bonf' ? 'at most ' + (sp.alpha * 100).toFixed(1) + '% by the Bonferroni bound'
-                               : 'at most ' + (sp.alpha * 100).toFixed(1) + '% by Holm\'s guarantee');
+      ? (powerNNullC > 0 ? (MCP.fwerIndep(post.alpha, powerNNullC) * 100).toFixed(1) + '% expected if the comparisons were independent' : 'no null comparisons in this configuration')
+      : (post.rule === 'bonf' ? 'at most ' + (post.alpha * 100).toFixed(1) + '% by the Bonferroni bound'
+                               : 'at most ' + (post.alpha * 100).toFixed(1) + '% by Holm\'s guarantee');
     stripTallyCaption($('power-strip-cap'),
       'Each column is one family; its height counts the true detections under the selected rule, and red means the family also has a false alarm.',
       stripRes, nSeg, powerNBad, 'families', 'had at least one false alarm under the selected rule', powerRefText,
@@ -3904,31 +4075,31 @@ TABS.power = {
     fwerPlot($('power-fwer'), {
       mode: 'power', xMax: 45,
       curves: [
-        { f: function () { return MCP.pairPower(sp.delta, sp.sigma, sp.R, sp.alpha); }, color: C.est, label: 'none: analytic power at α' },
-        { f: function (c) { return MCP.pairPower(sp.delta, sp.sigma, sp.R, sp.alpha / c); }, color: C.ok, label: 'Bonferroni: analytic power at α/C' }
+        { f: function () { return MCP.pairPower(sp.delta, sp.sigma, sp.R, post.alpha); }, color: C.est, label: 'none: analytic power at α' },
+        { f: function (c) { return MCP.pairPower(sp.delta, sp.sigma, sp.R, post.alpha / c); }, color: C.ok, label: 'Bonferroni: analytic power at α/C' }
       ],
       marks: marks, legendEl: legEl
     });
     reserveCapHeight(legEl, powerFwerLegendWorst(), true);
-    powerFwerCaption($('power-fwer-cap'), sp, nC);
+    powerFwerCaption($('power-fwer-cap'), sp, post, nC);
   }
 };
 
-// ── Tab ④: Reporting the Winner ───────────────────────────────────────────
+// ── Tab ③: Can We Just Pick the Best Mean? ────────────────────────────────────
 // The analyst who ran one family, picked the design with the best sample
 // mean, and reported an ordinary interval for it as though that design had
-// been chosen in advance. K, R, sigma, delta, alpha, the configuration, and
-// the direction are sampling knobs because the direction decides which way
-// a configuration other than All equal moves its design and so which design
-// the winner is likely to be; the interval level is the only post-processing
-// knob because it only re-judges an already-drawn family rather than
-// changing what was sampled.
+// been chosen in advance. K, R, sigma, delta, the configuration, and the
+// direction are sampling knobs because the direction decides which way a
+// configuration other than All equal moves its design and so which design
+// the winner is likely to be; alpha and the interval level are the
+// post-processing knobs because each only re-judges an already-drawn
+// family rather than changing what was sampled.
 function winnerKChanged() { clampParam('winner-K', 2, 10, 0); onSamplingChange('winner'); }
 function winnerRChanged() { clampParam('winner-R', 5, 50, 0); onSamplingChange('winner'); }
 function winnerSigmaChanged() { clampParam('winner-sigma', 0.5, 5, 1); onSamplingChange('winner'); }
 function winnerDeltaChanged() { clampParam('winner-delta', 0, 5, 1); onSamplingChange('winner'); }
 function winnerCfgChanged() { onSamplingChange('winner'); }
-function winnerAlphaChanged() { onSamplingChange('winner'); }
+function winnerAlphaChanged() { rederive('winner'); }
 function winnerDirChanged() { onSamplingChange('winner'); }
 function winnerLevelChanged() { rederive('winner'); }
 registerSpinner('winner-K', { min: 2, max: 10, step: 1, decimals: 0 }, function () { onSamplingChange('winner'); });
@@ -3994,15 +4165,15 @@ TABS.winner = {
   sampling: function () {
     return {
       K: Number($('winner-K').value), R: Number($('winner-R').value), sigma: Number($('winner-sigma').value),
-      cfg: $('winner-cfg').value, delta: Number($('winner-delta').value), alpha: Number($('winner-alpha').value),
+      cfg: $('winner-cfg').value, delta: Number($('winner-delta').value),
       dir: $('winner-dir').value, crn: false
     };
   },
-  post: function () { return { level: $('winner-level').value }; },
+  post: function () { return { level: $('winner-level').value, alpha: Number($('winner-alpha').value) }; },
   derive: function (seed, sp, post) {
     var means = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: sp.crn }).Y;
-    var rec = MCP.winnerFamily(Y, { alpha: sp.alpha, level: post.level, dir: sp.dir, means: means });
+    var rec = MCP.winnerFamily(Y, { alpha: post.alpha, level: post.level, dir: sp.dir, means: means });
     rec.means = means;
     return rec;
   },
@@ -4010,14 +4181,14 @@ TABS.winner = {
     var sp = TABS.winner.sampling(), post = TABS.winner.post();
     var runs = segRuns('winner'), all = hist('winner').runs;
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
-    var span = looksYSpan(spanSp);
+    var span = designsYSpan(spanSp);
     TABS.winner.ySpan = span;
-    var alphaJ = post.level === 'bonf' ? sp.alpha / sp.K : sp.alpha;
+    var alphaJ = post.level === 'bonf' ? post.alpha / sp.K : post.alpha;
     intervalLevelLine($('winner-level-line'), alphaJ, post.level === 'bonf', 'K');
 
     var latest = runs.length ? runs[runs.length - 1] : null;
     var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).map(function (t) {
-      return { truth: t, lo: t, hi: t, mean: t, captured: true };
+      return { truth: t, lo: t, hi: t, mean: t, captured: true, placeholder: true };
     });
     designsPlot($('winner-fig'), items, { ySpan: span, winnerIdx: latest ? latest.rec.win : null, full: true });
     $('winner-fig-leg').innerHTML = winnerFigLegendHtml();
@@ -4063,7 +4234,7 @@ function anovaRChanged() { clampParam('anova-R', 5, 50, 0); onSamplingChange('an
 function anovaSigmaChanged() { clampParam('anova-sigma', 0.5, 5, 1); onSamplingChange('anova'); }
 function anovaDeltaChanged() { clampParam('anova-delta', 0, 5, 1); onSamplingChange('anova'); }
 function anovaCfgChanged() { onSamplingChange('anova'); }
-function anovaAlphaChanged() { onSamplingChange('anova'); }
+function anovaAlphaChanged() { rederive('anova'); }
 function anovaRuleChanged() { rederive('anova'); }
 // Ordering by sample mean only changes which column each design's own
 // interval, letters, and matrix row or column land in; it reads no new
@@ -4111,15 +4282,15 @@ TABS.anova = {
   sampling: function () {
     return {
       K: Number($('anova-K').value), R: Number($('anova-R').value), sigma: Number($('anova-sigma').value),
-      cfg: $('anova-cfg').value, delta: Number($('anova-delta').value), alpha: Number($('anova-alpha').value),
+      cfg: $('anova-cfg').value, delta: Number($('anova-delta').value),
       dir: 'max', crn: false
     };
   },
-  post: function () { return { rule: $('anova-rule').value }; },
+  post: function () { return { rule: $('anova-rule').value, alpha: Number($('anova-alpha').value) }; },
   derive: function (seed, sp, post) {
     var means = MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir);
     var Y = MCP.drawFamily(seed, { K: sp.K, R: sp.R, sigma: sp.sigma, means: means, crn: sp.crn }).Y;
-    var rec = MCP.anovaFamily(Y, { alpha: sp.alpha, means: means });
+    var rec = MCP.anovaFamily(Y, { alpha: post.alpha, means: means });
     // anovaFamily's own .means already holds the K sample means the figure's
     // dots need; the true means driving the ticks and the pair truths are
     // attached under their own name instead of overwriting that field.
@@ -4130,7 +4301,7 @@ TABS.anova = {
     var sp = TABS.anova.sampling(), post = TABS.anova.post(), rule = post.rule;
     var runs = segRuns('anova');
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
-    var span = looksYSpan(spanSp);
+    var span = designsYSpan(spanSp);
     var latest = runs.length ? runs[runs.length - 1] : null;
     var K = spanSp.K;
 
@@ -4138,17 +4309,17 @@ TABS.anova = {
       var cd = latest.rec.rules[rule].cd;
       return { truth: latest.rec.trueMeans[i], mean: m, lo: m - cd / 2, hi: m + cd / 2, captured: true };
     }) : MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).map(function (t) {
-      return { truth: t, mean: t, lo: t, hi: t, captured: true };
+      return { truth: t, mean: t, lo: t, hi: t, captured: true, placeholder: true };
     });
     // "Order designs by sample mean" is a display order only: it permutes
     // which column, letter, and matrix row or column each design lands in,
-    // never the data itself, and so the same order drives the figure and the
+    // never the data themselves, and so the same order drives the figure and the
     // matrix below from the one array.
     var order = baseItems.map(function (_, i) { return i; });
     if ($('anova-sort').checked) order.sort(function (a, b) { return baseItems[a].mean - baseItems[b].mean; });
     var items = order.map(function (idx) {
       var it = baseItems[idx];
-      return { truth: it.truth, mean: it.mean, lo: it.lo, hi: it.hi, captured: it.captured, num: idx + 1 };
+      return { truth: it.truth, mean: it.mean, lo: it.lo, hi: it.hi, captured: it.captured, num: idx + 1, placeholder: it.placeholder };
     });
     var lettersBase = latest ? latest.rec.rules[rule].letters : undefined;
     var letters = lettersBase ? order.map(function (idx) { return lettersBase[idx]; }) : undefined;
@@ -4198,7 +4369,7 @@ TABS.anova = {
       bad: function (rec) { return rec.rules[rule].anyFalse; }
     });
     var anovaRefText = rule === 'lsd' ? 'not guaranteed under protected LSD'
-      : 'at most ' + (sp.alpha * 100).toFixed(1) + '% by ' + (rule === 'tukey' ? 'Tukey\'s guarantee' : 'the Bonferroni bound');
+      : 'at most ' + (post.alpha * 100).toFixed(1) + '% by ' + (rule === 'tukey' ? 'Tukey\'s guarantee' : 'the Bonferroni bound');
     stripTallyCaption($('anova-strip-cap'),
       'Each column is one family; its height counts the pairs declared different under the selected rule, and red means at least one of them is a false alarm.',
       stripRes, runs.length, fwerNum[rule], 'families', 'had at least one false alarm among the null pairs', anovaRefText,
@@ -4339,7 +4510,7 @@ function swText(color) {
 // current stage is muted rather than removed. Each entry maps to exactly one
 // visible mark: an eliminated design's dots stay filled and muted (the same
 // color a reader has already learned means "not the winner" elsewhere on the
-// page), while a survivor's second-stage dots are hollow in the ordinary
+// page), whereas a survivor's second-stage dots are hollow in the ordinary
 // first-stage orange, and so "added later" reads as a shape change within one
 // hue instead of colliding with the muted meaning. The two selection
 // outlines are mutually exclusive within one run, and so at stage 4 the one
@@ -4818,6 +4989,7 @@ window.addEventListener('DOMContentLoaded', function () {
   // An externally opened #id lands on that page instead of the default, page ①.
   var startHash = location.hash.slice(1);
   if (startHash && validTab(startHash)) showTab(startHash, null);
+  else autoRunFirstVisit('looks');
 });
 </script>
 <footer id="course-nav-footer" style="margin-top:0;font-size:0.8rem;color:var(--accent,#8C1D40);text-align:left;font-family:inherit;border-top:none;padding:0;">

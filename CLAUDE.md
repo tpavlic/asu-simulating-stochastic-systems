@@ -726,7 +726,7 @@ better.
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
   the result under the plot's title in `PLOT_SPECS`, and the `FIG_SCRIPTS` block writes a MATLAB,
-  R, or Python script that redraws the plot from that data. That block is a copy of
+  R, or Python script that redraws the plot from those data. That block is a copy of
   `output_analysis/output_analyzer/js/io/scripts.js` with the exports removed and the
   application's name changed, and so a change to the writers is made in the module first and
   copied here. The plot itself is a probe (`armProbe`): the pointer over it, or a tap on it, draws
@@ -929,18 +929,22 @@ better.
   of one system, each replicated R times, with bigger is better as the default direction and every
   page's controls split into what the experimenter chooses and what is true of the designs but
   hidden. Navigation is the grouped pill picker (as in the distribution gallery), the seven pages
-  in two groups, "The multiple comparisons problem" and "One-shot and sequential alternatives",
+  in two groups, "The problem and the usual correction" and "One-shot and sequential alternatives",
   collapsing to a select on narrow screens, with page ① the landing page and the shared situation
-  stated once in the header's subtitle. ① One Design Against K Requirements simulates
-  the null, one design judged on K responses each with its true mean exactly at its own target (one
+  stated once in the header's subtitle. ① Fishing Across K Responses simulates
+  the null, one design judged on K responses each with its true mean exactly at its own baseline (one
   small panel per response, on its own scale in its own units), so every flag
   is a false alarm, and tracks the family-wise error rate against the uncorrected and
-  Bonferroni-corrected bounds, naming Hotelling's T² and MANOVA as the one-shot versions; ② Designs Against Each Other runs the same test against a benchmark design or over
-  every pair, with common random numbers optional; ③ Power Under Correction plants a real difference
-  and judges the same raw p-values three ways at once (none, Bonferroni, and Holm's step-down) to
-  show the power Bonferroni gives up and Holm partly recovers, with the interval width ratio as a
-  card; ④ Reporting the Winner reports the ordinary interval of whichever design's sample mean is
-  best and shows its coverage falling below its nominal level; ⑤ ANOVA and Post Hoc Tests runs
+  Bonferroni-corrected bounds, naming Hotelling's T² and MANOVA as the one-shot versions; ② Fishing Across K Designs runs the same test against a benchmark design or over
+  every pair, with common random numbers optional; ③ Can We Just Pick the Best Mean? reports the ordinary
+  interval of whichever design's sample mean is best and shows its coverage falling below its
+  nominal level; ④ Fewer False Alarms, Fewer Detections plants a real difference and judges the same raw
+  p-values three ways at once (none, Bonferroni, and Holm's step-down) to show the power
+  Bonferroni gives up and Holm partly recovers, its figure drawing the intervals the selected
+  rule gives (uncorrected, Bonferroni, or under Holm each reached comparison at the level of its
+  own step and the comparisons past the stop as the whole line, with the caption saying
+  these are not confidence intervals; `holmIntervals` in the core), with the interval width
+  ratio as a card, and closes the group by pointing at the one-shot alternatives; ⑤ ANOVA and Post Hoc Tests runs
   one-way ANOVA and judges every pair by Tukey's HSD, Fisher's protected LSD, and Bonferroni side
   by side, with a compact-letter display, a pairwise matrix sized to the means plot beside it, and a
   toggle to order the designs by sample mean; and ⑥ Selecting the Best in Two Stages animates the
@@ -951,7 +955,8 @@ better.
   response-surface families that drive it, where ranking and selection fits inside it, and what
   the noise does to a reported best. Every history
   strip names what a column counts and its caption carries the family-level tally with its
-  reference. Commit tag `compare`. Conventions relied on by code outside the file, which any later
+  reference, and every page runs once by itself the first time it is shown, so a reader lands on
+  a drawn family rather than an empty frame. Commit tag `compare`. Conventions relied on by code outside the file, which any later
   edit has to preserve:*
   1. *Everything between the `MCP-CORE-BEGIN` / `MCP-CORE-END` sentinels is pure numerics with no
      DOM access, and the block must not contain the words "window" or "document".
@@ -972,15 +977,24 @@ better.
      and the two-stage procedure against the textbook's own worked example (the screening t, Table
      12.4's W matrix, the survivors, and the rounded second-stage sizes) and its 1 − α
      correct-selection guarantee across four (K, R₀, confidence) settings.*
-  3. *A knob is a sampling knob (K, R, σ, δ, α, the configuration, and whatever else changes which
-     data would be drawn) or a post-processing knob, marked `data-post` in the markup (the
-     interval level on tabs ①, ②, and ④, the correction rule on tab ③, and the
-     post-hoc rule and the sort-by-mean toggle on tab ⑤): a post-processing change re-derives every already-drawn family from
-     its own stored seed and sampling parameters rather than drawing new data, and so it neither
-     logs a new run nor clears the history. A sampling-knob change instead opens a new segment on
-     the next run, marked with a divider; every plot's axis is sized once from that segment's own
-     sampling parameters and held fixed for every run added to it, rather than being fixed globally
-     or recomputed run by run.*
+  3. *A knob is a sampling knob (K, R, σ, δ, the configuration, the direction, common random
+     numbers, tab ⑥'s ε and confidence, and whatever else changes which data would be drawn) or a
+     post-processing knob, marked `data-post` in the markup (α on tabs ① to ⑤, the comparisons
+     setting on tabs ② and ④, the interval level on tabs ①, ②, and ③, the correction rule on tab
+     ④, and the post-hoc rule and the sort-by-mean toggle on tab ⑤): a post-processing change
+     re-derives every already-drawn family from its own stored seed and sampling parameters rather
+     than drawing new data, and so it neither logs a new run nor clears the history. A
+     sampling-knob change instead opens a new segment on the next run, marked with a divider;
+     every plot's axis is sized once from that segment's own sampling parameters and held fixed
+     for every run added to it, rather than being fixed globally or recomputed run by run (the
+     one exception is the history strip's count axis on tabs ② and ④, whose maximum is the
+     number of comparisons C and so follows the comparisons setting). Each simulated tab's control
+     card shows the split in the order of the work: "Chosen by the experimenter before the data
+     are gathered" holds the sampling knobs the experimenter sets, "True of the simulated designs,
+     hidden from the experimenter" the planted truth, then the seed and Run row, and last, under
+     its own rule, "Chosen by the experimenter after the data are gathered" with the
+     post-processing knobs; tab ⑥ has no after group because its α and ε size the second stage
+     and so change the data drawn.*
   4. *The compact letter display (tab ⑤) is the maximal windows of the sorted sample means whose
      spread stays within the selected rule's critical difference: designs sharing a letter are not
      declared different from one another under that rule, and a window nested entirely inside an

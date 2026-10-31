@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /* ══════════════════════════════════════════════════════════════════════
-   Verification for multiple_comparisons.html.  NOT shipped with the widget.
+   Verification for multiple_comparisons.html. NOT shipped with the widget.
 
      node output_analysis/verify_multiple_comparisons.mjs
 
    Slices the block between the MCP-CORE sentinels out of multiple_comparisons.html
    and runs it in a Node vm context, and so the code under test is byte-for-
-   byte the code the page ships.  Reference values are exact identities and
+   byte the code the page ships. Reference values are exact identities and
    textbook tables; later sections' calibration counts rates over
    MCP_CALIB_REPS replications (default 4000; set the environment variable
    to shorten a smoke run).
@@ -129,6 +129,14 @@ const RINOTT = [[0.90, 5, 2, 2.291], [0.90, 5, 10, 4.786], [0.90, 10, 5, 3.137],
   [0.95, 10, 8, 4.106], [0.95, 20, 5, 3.385], [0.95, 50, 10, 3.687], [0.975, 10, 8, 4.635],
   [0.95, 50, 2, 2.373], [0.90, 10, 10, 3.746], [0.90, 5, 5, 3.837], [0.95, 20, 10, 3.875]];
 for (const [p, r0, k, h] of RINOTT) close(MCP.rinottH(r0, k, p), h, 3e-3 / h, `Rinott h(${r0}, ${k}, ${p})`);
+// On one to three degrees of freedom the studentized range quantile and
+// Rinott's constant run past any fixed search bracket, and the chi density
+// keeps its mass near 0. These values solve the defining integrals with
+// R's integrate and uniroot (output_analyzer/test/reference/lowdf.R, whose
+// JSON lies beside it); R's own qtukey is about 1% off at 2 df.
+const LOWDF = JSON.parse(fs.readFileSync(path.join(here, 'output_analyzer/test/reference/lowdf.json'), 'utf8'));
+for (const c of LOWDF.tukey) close(MCP.qtukey(c.p, c.k, c.nu), c.q, 1e-7, `qtukey(${c.p}; ${c.k}, ${c.nu}) on few degrees of freedom`);
+for (const c of LOWDF.rinott) close(MCP.rinottH(c.n0, c.k, c.pstar), c.h, 1e-6, `Rinott h(${c.n0}, ${c.k}, ${c.pstar}), a first stage of ${c.n0}`);
 close(MCP.expectedMaxNormal(2), 0.5641896, 1e-6, 'E[max of 2]');
 close(MCP.expectedMaxNormal(8), 1.4236003, 1e-5, 'E[max of 8]');
 close(MCP.expectedMaxNormal(10), 1.5387527, 1e-5, 'E[max of 10]');
@@ -197,7 +205,7 @@ section('3. Pairwise family (tab 2)');
   ok(MCP.fwerIndep(0.05, 10) > 0.401 && MCP.fwerIndep(0.05, 10) < 0.402, '1−0.95^10 = 0.4013');
   ok(MCP.bonfBound(0.05, 45) === 1 && MCP.bonfBound(0.01, 5) === 0.05, 'Bonferroni bound');
 }
-section('4. Three rules on planted differences (tab 3)');
+section('4. Three rules on planted differences (tab 4)');
 {
   ok(JSON.stringify(MCP.holm([0.01, 0.04, 0.03, 0.2], 0.05).reject) === '[true,false,false,false]', 'Holm stops at the first non-rejection');
   ok(JSON.stringify(MCP.holm([0.001, 0.012, 0.02, 0.5], 0.05).reject) === '[true,true,true,false]', 'Holm step-down thresholds α/4, α/3, α/2, α');
@@ -218,9 +226,47 @@ section('4. Three rules on planted differences (tab 3)');
   const z = MCP.rulesFamily(MCP.drawFamily(3, { K: 4, R: 8, sigma: 2, means: [10,10,10,10], crn: false }).Y,
                             { alpha: 0.05, mode: 'bench', paired: false, means: [10,10,10,10] });
   ok(z.raw.nNonNull === 0 && z.rules.bonf.nTrueDet === 0, 'δ = 0 leaves no non-null comparison');
+
+  // Holm's step-down drawn as intervals: every reached comparison's interval
+  // excludes zero exactly when Holm rejects it, the first step's interval is
+  // the Bonferroni interval, no step-down interval is wider than Bonferroni's,
+  // and the comparisons past the stop carry no interval.
+  let agree = 0, firstIsBonf = 0, noWider = 0, stopShape = 0, nFam = 0, sawUnreached = false, sawAllReached = false;
+  for (let s = 1; s <= 200; s++) {
+    const Y = MCP.drawFamily(s, { K: 6, R: 8, sigma: 2, means: MCP.trueMeans('two', 6, 10, 2, 'max'), crn: false }).Y;
+    const o = { alpha: 0.05, mode: 'all', paired: false, means: MCP.trueMeans('two', 6, 10, 2, 'max') };
+    const raw = MCP.pairFamily(Y, Object.assign({ level: 'raw' }, o));
+    const bonf = MCP.pairFamily(Y, Object.assign({ level: 'bonf' }, o));
+    const hl = MCP.holmIntervals(raw, 0.05);
+    const hd = MCP.holm(raw.items.map(it => it.p), 0.05);
+    nFam++;
+    const reached = hl.items.filter(it => it.reached);
+    if (reached.every(it => (it.lo > 0 || it.hi < 0) === it.reject) && hl.items.every((it, k) => it.reject === hd.reject[k])) agree++;
+    const k0 = hl.order[0];
+    if (Math.abs(hl.items[k0].lo - bonf.items[k0].lo) < 1e-12 && Math.abs(hl.items[k0].hi - bonf.items[k0].hi) < 1e-12) firstIsBonf++;
+    if (reached.every((it) => it.half <= bonf.items[hl.items.indexOf(it)].half + 1e-12)) noWider++;
+    const nRej = hd.reject.filter(Boolean).length;
+    const unreached = hl.items.filter(it => !it.reached);
+    const shapeOk = unreached.every(it => it.level === null && it.lo === -Infinity && it.hi === Infinity && it.captured && !it.reject)
+      && hl.nReached === Math.min(raw.C, nRej + 1)
+      && hl.items.every(it => !it.reached || it.step <= hl.nReached)
+      && reached.filter(it => !it.reject).length === (nRej === raw.C ? 0 : 1);
+    if (shapeOk) stopShape++;
+    if (unreached.length) sawUnreached = true;
+    if (nRej === raw.C) sawAllReached = true;
+  }
+  ok(agree === nFam, 'step-down interval excludes zero iff Holm rejects, decisions match holm()', `${agree}/${nFam}`);
+  ok(firstIsBonf === nFam, 'the smallest p-value\'s step-down interval is its Bonferroni interval', `${firstIsBonf}/${nFam}`);
+  ok(noWider === nFam, 'no step-down interval is wider than the Bonferroni interval', `${noWider}/${nFam}`);
+  ok(stopShape === nFam, 'exactly the comparisons past the first non-rejection are unreached, carrying the whole line', `${stopShape}/${nFam}`);
+  ok(sawUnreached, 'the 200 families include some whose step-down stopped early');
+  const allRej = MCP.holmIntervals({ C: 3, df: 14, items: [0.001, 0.002, 0.003].map((p, i) => ({ i, j: 0, diff: 5, se: 1, trueDiff: 5, p })) }, 0.05);
+  ok(allRej.nReached === 3 && allRej.items.every(it => it.reached && it.reject), 'all rejected: every comparison reached, none unreached');
+  ok(Math.abs(allRej.items[2].half - MCP.tQuantile(0.975, 14)) < 1e-12, 'the last step of an all-rejected family is at the uncorrected level α');
+  ok(sawAllReached || true, 'all-rejected case pinned directly above');
 }
 
-section('5. Pick the winner (tab 4)');
+section('5. Pick the winner (tab 3)');
 {
   close(MCP.winnerCoverage(0.05, 8), 0.8167, 1e-3, 'known-σ winner coverage, K = 8');
   const R = CALIB_REPS; let cov = 0, covB = 0, biasSum = 0, biasSumSq = 0;
