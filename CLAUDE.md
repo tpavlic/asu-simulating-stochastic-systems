@@ -956,7 +956,13 @@ better.
   the noise does to a reported best. Every history
   strip names what a column counts and its caption carries the family-level tally with its
   reference, and every page runs once by itself the first time it is shown, so a reader lands on
-  a drawn family rather than an empty frame. Commit tag `compare`. Conventions relied on by code outside the file, which any later
+  a drawn family rather than an empty frame. Tabs ② and ④ open with "Each design's replications" above their
+  differences (`replicationsPlot`): every replication of the latest run as a faint dot, each
+  design's sample mean, and its true mean, over faint horizontal rules at every tick and at the
+  unmoved designs' shared mean of 10, with no per-design interval because overlapping
+  intervals say nothing reliable about a difference; under common random numbers a gray line
+  joins each replication across the designs. The run's outputs are redrawn from its stored seed
+  rather than kept in the history, and no post-processing knob changes the figure. Commit tag `compare`. Conventions relied on by code outside the file, which any later
   edit has to preserve:*
   1. *Everything between the `MCP-CORE-BEGIN` / `MCP-CORE-END` sentinels is pure numerics with no
      DOM access, and the block must not contain the words "window" or "document".

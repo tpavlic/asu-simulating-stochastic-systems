@@ -689,6 +689,12 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
     </div>
     <div class="sec">
+      <div class="sec-hd">Each design's replications (bigger is better)</div>
+      <svg class="fig" id="pairs-reps" role="img" aria-label="One column per design: every replication's output as a faint gray dot, the design's sample mean as an orange dot, and its true mean as a teal tick, with a gray line joining each replication across the designs under common random numbers"></svg>
+      <div class="leg" id="pairs-reps-leg"></div>
+      <div class="fig-note" id="pairs-reps-cap"></div>
+    </div>
+    <div class="sec">
       <div class="sec-hd">Differences between designs (bigger is better)</div>
       <div class="fig-note" id="pairs-level-line"></div>
       <svg class="fig" id="pairs-fig" role="img" aria-label="One horizontal interval per comparison, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero"></svg>
@@ -906,6 +912,12 @@ svg.fig { display: block; width: 100%; height: auto; }
           </select>
         </span>
       </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Each design's replications (bigger is better)</div>
+      <svg class="fig" id="power-reps" role="img" aria-label="One column per design: every replication's output as a faint gray dot, the design's sample mean as an orange dot, and its true mean as a teal tick"></svg>
+      <div class="leg" id="power-reps-leg"></div>
+      <div class="fig-note" id="power-reps-cap"></div>
     </div>
     <div class="sec">
       <div class="sec-hd">Differences between designs, judged by the selected rule (bigger is better)</div>
@@ -3118,6 +3130,123 @@ function designsPlot(svgEl, items, opts) {
     if (!svgEl._dragBound) { svgEl._dragBound = true; bindLineDrag(svgEl, function (v) { svgEl._onTarget(v); }); }
   }
 }
+// The data before any comparison: every replication of every design as a
+// faint dot, each design's sample mean as an orange dot, and its true mean as
+// the teal tick. Replication r sits at the same horizontal offset in every
+// column, and so under common random numbers (opts.links) one gray line can
+// join a replication across the designs; because the designs then share a
+// random component, those lines run nearly parallel, which is why the paired
+// differences are narrower than either design's own spread. No interval is
+// drawn: two designs' own intervals overlapping says nothing reliable about
+// their difference, which has an interval of its own in the figure below.
+// opts.Y is K arrays of R outputs, or null before any run (truth only).
+function replicationsPlot(svgEl, opts) {
+  var W = fullCardWidth(svgEl), truth = opts.means, K = truth.length;
+  var pL = 46, pR = 16, pT = 12, pB = 28, cH = 150;
+  var colW = (W - pL - pR) / K, cW = colW * K;
+  var denseX = colW < 34, labelY = pT + cH + 16;
+  var yLo = opts.ySpan[0], yHi = opts.ySpan[1];
+  var yP = function (v) {
+    var c = Math.min(yHi, Math.max(yLo, v));
+    return pT + cH - (c - yLo) / (yHi - yLo) * cH;
+  };
+  var jw = Math.min(colW * 0.3, 20);
+  var Y = opts.Y, R = Y ? Y[0].length : 0;
+  var xOf = function (i, r) { return pL + (i + 0.5) * colW + (R > 1 ? (r / (R - 1) - 0.5) * 2 * jw : 0); };
+
+  var h = '<rect x="' + pL + '" y="' + pT + '" width="' + cW + '" height="' + cH + '" fill="' + C.bg + '" rx="3"/>';
+  var ticks = niceTicks(yLo, yHi, 4);
+  var step = ticks.length > 1 ? ticks[1] - ticks[0] : (yHi - yLo);
+  ticks.forEach(function (v) {
+    var ty = yP(v);
+    // A faint horizontal rule at every tick, as a guide for reading heights.
+    if (ty > pT + 0.5 && ty < pT + cH - 0.5) h += '<line x1="' + pL + '" y1="' + ty + '" x2="' + (pL + cW) + '" y2="' + ty + '" stroke="' + C.border + '" stroke-width="1"/>';
+    h += '<line x1="' + (pL - 4) + '" y1="' + ty + '" x2="' + pL + '" y2="' + ty + '" stroke="#bbb" stroke-width="1"/>';
+    h += '<text x="' + (pL - 7) + '" y="' + (ty + 4) + '" text-anchor="end" fill="' + C.muted + '" font-size="9.5" font-family="' + FF_MONO + '">' + fmtTick(v, step) + '</text>';
+  });
+  // The same rule at the unmoved designs' shared mean whether or not it is a
+  // tick (it is not once the step reaches 20): it runs through every unmoved
+  // design's truth tick, and so a design moved by even a small delta is seen
+  // to sit off it.
+  if (typeof opts.base === 'number' && ticks.indexOf(opts.base) < 0) {
+    h += '<line x1="' + pL + '" y1="' + yP(opts.base) + '" x2="' + (pL + cW) + '" y2="' + yP(opts.base) + '" stroke="' + C.border + '" stroke-width="1"/>';
+  }
+  h += '<line x1="' + pL + '" y1="' + pT + '" x2="' + pL + '" y2="' + (pT + cH) + '" stroke="#ccc" stroke-width="1"/>';
+  h += '<line x1="' + pL + '" y1="' + (pT + cH) + '" x2="' + (pL + cW) + '" y2="' + (pT + cH) + '" stroke="#ccc" stroke-width="1"/>';
+
+  var i, r;
+  if (Y && opts.links && K > 1) {
+    // Fainter as R grows, so that fifty lines still read as a bundle.
+    var lineOp = Math.min(0.8, 8 / R).toFixed(2);
+    for (r = 0; r < R; r++) {
+      var pts = [];
+      for (i = 0; i < K; i++) pts.push(xOf(i, r).toFixed(1) + ',' + yP(Y[i][r]).toFixed(1));
+      h += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + C.pair + '" stroke-width="1" stroke-opacity="' + lineOp + '"/>';
+    }
+  }
+  for (i = 0; i < K; i++) {
+    var cx = pL + (i + 0.5) * colW;
+    if (Y) {
+      for (r = 0; r < R; r++) {
+        h += '<circle cx="' + xOf(i, r).toFixed(1) + '" cy="' + yP(Y[i][r]).toFixed(1) + '" r="2.4" fill="' + C.muted + '" fill-opacity="0.5"/>';
+      }
+    }
+    // The truth tick spans the dots' own width so the dots never hide it,
+    // but stops short of its neighbors' so that equal truths in adjacent
+    // columns never merge into one line. The sample mean is drawn last.
+    var tw = Math.min(jw + 5, colW * 0.4);
+    h += '<line x1="' + (cx - tw) + '" y1="' + yP(truth[i]) + '" x2="' + (cx + tw) + '" y2="' + yP(truth[i]) + '" stroke="' + C.truth + '" stroke-width="2.5"/>';
+    if (Y) h += '<circle cx="' + cx + '" cy="' + yP(mean(Y[i])) + '" r="4.2" fill="' + C.est + '" stroke="#fff" stroke-width="1.2"/>';
+    if (!denseX || i % 2 === 0 || i === K - 1) {
+      var full = 'Design ' + (i + 1), short = 'D' + (i + 1);
+      var lbl = (textWidthPx(full, 10, FF_MONO) + 6 <= colW) ? full : short;
+      h += '<text x="' + cx + '" y="' + labelY + '" text-anchor="middle" fill="' + C.muted + '" font-size="10" font-family="' + FF_MONO + '">' + lbl + '</text>';
+    }
+  }
+  svgSet(svgEl, W, pT + cH + pB, h);
+}
+// The raw outputs' axis, sized once per segment as every other axis is: the
+// planted means' own spread plus four standard deviations of one output on
+// each side, so that a dot falls past the frame (and is then held at its
+// edge) about once in sixteen thousand outputs.
+function replicationsSpan(sp) {
+  var far = 0;
+  MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).forEach(function (m) { far = Math.max(far, Math.abs(m - 10)); });
+  var s = far + 4 * sp.sigma;
+  return [10 - s, 10 + s];
+}
+function replicationsLegendHtml(links) {
+  var items = [
+    { sw: legSwatch('<circle cx="12" cy="6" r="2.4" fill="' + C.muted + '" fill-opacity="0.5"/>'), label: 'one replication of the design' },
+    { sw: legSwatch('<circle cx="12" cy="6" r="4.2" fill="' + C.est + '" stroke="#fff" stroke-width="1.2"/>'), label: 'the design\'s sample mean' },
+    { sw: legSwatch('<line x1="2" y1="6" x2="22" y2="6" stroke="' + C.truth + '" stroke-width="2.5"/>'), label: 'the design\'s true mean, hidden from the experimenter' }
+  ];
+  if (links) items.push({ sw: legSwatch('<polyline points="1,9 8,4 16,6 23,2" fill="none" stroke="' + C.pair + '" stroke-width="1.4"/>'), label: 'the same replication in every design, joined under common random numbers' });
+  return legendHtml(items);
+}
+function replicationsCaption(el, runIdx, rec, links, crnPossible) {
+  var standing = 'These are the data every comparison below is computed from, and no choice made after the data are gathered changes them.';
+  var crnLine = ' Under common random numbers, replication r of every design shares one random component, and so the gray lines rise and fall together.';
+  var body = rec ? ' Run ' + runIdx + '.' : ' Run an experiment to draw R replications of each design.';
+  el.innerHTML = standing + (links ? crnLine : '') + body;
+  reserveCapHeight(el, [standing + (crnPossible ? crnLine : '') + ' Run an experiment to draw R replications of each design.'], true);
+}
+// Draws a tab's replications figure for its latest run, regenerating that
+// run's outputs from its own stored seed and sampling parameters rather than
+// keeping every run's outputs in the history. crnPossible says whether the
+// tab offers common random numbers, and so whether its legend and caption
+// reserve room for the line that joins a replication across the designs.
+function renderReplications(tab, latest, sp, runIdx, crnPossible) {
+  var useSp = latest ? latest.sp : sp;
+  var means = MCP.trueMeans(useSp.cfg, useSp.K, 10, useSp.delta, useSp.dir);
+  var Y = latest ? MCP.drawFamily(latest.seed, { K: useSp.K, R: useSp.R, sigma: useSp.sigma, means: means, crn: useSp.crn }).Y : null;
+  var links = !!useSp.crn;
+  replicationsPlot($(tab + '-reps'), { Y: Y, means: means, ySpan: replicationsSpan(useSp), links: links, base: 10 });
+  var legEl = $(tab + '-reps-leg');
+  legEl.innerHTML = replicationsLegendHtml(links);
+  reserveCapHeight(legEl, replicationsLegendHtml(crnPossible), true);
+  replicationsCaption($(tab + '-reps-cap'), runIdx, latest, links, crnPossible);
+}
 // Upper-triangular K x K grid of every pair (i, j), i < j: pair k = (i, j)
 // lands at compact row i, column j - 1, and because pairs is already built in
 // that same i-then-j order, the k-th pair and the k-th grid cell line up
@@ -3820,6 +3949,7 @@ TABS.pairs = {
 
     var latest = runs.length ? runs[runs.length - 1] : null;
     var items = latest ? latest.rec.items : pairsPlaceholderItems(sp.K, post.mode);
+    renderReplications('pairs', latest, sp, all.length, true);
     forestPlot($('pairs-fig'), items, {
       span: span, hyp: 0, glyph: true, full: true,
       labelOf: function (it) { return (it.i + 1) + ' − ' + (it.j + 1); }
@@ -4000,6 +4130,7 @@ TABS.power = {
     setCard('power-c-widthratio', widthRatio.toFixed(2) + '&times;');
 
     var latest = runs.length ? runs[runs.length - 1] : null;
+    renderReplications('power', latest, sp, hist('power').runs.length, false);
     // The uncorrected family is the raw pass itself (pairFamily at level
     // alpha), the Bonferroni family the derive step kept beside it, and the
     // Holm items the step-down's own levels.
