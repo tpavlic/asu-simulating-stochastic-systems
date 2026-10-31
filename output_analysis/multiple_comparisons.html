@@ -217,6 +217,10 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .leg > span { display: flex; gap: 6px; align-items: baseline; }
 .leg-grp-hd { margin-top: 10px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .leg-grp .leg { margin-top: 3px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+/* With the two groups side by side under their panels, each group lists its
+   entries in one column, so that a wrapped entry never opens a gap in the row
+   beside a short one. */
+.leg-cols .leg-grp .leg { grid-template-columns: minmax(0, 1fr); }
 /* Tab 6's five procedure steps, listed under the figure with the current one
    marked and the ones not yet reached muted, as the legend mutes its own
    entries; always five lines, and so the block's height never follows Step. */
@@ -340,6 +344,9 @@ details.why .why-body { padding: 9px 11px 10px 33px; font-size: .81rem; color: v
 details.why .why-body p + p { margin-top: 7px; }
 .sec { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 13px; margin-bottom: 13px; }
 .sec-hd { font-size: .75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
+/* A section heading standing over prose after a page's last figure, outside any card,
+   where it needs its own space above instead of a card's padding. */
+.note-hd { margin-top: 18px; }
 /* Digits of equal width wherever a number is written into text that reserves its
    height or width: a "0.0" placeholder then takes exactly the room a "0.1" will, and
    a run cannot move a wrap point by changing one digit for another. .tabular-nums is
@@ -1138,15 +1145,21 @@ svg.fig { display: block; width: 100%; height: auto; }
       <svg class="hsv" id="anova-strip" role="img" aria-label="One column per family run, its height equal to the number of pairs declared different under the selected post-hoc rule, colored red when at least one of those declared pairs is a false alarm and indigo otherwise"></svg>
       <div class="fig-note" id="anova-strip-cap"></div>
     </div>
+    <div class="sec-hd note-hd">Reading the three rules</div>
     <p class="exp-note">Tukey's honestly significant difference and Bonferroni's t both judge every pair at once, and the two critical-difference cards above show the gain is real but modest: Tukey's is the smaller of the two, never the larger, but rarely by much.</p>
     <p class="exp-note">Fisher's <span class="tip" tabindex="0" data-tip="Fisher's least significant difference is only applied after the omnibus F test flags a difference; a family whose F test flags none declares no pair different, whatever the raw mean gaps look like.">protected</span> LSD holds the family-wise error rate at α only when there are exactly three designs (Hayter, 1986); with five, and with the last two designs planted δ above the rest by default, F almost always flags a difference, and so the protection does nothing and the four null pairs (three among the unmoved designs and one between the two moved ones) are each tested at a bare α. Watch its family-wise error rate above settle well past α, whereas Tukey's and Bonferroni's do not.</p>
-    <p class="exp-note">ANOVA and all three post-hoc rules here assume every design is sampled independently of every other, an assumption common random numbers break by design: each rule pools a within-design variance across designs that no longer vary independently, Bonferroni's rule included. Under common random numbers, a comparison instead falls back to the paired interval at α/C that tab ② builds, where the Bonferroni inequality still holds because it needs no independence at all. When every comparison is against one benchmark design rather than among all of them, Dunnett's test is the exact many-versus-one counterpart of Tukey's rule here.</p>
+    <details class="why">
+      <summary>Common random numbers, and comparisons against one benchmark</summary>
+      <div class="why-body">
+        <p>ANOVA and all three post-hoc rules here assume every design is sampled independently of every other, an assumption common random numbers break by design: each rule pools a within-design variance across designs that no longer vary independently, Bonferroni's rule included. Under common random numbers, a comparison instead falls back to the paired interval at α/C that tab ② builds, where the Bonferroni inequality still holds because it needs no independence at all. When every comparison is against one benchmark design rather than among all of them, Dunnett's test is the exact many-versus-one counterpart of Tukey's rule here.</p>
+      </div>
+    </details>
     <details class="why">
       <summary>When design differences come from choosing different settings of a common set of parameters</summary>
       <div class="why-body">
         <p>One-way ANOVA is a linear model: each output is the grand mean, plus a shift for its design, plus noise. The K design shifts are free parameters tied only by their average, which is why the model can ask only whether the designs differ and then, pair by pair, which, and why one residual mean square feeds every post hoc rule above.</p>
         <p>The differences among the K designs often come from choosing different settings of a common set of parameters, not from K unrelated alternatives. When the designs are the levels of one factor, such as one to five servers, a model with a term for that factor asks one question, whether the response rises with the factor, in place of K(K &minus; 1)/2 pairwise ones; when they are the cells of a factorial, such as two queue disciplines crossed with three staffing levels, it asks for each factor&rsquo;s effect and their interaction, three questions in place of fifteen. Most of the multiple-comparisons burden disappears because the question changed, not because the correction improved, and the fitted model also predicts designs that were never simulated. Fitting such a model to simulation output is called metamodeling.</p>
-        <p>The independence assumption above belongs to the one-way model, not to ANOVA as a whole. When every design&rsquo;s r-th replication shares one random-number stream, the replication is a block, and a model with a term for each replication makes every comparison within a replication, as tab &#9313;&rsquo;s paired intervals do. The correlation that common random numbers create is then part of the model rather than a violation of it.</p>
+        <p>Independence across designs is an assumption of the one-way model, not of ANOVA as a whole. When every design&rsquo;s r-th replication shares one random-number stream, the replication is a block, and a model with a term for each replication makes every comparison within a replication, as tab &#9313;&rsquo;s paired intervals do. The correlation that common random numbers create is then part of the model rather than a violation of it.</p>
       </div>
     </details>
   </section>
@@ -1187,7 +1200,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="These are facts about the systems being simulated that the analyst never sees; the widget shows them so the reader can judge every decision against the truth.">True of the simulated designs, hidden from the experimenter</span></div>
       <div class="ctrl-row par-row">
         <span class="ctrl-pair ctrl-pair-wide">
-          <label class="ctrl-lbl" for="best-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every selection correct by definition; One design better plants a single best design δ ahead of the rest, with δ locked to ε so the guarantee is exactly at its hardest; Evenly spaced fans every design out in equal steps and lets δ range independently of ε.">Configuration</span></label>
+          <label class="ctrl-lbl" for="best-cfg"><span class="tip" tabindex="0" data-tip="How the designs' true means are set. All equal makes every selection correct by definition; One design better plants a single best design δ ahead of the rest, with δ locked to ε, the standard hard case for the guarantee; Evenly spaced fans every design out in equal steps and lets δ range independently of ε.">Configuration</span></label>
           <select id="best-cfg" onchange="bestCfgChanged()">
             <option value="all">All equal</option>
             <option value="one" selected>One design better by δ</option>
@@ -1203,7 +1216,7 @@ svg.fig { display: block; width: 100%; height: auto; }
           <input class="par-inp" id="best-sigma" type="text" inputmode="decimal" value="2" autocomplete="off" spellcheck="false" onchange="bestSigmaChanged()">
         </span>
         <span class="ctrl-pair ctrl-pair-wide">
-          <span class="ctrl-note" id="best-delta-note">δ = ε: the <span class="tip" tabindex="0" data-tip="The arrangement of true means that ranking and selection calls its least favorable configuration: one design is exactly ε better than all the others, which are tied. The best is then only just worth telling apart from the rest, and so this is where the 1 − α guarantee is hardest to meet. Locking δ to ε places the simulated designs in it.">slippage configuration</span></span>
+          <span class="ctrl-note" id="best-delta-note">δ = ε: the <span class="tip" tabindex="0" data-tip="The arrangement of true means that ranking and selection calls the slippage configuration: one design is exactly ε better than all the others, which are tied. The best is then only just worth telling apart from the rest, and so this is the standard hard case for the 1 − α guarantee. Locking δ to ε places the simulated designs in it.">slippage configuration</span></span>
         </span>
       </div>
       <div class="ctrl-row">
@@ -1256,7 +1269,11 @@ svg.fig { display: block; width: 100%; height: auto; }
         <div class="sc-val wrap" id="best-c-selected">—</div>
       </div>
     </div>
-    <div class="sg">
+    <div class="sg sg-three">
+      <div class="sc">
+        <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The subset-selection guarantee behind step 2 on its own: with probability at least 1 − α/2, the half of the error budget the screen takes, the best design is among the survivors, whatever the other designs' true means. As the selection card does, this card counts a survivor that is the best design or one within ε of it. A best-scenario chart that stops after screening reports exactly this survivor set.">Best survived screening</span></div>
+        <div class="sc-val wrap" id="best-c-screen">—</div>
+      </div>
       <div class="sc">
         <div class="sc-lbl"><span class="tip" tabindex="0" data-tip="The guarantee behind this whole procedure (Nelson, Swann, Goldsman, and Song, 2001): with probability at least 1 − α, the selection is the best design or one within ε of it, for normal data sampled independently across designs.">Probability of correct selection</span></div>
         <div class="sc-val wrap" id="best-c-pcs">—</div>
@@ -1271,10 +1288,17 @@ svg.fig { display: block; width: 100%; height: auto; }
       <svg class="hsv" id="best-strip" role="img" aria-label="One column per run, its height equal to the total replications used across both stages, colored red when the selection was incorrect and indigo otherwise"></svg>
       <div class="fig-note" id="best-strip-cap"></div>
     </div>
-    <p class="exp-note">A fixed-sample test such as one-way ANOVA draws the same number of replications from every design no matter how the data turn out; it cannot add replications where they turn out to be needed. This procedure can: its second stage adds replications only to the survivors of screening and only as many as each survivor's own variance and ε call for.</p>
-    <p class="exp-note">Arena's Process Analyzer draws this same idea as a best-scenario chart: one box plot per design, with the best one marked.</p>
-    <p class="exp-note">A screening-only variant of the procedure stops after step three and selects directly among the survivors, using a t quantile at the upper-tail probability 1 − (1 − α)^(1/(K−1)) instead of splitting the guarantee between two stages. A selection-only variant skips screening altogether and takes every design to the same second-stage size using Rinott's constant h(R₀, K, 1 − α) because the whole guarantee then falls on that one stage.</p>
-    <p class="exp-note">The 1 − α guarantee above is proved for normal data sampled independently across designs, and the procedure is also used with common random numbers in practice.</p>
+    <div class="sec-hd note-hd">Why the replications per run vary</div>
+    <p class="exp-note">The columns in the chart above differ in height because the number of replications the second stage draws varies from run to run. A fixed-sample test such as one-way ANOVA draws the same number of replications from every design no matter how the data turn out; it cannot add replications where they turn out to be needed. This procedure can: its second stage adds replications only to the survivors of screening and only as many as each survivor's own variance and ε call for.</p>
+    <div class="sec-hd note-hd">Stage-1 survivors are an answer in their own right</div>
+    <p class="exp-note">With probability at least 1 − α/2, the half of the error budget the screen takes, the best design is among the survivors of step 2. Some tools, such as Arena's Process Analyzer, stop there: a best-scenario chart draws one box plot per design, highlights every design the screen cannot rule out as a possible best, often several, and takes an error tolerance as ε. The procedure here goes on to size those survivors and pick one.</p>
+    <details class="why">
+      <summary>One-stage variants, and what the guarantee assumes</summary>
+      <div class="why-body">
+        <p>A screening-only variant of the procedure stops after step 2 and selects directly among the survivors, using a t quantile at the upper-tail probability 1 − (1 − α)^(1/(K−1)) instead of splitting the guarantee between two stages. A selection-only variant skips screening altogether and takes every design to the same second-stage size using Rinott's constant h(R₀, K, 1 − α) because the whole guarantee then falls on that one stage.</p>
+        <p>The 1 − α guarantee is proved for normal data sampled independently across designs, and the procedure is also used with common random numbers in practice.</p>
+      </div>
+    </details>
   </section>
 
   <!-- ── TAB ⑦: simulation optimization ──────────────────────────────── -->
@@ -1288,7 +1312,7 @@ svg.fig { display: block; width: 100%; height: auto; }
       <svg class="fig" id="optim-fig" role="img" aria-label="A loop of six boxes: propose candidate settings, simulate them, estimate the objective and its noise, judge the candidates statistically, update the search and return to proposing, or exit to report the best"></svg>
       <div class="fig-note" id="optim-fig-cap"></div>
     </div>
-    <div class="sec-hd" style="margin-top:18px">What drives the search</div>
+    <div class="sec-hd note-hd">What drives the search</div>
     <p class="exp-note"><span class="tip" tabindex="0" data-tip="A general-purpose search strategy that improves candidates by trial rather than by a problem-specific formula; it makes few assumptions about the objective, and it carries no guarantee of finding the true optimum.">Metaheuristics</span> search by trial and improvement rather than by gradient. <span class="tip" tabindex="0" data-tip="A metaheuristic that keeps a small reference set of diverse, good solutions and combines pairs of them into new candidates, rather than mutating one solution at a time.">Scatter search</span> paired with <span class="tip" tabindex="0" data-tip="A short list of recently visited or forbidden moves that keeps a search from cycling back to the same candidates it just left.">tabu memory</span> is the engine inside OptQuest, which Arena, AnyLogic, and other simulation packages license. The other common families take their moves from nature, each keeping a population or a search history that steers the next round of candidates away from ground already covered:</p>
     <ul class="exp-list">
       <li><a href="https://en.wikipedia.org/wiki/Genetic_algorithm" target="_blank" rel="noopener">Genetic algorithms</a>: a population of encoded candidates evolves by selection, crossover, and mutation, and the building blocks of good candidates spread through it.</li>
@@ -1303,10 +1327,10 @@ svg.fig { display: block; width: 100%; height: auto; }
     <p class="exp-note">Driven by a simulation, every one of these evaluates a noisy objective, and so each has a version that re-evaluates its elites, averages replications before comparing, or hands its finalists to ranking and selection. A wider <a href="https://en.wikipedia.org/wiki/Metaheuristic" target="_blank" rel="noopener">survey of metaheuristics</a> lists many more.</p>
     <p class="exp-note">The methods above treat the simulation model as a black box that can only be probed. An alternative approach is to build a <span class="tip" tabindex="0" data-tip="A cheap model fitted to the simulation's own outputs, also called a surrogate, that stands in for the simulation where the search needs many evaluations.">meta-model</span> of the simulation model that helps to identify generalizable structure across the parameter space. For example, <span class="tip" tabindex="0" data-tip="A fitted local model, often a low-order polynomial, of how the simulated objective changes near the current candidates.">response-surface</span> and <span class="tip" tabindex="0" data-tip="A family of methods that follow a noisy estimate of the objective's slope toward an optimum, taking smaller steps as the estimate grows more reliable.">stochastic-approximation</span> methods fit a local model of the objective and follow that model toward an optimum.</p>
     <p class="exp-note">Ranking and selection fits into the loop in two places. Page ⑥'s two-stage procedure is the clean-up step, deciding among the search's finalists with a stated guarantee once the search itself has narrowed the field; a lighter screening rule can also sit inside the loop, stopping replications on a candidate that is already clearly worse than the others.</p>
-    <div class="sec-hd" style="margin-top:18px">Two consequences of random simulation output</div>
+    <div class="sec-hd note-hd">Two consequences of random simulation output</div>
     <p class="exp-note">The search never sees a candidate's true expected performance. Every value it compares is a sample mean from a finite number of replications. The candidate with the largest sample mean is partly the candidate that happened to draw favorably, and so its sample mean overstates its true performance, as page ③ shows for a fixed set of designs. This is why the loop's last step re-estimates the chosen candidate on fresh replications before reporting it: a sample mean and interval computed from new replications are not biased by the selection that picked the candidate.</p>
     <p class="exp-note">Every comparison the search makes is one more hypothesis test, and a search makes thousands of them. If the rule were simply to move to any candidate whose interval excludes the current best's at α = 0.05, then one comparison in twenty between two equally good candidates would move the search to the wrong one. Pages ①, ②, and ④ measure exactly this accumulation of false alarms. The search rules above therefore do not decide each comparison once: they keep replicating candidates that are close and drop only candidates that are clearly worse.</p>
-    <div class="sec-hd" style="margin-top:18px">How this differs from the rest of this widget</div>
+    <div class="sec-hd note-hd">How this differs from the rest of this widget</div>
     <p class="exp-note">Pages ①–⑤ compare a fixed set of designs against fixed samples from each. Page ⑥ adds replications adaptively but still to a fixed set of designs chosen in advance. This page searches an open set: the design space itself is not enumerated, and the statistical tools built on the earlier pages (confidence intervals, corrections, and a screening rule) appear here again, now as components inside a search loop rather than as the whole procedure.</p>
   </section>
 </div>
@@ -2186,10 +2210,14 @@ function selectBest(seed, p) {
   // A design exactly eps worse than the best counts as incorrect, and so the
   // comparison needs a tolerance below eps itself rather than landing right
   // on the boundary, where floating-point rounding could tip either way.
-  var correct = sgn * (p.means[best] - p.means[selected]) < p.eps * (1 - 1e-9);
+  var good = function (i) { return sgn * (p.means[best] - p.means[i]) < p.eps * (1 - 1e-9); };
+  var correct = good(selected);
+  // The screen's own success, judged by the same rule as the selection so the
+  // two tallies agree: a survivor that is the best design or within eps of it.
+  var goodSurvived = scr.survivors.some(good);
   return { t: scr.t, h: h, stage1: { Y: Y, means: means, vars: vars }, W: scr.W, thresholds: scr.thresholds,
            sampleBest: scr.sampleBest, survivors: scr.survivors, sizes: sizes, stage2: { Y: Y2, means: means2 },
-           selected: selected, best: best, correct: correct, totalReps: total };
+           selected: selected, best: best, correct: correct, goodSurvived: goodSurvived, totalReps: total };
 }
 
 var MCP = { SEED_MAX: SEED_MAX, mulberry32: mulberry32, normalDraw: normalDraw,
@@ -4610,8 +4638,8 @@ function bestVerdict(rec) {
 // are phrases, not sentences, like the legend's entries.
 var BEST_STAGES = [
   { stage: 1, name: 'sample', text: function (sp) { return 'R₀ = ' + sp.R0 + ' replications of each design'; } },
-  { stage: 1, name: 'screen', text: function () { return 'a design survives if its first-stage mean clears its dashed threshold, the hardest of the other designs\' means shifted by max{0, W − ε}'; } },
-  { stage: 2, name: 'size', text: function () { return 'R<sub>i</sub> = max{R₀, ⌈(h·S<sub>i</sub>/ε)²⌉} replications in all for each survivor, from its first-stage variance'; } },
+  { stage: 1, name: 'screen', text: function () { return 'each design has its own dashed threshold, which is the strictest of the other designs\' first-stage means (the highest of them when bigger is better, the lowest when smaller is) after each is moved in the worse direction by max{0, W − ε}, with W = t·√((S²<sub>i</sub> + S²<sub>j</sub>)/R₀) being the pair\'s allowance for sampling noise and t being the screening t in the cards below; the design survives if its first-stage mean clears it'; } },
+  { stage: 2, name: 'size', text: function () { return 'R<sub>i</sub> = max{R₀, ⌈(h·S<sub>i</sub>/ε)²⌉} replications in all for each survivor, from its first-stage standard deviation S<sub>i</sub> and Rinott\'s constant h for R₀, K, and 1 − α/2 (in the cards below), the multiplier that makes a sample of this size enough to tell the survivor from the best at the ε threshold'; } },
   { stage: 2, name: 'sample again', text: function (sp, capped) { return 'the added replications in orange, beside the first-stage ones carried over in gray' + (capped ? ' (each design draws at most 200 of its added replications; the means use all of them)' : ''); } },
   { stage: 2, name: 'select', text: function () { return 'the survivor with the best overall mean'; } }
 ];
@@ -4637,27 +4665,38 @@ function bestStageList(el, stage, sp, capped, hasRun, narrow) {
 // drawn count as the segment's own. Opens with the fixed sentence naming
 // what a column counts and what turns it red, the same construction the
 // other strips' captions use.
-function bestStripCaption(el, res, nCorrect, nSeg, confPct) {
+// The screen's guarantee is 1 - alpha/2, so its percentage is halfway between
+// the stated confidence and 100.
+function bestStripCaption(el, res, nCorrect, nScreen, nSeg, confPct) {
   var lead = 'Each column is one run; its height counts the total replications used, and red means the selection was not the best or within ε of it. ';
+  var screenPct = (100 + confPct) / 2;
   if (!nSeg) {
     el.innerHTML = lead + 'No runs in this segment yet.';
   } else {
-    var pct = (nCorrect / nSeg * 100).toFixed(1);
+    var pct = (nCorrect / nSeg * 100).toFixed(1), pctS = (nScreen / nSeg * 100).toFixed(1);
     var showing = (res && res.dropped)
       ? ('Showing the latest <strong>' + res.shown + '</strong> of <strong>' + nSeg + '</strong> runs. ')
       : '';
     el.innerHTML = lead + showing + 'Correct selections: <strong>' + nCorrect + ' of ' + nSeg + '</strong> ('
-      + pct + '%; the guarantee is at least ' + confPct.toFixed(1) + '%).';
+      + pct + '%; the guarantee is at least ' + confPct.toFixed(1) + '%). The best design, or one within ε of it, survived screening in <strong>'
+      + nScreen + ' of ' + nSeg + '</strong> (' + pctS + '%; the guarantee is at least ' + screenPct.toFixed(1) + '%).';
   }
   reserveCapHeight(el, [lead + 'No runs in this segment yet.',
-    lead + 'Showing the latest <strong>100</strong> of <strong>999</strong> runs. Correct selections: <strong>100 of 999</strong> (100.0%; the guarantee is at least 100.0%).'], true);
+    lead + 'Showing the latest <strong>100</strong> of <strong>999</strong> runs. Correct selections: <strong>100 of 999</strong> (100.0%; the guarantee is at least 100.0%). The best design, or one within ε of it, survived screening in <strong>100 of 999</strong> (100.0%; the guarantee is at least 100.0%).'], true);
 }
 // A vertical bar swatch for a sample-mean mark (tall and thick for the
 // overall, first- and second-stage combined mean; short and thin for the
 // first-stage-only mean), and an outlined-rectangle swatch for a lane ringed
 // as the final selection.
-function swBar(color, tall) {
-  return legSwatch('<rect x="' + (tall ? 9 : 10) + '" y="' + (tall ? 0 : 2) + '" width="' + (tall ? 6 : 4) + '" height="' + (tall ? 12 : 8) + '" fill="' + color + '"/>');
+function swBar(color, kind) {
+  // The swatch is 24 x 12 at 1:1, so each mark is drawn at the width lanesPlot
+  // gives it: the true mean a 1.6px line over the whole row, the first-stage
+  // mean a 3px bar inset from the row's edges, the overall mean a 4px bar
+  // nearly the row's full height, and the threshold a 1.6px dashed line.
+  if (kind === 'truth') return legSwatch('<line x1="12" y1="0" x2="12" y2="12" stroke="' + color + '" stroke-width="1.6"/>');
+  if (kind === 'threshold') return legSwatch('<line x1="12" y1="0" x2="12" y2="12" stroke="' + color + '" stroke-width="1.6" stroke-dasharray="4,2.5"/>');
+  if (kind === 'overall') return legSwatch('<rect x="10" y="0" width="4" height="12" fill="' + color + '"/>');
+  return legSwatch('<rect x="10.5" y="2" width="3" height="8" fill="' + color + '"/>');
 }
 function swOutline(color) {
   return legSwatch('<rect x="2" y="2" width="20" height="8" rx="2" fill="none" stroke="' + color + '" stroke-width="2"/>');
@@ -4685,17 +4724,17 @@ function swText(color) {
 function bestLegendGroups(stage, correct, narrow) {
   return [
     { title: 'First stage and screening' + (narrow ? ' (the upper row of each lane)' : ''), items: [
-      { sw: swBar(C.truth, true), label: 'true mean (drawn in both ' + (narrow ? 'rows' : 'panels') + ')', live: true },
+      { sw: swBar(C.truth, 'truth'), label: 'true mean (drawn in both ' + (narrow ? 'rows' : 'panels') + ')', live: true },
       { sw: swDot(C.est), label: 'first-stage replication', live: true },
-      { sw: swBar(C.est, false), label: 'first-stage mean', live: true },
-      { sw: swLine(C.text, '5,3'), label: 'screening threshold: the hardest of the other designs\' bars to clear', live: stage >= 1 },
+      { sw: swBar(C.est, 'stage1'), label: 'first-stage mean', live: true },
+      { sw: swBar(C.text, 'threshold'), label: 'screening threshold, one per design: the strictest of the other designs\' means after each is moved in the worse direction by max{0, W − ε}', live: stage >= 1 },
       { sw: swDot(C.estMuted), label: 'eliminated design: its replications muted and its label struck through', live: stage >= 1 }
     ] },
     { title: 'Second stage and selection' + (narrow ? ' (the lower row of each lane)' : ''), items: [
-      { sw: swText(C.muted), label: 'number at the right edge: a survivor\'s second-stage sample size R<sub>i</sub>', live: stage >= 2 },
+      { sw: swText(C.muted), label: 'R<sub>i</sub> column at the right edge: a survivor\'s total sample size, both stages together', live: stage >= 2 },
       { sw: swDot(C.pair), label: 'first-stage replication carried over (gray)', live: stage >= 3 },
       { sw: swDot(C.est), label: 'second-stage replication', live: stage >= 3 },
-      { sw: swBar(C.ok, true), label: 'overall mean, both stages combined', live: stage >= 3 },
+      { sw: swBar(C.ok, 'overall'), label: 'overall mean, both stages combined', live: stage >= 3 },
       { sw: swOutline(C.ok), label: 'selected design: correct (the best, or within ε of it)', live: stage >= 4 && correct !== false },
       { sw: swOutline(C.miss), label: 'selected design: incorrect (at least ε from the best)', live: stage >= 4 && correct === false }
     ] }
@@ -4743,7 +4782,10 @@ function lanesPlot(svgEl, rec, stage, opts) {
   // two 22px sub-rows of 20px each, split by a hairline, with 4px between
   // lanes, so that the pair reads as one lane.
   var subH = narrow ? 22 : 34, rowH = narrow ? 20 : 30, laneH = narrow ? 2 * subH + 4 : 34;
-  var pL = narrow ? 26 : 34, pR = 40, pT = narrow ? 6 : 22, pB = 24, gap = 24;
+  // The top padding holds the panel titles (wide) or just the R_i column
+  // header (narrow) and is fixed, so that the figure's height never changes
+  // mid-Step.
+  var pL = narrow ? 26 : 34, pR = 40, pT = narrow ? 16 : 22, pB = 24, gap = 24;
   var cW = narrow ? W - pL - pR : (W - pL - pR - gap) / 2;
   var xA = pL, xB = narrow ? pL : pL + cW + gap;   // each panel's left edge
   var cH = K * laneH;
@@ -4765,6 +4807,12 @@ function lanesPlot(svgEl, rec, stage, opts) {
   if (!narrow) {
     h += '<text x="' + (xA + cW / 2) + '" y="12" text-anchor="middle" fill="' + C.text + '" font-size="10.5" font-weight="600" font-family="' + FF_SANS + '">First stage and screening</text>';
     h += '<text x="' + (xB + cW / 2) + '" y="12" text-anchor="middle" fill="' + C.text + '" font-size="10.5" font-weight="600" font-family="' + FF_SANS + '">Second stage and selection</text>';
+  }
+  // A column header over the survivors' sizes in the right margin, so that
+  // they are not mistaken for the design indices in the left margin; drawn
+  // only while the column holds numbers.
+  if (rec && stage >= 2 && rec.survivors.length > 1) {
+    h += '<text x="' + (xB + cW + 6) + '" y="12" text-anchor="start" fill="' + C.muted + '" font-size="9.5" font-family="' + FF_MONO + '">R<tspan dy="2.5" font-size="7">i</tspan></text>';
   }
   var laneTicks = niceTicks(lo, hi, narrow ? 5 : 4);
   var laneStep = laneTicks.length > 1 ? laneTicks[1] - laneTicks[0] : (hi - lo);
@@ -4915,6 +4963,7 @@ TABS.best = {
     // in a column of that panel's own width; on a narrow one the groups
     // stack, as the panels themselves have become the rows of each lane.
     legEl.style.cssText = lanesRes.narrow ? '' : 'display:grid;grid-template-columns:' + lanesRes.cW + 'px ' + lanesRes.cW + 'px;column-gap:' + lanesRes.gap + 'px;margin-left:' + lanesRes.pL + 'px';
+    legEl.classList.toggle('leg-cols', !lanesRes.narrow);
     bestStageList($('best-stages'), stage, spanSp, lanesRes && lanesRes.capped, !!latest, lanesRes.narrow);
 
     // at(need) is the one place the card-to-stage map above is enforced: a
@@ -4945,14 +4994,27 @@ TABS.best = {
     // its own answer, and so it would be premature to fold it into a rate the
     // reader is watching accumulate.
     var counted = runs.length - (latest && stage < 4 ? 1 : 0);
-    var nSeg = 0, nCorrect = 0, repSum = 0;
-    for (var ri = 0; ri < counted; ri++) { nSeg++; if (runs[ri].rec.correct) nCorrect++; repSum += runs[ri].rec.totalReps; }
+    // Two tallies, both judged by the same rule (the best design or one within
+    // eps of it): whether such a design survived screening (the screen's own
+    // subset-selection guarantee, at least 1 - alpha/2, the half of the error
+    // budget the screen takes) and whether the final selection was one (the
+    // whole procedure's guarantee, at least 1 - alpha).
+    var nSeg = 0, nCorrect = 0, nScreen = 0, repSum = 0;
+    for (var ri = 0; ri < counted; ri++) {
+      var rr = runs[ri].rec;
+      nSeg++;
+      if (rr.correct) nCorrect++;
+      if (rr.goodSurvived) nScreen++;
+      repSum += rr.totalReps;
+    }
+    setCard('best-c-screen', rateText(nScreen, nSeg));
     setCard('best-c-pcs', rateText(nCorrect, nSeg));
-    // Unlike the other rate cards, this one shares a plain two-column row
-    // rather than a full-width or single-column one, and so the widest rate
-    // text ("100.0% (100.0-100.0%)") would run past the narrow half at a
-    // phone width; wrap it onto two lines and reserve for that width instead
-    // of letting it ellipsize away the confidence interval.
+    // Unlike the other rate cards, these two share a three-column row rather
+    // than a full-width or single-column one, and so the widest rate text
+    // ("100.0% (100.0-100.0%)") would run past a third of the width on a
+    // mid-sized screen; wrap it onto two lines and reserve for that width
+    // instead of letting it ellipsize away the confidence interval.
+    reserveCapHeight($('best-c-screen'), '100.0% (100.0–100.0%)', false);
     reserveCapHeight($('best-c-pcs'), '100.0% (100.0–100.0%)', false);
     setCard('best-c-meanreps', nSeg > 0 ? (repSum / nSeg).toFixed(1) : '—');
 
@@ -4976,7 +5038,7 @@ TABS.best = {
       value: function (rec) { return rec.totalReps; },
       bad: function (rec) { return !rec.correct; }
     });
-    bestStripCaption($('best-strip-cap'), stripRes, nCorrect, nSeg, Number($('best-conf').value) * 100);
+    bestStripCaption($('best-strip-cap'), stripRes, nCorrect, nScreen, nSeg, Number($('best-conf').value) * 100);
   }
 };
 

@@ -569,17 +569,18 @@ power: Fix the margins on the narrow-screen layout
 
 Tags are not enumerated anywhere and are not permanent, because widgets keep arriving. While a
 directory holds a single widget its name is the natural tag (`prng`, or a trimmed `power` for
-`power_analysis/`); once it holds several independent tools, tag the widget instead (`analyzer`,
-`tutorial`, qualified as `input/analyzer` where the bare form is ambiguous), and let earlier
-commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
-explorer's tag and `mcx` is the examples widget's. `input_modeling/` also now holds two: `analyzer`
-is `input_analyzer.html`'s tag and `models` is `prob_models.html`'s. `output_analysis/` also now
-holds three: `ci` is `ci_explorer.html`'s tag, `compare` is `multiple_comparisons.html`'s, and `oa` is
-the multi-file app in its `output_analyzer/` subdirectory. Reuse
-whatever a widget has been tagged before – `git log --oneline -- prng/` shows it – and keep the
-tag short: the whole subject line should stay at 72 characters or fewer. This is not Conventional
-Commits, as there is no `feat:`/`fix:` type and the tag names a widget rather than a kind of
-change.
+`power_analysis/`); once it holds several independent tools, tag the widget instead (`models`,
+`compare`, or initials such as `ia` and `oa` where a bare word would fit two widgets), and let
+earlier commits keep the tags they were written with. `monte_carlo/` now holds two: `mc` stays the
+explorer's tag and `mcx` is the examples widget's. `input_modeling/` also now holds two: `ia` is
+`input_analyzer.html`'s tag, beside the Output Analyzer's `oa` (its earlier commits carry
+`analyzer`, which fit either analyzer once the second arrived), and `models` is
+`prob_models.html`'s. `output_analysis/` also now holds three: `ci` is `ci_explorer.html`'s tag,
+`compare` is `multiple_comparisons.html`'s, and `oa` is the multi-file app in its
+`output_analyzer/` subdirectory. Reuse whatever a widget has been tagged before –
+`git log --oneline -- prng/` shows it – and keep the tag short: the whole subject line should stay
+at 72 characters or fewer. This is not Conventional Commits, as there is no `feat:`/`fix:` type
+and the tag names a widget rather than a kind of change.
 
 **Omit the tag when the subject already says where the work is**, either because it names its target
 ("Add mobile-friendliness rules to CLAUDE.md") or because it describes a sweep ("Change the color
@@ -715,13 +716,18 @@ better.
   from timestamps, one relating two variables (a scatter with each column's histogram on its
   margins, a pairing switch that keeps both histograms while it shows the pairs shuffled or sorted
   together or opposite, with the range of r those values allow, the three correlation
-  coefficients, and a least-squares model of Y given X with a Breusch–Pagan check of its spread),
-  and one looking for patterns over time (a run sequence, a lag plot beside a correlogram with a
-  Ljung–Box test, a cycle of known period with up to three harmonics and a trend, a periodogram
-  for an unknown period, and an AR(1) for what the cycle leaves). The last two send residuals,
-  per-unit values, or AR(1) innovations to the first tab, and a fit made there to them becomes the
-  noise term of their export (`ST.handoff`, keyed to the data and model that sent them and cleared
-  whenever the first tab's data change); their exports read each tool's clock in the data's time
+  coefficients, a least-squares model of Y given X with a Breusch–Pagan check of its spread, and
+  NORTA pairs, X and Y drawn together with each column's own distribution and the data's Spearman
+  ρ or Pearson r, shown beside the data on one frame), and one looking for patterns over time (a
+  run sequence, a lag plot beside a correlogram with a Ljung–Box test, a cycle of known period
+  with up to three harmonics and a trend, a periodogram for an unknown period, an AR(1) for what
+  the cycle leaves, and a section that keeps the distribution as well as the carry-over: NORTA's
+  AR(1) on a normal scale, matched to the lag-one correlation, or EAR(1) for exponential readings
+  with no cycle). The last two send residuals, per-unit values, AR(1) innovations, or a column or
+  the readings themselves to the first tab, and a fit made there becomes the noise term of their
+  export or a NORTA distribution (`ST.handoff`, keyed to the data and model that sent them and
+  cleared whenever the first tab's data change; tab ③ keeps a captured fit for each column in
+  `PST.marg` and tab ④ in `SST.marg`, so that a second hand-off does not lose the first); their exports read each tool's clock in the data's time
   unit (Arena's `*ToBaseTime`, Simio's hours, AnyLogic's `time(UNIT)`). Every plot card carries a row of SVG, PNG, COPY, M,
   R, and PY buttons above the plot (COPY puts the PNG on the clipboard, and is left out where the
   browser cannot write an image there): the `Plot` builder records each mark it draws as data, files
@@ -779,7 +785,7 @@ better.
      `reflect` together. Any new code that reads `fit.shift` has to check `fit.reflect` as well. Only
      `shiftable` candidates are mirrored, and the Pearson type VI is deliberately not `shiftable`:
      with a shift it has four weakly identified parameters, and its shifted bootstrap took minutes.*
-  6. *The dependence numerics (core sections 15b to 15d) are checked by
+  6. *The dependence numerics (core sections 15b to 15e) are checked by
      `verify_input_analyzer_dependence.mjs`, which the main verify runs and which also runs alone in
      a few seconds. Its reference values come from `verify_dependence_reference.R`, which generates
      every dataset with a fixed seed and writes the data and R's results to
@@ -793,7 +799,24 @@ better.
      default, and Kendall's S uses Knight's merge count, so that both stay fast at tens of
      thousands of points; every control on tab ④ recomputes them. A fit to
      residuals is centered by `centeringMean`, which treats a mean within 1e-9 of the fit's
-     interquartile range as 0, so that an export never carries a meaningless "+ 3e-12".)*
+     interquartile range as 0, so that an export never carries a meaningless "+ 3e-12".*
+  7. *NORTA (core section 15e) solves the normals' correlation exactly, not by simulation: each
+     output's Hermite coefficients come from a midpoint rule on |z| ≤ 8 (`nortaGrid`), the outputs'
+     Pearson r (or Spearman ρ, through each value's mid-cdf, so that ties count) is a power series
+     in the normals' ρ (Mehler's formula) cut at `NORTA_K` terms, which must be even, with a
+     remainder fitted so that the map is exact at ρ = ±1, and Spearman between two continuous
+     marginals is 2 sin(πρ/6) in closed form. The data's own distribution is the piecewise-linear
+     empirical through `NORTA_BREAKS` (21) quantiles, the form the exports write, or the observed
+     values. R, MATLAB, and Python write every family through their quantile functions; Arena,
+     Simio, and AnyLogic get a block only for families whose quantile is a formula (the normal, the
+     lognormal, and the Johnson members as formulas of Z, the counts as a sum of indicators of U), and
+     write Φ by Abramowitz and Stegun 26.2.17 (`phiAS`, within 7.5e-8), which the verification
+     evaluates block by block at fixed normals. Arena 16.20 and AnyLogic 8.9.10 ran the blocks
+     unchanged (Arena's logical expressions as 0 or 1, `EP`, `**`, and a 16-term count; AnyLogic's
+     Java statements and ternaries) and matched the expected moments. Simio has not run them, but
+     its Reference Guide documents every function the Simio blocks call (`Math.If(test, value,
+     otherwise)`, `Math.Floor`, `Math.Exp`, `Math.Log`, `Math.Abs`, `Math.Sqrt`, `Math.Min`, and
+     `Math.Max`), a logical expression as 1 or 0, and an Assign step's rows running in order.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
@@ -949,7 +972,11 @@ better.
   by side, with a compact-letter display, a pairwise matrix sized to the means plot beside it, and a
   toggle to order the designs by sample mean; and ⑥ Selecting the Best in Two Stages animates the
   textbook's ranking-and-selection procedure stage by stage: a first-stage screen, second-stage
-  sizing from Rinott's constant, the added replications, and the final selection; and ⑦ Simulation
+  sizing from Rinott's constant, the added replications, and the final selection, with two
+  tallies judged by one rule (the best design or one within ε of it), how often such a design
+  survived screening (the screen's own subset-selection guarantee, 1 − α/2) and how often the
+  selection was one (1 − α), and a note that the
+  survivor set is what a best-scenario chart that stops after screening reports; and ⑦ Simulation
   Optimization closes the arc with no simulated data: a stepped flowchart of the adaptive
   search loop (propose, simulate, estimate, judge, update, report), the metaheuristic and
   response-surface families that drive it, where ranking and selection fits inside it, and what
@@ -980,8 +1007,12 @@ better.
   yet reached faded; listing all five
   keeps the block one height at every step without reserving blank space. The legend is two
   groups headed by the panel titles, each listing only its own panel's marks, laid out as two
-  columns under their panels (sized from the geometry `lanesPlot` returns) on a wide screen and
-  stacked on a narrow one. Commit tag `compare`. Conventions relied on by code outside the file, which any later
+  columns under their panels (sized from the geometry `lanesPlot` returns, each group's entries in
+  one column, and each swatch drawn at its mark's own width) on a wide screen and stacked on a
+  narrow one. Prose after a page's last figure follows page ①'s shape: a paragraph
+  that reads a number or figure on the page stays expanded under a `.note-hd` heading, and a
+  paragraph about what the page does not show (a variant, another tool, an assumption, a related
+  method) goes into a collapsed `details.why` box. Commit tag `compare`. Conventions relied on by code outside the file, which any later
   edit has to preserve:*
   1. *Everything between the `MCP-CORE-BEGIN` / `MCP-CORE-END` sentinels is pure numerics with no
      DOM access, and the block must not contain the words "window" or "document".
@@ -1030,7 +1061,8 @@ better.
      ('min' or 'max') sets which sample mean is better; a `cfg` other than all-equal moves one
      design (`one`), two together (`two`, where offered), or fans every design out in equal steps
      (`spread`), by `delta` in the direction `dir` favors, and locking δ to ε on tab ⑥'s `one`
-     configuration puts the 1 − α guarantee at its hardest point. The strip's current column stays
+     configuration puts the simulated designs in the slippage configuration, the standard hard case
+     for the 1 − α guarantee. The strip's current column stays
      in the history mid-Step (`pending`, not yet resolved) so the column count and the axis never
      change once the run's outcome is revealed, but its own bar is drawn only once stage 4 reveals
      whether the selection was correct.)*
