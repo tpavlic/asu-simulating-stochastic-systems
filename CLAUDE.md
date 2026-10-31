@@ -720,10 +720,11 @@ better.
   NORTA pairs, X and Y drawn together with each column's own distribution and the data's Spearman
   ρ or Pearson r, shown beside the data on one frame), and one looking for patterns over time (a
   run sequence, a lag plot beside a correlogram with a Ljung–Box test, a cycle of known period
-  with up to three harmonics and a trend, a periodogram for an unknown period, an AR(1) for what
-  the cycle leaves, and a section that keeps the distribution as well as the carry-over: NORTA's
-  AR(1) on a normal scale, matched to the lag-one correlation, or EAR(1) for exponential readings
-  with no cycle). The last two send residuals, per-unit values, AR(1) innovations, or a column or
+  with up to three harmonics and a trend, a periodogram for an unknown period, and two approaches
+  to the autocorrelation of what the cycle leaves, an AR(1) or a model that keeps the distribution
+  as well: NORTA's AR(1) on a normal scale, matched to the lag-one correlation, or EAR(1) for
+  exponential readings with no cycle; its export assembles the model from those pieces and writes
+  it out before the lines). The last two send residuals, per-unit values, AR(1) innovations, or a column or
   the readings themselves to the first tab, and a fit made there becomes the noise term of their
   export or a NORTA distribution (`ST.handoff`, keyed to the data and model that sent them and
   cleared whenever the first tab's data change; tab ③ keeps a captured fit for each column in

@@ -541,6 +541,10 @@ footer a:hover { text-decoration: underline; }
 /* ── Segmented choice (the pairing switch on tab 3) ───────────────────
    Radio buttons drawn as one bar of joined buttons; the inputs stay in
    the tab order and the accessibility tree, only visually hidden. */
+.exp-step { font-size: .8rem; color: var(--text); margin: 0 0 4px; line-height: 1.45; }
+.exp-step + .exp-code { margin-bottom: 8px; }
+.exp-steps { align-items: start; }
+.exp-steps > .copy-btn { align-self: end; margin-bottom: 8px; }
 .seg { display: inline-flex; flex-wrap: wrap; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
 /* Every option carries a left and a top rule, pulled outside its box by a negative margin, so
    that the box's overflow clips the rules of whichever options start a row or sit on the first
@@ -1948,7 +1952,7 @@ footer a:hover { text-decoration: underline; }
 
   <p class="tab-lede">Tab ① ignores the order of a sample: shuffle the numbers and nothing it
   reports changes. This tab checks whether the order carried information. Readings taken one after
-  another can carry over from one to the next (autocorrelation), as a tank's temperature does, or
+  another can depend on the ones before them (autocorrelation), as a tank's temperature does, or
   follow the clock, as hourly orders do. When they do, the tab builds a model that keeps that
   pattern: a cycle fitted to the clock and, for what the cycle leaves, either an <span class="tip" tabindex="0" data-tip="Autoregressive model of order 1: each value, measured from the mean, is &phi; times the one before it plus a new, independent noise term.">AR(1)</span> or a
   model that also keeps the readings' distribution, <span class="tip" tabindex="0" data-tip="Normal to anything: correlated standard normals, each turned into a uniform by the normal cdf &Phi; and then into a value by the inverse cdf of a chosen distribution, and so every value has exactly that distribution. Tab &#9314; uses it to draw correlated pairs.">NORTA</span>'s AR(1) or <span class="tip" tabindex="0" data-tip="Exponential AR(1): each value is &phi; times the one before it, plus a fresh exponential draw with probability 1 &minus; &phi;. Every value is then exponential, and the correlation at lag k is &phi;<sup>k</sup>.">EAR(1)</span>. Arrivals whose rate changes over the day belong on
@@ -2075,7 +2079,7 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">4 &middot; Remove a cycle <span class="sec-note">a pattern that repeats with a known period, such as a day or a week</span></div>
+    <div class="sec-hd">4 &middot; Model background periodicity <span class="sec-note">a pattern that repeats with a known period, such as a day or a week</span></div>
     <div class="ctrl-row">
       <label class="chk"><input type="checkbox" id="s-cyc"> Fit a cycle</label>
       <span class="ctrl-grp">
@@ -2138,7 +2142,7 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">5 &middot; Carry-over approach 1: AR(1) <span class="sec-note">each value a fraction of the one before plus noise, for dependence that a cycle does not explain</span></div>
+    <div class="sec-hd">5 &middot; Model residual autocorrelation&nbsp;– approach 1: AR(1) <span class="sec-note">each value a fraction of the one before plus noise, for dependence that a cycle does not explain</span></div>
     <div class="hint" id="s-ar-lede"></div>
     <div id="s-ar-out" style="margin-top:10px"></div>
     <div class="ctrl-row" style="margin-top:10px">
@@ -2177,7 +2181,7 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">6 &middot; Carry-over approach 2: keep the distribution (NORTA or EAR(1)) <span class="sec-note">an AR(1) on a normal scale, or a series of exponential values</span></div>
+    <div class="sec-hd">6 &middot; Model residual autocorrelation&nbsp;– approach 2: keep the distribution (NORTA or EAR(1)) <span class="sec-note">an AR(1) on a normal scale, or a series of exponential values</span></div>
     <div class="hint" id="s-nt-lede"></div>
     <div class="ctrl-row" style="margin-top:8px">
       <span class="ctrl-lbl" id="s-nk-lbl">Model</span>
@@ -2207,7 +2211,7 @@ footer a:hover { text-decoration: underline; }
     <details class="why">
       <summary>Why an AR(1) of normals, and when EAR(1) is enough</summary>
       <div class="why-body">
-        <p>The AR(1) of section 5 keeps the carry-over, but every value it draws is a weighted sum of
+        <p>The AR(1) of section 5 keeps the autocorrelation, but every value it draws is a weighted sum of
         noise terms, and such a sum drifts toward a normal shape whatever distribution the noise has.
         Service times in order, which are skewed and never negative, come out of it nearly symmetric
         and sometimes negative. NORTA instead runs the AR(1) on a normal scale, where Z<sub>t</sub> =
@@ -2221,7 +2225,7 @@ footer a:hover { text-decoration: underline; }
         <p>EAR(1) is a series whose values are exponential and need no transformation:
         X<sub>t</sub> = &phi; X<sub>t&minus;1</sub>, plus a fresh exponential draw with probability
         1 &minus; &phi;. Its correlation at lag k is &phi;<sup>k</sup>, as for the AR(1). It suits
-        readings that look exponential and carry over positively; it cannot carry a negative
+        readings that look exponential and are positively autocorrelated; it cannot produce a negative
         correlation, and with no cycle to subtract, it models the readings themselves. Its
         draws show its character: long stretches in which each value is a fixed fraction of the one
         before, broken by jumps up.</p>
@@ -2232,20 +2236,25 @@ footer a:hover { text-decoration: underline; }
   <section class="sec">
     <div class="sec-hd">7 &middot; Export <span class="sec-note">paste straight into your model or your analysis script</span></div>
     <div class="ctrl-row">
+      <span class="ctrl-lbl">Each value is</span>
+      <label class="chk"><input type="checkbox" id="s-exp-cyc"> the cycle of section 4 (else the mean)</label>
+      <span class="ctrl-lbl">plus noise with</span>
+      <span class="ctrl-grp">
+        <select id="s-carry" aria-label="Residual autocorrelation">
+          <option value="none">no autocorrelation</option>
+          <option value="ar">AR(1) autocorrelation</option>
+          <option value="keep">NORTA AR(1) autocorrelation</option>
+        </select>
+      </span>
+    </div>
+    <div class="ctrl-row">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="s-t0">The model's time 0 is data time</label>
         <input type="number" id="s-t0" class="mono-in" value="0" step="any" style="width:6em">
       </span>
-      <span class="ctrl-grp">
-        <label class="ctrl-lbl" for="s-carry">Carry-over approach</label>
-        <select id="s-carry">
-          <option value="none">none</option>
-          <option value="ar">AR(1)</option>
-          <option value="keep">NORTA AR(1)</option>
-        </select>
-      </span>
       <label class="chk"><input type="checkbox" id="s-clip"> Never below zero</label>
     </div>
+    <div id="s-exp-model"></div>
     <div class="hint" id="s-noise-say" style="margin-top:8px"></div>
     <div id="s-export-out" style="margin-top:8px"><div class="plot-empty">No model yet.</div></div>
     <div class="ctrl-row" style="margin-top:12px">
@@ -7662,7 +7671,7 @@ var DEP_TRIG = {
    when the data's time 0 is not the model's). With an AR(1), the noise is
    a variable Z updated once per draw by its own line, returned in `ar`.
    With m.norta ({ fit, phi }) or m.ear1 ({ mean, phi }), the noise is
-   instead the value that section 15e's carry-over gives, and with
+   instead the value that section 15e's autocorrelation models give, and with
    m.noLevel (no cycle fitted) that value is the whole draw. */
 function timeExpressions(m) {
   var out = { notes: {}, ar: null }, H = m.c.length, i, k;
@@ -7694,7 +7703,7 @@ function timeExpressions(m) {
     out[t] = m.clip ? clipAtZero(t, line) : line;
     out.notes[t] = nz.notes[t] || '';
   }
-  if (carry) out.ar = Object.assign({}, carry.ar, { notes: carry.notes, caps: carry.caps });
+  if (carry) out.ar = Object.assign({}, carry.ar, { notes: carry.notes, start: carry.start });
   if (m.ar && !carry) {
     var inn = m.ar.noise ? noiseTerms(m.ar.noise.fit, true)
                          : noiseTerms({ dist: DISTS.normal, p: [0, m.ar.sigmaE], shift: 0 }, false);
@@ -8483,11 +8492,18 @@ function nortaQuantile(fit, tool, Z, U) {
 }
 var NORTA_PHI_NOTE = 'has no normal cdf, and so U = Φ(Z) is written with Abramowitz and Stegun\'s approximation ' +
   '26.2.17, within 7.5 × 10⁻⁸ of the exact value.';
-var NORTA_ORDER = {
-  arena: 'One row of an Assign module per line, in order, run once per draw.',
-  simio: 'One row of an Assign step per line, in order, run once per draw, each name a real state variable.',
-  anylogic: 'Java statements, run once per draw, where the last ones set the model\'s own variables.'
-};
+/* What to do with a block of lines, said before the block. `per` names
+   when it runs ('pair' or 'draw'); the vector languages' steps are written
+   where their blocks are. */
+function nortaSteps(t, per, lines) {
+  var these = lines > 1 ? 'these lines, in order,' : 'this line';
+  return {
+    arena: 'Put ' + these + ' in one Assign module that runs once per ' + per + '.',
+    simio: 'Put ' + these + ' in one Assign step that runs once per ' + per + ', with each name a real state variable.',
+    anylogic: 'Run ' + (lines > 1 ? 'these statements' : 'this statement') + ' once per ' + per +
+      ' in one block of code; the last ' + (per === 'pair' ? 'two set' : 'one sets') + ' the model\'s own variables.'
+  }[t];
+}
 
 /* X and Y drawn together. m: fx, fy (fits), rho (the normals'
    correlation), xAttr and yAttr (the attributes that receive the values in
@@ -8496,7 +8512,7 @@ var NORTA_ORDER = {
    scripts). Each tool gets one block of lines, or null and a note saying
    which distribution it cannot write. */
 function nortaPairExpressions(m) {
-  var out = { notes: {} }, c = Math.sqrt(Math.max(0, 1 - m.rho * m.rho)), rz = num(m.rho), cz = num(c);
+  var out = { notes: {}, steps: {} }, c = Math.sqrt(Math.max(0, 1 - m.rho * m.rho)), rz = num(m.rho), cz = num(c);
   ['arena', 'simio', 'anylogic'].forEach(function (t) {
     var S = NORTA_SYN[t], al = t === 'anylogic';
     var V = al ? { Z1: 'z1', Z2: 'z2', T1: 't1', Q1: 'q1', U1: 'u1', T2: 't2', Q2: 'q2', U2: 'u2' }
@@ -8519,8 +8535,9 @@ function nortaPairExpressions(m) {
     L.push(S.set(m.xAttr, qx.expr));
     L.push(S.set(m.yAttr, qy.expr));
     out[t] = L.join('\n');
-    out.notes[t] = NORTA_ORDER[t] + (qx.u || qy.u ? ' ' + tn + ' ' + NORTA_PHI_NOTE : '') +
-      [qx.note, qy.note].filter(Boolean).map(function (s) { return ' ' + s; }).join('');
+    out.steps[t] = nortaSteps(t, 'pair', L.length);
+    out.notes[t] = ((qx.u || qy.u ? tn + ' ' + NORTA_PHI_NOTE : '') +
+      [qx.note, qy.note].filter(Boolean).map(function (s) { return ' ' + s; }).join('')).trim();
   });
   var chk = m.measure === 'pearson' ? 'Pearson' : 'Spearman', tg = num(m.target, 3);
   var vq = {};
@@ -8551,22 +8568,23 @@ function nortaPairExpressions(m) {
     'x = ' + vq.python.x.expr + '   # ' + m.xName + '\n' +
     'y = ' + vq.python.y.expr + '   # ' + m.yName + '\n' +
     'print(stats.' + (chk === 'Spearman' ? 'spearmanr' : 'pearsonr') + '(x, y).statistic)   # near ' + tg;
-  var scr = 'n pairs at once. The last line prints the ' + chk + ' correlation of the draws, which should be near ' + tg + '.';
-  out.notes.r = scr + [vq.r.x.note, vq.r.y.note].filter(Boolean).map(function (s) { return ' ' + s; }).join('');
-  out.notes.matlab = scr + ' The quantile functions are in the Statistics and Machine Learning Toolbox.' +
+  out.steps.r = out.steps.matlab = out.steps.python = 'Run these lines to draw n pairs at once. The last line prints the ' +
+    chk + ' correlation of the draws, which should be near ' + tg + '.';
+  out.notes.r = [vq.r.x.note, vq.r.y.note].filter(Boolean).join(' ');
+  out.notes.matlab = 'The quantile functions are in the Statistics and Machine Learning Toolbox.' +
     [vq.matlab.x.note, vq.matlab.y.note].filter(Boolean).map(function (s) { return ' ' + s; }).join('');
-  out.notes.python = scr + [vq.python.x.note, vq.python.y.note].filter(Boolean).map(function (s) { return ' ' + s; }).join('');
+  out.notes.python = [vq.python.x.note, vq.python.y.note].filter(Boolean).join(' ');
   return out;
 }
 
-/* The carry-over of a series kept on a normal scale, for timeExpressions:
+/* The autocorrelation of a series kept on a normal scale, for timeExpressions:
    Z follows a stationary AR(1) with coefficient phi, and each value is the
    fitted quantile at Phi(Z), less the fit's mean when it is the noise
    around a cycle (center). Returns, per tool, the update lines (ar), the
    value term (value), and a note, or a null value and a note saying why. */
 function nortaCarry(nm, center) {
   var mu = center ? centeringMean(nm.fit) : 0, c = Math.sqrt(Math.max(0, 1 - nm.phi * nm.phi));
-  var ph = num(nm.phi), cz = num(c), out = { value: {}, ar: {}, notes: {}, caps: {} };
+  var ph = num(nm.phi), cz = num(c), out = { value: {}, ar: {}, notes: {}, start: {} };
   DEP_TOOLS.forEach(function (t) {
     var S = NORTA_SYN[t], al = t === 'anylogic', Z = S ? 'Z' : 'z', U = S ? (al ? 'uz' : 'UZ') : 'u';
     var q = nortaQuantile(nm.fit, t, Z, U), tn = { arena: 'Arena', simio: 'Simio', anylogic: 'AnyLogic' }[t];
@@ -8585,8 +8603,8 @@ function nortaCarry(nm, center) {
     if (S) {
       L = [S.set('Z', ph + '*Z + ' + cz + '*' + S.nd)];
       if (q.u) L = L.concat(phiLines(t, 'Z', al ? 'tz' : 'TZ', al ? 'qz' : 'QZ', U));
-      out.caps[t] = NORTA_ORDER[t].replace('per draw', 'per draw, before the value is used') +
-        ' Z starts at 0, which puts the first value at the median, and the series forgets its start within a few draws.';
+      out.start[t] = 'Give Z a starting value of 0, which puts the first value at the median; the series forgets ' +
+        'its start within a few draws.';
       out.notes[t] = (q.u ? tn + ' ' + NORTA_PHI_NOTE : '') + (q.note ? ' ' + q.note : '');
     } else {
       if (t === 'r') L = ['z <- as.numeric(stats::filter(c(rnorm(1), ' + cz + ' * rnorm(n - 1)), ' + ph + ', method = "recursive"))']
@@ -8596,7 +8614,7 @@ function nortaCarry(nm, center) {
       else L = ['e = np.random.standard_normal(n)', 'z = np.zeros(n)', 'for i in range(n):',
                 '    z[i] = ' + ph + ' * z[i - 1] + ' + cz + ' * e[i] if i else e[i]']
         .concat(q.u ? ['u = stats.norm.cdf(z)'] : []);
-      out.caps[t] = 'n values in sequence, each standard normal from the first.';
+      out.start[t] = 'Every z is standard normal from the first.';
       out.notes[t] = (t === 'matlab' ? 'The quantile functions are in the Statistics and Machine Learning Toolbox.' : '') +
         (q.note ? ' ' + q.note : '');
     }
@@ -8607,7 +8625,7 @@ function nortaCarry(nm, center) {
 /* EAR(1) for timeExpressions: Z = phi Z, plus an exponential draw of mean
    mu with probability 1 - phi. The value is Z itself. */
 function ear1Carry(em) {
-  var ph = num(em.phi), mu = num(em.mean), out = { value: {}, ar: {}, notes: {}, caps: {} };
+  var ph = num(em.phi), mu = num(em.mean), out = { value: {}, ar: {}, notes: {}, start: {} };
   out.ar.arena = 'Z = ' + ph + '*Z + (UNIF(0, 1) >= ' + ph + ')*EXPO(' + mu + ')';
   out.ar.simio = 'Z = ' + ph + '*Z + Math.If(Random.Uniform(0, 1) < ' + ph + ', 0, Random.Exponential(' + mu + '))';
   out.ar.anylogic = 'Z = ' + ph + '*Z + (uniform(0, 1) < ' + ph + ' ? 0 : exponential(' + num(1 / em.mean) + '));';
@@ -8618,12 +8636,9 @@ function ear1Carry(em) {
   out.ar.python = 'e = np.where(np.random.rand(n) < ' + ph + ', 0, np.random.exponential(' + mu + ', n)); ' +
     'e[0] = np.random.exponential(' + mu + ')\nz = np.zeros(n)\nfor i in range(n):\n    z[i] = (' + ph +
     ' * z[i - 1] if i else 0) + e[i]';
-  var start = ' Give Z a starting value of ' + mu + ', the mean; for a start with the right distribution, ' +
-    'set it to one exponential draw of that mean instead.';
-  out.caps.arena = 'An Assign module, run once per draw before the value is used.' + start;
-  out.caps.simio = 'An Assign step on a real state variable Z, run once per draw.' + start;
-  out.caps.anylogic = 'Run once per draw, with Z a double variable.' + start;
-  out.caps.r = out.caps.matlab = out.caps.python = 'n values in sequence, the first an exponential draw, and so each is exponential.';
+  out.start.arena = out.start.simio = out.start.anylogic = 'Give Z a starting value of ' + mu + ', the mean; for a ' +
+    'start with the right distribution, set it to one exponential draw of that mean instead.';
+  out.start.r = out.start.matlab = out.start.python = 'The first value is an exponential draw, and so every value is exponential.';
   out.notes.anylogic = 'AnyLogic\'s exponential takes the RATE, 1/mean = ' + num(1 / em.mean) + '.';
   out.notes.r = out.notes.matlab = out.notes.python = out.notes.arena = out.notes.simio = '';
   DEP_TOOLS.forEach(function (t) { out.value[t] = NORTA_SYN[t] ? 'Z' : 'z'; });
@@ -15067,6 +15082,10 @@ function pairScriptRows() {
   return h;
 }
 /* Section 6 with X and Y drawn together: one block per tool. */
+/* An instruction set above the code box it describes. */
+function expStep(text) {
+  return '<div class="exp-step">' + esc(text) + '</div>';
+}
 function renderNortaExport() {
   var host = $('p-export-out'), say = $('p-noise-say'), nm = pairNames(), md = nortaModel();
   var ya = $('p-yattr');
@@ -15086,6 +15105,7 @@ function renderNortaExport() {
     var key = TOOLS[i][0];
     h += '<div class="exp-row" style="align-items:start"><div class="exp-tool">' + esc(TOOLS[i][1]) +
       (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div><div>' +
+      (ex[key] && ex.steps[key] ? expStep(ex.steps[key]) : '') +
       (ex[key] ? '<div class="exp-code" id="pnx-' + key + '">' + esc(ex[key]) + '</div>' : '') +
       (ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
       '</div>' + (ex[key] ? '<button class="copy-btn" data-copy="pnx-' + key + '" type="button">Copy</button>' : '<span></span>') +
@@ -15581,16 +15601,16 @@ function renderAr(md) {
     'e<sub>t</sub></span>';
   var ledes = [
     'Section 4’s cycle explains the part of the readings that follows the clock. What it leaves (the ' +
-    'readings minus the fitted cycle) can still carry over from one reading to the next, the way a tank’s ' +
-    'temperature changes only a little from one minute to the next. This section measures that carry-over ' +
+    'readings minus the fitted cycle) can still depend on the reading before, the way a tank’s ' +
+    'temperature changes only a little from one minute to the next. This section models that autocorrelation ' +
     'with an ' + TIP_AR1 + ', ' + form + ': each leftover value Z<sub>t</sub> is &phi; times the one before it plus a ' +
-    'noise term e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no carry-over, and a &phi; near 1 means each value ' +
+    'noise term e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no autocorrelation, and a &phi; near 1 means each value ' +
     'is almost the one before it.',
     'No cycle is fitted in section 4, and so this section works on the readings themselves, measured from ' +
-    'their mean. Readings can carry over from one to the next, the way a tank’s temperature changes only ' +
-    'a little from one minute to the next. This section measures that carry-over with an ' + TIP_AR1 + ', ' + form +
+    'their mean. Each reading can depend on the one before, the way a tank’s temperature changes only ' +
+    'a little from one minute to the next. This section models that autocorrelation with an ' + TIP_AR1 + ', ' + form +
     ': each value Z<sub>t</sub>, measured from the mean, is &phi; times the one before it plus a noise term ' +
-    'e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no carry-over, and a &phi; near 1 means each value is almost the ' +
+    'e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no autocorrelation, and a &phi; near 1 means each value is almost the ' +
     'one before it.'
   ];
   reserveHeight(lede, ledes);
@@ -15600,7 +15620,7 @@ function renderAr(md) {
   var cards = function (mean, phi, sd, p) {
     return '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
       (md.hf ? '' : card('Mean', mean)) +
-      card('Carry-over <span class="lit">&phi;</span>', phi) + card('Noise sd <span class="lit">&sigma;</span>', sd) +
+      card('AR(1) <span class="lit">&phi;</span>', phi) + card('Noise sd <span class="lit">&sigma;</span>', sd) +
       card('Test p-value', p) + '</div>';
   };
   if (!ar || !Number.isFinite(ar.phi)) {
@@ -15614,10 +15634,10 @@ function renderAr(md) {
   }
   var ni = ar.innov.length, m = Math.min(SST.m, ni - 2), q = IA.ljungBox(IA.acf(ar.innov, m), ni, m, 1);
   var says = [
-    'Once the carry-over is taken out, no correlation remains (p ≥ 0.05). An AR(1) with &phi; = ' +
+    'Once the AR(1) is taken out, no correlation remains (p ≥ 0.05). An AR(1) with &phi; = ' +
     fmt(ar.phi, 3) + ' describes how ' + what + (md.hf ? ' depends' : ' depend') + ' on the reading before, ' +
     'and the AR(1) residuals look like independent draws that tab ① can fit.',
-    'Correlation remains after the carry-over is taken out (p < 0.05), and so one reading’s worth of memory ' +
+    'Correlation remains after the AR(1) is taken out (p < 0.05), and so one reading’s worth of memory ' +
     'is not enough. Look for a cycle that section 4 misses, or a longer memory than an AR(1) has.',
     'The test needs at least two lags, one more than the AR(1) uses: raise the number of lags in section 3.'
   ];
@@ -15642,7 +15662,7 @@ function renderAr(md) {
   var model = '<div class="plot-hd" style="margin-top:10px">The fitted model</div>' +
     eq('Each reading', md.hf ? 'Y<sub>t</sub> = cycle(t) + Z<sub>t</sub>'
                              : 'Y<sub>t</sub> = ' + fmt(ar.mean, 4) + ' + Z<sub>t</sub>') +
-    eq('Carry-over', 'Z<sub>t</sub> = ' + fmt(ar.phi, 3) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>') +
+    eq('AR(1) update', 'Z<sub>t</sub> = ' + fmt(ar.phi, 3) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>') +
     eq('Noise term', '<span id="s-ar-step">' + stepRows[stepFit ? 1 : 0] + '</span>') +
     '<div class="plot-cap" id="s-ar-model-cap" style="text-align:left">' + modelCaps[stepFit ? 1 : 0] + '</div>';
   host.innerHTML = cards(fmt(ar.mean, 4), fmt(ar.phi, 3), fmt(ar.sigmaE, 4), fmtP(q.p)) + model +
@@ -15702,7 +15722,7 @@ function drawArCorrelogram(host, left, ar, what) {
     'e<sub>t</sub>; when the AR(1) fits, they sit inside the dashed band.</div>';
 }
 
-/* ── Section 6: keep the distribution as well as the carry-over ─────── */
+/* ── Section 6: keep the distribution as well as the autocorrelation────── */
 
 /* A fit picked on tab 1 for the readings, or for what the cycle leaves, is
    kept while the data (and, for the second, the cycle) stay the same. */
@@ -15764,11 +15784,11 @@ function keepModel(md) {
 function renderKeep(md) {
   var lede = $('s-nt-lede'), cards = $('s-nt-cards'), note = $('s-nt-note'), rh = $('s-nrun-host'), ah = $('s-nacf-host');
   var ledes = [
-    'Section 5’s AR(1) keeps the carry-over, but its draws have the shape of a sum of noise terms, close to ' +
+    'Section 5’s AR(1) keeps the autocorrelation, but its draws have the shape of a sum of noise terms, close to ' +
     'normal, whatever the shape of the readings. A model that must keep both the readings’ distribution and ' +
-    'their carry-over runs the AR(1) on a normal scale and turns each value into one of the chosen distribution ' +
+    'their autocorrelation runs the AR(1) on a normal scale and turns each value into one of the chosen distribution ' +
     '(' + TIP_NORTA + '), or, for readings that look exponential, uses ' + TIP_EAR1 + '.',
-    'Section 5’s AR(1) keeps the carry-over in what the cycle leaves, but its draws have the shape of a sum of ' +
+    'Section 5’s AR(1) keeps the autocorrelation in what the cycle leaves, but its draws have the shape of a sum of ' +
     'noise terms, close to normal, whatever the shape of the leftovers. ' + TIP_NORTA + ' keeps both: it runs the ' +
     'AR(1) on a normal scale and turns each value into one of the chosen distribution, which is then added to the ' +
     'cycle. ' + TIP_EAR1 + ' needs the readings themselves, with no cycle fitted.'
@@ -15785,7 +15805,7 @@ function renderKeep(md) {
   var caps = [
     'To use a named distribution, send ' + what + ' to tab ① with the button in section ' + (md.hf ? '4' : '3') +
     ' and pick a fit there; that fit then joins the list.',
-    'EAR(1)’s values are exponential with the readings’ mean, and its carry-over is their lag-one correlation.'];
+    'EAR(1)’s values are exponential with the readings’ mean, and its &phi; is their lag-one correlation.'];
   reserveHeight($('s-nsrc-cap'), caps);
   $('s-nsrc-cap').innerHTML = caps[ear ? 1 : 0];
   var k = keepModel(md);
@@ -15808,7 +15828,7 @@ function renderKeep(md) {
   cards.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
     card('Lag-one <span class="lit">r</span> to match', fmt(target, 3)) +
     (k.kind === 'ear1'
-      ? card('Carry-over <span class="lit">&phi;</span>', fmt(k.ear.phi, 3)) + card('Mean', fmt(k.ear.mean, 4))
+      ? card('EAR(1) <span class="lit">&phi;</span>', fmt(k.ear.phi, 3)) + card('Mean', fmt(k.ear.mean, 4))
       : card('Normal-scale <span class="lit">&phi;<sub>Z</sub></span>', fmt(k.sol.rho, 4)) +
         card('Reachable lag-one <span class="lit">r</span>', fmt(k.map.lo, 3) + ' to ' + fmt(k.map.hi, 3))) +
     card('Lag-one <span class="lit">r</span> drawn', fmt(got, 3)) + '</div>' +
@@ -15840,7 +15860,7 @@ function keepModelBlock(k) {
       'exponential draw is added. Every X<sub>t</sub> is then exponential with mean ' + mu + ', and the ' +
       'correlation at lag k is ' + ph + '<sup>k</sup>, the teal curve below.';
     return hd + eq('Each reading', 'Y<sub>t</sub> = X<sub>t</sub>') +
-      eq('Carry-over', 'X<sub>t</sub> = ' + ph + ' &middot; X<sub>t&minus;1</sub> + B<sub>t</sub> &middot; E<sub>t</sub>') +
+      eq('EAR(1) update', 'X<sub>t</sub> = ' + ph + ' &middot; X<sub>t&minus;1</sub> + B<sub>t</sub> &middot; E<sub>t</sub>') +
       eq('Jump or not', 'B<sub>t</sub> = 1 with probability ' + fmt(1 - k.ear.phi, 3) + ', otherwise 0') +
       eq('Jump size', 'E<sub>t</sub> ~ i.i.d. exponential with mean ' + mu) +
       '<div class="plot-cap" style="text-align:left">' + cap + '</div>';
@@ -15853,7 +15873,7 @@ function keepModelBlock(k) {
   return hd + eq('Each reading', k.hf ? 'Y<sub>t</sub> = cycle(t) + X<sub>t</sub>' +
                    (c ? (k.center > 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(k.center), 4) : '') : 'Y<sub>t</sub> = X<sub>t</sub>') +
     eq('Value', 'X<sub>t</sub> = F<sup>&minus;1</sup>(&Phi;(Z<sub>t</sub>))') +
-    eq('Carry-over', 'Z<sub>t</sub> = ' + fmt(rz, 4) + ' &middot; Z<sub>t&minus;1</sub> + &radic;(1 &minus; ' + fmt(rz, 4) +
+    eq('AR(1) update', 'Z<sub>t</sub> = ' + fmt(rz, 4) + ' &middot; Z<sub>t&minus;1</sub> + &radic;(1 &minus; ' + fmt(rz, 4) +
        '&sup2;) &middot; e<sub>t</sub>') +
     eq('Noise term', 'e<sub>t</sub> ~ i.i.d. Normal(0, 1)') +
     '<div class="plot-cap" style="text-align:left">' + cap + '</div>';
@@ -15987,11 +16007,40 @@ function seriesHandoff(kind) {
   return { fit: r.fit, dist: r.dist };
 }
 
+/* One line of a written-out model: a label and an equation. */
+function eqRow(l, r) {
+  return '<div class="eq"><span class="eq-l" style="min-width:7em">' + l + '</span><span class="eq-r">' + r + '</span></div>';
+}
+/* The two instructions for a series export with an update block: what to
+   do with the block (and where Z starts), and then with the value line. */
+function seriesSteps(key, block, start) {
+  var n = block.split('\n').length, these = n > 1 ? 'these lines, in order,' : 'this line', local = /\bdouble /.test(block);
+  var first = {
+    arena: 'Put ' + these + ' in one Assign module that runs once per draw, before the value is used. Make Z a ' +
+      'variable, not an attribute, so that it carries from one draw to the next.',
+    simio: 'Put ' + these + ' in one Assign step that runs once per draw, before the value is used, with each name a ' +
+      'real state variable.',
+    anylogic: 'Run ' + (n > 1 ? 'these statements' : 'this statement') + ' once per draw, before the value is used, ' +
+      'with Z a double variable of the model.',
+    r: 'Run ' + these + ' to draw z, a series of n values in order.'
+  };
+  first.matlab = first.python = first.r;
+  var sim = key === 'arena' || key === 'simio' || key === 'anylogic';
+  start = start || (sim ? 'Give Z a starting value of 0.' : '');
+  return [first[key] + (start ? ' ' + start : ''),
+    sim ? (local ? 'Then, in the same block of code, use this expression for the value:'
+                 : 'Then use this expression wherever the value is needed:')
+        : 'Then compute the n values from z:'];
+}
 function renderSeriesExport(md) {
   var host = $('s-export-out'), say = $('s-noise-say'), n = SST.y.length;
-  if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">No model yet.</div>'; say.innerHTML = ''; return; }
+  if (n < MIN_SERIES) {
+    host.innerHTML = '<div class="plot-empty">No model yet.</div>'; say.innerHTML = ''; $('s-exp-model').innerHTML = '';
+    return;
+  }
   document.querySelector('#s-carry option[value="keep"]').textContent =
-    SST.nkind === 'ear1' ? 'EAR(1)' : 'NORTA AR(1)';
+    SST.nkind === 'ear1' ? 'EAR(1) autocorrelation' : 'NORTA AR(1) autocorrelation';
+  $('s-exp-cyc').checked = !!SST.cyc;
   var carry = $('s-carry').value, keep = carry === 'keep' ? keepModel(md) : null;
   if (keep && keep.fail) keep = null;
   var clip = $('s-clip'), useAr = carry === 'ar' && md.ar && Number.isFinite(md.ar.phi);
@@ -16002,41 +16051,70 @@ function renderSeriesExport(md) {
     g: hf && SST.trend ? hf.g : null, unit: SST.unit, t0: Number($('s-t0').value) || 0,
     sd: hf ? hf.sd : sy.sd, noise: null, ar: null, clip: clip.checked
   };
+  /* The model the lines draw from, written out as sections 5 and 6 write
+     theirs, with what each choice above contributes. */
+  var eqs = [], sub = function (v) { return v + '<sub>t</sub>'; };
+  var Y = function (e) { return sub('Y') + ' = ' + (model.clip ? 'max(0, ' + e + ')' : e); };
+  var level = hf ? 'cycle(t)' : fmt(model.m, 4);
+  var iid = function (fitted, sd) {
+    return 'e<sub>t</sub> ~ i.i.d. ' + (fitted ? esc(distLower(fitted.dist)) + ' from tab ①, centered'
+                                               : '<span style="white-space:nowrap">Normal(0, ' + fmt(sd, 4) + ')</span>');
+  };
   if (carry === 'keep' && !keep) {
-    msgs.push('Section 6 has no model for these settings, and so the export carries no carry-over.');
+    msgs.push('Section 6 has no model for these settings (' + keepModel(md).fail.replace(/\.$/, '') +
+      '), and so the noise below has no autocorrelation.');
   }
   if (keep && keep.kind === 'ear1') {
     model.ear1 = { mean: keep.ear.mean, phi: keep.ear.phi }; model.noLevel = true;
-    msgs.push('Each draw is an EAR(1) value: exponential with mean ' + fmt(keep.ear.mean, 4) + ', with carry-over \u03c6 = ' +
-      fmt(keep.ear.phi, 4) + '.');
+    eqs.push(['Each value', Y(sub('X'))],
+      ['EAR(1) update', sub('X') + ' = ' + fmt(keep.ear.phi, 4) + ' &middot; X<sub>t&minus;1</sub> + B<sub>t</sub> &middot; E<sub>t</sub>'],
+      ['Jump or not', 'B<sub>t</sub> = 1 with probability ' + fmt(1 - keep.ear.phi, 4) + ', otherwise 0'],
+      ['Jump size', 'E<sub>t</sub> ~ i.i.d. exponential with mean ' + fmt(keep.ear.mean, 4)]);
+    msgs.push('EAR(1) draws the readings themselves, and so there is no separate mean or noise term.');
   } else if (keep) {
     model.norta = { fit: keep.fit, phi: keep.sol.rho }; model.noLevel = !hf;
-    msgs.push((hf ? 'The noise around the cycle is ' : 'Each draw is ') + keepSourceName(keep) + ', through an AR(1) on a ' +
-      'normal scale with \u03c6<sub>Z</sub> = ' + fmt(keep.sol.rho, 4) + (hf ? ', centered on 0.' : '.'));
+    var rz = fmt(keep.sol.rho, 4), cc = hf ? keep.center : 0;
+    eqs.push(['Each value', Y(hf ? 'cycle(t) + ' + sub('X') + (cc ? (cc > 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(cc), 4) : '')
+                                 : sub('X'))],
+      ['Value', sub('X') + ' = F<sup>&minus;1</sup>(&Phi;(' + sub('Z') + '))'],
+      ['AR(1) update', sub('Z') + ' = ' + rz + ' &middot; Z<sub>t&minus;1</sub> + &radic;(1 &minus; ' + rz + '&sup2;) &middot; e<sub>t</sub>'],
+      ['Noise term', 'e<sub>t</sub> ~ i.i.d. Normal(0, 1)']);
+    msgs.push('F is the cdf of ' + keepSourceName(keep) + (cc ? ', and ' + fmt(cc, 4) + ', its mean, centers ' +
+      'X<sub>t</sub> on 0.' : '.'));
   } else if (useAr) {
     var hi = seriesHandoff('innov');
     model.ar = { phi: md.ar.phi, sigmaE: md.ar.sigmaE, noise: hi ? { fit: hi.fit } : null };
     if (hi && !Number.isFinite(IA.centeringMean(hi.fit))) { model.ar.noise = null; hi = null; }
-    msgs.push('Noise: an AR(1) variable Z with φ = ' + fmt(md.ar.phi, 4) + ', whose noise terms are ' +
-      (hi ? 'the ' + esc(distLower(hi.dist)) + ' fitted on tab ① to them, centered by its mean.'
-          : 'normal with standard deviation ' + fmt(md.ar.sigmaE, 4) + '.'));
+    eqs.push(['Each value', Y(level + ' + ' + sub('Z'))],
+      ['AR(1) update', sub('Z') + ' = ' + fmt(md.ar.phi, 4) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>'],
+      ['Noise term', iid(hi, md.ar.sigmaE)]);
   } else {
     var hr = hf ? seriesHandoff('resid') : null;
-    if (hr && Number.isFinite(IA.centeringMean(hr.fit))) {
-      model.noise = { fit: hr.fit };
-      msgs.push('Noise: the ' + esc(distLower(hr.dist)) + ' fitted on tab ① to what the cycle leaves, centered by its mean.');
-    } else {
-      msgs.push('Noise: normal with mean 0 and standard deviation ' + fmt(model.sd, 4) + ', ' +
-        (hf ? 'what the cycle leaves.' : 'the readings’ own.') +
-        (hf ? ' To use another distribution, send what the cycle leaves to tab ① and pick a fit there.' : ''));
-    }
+    if (hr && !Number.isFinite(IA.centeringMean(hr.fit))) hr = null;
+    if (hr) model.noise = { fit: hr.fit };
+    eqs.push(['Each value', Y(level + ' + e<sub>t</sub>')], ['Noise term', iid(hr, model.sd)]);
+    msgs.push(hf ? 'Without autocorrelation, the noise around the cycle is drawn afresh for every value.' +
+                   (hr ? '' : ' To use another distribution for it, send what the cycle leaves to tab ① and pick a fit there.')
+                 : 'With no cycle and no autocorrelation, every value is an independent draw from one normal ' +
+                   'distribution with the readings’ mean and standard deviation, and the order of the readings plays ' +
+                   'no part. Tab ① fits other shapes to them.');
   }
-  if (!hf && !keep) msgs.push(useAr ? 'No cycle is fitted, and so the value is the mean plus Z.'
-    : 'No cycle is fitted and the AR(1) is not included, and so this is one draw from a single distribution: ' +
-      'tab ① is the place to fit it.');
+  if (hf && eqs.length && !(keep && keep.kind === 'ear1')) {
+    var term = function (v, f) { return (v < 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(v), 4) + ' ' + f; };
+    var cyc = fmt(hf.m, 4), P = fmt(SST.P, 6);
+    for (var k = 0; k < hf.c.length; k++) {
+      var w = (k ? 2 * (k + 1) : 2) + '&pi;t/' + P;
+      cyc += term(hf.c[k], 'cos(' + w + ')') + term(hf.s[k], 'sin(' + w + ')');
+    }
+    if (SST.trend && Number.isFinite(hf.g)) cyc += term(hf.g, 't');
+    eqs.splice(1, 0, ['Cycle', 'cycle(t) = ' + cyc]);
+  }
+  if (model.clip) msgs.push('A value that would fall below 0 is set to 0.');
   if (hf) msgs.push(SST.unit === 'other'
-    ? 'The clock is used as it is, and so the model’s time unit must match the data’s.'
-    : 'The clock is read in ' + SST.unit + ', whatever time unit the model runs in.');
+    ? 'The cycle reads the clock as it is, and so the model’s time unit must match the data’s.'
+    : 'The cycle reads the clock in ' + SST.unit + ', whatever time unit the model runs in.');
+  $('s-exp-model').innerHTML = '<div class="plot-hd" style="margin-top:10px">The model the lines below draw from</div>' +
+    eqs.map(function (q) { return eqRow(q[0], q[1]); }).join('');
   say.innerHTML = msgs.join(' ');
 
   var ex = IA.timeExpressions(model), h = '', i;
@@ -16048,19 +16126,22 @@ function renderSeriesExport(md) {
         esc(ex.notes[key]) + '</div><span></span></div>';
       continue;
     }
-    h += '<div class="exp-row"><div class="exp-tool">' + esc(TOOLS[i][1]) +
-      (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div><div>' +
-      (ex.ar && ex.ar[key] ? '<div class="exp-code" id="sar-' + key + '">' + esc(ex.ar[key]) + '</div>' +
-        '<div class="plot-cap" style="text-align:left;margin:3px 0 6px">' + (ex.ar.caps ? ex.ar.caps[key] :
-        { arena: 'An Assign module, run once per draw before the value is used; Z starts at 0.',
-           simio: 'An Assign step on a state variable Z, run once per draw; Z starts at 0.',
-           anylogic: 'Run once per draw, with Z a double variable that starts at 0.',
-           r: 'n values in sequence.', matlab: 'n values in sequence.', python: 'n values in sequence.' }[key]) +
-        (ex.ar.notes && ex.ar.notes[key] ? ' ' + esc(ex.ar.notes[key]) : '') + '</div>' : '') +
+    var tool = '<div class="exp-tool">' + esc(TOOLS[i][1]) + (TOOLS[i][2] ? '<span>' + esc(TOOLS[i][2]) + '</span>' : '') + '</div>';
+    var copy = function (id) { return '<button class="copy-btn" data-copy="' + id + '" type="button">Copy</button>'; };
+    if (ex.ar && ex.ar[key]) {
+      var st = seriesSteps(key, ex.ar[key], ex.ar.start ? ex.ar.start[key] : null), nt = ex.ar.notes && ex.ar.notes[key];
+      h += '<div class="exp-row exp-steps">' + tool + '<div>' + expStep(st[0]) +
+        '<div class="exp-code" id="sar-' + key + '">' + esc(ex.ar[key]) + '</div></div>' + copy('sar-' + key) + '</div>' +
+        '<div class="exp-row exp-steps"><div class="exp-tool"></div><div>' + expStep(st[1]) +
+        '<div class="exp-code" id="sexp-' + key + '">' + esc(ex[key]) + '</div></div>' + copy('sexp-' + key) + '</div>' +
+        (nt ? '<div class="exp-row"><div class="exp-tool"></div><div class="plot-cap" style="text-align:left;margin-top:-4px">' +
+          esc(nt) + '</div><span></span></div>' : '');
+      continue;
+    }
+    h += '<div class="exp-row">' + tool + '<div>' +
       '<div class="exp-code" id="sexp-' + key + '">' + esc(ex[key]) + '</div>' +
-      (!ex.ar && ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
-      '</div><button class="copy-btn" data-copy="' + (ex.ar && ex.ar[key] ? 'sexp2-' : 'sexp-') + key + '" type="button">Copy</button></div>';
-    if (ex.ar && ex.ar[key]) h += '<div id="sexp2-' + key + '" hidden>' + esc(ex.ar[key] + '\n' + ex[key]) + '</div>';
+      (ex.notes[key] ? '<div class="plot-cap" style="text-align:left;margin-top:3px">' + esc(ex.notes[key]) + '</div>' : '') +
+      '</div>' + copy('sexp-' + key) + '</div>';
   }
   var sc = IA.timeScripts({ t: SST.t, y: SST.y }, { maxLag: seriesMaxLag(), m: Math.min(SST.m, n - 2), cycle: !!hf,
     P: SST.P, H: SST.H, trend: SST.trend, ar: true, span: SST.span, src: SST.src });
@@ -16123,6 +16204,8 @@ function initSeriesModel() {
   $('s-send-innov').addEventListener('click', function () { sendSeriesToFit('innov'); });
   $('s-t0').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
   $('s-carry').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
+  /* The export's cycle box is section 4's own, shown again where the model is assembled. */
+  $('s-exp-cyc').addEventListener('change', function () { $('s-cyc').checked = SST.cyc = this.checked; renderSeriesAll(); });
   initKeep();
   $('s-clip').addEventListener('change', function () { this.dataset.user = '1'; renderSeriesExport(seriesModel()); });
   $('s-csv-data').addEventListener('click', csvSeriesData);
