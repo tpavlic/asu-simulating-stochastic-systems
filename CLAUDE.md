@@ -962,7 +962,26 @@ better.
   unmoved designs' shared mean of 10, with no per-design interval because overlapping
   intervals say nothing reliable about a difference; under common random numbers a gray line
   joins each replication across the designs. The run's outputs are redrawn from its stored seed
-  rather than kept in the history, and no post-processing knob changes the figure. Commit tag `compare`. Conventions relied on by code outside the file, which any later
+  rather than kept in the history, and no post-processing knob changes the figure. Tab ⑥'s figure
+  (`lanesPlot`) is two panels sharing one lane per design, the first stage and screening on the
+  left and the second stage and selection on the right, on one x span with the same ticks, so that
+  a lane reads as one design seen twice; a survivor's first-stage replications reappear in gray in
+  the right panel beside the ones the second stage added, so that the overall mean visibly stands
+  on both; until a right-hand row has marks of its own, a short note says where the procedure
+  stands for that design ("awaits screening (press Step)" before screening, then "screened out",
+  "survived screening", or "only survivor: no second stage"), right-aligned at the row's end in
+  line with the sizes column, so that mid-Step the panel reads as waiting rather than broken. Below 560px the two panels interleave as the upper and lower row of
+  each lane rather than stacking, so that the lane still reads as one design, with "First" and
+  "Second" at the left edge of the two sub-rows and the selection outline ringing the whole lane. Between the figure and its legend, the procedure's five steps
+  are listed in full (`BEST_STAGES`) under two headings, "Stage 1" for the left panel's sample and
+  screen steps and "Stage 2" for the right panel's size, sample again, and select steps, so that
+  the title's two stages and the five steps are one hierarchy; each step is a bold "Step n of 5,
+  verb:" and a phrase, with the step reached marked by an accent bar and wash and the steps not
+  yet reached faded; listing all five
+  keeps the block one height at every step without reserving blank space. The legend is two
+  groups headed by the panel titles, each listing only its own panel's marks, laid out as two
+  columns under their panels (sized from the geometry `lanesPlot` returns) on a wide screen and
+  stacked on a narrow one. Commit tag `compare`. Conventions relied on by code outside the file, which any later
   edit has to preserve:*
   1. *Everything between the `MCP-CORE-BEGIN` / `MCP-CORE-END` sentinels is pure numerics with no
      DOM access, and the block must not contain the words "window" or "document".
