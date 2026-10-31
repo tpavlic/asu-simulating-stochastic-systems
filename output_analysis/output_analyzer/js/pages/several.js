@@ -101,7 +101,7 @@ const diffStepsOn = k => diffAdjust === 'holm' && famSize(k) >= 2 && diffSteps;
 const BENCH_NOTES = ['above (Holm)', 'below (Holm)', 'not declared', 'not reached', 'contains'];
 const DIFF_NOTES = ['different (Holm)', 'not declared', 'not reached', 'contains 0'];
 // The sentences a step-down caption shares between the two sections.
-const stepWhy = (what, ref) => ' These are not confidence intervals: each width depends on the other ' + what + 's’ p-values' +
+const stepWhy = (what, ref) => ' <b>These are not confidence intervals</b>: each width depends on the other ' + what + 's’ p-values' +
   (ref === 'the benchmark' ? ' and on where the benchmark is, which is why the intervals widen, narrow, and drop out as the benchmark moves' : '') +
   '. The table keeps the Bonferroni intervals.';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
@@ -149,18 +149,21 @@ let epsTf = null;
 
 // ── Small helpers ─────────────────────────────────────────────────────────
 
-// The banner over a family of C comparisons whose plot draws the step-down
-// intervals: the plot's levels, step by step, and the table's one level.
-const stepBanner = (head, sym, C, perLevel) => head + ': the plot’s step r at 1 − α/(' + sym + ' − r + 1), from ' + levelPct(perLevel) + ' to ' +
-  levelPct(1 - (1 - perLevel) * C) + ', and the table’s intervals each at 1 − α/' + sym + ' = ' + levelPct(perLevel);
+// The banner over a family of C comparisons decided by Holm's step-down,
+// whether or not its plot draws the step-down intervals: the thresholds the
+// ranked p-values are tested at. The note above the table gives the
+// intervals' level.
+const holmBanner = (head, sym, C, perLevel) => head + ', tested by Holm’s step-down on the ranked p-values with thresholds α/(' + sym + ' − r + 1) for rank r, from α/' + sym + ' = ' +
+  num(1 - perLevel, 4) + ' up to α = ' + num((1 - perLevel) * C, 4);
 
 // How Holm's step-down reads, for the C tests of a family against its reference.
 // `intervals` is true when the section draws Bonferroni's intervals, 'steps' when its plot draws the
-// step-down intervals and only its table keeps Bonferroni's, and false when it draws none.
-const holmHow = (C, what, intervals = true) => 'Holm’s step-down sorts the ' + C + ' p-values from smallest to largest and compares the smallest with α/' + C + ', the next with α/' + (C - 1) +
+// step-down intervals and only its table keeps Bonferroni's, and false when it draws none; `perLevel`
+// is the Bonferroni intervals' level, in bold because the banner over a Holm family does not give it.
+const holmHow = (C, what, intervals = true, perLevel = null) => 'Holm’s step-down sorts the ' + C + ' p-values from smallest to largest and compares the smallest with α/' + C + ', the next with α/' + (C - 1) +
   ', and so on, stopping at the first that is not below its threshold; the Holm p in the table is the smallest α at which ' + what + ' would be declared.' +
-  (intervals === 'steps' ? ' The table’s intervals stay Bonferroni’s at 1 − α/' + C + '; the plot draws each at the level of its own step instead.'
-    : intervals ? ' The intervals stay Bonferroni’s at 1 − α/' + C + ', because Holm’s step-down has no intervals of matching width.' : '');
+  (intervals === 'steps' ? ' The table’s intervals stay Bonferroni’s, each at <b>1 − α/' + C + ' = ' + levelPct(perLevel) + '</b>; the plot draws each at the level of its own step instead.'
+    : intervals ? ' The intervals stay Bonferroni’s, each at <b>1 − α/' + C + ' = ' + levelPct(perLevel) + '</b>, because Holm’s step-down has no intervals of matching width.' : '');
 
 // The response as the axes name it: "wait", or under a transform "the log of wait".
 const respName = list => (tfNow === 'none' ? list[0].response : 'the ' + transformOf(tfNow).label.toLowerCase() + ' of ' + list[0].response);
@@ -1013,7 +1016,7 @@ function update() {
       b.appendChild(para('cmp-banner', 'C = k = 1 comparison with the benchmark, at 1 − α/1 = ' + levelPct(sm.perLevel)));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several pseudo-medians, done by hand: each design’s own Wilcoxon signed-rank interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. Each interval is on the Hodges–Lehmann pseudo-median, the median of the pairwise averages of the design’s outcomes.'));
-    b.appendChild(para('cmp-banner', benchStepsOn(k) ? stepBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
+    b.appendChild(para('cmp-banner', bHolm ? holmBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
       : 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     }
     const bm = benchmark(hl.map(r => ({ lo: r.lo, hi: r.hi, center: r.estimate })), list[0],
@@ -1027,7 +1030,7 @@ function update() {
         : 'Each design’s pseudo-median with its own Wilcoxon signed-rank interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
           ' intervals cover ' + allOf(k) + ' true pseudo-medians with probability at least ' + L + '.' + bm.caption(), 'pseudo-median');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
-    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own Wilcoxon signed-rank test against the benchmark gives its p-value. ' + holmHow(k, 'a design', bm.steps ? 'steps' : true)));
+    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own Wilcoxon signed-rank test against the benchmark gives its p-value. ' + holmHow(k, 'a design', bm.steps ? 'steps' : true, sm.perLevel)));
     const basis = r => (r.exact ? 'exact' : 'normal approx.');
     const bk = hl.map(r => backCols(r.estimate, r.lo, r.hi, true));
     const ht = i => bm.fam.tests[i];
@@ -1043,7 +1046,7 @@ function update() {
       b.appendChild(para('cmp-banner', 'C = k = 1 comparison with the benchmark, at 1 − α/1 = ' + levelPct(sm.perLevel)));
     } else {
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for several means, done by hand: each design’s own t interval at level 1 − α/k, and so ' + allOf(k) + ' hold at once with confidence at least ' + L + '. No variance is pooled, and no analysis of variance comes first.'));
-    b.appendChild(para('cmp-banner', benchStepsOn(k) ? stepBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
+    b.appendChild(para('cmp-banner', bHolm ? holmBanner('C = k = ' + k + ' comparisons with the benchmark', 'k', k, sm.perLevel)
       : 'C = k = ' + k + ' comparisons with the benchmark, each at 1 − α/k = ' + levelPct(sm.perLevel)));
     }
     const bm = benchmark(sm.items.map(it => ({ lo: it.lo, hi: it.hi, center: it.mean })), list[0],
@@ -1057,7 +1060,7 @@ function update() {
         : 'Each design’s mean with its own t interval at ' + levelPct(sm.perLevel) + '. Together the ' + word(k) +
           ' intervals cover ' + allOf(k) + ' true means with probability at least ' + L + '; one interval alone is wider than an ordinary ' + L + ' interval would be.' + bm.caption(), 'mean');
     if (bm.on) b.appendChild(para('cmp-verdict', bm.verdict(short)));
-    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own one-sample t test against the benchmark gives its p-value. ' + holmHow(k, 'a design', bm.steps ? 'steps' : true)));
+    if (bm.holm) b.appendChild(para('exp-note', 'Each design’s own one-sample t test against the benchmark gives its p-value. ' + holmHow(k, 'a design', bm.steps ? 'steps' : true, sm.perLevel)));
     const bk = sm.items.map(it => backCols(it.mean, it.lo, it.hi, false));
     const ht = i => bm.fam.tests[i];
     const rows = sm.items.map((it, i) => [badge(i) + ' ' + esc(short[i]), intl(it.n), num(it.mean), num(it.sd), num(it.se), intl(it.df), interval(it.lo, it.hi)].concat(bk[i] ? bk[i].cells : [],
@@ -1161,7 +1164,7 @@ function update() {
     if (np) {
     const famR = bonferroniFamilyRank(groups, { mode: diffMode, control: ctrlIdx, level, paired, adjust: dAdj });
     const rName = paired ? 'Wilcoxon signed-rank interval' : 'Wilcoxon rank-sum interval';
-    b.appendChild(para('cmp-banner', dSteps ? stepBanner('C = ' + famR.C + ' comparisons', 'C', famR.C, famR.perLevel)
+    b.appendChild(para('cmp-banner', dHolm ? holmBanner('C = ' + famR.C + ' comparisons', 'C', famR.C, famR.perLevel)
       : 'C = ' + famR.C + ' comparison' + (famR.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(famR.perLevel)));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand with ranks: every pair’s own ' + rName + ' for the shift in location at level 1 − α/C, ' +
       (paired ? 'on the paired differences within each replication' : 'on the two designs’ outcomes') + '; each interval contains 0 exactly when that pair’s Wilcoxon test at α/C does not reject.'));
@@ -1186,7 +1189,7 @@ function update() {
     const rows = famR.comparisons.map((c, i) => ['<span class="sev-pair">' + esc(lab(c)) + '</span>', '<span class="sev-full">' + esc(full(c)) + '</span>', num(c.diff), num(c.stat), interval(c.lo, c.hi)].concat(rk[i] ? rk[i].cells : [], [pValue(c.p), pValue(c.pAdj),
       c.exact ? 'exact' : 'normal approx.', dCell(c)]));
     b.appendChild(table(['Pair', 'Designs', 'Shift', statName, 'Interval'].concat(rk[0] ? rk[0].heads : [], ['p', dHolm ? 'Holm p' : 'Adjusted p', 'Basis', dHolm ? 'Decision' : 'Flag']), rows));
-    b.appendChild(para('exp-note', (dHolm ? holmHow(famR.C, 'a pair', dSteps ? 'steps' : true) + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful than Bonferroni on the same p-values. '
+    b.appendChild(para('exp-note', (dHolm ? holmHow(famR.C, 'a pair', dSteps ? 'steps' : true, famR.perLevel) + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful than Bonferroni on the same p-values. '
       : 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative. The adjusted p is C·p capped at 1. ') +
       (paired ? 'Friedman’s' : 'Dunn’s') + ' pairwise comparisons in the analysis section are the rank post hoc, on the ranks of all the outcomes together.'));
     tables.push({ section: 'diffs', name: 'Pairwise rank comparisons (' + (dHolm ? 'Holm' : 'Bonferroni') + ')', headers: ['pair', 'shift', statName, 'lower', 'upper'].concat(rk[0] ? rk[0].csvHeads : [], ['p', dHolm ? 'Holm adjusted p' : 'adjusted p', 'basis', 'flag']),
@@ -1194,7 +1197,7 @@ function update() {
     const nf = famR.comparisons.filter(c => c.flagged).length;
     summary.push(dSummary(famR.comparisons, famR.C, ' rank') || 'Bonferroni rank (' + (diffMode === 'pairs' ? 'all pairs' : 'versus ' + esc(short[ctrlIdx])) + ', C = ' + famR.C + '): ' + plural(nf, 'shift excludes', 'shifts exclude') + ' 0.');
     } else {
-    b.appendChild(para('cmp-banner', dSteps ? stepBanner('C = ' + fam.C + ' comparisons', 'C', fam.C, fam.perLevel)
+    b.appendChild(para('cmp-banner', dHolm ? holmBanner('C = ' + fam.C + ' comparisons', 'C', fam.C, fam.perLevel)
       : 'C = ' + fam.C + ' comparison' + (fam.C === 1 ? '' : 's') + ', each at 1 − α/C = ' + levelPct(fam.perLevel)));
     b.appendChild(para('cmp-lead', 'The Bonferroni procedure for differences, done by hand: every pair’s own ' + famName + ' at level 1 − α/C, with no pooled variance and no analysis of variance in front; each interval contains 0 exactly when that pair’s t test at α/C does not reject. The Bonferroni rule in the ANOVA section is the other kind: the same α/C, on the pooled variance.'));
     if (diffMode === 'control') b.appendChild(para('cmp-lead', 'Each design against the control, ' + esc(short[ctrlIdx]) + '.'));
@@ -1218,7 +1221,7 @@ function update() {
       dCell(c)]));
     b.appendChild(table(['Pair', 'Designs', 'Difference', 'SE', 'df', 'Interval'].concat(rk[0] ? rk[0].heads : [], ['t', 'p', dHolm ? 'Holm p' : 'Adjusted p', dHolm ? 'Decision' : 'Flag']), rows));
     b.appendChild(para('exp-note', (dHolm
-      ? holmHow(fam.C, 'a pair', dSteps ? 'steps' : true) + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful. '
+      ? holmHow(fam.C, 'a pair', dSteps ? 'steps' : true, fam.perLevel) + ' Holm’s step-down holds the same family-wise error rate as Bonferroni, at or below α = ' + aTxt + ', and is never less powerful. '
       : 'Bonferroni holds the family-wise error rate at or below α = ' + aTxt + ' and is conservative: its true error rate is usually lower, and its intervals are wider than they need to be. ' +
         'The adjusted p is C·p capped at 1. ') +
       'Tukey’s procedure (all pairs) and Dunnett’s (versus a control) are less conservative and are offered in the analysis of variance below.'));
