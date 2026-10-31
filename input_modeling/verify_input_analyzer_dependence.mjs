@@ -405,6 +405,271 @@ export function runExports(IA, { section, ok, close }) {
   }
 }
 
+/* ── 22. NORTA and EAR(1) ────────────────────────────────────────────
+   The correlation map against closed forms and Monte Carlo, Phi's
+   approximation, every family's quantile as each tool writes it (the
+   Arena, Simio, and AnyLogic blocks evaluated here at fixed normals, and
+   the R, Python, and MATLAB blocks run in their languages at the same
+   normals), and the two series models. */
+const NORTA_FAMS = D => [
+  ['expo', { dist: D.expo, p: [2], shift: 0 }],
+  ['weibull', { dist: D.weibull, p: [3, 1.7], shift: 0 }],
+  ['shifted weibull', { dist: D.weibull, p: [3, 1.7], shift: 1.5 }],
+  ['loglogistic', { dist: D.loglogistic, p: [3, 2], shift: 0 }],
+  ['uniform', { dist: D.uniform, p: [1, 4], shift: 0 }],
+  ['triangular', { dist: D.triangular, p: [1, 2, 5], shift: 0 }],
+  ['geometric', { dist: D.geometric, p: [0.3], shift: 0 }],
+  ['discreteUniform', { dist: D.discreteUniform, p: [2, 7], shift: 0 }],
+  ['normal', { dist: D.normal, p: [10, 2], shift: 0 }],
+  ['lognormal', { dist: D.lognormal, p: [1, 0.5], shift: 0 }],
+  ['mirrored lognormal', { dist: D.lognormal, p: [1, 0.5], shift: 20, reflect: true }],
+  ['johnsonSB', { dist: D.johnsonSB, p: [0.5, 1.2, 2, 6], shift: 0 }],
+  ['johnsonSU', { dist: D.johnsonSU, p: [-0.4, 1.5, 3, 2], shift: 0 }],
+  ['empirical', { dist: D.empirical, p: [[1.2, 1.9, 2.1, 2.8, 3.3, 3.4, 4.0, 5.2, 6.1, 7.7, 9.4]], shift: 0 }],
+  ['discreteEmpirical', { dist: D.discreteEmpirical, p: D.discreteEmpirical.fit([1, 2, 2, 3, 3, 3, 5, 8, 8]).p, shift: 0 }],
+  ['poisson', { dist: D.poisson, p: [3.2], shift: 0 }],
+  ['negBinomial', { dist: D.negBinomial, p: [2.5, 0.4], shift: 0 }],
+  ['binomial', { dist: D.binomial, p: [12, 0.3], shift: 0 }],
+  ['gamma', { dist: D.gamma, p: [2.3, 1.4], shift: 0 }],
+  ['erlang', { dist: D.erlang, p: [3, 0.8], shift: 0 }],
+  ['beta', { dist: D.beta, p: [2, 3.5, 1, 6], shift: 0 }],
+  ['pert', { dist: D.pert, p: [1, 2, 6], shift: 0 }],
+  ['pearson5', { dist: D.pearson5, p: [3.3, 10], shift: 0 }],
+  ['pearson6', { dist: D.pearson6, p: [2.3, 4.3, 4], shift: 0 }]
+];
+const SIM_ONLY = new Set(['gamma', 'erlang', 'beta', 'pert', 'pearson5', 'pearson6']);
+
+/* Runs a block of Arena, Simio, or AnyLogic assignments as JavaScript,
+   with NORM, Random.Normal, or normal returning the given values in turn.
+   Returns every name the block assigns. */
+function runSimBlock(tool, block, normals) {
+  let k = 0;
+  const nd = () => normals[k++ % normals.length];
+  const lines = block.split('\n');
+  const names = new Set();
+  const js = lines.map(l => {
+    let s = l.replace(/;$/, '').replace(/^double /, '');
+    const m = s.match(/^(\w+) = (.*)$/);
+    names.add(m[1]);
+    let e = m[2];
+    if (tool === 'simio') e = e.replace(/\^/g, '**').replace(/Math\./g, 'M.').replace(/Random\./g, 'R.');
+    return 'v.' + m[1] + ' = ' + e.replace(/\b([A-Z]\w*|[a-z]\w*)\b(?!\s*\()/g, (w, id) =>
+      names.has(id) ? 'v.' + id : id) + ';';
+  }).join('\n');
+  const M = { If: (c, a, b) => (c ? a : b), Exp: Math.exp, Log: Math.log, Abs: Math.abs, Sqrt: Math.sqrt,
+              Max: Math.max, Min: Math.min, Floor: Math.floor };
+  const env = { EP: Math.exp, LN: Math.log, ABS: Math.abs, SQRT: Math.sqrt, MX: Math.max, MN: Math.min, AINT: Math.trunc,
+                NORM: nd, normal: nd, M, R: { Normal: nd } };
+  const v = {};
+  new Function('v', ...Object.keys(env), js)(v, ...Object.values(env));
+  return v;
+}
+
+export function runNorta(IA, { section, ok, close }) {
+  section('22. NORTA and EAR(1)');
+  const D = IA.DISTS;
+  /* Lognormal pairs have a closed-form correlation, and normals keep theirs. */
+  {
+    const s1 = 0.6, s2 = 1.1;
+    const A = IA.nortaMarginal(u => Math.exp(s1 * IA.normInv(u))), B = IA.nortaMarginal(u => Math.exp(0.3 + s2 * IA.normInv(u)));
+    const mp = IA.nortaMap(A, B, 'pearson');
+    let worst = 0;
+    for (const r of [-1, -0.8, -0.4, 0, 0.2, 0.5, 0.8, 0.95, 1]) {
+      const ex = Math.expm1(r * s1 * s2) / Math.sqrt(Math.expm1(s1 * s1) * Math.expm1(s2 * s2));
+      worst = Math.max(worst, Math.abs(mp.f(r) - ex));
+    }
+    ok(worst < 1e-7, `Pearson map for two lognormals matches (e^(rho s1 s2) - 1)/sqrt(...) (worst ${worst.toExponential(2)})`);
+    const N = IA.nortaMarginal(u => IA.normInv(u)), mn = IA.nortaMap(N, N, 'pearson');
+    ok(Math.abs(mn.f(0.37) - 0.37) < 1e-9 && Math.abs(mn.lo + 1) < 1e-9 && Math.abs(mn.hi - 1) < 1e-9,
+       'two normals keep their correlation, from -1 to 1');
+    const sp = IA.nortaMap(A, B, 'spearman');
+    ok(sp.exact && Math.abs(IA.nortaSolve(sp, 0.5).rho - 2 * Math.sin(Math.PI / 12)) < 1e-15,
+       'Spearman between continuous marginals is matched in closed form, 2 sin(pi rho / 6)');
+  }
+  /* An exponential and a beta(1, 1/2) at r = 0.45: the normals need
+     0.5643, which R confirms (2 million pairs give r = 0.4506). */
+  {
+    const E = IA.nortaMarginal(u => -Math.log(1 - u)), B = IA.nortaMarginal(u => D.beta.quantile(u, [1, 0.5, 0, 1]));
+    const sol = IA.nortaSolve(IA.nortaMap(E, B, 'pearson'), 0.45);
+    close(sol.rho, 0.56426, 2e-4, 'exponential and beta(1, 1/2) at r = 0.45 need normals with rho 0.5643');
+    const pr = IA.nortaPairs(u => -Math.log(1 - u), u => D.beta.quantile(u, [1, 0.5, 0, 1]), sol.rho, 400000, IA.MRG32k3a(51));
+    close(IA.pairCorr(pr.x, pr.y), 0.45, 0.012, 'and 400,000 pairs drawn at that rho have r near 0.45');
+  }
+  /* Discrete marginals: ties keep Spearman short of the normals', and the
+     map allows for them. */
+  for (const [lab, qa, qb, target, meas] of [
+    ['Poisson(2) and Poisson(2), Spearman 0.5', u => D.poisson.quantile(u, [2]), u => D.poisson.quantile(u, [2]), 0.5, 'spearman'],
+    ['binomial(5, 0.3) and gamma, Spearman -0.6', u => D.binomial.quantile(u, [5, 0.3]), u => D.gamma.quantile(u, [2, 1]), -0.6, 'spearman'],
+    ['geometric(0.4) and Weibull, Pearson 0.7', u => D.geometric.quantile(u, [0.4]), u => D.weibull.quantile(u, [2, 1.5]), 0.7, 'pearson']
+  ]) {
+    const A = IA.nortaMarginal(qa), B = IA.nortaMarginal(qb), mp = IA.nortaMap(A, B, meas), sol = IA.nortaSolve(mp, target);
+    const pr = IA.nortaPairs(qa, qb, sol.rho, 300000, IA.MRG32k3a(77));
+    const got = meas === 'pearson' ? IA.pairCorr(pr.x, pr.y) : IA.spearman(pr.x, pr.y).rho;
+    close(got, target, 0.015, `${lab}: normals at ${sol.rho.toFixed(4)} give ${got.toFixed(4)} over 300,000 pairs`);
+  }
+  {
+    const P = IA.nortaMarginal(u => D.poisson.quantile(u, [0.4])), mp = IA.nortaMap(P, P, 'spearman');
+    const u = IA.MRG32k3a(5), x = [];
+    for (let i = 0; i < 200000; i++) x.push(D.poisson.quantile(u(), [0.4]));
+    close(mp.hi, IA.spearman(x, x).rho, 1e-9, 'the reachable Spearman range ends where a variable meets itself');
+    const sol = IA.nortaSolve(mp, -0.99);
+    ok(sol.clamp === -1 && sol.rho === -1, 'a target beyond reach is clamped to the nearer end', JSON.stringify(sol));
+  }
+  /* Phi's approximation. */
+  {
+    let worst = 0;
+    for (let z = -8; z <= 8; z += 0.001) worst = Math.max(worst, Math.abs(IA.phiAS(z) - IA.normCdf(z)));
+    ok(worst < 7.5e-8, `Abramowitz and Stegun 26.2.17 is within 7.5e-8 of Phi on [-8, 8] (worst ${worst.toExponential(2)})`);
+  }
+  /* Every family through the three simulation tools' blocks, at fixed
+     normals: the value must be the fit's quantile at Phi(Z). */
+  const grid = [];
+  for (let z = -3.7; z <= 3.75; z += 0.31) grid.push(Math.round(z * 100) / 100);
+  const rho = 0.6, other = { dist: D.expo, p: [1], shift: 0 };
+  for (const [lab, fit] of NORTA_FAMS(D)) {
+    const ex = IA.nortaPairExpressions({ fx: fit, fy: other, rho, xAttr: 'Xv', yAttr: 'Yv', xName: 'x', yName: 'y',
+                                         target: 0.5, measure: 'spearman', n: grid.length });
+    const q = IA.fitQuantile(fit), disc = fit.dist.kind === 'discrete';
+    for (const tool of ['arena', 'simio', 'anylogic']) {
+      if (SIM_ONLY.has(lab)) {
+        ok(ex[tool] === null && /not a formula/.test(ex.notes[tool]), `${lab}: ${tool} has no line, and a note says why`, ex.notes[tool]);
+        continue;
+      }
+      let bad = 0, worst = 0;
+      /* Against the quantile at the approximate Phi, which is what the
+         tools compute, and to the 6 significant figures they are given. */
+      /* The normal, the lognormal, and the Johnson members are formulas of Z
+         itself, with no Phi at all. */
+      const viaU = /\b[Uu]1\b/.test(ex[tool].split('\n').find(l => /Xv = /.test(l)));
+      for (const z of grid) {
+        const v = runSimBlock(tool, ex[tool], [z, 0]);
+        const want = q(viaU ? IA.phiAS(z) : IA.normCdf(z));
+        const err = Math.abs(v.Xv - want) / Math.max(1, Math.abs(want));
+        if (disc ? v.Xv !== want : err > 2e-5) bad++;
+        worst = Math.max(worst, err);
+        const wy = -Math.log(1 - IA.phiAS(rho * z));
+        if (Math.abs(v.Yv - wy) > 2e-5 * Math.max(1, wy)) bad++;
+      }
+      ok(bad === 0, `${lab}: the ${tool} block gives the quantile at Phi(Z) at ${grid.length} normals (worst ${worst.toExponential(1)})`,
+         ex[tool]);
+    }
+  }
+  /* The same families, and the three that only R, MATLAB, and Python can
+     write, through each language at the same normals. */
+  {
+    const fams = NORTA_FAMS(D), zs = grid;
+    const blocks = { r: [], python: [], matlab: [] }, want = [];
+    fams.forEach(([lab, fit], i) => {
+      const ex = IA.nortaPairExpressions({ fx: fit, fy: other, rho, xAttr: 'Xv', yAttr: 'Yv', xName: 'x', yName: 'y',
+                                           target: 0.5, measure: 'spearman', n: zs.length });
+      const q = IA.fitQuantile(fit);
+      want.push(zs.map(z => q(IA.normCdf(z))));
+      blocks.r.push(ex.r.replace('z1 <- rnorm(n)', 'z1 <- c(' + zs.join(', ') + ')').replace('* rnorm(n)', '* rep(0, n)') +
+        `\ncat("F${i}", sprintf("%.12g", x), "\\n")`);
+      blocks.python.push(ex.python.replace(/^import.*\n|^from.*\n/gm, '')
+        .replace('z1 = rng.standard_normal(n)', 'z1 = np.array([' + zs.join(', ') + '])').replace('* rng.standard_normal(n)', '* np.zeros(n)') +
+        `\nprint("F${i}", " ".join("%.12g" % v for v in x))`);
+      blocks.matlab.push(ex.matlab.replace('z1 = randn(n, 1);', 'z1 = [' + zs.join('; ') + '];').replace('* randn(n, 1)', '* zeros(n, 1)')
+        .replace(/^corr.*$/m, '') + `\nfprintf('F${i} '); fprintf('%.12g ', x); fprintf('\\n');`);
+    });
+    const judge = (lang, res) => {
+      if (res === undefined) { console.log(`  (skipped: ${lang}; set IA_MATLAB=1 to run it)`); return; }
+      if (!res) { console.log(`  (skipped: ${lang} is not installed)`); return; }
+      fams.forEach(([lab, fit], i) => {
+        const line = res.out.split('\n').find(l => l.startsWith('F' + i + ' '));
+        const got = line ? line.trim().split(/\s+/).slice(1).map(Number) : [];
+        const disc = fit.dist.kind === 'discrete';
+        let bad = got.length === zs.length ? 0 : zs.length;
+        /* The parameters are written to 6 significant figures. */
+        got.forEach((g, j) => { const w = want[i][j]; if (disc ? g !== w : Math.abs(g - w) > 2e-5 * Math.max(1, Math.abs(w))) bad++; });
+        ok(bad === 0, `${lab}: ${lang} gives the quantile at Phi(Z) at every normal`, res.out.slice(-600));
+      });
+    };
+    judge('R', runScript('Rscript', ['--vanilla'], blocks.r.join('\n\n'), 'R'));
+    judge('Python', runScript('python3', ['-I'], 'import numpy as np\nfrom scipy import stats\nrng = None\n' + blocks.python.join('\n\n'), 'py'));
+    judge('MATLAB', runMatlab(blocks.matlab.join('\n\n')));
+  }
+  /* The whole pair script draws pairs at the target. */
+  {
+    const fx = { dist: D.gamma, p: [2, 1.5], shift: 0 }, fy = { dist: D.beta, p: [2, 5, 0, 10], shift: 0 };
+    const A = IA.nortaMarginal(IA.fitQuantile(fx)), B = IA.nortaMarginal(IA.fitQuantile(fy));
+    const sol = IA.nortaSolve(IA.nortaMap(A, B, 'pearson'), 0.55);
+    const ex = IA.nortaPairExpressions({ fx, fy, rho: sol.rho, xAttr: 'Xv', yAttr: 'Yv', xName: 'x', yName: 'y',
+                                         target: 0.55, measure: 'pearson', n: 400000 });
+    const num1 = res => { if (!res) return NaN; const m = res.out.match(/(-?\d\.\d+)\s*$/m); return m ? Number(m[1]) : NaN; };
+    for (const [lang, res] of [['R', runScript('Rscript', ['--vanilla'], ex.r, 'R')],
+                               ['Python', runScript('python3', ['-I'], ex.python, 'py')],
+                               ['MATLAB', runMatlab(ex.matlab)]]) {
+      if (res === undefined || res === null) { console.log(`  (skipped: ${lang})`); continue; }
+      const r = res.out.match(/(-?0\.\d+)/g), got = r ? Number(r[r.length - 1]) : NaN;
+      close(got, 0.55, 0.012, `${lang}'s gamma and beta pair script draws pairs with r near 0.55 (${got})`);
+    }
+  }
+  /* Series: NORTA's AR(1) keeps the marginal and the lag-one correlation,
+     and EAR(1) keeps the exponential and phi. */
+  {
+    const g = { dist: D.gamma, p: [2, 1.5], shift: 0 }, q = IA.fitQuantile(g);
+    const A = IA.nortaMarginal(q), mp = IA.nortaMap(A, A, 'pearson'), sol = IA.nortaSolve(mp, 0.6);
+    const v = IA.nortaAr1(q, sol.rho, 300000, IA.MRG32k3a(99)), s = IA.summarize(v);
+    close(IA.acf(v, 1)[1], 0.6, 0.02, `a gamma series from NORTA's AR(1) (phi_Z ${sol.rho.toFixed(4)}) has lag-one r near 0.6`);
+    close(IA.acf(v, 3)[3], mp.f(Math.pow(sol.rho, 3)), 0.04, 'and its lag-three r is the map at phi_Z cubed');
+    close(s.mean, 3, 0.01, 'and its mean is the gamma\'s, 3');
+    const e = IA.ear1Series(2.5, 0.7, 300000, IA.MRG32k3a(98)), se = IA.summarize(e);
+    close(se.mean, 2.5, 0.015, 'EAR(1) values have the exponential\'s mean');
+    close(se.sd, 2.5, 0.02, 'and its standard deviation');
+    close(IA.acf(e, 1)[1], 0.7, 0.015, 'and lag-one correlation phi');
+    close(IA.acf(e, 2)[2], 0.49, 0.03, 'and phi squared at lag two');
+    const ef = IA.ear1Fit([1, 2, 3, 2, 1, 0.5, 0.4, 2, 3, 4, 3, 2]);
+    ok(ef.ok && ef.phi > 0, 'ear1Fit reads phi from the lag-one correlation', JSON.stringify(ef));
+    ok(!IA.ear1Fit([1, -1, 2, -2, 1, -1, 2, -2, 1]).ok, 'ear1Fit refuses readings that go below 0');
+  }
+  /* Series blocks in every tool. A Weibull through the Arena block, 40,000
+     draws, keeps its mean and the lag-one correlation; the cycle is added
+     to the centered value. */
+  {
+    const w = { dist: D.weibull, p: [3, 1.7], shift: 0 }, q = IA.fitQuantile(w);
+    const A = IA.nortaMarginal(q), mp = IA.nortaMap(A, A, 'pearson'), sol = IA.nortaSolve(mp, 0.5);
+    const base = { m: 40, c: [], s: [], P: 24, g: null, unit: 'hours', t0: 0, sd: 1, noise: null, ar: null, clip: false };
+    const ex = IA.timeExpressions(Object.assign({}, base, { norta: { fit: w, phi: sol.rho }, noLevel: true }));
+    ok(ex.ar && /^Z = /.test(ex.ar.arena) && /UZ/.test(ex.arena), 'NORTA\'s Arena series updates Z, then its uniform', ex.ar && ex.ar.arena);
+    const u = IA.MRG32k3a(17), nd = () => IA.normInv(u()), out = [];
+    const state = { Z: 0 };
+    /* runSimBlock starts each block fresh, and so Z is carried by hand. */
+    const lines = ex.ar.arena.split('\n');
+    for (let i = 0; i < 40000; i++) {
+      const block = lines.map((l, j) => j === 0 ? l.replace(/\*Z \+/, '*(' + state.Z + ') +') : l).join('\n') + '\nVAL = ' + ex.arena;
+      const r = runSimBlock('arena', block, [nd()]);
+      state.Z = r.Z; out.push(r.VAL);
+    }
+    close(IA.summarize(out).mean, 3 * Math.exp(IA.logGamma(1 + 1 / 1.7)), 0.02, 'the Arena NORTA series keeps the Weibull\'s mean');
+    close(IA.acf(out, 1)[1], 0.5, 0.04, 'and the lag-one correlation');
+    const ec = IA.timeExpressions(Object.assign({}, base, { c: [5], s: [0], norta: { fit: { dist: D.expo, p: [2], shift: 0 }, phi: 0.5 } }));
+    ok(/ - 2\)$/.test(ec.r) && /qexp\(u, rate = 0\.5\)/.test(ec.r), 'with a cycle, the value is centered by the fit\'s mean', ec.r);
+    const ee = IA.timeExpressions(Object.assign({}, base, { ear1: { mean: 2.5, phi: 0.7 }, noLevel: true }));
+    ok(ee.arena === 'Z' && ee.ar.arena === 'Z = 0.7*Z + (UNIF(0, 1) >= 0.7)*EXPO(2.5)', 'the EAR(1) Arena update', ee.ar.arena);
+    ok(/exponential\(0\.4\)/.test(ee.ar.anylogic), 'AnyLogic\'s EAR(1) draws at the rate 1/mean', ee.ar.anylogic);
+    const g = { dist: D.gamma, p: [2, 1.5], shift: 0 }, sg = IA.nortaSolve(IA.nortaMap(IA.nortaMarginal(IA.fitQuantile(g)), IA.nortaMarginal(IA.fitQuantile(g)), 'pearson'), 0.6);
+    const eg = IA.timeExpressions(Object.assign({}, base, { norta: { fit: g, phi: sg.rho }, noLevel: true }));
+    ok(eg.arena === null && /not a formula/.test(eg.notes.arena), 'a gamma series has no Arena line, and a note says why', eg.notes.arena);
+    const check = {
+      python: c => 'import numpy as np\nfrom scipy import stats\nn = 300000\n' + c + '\nprint("STAT", VAL.mean(), np.corrcoef(VAL[1:], VAL[:-1])[0, 1])',
+      matlab: c => 'n = 300000;\n' + c + '\nc = corrcoef(VAL(2:end), VAL(1:end-1)); fprintf(\'STAT %.6f %.6f\\n\', mean(VAL), c(1, 2));'
+    };
+    for (const [lab, e2, mean, r1] of [['gamma NORTA', eg, 3, 0.6], ['EAR(1)', ee, 2.5, 0.7]]) {
+      for (const [lang, run] of [['r', c => runScript('Rscript', ['--vanilla'], c, 'R')], ['python', c => runScript('python3', ['-I'], c, 'py')],
+                                 ['matlab', c => runMatlab(c)]]) {
+        const asn = lang === 'r' ? ' <- ' : ' = ', end = lang === 'matlab' ? ';' : '';
+        const body = (lang === 'r' ? 'n <- 300000\n' : '') + e2.ar[lang] + '\nVAL' + asn + e2[lang] + end;
+        const res = run(lang === 'r' ? body + '\ncat("STAT", mean(VAL), cor(VAL[-1], VAL[-n]), "\\n")' : check[lang](body));
+        if (res === undefined || res === null) { console.log(`  (skipped: ${lang})`); continue; }
+        const m = res.out.match(/STAT\s+(\S+)\s+(\S+)/);
+        ok(!!m && Math.abs(Number(m[1]) - mean) < 0.03 * mean && Math.abs(Number(m[2]) - r1) < 0.015,
+           `${lab}: the ${lang} series has mean near ${mean} and lag-one r near ${r1}`, m ? m[0] : res.out.slice(-500));
+      }
+    }
+  }
+}
+
 /* Run on its own. */
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { loadCore } = await import('./verify_input_analyzer_jobs.mjs');
@@ -423,7 +688,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       t.ok(err <= tol, `${label}  (err ${err.toExponential(2)} <= ${tol.toExponential(1)})`, `got  ${got}\n        want ${want}`);
     },
   };
-  try { runDependence(IA, t); runTimeOrder(IA, t); runExports(IA, t); }
+  try { runDependence(IA, t); runTimeOrder(IA, t); runExports(IA, t); runNorta(IA, t); }
   catch (e) { fail++; failures.push(group + ' :: threw ' + e.message); console.log('  FAIL  threw: ' + e.stack); }
   console.log(`\n${pass} passed, ${fail} failed`);
   for (const f of failures) console.log('  - ' + f);

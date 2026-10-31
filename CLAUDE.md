@@ -816,7 +816,7 @@ better.
      Java statements and ternaries) and matched the expected moments. Simio has not run them, but
      its Reference Guide documents every function the Simio blocks call (`Math.If(test, value,
      otherwise)`, `Math.Floor`, `Math.Exp`, `Math.Log`, `Math.Abs`, `Math.Sqrt`, `Math.Min`, and
-     `Math.Max`), a logical expression as 1 or 0, and an Assign step's rows running in order.)*
+     `Math.Max`) and an Assign step's rows running in order.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
