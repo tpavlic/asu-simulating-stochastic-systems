@@ -207,10 +207,11 @@ export function runTimeOrder(IA, { section, ok, close }) {
 
   T.harm = REF.harm;
   REF.harm.fits.forEach((d, i) => {
-    const lab = `harmonic fit ${i + 1} (${d.H} harmonic${d.H > 1 ? 's' : ''}${d.trend ? ', trend' : ''})`;
-    const f = IA.harmonicFit(REF.harm.t, REF.harm.y, d.P, d.H, d.trend);
+    const lab = `harmonic fit ${i + 1} (${d.H} harmonic${d.H === 1 ? '' : 's'}${d.H2 ? `, a second cycle of period ${d.P2}` : ''}${d.trend ? ', trend' : ''})`;
+    const f = IA.harmonicFit(REF.harm.t, REF.harm.y, d.P, d.H, d.trend, d.P2, d.H2);
     const mine = [f.m];
     for (let k = 0; k < d.H; k++) mine.push(f.c[k], f.s[k]);
+    for (let k = 0; k < d.H2; k++) mine.push(f.c2[k], f.s2[k]);
     if (d.trend) mine.push(f.g);
     let wc = 0;
     for (let k = 0; k < mine.length; k++) wc = Math.max(wc, Math.abs(mine[k] - d.coef[k]) / Math.max(1, Math.abs(d.coef[k])));
@@ -258,6 +259,8 @@ export function runTimeOrder(IA, { section, ok, close }) {
     const f = IA.harmonicFit(t, y, 24, 1, false);
     ok(Math.abs(f.amp[0] - 4) < 0.25, `harmonicFit recovers an amplitude of 4 (${f.amp[0].toFixed(3)})`);
     ok(Math.abs(f.peakAt[0] - 15) < 0.4, `harmonicFit puts the peak at t = 15 (${f.peakAt[0].toFixed(3)})`);
+    const fc = IA.harmonicFit(t, y, 24, 2, false, 12, 1);
+    ok(fc.clash && !Number.isFinite(fc.m), 'a second cycle of period 12 repeats the first one\'s second harmonic, and the fit refuses it');
 
     const z = [0];
     for (let j = 1; j < 2000; j++) z.push(0.8 * z[j - 1] + IA.normInv(u()));
@@ -360,6 +363,12 @@ export function runExports(IA, { section, ok, close }) {
           'the Simio line, evaluated at 2.5 hours, gives the cycle at 150 minutes');
     const eo = IA.timeExpressions(Object.assign({}, m, { unit: 'other' }));
     ok(/TNOW/.test(eo.arena) && !/BaseTime/.test(eo.arena) && /time\(\)/.test(eo.anylogic), 'an unnamed unit uses the bare clock', eo.arena);
+    const m2 = Object.assign({}, m, { c2: [4], s2: [-2], P2: 168 });
+    const det2 = t => det(t) + 4 * Math.cos(2 * Math.PI * t / 168) - 2 * Math.sin(2 * Math.PI * t / 168);
+    const e2 = IA.timeExpressions(m2);
+    let worst2 = 0;
+    for (const tt of [0, 5.5, 13, 30, 100]) worst2 = Math.max(worst2, Math.abs(ev(e2.arena, arenaEnv(tt, baseHours)) - det2(tt)));
+    ok(worst2 < 1e-6, `with a second cycle, the Arena line gives both cycles (worst ${worst2.toExponential(2)})`, e2.arena);
     const e0 = IA.timeExpressions(Object.assign({}, m, { t0: 6 }));
     const w0 = Math.abs(ev(e0.arena, arenaEnv(2, baseHours)) - det(8));
     ok(w0 < 1e-6, 'a clock origin of 6 shifts the model\'s time 0 to data time 6', e0.arena);
@@ -382,8 +391,21 @@ export function runExports(IA, { section, ok, close }) {
     const ts = IA.timeScripts({ t, y: yy }, { maxLag: 40, m: 20, P: 24, H: 1, trend: false, cycle: true, ar: true, span: 3, src: 'verify' });
     judgeScript(ok, 'R', 'a series', runScript('Rscript', ['--vanilla'], ts.r, 'R'), 10);
     judgeScript(ok, 'Python', 'a series', runScript('python3', ['-I'], ts.python, 'py'), 10);
+    /* Two cycles, daily and weekly, with a trend, on ten days of hourly
+       data, under the 250 values past which the scripts read the CSV. */
+    const t2 = [], y2 = [];
+    for (let i = 0; i < 240; i++) { t2.push(i); y2.push(30 + 8 * Math.cos(2 * Math.PI * (i - 14) / 24) + 3 * Math.cos(2 * Math.PI * i / 168) + 0.01 * i + 2 * IA.normInv(u())); }
+    const ts2 = IA.timeScripts({ t: t2, y: y2 }, { maxLag: 40, m: 20, P: 24, H: 2, P2: 168, H2: 1, trend: true, cycle: true, ar: true, span: 3 });
+    judgeScript(ok, 'R', 'a series with two cycles and a trend', runScript('Rscript', ['--vanilla'], ts2.r, 'R'), 10);
+    judgeScript(ok, 'Python', 'a series with two cycles and a trend', runScript('python3', ['-I'], ts2.python, 'py'), 10);
+    /* A trend with no cycle: the fit's only column after the constant is t. */
+    const tsT = IA.timeScripts({ t, y: yy.map((v, i) => v + 0.05 * i) }, { maxLag: 40, m: 20, P: 24, H: 0, trend: true, cycle: true, ar: true, span: 3 });
+    judgeScript(ok, 'R', 'a series with a trend and no cycle', runScript('Rscript', ['--vanilla'], tsT.r, 'R'), 10);
+    judgeScript(ok, 'Python', 'a series with a trend and no cycle', runScript('python3', ['-I'], tsT.python, 'py'), 10);
     judgeScript(ok, 'MATLAB', 'two variables', runMatlab(sc.matlab), 14);
     judgeScript(ok, 'MATLAB', 'a series', runMatlab(ts.matlab), 10);
+    judgeScript(ok, 'MATLAB', 'a series with a trend and no cycle', runMatlab(tsT.matlab), 10);
+    judgeScript(ok, 'MATLAB', 'a series with two cycles and a trend', runMatlab(ts2.matlab), 10);
     /* Past MAX_INLINE values the scripts read the tab's CSV download
        instead of embedding the data, and the file carries # provenance
        lines and a blank line above its header. */

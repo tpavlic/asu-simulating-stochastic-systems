@@ -66,12 +66,15 @@ yw <- ar.yw(ar_series, aic = FALSE, order.max = 1)
 th <- 0:143
 yhar <- 10 + 3 * cos(2 * pi * th / 24) - 1.5 * sin(2 * pi * th / 24) +
   0.8 * cos(4 * pi * th / 24) + 0.01 * th + rnorm(144, sd = 0.7)
-harm <- function(t, y, P, H, trend) {
-  X <- do.call(cbind, lapply(1:H, function(k) cbind(cos(2 * pi * k * t / P), sin(2 * pi * k * t / P))))
-  f <- if (trend) lm(y ~ X + t) else lm(y ~ X)
+# H = 0 with a trend is a straight line alone, the page's trend with no
+# cycle; H2 harmonics of a second period P2 are a second cycle.
+waves <- function(t, P, H) do.call(cbind, lapply(seq_len(H), function(k) cbind(cos(2 * pi * k * t / P), sin(2 * pi * k * t / P))))
+harm <- function(t, y, P, H, trend, P2 = 0, H2 = 0) {
+  X <- cbind(waves(t, P, H), if (H2 > 0) waves(t, P2, H2), if (trend) t)
+  f <- lm(y ~ X)
   s <- summary(f); fs <- s$fstatistic
   b <- coef(f)
-  obj(P = num(P), H = num(H), trend = if (trend) "true" else "false",
+  obj(P = num(P), H = num(H), P2 = num(P2), H2 = num(H2), trend = if (trend) "true" else "false",
       coef = arr(unname(b)), r2 = num(s$r.squared), s = num(s$sigma),
       F = num(unname(fs[1])), df1 = num(unname(fs[2])), df2 = num(unname(fs[3])),
       p = num(pf(fs[1], fs[2], fs[3], lower.tail = FALSE)),
@@ -92,6 +95,7 @@ cat(obj(
            lb1 = obj(Q = num(unname(lb1$statistic)), df = num(unname(lb1$parameter)), p = num(lb1$p.value)),
            phi = num(yw$ar[1]), varPred = num(yw$var.pred), mean = num(yw$x.mean)),
   harm = obj(t = arr(th), y = arr(yhar),
-             fits = paste0("[", paste(harm(th, yhar, 24, 1, FALSE), harm(th, yhar, 24, 2, TRUE), sep = ","), "]")),
+             fits = paste0("[", paste(harm(th, yhar, 24, 1, FALSE), harm(th, yhar, 24, 2, TRUE),
+                                 harm(th, yhar, 24, 0, TRUE), harm(th, yhar, 24, 2, TRUE, 72, 1), sep = ","), "]")),
   pgram = paste0("[", paste(pg(yhar, 1), pg(yhar, 3), pg(yhar, 5), sep = ","), "]")
 ), "\n")

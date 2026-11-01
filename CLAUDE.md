@@ -718,13 +718,18 @@ better.
   together or opposite, with the range of r those values allow, the three correlation
   coefficients, a least-squares model of Y given X with a Breusch–Pagan check of its spread, and
   NORTA pairs, X and Y drawn together with each column's own distribution and the data's Spearman
-  ρ or Pearson r, shown beside the data on one frame), and one looking for patterns over time (a
-  run sequence, a lag plot beside a correlogram with a Ljung–Box test, a cycle of known period
-  with up to three harmonics and a trend, a periodogram for an unknown period, and two approaches
-  to the autocorrelation of what the cycle leaves, an AR(1) or a model that keeps the distribution
-  as well: NORTA's AR(1) on a normal scale, matched to the lag-one correlation, or EAR(1) for
-  exponential readings with no cycle; its export assembles the model from those pieces and writes
-  it out before the lines). The last two send residuals, per-unit values, AR(1) innovations, or a column or
+  ρ or Pearson r, shown beside the data on one frame), and one looking for patterns over time
+  (opened by a diagram of how its sections assemble a model as the mean over time plus variation
+  around it, then a run sequence drawn with that mean, a lag plot beside a correlogram with a Ljung–Box
+  test, a mean over time that is a constant plus an optional straight-line trend and up to two cycles
+  of known period, each with up to three harmonics (a second cycle whose harmonic repeats one of the
+  first's is refused), written out as a fitted model and drawn through the readings or as the
+  residuals around it, a periodogram for an unknown period, and one section for
+  the variation around that mean, switched among independent draws, an AR(1), NORTA's AR(1) on a
+  normal scale, matched to the lag-one correlation, and EAR(1) for exponential readings with a
+  constant mean (grayed while a trend or a cycle is fitted, the reader's choice kept); its export
+  repeats those choices, synced both ways, writes the model out before the lines, and warns that an
+  exported trend holds only over the data's own span). The last two send residuals, per-unit values, AR(1) innovations, or a column or
   the readings themselves to the first tab, and a fit made there becomes the noise term of their
   export or a NORTA distribution (`ST.handoff`, keyed to the data and model that sent them and
   cleared whenever the first tab's data change; tab ③ keeps a captured fit for each column in

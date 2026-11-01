@@ -137,7 +137,8 @@ summary { min-height: 26px; }
 /* ── Controls ────────────────────────────────────────────────────────── */
 .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .ctrl-lbl { font-size: .82rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
-.ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+.ctrl-grp { display: inline-flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; max-width: 100%; }
+.ctrl-grp select { max-width: 100%; min-width: 0; }
 /* A running note beside a control, rather than a label for one: it has to be
    free to wrap, and to take its own line when the row runs out of width. */
 .ctrl-note { font-size: .82rem; color: var(--muted); line-height: 1.4;
@@ -541,6 +542,28 @@ footer a:hover { text-decoration: underline; }
 /* ── Segmented choice (the pairing switch on tab 3) ───────────────────
    Radio buttons drawn as one bar of joined buttons; the inputs stay in
    the tab order and the accessibility tree, only visually hidden. */
+.flow { margin: 0 4px 16px; }
+.flow svg { display: block; width: 100%; height: auto; font-family: inherit; }
+.flow .flow-narrow { display: none; max-width: 360px; margin: 0 auto; }
+/* The wide layout's type drops below 0.85 of its size under about 940px. */
+@media (max-width: 940px) { .flow .flow-wide { display: none; } .flow .flow-narrow { display: block; } }
+.flow text { text-anchor: middle; }
+.flow .fgroup rect { fill: var(--chart-bg); stroke: var(--border); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.flow .fgroup .tg { text-anchor: start; font-size: 12px; font-weight: 700; fill: var(--muted); }
+.flow .fbox rect { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+.flow .fbox .t1 { font-size: 13.5px; font-weight: 700; fill: var(--text); }
+.flow .fbox .t2 { font-size: 12px; fill: var(--muted); }
+.flow .flink { cursor: pointer; outline: none; }
+.flow .flink rect { stroke: var(--accent); }
+.flow .flink .t1, .flow .flink .tg { fill: var(--accent); }
+.flow .fin { pointer-events: none; }
+.flow .flink:hover rect, .flow .flink:focus-visible rect { fill: var(--accent-wash); stroke-width: 2.5; }
+.flow .arrow { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.flow .arrow.dash { stroke-dasharray: 5 4; }
+.flow .ahead { fill: var(--muted); }
+.flow .ta { font-size: 12px; fill: var(--muted); font-style: italic; }
+.flow .ta.tl { text-anchor: start; }
+.flow figcaption { text-align: left; margin-top: 6px; }
 .exp-step { font-size: .8rem; color: var(--text); margin: 0 0 4px; line-height: 1.45; }
 .exp-step + .exp-code { margin-bottom: 8px; }
 .exp-steps { align-items: start; }
@@ -1954,9 +1977,21 @@ footer a:hover { text-decoration: underline; }
   reports changes. This tab checks whether the order carried information. Readings taken one after
   another can depend on the ones before them (autocorrelation), as a tank's temperature does, or
   follow the clock, as hourly orders do. When they do, the tab builds a model that keeps that
-  pattern: a cycle fitted to the clock and, for what the cycle leaves, either an <span class="tip" tabindex="0" data-tip="Autoregressive model of order 1: each value, measured from the mean, is &phi; times the one before it plus a new, independent noise term.">AR(1)</span> or a
+  pattern: a mean over time that follows the clock, with a trend or a cycle if the readings have one,
+  and variation around it that can depend on the value before, through an <span class="tip" tabindex="0" data-tip="Autoregressive model of order 1: each value, measured from the mean, is &phi; times the one before it plus a new, independent noise term.">AR(1)</span> or a
   model that also keeps the readings' distribution, <span class="tip" tabindex="0" data-tip="Normal to anything: correlated standard normals, each turned into a uniform by the normal cdf &Phi; and then into a value by the inverse cdf of a chosen distribution, and so every value has exactly that distribution. Tab &#9314; uses it to draw correlated pairs.">NORTA</span>'s AR(1) or <span class="tip" tabindex="0" data-tip="Exponential AR(1): each value is &phi; times the one before it, plus a fresh exponential draw with probability 1 &minus; &phi;. Every value is then exponential, and the correlation at lag k is &phi;<sup>k</sup>.">EAR(1)</span>. Arrivals whose rate changes over the day belong on
   <a class="tab-link" href="#arr" data-tab="arr">tab ②</a> instead.</p>
+
+  <figure class="flow">
+    <svg class="flow-wide" viewBox="0 0 945 330" role="group" aria-label="How the tab assembles a model"><defs><marker id="fa-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs><g class="fbox"><rect x="10" y="116" width="100" height="60" rx="6"/><text class="t1" x="60" y="143">Readings</text><text class="t2" x="60" y="160">in time order</text></g><path class="arrow" d="M110,146 H143" marker-end="url(#fa-w)"/><g class="fgroup flink" data-goto="s-sec4" tabindex="0" role="link" aria-label="Section 4, the mean over time"><rect x="145" y="10" width="230" height="272" rx="9"/><text class="tg" x="157" y="29">4 &#183; Mean over time</text></g><g class="fbox fin"><rect x="160" y="49" width="200" height="56" rx="6"/><text class="t1" x="260" y="74">Constant</text><text class="t2" x="260" y="91">the readings&#8217; level, m</text></g><g class="fbox fin"><rect x="160" y="127" width="200" height="56" rx="6"/><text class="t1" x="260" y="152">Straight-line trend</text><text class="t2" x="260" y="169">optional</text></g><text class="ta fin" x="260" y="120">+</text><g class="fbox fin"><rect x="160" y="205" width="200" height="56" rx="6"/><text class="t1" x="260" y="230">Cycles</text><text class="t2" x="260" y="247">optional, one or two periods</text></g><text class="ta fin" x="260" y="198">+</text><path class="arrow" d="M375,146 H453" marker-end="url(#fa-w)"/><text class="ta" x="415" y="136">what&#8217;s left</text><g class="fgroup flink" data-goto="s-sec5" tabindex="0" role="link" aria-label="Section 5, the variation around the mean"><rect x="455" y="10" width="260" height="272" rx="9"/><text class="tg" x="467" y="29">5 &#183; Variation around the mean</text></g><g class="fbox fin"><rect x="465" y="38" width="240" height="48" rx="6"/><text class="t1" x="585" y="59">Independent draws</text><text class="t2" x="585" y="76">no memory</text></g><g class="fbox fin"><rect x="465" y="100" width="240" height="48" rx="6"/><text class="t1" x="585" y="121">AR(1)</text><text class="t2" x="585" y="138">fed by the value before</text></g><text class="ta fin" x="585" y="97">or</text><g class="fbox fin"><rect x="465" y="162" width="240" height="48" rx="6"/><text class="t1" x="585" y="183">NORTA AR(1)</text><text class="t2" x="585" y="200">keeps the distribution too</text></g><text class="ta fin" x="585" y="159">or</text><g class="fbox fin"><rect x="465" y="224" width="240" height="48" rx="6"/><text class="t1" x="585" y="245">EAR(1)</text><text class="t2" x="585" y="262">exponential, constant mean only</text></g><text class="ta fin" x="585" y="221">or</text><path class="arrow" d="M715,146 H743" marker-end="url(#fa-w)"/><g class="fbox flink" data-goto="s-sec6" tabindex="0" role="link" aria-label="Section 6, the export"><rect x="745" y="111" width="190" height="70" rx="6"/><text class="t1" x="840" y="143">6 &#183; Export</text><text class="t2" x="840" y="160">mean + variation</text></g><path class="arrow dash" d="M260,282 V304 H840 V183" marker-end="url(#fa-w)"/><text class="ta" x="550" y="321">the mean over time is added back</text></svg>
+    <svg class="flow-narrow" viewBox="0 0 340 708" role="group" aria-label="How the tab assembles a model"><defs><marker id="fa-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahead"/></marker></defs><g class="fbox"><rect x="85" y="6" width="150" height="50" rx="6"/><text class="t1" x="160" y="28">Readings</text><text class="t2" x="160" y="45">in time order</text></g><path class="arrow" d="M160,56 V72" marker-end="url(#fa-n)"/><g class="fgroup flink" data-goto="s-sec4" tabindex="0" role="link" aria-label="Section 4, the mean over time"><rect x="10" y="74" width="270" height="232" rx="9"/><text class="tg" x="22" y="93">4 &#183; Mean over time</text></g><g class="fbox fin"><rect x="25" y="102" width="240" height="50" rx="6"/><text class="t1" x="145" y="124">Constant</text><text class="t2" x="145" y="141">the readings&#8217; level, m</text></g><g class="fbox fin"><rect x="25" y="174" width="240" height="50" rx="6"/><text class="t1" x="145" y="196">Straight-line trend</text><text class="t2" x="145" y="213">optional</text></g><text class="ta fin" x="145" y="167">+</text><g class="fbox fin"><rect x="25" y="246" width="240" height="50" rx="6"/><text class="t1" x="145" y="268">Cycles</text><text class="t2" x="145" y="285">optional, one or two periods</text></g><text class="ta fin" x="145" y="239">+</text><path class="arrow" d="M145,306 V348" marker-end="url(#fa-n)"/><text class="ta tl" x="155" y="331">what&#8217;s left</text><g class="fgroup flink" data-goto="s-sec5" tabindex="0" role="link" aria-label="Section 5, the variation around the mean"><rect x="10" y="350" width="270" height="272" rx="9"/><text class="tg" x="22" y="369">5 &#183; Variation around the mean</text></g><g class="fbox fin"><rect x="25" y="378" width="240" height="48" rx="6"/><text class="t1" x="145" y="399">Independent draws</text><text class="t2" x="145" y="416">no memory</text></g><g class="fbox fin"><rect x="25" y="440" width="240" height="48" rx="6"/><text class="t1" x="145" y="461">AR(1)</text><text class="t2" x="145" y="478">fed by the value before</text></g><text class="ta fin" x="145" y="437">or</text><g class="fbox fin"><rect x="25" y="502" width="240" height="48" rx="6"/><text class="t1" x="145" y="523">NORTA AR(1)</text><text class="t2" x="145" y="540">keeps the distribution too</text></g><text class="ta fin" x="145" y="499">or</text><g class="fbox fin"><rect x="25" y="564" width="240" height="48" rx="6"/><text class="t1" x="145" y="585">EAR(1)</text><text class="t2" x="145" y="602">exponential, constant mean only</text></g><text class="ta fin" x="145" y="561">or</text><path class="arrow" d="M145,622 V640" marker-end="url(#fa-n)"/><g class="fbox flink" data-goto="s-sec6" tabindex="0" role="link" aria-label="Section 6, the export"><rect x="55" y="642" width="180" height="60" rx="6"/><text class="t1" x="145" y="669">6 &#183; Export</text><text class="t2" x="145" y="686">mean + variation</text></g><path class="arrow dash" d="M280,200 H312 V672 H237" marker-end="url(#fa-n)"/><text class="ta" x="326" y="436" transform="rotate(90 326 436)">the mean over time is added back</text></svg>
+    <figcaption class="plot-cap">Each value a model draws is the mean over time plus variation
+    around it. The mean over time follows the clock alone: a constant, plus a trend or cycles when section 4
+    adds them. The variation either has no memory or is fed by the value before it, with fresh noise added at
+    every step. The export adds the two together. With a constant mean, NORTA's AR(1) and EAR(1) draw the
+    readings themselves, mean included, and EAR(1) is offered only then. Each numbered group links to its
+    section.</figcaption>
+  </figure>
 
   <section class="sec">
     <div class="sec-hd">1 &middot; Data <span class="sec-note">paste readings in time order, with or without a time column</span></div>
@@ -2018,7 +2053,7 @@ footer a:hover { text-decoration: underline; }
   </section>
 
   <section class="sec">
-    <div class="sec-hd">2 &middot; The readings in order <span class="sec-note">each value at its time, with the fitted cycle once section 4 has one</span></div>
+    <div class="sec-hd">2 &middot; The readings in order <span class="sec-note">each value at its time, with section 4's mean over time</span></div>
     <div class="plot-card">
       <div class="plot-hd" id="s-run-hd">Readings over time</div>
       <div id="s-run-host"><div class="plot-empty">Load readings to plot them.</div></div>
@@ -2031,7 +2066,7 @@ footer a:hover { text-decoration: underline; }
       <span class="ctrl-lbl" id="s-view-lbl">Show</span>
       <div class="seg" role="radiogroup" aria-labelledby="s-view-lbl">
         <label><input type="radio" name="s-view" value="data" checked><span>the readings</span></label>
-        <label id="s-view-left-lbl"><input type="radio" name="s-view" value="left" disabled><span>what the cycle leaves</span></label>
+        <label id="s-view-left-lbl"><input type="radio" name="s-view" value="left" disabled><span>what section 4 leaves</span></label>
       </div>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="s-lag">Lag <span class="lit">k</span></label>
@@ -2078,24 +2113,50 @@ footer a:hover { text-decoration: underline; }
     </details>
   </section>
 
-  <section class="sec">
-    <div class="sec-hd">4 &middot; Model background periodicity <span class="sec-note">a pattern that repeats with a known period, such as a day or a week</span></div>
-    <div class="ctrl-row">
-      <label class="chk"><input type="checkbox" id="s-cyc"> Fit a cycle</label>
+  <section class="sec" id="s-sec4">
+    <div class="sec-hd">4 &middot; Mean over time <span class="sec-note">the part that follows the clock: a constant, plus a straight-line trend and up to two cycles of known period</span></div>
+    <div class="ctrl-row" style="margin-bottom:4px">
+      <span class="ctrl-lbl">The mean is a constant</span>
+      <label class="chk"><input type="checkbox" id="s-trend"> plus a straight-line trend</label>
+    </div>
+    <div class="ctrl-row" style="margin-bottom:4px">
+      <label class="chk"><input type="checkbox" id="s-cyc"> plus a cycle</label>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="s-P">Period</label>
         <input type="number" id="s-P" class="mono-in" min="0" step="any" value="24" style="width:6em">
-        <span class="ctrl-note" id="s-P-unit"></span>
+        <span class="ctrl-note s-unit" style="flex:none"></span>
       </span>
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="s-H">Harmonics</label>
         <select id="s-H"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
       </span>
-      <label class="chk"><input type="checkbox" id="s-trend"> Add a straight-line trend</label>
+    </div>
+    <div class="ctrl-row">
+      <label class="chk" id="s-cyc2-lbl"><input type="checkbox" id="s-cyc2"> plus a second cycle</label>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-P2">Period</label>
+        <input type="number" id="s-P2" class="mono-in" min="0" step="any" value="168" style="width:6em">
+        <span class="ctrl-note s-unit" style="flex:none"></span>
+      </span>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="s-H2">Harmonics</label>
+        <select id="s-H2"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </span>
     </div>
     <div id="s-cyc-out"></div>
+    <div class="ctrl-row" style="margin-top:12px">
+      <span class="ctrl-lbl" id="s-mv-lbl">Show</span>
+      <div class="seg" role="radiogroup" aria-labelledby="s-mv-lbl">
+        <label><input type="radio" name="s-mview" value="fit" checked><span>the readings and &mu;(t)</span></label>
+        <label><input type="radio" name="s-mview" value="resid"><span>the residuals</span></label>
+      </div>
+    </div>
+    <div class="plot-card">
+      <div class="plot-hd" id="s-mfit-hd">The readings and the mean over time</div>
+      <div id="s-mfit-host"><div class="plot-empty">Load readings to plot them.</div></div>
+    </div>
     <div class="ctrl-row" style="margin-top:10px">
-      <button class="btn2" id="s-send-left" type="button" disabled>Fit what the cycle leaves on tab ①</button>
+      <button class="btn2" id="s-send-left" type="button" disabled>Fit the residuals around the mean on tab ①</button>
     </div>
     <details class="why" id="s-pg-details">
       <summary>Find a period you do not know</summary>
@@ -2125,39 +2186,94 @@ footer a:hover { text-decoration: underline; }
       </div>
     </details>
     <details class="why">
-      <summary>How the cycle is fitted</summary>
+      <summary>How the trend and the cycles are fitted</summary>
       <div class="why-body">
-        <p>The cycle is <code>m + c&#8321; cos(2&pi;t/P) + s&#8321; sin(2&pi;t/P)</code>, plus the same
-        pair at twice and three times the frequency for a second and third harmonic, fitted by least
-        squares. A cosine and a sine of one frequency together make a wave of any height and any
-        timing, and the cards report each one as its amplitude (half the distance from trough to
+        <p>The mean over time is the constant <code>m</code>, plus <code>g&thinsp;t</code> for a trend,
+        plus <code>c&#8321; cos(2&pi;t/P) + s&#8321; sin(2&pi;t/P)</code> for a cycle, with the same
+        pair at twice and three times the frequency for a second and third harmonic, plus the same terms
+        again in a second period for a second cycle, all fitted together by least squares. With neither a trend nor a cycle, <code>m</code> is the readings' mean. A
+        cosine and a sine of one frequency together make a wave of any height and any timing, and the cards report each one as its amplitude (half the distance from trough to
         peak) and the time of its peak. One harmonic gives one smooth peak per period; a second
         lets the shape have two humps, such as a lunch and a dinner rush.</p>
-        <p>The F test compares the fit with a flat line at the mean. Afterward, section 3's
-        correlogram can be switched to what the cycle leaves: if those bars sit inside the band, the
-        cycle plus independent noise is a complete model, and the noise can go to tab ① to be
-        fitted.</p>
+        <p>Harmonics all repeat on the cycle's own period, and so they only shape one cycle. A
+        pattern on a second time scale, such as a weekly one on top of a daily one, needs a second
+        cycle with its own period. Its harmonics must differ from the first cycle's: a second
+        period of 12 hours beside a daily cycle with two harmonics repeats the second harmonic,
+        and the two cannot be told apart.</p>
+        <p>The F test compares the fit with a flat line at the readings' mean. Afterward, section 3's
+        correlogram can be switched to what section 4 leaves: if those bars sit inside the band, the
+        mean over time plus independent variation is a complete model, and the variation can go to
+        tab ① to be fitted.</p>
       </div>
     </details>
   </section>
 
-  <section class="sec">
-    <div class="sec-hd">5 &middot; Model residual autocorrelation&nbsp;– approach 1: AR(1) <span class="sec-note">each value a fraction of the one before plus noise, for dependence that a cycle does not explain</span></div>
-    <div class="hint" id="s-ar-lede"></div>
-    <div id="s-ar-out" style="margin-top:10px"></div>
-    <div class="ctrl-row" style="margin-top:10px">
-      <button class="btn2" id="s-send-innov" type="button">Fit the AR(1) residuals on tab ①</button>
-      <button class="btn2" id="s-adraw" type="button">Draw again</button>
+  <section class="sec" id="s-sec5">
+    <div class="sec-hd">5 &middot; Variation around the mean <span class="sec-note">how each value depends on the one before it: not at all, or through an autoregressive model</span></div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl" id="s-vk-lbl">Model</span>
+      <div class="seg" role="radiogroup" aria-labelledby="s-vk-lbl">
+        <label><input type="radio" name="s-vkind" value="iid" checked><span>Independent</span></label>
+        <label><input type="radio" name="s-vkind" value="ar"><span>AR(1)</span></label>
+        <label><input type="radio" name="s-vkind" value="norta"><span>NORTA AR(1)</span></label>
+        <label id="s-vk-ear-lbl"><input type="radio" name="s-vkind" value="ear1"><span>EAR(1)</span></label>
+      </div>
     </div>
-    <div class="plot-wrap plot-pair" style="margin-top:10px">
-      <div class="plot-card" style="flex:1.4 1 400px">
-        <div class="plot-hd">A series drawn from the AR(1)</div>
-        <div id="s-arun-host"><div class="plot-empty">Load readings.</div></div>
+    <div class="hint" id="s-v-lede" style="margin-top:8px"></div>
+    <div id="s-v-iid">
+      <div id="s-iid-out"></div>
+      <div class="ctrl-row" style="margin-top:10px">
+        <button class="btn2" id="s-idraw" type="button">Draw again</button>
       </div>
-      <div class="plot-card" style="flex:1 1 330px">
-        <div class="plot-hd">Correlation at each lag, before and after the AR(1)</div>
-        <div id="s-innov-host"><div class="plot-empty">Load readings.</div></div>
+      <div class="plot-wrap plot-pair" style="margin-top:10px">
+        <div class="plot-card" style="flex:1.4 1 400px">
+          <div class="plot-hd">A series drawn from the model</div>
+          <div id="s-irun-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
+        <div class="plot-card" style="flex:1 1 330px">
+          <div class="plot-hd">Correlation at each lag: the data and the series drawn</div>
+          <div id="s-iacf-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
       </div>
+    </div>
+    <div id="s-v-ar" hidden>
+      <div id="s-ar-out" style="margin-top:10px"></div>
+      <div class="ctrl-row" style="margin-top:10px">
+        <button class="btn2" id="s-send-innov" type="button">Fit the AR(1) residuals on tab ①</button>
+        <button class="btn2" id="s-adraw" type="button">Draw again</button>
+      </div>
+      <div class="plot-wrap plot-pair" style="margin-top:10px">
+        <div class="plot-card" style="flex:1.4 1 400px">
+          <div class="plot-hd">A series drawn from the AR(1)</div>
+          <div id="s-arun-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
+        <div class="plot-card" style="flex:1 1 330px">
+          <div class="plot-hd">Correlation at each lag, before and after the AR(1)</div>
+          <div id="s-innov-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
+      </div>
+    </div>
+    <div id="s-v-keep" hidden>
+      <div class="ctrl-row" style="margin-top:8px">
+        <span class="ctrl-grp" id="s-nsrc-grp">
+          <label class="ctrl-lbl" for="s-nsrc">Distribution</label>
+          <select id="s-nsrc"></select>
+        </span>
+        <button class="btn2" id="s-ndraw" type="button">Draw again</button>
+      </div>
+      <div class="plot-cap" id="s-nsrc-cap" style="text-align:left;margin:-2px 0 8px"></div>
+      <div id="s-nt-cards"></div>
+      <div class="plot-wrap plot-pair" style="margin-top:10px">
+        <div class="plot-card" style="flex:1.4 1 400px">
+          <div class="plot-hd" id="s-nrun-hd">A series drawn from the model</div>
+          <div id="s-nrun-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
+        <div class="plot-card" style="flex:1 1 330px">
+          <div class="plot-hd">Correlation at each lag: the data and the series drawn</div>
+          <div id="s-nacf-host"><div class="plot-empty">Load readings.</div></div>
+        </div>
+      </div>
+      <div id="s-nt-note" style="margin-top:10px"></div>
     </div>
     <details class="why">
       <summary>A model that follows the clock, or one that remembers the last value</summary>
@@ -2169,7 +2285,7 @@ footer a:hover { text-decoration: underline; }
         teal curve on the plot, and the noise terms are uncorrelated. The AR(1) residuals, each value minus
         &phi; times the one before it, are the estimates of those noise terms, which is why their orange
         bars should sit inside the band.</p>
-        <p>The cycle in section 4 reads the clock, and so it needs no memory: a model can draw a
+        <p>Section 4's mean over time reads the clock, and so it needs no memory: a model can draw a
         value at any time from the time alone. An AR(1) remembers the previous draw, and so a model
         needs a variable that it updates every time it draws. Its lag then means one draw ago,
         which matches the data only if the model draws at the data's own spacing (once a minute for
@@ -2178,40 +2294,10 @@ footer a:hover { text-decoration: underline; }
         explains the data, it is the simpler model to build.</p>
       </div>
     </details>
-  </section>
-
-  <section class="sec">
-    <div class="sec-hd">6 &middot; Model residual autocorrelation&nbsp;– approach 2: keep the distribution (NORTA or EAR(1)) <span class="sec-note">an AR(1) on a normal scale, or a series of exponential values</span></div>
-    <div class="hint" id="s-nt-lede"></div>
-    <div class="ctrl-row" style="margin-top:8px">
-      <span class="ctrl-lbl" id="s-nk-lbl">Model</span>
-      <div class="seg" role="radiogroup" aria-labelledby="s-nk-lbl">
-        <label><input type="radio" name="s-nkind" value="norta" checked><span>AR(1) on a normal scale</span></label>
-        <label id="s-nk-ear-lbl"><input type="radio" name="s-nkind" value="ear1"><span>EAR(1)</span></label>
-      </div>
-      <span class="ctrl-grp" id="s-nsrc-grp">
-        <label class="ctrl-lbl" for="s-nsrc">Distribution</label>
-        <select id="s-nsrc"></select>
-      </span>
-      <button class="btn2" id="s-ndraw" type="button">Draw again</button>
-    </div>
-    <div class="plot-cap" id="s-nsrc-cap" style="text-align:left;margin:-2px 0 8px"></div>
-    <div id="s-nt-cards"></div>
-    <div class="plot-wrap plot-pair" style="margin-top:10px">
-      <div class="plot-card" style="flex:1.4 1 400px">
-        <div class="plot-hd" id="s-nrun-hd">A series drawn from the model</div>
-        <div id="s-nrun-host"><div class="plot-empty">Load readings.</div></div>
-      </div>
-      <div class="plot-card" style="flex:1 1 330px">
-        <div class="plot-hd">Correlation at each lag: the data and the series drawn</div>
-        <div id="s-nacf-host"><div class="plot-empty">Load readings.</div></div>
-      </div>
-    </div>
-    <div id="s-nt-note" style="margin-top:10px"></div>
     <details class="why">
       <summary>Why an AR(1) of normals, and when EAR(1) is enough</summary>
       <div class="why-body">
-        <p>The AR(1) of section 5 keeps the autocorrelation, but every value it draws is a weighted sum of
+        <p>The AR(1) keeps the autocorrelation, but every value it draws is a weighted sum of
         noise terms, and such a sum drifts toward a normal shape whatever distribution the noise has.
         Service times in order, which are skewed and never negative, come out of it nearly symmetric
         and sometimes negative. NORTA instead runs the AR(1) on a normal scale, where Z<sub>t</sub> =
@@ -2226,24 +2312,27 @@ footer a:hover { text-decoration: underline; }
         X<sub>t</sub> = &phi; X<sub>t&minus;1</sub>, plus a fresh exponential draw with probability
         1 &minus; &phi;. Its correlation at lag k is &phi;<sup>k</sup>, as for the AR(1). It suits
         readings that look exponential and are positively autocorrelated; it cannot produce a negative
-        correlation, and with no cycle to subtract, it models the readings themselves. Its
+        correlation, and with neither a trend nor a cycle to subtract, it models the readings themselves. Its
         draws show its character: long stretches in which each value is a fixed fraction of the one
         before, broken by jumps up.</p>
       </div>
     </details>
   </section>
 
-  <section class="sec">
-    <div class="sec-hd">7 &middot; Export <span class="sec-note">paste straight into your model or your analysis script</span></div>
+  <section class="sec" id="s-sec6">
+    <div class="sec-hd">6 &middot; Export <span class="sec-note">paste straight into your model or your analysis script</span></div>
     <div class="ctrl-row">
-      <span class="ctrl-lbl">Each value is</span>
-      <label class="chk"><input type="checkbox" id="s-exp-cyc"> the cycle of section 4 (else the mean)</label>
-      <span class="ctrl-lbl">plus noise with</span>
+      <span class="ctrl-lbl">Each value is the mean over time, a constant</span>
+      <label class="chk"><input type="checkbox" id="s-exp-trend"> plus a trend</label>
+      <label class="chk"><input type="checkbox" id="s-exp-cyc"> plus a cycle</label>
+      <label class="chk" id="s-exp-cyc2-lbl"><input type="checkbox" id="s-exp-cyc2"> plus a second cycle,</label>
+      <span class="ctrl-lbl">with variation around it from</span>
       <span class="ctrl-grp">
-        <select id="s-carry" aria-label="Residual autocorrelation">
-          <option value="none">no autocorrelation</option>
-          <option value="ar">AR(1) autocorrelation</option>
-          <option value="keep">NORTA AR(1) autocorrelation</option>
+        <select id="s-carry" aria-label="Variation around the mean">
+          <option value="iid">independent draws</option>
+          <option value="ar">an AR(1)</option>
+          <option value="norta">NORTA’s AR(1)</option>
+          <option value="ear1">EAR(1)</option>
         </select>
       </span>
     </div>
@@ -2264,7 +2353,7 @@ footer a:hover { text-decoration: underline; }
     <details class="why">
       <summary>Reading the expressions, and the clock in each tool</summary>
       <div class="why-body">
-        <p>Each line draws one value at the moment it is evaluated. The cycle reads the
+        <p>Each line draws one value at the moment it is evaluated. The mean over time reads the
         simulation clock in the data's time unit whatever unit the model itself runs in: Arena's
         <code>TNOW</code> is in the model's base time unit, and the line divides it by
         <code>HoursToBaseTime(1)</code> (or the minutes, seconds, or days form) to get hours; Simio's
@@ -2273,9 +2362,9 @@ footer a:hover { text-decoration: underline; }
         clock is used, and the model's own time unit must then match the data's.</p>
         <p>If the data's time 0 is not the moment the simulation starts, set the box above: a model
         that starts at 6 a.m. against data timed from midnight in hours needs a 6 there.</p>
-        <p>With the AR(1) of section 5, the noise is a variable <code>Z</code> that its own line updates
-        each time a value is drawn, and the value is the cycle plus <code>Z</code>. Give
-        <code>Z</code> a starting value of 0. With section 6's model, <code>Z</code> is updated the same way,
+        <p>With an AR(1), the variation is a variable <code>Z</code> that its own line updates
+        each time a value is drawn, and the value is the mean over time plus <code>Z</code>. Give
+        <code>Z</code> a starting value of 0. NORTA's AR(1) and EAR(1) update their variable the same way,
         and for NORTA the lines after it turn <code>Z</code> into a uniform and the value line turns that
         into a value of the chosen distribution. Arena, Simio, and AnyLogic have no normal cdf, and so their
         uniform comes from a standard approximation within 7.5 &times; 10<sup>&minus;8</sup> of the exact
@@ -7396,24 +7485,37 @@ function lsq(X, y) {
   return { beta: beta, fitted: fitted, resid: resid, rss: rss };
 }
 
-/* A cycle of period P with H harmonics, and optionally a straight-line
-   trend, fitted by least squares:
-     y = m + sum_k (c_k cos(2 pi k t / P) + s_k sin(2 pi k t / P)) [+ g t].
+/* A cycle of period P with H harmonics (H may be 0), optionally a second
+   cycle of period P2 with H2 harmonics, and optionally a straight-line
+   trend, fitted together by least squares:
+     y = m + sum_k (c_k cos(2 pi k t / P) + s_k sin(2 pi k t / P))
+           + sum_j (c2_j cos(2 pi j t / P2) + s2_j sin(2 pi j t / P2)) [+ g t].
    Each harmonic is also reported as an amplitude and the time of its peak
-   within one of its own cycles, which is how a schedule is described.
-   The F test compares the fit with a constant mean. */
-function harmonicFit(t, y, P, H, trend) {
-  var n = y.length, X = [], i, k;
-  var out = { m: NaN, c: [], s: [], g: NaN, amp: [], peakAt: [], fitted: [], resid: [],
-              r2: NaN, sd: NaN, F: NaN, df1: NaN, df2: NaN, p: NaN, P: P, H: H, trend: !!trend };
+   within one of its own cycles, which is how a schedule is described. A
+   harmonic of the second cycle at a frequency the first already has would
+   make the fit singular, and so the fit refuses it with clash set. The F
+   test compares the fit with a constant mean. */
+function harmonicFit(t, y, P, H, trend, P2, H2) {
+  var n = y.length, X = [], i, k, j;
+  H2 = P2 > 0 ? H2 || 0 : 0;
+  var out = { m: NaN, c: [], s: [], g: NaN, amp: [], peakAt: [], c2: [], s2: [], amp2: [], peakAt2: [],
+              fitted: [], resid: [], r2: NaN, sd: NaN, F: NaN, df1: NaN, df2: NaN, p: NaN,
+              P: P, H: H, P2: H2 ? P2 : null, H2: H2, trend: !!trend, clash: false };
+  for (k = 1; k <= H; k++) for (j = 1; j <= H2; j++)
+    if (Math.abs(k / P - j / P2) <= 1e-9 * (k / P)) out.clash = true;
+  if (out.clash) return out;
   var ones = [];
   for (i = 0; i < n; i++) ones.push(1);
   X.push(ones);
-  for (k = 1; k <= H; k++) {
-    var cc = [], ss = [];
-    for (i = 0; i < n; i++) { var w = 2 * Math.PI * k * t[i] / P; cc.push(Math.cos(w)); ss.push(Math.sin(w)); }
-    X.push(cc, ss);
-  }
+  var waves = function (per, K) {
+    for (var q = 1; q <= K; q++) {
+      var cc = [], ss = [];
+      for (i = 0; i < n; i++) { var w = 2 * Math.PI * q * t[i] / per; cc.push(Math.cos(w)); ss.push(Math.sin(w)); }
+      X.push(cc, ss);
+    }
+  };
+  waves(P, H);
+  waves(P2, H2);
   if (trend) X.push(t.slice());
   var npar = X.length;
   if (!(P > 0) || n <= npar) return out;
@@ -7436,6 +7538,13 @@ function harmonicFit(t, y, P, H, trend) {
     out.amp.push(Math.sqrt(c * c + s * s));
     var per = P / (k + 1), ph = Math.atan2(s, c) * per / (2 * Math.PI);
     out.peakAt.push(((ph % per) + per) % per);
+  }
+  for (j = 0; j < H2; j++) {
+    var c2 = f.beta[1 + 2 * H + 2 * j], s2 = f.beta[2 + 2 * H + 2 * j];
+    out.c2.push(c2); out.s2.push(s2);
+    out.amp2.push(Math.sqrt(c2 * c2 + s2 * s2));
+    var per2 = P2 / (j + 1), ph2 = Math.atan2(s2, c2) * per2 / (2 * Math.PI);
+    out.peakAt2.push(((ph2 % per2) + per2) % per2);
   }
   if (trend) out.g = f.beta[npar - 1];
   out.fitted = f.fitted; out.resid = f.resid;
@@ -7666,13 +7775,15 @@ var DEP_TRIG = {
 };
 
 /* A value that follows the clock:
-     m + sum_k (c_k cos(w_k T) + s_k sin(w_k T)) [+ g T] + noise,
-   with w_k = 2 pi k / P and T the clock in the data's unit (shifted by t0
-   when the data's time 0 is not the model's). With an AR(1), the noise is
-   a variable Z updated once per draw by its own line, returned in `ar`.
-   With m.norta ({ fit, phi }) or m.ear1 ({ mean, phi }), the noise is
-   instead the value that section 15e's autocorrelation models give, and with
-   m.noLevel (no cycle fitted) that value is the whole draw. */
+     m + sum_k (c_k cos(w_k T) + s_k sin(w_k T))
+       + sum_j (c2_j cos(v_j T) + s2_j sin(v_j T)) [+ g T] + noise,
+   with w_k = 2 pi k / P, v_j = 2 pi j / P2 (the second cycle, present when
+   m.c2 is), and T the clock in the data's unit (shifted by t0 when the
+   data's time 0 is not the model's). With an AR(1), the noise is a variable
+   Z updated once per draw by its own line, returned in `ar`. With m.norta
+   ({ fit, phi }) or m.ear1 ({ mean, phi }), the noise is instead the value
+   that section 15e's autocorrelation models give, and with m.noLevel (no
+   trend or cycle fitted) that value is the whole draw. */
 function timeExpressions(m) {
   var out = { notes: {}, ar: null }, H = m.c.length, i, k;
   var nz = m.noise ? noiseTerms(m.noise.fit, true)
@@ -7687,6 +7798,11 @@ function timeExpressions(m) {
       var w = num(2 * Math.PI * (k + 1) / m.P, 10);
       line += signedTerm(m.c[k]) + '*' + trig[0] + '(' + w + '*' + T + ')';
       line += signedTerm(m.s[k]) + '*' + trig[1] + '(' + w + '*' + T + ')';
+    }
+    for (k = 0; k < (m.c2 ? m.c2.length : 0); k++) {
+      var w2 = num(2 * Math.PI * (k + 1) / m.P2, 10);
+      line += signedTerm(m.c2[k]) + '*' + trig[0] + '(' + w2 + '*' + T + ')';
+      line += signedTerm(m.s2[k]) + '*' + trig[1] + '(' + w2 + '*' + T + ')';
     }
     if (m.g !== null && m.g !== undefined && Number.isFinite(m.g)) line += signedTerm(m.g) + '*' + T;
     var zName = (t === 'r' || t === 'matlab' || t === 'python') ? 'z' : 'Z';
@@ -7903,24 +8019,29 @@ function pairScripts(x, y, o) {
   return { r: r, python: py, matlab: mat };
 }
 
-/* o: maxLag, m (Ljung-Box lags), cycle (fit one), P, H, trend, ar (fit an
-   AR(1) to what the cycle leaves, or to the data), span (periodogram), and
+/* o: maxLag, m (Ljung-Box lags), cycle (fit a mean over time: H harmonics
+   of period P, H possibly 0, H2 of a second period P2 when P2 is given,
+   and a trend if trend), P, H, P2, H2, trend, ar (fit an
+   AR(1) to what that fit leaves, or to the data), span (periodogram), and
    src. series: { t, y }. */
 function timeScripts(series, o) {
   var y = series.y, t = series.t, n = y.length, P = pageNum, i;
+  var H2 = o.P2 > 0 ? o.H2 || 0 : 0, K = 2 * o.H;
   var rows = [], a0 = acf(y, o.maxLag), lb0 = ljungBox(a0, n, o.m, 0);
   for (i = 1; i <= Math.min(5, o.maxLag); i++) rows.push(['lag-' + i + ' autocorrelation', 'acf' + i, a0[i]]);
   rows.push(['Ljung-Box Q, data', 'Q0', lb0.Q], ['Ljung-Box p-value, data', 'p0', lb0.p]);
   var hf = null, left = y;
   if (o.cycle) {
-    hf = harmonicFit(t, y, o.P, o.H, o.trend);
+    hf = harmonicFit(t, y, o.P, o.H, o.trend, o.P2, H2);
     left = hf.resid;
-    rows.push(['mean level m', 'hm', hf.m]);
+    rows.push(['constant m', 'hm', hf.m]);
     for (i = 0; i < o.H; i++) rows.push(['cos coefficient ' + (i + 1), 'hc' + (i + 1), hf.c[i]], ['sin coefficient ' + (i + 1), 'hs' + (i + 1), hf.s[i]]);
+    for (i = 0; i < H2; i++) rows.push(['second cycle cos coefficient ' + (i + 1), 'hd' + (i + 1), hf.c2[i]],
+                                       ['second cycle sin coefficient ' + (i + 1), 'he' + (i + 1), hf.s2[i]]);
     if (o.trend) rows.push(['trend per time unit', 'hg', hf.g]);
-    rows.push(['cycle R squared', 'hr2', hf.r2], ['cycle residual sd', 'hsd', hf.sd], ['cycle F', 'hF', hf.F], ['cycle F p-value', 'hp', hf.p]);
+    rows.push(['fit R squared', 'hr2', hf.r2], ['fit residual sd', 'hsd', hf.sd], ['fit F', 'hF', hf.F], ['fit F p-value', 'hp', hf.p]);
     var a1 = acf(left, o.maxLag), lb1 = ljungBox(a1, n, o.m, 0);
-    rows.push(['Ljung-Box Q, after the cycle', 'Q1', lb1.Q], ['Ljung-Box p-value, after the cycle', 'p1', lb1.p]);
+    rows.push(['Ljung-Box Q, after the fit', 'Q1', lb1.Q], ['Ljung-Box p-value, after the fit', 'p1', lb1.p]);
   }
   var ar = null;
   if (o.ar) {
@@ -7936,13 +8057,18 @@ function timeScripts(series, o) {
   var src = o.src ? 'data source: ' + o.src : '', csv = 'input-analyzer-series.csv';
   var tl = { r: depLiteral(t, 'r'), m: depLiteral(t, 'matlab'), p: depLiteral(t, 'python') };
   var yl = { r: depLiteral(y, 'r'), m: depLiteral(y, 'matlab'), p: depLiteral(y, 'python') };
+  /* The columns after the constant: each harmonic's cosine and sine, the
+     second cycle's, and the trend. With a trend and no cycle, the trend is
+     the only one. */
   var harmCols = function (lang) {
-    var parts = [];
-    for (var k = 1; k <= o.H; k++) {
-      var w = '2 * pi * ' + k + ' * t / P';
+    var parts = [], k;
+    var add = function (w) {
       if (lang === 'r') parts.push('cos(' + w + '), sin(' + w + ')');
       else parts.push('np.cos(' + w.replace('pi', 'np.pi') + '), np.sin(' + w.replace('pi', 'np.pi') + ')');
-    }
+    };
+    for (k = 1; k <= o.H; k++) add('2 * pi * ' + k + ' * t / P');
+    for (k = 1; k <= H2; k++) add('2 * pi * ' + k + ' * t / P2');
+    if (o.trend) parts.push('t');
     return parts.join(', ');
   };
   var call = function (fmt) { return rows.map(function (r) { return fmt(r[0], r[1], P(r[2])); }).join('\n'); };
@@ -7954,18 +8080,23 @@ function timeScripts(series, o) {
     (tl.r && yl.r ? 't <- ' + tl.r + '\ny <- ' + yl.r + '\n'
                   : 'd <- read.csv("' + csv + '", comment.char = "#")   # the tab\'s CSV download\nt <- d$t; y <- d$y\n') +
     'n <- length(y); max_lag <- ' + o.maxLag + '; m <- ' + o.m + '\n' +
-    (o.cycle ? 'P <- ' + num(o.P, 12) + '\n' : '') + '\n' + REPORT_R + '\n' +
+    (o.cycle ? 'P <- ' + num(o.P, 12) + '\n' : '') + (H2 ? 'P2 <- ' + num(o.P2, 12) + '\n' : '') + '\n' + REPORT_R + '\n' +
     'v <- list()\n' +
     'a0 <- acf(y, lag.max = max_lag, plot = FALSE)$acf[, 1, 1]\n' +
     'for (k in 1:' + Math.min(5, o.maxLag) + ') v[[paste0("acf", k)]] <- a0[k + 1]\n' +
     'b0 <- Box.test(y, lag = m, type = "Ljung-Box"); v$Q0 <- unname(b0$statistic); v$p0 <- b0$p.value\n' +
     'left <- y\n' +
     (o.cycle
-      ? 'X <- cbind(' + harmCols('r') + (o.trend ? ', t' : '') + ')\n' +
+      ? 'X <- cbind(' + harmCols('r') + ')\n' +
         'cyc <- lm(y ~ X); sc <- summary(cyc); co <- unname(coef(cyc)); fs <- sc$fstatistic\n' +
         'v$hm <- co[1]\n' +
-        (function () { var s = ''; for (var k = 1; k <= o.H; k++) s += 'v$hc' + k + ' <- co[' + (2 * k) + ']; v$hs' + k + ' <- co[' + (2 * k + 1) + ']\n'; return s; })() +
-        (o.trend ? 'v$hg <- co[' + (2 * o.H + 2) + ']\n' : '') +
+        (function () {
+          var s = '', k;
+          for (k = 1; k <= o.H; k++) s += 'v$hc' + k + ' <- co[' + (2 * k) + ']; v$hs' + k + ' <- co[' + (2 * k + 1) + ']\n';
+          for (k = 1; k <= H2; k++) s += 'v$hd' + k + ' <- co[' + (K + 2 * k) + ']; v$he' + k + ' <- co[' + (K + 2 * k + 1) + ']\n';
+          return s;
+        })() +
+        (o.trend ? 'v$hg <- co[' + (K + 2 * H2 + 2) + ']\n' : '') +
         'v$hr2 <- sc$r.squared; v$hsd <- sc$sigma; v$hF <- unname(fs[1])\n' +
         'v$hp <- pf(fs[1], fs[2], fs[3], lower.tail = FALSE)\n' +
         'left <- unname(resid(cyc))\n' +
@@ -7993,7 +8124,7 @@ function timeScripts(series, o) {
     (tl.p && yl.p ? 't = ' + tl.p + '\ny = ' + yl.p + '\n'
                   : 'import csv\n' + READ_CSV_PY + 'd = read_csv("' + csv + '")   # the tab\'s CSV download\nt, y = d["t"], d["y"]\n') +
     'n = len(y); max_lag = ' + o.maxLag + '; m = ' + o.m + '\n' +
-    (o.cycle ? 'P = ' + num(o.P, 12) + '\n' : '') + '\n' + REPORT_PY + '\n' +
+    (o.cycle ? 'P = ' + num(o.P, 12) + '\n' : '') + (H2 ? 'P2 = ' + num(o.P2, 12) + '\n' : '') + '\n' + REPORT_PY + '\n' +
     'def acf(x, L):\n    z = x - x.mean(); c0 = np.sum(z * z)\n' +
     '    return np.array([np.sum(z[:len(z) - k] * z[k:]) / c0 for k in range(L + 1)])\n\n' +
     'def ljung_box(x, m, fitdf=0):\n    r = acf(x, m); k = np.arange(1, m + 1); N = len(x)\n' +
@@ -8002,10 +8133,15 @@ function timeScripts(series, o) {
     'for k in range(1, ' + (Math.min(5, o.maxLag) + 1) + '):\n    v[f"acf{k}"] = a0[k]\n' +
     'v["Q0"], v["p0"] = ljung_box(y, m)\nleft = y\n' +
     (o.cycle
-      ? 'X = np.column_stack([np.ones(n), ' + harmCols('py') + (o.trend ? ', t' : '') + '])\n' +
+      ? 'X = np.column_stack([np.ones(n), ' + harmCols('py') + '])\n' +
         'co, *_ = np.linalg.lstsq(X, y, rcond=None)\nfit = X @ co; left = y - fit\n' +
         'v["hm"] = co[0]\n' +
-        (function () { var s = ''; for (var k = 1; k <= o.H; k++) s += 'v["hc' + k + '"], v["hs' + k + '"] = co[' + (2 * k - 1) + '], co[' + (2 * k) + ']\n'; return s; })() +
+        (function () {
+          var s = '', k;
+          for (k = 1; k <= o.H; k++) s += 'v["hc' + k + '"], v["hs' + k + '"] = co[' + (2 * k - 1) + '], co[' + (2 * k) + ']\n';
+          for (k = 1; k <= H2; k++) s += 'v["hd' + k + '"], v["he' + k + '"] = co[' + (K + 2 * k - 1) + '], co[' + (K + 2 * k) + ']\n';
+          return s;
+        })() +
         (o.trend ? 'v["hg"] = co[-1]\n' : '') +
         'rss = np.sum(left ** 2); tss = np.sum((y - y.mean()) ** 2); p1 = X.shape[1] - 1; p2 = n - X.shape[1]\n' +
         'v["hr2"] = 1 - rss / tss; v["hsd"] = np.sqrt(rss / p2)\n' +
@@ -8033,7 +8169,7 @@ function timeScripts(series, o) {
     (tl.m && yl.m ? 't = ' + tl.m + '.\';\ny = ' + yl.m + '.\';\n'
                   : 'd = readtable(\'' + csv + '\', \'CommentStyle\', \'#\');   % the tab\'s CSV download\nt = d.t; y = d.y;\n') +
     'n = numel(y); maxLag = ' + o.maxLag + '; m = ' + o.m + ';\n' +
-    (o.cycle ? 'P = ' + num(o.P, 12) + ';\n' : '') +
+    (o.cycle ? 'P = ' + num(o.P, 12) + ';\n' : '') + (H2 ? 'P2 = ' + num(o.P2, 12) + ';\n' : '') +
     'acfv = @(x, L) arrayfun(@(k) sum((x(1:end-k) - mean(x)) .* (x(1+k:end) - mean(x))), 0:L) / sum((x - mean(x)).^2);\n' +
     'lbQ = @(x, mm) numel(x) * (numel(x) + 2) * sum(acfv(x, mm).^2 .* [0, 1 ./ (numel(x) - (1:mm))]);\n' +
     'chiP = @(Q, df) gammainc(Q / 2, df / 2, \'upper\');\n\n' +
@@ -8045,16 +8181,19 @@ function timeScripts(series, o) {
       ? (function () {
           var cols = [], k;
           for (k = 1; k <= o.H; k++) cols.push('cos(2*pi*' + k + '*t/P), sin(2*pi*' + k + '*t/P)');
-          var s = 'X = [ones(n, 1), ' + cols.join(', ') + (o.trend ? ', t' : '') + '];\nco = X \\ y; left = y - X * co;\n' +
+          for (k = 1; k <= H2; k++) cols.push('cos(2*pi*' + k + '*t/P2), sin(2*pi*' + k + '*t/P2)');
+          if (o.trend) cols.push('t');
+          var s = 'X = [ones(n, 1), ' + cols.join(', ') + '];\nco = X \\ y; left = y - X * co;\n' +
             'rss = sum(left.^2); tss = sum((y - mean(y)).^2); p1 = size(X, 2) - 1; p2 = n - size(X, 2);\n' +
             'F = ((tss - rss) / p1) / (rss / p2);\n' +
-            'report(\'mean level m\', co(1), ' + P(hf.m) + ');\n';
+            'report(\'constant m\', co(1), ' + P(hf.m) + ');\n';
           for (k = 1; k <= o.H; k++) s += 'report(\'cos coefficient ' + k + '\', co(' + (2 * k) + '), ' + P(hf.c[k - 1]) + '); report(\'sin coefficient ' + k + '\', co(' + (2 * k + 1) + '), ' + P(hf.s[k - 1]) + ');\n';
+          for (k = 1; k <= H2; k++) s += 'report(\'second cycle cos coefficient ' + k + '\', co(' + (K + 2 * k) + '), ' + P(hf.c2[k - 1]) + '); report(\'second cycle sin coefficient ' + k + '\', co(' + (K + 2 * k + 1) + '), ' + P(hf.s2[k - 1]) + ');\n';
           if (o.trend) s += 'report(\'trend per time unit\', co(end), ' + P(hf.g) + ');\n';
-          s += 'report(\'cycle R squared\', 1 - rss / tss, ' + P(hf.r2) + '); report(\'cycle residual sd\', sqrt(rss / p2), ' + P(hf.sd) + ');\n' +
-            'report(\'cycle F\', F, ' + P(hf.F) + '); report(\'cycle F p-value\', betainc(p2 / (p2 + p1 * F), p2 / 2, p1 / 2), ' + P(hf.p) + ');\n';
+          s += 'report(\'fit R squared\', 1 - rss / tss, ' + P(hf.r2) + '); report(\'fit residual sd\', sqrt(rss / p2), ' + P(hf.sd) + ');\n' +
+            'report(\'fit F\', F, ' + P(hf.F) + '); report(\'fit F p-value\', betainc(p2 / (p2 + p1 * F), p2 / 2, p1 / 2), ' + P(hf.p) + ');\n';
           var a1 = acf(left, o.maxLag), lb1 = ljungBox(a1, n, o.m, 0);
-          s += 'Q1 = lbQ(left, m); report(\'Ljung-Box Q, after the cycle\', Q1, ' + P(lb1.Q) + '); report(\'Ljung-Box p-value, after the cycle\', chiP(Q1, m), ' + P(lb1.p) + ');\n';
+          s += 'Q1 = lbQ(left, m); report(\'Ljung-Box Q, after the fit\', Q1, ' + P(lb1.Q) + '); report(\'Ljung-Box p-value, after the fit\', chiP(Q1, m), ' + P(lb1.p) + ');\n';
           return s;
         })()
       : '') +
@@ -15175,15 +15314,18 @@ var SST = {
   unit: 'other',      /* seconds | minutes | hours | days | other          */
   y: [], t: [], dropped: 0, sorted: true, gapCV: NaN, clock: false,
   view: 'data',       /* what section 3 shows: data | left                 */
+  mview: 'fit',       /* what section 4's plot shows: fit | resid          */
   lag: 1, m: 20,
   cyc: false, P: 24, H: 1, trend: false,
+  cyc2: false, P2: 168, H2: 1,   /* a second cycle, used only beside the first */
   span: 3,
   src: null, about: null, sig: '',
-  /* Section 6: NORTA's AR(1) or EAR(1). The distribution comes from 'line'
-     (the series, piecewise linear), 'disc' (its own values), or 'fit' (the
-     fit picked on tab 1 for the readings, or for what the cycle leaves,
-     kept in marg once captured). */
-  nkind: 'norta', nsrc: 'auto', nUser: false, marg: { y: null, resid: null }, nSeed: 1, nCache: {}, aSeed: 1
+  /* Section 5's model of the variation around the mean: iid, ar, norta,
+     or ear1. NORTA's distribution comes from 'line' (the series, piecewise
+     linear), 'disc' (its own values), or 'fit' (the fit picked on tab 1
+     for the readings, or for what section 4 leaves, kept in marg once
+     captured). */
+  vkind: 'iid', nsrc: 'auto', nUser: false, marg: { y: null, resid: null }, nSeed: 1, nCache: {}, aSeed: 1, iSeed: 1
 };
 var MIN_SERIES = 10;
 
@@ -15260,7 +15402,7 @@ function seriesUse() {
   for (var i = 0; i < sr.y.length; i++) s += sr.y[i] + 1e-3 * sr.t[i];
   SST.sig = [SST.vi, SST.ti, SST.delta, sr.y.length, s].join('|');
   SST.nsrc = 'auto';
-  SST.nUser = false; SST.marg = { y: null, resid: null }; SST.nSeed = 1; SST.nCache = {}; SST.aSeed = 1;
+  SST.nUser = false; SST.marg = { y: null, resid: null }; SST.nSeed = 1; SST.nCache = {}; SST.aSeed = 1; SST.iSeed = 1;
   $('s-lag').max = String(L); $('s-lag-n').max = String(L);
   $('s-lag').value = String(SST.lag); $('s-lag-n').value = String(SST.lag);
   $('s-m').max = String(Math.max(1, sr.y.length - 2)); $('s-m').value = String(SST.m);
@@ -15268,19 +15410,47 @@ function seriesUse() {
   renderSeriesAll();
 }
 
-/* The fitted cycle (when one is asked for and can be fitted), what it
-   leaves, and the AR(1) of that. */
+/* Section 4's mean over time: a constant, and when a trend or a cycle is
+   asked for and can be fitted, the least-squares fit in hf (no harmonics
+   for a trend alone), what it leaves, and the AR(1) of that. With neither,
+   hf is null and the readings themselves are what is left. */
 function seriesModel() {
   var y = SST.y, out = { hf: null, left: y, ar: null };
   if (y.length < MIN_SERIES) return out;
-  if (SST.cyc && SST.P > 0) {
-    var hf = IA.harmonicFit(SST.t, y, SST.P, SST.H, SST.trend);
+  if ((SST.cyc || SST.trend) && SST.P > 0) {
+    var two = SST.cyc && SST.cyc2 && SST.P2 > 0;
+    var hf = IA.harmonicFit(SST.t, y, SST.P, SST.cyc ? SST.H : 0, SST.trend, two ? SST.P2 : 0, two ? SST.H2 : 0);
     if (Number.isFinite(hf.m)) { out.hf = hf; out.left = hf.resid; }
+    out.clash = hf.clash;
   }
   out.ar = IA.ar1(out.left);
   return out;
 }
 function seriesShown(md) { return SST.view === 'left' && md.hf ? md.hf.resid : SST.y; }
+/* What section 4 fits beyond the constant, and what that leaves. */
+function twoCycles() { return SST.cyc && SST.cyc2; }
+function fitName() {
+  var cy = twoCycles() ? 'cycles' : 'cycle';
+  return SST.cyc && SST.trend ? 'trend and ' + cy : SST.cyc ? cy : 'trend';
+}
+function fitLeaves() { return 'what the ' + fitName() + (SST.cyc && (SST.trend || SST.cyc2) ? ' leave' : ' leaves'); }
+/* Section 4's mean over time with its numbers: the constant, the trend,
+   and each cycle's cosine and sine terms, as the export writes it. */
+function muExpr(hf) {
+  var term = function (v, f) { return (v < 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(v), 4) + ' ' + f; };
+  var e = fmt(hf.m, 4), k;
+  if (hf.trend && Number.isFinite(hf.g)) e += term(hf.g, 't');
+  var waves = function (c, sn, P) {
+    for (k = 0; k < c.length; k++) {
+      var w = (k ? 2 * (k + 1) : 2) + '&pi;t/' + fmt(P, 6);
+      e += term(c[k], 'cos(' + w + ')') + term(sn[k], 'sin(' + w + ')');
+    }
+  };
+  waves(hf.c, hf.s, hf.P);
+  if (hf.H2) waves(hf.c2, hf.s2, hf.P2);
+  return e;
+}
+function leftName(hf) { return hf ? fitLeaves() : 'the readings'; }
 
 function renderSeriesAll() {
   captureSeriesMarginal();
@@ -15291,20 +15461,20 @@ function renderSeriesAll() {
   var ll = $('s-view-left-lbl');
   ll.classList.toggle('off', !leftOk);
   if (leftOk) ll.removeAttribute('data-tip');
-  else ll.setAttribute('data-tip', 'Fit a cycle in section 4 first; this view shows what it leaves.');
+  else ll.setAttribute('data-tip', 'Add a trend or a cycle in section 4 first; this view shows what it leaves.');
   if (!leftOk && SST.view === 'left') {
     SST.view = 'data';
     document.querySelector('input[name="s-view"][value="data"]').checked = true;
   }
-  $('s-P-unit').textContent = unitName();
+  var us = document.querySelectorAll('.s-unit');
+  for (var ui = 0; ui < us.length; ui++) us[ui].textContent = unitName();
   renderSeriesAbout();
   renderRun(md);
   renderLagPlot(md);
   renderSeriesAcf(md);
   renderCycle(md);
   renderPeriodogram();
-  if (typeof renderAr === 'function') renderAr(md);
-  if (typeof renderKeep === 'function') renderKeep(md);
+  if (typeof renderVariation === 'function') renderVariation(md);
   if (typeof renderSeriesExport === 'function') renderSeriesExport(md);
   armPlotDownloads();
 }
@@ -15346,24 +15516,78 @@ function renderRun(md) {
   P.line(pts, 'var(--obs)', 1.1);
   if (n <= 200) P.dots(pts, 'var(--obs)', 2.2);
   var leg = [{ mark: 'line', color: 'var(--obs)', label: 'readings' }];
-  if (md.hf) {
-    var fp = [];
-    for (i = 0; i < n; i++) fp.push([t[i], md.hf.fitted[i]]);
-    P.line(fp, 'var(--fit)', 2.2);
-    leg.push({ mark: 'line', color: 'var(--fit)', label: 'fitted cycle' + (SST.trend ? ' and trend' : '') });
-  }
+  /* Section 4's mean over time, the readings' mean when it is only the
+     constant. */
+  leg.push(meanLine(P, md.hf, t, sy.mean));
   P.labels(SST.ti === null ? 'time (' + unitName() + ')' : SST.table.names[SST.ti] + (SST.clock ? ' (clock time)' : ''), vname);
   /* The legend sits in a strip above the frame, where no reading can be
      under it. */
   for (i = 0; i < leg.length; i++) P.legend(P.mL + i * 150, 14, [leg[i]]);
-  host.innerHTML = P.svg('Run sequence of ' + vname, 'The readings of ' + vname + ' plotted against time' +
-    (md.hf ? ', with the fitted cycle' : '')) +
-    '<div class="plot-cap">' + n + ' readings' + (md.hf ? ' · cycle of period ' + fmt(SST.P, 4) + ' ' + esc(unitName()) : '') + '</div>';
+  host.innerHTML = P.svg('Run sequence of ' + vname, 'The readings of ' + vname + ' plotted against time, with ' +
+    (md.hf ? 'the fitted ' + fitName() : 'their mean')) +
+    '<div class="plot-cap">' + n + ' readings · ' + (md.hf ? 'fitted ' + fitName() +
+    (SST.cyc ? ' of period ' + fmt(SST.P, 4) + (twoCycles() ? ' and ' + fmt(SST.P2, 4) : '') + ' ' + esc(unitName()) : '')
+    : 'mean ' + fmt(sy.mean, 4)) + '</div>';
+}
+
+/* Section 4's own check of its fit: the readings with the mean over time
+   drawn through them, or the residuals around it, each reading minus
+   mu(t), against a line at 0. The residuals are what the button under the
+   plot sends to tab 1, and what section 5 models. */
+function renderMeanFit(md) {
+  var host = $('s-mfit-host'), y = SST.y, t = SST.t, n = y.length, i;
+  var resid = SST.mview === 'resid', vname = SST.table ? SST.table.names[SST.vi] : 'value';
+  $('s-mfit-hd').textContent = resid ? 'The residuals around the mean over time' : 'The readings and the mean over time';
+  if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>'; return; }
+  var sy = IA.summarize(y), v = [];
+  for (i = 0; i < n; i++) v.push(resid ? y[i] - (md.hf ? md.hf.fitted[i] : sy.mean) : y[i]);
+  var lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+  if (!resid && md.hf) for (i = 0; i < n; i++) { lo = Math.min(lo, md.hf.fitted[i]); hi = Math.max(hi, md.hf.fitted[i]); }
+  if (resid) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+  var pad = Math.max((hi - lo) * 0.06, 1e-9), t0 = Math.min.apply(null, t), t1 = Math.max.apply(null, t);
+  if (!(t1 > t0)) t1 = t0 + 1;
+  var W = hostW(host, 330, 980, 900), H = W < 520 ? 250 : 280;
+  var P = Plot(W, H, { l: 50, r: 12, t: 30, b: 44 }).domain(t0, t1, lo - pad, hi + pad);
+  var xt = tickPair(t0, t1, W < 520 ? 5 : 9), yt = tickPair(lo - pad, hi + pad, 5);
+  P.frame().axes(xt.ticks, yt.ticks, SST.clock ? clockStr : xt.fmt, yt.fmt);
+  var pts = [];
+  for (i = 0; i < n; i++) pts.push([t[i], v[i]]);
+  var leg = [];
+  if (resid) {
+    P.line([[t0, 0], [t1, 0]], 'var(--fit)', 2.2);
+    leg.push({ mark: 'line', color: 'var(--fit)', label: 'zero, where μ(t) is' });
+  }
+  P.line(pts, 'var(--obs)', 1.1);
+  if (n <= 200) P.dots(pts, 'var(--obs)', 2.2);
+  leg.unshift({ mark: 'line', color: 'var(--obs)', label: resid ? 'residuals' : 'readings' });
+  if (!resid) leg.push(meanLine(P, md.hf, t, sy.mean));
+  P.labels(SST.ti === null ? 'time (' + unitName() + ')' : SST.table.names[SST.ti] + (SST.clock ? ' (clock time)' : ''),
+           resid ? 'residual' : vname);
+  for (i = 0; i < leg.length; i++) P.legend(P.mL + i * 150, 14, [leg[i]]);
+  host.innerHTML = P.svg(resid ? 'Residuals around the mean over time' : 'Readings and the mean over time',
+    resid ? 'Each reading minus the mean over time, plotted against time, with a line at 0'
+          : 'The readings of ' + vname + ' plotted against time, with the mean over time') +
+    '<div class="plot-cap">' + (resid
+      ? 'Each residual is a reading minus μ(t). A pattern still visible ' +
+        'here is one the mean over time misses. What remains is the variation that section 5 models' +
+        (md.hf ? ', and the button below sends these values to tab ①.' : '. With only the constant, these are the ' +
+        'readings less their mean, and section 3’s button sends the readings themselves to tab ①.')
+      : n + ' readings · ' + (md.hf ? 'fitted ' + fitName() : 'the readings’ mean, ' + fmt(sy.mean, 4))) + '</div>';
+}
+
+/* Draws section 4's mean over time on a plot of the readings' time span
+   and returns its legend entry. */
+function meanLine(P, hf, t, mean) {
+  var fp = [], i;
+  if (hf) for (i = 0; i < t.length; i++) fp.push([t[i], hf.fitted[i]]);
+  else fp.push([Math.min.apply(null, t), mean], [Math.max.apply(null, t), mean]);
+  P.line(fp, 'var(--fit)', 2.2);
+  return { mark: 'line', color: 'var(--fit)', label: hf ? 'fitted ' + fitName() : 'the readings’ mean' };
 }
 
 function renderLagPlot(md) {
   var host = $('s-lag-host'), v = seriesShown(md), n = v.length, k = SST.lag;
-  $('s-lag-hd').textContent = (SST.view === 'left' ? 'What the cycle leaves' : 'Each reading') + ' against ' +
+  $('s-lag-hd').textContent = (SST.view === 'left' ? 'W' + fitLeaves().slice(1) : 'Each reading') + ' against ' +
     (k === 1 ? 'the one before' : 'the one ' + k + ' steps earlier');
   if (n < MIN_SERIES) { host.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>'; return; }
   var s = IA.summarize(v), pad = Math.max((s.max - s.min) * 0.05, 1e-9), lo = s.min - pad, hi = s.max + pad;
@@ -15375,7 +15599,7 @@ function renderLagPlot(md) {
   P.dots(pts, 'var(--obs)', 2.4);
   P.labels(k === 1 ? 'previous reading' : 'reading ' + k + ' steps earlier', 'reading');
   var r = IA.acf(v, k)[k];
-  host.innerHTML = P.svg('Lag plot of ' + (SST.view === 'left' ? 'what the cycle leaves' : 'the readings'),
+  host.innerHTML = P.svg('Lag plot of ' + (SST.view === 'left' ? leftName(md.hf) : 'the readings'),
     'Each reading plotted against the reading ' + k + ' steps earlier') +
     '<div class="plot-cap">' + pts.length + ' pairs · lag-' + k + ' correlation ' + fmt(r, 3) + '</div>';
 }
@@ -15430,7 +15654,7 @@ function renderSeriesAcf(md) {
     lb.innerHTML = ''; return;
   }
   var r = IA.acf(v, seriesMaxLag());
-  var what = SST.view === 'left' ? 'what the cycle leaves' : 'the readings';
+  var what = SST.view === 'left' ? leftName(md.hf) : 'the readings';
   /* Beside the lag plot (not stacked under it), the correlogram is drawn
      as tall as the lag plot so that the two frames stand level. */
   var lagSvg = $('s-lag-host').querySelector('svg'), matchH = 0;
@@ -15444,8 +15668,8 @@ function renderSeriesAcf(md) {
     'The correlations are no larger than independent values would give (p ≥ 0.05). Tab ① may treat ' +
     'these readings as a sample, and the button below sends them there.',
     'The correlations are too large for independent values (p < 0.05). Tab ① would treat the readings as ' +
-    'interchangeable, and they are not: a model has to keep the pattern, through a cycle (section 4), an ' +
-    'AR(1) (section 5), or both.',
+    'interchangeable, and they are not: a model has to keep the pattern, through a trend or a cycle (section 4), ' +
+    'an autoregressive model (section 5), or both.',
     'The readings do not vary, and so there is no correlation to test.'
   ];
   var vk = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
@@ -15465,35 +15689,65 @@ function setLag(k) {
 }
 
 function renderCycle(md) {
-  var host = $('s-cyc-out'), hf = md.hf, u = unitName();
+  var host = $('s-cyc-out'), hf = md.hf, u = unitName(), n = SST.y.length;
+  var per1 = SST.unit === 'other' ? 'time unit' : SST.unit.replace(/s$/, '');
   var peak = function (v) { return SST.clock && SST.unit === 'minutes' ? clockStr(v) : fmt(v, 4) + ' ' + esc(u); };
-  /* Three rows always so that the page keeps its height as harmonics are
-     added and the cycle is switched on and off. */
-  var rows = '';
-  for (var k = 0; k < 3; k++) {
-    var on = hf && k < SST.H;
-    rows += '<tr><td>' + ['First', 'Second', 'Third'][k] + ' (period ' + fmt(SST.P / (k + 1), 4) + ')</td>' +
-      '<td class="num">' + (on ? fmt(hf.amp[k], 4) : '—') + '</td><td class="num">' + (on ? peak(hf.peakAt[k]) : '—') + '</td></tr>';
+  /* Three rows for each cycle shown, so that the page keeps its height as
+     harmonics are added and a cycle is switched on and off. */
+  var rows = function (P, H, amp, at, title) {
+    var h = title ? '<tr><th colspan="3" style="text-align:left;padding-top:8px">' + title + '</th></tr>' : '';
+    for (var k = 0; k < 3; k++) {
+      var on = hf && k < H;
+      h += '<tr><td>' + ['First', 'Second', 'Third'][k] + ' (period ' + fmt(P / (k + 1), 4) + ')</td>' +
+        '<td class="num">' + (on ? fmt(amp[k], 4) : '—') + '</td><td class="num">' + (on ? peak(at[k]) : '—') + '</td></tr>';
+    }
+    return h;
+  };
+  var two = twoCycles();
+  var body = rows(SST.P, hf ? hf.H : 0, hf ? hf.amp : [], hf ? hf.peakAt : [],
+                  two ? 'Cycle of period ' + fmt(SST.P, 4) : '') +
+    (two ? rows(SST.P2, hf ? hf.H2 : 0, hf ? hf.amp2 : [], hf ? hf.peakAt2 : [], 'Second cycle, of period ' + fmt(SST.P2, 4)) : '');
+  var mean = n >= MIN_SERIES ? IA.summarize(SST.y).mean : NaN;
+  var model = '—';
+  if (hf) model = '&mu;(t) = ' + muExpr(hf);
+  else if (Number.isFinite(mean)) model = '&mu;(t) = ' + fmt(mean, 4);
+  var reads = '';
+  if (hf) {
+    /* With a cycle, the constant is the level the cycle swings around, not
+       the mean at any one moment: at t = 0 each cosine term adds to it. */
+    var lvl = SST.cyc ? ', the level the ' + (twoCycles() ? 'cycles swing' : 'cycle swings') + ' around' +
+      (SST.trend ? ' at t = 0,' : '') : SST.trend ? ', the mean at t = 0,' : '';
+    reads = fmt(hf.m, 4) + ' is the constant' + lvl +
+      (SST.trend ? ' and the trend changes the mean by ' + fmt(hf.g, 4).replace(/^-/, '&minus;') + ' per ' + per1 : '') + '.';
+    if (SST.cyc) reads += ' Each cosine and sine pair is one harmonic of a cycle, which the table reads as its ' +
+      'amplitude (half the distance from trough to peak) and the time of its peak.';
   }
   var caps = [
-    'Tick \u201cFit a cycle\u201d and give its period in ' + esc(u) + '.',
-    'The cycle could not be fitted: check the period, or load more readings.',
-    'Residual standard deviation ' + (hf ? fmt(hf.sd, 4) : '0.0000') + '. The F test compares the fit with a flat ' +
-    'line at the mean, and each peak time is within one period of that harmonic.'
+    'With neither a trend nor a cycle, the mean over time is the constant m, the readings’ mean. Tick a box ' +
+    'above to let it follow the clock.',
+    md.clash ? 'A harmonic of the second cycle has the period of one of the first cycle’s, and so the two cannot ' +
+      'be told apart: change the second period or the harmonics.'
+      : 'The mean over time could not be fitted: check the period, or load more readings.',
+    reads + ' The F test compares the fit with a flat line at the readings’ mean.'
   ];
-  host.innerHTML = '<div class="plot-wrap" style="margin-top:4px">' +
-    '<div style="flex:1 1 280px;min-width:0"><div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
-    card('Mean level <span class="lit">m</span>', hf ? fmt(hf.m, 4) : '—') +
+  host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:4px">' +
     card('<span class="lit">R²</span>', hf ? fmt(hf.r2, 4) : '—') +
     card('F test p-value', hf ? fmtP(hf.p) : '—') +
-    card('Trend per ' + (SST.unit === 'other' ? 'unit' : SST.unit.replace(/s$/, '')), hf && SST.trend ? fmt(hf.g, 4) : '—') +
-    '</div></div>' +
-    '<div style="flex:1.3 1 320px;min-width:0"><div class="tbl-scroll"><table class="tbl"><thead><tr><th>Harmonic</th>' +
-    '<th class="num">Amplitude</th><th class="num">Peak at</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
-    '</div><div class="plot-cap" id="s-cyc-cap" style="text-align:left;margin-top:5px">' +
-    (hf ? caps[2] : SST.cyc ? caps[1] : caps[0]) + '</div>';
-  reserveHeight($('s-cyc-cap'), caps);
+    card('Residual sd', hf ? fmt(hf.sd, 4) : '—') + '</div>' +
+    '<div class="plot-hd" style="margin-top:10px">The fitted model</div>' +
+    eqRow('Each reading', 'Y<sub>t</sub> = &mu;(t) + Z<sub>t</sub>') +
+    eqRow('Mean over time', model) +
+    '<div class="plot-cap" id="s-cyc-cap" style="text-align:left">' +
+    (hf ? caps[2] : SST.cyc || SST.trend ? caps[1] : caps[0]) +
+    ' Section 5 models Z<sub>t</sub>, the variation around the mean.</div>' +
+    '<div class="tbl-scroll" style="margin-top:8px"><table class="tbl"><thead><tr><th>Harmonic</th>' +
+    '<th class="num">Amplitude</th><th class="num">Peak at</th></tr></thead><tbody>' + body + '</tbody></table></div>';
   $('s-send-left').disabled = !hf;
+  renderMeanFit(md);
+  $('s-P').disabled = $('s-H').disabled = !SST.cyc;
+  $('s-cyc2').disabled = !SST.cyc;
+  $('s-cyc2-lbl').classList.toggle('off', !SST.cyc);
+  $('s-P2').disabled = $('s-H2').disabled = !two;
 }
 
 function renderPeriodogram() {
@@ -15570,6 +15824,17 @@ function initSeriesTab() {
     renderSeriesAll();
   });
   $('s-H').addEventListener('change', function () { SST.H = Number(this.value); renderSeriesAll(); });
+  var mv = document.querySelectorAll('input[name="s-mview"]');
+  for (i = 0; i < mv.length; i++) mv[i].addEventListener('change', function () {
+    SST.mview = this.value; renderMeanFit(seriesModel()); armPlotDownloads();
+  });
+  $('s-cyc2').addEventListener('change', function () { SST.cyc2 = this.checked; renderSeriesAll(); });
+  $('s-P2').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (v > 0) SST.P2 = v; else this.value = String(SST.P2);
+    renderSeriesAll();
+  });
+  $('s-H2').addEventListener('change', function () { SST.H2 = Number(this.value); renderSeriesAll(); });
   $('s-trend').addEventListener('change', function () { SST.trend = this.checked; renderSeriesAll(); });
   $('s-span').addEventListener('change', function () { SST.span = Number(this.value); renderPeriodogram(); });
   $('s-pg-details').addEventListener('toggle', renderPeriodogram);
@@ -15584,8 +15849,10 @@ function initSeriesTab() {
   S_LOADER.loadText(sampleCsv(s0), s0.name, 'built-in sample "' + s0.name + '"');
 }
 
-/* Section 5: an AR(1) for what the cycle leaves, or for the readings when
-   no cycle is fitted, checked by the correlogram of its residuals. */
+/* Section 5: the variation around the mean over time. Independent draws, or
+   an AR(1) for what section 4 leaves (the readings themselves when it fits
+   only the constant), checked by the correlogram of its residuals, or
+   NORTA's AR(1) or EAR(1), which keep the distribution as well. */
 
 /* Tab 4's model names, each with its definition as a tip, for ledes that a
    reader may reach without having read the others. */
@@ -15593,30 +15860,10 @@ var TIP_AR1 = '<span class="tip" tabindex="0" data-tip="Autoregressive model of 
 var TIP_NORTA = '<span class="tip" tabindex="0" data-tip="Normal to anything: correlated standard normals, each turned into a uniform by the normal cdf &Phi; and then into a value by the inverse cdf of a chosen distribution, and so every value has exactly that distribution. Tab &#9314; uses it to draw correlated pairs.">NORTA</span>';
 var TIP_EAR1 = '<span class="tip" tabindex="0" data-tip="Exponential AR(1): each value is &phi; times the one before it, plus a fresh exponential draw with probability 1 &minus; &phi;. Every value is then exponential, and the correlation at lag k is &phi;<sup>k</sup>.">EAR(1)</span>';
 function renderAr(md) {
-  var host = $('s-ar-out'), ih = $('s-innov-host'), lede = $('s-ar-lede'), ar = md.ar, n = SST.y.length;
-  var what = md.hf ? 'what the cycle leaves' : 'the readings';
-  /* The generic model is written once, in the opening paragraph, and the
-     fitted one with its numbers sits under the cards. */
-  var form = '<span class="mono" style="white-space:nowrap">Z<sub>t</sub> = &phi; &middot; Z<sub>t&minus;1</sub> + ' +
-    'e<sub>t</sub></span>';
-  var ledes = [
-    'Section 4’s cycle explains the part of the readings that follows the clock. What it leaves (the ' +
-    'readings minus the fitted cycle) can still depend on the reading before, the way a tank’s ' +
-    'temperature changes only a little from one minute to the next. This section models that autocorrelation ' +
-    'with an ' + TIP_AR1 + ', ' + form + ': each leftover value Z<sub>t</sub> is &phi; times the one before it plus a ' +
-    'noise term e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no autocorrelation, and a &phi; near 1 means each value ' +
-    'is almost the one before it.',
-    'No cycle is fitted in section 4, and so this section works on the readings themselves, measured from ' +
-    'their mean. Each reading can depend on the one before, the way a tank’s temperature changes only ' +
-    'a little from one minute to the next. This section models that autocorrelation with an ' + TIP_AR1 + ', ' + form +
-    ': each value Z<sub>t</sub>, measured from the mean, is &phi; times the one before it plus a noise term ' +
-    'e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no autocorrelation, and a &phi; near 1 means each value is almost the ' +
-    'one before it.'
-  ];
-  reserveHeight(lede, ledes);
-  lede.innerHTML = ledes[md.hf ? 0 : 1];
-  /* The readings' mean gets a card only when no cycle is fitted, as it is
-     then the constant in the model's first line. */
+  var host = $('s-ar-out'), ih = $('s-innov-host'), ar = md.ar, n = SST.y.length;
+  var what = leftName(md.hf);
+  /* The readings' mean gets a card only when section 4 fits nothing beyond
+     the constant, which is then the mean in the model's first line. */
   var cards = function (mean, phi, sd, p) {
     return '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
       (md.hf ? '' : card('Mean', mean)) +
@@ -15638,7 +15885,7 @@ function renderAr(md) {
     fmt(ar.phi, 3) + ' describes how ' + what + (md.hf ? ' depends' : ' depend') + ' on the reading before, ' +
     'and the AR(1) residuals look like independent draws that tab ① can fit.',
     'Correlation remains after the AR(1) is taken out (p < 0.05), and so one reading’s worth of memory ' +
-    'is not enough. Look for a cycle that section 4 misses, or a longer memory than an AR(1) has.',
+    'is not enough. Look for a trend or a cycle that section 4 misses, or a longer memory than an AR(1) has.',
     'The test needs at least two lags, one more than the AR(1) uses: raise the number of lags in section 3.'
   ];
   var ak = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
@@ -15649,7 +15896,7 @@ function renderAr(md) {
   if (stepFit && !Number.isFinite(IA.centeringMean(stepFit.fit))) stepFit = null;
   var stepRows = ['e<sub>t</sub> ~ i.i.d. <span style="white-space:nowrap">Normal(0, ' + fmt(ar.sigmaE, 4) + ')</span>',
     'e<sub>t</sub> ~ i.i.d. ' + (stepFit ? esc(distLower(stepFit.dist)) : 'normal') + ' from tab ①, centered'];
-  var whereMean = md.hf ? 'cycle(t) is the fit from section 4. ' : fmt(ar.mean, 4) + ' is the readings\u2019 mean. ';
+  var whereMean = md.hf ? '&mu;(t) is section 4\u2019s mean over time. ' : fmt(ar.mean, 4) + ' is the readings\u2019 mean. ';
   var modelCaps = [
     whereMean + 'Read i.i.d. as independent draws from one distribution. The normal is the export\u2019s default, ' +
     'and this section does not test its shape: sending the AR(1) residuals to tab ① fits and tests other shapes.',
@@ -15660,7 +15907,7 @@ function renderAr(md) {
     return '<div class="eq"><span class="eq-l" style="min-width:7em">' + l + '</span><span class="eq-r">' + r + '</span></div>';
   };
   var model = '<div class="plot-hd" style="margin-top:10px">The fitted model</div>' +
-    eq('Each reading', md.hf ? 'Y<sub>t</sub> = cycle(t) + Z<sub>t</sub>'
+    eq('Each reading', md.hf ? 'Y<sub>t</sub> = &mu;(t) + Z<sub>t</sub>'
                              : 'Y<sub>t</sub> = ' + fmt(ar.mean, 4) + ' + Z<sub>t</sub>') +
     eq('AR(1) update', 'Z<sub>t</sub> = ' + fmt(ar.phi, 3) + ' &middot; Z<sub>t&minus;1</sub> + e<sub>t</sub>') +
     eq('Noise term', '<span id="s-ar-step">' + stepRows[stepFit ? 1 : 0] + '</span>') +
@@ -15722,10 +15969,10 @@ function drawArCorrelogram(host, left, ar, what) {
     'e<sub>t</sub>; when the AR(1) fits, they sit inside the dashed band.</div>';
 }
 
-/* ── Section 6: keep the distribution as well as the autocorrelation────── */
+/* ── Section 5, NORTA's AR(1) and EAR(1): keep the distribution as well ─── */
 
-/* A fit picked on tab 1 for the readings, or for what the cycle leaves, is
-   kept while the data (and, for the second, the cycle) stay the same. */
+/* A fit picked on tab 1 for the readings, or for what section 4 leaves, is
+   kept while the data (and, for the second, section 4's fit) stay the same. */
 function captureSeriesMarginal() {
   var h = ST.handoff, r = pickedRow();
   if (!h || h.from !== 'time' || (h.kind !== 'y' && h.kind !== 'resid') || !r || h.sig !== seriesSigFor(h.kind)) return;
@@ -15739,30 +15986,34 @@ function keepMarg(md) {
   return m && m.sig === seriesSigFor(kind) ? m : null;
 }
 function keepSourceName(k) {
-  var what = k.hf ? 'what the cycle leaves' : 'the readings';
-  if (k.src === 'fit') return 'the ' + distLower(k.marg.dist) + ' fitted on tab ① to ' + what;
-  return keepSourceLabel(k.src, !!k.hf);
+  if (k.src === 'fit') return 'the ' + distLower(k.marg.dist) + ' fitted on tab ① to ' + leftName(k.hf);
+  return keepSourceLabel(k.src, k.hf);
 }
-function keepSourceLabel(src, cyc) {
-  if (src === 'disc') return cyc ? 'the values of what the cycle leaves' : 'the readings’ own values';
-  return (cyc ? 'what the cycle leaves' : 'the readings') + ', joined by straight lines';
+function keepSourceLabel(src, hf) {
+  if (src === 'disc') return hf ? 'the values of ' + leftName(hf) : 'the readings’ own values';
+  return leftName(hf) + ', joined by straight lines';
 }
 /* The source in use: whole-number readings default to their own values,
-   anything else (what a cycle leaves included) to the straight-line form. */
+   anything else (what a trend or a cycle leaves included) to the
+   straight-line form. */
 function keepSource(md) {
   var src = SST.nsrc;
   if (src === 'fit' && !keepMarg(md)) src = 'auto';
   if (src === 'auto') src = md.left.length && md.left.every(function (v) { return Number.isInteger(v); }) ? 'disc' : 'line';
   return src;
 }
-/* Section 6's model for the current settings, or { fail } saying why there
-   is none. */
+/* Section 5's model in use. EAR(1) draws exponential values, and what a
+   trend or a cycle leaves is centered on 0, and so while section 4 fits
+   either, the reader's EAR(1) choice is set aside, not lost, and NORTA's
+   AR(1) is used. */
+function vKind(md) { return md.hf && SST.vkind === 'ear1' ? 'norta' : SST.vkind; }
+function keepKind(md) { return vKind(md) === 'ear1' ? 'ear1' : 'norta'; }
+/* NORTA's or EAR(1)'s model for the current settings, or { fail } saying
+   why there is none. */
 function keepModel(md) {
   var n = SST.y.length;
   if (n < MIN_SERIES) return { fail: 'Load at least ' + MIN_SERIES + ' readings.' };
-  if (SST.nkind === 'ear1') {
-    if (md.hf) return { fail: 'EAR(1) draws exponential values, and what a cycle leaves is centered on 0. ' +
-      'EAR(1) therefore applies only with no cycle fitted in section 4.' };
+  if (keepKind(md) === 'ear1') {
     var ef = IA.ear1Fit(SST.y);
     if (!ef.ok) return { fail: ef.min < 0 || !(ef.mean > 0)
       ? 'EAR(1) draws values that are never negative, and these readings go below 0.'
@@ -15782,25 +16033,13 @@ function keepModel(md) {
            center: md.hf ? IA.centeringMean(fit) : 0 };
 }
 function renderKeep(md) {
-  var lede = $('s-nt-lede'), cards = $('s-nt-cards'), note = $('s-nt-note'), rh = $('s-nrun-host'), ah = $('s-nacf-host');
-  var ledes = [
-    'Section 5’s AR(1) keeps the autocorrelation, but its draws have the shape of a sum of noise terms, close to ' +
-    'normal, whatever the shape of the readings. A model that must keep both the readings’ distribution and ' +
-    'their autocorrelation runs the AR(1) on a normal scale and turns each value into one of the chosen distribution ' +
-    '(' + TIP_NORTA + '), or, for readings that look exponential, uses ' + TIP_EAR1 + '.',
-    'Section 5’s AR(1) keeps the autocorrelation in what the cycle leaves, but its draws have the shape of a sum of ' +
-    'noise terms, close to normal, whatever the shape of the leftovers. ' + TIP_NORTA + ' keeps both: it runs the ' +
-    'AR(1) on a normal scale and turns each value into one of the chosen distribution, which is then added to the ' +
-    'cycle. ' + TIP_EAR1 + ' needs the readings themselves, with no cycle fitted.'
-  ];
-  reserveHeight(lede, ledes);
-  lede.innerHTML = ledes[md.hf ? 1 : 0];
-  var what = md.hf ? 'what the cycle leaves' : 'the readings';
-  var sel = $('s-nsrc'), m = keepMarg(md), o = [['line', keepSourceLabel('line', !!md.hf)], ['disc', keepSourceLabel('disc', !!md.hf)]];
+  var cards = $('s-nt-cards'), note = $('s-nt-note'), rh = $('s-nrun-host'), ah = $('s-nacf-host');
+  var what = leftName(md.hf);
+  var sel = $('s-nsrc'), m = keepMarg(md), o = [['line', keepSourceLabel('line', md.hf)], ['disc', keepSourceLabel('disc', md.hf)]];
   if (m) o.push(['fit', 'the ' + distLower(m.dist) + ' fitted on tab ①']);
   sel.innerHTML = o.map(function (q) { return '<option value="' + q[0] + '">' + esc(q[1]) + '</option>'; }).join('');
   sel.value = keepSource(md);
-  var ear = SST.nkind === 'ear1';
+  var ear = keepKind(md) === 'ear1';
   $('s-nsrc-grp').style.display = ear ? 'none' : '';
   var caps = [
     'To use a named distribution, send ' + what + ' to tab ① with the button in section ' + (md.hf ? '4' : '3') +
@@ -15847,7 +16086,7 @@ function renderKeep(md) {
   drawKeepRun(rh, drawn, k);
   drawKeepAcf(ah, IA.acf(md.left, L), IA.acf(v, L), model, n, what);
 }
-/* Section 6's model written out with its numbers, as section 5 writes the
+/* NORTA's or EAR(1)'s model written out with its numbers, as the AR(1) writes the
    AR(1). */
 function keepModelBlock(k) {
   var eq = function (l, r) {
@@ -15868,9 +16107,9 @@ function keepModelBlock(k) {
   var rz = k.sol.rho, sc = fmt(Math.sqrt(Math.max(0, 1 - rz * rz)), 4), c = k.hf && k.center !== 0;
   cap = 'F is the cdf of ' + keepSourceName(k) + ', and &Phi; is the standard normal cdf. The noise term\u2019s ' +
     'factor, &radic;(1 &minus; ' + fmt(rz, 4) + '&sup2;) = ' + sc + ', keeps every Z<sub>t</sub> standard normal, ' +
-    'and so every X<sub>t</sub> has exactly the distribution F.' + (k.hf ? ' cycle(t) is the fit from section 4' +
+    'and so every X<sub>t</sub> has exactly the distribution F.' + (k.hf ? ' &mu;(t) is section 4\u2019s mean over time' +
     (c ? ', and ' + fmt(k.center, 4) + ', the mean of F, centers X<sub>t</sub> on 0.' : '.') : '');
-  return hd + eq('Each reading', k.hf ? 'Y<sub>t</sub> = cycle(t) + X<sub>t</sub>' +
+  return hd + eq('Each reading', k.hf ? 'Y<sub>t</sub> = &mu;(t) + X<sub>t</sub>' +
                    (c ? (k.center > 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(k.center), 4) : '') : 'Y<sub>t</sub> = X<sub>t</sub>') +
     eq('Value', 'X<sub>t</sub> = F<sup>&minus;1</sup>(&Phi;(Z<sub>t</sub>))') +
     eq('AR(1) update', 'Z<sub>t</sub> = ' + fmt(rz, 4) + ' &middot; Z<sub>t&minus;1</sub> + &radic;(1 &minus; ' + fmt(rz, 4) +
@@ -15878,10 +16117,10 @@ function keepModelBlock(k) {
     eq('Noise term', 'e<sub>t</sub> ~ i.i.d. Normal(0, 1)') +
     '<div class="plot-cap" style="text-align:left">' + cap + '</div>';
 }
-/* A series drawn from section 5's AR(1) at the data's own times, as the
+/* A series drawn from the AR(1) at the data's own times, as the
    export draws it: Z starts from its long-run normal distribution, the noise
    is normal or the distribution fitted to the AR(1) residuals on tab 1
-   (centered), and each value is the mean or the cycle plus Z. */
+   (centered), and each value is the mean over time plus Z. */
 function arSeries(md, ar, stepFit) {
   var n = SST.y.length, u = IA.MRG32k3a(7300 + SST.aSeed), out = [], i, z;
   var q = stepFit ? IA.fitQuantile(stepFit.fit) : null, c = stepFit ? IA.centeringMean(stepFit.fit) : 0;
@@ -15911,12 +16150,7 @@ function drawKeepRun(host, d, k, name) {
   P.line(pts, 'var(--obs)', 1.1);
   if (n <= 200) P.dots(pts, 'var(--obs)', 2.2);
   var leg = [{ mark: 'line', color: 'var(--obs)', label: 'drawn from the model' }];
-  if (k.hf) {
-    var fp = [];
-    for (i = 0; i < n; i++) fp.push([t[i], k.hf.fitted[i]]);
-    P.line(fp, 'var(--fit)', 2.2);
-    leg.push({ mark: 'line', color: 'var(--fit)', label: 'fitted cycle' });
-  }
+  leg.push(meanLine(P, k.hf, t, IA.summarize(y).mean));
   P.labels(SST.ti === null ? 'time (' + unitName() + ')' : SST.table.names[SST.ti] + (SST.clock ? ' (clock time)' : ''), vname);
   for (i = 0; i < leg.length; i++) P.legend(P.mL + i * 170, 14, [leg[i]]);
   var sd = IA.summarize(y), sm = IA.summarize(d);
@@ -15926,7 +16160,7 @@ function drawKeepRun(host, d, k, name) {
     '<div class="plot-cap">On the scale of the readings in section 2 · mean ' + fmt(sm.mean, 4) + ' and sd ' + fmt(sm.sd, 4) +
     ', against the data’s ' + fmt(sd.mean, 4) + ' and ' + fmt(sd.sd, 4) + '</div>';
 }
-function drawKeepAcf(host, before, after, model, n, what) {
+function drawKeepAcf(host, before, after, model, n, what, cap) {
   var L = before.length - 1, k;
   var W = hostW(host, 330, 620, 480), narrow = W < 470, top = narrow ? 60 : 46;
   var P = Plot(W, Math.round(W * (narrow ? 0.72 : 0.6)) + top - 12, { l: 46, r: 12, t: top, b: 44 }).domain(0, L + 0.5, -1, 1);
@@ -15954,34 +16188,146 @@ function drawKeepAcf(host, before, after, model, n, what) {
   }
   host.innerHTML = P.svg('Correlogram of the data and of a drawn series',
     'Autocorrelation of ' + what + ' and of a series drawn from the model at each lag, with the model’s own correlations') +
-    '<div class="plot-cap">Gray bars are the data’s correlogram and orange bars the drawn series’. The teal ' +
-    'curve is the model’s correlation at each lag, matched to the data at lag 1.</div>';
+    '<div class="plot-cap">' + (cap || 'Gray bars are the data’s correlogram and orange bars the drawn series’. The ' +
+    'teal curve is the model’s correlation at each lag, matched to the data at lag 1.') + '</div>';
+}
+/* Independent variation: each value is the mean over time plus a fresh
+   draw, normal with section 4's residual sd (the readings' sd when it fits
+   only the constant) unless tab 1 has fitted what section 4 leaves. */
+function iidNoise(md) {
+  var hr = md.hf ? seriesHandoff('resid') : null;
+  return hr && Number.isFinite(IA.centeringMean(hr.fit)) ? hr : null;
+}
+function iidSeries(md, hr) {
+  var n = SST.y.length, u = IA.MRG32k3a(7100 + SST.iSeed), sy = IA.summarize(SST.y), out = [], i;
+  var sd = md.hf ? md.hf.sd : sy.sd, q = hr ? IA.fitQuantile(hr.fit) : null, c = hr ? IA.centeringMean(hr.fit) : 0;
+  for (i = 0; i < n; i++) {
+    var v = u(), e = q ? q(Math.min(Math.max(v, 1e-12), 1 - 1e-12)) - c : sd * IA.normInv(v);
+    out.push((md.hf ? md.hf.fitted[i] : sy.mean) + e);
+  }
+  return out;
+}
+function renderIid(md) {
+  var host = $('s-iid-out'), rh = $('s-irun-host'), ah = $('s-iacf-host'), n = SST.y.length;
+  if (n < MIN_SERIES) {
+    host.innerHTML = '';
+    rh.innerHTML = ah.innerHTML = '<div class="plot-empty">Load at least ' + MIN_SERIES + ' readings.</div>';
+    $('s-idraw').disabled = true;
+    return;
+  }
+  var sy = IA.summarize(SST.y), hf = md.hf, sd = hf ? hf.sd : sy.sd, hr = iidNoise(md), what = leftName(hf);
+  var m = Math.min(SST.m, n - 2), q = IA.ljungBox(IA.acf(md.left, m), n, m, 0);
+  var says = [
+    'No correlation shows in ' + what + ' (p ≥ 0.05), and so independent draws keep what the data show.',
+    'Correlation remains in ' + what + ' (p < 0.05), and independent draws lose it: try one of the ' +
+    'autoregressive models.',
+    'The readings do not vary, and so there is no correlation to test.'
+  ];
+  var vk = Number.isFinite(q.p) ? (q.p < 0.05 ? 1 : 0) : 2;
+  host.innerHTML = '<div class="sg" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
+    (hf ? '' : card('Mean', fmt(sy.mean, 4))) + card('Noise sd <span class="lit">&sigma;</span>', fmt(sd, 4)) +
+    card('Test p-value', fmtP(q.p)) + '</div>' +
+    '<div class="plot-hd" style="margin-top:10px">The fitted model</div>' +
+    eqRow('Each reading', 'Y<sub>t</sub> = ' + (hf ? '&mu;(t)' : fmt(sy.mean, 4)) + ' + e<sub>t</sub>') +
+    eqRow('Noise term', 'e<sub>t</sub> ~ i.i.d. ' + (hr ? esc(distLower(hr.dist)) + ' from tab ①, centered'
+      : '<span style="white-space:nowrap">Normal(0, ' + fmt(sd, 4) + ')</span>')) +
+    '<div class="plot-cap" style="text-align:left">' + (hf ? '&mu;(t) is section 4’s mean over time, and &sigma; its ' +
+      'residual standard deviation.' : fmt(sy.mean, 4) + ' and &sigma; are the readings’ mean and standard deviation.') +
+    ' The test asks whether ' + what + ' are correlated (Ljung–Box over the lags set in section 3).</div>' +
+    '<div class="note ' + (vk === 1 ? 'warn' : 'quiet') + '" style="margin-top:8px">' + says[vk] + '</div>';
+  var d = iidSeries(md, hr), L = seriesMaxLag(), dl = [], zero = [1], i;
+  for (i = 0; i < n; i++) dl.push(d[i] - (hf ? hf.fitted[i] : sy.mean));
+  for (i = 1; i <= L; i++) zero.push(0);
+  drawKeepRun(rh, d, { hf: hf }, 'independent draws');
+  drawKeepAcf(ah, IA.acf(md.left, L), IA.acf(dl, L), zero, n, what,
+    'Gray bars are the correlogram of ' + what + ' and orange bars the drawn series’. Independent draws have no ' +
+    'correlation at any lag, the teal line at 0, and so their bars sit inside the band.');
+  $('s-idraw').disabled = false;
+}
+
+/* Section 5's switch: its opening paragraph for each model, with and
+   without a trend or a cycle in section 4, and the one block shown. */
+function variationLedes(kind) {
+  var form = '<span class="mono" style="white-space:nowrap">Z<sub>t</sub> = &phi; &middot; Z<sub>t&minus;1</sub> + ' +
+    'e<sub>t</sub></span>';
+  if (kind === 'iid') return [
+    'With no memory, each value is the readings’ mean plus a fresh, independent draw, ' +
+    'Y<sub>t</sub> = m + e<sub>t</sub>, and the order of the readings plays no part. This is a complete model ' +
+    'when section 3 finds no correlation in the readings.',
+    'With no memory, each value is section 4’s mean over time plus a fresh, independent draw, ' +
+    'Y<sub>t</sub> = &mu;(t) + e<sub>t</sub>. This is a complete model when section 3’s correlogram of what ' +
+    'section 4 leaves stays inside its band.'];
+  if (kind === 'ar') return [
+    'Each reading can depend on the one before, the way a tank’s temperature changes only a little from one ' +
+    'minute to the next. An ' + TIP_AR1 + ' models that autocorrelation on the readings measured from their mean, ' +
+    form + ': each value Z<sub>t</sub> is &phi; times the one before it plus a noise term ' +
+    'e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means no autocorrelation, and a &phi; ' +
+    'near 1 means each value is almost the one before it.',
+    'What section 4’s mean over time leaves (the readings minus &mu;(t)) can still depend on the reading before, ' +
+    'the way a tank’s temperature changes only a little from one minute to the next. An ' + TIP_AR1 + ' models ' +
+    'that autocorrelation, ' + form + ': each leftover value Z<sub>t</sub> is &phi; times the one before it ' +
+    'plus a noise term e<sub>t</sub>, a new random draw at each reading. A &phi; near 0 means ' +
+    'no autocorrelation, and a &phi; near 1 means each value is almost the one before it.'];
+  if (kind === 'norta') return [
+    'An AR(1) keeps the autocorrelation, but its draws have the shape of a sum of noise terms, close to normal, ' +
+    'whatever the shape of the readings. ' + TIP_NORTA + '’s AR(1) keeps the readings’ distribution as well: it ' +
+    'runs the AR(1) on a normal scale and turns each value into one of the chosen distribution, mean included.',
+    'An AR(1) keeps the autocorrelation in what section 4 leaves, but its draws have the shape of a sum of noise ' +
+    'terms, close to normal, whatever the shape of the leftovers. ' + TIP_NORTA + '’s AR(1) keeps their ' +
+    'distribution as well: it runs the AR(1) on a normal scale and turns each value into one of the chosen ' +
+    'distribution, which is then added to &mu;(t).'];
+  var ear = TIP_EAR1 + ' is an autoregressive model whose values are exponential, for readings that look exponential ' +
+    'and are positively autocorrelated. It draws the readings themselves, mean included, and so it is offered only ' +
+    'while section 4 fits neither a trend nor a cycle.';
+  return [ear, ear];
+}
+function renderVariation(md) {
+  var kind = vKind(md), er = document.querySelector('input[name="s-vkind"][value="ear1"]'), el = $('s-vk-ear-lbl');
+  er.disabled = !!md.hf; el.classList.toggle('off', !!md.hf);
+  if (md.hf) el.setAttribute('data-tip', 'EAR(1) draws the readings themselves, and so it needs neither a trend nor a cycle in section 4.');
+  else el.removeAttribute('data-tip');
+  document.querySelector('input[name="s-vkind"][value="' + kind + '"]').checked = true;
+  var lede = $('s-v-lede'), ledes = variationLedes(kind);
+  lede.style.minHeight = '';
+  reserveHeight(lede, ledes);
+  lede.innerHTML = ledes[md.hf ? 1 : 0];
+  $('s-v-iid').hidden = kind !== 'iid';
+  $('s-v-ar').hidden = kind !== 'ar';
+  $('s-v-keep').hidden = kind !== 'norta' && kind !== 'ear1';
+  if (kind === 'iid') renderIid(md);
+  else if (kind === 'ar') renderAr(md);
+  else renderKeep(md);
+}
+/* The reader's choice, from section 5's switch or the export's menu. */
+function setVariation(kind) {
+  SST.vkind = kind;
+  var md = seriesModel();
+  renderVariation(md); renderSeriesExport(md); armPlotDownloads();
 }
 function initKeep() {
-  var rb = document.querySelectorAll('input[name="s-nkind"]');
-  for (var i = 0; i < rb.length; i++) rb[i].addEventListener('change', function () {
-    SST.nkind = this.value; var md = seriesModel(); renderKeep(md); renderSeriesExport(md); armPlotDownloads();
-  });
+  var rb = document.querySelectorAll('input[name="s-vkind"]');
+  for (var i = 0; i < rb.length; i++) rb[i].addEventListener('change', function () { setVariation(this.value); });
   $('s-nsrc').addEventListener('change', function () {
     SST.nsrc = this.value; SST.nUser = true; var md = seriesModel(); renderKeep(md); renderSeriesExport(md); armPlotDownloads();
   });
   $('s-ndraw').addEventListener('click', function () { SST.nSeed++; renderKeep(seriesModel()); armPlotDownloads(); });
   $('s-adraw').addEventListener('click', function () { SST.aSeed++; renderAr(seriesModel()); armPlotDownloads(); });
+  $('s-idraw').addEventListener('click', function () { SST.iSeed++; renderIid(seriesModel()); armPlotDownloads(); });
 }
 
-/* Sends readings, what the cycle leaves, or the AR(1) innovations to tab 1.
+/* Sends readings, what section 4 leaves, or the AR(1) innovations to tab 1.
    A fit made there to the last two becomes the export's noise term. */
 function sendSeriesToFit(kind) {
   var md = seriesModel(), v, label, unit, vname = SST.table ? SST.table.names[SST.vi] : 'readings';
   if (kind === 'y') { v = SST.y; label = vname; unit = 'the ' + vname + ' readings from tab ④'; }
   else if (kind === 'resid') {
     if (!md.hf) return;
-    v = md.hf.resid; label = 'What the cycle leaves in ' + vname;
-    unit = 'the readings of ' + vname + ' minus the fitted cycle, from tab ④';
+    v = md.hf.resid; label = 'Residuals around the fitted ' + fitName() + ' in ' + vname;
+    unit = 'the readings of ' + vname + ' minus the fitted ' + fitName() + ', from tab ④';
   } else {
     if (!md.ar || !md.ar.innov.length) return;
     v = md.ar.innov; label = 'AR(1) residuals of ' + vname;
-    unit = 'the residuals of an AR(1) fitted to ' + (md.hf ? 'what the cycle leaves in ' : '') + vname + ', from tab ④';
+    unit = 'the residuals of an AR(1) fitted to ' + (md.hf ? fitLeaves() + ' in ' : '') + vname + ', from tab ④';
   }
   showTab('fit');
   ST.unit = unit;
@@ -15993,13 +16339,13 @@ function sendSeriesToFit(kind) {
   ST.handoff = { from: 'time', kind: kind, sig: seriesSigFor(kind) };
   $('tab-fit').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-/* The data and the cycle settings a hand-off belongs to: a fit to the
-   residuals of one cycle is no use as the noise of another. */
+/* The data and section 4's settings a hand-off belongs to: a fit to the
+   residuals of one trend or cycle is no use as the noise of another. */
 function seriesModelSig() {
-  return [SST.sig, SST.cyc ? 1 : 0, SST.P, SST.H, SST.trend ? 1 : 0].join('|');
+  return [SST.sig, SST.cyc ? 1 : 0, SST.P, SST.H, SST.trend ? 1 : 0, twoCycles() ? 1 : 0, SST.P2, SST.H2].join('|');
 }
-/* The readings themselves belong to the data alone; what the cycle leaves
-   and the AR(1) residuals belong to the cycle too. */
+/* The readings themselves belong to the data alone; what section 4 leaves
+   and the AR(1) residuals belong to its fit too. */
 function seriesSigFor(kind) { return kind === 'y' ? SST.sig : seriesModelSig(); }
 function seriesHandoff(kind) {
   var h = ST.handoff, r = pickedRow();
@@ -16038,31 +16384,39 @@ function renderSeriesExport(md) {
     host.innerHTML = '<div class="plot-empty">No model yet.</div>'; say.innerHTML = ''; $('s-exp-model').innerHTML = '';
     return;
   }
-  document.querySelector('#s-carry option[value="keep"]').textContent =
-    SST.nkind === 'ear1' ? 'EAR(1) autocorrelation' : 'NORTA AR(1) autocorrelation';
-  $('s-exp-cyc').checked = !!SST.cyc;
-  var carry = $('s-carry').value, keep = carry === 'keep' ? keepModel(md) : null;
+  /* The controls above the lines are sections 4 and 5's own, shown again
+     where the model is assembled. */
+  $('s-exp-cyc').checked = !!SST.cyc; $('s-exp-trend').checked = !!SST.trend;
+  $('s-exp-cyc2').checked = twoCycles(); $('s-exp-cyc2').disabled = !SST.cyc;
+  $('s-exp-cyc2-lbl').classList.toggle('off', !SST.cyc);
+  var vk = vKind(md), sel = $('s-carry');
+  sel.querySelector('option[value="ear1"]').disabled = !!md.hf;
+  sel.value = vk;
+  var keep = vk === 'norta' || vk === 'ear1' ? keepModel(md) : null;
   if (keep && keep.fail) keep = null;
-  var clip = $('s-clip'), useAr = carry === 'ar' && md.ar && Number.isFinite(md.ar.phi);
+  var clip = $('s-clip'), useAr = vk === 'ar' && md.ar && Number.isFinite(md.ar.phi);
   if (!clip.dataset.user) clip.checked = SST.y.every(function (v) { return v >= 0; });
   var sy = IA.summarize(SST.y), hf = md.hf, msgs = [];
   var model = {
     m: hf ? hf.m : sy.mean, c: hf ? hf.c : [], s: hf ? hf.s : [], P: SST.P,
+    c2: hf && hf.H2 ? hf.c2 : null, s2: hf && hf.H2 ? hf.s2 : null, P2: hf && hf.H2 ? hf.P2 : null,
     g: hf && SST.trend ? hf.g : null, unit: SST.unit, t0: Number($('s-t0').value) || 0,
     sd: hf ? hf.sd : sy.sd, noise: null, ar: null, clip: clip.checked
   };
-  /* The model the lines draw from, written out as sections 5 and 6 write
-     theirs, with what each choice above contributes. */
+  /* The model the lines draw from, written out as section 5 writes it,
+     with what each choice above contributes. */
   var eqs = [], sub = function (v) { return v + '<sub>t</sub>'; };
   var Y = function (e) { return sub('Y') + ' = ' + (model.clip ? 'max(0, ' + e + ')' : e); };
-  var level = hf ? 'cycle(t)' : fmt(model.m, 4);
+  var level = hf ? '&mu;(t)' : fmt(model.m, 4);
   var iid = function (fitted, sd) {
     return 'e<sub>t</sub> ~ i.i.d. ' + (fitted ? esc(distLower(fitted.dist)) + ' from tab ①, centered'
                                                : '<span style="white-space:nowrap">Normal(0, ' + fmt(sd, 4) + ')</span>');
   };
-  if (carry === 'keep' && !keep) {
-    msgs.push('Section 6 has no model for these settings (' + keepModel(md).fail.replace(/\.$/, '') +
-      '), and so the noise below has no autocorrelation.');
+  if ((vk === 'norta' || vk === 'ear1') && !keep) {
+    msgs.push('Section 5 has no model for these settings (' + keepModel(md).fail.replace(/\.$/, '') +
+      '), and so the variation below is drawn independently.');
+  } else if (vk === 'ar' && !useAr) {
+    msgs.push('Section 5 has no AR(1) for these readings, and so the variation below is drawn independently.');
   }
   if (keep && keep.kind === 'ear1') {
     model.ear1 = { mean: keep.ear.mean, phi: keep.ear.phi }; model.noLevel = true;
@@ -16074,7 +16428,7 @@ function renderSeriesExport(md) {
   } else if (keep) {
     model.norta = { fit: keep.fit, phi: keep.sol.rho }; model.noLevel = !hf;
     var rz = fmt(keep.sol.rho, 4), cc = hf ? keep.center : 0;
-    eqs.push(['Each value', Y(hf ? 'cycle(t) + ' + sub('X') + (cc ? (cc > 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(cc), 4) : '')
+    eqs.push(['Each value', Y(hf ? '&mu;(t) + ' + sub('X') + (cc ? (cc > 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(cc), 4) : '')
                                  : sub('X'))],
       ['Value', sub('X') + ' = F<sup>&minus;1</sup>(&Phi;(' + sub('Z') + '))'],
       ['AR(1) update', sub('Z') + ' = ' + rz + ' &middot; Z<sub>t&minus;1</sub> + &radic;(1 &minus; ' + rz + '&sup2;) &middot; e<sub>t</sub>'],
@@ -16093,26 +16447,27 @@ function renderSeriesExport(md) {
     if (hr && !Number.isFinite(IA.centeringMean(hr.fit))) hr = null;
     if (hr) model.noise = { fit: hr.fit };
     eqs.push(['Each value', Y(level + ' + e<sub>t</sub>')], ['Noise term', iid(hr, model.sd)]);
-    msgs.push(hf ? 'Without autocorrelation, the noise around the cycle is drawn afresh for every value.' +
-                   (hr ? '' : ' To use another distribution for it, send what the cycle leaves to tab ① and pick a fit there.')
-                 : 'With no cycle and no autocorrelation, every value is an independent draw from one normal ' +
+    msgs.push(hf ? 'With independent draws, the variation around the mean over time is drawn afresh for every value.' +
+                   (hr ? '' : ' To use another distribution for it, send ' + fitLeaves() + ' to tab ① and pick a fit there.')
+                 : 'With a constant mean and independent draws, every value is an independent draw from one normal ' +
                    'distribution with the readings’ mean and standard deviation, and the order of the readings plays ' +
                    'no part. Tab ① fits other shapes to them.');
   }
-  if (hf && eqs.length && !(keep && keep.kind === 'ear1')) {
-    var term = function (v, f) { return (v < 0 ? ' &minus; ' : ' + ') + fmt(Math.abs(v), 4) + ' ' + f; };
-    var cyc = fmt(hf.m, 4), P = fmt(SST.P, 6);
-    for (var k = 0; k < hf.c.length; k++) {
-      var w = (k ? 2 * (k + 1) : 2) + '&pi;t/' + P;
-      cyc += term(hf.c[k], 'cos(' + w + ')') + term(hf.s[k], 'sin(' + w + ')');
-    }
-    if (SST.trend && Number.isFinite(hf.g)) cyc += term(hf.g, 't');
-    eqs.splice(1, 0, ['Cycle', 'cycle(t) = ' + cyc]);
-  }
+  if (hf && eqs.length && !(keep && keep.kind === 'ear1')) eqs.splice(1, 0, ['Mean over time', '&mu;(t) = ' + muExpr(hf)]);
   if (model.clip) msgs.push('A value that would fall below 0 is set to 0.');
   if (hf) msgs.push(SST.unit === 'other'
-    ? 'The cycle reads the clock as it is, and so the model’s time unit must match the data’s.'
-    : 'The cycle reads the clock in ' + SST.unit + ', whatever time unit the model runs in.');
+    ? 'The mean over time reads the clock as it is, and so the model’s time unit must match the data’s.'
+    : 'The mean over time reads the clock in ' + SST.unit + ', whatever time unit the model runs in.');
+  /* A cycle repeats and so stays in the data's range, but a trend does not:
+     say over what span of time it was fitted. */
+  if (hf && SST.trend && Number.isFinite(hf.g) && hf.g !== 0) {
+    var tAt = function (v) { return SST.clock && SST.unit === 'minutes' ? clockStr(v) : fmt(v, 4); };
+    var ta = Math.min.apply(null, SST.t), tb = Math.max.apply(null, SST.t);
+    msgs.push('The trend is a straight line, and so it keeps ' + (hf.g > 0 ? 'rising' : 'falling') + ' for as long as ' +
+      'the model runs. It describes the data only over their own span, data time ' + tAt(ta) + ' to ' + tAt(tb) +
+      (SST.clock && SST.unit === 'minutes' ? '' : ' ' + esc(unitName())) + ', and a run much longer than that carries ' +
+      'the mean past anything the data show.');
+  }
   $('s-exp-model').innerHTML = '<div class="plot-hd" style="margin-top:10px">The model the lines below draw from</div>' +
     eqs.map(function (q) { return eqRow(q[0], q[1]); }).join('');
   say.innerHTML = msgs.join(' ');
@@ -16144,7 +16499,7 @@ function renderSeriesExport(md) {
       '</div>' + copy('sexp-' + key) + '</div>';
   }
   var sc = IA.timeScripts({ t: SST.t, y: SST.y }, { maxLag: seriesMaxLag(), m: Math.min(SST.m, n - 2), cycle: !!hf,
-    P: SST.P, H: SST.H, trend: SST.trend, ar: true, span: SST.span, src: SST.src });
+    P: SST.P, H: SST.cyc ? SST.H : 0, P2: hf && hf.H2 ? SST.P2 : 0, H2: hf && hf.H2 ? SST.H2 : 0, trend: SST.trend, ar: true, span: SST.span, src: SST.src });
   h += '<div class="plot-hd" style="margin-top:14px">Recompute this tab from the raw data</div>' +
        '<div class="plot-cap" style="text-align:left;margin-bottom:7px">Each script prints every number on ' +
        'this tab beside the value shown here, and says whether the two agree.</div>';
@@ -16167,7 +16522,9 @@ function seriesProvenance() {
     ['# readings column: ' + (SST.table ? SST.table.names[SST.vi] : '') + '; time: ' +
      (SST.ti === null ? 'equally spaced every ' + SST.delta : SST.table.names[SST.ti] + (SST.clock ? ' (minutes past midnight)' : ''))],
     ['# time unit: ' + SST.unit],
-    ['# cycle: ' + (SST.cyc ? 'period ' + SST.P + ' with ' + SST.H + ' harmonic' + (SST.H > 1 ? 's' : '') + (SST.trend ? ' and a trend' : '') : 'none')],
+    ['# mean over time: a constant' + (SST.trend ? ' plus a straight-line trend' : '') +
+     (SST.cyc ? ' plus a cycle of period ' + SST.P + ' with ' + SST.H + ' harmonic' + (SST.H > 1 ? 's' : '') : '') +
+     (twoCycles() ? ' plus a second cycle of period ' + SST.P2 + ' with ' + SST.H2 + ' harmonic' + (SST.H2 > 1 ? 's' : '') : '')],
     []
   ];
 }
@@ -16186,12 +16543,16 @@ function csvSeriesResults() {
   rows.push(['quantity', 'value']);
   rows.push(['Ljung-Box Q (readings)', N(q0.Q)], ['Ljung-Box df', q0.df], ['Ljung-Box p-value', N(q0.p)]);
   if (md.hf) {
-    rows.push(['mean level m', N(md.hf.m)]);
-    for (var k = 0; k < SST.H; k++) rows.push(['harmonic ' + (k + 1) + ' cos coefficient', N(md.hf.c[k])],
+    rows.push(['constant m', N(md.hf.m)]);
+    for (var k = 0; k < md.hf.H; k++) rows.push(['harmonic ' + (k + 1) + ' cos coefficient', N(md.hf.c[k])],
       ['harmonic ' + (k + 1) + ' sin coefficient', N(md.hf.s[k])], ['harmonic ' + (k + 1) + ' amplitude', N(md.hf.amp[k])],
       ['harmonic ' + (k + 1) + ' peak at', N(md.hf.peakAt[k])]);
+    for (k = 0; k < md.hf.H2; k++) rows.push(['second cycle harmonic ' + (k + 1) + ' cos coefficient', N(md.hf.c2[k])],
+      ['second cycle harmonic ' + (k + 1) + ' sin coefficient', N(md.hf.s2[k])],
+      ['second cycle harmonic ' + (k + 1) + ' amplitude', N(md.hf.amp2[k])],
+      ['second cycle harmonic ' + (k + 1) + ' peak at', N(md.hf.peakAt2[k])]);
     if (SST.trend) rows.push(['trend per time unit', N(md.hf.g)]);
-    rows.push(['cycle R squared', N(md.hf.r2)], ['cycle residual sd', N(md.hf.sd)], ['cycle F', N(md.hf.F)], ['cycle F p-value', N(md.hf.p)]);
+    rows.push(['fit R squared', N(md.hf.r2)], ['fit residual sd', N(md.hf.sd)], ['fit F', N(md.hf.F)], ['fit F p-value', N(md.hf.p)]);
   }
   if (md.ar && Number.isFinite(md.ar.phi)) rows.push(['AR(1) phi', N(md.ar.phi)], ['AR(1) noise sd', N(md.ar.sigmaE)]);
   for (var j = 1; j < a0.length; j++) rows.push(['autocorrelation at lag ' + j, N(a0[j])]);
@@ -16203,9 +16564,11 @@ function initSeriesModel() {
   $('s-send-left').addEventListener('click', function () { sendSeriesToFit('resid'); });
   $('s-send-innov').addEventListener('click', function () { sendSeriesToFit('innov'); });
   $('s-t0').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
-  $('s-carry').addEventListener('change', function () { renderSeriesExport(seriesModel()); });
-  /* The export's cycle box is section 4's own, shown again where the model is assembled. */
+  $('s-carry').addEventListener('change', function () { setVariation(this.value); });
+  /* The export's boxes are section 4's own, shown again where the model is assembled. */
   $('s-exp-cyc').addEventListener('change', function () { $('s-cyc').checked = SST.cyc = this.checked; renderSeriesAll(); });
+  $('s-exp-trend').addEventListener('change', function () { $('s-trend').checked = SST.trend = this.checked; renderSeriesAll(); });
+  $('s-exp-cyc2').addEventListener('change', function () { $('s-cyc2').checked = SST.cyc2 = this.checked; renderSeriesAll(); });
   initKeep();
   $('s-clip').addEventListener('change', function () { this.dataset.user = '1'; renderSeriesExport(seriesModel()); });
   $('s-csv-data').addEventListener('click', csvSeriesData);
@@ -16247,6 +16610,15 @@ window.addEventListener('resize', function () {
   }, 150);
 });
 function validTab(name) { return !!document.querySelector('.tab[data-tab="' + name + '"]'); }
+/* The diagram at the top of tab 4: each numbered group or box scrolls to its section. */
+document.addEventListener('click', function (e) {
+  var g = e.target.closest ? e.target.closest('.flink') : null;
+  if (g) $(g.getAttribute('data-goto')).scrollIntoView({ block: 'start', behavior: 'smooth' });
+});
+document.addEventListener('keydown', function (e) {
+  var g = e.target.closest ? e.target.closest('.flink') : null;
+  if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(g.getAttribute('data-goto')).scrollIntoView({ block: 'start' }); }
+});
 /* A mention of the other tab in the text is a link to it. The router alone
    would switch tabs but leave the scroll where it was, landing the reader
    halfway down the other tab, and so the click also brings the tab strip
