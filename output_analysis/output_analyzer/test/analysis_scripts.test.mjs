@@ -1059,6 +1059,12 @@ import { LIB } from '../js/io/script_lib.js';
 const FOUR = example('four-designs');
 const FOUR_CRN = example('four-crn');
 const SIX_D = example('six-designs');   // SIX names the descriptives fixture above
+// The average waits that the six-designs example held before it became counts of customers served
+// (mean service 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, 15 days each). Their graded
+// differences give the Holm and step-down fixtures below the decisions those fixtures need, which
+// the example's paired designs, nearly tied within each pair and far apart across pairs, do not.
+const SIX_W = buildDatasets(sniff(readFileSync(join(HERE, 'fixtures', 'six_designs_waits.csv'), 'utf8'), { name: 'Six designs' }),
+  { kind: 'reps', value: 2, time: null, rep: 1, scenario: 0, name: 'Six designs', endTime: null, blocks: false }).datasets;
 const SEV_PLAN = { meansH: 0.5, diffsH: 0.6, delta: 0.4, power: 0.8 };
 const SEV_RULES = { tukey: 'Tukey’s HSD', lsd: 'Fisher’s LSD (protected)', bonferroni: 'Bonferroni (pooled variance)', dunnett: 'Dunnett vs control' };
 
@@ -1208,9 +1214,9 @@ checkRecipe('Several Systems, paired rank procedures over all pairs with a bench
 // which is the case the "(Holm)" mark exists for.
 const HOLM = {
   means: sevRecipe(FOUR, { bench: 3.12, benchAdjust: 'holm', view: { section: 'means' } }),
-  diffs: sevRecipe(SIX_D, { level: 0.9, diffAdjust: 'holm', benchAdjust: 'holm', bench: 2.89, rule: 'holm', view: { section: 'diffs' } }),
-  welch: sevRecipe(SIX_D, { level: 0.9, varMode: 'welch', ruleW: 'holmWelch', diffAdjust: 'holm', view: { section: 'anova' } }),
-  rank: sevRecipe(SIX_D, { proc: 'np', level: 0.9, diffMode: 'control', ctrlIdx: 1, diffAdjust: 'holm', benchAdjust: 'holm', bench: 3.28, view: { section: 'means' } }),
+  diffs: sevRecipe(SIX_W, { level: 0.9, diffAdjust: 'holm', benchAdjust: 'holm', bench: 2.89, rule: 'holm', view: { section: 'diffs' } }),
+  welch: sevRecipe(SIX_W, { level: 0.9, varMode: 'welch', ruleW: 'holmWelch', diffAdjust: 'holm', view: { section: 'anova' } }),
+  rank: sevRecipe(SIX_W, { proc: 'np', level: 0.9, diffMode: 'control', ctrlIdx: 1, diffAdjust: 'holm', benchAdjust: 'holm', bench: 3.28, view: { section: 'means' } }),
   paired: sevRecipe(FOUR_CRN, { paired: true, rule: 'holm', diffAdjust: 'holm', benchAdjust: 'holm', bench: 3.44, view: { section: 'anova' } })
 };
 test('the Holm fixtures declare designs and pairs whose intervals still contain the reference', () => {
@@ -1232,8 +1238,8 @@ test('the Holm fixtures declare designs and pairs whose intervals still contain 
   for (const r of Object.values(HOLM)) for (const lang of LANGS) assert.ok(/^[\x00-\x7f]*$/.test(analysisScript(r, lang)), lang + ' script is not ASCII');
 });
 checkRecipe('Several Systems, Holm against the benchmark on four-designs', HOLM.means, Object.assign({ smoke: true }, sevPinned(HOLM.means)));
-checkRecipe('Several Systems, Holm decisions and post hoc on six-designs, 90%', HOLM.diffs, Object.assign({ smoke: true }, sevPinned(HOLM.diffs)));
-checkRecipe('Several Systems, Holm on Welch pairs on six-designs, 90%', HOLM.welch, sevPinned(HOLM.welch));
+checkRecipe('Several Systems, Holm decisions and post hoc on six designs of average waits, 90%', HOLM.diffs, Object.assign({ smoke: true }, sevPinned(HOLM.diffs)));
+checkRecipe('Several Systems, Holm on Welch pairs on six designs of average waits, 90%', HOLM.welch, sevPinned(HOLM.welch));
 checkRecipe('Several Systems, rank procedures with Holm decisions versus control, 90%', HOLM.rank, Object.assign({ smoke: true }, sevPinned(HOLM.rank)));
 checkRecipe('Several Systems, paired with Holm decisions and the blocked Holm post hoc', HOLM.paired, sevPinned(HOLM.paired));
 
@@ -1244,8 +1250,8 @@ checkRecipe('Several Systems, paired with Holm decisions and the blocked Holm po
 import { stepDownLevels } from '../js/stats/compare.js';
 const STEPS = [
   ['means', sevRecipe(FOUR, { bench: 2.5, benchAdjust: 'holm', view: { section: 'means', benchSteps: true } }), / bench p$/, 0.05, true],
-  ['rank means', sevRecipe(SIX_D, { proc: 'np', level: 0.9, benchAdjust: 'holm', bench: 2.4, view: { section: 'means', benchSteps: true } }), / bench p$/, 0.1],
-  ['Welch differences', sevRecipe(SIX_D, { level: 0.9, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^diff \d+-\d+ p$/, 0.1, true],
+  ['rank means', sevRecipe(SIX_W, { proc: 'np', level: 0.9, benchAdjust: 'holm', bench: 2.4, view: { section: 'means', benchSteps: true } }), / bench p$/, 0.1],
+  ['Welch differences', sevRecipe(SIX_W, { level: 0.9, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^diff \d+-\d+ p$/, 0.1, true],
   ['paired differences', sevRecipe(FOUR_CRN, { paired: true, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^diff \d+-\d+ p$/, 0.05],
   ['paired rank differences', sevRecipe(FOUR_CRN, { proc: 'np', paired: true, diffAdjust: 'holm', view: { section: 'diffs', diffSteps: true } }), /^shift \d+-\d+ p$/, 0.05]
 ];
@@ -1550,10 +1556,18 @@ checkRecipe('Several Systems, blocked ANOVA with protected LSD', sevRecipe(FOUR_
 
 // ── Several Systems, the rank tests and the screen for the best ──────────
 
-test('severalRecipe carries the rank tests, the screen, and the letters', () => {
+test('severalRecipe carries the rank tests and the letters, and no screen, which has no rank version', () => {
   const r = sevRecipe(SIX_D, { proc: 'np', adjust: 'holm' });
   for (const k of ['kruskal H', 'kruskal p', 'rank pair 1-2 z', 'rank pair 5-6 adjusted p', 'rank pair 1-6 different', 'rank letters 1', 'rank design 3 pseudo-median',
-    'rank design 6 upper', 'screen t', 'rinott h', 'design 1 survives', 'design 1 N', 'design 6 additional', 'best design']) assert.ok(k in r.expect, k);
+    'rank design 6 upper']) assert.ok(k in r.expect, k);
+  // The page shows no screen under the rank procedures, and so neither does the script, nor its indifference zone.
+  for (const k of ['screen t', 'rinott h', 'design 1 survives', 'design 1 N', 'design 6 additional', 'best design', 'screen']) assert.ok(!(k in r.expect), k + ' absent');
+  assert.equal(r.several.subset, null);
+  assert.ok(!('epsilon' in r.settings) && 'direction' in r.settings);
+  for (const lang of LANGS) {
+    const text = analysisScript(r, lang);
+    assert.ok(!text.includes('subset_selection') && !/\nepsilon (<-|=) /.test(text), lang + ': no screen and no epsilon');
+  }
   assert.deepEqual(r.several.rank, { paired: false, pairs: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [1, 2], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5], [3, 4], [3, 5], [4, 5]] });
   // R counts the ties exactly itself; kruskal.test, which rounds them to 15 digits, is left as a comment.
   assert.ok(analysisScript(r, 'R').includes('# kw <- kruskal.test(y, g)') && !/^\s*kw <- kruskal\.test/m.test(analysisScript(r, 'R')));
@@ -1677,14 +1691,16 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
   assert.ok(Math.abs(r.expect['rinott h'] - 10.7548339283) < 1e-4, String(r.expect['rinott h']));
   checkRecipe('Several Systems, the screen on three replications per design', r, sevChecks);
   const two = [[2.1, 3.4], [3.9, 4.4], [2.5, 2.2]].map((v, i) => reps('T' + (i + 1), v));
-  // Under the rank procedures, because on two outcomes per design Levene's F is rounding noise near
-  // 1e30 and the pooled analysis's three residual degrees of freedom put Tukey's quantile where
-  // R's qtukey is good to about 1e-5 only.
-  const r2 = sevRecipe(two, { eps: 0.4, proc: 'np' });
+  // Under Welch's analysis, because the pooled analysis's three residual degrees of freedom put
+  // Tukey's quantile where R's qtukey is good to about 1e-5 only; R is not held to the
+  // Games-Howell values it cannot reach, as in the Games-Howell fixture on these outcomes below.
+  // (The screen is not in the rank procedures' scripts, as it has no rank version.)
+  const r2 = sevRecipe(two, { eps: 0.4, varMode: 'welch' });
   assert.ok(Math.abs(r2.expect['rinott h'] - 47.018598657983844) < 1e-4, String(r2.expect['rinott h']));
   const sized = Object.keys(r2.expect).filter(k => /^design \d+ N$/.test(k));
   assert.ok(sized.length > 0 && sized.every(k => r2.expect[k] > 2), 'every survivor needs more than its two replications');
-  checkRecipe('Several Systems, the screen on two replications per design', r2, sevChecks);
+  checkRecipe('Several Systems, the screen on two replications per design', r2,
+    Object.assign({ notInR: /^posthoc gameshowell .*(crit|hw|lower|upper| p)$/ }, sevChecks));
 }
 
 // The screen refuses an indifference zone of 0 (or one not set), and the
@@ -1699,7 +1715,7 @@ checkRecipe('Several Systems, the screen for the best, smaller is better', sevRe
     assert.ok(s.includes('The indifference zone delta must be positive.'), lang + ' gives the reason');
   }
   checkRecipe('Several Systems, screen undefined at eps = 0', r, sevChecks);
-  checkRecipe('Several Systems, screen undefined with no indifference zone set', sevRecipe(FOUR, { eps: NaN, proc: 'np' }), sevChecks);
+  checkRecipe('Several Systems, screen undefined with no indifference zone set', sevRecipe(FOUR, { eps: NaN }), sevChecks);
 }
 
 // Two outcomes equal to 15 significant digits but not exactly: the tie
@@ -2178,14 +2194,15 @@ test('Tidy R carries each page\'s tidy forms and the same report lines as Base R
     ['several, Tukey', sevRecipe(FOUR),
       ['d_tbl <- tibble(design = factor(rep(seq_len(k), lengths(groups))), name = rep(design_names, lengths(groups)), outcome = unlist(groups))',
         'means_tbl <- bind_cols(distinct(d_tbl, design, name), bind_rows(sm$items))', 'print(broom::tidy(av$fit))', 'broom::tidy(TukeyHSD(av$fit, "design"', 'print(bind_rows(ph$pairs))',
-        'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")']],
+        'family_tests[[lab]] <- cmp$test', 'family_tbl <- bind_rows(lapply(family_tests, broom::tidy), .id = "pair")',
+        'print(tibble(design = seq_len(k), survives = ss$survivors']],
     ['several, Welch', sevRecipe(FOUR, { varMode: 'welch' }), ['print(suppressMessages(broom::tidy(av$test)))', 'print(bind_rows(ph$pairs))',
       'oneway.test(outcome ~ design, var.equal = FALSE)', 'anova(lm(distance ~ group))']],
     ['several, Kruskal-Wallis with a benchmark', sevRecipe(SIX_D, { proc: 'np', bench: 2 }),
       ['bind_cols(distinct(d_tbl, design, name), bind_rows(lapply(srs, function(s) broom::tidy(s$test))))',
         'print(bind_rows(rk$pairs))']],
     ['several, Friedman', sevRecipe(FOUR_CRN, { paired: true, proc: 'np' }),
-      ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))', 'print(tibble(design = seq_len(k), survives = ss$survivors']],
+      ['block = rep(block_id, times = k)', 'print(broom::tidy(rk$test))']],
     ['steady', stRecipe(TRANSIENT, { lumped: true, cut: 50, count: 10 }),
       ['records_tbl <- bind_rows(lapply(reps, function(r) tibble(', 'print(broom::tidy(bm$test))']],
     ['explore', exRecipe(TRANSIENT),

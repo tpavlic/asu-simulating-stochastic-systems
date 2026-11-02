@@ -1,7 +1,8 @@
 // Small rules the pages apply, kept apart from the pages so that they can be
 // tested in Node and shared with the regenerate scripts: the ticks a dataset
 // checklist opens with, whether a comparison opens paired, Two Systems'
-// verdict on the F ratio of the variances, and the labels the figures carry.
+// verdict on the F ratio of the variances, the labels the figures carry, and
+// which of Several Systems' sections and procedures can be chosen together.
 // Pure functions, no DOM.
 
 import { transformLabel } from '../stats/transform.js';
@@ -122,6 +123,35 @@ export function shortNames(list) {
   if (parts.some(p => !p) || parts.some(p => p[0] !== parts[0][0])) return names;
   const tails = parts.map(p => p[1]);
   return new Set(tails).size === tails.length ? tails : names;
+}
+
+// Why a Several Systems section, or the nonparametric Procedure, is unavailable.
+const NEED_TWO = 'Needs two or more checked designs.';
+const SCREEN_NO_RANK = 'The screen for the best has no nonparametric version. Choose “t procedures” under Procedure to use it.';
+const RANK_NOT_HERE = 'Unavailable in Screen for the best, which has no nonparametric version. Open another section to use the rank procedures.';
+
+/**
+ * The sections of Several Systems that cannot be opened, each with the
+ * reason its grayed link gives, or null when every section can: with one
+ * checked design, those that compare designs, and under the rank procedures
+ * the screen for the best, which has no rank version.
+ * @param {{k: number, proc: 't'|'np'}} o k is the number of checked designs
+ * @returns {Object<string, string>|null}
+ */
+export function severalSectionsOff({ k, proc }) {
+  if (k === 1) return { diffs: NEED_TWO, anova: NEED_TWO, subset: NEED_TWO };
+  return proc === 'np' ? { subset: SCREEN_NO_RANK } : null;
+}
+
+/**
+ * Why Several Systems' Procedure switch withholds its nonparametric setting
+ * while `section` is open, or null when it offers it: the screen for the
+ * best has no rank version, and so the two are never chosen together.
+ * @param {string|null} section
+ * @returns {string|null}
+ */
+export function rankProcWithheld(section) {
+  return section === 'subset' ? RANK_NOT_HERE : null;
 }
 
 /**

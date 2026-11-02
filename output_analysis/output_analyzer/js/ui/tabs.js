@@ -10,8 +10,8 @@
 // <div data-subnav> with one link per section, lists the open page's sections
 // under its sidebar item, and adds them to the <select> as indented options.
 // A page that cannot fill one of its sections for the data it shows says so
-// through setSectionAvailable, which hides that section's strip button and
-// grays its sidebar sub-item and <select> option.
+// through setSectionAvailable, which grays that section's strip button, its
+// sidebar sub-item, and its <select> option.
 
 let onShowCb = null;
 let current = null;
@@ -99,11 +99,12 @@ function syncOptions(page) {
 
 /**
  * Marks the sections of a divided page available or not for the data it
- * currently shows. An unavailable section's button in the page's own strip is
- * hidden, and so the page offers only what applies, and its sidebar sub-item and
- * <select> option are grayed and inert with a tooltip saying why, and so the
- * navigation keeps its shape. An open section that becomes unavailable
- * gives way to the first available one.
+ * currently shows. An unavailable section's button in the page's own strip,
+ * its sidebar sub-item, and its <select> option are grayed and inert, the
+ * button and sub-item with a tooltip saying why, and so both strips keep their
+ * shape and a reader looking for a section finds it and learns why it is
+ * closed. An open section that becomes unavailable gives way to the first
+ * available one.
  * @param {string} page
  * @param {Object<string, string|null>} off section id → why it is unavailable,
  *   or null (or absent) when it is available
@@ -115,8 +116,9 @@ export function setSectionAvailable(page, off) {
   for (const s of list) { const tip = off ? off[s.id] : null; if (tip) map.set(s.id, String(tip)); }
   SECTIONS_OFF.set(page, map);
   const root = document.getElementById('tab-' + page);
-  if (root) root.querySelectorAll('.subtab[data-section]').forEach(a => { a.hidden = map.has(a.getAttribute('data-section')); });
-  document.querySelectorAll('.tab-subs[data-subs-for="' + page + '"] .tab-sub[data-section]').forEach(a => {
+  const links = [...(root ? root.querySelectorAll('.subtab[data-section]') : []),
+    ...document.querySelectorAll('.tab-subs[data-subs-for="' + page + '"] .tab-sub[data-section]')];
+  links.forEach(a => {
     const sid = a.getAttribute('data-section');
     const tip = map.get(sid);
     a.classList.toggle('disabled', !!tip);
@@ -235,8 +237,10 @@ export function showTab(name) {
   }
   activate(page, sec);
   // replaceState, not pushState: the address bar always names the page a
-  // copied link would open, without a history entry per page visited.
-  const full = fullName(page, sec);
+  // copied link would open, without a history entry per page visited. The
+  // page's onShow may have marked the section just opened unavailable and
+  // moved on to another, and so the hash names what is open now.
+  const full = fullName(current, currentSec);
   if (location.hash.slice(1) !== full) history.replaceState(null, '', '#' + full);
 }
 

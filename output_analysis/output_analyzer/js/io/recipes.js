@@ -487,7 +487,8 @@ const benchDecision = (lo, hi, bench, t, holm) => {
  * pseudo-medians) with simultaneous intervals, the Bonferroni family of
  * differences (or of rank shifts), and the replication plans for both. The
  * analysis of variance, the rank tests, and the screen for the best fill
- * `several.anova`, `several.rank`, and `several.subset`.
+ * `several.anova`, `several.rank`, and `several.subset`; the screen, which
+ * has no rank version, is left out under the rank procedures.
  * @param {{ list: object[], groups: ArrayLike<number>[], paired: boolean,
  *   match: null|{ by: 'id'|'position', blocks: number[][], unmatched: number[][], keys: any[] },
  *   level: number, proc: 't'|'np', varMode: 'pooled'|'welch', rule: string, ruleW: string,
@@ -652,7 +653,8 @@ export function severalRecipe(o) {
     // Under Holm, the section's figure drew each interval at the level of its step in the step-down.
     steps: !!(o.view && (section === 'means' ? o.view.benchSteps && benchAdj === 'holm' && bench != null && !single : section === 'diffs' && o.view.diffSteps && diffAdj === 'holm' && !single)) };
   if (np) r.settings.rank_adjust = o.adjust === 'holm' ? 'holm' : 'bonferroni';
-  Object.assign(r.settings, { epsilon: eps, direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
+  // The screen, and so its indifference zone, belongs to the t procedures only.
+  Object.assign(r.settings, np ? {} : { epsilon: eps }, { direction: dir === 'min' ? 'min' : 'max', plan_means_h: plan.meansH, plan_diffs_h: plan.diffsH,
     plan_delta: plan.delta, plan_power: plan.power });
   const dunnett = proc !== 'np' && !(o.varMode === 'welch' && !paired) && o.rule === 'dunnett';
   r.settingsNote = [
@@ -663,13 +665,14 @@ export function severalRecipe(o) {
         : ', and bench_adjust says how: "bonferroni" declares a design above or below it when its interval excludes it, and "holm" when Holm\'s step-down on the designs\' own tests against it rejects. ') : '') +
       (!single ? 'diff_adjust says how a pairwise comparison is declared different: "bonferroni" when its interval excludes 0, and "holm" when Holm\'s step-down on the comparisons\' own tests rejects; the intervals are Bonferroni\'s either way. ' : '') +
       (np ? 'rank_adjust is the rule that adjusts the rank tests\' pairwise p-values: "holm" (Holm\'s step-down) or "bonferroni". ' : '') +
-      'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ' +
+      (np ? 'direction says whether larger outcomes are better ("max") or smaller ones ("min"). '
+        : 'epsilon is the screen\'s indifference zone, the smallest difference worth telling apart, and direction says whether the larger mean is better ("max") or the smaller ("min"). ') +
       'plan_means_h and plan_diffs_h are the half-widths the replication plans aim for, and plan_delta and plan_power are the shift the F test should detect and the probability of detecting it.'
   ];
   if (!single) {
     severalAnova(r, o, g);
     severalRank(r, o, g);
-    severalSubset(r, o, g);
+    if (!np) severalSubset(r, o, g);
   }
   return r;
 }
@@ -790,9 +793,10 @@ function severalRank(r, o, g) {
 }
 
 /**
- * The screen for the best, which the page shows under every procedure: the
- * subset-selection screen with indifference zone eps and Rinott's
- * second-stage sizes, or the reason the screen is not defined.
+ * The screen for the best, which the page shows under the t procedures only,
+ * as it has no rank version: the subset-selection screen with indifference
+ * zone eps and Rinott's second-stage sizes, or the reason the screen is not
+ * defined.
  */
 function severalSubset(r, o, g) {
   const { level, eps } = o;

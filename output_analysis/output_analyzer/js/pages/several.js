@@ -6,7 +6,8 @@
 // differences or a target ANOVA power needs; one-way ANOVA with a post-hoc
 // rule and the compact letter display; and a subset-selection screen for the
 // best design with the second-stage replication counts a Rinott procedure
-// would ask for. Every result is computed whichever section is open. Under a
+// would ask for, under the t procedures only, since the screen has no rank
+// version. Every result is computed whichever section is open. Under a
 // transform, every design's outcomes are put through it before anything
 // else; the means are carried back to the response's units, and under the
 // log the differences are carried back as ratios.
@@ -26,10 +27,10 @@ import { normalQQ, shapiroWilk } from '../stats/normality.js';
 import { installExportRow } from '../ui/exportrow.js';
 import { assumptionChecks } from '../ui/checks.js';
 import { num, stat, pValue, pct, esc, plural, intl, dash, lvl, pEq } from '../ui/format.js';
-import { currentSection, setSectionAvailable } from '../ui/tabs.js';
+import { currentTab, currentSection, setSectionAvailable } from '../ui/tabs.js';
 import { severalRecipe } from '../io/recipes.js';
 import { registerTips } from '../ui/tooltip.js';
-import { shortNames, pairingDefault } from '../ui/rules.js';
+import { shortNames, pairingDefault, severalSectionsOff, rankProcWithheld } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'several';
@@ -106,6 +107,10 @@ const stepWhy = (what, ref) => ' <b>These are not confidence intervals</b>: each
   '. The table keeps the Bonferroni intervals.';
 // 't' for the t-based procedures on every sub-item, 'np' for their rank versions.
 let proc = 't';
+// The screen for the best has no rank version, and so the two are never on
+// together: under 'np' its section is unavailable (severalSectionsOff), and
+// while it is open the nonparametric button is (syncProcLock). A warning
+// stands in place of the screen if the combination is reached anyway.
 // How the design plots draw each design: 'int', its center with its interval,
 // or 'box', a box plot of its outcomes with the center as a diamond; and
 // whether, with intervals, every outcome is drawn as a dot behind its row.
@@ -774,11 +779,41 @@ function benchmark(items, ds, testsFor, steps = null) {
   };
 }
 
+// What stands in the screen's section while Procedure is nonparametric: no
+// result, only the reason and the way back.
+function screenNpWarning() {
+  const box = notice('warn', '<b>The screen for the best has no nonparametric version.</b> It judges the designs by their means and each design’s own standard deviation, and so it assumes that every design’s replication outcomes are normal. ' +
+    'It does not run while Procedure is set to Nonparametric (Wilcoxon); choose “t procedures” under Procedure to run it.');
+  box.classList.add('notice-strong');
+  return box;
+}
+
+// What the screen's checks line advises when normality fails, in place of a
+// nonparametric procedure, which the screen does not have.
+const SCREEN_REMEDY = 'The screen has no nonparametric version. Consider more replications per design, which bring the design means closer to normal, ' +
+  'or a transform of the replication outcomes (Transform, beside the confidence level above) under which they look normal.';
+
+// While the screen's section is open, the nonparametric button is unavailable,
+// grayed with a tooltip saying why, as the section links are; leaving the
+// section gives it back. It
+// stays focusable (aria-disabled, not disabled), and so its tooltip opens on
+// focus as well as on hover.
+function syncProcLock() {
+  if (!rootEl) return;
+  const why = currentTab() === id ? rankProcWithheld(currentSection()) : null;
+  const b = rootEl.querySelector('[data-proc="np"]');
+  if (why) { b.setAttribute('aria-disabled', 'true'); b.setAttribute('data-tip', why); }
+  else { b.removeAttribute('aria-disabled'); b.removeAttribute('data-tip'); }
+  // The indifference zone belongs to the screen, which does not run under the rank procedures.
+  rootEl.querySelector('#sev-eps-row').style.display = proc === 'np' ? 'none' : '';
+}
+
 function syncControls(list, groups) {
   rootEl.querySelectorAll('[data-dir]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
   rootEl.querySelectorAll('[data-diff]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diff === diffMode)));
   rootEl.querySelectorAll('[data-pair]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pair === pairMode)));
   rootEl.querySelectorAll('[data-proc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.proc === proc)));
+  syncProcLock();
   rootEl.querySelectorAll('[data-dplot]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dplot === designPlot)));
   // One checked design has nothing to pair with.
   rootEl.querySelector('#sev-pair-lbl').closest('.ctrl-row').style.display = list.length < 2 ? 'none' : '';
@@ -959,14 +994,15 @@ function update() {
   bodies.forEach(b => { const h = b.offsetHeight; if (h) b.style.minHeight = h + 'px'; b.innerHTML = ''; });
   const release = () => bodies.forEach(b => { b.style.minHeight = ''; });
 
+  const np = proc === 'np';
   numberChecklist(list);
   const key = rootEl.querySelector('#sev-key');
   key.innerHTML = list.map((d, i) => '<span class="sev-key-it">' + badge(i) + ' ' + esc(d.name) + '</span>').join(' ');
   if (k < 1 || (paired && match.blocks.length < 2) || refused) {
-    setSectionAvailable(id, null);
+    setSectionAvailable(id, severalSectionsOff({ k, proc }));
     unit.innerHTML = '<span class="unit-lbl">Experimental unit:</span> ' + (k < 1 ? 'check a design above.' : refused ? 'no result while the transform cannot take every outcome.' : 'too few replications matched across the designs.');
     const msg = k < 1 ? 'Check one or more designs above: one for the benchmark comparison, two or more to compare them.' : 'Pairing needs at least two replications matched across every design.';
-    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(refused && k >= 1 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
+    [0, 1, 2, 3].forEach(i => bodies[i].appendChild(i === 3 && np ? screenNpWarning() : refused && k >= 1 ? transformRefusal(tfNow, refused) : para('muted-line cmp-empty', msg)));
     resultBase = null;
     planCtx = { msg: refused ? 'Planning needs replication outcomes the transform can take.' : 'Check a design above to plan replications.' };
     drawPlan();
@@ -995,7 +1031,6 @@ function update() {
 
   const ctrlIdx = Math.max(0, list.findIndex(d => d.id === controlId));
   const L = levelPct(level), aTxt = num(alpha, 2);
-  const np = proc === 'np';
   const tables = [];
   const summary = [];
 
@@ -1076,10 +1111,9 @@ function update() {
   // One design: the benchmark comparison stands (Bonferroni with k = 1 is
   // the plain interval, the same as One System's), and the sections that
   // compare designs wait for a second one.
-  const needTwo = 'Needs two or more checked designs.';
-  setSectionAvailable(id, k === 1 ? { diffs: needTwo, anova: needTwo, subset: needTwo } : null);
+  setSectionAvailable(id, severalSectionsOff({ k, proc }));
   if (k === 1) {
-    [1, 2, 3].forEach(i => bodies[i].appendChild(para('muted-line cmp-empty', 'Pairwise comparisons, the analysis of variance, and the screen for the best need two or more designs; check another design above.')));
+    [1, 2, 3].forEach(i => bodies[i].appendChild(i === 3 && np ? screenNpWarning() : para('muted-line cmp-empty', 'Pairwise comparisons, the analysis of variance, and the screen for the best need two or more designs; check another design above.')));
     const unitsOne = Array.from(new Set(list.map(d => d.unit || '')));
     planCtx = { key: list.map(d => d.id).join('|') + tfKey(), k, ns, short, ctrlIdx, unit: unitsOne.length === 1 ? unitsOne[0] : '', single: true,
                 sds: sm.items.map(it => it.sd), widest: NaN, meanHw: Math.max(...sm.items.map(it => it.hi - it.mean)), sigma: NaN, grandMean: NaN, welch: false, paired: false, sdDs: null };
@@ -1469,11 +1503,13 @@ function update() {
   
   }
 
-  // The screen for the best.
-  if (np) bodies[3].appendChild(para('cmp-lead', 'The screen is a procedure on sample means and standard deviations, and it has no rank version here; it is shown unchanged.'));
+  // The screen for the best, under the t procedures only. The nonparametric
+  // setting makes its section unavailable; should the section be open
+  // anyway, it shows a warning in place of any result.
   const eps = epsSpin ? epsSpin.get() : NaN;
-  const ss = subsetSelection(groups, { alpha, delta: eps, dir: dirS });
-  {
+  if (np) bodies[3].appendChild(screenNpWarning());
+  else {
+    const ss = subsetSelection(groups, { alpha, delta: eps, dir: dirS });
     const b = bodies[3];
     b.appendChild(para('cmp-lead', 'Confidence 1 − α is split evenly between the screen and the second-stage sizing: the screen runs at 1 − α/2 = ' + levelPct(1 - alpha / 2) +
       ' and the sizing at ' + levelPct(1 - alpha / 2) + ', and so the whole procedure holds at ' + L + ' or more. The indifference zone is ε = ' + num(eps) + '.'));
@@ -1503,7 +1539,7 @@ function update() {
       b.appendChild(para('exp-note', 'N is the total number of replications Rinott’s second stage needs for each survivor, max(R, ⌈(h·s/ε)²⌉) with h = ' + num(ss.h) +
         '; the screen’s t = ' + num(ss.t) + '. A smaller ε asks for more replications, in proportion to 1/ε².'));
       // The screen's allowances and Rinott's sizes are t procedures on each design's own mean and variance.
-      b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the screen', declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
+      b.appendChild(assumptionChecks({ sets: designSets, alpha, procedure: 'the screen', remedy: SCREEN_REMEDY, declared: 'between designs cannot be checked from the data; it is what the Replications switch declares.' }));
       tables.push({ section: 'subset', name: 'Screen for the best', headers: ['design', 'R', 'mean', 's', 'survives', 'N needed', 'additional replications'],
         rows: list.map((d, i) => [d.name, ss.n[i], ss.means[i], Math.sqrt(ss.s2[i]), ss.survivors[i] ? 'yes' : 'no', ss.N[i] === null ? '' : ss.N[i], ss.additional[i] === null ? '' : ss.additional[i]]) });
       summary.push(verdict);
@@ -1536,7 +1572,7 @@ function update() {
       'designs drawn as': designPlot === 'box' ? 'box plots' : showPts ? 'intervals with each outcome' : 'intervals',
       control: list[ctrlIdx].name,
       benchmark: benchOn && Number.isFinite(benchVal) ? benchVal : 'none',
-      'indifference zone': Number.isFinite(eps) ? eps : '',
+      'indifference zone': np ? 'not applicable' : Number.isFinite(eps) ? eps : '',
       ...(tfNow !== 'none' ? { transform: transformOf(tfNow).label.toLowerCase() + ' of each replication outcome' } : {})
     },
     tables,
@@ -1745,7 +1781,7 @@ export function render(root) {
         '<span class="ctrl-note row-note" id="sev-match-note"></span>' +
       '</div>' +
       '<div class="ctrl-row">' +
-        '<span class="ctrl-lbl" id="sev-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: intervals on means by the t distribution, the analysis of variance, and its post-hoc rules, all assuming normal replication outcomes. Nonparametric: the same sub-items by ranks, with Wilcoxon intervals on pseudo-medians and shifts, Kruskal–Wallis or Friedman in place of the analysis of variance, and Dunn’s or Friedman’s pairwise comparisons in place of the post-hoc rules; they need no normality and keep their level under heavy tails. The screen for the best has no rank version and is shown unchanged.">Procedure</span></span>' +
+        '<span class="ctrl-lbl" id="sev-proc-lbl"><span class="tip" tabindex="0" data-tip="t procedures: intervals on means by the t distribution, the analysis of variance, and its post-hoc rules, all assuming normal replication outcomes. Nonparametric: the same sub-items by ranks, with Wilcoxon intervals on pseudo-medians and shifts, Kruskal–Wallis or Friedman in place of the analysis of variance, and Dunn’s or Friedman’s pairwise comparisons in place of the post-hoc rules; they need no normality and keep their level under heavy tails. The screen for the best has no nonparametric version: its section is unavailable under Nonparametric, and Nonparametric is unavailable while its section is open.">Procedure</span></span>' +
         '<span class="seg" role="group" aria-labelledby="sev-proc-lbl">' +
           '<button type="button" class="seg-btn" data-proc="t" aria-pressed="true">t procedures</button>' +
           '<button type="button" class="seg-btn" data-proc="np" aria-pressed="false">Nonparametric (Wilcoxon)</button>' +
@@ -1803,7 +1839,7 @@ export function render(root) {
       '<div id="sev-rule-host"></div>' +
       '<div id="sev-posthoc-body"></div><div class="plan-sub plan-card" id="sev-plan-anova"></div></div>' +
     '<div class="sec" data-section="subset"><h3 class="sec-title">Screen for the best</h3><p class="sec-lede">Which designs cannot be ruled out as the best within an indifference zone ε and how many more replications a second stage would need to choose among them.</p>' +
-      '<div class="ctrl-row">' +
+      '<div class="ctrl-row" id="sev-eps-row">' +
         '<span class="ctrl-pair"><span class="ctrl-lbl"><span class="tip" tabindex="0" data-tip="The smallest difference in means worth detecting, used by the screen and its second stage only. Designs whose means are within ε of the best count as good enough, and the screen and the second-stage sizes are set to it.">Indifference zone ε</span></span><span id="sev-eps-host"></span></span>' +
         '<span class="ctrl-note" id="sev-eps-note"></span>' +
         '<button type="button" class="btn-mini" id="sev-eps-reset" style="display:none">Use default</button>' +
@@ -1878,7 +1914,11 @@ export function render(root) {
     if (list.length >= 2) state.setPick(id, 'pairing:' + setKey(list), pairMode);
     schedule();
   }));
-  root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));
+  root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => {
+    // An unavailable button (see syncProcLock) keeps its tooltip and changes nothing.
+    if (b.getAttribute('aria-disabled') === 'true') return;
+    proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule();
+  }));
   root.querySelectorAll('[data-dplot]').forEach(b => b.addEventListener('click', () => { designPlot = b.dataset.dplot; state.setPick(id, 'designPlot', designPlot); schedule(); }));
   root.querySelector('#sev-pts').addEventListener('change', e => { showPts = e.target.checked; state.setPick(id, 'showPts', showPts); schedule(); });
   root.querySelectorAll('[data-match]').forEach(b => b.addEventListener('click', () => { matchChoice = b.dataset.match; state.setPick(id, 'match', matchChoice); schedule(); }));
@@ -1979,7 +2019,10 @@ function autoCheck() {
 
 /** Called each time the page is shown. */
 export function onShow() { update(); if (exportRow) exportRow.refresh(); }
-/** Called when the shown section changes; the export row offers that section's tables. */
-export function onShowSection() { if (exportRow) exportRow.refresh(); }
+/**
+ * Called when the shown section changes; the export row offers that
+ * section's tables, and the nonparametric button follows the section.
+ */
+export function onShowSection() { syncProcLock(); if (exportRow) exportRow.refresh(); }
 
 export default { id, title, sections, render, onShow, onShowSection };

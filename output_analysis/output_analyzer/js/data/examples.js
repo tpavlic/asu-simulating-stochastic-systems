@@ -8,7 +8,7 @@
 export const EXAMPLES = [
   {
     id: "queue-reps",
-    title: "Queue days: replication intervals",
+    title: "Replication intervals (average wait, 20 days)",
     file: "queue_reps.csv",
     kind: "reps",
     format: "columns",
@@ -39,11 +39,11 @@ export const EXAMPLES = [
   },
   {
     id: "two-independent",
-    title: "Two designs: independent runs",
+    title: "Independent replications (average wait, 2 designs)",
     file: "two_designs_independent.csv",
     kind: "reps",
     format: "columns",
-    description: "Average wait over an 8-hour day for a queue served at a mean of 0.8 minute (design A) and one served at 0.75 minute (design B), with 15 days each drawn from independent random streams. Use it to compare two systems with a two-sample interval, ignoring any pairing.",
+    description: "Average wait over an 8-hour day for a queue served at a mean of 0.8 minute (design A) and one served at 0.75 minute (design B), with 15 days each drawn from independent random streams. Nothing pairs a day of one design with a day of the other, and so the two are compared with a two-sample interval.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, independent","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,2.4621
@@ -80,11 +80,11 @@ B,15,2.3592
   },
   {
     id: "two-crn",
-    title: "Two designs: common random numbers",
+    title: "Common random numbers (average wait, 2 designs)",
     file: "two_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The same two queues and 15 days each as the independent set, but both designs see the same arrival and service random numbers on each day, and so the file's block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.",
+    description: "The same two queues and 15 days each as the independent-replications example, but both designs see the same arrival and service random numbers on each day, and so the file's block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Two designs, paired","endTime":null,"blocks":true},
     text: `design,block,avg_wait
 A,1,1.7
@@ -121,7 +121,7 @@ B,15,2.8592
   },
   {
     id: "muffin-oven",
-    title: "Muffin oven: two loading policies, four outputs",
+    title: "Paired comparison, four outputs (muffin oven, 2 policies)",
     file: "muffin_oven.csv",
     kind: "reps",
     format: "columns",
@@ -152,11 +152,11 @@ nearly_full,10,6.1282,0.8667,35,35
   },
   {
     id: "four-designs",
-    title: "Four designs: ANOVA and selection",
+    title: "Nonparametric ANOVA (average wait, 4 designs)",
     file: "four_designs.csv",
     kind: "reps",
     format: "columns",
-    description: "Average wait over an 8-hour day for four versions of a queue with mean service times 0.80, 0.78, 0.75, and 0.70 minute, with 10 independent days each. Use it for one-way analysis of variance, all-pairs comparisons, and picking the best design.",
+    description: "Average wait over an 8-hour day for four versions of a queue with mean service times 0.80, 0.78, 0.75, and 0.70 minute, with 10 independent days each. The days' average waits are skewed to the right, and so the residuals of the one-way analysis of variance fail Shapiro–Wilk (p ≈ 0.009). Use it for the nonparametric analysis: the pooled F test just misses at the 5% level (p ≈ 0.052), whereas the Kruskal–Wallis test, which needs no normality, just rejects (p ≈ 0.048), and Dunn's pairwise comparisons declare A and D different.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs","endTime":null,"blocks":false},
     text: `design,replication,avg_wait
 A,1,3.2203
@@ -203,112 +203,364 @@ D,10,2.3796
   },
   {
     id: "six-designs",
-    title: "Six designs: screen for the best",
+    title: "Screen for the best, unequal spreads (customers served, 6 designs)",
     file: "six_designs.csv",
     kind: "reps",
     format: "columns",
-    description: "Average wait over an 8-hour day for six versions of a queue with mean service times 0.90, 0.88, 0.80, 0.75, 0.65, and 0.60 minute, with 15 independent days each. With smaller taken as better, the screen keeps one design; with bigger taken as better, it keeps two that it cannot tell apart.",
+    description: "Customers served over an 8-hour day by six versions of a single-server queue with room for 8 customers in all (the one in service and 7 waiting), where an arrival who finds the room full is turned away. Customers arrive at a mean of one a minute, faster than any design serves them, and so the room is usually full and a day's count is mostly the number of services that fit in it. Designs A, C, and E serve in exponential times of mean 1.30, 1.20, and 1.10 minutes; B, D, and F serve a little more slowly, at means of 1.35, 1.25, and 1.15 minutes, but far more consistently, in times whose standard deviation is a third of their mean. Each design has 20 independent days. Every design's counts look normal, but the consistent designs' counts spread about half as widely, and Levene's test flags it: the pooled analysis of variance assumes equal spreads, and so Welch's analysis is the one to use. The screen for the best uses each design's own variance and needs no equal spreads, and its checks pass. With bigger taken as better, it keeps E and F, which it cannot tell apart, and Rinott's second stage would need about three and a half times as many replications of E as of F, whose counts vary less.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Six designs","endTime":null,"blocks":false},
-    text: `design,replication,avg_wait
-A,1,10.3814
-A,2,7.1211
-A,3,9.3813
-A,4,2.1426
-A,5,6.9927
-A,6,2.2837
-A,7,3.3051
-A,8,7.1742
-A,9,11.9451
-A,10,6.3578
-A,11,16.3209
-A,12,11.417
-A,13,6.6432
-A,14,4.886
-A,15,5.6455
-B,1,5.3791
-B,2,10.8401
-B,3,2.5939
-B,4,3.512
-B,5,5.3505
-B,6,2.09
-B,7,9.6364
-B,8,6.1664
-B,9,4.9222
-B,10,4.955
-B,11,3.1259
-B,12,7.4991
-B,13,4.0031
-B,14,2.8642
-B,15,3.5588
-C,1,1.8661
-C,2,2.5425
-C,3,3.9169
-C,4,2.6182
-C,5,3.1795
-C,6,3.2256
-C,7,1.6193
-C,8,3.1977
-C,9,2.6583
-C,10,2.7154
-C,11,4.1917
-C,12,1.754
-C,13,2.3613
-C,14,3.4668
-C,15,1.8167
-D,1,3.6802
-D,2,2.0948
-D,3,1.5073
-D,4,3.5353
-D,5,2.135
-D,6,1.5112
-D,7,1.0974
-D,8,2.0621
-D,9,2.4011
-D,10,2.8993
-D,11,1.5693
-D,12,1.4656
-D,13,4.1378
-D,14,1.7709
-D,15,1.8934
-E,1,1.5737
-E,2,1.2395
-E,3,0.9943
-E,4,2.8171
-E,5,1.6014
-E,6,1.0526
-E,7,1.0989
-E,8,1.603
-E,9,0.7008
-E,10,1.55
-E,11,0.9008
-E,12,0.9016
-E,13,0.5676
-E,14,0.9813
-E,15,0.9208
-F,1,1.0335
-F,2,0.8251
-F,3,1.3458
-F,4,1.1399
-F,5,0.5816
-F,6,0.5309
-F,7,0.7786
-F,8,1.1993
-F,9,0.5156
-F,10,0.6909
-F,11,0.7593
-F,12,0.6207
-F,13,0.959
-F,14,0.8744
-F,15,0.8066
+    text: `design,replication,served
+A,1,345
+A,2,350
+A,3,367
+A,4,359
+A,5,343
+A,6,384
+A,7,347
+A,8,368
+A,9,376
+A,10,332
+A,11,345
+A,12,345
+A,13,342
+A,14,362
+A,15,364
+A,16,358
+A,17,346
+A,18,338
+A,19,379
+A,20,375
+B,1,348
+B,2,368
+B,3,349
+B,4,364
+B,5,351
+B,6,350
+B,7,349
+B,8,357
+B,9,342
+B,10,359
+B,11,354
+B,12,353
+B,13,357
+B,14,348
+B,15,358
+B,16,342
+B,17,360
+B,18,349
+B,19,354
+B,20,354
+C,1,374
+C,2,406
+C,3,374
+C,4,397
+C,5,374
+C,6,363
+C,7,371
+C,8,361
+C,9,395
+C,10,385
+C,11,364
+C,12,396
+C,13,392
+C,14,384
+C,15,389
+C,16,410
+C,17,372
+C,18,399
+C,19,382
+C,20,374
+D,1,381
+D,2,384
+D,3,378
+D,4,379
+D,5,371
+D,6,385
+D,7,377
+D,8,363
+D,9,370
+D,10,378
+D,11,370
+D,12,378
+D,13,376
+D,14,370
+D,15,381
+D,16,384
+D,17,376
+D,18,374
+D,19,380
+D,20,393
+E,1,404
+E,2,429
+E,3,410
+E,4,407
+E,5,423
+E,6,397
+E,7,394
+E,8,417
+E,9,397
+E,10,413
+E,11,419
+E,12,395
+E,13,415
+E,14,397
+E,15,405
+E,16,405
+E,17,390
+E,18,415
+E,19,389
+E,20,421
+F,1,407
+F,2,399
+F,3,392
+F,4,415
+F,5,403
+F,6,405
+F,7,406
+F,8,408
+F,9,400
+F,10,410
+F,11,409
+F,12,390
+F,13,405
+F,14,403
+F,15,411
+F,16,405
+F,17,413
+F,18,404
+F,19,399
+F,20,403
+`
+  },
+  {
+    id: "customers-served",
+    title: "Parametric ANOVA and screen for the best (customers served, 5 designs)",
+    file: "customers_served.csv",
+    kind: "reps",
+    format: "columns",
+    description: "Customers served over an 8-hour day by five versions of a single-server queue with room for 4 customers in all (the one in service and 3 waiting), where an arrival who finds the room full is turned away. Customers arrive at a mean of one a minute, the designs' mean service times are 1.00, 0.97, 0.80, 0.65, and 0.62 minute, and each design has 20 independent days. A day's count totals hundreds of customers, and so the outcomes are close to normal and spread about equally across the designs. Use it for a one-way analysis of variance whose assumption checks pass: the F test rejects equal means, neither Shapiro–Wilk on the residuals nor Levene's test flags anything, and Tukey's procedure groups A with B and D with E. With bigger taken as better, the screen keeps D and E, which it cannot tell apart.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Customers served","endTime":null,"blocks":false},
+    text: `design,replication,served
+A,1,369
+A,2,395
+A,3,396
+A,4,378
+A,5,397
+A,6,381
+A,7,406
+A,8,373
+A,9,374
+A,10,418
+A,11,378
+A,12,386
+A,13,369
+A,14,397
+A,15,389
+A,16,375
+A,17,389
+A,18,380
+A,19,383
+A,20,400
+B,1,392
+B,2,374
+B,3,377
+B,4,381
+B,5,390
+B,6,360
+B,7,385
+B,8,407
+B,9,375
+B,10,422
+B,11,383
+B,12,383
+B,13,353
+B,14,390
+B,15,384
+B,16,398
+B,17,381
+B,18,381
+B,19,403
+B,20,400
+C,1,395
+C,2,425
+C,3,428
+C,4,428
+C,5,416
+C,6,440
+C,7,411
+C,8,413
+C,9,438
+C,10,407
+C,11,421
+C,12,402
+C,13,439
+C,14,409
+C,15,435
+C,16,423
+C,17,456
+C,18,395
+C,19,428
+C,20,422
+D,1,425
+D,2,441
+D,3,456
+D,4,440
+D,5,438
+D,6,451
+D,7,473
+D,8,439
+D,9,442
+D,10,430
+D,11,459
+D,12,448
+D,13,448
+D,14,407
+D,15,450
+D,16,449
+D,17,447
+D,18,445
+D,19,431
+D,20,429
+E,1,456
+E,2,440
+E,3,447
+E,4,439
+E,5,452
+E,6,453
+E,7,448
+E,8,457
+E,9,470
+E,10,477
+E,11,433
+E,12,428
+E,13,458
+E,14,452
+E,15,452
+E,16,450
+E,17,459
+E,18,446
+E,19,429
+E,20,448
+`
+  },
+  {
+    id: "versus-control",
+    title: "Holm's step-down versus a control (customers served, 5 designs)",
+    file: "served_versus_control.csv",
+    kind: "reps",
+    format: "columns",
+    description: "Customers served over an 8-hour day by the queue of the parametric ANOVA example, with room for 4 customers in all and arrivals at a mean of one a minute: the current design A, whose mean service time is 1.00 minute, and four candidates that each serve a little faster, at means of 0.95, 0.94, 0.93, and 0.92 minute (B, C, D, and E), with 20 independent days each. Every design's counts look normal, and the designs spread about equally. Under Pairwise comparisons, switched to versus control with A as the control, each candidate's difference from A has its own p-value (about 0.044, 0.016, 0.021, and 0.0002 for B, C, D, and E). Bonferroni compares every one with 0.05/4 = 0.0125 and declares only E different from A. Holm's step-down compares the smallest with 0.0125, the next with 0.05/3, then 0.05/2 and 0.05, and declares all four, though it holds the chance of any false declaration at 5% just as Bonferroni does. Dunnett's procedure, offered in the analysis of variance for comparisons with a control, declares only E as well: like Bonferroni, it judges every comparison against one threshold, and the extra declarations come from stepping down.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Versus a control","endTime":null,"blocks":false},
+    text: `design,replication,served
+A,1,382
+A,2,383
+A,3,391
+A,4,387
+A,5,391
+A,6,367
+A,7,402
+A,8,366
+A,9,407
+A,10,384
+A,11,368
+A,12,389
+A,13,371
+A,14,377
+A,15,398
+A,16,370
+A,17,390
+A,18,370
+A,19,378
+A,20,372
+B,1,401
+B,2,381
+B,3,390
+B,4,411
+B,5,397
+B,6,396
+B,7,395
+B,8,403
+B,9,366
+B,10,390
+B,11,383
+B,12,376
+B,13,388
+B,14,384
+B,15,433
+B,16,358
+B,17,409
+B,18,400
+B,19,403
+B,20,374
+C,1,362
+C,2,394
+C,3,396
+C,4,410
+C,5,391
+C,6,403
+C,7,386
+C,8,384
+C,9,373
+C,10,404
+C,11,397
+C,12,405
+C,13,397
+C,14,379
+C,15,405
+C,16,411
+C,17,402
+C,18,368
+C,19,382
+C,20,406
+D,1,391
+D,2,376
+D,3,407
+D,4,372
+D,5,392
+D,6,407
+D,7,387
+D,8,406
+D,9,394
+D,10,422
+D,11,385
+D,12,383
+D,13,410
+D,14,413
+D,15,383
+D,16,403
+D,17,413
+D,18,393
+D,19,351
+D,20,382
+E,1,401
+E,2,407
+E,3,397
+E,4,423
+E,5,400
+E,6,409
+E,7,391
+E,8,384
+E,9,403
+E,10,419
+E,11,390
+E,12,424
+E,13,374
+E,14,384
+E,15,390
+E,16,401
+E,17,407
+E,18,378
+E,19,416
+E,20,392
 `
   },
   {
     id: "four-crn",
-    title: "Four designs: common random numbers",
+    title: "Blocked by common random numbers (average wait, 4 designs)",
     file: "four_designs_crn.csv",
     kind: "reps",
     format: "columns",
-    description: "The four queue designs of the ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs, and so the file's block column names the day. Several Systems opens the four designs paired across designs: the day effect they share comes out as a block, and the differences become paired intervals.",
+    description: "The four queue designs of the nonparametric ANOVA example (mean service times 0.80, 0.78, 0.75, and 0.70 minute, 10 days each), but with day i of every design driven by the same random inputs, and so the file's block column names the day. Several Systems opens the four designs paired across designs: the day effect they share comes out as a block, and the differences become paired intervals.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Four designs, CRN","endTime":null,"blocks":true},
     text: `design,block,avg_wait
 A,1,2.2815
@@ -355,7 +607,7 @@ D,10,1.4099
   },
   {
     id: "transient",
-    title: "Transient waits: warm-up",
+    title: "Warm-up (transient waits, 10 runs)",
     file: "transient_waits.txt",
     kind: "tally",
     format: "minus1",
@@ -3375,7 +3627,7 @@ D,10,1.4099
   },
   {
     id: "steady-long",
-    title: "One long run: batch means",
+    title: "Batch means (waits, one long run)",
     file: "steady_state_long.csv",
     kind: "tally",
     format: "columns",
@@ -8386,7 +8638,7 @@ D,10,1.4099
   },
   {
     id: "queue-length",
-    title: "Queue length: time-persistent",
+    title: "Time-persistent average (queue length, 5 runs)",
     file: "queue_length.txt",
     kind: "time",
     format: "minus1",
@@ -13275,7 +13527,7 @@ D,10,1.4099
   },
   {
     id: "service-level",
-    title: "Service level: a proportion to transform",
+    title: "Transform to even out spreads (service level, 3 designs)",
     file: "service_level.csv",
     kind: "reps",
     format: "columns",
@@ -13331,7 +13583,7 @@ C,15,0.5613
   },
   {
     id: "utilization",
-    title: "Utilization: a time-persistent proportion",
+    title: "Time-persistent proportion (utilization, 3 designs)",
     file: "utilization.csv",
     kind: "time",
     format: "columns",

@@ -914,9 +914,10 @@ function sevRank(r, L, out, need) {
   }
 }
 
-// The screen for the best, under every procedure: the subset-selection
-// screen with indifference zone epsilon and Rinott's second-stage sizes, or
-// the reason the page gives for not running it.
+// The screen for the best, under the t procedures only (the recipe carries no
+// screen under the rank procedures): the subset-selection screen with
+// indifference zone epsilon and Rinott's second-stage sizes, or the reason the
+// page gives for not running it.
 function sevSubset(r, L, out, need) {
   const S = r.several, lang = L.lang, f = FIELD[lang], c = L.comment;
   need.push('subset');
@@ -924,7 +925,6 @@ function sevSubset(r, L, out, need) {
   out.push(...commentLines(c, 'Confidence 1 - alpha is split evenly between the screen and the second-stage sizing, each at 1 - alpha/2. ' +
     'A design survives when no other design\'s mean beats it by more than max(0, W_ij - epsilon), where W_ij = t sqrt(s_i^2/R_i + s_j^2/R_j) ' +
     'and t is the screen\'s t quantile; a survivor needs N = max(R, ceiling((h s / epsilon)^2)) replications in all for Rinott\'s second stage, h being Rinott\'s constant. ' +
-    (S.np ? 'The screen works on means and standard deviations under every procedure; it has no rank version. ' : '') +
     'The best design is reported by its number on the page' + (lang === 'py' ? ', counted from 1.' : '.'), c));
   out.push(L.assign('ss', 'subset_selection(groups, alpha, epsilon, direction)'));
   if (!S.subset.ok) {

@@ -244,9 +244,9 @@ test('the bundled examples round-trip through the all-dataset observations file'
       groups.get(key).push(ds);
     }
   }
-  // reps without times (eight examples), tally with times (two), time-persistent ending at 480 and at 600 (one each)
+  // reps without times (ten examples), tally with times (two), time-persistent ending at 480 and at 600 (one each)
   assert.deepEqual([...groups.keys()].sort(), ['reps untimed', 'tally timed', 'time timed to 480', 'time timed to 600']);
-  assert.equal(groups.get('reps untimed').length, 24);
+  assert.equal(groups.get('reps untimed').length, 34);
   for (const [key, group] of groups) {
     const ends = new Set(group.map(ds => ds.endTime));
     assert.equal(ends.size, 1, key);

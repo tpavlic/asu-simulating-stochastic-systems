@@ -1,14 +1,15 @@
 // Tests for the small rules the pages apply, each a pure function: the ticks
 // the Equal variances checklist on Summary and Plots opens with, Two Systems'
 // verdict on the F ratio of the variances with its exported "interval
-// contains 1" entry, and the labels the figures and the regenerate scripts
-// share. Expected values follow from each rule as its
+// contains 1" entry, the labels the figures and the regenerate scripts
+// share, and which of Several Systems' sections and procedures can be chosen
+// together. Expected values follow from each rule as its
 // JSDoc states it; the one statistic used, fRatio on constant designs, gives
 // standard deviations of exactly 0 by its own definition (pinned in
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault, histChoice } from '../js/ui/rules.js';
+import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault, histChoice, severalSectionsOff, rankProcWithheld } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
@@ -133,4 +134,27 @@ test('histChoice: a bar per value for discrete data, Sturges\' equal-width bins 
   const many = Array.from({ length: 400 }, (_, i) => Math.sqrt(i + 1));
   assert.deepEqual([histChoice(many, { mode: 'value' }).perValue, histChoice(many, null).canValue], [false, false], 'too many values for a bar each');
   assert.deepEqual([histChoice([], null).perValue, histChoice([], null).canValue], [false, false]);
+});
+
+// The screen for the best has no rank version, and so the page never offers
+// it and the nonparametric procedure together: the screen's section is
+// unavailable under the rank procedures, and the nonparametric setting while
+// that section is open. With one design, the sections that compare designs
+// say they need a second, whatever the procedure.
+test('severalSectionsOff and rankProcWithheld keep the screen and the rank procedures apart', () => {
+  assert.equal(severalSectionsOff({ k: 4, proc: 't' }), null);
+  assert.equal(severalSectionsOff({ k: 0, proc: 't' }), null);
+  for (const k of [0, 2, 6]) {
+    const off = severalSectionsOff({ k, proc: 'np' });
+    assert.deepEqual(Object.keys(off), ['subset'], 'k = ' + k);
+    assert.match(off.subset, /no nonparametric version/);
+    assert.match(off.subset, /“t procedures”/);
+  }
+  for (const proc of ['t', 'np']) {
+    const off = severalSectionsOff({ k: 1, proc });
+    assert.deepEqual(Object.keys(off).sort(), ['anova', 'diffs', 'subset'], proc);
+    assert.match(off.subset, /two or more/);
+  }
+  assert.match(rankProcWithheld('subset'), /no nonparametric version/);
+  for (const sec of ['means', 'diffs', 'anova', null]) assert.equal(rankProcWithheld(sec), null, String(sec));
 });

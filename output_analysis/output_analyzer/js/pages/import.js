@@ -207,13 +207,14 @@ export function render(root) {
   });
 
   // One group per page the examples are for, in the pages' own order, so a
-  // reader who came from a page finds its datasets together. The groups
-  // name ids, and an example missing from every group (a new one, say) is
-  // listed at the end under no label rather than dropped.
+  // reader who came from a page finds its datasets together, and within a
+  // group the simplest analysis first. The groups name ids, and an example
+  // missing from every group (a new one, say) is listed at the end under no
+  // label rather than dropped.
   const groups = [
     { label: 'One System', ids: ['queue-reps'] },
     { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'muffin-oven'] },
-    { label: 'Several Systems', ids: ['four-designs', 'six-designs', 'four-crn', 'service-level'] },
+    { label: 'Several Systems', ids: ['customers-served', 'versus-control', 'four-designs', 'four-crn', 'six-designs', 'service-level'] },
     { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
   ];
   const option = ex => '<option value="' + esc(ex.id) + '">' + esc(ex.title) + '</option>';

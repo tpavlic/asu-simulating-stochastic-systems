@@ -27,17 +27,20 @@ const heading = (text, bad, tested) => '<b class="' + (bad ? 'chk-bad' : tested 
 /**
  * Builds the checks callout.
  * @param {{ sets: {name: string, values: ArrayLike<number>, dsId?: string}[], pooled?: boolean, alpha?: number, declared?: string,
- *   procedure?: string, varianceSets?: ArrayLike<number>[], alternative?: string, linkDs?: string }} o
+ *   procedure?: string, remedy?: string, varianceSets?: ArrayLike<number>[], alternative?: string, linkDs?: string }} o
  *   `varianceSets` are the groups Levene's test compares when they differ from
  *   `sets` (an analysis of variance checks normality on the residuals but
  *   spreads across the designs); `alternative` names what to prefer when the
  *   spreads differ. `linkDs` is the dataset the Normality link opens when the
  *   rejecting set is not itself a dataset (residuals, paired differences).
  *   `pooled` adds Levene's test across the sets; `declared` is the sentence
- *   on independence, starting after the word "Independence".
+ *   on independence, starting after the word "Independence". `remedy` is the
+ *   advice, in whole sentences, when normality is rejected, for a procedure
+ *   with no nonparametric counterpart to recommend; without it, the line
+ *   suggests one in place of `procedure`.
  * @returns {HTMLElement}
  */
-export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared = null, procedure = 'this procedure',
+export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared = null, procedure = 'this procedure', remedy = null,
                                    varianceSets = null, alternative = 'a procedure that does not pool the variances, such as Welch’s', linkDs = null }) {
   const parts = [];
   let warn = false, tested = false, normBad = false, normTested = false, firstBad = null;
@@ -61,7 +64,8 @@ export function assumptionChecks({ sets, pooled = false, alpha = 0.05, declared 
   const minN = Math.min(...sets.map(st => st.values.length));
   const small = minN < SMALL;
   let html = heading('Normality checks.', normBad, normTested) + ' ' + parts.join('; ') + '.' +
-    (normBad ? ' Consult the ' + normLink('Normality section of Summary and Plots', firstBad || linkDs) + ' and consider a nonparametric procedure instead of ' + procedure + '. The results on this page assume normality and should be interpreted with caution when the data are not consistent with that assumption.' : '') +
+    (normBad ? ' Consult the ' + normLink('Normality section of Summary and Plots', firstBad || linkDs) +
+      (remedy ? '. ' + remedy : ' and consider a nonparametric procedure instead of ' + procedure + '.') + ' The results on this page assume normality and should be interpreted with caution when the data are not consistent with that assumption.' : '') +
     (small && tested ? ' With n = ' + intl(minN) + ' these checks have little power.' : '');
   const vsets = varianceSets ? varianceSets.map(v => Array.from(v).filter(Number.isFinite)) : sets.map(st => Array.from(st.values).filter(Number.isFinite));
   if (pooled && vsets.length >= 2 && vsets.every(v => v.length >= 2)) {
