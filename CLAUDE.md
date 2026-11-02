@@ -986,7 +986,12 @@ better.
   Optimization closes the arc with no simulated data: a stepped flowchart of the adaptive
   search loop (propose, simulate, estimate, judge, update, report), the metaheuristic and
   response-surface families that drive it, where ranking and selection fits inside it, and what
-  the noise does to a reported best. Every history
+  the noise does to a reported best. While a correction is selected, tabs ① to ④ also draw each
+  interval's uncorrected 1 − α version as a pale slate band (`--ghost`) behind the corrected one,
+  from the `rawLo` and `rawHi` that `oneSampleFamily`, `pairFamily`, and `winnerFamily` record, so
+  that the corrected line running past the band is the width the correction adds; the colors
+  and decisions stay the corrected ones, a "Show uncorrected intervals" checkbox (ticked by
+  default) turns the bands off, and with no correction selected the checkbox is grayed. Every history
   strip names what a column counts and its caption carries the family-level tally with its
   reference, and every page runs once by itself the first time it is shown, so a reader lands on
   a drawn family rather than an empty frame. Tabs ② and ④ open with "Each design's replications" above their

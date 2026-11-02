@@ -58,6 +58,9 @@
   /* indigo, THEME.md's third data color: a decision that is correct (a true
      detection, a correct selection) and any bar that carries no error. */
   --ok:          #3F4C8C;
+  /* a corrected interval's uncorrected counterpart (1 − α), drawn as a pale
+     slate band behind it: neutral, and so it carries no decision. */
+  --ghost:       rgba(100,116,139,.30);
   /* the sampled thing when it is not the one in focus (tab ③'s losers, tab
      ⑥'s eliminated designs). */
   --est-muted:   rgba(194,87,10,.45);
@@ -191,6 +194,9 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .ctrl-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; min-height: 24px;
             font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; }
 .ctrl-chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
+/* A checkbox that has nothing to act on under the current settings. */
+.ctrl-chk.is-off { opacity: .5; cursor: not-allowed; }
+.ctrl-chk.is-off input { cursor: not-allowed; }
 /* Own line inside the wrapping row, with the height reserved so text causes no shift.
    min-height must match line-height (1.35, unitless -> 1.35em at this element's own
    font-size), not just approximate it: 1.15em reserved less than one line actually
@@ -587,12 +593,15 @@ svg.fig { display: block; width: 100%; height: auto; }
             <option value="bonf">1 − α/K (Bonferroni)</option>
           </select>
         </span>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Draws each interval uncorrected, at 1 − α, as a pale band behind the corrected one, and so the colored line running past the band is the width the correction adds. The colors and decisions stay the corrected ones. Available while a correction is selected." data-tip-press>
+          <input type="checkbox" id="looks-ghost" checked onchange="TABS.looks.render()"> <span class="tip">Show uncorrected intervals</span>
+        </label>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd" id="looks-fig-title">One design on five responses, every true mean at its baseline</div>
       <div class="fig-note" id="looks-level-line"></div>
-      <svg class="fig" id="looks-fig" role="img" aria-label="One small panel per response, each on its own scale in its own units with its baseline as a dashed line; the design's interval for that response is red, dashed, with a hollow dot when it excludes the baseline (a false alarm) and gray when it contains it"></svg>
+      <svg class="fig" id="looks-fig" role="img" aria-label="One small panel per response, each on its own scale in its own units with its baseline as a dashed line; the design's interval for that response is red, dashed, with a hollow dot when it excludes the baseline (a false alarm) and gray when it contains it; with Bonferroni selected, a pale band behind each interval marks the same interval uncorrected"></svg>
       <div class="leg" id="looks-fig-leg"></div>
       <div class="fig-note" id="looks-fig-cap"></div>
     </div>
@@ -706,6 +715,9 @@ svg.fig { display: block; width: 100%; height: auto; }
             <option value="bonf">1 − α/C (Bonferroni)</option>
           </select>
         </span>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Draws each interval uncorrected, at 1 − α, as a pale band behind the corrected one, and so the colored line running past the band is the width the correction adds. The colors and decisions stay the corrected ones. Available while a correction is selected." data-tip-press>
+          <input type="checkbox" id="pairs-ghost" checked onchange="TABS.pairs.render()"> <span class="tip">Show uncorrected intervals</span>
+        </label>
       </div>
     </div>
     <div class="sec">
@@ -717,7 +729,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="sec">
       <div class="sec-hd">Differences between designs (bigger is better)</div>
       <div class="fig-note" id="pairs-level-line"></div>
-      <svg class="fig" id="pairs-fig" role="img" aria-label="One horizontal interval per comparison, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero"></svg>
+      <svg class="fig" id="pairs-fig" role="img" aria-label="One horizontal interval per comparison, centered on zero, each comparison's true difference shown as a teal tick and its interval colored by the test's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the interval excludes zero; with Bonferroni selected, a pale band behind each interval marks the same interval uncorrected"></svg>
       <div class="leg" id="pairs-fig-leg"></div>
       <div class="fig-note" id="pairs-fig-cap"></div>
       <div id="pairs-table"></div>
@@ -821,12 +833,15 @@ svg.fig { display: block; width: 100%; height: auto; }
             <option value="bonf">1 − α/K (Bonferroni)</option>
           </select>
         </span>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Draws each interval uncorrected, at 1 − α, as a pale band behind the corrected one, and so the colored line running past the band is the width the correction adds. The colors and decisions stay the corrected ones. Available while a correction is selected." data-tip-press>
+          <input type="checkbox" id="winner-ghost" checked onchange="TABS.winner.render()"> <span class="tip">Show uncorrected intervals</span>
+        </label>
       </div>
     </div>
     <div class="sec">
       <div class="sec-hd">Designs and the winner</div>
       <div class="fig-note" id="winner-level-line"></div>
-      <svg class="fig" id="winner-fig" role="img" aria-label="One vertical interval per design over the design index, each design's true mean shown as a teal tick; every design but the winner is muted, and the design chosen as the winner is colored teal with a filled dot when its interval captures its true mean and red, dashed, with a hollow dot when it misses, ringed in orange as this family's pick"></svg>
+      <svg class="fig" id="winner-fig" role="img" aria-label="One vertical interval per design over the design index, each design's true mean shown as a teal tick; every design but the winner is muted, and the design chosen as the winner is colored teal with a filled dot when its interval captures its true mean and red, dashed, with a hollow dot when it misses, ringed in orange as this family's pick; with Bonferroni selected, a pale band behind each interval marks the same interval uncorrected"></svg>
       <div class="leg" id="winner-fig-leg"></div>
       <div class="fig-note" id="winner-fig-cap"></div>
     </div>
@@ -931,6 +946,9 @@ svg.fig { display: block; width: 100%; height: auto; }
             <option value="holm">Holm's step-down</option>
           </select>
         </span>
+        <label class="ctrl-chk ctrl-pair-wide" data-tip="Draws each interval uncorrected, at 1 − α, as a pale band behind the corrected one, and so the colored line running past the band is the width the correction adds. The colors and decisions stay the corrected ones. Available while a correction is selected." data-tip-press>
+          <input type="checkbox" id="power-ghost" checked onchange="TABS.power.render()"> <span class="tip">Show uncorrected intervals</span>
+        </label>
       </div>
     </div>
     <div class="sec">
@@ -942,7 +960,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="sec">
       <div class="sec-hd">Differences between designs, judged by the selected rule (bigger is better)</div>
       <div class="fig-note" id="power-level-line"></div>
-      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the level the selected rule gives it: the uncorrected level, the Bonferroni level, or under Holm's step-down the level of its own step, with a comparison the step-down never reached drawn as the whole line. Each comparison's true difference is shown as a teal tick and its interval colored by the rule's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the comparison was flagged"></svg>
+      <svg class="fig" id="power-fig" role="img" aria-label="One horizontal interval per comparison, drawn at the level the selected rule gives it: the uncorrected level, the Bonferroni level, or under Holm's step-down the level of its own step, with a comparison the step-down never reached drawn as the whole line. Each comparison's true difference is shown as a teal tick and its interval colored by the rule's decision: red, dashed, with a hollow dot for a false alarm, indigo for a detection, and gray when kept, with a decision glyph marking whether the comparison was flagged; under Bonferroni or Holm, a pale band behind each interval marks the uncorrected interval"></svg>
       <div class="leg" id="power-fig-leg"></div>
       <div class="fig-note" id="power-fig-cap"></div>
       <div id="power-table"></div>
@@ -1915,6 +1933,9 @@ function oneSampleFamily(Y, o) {
   var C = Y.length, R = Y[0].length, df = R - 1;
   var alphaJ = o.level === 'bonf' ? o.alpha / C : o.alpha;
   var tcrit = tQuantile(1 - alphaJ / 2, df);
+  // The uncorrected critical value, for the 1 - alpha interval each item
+  // also carries (rawLo, rawHi): the same as tcrit when no correction is on.
+  var tcritRaw = alphaJ === o.alpha ? tcrit : tQuantile(1 - o.alpha / 2, df);
   var items = [], nReject = 0, nFalse = 0, allCaptured = true, i;
   for (i = 0; i < C; i++) {
     var m = mean(Y[i]), sd = Math.sqrt(sampleVar(Y[i])), se = sd / Math.sqrt(R);
@@ -1927,6 +1948,7 @@ function oneSampleFamily(Y, o) {
     if (falseRej) nFalse++;
     if (!captured) allCaptured = false;
     items.push({ i: i, mean: m, sd: sd, se: se, half: half, lo: lo, hi: hi, truth: truth,
+                 rawLo: m - tcritRaw * se, rawHi: m + tcritRaw * se,
                  captured: captured, reject: reject, falseRej: falseRej, p: p });
   }
   return { C: C, alphaJ: alphaJ, df: df, tcrit: tcrit, items: items,
@@ -1944,6 +1966,7 @@ function pairFamily(Y, o) {
   var C = pairs.length, df = o.paired ? R - 1 : 2 * R - 2;
   var alphaJ = o.level === 'bonf' ? o.alpha / C : o.alpha;
   var tcrit = tQuantile(1 - alphaJ / 2, df);
+  var tcritRaw = alphaJ === o.alpha ? tcrit : tQuantile(1 - o.alpha / 2, df);
   var items = [], nReject = 0, nFalse = 0, nTrueDet = 0, nNull = 0, nNonNull = 0, allCaptured = true, k, r;
   for (k = 0; k < C; k++) {
     i = pairs[k][0]; j = pairs[k][1];
@@ -1970,7 +1993,7 @@ function pairFamily(Y, o) {
     if (trueDet) nTrueDet++;
     if (!captured) allCaptured = false;
     items.push({ i: i, j: j, diff: diff, se: se, half: half, lo: lo, hi: hi, trueDiff: trueDiff,
-                 captured: captured, reject: reject, falseRej: falseRej, trueDet: trueDet, p: p, pBonf: pBonf });
+                 rawLo: diff - tcritRaw * se, rawHi: diff + tcritRaw * se, captured: captured, reject: reject, falseRej: falseRej, trueDet: trueDet, p: p, pBonf: pBonf });
   }
   return { C: C, alphaJ: alphaJ, df: df, tcrit: tcrit, items: items, nReject: nReject,
            nFalse: nFalse, nTrueDet: nTrueDet, nNull: nNull, nNonNull: nNonNull,
@@ -2066,11 +2089,13 @@ function winnerFamily(Y, o) {
   var K = Y.length, R = Y[0].length, df = R - 1, sgn = o.dir === 'max' ? 1 : -1;
   var alphaJ = o.level === 'bonf' ? o.alpha / K : o.alpha;
   var tcrit = tQuantile(1 - alphaJ / 2, df);
+  var tcritRaw = alphaJ === o.alpha ? tcrit : tQuantile(1 - o.alpha / 2, df);
   var items = [], win = 0, i;
   for (i = 0; i < K; i++) {
     var m = mean(Y[i]), sd = Math.sqrt(sampleVar(Y[i])), half = tcrit * sd / Math.sqrt(R);
-    var lo = m - half, hi = m + half, truth = o.means[i];
-    items.push({ i: i, mean: m, sd: sd, lo: lo, hi: hi, truth: truth, captured: lo <= truth && truth <= hi });
+    var lo = m - half, hi = m + half, truth = o.means[i], rawHalf = tcritRaw * sd / Math.sqrt(R);
+    items.push({ i: i, mean: m, sd: sd, lo: lo, hi: hi, truth: truth, captured: lo <= truth && truth <= hi,
+                 rawLo: m - rawHalf, rawHi: m + rawHalf });
     if (sgn * (items[i].mean - items[win].mean) > 0) win = i;
   }
   var winItem = items[win];
@@ -2245,7 +2270,7 @@ var C = {
   muted: tok('--muted'), bg: tok('--chart-bg'), text: tok('--text'), border: tok('--border'),
   truth: tok('--truth'), est: tok('--est'), estPale: tok('--est-pale'), estMuted: tok('--est-muted'),
   hit: tok('--hit'), miss: tok('--miss'), warn: tok('--warn'), pair: tok('--pair'), band: tok('--band'),
-  ok: tok('--ok')
+  ok: tok('--ok'), ghost: tok('--ghost')
 };
 var FF_MONO = 'IBM Plex Mono,monospace';
 var FF_SANS = 'Outfit,sans-serif';
@@ -2979,6 +3004,12 @@ function forestPlot(svgEl, items, opts) {
     // (tab (4) under Holm's rule) carries the whole line, lo and hi infinite,
     // and so draws as a muted interval clipped at both edges with arrows.
     if (!it.placeholder) {
+      // opts.ghost: the uncorrected interval as a pale band behind the
+      // corrected one, which runs past the band by the width the correction adds.
+      if (opts.ghost && it.rawLo != null) {
+        var gx0 = xP(clip(it.rawLo)), gx1 = xP(clip(it.rawHi));
+        h += '<rect x="' + gx0 + '" y="' + (cy - 4.5) + '" width="' + (gx1 - gx0) + '" height="9" rx="2" fill="' + C.ghost + '"/>';
+      }
       h += '<line x1="' + xP(lo) + '" y1="' + cy + '" x2="' + xP(hi) + '" y2="' + cy + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
       if (loClipped) h += arrowMark(xP(lo), cy, -1, col);
       if (hiClipped) h += arrowMark(xP(hi), cy, 1, col);
@@ -3114,6 +3145,10 @@ function designsPlot(svgEl, items, opts) {
     // mean to show: drawing its zero-width interval would put a dot on every
     // truth bar that reads as a result. Only the truth bar and label are drawn.
     if (!it.placeholder) {
+      // opts.ghost: the uncorrected interval as a pale band behind this one.
+      if (opts.ghost && it.rawLo != null) {
+        h += '<rect x="' + (cx - 5) + '" y="' + yP(it.rawHi) + '" width="10" height="' + (yP(it.rawLo) - yP(it.rawHi)) + '" rx="2" fill="' + C.ghost + '"/>';
+      }
       h += '<line x1="' + cx + '" y1="' + yP(it.lo) + '" x2="' + cx + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
       h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.hi) + '" x2="' + (cx + 6) + '" y2="' + yP(it.hi) + '" stroke="' + col + '" stroke-width="1.8"/>';
       h += '<line x1="' + (cx - 6) + '" y1="' + yP(it.lo) + '" x2="' + (cx + 6) + '" y2="' + yP(it.lo) + '" stroke="' + col + '" stroke-width="1.8"/>';
@@ -3430,6 +3465,20 @@ function swDecision(color, hollow) {
     + (hollow ? '<circle cx="12" cy="6" r="3.6" fill="#fff" stroke="' + color + '" stroke-width="2"/>' : '<circle cx="12" cy="6" r="4" fill="' + color + '"/>'));
 }
 function swWhole(color) { return legSwatch('<line x1="4" y1="6" x2="20" y2="6" stroke="' + color + '" stroke-width="2"/><path d="M4 6l4 -3v6z" fill="' + color + '"/><path d="M20 6l-4 -3v6z" fill="' + color + '"/>'); }
+function swGhost() { return legSwatch('<rect x="4" y="1.5" width="16" height="9" rx="2" fill="' + C.ghost + '"/><line x1="1" y1="6" x2="23" y2="6" stroke="' + C.muted + '" stroke-width="1.8"/>'); }
+// The legend entry for the pale band, which a tab adds while it draws one.
+function ghostLegend(level) {
+  return legendHtml([{ sw: swGhost(), label: 'pale band: the same interval uncorrected, at ' + level + ', for comparison' }]);
+}
+// Whether a tab draws the uncorrected bands: its checkbox ticked and a
+// correction selected. With no correction there is nothing to compare, and
+// so the checkbox is grayed and inert (its tick kept for later).
+function ghostOn(tab, corrected) {
+  var box = $(tab + '-ghost');
+  box.disabled = !corrected;
+  box.closest('.ctrl-chk').classList.toggle('is-off', !corrected);
+  return corrected && box.checked;
+}
 function swDot(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="' + color + '"/>'); }
 function swDotHollow(color) { return legSwatch('<circle cx="12" cy="6" r="4" fill="#fff" stroke="' + color + '" stroke-width="2"/>'); }
 // Each entry is a flex row of swatch and label; the label is wrapped in its
@@ -3669,6 +3718,11 @@ function responsesPlot(svgEl, items, opts) {
     // sample mean, and the panel shows only its baseline.
     if (it.placeholder) return;
     var lo = yP(units(it.lo)), hi = yP(units(it.hi)), ym = yP(units(it.mean));
+    // opts.ghost: the uncorrected interval as a pale band behind this one.
+    if (opts.ghost && it.rawLo != null) {
+      var gTop = yP(units(it.rawHi));
+      h += '<rect x="' + (cx - 5) + '" y="' + gTop + '" width="10" height="' + (yP(units(it.rawLo)) - gTop) + '" rx="2" fill="' + C.ghost + '"/>';
+    }
     h += '<line x1="' + cx + '" y1="' + lo + '" x2="' + cx + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"' + dash + '/>';
     h += '<line x1="' + (cx - 6) + '" y1="' + hi + '" x2="' + (cx + 6) + '" y2="' + hi + '" stroke="' + col + '" stroke-width="1.8"/>';
     h += '<line x1="' + (cx - 6) + '" y1="' + lo + '" x2="' + (cx + 6) + '" y2="' + lo + '" stroke="' + col + '" stroke-width="1.8"/>';
@@ -3834,8 +3888,10 @@ TABS.looks = {
     var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, LOOKS_THETA0, sp.delta, sp.dir).map(function (t) {
       return { truth: t, lo: t, hi: t, mean: t, captured: true, reject: false, falseRej: false, placeholder: true };
     });
-    responsesPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES });
-    $('looks-fig-leg').innerHTML = looksFigLegendHtml();
+    var looksGhost = ghostOn('looks', post.level === 'bonf');
+    responsesPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES, ghost: looksGhost });
+    $('looks-fig-leg').innerHTML = looksFigLegendHtml() + (looksGhost ? ghostLegend('1 − α') : '');
+    reserveCapHeight($('looks-fig-leg'), looksFigLegendHtml() + ghostLegend('1 − α'), true);
     looksFigCaption($('looks-fig-cap'), all.length, latest ? latest.rec : null, post.theta0);
 
     var stripRes = stripPlot($('looks-strip'), runs, {
@@ -3994,11 +4050,13 @@ TABS.pairs = {
     var latest = runs.length ? runs[runs.length - 1] : null;
     var items = latest ? latest.rec.items : pairsPlaceholderItems(sp.K, post.mode);
     renderReplications('pairs', latest, sp, all.length, true);
+    var pairsGhost = ghostOn('pairs', post.level === 'bonf');
     forestPlot($('pairs-fig'), items, {
-      span: span, hyp: 0, glyph: true, full: true,
+      span: span, hyp: 0, glyph: true, full: true, ghost: pairsGhost,
       labelOf: function (it) { return (it.i + 1) + ' − ' + (it.j + 1); }
     });
-    $('pairs-fig-leg').innerHTML = pairsFigLegendHtml();
+    $('pairs-fig-leg').innerHTML = pairsFigLegendHtml() + (pairsGhost ? ghostLegend('1 − α') : '');
+    reserveCapHeight($('pairs-fig-leg'), pairsFigLegendHtml() + ghostLegend('1 − α'), true);
     pairsFigCaption($('pairs-fig-cap'), all.length, latest ? latest.rec : null);
     pTable($('pairs-table'), items, pairsTableCols());
 
@@ -4181,13 +4239,14 @@ TABS.power = {
     var figItems = !latest ? pairsPlaceholderItems(sp.K, post.mode)
       : post.rule === 'none' ? latest.rec.raw.items
       : post.rule === 'bonf' ? latest.rec.bonfItems : latest.rec.holmItems;
+    var powerGhost = ghostOn('power', post.rule !== 'none');
     forestPlot($('power-fig'), figItems, {
-      span: span, hyp: 0, glyph: true, full: true,
+      span: span, hyp: 0, glyph: true, full: true, ghost: powerGhost,
       labelOf: function (it) { return (it.i + 1) + ' − ' + (it.j + 1); }
     });
     var powerLegEl = $('power-fig-leg');
-    powerLegEl.innerHTML = powerFigLegendHtml(post.rule);
-    reserveCapHeight(powerLegEl, powerFigLegendHtml('holm'), true);
+    powerLegEl.innerHTML = powerFigLegendHtml(post.rule) + (powerGhost ? ghostLegend('1 − α') : '');
+    reserveCapHeight(powerLegEl, powerFigLegendHtml('holm') + ghostLegend('1 − α'), true);
     powerFigCaption($('power-fig-cap'), post);
     pTable($('power-table'), powerTableRows(latest ? latest.rec : null, sp, post), powerTableCols());
 
@@ -4365,8 +4424,10 @@ TABS.winner = {
     var items = latest ? latest.rec.items : MCP.trueMeans(sp.cfg, sp.K, 10, sp.delta, sp.dir).map(function (t) {
       return { truth: t, lo: t, hi: t, mean: t, captured: true, placeholder: true };
     });
-    designsPlot($('winner-fig'), items, { ySpan: span, winnerIdx: latest ? latest.rec.win : null, full: true });
-    $('winner-fig-leg').innerHTML = winnerFigLegendHtml();
+    var winnerGhost = ghostOn('winner', post.level === 'bonf');
+    designsPlot($('winner-fig'), items, { ySpan: span, winnerIdx: latest ? latest.rec.win : null, full: true, ghost: winnerGhost });
+    $('winner-fig-leg').innerHTML = winnerFigLegendHtml() + (winnerGhost ? ghostLegend('1 − α') : '');
+    reserveCapHeight($('winner-fig-leg'), winnerFigLegendHtml() + ghostLegend('1 − α'), true);
     winnerFigCaption($('winner-fig-cap'), all.length, latest ? latest.rec : null, sp.dir);
 
     // The frozen window ties the history's y-axis to the same span the
