@@ -566,8 +566,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="looks-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="looks-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('looks')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('looks');}">
+          <label class="ctrl-lbl" for="looks-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+          <input class="seed-inp" id="looks-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="looks-seed-msg" onchange="normalizeSeed('looks')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('looks');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="looks-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -575,6 +575,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="looks-run" onclick="runOne('looks')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="looks-run100" onclick="runBatch('looks')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('looks')">Clear history</button>
+        <span class="seed-msg" id="looks-seed-msg" role="status" aria-live="polite"></span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
       <div class="ctrl-row par-row">
@@ -681,8 +682,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Without common random numbers, each design takes its own successive draws from this one seeded stream, which makes the designs as independent as giving each its own stream; with them, the designs also share a common component drawn once per replication.">Seed</span></label>
-          <input class="seed-inp" id="pairs-seed" type="text" inputmode="numeric" value="13579" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('pairs')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('pairs');}">
+          <label class="ctrl-lbl" for="pairs-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100. Without common random numbers, each design takes its own successive draws from this one seeded stream, which makes the designs as independent as giving each its own stream; with them, the designs also share a common component drawn once per replication.">Seed</span></label>
+          <input class="seed-inp" id="pairs-seed" type="text" inputmode="numeric" value="13579" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="pairs-seed-msg" onchange="normalizeSeed('pairs')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('pairs');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="pairs-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -690,6 +691,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="pairs-run" onclick="runOne('pairs')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="pairs-run100" onclick="runBatch('pairs')" data-tip="Runs 100 families back to back from consecutive seeds. The false-alarm rate below should settle near the family-wise error rate this many comparisons produce." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('pairs')">Clear history</button>
+        <span class="seed-msg" id="pairs-seed-msg" role="status" aria-live="polite"></span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
       <div class="ctrl-row par-row">
@@ -806,8 +808,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
+          <label class="ctrl-lbl" for="winner-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+          <input class="seed-inp" id="winner-seed" type="text" inputmode="numeric" value="97531" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="winner-seed-msg" onchange="normalizeSeed('winner')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('winner');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="winner-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -815,6 +817,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="winner-run" onclick="runOne('winner')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="winner-run100" onclick="runBatch('winner')" data-tip="Runs 100 families back to back from consecutive seeds. The winner's observed coverage below should settle near the known-σ reference under the raw level, and rise back toward 1 − α/2 under the Bonferroni level." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('winner')">Clear history</button>
+        <span class="seed-msg" id="winner-seed-msg" role="status" aria-live="polite"></span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
       <div class="ctrl-row par-row">
@@ -911,8 +914,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="power-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="power-seed" type="text" inputmode="numeric" value="24680" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('power')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('power');}">
+          <label class="ctrl-lbl" for="power-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+          <input class="seed-inp" id="power-seed" type="text" inputmode="numeric" value="24680" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="power-seed-msg" onchange="normalizeSeed('power')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('power');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="power-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -920,6 +923,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="power-run" onclick="runOne('power')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="power-run100" onclick="runBatch('power')" data-tip="Runs 100 families back to back from consecutive seeds. Bonferroni's and Holm's power below should settle near their analytic values, and both rules' false-alarm rates should settle at or below α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('power')">Clear history</button>
+        <span class="seed-msg" id="power-seed-msg" role="status" aria-live="polite"></span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
       <div class="ctrl-row par-row">
@@ -1059,8 +1063,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="anova-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="anova-seed" type="text" inputmode="numeric" value="15935" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('anova')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('anova');}">
+          <label class="ctrl-lbl" for="anova-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+          <input class="seed-inp" id="anova-seed" type="text" inputmode="numeric" value="15935" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="anova-seed-msg" onchange="normalizeSeed('anova')" onkeydown="if(event.key==='Enter'){event.preventDefault();runOne('anova');}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="anova-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -1068,6 +1072,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run" id="anova-run" onclick="runOne('anova')"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run</button>
         <button class="btn-run2" id="anova-run100" onclick="runBatch('anova')" data-tip="Runs 100 families back to back from consecutive seeds. Watch protected LSD's family-wise rate settle above α, whereas Tukey's and Bonferroni's stay at or below it." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="clearHist('anova')">Clear history</button>
+        <span class="seed-msg" id="anova-seed-msg" role="status" aria-live="polite"></span>
       </div>
       <div class="ctrl-grp-lbl"><span class="tip" tabindex="0" data-tip="The analysis of the experiment: these settings decide how the families already drawn are judged. A change re-judges every family in the history at once, and no new data are drawn.">Chosen by the experimenter after the data are gathered</span></div>
       <div class="ctrl-row par-row">
@@ -1239,8 +1244,8 @@ svg.fig { display: block; width: 100%; height: auto; }
       </div>
       <div class="ctrl-row">
         <span class="ctrl-grp">
-          <label class="ctrl-lbl" for="best-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly.">Seed</span></label>
-          <input class="seed-inp" id="best-seed" type="text" inputmode="numeric" value="26317" maxlength="10" autocomplete="off" spellcheck="false" onchange="currentSeed('best')" onkeydown="if(event.key==='Enter'){event.preventDefault();bestRun();}">
+          <label class="ctrl-lbl" for="best-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same family exactly. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+          <input class="seed-inp" id="best-seed" type="text" inputmode="numeric" value="26317" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="best-seed-msg" onchange="normalizeSeed('best')" onkeydown="if(event.key==='Enter'){event.preventDefault();bestRun();}">
           <label class="ctrl-chk" data-tip="Run always uses the seed shown. With this ticked, a fresh seed is drawn afterward, ready for the next run." data-tip-press>
             <input type="checkbox" id="best-newseed" checked> <span class="tip">New seed after each run</span>
           </label>
@@ -1249,6 +1254,7 @@ svg.fig { display: block; width: 100%; height: auto; }
         <button class="btn-run2" id="best-step" onclick="bestStep()" data-tip="Advances through the procedure's own stages one at a time: first stage, screening, second-stage sizes, second stage, and selection. Starts a new run at the first stage once the previous one reaches selection." data-tip-press><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Step</button>
         <button class="btn-run2" id="best-run100" onclick="bestRunBatch()" data-tip="Runs 100 two-stage procedures back to back from consecutive seeds. Watch the probability of correct selection below settle at or above 1 − α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run &times;100</button>
         <button class="btn-clear" onclick="bestClear()">Clear history</button>
+        <span class="seed-msg" id="best-seed-msg" role="status" aria-live="polite"></span>
       </div>
     </div>
     <div class="sec">
@@ -2539,30 +2545,96 @@ function randomSeed() { return 100000 + Math.floor(Math.random() * 900000); }
 // safe here: mulberry32 avalanche-mixes them into well-separated streams.
 function batchSeed(s0, i) { return (s0 + i) % (MCP.SEED_MAX + 1); }
 var BATCH_RUNS = 100;
-// Reads the seed box, clamping and normalizing it, and writes back what was
-// used so the field always shows the value a run actually received. Falls
-// back to a fresh random seed when the box does not exist yet or holds
-// nothing usable because a tab may call this before its own controls are built.
-function currentSeed(tab) {
-  var el = $(tab + '-seed');
-  if (!el) return randomSeed();
-  var n = parseInt(el.value, 10);
-  if (!Number.isFinite(n) || n < 0) n = randomSeed();
-  n = Math.min(MCP.SEED_MAX, Math.max(0, n));
-  el.value = String(n);
-  return n;
+// Reads a typed seed. Any whole number from 0 to SEED_MAX is a seed, and a
+// value outside that range is clamped, with the box told so. Nothing else is
+// accepted: the message names the fault and the run that asked is refused, so
+// that a typo never silently runs on some other seed.
+function parseSeed(raw) {
+  var s = String(raw).trim();
+  if (!/^[+-]?\d{1,10}$/.test(s))
+    return { ok: false, value: null, msg: '⚠ Seed must be a whole number from 0 to ' + MCP.SEED_MAX + '.' };
+  var n = Number(s), v = Math.min(Math.max(n, 0), MCP.SEED_MAX);
+  // Worded neutrally ("using") because this fires both when a seed is about to
+  // be run and when the field is merely edited, where nothing has run yet.
+  return { ok: true, value: v,
+           msg: v === n ? '' : 'Seed ' + s + ' is outside 0–' + MCP.SEED_MAX + '; using ' + v + '.' };
 }
-// Called after a run has already drawn its samples, and so the run always
-// used the seed the reader could see. With "New seed after each run" ticked,
-// queue a fresh one for next time; left unticked, the box is untouched and a
-// repeated click reproduces the same run exactly.
-function noteRun(tab, seed) {
-  var newseedEl = $(tab + '-newseed');
-  if (newseedEl && newseedEl.checked) {
-    var seedEl = $(tab + '-seed');
-    if (seedEl) seedEl.value = String(randomSeed());
+// The line under the seed row: which seed the results on screen came from, and
+// the seed the box holds for the next run. The box is the one source of the
+// next seed, and the line only restates it, re-pointed whenever the box is
+// edited, so that the two can never disagree.
+function seedMsg(tab, text, bad) {
+  var inp = $(tab + '-seed'), msg = $(tab + '-seed-msg');
+  if (msg) { msg.textContent = text; msg.classList.toggle('bad', !!bad); }
+  if (inp) inp.setAttribute('aria-invalid', bad ? 'true' : 'false');
+}
+// What the last completed run or batch on each tab used, as the sentence the
+// line shows, kept so that editing the seed can re-point the "Next run" figure
+// while preserving the record of what actually ran.
+var LAST_RUN = {};
+// The seed a run should use, written back into the box normalized so that what
+// the reader sees is what the generator received, or null when the box holds
+// nothing usable (the message says so, and the run is refused). A tab whose box
+// is not in the page yet runs on a fresh random seed.
+function readSeed(tab) {
+  var inp = $(tab + '-seed');
+  if (!inp) return randomSeed();
+  var r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); inp.focus(); inp.select(); return null; }
+  inp.value = String(r.value);
+  seedMsg(tab, r.msg, false);
+  return r.value;
+}
+// Same normalization on change, but never steals focus. Editing the seed only
+// changes what the next run will do, and so the record of the last run is kept
+// and just the "Next run" figure is re-pointed at the new value.
+function normalizeSeed(tab) {
+  var inp = $(tab + '-seed'), r = parseSeed(inp.value);
+  if (!r.ok) { seedMsg(tab, r.msg, true); return; }
+  inp.value = String(r.value);
+  var last = LAST_RUN[tab], bits = [];
+  if (r.msg) bits.push(r.msg);
+  if (last) bits.push(last, 'Next run: ' + r.value + '.');
+  seedMsg(tab, bits.join(' '), false);
+}
+function wantsNewSeed(tab) { var el = $(tab + '-newseed'); return !!el && el.checked; }
+// Called after a run has already drawn its family, and so the run always used
+// the seed the reader could see. With "New seed after each run" ticked, a fresh
+// seed is queued in the box and named for next time; left unticked, the box is
+// untouched and a repeated click reproduces the same family exactly, which the
+// line says, or the button reads as broken rather than as the point.
+function noteRun(tab, seed, runIdx, repeat) {
+  var used = 'Run ' + runIdx + ' used seed ' + seed + '.';
+  LAST_RUN[tab] = used;
+  if (wantsNewSeed(tab)) {
+    var next = randomSeed();
+    $(tab + '-seed').value = String(next);
+    seedMsg(tab, used + ' Next run: ' + next + '.', false);
+    return;
   }
+  seedMsg(tab, repeat
+    ? 'Run ' + runIdx + ' repeats Run ' + (runIdx - 1) + ' exactly, from the same seed and settings. Tick “New seed after each run” to vary it.'
+    : used, false);
 }
+// Counterpart for a batch: names the seed range instead of one seed, so that
+// the whole batch can be run again from its first seed.
+function noteBatch(tab, s0, first, last) {
+  var used = 'Runs ' + first + '–' + last + ' used seeds ' + s0 + '–' + batchSeed(s0, BATCH_RUNS - 1) + '.';
+  LAST_RUN[tab] = used;
+  if (wantsNewSeed(tab)) {
+    var next = randomSeed();
+    $(tab + '-seed').value = String(next);
+    seedMsg(tab, used + ' Next run: ' + next + '.', false);
+    return;
+  }
+  seedMsg(tab, used + ' Click again to repeat the whole batch exactly.', false);
+}
+// The seed field's spin buttons and arrow keys (wired by bindSpinners through
+// SPIN) step the seed by 1, or by 100 with Shift, and re-point the line.
+['looks', 'pairs', 'winner', 'power', 'anova', 'best'].forEach(function (t) {
+  registerSpinner(t + '-seed', { min: 0, max: MCP.SEED_MAX, step: 1, shiftStep: 100, decimals: 0 },
+                  function () { normalizeSeed(t); });
+});
 
 // ── History model, with post-processing re-derivation ────────────────────
 // Every family a tab has run, plus where its current segment began. A
@@ -2571,27 +2643,34 @@ function noteRun(tab, seed) {
 // only the current segment, and so a rate never mixes two experiments.
 var HIST = {};
 var HIST_MAX = 100;
-function hist(tab) { return HIST[tab] || (HIST[tab] = { runs: [], segStart: 0 }); }
+// n counts every family run since Clear history, and so it keeps growing once
+// the oldest families are dropped past HIST_MAX: it is the number a run is
+// known by on the strip's axis, in the captions, and on the seed line.
+function hist(tab) { return HIST[tab] || (HIST[tab] = { runs: [], segStart: 0, n: 0 }); }
 function sameSampling(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function runOne(tab) {
-  var T = TABS[tab], H = hist(tab), sp = T.sampling(), seed = currentSeed(tab);
+  var T = TABS[tab], H = hist(tab), sp = T.sampling(), seed = readSeed(tab);
+  if (seed === null) return;
   var last = H.runs.length ? H.runs[H.runs.length - 1] : null;
   var divider = !!last && !sameSampling(last.sp, sp);
+  var repeat = !!last && !divider && last.seed === seed;
   if (divider) H.segStart = H.runs.length;
   H.runs.push({ seed: seed, sp: sp, rec: T.derive(seed, sp, T.post()), divider: divider });
   if (H.runs.length > HIST_MAX) { H.runs.shift(); H.segStart = Math.max(0, H.segStart - 1); }
-  noteRun(tab, seed); T.render();
+  H.n += 1;
+  noteRun(tab, seed, H.n, repeat); T.render();
 }
 // Walks BATCH_RUNS consecutive seeds from the seed box, the way a single run
 // walks one: the box is read once for a starting seed s0, every family in the
 // batch draws from batchSeed(s0, i) without the box being touched in between,
-// and the box is put back to s0 once the loop ends. noteRun then runs exactly
-// once, on the batch's last seed, and so "New seed after each run" advances the
-// box past the whole batch rather than past every family inside it.
+// and the box is put back to s0 once the loop ends. noteBatch then runs exactly
+// once, and so "New seed after each run" advances the box past the whole batch
+// rather than past every family inside it.
 function runBatch(tab) {
   var T = TABS[tab], H = hist(tab), sp = T.sampling();
   var seedEl = $(tab + '-seed');
-  var s0 = currentSeed(tab);
+  var s0 = readSeed(tab);
+  if (s0 === null) return;
   var last = H.runs.length ? H.runs[H.runs.length - 1] : null;
   var divider = !!last && !sameSampling(last.sp, sp);
   if (divider) H.segStart = H.runs.length;
@@ -2601,11 +2680,16 @@ function runBatch(tab) {
     H.runs.push({ seed: seed, sp: sp, rec: T.derive(seed, sp, T.post()), divider: divider && i === 0 });
     if (H.runs.length > HIST_MAX) { H.runs.shift(); H.segStart = Math.max(0, H.segStart - 1); }
   }
+  H.n += BATCH_RUNS;
   if (seedEl) seedEl.value = String(s0);
-  noteRun(tab, seed);
+  noteBatch(tab, s0, H.n - BATCH_RUNS + 1, H.n);
   T.render();
 }
-function clearHist(tab) { HIST[tab] = { runs: [], segStart: 0 }; TABS[tab].render(); }
+function clearHist(tab) {
+  HIST[tab] = { runs: [], segStart: 0, n: 0 };
+  LAST_RUN[tab] = null; seedMsg(tab, '', false);
+  TABS[tab].render();
+}
 // A post-processing knob changed (the correction rule, the post-hoc rule, the
 // target theta0, the interval level): the same families, re-judged. Every
 // record is rebuilt from its own stored seed and sampling parameters, and so the
@@ -2730,7 +2814,10 @@ function histPlot(svgEl, containerEl, runs, opts) {
   var dense = colW < 30;
   var barW = Math.min(6, colW * .5), capW = Math.min(5, colW * .42);
   var dotR = Math.min(4, Math.max(1.4, colW * .34)), lwBar = colW < 12 ? 1.1 : 1.8;
-  var firstRunIdx = runs.length - shown.length + 1;
+  // The axis labels each column with its run's own number: opts.lastIdx is
+  // the number of the last run drawn (the tab's running count), and runs.length
+  // would restart the numbering once the oldest families have been dropped.
+  var firstRunIdx = (opts.lastIdx || runs.length) - shown.length + 1;
   var win = opts.window || histWindow([runs]) || opts.emptyWindow;
   var yMin = win.lo, yMax = win.hi;
   if (!(yMax > yMin)) { var c0 = Number.isFinite(yMin) ? yMin : 0; yMin = c0 - 1; yMax = c0 + 1; }
@@ -2891,7 +2978,7 @@ function stripPlot(svgEl, runs, opts) {
   var yP = function (v) { return pT + cH - Math.min(1, Math.max(0, v / yMax)) * cH; };
   var visible = histVisible(runs, cW), shown = visible.shown, colW = visible.colW;
   var barW = Math.min(16, colW * 0.62);
-  var firstIdx = runs.length - shown.length + 1;
+  var firstIdx = (opts.lastIdx || runs.length) - shown.length + 1;
 
   var h = '<rect x="' + pL + '" y="' + pT + '" width="' + cW + '" height="' + cH + '" fill="' + C.bg + '" rx="3"/>';
   var stripTicks = niceTicks(0, yMax, 4);
@@ -3872,7 +3959,7 @@ TABS.looks = {
   },
   render: function () {
     var sp = TABS.looks.sampling(), post = TABS.looks.post();
-    var runs = segRuns('looks'), all = hist('looks').runs;
+    var runs = segRuns('looks');
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
     var span = looksYSpan(spanSp);
     TABS.looks.ySpan = span;
@@ -3892,9 +3979,10 @@ TABS.looks = {
     responsesPlot($('looks-fig'), items, { spanStd: span[1], responses: LOOKS_RESPONSES, ghost: looksGhost });
     $('looks-fig-leg').innerHTML = looksFigLegendHtml() + (looksGhost ? ghostLegend('1 − α') : '');
     reserveCapHeight($('looks-fig-leg'), looksFigLegendHtml() + ghostLegend('1 − α'), true);
-    looksFigCaption($('looks-fig-cap'), all.length, latest ? latest.rec : null, post.theta0);
+    looksFigCaption($('looks-fig-cap'), hist('looks').n, latest ? latest.rec : null, post.theta0);
 
     var stripRes = stripPlot($('looks-strip'), runs, {
+      lastIdx: hist('looks').n,
       yMax: sp.K, yLabel: 'flagged',
       value: function (rec) { return rec.nReject; },
       bad: function (rec) { return rec.anyFalse; }
@@ -4030,7 +4118,7 @@ TABS.pairs = {
   },
   render: function () {
     var sp = TABS.pairs.sampling(), post = TABS.pairs.post();
-    var runs = segRuns('pairs'), all = hist('pairs').runs;
+    var runs = segRuns('pairs');
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
     var span = pairsSpan(spanSp);
     TABS.pairs.span = span;
@@ -4049,7 +4137,7 @@ TABS.pairs = {
 
     var latest = runs.length ? runs[runs.length - 1] : null;
     var items = latest ? latest.rec.items : pairsPlaceholderItems(sp.K, post.mode);
-    renderReplications('pairs', latest, sp, all.length, true);
+    renderReplications('pairs', latest, sp, hist('pairs').n, true);
     var pairsGhost = ghostOn('pairs', post.level === 'bonf');
     forestPlot($('pairs-fig'), items, {
       span: span, hyp: 0, glyph: true, full: true, ghost: pairsGhost,
@@ -4057,7 +4145,7 @@ TABS.pairs = {
     });
     $('pairs-fig-leg').innerHTML = pairsFigLegendHtml() + (pairsGhost ? ghostLegend('1 − α') : '');
     reserveCapHeight($('pairs-fig-leg'), pairsFigLegendHtml() + ghostLegend('1 − α'), true);
-    pairsFigCaption($('pairs-fig-cap'), all.length, latest ? latest.rec : null);
+    pairsFigCaption($('pairs-fig-cap'), hist('pairs').n, latest ? latest.rec : null);
     pTable($('pairs-table'), items, pairsTableCols());
 
     setCard('pairs-c-C', String(nC));
@@ -4066,6 +4154,7 @@ TABS.pairs = {
     setCard('pairs-c-indep', nNullC > 0 ? (MCP.fwerIndep(alphaJ, nNullC) * 100).toFixed(1) + '%' : '—');
 
     var stripRes = stripPlot($('pairs-strip'), runs, {
+      lastIdx: hist('pairs').n,
       yMax: nC, yLabel: 'declared different',
       value: function (rec) { return rec.nReject; },
       bad: function (rec) { return rec.anyFalse; }
@@ -4232,7 +4321,7 @@ TABS.power = {
     setCard('power-c-widthratio', widthRatio.toFixed(2) + '&times;');
 
     var latest = runs.length ? runs[runs.length - 1] : null;
-    renderReplications('power', latest, sp, hist('power').runs.length, false);
+    renderReplications('power', latest, sp, hist('power').n, false);
     // The uncorrected family is the raw pass itself (pairFamily at level
     // alpha), the Bonferroni family the derive step kept beside it, and the
     // Holm items the step-down's own levels.
@@ -4278,6 +4367,7 @@ TABS.power = {
     });
 
     var stripRes = stripPlot($('power-strip'), runs, {
+      lastIdx: hist('power').n,
       yMax: nC, yLabel: 'true detections',
       value: function (rec) { return rec.rules[post.rule].nTrueDet; },
       bad: function (rec) { return rec.rules[post.rule].anyFalse; }
@@ -4413,7 +4503,7 @@ TABS.winner = {
   },
   render: function () {
     var sp = TABS.winner.sampling(), post = TABS.winner.post();
-    var runs = segRuns('winner'), all = hist('winner').runs;
+    var runs = segRuns('winner');
     var spanSp = runs.length ? runs[runs.length - 1].sp : sp;
     var span = designsYSpan(spanSp);
     TABS.winner.ySpan = span;
@@ -4428,7 +4518,7 @@ TABS.winner = {
     designsPlot($('winner-fig'), items, { ySpan: span, winnerIdx: latest ? latest.rec.win : null, full: true, ghost: winnerGhost });
     $('winner-fig-leg').innerHTML = winnerFigLegendHtml() + (winnerGhost ? ghostLegend('1 − α') : '');
     reserveCapHeight($('winner-fig-leg'), winnerFigLegendHtml() + ghostLegend('1 − α'), true);
-    winnerFigCaption($('winner-fig-cap'), all.length, latest ? latest.rec : null, sp.dir);
+    winnerFigCaption($('winner-fig-cap'), hist('winner').n, latest ? latest.rec : null, sp.dir);
 
     // The frozen window ties the history's y-axis to the same span the
     // designs plot above draws on, and so the two figures read as one scale
@@ -4439,6 +4529,7 @@ TABS.winner = {
     });
     var liveTruth = latest ? latest.rec.winItem.truth : winnerExpectedTruth(sp);
     var histRes = histPlot($('winner-hist'), $('winner-hw'), histRuns, {
+      lastIdx: hist('winner').n,
       yLabel: 'sample mean', truthLabel: function (v) { return 'true mean ' + v.toFixed(2); },
       window: { lo: span[0], hi: span[1] }, liveTruth: liveTruth, grab: false, nLabel: 'R',
       missLabel: 'interval misses (more than α of them under the raw level)'
@@ -4560,7 +4651,7 @@ TABS.anova = {
     var lettersBase = latest ? latest.rec.rules[rule].letters : undefined;
     var letters = lettersBase ? order.map(function (idx) { return lettersBase[idx]; }) : undefined;
     designsPlot($('anova-fig'), items, { ySpan: span, neutral: true, letters: letters });
-    anovaFigCaption($('anova-fig-cap'), runs.length, latest ? latest.rec : null, rule);
+    anovaFigCaption($('anova-fig-cap'), hist('anova').n, latest ? latest.rec : null, rule);
 
     var pairsBase = latest ? latest.rec.pairs : anovaPlaceholderPairs(sp);
     var ruleObj = latest ? latest.rec.rules[rule] : { sig: pairsBase.map(function () { return false; }) };
@@ -4600,6 +4691,7 @@ TABS.anova = {
 
     var nC = spanSp.K * (spanSp.K - 1) / 2;
     var stripRes = stripPlot($('anova-strip'), runs, {
+      lastIdx: hist('anova').n,
       yMax: nC, yLabel: 'pairs declared different',
       value: function (rec) { return rec.rules[rule].nSig; },
       bad: function (rec) { return rec.rules[rule].anyFalse; }
@@ -5095,6 +5187,7 @@ TABS.best = {
       }]);
     }
     var stripRes = stripPlot($('best-strip'), stripRuns, {
+      lastIdx: hist('best').n,
       yMax: bestStripYMax(spanSp), yLabel: 'replications',
       value: function (rec) { return rec.totalReps; },
       bad: function (rec) { return !rec.correct; }
