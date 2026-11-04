@@ -133,8 +133,131 @@ section('2. Tab ①: capture rate = confidence level (' + CALIB_REPS + ' reps pe
      && rec.n === 18 && Math.abs(rec.alpha - 0.05) < 1e-12 && rec.key === 'k', 'histRecord shape');
 }
 
-/* ═══ 3. Tab ②: systems fed the same or different random numbers ═════ */
-section('3. Tab ②: cross moments, capture in both arms, paired/Welch width ratio, detection');
+/* ═══ 2a. Tab ②: prediction intervals ═════════════════════════════════ */
+section('2a. Tab ②: shapes, prediction-interval coverage, the large-n limits (' + CALIB_REPS + ' reps per cell, 4 SE)');
+/* Each shape's draws have mean μ and standard deviation σ, and its cdf is the
+   distribution of its own draws (checked at three points). */
+CI.PI_SHAPE_KEYS.forEach(k => {
+  const sh = CI.PI_SHAPES[k], rand = CI.mulberry32(777), mu = 3, sigma = 2, N = 400000, xs = [];
+  for (let i = 0; i < N; i++) xs.push(sh.draw(rand, mu, sigma));
+  close(CI.mean(xs), mu, 4 * sigma / Math.sqrt(N) / mu, `${k}: draws have mean μ`);
+  close(Math.sqrt(CI.sampleVar(xs)), sigma, 0.01, `${k}: draws have sd σ`);
+  [mu - sigma, mu, mu + 1.5 * sigma].forEach(x => {
+    const emp = xs.filter(v => v <= x).length / N, want = sh.cdf(x, mu, sigma);
+    ok(Math.abs(emp - want) <= 4 * Math.sqrt(want * (1 - want) / N) + 1e-12,
+       `${k}: empirical cdf at ${x} matches cdf (${emp.toFixed(4)} vs ${want.toFixed(4)})`);
+  });
+  /* The pdf integrates to 1 and is the cdf's derivative. */
+  let area = 0; const lo = mu - 6 * sigma, hi = mu + 12 * sigma, m = 200000, dx = (hi - lo) / m;
+  for (let i = 0; i < m; i++) area += sh.pdf(lo + (i + 0.5) * dx, mu, sigma) * dx;
+  close(area, 1, 1e-4, `${k}: pdf integrates to 1`);
+});
+close(CI.piLimitCoverage('normal', 0.95), 0.95, 1e-12, 'normal: large-n coverage is the confidence level (95%)');
+close(CI.piLimitCoverage('normal', 0.99), 0.99, 1e-12, 'normal: large-n coverage is the confidence level (99%)');
+close(CI.piLimitCoverage('uniform', 0.95), 1, 1e-15, 'uniform: μ ± 1.96σ covers all of μ ± √3σ');
+close(CI.piLimitCoverage('uniform', 0.6), 0.8416212335729143 / Math.sqrt(3), 1e-12, 'uniform: 60% interval covers z/√3');
+close(CI.piLimitCoverage('exponential', 0.95), 1 - Math.exp(-(1 + 1.959963984540054)), 1e-12, 'exponential: 95% interval covers 1 − e^−(1+z) = 0.9482');
+close(CI.piLimitCoverage('exponential', 0.99), 1 - Math.exp(-(1 + 2.5758293035489004)), 1e-12, 'exponential: 99% interval covers 0.9720');
+{
+  const tn = CI.piLimitTails('normal', 0.95), te = CI.piLimitTails('exponential', 0.95);
+  close(tn.below, 0.025, 1e-12, 'normal: 2.5% of new values fall below the 95% limit');
+  close(tn.above, 0.025, 1e-12, 'normal: 2.5% fall above it');
+  ok(te.below === 0, 'exponential: no new value falls below μ − 1.96σ (the floor is μ − σ)');
+  close(te.above, Math.exp(-(1 + 1.959963984540054)), 1e-12, 'exponential: 5.18% fall above μ + 1.96σ');
+}
+{
+  const w = CI.piWidthCurves(20, 0.95), t = CI.tQuantile(0.975, 19);
+  close(w.ci, t / Math.sqrt(20), 1e-15, 'width curves: CI half-width t/√n in units of σ');
+  close(w.pi, t * Math.sqrt(1 + 1 / 20), 1e-15, 'width curves: PI half-width t·√(1 + 1/n) in units of σ');
+  const far = CI.piWidthCurves(100000, 0.95);
+  ok(far.ci < 0.01 && Math.abs(far.pi - 1.959963984540054) < 1e-3, 'width curves: at n = 100000 the CI is near 0 and the PI near z');
+}
+/* Each quantile function inverts its cdf, and the population's middle range has α/2
+   beyond each end. */
+CI.PI_SHAPE_KEYS.forEach(k => {
+  const sh = CI.PI_SHAPES[k];
+  [0.005, 0.025, 0.3, 0.5, 0.975, 0.9995].forEach(pr => close(sh.cdf(sh.quantile(pr, 3, 2), 3, 2), pr, 1e-11, `${k}: cdf(quantile(${pr})) = ${pr}`));
+  const r = CI.piTrueRange(k, 0.95, 3, 2);
+  close(sh.cdf(r.lo, 3, 2), 0.025, 1e-11, `${k}: 2.5% of the population lies below its middle 95%`);
+  close(1 - sh.cdf(r.hi, 3, 2), 0.025, 1e-11, `${k}: 2.5% lies above it`);
+});
+{
+  const r = CI.piTrueRange('exponential', 0.95, 0, 1);
+  close(r.lo, -1 - Math.log(0.975), 1e-12, 'exponential: middle 95% starts at μ − 0.975σ');
+  close(r.hi, -1 + Math.log(40), 1e-12, 'exponential: middle 95% ends at μ + 2.689σ');
+  const rn = CI.piTrueRange('normal', 0.95, 0, 1);
+  close(rn.hi, 1.959963984540054, 1e-12, 'normal: middle 95% is μ ± z·σ');
+}
+/* The t density against its own cdf, and the position density's mass beyond ±1. */
+{
+  close(CI.tPdf(0, 1), 1 / Math.PI, 1e-14, 'tPdf(0, 1) = 1/π (Cauchy)');
+  const nu = 7, h = 1e-5;
+  close(CI.tPdf(0.8, nu), (CI.tCdf(0.8 + h, nu) - CI.tCdf(0.8 - h, nu)) / (2 * h), 1e-6, 'tPdf is the derivative of tCdf');
+  [[5, 0.95], [20, 0.99], [200, 0.8]].forEach(([n, conf]) => {
+    let inside = 0; const m = 20000;
+    for (let i = 0; i < m; i++) { const u = -1 + (i + 0.5) * 2 / m; inside += CI.piPositionPdf(u, n, conf) * 2 / m; }
+    close(inside, conf, 1e-6, `position density at n = ${n}, ${conf * 100}% puts 1 − α between −1 and +1`);
+  });
+}
+/* The same in units of S: the density integrates to 1 − α between the interval's ends,
+   and posS is pos rescaled by the end. */
+[[5, 0.95], [20, 0.99], [200, 0.8]].forEach(([n, conf]) => {
+  const e = CI.piSdEnd(n, conf); let inside = 0; const m = 20000;
+  for (let i = 0; i < m; i++) { const v = -e + (i + 0.5) * 2 * e / m; inside += CI.piSdPdf(v, n) * 2 * e / m; }
+  close(inside, conf, 1e-6, `S-unit density at n = ${n}, ${conf * 100}% puts 1 − α between ±t·√(1 + 1/n)`);
+});
+{
+  const run = CI.runPI(4243, { shape: 'exponential', mu: 5, sigma: 1, n: 12, conf: 0.9 });
+  close(run.posS, run.pos * CI.piSdEnd(12, 0.9), 1e-12, 'posS = pos · t·√(1 + 1/n)');
+}
+/* Normal population: the positions follow that density (checked at three cut points). */
+{
+  const n = 10, conf = 0.95, pos = [];
+  for (let r = 0; r < CALIB_REPS; r++) pos.push(CI.runPI(30000 + r, { shape: 'normal', mu: 5, sigma: 1, n, conf }).pos);
+  const t = CI.tQuantile(0.975, n - 1);
+  [-1, -0.3, 0.6, 1].forEach(u => {
+    const want = CI.tCdf(t * u, n - 1), got = pos.filter(v => v <= u).length / CALIB_REPS;
+    rateNear(got, want, CALIB_REPS, 4, `normal n=10, 95%: share of positions at or below ${u}`);
+  });
+}
+
+/* The normal shape reproduces tab ①'s sample and interval from the same seed. */
+{
+  const p = { mu: 5, sigma: 0.1, n: 20, conf: 0.95 }, a = CI.runNormal(4242, p), b = CI.runPI(4242, Object.assign({ shape: 'normal' }, p));
+  ok(a.xs.every((v, i) => v === b.xs[i]) && a.ci.lo === b.ci.lo && a.ci.hi === b.ci.hi, 'runPI(normal) gives runNormal\'s sample and interval for the same seed');
+  close(b.pi.h, b.ci.h * Math.sqrt(20 + 1), 1e-12, 'PI half-width = CI half-width · √(n + 1)');
+  close(b.piCover, CI.normCdf((b.pi.hi - 5) / 0.1) - CI.normCdf((b.pi.lo - 5) / 0.1), 1e-15, 'piCover is the normal mass inside the PI');
+}
+/* Normal population: the PI catches the next value at the confidence level, the
+   average of the runs' exact coverages is that level too, and the CI still captures μ. */
+[[5, 0.95], [20, 0.95], [20, 0.8], [100, 0.99]].forEach(([n, conf]) => {
+  let piHits = 0, ciHits = 0, cover = 0;
+  for (let r = 0; r < CALIB_REPS; r++) {
+    const run = CI.runPI(20000 + r, { shape: 'normal', mu: 5, sigma: 1, n: n, conf: conf });
+    piHits += run.piHit ? 1 : 0; ciHits += run.hit ? 1 : 0; cover += run.piCover;
+  }
+  rateNear(piHits / CALIB_REPS, conf, CALIB_REPS, 4, `normal n=${n}, ${conf * 100}%: PI catches the next value`);
+  rateNear(cover / CALIB_REPS, conf, CALIB_REPS, 4, `normal n=${n}, ${conf * 100}%: mean exact PI coverage`);
+  rateNear(ciHits / CALIB_REPS, conf, CALIB_REPS, 4, `normal n=${n}, ${conf * 100}%: CI captures μ`);
+});
+/* Other shapes at n = 1000: the CI is back at its level (the central limit theorem),
+   and the PI sits at the shape's own limit instead. Every exponential miss is high:
+   the lower end of μ ± z·σ is below the population's floor. */
+[['uniform', 0.95], ['exponential', 0.95], ['exponential', 0.99]].forEach(([shape, conf]) => {
+  const R = Math.max(500, Math.round(CALIB_REPS / 4));
+  let piHits = 0, ciHits = 0, low = 0;
+  for (let r = 0; r < R; r++) {
+    const run = CI.runPI(60000 + r, { shape: shape, mu: 5, sigma: 1, n: 1000, conf: conf });
+    piHits += run.piHit ? 1 : 0; ciHits += run.hit ? 1 : 0; if (run.next < run.pi.lo) low++;
+  }
+  const lim = CI.piLimitCoverage(shape, conf);
+  rateNear(piHits / R, Math.min(lim, 1 - 1e-9), R, 4, `${shape} n=1000, ${conf * 100}%: PI catches the next value at the shape's limit ${lim.toFixed(4)}`);
+  ok(Math.abs(ciHits / R - conf) <= 0.01, `${shape} n=1000, ${conf * 100}%: CI captures μ within 0.01 of the level (${(ciHits / R).toFixed(4)})`);
+  if (shape === 'exponential') ok(low === 0, `exponential n=1000, ${conf * 100}%: no next value falls below the PI (${low})`);
+});
+
+/* ═══ 3. Tab ③: systems fed the same or different random numbers ═════ */
+section('3. Tab ③: cross moments, capture in both arms, paired/Welch width ratio, detection');
 close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.exp), CI.FUNCS.exp.m2, 1e-9, 'funcCross(exp, exp) = E[exp(U)²]');
 close(CI.funcCross(CI.FUNCS.sqrt, CI.FUNCS.sqrt), 0.5, 1e-9, 'funcCross(sqrt, sqrt) = 1/2');
 close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.bowl), 1.25 * Math.E - 3.25, 1e-9, 'funcCross(exp, bowl) = 5e/4 − 13/4');
@@ -203,8 +326,8 @@ close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.recip), 1.1253860830832698, 1e-8, 'fun
   }
 }
 
-/* ═══ 4. Tab ③: function moments, antithetic variance, capture ════ */
-section('4. Tab ③: function-menu moments (closed form), antithetic SE, capture');
+/* ═══ 4. Tab ④: function moments, antithetic variance, capture ════ */
+section('4. Tab ④: function-menu moments (closed form), antithetic SE, capture');
 CI.FUNC_KEYS.forEach(k => {
   const f = CI.FUNCS[k], rand = CI.mulberry32(99), N = 200000;
   let s1 = 0, s2 = 0, sc = 0, su = 0;
@@ -322,8 +445,8 @@ close(CI.funcCross(CI.FUNCS.exp, CI.FUNCS.ident), 1, 1e-9, 'funcCross(exp, ident
   ok(allNegOne, 'ident, 25 pairs, 200 seeds: sample pair correlation r within 1e-9 of -1 in every run');
 }
 
-/* ═══ 5. Tab ④: control variates ═════════════════════════════════ */
-section('5. Tab ④: c* against closed form, capture at n = 50, shortfall at n = 10');
+/* ═══ 5. Tab ⑤: control variates ═════════════════════════════════ */
+section('5. Tab ⑤: c* against closed form, capture at n = 50, shortfall at n = 10');
 CI.FUNC_KEYS.forEach(k => {
   const run = CI.runCV(11, { fn: k, n: 200000, conf: 0.95 }), want = CI.FUNCS[k].covU * 12;
   if (k === 'bowl') ok(Math.abs(run.c) < 0.01, `bowl: estimated c ≈ 0 (${run.c.toFixed(4)})`);
@@ -388,8 +511,8 @@ close(CI.FUNCS.exp.covU * 12, 1.6903, 1e-3, 'exp: c* = 1.690 (a 1000-draw estima
   ok(allR2, 'ident, n = 50, 200 seeds: r² within 1e-9 of 1 in every run');
   ok(allHit, 'ident, n = 50, 200 seeds: control-variate interval captures E[h] in every run');
 }
-/* ═══ 6. Tab ⑤: importance sampling on the three-model menu ══════════ */
-section('6. Tab ⑤: weighted estimator unbiased, capture at n = 1000, direct sampling fails at T = 5');
+/* ═══ 6. Tab ⑥: importance sampling on the three-model menu ══════════ */
+section('6. Tab ⑥: weighted estimator unbiased, capture at n = 1000, direct sampling fails at T = 5');
 /* A fine composite trapezoid rule; the model integrand is Schwartz-class (a
    Gaussian density times at most a polynomial change-of-variable factor), and
    so this converges far faster than the textbook O(h²) bound suggests—every

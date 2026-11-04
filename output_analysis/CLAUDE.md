@@ -6,9 +6,24 @@ messages) are in the root `CLAUDE.md`.
 
 - `output_analysis/ci_explorer.html` *(confidence intervals taught by experiment: tab ① draws n
   values from N(μ, σ²), forms the t interval, and keeps a history whose true-mean line steps when μ
-  changes; tabs ②–④ apply common random numbers, antithetic variates, and control variates to a
+  changes; tab ② builds a confidence interval and a prediction interval from one sample of a
+  normal, uniform, or exponential population (each set by μ and σ alone), judges the CI against μ
+  and the PI against one more draw taken after the sample, and shows the exact chance that the
+  run's PI catches a new value, the population's own middle 1 − α as a third teal row under the
+  two intervals, two histories on one y-window (the PI history marks each miss's side with a
+  caret, and its caption sets the below/above counts against α/2 each), a histogram of where each
+  next value landed in units of S, (next − x̄)/S, against the exact normal-theory density with the
+  PI's ends at ±t·√(1 + 1/n) (it counts every run since the shape, μ, σ, or n last changed, not
+  only the columns the history has room for, and a level change moves only the end lines), the half-widths against n (with S replaced by σ, the PI's leveling
+  off at z·σ), and each shape's large-n PI coverage split by side. A total miss rate alone hides
+  the exponential's failure (about 5% at 95%), which is why the side of each miss is shown three
+  ways. For the normal shape a seed gives tab ①'s sample and interval exactly. The tab strip groups
+  ① and ② under "Interval estimates", and so their tabs read "Confidence" and "Prediction";
+  tab ③ reads "CRN", with the full name in a tooltip and its aria-label, because with every
+  name in full the strip needs 977px of the widget's 984px; tabs ③–⑤ apply
+  common random numbers, antithetic variates, and control variates to a
   shared five-model menu (the identity, exp(u), √u, 1/(1 + u), and the bowl) whose exact moments the
-  verify script pins, each as a plain history over an improved one on a shared scale; tab ⑤ applies
+  verify script pins, each as a plain history over an improved one on a shared scale; tab ⑥ applies
   importance sampling to a normal input through its own three-model menu (x, exp(x), and x²), with
   the threshold on the output scale, the shift aimed at the input threshold, and closed-form tail
   probabilities. Conventions relied on by code outside the file, which any later edit has to
@@ -17,16 +32,18 @@ messages) are in the root `CLAUDE.md`.
      access (the block must not contain the words "window" or "document").
      `output_analysis/verify_ci_explorer.mjs` slices that block out of the HTML and runs it in Node.*
   2. *`verify_ci_explorer.mjs` is not shipped with the widget and is not linked from the site. Run
-     it (`node output_analysis/verify_ci_explorer.mjs`, about three and a half minutes;
+     it (`node output_analysis/verify_ci_explorer.mjs`, about four minutes;
      `CI_CALIB_REPS` shortens the calibration sections) after touching anything in the core. It
      checks the special functions against exact identities and t tables, capture rates against
-     1 − α for every tab, the paired-to-Welch half-width ratio against √(1 − ρ), the function menu's
-     moments against their closed forms (the exp(u) pair-mean standard error of 0.0028 and c* of
-     1.690), the importance-sampling estimator's unbiasedness, and tab ⑤'s output densities:
-     it integrates each to 1, checks its tail mass beyond T against the closed-form truth, and pins
+     1 − α for every tab, each population shape's draws, cdf, and pdf, the prediction interval's
+     coverage under normality and its large-n limit and miss side for the other shapes, the
+     paired-to-Welch half-width ratio against √(1 − ρ), the function menu's moments against their
+     closed forms (the exp(u) pair-mean standard error of 0.0028 and c* of 1.690), the
+     importance-sampling estimator's unbiasedness, and tab ⑥'s output densities: it integrates
+     each to 1, checks its tail mass beyond T against the closed-form truth, and pins
      the x² model's silent-failure numbers (a weighted estimate at half the truth, near-zero
      capture, and a healthy ESS that gives no warning).*
-  3. *The function menu shared by tabs ②–④ carries exact moments (`mean`, `m2`, `cross`, `covU`)
+  3. *The function menu shared by tabs ③–⑤ carries exact moments (`mean`, `m2`, `cross`, `covU`)
      that the verify script pins, and so adding a function means deriving its four moments, not
      only its formula. The `bowl` entry is the deliberate counterexample on which neither
      technique helps and must stay non-monotone with zero covariance.)*

@@ -47,7 +47,7 @@ below.
 | Directory | Description |
 | --- | --- |
 | [`power_analysis/`](power_analysis/) | Power Explorer: pick a hypothesis test and watch the null and alternative sampling distributions separate as n grows, estimate power by Monte Carlo and by formula, and solve for the replications a target power needs. |
-| [`output_analysis/ci_explorer.html`](output_analysis/ci_explorer.html) | Confidence Interval and Variance Reduction Techniques Explorer: build t intervals from samples of a known population and watch about α of them miss the truth, then narrow them with common random numbers, antithetic variates, control variates, and importance sampling. |
+| [`output_analysis/ci_explorer.html`](output_analysis/ci_explorer.html) | Confidence Interval and Variance Reduction Techniques Explorer: build confidence intervals from samples of a known population and watch about α of them miss the truth, compare them with prediction intervals for the next value, and then narrow them with common random numbers, antithetic variates, control variates, and importance sampling. |
 | [`output_analysis/multiple_comparisons.html`](output_analysis/multiple_comparisons.html) | Multiple Comparisons Explorer: watch the family-wise error rate climb as comparisons multiply, see what Bonferroni and Holm give back, and run ANOVA post-hoc tests and a two-stage select-the-best procedure on simulated designs. |
 | [`output_analysis/output_analyzer/`](output_analysis/output_analyzer/) | Output Analyzer: load simulation output and form the right interval: t intervals on replication means, comparisons of two or several designs with post-hoc tests and a best-subset screen, and a steady-state workspace with warm-up truncation and batch means. |
 

@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Confidence Interval and Variance Reduction Techniques Explorer – interactive explainer</title>
-<meta name="description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+<meta name="description" content="Interactive explorer for confidence and prediction intervals: sample a known population, build t intervals, and watch about 5% of them miss the true mean; set a prediction interval for the next value beside each one and see where it fails when the population is not normal; and narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Confidence Interval and Variance Reduction Techniques Explorer – interactive explainer">
-<meta property="og:description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+<meta property="og:description" content="Interactive explorer for confidence and prediction intervals: sample a known population, build t intervals, and watch about 5% of them miss the true mean; set a prediction interval for the next value beside each one and see where it fails when the population is not normal; and narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer-preview.png">
 <meta property="og:image:width" content="2040">
 <meta property="og:image:height" content="1020">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Confidence Interval and Variance Reduction Techniques Explorer – interactive explainer">
-<meta name="twitter:description" content="Interactive explorer for confidence intervals: sample a known normal population, build t intervals, and watch about 5% of them miss the true mean; then narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
+<meta name="twitter:description" content="Interactive explorer for confidence and prediction intervals: sample a known population, build t intervals, and watch about 5% of them miss the true mean; set a prediction interval for the next value beside each one and see where it fails when the population is not normal; and narrow the intervals with common random numbers, antithetic variates, control variates, and importance sampling.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/output_analysis/ci_explorer-preview.png">
 
 <!-- Google Analytics -->
@@ -55,7 +55,7 @@
   --warn:        #8b6914;
   --pair:        #b9b3b6;  /* connecting lines between paired marks: neutral, carries no meaning */
   --band:        rgba(15,110,140,.12);  /* shaded regions under the true density */
-  /* Tab 5's own histogram bars need a darker shade of each sample
+  /* Tab 6's own histogram bars need a darker shade of each sample
      color for the bars past the threshold (output) and in its pre-image
      (input) -- each is its own hue mixed 35% toward black, and so it reads
      as "the same color, emphasized" rather than a third, unrelated color.
@@ -74,6 +74,14 @@
      8.00:1 as an available data color with no assigned meaning yet in this
      widget, and so it is used here instead. */
   --ratio:       #3F4C8C;
+  /* Tab ②'s half-width chart draws two curves that mean "this interval's size",
+     not a hit or a miss, and so neither may borrow teal, red, or orange. Indigo
+     (--ratio above) takes the prediction interval. The confidence interval takes
+     dark ochre, THEME.md's readable stand-in for gold (5.09:1 on white): a blue
+     and a yellow-brown stay apart under red-green color deficiency, and the two
+     differ in lightness as well (8.00:1 against 5.09:1). Each curve is also named
+     at its right end, so hue never carries the distinction alone. */
+  --curve-ci:    #8b6914;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5;
@@ -143,17 +151,17 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 /* A label never ends one line while its field starts the next. */
 .ctrl-pair { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 /* Below the width where the four parameter pairs fit on one line, they form a 2×2 grid
-   instead of wrapping ragged. Tab ③'s and tab ④'s own σₑ pair uses a
-   slider-carrying ctrl-pair-wide, which needs more room: tab ③'s row (model, σₑ, n, confidence)
-   wraps at 870px and stays on one line at 871px; tab ④'s row (model, n,
-   confidence, σₑ) wraps at 889px and stays on one line at 890px. Tab ②'s own row
+   instead of wrapping ragged. Tab ④'s and tab ⑤'s own σₑ pair uses a
+   slider-carrying ctrl-pair-wide, which needs more room: tab ④'s row (model, σₑ, n, confidence)
+   wraps at 870px and stays on one line at 871px; tab ⑤'s row (model, n,
+   confidence, σₑ) wraps at 889px and stays on one line at 890px. Tab ③'s own row
    (two models, shift, σₑ) never reaches one line at all, even at the widget's own
    984px content-width ceiling (it would need roughly 1040px): above this
    breakpoint it falls back to a clean two-line split instead (the three narrow
    pairs on one line, the wide σₑ pair dropping to its own full-width line below
-   them), which is why tab ③'s and tab ④'s one-line thresholds, not tab ②'s, set
+   them), which is why tab ④'s and tab ⑤'s one-line thresholds, not tab ③'s, set
    this shared value. The grid kicks in at 57em (912px), just above the larger of
-   the two reachable thresholds (tab ④'s 890px); the em unit tracks the browser's
+   the two reachable thresholds (tab ⑤'s 890px); the em unit tracks the browser's
    default font size like the tab-strip breakpoint does. */
 @media (max-width: 57em) {
   .ctrl-row.par-row { display: grid; grid-template-columns: repeat(2, minmax(0, max-content)); gap: 8px 22px; }
@@ -167,7 +175,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
      instead of collapsing to one narrow word per line beside a squeezed slider. */
   .par-row .ctrl-pair-wide { grid-column: 1 / -1; }
 }
-/* Tab ⑤'s row carries five pairs, not four: Model joined T on top
+/* Tab ⑥'s row carries five pairs, not four: Model joined T on top
    of the θ pair the other three sliders already widened. Above 912px, θ is
    ordered last (Model, T, n, Confidence, θ) and given flex-basis:100% so it is
    never a candidate for sharing a line with its neighbors -- it always starts
@@ -193,8 +201,8 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .seed-msg { flex: 0 0 100%; min-height: 1.35em; margin-top: -2px;
             font-size: .75rem; line-height: 1.35; color: var(--muted); }
 .seed-msg.bad { color: var(--accent); font-weight: 600; }
-/* Tab ①/②'s par-row reserves this line's height even when empty, which sits those
-   tabs' seed row visibly farther from the parameter row than tab ③, whose par-row
+/* Tab ①/③'s par-row reserves this line's height even when empty, which sits those
+   tabs' seed row visibly farther from the parameter row than tab ④, whose par-row
    carries no such span at all. Collapse the reservation when there is no message,
    and so the gap above the seed row matches across tabs regardless of whether the row
    happens to have a validation-message span. */
@@ -232,12 +240,12 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    can overflow that width rather than being visually squeezed into it. */
 .lg-s { display: inline-block; width: 1.4em; text-align: center; white-space: nowrap; flex: 0 0 auto; }
 .lg-s.lg-wide { width: auto; min-width: 1.4em; }
-/* Tab ⑤'s legend swatches are tiny SVGs, not text glyphs, and so a stroke width, a
+/* Tab ⑥'s legend swatches are tiny SVGs, not text glyphs, and so a stroke width, a
    dash pattern, a fill, and a radius can each match the drawn mark exactly
    rather than only reading as "a line" or "a dot" in a generic sense. */
 .lg-sv { display: inline-block; width: 24px; height: 12px; flex: 0 0 auto; }
 #is-fig-leg > span { align-items: center; }
-/* The two tab ⑤ captions and every history tally reserve their height at run
+/* The two tab ⑥ captions and every history tally reserve their height at run
    time (reserveCapHeight in the page script) from the tallest text their current
    shape can hold, measured in place at the current width, so that a run, a drag,
    an edit, Run ×100, or the sample toggle never moves the page at any width.
@@ -245,7 +253,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    had measured. */
 #is-fig-cap, #is-pair-cap { line-height: 1.35; }
 /* A segmented (pill) toggle: two buttons sharing one rounded outline, the active one
-   filled with the accent color. Shared by tab ③'s arm toggle and its draw-order
+   filled with the accent color. Shared by tab ④'s arm toggle and its draw-order
    panel's own copy of the same control. */
 .seq-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 6px; }
 .seg { display: inline-flex; border-radius: 999px; overflow: hidden; }
@@ -260,11 +268,11 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
    give the columns a large min-content width and push the page into h-scroll. */
 .sg { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 10px; }
 /* Stacked layout, still wide: eight cards read better as two rows of four than four of two.
-   This four-across layout was sized for tab ①'s eight short cards; tab ②'s own .sg carries
+   This four-across layout was sized for tab ①'s eight short cards; tab ③'s own .sg carries
    thirteen cards with longer values ("1.9481 (0.5958)", a bracketed interval) that would
    ellipsize in a quarter-width column, and so it opts out via sg-two and stays two-column here. */
 @media (max-width: 760px) and (min-width: 560px) { .sg:not(.sg-two) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-/* Tab 4's own stats grid, side by side with the figure card (viewport wider than
+/* Tab 5's own stats grid, side by side with the figure card (viewport wider than
    760px, where .viz-row is a row rather than a column): a single column balances
    the figure's own three-panel height better than two narrow columns do, and the
    cards are reordered to read True mean, Plain mean, Plain half-width, CV mean,
@@ -280,7 +288,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
   .sg-cv .sc:has(#cv-s-hc) { order: 5; }
   .sg-cv .sc:has(#cv-s-c) { order: 6; }
   .sg-cv .sc:has(#cv-s-r2) { order: 7; }
-  /* Tab 5's own single-column stats grid: unlike .sg-cv it needs no :has()
+  /* Tab 6's own single-column stats grid: unlike .sg-cv it needs no :has()
      reordering because its DOM order (True p full width, and then the direct/
      weighted pairs top to bottom) already reads correctly as one column. */
   .sg-is { grid-template-columns: minmax(0, 1fr); }
@@ -289,7 +297,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
      to one ordinary card's own width and let the figure card -- ordinarily a
      fixed flex-basis, shrinkable only down to its own content -- grow to fill
      what the column gave up, and so the three pin panels actually spread out.
-     Scoped to the viz-row holding .sg-cv or .sg-is so tabs 1-3, which share
+     Scoped to the viz-row holding .sg-cv or .sg-is so tabs 1, 3, and 4, which share
      the same .cv-card/.stats-panel classes, are unaffected. */
   .viz-row:has(.sg-cv) > .cv-card, .viz-row:has(.sg-is) > .cv-card { flex: 1 1 auto; }
   .viz-row:has(.sg-cv) > .stats-panel, .viz-row:has(.sg-is) > .stats-panel { flex: 0 0 230px; min-width: 0; }
@@ -308,6 +316,9 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .sc-lbl { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
 /* Greek letters and x-bar inside the uppercase stat labels keep their case and spacing. */
 .sym { text-transform: none; letter-spacing: 0; }
+/* A tip inside a stat card's label is a touch target of its own; padding grows the hit area to
+   24px and an equal negative margin keeps the card the height it was. */
+.sc-lbl .tip { display: inline-block; padding: 5px 0; margin: -5px 0; }
 .sym sub, sub.sym { font-size: .8em; }
 .ov { position: relative; display: inline-block; text-transform: none; letter-spacing: 0; }
 .ov::before { content: ''; position: absolute; left: .06em; right: .06em; top: .17em; border-top: .09em solid currentColor; }
@@ -323,7 +334,7 @@ select { font-family: 'Outfit', sans-serif; font-size: .88rem; padding: 5px 10px
 .hint { background: #f5f2f3; border-radius: 6px; padding: 9px 11px; font-size: .82rem; color: var(--muted); line-height: 1.55; }
 .hint.wide { margin-bottom: 13px; }
 /* Each tab opens with a two-sentence lede saying what the tab shows, above its
-   own controls: a reader arriving on tab 5 meets a theta slider and a "Sample
+   own controls: a reader arriving on tab 6 meets a theta slider and a "Sample
    shown" toggle whose vocabulary the long .hint paragraph does not reach until
    below the figures. Unlike that paragraph, this one carries no panel of its
    own -- it reads as body text under the tab bar rather than as a second
@@ -369,6 +380,7 @@ footer:not(#course-nav-footer) { text-align: center; padding: 6px 18px 0; max-wi
 footer a { color: var(--accent); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 .tab-group { position: relative; display: flex; gap: 3px; padding-top: 17px; margin-left: 8px; }
+.tab-group:first-child { margin-left: 0; }
 .tab-group::before {
   content: ''; position: absolute; top: 10px; left: 6px; right: 6px;
   border-top: 1.5px solid var(--border);
@@ -388,10 +400,15 @@ footer a:hover { text-decoration: underline; }
 /* Swap the tab strip for the dropdown before the labels would wrap.
    em rather than px so a larger default font size flips the switch
    sooner because media-query em tracks the browser default. */
-/* These shorter tab names need about 956px of viewport; below that the
-   strip gives way to the dropdown, whose optgroup carries the shorter
-   group name. */
-@media (max-width: 60em) {
+/* The two groups need 829px of strip in the widest case (whichever tab is active
+   is bold), which is 865px of viewport once the widget's 18px side padding is
+   counted. The switch sits at 56em (896px), and so a classic 15px scrollbar still
+   leaves the strip its room; below that the strip gives way to the dropdown, whose
+   optgroups carry the full names. "Interval estimates" over the first group lets
+   its tabs read "Confidence" and "Prediction". Common random numbers is the one
+   name shortened, to CRN: with all four names in full the strip needs 977px of
+   the widget's 984px, too close for a fallback font or another renderer. */
+@media (max-width: 56em) {
   .tabs { display: none; }
   .tab-select { display: block; }
 }
@@ -404,7 +421,7 @@ footer a:hover { text-decoration: underline; }
    .cv-card only shrink-to-fits its own children's content width -- explicit
    width: 100% is what actually pins it to the row's own width regardless of
    content, matching this comment's own intent. Without
-   it, a card whose content changes width between draws (e.g. tab ⑤'s figure
+   it, a card whose content changes width between draws (e.g. tab ⑥'s figure
    caption going from empty to a full sentence after a run) silently resizes the
    card itself, which the figure's own SVG (sized to the card's clientWidth) then
    also resizes to fit, even though nothing about the figure's own geometry moved.
@@ -435,7 +452,7 @@ footer a:hover { text-decoration: underline; }
 .spin .par-inp, .spin .seed-inp { padding-right: 24px; }
 @media (hover: none) {
   /* The 28px pair beside a field can outgrow a narrow grid column (e.g. the
-     paired μ₁/μ₂ fields on tab ②'s two-column layout at 390px); letting the
+     paired μ₁/μ₂ fields on tab ③'s two-column layout at 390px); letting the
      group wrap drops the buttons to their own line under the field instead
      of pushing the page into horizontal scroll. */
   .spin { flex-wrap: wrap; }
@@ -446,7 +463,7 @@ footer a:hover { text-decoration: underline; }
 /* Range inputs: 26px tall so a finger lands on the strip, per CLAUDE.md. */
 input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
 .rng-val { font-family: 'IBM Plex Mono', monospace; font-size: .85rem; color: var(--text); min-width: 3.2em; display: inline-block; }
-/* Tab 4's c slider carries two values that are only placeholders before a run --
+/* Tab 5's c slider carries two values that are only placeholders before a run --
    "c = --" beside it and an empty "(c* = ...)" aside -- and both grow past the
    shared .rng-val floor once a real, signed, two-decimal number (e.g. "c =
    -0.47") fills them in. In the narrow-screen layout, where the figure card's
@@ -457,7 +474,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    and the SVG's height -- constant across a run and a clear. */
 #cv-c-val { min-width: 6em; }
 #cv-c-star { min-width: 8em; }
-/* Tab 4's own c-slider row wraps rather than overflowing on a narrow card: the
+/* Tab 5's own c-slider row wraps rather than overflowing on a narrow card: the
    label stays put, the slider (.rs-wrap) is the one flexible child and may
    shrink all the way to min-width:0, and the readout is a single never-wrapping
    unit that drops to its own line under the track once the row runs out of
@@ -471,7 +488,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .cv-c-readout { white-space: nowrap; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; }
 /* ── Shared range-slider pieces ──────────────────────────────────
    Shared by the c slider (named .cv-slider-*) and the three "own noise σₑ"
-   sliders on tabs ②–④, so all four reuse the same wrapper and thumb CSS
+   sliders on tabs ③–⑤, so all four reuse the same wrapper and thumb CSS
    rather than each carrying a copy. The tick overlay itself
    (.rs-ticks, .rs-tick, .rs-tick-lbl, and the renderSliderTicks JS renderer
    below) stays the c slider's own: the three σₑ sliders carry no tick and
@@ -490,7 +507,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 .rs-wrap input[type=range] { display: block; width: 100%; }
 /* The c slider grows to fill its row. */
 .rs-wrap-grow { flex: 1 1 160px; min-width: 0; }
-/* The three σₑ sliders, and tab ⑤'s θ slider, instead take a fixed width:
+/* The three σₑ sliders, and tab ⑥'s θ slider, instead take a fixed width:
    140px, capped at 45vw so a narrow phone's own edge is never reached. */
 .rs-wrap-fixed { width: 140px; max-width: 45vw; }
 /* Thumb pinned to 26px in both engines so the tick overlay's own calc((100% -
@@ -521,7 +538,7 @@ svg.fig { display: block; width: 100%; height: auto; }
    drag that starts on it move μ or σ, whereas a swipe anywhere else still scrolls. */
 .ci-handle { cursor: ew-resize; touch-action: none; }
 #ci-fig.hot-mu #ci-muline, #ci-fig.hot-sigma #ci-curve { stroke-width: 3.5; }
-/* Drag handles on the tab ⑤ transfer plot: the T line (vertical
+/* Drag handles on the tab ⑥ transfer plot: the T line (vertical
    drag, ns-resize) and the way-in line(s) (horizontal drag, ew-resize), the
    same touch-action:none-on-the-handle-alone pattern as tab ①'s own handles. */
 .is-handle { touch-action: none; }
@@ -546,6 +563,37 @@ svg.fig { display: block; width: 100%; height: auto; }
 .is-handle[data-handle="pairT"] { cursor: ew-resize; }
 #is-pair-fig.hot-T .is-pair-t-vis { stroke-width: 2.4; }
 #is-pair-fig.hot-T .is-pair-t-lbl { font-weight: 900; }
+/* Tab ② half-width chart: a plain SVG whose viewBox is set to its container's width at
+   draw time, so one unit is one CSS pixel. pan-y keeps a vertical swipe scrolling the page
+   while a horizontal drag across the plot still scrubs the readout. */
+svg.pi-wsv { display: block; width: 100%; height: auto; touch-action: pan-y; cursor: crosshair; }
+#pi-wleg > span, #pi-pleg > span { align-items: center; }
+#pi-wread, #pi-pread { font-size: .8rem; color: var(--text); margin-top: 4px; }
+#pi-pleg { margin-top: 6px; }
+/* Table of large-n prediction-interval coverage by population shape. */
+.tbl-wrap { overflow-x: auto; }
+.pi-tbl { border-collapse: collapse; width: 100%; font-size: .84rem; }
+.pi-tbl th, .pi-tbl td { padding: 6px 12px; text-align: right; border-bottom: 1px solid var(--border); }
+.pi-tbl td { white-space: nowrap; }
+.pi-tbl th { vertical-align: bottom; }
+/* At a phone's width the header wraps (its second column over two lines) and the cells tighten,
+   so the four columns fit without the wrapper's sideways scroll. */
+@media (max-width: 480px) { .pi-tbl th, .pi-tbl td { padding: 6px 6px; } .pi-tbl th { letter-spacing: .03em; } }
+.pi-tbl th:first-child, .pi-tbl td:first-child { text-align: left; }
+.pi-tbl th { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.pi-tbl td + td { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+.pi-tbl tr.cur td { background: var(--accent-wash); font-weight: 700; }
+/* The landing-spot panel's counts, with what a normal population would give in the row below,
+   so each pair of numbers shares a column. Fixed column widths keep the header's wrapping, and
+   so the table's height, independent of how many digits the counts have. The expected row is
+   teal, the color of the exact curve it comes from. */
+.pi-ptbl-wrap { max-width: 640px; margin: 6px auto 0; }
+.pi-ptbl { table-layout: fixed; }
+.pi-ptbl col.pi-ptbl-lbl { width: 34%; }
+.pi-ptbl tbody th { text-align: left; font-size: .8rem; font-weight: 600; color: var(--text);
+                    text-transform: none; letter-spacing: 0; vertical-align: middle; }
+.pi-ptbl tr.pi-ptbl-exp th, .pi-ptbl tr.pi-ptbl-exp td { color: var(--truth); }
+.pi-ptbl tbody tr:last-child th, .pi-ptbl tbody tr:last-child td { border-bottom: none; }
 /* Two stacked history charts: a small heading over each, sharing one section. */
 .hist-hd { font-size: .78rem; font-weight: 700; color: var(--muted); margin: 6px 0 2px; }
 .hist-hd + svg.hsv { margin-top: 2px; }
@@ -564,22 +612,29 @@ svg.fig { display: block; width: 100%; height: auto; }
     <div class="wh-copy">&copy; 2026 Theodore P. Pavlic<br class="cr-br"><span class="cr-sep"> &middot; </span><a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT&nbsp;License</a></div>
   </div>
   <nav class="tabs">
-    <a class="tab active" href="#ci" data-tab="ci" onclick="showTab('ci',this);return false;">① Confidence Intervals</a>
+    <div class="tab-group">
+      <span class="tab-group-lbl" aria-hidden="true">Interval estimates</span>
+      <a class="tab active" href="#ci" data-tab="ci" aria-label="Confidence Intervals" onclick="showTab('ci',this);return false;">① Confidence</a>
+      <a class="tab" href="#pi" data-tab="pi" aria-label="Prediction Intervals" onclick="showTab('pi',this);return false;">② Prediction</a>
+    </div>
     <div class="tab-group">
       <span class="tab-group-lbl" aria-hidden="true">Variance reduction: narrowing the interval</span>
-      <a class="tab" href="#crn" data-tab="crn" onclick="showTab('crn',this);return false;">② Common Random Numbers</a>
-      <a class="tab" href="#av" data-tab="av" onclick="showTab('av',this);return false;">③ Antithetic Variates</a>
-      <a class="tab" href="#cv" data-tab="cv" onclick="showTab('cv',this);return false;">④ Control Variates</a>
-      <a class="tab" href="#is" data-tab="is" onclick="showTab('is',this);return false;">⑤ Importance Sampling</a>
+      <a class="tab" href="#crn" data-tab="crn" data-tip="Common random numbers" data-tip-press aria-label="Common Random Numbers (CRN)" onclick="showTab('crn',this);return false;">③ CRN</a>
+      <a class="tab" href="#av" data-tab="av" onclick="showTab('av',this);return false;">④ Antithetic Variates</a>
+      <a class="tab" href="#cv" data-tab="cv" onclick="showTab('cv',this);return false;">⑤ Control Variates</a>
+      <a class="tab" href="#is" data-tab="is" onclick="showTab('is',this);return false;">⑥ Importance Sampling</a>
     </div>
   </nav>
   <select id="tab-select" class="tab-select" onchange="showTab(this.value,null)" aria-label="Select tab">
-    <option value="ci">① Confidence Intervals</option>
+    <optgroup label="Interval Estimates">
+      <option value="ci">① Confidence Intervals</option>
+      <option value="pi">② Prediction Intervals</option>
+    </optgroup>
     <optgroup label="Variance Reduction">
-      <option value="crn">② Common Random Numbers</option>
-      <option value="av">③ Antithetic Variates</option>
-      <option value="cv">④ Control Variates</option>
-      <option value="is">⑤ Importance Sampling</option>
+      <option value="crn">③ Common Random Numbers</option>
+      <option value="av">④ Antithetic Variates</option>
+      <option value="cv">⑤ Control Variates</option>
+      <option value="is">⑥ Importance Sampling</option>
     </optgroup>
   </select>
 
@@ -670,11 +725,166 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ②: common random numbers ────────────────────────────────── -->
+  <!-- ── TAB ②: prediction intervals ─────────────────────────────────── -->
+  <section id="tab-pi" class="tp">
+    <p class="lede">A confidence interval estimates the population mean μ. A prediction interval estimates where one more value from the same population will land. Here both are built from the same sample, and each is judged against its own target: the confidence interval against μ, and the prediction interval against a new value drawn after the sample.</p>
+    <div class="ctrl-row par-row">
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="pi-shape"><span class="tip" tabindex="0" data-tip="The shape of the population the values are drawn from. Every shape has the mean μ and standard deviation σ set beside it. The prediction interval assumes a normal population; the other two show what happens when it is not.">Population shape</span></label>
+        <select id="pi-shape" onchange="piParamsChanged()">
+          <option value="normal" selected>Normal</option><option value="uniform">Uniform</option><option value="exponential">Exponential</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="pi-mu"><span class="tip" tabindex="0" data-tip="The population mean, the number the confidence interval is trying to capture. Changing it mid-history moves the dashed line in the charts below rather than clearing them. Arrow keys move it by 0.1; hold Shift for 1.">Population mean μ</span></label>
+        <input class="par-inp" id="pi-mu" type="text" inputmode="decimal" value="5" autocomplete="off" spellcheck="false" aria-describedby="pi-par-msg" onchange="piParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="pi-sigma"><span class="tip" tabindex="0" data-tip="The population standard deviation σ. Both half-widths grow in proportion to it; σ² is shown in the stats for readers who think in variances. Arrow keys or the buttons move it by 0.01; hold Shift for 0.1.">Std. dev. σ</span></label>
+        <input class="par-inp" id="pi-sigma" type="text" inputmode="decimal" value="0.1" autocomplete="off" spellcheck="false" aria-describedby="pi-par-msg" onchange="piParamsChanged()">
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="pi-n">Samples per run n</label>
+        <select id="pi-n" onchange="piParamsChanged()">
+          <option value="5">5</option><option value="10">10</option><option value="15">15</option>
+          <option value="20" selected>20</option><option value="30">30</option><option value="50">50</option>
+          <option value="100">100</option><option value="200">200</option>
+        </select>
+      </span>
+      <span class="ctrl-pair">
+        <label class="ctrl-lbl" for="pi-conf"><span class="tip" tabindex="0" data-tip="The confidence level 100(1 − α)%. Lower confidence gives a narrower interval that misses more often, and this is the only control that changes the miss rate.">Confidence</span></label>
+        <select id="pi-conf" onchange="piParamsChanged()">
+          <option value="0.999">99.9%</option><option value="0.99">99%</option><option value="0.95" selected>95%</option>
+          <option value="0.9">90%</option><option value="0.8">80%</option><option value="0.6">60%</option><option value="0.4">40%</option>
+        </select>
+      </span>
+      <span class="seed-msg" id="pi-par-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="pi-seed"><span class="tip" tabindex="0" data-tip="Any whole number from 0 to 2147483647. The same seed reproduces the same run exactly, which is what makes an experiment here repeatable. Arrow keys or the buttons move it by 1; hold Shift for 100.">Seed</span></label>
+        <input class="seed-inp" id="pi-seed" type="text" inputmode="numeric" value="54321" maxlength="10" autocomplete="off" spellcheck="false" aria-describedby="pi-seed-msg" onchange="normalizeSeed('pi')" onkeydown="if(event.key==='Enter'){event.preventDefault();runPi();}">
+        <label class="ctrl-chk" data-tip="Run Experiment always uses the seed shown. With this ticked, a fresh seed is drawn afterwards, ready for the next run." data-tip-press>
+          <input type="checkbox" id="pi-newseed" checked> <span class="tip">New seed after each run</span>
+        </label>
+      </span>
+      <button class="btn-run" id="pi-run" onclick="runPi()"><svg class="btn-ico" viewBox="0 0 10 12" aria-hidden="true"><path d="M0 0l10 6-10 6z"/></svg>Run Experiment</button>
+      <button class="btn-run2" id="pi-run100" onclick="runPiBatch()" data-tip="Runs 100 experiments back to back from consecutive seeds and draws only the last. With a normal population, both miss tallies under the history charts should settle near α." data-tip-press><svg class="btn-ico" viewBox="0 0 17 12" aria-hidden="true"><path d="M0 0l8 6-8 6z"/><path d="M9 0l8 6-8 6z"/></svg>Run ×100</button>
+      <button class="btn-clear" onclick="clearPi()">Clear history</button>
+      <span class="seed-msg" id="pi-seed-msg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="viz-row">
+      <div class="cv-card">
+        <svg class="fig" id="pi-fig" role="img" aria-label="The population density with the run's sample as a rug and histogram, the sample mean, the confidence interval, the prediction interval, the next value, and the middle of the population"></svg>
+        <div class="cv-leg">
+          <span style="color:var(--truth)"><span class="lg-s">—</span>true density and μ</span>
+          <span style="color:var(--est)"><span class="lg-s">▮</span>sample histogram and rug</span>
+          <span style="color:var(--est-dark)"><span class="lg-s">◆</span>next value</span>
+          <span><span class="lg-s lg-wide">⊢●⊣</span>interval and its mean (solid teal hits its target; dashed red, hollow dot, misses)</span>
+          <span id="pi-leg-range" style="color:var(--truth)"><span class="lg-s lg-wide">⊢⊣</span><span id="pi-leg-range-t">middle 95% of the population (2.5% beyond each end)</span></span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="sg sg-two">
+          <div class="sc"><div class="sc-lbl">Sample mean <span class="ov">x</span></div><div class="sc-val acc" id="pi-s-mean">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">μ</span></div><div class="sc-val dim" id="pi-s-mu">5</div></div>
+          <div class="sc"><div class="sc-lbl">Sample std. dev. S</div><div class="sc-val acc" id="pi-s-sd">—</div></div>
+          <div class="sc"><div class="sc-lbl">True <span class="sym">σ</span> (<span class="sym">σ²</span>)</div><div class="sc-val dim" id="pi-s-sigma">0.1 (0.01)</div></div>
+          <div class="sc"><div class="sc-lbl"><span class="sym">t<sub>α/2,n−1</sub></span> at <span id="pi-s-conf">95%</span></div><div class="sc-val" id="pi-s-t">—</div></div>
+          <div class="sc"><div class="sc-lbl">Next value <span class="sym">x<sub>n+1</sub></span></div><div class="sc-val" id="pi-s-next" style="color:var(--est-dark)">—</div></div>
+          <div class="sc"><div class="sc-lbl">CI half-width <span class="sym">t·S/√n</span></div><div class="sc-val" id="pi-s-hc">—</div></div>
+          <div class="sc"><div class="sc-lbl">PI half-width <span class="sym">t·S·√(1 + 1/n)</span></div><div class="sc-val" id="pi-s-hp">—</div></div>
+          <div class="sc"><div class="sc-lbl">CI captures <span class="sym">μ</span>?</div><div class="sc-val" id="pi-s-hit">—</div></div>
+          <div class="sc"><div class="sc-lbl">PI catches the next value?</div><div class="sc-val" id="pi-s-phit">—</div></div>
+          <div class="sc sc-wide sc-full"><div class="sc-lbl"><span class="tip" tabindex="0" data-tip="Computed exactly from the known population: the share of all possible new values that land inside this run's prediction interval. It changes from run to run. Averaged over many runs, it equals the confidence level when the population is normal.">Chance this PI catches a new value</span></div><div class="sc-val" id="pi-s-cover">—</div></div>
+          <div class="sc sc-wide sc-full"><div class="sc-lbl">CI <span class="ov">x</span> ± H, <span id="pi-s-conf2">95%</span></div><div class="sc-val" id="pi-s-cint">—</div></div>
+          <div class="sc sc-wide sc-full"><div class="sc-lbl">PI, <span id="pi-s-conf3">95%</span></div><div class="sc-val" id="pi-s-pint">—</div></div>
+          <div class="sc sc-wide sc-full"><div class="sc-lbl">Middle <span id="pi-s-conf4">95%</span> of the population</div><div class="sc-val" id="pi-s-range">—</div></div>
+        </div>
+        <div class="sr-only" id="pi-live" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="hint wide">Each run draws n values from the population, forms both intervals from <span class="ov">x</span> and S, and then draws one more value from the same population: the next value. The confidence interval is judged against μ, and the prediction interval against that next value. The third row is the middle 95% of the population itself, the interval a prediction interval would be if the population were known. Because the population is known, the card “Chance this PI catches a new value” gives the exact probability for this run's interval. That probability changes from run to run, and its average over many runs is the confidence level when the population is normal. The x-axis stays fixed, and Clear history re-centers it on the current population.</div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history&nbsp;– confidence intervals for <span class="sym">μ</span></div>
+      <div class="exp-note">Each column is one run's confidence interval, judged against μ.</div>
+      <div id="pi-hw1"><svg class="hsv" id="pi-hist1"></svg></div>
+      <div class="hist-cap" id="pi-cap1"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Experiment history&nbsp;– prediction intervals for the next value</div>
+      <div class="exp-note">Each column is one run's prediction interval, judged against the next value drawn in that run (the diamond).</div>
+      <div id="pi-hw2"><svg class="hsv" id="pi-hist2"></svg></div>
+      <div class="hist-cap" id="pi-cap2"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Where the next values landed, pooled across runs</div>
+      <div class="exp-note">Each run adds one value to this histogram: its next value, measured from that run's own sample mean <span class="ov">x</span> in units of that run's own sample standard deviation S, where 0 is <span class="ov">x</span> and 2 is two sample standard deviations above it. The histogram pools every run since μ, σ, n, or the shape last changed, unlike the sample histogram at the top of the page, which shows the n values of the latest run alone. The dashed lines are the prediction interval's ends at the selected confidence level, ±t·√(1 + 1/n) on this scale, and a value beyond either one is a miss. The teal curve is where the values land when the population is normal. Changing the confidence level moves the dashed lines and leaves the values where they are. Because the histogram pools every run and judges them all at the selected level, its counts can differ from the tally under the history chart above, which covers only the runs that chart has room to draw and judges each run at the confidence level it used.</div>
+      <div id="pi-pw"><svg class="pi-wsv" id="pi-pfig" role="img" aria-label="Histogram of where each run's next value landed, in sample standard deviations from its sample mean, with the curve for a normal population and the prediction interval's ends"></svg></div>
+      <div class="tbl-wrap pi-ptbl-wrap">
+        <table class="pi-tbl pi-ptbl" aria-label="Runs counted beyond each end of the prediction interval and between them, beside the counts expected for a normal population">
+          <colgroup><col class="pi-ptbl-lbl"><col><col><col></colgroup>
+          <thead><tr><th scope="col"></th><th scope="col">Below the lower end</th><th scope="col">Between</th><th scope="col">Above the upper end</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Runs counted</th><td id="pi-pt-b">0</td><td id="pi-pt-c">0</td><td id="pi-pt-a">0</td></tr>
+            <tr class="pi-ptbl-exp"><th scope="row">Expected for a normal population</th><td id="pi-pe-b">0.0</td><td id="pi-pe-c">0.0</td><td id="pi-pe-a">0.0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="fig-note" id="pi-pread"></div>
+      <div class="cv-leg" id="pi-pleg">
+        <span><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="4" y="1" width="16" height="10" fill="var(--est)" fill-opacity=".45" stroke="var(--est)" stroke-width=".6"/></svg>next value inside the interval at the selected level</span>
+        <span><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><rect x="4" y="1" width="16" height="10" fill="var(--est-dark)" fill-opacity=".75" stroke="var(--est-dark)" stroke-width=".6"/></svg>next value beyond it</span>
+        <span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="currentColor" stroke-width="2"/></svg>where values land for a normal population</span>
+        <span><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3,2"/></svg>ends of the prediction interval at the selected level</span>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">How the two half-widths change with n</div>
+      <div class="exp-note">The curves give each half-width with S replaced by σ, in units of σ, at the selected confidence level. The confidence interval's half-width t·σ/√n falls toward 0 as n grows. The prediction interval's half-width t·σ·√(1 + 1/n) falls only toward z·σ, because a new value has its own spread σ that no amount of sampling removes. The two dots are the latest run's own half-widths, which use S instead of σ.</div>
+      <div id="pi-ww"><svg class="pi-wsv" id="pi-wfig" role="img" aria-label="Half-widths of the confidence interval and the prediction interval against the number of samples per run, in units of σ"></svg></div>
+      <div class="fig-note" id="pi-wread"></div>
+      <div class="cv-leg" id="pi-wleg">
+        <span style="color:var(--ratio)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>PI half-width</span>
+        <span style="color:var(--curve-ci)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>CI half-width</span>
+        <span style="color:var(--truth)"><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="1" y1="6" x2="23" y2="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4,3"/></svg>limit of the PI half-width as n grows</span>
+        <span><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--muted)" stroke-width="1.2"/></svg>selected n</span>
+        <span><svg class="lg-sv" viewBox="0 0 24 12" aria-hidden="true"><circle cx="7" cy="6" r="4" fill="var(--ratio)" stroke="#fff" stroke-width="1.2"/><circle cx="18" cy="6" r="4" fill="var(--curve-ci)" stroke="#fff" stroke-width="1.2"/></svg>latest run (uses S)</span>
+      </div>
+      <div class="fig-note" id="pi-whint">Move a pointer over the plot, or tap it, to read both half-widths at any n.</div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">Where the prediction interval comes from</div>
+      <div class="exp-note">A new value x<sub>n+1</sub> and the sample mean <span class="ov">x</span> are independent, and so x<sub>n+1</sub> − <span class="ov">x</span> has variance σ² + σ²/n = σ²(1 + 1/n). The first term is the spread of the new value itself, and the second is the uncertainty in <span class="ov">x</span>. Replacing σ by S and z by t gives the prediction interval below. For a normal population it catches the next value with probability exactly 1 − α.</div>
+      <div class="eq-row"><span class="eq-lbl">CI half-width:</span><span class="eq-val">H = t<sub>α/2,n−1</sub> · S / √n</span></div>
+      <div class="eq-row"><span class="eq-lbl">PI half-width:</span><span class="eq-val">H = t<sub>α/2,n−1</sub> · S · √(1 + 1/n)</span></div>
+      <div class="eq-row"><span class="eq-lbl">CI guarantee:</span><span class="eq-val">Pr( μ ∈ <span class="ov">x</span> ± H<sub>CI</sub> ) = 1 − α</span></div>
+      <div class="eq-row"><span class="eq-lbl">PI guarantee:</span><span class="eq-val">Pr( x<sub>n+1</sub> ∈ <span class="ov">x</span> ± H<sub>PI</sub> ) = 1 − α for a normal population</span></div>
+      <div class="eq-hr"></div>
+      <div class="cards">
+        <div class="card"><strong>Larger n: the CI shrinks to a point</strong>The CI's half-width falls like 1/√n. It measures how far <span class="ov">x</span> may be from μ, and that error can be made as small as you like by taking more samples.</div>
+        <div class="card"><strong>Larger n: the PI shrinks only to μ ± z·σ</strong>The PI's half-width falls toward z·σ. It must cover a single future value, and the spread σ of that value is a property of the population that sampling cannot reduce.</div>
+        <div class="card"><strong>Same sample, same center</strong>Both intervals are centered on <span class="ov">x</span> and use the same t and S. Only the factor after S differs: 1/√n for the mean, and √(1 + 1/n) for a single value.</div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-hd">When the population is not normal</div>
+      <div class="exp-note">For each of these shapes, the confidence interval's capture rate returns to the confidence level as n grows, because the sample mean becomes approximately normal. The prediction interval does not: as n grows it settles on μ ± z·σ, and the share of new values inside that range is set by the shape. The table gives that share, and where the misses fall, at the selected confidence level.</div>
+      <div class="tbl-wrap">
+        <table class="pi-tbl" id="pi-tbl">
+          <thead><tr><th scope="col">Population</th><th scope="col">New values inside <span class="sym">μ ± z·σ</span></th><th scope="col">Below</th><th scope="col">Above</th></tr></thead>
+          <tbody id="pi-tbody"></tbody>
+        </table>
+      </div>
+      <div class="exp-note" style="margin-top:9px;margin-bottom:0">A uniform population has no values beyond μ ± √3·σ, and so a 95% prediction interval eventually catches every new value, missing on neither side. An exponential population is skewed to the right. At 95% its total coverage comes close to 95%, which makes the miss tally look right, but no new value falls below the interval and all of the misses fall above it, where the interval promised 2.5% on each side. At 99% it misses 2.8% of new values instead of 1%.</div>
+    </div>
+  </section>
+
+  <!-- ── TAB ③: common random numbers ────────────────────────────────── -->
   <section id="tab-crn" class="tp">
     <p class="lede">Common Random Numbers (CRN) uses <span class="tip" tabindex="0" data-tip="Holding a source of variation fixed across the things being compared, so that a difference between them cannot be confused with it. The shared input stream is the block here, and the comparison becomes a paired one.">statistical blocking</span> to apply the same input combination to every system under test so that the differences between systems can be isolated from the differences across inputs.</p>
     <div class="ctrl-row par-row">
-      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ③ and ④.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
+      <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn1"><span class="tip" tabindex="0" data-tip="A stand-in for a simulation model: it turns one uniform random number u into an output. Both systems read u from the same menu of models as tabs ④ and ⑤.">System 1 model h₁(u)</span></label><select id="crn-fn1" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-fn2"><span class="tip" tabindex="0" data-tip="The second system's model, read from the same menu; choose one that responds to u in the opposite direction to see pairing backfire.">System 2 model h₂(u)</span></label><select id="crn-fn2" onchange="crnParamsChanged()"></select></span>
       <span class="ctrl-pair"><label class="ctrl-lbl" for="crn-shift"><span class="tip" tabindex="0" data-tip="Added to every output of system 2 so that two systems built from the same model can still differ by a known amount. The true difference δ = E[h₂] + shift − E[h₁] is what the intervals try to capture.">Shift added to system 2</span></label><input class="par-inp" id="crn-shift" type="text" inputmode="decimal" value="0.5" autocomplete="off" spellcheck="false" aria-describedby="crn-par-msg" onchange="crnParamsChanged()"></span>
       <span class="ctrl-pair ctrl-pair-wide">
@@ -777,7 +987,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ③: antithetic variates ──────────────────────────────────── -->
+  <!-- ── TAB ④: antithetic variates ──────────────────────────────────── -->
   <section id="tab-av" class="tp">
     <p class="lede">Antithetic variates are designed to create negative correlation between pairs of simulation outputs to accelerate the natural averaging that comes from the <span class="tip" tabindex="0" data-tip="The average of independent draws settles on the true mean as their number grows. Pairing each draw with a negatively correlated partner makes that average settle sooner.">Law of Large Numbers</span>. Even runs use <span class="tip" tabindex="0" data-tip="A pseudorandom number generator: a deterministic recurrence whose stream passes as independent uniform draws on (0, 1). Started from the same seed, it repeats exactly, which is what lets one run reuse the draws of another.">PRNG</span> draws (1 − u) that are the complement of the draws (u) from the prior odd run.</p>
     <div class="ctrl-row par-row">
@@ -883,7 +1093,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ④: control variates ─────────────────────────────────────── -->
+  <!-- ── TAB ⑤: control variates ─────────────────────────────────────── -->
   <section id="tab-cv" class="tp">
     <p class="lede">Control variates use knowledge about how extreme draws from an <span class="tip" tabindex="0" data-tip="A probability distribution standing in for one source of variation in the simulation, its shape and parameters settled before the run (fit to previously collected data, say). Its mean is therefore known ahead of time, unlike the output's.">input model</span> are relative to the mean of that model in order to isolate <span class="tip" tabindex="0" data-tip="The share of the output's variance that the input accounts for, R² in a regression. The rest, 1 − R², is what no control variate built on that input can remove.">explained variance</span> (explained by inputs) from model variance.</p>
     <div class="ctrl-row par-row">
@@ -988,7 +1198,7 @@ svg.fig { display: block; width: 100%; height: auto; }
     </div>
   </section>
 
-  <!-- ── TAB ⑤: importance sampling ──────────────────────────────────── -->
+  <!-- ── TAB ⑥: importance sampling ──────────────────────────────────── -->
   <section id="tab-is" class="tp">
     <p class="lede">Importance sampling allows for estimating rare events by concentrating inputs only on “important” cases that are likely to generate those rare events. To recover the right proportions, <span class="tip" tabindex="0" data-tip="How probable an observed draw is under a given distribution, read as a function of the distribution rather than of the draw. Dividing the target’s likelihood by the proposal’s gives each draw its weight.">likelihood</span> ratios reweight the biased outcomes.</p>
     <div class="ctrl-row par-row">
@@ -1366,7 +1576,124 @@ function c4(n) {
   return Math.sqrt(2 / (n - 1)) * Math.exp(logGamma(n / 2) - logGamma((n - 1) / 2));
 }
 
-/* ── The function menu shared by tabs ②, ③, and ④ ─────────────────────
+/* ── Tab ②: a confidence interval and a prediction interval from one sample ──
+   Three population shapes, each set by its mean μ and standard deviation σ alone,
+   and so the same two fields describe every shape:
+     normal       N(μ, σ²), the shape the prediction interval assumes;
+     uniform      flat on μ ± √3·σ, lighter tails than the normal;
+     exponential  μ − σ + σ·E with E ~ Exp(1), skewed right, its floor at μ − σ.
+   Each carries an inverse-transform draw, an exact cdf, and a pdf, and so the chance
+   that a given interval holds the next value is known exactly rather than estimated. */
+var SQRT3 = Math.sqrt(3);
+var PI_SHAPES = {
+  normal: {
+    draw: function (rand, mu, sigma) { return normalDraw(rand, mu, sigma); },
+    cdf: function (x, mu, sigma) { return normCdf((x - mu) / sigma); },
+    pdf: function (x, mu, sigma) { return normPdf((x - mu) / sigma) / sigma; }
+  },
+  uniform: {
+    draw: function (rand, mu, sigma) { return mu + SQRT3 * sigma * (2 * rand() - 1); },
+    cdf: function (x, mu, sigma) {
+      var a = mu - SQRT3 * sigma, b = mu + SQRT3 * sigma;
+      return x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a);
+    },
+    pdf: function (x, mu, sigma) {
+      var a = mu - SQRT3 * sigma, b = mu + SQRT3 * sigma;
+      return x < a || x > b ? 0 : 1 / (b - a);
+    }
+  },
+  exponential: {
+    /* rand() is in [0, 1), and so 1 − u is in (0, 1] and its log is finite. */
+    draw: function (rand, mu, sigma) { return mu - sigma - sigma * Math.log(1 - rand()); },
+    cdf: function (x, mu, sigma) { var e = (x - (mu - sigma)) / sigma; return e <= 0 ? 0 : 1 - Math.exp(-e); },
+    pdf: function (x, mu, sigma) { var e = (x - (mu - sigma)) / sigma; return e < 0 ? 0 : Math.exp(-e) / sigma; }
+  }
+};
+var PI_SHAPE_KEYS = ['normal', 'uniform', 'exponential'];
+/* Each shape's quantile function, p in (0, 1): the inverse of its cdf. */
+PI_SHAPES.normal.quantile = function (p, mu, sigma) { return mu + sigma * normInv(p); };
+PI_SHAPES.uniform.quantile = function (p, mu, sigma) { return mu + SQRT3 * sigma * (2 * p - 1); };
+PI_SHAPES.exponential.quantile = function (p, mu, sigma) { return mu - sigma - sigma * Math.log(1 - p); };
+/* The middle 100(1 − α)% of the population itself, with α/2 beyond each end: the
+   interval a prediction interval would be if the population were known exactly. */
+function piTrueRange(shape, conf, mu, sigma) {
+  var a = (1 - conf) / 2, s = PI_SHAPES[shape];
+  return { lo: s.quantile(a, mu, sigma), hi: s.quantile(1 - a, mu, sigma) };
+}
+/* Student's t density with nu degrees of freedom. */
+function tPdf(x, nu) {
+  return Math.exp(logGamma((nu + 1) / 2) - logGamma(nu / 2) - 0.5 * Math.log(nu * Math.PI)
+                  - (nu + 1) / 2 * Math.log(1 + x * x / nu));
+}
+/* Where the next value landed inside its prediction interval, in units of the
+   half-width: −1 at the lower end, 0 at x̄, +1 at the upper end, and beyond ±1 a miss.
+   For a normal population (next − x̄)/(S·√(1 + 1/n)) has exactly the t distribution
+   with n − 1 degrees of freedom, which is the fact the interval is built on, and so
+   the position is that t variable divided by t_{α/2,n−1}. Its density, u ↦ t·f(t·u),
+   puts exactly α/2 beyond each end. */
+function piPositionPdf(u, n, conf) {
+  var t = tQuantile(1 - (1 - conf) / 2, n - 1);
+  return t * tPdf(t * u, n - 1);
+}
+/* The same landing spot in units of the sample's own standard deviation,
+   (next − x̄)/S. For a normal population it is √(1 + 1/n) times a t variable with
+   n − 1 degrees of freedom, and so its density depends on n alone; the prediction
+   interval's ends sit at ±t_{α/2,n−1}·√(1 + 1/n) on this scale. */
+function piSdPdf(v, n) {
+  var k = Math.sqrt(1 + 1 / n);
+  return tPdf(v / k, n - 1) / k;
+}
+function piSdEnd(n, conf) {
+  return tQuantile(1 - (1 - conf) / 2, n - 1) * Math.sqrt(1 + 1 / n);
+}
+/* The prediction interval for one more value: mean ± t_{1-α/2, n-1}·s·√(1 + 1/n). */
+function piNext(ci) {
+  var h = ci.t * ci.s * Math.sqrt(1 + 1 / ci.n);
+  return { h: h, lo: ci.mean - h, hi: ci.mean + h };
+}
+/* The chance that the interval [lo, hi] holds a new draw from the population. */
+function piCoverage(shape, lo, hi, mu, sigma) {
+  var s = PI_SHAPES[shape];
+  return Math.max(0, s.cdf(hi, mu, sigma) - s.cdf(lo, mu, sigma));
+}
+/* As n grows, x̄ → μ, S → σ, and t → z, and so the prediction interval settles on
+   μ ± z·σ. Its coverage there is fixed by the population's shape, not by the sample:
+   exactly 1 − α for the normal, and something else for any other shape. */
+function piLimitCoverage(shape, conf) {
+  var z = normInv(1 - (1 - conf) / 2);
+  return piCoverage(shape, -z, z, 0, 1);
+}
+/* The same limit split by side: the chance a new value falls below μ − z·σ and the
+   chance it falls above μ + z·σ. The normal splits α evenly; a skewed shape does not. */
+function piLimitTails(shape, conf) {
+  var z = normInv(1 - (1 - conf) / 2), s = PI_SHAPES[shape];
+  return { below: s.cdf(-z, 0, 1), above: 1 - s.cdf(z, 0, 1) };
+}
+/* The half-widths with S replaced by σ, in units of σ: t/√n for the confidence
+   interval and t·√(1 + 1/n) for the prediction interval. */
+function piWidthCurves(n, conf) {
+  var t = tQuantile(1 - (1 - conf) / 2, n - 1);
+  return { ci: t / Math.sqrt(n), pi: t * Math.sqrt(1 + 1 / n) };
+}
+/* p = {shape, mu, sigma, n, conf}.  The n sample values come first in the seed's
+   stream and the next value after them, and so for the normal shape a seed gives the
+   same sample, and the same confidence interval, as it does on tab ①. */
+function runPI(seed, p) {
+  var rand = mulberry32(seed), sh = PI_SHAPES[p.shape], xs = new Array(p.n);
+  for (var i = 0; i < p.n; i++) xs[i] = sh.draw(rand, p.mu, p.sigma);
+  var next = sh.draw(rand, p.mu, p.sigma);
+  var ci = ciMean(xs, p.conf), pi = piNext(ci), d = next - ci.mean;
+  /* A sample with zero spread gives a point interval; the next value then sits at
+     its center or infinitely far out, in half-width units. */
+  var pos = pi.h > 0 ? d / pi.h : d === 0 ? 0 : d > 0 ? Infinity : -Infinity;
+  var posS = ci.s > 0 ? d / ci.s : d === 0 ? 0 : d > 0 ? Infinity : -Infinity;
+  return { xs: xs, ci: ci, pi: pi, next: next, truth: p.mu, pos: pos, posS: posS,
+           hit: captured(ci, p.mu), piHit: captured(pi, next),
+           piCover: piCoverage(p.shape, pi.lo, pi.hi, p.mu, p.sigma),
+           range: piTrueRange(p.shape, p.conf, p.mu, p.sigma) };
+}
+
+/* ── The function menu shared by tabs ③, ④, and ⑤ ─────────────────────
    Each h is a stand-in for a simulation model driven by one uniform.  The moments
    are exact: mean E[h(U)], m2 E[h(U)²], cross E[h(U) h(1−U)], and covU cov(U, h(U)).
    Four of the five are monotone; the bowl is the counterexample on which both
@@ -1390,7 +1717,7 @@ var FUNC_KEYS = ['ident', 'exp', 'sqrt', 'recip', 'bowl'];
 function funcVar(f) { return f.m2 - f.mean * f.mean; }
 function funcAntiCov(f) { return f.cross - f.mean * f.mean; }
 
-/* ── Tab ②: two systems fed the same or different random numbers ────────
+/* ── Tab ③: two systems fed the same or different random numbers ────────
    p = {fn1, fn2, shift2, sigE, n, conf}.  A system turns a uniform input into an
    output: Y_k = h_k(U) + shift_k + sigE·Z_k, with shift_1 = 0, shift_2 = p.shift2, and
    Z_k the system's own standard-normal noise.  Under independent inputs system 2 reads
@@ -1431,7 +1758,7 @@ function crnPredicted(p) {
   return { rho: cov / Math.sqrt(v1 * v2), ratio: Math.sqrt(Math.max(0, (v1 + v2 - 2 * cov) / (v1 + v2))), v1: v1, v2: v2, cov: cov };
 }
 
-/* ── Tab ③: antithetic pairs ──────────────────────────────────────────
+/* ── Tab ④: antithetic pairs ──────────────────────────────────────────
    p = {fn, n, conf, sigE}.  Both arms evaluate h 2n times and share the first n draws
    u_i.  The independent arm pairs each u_i with a fresh draw v_i and averages
    the pair, w_i = (h(u_i) + h(v_i)) / 2; the antithetic arm pairs it with its
@@ -1469,7 +1796,7 @@ function runAV(seed, p) {
            r: sampleCorr(ya, yb), hitInd: captured(ind, f.mean), hitAv: captured(av, f.mean) };
 }
 
-/* ── Tab ④: the uniform input as a control variate ────────────────────
+/* ── Tab ⑤: the uniform input as a control variate ────────────────────
    p = {fn, n, conf, sigE}.  Y = h(U) + σₑ ε, with ε a standard normal drawn from
    the same stream as U, and the control X = U, whose mean ½ is known. Z = Y − c
    (U − ½) has the same mean as Y for any c; the variance-minimizing c* =
@@ -1491,7 +1818,7 @@ function runCV(seed, p) {
            plain: plain, cv: cv, truth: f.mean, hitPlain: captured(plain, f.mean), hitCv: captured(cv, f.mean) };
 }
 
-/* ── Tab ⑤: the model menu, a transfer function h from an input to an output,
+/* ── Tab ⑥: the model menu, a transfer function h from an input to an output,
    with the rare event on the output side ────────────────────────────────
    Each entry turns a standard-normal input X into an output h(X), and the event
    is h(X) ≥ T for a threshold T on the output scale. Fields:
@@ -1537,7 +1864,7 @@ var IS_FUNCS = {
 var IS_KEYS = ['ident', 'exp', 'sq'];
 function isTruth(fn, T) { return IS_FUNCS[fn].truth(T); }
 
-/* ── Tab ⑤: a rare event on a model's output, by importance sampling ──
+/* ── Tab ⑥: a rare event on a model's output, by importance sampling ──
    p = {fn, T, theta, n, conf}. Target p = P(h(X) ≥ T) for X ~ N(0, 1) and h the
    model named by p.fn. The direct arm draws n standard normals and averages the
    indicator 1[h(X) ≥ T]. The weighted arm draws n values from N(θ, 1), the same
@@ -1578,6 +1905,9 @@ var CI = {
   mean: mean, sampleVar: sampleVar, sampleCov: sampleCov, sampleCorr: sampleCorr,
   ciMean: ciMean, ciWelch: ciWelch, captured: captured, pValueZero: pValueZero
   , runNormal: runNormal, histRecord: histRecord, c4: c4
+  , PI_SHAPES: PI_SHAPES, PI_SHAPE_KEYS: PI_SHAPE_KEYS, piNext: piNext, piCoverage: piCoverage
+  , piLimitCoverage: piLimitCoverage, piLimitTails: piLimitTails, piWidthCurves: piWidthCurves, runPI: runPI
+  , piTrueRange: piTrueRange, tPdf: tPdf, piPositionPdf: piPositionPdf, piSdPdf: piSdPdf, piSdEnd: piSdEnd
   , runCRN: runCRN, funcCross: funcCross, crnPredicted: crnPredicted
   , FUNCS: FUNCS, FUNC_KEYS: FUNC_KEYS, funcVar: funcVar, funcAntiCov: funcAntiCov, runAV: runAV
   , runCV: runCV
@@ -1596,7 +1926,7 @@ const C = {
   truth: tok('--truth'), est: tok('--est'), estPale: tok('--est-pale'),
   hit: tok('--hit'), miss: tok('--miss'), warn: tok('--warn'),
   pair: tok('--pair'), band: tok('--band'),
-  truthDark: tok('--truth-dark'), estDark: tok('--est-dark'), ratio: tok('--ratio'),
+  truthDark: tok('--truth-dark'), estDark: tok('--est-dark'), ratio: tok('--ratio'), curveCi: tok('--curve-ci'),
 };
 const FF_MONO = 'IBM Plex Mono,monospace';
 const FF_SANS = 'Outfit,sans-serif';
@@ -1636,7 +1966,7 @@ function renderActiveHist() {
 // A stats-card label that ends in "(df N)" has to wrap to the same number of
 // lines before a run, when it reads "df —", as after one, or the card grows
 // on the first run at whatever widths the two forms straddle a wrap point
-// (found at 550 and 780 px on tab ③ and at 540 and 550 px on tab ②). Each
+// (found at 550 and 780 px on tab ④ and at 540 and 550 px on tab ③). Each
 // df span is therefore given the pixel width of its widest possible text,
 // measured in its own font by a hidden clone: the exact df where n fixes it,
 // and the Welch–Satterthwaite ceiling 2(n − 1) with its decimal for the one
@@ -1711,7 +2041,7 @@ function parseSeed(raw) {
 
 // The last completed run per tab. Kept so that editing the seed can update the
 // "Next run" figure while preserving the record of what the last run actually did.
-const lastRun = { ci: null, crn: null, av: null, cv: null, is: null };
+const lastRun = { ci: null, pi: null, crn: null, av: null, cv: null, is: null };
 
 function seedMsg(tab, text, bad) {
   const inp = document.getElementById(tab + '-seed');
@@ -1831,16 +2161,31 @@ function histWindow(lists) {
   let lo = Infinity, hi = -Infinity;
   lists.forEach(runs => runs.slice(-HIST_MAX).forEach(r => {
     lo = Math.min(lo, r.lo, r.truth); hi = Math.max(hi, r.hi, r.truth);
+    // A record that carries a target value (tab ②'s next value) keeps it in view too.
+    if (Number.isFinite(r.target)) { lo = Math.min(lo, r.target); hi = Math.max(hi, r.target); }
   }));
   if (!(lo <= hi)) return null;
   const span = (hi - lo) || Math.abs(hi) * 0.1 || 1;
   return { lo: lo - span * 0.1, hi: hi + span * 0.1 };
 }
 function fmtTick(v, win) {
-  // Tab ⑤ plots tail probabilities near 1e-7, where fixed decimals are all zeros.
+  // Tab ⑥ plots tail probabilities near 1e-7, where fixed decimals are all zeros.
   if (win < 1e-4) return v.toExponential(1);
   const prec = win < 0.002 ? 6 : win < 0.02 ? 5 : win < 0.2 ? 4 : win < 2 ? 3 : 2;
   return v.toFixed(prec);
+}
+// Breaks a legend label at spaces into lines of at most `max` characters (a longer word keeps its own line).
+function histWrapLabel(label, max) {
+  const lines = [];
+  label.split(' ').forEach(w => {
+    if (lines.length && (lines[lines.length - 1] + ' ' + w).length <= max) lines[lines.length - 1] += ' ' + w;
+    else lines.push(w);
+  });
+  return lines;
+}
+// A filled diamond in the dark sample color, with a thin white edge so it reads over a bar.
+function histDiamond(cx, cy, r) {
+  return `<path d="M${cx},${cy - r} L${cx + r},${cy} L${cx},${cy + r} L${cx - r},${cy} Z" fill="${C.estDark}" stroke="#fff" stroke-width=".9"/>`;
 }
 function histPlot(svgEl, containerEl, runs, opts) {
   const widget = document.querySelector('.widget');
@@ -1850,24 +2195,38 @@ function histPlot(svgEl, containerEl, runs, opts) {
   // length-based estimate the true-value label uses below, at this legend's own 10px
   // font: about 5.4 units per character, plus 18 for the marker and its gap). starZero
   // adds a third item; without it the legend keeps its original two-item, one-or-two-row
-  // layout.
+  // layout. opts.targets (a per-run target mark, as tab ②'s next value) adds its own item the
+  // same way, and opts.legendLabels renames the two interval entries and the target's.
+  const lab = opts.legendLabels || {};
   const legItems = [
-    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="4" fill="${C.hit}"/>`, label: 'interval captures the true value' },
-    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`, label: 'interval misses (about α of them expected)' },
+    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="4" fill="${C.hit}"/>`, label: lab.hit || 'interval captures the true value' },
+    { icon: (cx, cy) => `<circle cx="${cx}" cy="${cy}" r="3.6" fill="#fff" stroke="${C.miss}" stroke-width="2"/>`, label: lab.miss || 'interval misses (about α of them expected)' },
   ];
   if (opts.starZero) legItems.push({ icon: null, label: '* interval excludes zero' });
+  if (opts.targets) {
+    legItems.push({ icon: (cx, cy) => histDiamond(cx, cy, 4.6), label: lab.target || 'target value' });
+    legItems.push({ icon: null, label: '▲ ▼ side the missed next value fell on' });
+  }
+  const flowLegend = opts.starZero || opts.targets;
   legItems.forEach(it => { it.block = it.label.length * 5.4 + 18; });
+  // With opts.targets the longer entries wrap onto further rows rather than running past the
+  // chart's right edge at a phone's width.
+  if (opts.targets) legItems.forEach(it => {
+    it.lines = histWrapLabel(it.label, Math.floor((cW - 4 - 18) / 5.4));
+    it.block = Math.max.apply(null, it.lines.map(l => l.length)) * 5.4 + 18;
+  });
   let legRows;
-  if (!opts.starZero) {
+  if (!flowLegend) {
     legRows = cW < 330 ? 2 : 1;
   } else {
     // Greedy left-to-right wrap: an item starts a new row when it would run past the
     // panel's own width at its current position.
     const GAP = 20; let ax = 7, row = 0;
     legItems.forEach((it, idx) => {
-      if (idx > 0 && ax + it.block > cW - 4) { row++; ax = it.icon ? 7 : 0; }
+      const rows = it.lines ? it.lines.length : 1;
+      if (idx > 0 && (ax + it.block > cW - 4 || rows > 1)) { row++; ax = it.icon ? 7 : 0; }
       it.row = row; it.ax = ax;
-      ax += it.block + GAP;
+      if (rows > 1) { row += rows - 1; ax = cW; } else ax += it.block + GAP;
     });
     legRows = row + 1;
   }
@@ -1987,9 +2346,25 @@ function histPlot(svgEl, containerEl, runs, opts) {
     });
   }
 
+  // Per-run target marks (filled, so painted after every hollow mark), drawn over the
+  // brackets, and a caret in the top margin over each missed column naming the side the
+  // target fell on. The caret's width stays under a column's, so neighbors never touch.
+  if (opts.targets) {
+    const cR = Math.min(4.5, colW * .45), cY = pT / 2;
+    shown.forEach((r, i) => {
+      if (!r.side) return;
+      const cx = xC(i), up = r.side === 'above', tip = cY + (up ? -cR * .85 : cR * .85), base = cY + (up ? cR * .85 : -cR * .85);
+      h += `<path d="M${cx},${tip} L${cx + cR},${base} L${cx - cR},${base} Z" fill="#595959"/>`;
+    });
+    const dR = Math.min(5, Math.max(3.2, colW * .4));
+    shown.forEach((r, i) => {
+      if (!Number.isFinite(r.target)) return;
+      h += histDiamond(xC(i), yP(Math.min(yMax, Math.max(yMin, r.target))), dR);
+    });
+  }
   // Legend, and then the true-value label at the right end of its line, drawn last so it
   // sits on top of the bars.
-  if (!opts.starZero) {
+  if (!flowLegend) {
     const ly = SH - 14 - (legRows - 1) * 14;
     const mx = legRows === 1 ? pL + 175 : pL + 7, my = legRows === 1 ? ly : SH - 14;
     h += `<circle cx="${pL + 7}" cy="${ly}" r="4" fill="${C.hit}"/>`;
@@ -1999,20 +2374,35 @@ function histPlot(svgEl, containerEl, runs, opts) {
   } else {
     legItems.forEach(it => {
       const ly = SH - 14 - (legRows - 1 - it.row) * 14, x = pL + it.ax;
-      if (it.icon) { h += it.icon(x, ly); h += `<text x="${x + 8}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">${it.label}</text>`; }
-      else { h += `<text x="${x}" y="${ly + 4}" fill="#666" font-size="10" font-family="${FF_SANS}">${it.label}</text>`; }
+      if (it.icon) h += it.icon(x, ly);
+      (it.lines || [it.label]).forEach((line, k) => {
+        h += `<text x="${it.icon ? x + 8 : x}" y="${ly + 4 + k * 14}" fill="#666" font-size="10" font-family="${FF_SANS}">${line}</text>`;
+      });
     });
   }
   const tl = opts.truthLabel(opts.liveTruth), tvy = live;
   // Raised one line above the usual offset (14 units, this plot's other line height)
   // so the label clears the cantilever running out from this same y at the right edge.
-  const lblY = tvy < pT + 18 ? tvy + 14 : tvy - 19, lblW = tl.length * 6.8 + 8;
-  h += `<rect x="${pL + cW - lblW - 3}" y="${lblY - 12}" width="${lblW}" height="16" fill="white" opacity=".92" rx="2" pointer-events="none"/>`;
-  h += `<text x="${pL + cW - 5}" y="${lblY}" text-anchor="end" fill="${C.truth}" font-size="10.5" font-weight="700" font-family="${FF_MONO}" pointer-events="none">${tl}</text>`;
+  // With opts.solidLabel the label sits clear of the top margin (where the carets ride), on an
+  // opaque backing that is resized to the measured text below.
+  const lblY = tvy < pT + (opts.solidLabel ? 31 : 18) ? tvy + 14 : tvy - 19, lblW = tl.length * 6.8 + 8;
+  h += opts.solidLabel
+    ? `<rect class="hist-tl-bg" x="${pL + cW - lblW - 3}" y="${lblY - 12}" width="${lblW}" height="16" fill="${C.bg}" rx="2" pointer-events="none"/>`
+    : `<rect x="${pL + cW - lblW - 3}" y="${lblY - 12}" width="${lblW}" height="16" fill="white" opacity=".92" rx="2" pointer-events="none"/>`;
+  h += `<text${opts.solidLabel ? ' class="hist-tl"' : ''} x="${pL + cW - 5}" y="${lblY}" text-anchor="end" fill="${C.truth}" font-size="10.5" font-weight="700" font-family="${FF_MONO}" pointer-events="none">${tl}</text>`;
 
   svgEl.innerHTML = h;
   svgEl.setAttribute('viewBox', `0 0 ${W} ${SH}`);
   svgEl.style.width = '100%'; svgEl.style.height = 'auto'; svgEl.style.display = 'block';
+  if (opts.solidLabel) {
+    // The backing is sized to the text as drawn; a chart on a hidden tab has no boxes to
+    // measure, and keeps the length-based estimate until the tab is shown.
+    const t = svgEl.querySelector('.hist-tl'), bg = svgEl.querySelector('.hist-tl-bg');
+    try {
+      const b = t.getBBox();
+      if (b.width > 0) { bg.setAttribute('x', b.x - 4); bg.setAttribute('width', b.width + 8); bg.setAttribute('y', b.y - 2); bg.setAttribute('height', b.height + 4); }
+    } catch (e) {}
+  }
   // The held segment's x-range, in the SVG's own coordinate space, for histBindDrag
   // to invert a pointer position back into a data value.
   svgEl._frame = { pT: pT, cH: cH, yMin: yMin, yMax: yMax, x0: pL + shown.length * colW, x1: cantEnd };
@@ -2104,10 +2494,10 @@ function svgSet(el, w, h, inner) {
 // content too, and so using it in place of '' puts the "no note" state through
 // the same line-box path as every other state, and the two round identically.
 // The note keeps growing normally when real text wraps to a second line
-// (confirmed: tab ③'s longest combined note, truncation text plus a clip
+// (confirmed: tab ④'s longest combined note, truncation text plus a clip
 // count, does wrap at 390px, and must keep doing so).
 function setFigNote(id, text) { $(id).textContent = text || ' '; }
-// Updates a [data-tip] element's own tooltip text after page load (tab ⑤'s True
+// Updates a [data-tip] element's own tooltip text after page load (tab ⑥'s True
 // p card, whose closed form depends on the selected model). The tooltip system
 // below mirrors every [data-tip] element's text into a visually hidden span at
 // load time and points at it with aria-describedby; that span has to be kept in
@@ -2145,10 +2535,10 @@ function fmtPShort(p) {
 function decFor(scale) { return scale < 0.002 ? 6 : scale < 0.02 ? 5 : scale < 0.2 ? 4 : scale < 2 ? 3 : 2; }
 // Round-number axis ticks (1-2-2.5-5-10 step selection, ceil/floor-snapped to
 // the chosen step), ported from power_analysis/power_explorer.html's own
-// niceTicks -- this file carried no such routine before tab ⑤'s transfer plot
-// needed one, and none of tab ①-④'s own figures called for one
+// niceTicks -- this file carried no such routine before tab ⑥'s transfer plot
+// needed one, and none of tab ①-⑤'s own figures called for one
 // either, and so it lives here as a shared helper for any figure to reuse, not
-// only tab ⑤'s. `want` is roughly the desired number of intervals, not ticks;
+// only tab ⑥'s. `want` is roughly the desired number of intervals, not ticks;
 // the 2.5 step (beyond power_explorer's own 1-2-5-10) fills the gap between 2
 // and 5 that otherwise left some spans with only one or two ticks.
 function niceTicks(lo, hi, want) {
@@ -2197,7 +2587,7 @@ function decimalSpin(id, min, onchange, step) {
 // track, and so a mark lines up with the thumb's actual center at that value
 // rather than with the track's raw edge-to-edge fraction. `ticks` is an array of
 // { v, label, accent }; a muted (non-accent) label is dropped when it overlaps
-// an accent label, but its mark stays. Only the c slider (tab ④) uses this now:
+// an accent label, but its mark stays. Only the c slider (tab ⑤) uses this now:
 // the three σₑ sliders lost their own ticks and snap, and so this is no
 // longer "shared" in the plural sense the name still implies, but the name
 // stays because nothing else calls it and a rename would touch every
@@ -2222,7 +2612,7 @@ function renderSliderTicks(inputId, ticksId, ticks) {
 // The "own noise σₑ" slider's own range and step, internal only (the slider
 // itself carries no tick and no label naming this quantity to the
 // reader): 0 to twice the model's own standard deviation (the larger of the
-// two models' on tab ②), computed from the exact moments in funcVar. The step
+// two models' on tab ③), computed from the exact moments in funcVar. The step
 // coarsens as the range widens so a single step is never imperceptible on a
 // quiet model like the bowl (own standard deviation ≈ 0.0745: max ≈ 0.149,
 // step 0.001) nor needlessly fine on a noisy one (exp(u), max ≈ 3.44, step 0.01).
@@ -2343,7 +2733,7 @@ function figWidth(svgEl) {
   return Math.max(300, Math.min(760, w || 380));
 }
 // The same card-padding measurement, without figWidth's 760px upper clamp:
-// tab ⑤'s likelihood-weighting pair lives in a full-width card with
+// tab ⑥'s likelihood-weighting pair lives in a full-width card with
 // no fixed-width stats-panel sibling to share the row with, and so it can run
 // wider than any figure figWidth was sized for.
 function fullCardWidth(svgEl) {
@@ -2398,7 +2788,7 @@ function ciSvgPoint(svg, ev) {
   return pt.matrixTransform(svg.getScreenCTM().inverse());
 }
 // Shared rAF-coalescing scaffolding for a drag's own pointermove handler
-// (tabs ① and ⑤): many pointermoves can land in the same
+// (tabs ① and ⑥): many pointermoves can land in the same
 // frame, and only the latest one needs to move the figure, and so
 // `schedule(ev)` queues an event and fires `run(ev)` at most once per
 // animation frame, and `flush()` applies any still-pending event
@@ -2649,7 +3039,601 @@ TABS.ci = {
     renderCiHist(p);
   }
 };
-// ── Tab ②: systems fed the same or different random numbers ─────────
+// ── Tab ②: prediction intervals ───────────────────────
+// One sample gives two intervals, and each is judged against its own target: the
+// confidence interval against μ, the prediction interval against one more draw taken
+// after the sample. The population shape is chosen here (normal, uniform, exponential), its
+// density is known exactly, and so each run also reports the exact chance that its
+// prediction interval holds a new value.
+const PIS = { runs: [], piRuns: [], last: null, anim: null, lastRunObj: null, win: null, finish: null, lastGood: null, hoverN: null, posScale: null, posHover: null, histShown: 0 };
+const PI_NAMES = { normal: 'Normal', uniform: 'Uniform', exponential: 'Exponential' };
+function piCancelAnim() {
+  if (PIS.anim) { cancelAnimationFrame(PIS.anim); PIS.anim = null; if (PIS.lastRunObj && PIS.finish) PIS.finish(); }
+}
+function piParams() {
+  const bounds = piMuBounds();
+  const mu = readNum('pi-mu', 'pi-par-msg', bounds[0], bounds[1], 'μ');
+  if (mu === null) return null;
+  // μ and σ share one status span; see ciParams.
+  const muMsg = $('pi-par-msg').textContent;
+  const sigma = readNum('pi-sigma', 'pi-par-msg', 1e-6, 1e6, 'σ');
+  if (sigma === null) return null;
+  if (!$('pi-par-msg').textContent && muMsg) $('pi-par-msg').textContent = muMsg;
+  const p = { shape: $('pi-shape').value, mu: mu, sigma: sigma, n: +$('pi-n').value, conf: +$('pi-conf').value };
+  PIS.lastGood = p;
+  return p;
+}
+// Read-only counterpart to piParams, safe on every resize and tab switch.
+function piParamsPeek() {
+  const g = PIS.lastGood || { shape: 'normal', mu: 5, sigma: 0.1, n: 20, conf: 0.95 };
+  const mu = Number($('pi-mu').value), sigma = Number($('pi-sigma').value);
+  return {
+    shape: $('pi-shape').value || g.shape,
+    mu: Number.isFinite(mu) ? mu : g.mu,
+    sigma: Number.isFinite(sigma) && sigma > 0 ? sigma : g.sigma,
+    n: +$('pi-n').value || g.n, conf: +$('pi-conf').value || g.conf
+  };
+}
+function piKey(p) { return [p.shape, p.mu, p.sigma, p.n, p.conf].join('|'); }
+// The density's highest point for a shape of spread σ (the exponential's is its floor).
+function piPeak(shape, sigma) {
+  return CI.PI_SHAPES[shape].pdf(shape === 'exponential' ? -sigma * (1 - 1e-9) : 0, 0, sigma);
+}
+// The axis window, as tab ①'s: x is set at load and by Clear history only, and the
+// y-scale yields only when the curve would clip.
+function piWindow(p) {
+  return { x0: p.mu - 4 * p.sigma, x1: p.mu + 4 * p.sigma, yMax: 1.6 * piPeak(p.shape, p.sigma) };
+}
+function piStickyWindow(p) {
+  const fit = piWindow(p);
+  if (!PIS.win) return (PIS.win = fit);
+  const w = PIS.win, peak = piPeak(p.shape, p.sigma);
+  if (peak > w.yMax) w.yMax = peak * 1.15;
+  else if (peak < w.yMax / 4) w.yMax = peak * 1.6;
+  return w;
+}
+function piMuBounds() {
+  const w = PIS.win; if (!w) return [-1e6, 1e6];
+  const m = (w.x1 - w.x0) * 0.05; return [w.x0 + m, w.x1 - m];
+}
+SPIN['pi-mu'] = (dir, shift) => {
+  const [lo, hi] = piMuBounds(), inp = $('pi-mu'), v = Number(inp.value);
+  if (!Number.isFinite(v)) return;
+  const st = shift ? 1 : 0.1, next = Math.min(hi, Math.max(lo, Number((v + dir * st).toFixed(1))));
+  inp.value = String(next); piParamsChanged();
+};
+SPIN['pi-sigma'] = decimalSpin('pi-sigma', 0.01, piParamsChanged, 0.01);
+SPIN['pi-seed'] = seedSpin('pi');
+
+function piParamsChanged() {
+  const p = piParams(); if (!p) return;
+  piCancelAnim();
+  PIS.hoverN = null;
+  $('pi-s-mu').textContent = String(p.mu);
+  $('pi-s-sigma').textContent = p.sigma + ' (' + Number((p.sigma * p.sigma).toPrecision(4)) + ')';
+  // With no run on screen the t and interval cards describe the run about to happen.
+  if (PIS.lastRunObj === null) piConfLabels(p.conf);
+  const run = PIS.lastRunObj;
+  drawPiFig(run, run ? run.xs.length : 0, p);
+  drawPiWidth(p);
+  renderPiTable(p);
+  renderPiHist(p);
+  reservePiMsg(); reservePiLeg();
+}
+function piConfLabels(conf) {
+  const txt = fmtConf(conf);
+  ['pi-s-conf', 'pi-s-conf2', 'pi-s-conf3', 'pi-s-conf4'].forEach(id => { $(id).textContent = txt; });
+  $('pi-leg-range-t').textContent = piRangeLegendText(conf);
+}
+// The share left beyond each end of the population's middle, a round percent at every level.
+function piRangeLegendText(conf) {
+  return 'middle ' + fmtConf(conf) + ' of the population (' + Number(((1 - conf) / 2 * 100).toFixed(2)) + '% beyond each end)';
+}
+// The legend's range entry reads differently at each level, and so its height is reserved
+// for the longest form.
+function reservePiLeg() {
+  reserveCapHeight($('pi-leg-range'), '<span class="lg-s lg-wide">⊢⊣</span><span>' + piRangeLegendText(0.999) + '</span>', true);
+}
+// The population density as solid pieces joined by dashed risers at each jump, never a
+// ramp between the zero part and the flat or peak part. The pieces come from the shape's
+// own support edges (the uniform's two, the exponential's floor), and each value from the
+// shape's pdf evaluated just inside its piece.
+function piDensityParts(p, x0, x1, xP, yP) {
+  const S = CI.PI_SHAPES[p.shape], eps = p.sigma * 1e-9;
+  const edges = p.shape === 'uniform' ? [p.mu - Math.sqrt(3) * p.sigma, p.mu + Math.sqrt(3) * p.sigma]
+              : p.shape === 'exponential' ? [p.mu - p.sigma] : [];
+  const cuts = [x0].concat(edges.filter(e => e > x0 && e < x1), [x1]);
+  const steps = p.shape === 'normal' ? 120 : p.shape === 'exponential' ? 80 : 1;
+  let d = '', risers = '';
+  for (let k = 0; k + 1 < cuts.length; k++) {
+    const a = cuts[k], b = cuts[k + 1];
+    for (let i = 0; i <= steps; i++) {
+      const x = a + (b - a) * i / steps, xi = Math.min(b - eps, Math.max(a + eps, x));
+      d += (i ? 'L' : 'M') + xP(x).toFixed(1) + ',' + yP(S.pdf(xi, p.mu, p.sigma)).toFixed(1);
+    }
+  }
+  edges.forEach(e => {
+    if (!(e > x0 && e < x1)) return;
+    risers += `<line x1="${xP(e)}" y1="${yP(S.pdf(e - 2 * eps, p.mu, p.sigma))}" x2="${xP(e)}" y2="${yP(S.pdf(e + 2 * eps, p.mu, p.sigma))}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="3,3"/>`;
+  });
+  return { d: d, risers: risers };
+}
+const piFrame = W => ({ W: W, H: 340, pL: 30, pR: 14, pT: 12, pB: 156 });
+// One interval row: a small label over a bracket (pale band, line, end caps, mean dot) in
+// teal when it hits its target and dashed red with a hollow dot when it misses, and the
+// half-width written beneath.
+function piBracketSvg(label, mean, lo, hi, hit, base, rowTop, xP, x0, x1, pL) {
+  const col = hit ? C.hit : C.miss, dash = hit ? '' : ' stroke-dasharray="4,3"';
+  const cl = v => xP(Math.min(x1, Math.max(x0, v)));
+  const bx = cl(mean), l = cl(lo), r = cl(hi), by = base + rowTop + 12;
+  let h = `<text x="${pL}" y="${base + rowTop}" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">${label}</text>`;
+  h += `<rect x="${l}" y="${by - 3}" width="${Math.max(1, r - l)}" height="6" fill="${col}" opacity=".15" rx="1"/>`;
+  h += `<line x1="${l}" y1="${by}" x2="${r}" y2="${by}" stroke="${col}" stroke-width="2"${dash}/>`;
+  h += `<line x1="${l}" y1="${by - 5}" x2="${l}" y2="${by + 5}" stroke="${col}" stroke-width="2"/>`;
+  h += `<line x1="${r}" y1="${by - 5}" x2="${r}" y2="${by + 5}" stroke="${col}" stroke-width="2"/>`;
+  h += hit ? `<circle cx="${bx}" cy="${by}" r="4.5" fill="${col}"/>`
+           : `<circle cx="${bx}" cy="${by}" r="4" fill="#fff" stroke="${col}" stroke-width="2"/>`;
+  // The x-bar's overline is a short line placed by the monospace font's metrics (see drawCiFig).
+  const xhFS = 10, xhCW = xhFS * 0.6, xhY = by + 17, xhX0 = bx - xhCW * 2.5;
+  h += `<text x="${bx}" y="${xhY}" text-anchor="middle" fill="${col}" font-size="${xhFS}" font-family="${FF_MONO}">x ± H</text>`;
+  h += `<line x1="${xhX0 + 0.06 * xhFS}" y1="${xhY - xhFS + 0.17 * xhFS}" x2="${xhX0 + xhCW - 0.06 * xhFS}" y2="${xhY - xhFS + 0.17 * xhFS}" stroke="${col}" stroke-width="${0.09 * xhFS}"/>`;
+  return { svg: h, by: by };
+}
+// The exact reference row: the middle of the population itself, a bracket in the truth color
+// with a pale band and end caps, and no mean dot or hit/miss styling because nothing is judged.
+function piRangeSvg(label, lo, hi, base, rowTop, xP, x0, x1, pL) {
+  const cl = v => xP(Math.min(x1, Math.max(x0, v))), l = cl(lo), r = cl(hi), by = base + rowTop + 12;
+  let h = `<text x="${pL}" y="${base + rowTop}" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">${label}</text>`;
+  h += `<rect x="${l}" y="${by - 3}" width="${Math.max(1, r - l)}" height="6" fill="${C.truth}" opacity=".15" rx="1"/>`;
+  h += `<line x1="${l}" y1="${by}" x2="${r}" y2="${by}" stroke="${C.truth}" stroke-width="2"/>`;
+  h += `<line x1="${l}" y1="${by - 5}" x2="${l}" y2="${by + 5}" stroke="${C.truth}" stroke-width="2"/>`;
+  h += `<line x1="${r}" y1="${by - 5}" x2="${r}" y2="${by + 5}" stroke="${C.truth}" stroke-width="2"/>`;
+  return h;
+}
+// The figure: the population's density over μ ± 4σ, a rug and density-scaled histogram of
+// the first `upto` samples, and, once all are in, the two interval rows and the next value.
+function drawPiFig(run, upto, p) {
+  const F = piFrame(figWidth($('pi-fig'))), { W, H, pL, pR, pT, pB } = F, cW = W - pL - pR, cH = H - pT - pB;
+  const win = piStickyWindow(p), x0 = win.x0, x1 = win.x1, yMax = win.yMax;
+  const xP = x => pL + (x - x0) / (x1 - x0) * cW;
+  const yP = f => pT + cH - Math.min(f, yMax) / yMax * cH;
+  const N = run ? run.xs.length : p.n, base = pT + cH;
+  upto = Math.min(upto, N);
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  h += `<line x1="${pL}" y1="${base}" x2="${pL + cW}" y2="${base}" stroke="#ccc"/>`;
+  // Histogram over the sample's own range with k = ceil(√N) bins, as a density on the curve's scale.
+  if (run && upto > 0) {
+    let xMin = Infinity, xMax = -Infinity;
+    for (let i = 0; i < N; i++) { if (run.xs[i] < xMin) xMin = run.xs[i]; if (run.xs[i] > xMax) xMax = run.xs[i]; }
+    const k = Math.max(5, Math.ceil(Math.sqrt(N)));
+    const bw = xMax === xMin ? (x1 - x0) / 30 : (xMax - xMin) / k;
+    const cnt = new Array(k).fill(0);
+    for (let i = 0; i < upto; i++) {
+      let b = Math.floor((run.xs[i] - xMin) / bw); if (b >= k) b = k - 1;
+      if (b >= 0 && b < k) cnt[b]++;
+    }
+    for (let b = 0; b < k; b++) if (cnt[b]) {
+      const y = yP(cnt[b] / (upto * bw));
+      const bx0 = xP(xMin + b * bw), barW = Math.max(1, cW * bw / (x1 - x0) - 1);
+      const cx0 = Math.max(pL, bx0), cx1 = Math.min(pL + cW, bx0 + barW);
+      if (cx1 > cx0) h += `<rect x="${cx0}" y="${y}" width="${cx1 - cx0}" height="${base - y}" fill="${C.est}" opacity=".3" stroke="${C.est}" stroke-width=".6"/>`;
+    }
+  }
+  const dens = piDensityParts(p, x0, x1, xP, yP);
+  h += `<path d="${dens.d}" fill="none" stroke="${C.truth}" stroke-width="2" stroke-linejoin="round"/>` + dens.risers;
+  h += `<line x1="${xP(p.mu)}" y1="${pT}" x2="${xP(p.mu)}" y2="${base + 30}" stroke="${C.truth}" stroke-width="1.2" stroke-dasharray="4,3"/>`;
+  h += `<text x="${xP(p.mu) + 6}" y="${pT + 16}" fill="${C.truth}" font-size="11" font-weight="700" font-family="${FF_MONO}">μ</text>`;
+  const dec = decFor(x1 - x0);
+  for (let i = 0; i <= 4; i++) {
+    const x = x0 + i * (x1 - x0) / 4;
+    h += `<line x1="${xP(x)}" y1="${base}" x2="${xP(x)}" y2="${base + 4}" stroke="#bbb"/>`;
+    h += `<text x="${xP(x)}" y="${base + 15}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${x.toFixed(dec)}</text>`;
+  }
+  const rugY = base + 20;
+  if (run) for (let i = 0; i < upto; i++) {
+    const x = xP(Math.min(x1, Math.max(x0, run.xs[i])));
+    h += `<line x1="${x}" y1="${rugY}" x2="${x}" y2="${rugY + 9}" stroke="${C.est}" stroke-width="1" opacity=".8"/>`;
+  }
+  if (run && upto >= N) {
+    const a = piBracketSvg('Confidence interval for μ', run.ci.mean, run.ci.lo, run.ci.hi, run.hit, base, 44, xP, x0, x1, pL);
+    const b = piBracketSvg('Prediction interval for the next value', run.ci.mean, run.pi.lo, run.pi.hi, run.piHit, base, 88, xP, x0, x1, pL);
+    h += a.svg + b.svg + piRangeSvg('Middle ' + fmtConf(run.conf) + ' of the population', run.range.lo, run.range.hi, base, 132, xP, x0, x1, pL);
+    // The next value rides on the prediction interval's line, filled and painted last.
+    h += histDiamond(xP(Math.min(x1, Math.max(x0, run.next))), b.by, 5.5);
+  }
+  svgSet($('pi-fig'), W, H, h);
+}
+function piShowStats(run) {
+  const ci = run.ci, pi = run.pi, d = decFor(ci.h || run.truth || 1);
+  $('pi-s-mean').textContent = fmt(ci.mean, d);
+  $('pi-s-sd').textContent = fmt(ci.s, d);
+  $('pi-s-t').textContent = fmt(ci.t, 3) + ' (df ' + ci.df + ')';
+  $('pi-s-next').textContent = fmt(run.next, d);
+  $('pi-s-hc').textContent = fmt(ci.h, d);
+  $('pi-s-hp').textContent = fmt(pi.h, d);
+  $('pi-s-hit').textContent = run.hit ? 'yes' : 'no (missed)';
+  $('pi-s-hit').style.color = run.hit ? C.hit : C.miss;
+  $('pi-s-phit').textContent = run.piHit ? 'yes' : 'no (missed)';
+  $('pi-s-phit').style.color = run.piHit ? C.hit : C.miss;
+  $('pi-s-cover').textContent = (run.piCover * 100).toFixed(1) + '%';
+  $('pi-s-cint').textContent = '[' + fmt(ci.lo, d) + ', ' + fmt(ci.hi, d) + ']';
+  $('pi-s-pint').textContent = '[' + fmt(pi.lo, d) + ', ' + fmt(pi.hi, d) + ']';
+  $('pi-s-range').textContent = '[' + fmt(run.range.lo, d) + ', ' + fmt(run.range.hi, d) + ']';
+  piConfLabels(run.conf);
+  $('pi-live').textContent = 'Run complete: the confidence interval [' + fmt(ci.lo, d) + ', ' + fmt(ci.hi, d) + '] '
+    + (run.hit ? 'captures μ' : 'misses μ') + ', and the prediction interval [' + fmt(pi.lo, d) + ', ' + fmt(pi.hi, d) + '] '
+    + (run.piHit ? 'catches' : 'misses') + ' the next value ' + fmt(run.next, d);
+}
+function piRecord(run, p) {
+  const key = piKey(p);
+  PIS.runs.push(CI.histRecord(run.ci.mean, run.ci, p.mu, p.n, p.conf, key));
+  PIS.piRuns.push({ est: run.ci.mean, lo: run.pi.lo, hi: run.pi.hi, truth: p.mu, target: run.next, hit: run.piHit,
+                    n: p.n, alpha: 1 - p.conf, key: key, missP: 1 - run.piCover, posS: run.posS, skey: piSegKey(p),
+                    side: run.next < run.pi.lo ? 'below' : run.next > run.pi.hi ? 'above' : null });
+}
+function piMakeRun(seed, p) {
+  const run = CI.runPI(seed, p); run.conf = p.conf; run.p = Object.assign({}, p); return run;
+}
+function runPi() {
+  const seed = readSeed('pi'); if (seed === null) return;
+  const p = piParams(); if (!p) return;
+  piCancelAnim();
+  const run = piMakeRun(seed, p);
+  const repeat = PIS.last && PIS.last.seed === seed && PIS.last.key === piKey(p);
+  PIS.last = { seed: seed, key: piKey(p) };
+  piRecord(run, p);
+  PIS.lastRunObj = run;
+  const finish = () => { PIS.finish = null; drawPiFig(run, p.n, p); piShowStats(run); drawPiWidth(p); renderPiHist(p); };
+  noteRun('pi', seed, PIS.runs.length, repeat);
+  if (REDUCED) { finish(); return; }
+  const t0 = performance.now(), DUR = 600;
+  const frame = now => {
+    const f = Math.min(1, (now - t0) / DUR), upto = Math.floor(f * p.n);
+    drawPiFig(run, upto, p);
+    if (f < 1) PIS.anim = requestAnimationFrame(frame); else { PIS.anim = null; finish(); }
+  };
+  PIS.finish = finish;
+  PIS.anim = requestAnimationFrame(frame);
+}
+function runPiBatch() {
+  const s0 = readSeed('pi'); if (s0 === null) return;
+  const p = piParams(); if (!p) return;
+  piCancelAnim();
+  batchRun('pi', () => {
+    const first = PIS.runs.length + 1;
+    let run = null;
+    for (let i = 0; i < BATCH_RUNS; i++) { run = piMakeRun(batchSeed(s0, i), p); piRecord(run, p); }
+    PIS.last = { seed: batchSeed(s0, BATCH_RUNS - 1), key: piKey(p) };
+    PIS.lastRunObj = run;
+    drawPiFig(run, p.n, p); piShowStats(run); drawPiWidth(p); renderPiHist(p);
+    noteBatch('pi', s0, first, PIS.runs.length);
+  });
+}
+function clearPi() {
+  piCancelAnim();
+  PIS.runs = []; PIS.piRuns = []; PIS.last = null; PIS.lastRunObj = null; PIS.hoverN = null; lastRun.pi = null;
+  ['pi-s-mean', 'pi-s-sd', 'pi-s-t', 'pi-s-next', 'pi-s-hc', 'pi-s-hp', 'pi-s-hit', 'pi-s-phit', 'pi-s-cover', 'pi-s-cint', 'pi-s-pint', 'pi-s-range']
+    .forEach(id => { $(id).textContent = '—'; });
+  $('pi-s-hit').style.color = ''; $('pi-s-phit').style.color = '';
+  $('pi-live').textContent = '';
+  piConfLabels(+$('pi-conf').value);
+  PIS.win = null; PIS.posScale = null;
+  const p = piParams();
+  if (p) { drawPiFig(null, 0, p); drawPiWidth(p); renderPiTable(p); }
+  seedMsg('pi', '', false); renderPiHist(p || undefined);
+}
+// Both histories share one y-window (the union of both, the figure's x-window, and every
+// next value on screen), and so interval lengths compare directly between them.
+function renderPiHist(p) {
+  p = p || piParamsPeek();
+  const w = PIS.win || piWindow(p);
+  const u = histWindow([PIS.runs, PIS.piRuns]);
+  const win = u ? { lo: Math.min(u.lo, w.x0), hi: Math.max(u.hi, w.x1) } : { lo: w.x0, hi: w.x1 };
+  const res1 = histPlot($('pi-hist1'), $('pi-hw1'), PIS.runs, {
+    yLabel: 'mean', truthLabel: v => 'μ = ' + v, window: win, liveTruth: p.mu, grab: false, nLabel: 'n', solidLabel: true });
+  histCaption($('pi-cap1'), res1, 'μ', null);
+  const res2 = histPlot($('pi-hist2'), $('pi-hw2'), PIS.piRuns, {
+    yLabel: 'value', truthLabel: v => 'μ = ' + v, window: win, liveTruth: p.mu, grab: false, nLabel: 'n', targets: true, solidLabel: true,
+    legendLabels: { hit: 'interval catches its next value', miss: 'interval misses its next value (about α of them expected)', target: 'next value' } });
+  piCaption($('pi-cap2'), res2);
+  PIS.histShown = res2.shown;
+  renderPiPos(p);
+}
+// The prediction-interval tally under its chart, counted over exactly the runs shown. The
+// expected number of misses is the sum of each shown run's own α, and the exact miss
+// chances are the sum of 1 − (the chance each interval caught a new value).
+function piTallyText(m, N, below, above, exp, exact, dropped) {
+  return 'Intervals missing their next value: <strong>' + m + ' of ' + N + '</strong>'
+    + ' (' + below + ' below and ' + above + ' above, where about ' + exp + ' are expected on each side at the confidence levels used)'
+    + ' &middot; the exact miss chances of these intervals add to ' + exact
+    + (dropped ? ' &middot; latest ' + N + ' of ' + (N + dropped) + ' runs' : '');
+}
+function piCaption(el, res) {
+  if (!res || !res.shown) {
+    el.innerHTML = piTallyText(0, 0, 0, 0, '0.0', '0.0', 0);
+  } else {
+    const shown = PIS.piRuns.slice(-res.shown);
+    let below = 0, above = 0, exact = 0;
+    shown.forEach(r => { if (r.side === 'below') below++; else if (r.side === 'above') above++; exact += r.missP; });
+    el.innerHTML = piTallyText(res.shown - res.hits, res.shown, below, above, (res.expMiss / 2).toFixed(1), exact.toFixed(1), res.dropped);
+  }
+  reserveCapHeight(el, piTallyText(100, 100, 100, 100, '49.9', '100.0', 899), true);
+}
+// The seed message can run to two lines at a phone's width, and so its height is reserved
+// for the longest one it can show; a run, a sweep, or a clear then never moves the page.
+function reservePiMsg() {
+  const el = $('pi-seed-msg');
+  const worst = ['Run 999 repeats Run 998 exactly – same seed, same sample size. Tick “New seed after each run” to vary it.',
+                 'Runs 1000–1099 used seeds 2147483600–2147483699. Click again to repeat the whole sweep exactly.',
+                 'Runs 1000–1099 used seeds 2147483600–2147483699. Next run: 999999.',
+                 '⚠ Seed must be a whole number from 0 to ' + SEED_MAX + '.'];
+  let h = 0;
+  worst.forEach(t => { reserveCapHeight(el, t); h = Math.max(h, parseFloat(el.style.minHeight)); });
+  el.style.minHeight = h + 'px';
+}
+// ── Tab ②: where each next value landed, in sample standard deviations ──
+// Each run's position is (next value − x̄) / S. Under a normal population it has the exact
+// density CI.piSdPdf, which depends on n alone, and the prediction interval's ends sit at
+// ±CI.piSdEnd(n, conf), so a change of confidence level moves two lines over fixed data.
+const PI_POS_OV = 32;
+const PI_POS_PROMPT = 'Run an experiment to begin collecting results.';
+// The settings that decide where a run's value lands; the confidence level is not one.
+function piSegKey(p) { return [p.shape, p.mu, p.sigma, p.n].join('|'); }
+// The runs the position panel counts: every run in the trailing stretch that shares the
+// current shape, μ, σ, and n. It is not cut to the columns the PI history has room for,
+// which on a phone is about a third of a 100-run sweep, and so the evidence for where the
+// misses fall does not thin out with the width of the screen.
+function piPosSegment(p) {
+  const key = piSegKey(p), runs = PIS.piRuns, seg = [];
+  for (let i = runs.length - 1; i >= 0 && runs[i].skey === key; i--) seg.unshift(runs[i]);
+  return seg;
+}
+// Bins of width end/m, with m bins on each side of 0 inside the interval and the same width
+// continuing out to ±R, so the interval's ends are always bin edges. A bin cut by the axis
+// end counts only what lies inside it, and its density uses that shorter width.
+function piPosBins(seg, end, R) {
+  const N = seg.length, m = Math.min(10, Math.max(2, Math.round(Math.sqrt(N) / 2))), w = end / m;
+  const kmin = Math.floor(-R / w + 1e-9), kmax = Math.ceil(R / w - 1e-9) - 1;
+  const bins = [];
+  for (let k = kmin; k <= kmax; k++) {
+    const lo = Math.max(k * w, -R), hi = Math.min((k + 1) * w, R), mid = (lo + hi) / 2;
+    bins.push({ lo: lo, hi: hi, cnt: 0, miss: mid < -end || mid > end });
+  }
+  let ovL = 0, ovR = 0, below = 0, above = 0;
+  seg.forEach(r => {
+    const u = r.posS;
+    if (u < -end) below++; else if (u > end) above++;
+    if (u < -R) ovL++;
+    else if (u > R) ovR++;
+    else if (u >= -R) bins[Math.min(kmax - kmin, Math.max(0, Math.floor(u / w + 1e-9) - kmin))].cnt++;
+  });
+  return { N: N, w: w, bins: bins, ovL: ovL, ovR: ovR, below: below, above: above, between: N - below - above };
+}
+const PI_POS_READ_HINT = 'Move a pointer over a bar, or tap it, to read its count.';
+function piPosNum(v) { return (v < 0 ? '−' : '') + Math.abs(v).toFixed(2); }
+function piPosReadText(hit) {
+  if (!hit) return PI_POS_READ_HINT;
+  const runs = hit.cnt + (hit.cnt === 1 ? ' run' : ' runs');
+  return hit.ov ? 'beyond ' + (hit.ov < 0 ? '−' : '') + hit.R + ': ' + runs : piPosNum(hit.lo) + ' to ' + piPosNum(hit.hi) + ': ' + runs;
+}
+function renderPiPos(p) {
+  p = p || piParamsPeek();
+  const svg = $('pi-pfig'), host = $('pi-pw');
+  const W = Math.max(300, Math.min(900, host.clientWidth || 600)), H = 236;
+  const pL = 40, pR = 8, pT = 22, pB = 44, cW = W - pL - pR, cH = H - pT - pB;
+  const ax0 = pL + PI_POS_OV, axW = cW - 2 * PI_POS_OV;
+  // The axis spans ±R, wide enough to hold both ends of the interval with room beyond them.
+  const end = CI.piSdEnd(p.n, p.conf), R = Math.max(4, Math.ceil(1.15 * end));
+  const xU = u => ax0 + (u + R) / (2 * R) * axW;
+  const seg = piPosSegment(p), d = piPosBins(seg, end, R), N = d.N;
+  // The curve (it does not change with the level), and the y-scale: sized from the curve's
+  // peak (with headroom for the prompt) and the tallest bar, and never shrunk within a segment.
+  const curve = [], cStep = 2 * R / 240;
+  for (let i = 0; i <= 240; i++) { const u = -R + i * cStep; curve.push([u, CI.piSdPdf(u, p.n)]); }
+  const dens = (cnt, wd) => N > 0 ? cnt / (N * wd) : 0;
+  let barMax = 0;
+  if (N > 0) {
+    d.bins.forEach(b => { barMax = Math.max(barMax, dens(b.cnt, b.hi - b.lo)); });
+    barMax = Math.max(barMax, dens(d.ovL, d.w), dens(d.ovR, d.w));
+  }
+  const key = piSegKey(p);
+  if (!PIS.posScale || PIS.posScale.key !== key) PIS.posScale = { key: key, ymax: 0 };
+  PIS.posScale.ymax = Math.max(PIS.posScale.ymax, 1.3 * Math.max.apply(null, curve.map(c => c[1])), 1.12 * barMax);
+  const yMax = PIS.posScale.ymax, yD = v => pT + cH - Math.min(v, yMax) / yMax * cH, base = pT + cH;
+  let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  h += `<line x1="${ax0}" y1="${pT}" x2="${ax0}" y2="${base}" stroke="#e2dcdc"/><line x1="${ax0 + axW}" y1="${pT}" x2="${ax0 + axW}" y2="${base}" stroke="#e2dcdc"/>`;
+  h += `<line x1="${pL}" y1="${base}" x2="${pL + cW}" y2="${base}" stroke="#ccc"/><line x1="${pL}" y1="${pT}" x2="${pL}" y2="${base}" stroke="#ccc"/>`;
+  h += `<text x="${pL - 6}" y="${base + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">0</text>`;
+  h += `<text x="${pL - 6}" y="${pT + 8}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${yMax.toFixed(1)}</text>`;
+  const ylx = 11, yly = pT + cH / 2;
+  h += `<text x="${ylx}" y="${yly}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${ylx},${yly})">density</text>`;
+  // Integer ticks, thinned to labels at least 30px apart, and none close enough to the axis
+  // ends to meet the "beyond" labels there.
+  const pxU = axW / (2 * R), step = [1, 2, 5, 10, 20].find(s => s * pxU >= 30) || 20;
+  for (let u = -Math.floor(R / step) * step; u <= R; u += step) {
+    h += `<line x1="${xU(u)}" y1="${base}" x2="${xU(u)}" y2="${base + 4}" stroke="#bbb"/>`;
+    if (Math.min(xU(u) - ax0, ax0 + axW - xU(u)) >= 14) h += `<text x="${xU(u)}" y="${base + 15}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${u < 0 ? '−' + (-u) : u}</text>`;
+  }
+  h += `<text x="${ax0 + axW / 2}" y="${base + 35}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">distance from the sample mean, in units of S</text>`;
+  h += `<text x="${pL + PI_POS_OV / 2}" y="${base + 15}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_SANS}">beyond</text>`;
+  h += `<text x="${pL + cW - PI_POS_OV / 2}" y="${base + 15}" text-anchor="middle" fill="${C.muted}" font-size="9" font-family="${FF_SANS}">beyond</text>`;
+  // Bars: filled, orange inside the interval and dark orange past either end.
+  const hits = [];
+  const bar = (x0, x1, dv, miss) => {
+    if (dv <= 0) return;
+    const col = miss ? C.estDark : C.est;
+    h += `<rect x="${x0}" y="${yD(dv)}" width="${Math.max(0.5, x1 - x0)}" height="${base - yD(dv)}" fill="${col}" fill-opacity="${miss ? .75 : .45}" stroke="${col}" stroke-width=".6"/>`;
+  };
+  d.bins.forEach(b => {
+    bar(xU(b.lo), xU(b.hi), dens(b.cnt, b.hi - b.lo), b.miss);
+    hits.push({ x0: xU(b.lo), x1: xU(b.hi), lo: b.lo, hi: b.hi, cnt: b.cnt });
+  });
+  const ovW = 20;
+  bar(pL + (PI_POS_OV - ovW) / 2, pL + (PI_POS_OV + ovW) / 2, dens(d.ovL, d.w), true);
+  bar(pL + cW - (PI_POS_OV + ovW) / 2, pL + cW - (PI_POS_OV - ovW) / 2, dens(d.ovR, d.w), true);
+  hits.push({ x0: pL, x1: ax0, ov: -1, R: R, cnt: d.ovL }, { x0: ax0 + axW, x1: pL + cW, ov: 1, R: R, cnt: d.ovR });
+  // The two ends of the interval at the selected level, each labeled on its outer side so
+  // the two labels stay apart however close the ends sit.
+  [-1, 1].forEach(sg => {
+    const x = xU(sg * end);
+    h += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${base}" stroke="${C.muted}" stroke-width="1.2" stroke-dasharray="4,3"/>`;
+    h += `<text x="${x + sg * 3}" y="${pT - 6}" text-anchor="${sg < 0 ? 'end' : 'start'}" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">${sg < 0 ? 'lower' : 'upper'} end</text>`;
+  });
+  // The curve for a normal population, over the bars.
+  h += `<path d="${curve.map((c, i) => (i ? 'L' : 'M') + xU(c[0]).toFixed(1) + ',' + yD(c[1]).toFixed(1)).join('')}" fill="none" stroke="${C.truth}" stroke-width="2" stroke-linejoin="round"/>`;
+  if (N === 0) {
+    const mid = ax0 + axW / 2;
+    if (cW < 400) {
+      h += `<text x="${mid}" y="${pT + 14}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">Run an experiment</text>`;
+      h += `<text x="${mid}" y="${pT + 29}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">to begin collecting results.</text>`;
+    } else {
+      h += `<text x="${mid}" y="${pT + 18}" text-anchor="middle" fill="${C.muted}" font-size="12" font-style="italic" font-family="${FF_SANS}">${PI_POS_PROMPT}</text>`;
+    }
+  }
+  h += `<g id="pi-phi"></g>`;
+  svg.innerHTML = h;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg._pos = { hits: hits, pT: pT, cH: cH };
+  PIS.posHover = null;
+  const tail = (N * (1 - p.conf) / 2).toFixed(1);
+  $('pi-pt-b').textContent = d.below; $('pi-pt-c').textContent = d.between; $('pi-pt-a').textContent = d.above;
+  $('pi-pe-b').textContent = tail; $('pi-pe-c').textContent = (N * p.conf).toFixed(1); $('pi-pe-a').textContent = tail;
+  reserveCapHeight($('pi-pread'), PI_POS_READ_HINT);
+  paintPiPosHover();
+}
+// The pointer's bar: a wash over its column and its count in the readout line.
+function paintPiPosHover() {
+  const svg = $('pi-pfig'), g = svg._pos, host = $('pi-phi'), hit = PIS.posHover;
+  if (!g || !host) return;
+  host.innerHTML = hit ? `<rect x="${hit.x0}" y="${g.pT}" width="${hit.x1 - hit.x0}" height="${g.cH}" fill="${C.accent}" fill-opacity=".12" pointer-events="none"/>` : '';
+  $('pi-pread').textContent = piPosReadText(hit);
+}
+function piInitPos() {
+  const svg = $('pi-pfig');
+  const at = ev => {
+    const g = svg._pos; if (!g) return;
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const hit = q.y >= g.pT && q.y <= g.pT + g.cH ? g.hits.find(b => q.x >= b.x0 && q.x < b.x1) : null;
+    PIS.posHover = hit || null;
+    paintPiPosHover();
+  };
+  svg.addEventListener('pointerdown', at);
+  svg.addEventListener('pointermove', at);
+  svg.addEventListener('pointerleave', ev => { if (ev.pointerType === 'mouse') { PIS.posHover = null; paintPiPosHover(); } });
+}
+// ── Tab ②: half-widths against n ──────────────────────
+const PI_WN = 200, PI_WYMAX = 4.5;
+const PI_WREAD_WORST = 'n = 200: CI half-width 450.07σ, PI half-width 779.02σ';
+// Both curves for every n from 2 to PI_WN at one confidence level, cached because the
+// pointer reads them on every move.
+function piCurveData(conf) {
+  if (PIS.curves && PIS.curves.conf === conf) return PIS.curves;
+  const ci = [], pi = [];
+  for (let n = 2; n <= PI_WN; n++) { const c = CI.piWidthCurves(n, conf); ci[n] = c.ci; pi[n] = c.pi; }
+  return (PIS.curves = { conf: conf, ci: ci, pi: pi });
+}
+function piWidthReadText(n, conf) {
+  const c = piCurveData(conf);
+  return 'n = ' + n + ': CI half-width ' + c.ci[n].toFixed(2) + 'σ, PI half-width ' + c.pi[n].toFixed(2) + 'σ';
+}
+function drawPiWidth(p) {
+  p = p || piParamsPeek();
+  const svg = $('pi-wfig'), host = $('pi-ww');
+  const W = Math.max(300, Math.min(900, host.clientWidth || 600)), H = W < 520 ? 250 : 290;
+  const pL = 44, pR = 34, pT = 12, pB = 44, cW = W - pL - pR, cH = H - pT - pB;
+  const xP = n => pL + n / PI_WN * cW, yP = v => pT + cH - Math.min(v, PI_WYMAX) / PI_WYMAX * cH;
+  const cur = piCurveData(p.conf), z = CI.normInv(1 - (1 - p.conf) / 2);
+  const halo = ` stroke="${C.bg}" stroke-width="3" paint-order="stroke"`;
+  let h = `<defs><clipPath id="pi-wclip"><rect x="${pL}" y="${pT}" width="${cW}" height="${cH}"/></clipPath></defs>`;
+  h += `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
+  for (let v = 0; v <= 4; v++) {
+    h += `<line x1="${pL}" y1="${yP(v)}" x2="${pL + cW}" y2="${yP(v)}" stroke="${v ? '#eee' : '#ccc'}"/>`;
+    h += `<line x1="${pL - 4}" y1="${yP(v)}" x2="${pL}" y2="${yP(v)}" stroke="#bbb"/>`;
+    h += `<text x="${pL - 7}" y="${yP(v) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${v}</text>`;
+  }
+  for (let n = 0; n <= PI_WN; n += 50) {
+    h += `<line x1="${xP(n)}" y1="${pT + cH}" x2="${xP(n)}" y2="${pT + cH + 4}" stroke="#bbb"/>`;
+    h += `<text x="${xP(n)}" y="${pT + cH + 15}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${n}</text>`;
+  }
+  h += `<text x="${pL + cW / 2}" y="${pT + cH + 35}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">samples per run n</text>`;
+  const ylx = 11, yly = pT + cH / 2;
+  h += `<text x="${ylx}" y="${yly}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${ylx},${yly})">half-width ÷ σ</text>`;
+  // The two curves, clipped at the plot's top where both start far above the axis.
+  const path = arr => { let d = ''; for (let n = 2; n <= PI_WN; n++) d += (n === 2 ? 'M' : 'L') + xP(n).toFixed(1) + ',' + yP(arr[n]).toFixed(1); return d; };
+  h += `<g clip-path="url(#pi-wclip)">`
+    + `<path d="${path(cur.ci)}" fill="none" stroke="${C.curveCi}" stroke-width="2.2" stroke-linejoin="round"/>`
+    + `<path d="${path(cur.pi)}" fill="none" stroke="${C.ratio}" stroke-width="2.2" stroke-linejoin="round"/></g>`;
+  h += `<line x1="${pL}" y1="${yP(z)}" x2="${pL + cW}" y2="${yP(z)}" stroke="${C.truth}" stroke-width="1.5" stroke-dasharray="5,3"/>`;
+  h += `<text x="${xP(150)}" y="${yP(z) + 14}" text-anchor="middle" fill="${C.truth}" font-size="10.5" font-weight="700" font-family="${FF_MONO}"${halo}>z = ${z.toFixed(2)}</text>`;
+  h += `<line x1="${xP(p.n)}" y1="${pT}" x2="${xP(p.n)}" y2="${pT + cH}" stroke="${C.muted}" stroke-width="1.2"/>`;
+  h += `<text x="${pL + cW + 6}" y="${yP(cur.pi[PI_WN]) + 4}" fill="${C.ratio}" font-size="11" font-weight="700" font-family="${FF_SANS}">PI</text>`;
+  h += `<text x="${pL + cW + 6}" y="${Math.min(yP(cur.ci[PI_WN]) + 4, pT + cH - 2)}" fill="${C.curveCi}" font-size="11" font-weight="700" font-family="${FF_SANS}">CI</text>`;
+  h += `<g id="pi-wguide"></g>`;
+  // The latest run's own half-widths, which use S in place of σ.
+  const run = PIS.lastRunObj;
+  if (run) {
+    const sg = run.p.sigma, dot = (v, col) => `<circle cx="${xP(run.ci.n)}" cy="${Math.max(yP(v / sg), pT + 5)}" r="4.5" fill="${col}" stroke="#fff" stroke-width="1.5"/>`;
+    h += dot(run.pi.h, C.ratio) + dot(run.ci.h, C.curveCi);
+  }
+  svg.innerHTML = h;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg._geo = { pL: pL, cW: cW, pT: pT, cH: cH, xP: xP, yP: yP };
+  paintPiGuide(p);
+  reserveCapHeight($('pi-wread'), PI_WREAD_WORST);
+}
+// The pointer's guide at the nearest whole n, and the readout beneath the chart: the
+// hovered n while there is one, the selected n otherwise.
+function paintPiGuide(p) {
+  p = p || piParamsPeek();
+  const svg = $('pi-wfig'), g = svg._geo, host = $('pi-wguide'), n = PIS.hoverN;
+  if (!g || !host) return;
+  let h = '';
+  if (n !== null) {
+    const c = piCurveData(p.conf), ring = (v, col) => `<circle cx="${g.xP(n)}" cy="${Math.max(g.yP(v), g.pT + 3)}" r="3.2" fill="#fff" stroke="${col}" stroke-width="1.6"/>`;
+    h = `<line x1="${g.xP(n)}" y1="${g.pT}" x2="${g.xP(n)}" y2="${g.pT + g.cH}" stroke="${C.accent}" stroke-width="1" stroke-dasharray="2,2"/>`
+      + ring(c.pi[n], C.ratio) + ring(c.ci[n], C.curveCi);
+  }
+  host.innerHTML = h;
+  $('pi-wread').textContent = piWidthReadText(n === null ? p.n : n, p.conf);
+}
+function piInitWidth() {
+  const svg = $('pi-wfig');
+  const at = ev => {
+    const g = svg._geo; if (!g) return;
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    PIS.hoverN = Math.min(PI_WN, Math.max(2, Math.round((q.x - g.pL) / g.cW * PI_WN)));
+    paintPiGuide();
+  };
+  svg.addEventListener('pointerdown', at);
+  svg.addEventListener('pointermove', at);
+  // A mouse leaving puts the readout back on the selected n; a finger lifting leaves the
+  // tapped n showing.
+  svg.addEventListener('pointerleave', ev => { if (ev.pointerType === 'mouse') { PIS.hoverN = null; paintPiGuide(); } });
+}
+// ── Tab ②: the large-n coverage table ─────────────────
+function renderPiTable(p) {
+  p = p || piParamsPeek();
+  const pct = v => (Math.max(0, v) * 100).toFixed(1) + '%';
+  $('pi-tbody').innerHTML = CI.PI_SHAPE_KEYS.map(k => {
+    const t = CI.piLimitTails(k, p.conf);
+    return `<tr${k === p.shape ? ' class="cur" aria-current="true"' : ''}><td>${PI_NAMES[k]}</td><td>${pct(CI.piLimitCoverage(k, p.conf))}</td><td>${pct(t.below)}</td><td>${pct(t.above)}</td></tr>`;
+  }).join('');
+}
+TABS.pi = {
+  init() {
+    piInitWidth(); piInitPos(); piParamsChanged();
+  },
+  render() {
+    const p = piParamsPeek(), run = PIS.lastRunObj;
+    drawPiFig(run, run ? run.xs.length : 0, p);
+    drawPiWidth(p);
+    renderPiHist(p);
+    reservePiMsg(); reservePiLeg();
+  }
+};
+// ── Tab ③: systems fed the same or different random numbers ─────────
 const CRS = { ind: [], crn: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null };
 function crnParams() {
   // shift2 and sigE share one status span; each field is read only after the previous
@@ -2680,7 +3664,7 @@ function crnSigeDrag() { sigeDrag('crn', crnParamsChanged); }
 //: each is today's own extent, widened to at least one
 // noise-equivalent standard deviation of padding on each side so the panel has
 // room for a drag to a larger σₑ without itself rescaling (the "fixed scales
-// during a drag" rule, generalized from tab ④'s c slider). The differences
+// during a drag" rule, generalized from tab ⑤'s c slider). The differences
 // strip's own pad uses √2·σ_h because d = y₂ − y₁ carries both systems' noise.
 // A flat pad is not always enough, though: the paired and Welch interval
 // half-widths both grow with σₑ, and so the run's own interval endpoints (sized
@@ -2716,8 +3700,8 @@ function crnLockScale(run, p, seed) {
 function crnFlowTextW(text, fs, mono) { return text.length * fs * (mono ? 0.6 : 0.447); }
 // One model block's label: "prefix + label" when it fits the block, the bare label
 // alone otherwise. usableW is the block's own width in already-scaled SVG units.
-// prefix is typically "h1(u) = " or "h2(u) = " (tab 2, two systems) or "h(u) = "
-// (tab 3, one model shared by both arms).
+// prefix is typically "h1(u) = " or "h2(u) = " (tab 3, two systems) or "h(u) = "
+// (tab 4, one model shared by both arms).
 function crnFlowModelLabel(prefix, f, usableW) {
   const full = `${prefix}${f.label}`;
   return crnFlowTextW(full, 8.5, true) <= usableW ? full : f.label;
@@ -2993,7 +3977,7 @@ function crnFlowDiagram(offX, offY, s, isCRN, p, f1, f2, fmtShift) {
 // avFlowDiagram, and cvFlowDiagram for how each computes its own). The pair shares
 // one height, the taller of the two, and so neither diagram's content is cramped and
 // the shorter one just carries extra blank space below it. Shared by drawCrnFlow
-// (tab 2), drawAvFlow (tab 3), and drawCvFlow (tab 4): the layout, the arrow
+// (tab 3), drawAvFlow (tab 4), and drawCvFlow (tab 5): the layout, the arrow
 // marker, and the caption write are identical across them, and only the diagrams
 // themselves differ. Height never depends on offX or offY (only content position
 // depends on those, and only X is ever scaled by s), and so the two diagrams are each
@@ -3281,7 +4265,7 @@ function drawCrnFig(run, p) {
       // A σₑ re-evaluation locks this panel's scale to the run that set it
       // (see oLo/oHi above), and so a larger drag can push a dot past the
       // rect's own edge; the clip cuts it off there instead of letting it
-      // bleed into a neighboring panel, matching tab ④'s own c-slider rule.
+      // bleed into a neighboring panel, matching tab ⑤'s own c-slider rule.
       let hOut = '';
       if (row.paired) for (let i = 0; i < m; i++) hOut += `<line x1="${oc1}" y1="${yO(top, run.y1[i])}" x2="${oc2}" y2="${yO(top, row.out2[i])}" stroke="${C.pair}" stroke-width="1"/>`;
       for (let i = 0; i < m; i++) {
@@ -3310,7 +4294,7 @@ function drawCrnFig(run, p) {
       // Same clip rule as the outputs panel above: a σₑ re-evaluation can push
       // a dᵢ dot or an interval bar past the strip's own locked scale. The
       // interval's own mean dot is redrawn a second time, outside the clip, and so
-      // it stays visible even when its bar clips (mirroring tab ④'s
+      // it stays visible even when its bar clips (mirroring tab ⑤'s
       // intervalMeanDot).
       let hDiff = '';
       if (row.paired) {
@@ -3451,7 +4435,7 @@ TABS.crn = {
 SPIN['crn-shift'] = decimalSpin('crn-shift', -1e6, crnParamsChanged);
 SPIN['crn-sige'] = decimalSpin('crn-sige', 0, crnParamsChanged, 0.01);
 SPIN['crn-seed'] = seedSpin('crn');
-// ── Tab ③: antithetic variates ───────────────────────
+// ── Tab ④: antithetic variates ───────────────────────
 // One diagram (Independent draws or Antithetic pairs), drawn into local coordinates
 // 0-380 wide by 0-142 tall and offset/scaled exactly like crnFlowDiagram, whose own
 // lane positions (y1 = 48, y2 = 96, yMid = 72) and noise-junction geometry this
@@ -3628,7 +4612,7 @@ function fnCurve(f) {
   return { pts: pts, lo: lo - pad, hi: hi + pad };
 }
 const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null, mode: 'ind', lastSeed: null, scale: null };
-// The one toggle for tab ③'s whole single-run region (the figure, its rug-and-
+// The one toggle for tab ④'s whole single-run region (the figure, its rug-and-
 // interval strip, and the draw-order panel below it): which arm's pairs they show.
 // Redraws from the last run if there is one, or the empty state otherwise.
 function avMode(m) {
@@ -3809,7 +4793,7 @@ function drawAvFig(run, p) {
   $('av-fig-leg').innerHTML = avFigLegendHtml(mode);
   setFigNote('av-fig-note', run && p.n > MAXP ? 'The first ' + MAXP.toLocaleString() + ' of the ' + p.n.toLocaleString() + ' pairs are shown.' : '');
 }
-// Tab ③'s draw-order panel: the same run's 2n outputs, in the order the stream
+// Tab ④'s draw-order panel: the same run's 2n outputs, in the order the stream
 // produced them. It carries no toggle of its own -- it reads AVS.mode, the same
 // state the figure above's segmented control sets, and so the two always agree.
 function avSeqTitle(mode) {
@@ -4000,7 +4984,7 @@ TABS.av = {
 };
 SPIN['av-seed'] = seedSpin('av');
 SPIN['av-sige'] = decimalSpin('av-sige', 0, avParamsChanged, 0.01);
-// ── Tab ④: control variates ──────────────────────────
+// ── Tab ⑤: control variates ──────────────────────────
 const CVS = { plain: [], cv: [], last: null, lastRunObj: null, lastRunP: null, c: 0, lastSeed: null, scale: null };
 function cvParams() {
   const sigE = readNum('cv-sige', 'cv-par-msg', 0, 1e6, 'the noise scale σ');
@@ -4132,7 +5116,7 @@ function cvFlowDiagram(offX, offY, s, isCV, p, f) {
     h += crnFlowMono(X(59), Y(yMid - 6), 9, [{ ch: 'u' }, crnFlowSub('i')], 'middle');
   }
 
-  // Model block(s): h(u) on the noise-bearing lane, 80 units wide as on tab ③; the
+  // Model block(s): h(u) on the noise-bearing lane, 80 units wide as on tab ④; the
   // control-variate lane also gets a block computing c·(u − 0.5) from the same u,
   // the same size as the h(u) block because both are just a function of u.
   const usableW = (80 - 6) * s, lbl = crnFlowModelLabel('h(u) = ', f, usableW);
@@ -4185,7 +5169,7 @@ function cvFlowDiagram(offX, offY, s, isCV, p, f) {
 
   // Sum junction: the noise-bearing lane's y enters from above with a '+' sign,
   // the c·(u − 0.5) lane's value enters from below with a '−' sign, mirroring the
-  // labeled-input pattern tab ②'s own sum junction uses. Each lane resumes right
+  // labeled-input pattern tab ③'s own sum junction uses. Each lane resumes right
   // after its own label (see above), and the turn point xJ is set by whichever
   // lane's own resume point is furthest right -- the c·(u−0.5) lane's, always.
   const { resumes: [resume1, resume2], labelEnd } = crnFlowLaneResume(labelStart, gap, s, [[{ ch: 'y' }], crnFlowChars('c·(u−0.5)')]);
@@ -4229,7 +5213,7 @@ function cvEffective(run, c, conf) {
 }
 // A capped interval bar with an end dot, colored and dashed by capture -- the same
 // style as drawCrnFig's own intervalMark and drawAvFig/drawAvSeq's drawPairStrip,
-// but taking already-mapped pixel y's directly: tab 4's two strips carry no rug of
+// but taking already-mapped pixel y's directly: tab 5's two strips carry no rug of
 // their own to derive a y-scale from, only the one interval each.
 function svgIntervalMark(cx, yTop, yBot, yMean, hit) {
   const capW = 6, lwBar = 2, dotR = 3.5;
@@ -4245,8 +5229,8 @@ function svgIntervalMark(cx, yTop, yBot, yMean, hit) {
 // redraw outside a panel's own clip-path --
 // the interval bar clips at the panel edge when a slider or a σₑ re-evaluation
 // pushes it out of the panel's fixed scale, but the dot marking the interval's
-// own mean must stay visible regardless. Shared by drawCvFig (tab ④) and
-// drawCrnFig's differences strip (tab ②).
+// own mean must stay visible regardless. Shared by drawCvFig (tab ⑤) and
+// drawCrnFig's differences strip (tab ③).
 function intervalMeanDot(cx, yMean, hit) {
   const dotR = 3.5, col = hit ? C.hit : C.miss;
   return hit ? `<circle cx="${cx}" cy="${yMean}" r="${dotR}" fill="${col}"/>`
@@ -4536,14 +5520,14 @@ TABS.cv = {
 };
 SPIN['cv-seed'] = seedSpin('cv');
 SPIN['cv-sige'] = decimalSpin('cv-sige', 0, cvParamsChanged, 0.01);
-// ── Tab ⑤: importance sampling ───────────────────────
+// ── Tab ⑥: importance sampling ───────────────────────
 // hoverY: the one hovered output value shared by the likelihood-
 // weighting card's three plots, null when the pointer is not over any of
 // them. Set from a pointer's x within whichever panel it sits in (isInitDrag),
 // read back on every drawIsPairFig call so a live redraw (a run, a drag, a
 // field edit) re-applies whatever hover was already showing.
 const ISS = { direct: [], wtd: [], last: null, lastRunObj: null, lastRunP: null, lastSeed: null, scale: null, drag: null, frame: null, pairFrame: null, mode: 'prop', hoverY: null };
-// The one toggle for tab ⑤'s whole transfer-plot figure: which arm's
+// The one toggle for tab ⑥'s whole transfer-plot figure: which arm's
 // sample it draws, direct or proposal. Mirrors avMode's own pattern -- it
 // redraws from the last run if there is one, or the empty state otherwise, and
 // never re-evaluates or touches the history because both arms already ride
@@ -4555,7 +5539,7 @@ function isMode(m) {
   const p = ISS.lastRunP || isParams();
   if (p) drawIsFig(ISS.lastRunObj, p);
 }
-// Tab ⑤'s legend: the model curve and both density curves are the
+// Tab ⑥'s legend: the model curve and both density curves are the
 // same in either view (the transfer plot now shows inputs and outputs only,
 // with both curves always drawn), and only the sample-specific entries --
 // the draws on the curve, their rug, and the histogram -- change color and
@@ -5122,7 +6106,7 @@ function isRoundTheta(v) {
   const r = Number((Math.round(v / 0.05) * 0.05).toFixed(2));
   return Math.min(6, Math.max(0, r));
 }
-// Tab ⑤ drag handles: the transfer plot's T line, the input threshold, and
+// Tab ⑥ drag handles: the transfer plot's T line, the input threshold, and
 // the proposal-density curve, plus the likelihood-weighting
 // pair's own three T handles, one per plot -- one shared pointer system bound
 // to both SVGs rather than a
@@ -5293,7 +6277,7 @@ function isInitDrag() {
 // after a run, a zero count is spelled out as "None"/"none" rather than
 // omitting the sentence, following the site's own clip-sentence wording for
 // the third one ("Of the 80 dots drawn, 3 lie beyond the panel's fixed
-// scale.", tabs ②-④). n's own two phrasings ("All n ..." vs "The
+// scale.", tabs ③-⑤). n's own two phrasings ("All n ..." vs "The
 // first 300 of n ...") wrap at different card widths, and so this stamps the
 // element's own data-shape ("short" or "long") for the CSS tiers above to key
 // on; before a run there is no run.wtd.n yet, and so the live n selector's
@@ -5356,7 +6340,7 @@ function setIsFigCap(run, beyond) {
   reserveCapHeight(el, isFigCapText(n, 'proposal', n.toLocaleString(), n.toLocaleString()));
 }
 // The likelihood ratio W at output value y, inverting h
-// analytically for each of tab ⑤'s three models -- a page-script-only
+// analytically for each of tab ⑥'s three models -- a page-script-only
 // concern (CI-CORE carries no general inverse, only wayIn's single point),
 // used solely to draw the pair's middle plot. ident and exp are single-
 // valued; sq is two-valued (x = +√y feeds almost all of the proposal's own
@@ -5798,7 +6782,7 @@ function isPairLegendHtml(fnKey) {
 // mass past T equals the weighted estimate stays unqualified because it is
 // true of the full histogram regardless of which bins are drawn. Only the
 // sq-only branch note still comes and goes with the model, and so this is
-// the one place on tab ⑤ where a parameter change (switching to or from x²)
+// the one place on tab ⑥ where a parameter change (switching to or from x²)
 // is allowed to change the card's own height; every other combination -- a
 // run, Run ×100, a live drag, a field edit, an n edit, or the sample toggle
 // -- leaves it unchanged. `data-model` stamps which shape is showing (mirror
@@ -6015,6 +6999,12 @@ SPIN['is-theta-val'] = decimalSpin('is-theta-val', 0, isParamsChanged, 0.05);
   ['pointerup','pointercancel'].forEach(function(ev){
     document.addEventListener(ev, function(){ if(timer){ clearTimeout(timer); timer=null; } });
   });
+  // A long press on a link raises the browser's own menu on some phones; the tip has
+  // opened by then, so the menu is withheld. A right-click does not pass through here
+  // with a tip open, so "Copy link" still works on a tab.
+  document.addEventListener('contextmenu', function(e){
+    if(openedBy==='press' && e.target.closest && e.target.closest('a[data-tip-press]')) e.preventDefault();
+  });
   // Capture phase, and so the press never reaches the button's own handler.
   document.addEventListener('click', function(e){
     if(swallow){ swallow=false; e.preventDefault(); e.stopPropagation(); }
@@ -6026,7 +7016,7 @@ window.addEventListener('DOMContentLoaded', () => {
   Object.keys(TABS).forEach(k => { if (TABS[k].init) TABS[k].init(); });
   renderActiveHist();
   watchHistWidth();
-  // The df spans and the tab ⑤ captions are measured in their own font, and
+  // The df spans and the tab ⑥ captions are measured in their own font, and
   // so they are measured again once the web fonts have arrived.
   reserveAllDf();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { reserveAllDf(); renderActiveHist(); });
