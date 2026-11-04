@@ -451,6 +451,13 @@ check all of the following.
   should join, and keep its `W`/`H` in step with the `og:image:width`/`height` in `index.html`
   (ratio near 2:1 for Twitter/X). The script is not linked from the site
 
+## Branches
+
+**Commit and push directly to `main`.** This repository has a single developer, and so there is no
+review step for a branch to wait on: never open a pull request, and do not create a branch unless
+the user asks for one (they may, for a long side project). This holds even when a session's setup
+names a feature branch to develop on.
+
 ## Commit messages
 
 **A localized edit to one widget has to make that widget identifiable from the commit message, and
