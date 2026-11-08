@@ -62,10 +62,13 @@ export function fRatioVerdict(fr) {
 }
 
 /**
- * The row label for a design in a Two Systems figure: its role letter,
- * followed by the dataset's name with any prefix the two names share
- * ("file · A" and "file · B" become "A" and "B") unless that is the role
- * letter itself.
+ * The row label for a design in a Two Systems figure: its role letter, and
+ * then in parentheses the dataset's name with any prefix the two names share
+ * dropped ("file · fast" and "file · slow" become "A (fast)" and "B (slow)").
+ * The letter is never dropped, even when the name is itself a letter: a
+ * dataset named "C" in the B role reads "B (C)", and one named "A" in the A
+ * role reads "A (A)", so that no row can be read as a difference of two
+ * designs or as a role it does not hold.
  * @param {{name: string}} dsA
  * @param {{name: string}} dsB
  * @returns {[string, string]}
@@ -75,7 +78,7 @@ export function roleLabels(dsA, dsB) {
   const pa = cut(dsA.name), pb = cut(dsB.name);
   const shared = pa && pb && pa[0] === pb[0] && pa[1] !== pb[1];
   const na = shared ? pa[1] : dsA.name, nb = shared ? pb[1] : dsB.name;
-  return [na === 'A' ? 'A' : 'A · ' + na, nb === 'B' ? 'B' : 'B · ' + nb];
+  return ['A (' + na + ')', 'B (' + nb + ')'];
 }
 
 /**

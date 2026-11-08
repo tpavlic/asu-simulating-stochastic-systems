@@ -59,10 +59,11 @@ test('fRatioVerdict: contains and excludes 1 follow the interval', () => {
   assert.match(fRatioVerdict({ s1: 1, s2: 2, lo: 0.5, hi: 2 }).text, /^The interval contains 1/);
 });
 
-test('roleLabels drops a prefix the two names share, and never repeats the role letter', () => {
-  assert.deepEqual(roleLabels({ name: 'file · A' }, { name: 'file · B' }), ['A', 'B']);
-  assert.deepEqual(roleLabels({ name: 'file · fast' }, { name: 'file · slow' }), ['A · fast', 'B · slow']);
-  assert.deepEqual(roleLabels({ name: 'one · x' }, { name: 'two · y' }), ['A · one · x', 'B · two · y']);
+test('roleLabels keeps the role letter and drops a prefix the two names share', () => {
+  assert.deepEqual(roleLabels({ name: 'file · A' }, { name: 'file · B' }), ['A (A)', 'B (B)']);
+  assert.deepEqual(roleLabels({ name: 'file · A' }, { name: 'file · C' }), ['A (A)', 'B (C)']);
+  assert.deepEqual(roleLabels({ name: 'file · fast' }, { name: 'file · slow' }), ['A (fast)', 'B (slow)']);
+  assert.deepEqual(roleLabels({ name: 'one · x' }, { name: 'two · y' }), ['A (one · x)', 'B (two · y)']);
 });
 
 test('outcomeAxis and estimateAxis name the outcome by the data kind', () => {

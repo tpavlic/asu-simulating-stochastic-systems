@@ -407,8 +407,20 @@ function chosen() {
   return { a: a && canInfer(a).ok ? a : null, b: b && canInfer(b).ok ? b : null };
 }
 
-// Sets the mode for the chosen pair, the reader's own choice for it or the
-// default, and the note under the switch saying which and why. With no pair
+// Sets the mode for the chosen pair, and the note under the switch saying
+// which and why: the reader's own choice for this pair; otherwise Paired
+// carried over from the pair it was last chosen on, because pairing declares
+// how the study was run (every design on common random numbers), which holds
+// across the designs rather than for one pair, and a swap of one design would
+// otherwise fall back to Independent and look like a different page; otherwise
+// the default. The choice carries only to datasets that were loaded when it
+// was made (`mode:last` holds the mode and then their ids), so that a file
+// loaded later, in this sitting or in a restored session, never inherits it;
+// a carried Paired also needs at least two matched replications. It is never
+// recorded for the new pair, so the note keeps saying it was carried until the
+// reader presses the switch. Only Paired carries: a file whose replication
+// column is marked as blocks opens Paired, and an Independent chosen on some
+// earlier, unrelated pair must not override that evidence. With no pair
 // chosen, the switch keeps its last setting.
 function pickMode() {
   const { a, b } = chosen();
@@ -417,11 +429,30 @@ function pickMode() {
   const def = pairingDefault([a, b]);
   const kept = state.getPick(id, 'mode:' + pairKey());
   const chosenMode = kept === 'paired' || kept === 'independent' ? kept : null;
-  mode = chosenMode || (def.paired ? 'paired' : 'independent');
   const defMode = def.paired ? 'paired' : 'independent';
-  note.textContent = chosenMode && chosenMode !== defMode
-    ? (def.why ? (chosenMode === 'paired' ? 'Paired' : 'Independent') + ', as chosen. ' + def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '') : '')
-    : def.why;
+  const defWhy = def.why.replace(' by default:', ' would be the default:').replace(/ Choose Paired if .*$/, '');
+  if (chosenMode) {
+    mode = chosenMode;
+    note.textContent = chosenMode !== defMode ? (chosenMode === 'paired' ? 'Paired' : 'Independent') + ', as chosen.' + (def.why ? ' ' + defWhy : '') : def.why;
+    return;
+  }
+  const last = state.getPick(id, 'mode:last');
+  if (!def.paired && Array.isArray(last) && last[0] === 'paired' && last.includes(a.id) && last.includes(b.id)) {
+    const eA = estimatesOf(a), eB = estimatesOf(b);
+    const keptMatch = state.getPick(id, 'match:' + pairKey());
+    const by = keptMatch === 'id' || keptMatch === 'position' ? keptMatch : defaultMatch(eA.ids, eB.ids, false).by;
+    if (matchPairs(eA.ids, eB.ids, by).pairs.length >= 2) {
+      mode = 'paired';
+      note.textContent = 'Paired, carried over from the pair it was last chosen on. ' + (def.why ? defWhy + ' ' : '') +
+        'Choose Independent if replication i of these two designs did not share a block.';
+      return;
+    }
+    mode = 'independent';
+    note.textContent = (def.why || 'Independent by default.') + ' Paired was chosen for an earlier pair but is not carried over here: fewer than two replications match.';
+    return;
+  }
+  mode = defMode;
+  note.textContent = def.why;
 }
 
 function syncControls() {
@@ -1230,7 +1261,8 @@ export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
     '<p class="lede">Compare two designs on their replication outcomes. Replications run on independent random streams are compared with a two-sample t procedure, Welch’s by default or the pooled-variance t when the two designs are taken to share one variance. ' +
-    'Replications that share a block (common random numbers, or the same subject, batch, or day) are compared as pairs. Pairing is something you declare, never something the page infers from the data: with the switch below, or once for a whole file on the Import page by marking its replication column as blocks, which opens the comparison of two datasets from that file paired.</p>' +
+    'Replications that share a block (common random numbers, or the same subject, batch, or day) are compared as pairs. Pairing is something you declare, never something the page infers from the data: with the switch below, or once for a whole file on the Import page by marking its replication column as blocks, which opens the comparison of two datasets from that file paired. ' +
+    'Comparing the same two designs on several responses (a cost and a count of lost calls, say) is a family of comparisons even though each is run here on its own: to hold the family-wise error rate at α across m responses by Bonferroni, set the confidence level to 1 − α/m before reading each one.</p>' +
     '<div class="sec ctrl-card">' +
       '<div class="ctrl-row">' +
         '<span class="ctrl-pair"><label class="ctrl-lbl" for="two-a">Design A</label><select id="two-a"></select></span>' +
@@ -1311,7 +1343,7 @@ export function render(root) {
   selB.addEventListener('change', () => schedule());
   root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
     mode = b.dataset.mode;
-    if (selA.value && selB.value && selA.value !== selB.value) state.setPick(id, 'mode:' + pairKey(), mode);
+    if (selA.value && selB.value && selA.value !== selB.value) { state.setPick(id, 'mode:' + pairKey(), mode); state.setPick(id, 'mode:last', [mode].concat(state.datasets.map(d => d.id))); }
     schedule();
   }));
   root.querySelectorAll('[data-proc]').forEach(b => b.addEventListener('click', () => { proc = b.dataset.proc; state.setPick(id, 'proc', proc); schedule(); }));

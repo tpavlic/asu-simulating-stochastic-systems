@@ -105,7 +105,15 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   opens Paired exactly when both datasets come from one load whose ids are blocks
   (`pairingDefault` in `js/ui/rules.js`; datasets from different files open Independent even when
   each marked its blocks), with a note under the switch saying why, and the reader's own choice is
-  kept per pair of datasets (`mode:<A id>|<B id>`); matched on replication id or position (declared
+  kept per pair of datasets (`mode:<A id>|<B id>`); a Paired the reader pressed carries over to a
+  later pair that has no choice of its own and opens Independent by default, when both datasets
+  were loaded at the time of the press (`mode:last` holds the mode and the ids loaded then, so a
+  file loaded later never inherits it) and at least two replications match, with the note saying
+  it was carried over and to choose Independent if the designs did not share a block, and a note
+  saying why it was not carried when too few match; an Independent press never carries, because
+  a file marked as blocks opens Paired on its own evidence; the figures label each design by its
+  role and then its name in parentheses, "A (fast)" and "B (slow)", never dropping the letter
+  even when the name is one (`roleLabels` in `js/ui/rules.js`); matched on replication id or position (declared
   blocks always by id) with unmatched replications listed and counted in the experimental-unit
   line; a Procedure
   switch to the Wilcoxon rank-sum or signed-rank test with the Hodges–Lehmann estimate and its
