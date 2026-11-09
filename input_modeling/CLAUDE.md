@@ -13,7 +13,7 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
   observations themselves; read as counts, the table is expanded into its observations before
   anything is fitted, the count column is guessed by its header or, between two columns of whole
   numbers, by the larger total, and the outcomes come from another column or are numbered
-  0, 1, 2, … by row, which refuses a missing count or a blank line inside the table because either
+  0, 1, 2, … or 1, 2, 3, … by row, which refuses a missing count or a blank line inside the table because either
   would shift every later outcome), one estimating a piecewise-constant arrival rate
   from timestamps, one relating two variables (a scatter with each column's histogram on its
   margins, a pairing switch that keeps both histograms while it shows the pairs shuffled or sorted
@@ -148,7 +148,20 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      the bootstrap p-values are approximate; at about 0.6, a correct shifted gamma was rejected up
      to about twice as often as nominal. Fitting to interval probabilities would remove the
      remaining error but would make every continuous fit a numerical search, and it was deferred
-     for that reason.)*
+     for that reason.*
+  9. *`fitDist`'s eighth argument, `opts`, carries two fit options that `rankAll` passes and
+     `bootstrapRun` repeats in every refit from flags on the fit. `floor0` ("Keep each model at or
+     above zero", on by default) caps the shift search at γ = 0 when no value is negative; a fit
+     stopped there is `floorBound`, the unshifted model, with the shift not counted in k. `start1`
+     ("Smallest possible value is 1", off by default) fits the families in `START1_KEYS` to x − 1
+     and stores `shift: 1, start1: true`; `expressions` adds "1 +" to every tool's line (the
+     geometric becomes AnyLogic's and SciPy's trials count), and the snippets subtract 1 from the
+     data right after reading it. A shift that converges onto the minimum is reported as the
+     minimum exactly when the family can take a value of 0 there (the exponential). The fit card
+     notes any continuous model that puts 0.01% or more of its draws below zero when no value is
+     negative (`belowZeroNote`). A frequency table numbered by row can start at 1 (`ST.freq.out`
+     of −2). The Phone menu times sample is recorded to whole seconds: it loads as counts, and the
+     count note's floor sentence points to Continuous with the shift.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

@@ -1923,6 +1923,86 @@ section('16b. data recorded to a step');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   16c. KEEPING A MODEL AT OR ABOVE ZERO, AND COUNTS THAT START AT 1
+
+   floor0 holds a shift at 0 or above when no value is negative; a shift
+   that converges onto the minimum is reported as the minimum itself; and
+   start1 fits a count family to x - 1 and adds the 1 back in every export.
+   ══════════════════════════════════════════════════════════════════════ */
+section('16c. the floor at zero, the exact minimum, and counts from 1');
+{
+  const LN = IA.DISTS.lognormal, GA = IA.DISTS.gamma, EX = IA.DISTS.expo, PO = IA.DISTS.poisson;
+  const u = IA.MRG32k3a(16300);
+  const floor = { floor0: true };
+
+  /* A lognormal whose free shift lands below zero. */
+  const lx = Array.from({ length: 200 }, () => Math.max(0.01, -1 + LN.sample(u, [1, 0.4])));
+  const lf = IA.fitDist(LN, lx, true, false), lk = IA.fitDist(LN, lx, true, false, null, null, false, floor);
+  ok(lf.shift < 0, `free, the lognormal's shift goes below zero (${lf.shift.toFixed(3)})`);
+  ok(lk.shift === 0 && lk.floorBound && lk.k === 2,
+     `kept at or above zero, it stops at 0 and is not counted (shift ${lk.shift}, k = ${lk.k})`);
+  close(lk.ll, IA.fitDist(LN, lx, false, false).ll, 1e-9, 'and that fit is the unshifted lognormal\'s');
+  ok(IA.fitCdf(lf)(0) > 0 && IA.fitCdf(lk)(0) === 0, 'the free fit puts probability below zero and the kept one none');
+
+  /* A shift that is already above zero is untouched by the floor. */
+  const gx = Array.from({ length: 200 }, () => 3 + GA.sample(u, [2, 1]));
+  const gf = IA.fitDist(GA, gx, true, false), gk = IA.fitDist(GA, gx, true, false, null, null, false, floor);
+  ok(gf.shift === gk.shift && !gk.floorBound, `a gamma shift of ${gf.shift.toFixed(3)} is the same either way`);
+
+  /* Kept at or above zero with a 0 in the data, the shift has no room. */
+  const zx = gx.map(v => v - 3); zx[0] = 0;
+  const zk = IA.fitDist(EX, zx, true, false, null, null, false, floor);
+  ok(zk.ok && zk.shift === 0 && zk.floorBound, 'with a 0 among the values, the exponential is fitted unshifted');
+
+  /* A shifted exponential's shift is the sample minimum exactly. */
+  const ex = Array.from({ length: 200 }, () => 2 + EX.sample(u, [3]));
+  const ef = IA.fitDist(EX, ex, true, false);
+  ok(ef.atBound && ef.shift === Math.min(...ex), `the exponential's shift is exactly the minimum, ${IA.num(ef.shift)}`);
+
+  /* The floor is carried into the bootstrap's refits. */
+  {
+    const s = lx.slice().sort((a, b) => a - b), F = IA.fitCdf(lk);
+    const run = IA.bootstrapRun(lk, s.length, 60, 7, true, IA.ksStat(s, F, IA.fitAtom(lk)).D, IA.adStat(s, F));
+    run.step(60);
+    ok(run.result().used === 60, 'the bootstrap refits under the floor without losing a resample');
+  }
+
+  /* Counts that start at 1: batch sizes 1 + Poisson(2.5). */
+  const bx = Array.from({ length: 400 }, () => 1 + PO.sample(u, [2.5]));
+  const bf = IA.fitDist(PO, bx, false, false, null, null, false, { start1: true });
+  const mean = bx.reduce((a, b) => a + b, 0) / bx.length;
+  close(bf.p[0], mean - 1, 1e-12, 'counted from 1, the Poisson mean is the mean of x - 1');
+  ok(bf.shift === 1 && bf.start1 && bf.k === 1, 'its start is 1 and is not counted as a parameter');
+  ok(bf.ll > IA.fitDist(PO, bx, false, false).ll, 'and it fits these batch sizes better than a count from 0');
+  ok(IA.fitCdf(bf)(0.5) === 0 && IA.fitAtom(bf)(1) > 0, 'the model puts nothing at 0 and something at 1');
+  const bad = IA.fitDist(PO, [0, 1, 2, 3], false, false, null, null, false, { start1: true });
+  ok(!bad.ok && /1 or more/.test(bad.msg), 'a 0 in the data is refused with a reason');
+  const ce = IA.fitDist(IA.DISTS.discreteUniform, bx, false, false, null, null, false, { start1: true });
+  ok(ce.ok && !ce.start1, 'the discrete uniform takes its own ends and ignores the option');
+  const e1 = IA.expressions(bf);
+  ok(e1.arena === '1 + POIS(' + IA.num(bf.p[0]) + ')' && e1.r.startsWith('1 + rpois(') &&
+     e1.python === 'stats.poisson(mu=' + IA.num(bf.p[0]) + ', loc=1)', 'every export adds the 1', JSON.stringify(e1));
+  const g1 = IA.expressions(IA.fitDist(IA.DISTS.geometric, bx, false, false, null, null, false, { start1: true }));
+  ok(/^geometric\([^)]*\)$/.test(g1.anylogic) && /^stats\.geom\(p=[^,]*\)$/.test(g1.python) && g1.arena.startsWith('1 + AINT('),
+     'a geometric counted from 1 is the trials count AnyLogic and SciPy draw directly', JSON.stringify(g1));
+  const sc = IA.reproScripts(bf, bx, 1, 99);
+  ok(sc.r.includes('x <- x - 1') && sc.matlab.includes('x = x - 1;') && sc.python.includes('x = x - 1') &&
+     !sc.r.includes('location shift'), 'the snippets refit x - 1 and carry no shift note');
+  {
+    let rej = 0;
+    for (let rep = 0; rep < 100; rep++) {
+      const ur = IA.MRG32k3a(16400 + rep);
+      const y = Array.from({ length: 150 }, () => 1 + PO.sample(ur, [2.5])).sort((a, b) => a - b);
+      const fy = IA.fitDist(PO, y, false, false, null, null, false, { start1: true }), Fy = IA.fitCdf(fy);
+      const run = IA.bootstrapRun(fy, 150, 199, 16500 + rep, false, IA.ksStat(y, Fy, IA.fitAtom(fy)).D, IA.adStat(y, Fy));
+      run.step(199);
+      if (run.result().pD < 0.05) rej++;
+    }
+    ok(rej <= 12, `a correct count from 1 is rejected by its bootstrap ${rej} times in 100 (nominal 5)`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    17. ARRIVAL PROCESSES
    ══════════════════════════════════════════════════════════════════════ */
 section('17. arrival-process analysis');

@@ -173,7 +173,7 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 /* .chk is nowrap, which is right for a two-word label and wrong for this
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
-#shift-wrap, #reflect-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
+#shift-wrap, #reflect-wrap, #floor-wrap, #start1-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
 .ctrl-row.ctrl-stack { flex-direction: column; align-items: flex-start; gap: 4px; }
 /* The bar sits under the disagreement notes, which end flush, and so it
    carries its own gap above; its one-line label is centered on the select
@@ -181,7 +181,7 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 .ctrl-row.tbl-bar { margin: 14px 0 6px; }
 .tbl-bar #johnson-wrap { align-items: center; }
 .tbl-bar .tbl-bar-end { margin-left: auto; }
-#shift-wrap input, #reflect-wrap input, #johnson-wrap input { margin-top: .2em; }
+#shift-wrap input, #reflect-wrap input, #floor-wrap input, #start1-wrap input, #johnson-wrap input { margin-top: .2em; }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible,
 a:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -637,6 +637,7 @@ footer a:hover { text-decoration: underline; }
           <button class="btn2" data-sample="svc" type="button">Drive-through service</button>
           <button class="btn2" data-sample="rep" type="button">CNC repair times</button>
           <button class="btn2" data-sample="ins" type="button">Inspection times</button>
+          <button class="btn2" data-sample="ivr" type="button">Phone menu times (whole seconds)</button>
           <button class="btn2" data-sample="dem" type="button">Parts demand (counts)</button>
           <button class="btn2" data-sample="tbl" type="button">Board defects (table)</button>
         </div>
@@ -819,6 +820,12 @@ footer a:hover { text-decoration: underline; }
       </label>
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
+      </label>
+      <label class="chk" id="floor-wrap" data-tip="Holds each candidate's shift γ at 0 or above, so that no model fitted to values that are never negative can produce a negative one. Turn it off to let a shift go below zero; the fit details then say how much of the model falls below zero." data-tip-press>
+        <input type="checkbox" id="floor-chk" checked autocomplete="off"> <span class="tip">Keep each model at or above zero</span>
+      </label>
+      <label class="chk" id="start1-wrap" data-tip="For counts that can never be 0, such as the number of items in a batch: the Poisson, negative binomial, binomial, and geometric are each fitted as 1 plus a draw, so that they start at 1. The 1 is fixed, not estimated." data-tip-press>
+        <input type="checkbox" id="start1-chk" autocomplete="off"> <span class="tip">Smallest possible value is 1</span>
       </label>
     </div>
 
@@ -4670,6 +4677,9 @@ var JOHNSON_KEYS = ['johnsonSB', 'johnsonSU'];
    one gains about as much again on every decade. */
 var D_MIN_FRAC = 1e-10;   /* smallest  min(x) - gamma, as a fraction of the range */
 var D_MAX_FRAC = 3;       /* largest   min(x) - gamma, as a multiple of the range */
+/* The count families that can start at 1 instead of 0 (the discrete
+   uniform and the empirical take their own ends from the data). */
+var START1_KEYS = ['poisson', 'geometric', 'negBinomial', 'binomial'];
 var D_SAFE_FRAC = 1e-3;   /* the conservative fallback when the profile diverges */
 var GRID_N = 96;          /* profile grid points; the bootstrap uses fewer */
 var DIVERGE_GAIN = 0.05;  /* log-likelihood units per extra factor of 1000 in d */
@@ -4763,7 +4773,10 @@ var FIT_FAST = false;
 /* The parent fit's parameters while the bootstrap refits its resamples,
    for a search that can start from them; null otherwise. */
 var FIT_HINT = null;
-function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
+/* `opts` carries two fit options: floor0, which keeps a shifted model at or
+   above zero (gamma >= 0) when no value is negative, and start1, which
+   starts a count at 1 (see START1_KEYS). */
+function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   if (!x || x.length < 2) return { ok: false, msg: 'Need at least two observations.' };
   FIT_FAST = !!fast;
   if (reflect && dist.shiftable) {
@@ -4794,6 +4807,23 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
                      : function (y) { return dist.fit(y); };
   var heldK = function (f) { return held ? f.freeCount : dist.np; };
 
+  /* A count that cannot be 0 (a batch holds at least one item) is 1 plus a
+     draw from the family, which is fitted to x - 1. The 1 is part of the
+     model's definition rather than an estimate, and so it counts nowhere. */
+  if (opts && opts.start1 && dist.kind === 'discrete' && START1_KEYS.indexOf(dist.key) >= 0) {
+    var y1 = new Array(x.length), j1;
+    for (j1 = 0; j1 < x.length; j1++) {
+      y1[j1] = x[j1] - 1;
+      if (y1[j1] < 0) return { ok: false, msg: 'Starting the count at 1 needs every value to be 1 or more.' };
+    }
+    var f1 = fitCore(y1);
+    if (!f1.ok) return f1;
+    return { ok: true, dist: dist, p: f1.p, shift: 1, start1: true, k: heldK(f1), ll: dist.loglik(y1, f1.p),
+             atBound: false, degenerate: false, shiftHeld: false, edge: f1.edge || null,
+             orderStat: f1.orderStat || null,
+             fixed: held ? fixed.slice() : null, allHeld: held && f1.freeCount === 0 };
+  }
+
   if (!useShift || !dist.shiftable) {
     var f = fitCore(x);
     if (!f.ok) return f;
@@ -4823,6 +4853,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
   var range = s.max - s.min;
   if (!(range > 0)) return { ok: false, msg: 'Every value is identical: there is nothing to fit.' };
   var dMin = D_MIN_FRAC * range, dMax = D_MAX_FRAC * range;
+  var floor0 = !!(opts && opts.floor0) && s.min >= 0;
   /* Inside the bootstrap this profile runs once per resample, and so the grid
      is coarsened there. The estimate it returns is the same to within far
      less than the sampling noise the bootstrap is measuring. */
@@ -4839,32 +4870,58 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
     return { ll: Number.isFinite(ll) ? ll : -Infinity, p: fr.p, g: g, free: lastFree };
   }
 
-  /* Coarse geometric sweep to bracket the maximum ... */
-  var lg0 = Math.log(dMin), lg1 = Math.log(dMax), best = -1, bestLL = -Infinity, i2;
-  for (i2 = 0; i2 < gridN; i2++) {
-    var r = score(Math.exp(lg0 + (lg1 - lg0) * i2 / (gridN - 1)));
-    if (r.ll > bestLL) { bestLL = r.ll; best = i2; }
+  /* A coarse geometric sweep over d in [dMin, hi] brackets the maximum, and
+     golden-section refinement inside the bracket finds it. Returns the best
+     point, or a message when no shift gives a fit. */
+  function search(hi) {
+    var lg0 = Math.log(dMin), lg1 = Math.log(hi), best = -1, bestLL = -Infinity, i2;
+    for (i2 = 0; i2 < gridN; i2++) {
+      var r = score(Math.exp(lg0 + (lg1 - lg0) * i2 / (gridN - 1)));
+      if (r.ll > bestLL) { bestLL = r.ll; best = i2; }
+    }
+    if (!Number.isFinite(bestLL)) return { msg: 'No location shift makes this distribution fit these values.' };
+    var step = (lg1 - lg0) / (gridN - 1);
+    var a = lg0 + step * Math.max(0, best - 1), b = lg0 + step * Math.min(gridN - 1, best + 1);
+    var phi = 0.6180339887498949;
+    var c = b - phi * (b - a), d2 = a + phi * (b - a);
+    var fc = score(Math.exp(c)).ll, fd = score(Math.exp(d2)).ll;
+    for (var it = 0; it < golden && (b - a) > 1e-12; it++) {
+      if (fc > fd) { b = d2; d2 = c; fd = fc; c = b - phi * (b - a); fc = score(Math.exp(c)).ll; }
+      else { a = c; c = d2; fc = fd; d2 = a + phi * (b - a); fd = score(Math.exp(d2)).ll; }
+    }
+    var dBest = Math.exp(fc > fd ? c : d2), sBest = score(dBest);
+    if (!Number.isFinite(sBest.ll)) return { msg: 'The location-shifted fit did not converge.' };
+    return { fin: sBest, d: dBest };
   }
-  if (!Number.isFinite(bestLL))
-    return { ok: false, msg: 'No location shift makes this distribution fit these values.' };
+  var found = search(dMax);
+  if (found.msg) return { ok: false, msg: found.msg };
+  var fin = found.fin, dOpt = found.d;
 
-  /* ... then golden-section refinement inside the bracketing interval. */
-  var step = (lg1 - lg0) / (gridN - 1);
-  var a = lg0 + step * Math.max(0, best - 1), b = lg0 + step * Math.min(gridN - 1, best + 1);
-  var phi = 0.6180339887498949;
-  var c = b - phi * (b - a), d2 = a + phi * (b - a);
-  var fc = score(Math.exp(c)).ll, fd = score(Math.exp(d2)).ll;
-  for (var it = 0; it < golden && (b - a) > 1e-12; it++) {
-    if (fc > fd) { b = d2; d2 = c; fd = fc; c = b - phi * (b - a); fc = score(Math.exp(c)).ll; }
-    else { a = c; c = d2; fc = fd; d2 = a + phi * (b - a); fd = score(Math.exp(d2)).ll; }
+  /* Kept at or above zero, gamma = min - d cannot go below 0. The search
+     above is the same with the option on or off, so that a shift already at
+     or above zero is untouched; one below zero is searched for again with d
+     capped at the smallest value, where the best shift may be 0 itself. A
+     smallest value of 0 leaves no room at all, and the fit is the unshifted
+     one. */
+  var floorBound = false;
+  if (floor0 && fin.g < 0) {
+    dMax = s.min;
+    if (!(dMax > dMin * 1.5)) {
+      var fz = fitCore(x);
+      if (!fz.ok) return fz;
+      return { ok: true, dist: dist, p: fz.p, shift: 0, k: heldK(fz), ll: dist.loglik(x, fz.p),
+               atBound: false, degenerate: false, shiftHeld: false, floor0: true, floorBound: true,
+               fixed: held ? fixed.slice() : null, allHeld: held && fz.freeCount === 0 };
+    }
+    found = search(dMax);
+    if (found.msg) return { ok: false, msg: found.msg };
+    fin = found.fin; dOpt = found.d;
+    var atZero = score(dMax);
+    if (Number.isFinite(atZero.ll) && atZero.ll >= fin.ll - 1e-9) { fin = atZero; dOpt = dMax; floorBound = true; }
   }
-  var dOpt = Math.exp(fc > fd ? c : d2);
-  var fin = score(dOpt);
-  if (!Number.isFinite(fin.ll))
-    return { ok: false, msg: 'The location-shifted fit did not converge.' };
 
   /* At the bound? Then find out which of the two situations this is. */
-  var atBound = dOpt <= dMin * 1.5, degenerate = false;
+  var atBound = !floorBound && dOpt <= dMin * 1.5, degenerate = false;
   if (atBound) {
     var deeper = score(dMin * 1e-3);
     if (Number.isFinite(deeper.ll) && deeper.ll - fin.ll > DIVERGE_GAIN) {
@@ -4876,16 +4933,25 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
          below such a block was rejected by its own rounded bootstrap more
          than half the time on correct models; at h/2 it was not. */
       var g0 = recordingGrid(s.sorted);
-      var dSafe = Math.max(D_SAFE_FRAC * range, g0 ? g0.h / 2 : 0);
+      var dSafe = Math.min(dMax, floor0 ? s.min : Infinity, Math.max(D_SAFE_FRAC * range, g0 ? g0.h / 2 : 0));
       var safe = score(dSafe);
       if (Number.isFinite(safe.ll)) { fin = safe; dOpt = dSafe; }
+    } else {
+      /* Converging onto the minimum, the estimate is the minimum itself, and
+         so it is reported exactly rather than a grid step short of it. A
+         family that cannot take a value of exactly 0 keeps the grid's end. */
+      var exact = score(0);
+      if (Number.isFinite(exact.ll) && exact.ll >= fin.ll - 1e-9) { fin = exact; dOpt = 0; }
     }
   }
   /* The shift is itself an estimated parameter, and so it is added to
      whatever the holds left free. */
+  /* A shift stopped at 0 by the floor is the unshifted model, and so it is
+     not counted as an estimate. */
   return { ok: true, dist: dist, p: fin.p, shift: fin.g,
-           k: (fin.free === undefined ? dist.np : fin.free) + 1, ll: fin.ll,
+           k: (fin.free === undefined ? dist.np : fin.free) + (floorBound ? 0 : 1), ll: fin.ll,
            atBound: atBound && !degenerate, degenerate: degenerate, shiftHeld: false,
+           floor0: floor0, floorBound: floorBound,
            fixed: held ? fixed.slice() : null, allHeld: false };
 }
 
@@ -5322,7 +5388,8 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
          distribution collapses to the classical one -- which is the point
          of allowing it. */
       FIT_HINT = fit.p;
-      var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect);
+      var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect,
+                       { floor0: !!fit.floor0, start1: !!fit.start1 });
       FIT_HINT = null;
       if (!rf.ok) continue;                 /* a degenerate resample is skipped */
       var F = fitCdf(rf);
@@ -5638,14 +5705,14 @@ function generateSample(key, p, shift, n, seed, dp) {
 /* ─────────────────────────────────────────────────────────────────────
    12. RANKING THE CANDIDATES
    ───────────────────────────────────────────────────────────────────── */
-function rankAll(x, keys, useShift, bins, holds, holdShift, reflect) {
+function rankAll(x, keys, useShift, bins, holds, holdShift, reflect, opts) {
   var rows = [], n = x.length, i;
   for (i = 0; i < keys.length; i++) {
     var dist = DISTS[keys[i]];
     /* Holds are per distribution: pinning the gamma's shape says nothing
        about the Weibull's, and so each candidate is fitted under its own. */
     var f = fitDist(dist, x, useShift, false, holds && holds[keys[i]],
-                    holdShift && holdShift[keys[i]], reflect);
+                    holdShift && holdShift[keys[i]], reflect, opts);
     if (!f.ok) { rows.push({ key: keys[i], dist: dist, ok: false, msg: f.msg }); continue; }
     var ic = infoCriteria(f.ll, f.k, n);
     var sqe = bins ? squareError(x, f, bins) : NaN;
@@ -6561,6 +6628,25 @@ function expressions(fit, sample) {
         '], [' + bp.map(function (v) { return N(v); }).join(', ') + '])',
         'Inverse transform by linear interpolation.' + thin);
   }
+  /* A count that starts at 1 is 1 plus a draw from the fitted family. The
+     geometric is the exception worth writing out: counted from 1, it is the
+     number of trials, which AnyLogic and SciPy draw directly. */
+  if (fit.start1) {
+    var plus = ' The count starts at 1, and so 1 is added to each draw.';
+    ['arena', 'simio', 'anylogic', 'r', 'matlab'].forEach(function (t) {
+      if (out[t]) { out[t] = '1 + ' + out[t]; out.notes[t] = (out.notes[t] ? out.notes[t] + ' ' : '') + plus.trim(); }
+    });
+    if (out.python) {
+      out.python = /loc=-1\)$/.test(out.python) ? out.python.replace(/, loc=-1\)$/, ')')
+                                                : out.python.replace(/\)$/, ', loc=1)');
+      out.notes.python = 'loc=1 starts the count at 1.';
+    }
+    if (k === 'geometric') {
+      out.anylogic = 'geometric(' + N(p[0]) + ')';
+      out.notes.anylogic = 'AnyLogic counts trials up to and including the first success, starting at 1, as the fit does.';
+      out.notes.python = "SciPy's geom counts trials, starting at 1, as the fit does.";
+    }
+  }
   return out;
 }
 
@@ -6770,13 +6856,17 @@ function reproScripts(fit, x, seed, B, src) {
            c + ' rounded the same way before it is refitted, which gives it ties like yours.\n' +
            c + ' A rounded resample the fit cannot take (a 0, say) is skipped, as on the page.\n';
   }
-  var shiftNote = g ? '\n# This page fitted a location shift of ' + num(g) +
+  /* A count that starts at 1 is refitted to x - 1, which each snippet
+     computes right after reading the data, and so it needs no shift note. */
+  var s1 = !!fit.start1;
+  var shiftNote = g && !s1 ? '\n# This page fitted a location shift of ' + num(g) +
     '. The snippets below refit WITHOUT one,\n# so the parameters will differ; subtract the shift from x first to compare directly.' : '';
 
   /* ── R ─────────────────────────────────────────────────────────── */
   var rf = R_FIT[k];
   var xlit = dataLiteral(x, 'r');
-  var rdata = srcR + (xlit ? 'x <- ' + xlit : 'x <- read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button');
+  var rdata = srcR + (xlit ? 'x <- ' + xlit : 'x <- read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button') +
+    (s1 ? '\nx <- x - 1   # this page starts the count at 1: the family is fitted to x - 1' : '');
   if (rf) {
     var dR = 'd' + rf.p.slice(1);   /* pgamma -> dgamma, and so on */
     out.r =
@@ -6931,11 +7021,12 @@ function reproScripts(fit, x, seed, B, src) {
   var mlit = dataLiteral(x, 'matlab');
   var mdata = srcM + (mlit ? 'x = ' + mlit + "';"
                    : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button\n' +
-                     'x = x(:, 2);                                 % column 1 is the row index');
+                     'x = x(:, 2);                                 % column 1 is the row index') +
+    (s1 ? '\nx = x - 1;   % this page starts the count at 1: the family is fitted to x - 1' : '');
   if (names && names.ml) {
     out.matlab =
       '% Refit and re-test in MATLAB. Needs the Statistics and Machine Learning Toolbox.' +
-      (g ? '\n% This page fitted a location shift of ' + num(g) + '; fitdist has no shift, and so subtract it first.' : '') + '\n' +
+      (g && !s1 ? '\n% This page fitted a location shift of ' + num(g) + '; fitdist has no shift, and so subtract it first.' : '') + '\n' +
       mdata + '\n\n' +
       (k === 'binomial'
         ? "% fitdist has no fit for the number of trials, and so it is held at " + num(fit.p[0]) + ',\n' +
@@ -7083,7 +7174,8 @@ function reproScripts(fit, x, seed, B, src) {
   var plit = dataLiteral(x, 'python');
   var pdata = srcR + (plit ? 'x = ' + plit
                    : 'with open("input-analyzer-data.csv") as fh:   # use the CSV download button\n' +
-                     '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])');
+                     '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])') +
+    (s1 ? '\nx = x - 1   # this page starts the count at 1: the family is fitted to x - 1' : '');
   if (names && names.scipy && !isDisc) {
     /* floc pins the location where this page pinned it, and so scipy is
        solving the same optimization rather than a wider one. */
@@ -9069,6 +9161,16 @@ var SAMPLES = {
     5.36,6.41,2.71,4.47,3.91,2.75,4.11,2.32,4.91,2.92,3.94,4.88,4.45,3.89,3.07,4.55,3.41,5.28,
     3.36,4.02,1.93,3.87,2.52,2.95,4.62,5.6,2.94,3.48,5.7,3.21
   ] },
+  /* Recorded to the whole second, and so tied: the page reads these as
+     counts until Family is set to Continuous, which is the lesson. */
+  ivr: { name: "Phone menu times (whole seconds)",
+    unit: "seconds a caller spends in an automated phone menu, recorded to the whole second", v: [
+    13,5,7,15,10,8,6,11,6,9,7,7,5,12,13,9,6,12,11,7,8,9,12,9,6,10,12,9,12,6,
+    7,6,6,6,6,7,10,11,8,6,6,11,6,7,7,7,9,12,7,7,8,9,17,6,9,6,8,14,8,9,
+    10,9,8,6,12,6,10,9,7,12,10,9,7,12,6,13,6,5,8,8,7,8,12,6,8,7,8,11,11,8,
+    9,6,7,9,8,14,10,12,7,9,6,9,7,8,13,8,6,10,6,6,9,15,16,8,10,10,10,9,6,6,
+    7,6,7,12,12,9,16,14,7,11,10,12,11,6,9,8,13,18,9,7,9,8,7,8,8,16,10,8,8,15
+  ] },
   dem: { name: "Parts demand (counts)", unit: "parts requested per hour at a maintenance counter", v: [
     5,1,3,4,6,3,4,3,7,3,11,1,5,5,5,2,5,4,8,3,3,2,3,2,5,1,4,3,2,4,5,4,4,7,3,7,1,3,1,7,4,2,6,2,0,
     5,7,2,5,3,4,3,2,4,4,5,3,5,3,6,7,1,3,3,3,4,5,7,4,5,5,6,6,3,4,5,2,2,4,4,1,3,4,4,3,3,1,4,4,4,9,
@@ -9542,12 +9644,14 @@ var ST = {
   clockConv: 'ms',  /* how to read a duration written as clock time    */
   clockUnit: null,  /* the unit that reading produced, when one was used */
   freq: { mode: 'obs', out: null }, /* whether the column holds counts of outcomes,
-                       and which column (or -1, row order from 0) names them */
+                       and which column (or -1 and -2, row order from 0 and from 1) names them */
   genTruth: null,   /* what the generator last produced, for the readout */
   family: 'auto',
   shift: true,
   shiftAutoOff: false, /* the page, not the reader, turned the shift off */
   reflect: false,   /* fit each zero-based candidate as c - X instead */
+  floor0: true,     /* keep each shifted model at or above zero (gamma >= 0) */
+  start1: false,    /* start each count family at 1 instead of 0 */
   johnson: false,   /* add the two Johnson members to the continuous ranking */
   rankBy: 'aic',
   rows: [],         /* rankAll() output                                */
@@ -9858,7 +9962,7 @@ function freqExpand(t, col, outCol) {
         continue;
       }
     } else {
-      o = k++;
+      o = k++ + (outCol === -2 ? 1 : 0);
     }
     var key = String(o);
     if (seen[key] !== undefined) {
@@ -9942,6 +10046,9 @@ function freqAccept(cv, sourceLabel) {
   var o0 = document.createElement('option');
   o0.value = '-1'; o0.textContent = '0, 1, 2, … by row';
   sel.appendChild(o0);
+  var o1 = document.createElement('option');
+  o1.value = '-2'; o1.textContent = '1, 2, 3, … by row';
+  sel.appendChild(o1);
   sel.value = String(ST.freq.out);
 
   /* A built-in sample's description is of its observations, not of a
@@ -9961,8 +10068,9 @@ function freqAccept(cv, sourceLabel) {
     for (li = first + 1; li < last; li++) if (lines[li].trim() === '') gaps++;
     if (gaps) ex.error = gaps + ' blank line' + (gaps === 1 ? '' : 's') + ' inside the table';
   }
+  var byRow = ST.freq.out === -2 ? '1, 2, 3, …' : '0, 1, 2, …';
   if (ex.error && ST.freq.out < 0)
-    ex.error += '. Numbered 0, 1, 2, … by row, a missing count would shift every outcome after ' +
+    ex.error += '. Numbered ' + byRow + ' by row, a missing count would shift every outcome after ' +
                 'it; type 0 for an outcome never seen, or give the outcomes a column of their own';
   if (!ex.error && ex.values.length < 2) ex.error = 'the counts add up to fewer than 2 observations';
   if (ex.error) {
@@ -9972,7 +10080,7 @@ function freqAccept(cv, sourceLabel) {
     return null;
   }
   var whence = ST.freq.out >= 0 ? 'outcomes from column “' + t.names[ST.freq.out] + '”'
-                                : 'outcomes 0, 1, 2, … by row';
+                                : 'outcomes ' + byRow + ' by row';
   var bits = ['Read a frequency table of ' + ex.nOut + ' outcome' + (ex.nOut === 1 ? '' : 's') +
               ', ' + ex.values.length + ' observations', 'counts from column “' + t.names[col] + '”',
               whence];
@@ -10025,9 +10133,17 @@ function renderStats() {
   if (isCountData(s)) {
     msg = '<strong>These look like counts.</strong> Every value is a whole number at or above zero, ' +
       'and ' + s.nUnique + ' distinct values among ' + s.n + ' repeat the way counts do, and so ' +
-      '<em>Choose for me</em> fits the discrete candidates. If they are measurements recorded to ' +
-      'whole units instead, set <em>Family</em> to <em>Continuous</em>; continuous fits are a ' +
-      'reasonable approximation to counts once the counts get large.';
+      '<em>Choose for me</em> fits the discrete candidates. ' +
+      (s.min >= 2
+        ? 'The smallest value is ' + s.min + '. Counts with a large mean can have a floor like that, ' +
+          'and so can times with a fixed delay before their variable part begins. If these are times ' +
+          'or other measurements recorded to whole units, set <em>Family</em> to <em>Continuous</em> ' +
+          'and keep the location shift, which fits that delay.'
+        : 'If they are measurements recorded to whole units instead, set <em>Family</em> to ' +
+          '<em>Continuous</em>; continuous fits are a reasonable approximation to counts once the ' +
+          'counts get large.' +
+          (s.min === 1 ? ' None of the values is 0. If the count can never be 0 (the items in a ' +
+                         'batch, say), tick <em>Smallest possible value is 1</em>.' : ''));
   } else if (isFewValues(s)) {
     msg = '<strong>These look like a few distinct outcomes.</strong> The ' + s.n + ' observations take ' +
       'only ' + s.nUnique + ' distinct value' + (s.nUnique === 1 ? '' : 's') + ', each seen ' +
@@ -10305,6 +10421,8 @@ function activeFamily() {
 /* The histogram's bins: one per outcome under a discrete family, and
    otherwise the slider's count. */
 function binsFor(k) { return IA.makeBins(ST.x, k, activeFamily() === 'discrete'); }
+/* The two fit options as the core reads them. */
+function fitOpts() { return { floor0: ST.floor0, start1: ST.start1 }; }
 function activeKeys() {
   var fam = activeFamily();
   if (fam === 'discrete') return IA.DISCRETE_KEYS;
@@ -10313,7 +10431,9 @@ function activeKeys() {
 /* A fit option that cannot apply is grayed, as Arena grays its own menu
    entries that do not apply to the data, and its tip then says why. No
    discrete candidate is shifted, mirrored, or a Johnson member, and so
-   under the discrete family all three boxes have nothing to do. The shift
+   under the discrete family those boxes and the floor have nothing to do,
+   and no continuous candidate counts from 0, and so the start-at-1 box has
+   nothing to do under the continuous family. The shift
    is also grayed while the mirror image is on because a mirrored fit
    estimates its own end point. It is never grayed for the picked model:
    the box sets how every candidate is fitted, and section 3 says why the
@@ -10338,6 +10458,14 @@ function syncFitBoxes() {
     : ST.reflect ? 'The mirror image estimates its own end point, and so a shift has nothing to add while it is on.'
     : null);
   setBoxOff('reflect-wrap', 'reflect-chk', disc ? 'None of the discrete candidates is mirrored.' + toCont : null);
+  setBoxOff('floor-wrap', 'floor-chk',
+    disc ? 'None of the discrete candidates takes a shift.' + toCont
+    : ST.s && ST.s.min < 0 ? 'Some of your values are negative, and so a model that stays at or above zero cannot fit them.'
+    : ST.reflect ? 'A mirrored model runs down without limit, and so it cannot be kept at or above zero.'
+    : !ST.shift ? 'With no shift estimated, every candidate that starts at zero already stays at or above zero.'
+    : null);
+  setBoxOff('start1-wrap', 'start1-chk',
+    ST.s && !disc ? 'Only the discrete candidates count from 0. Set Family to Discrete to use it.' : null);
   setBoxOff('johnson-wrap', 'johnson-chk', disc ? 'Both Johnson members are continuous.' + toCont : null);
 }
 
@@ -10354,7 +10482,7 @@ function refitAll() {
   $('bins-val').textContent = String(k);
   ST.binK = k;
   ST.bins = binsFor(k);
-  ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+  ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect, fitOpts());
 
   /* Keep the reader's own choice across a refit; otherwise follow the
      leader under whichever criterion is selected. */
@@ -10762,11 +10890,16 @@ function renderFit() {
       (f.shiftHeld ? ' (held, and so not counted as a parameter)'
                    : (f.atBound ? ' (estimated by your largest observation)' : ' (estimated)')),
       'shift');
+  } else if (f.start1) {
+    add('start', '1', 'the smallest value the model can produce, set by <strong>Smallest possible value ' +
+      'is 1</strong>; the family counts from here, and the 1 is not an estimate', null);
   } else if (f.shift || (ST.shift && d.shiftable)) {
     add('γ &nbsp;<span class="p-what">shift</span>', fmt(f.shift, 5),
       'the smallest value the model can produce; everything else is measured from here' +
       (f.shiftHeld ? ' (held, and so not counted as a parameter)'
-                   : (f.atBound ? ' (estimated by your smallest observation)' : ' (estimated)')),
+       : f.floorBound ? ' (kept at 0 by <strong>Keep each model at or above zero</strong>, and so not ' +
+                        'counted as a parameter)'
+       : (f.atBound ? ' (estimated by your smallest observation)' : ' (estimated)')),
       'shift');
   }
   for (var i = 0; i < d.params.length; i++) {
@@ -10885,6 +11018,7 @@ function renderFit() {
       'search, where the curve already matches that limit closely. The ' +
       (toGamma ? 'gamma' : 'Pearson type V') + ' row fits the limit itself, with one parameter fewer.</div>';
   }
+  pin += belowZeroNote(r);
   if (r.noCriteria) {
     pin += '<div class="note quiet"><strong>Why this one is not scored.</strong> The empirical ' +
       'distribution is built from the data rather than fitted to them: it carries ' +
@@ -10907,6 +11041,25 @@ function renderFit() {
         '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + cards + '</div></div>' +
     '</div>' + pin;
   wireHoldControls();
+}
+/* How much of a continuous model falls below zero when none of the data
+   do. A simulation drawing from it would produce negative values about that
+   often, which for a time breaks the model it feeds. */
+function belowZeroNote(r) {
+  var f = r.fit, d = r.dist;
+  if (!ST.s || ST.s.min < 0 || d.kind === 'discrete' || r.noCriteria) return '';
+  var below = IA.fitCdf(f)(0);
+  if (!(below >= 1e-4)) return '';
+  var pct = below * 100;
+  var how = f.reflect
+    ? 'A mirrored model always runs below zero; use it only if that share is small enough to ignore.'
+    : ST.shift && d.shiftable && !ST.floor0
+      ? 'Tick <strong>Keep each model at or above zero</strong> to hold the shift at 0 or above.'
+      : 'A family that starts at zero, such as the gamma, lognormal, or Weibull, cannot do this.';
+  return '<div class="note"><strong>This model puts ' + fmt(pct, 2) + '% of its draws below zero.</strong> ' +
+    'None of your values is below zero, and a simulation drawing from this model would produce a ' +
+    'negative value about ' + (pct >= 1 ? 'once in every ' + Math.round(100 / pct) + ' draws'
+                                       : 'that often') + '. ' + how + '</div>';
 }
 function card(lbl, val) {
   return '<div class="sc"><div class="sc-lbl">' + lbl + '</div><div class="sc-val">' + val + '</div></div>';
@@ -11042,14 +11195,14 @@ function applyHolds() {
     holdPrev = null;
     ST.gof = null;
     ST.holdRefused = null;
-    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect, fitOpts());
     if (prev && prev.key === ST.pick && !pickedRow()) {
       var failed = ST.rows.filter(function (row) { return row.key === ST.pick; })[0];
       ST.holds[ST.pick] = prev.holds;
       ST.holdShift[ST.pick] = prev.shift;
       ST.holdRefused = { key: ST.pick, label: prev.label, value: prev.value,
                          msg: failed && failed.msg ? failed.msg : 'No fit is possible with it.' };
-      ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+      ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect, fitOpts());
     }
     renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
   }, 0);
@@ -11716,7 +11869,8 @@ function bootWorkerSource() {
     '  var m = e.data;\n' +
     '  var dist = DISTS[m.distKey];\n' +
     '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
-    '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false };\n' +
+    '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false,\n' +
+    '              floor0: m.floor0, start1: m.start1 };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
     '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue, m.grid);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
@@ -11768,6 +11922,7 @@ function startBootstrap() {
               obsD: obsD, obsA: obsA, fixed: f.fixed || null,
               obsChi: obsChi, binK: ST.bins.k, perValue: !!ST.bins.perValue,
               fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect,
+              floor0: !!f.floor0, start1: !!f.start1,
               grid: bootGrid(f) };
 
   function finish(res) {
@@ -11814,7 +11969,8 @@ function startBootstrap() {
    responsive even without a worker. */
 function runOnMainThread(msg, obsD, obsA, finish) {
   var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
-              fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false };
+              fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false,
+              floor0: msg.floor0, start1: msg.start1 };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
                             msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue, msg.grid);
   var chunk = Math.max(5, Math.round(msg.B / 80));
@@ -11851,6 +12007,7 @@ function fitSignature() {
   if (!r) return null;
   return [r.key, ST.shift, !!r.fit.reflect, ST.s.n, ST.seed, ST.B, r.fit.p.join(','),
           JSON.stringify(r.fit.fixed || null), r.fit.shiftHeld ? r.fit.shift : 'est',
+          ST.floor0 ? 'f' : '', ST.start1 ? 's' : '',
           ST.bins ? ST.bins.k : 0].join('|');
 }
 
@@ -16884,6 +17041,8 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.reflect = this.checked; ST.holdShift = {}; refitAll();
   });
   $('johnson-chk').addEventListener('change', function () { ST.johnson = this.checked; refitAll(); });
+  $('floor-chk').addEventListener('change', function () { ST.floor0 = this.checked; refitAll(); });
+  $('start1-chk').addEventListener('change', function () { ST.start1 = this.checked; refitAll(); });
   $('rank-by').addEventListener('change', function () {
     ST.rankBy = this.value;
     if (!ST.userPicked) { ST.pick = IA.bestBy(ST.rows, ST.rankBy) || ST.pick; }
@@ -16914,7 +17073,7 @@ document.addEventListener('DOMContentLoaded', function () {
     /* Square error is a function of the binning, and so the ranking is
        recomputed too -- and if the reader is sorting by square error, the
        order on screen can change under the slider. That is the lesson. */
-    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect);
+    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect, fitOpts());
     if (!ST.userPicked) ST.pick = IA.bestBy(ST.rows, ST.rankBy) || firstOk();
     /* The chi-square null was built on the old bin count, and so it no longer
        describes what is on screen. */
