@@ -6942,6 +6942,12 @@ function reproScripts(fit, x, seed, B, src) {
           (binHeld ? '% the value held on this page.\n' : '% the value this page estimated, which K still counts.\n')
         : '') +
       "pd = fitdist(x(:), '" + names.ml + "'" + mlArgs + ");\ndisp(pd)\n\n" +
+      (k === 'normal' || k === 'lognormal'
+        ? "% fitdist's sigma divides by n - 1, where maximum likelihood (and this page)\n" +
+          '% divides by n, and so sigma here is larger by sqrt(n/(n - 1)), and logL and D\n' +
+          '% differ slightly from the page\'s. The bootstrap p-value is unaffected,\n' +
+          '% because every resample is fitted the same way.\n\n'
+        : '') +
       '% Model selection by hand: refit with another family name and compare.\n' +
       '% The smaller AIC (or BIC) wins.\n' +
       'nll = negloglik(pd); K = ' + (k === 'binomial' ? (binHeld ? '1' : '2') : 'pd.NumParameters') + ';\n' +
