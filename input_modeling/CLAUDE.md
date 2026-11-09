@@ -132,7 +132,7 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      (`recordingGrid`, applied by `snapToGrid` inside `bootstrapRun`), and the R, MATLAB, and Python
      snippets do the same with a `rec` function, skipping a rounded resample their fitter refuses,
      as the page does. Without the rounding, the resamples have none of the data's ties, and on
-     data recorded to whole seconds with a spread of about ten seconds the bootstrap rejected a
+     data recorded to whole seconds with a spread of about ten seconds, the bootstrap rejected a
      correct shifted gamma 100% of the time; with it, the rejection rate is at or below nominal
      (section 16b of the verify measures both). The step is the fewest decimal places that write
      every value, grown to the gaps' common divisor only with at least `GRID_MIN_DISTINCT` (8)
@@ -143,7 +143,7 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      with a step, a shifted fit flagged degenerate falls back to a shift h/2 below the smallest
      value rather than 0.001 of the range below it: a block of tied values at the minimum is what
      makes the profile diverge there, and at the old fallback a coarse shifted lognormal (step about
-     0.6 of the SD) was rejected by its rounded bootstrap about half the time on correct models
+     0.6 of the SD) was rejected by its rounded bootstrap more than half the time on correct models
      (section 16b checks it). Above a step of `COARSE_STEP_SD` (0.5) of the SD, the tie note says
      the bootstrap p-values are approximate; at about 0.6, a correct shifted gamma was rejected up
      to about twice as often as nominal. Fitting to interval probabilities would remove the

@@ -821,10 +821,10 @@ footer a:hover { text-decoration: underline; }
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
       </label>
-      <label class="chk" id="floor-wrap" data-tip="Holds each candidate's shift γ at 0 or above, so that no model fitted to values that are never negative can produce a negative one. Turn it off to let a shift go below zero; the fit details then say how much of the model falls below zero." data-tip-press>
+      <label class="chk" id="floor-wrap" data-tip="Holds each candidate's shift γ at 0 or above so that no model fitted to values that are never negative can produce a negative one. Turn it off to let a shift go below zero; the fit details then say how much of the model falls below zero." data-tip-press>
         <input type="checkbox" id="floor-chk" checked autocomplete="off"> <span class="tip">Keep each model at or above zero</span>
       </label>
-      <label class="chk" id="start1-wrap" data-tip="For counts that can never be 0, such as the number of items in a batch: the Poisson, negative binomial, binomial, and geometric are each fitted as 1 plus a draw, so that they start at 1. The 1 is fixed, not estimated." data-tip-press>
+      <label class="chk" id="start1-wrap" data-tip="For counts that can never be 0, such as the number of items in a batch: the Poisson, negative binomial, binomial, and geometric are each fitted as 1 plus a draw so that they start at 1. The 1 is fixed, not estimated." data-tip-press>
         <input type="checkbox" id="start1-chk" autocomplete="off"> <span class="tip">Smallest possible value is 1</span>
       </label>
     </div>
@@ -4872,7 +4872,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
 
   /* A coarse geometric sweep over d in [dMin, hi] brackets the maximum, and
      golden-section refinement inside the bracket finds it. Returns the best
-     point, or a message when no shift gives a fit. */
+     point or a message when no shift gives a fit. */
   function search(hi) {
     var lg0 = Math.log(dMin), lg1 = Math.log(hi), best = -1, bestLL = -Infinity, i2;
     for (i2 = 0; i2 < gridN; i2++) {
@@ -4898,7 +4898,7 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   var fin = found.fin, dOpt = found.d;
 
   /* Kept at or above zero, gamma = min - d cannot go below 0. The search
-     above is the same with the option on or off, so that a shift already at
+     above is the same with the option on or off, and so a shift already at
      or above zero is untouched; one below zero is searched for again with d
      capped at the smallest value, where the best shift may be 0 itself. A
      smallest value of 0 leaves no room at all, and the fit is the unshifted
@@ -5470,7 +5470,7 @@ function recordingGrid(sorted) {
     var all = true;
     for (i = 0; i < n && all; i++) {
       var v = sorted[i] * sc;
-      /* Past 1e12 steps a double cannot hold the fraction being asked
+      /* Past 1e12 steps, a double cannot hold the fraction being asked
          about, and so the question has no answer. */
       if (!Number.isFinite(v) || Math.abs(v) > 1e12) return null;
       if (Math.abs(v - Math.round(v)) > 1e-6) all = false;
@@ -5493,7 +5493,7 @@ function recordingGrid(sorted) {
 }
 /* Rounds v to the nearest grid point. Writing the result back through
    toFixed keeps a value such as 0.30000000000000004 from creating a tie
-   that is not there, or failing to create one that is. */
+   that is not there or failing to create one that is. */
 function snapToGrid(v, grid) {
   var r = grid.off + Math.round((v - grid.off) / grid.h) * grid.h;
   return Math.abs(r) < 1e21 ? Number(r.toFixed(grid.dp)) : r;
@@ -7036,7 +7036,7 @@ function reproScripts(fit, x, seed, B, src) {
       (k === 'normal' || k === 'lognormal'
         ? "% fitdist's sigma divides by n - 1, where maximum likelihood (and this page)\n" +
           '% divides by n, and so sigma here is larger by sqrt(n/(n - 1)), and logL and D\n' +
-          '% differ slightly from the page\'s. The bootstrap p-value is unaffected,\n' +
+          '% differ slightly from the page\'s. The bootstrap p-value is unaffected\n' +
           '% because every resample is fitted the same way.\n\n'
         : '') +
       '% Model selection by hand: refit with another family name and compare.\n' +
@@ -11883,13 +11883,13 @@ function bootWorkerSource() {
     '};';
 }
 
-/* The step a continuous fit's resamples are rounded to, so that they are
-   tied the way the data are; null for a discrete fit, whose resamples are
+/* The step a continuous fit's resamples are rounded to, which ties them
+   the way the data are tied; null for a discrete fit, whose resamples are
    already on its outcomes, and for data on no grid. */
 /* Above this step, as a share of the data's standard deviation, the note
    under the tests says the bootstrap p-values are approximate. Measured on
    correct shifted fits to whole-unit data, the rounded bootstrap held near
-   its nominal 5% for every family up to about 0.45, and rejected up to about
+   its nominal 5% for every family up to about 0.45 and rejected up to about
    twice as often (a gamma of shape 2) at about 0.6. */
 var COARSE_STEP_SD = 0.5;
 function bootGrid(f) {
@@ -12110,7 +12110,7 @@ function renderGof() {
               'recorded to, before it is refitted, and so it has ties like yours.' +
               (coarse
                 ? ' <strong>That step is ' + fmt(stepSd, 2) + ' of your data\'s standard deviation, ' +
-                  'which is coarse.</strong> At that coarseness the bootstrap p-values are only ' +
+                  'which is coarse.</strong> At that coarseness, the bootstrap p-values are only ' +
                   'approximate, and a correct model can be rejected more often than the stated ' +
                   'level: about twice as often at a step of 0.6 of the standard deviation, in a ' +
                   'simulation check. Data recorded to a finer step would remove the problem.'
@@ -12128,7 +12128,7 @@ function renderGof() {
      check on it rather than a correction. Ties break the table on their
      own, held parameters or not. */
   var bootPrompt = ' Press <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> below to fill it in; with ' + n +
-    ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
+    ' observations and ' + ST.B.toLocaleString() + ' replications, it takes a few seconds because ' +
     'every resample is refitted from scratch, which is the whole point of it.';
   /* Ties the bootstrap reproduces: a discrete fit's own, or a step it rounds to. */
   var tiesKept = tied && (f.dist.kind === 'discrete' || !!tieGrid);
