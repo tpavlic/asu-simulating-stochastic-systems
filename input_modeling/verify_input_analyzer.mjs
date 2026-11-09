@@ -102,6 +102,10 @@ pending.boot = {};
 for (const [key, truth] of BOOT_FAMILIES)
   pending.boot[key] = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
     pool.run('bootCalib', { key, truth, n: 60, B: CALIB_B, from, to }))).then(sumCounts);
+pending.roundGrid = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true }))).then(sumCounts);
+pending.roundFull = Promise.all(chunks(40, 20).map(([from, to]) =>
+  pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: false }))).then(sumCounts);
 pool.start();
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1789,6 +1793,93 @@ section('16. bootstrap calibration under a true null');
     ok(a.pD === b.pD && a.pA === b.pA && a.critD === b.critD,
        'the same seed reproduces the same bootstrap p-values exactly');
     ok(a.pD !== c.pD || a.critD !== c.critD, 'a different seed gives a different bootstrap');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   16b. DATA RECORDED TO A STEP
+
+   Measurements recorded to a fixed step are tied, and ties push K-S and
+   A-D up. A bootstrap drawn at full precision has no ties, so it rejects
+   a correct model; rounding each resample to the data's own step puts it
+   right. The step itself is read off the data, and that reading must not
+   invent a coarse grid for a few irregular outcomes.
+   ══════════════════════════════════════════════════════════════════════ */
+section('16b. data recorded to a step');
+{
+  const grid = v => IA.recordingGrid(v.slice().sort((a, b) => a - b));
+  const same = (g, h, off) => g && g.h === h && g.off === off;
+  ok(same(grid([5, 6, 6, 7, 9, 12, 5]), 1, 0), 'whole numbers sit on a step of 1');
+  ok(same(grid([1.2, 3.4, 1.3, 2.0]), 0.1, 0), 'values to one decimal place sit on a step of 0.1');
+  ok(same(grid([10.3 - 5.1, 7.7 - 2.6, 3.3]), 0.1, 0),
+     'a difference of tenths, 5.200000000000001 in floating point, still reads as tenths');
+  ok(same(grid([1, 6, 11, 16, 21, 26, 31, 41, 6]), 5, 1), 'values 5 apart, starting at 1, sit on a step of 5 from 1');
+  ok(same(grid([1, 6, 11, 21, 6]), 1, 0), 'but four such values are too few to tell a step of 5 from a coincidence');
+  ok(same(grid([1.2, 3.4]), 0.1, 0), 'two values get their decimal step, not a step of their own difference');
+  ok(same(grid([2, 3.14, 6.75, 2, 3.14]), 0.01, 0),
+     'three irregular outcomes get their decimal step, 0.01, not the 0.19 they share by coincidence');
+  ok(grid([Math.PI, Math.E, 1.4142135623]) === null, 'full-precision values sit on no step');
+  ok(grid([1 / 60, 2 / 60, 5 / 60]) === null, 'seconds written as minutes sit on no decimal step');
+  ok(grid([4, 4, 4]) === null, 'a single repeated value has no spacing to read');
+  const g = grid([1.2, 3.4]);
+  ok([0.04999, 0.05, 1.3333, -0.06].map(v => IA.snapToGrid(v, g)).join(',') === '0,0.1,1.3,-0.1',
+     'rounding to a step of 0.1 lands on exact tenths');
+  const g5 = grid([1, 6, 11, 16, 21, 26, 31, 36]);
+  ok([3.4, 3.6, -1.2].map(v => IA.snapToGrid(v, g5)).join(',') === '1,6,1',
+     'rounding to a step of 5 from 1 lands on 1, 6, 11, ...');
+
+  /* A discrete fit's resamples are already on its outcomes, and so a grid
+     handed to its bootstrap is ignored. */
+  {
+    const u = IA.MRG32k3a(5150), x = [];
+    for (let i = 0; i < 80; i++) x.push(IA.DISTS.poisson.sample(u, [3]));
+    x.sort((a, b) => a - b);
+    const f = IA.fitDist(IA.DISTS.poisson, x, false, false), F = IA.fitCdf(f);
+    const run = IA.bootstrapRun(f, 80, 50, 9, false, IA.ksStat(x, F, IA.fitAtom(f)).D, IA.adStat(x, F),
+                                null, NaN, 0, null, false, false, IA.recordingGrid(x));
+    run.step(50);
+    ok(run.result().grid === null, 'a discrete fit\'s bootstrap does not round its resamples');
+  }
+
+  /* The measurement: 5 + gamma(2, 2) recorded to whole numbers, fitted
+     with the shift (jobs roundCalib). */
+  {
+    const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
+    const { rejD, rejA, used } = await pending.roundGrid;
+    const rD = rejD / used, rA = rejA / used;
+    ok(Math.abs(rD - 0.05) < band,
+       `whole-number data, resamples rounded: K-S rejects ${(100 * rD).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
+    ok(Math.abs(rA - 0.05) < band,
+       `whole-number data, resamples rounded: A-D rejects ${(100 * rA).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
+    const full = await pending.roundFull;
+    const fD = full.rejD / full.used, fA = full.rejA / full.used;
+    ok(fD > 0.5 && fA > 0.5,
+       `and drawn at full precision instead, they reject ${(100 * fD).toFixed(0)}% (K-S) and ` +
+       `${(100 * fA).toFixed(0)}% (A-D) of correct fits, which is the failure the rounding fixes`);
+  }
+
+  /* The exported snippets round their resamples the same way, only for a
+     continuous fit to data on a step. */
+  {
+    const u = IA.MRG32k3a(5151), xi = [], xf = [];
+    for (let i = 0; i < 120; i++) { const v = 5 + IA.DISTS.gamma.sample(u, [2, 2]); xi.push(Math.round(v)); xf.push(v); }
+    const si = IA.reproScripts(IA.fitDist(IA.DISTS.gamma, xi, false, false), xi, 1, 199);
+    ok(si.r.includes('rec <- function(v) round(v)') && si.r.includes('y <- rec(rgamma('),
+       'R rounds each resample to the whole numbers the data are recorded to', si.r);
+    ok(si.matlab.includes('rec = @(v) round(v);') && si.matlab.includes('y = rec(random(pd'),
+       'MATLAB rounds each resample the same way', si.matlab);
+    ok(si.python.includes('rec = lambda v: np.round(v)') && si.python.includes('y = rec(stats.gamma.rvs('),
+       'Python rounds each resample the same way', si.python);
+    ok(si.r.includes('usable resamples') && si.python.includes('usable resamples'),
+       'and each counts the resamples it could refit');
+    const sf = IA.reproScripts(IA.fitDist(IA.DISTS.gamma, xf, false, false), xf, 1, 199);
+    ok(!/rec[(<= ]/.test(sf.r + sf.matlab + sf.python), 'full-precision data get no rounding');
+    const xp = xi.map(v => v - 5);
+    const sp = IA.reproScripts(IA.fitDist(IA.DISTS.poisson, xp, false, false), xp, 1, 199);
+    ok(!/rec[(<= ]/.test(sp.r + sp.matlab + sp.python), 'a discrete fit gets no rounding');
+    const xt = xi.map(v => v / 10);
+    const st = IA.reproScripts(IA.fitDist(IA.DISTS.gamma, xt, false, false), xt, 1, 199);
+    ok(st.python.includes('rec = lambda v: np.round(v / 0.1) * 0.1'), 'a step of 0.1 is written out', st.python);
   }
 }
 

@@ -124,7 +124,19 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      Java statements and ternaries) and matched the expected moments. Simio has not run them, but
      its Reference Guide documents every function the Simio blocks call (`Math.If(test, value,
      otherwise)`, `Math.Floor`, `Math.Exp`, `Math.Log`, `Math.Abs`, `Math.Sqrt`, `Math.Min`, and
-     `Math.Max`) and an Assign step's rows running in order.)*
+     `Math.Max`) and an Assign step's rows running in order.*
+  8. *A continuous fit's bootstrap rounds each resample to the data's recording step
+     (`recordingGrid`, applied by `snapToGrid` inside `bootstrapRun`), and the R, MATLAB, and Python
+     snippets do the same with a `rec` function, skipping a rounded resample their fitter refuses,
+     as the page does. Without the rounding, the resamples have none of the data's ties, and on
+     data recorded to whole seconds with a spread of about ten seconds the bootstrap rejected a
+     correct shifted gamma 100% of the time; with it, the rejection rate is at or below nominal
+     (section 16b of the verify measures both). The step is the fewest decimal places that write
+     every value, grown to the gaps' common divisor only with at least `GRID_MIN_DISTINCT` (8)
+     distinct values two of which sit one step apart, and so a few irregular outcomes never get a
+     coincidental coarse step. Values on no decimal step (seconds written as minutes) get no grid,
+     and the tie note says the bootstrap cannot correct for their ties. The grid never enters the
+     choice of family: data that look discrete are fitted as discrete exactly as before.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

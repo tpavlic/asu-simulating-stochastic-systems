@@ -752,11 +752,10 @@ footer a:hover { text-decoration: underline; }
         <p>The <strong>recorded to</strong> setting rounds the values on the way out, which is what
         a stopwatch or a spreadsheet does to a real measurement. Generate at full precision and at
         one decimal place and compare the K–S statistic: rounding creates ties, and ties inflate
-        both K–S and Anderson–Darling. The bootstrap p-values beside them hold up anyway: the
-        resamples are drawn at full precision, without the rounding, and a calibration check shows
-        that realistic recording granularity barely moves them. Rounding coarse enough to matter
-        tends to break the fit itself first: rounding small positive values to whole numbers creates
-        zeros that no gamma, lognormal, or Weibull can absorb.</p>
+        both K–S and Anderson–Darling. The bootstrap p-values beside them hold up anyway because
+        each resample is rounded to the same step as the data before it is refitted. Rounding small
+        positive values to whole numbers also creates zeros, which a gamma, lognormal, or Weibull
+        can fit only with the location shift.</p>
         <p>The two <strong>Johnson</strong> entries sit under their own heading in the menu because
         they are fitted only on request (the box in section 2), never by default. That is what they
         are for here. Every other
@@ -967,7 +966,12 @@ footer a:hover { text-decoration: underline; }
       it is less sensitive, meaning it may tolerate larger deviations than the other two. However,
       with a large enough sample, all three tests tend to reject (see "Why a large sample rejects
       every distribution you try" below). To avoid inflated error rates, choose the test before
-      looking at the results, and commit to its result (regardless of what the other tests say).</div>
+      looking at the results, and commit to its result (regardless of what the other tests say).
+      <p style="margin:8px 0 0">Rounded measurements are a special case. Times recorded to the
+      nearest second are still a continuous quantity, and so they still call for a continuous
+      distribution, but the recording leaves many values tied. Ties make the table p-values of
+      K&ndash;S and A&ndash;D wrong. The bootstrap p-values stay valid because each resample is
+      rounded the same way as your data before it is refitted.</p></div>
 
     <div class="plot-wrap" style="margin-top:13px">
       <div style="flex:1 1 340px;min-width:0">
@@ -5267,21 +5271,33 @@ function adStat(sorted, F) {
    the +1 in both places keeps a p-value from ever being reported as
    exactly zero, which with B replications it cannot be known to be.
 
+   "Draw n values" has to mean drawn the way the data were. Measurements
+   recorded to a fixed step (whole seconds, tenths of a minute) are tied,
+   ties push both statistics up, and resamples drawn at full precision
+   have none, and so the data's statistic would sit above the whole null
+   distribution and a correct model would be rejected. With whole-second
+   data spread over about ten seconds, that happens nearly every time. A
+   continuous fit's resamples are therefore rounded to the data's own
+   step (`grid`, from recordingGrid below) before they are refitted. A
+   discrete fit's resamples are already on the outcomes, and so they are
+   left alone.
+
    This is written as a resumable chunk so the same code can drive a Web
    Worker (posting progress between chunks) or, when a page opened from
    file:// cannot construct one, a timer on the main thread. */
-function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift, reflect, perValue) {
+function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK, fixedShift, reflect, perValue, grid) {
   var u01 = MRG32k3a(seed);
   var dist = fit.dist;
   var geD = 0, geA = 0, geC = 0, done = 0, usedChi = 0;
   var nullD = [], nullA = [], nullC = [];
   var draw = fitSampler(fit, u01);
   var doChi = Number.isFinite(obsChi) && binK > 0;
+  var snap = grid && dist.kind !== 'discrete' ? grid : null;
 
   function step(count) {
     for (var b = 0; b < count && done < B; b++, done++) {
       var y = new Array(n), i;
-      for (i = 0; i < n; i++) y[i] = draw();
+      for (i = 0; i < n; i++) y[i] = snap ? snapToGrid(draw(), snap) : draw();
       y.sort(function (a, c) { return a - c; });
       /* Refitted exactly as the reader's own sample was, holds included.
          With every parameter held this is a no-op, and the null
@@ -5319,7 +5335,7 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
     nullA.sort(function (a, c) { return a - c; });
     nullC.sort(function (a, c) { return a - c; });
     return {
-      B: B, used: m, usedChi: usedChi, seed: seed,
+      B: B, used: m, usedChi: usedChi, seed: seed, grid: snap,
       pD: (1 + geD) / (m + 1), pA: (1 + geA) / (m + 1),
       pChi: doChi && usedChi ? (1 + geC) / (usedChi + 1) : NaN,
       critChi: usedChi ? nullC[Math.min(usedChi - 1, Math.floor(0.95 * usedChi))] : NaN,
@@ -5332,6 +5348,70 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
     };
   }
   return { step: step, result: result, total: B };
+}
+
+/* ── The recording step ────────────────────────────────────────────
+   Returns { h, off, dp } when every value lies on the grid off + k h, and
+   null otherwise. The step is found in two stages.
+
+   First the decimal places: the fewest, up to GRID_MAX_DP, that write
+   every value exactly, giving a step of 10^-dp. Full-precision values
+   need more and get no grid, and neither do values converted into a unit
+   that is not a power of ten (seconds written as minutes sit on a grid of
+   1/60, which no decimal step matches), whose bootstrap is drawn at full
+   precision as before.
+
+   Then the step grows to the greatest common divisor of the gaps between
+   distinct values, and so data recorded to the nearest 5 seconds get a
+   step of 5 -- but only when there are at least GRID_MIN_DISTINCT distinct
+   values and two of them sit exactly one such step apart. A handful of
+   values can share a divisor by coincidence (2, 3.14, and 6.75 all lie
+   on a grid of 0.19 that starts at 2, and any two values lie on a grid of
+   their own difference), and the resamples would then be rounded to a
+   step nobody recorded with. With seven or more gaps, a shared divisor
+   is a coincidence less than about 1% of the time. */
+var GRID_MAX_DP = 8;
+var GRID_MIN_DISTINCT = 8;
+function gcdInt(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { var t = a % b; a = b; b = t; }
+  return a;
+}
+function recordingGrid(sorted) {
+  var n = sorted.length, dp, i, sc = 1;
+  if (n < 2) return null;
+  for (dp = 0; dp <= GRID_MAX_DP; dp++) {
+    sc = Math.pow(10, dp);
+    var all = true;
+    for (i = 0; i < n && all; i++) {
+      var v = sorted[i] * sc;
+      /* Past 1e12 steps a double cannot hold the fraction being asked
+         about, and so the question has no answer. */
+      if (!Number.isFinite(v) || Math.abs(v) > 1e12) return null;
+      if (Math.abs(v - Math.round(v)) > 1e-6) all = false;
+    }
+    if (all) break;
+  }
+  if (dp > GRID_MAX_DP) return null;
+  var base = Math.round(sorted[0] * sc), prev = base, g = 0, minGap = Infinity, distinct = 1;
+  for (i = 1; i < n; i++) {
+    var k = Math.round(sorted[i] * sc);
+    if (k === prev) continue;
+    distinct++;
+    g = gcdInt(g, k - base);
+    if (k - prev < minGap) minGap = k - prev;
+    prev = k;
+  }
+  if (g === 0) return null;   /* a single distinct value has no spacing */
+  var step = distinct >= GRID_MIN_DISTINCT && minGap === g ? g : 1;
+  return { h: step / sc, off: (((base % step) + step) % step) / sc, dp: dp };
+}
+/* Rounds v to the nearest grid point. Writing the result back through
+   toFixed keeps a value such as 0.30000000000000004 from creating a tie
+   that is not there, or failing to create one that is. */
+function snapToGrid(v, grid) {
+  var r = grid.off + Math.round((v - grid.off) / grid.h) * grid.h;
+  return Math.abs(r) < 1e21 ? Number(r.toFixed(grid.dp)) : r;
 }
 
 /* The textbook critical value: the large-sample 0.05 point of the K-S
@@ -6655,6 +6735,23 @@ function reproScripts(fit, x, seed, B, src) {
   /* Tied values in continuous data (rounded measurements) make R's ks.test
      warn; the annotation below tells the reader the warning is expected. */
   var hasTies = new Set(x).size < n;
+  /* A continuous fit's resamples are rounded to the data's own step, as the
+     page's bootstrap rounds them; see bootstrapRun. */
+  var rg = isDisc ? null : recordingGrid(x.slice().sort(function (a, b) { return a - b; }));
+  function recBody(rnd) {
+    var u = rg.off ? '(v - ' + num(rg.off) + ')' : 'v';
+    var r = rg.h === 1 ? rnd + '(' + u + ')' : rnd + '(' + u + ' / ' + num(rg.h) + ') * ' + num(rg.h);
+    return rg.off ? num(rg.off) + ' + ' + r : r;
+  }
+  /* Rounding can put a resample value at 0, or below, where a family that
+     starts at zero cannot be fitted; such a resample is skipped, as the
+     page's own bootstrap skips it, and so the guarded loops below count
+     the usable ones. */
+  function recNote(c) {
+    return c + ' Your data are recorded to the nearest ' + num(rg.h) + ', and so each resample is\n' +
+           c + ' rounded the same way before it is refitted, which gives it ties like yours.\n' +
+           c + ' A rounded resample the fit cannot take (a 0, say) is skipped, as on the page.\n';
+  }
   var shiftNote = g ? '\n# This page fitted a location shift of ' + num(g) +
     '. The snippets below refit WITHOUT one,\n# so the parameters will differ; subtract the shift from x first to compare directly.' : '';
 
@@ -6683,6 +6780,7 @@ function reproScripts(fit, x, seed, B, src) {
           '# p-value, which assumes continuous data with fixed parameters; D itself is\n' +
           '# computed correctly, and the bootstrap comparison below stands.\n'
         : '') +
+      (!rf.discrete && rg ? recNote('#') + 'rec <- function(v) ' + recBody('round') + '\n' : '') +
       (rf.discrete
         ? '# ks.test also computes D as though the data were continuous (hence the\n' +
           '# ties warning it would print), and so D runs larger than the atom-aware D\n' +
@@ -6695,8 +6793,14 @@ function reproScripts(fit, x, seed, B, src) {
       'Dobs <- Dstat(x, f); print(Dobs)\n\n' +
       '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
       'set.seed(' + seed + '); B <- ' + B + '\n' +
-      'Db <- replicate(B, { y <- ' + rf.r + '(length(x), ' + rf.ra + '); Dstat(y, fit_one(y)) })\n' +
-      'cat("D =", Dobs, "  bootstrap p =", (1 + sum(Db >= Dobs)) / (B + 1), "\\n")\n' +
+      (!rf.discrete && rg
+        ? 'Db <- replicate(B, { y <- rec(' + rf.r + '(length(x), ' + rf.ra + '))\n' +
+          '                     tryCatch(Dstat(y, fit_one(y)), error = function(e) NA) })\n' +
+          'Db <- Db[!is.na(Db)]\n' +
+          'cat("D =", Dobs, "  bootstrap p =", (1 + sum(Db >= Dobs)) / (length(Db) + 1),\n' +
+          '    "  usable resamples =", length(Db), "\\n")\n'
+        : 'Db <- replicate(B, { y <- ' + rf.r + '(length(x), ' + rf.ra + '); Dstat(y, fit_one(y)) })\n' +
+          'cat("D =", Dobs, "  bootstrap p =", (1 + sum(Db >= Dobs)) / (B + 1), "\\n")\n') +
       '# R\'s generator is not this page\'s MRG32k3a, and so expect agreement to\n' +
       '# bootstrap noise (a few thousandths), not to the last digit.\n\n' +
       (rf.discrete
@@ -6843,11 +6947,21 @@ function reproScripts(fit, x, seed, B, src) {
           "    [~, ~, Db(b)] = kstest(y, 'CDF', pb);\n" +
           'end\n' +
           'warning(ws);\n'
-        : 'for b = 1:B\n' +
-          '    y = random(pd, numel(x), 1);\n' +
-          "    [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'" + mlArgs + "));\n" +
-          'end\n') +
-      "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));\n\n" +
+        : rg
+          ? recNote('%') + 'rec = @(v) ' + recBody('round') + ';\n' +
+            'for b = 1:B\n' +
+            '    y = rec(random(pd, numel(x), 1));\n' +
+            "    try, [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'" + mlArgs + "));\n" +
+            '    catch, Db(b) = NaN; end\n' +
+            'end\n' +
+            'Db = Db(~isnan(Db));\n'
+          : 'for b = 1:B\n' +
+            '    y = random(pd, numel(x), 1);\n' +
+            "    [~, ~, Db(b)] = kstest(y, 'CDF', fitdist(y, '" + names.ml + "'" + mlArgs + "));\n" +
+            'end\n') +
+      (rg && !isDisc
+        ? "fprintf('D = %.5f   bootstrap p = %.4f   usable resamples = %d\\n', D, (1 + sum(Db >= D)) / (numel(Db) + 1), numel(Db));\n\n"
+        : "fprintf('D = %.5f   bootstrap p = %.4f\\n', D, (1 + sum(Db >= D)) / (B + 1));\n\n") +
       (isDisc
         ? '% The page\'s two main figures, in editable form. The data are counts, and\n' +
           '% so the model is a pmf drawn at the whole numbers, not a smooth curve.\n' +
@@ -6970,12 +7084,25 @@ function reproScripts(fit, x, seed, B, src) {
       '# kstest\'s p-value here assumes fixed parameters and is too large.\n' +
       "D = stats.kstest(x, '" + names.scipy + "', args=D_ARGS).statistic\n\n" +
       '# Parametric bootstrap: resample from the fit, REFIT each resample.\n' +
-      'rng = np.random.default_rng(' + seed + ')\nB = ' + B + '\nDb = np.empty(B)\n' +
-      'for b in range(B):\n' +
-      '    y = stats.' + names.scipy + '.rvs(*D_ARGS, size=x.size, random_state=rng)\n' +
-      '    ab = stats.' + names.scipy + '.fit(y' + flocArg + ')\n' +
-      "    Db[b] = stats.kstest(y, '" + names.scipy + "', args=ab).statistic\n" +
-      'print(f"D = {D:.5f}   bootstrap p = {(1 + (Db >= D).sum()) / (B + 1):.4f}")\n' +
+      (rg
+        ? recNote('#') + 'rec = lambda v: ' + recBody('np.round') + '\n' +
+          'rng = np.random.default_rng(' + seed + ')\nB = ' + B + '\nDb = np.full(B, np.nan)\n' +
+          'for b in range(B):\n' +
+          '    y = rec(stats.' + names.scipy + '.rvs(*D_ARGS, size=x.size, random_state=rng))\n' +
+          '    with np.errstate(all="ignore"):\n' +
+          '        try:\n' +
+          '            ab = stats.' + names.scipy + '.fit(y' + flocArg + ')\n' +
+          "            Db[b] = stats.kstest(y, '" + names.scipy + "', args=ab).statistic\n" +
+          '        except (ValueError, RuntimeError, FloatingPointError):\n' +
+          '            pass\n' +
+          'Db = Db[np.isfinite(Db)]\n' +
+          'print(f"D = {D:.5f}   bootstrap p = {(1 + (Db >= D).sum()) / (Db.size + 1):.4f}   usable resamples = {Db.size}")\n'
+        : 'rng = np.random.default_rng(' + seed + ')\nB = ' + B + '\nDb = np.empty(B)\n' +
+          'for b in range(B):\n' +
+          '    y = stats.' + names.scipy + '.rvs(*D_ARGS, size=x.size, random_state=rng)\n' +
+          '    ab = stats.' + names.scipy + '.fit(y' + flocArg + ')\n' +
+          "    Db[b] = stats.kstest(y, '" + names.scipy + "', args=ab).statistic\n" +
+          'print(f"D = {D:.5f}   bootstrap p = {(1 + (Db >= D).sum()) / (B + 1):.4f}")\n') +
       "# NumPy's generator is not this page's MRG32k3a, and so expect agreement to\n" +
       '# bootstrap noise, not to the last digit.\n\n' +
       '# The page\'s two main figures, in editable form.\n' +
@@ -8836,7 +8963,7 @@ var IA = {
   ksStat: ksStat, fitAtom: fitAtom, adStat: adStat, ksTableCritical: ksTableCritical,
   ksQ: ksQ, ksPvalueClassical: ksPvalueClassical,
   adInf: adInf, adPvalueClassical: adPvalueClassical, AD_TABLE: AD_TABLE,
-  bootstrapRun: bootstrapRun,
+  bootstrapRun: bootstrapRun, recordingGrid: recordingGrid, snapToGrid: snapToGrid,
   GEN_SPEC: GEN_SPEC, GEN_KEYS: GEN_KEYS,
   validateGenParams: validateGenParams, generateSample: generateSample,
   rankAll: rankAll, sortRows: sortRows, bestBy: bestBy,
@@ -11566,7 +11693,7 @@ function bootWorkerSource() {
     '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
     '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
-    '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue);\n' +
+    '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue, m.grid);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
     '  var done = 0;\n' +
     '  while (done < m.B) {\n' +
@@ -11575,6 +11702,13 @@ function bootWorkerSource() {
     '  }\n' +
     '  self.postMessage({ type: "done", result: run.result() });\n' +
     '};';
+}
+
+/* The step a continuous fit's resamples are rounded to, so that they are
+   tied the way the data are; null for a discrete fit, whose resamples are
+   already on its outcomes, and for data on no grid. */
+function bootGrid(f) {
+  return f.dist.kind === 'discrete' ? null : IA.recordingGrid(ST.s.sorted);
 }
 
 function startBootstrap() {
@@ -11602,7 +11736,8 @@ function startBootstrap() {
               B: ST.B, seed: seed, useShift: ST.shift && f.dist.shiftable,
               obsD: obsD, obsA: obsA, fixed: f.fixed || null,
               obsChi: obsChi, binK: ST.bins.k, perValue: !!ST.bins.perValue,
-              fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect };
+              fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect,
+              grid: bootGrid(f) };
 
   function finish(res) {
     BOOT.running = false;
@@ -11650,7 +11785,7 @@ function runOnMainThread(msg, obsD, obsA, finish) {
   var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
               fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
-                            msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue);
+                            msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue, msg.grid);
   var chunk = Math.max(5, Math.round(msg.B / 80));
   function tick() {
     if (BOOT.canceled) { finish(null); return; }
@@ -11766,25 +11901,50 @@ function renderGof() {
 
   /* The tie caveat has to come before the numbers, not after them. */
   var tied = ST.s.nUnique < ST.s.n * 0.5 || f.dist.kind === 'discrete';
+  var tieGrid = bootGrid(f);
   var tieNote = tied
     ? '<div class="note quiet" style="margin-top:8px"><strong>' + (f.dist.kind === 'discrete'
         ? 'This is a discrete fit, and ties are unavoidable.'
         : 'Your data have many repeated values (' + ST.s.nUnique + ' distinct out of ' + ST.s.n +
           '), and they were almost certainly rounded when they were recorded.') +
-      '</strong> Both statistics are built for continuous data with no ties, and ties push them up; ' +
-      'neither the usual rules of thumb nor the table column applies here. ' +
+      '</strong> ' +
       (f.dist.kind === 'discrete'
-        ? 'The bootstrap column is unaffected: every resample is drawn from the discrete fit and ' +
-          'is just as tied. Read that one.'
-        : 'The bootstrap column is still the one to read. Its resamples are drawn at full ' +
-          'precision, and so they do not reproduce the ties, but a calibration check shows that ' +
-          'a realistic recording granularity barely moves the bootstrap p-value.') + '</div>'
+        ? 'The published tables for both statistics assume a continuous distribution with no ties, ' +
+          'and so the table column does not apply here. The bootstrap column is unaffected: every ' +
+          'resample is drawn from the discrete fit and is just as tied. Read that one.'
+        : 'Both statistics are built for continuous data with no ties, and ties push them up; ' +
+          'neither the usual rules of thumb nor the table column applies here. ' +
+          (tieGrid
+            ? 'The bootstrap column is still the one to read: each resample is rounded to the ' +
+              'nearest <span class="mono">' + IA.num(tieGrid.h) + '</span>, the step your data are ' +
+              'recorded to, before it is refitted, and so it has ties like yours.'
+            : 'The bootstrap column cannot correct for this. Your values do not sit on a decimal ' +
+              'step, and so its resamples are drawn at full precision and are not tied the way your ' +
+              'data are, which makes its p-value too small where the rounding is coarse. If the ' +
+              'values were converted from the unit they were recorded in, analyze them in that unit ' +
+              'instead.')) + '</div>'
     : '';
 
-  /* Which column to read depends on whether anything was estimated: with
-     every parameter held at a typed value, the table's assumption holds,
-     and the bootstrap becomes a check on it rather than a correction. */
-  var explain = f.k === 0
+  /* Which column to read depends on whether anything was estimated and on
+     whether the data are tied. With every parameter held at a typed value
+     and no ties, the table's assumptions hold, and the bootstrap becomes a
+     check on it rather than a correction. Ties break the table on their
+     own, held parameters or not. */
+  var bootPrompt = ' Press <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> below to fill it in; with ' + n +
+    ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
+    'every resample is refitted from scratch, which is the whole point of it.';
+  /* Ties the bootstrap reproduces: a discrete fit's own, or a step it rounds to. */
+  var tiesKept = tied && (f.dist.kind === 'discrete' || !!tieGrid);
+  var explain = f.k === 0 && tied
+    ? '<div class="hint" style="margin-top:9px"><strong>Read the bootstrap column, not the table ' +
+      'column.</strong> Every parameter is held at a value you chose, and so nothing was estimated ' +
+      'from this sample, which is one thing the published tables assume. They also assume no ties. ' +
+      'Your data have ties, and so the table column is still wrong. ' +
+      (tiesKept ? 'The <em>bootstrap</em> column is drawn with the same kind of ties as your data.'
+                : 'The <em>bootstrap</em> column cannot correct for them either, as the note above ' +
+                  'explains: with every parameter held and no ties in its resamples, it estimates ' +
+                  'the same distribution the table does.') + (res ? '' : bootPrompt) + '</div>'
+    : f.k === 0
     ? '<div class="hint" style="margin-top:9px"><strong>Here the table column is the right one.' +
       '</strong> Every parameter is held at a value you chose, and so nothing was estimated from ' +
       'this sample, which is exactly what the published tables assume. The <em>bootstrap</em> ' +
@@ -11798,11 +11958,9 @@ function renderGof() {
       'sample, which pulls the fitted curve toward your data and makes both statistics smaller than ' +
       'that assumption expects, and so the table column runs too <em>large</em>, and a test built on it ' +
       'accepts fits it should reject. The <em>bootstrap</em> column estimates the right distribution ' +
-      'for the fit you actually performed. <strong>Because the parameters were estimated from your ' +
-      'data, read the bootstrap column, not the table column.</strong>' +
-      (res ? '' : ' Press <button type=\"button\" class=\"run-boot-link\">Run the bootstrap</button> below to fill it in; with ' + n +
-        ' observations and ' + ST.B.toLocaleString() + ' replications it takes a few seconds because ' +
-        'every resample is refitted from scratch, which is the whole point of it.') +
+      'for the fit you actually performed' + (tiesKept ? ', ties included' : '') + '. <strong>Because the ' +
+      'parameters were estimated from your data' + (tiesKept ? ', and because your data have ties' : '') +
+      ', read the bootstrap column, not the table column.</strong>' + (res ? '' : bootPrompt) +
       '</div>';
 
   var verdict = '';
@@ -11818,7 +11976,9 @@ function renderGof() {
           'the misfit sits in a tail, which A–D weights more heavily. '
         : '') +
       'Seed ' + ST.seed + ', ' + res.used.toLocaleString() + ' usable replications of ' +
-      res.B.toLocaleString() + (res.mainThread ? ', run on the main thread because this browser ' +
+      res.B.toLocaleString() + (res.grid ? ', each rounded to the nearest <span class="mono">' +
+      IA.num(res.grid.h) + '</span> as your data are' : '') +
+      (res.mainThread ? ', run on the main thread because this browser ' +
       'would not build a worker from a local file' : '') + '.</div>' +
       '<div class="note">' + critCompare(n, tableCrit, res.critD, D) + '</div>';
   }
