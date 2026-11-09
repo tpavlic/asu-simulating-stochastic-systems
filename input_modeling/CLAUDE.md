@@ -66,10 +66,13 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      `IA_CALIB_B` shorten the slow calibration sections.*
   3. *Two parameter counts are deliberate and must not be collapsed into one. `fit.k` counts every
      quantity estimated from the data and drives AIC and BIC; `regularCount(fit)` excludes
-     parameters that are extreme order statistics -- a uniform's endpoints, a beta's interval, a
-     shift that converged onto the sample minimum -- and is what the chi-square degrees of freedom
+     parameters that are extreme order statistics -- a uniform's endpoints, a beta's interval -- and
+     an estimated location shift wherever it lands, and is what the chi-square degrees of freedom
      subtract. The verification measures both: on uniform data the order-statistic count rejects at
-     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%. A fit can also name its
+     4.0% against a nominal 5%, and subtracting everything rejects at 11.5%. The shift was once
+     subtracted when it landed inside the range, but under a true null at n = 100 and 300, across
+     every shiftable family, that rejected 6.5% to 16.8% of correct shifted fits, and leaving it out
+     rejected 3.5% to 6.9%; the verify measures it on a shifted gamma. A fit can also name its
      own order-statistic parameters in `fit.orderStat`, which `regularCount` reads before the
      family's `orderStat`: the binomial's n is one when it lands on the largest count. The negative
      binomial and the binomial report their Poisson limit as `edge: 'poisson'` (variance not above,

@@ -156,6 +156,25 @@ export const JOBS = {
     return { rejPage, rejNaive, used };
   },
 
+  /* Section 15g: the table chi-square on correct shifted gammas, with the
+     page's df (shift left out) and with the shift subtracted too,
+     replications [from, to). */
+  chiShift(IA, { from, to, n, K }) {
+    let rejPage = 0, rejSub = 0, used = 0;
+    for (let rep = from; rep < to; rep++) {
+      const u = IA.MRG32k3a(1300000 + rep), x = [];
+      for (let i = 0; i < n; i++) x.push(5 + IA.DISTS.gamma.sample(u, [2, 2]));
+      const f = IA.fitDist(IA.DISTS.gamma, x, true, false);
+      if (!f.ok) continue;
+      const c = IA.chiSquareGOF(x, f, IA.makeBins(x, K));
+      if (!(c.df >= 2) || !Number.isFinite(c.stat)) continue;
+      used++;
+      if (c.p < 0.05) rejPage++;
+      if (IA.gammaQ((c.df - 1) / 2, c.stat / 2) < 0.05) rejSub++;
+    }
+    return { rejPage, rejSub, used };
+  },
+
   /* Section 15g, second measurement: the bootstrap chi-square under a
      true gamma null, replications [from, to). */
   chiBoot(IA, { from, to, n, K, B }) {

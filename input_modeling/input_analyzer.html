@@ -1046,7 +1046,10 @@ footer a:hover { text-decoration: underline; }
         <code>1/&radic;n</code>, and so asymptotically it behaves like a constant that was known all
         along and absorbs none of the discrepancy the correction exists to account for. Subtracting
         for it would throw away power for nothing; the degrees of freedom therefore count only the
-        <em>regular</em> parameters. AIC and BIC keep the full count because their penalty
+        <em>regular</em> parameters. An estimated location shift is left out too, wherever it
+        lands: it marks the edge of the distribution, and when the test is run on correct shifted
+        fits, subtracting it makes the test reject as much as three times as often as it should.
+        AIC and BIC keep the full count because their penalty
         measures complexity rather than correcting a distribution, and a number read off the data
         was still estimated from the data however fast it converged.</p>
         <p><strong>And the correction is exact only when the parameters were estimated from the
@@ -4920,6 +4923,14 @@ function fitLo(fit) { return fit.reflect ? -Infinity : fit.shift + fit.dist.lo(f
    lowers the test's power with nothing gained. kChi therefore counts only the
    regular parameters.
 
+   An estimated location shift is left out too, wherever it lands. It marks
+   the edge of the distribution's support, and an edge estimate absorbs far
+   less of the discrepancy than an ordinary parameter does, even when it
+   falls inside the range rather than on the minimum. Measured under a true
+   null at n = 100 and 300, across every shiftable family, subtracting it
+   rejected 6.5% to 16.8% of correct shifted fits, and leaving it out
+   rejected 3.5% to 6.9%.
+
    AIC and BIC keep the full count. Their penalty grows with
    complexity, and a number read off the data was estimated from them,
    however fast it converged. Strictly, the AIC expansion assumes
@@ -4951,9 +4962,8 @@ function regularCount(fit) {
     if (os.indexOf(i) >= 0) continue;                                                /* order statistic */
     n++;
   }
-  /* A shift that converged onto the smallest observation is an order
-     statistic too; one found in the interior of the range is not. */
-  if (fit.shift && !fit.shiftHeld && !fit.atBound) n++;
+  /* An estimated shift (or a mirror image's end point) is never counted;
+     see ORDER_STAT_NOTE above. */
   return n;
 }
 
@@ -11628,8 +11638,9 @@ function renderChi() {
       'estimated from the data.' +
       (chi.kChi !== r.fit.k
         ? ' ' + (r.fit.k - chi.kChi) + ' of this fit\'s ' + r.fit.k + ' estimated ' +
-          'quantities do not appear in that subtraction: they are extreme order statistics, and ' +
-          'they absorb none of the discrepancy the subtraction exists to correct. The note below ' +
+          'quantities do not appear in that subtraction: they are extreme order statistics or the ' +
+          'location shift, and they absorb little or none of the discrepancy the subtraction exists ' +
+          'to correct. The note below ' +
           'explains why, and the bootstrap ' +
           'column checks it.'
         : '') +
@@ -13308,7 +13319,7 @@ function csvGof() {
                'df = groups - 1 - regular parameters. ' + ST.bins.k + ' histogram bins pooled into ' +
                chi.nGroups + ' groups so every expected count reaches ' + chi.minExpected +
                '. ' + chi.kChi + ' of the ' + r.fit.k + ' estimated quantities are subtracted; ' +
-               'any others are extreme order statistics, which cost no degrees of freedom.']);
+               'any others are extreme order statistics or the location shift, which cost no degrees of freedom.']);
   }
   rows.push(['Kolmogorov-Smirnov', IA.num(D, 8), '',
              IA.num(IA.ksPvalueClassical(D, n), 6),

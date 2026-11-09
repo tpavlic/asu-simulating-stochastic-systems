@@ -96,6 +96,8 @@ pending.genRefit = Promise.all(IA.GEN_KEYS.map(key => pool.run('genRefit', { key
 pending.mirror = Promise.all(IA.CONTINUOUS_KEYS.map(key => pool.run('mirrorKey', { key })));
 pending.chiDf = Promise.all(chunks(1200, 150).map(([from, to]) =>
   pool.run('chiDf', { from, to, n: 200, K: 8 }))).then(sumCounts);
+pending.chiShift = Promise.all(chunks(2000, 250).map(([from, to]) =>
+  pool.run('chiShift', { from, to, n: 100, K: 8 }))).then(sumCounts);
 pending.chiBoot = Promise.all(chunks(250, 20).map(([from, to]) =>
   pool.run('chiBoot', { from, to, n: 150, K: 8, B: 300 }))).then(sumCounts);
 pending.boot = {};
@@ -1577,6 +1579,25 @@ section('15g. chi-square degrees of freedom');
     const f = IA.fitDist(IA.DISTS.gamma, x0, false, false, [2.5, null]);
     const c = IA.chiSquareGOF(x0, f, b0);
     ok(c.kChi === 1, `a held parameter is not estimated, so kChi drops to ${c.kChi}`);
+  }
+  {
+    const xs = x0.map(v => v + 5);
+    const f = IA.fitDist(IA.DISTS.gamma, xs, true, false);
+    const c = IA.chiSquareGOF(xs, f, IA.makeBins(xs, 10));
+    ok(!f.atBound && f.k === 3 && c.kChi === 2,
+      `shifted gamma: the shift lands inside the range, k = ${f.k}, and kChi = ${c.kChi} leaves it out`);
+  }
+
+  /* An estimated shift, inside the range or not, is left out of the df.
+     Correct shifted gammas, n = 100 in 8 bins (job chiShift); subtracting
+     the shift is measured beside it. */
+  {
+    const { rejPage, rejSub, used } = await pending.chiShift;
+    const rP = rejPage / used, rS = rejSub / used, se = Math.sqrt(0.05 * 0.95 / used);
+    ok(Math.abs(rP - 0.05) < 4 * se + 0.01,
+      `shifted gamma: the table chi-square rejects ${(100 * rP).toFixed(1)}% of correct fits (nominal 5%, ${used} reps)`);
+    ok(rS > rP + 0.03,
+      `and subtracting the shift as well would reject ${(100 * rS).toFixed(1)}%`);
   }
 
   /* The measurement. Uniform data, uniform fit: the endpoints are order
