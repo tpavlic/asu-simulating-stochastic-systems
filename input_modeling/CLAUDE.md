@@ -150,9 +150,10 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      replaces these fits on coarse data.*
   9. *`fitDist`'s eighth argument, `opts`, carries the fit options that `rankAll` passes; every
      fit records in `fit.opts` the ones that applied to it (holding and cutting only where no
-     value is negative), and `bootstrapRun` refits every resample under them. `floor0` ("Keep each
-     model at or above zero", on by default) caps the shift search at γ = 0 when no value is
-     negative; a fit stopped there is `floorBound`, the unshifted model, with the shift not counted
+     value is negative), and `bootstrapRun` refits every resample under them. "Keep models at or
+     above zero" (`#zero-pick`, `ST.zero`) chooses among no, by holding each start at 0 or above
+     (the default, `floor0`), and by cutting each off at zero (`cut0` as well). `floor0` caps the
+     shift search at γ = 0 when no value is negative; a fit stopped there is `floorBound`, the unshifted model, with the shift not counted
      in k. It also holds the minimum of a family that has one (`minParam`: the triangular, PERT,
      beta, and Johnson S_B) at or above 0 (`floorMinFit`, `floorParam`, counted nowhere). `cut0`
      is item 11. `start1`
@@ -214,7 +215,12 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      can peak below 0; it recovered a normal(−2, 2) cut at 0 and never reached the limit. A fit at
      its limit is `cutLimit`. In the default mode (`floor0` alone), a family that cannot produce
      an exact 0 in the data once its start or minimum is held at 0 is cut instead of failing
-     (`cutForZero`), and its bootstrap refits with the cut too. Section 16e of the verify checks
+     (`cutForZero`), and its bootstrap refits with the cut too. The fit card's `cutNote` says what
+     was cut and why, that the parameters describe the model before the cut, when a fit stopped at
+     its limit, that a shifted family's start is placed only loosely, and, when the data hold an
+     exact 0 that a resample would rarely reproduce, that the A–D p-value runs low; the table labels
+     a row cut for an exact 0 or stopped at its limit, and `derivedRows` gives a cut model's own
+     mean and median. Section 16e of the verify checks
      the cut functions against each other and the truncated normal's closed forms, the limits,
      the minimum hold, exact zeros, ranges, the mirror image, and the bootstrap's calibration (a
      cut normal and a cut gamma at 4.0% to 5.5%, and data recorded to 0.1 with exact zeros in the

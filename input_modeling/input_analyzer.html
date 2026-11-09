@@ -173,7 +173,8 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 /* .chk is nowrap, which is right for a two-word label and wrong for this
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
-#shift-wrap, #reflect-wrap, #floor-wrap, #start1-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
+#shift-wrap, #reflect-wrap, #start1-wrap, #johnson-wrap { white-space: normal; align-items: flex-start; }
+.ctrl-grp.off { opacity: .5; }
 .ctrl-row.ctrl-stack { flex-direction: column; align-items: flex-start; gap: 4px; }
 /* The bar sits under the disagreement notes, which end flush, and so it
    carries its own gap above; its one-line label is centered on the select
@@ -181,7 +182,7 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
 .ctrl-row.tbl-bar { margin: 14px 0 6px; }
 .tbl-bar #johnson-wrap { align-items: center; }
 .tbl-bar .tbl-bar-end { margin-left: auto; }
-#shift-wrap input, #reflect-wrap input, #floor-wrap input, #start1-wrap input, #johnson-wrap input { margin-top: .2em; }
+#shift-wrap input, #reflect-wrap input, #start1-wrap input, #johnson-wrap input { margin-top: .2em; }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible,
 a:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -832,9 +833,14 @@ footer a:hover { text-decoration: underline; }
       <label class="chk" id="reflect-wrap" data-tip="For data with a long left tail: each candidate that starts at zero is fitted as c − X, flipped to end at a right end c that is estimated inside its own fit" data-tip-press>
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
       </label>
-      <label class="chk" id="floor-wrap" data-tip="Holds each candidate's shift γ at 0 or above so that no model fitted to values that are never negative can produce a negative one. Turn it off to let a shift go below zero; the fit details then say how much of the model falls below zero." data-tip-press>
-        <input type="checkbox" id="floor-chk" checked autocomplete="off"> <span class="tip">Keep each model at or above zero</span>
-      </label>
+      <span class="ctrl-grp" id="zero-grp">
+        <label class="ctrl-lbl" for="zero-pick"><span class="tip" tabindex="0" id="zero-tip" data-tip="For values that are never negative, such as times. Holding each start at 0 or above keeps a shifted candidate from starting below zero and the triangular, PERT, beta, and Johnson Sᵦ from reaching below it; the normal and Johnson Sᵤ have no start to hold. Cutting each off at zero lets a candidate start or reach below 0 and removes the part below 0, which keeps every candidate at or above zero and allows a density that is above zero at 0 itself. Choose no to fit each candidate without either.">Keep models at or above zero</span></label>
+        <select id="zero-pick" autocomplete="off">
+          <option value="allow">no</option>
+          <option value="hold" selected>by holding each start at 0 or above</option>
+          <option value="cut">by cutting each off at zero</option>
+        </select>
+      </span>
       <label class="chk" id="start1-wrap" data-tip="For counts that can never be 0, such as the number of items in a batch: the Poisson, negative binomial, binomial, and geometric are each fitted as 1 plus a draw so that they start at 1. The 1 is fixed, not estimated." data-tip-press>
         <input type="checkbox" id="start1-chk" autocomplete="off"> <span class="tip">Smallest possible value is 1</span>
       </label>
@@ -7514,8 +7520,8 @@ function rangeScripts(fit, x, seed, B, src) {
                ? ', the whole number this page chose; K still counts it.' : ', as on the page.'));
     }
     if (hasS && fit.shiftHeld) L.push(c + ' The ' + (refl ? 'end c' : 'shift') + ' is held at ' + num(fit.shift) + ', as on the page.');
-    if (hasS && fit.floorBound) L.push(c + ' The shift is held at 0 by "Keep each model at or above zero", and K does not count it.');
-    if (floor0) L.push(c + ' "Keep each model at or above zero" is on, and so the shift may not go below 0.');
+    if (hasS && fit.floorBound) L.push(c + ' The shift is held at 0 by "Keep models at or above zero", and K does not count it.');
+    if (floor0) L.push(c + ' "Keep models at or above zero" holds each start at 0 or above, and so the shift may not go below 0.');
     return L.length ? L.join('\n') + '\n' : '';
   };
   /* The recording, as each language rounds a resample. */
@@ -8581,18 +8587,29 @@ function breuschPagan(x, resid) {
    every family that has one, and otherwise the average of the quantile
    function over (0, 1), which is the mean of any distribution. Infinite
    where the family's mean does not exist at the fitted shape. A cut model's
-   mean is the average of the whole model's quantile over the part kept,
-   (m, 1) with m = F(cut), taken by the midpoint rule in t with
-   u = 1 - (1 - m) t^2, whose factor 2t tames the right tail where Q(u)
-   runs off to infinity; it is infinite where the whole model's is. */
+   mean is the whole model's mean less the part below the cut, over the
+   share kept, (mean - integral of Q over (0, m)) / (1 - m) with m = F(cut),
+   whenever m is at most a half, as it always is for the families whose
+   quantile is a numerical inversion; the integral is by the midpoint rule
+   in t with u = m t^2, whose factor 2t tames a left tail that runs off to
+   -infinity. A deeper cut (only the normal, the Johnson members, the
+   triangular, and the PERT may cut more) would lose digits to that
+   subtraction, and so it averages Q over the part kept instead, in t with
+   u = 1 - (1 - m) t^2. Either is infinite where the whole model's mean is. */
 function fitMean(fit) {
   if (isCut(fit)) {
     var whole = {}, key2;
     for (key2 in fit) whole[key2] = fit[key2];
     whole.cut = null;
-    var mw = fitMean(whole), Qw = fitQuantile(whole), K = 1 - fit.cutMass, NC = 20000, sum = 0;
+    var mw = fitMean(whole), Qw = fitQuantile(whole), cm = fit.cutMass, K = 1 - cm, sum = 0, ic, tc, NC;
     if (!Number.isFinite(mw)) return mw;
-    for (var ic = 0; ic < NC; ic++) { var tc = (ic + 0.5) / NC; sum += Qw(Math.min(1 - K * tc * tc, 1 - 2.2e-16)) * 2 * tc; }
+    if (cm <= 0.5) {
+      NC = 1000;
+      for (ic = 0; ic < NC; ic++) { tc = (ic + 0.5) / NC; sum += Qw(cm * tc * tc) * 2 * tc; }
+      return (mw - sum / NC * cm) / K;
+    }
+    NC = 20000;
+    for (ic = 0; ic < NC; ic++) { tc = (ic + 0.5) / NC; sum += Qw(Math.min(1 - K * tc * tc, 1 - 2.2e-16)) * 2 * tc; }
     return sum / NC;
   }
   var p = fit.p, k = fit.dist.key, m;
@@ -10667,7 +10684,7 @@ var ST = {
   shift: true,
   shiftAutoOff: false, /* the page, not the reader, turned the shift off */
   reflect: false,   /* fit each zero-based candidate as c - X instead */
-  floor0: true,     /* keep each shifted model at or above zero (gamma >= 0) */
+  zero: 'hold',     /* keep models at or above zero: 'allow', 'hold' each start, or 'cut' at zero */
   start1: false,    /* start each count family at 1 instead of 0 */
   recKind: 'nearest', /* how values on a coarse step were recorded, or 'exact' */
   johnson: false,   /* add the two Johnson members to the continuous ranking */
@@ -11450,7 +11467,9 @@ function fitRec() {
   return recAvail() && ST.recKind !== 'exact' ? IA.recordingRec(ST.s, ST.recKind) : null;
 }
 /* The fit options as the core reads them. */
-function fitOpts() { return { floor0: ST.floor0, start1: ST.start1, rec: fitRec() }; }
+function fitOpts() {
+  return { floor0: ST.zero !== 'allow', cut0: ST.zero === 'cut', start1: ST.start1, rec: fitRec() };
+}
 function syncRecPick() {
   var r = recAvail();
   $('rec-grp').style.display = r ? '' : 'none';
@@ -11503,12 +11522,13 @@ function syncFitBoxes() {
     : ST.reflect ? 'The mirror image estimates its own end point, and so a shift has nothing to add while it is on.'
     : null);
   setBoxOff('reflect-wrap', 'reflect-chk', disc ? 'None of the discrete candidates is mirrored.' + toCont : null);
-  setBoxOff('floor-wrap', 'floor-chk',
-    disc ? 'None of the discrete candidates takes a shift.' + toCont
+  var zeroOff = disc ? 'Every discrete candidate already stays at or above zero.' + toCont
     : ST.s && ST.s.min < 0 ? 'Some of your values are negative, and so a model that stays at or above zero cannot fit them.'
-    : ST.reflect ? 'A mirrored model runs down without limit, and so it cannot be kept at or above zero.'
-    : !ST.shift ? 'With no shift estimated, every candidate that starts at zero already stays at or above zero.'
-    : null);
+    : null;
+  $('zero-grp').classList.toggle('off', !!zeroOff);
+  $('zero-pick').disabled = !!zeroOff;
+  $('zero-pick').value = ST.zero;
+  setTip($('zero-tip'), zeroOff);
   setBoxOff('start1-wrap', 'start1-chk',
     ST.s && !disc ? 'Only the discrete candidates count from 0. Set Family to Discrete to use it.' : null);
   setBoxOff('johnson-wrap', 'johnson-chk', disc ? 'Both Johnson members are continuous.' + toCont : null);
@@ -11722,6 +11742,10 @@ function renderRanking() {
          r.fit.atBound ? '<span class="rank-sub">' + (r.fit.reflect ? 'c sits at the largest observation'
                                                     : 'shift sits at the smallest observation') + '</span>' :
          r.fit.edge ? tipSpan('rank-sub', 'close to its ' + EDGE_NAME[r.fit.edge] + ' limit', edgeTip(r.fit.edge, r.key)) :
+         r.fit.cutForZero ? tipSpan('rank-sub', 'cut off at zero', 'A value is exactly 0, which this family ' +
+           'cannot produce with its start held at 0, and so this row is cut off at zero instead.') :
+         r.fit.cutLimit ? tipSpan('rank-sub', 'cut at its limit', 'This fit cuts off as much of the model as ' +
+           'is allowed, and the likelihood was still rising; the fit details say more.') :
          (near = nearSpecialCase(r, ST.rows)) ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' : '') +
       '</td>' +
@@ -11941,12 +11965,18 @@ function renderFit() {
       'is 1</strong>; the family counts from here, and the 1 is not an estimate', null);
   } else if (f.shift || (ST.shift && d.shiftable)) {
     add('γ &nbsp;<span class="p-what">shift</span>', fmt(f.shift, 5),
-      'the smallest value the model can produce; everything else is measured from here' +
+      (IA.isCut(f) ? 'where the model would start without the cut; everything else is measured from here'
+                   : 'the smallest value the model can produce; everything else is measured from here') +
       (f.shiftHeld ? ' (held, and so not counted as a parameter)'
-       : f.floorBound ? ' (kept at 0 by <strong>Keep each model at or above zero</strong>, and so not ' +
+       : f.floorBound ? ' (kept at 0 by <strong>Keep models at or above zero</strong>, and so not ' +
                         'counted as a parameter)'
        : (f.atBound ? ' (estimated by your smallest observation)' : ' (estimated)')),
       'shift');
+  }
+  if (IA.isCut(f)) {
+    add('cut &nbsp;<span class="p-what">at zero</span>', '0',
+      'the smallest value the model can produce: the ' + fmt(100 * f.cutMass, 3) + '% of the model below 0 ' +
+      'is removed and the rest scaled up to make up for it (set, not estimated)', null);
   }
   for (var i = 0; i < d.params.length; i++) {
     var pv = f.p[i];
@@ -12065,6 +12095,7 @@ function renderFit() {
       (toGamma ? 'gamma' : 'Pearson type V') + ' row fits the limit itself, with one parameter fewer.</div>';
   }
   pin += rangeFitNote(r);
+  pin += cutNote(r);
   pin += belowZeroNote(r);
   if (r.noCriteria) {
     pin += '<div class="note quiet"><strong>Why this one is not scored.</strong> The empirical ' +
@@ -12116,6 +12147,50 @@ function rangeFitNote(r) {
       'a range, and the model reaches into ' + (ends.length > 1 ? 'both end ranges' : 'that range') + '.';
   return out + '</div>';
 }
+/* What a model cut off at zero is, why this one was cut, and what its fit
+   could not settle. */
+function cutNote(r) {
+  var f = r.fit, d = r.dist;
+  if (!IA.isCut(f) || r.noCriteria) return '';
+  var shifted = d.shiftable && !f.reflect, mp = d.minParam;
+  var where = f.reflect ? 'a mirrored model runs down without limit'
+    : shifted ? 'its start, γ = ' + fmt(f.shift, 4) + ', lies below 0'
+    : mp !== undefined && f.p[mp] < 0 ? 'its ' + d.params[mp].name + ', ' + fmt(f.p[mp], 4) + ', lies below 0'
+    : 'its left tail runs below 0';
+  var out = '<div class="note quiet">';
+  if (f.cutForZero) {
+    out += '<strong>Cut off at zero because a value is exactly 0.</strong> With its ' +
+      (shifted ? 'start' : d.params[mp].name) + ' held at 0, a ' + distLower(d) + ' cannot produce a value of ' +
+      'exactly 0, and so this row is cut off at zero instead: ' + where + ', and ';
+  } else {
+    out += '<strong>Cut off at zero.</strong> Here ' + where + ', and ';
+  }
+  out += 'the ' + fmt(100 * f.cutMass, 3) + '% of the model below 0 is removed and the rest scaled up to make ' +
+    'up for it, and so it never produces a negative value. The parameters above describe the model before ' +
+    'the cut; the model mean and median are those after it.';
+  if (f.cutLimit) {
+    out += ' This fit stopped at the limit of ' + (IA.CUT_DEEP.indexOf(d.key) < 0 ? 'half' : '99.9%') +
+      ' of the model cut off, and the likelihood was still rising there.' +
+      (d.key === 'normal' || d.key === 'johnsonSU'
+        ? ' Cut that deeply, a ' + distLower(d) + ' is practically an exponential, and the exponential row ' +
+          'fits that shape directly.' : '');
+  }
+  if (shifted || d.key === 'beta') {
+    out += ' Other ' + (d.key === 'beta' ? 'lower ends' : 'starts') + ' below 0 fit these data nearly as well, ' +
+      'each with its own shape and scale, and so none of these parameters means much on its own. The curve ' +
+      'they make together is what the data determine.';
+  }
+  /* A resample holds a 0 only when a draw rounds to it, which on the
+     data's step takes a draw within half a step of 0 (a fit to recorded
+     ranges scores a 0 as a range and is unaffected). */
+  var g0 = bootGrid(f), zeros = g0 ? ST.s.n * IA.fitCdf(f)(g0.h / 2) : 0;
+  if (ST.s.min === 0 && !f.rec && zeros < 1) {
+    out += ' Your values include an exact 0, where this model starts, and the A–D statistic weighs a value ' +
+      'at the very edge of a model heavily. The bootstrap\'s simulated samples almost never hold an exact 0, ' +
+      'and so the A–D p-value for this row runs low. K–S is not affected.';
+  }
+  return out + '</div>';
+}
 /* How much of a continuous model falls below zero when none of the data
    do. A simulation drawing from it would produce negative values about that
    often, which for a time breaks the model it feeds. */
@@ -12125,11 +12200,12 @@ function belowZeroNote(r) {
   var below = IA.fitCdf(f)(0);
   if (!(below >= 1e-4)) return '';
   var pct = below * 100;
+  var cutIt = '<strong>by cutting each off at zero</strong> under <strong>Keep models at or above zero</strong>';
   var how = f.reflect
-    ? 'A mirrored model always runs below zero; use it only if that share is small enough to ignore.'
-    : ST.shift && d.shiftable && !ST.floor0
-      ? 'Tick <strong>Keep each model at or above zero</strong> to hold the shift at 0 or above.'
-      : 'A family that starts at zero, such as the gamma, lognormal, or Weibull, cannot do this.';
+    ? 'A mirrored model always runs below zero. Choose ' + cutIt + ' to remove that part.'
+    : ST.zero === 'allow'
+      ? 'Choose <strong>by holding each start at 0 or above</strong> or ' + cutIt + ' to prevent that.'
+      : 'The ' + distLower(d) + ' has no start to hold at 0. Choose ' + cutIt + ' to remove that part.';
   return '<div class="note"><strong>This model puts ' + fmt(pct, 2) + '% of its draws below zero.</strong> ' +
     'None of your values is below zero, and a simulation drawing from this model would produce a ' +
     'negative value about ' + (pct >= 1 ? 'once in every ' + Math.round(100 / pct) + ' draws'
@@ -12532,6 +12608,11 @@ function paramGloss(key, i, f) {
   };
   var arr = g[key];
   var base = arr && arr[i] ? arr[i] : '';
+  if (f.floorParam === i)
+    return 'held at 0 by <strong>Keep models at or above zero</strong>, the lowest it may go, and so not ' +
+      'counted as a parameter';
+  if (IA.isCut(f) && IA.DISTS[key].minParam === i && f.p[i] < 0)
+    base += '; it lies below 0, and the cut at 0 removes the part of the model below 0';
   if (f.reflect && i === 0 && key === 'expo') return 'mean of the exponential part, measured down from c';
   /* A mirrored model's density starts at c, not at zero. */
   if (f.reflect) return base.replace(/\bzero\b/g, 'c');
@@ -12544,6 +12625,14 @@ function paramGloss(key, i, f) {
    scale, the model mean against the sample mean. */
 function derivedRows(d, f) {
   var out = [], p = f.p;
+  /* A cut model's mean and median are not the family's formulas, which
+     describe the model before the cut. */
+  if (IA.isCut(f)) {
+    out.push(['model mean', fmt(IA.fitMean(f), 5), 'after the cut; compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
+    out.push(['model median', fmt(IA.fitQuantile(f)(0.5), 5),
+      'after the cut; compare it with the sample median of ' + fmt(ST.s.med, 5)]);
+    return out;
+  }
   /* The model mean is the end point plus the unshifted mean, or, for a
      mirrored fit, c minus it; the label says which. */
   var at = function (m) { return f.reflect ? f.shift - m : f.shift + m; };
@@ -12944,7 +13033,8 @@ function bootWorkerSource() {
     '  var dist = DISTS[m.distKey];\n' +
     '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
     '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false,\n' +
-    '              floor0: m.floor0, start1: m.start1, rec: m.rec };\n' +
+    '              floor0: m.floor0, start1: m.start1, rec: m.rec,\n' +
+    '              cut: m.cut, cutMass: m.cutMass, opts: m.opts };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
     '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue, m.grid);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
@@ -13000,6 +13090,7 @@ function startBootstrap() {
               obsChi: obsChi, binK: ST.bins.k, perValue: !!ST.bins.perValue,
               fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect,
               floor0: !!f.floor0, start1: !!f.start1, rec: f.rec || null,
+              cut: IA.isCut(f) ? f.cut : null, cutMass: IA.isCut(f) ? f.cutMass : 0, opts: f.opts || null,
               grid: bootGrid(f) };
 
   function finish(res) {
@@ -13047,7 +13138,8 @@ function startBootstrap() {
 function runOnMainThread(msg, obsD, obsA, finish) {
   var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
               fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false,
-              floor0: msg.floor0, start1: msg.start1, rec: msg.rec };
+              floor0: msg.floor0, start1: msg.start1, rec: msg.rec,
+              cut: msg.cut, cutMass: msg.cutMass, opts: msg.opts };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
                             msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue, msg.grid);
   var chunk = Math.max(5, Math.round(msg.B / 80));
@@ -13084,7 +13176,7 @@ function fitSignature() {
   if (!r) return null;
   return [r.key, ST.shift, !!r.fit.reflect, ST.s.n, ST.seed, ST.B, r.fit.p.join(','),
           JSON.stringify(r.fit.fixed || null), r.fit.shiftHeld ? r.fit.shift : 'est',
-          ST.floor0 ? 'f' : '', ST.start1 ? 's' : '', r.fit.rec ? r.fit.rec.kind : '',
+          ST.zero, ST.start1 ? 's' : '', r.fit.rec ? r.fit.rec.kind : '',
           ST.bins ? ST.bins.k : 0].join('|');
 }
 
@@ -18131,7 +18223,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.reflect = this.checked; ST.holdShift = {}; refitAll();
   });
   $('johnson-chk').addEventListener('change', function () { ST.johnson = this.checked; refitAll(); });
-  $('floor-chk').addEventListener('change', function () { ST.floor0 = this.checked; refitAll(); });
+  $('zero-pick').addEventListener('change', function () { ST.zero = this.value; refitAll(); });
   $('start1-chk').addEventListener('change', function () { ST.start1 = this.checked; refitAll(); });
   $('rec-pick').addEventListener('change', function () { ST.recKind = this.value; refitAll(); });
   $('rank-by').addEventListener('change', function () {
