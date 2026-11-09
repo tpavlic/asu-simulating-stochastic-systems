@@ -3670,6 +3670,7 @@ DISTS.uniform = {
    a numerical optimizer is for". */
 DISTS.triangular = {
   key: 'triangular', name: 'Triangular', lower: 'triangular', kind: 'continuous', np: 3, shiftable: false,
+  minParam: 0,
   /* a and b are NOT order statistics here: the triangular density is zero
      at its endpoints, and so the maximum-likelihood endpoints lie strictly
      outside the data and are found by search like any regular parameter. */
@@ -3752,7 +3753,7 @@ function pertShapes(p) {
   return [1 + 4 * w, 1 + 4 * (1 - w)];
 }
 DISTS.pert = {
-  key: 'pert', name: 'PERT', lower: 'PERT', kind: 'continuous', np: 3, shiftable: false,
+  key: 'pert', name: 'PERT', lower: 'PERT', kind: 'continuous', np: 3, shiftable: false, minParam: 0,
   /* a and b are found by search, as for the triangular; see that entry. */
   locParam: 0,
   params: [{ sym: 'a', name: 'minimum' }, { sym: 'm', name: 'most likely' }, { sym: 'b', name: 'maximum' }],
@@ -3868,7 +3869,7 @@ function betaShapes(ml, m1l, my, vy) {
    solved by Newton on the 2x2 system whose Jacobian is built from
    trigamma, started from the method-of-moments estimate. */
 DISTS.beta = {
-  key: 'beta', name: 'Beta', lower: 'beta', kind: 'continuous', np: 4, shiftable: false,
+  key: 'beta', name: 'Beta', lower: 'beta', kind: 'continuous', np: 4, shiftable: false, minParam: 2,
   /* L and U come from the sample range. See ORDER_STAT_NOTE. */
   orderStat: [2, 3], locParam: 2,
   /* Only the first two parameters are found by maximizing the likelihood;
@@ -4487,7 +4488,7 @@ function johnsonZ_SB(x, p) {
 }
 DISTS.johnsonSB = {
   key: 'johnsonSB', name: 'Johnson Sᵦ (bounded)', lower: 'Johnson Sᵦ (bounded)', kind: 'continuous',
-  np: 4, shiftable: false, optIn: true, locParam: 2,
+  np: 4, shiftable: false, optIn: true, locParam: 2, minParam: 2,
   params: [{ sym: 'γ', name: 'shape 1' }, { sym: 'δ', name: 'shape 2' },
            { sym: 'ξ', name: 'lower end' }, { sym: 'λ', name: 'range' }],
   lo: function (p) { return p[2]; },
@@ -4787,13 +4788,88 @@ var FIT_FAST = false;
 /* The parent fit's parameters while the bootstrap refits its resamples,
    for a search that can start from them; null otherwise. */
 var FIT_HINT = null;
-/* `opts` carries three fit options: floor0, which keeps a shifted model at
-   or above zero (gamma >= 0) when no value is negative, start1, which
-   starts a count at 1 (see START1_KEYS), and rec, which fits a continuous
-   candidate to the ranges its recorded values stand for (see 7b). */
+/* Kept at or above zero, a family with its own minimum (`minParam`: the
+   triangular, PERT, beta, and Johnson S_B) holds that minimum at or above
+   0 when no value is negative, as a shifted family holds its shift. A fit
+   whose minimum lands below 0 is refitted with the minimum held at 0, the
+   nearest the limit allows, and like a shift stopped at 0 the held minimum
+   is not counted in k or in the chi-square's degrees of freedom
+   (`floorParam`). A beta keeps the upper end its ordinary fit reads off the
+   data. With a value of exactly 0 such a model gives that value no
+   density, and fitDist cuts the family off at zero instead. */
+function floorsMin(dist, x, fixed) {
+  var j = dist.minParam;
+  if (j === undefined || (fixed && fixed[j] !== null && fixed[j] !== undefined)) return false;
+  for (var i = 0; i < x.length; i++) if (x[i] < 0) return false;
+  return true;
+}
+function floorMinFit(dist, x, fixed, f) {
+  var np = dist.params.length, h = new Array(np), j, nonHeld = 0;
+  for (j = 0; j < np; j++) {
+    h[j] = fixed && fixed[j] !== null && fixed[j] !== undefined ? fixed[j] : null;
+    if (h[j] === null) nonHeld++;
+  }
+  h[dist.minParam] = 0;
+  if (dist.key === 'beta' && h[3] === null) h[3] = f.p[3];
+  var zero = Math.min.apply(null, x) === 0;
+  var fz = fitWithHolds(dist, x, h);
+  var ll = fz.ok ? dist.loglik(x, fz.p) : -Infinity;
+  if (!Number.isFinite(ll))
+    return { ok: false, msg: zero
+      ? 'With its ' + dist.params[dist.minParam].name + ' kept at or above zero, a ' + distLower(dist) +
+        ' cannot produce a value of exactly 0.'
+      : 'No ' + distLower(dist) + ' with its ' + dist.params[dist.minParam].name +
+        ' kept at or above zero fits these values.' };
+  var held = hasHolds(fixed);
+  return { ok: true, dist: dist, p: fz.p, shift: 0, k: nonHeld - 1, ll: ll,
+           atBound: false, degenerate: false, shiftHeld: false, edge: null,
+           orderStat: f.orderStat || null, floor0: true, floorBound: true, floorParam: dist.minParam,
+           fixed: held ? fixed.slice() : null, allHeld: false };
+}
+
+/* `opts` carries four fit options: floor0, which keeps a shifted model at
+   or above zero (gamma >= 0) when no value is negative, cut0, which keeps
+   a model at or above zero by cutting it off there instead (see 7c),
+   start1, which starts a count at 1 (see START1_KEYS), and rec, which fits
+   a continuous candidate to the ranges its recorded values stand for
+   (see 7b). Every fit records in `opts` the options that applied to it,
+   and the bootstrap refits each resample under the same ones. Keeping
+   models at or above zero applies only where no value is negative, and
+   so a resample of a fit it did not apply to is not held either.
+
+   Held at 0, a start or minimum leaves a family that starts there unable
+   to produce a value of exactly 0 (its density there is 0, or for the
+   lognormal undefined), and the fit fails. Kept at or above zero, such a
+   family is cut off at zero instead (7c), and the fit says so
+   (`cutForZero`). Its bootstrap refits every resample with the cut too,
+   which takes the better of the held model and the cut one: resamples
+   almost never hold an exact 0, and refitted held, they would be fitted by
+   a narrower family than the data were. A family that takes no shift with
+   the shift off is left to fail, as the reader asked for a model that
+   starts at 0. */
 function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
+  var r = fitDistWith(dist, x, useShift, fast, fixed, fixedShift, reflect, opts), i;
+  var nonNeg = true, zero = false;
+  for (i = 0; i < x.length; i++) { if (x[i] < 0) nonNeg = false; if (x[i] === 0) zero = true; }
+  if (!r.ok && zero && nonNeg && opts && opts.floor0 && !opts.cut0 && !opts.inCut && !reflect &&
+      CUT_KEYS.indexOf(dist.key) >= 0 && (useShift || !dist.shiftable)) {
+    var co = {}, key;
+    for (key in opts) co[key] = opts[key];
+    co.cut0 = true;
+    var rc = fitCut(dist, x, useShift, fast, fixed, fixedShift, false, co);
+    if (rc.ok) { rc.cutForZero = true; r = rc; }
+  }
+  if (r.ok) {
+    r.opts = { floor0: !!(opts && opts.floor0) && nonNeg, cut0: (!!(opts && opts.cut0) || !!r.cutForZero) && nonNeg,
+               start1: !!(opts && opts.start1), rec: opts && opts.rec || null };
+  }
+  return r;
+}
+function fitDistWith(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   if (!x || x.length < 2) return { ok: false, msg: 'Need at least two observations.' };
   FIT_FAST = !!fast;
+  if (opts && opts.cut0 && CUT_KEYS.indexOf(dist.key) >= 0)
+    return fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts);
   if (reflect && dist.shiftable) {
     var neg = new Array(x.length);
     for (var r0 = 0; r0 < x.length; r0++) neg[r0] = -x[r0];
@@ -4849,6 +4925,8 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   if (!useShift || !dist.shiftable) {
     var f = fitCore(x);
     if (!f.ok) return f;
+    if (opts && opts.floor0 && floorsMin(dist, x, fixed) && f.p[dist.minParam] < 0)
+      return floorMinFit(dist, x, fixed, f);
     var ll0 = dist.loglik(x, f.p);
     return { ok: true, dist: dist, p: f.p, shift: 0, k: heldK(f), ll: ll0,
              atBound: false, degenerate: false, shiftHeld: false, edge: f.edge || null,
@@ -5078,6 +5156,9 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
   var floor0 = shiftOn && !!opts.floor0 && C.top - rec.h - recLow(rec) >= 0;
   var logIdx = INTERVAL_LOG[dist.key] || [];
   var isHeld = function (j) { return held && fixed[j] !== null && fixed[j] !== undefined; };
+  /* A family with its own minimum holds it at or above 0 as the shift is
+     held (see floorsMin). */
+  var mp = !!opts.floor0 && floorsMin(dist, x, fixed) ? dist.minParam : -1;
 
   /* The start: the parent fit inside the bootstrap, otherwise the ordinary
      fit to the recorded values themselves. */
@@ -5103,18 +5184,20 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
     }
     p0 = base.p.slice();
     if (p0.some(function (v) { return !Number.isFinite(v); })) return base;
+    if (mp >= 0 && !(p0[mp] > 0)) p0[mp] = 1e-3 * rec.h;
     g0 = shiftable ? (shiftHeld ? fixedShift : base.shift - lift) : 0;
   }
   if (shiftOn && floor0 && g0 < 0) g0 = 0;
   if (shiftOn && !(g0 < C.top)) g0 = C.top - 0.5 * rec.h;
 
-  var free = [], whole = -1;
+  var freeAll = [], whole = -1;
   for (i = 0; i < np; i++) {
     if (isHeld(i)) continue;
     if (dist.params[i].whole) { whole = i; continue; }
-    free.push(i);
+    freeAll.push(i);
   }
-  function run(pStart, gStart, withShift) {
+  function run(pStart, gStart, withShift, only) {
+    var free = only || freeAll;
     var t0 = free.map(function (j) { return logIdx.indexOf(j) >= 0 ? Math.log(pStart[j]) : pStart[j]; });
     if (withShift) t0.push(Math.log(Math.max(C.top - gStart, 1e-6 * rec.h)));
     function unpack(t) {
@@ -5125,6 +5208,7 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
     function neg(t) {
       var u = unpack(t);
       if (floor0 && u.g < 0) return 1e300;
+      if (mp >= 0 && u.p[mp] < 0) return 1e300;
       var v = cellLogLik(dist, u.p, u.g, C);
       return Number.isFinite(v) ? -v : 1e300;
     }
@@ -5152,39 +5236,290 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
     var rz = run(res.p, 0, false);
     if (rz.ll >= res.ll - 1e-9) { res = rz; res.g = 0; floorBound = true; }
   }
+  /* So is a minimum pressed against 0. */
+  var floorParam = null;
+  if (mp >= 0 && Number.isFinite(res.ll) && res.p[mp] < 1e-3 * rec.h) {
+    var q0 = res.p.slice(); q0[mp] = 0;
+    var rm = run(q0, res.g, shiftOn, freeAll.filter(function (j) { return j !== mp; }));
+    if (rm.ll >= res.ll - 1e-9) { res = rm; floorParam = mp; }
+  }
   if (!Number.isFinite(res.ll))
     return { ok: false, msg: 'No parameter values give every recorded range some probability.' };
-  var freeCount = free.length + (whole >= 0 ? 1 : 0);
+  var freeCount = freeAll.length + (whole >= 0 ? 1 : 0);
   return { ok: true, dist: dist, p: res.p, shift: shiftable ? res.g : 0,
-           k: (held ? freeCount : dist.np) + (shiftOn && !floorBound ? 1 : 0), ll: res.ll,
-           atBound: false, degenerate: false, shiftHeld: shiftHeld,
-           floor0: floor0, floorBound: floorBound, rec: rec,
+           k: (held ? freeCount : dist.np) + (shiftOn && !floorBound ? 1 : 0) - (floorParam !== null ? 1 : 0),
+           ll: res.ll, atBound: false, degenerate: false, shiftHeld: shiftHeld,
+           floor0: floor0 || mp >= 0, floorBound: floorBound || floorParam !== null, floorParam: floorParam,
+           rec: rec,
            edge: base ? base.edge || null : null,
            fixed: held ? fixed.slice() : null, allHeld: held && freeCount === 0 && !shiftOn };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   7c. MODELS CUT OFF AT ZERO
+   ─────────────────────────────────────────────────────────────────────
+   Holding a shifted model's start at or above 0 keeps it at or above
+   zero, and it also rules out every shape whose density is above zero at
+   0 itself. A model cut off at zero keeps those shapes: its start (or its
+   lower end, or the normal's whole left tail) may lie below 0, and the
+   part below 0 is removed and the rest scaled up,
+
+       F_cut(v) = (F(v) - F(0)) / (1 - F(0))   for v >= 0,
+
+   the distribution of a draw from F given that the draw is at or above
+   zero. A model with nothing below 0 is its own cut-off version, and so
+   the fit compares the best model that is cut with the ordinary fit,
+   which is the better whenever cutting gains nothing. A mirrored model
+   always reaches below 0, and so it is always cut.
+
+   The exponential is not cut: cut off at zero it is the same exponential
+   whatever its shift, and so the shift could not be estimated. Neither are
+   the uniform (cut off, it is another uniform), the Pearson type VI (it
+   takes no shift), or the empirical and discrete families. A beta keeps
+   its upper end where the ordinary fit reads it off the data, and its
+   lower end is searched below the ordinary fit's, so that the density
+   cannot run off to infinity at the smallest value.
+
+   The cut-off likelihood is the ordinary one less n ln(1 - F(0)), or for
+   recorded ranges the probability of each range's part above 0 over
+   1 - F(0), maximized by Nelder-Mead from the ordinary fit. The bound is
+   fixed rather than estimated, and so it is not counted in k; a start,
+   end, or location that the fit moves below 0 is counted as before.
+
+   A shifted model and the beta may cut off at most CUT_MAX_MASS of
+   themselves. Far enough out, every one of these families' tails looks
+   much like every other's, and without the limit the likelihood barely
+   tells a start a little below 0 from one thousands of units below it: on
+   30 samples of 150 from each of a cut gamma, lognormal, and Weibull that
+   cut 14% to 27% of the model, the start ran off more than 20 ranges below
+   the data in 5 to 8 samples, to a shape in the millions, and 1 - F(0) lost
+   its digits. With the limit, 7 to 12 of the 30 fits stop at it, and the
+   share they cut runs high (a median of 31% to 48%): 150 values place the
+   start of these models only loosely. A cut beta runs to a first shape
+   near 0, with nearly all of it below 0, and is held to the same limit.
+
+   The normal, the Johnson members, the triangular, and the PERT may cut off
+   up to CUT_DEEP_MASS, and so a normal can peak below 0 and fall from 0
+   onward, the usual truncated normal. On 20 samples of 150 from a normal
+   with mean -2 and SD 2 cut at 0 (84% cut), the cut normal cut a median of
+   86% and never reached the limit, and it cut exactly half of a half-normal.
+   Cut deeper still, the normal is practically an exponential, and on
+   exponential samples it stopped at the limit in 16 of 20; Johnson S_U did
+   in 10, S_B in 3, and the triangular and PERT never cut at all.
+
+   A fit stopped at its limit is flagged `cutLimit`: the data cannot say
+   where the model starts. */
+var CUT_KEYS = ['normal', 'johnsonSU', 'triangular', 'pert', 'beta', 'johnsonSB',
+                'gamma', 'erlang', 'weibull', 'lognormal', 'loglogistic', 'pearson5'];
+var CUT_MAX_MASS = 0.5;
+var CUT_DEEP = ['normal', 'johnsonSU', 'johnsonSB', 'triangular', 'pert'], CUT_DEEP_MASS = 0.999;
+function cutCap(dist) { return CUT_DEEP.indexOf(dist.key) >= 0 ? CUT_DEEP_MASS : CUT_MAX_MASS; }
+
+function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
+  var plain = {}, key;
+  for (key in opts) if (key !== 'cut0') plain[key] = opts[key];
+  plain.floor0 = true; plain.inCut = true;
+  reflect = !!reflect && dist.shiftable;
+  var base = fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, plain);
+  if (base.ok) base.cut0 = true;
+  var s = summarize(x), n = x.length, range = s.max - s.min, i;
+  if (s.min < 0 || !(range > 0)) return base;
+  var shiftOn = dist.shiftable && (!!useShift || reflect);
+  var shiftHeld = shiftOn && fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
+  /* A model that starts at 0, or at a held start at or above it, has
+     nothing to cut. */
+  if (dist.shiftable && !shiftOn) return base;
+  if (shiftHeld && !reflect && fixedShift >= 0) return base;
+  var shiftFree = shiftOn && !shiftHeld;
+
+  var rec = opts.rec || null, C = rec ? recCells(x, rec) : null;
+  var np = dist.params.length, logIdx = INTERVAL_LOG[dist.key] || [];
+  var held = hasHolds(fixed);
+  var isHeld = function (j) { return held && fixed[j] !== null && fixed[j] !== undefined; };
+  var lockU = dist.key === 'beta' && !isHeld(3);
+  var free = [], whole = -1;
+  for (i = 0; i < np; i++) {
+    if (isHeld(i)) continue;
+    if (dist.params[i].whole) { whole = i; continue; }
+    if (lockU && i === 3) continue;
+    free.push(i);
+  }
+  var dLow = D_SAFE_FRAC * range;
+  /* The start's limit: just below the smallest value (or below 0, where
+     the model stops being cut), and for a mirror image just above the
+     largest; a beta's lower end stays below the ordinary fit's. */
+  var gHi = rec ? 0 : Math.min(0, s.min - dLow);
+  var cLo = rec ? s.max + recLow(rec) : s.max + dLow;
+  var Lcap = dist.key === 'beta' && base.ok ? base.p[2] : null;
+  var cap = cutCap(dist);
+
+  function keepOf(p, g) {
+    var k = reflect ? dist.cdf(g, p) : 1 - dist.cdf(-g, p);
+    return k > 0 && k <= 1 ? k : NaN;
+  }
+  var y = new Array(n);
+  function loglik(p, g) {
+    var keep = keepOf(p, g), ll;
+    if (!(keep >= 1 - cap)) return -Infinity;
+    if (C) {
+      var F = fitCdf({ dist: dist, p: p, shift: g, reflect: reflect }), e, j;
+      for (e = 0; e < C.edges.length; e++) C.F[e] = F(Math.max(C.edges[e], 0));
+      ll = 0;
+      for (j = 0; j < C.c.length; j++) {
+        var q = C.F[C.hi[j]] - C.F[C.lo[j]];
+        if (!(q > 0)) return -Infinity;
+        ll += C.c[j] * Math.log(q);
+      }
+    } else {
+      for (i = 0; i < n; i++) y[i] = reflect ? g - x[i] : x[i] - g;
+      ll = dist.loglik(y, p);
+    }
+    return Number.isFinite(ll) ? ll - n * Math.log(keep) : -Infinity;
+  }
+
+  function run(pStart, gStart) {
+    var t0 = free.map(function (j) {
+      if (j === 2 && Lcap !== null) return Math.log(Math.max(Lcap - pStart[2], 1e-3 * range));
+      return logIdx.indexOf(j) >= 0 ? Math.log(pStart[j]) : pStart[j];
+    });
+    if (shiftFree) t0.push(Math.log(reflect ? gStart - cLo : gHi - gStart));
+    function unpack(t) {
+      var q = pStart.slice(), j;
+      for (j = 0; j < free.length; j++) {
+        var f = free[j];
+        q[f] = f === 2 && Lcap !== null ? Lcap - Math.exp(t[j])
+             : logIdx.indexOf(f) >= 0 ? Math.exp(t[j]) : t[j];
+      }
+      var g = !shiftOn ? 0 : shiftHeld ? fixedShift
+            : reflect ? cLo + Math.exp(t[free.length]) : gHi - Math.exp(t[free.length]);
+      return { p: q, g: g };
+    }
+    function neg(t) {
+      var u = unpack(t), v = loglik(u.p, u.g);
+      return Number.isFinite(v) ? -v : 1e300;
+    }
+    if (t0.some(function (v) { return !Number.isFinite(v); })) return { ll: -Infinity };
+    if (!t0.length) { var u0 = unpack(t0); return { p: u0.p, g: u0.g, ll: loglik(u0.p, u0.g) }; }
+    var best = nelderMead(neg, t0, { maxIter: fast ? 400 : 2000, tol: fast ? 1e-7 : 1e-12 });
+    if (!fast) best = nelderMead(neg, best.x, { maxIter: 2000, tol: 1e-13 });
+    var u = unpack(best.x);
+    return { p: u.p, g: u.g, ll: best.f >= 1e299 ? -Infinity : -best.f };
+  }
+
+  /* Starts: the parent fit inside the bootstrap; otherwise the ordinary
+     fit, and for a free start also the ordinary fit with its start
+     unconstrained, which is often already below 0. A start on the wrong
+     side of its limit is moved a tenth of the spread past it, and a start
+     that cuts off more than the limit is moved back toward 0. */
+  var starts = [], spread = s.sd > 0 ? s.sd : range;
+  function addStart(p, g) {
+    if (!p || p.length !== np || !p.every(Number.isFinite)) return;
+    var q = p.slice();
+    for (var j = 0; j < np; j++) if (isHeld(j)) q[j] = fixed[j];
+    if (shiftFree && !reflect && !(g < gHi)) g = gHi - 0.1 * spread;
+    if (shiftFree && reflect && !(g > cLo)) g = cLo + 0.1 * spread;
+    if (Lcap !== null && !(q[2] < Lcap)) q[2] = Lcap - 0.01 * range;
+    if (lockU && base.ok) q[3] = base.p[3];
+    for (var b = 0; b < 60 && !(keepOf(q, g) >= 1 - 0.9 * cap); b++) {
+      if (!shiftFree) return;
+      g = reflect ? cLo + 2 * (g - cLo) : (g + gHi) / 2;
+    }
+    if (!(keepOf(q, g) >= 1 - cap)) return;
+    starts.push({ p: q, g: g });
+  }
+  var hint = fast && FIT_HINT && FIT_HINT.length === np;
+  if (hint) {
+    /* bootstrapRun stores a mirror image's end negated, for fitDist's
+       recursion on -x; this search runs on x itself. */
+    var hs = Number.isFinite(FIT_HINT_SHIFT) ? (reflect ? -FIT_HINT_SHIFT : FIT_HINT_SHIFT) : 0;
+    addStart(FIT_HINT, shiftHeld ? fixedShift : hs);
+  } else {
+    if (base.ok) addStart(base.p, shiftHeld ? fixedShift : base.shift);
+    if (!reflect) {
+      var open = fitDist(dist, x, useShift, fast, fixed, fixedShift, false,
+                         { floor0: false, start1: plain.start1, rec: rec });
+      if (open.ok) addStart(open.p, shiftHeld ? fixedShift : open.shift);
+    }
+  }
+  if (!starts.length && base.ok) addStart(base.p, shiftHeld ? fixedShift : base.shift);
+
+  var res = { ll: -Infinity }, si, r;
+  for (si = 0; si < starts.length; si++) {
+    r = run(starts[si].p, starts[si].g);
+    if (r.ll > res.ll) res = r;
+    if (whole >= 0) {
+      for (var dm = -1; dm <= 1; dm += 2) {
+        var q = starts[si].p.slice(); q[whole] += dm;
+        if (q[whole] < 1) continue;
+        r = run(q, starts[si].g);
+        if (r.ll > res.ll) res = r;
+      }
+    }
+  }
+
+  /* The ordinary fit competes when nothing of it lies below 0. */
+  var baseIn = base.ok && !(fitCdf(base)(0) > 0);
+  if (baseIn && !(res.ll > base.ll + 1e-9)) return base;
+  if (!Number.isFinite(res.ll))
+    return base.ok && baseIn ? base : { ok: false, msg: 'No cut-off model fits these values.' };
+  var keep = keepOf(res.p, res.g);
+  var nFree = held ? np - fixed.filter(function (v) { return v !== null && v !== undefined; }).length : dist.np;
+  return { ok: true, dist: dist, p: res.p, shift: shiftOn ? res.g : 0, reflect: reflect || undefined,
+           k: nFree + (shiftFree ? 1 : 0), ll: res.ll,
+           atBound: false, degenerate: false, shiftHeld: shiftHeld,
+           floor0: !reflect, floorBound: false, cut0: true, cut: 0, cutMass: 1 - keep,
+           cutLimit: 1 - keep > cap - 1e-3 * (1 - cap) - 1e-6, rec: rec,
+           edge: null, orderStat: dist.key === 'beta' ? [3] : null,
+           fixed: held ? fixed.slice() : null, allHeld: held && nFree === 0 && !shiftFree };
 }
 
 /* The fitted model's CDF, pdf, and quantile ON THE DATA'S OWN SCALE, that
    is with the location shift folded back in. Everything downstream --
    plots, goodness of fit, export -- goes through these three, and so the shift
-   is handled in exactly one place. */
+   is handled in exactly one place. A model cut off at zero (7c) is cut
+   here too, from fit.cut, the bound, and fit.cutMass, F(bound) before the
+   cut. */
+function isCut(fit) { return fit.cut !== undefined && fit.cut !== null && fit.cutMass > 0; }
 function fitCdf(fit) {
-  if (fit.reflect) return function (v) { return 1 - fit.dist.cdf(fit.shift - v, fit.p); };
-  return function (v) { return fit.dist.cdf(v - fit.shift, fit.p); };
+  var F = fit.reflect ? function (v) { return 1 - fit.dist.cdf(fit.shift - v, fit.p); }
+                      : function (v) { return fit.dist.cdf(v - fit.shift, fit.p); };
+  if (!isCut(fit)) return F;
+  var b = fit.cut, m = fit.cutMass, K = 1 - m;
+  return function (v) { return v <= b ? 0 : Math.max(0, (F(v) - m) / K); };
 }
 function fitPdf(fit) {
-  if (fit.reflect) return function (v) { return fit.dist.pdf(fit.shift - v, fit.p); };
-  return function (v) { return fit.dist.pdf(v - fit.shift, fit.p); };
+  var f = fit.reflect ? function (v) { return fit.dist.pdf(fit.shift - v, fit.p); }
+                      : function (v) { return fit.dist.pdf(v - fit.shift, fit.p); };
+  if (!isCut(fit)) return f;
+  var b = fit.cut, K = 1 - fit.cutMass;
+  return function (v) { return v < b ? 0 : f(v) / K; };
 }
 function fitQuantile(fit) {
-  if (fit.reflect) return function (u) { return fit.shift - fit.dist.quantile(1 - u, fit.p); };
-  return function (u) { return fit.shift + fit.dist.quantile(u, fit.p); };
+  var Q = fit.reflect ? function (u) { return fit.shift - fit.dist.quantile(1 - u, fit.p); }
+                      : function (u) { return fit.shift + fit.dist.quantile(u, fit.p); };
+  if (!isCut(fit)) return Q;
+  var b = fit.cut, m = fit.cutMass, K = 1 - m;
+  return function (u) { return Math.max(b, Q(m + u * K)); };
 }
+/* A cut model draws from the whole model until a draw lands at or above
+   the bound, which takes 1/(1 - F(bound)) draws on average; past about four,
+   it inverts the CDF instead. */
 function fitSampler(fit, u01) {
-  if (fit.reflect) return function () { return fit.shift - fit.dist.sample(u01, fit.p); };
-  return function () { return fit.shift + fit.dist.sample(u01, fit.p); };
+  var raw = fit.reflect ? function () { return fit.shift - fit.dist.sample(u01, fit.p); }
+                        : function () { return fit.shift + fit.dist.sample(u01, fit.p); };
+  if (!isCut(fit)) return raw;
+  var b = fit.cut, Q = fitQuantile(fit);
+  if (fit.cutMass > 0.75) return function () { return Q(u01()); };
+  return function () {
+    for (var t = 0; t < 1000; t++) { var v = raw(); if (v >= b) return v; }
+    return Q(u01());
+  };
 }
 /* A mirrored model has no left end: its support runs down to -Infinity. */
-function fitLo(fit) { return fit.reflect ? -Infinity : fit.shift + fit.dist.lo(fit.p); }
+function fitLo(fit) {
+  var lo = fit.reflect ? -Infinity : fit.shift + fit.dist.lo(fit.p);
+  return isCut(fit) ? Math.max(fit.cut, lo) : lo;
+}
 
 /* ─────────────────────────────────────────────────────────────────────
    ORDER_STAT_NOTE: why two different parameter counts
@@ -5242,6 +5577,7 @@ function regularCount(fit) {
   for (i = 0; i < dist.params.length; i++) {
     if (fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined) continue;  /* held, not estimated */
     if (os.indexOf(i) >= 0) continue;                                                /* order statistic */
+    if (fit.floorParam === i) continue;                                     /* held at 0 by the floor */
     n++;
   }
   /* An estimated shift (or a mirror image's end point) is never counted;
@@ -5654,7 +5990,7 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
       FIT_HINT = fit.p;
       FIT_HINT_SHIFT = fit.reflect ? -fit.shift : fit.shift;
       var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect,
-                       { floor0: !!fit.floor0, start1: !!fit.start1, rec: fit.rec || null });
+                       fit.opts || { floor0: !!fit.floor0, start1: !!fit.start1, rec: fit.rec || null });
       FIT_HINT = null; FIT_HINT_SHIFT = null;
       if (!rf.ok) continue;                 /* a degenerate resample is skipped */
       var F = gofCdf(rf);
@@ -8244,8 +8580,21 @@ function breuschPagan(x, resid) {
 /* The mean of a fitted model, shift and mirror included: closed form for
    every family that has one, and otherwise the average of the quantile
    function over (0, 1), which is the mean of any distribution. Infinite
-   where the family's mean does not exist at the fitted shape. */
+   where the family's mean does not exist at the fitted shape. A cut model's
+   mean is the average of the whole model's quantile over the part kept,
+   (m, 1) with m = F(cut), taken by the midpoint rule in t with
+   u = 1 - (1 - m) t^2, whose factor 2t tames the right tail where Q(u)
+   runs off to infinity; it is infinite where the whole model's is. */
 function fitMean(fit) {
+  if (isCut(fit)) {
+    var whole = {}, key2;
+    for (key2 in fit) whole[key2] = fit[key2];
+    whole.cut = null;
+    var mw = fitMean(whole), Qw = fitQuantile(whole), K = 1 - fit.cutMass, NC = 20000, sum = 0;
+    if (!Number.isFinite(mw)) return mw;
+    for (var ic = 0; ic < NC; ic++) { var tc = (ic + 0.5) / NC; sum += Qw(Math.min(1 - K * tc * tc, 1 - 2.2e-16)) * 2 * tc; }
+    return sum / NC;
+  }
   var p = fit.p, k = fit.dist.key, m;
   switch (k) {
     case 'expo': m = p[0]; break;
@@ -9724,6 +10073,7 @@ var IA = {
   MRG32k3a: MRG32k3a,
   recordingRec: recordingRec, rescoreBins: rescoreBins, gofCdf: gofCdf, recLow: recLow, recCells: recCells, cellLogLik: cellLogLik, flipRec: flipRec,
   INTERVAL_STEP_SD: INTERVAL_STEP_SD,
+  CUT_KEYS: CUT_KEYS, CUT_DEEP: CUT_DEEP, fitCut: fitCut, isCut: isCut,
   logGamma: logGamma, logBeta: logBeta,
   gammaP: gammaP, gammaQ: gammaQ, betaInc: betaInc,
   erf: erf, erfc: erfc, normPdf: normPdf, normCdf: normCdf, normInv: normInv,

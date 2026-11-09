@@ -148,10 +148,14 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      the bootstrap p-values are approximate; at about 0.6, a correct shifted gamma was rejected up
      to about twice as often as nominal. Item 10 describes the fit to recorded ranges, which
      replaces these fits on coarse data.*
-  9. *`fitDist`'s eighth argument, `opts`, carries two fit options that `rankAll` passes and
-     `bootstrapRun` repeats in every refit from flags on the fit. `floor0` ("Keep each model at or
-     above zero", on by default) caps the shift search at γ = 0 when no value is negative; a fit
-     stopped there is `floorBound`, the unshifted model, with the shift not counted in k. `start1`
+  9. *`fitDist`'s eighth argument, `opts`, carries the fit options that `rankAll` passes; every
+     fit records in `fit.opts` the ones that applied to it (holding and cutting only where no
+     value is negative), and `bootstrapRun` refits every resample under them. `floor0` ("Keep each
+     model at or above zero", on by default) caps the shift search at γ = 0 when no value is
+     negative; a fit stopped there is `floorBound`, the unshifted model, with the shift not counted
+     in k. It also holds the minimum of a family that has one (`minParam`: the triangular, PERT,
+     beta, and Johnson S_B) at or above 0 (`floorMinFit`, `floorParam`, counted nowhere). `cut0`
+     is item 11. `start1`
      ("Smallest possible value is 1", off by default) fits the families in `START1_KEYS` to x − 1
      and stores `shift: 1, start1: true`; `expressions` adds "1 +" to every tool's line (the
      geometric becomes AnyLogic's and SciPy's trials count), and the snippets subtract 1 from the
@@ -191,7 +195,30 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      given only for a fit of values recorded exactly. The bin
      slider rescores the square error (`rescoreBins`) rather than refitting. Timings: the verify's
      `vm` sandbox runs this code 20–50 times slower than a browser; on the page the whole ranking
-     takes about 0.1 s and a 2000-resample bootstrap of a range fit about a second.)*
+     takes about 0.1 s and a 2000-resample bootstrap of a range fit about a second.*
+  11. *With `cut0`, a continuous candidate is cut off at zero (core section 7c, `fitCut`): its
+     start, minimum, or the normal's left tail may lie below 0, the part below 0 is removed, and
+     the rest is scaled up, F_cut(v) = (F(v) − F(0)) / (1 − F(0)). The cut is stored as `fit.cut`
+     (the bound, 0) and `fit.cutMass` (F(0) before the cut) and applied in `fitCdf`, `fitPdf`,
+     `fitQuantile`, `fitSampler` (draw again while below the bound, or invert past a 75% cut),
+     `fitLo`, and `fitMean`, and so everything downstream reads it. `CUT_KEYS` lists the families
+     cut: not the exponential (cut, it is the same exponential whatever its shift), the uniform,
+     the Pearson type VI, or the empirical and discrete families. The fit maximizes the cut
+     likelihood by Nelder–Mead from the held and the unconstrained ordinary fits and keeps the held
+     fit when cutting gains nothing; a mirror image always reaches below 0 and is always cut. The
+     shifted families and the beta may cut at most `CUT_MAX_MASS` (half) of themselves: without the
+     limit, a cut gamma, lognormal, or Weibull ran its start off thousands of units below 0 in a
+     quarter of samples of 150, and with it, 7 to 12 of 30 fits stop at the limit and the share
+     they cut runs high, because the data place their start only loosely. The normal, the Johnson
+     members, the triangular, and the PERT may cut up to `CUT_DEEP_MASS` (99.9%), and so a normal
+     can peak below 0; it recovered a normal(−2, 2) cut at 0 and never reached the limit. A fit at
+     its limit is `cutLimit`. In the default mode (`floor0` alone), a family that cannot produce
+     an exact 0 in the data once its start or minimum is held at 0 is cut instead of failing
+     (`cutForZero`), and its bootstrap refits with the cut too. Section 16e of the verify checks
+     the cut functions against each other and the truncated normal's closed forms, the limits,
+     the minimum hold, exact zeros, ranges, the mirror image, and the bootstrap's calibration (a
+     cut normal and a cut gamma at 4.0% to 5.5%, and data recorded to 0.1 with exact zeros in the
+     default mode at 6.0% (K–S) and 8.0% (A–D), against a nominal 5%).)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

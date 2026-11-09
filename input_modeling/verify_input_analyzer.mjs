@@ -130,6 +130,15 @@ pending.roundRecGamma = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
 pending.roundRecLogn = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
   pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true, key: 'lognormal', truth: [1.015, 0.5], rec: true })))
   .then(sumCounts);
+pending.cutNormal = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('cutCalib', { n: 100, B: CALIB_B, from, to, key: 'normal', truth: [1, 2], g: 0, useShift: false })))
+  .then(sumCounts);
+pending.cutGamma = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('cutCalib', { n: 100, B: CALIB_B, from, to, key: 'gamma', truth: [2, 1.5], g: -1, useShift: true })))
+  .then(sumCounts);
+pending.cutZero = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('cutCalib', { n: 200, B: CALIB_B, from, to, key: 'gamma', truth: [2, 3], g: -2, useShift: true,
+                         step: 0.1 }))).then(sumCounts);
 pool.start();
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2157,6 +2166,155 @@ section('16d. fitting to recorded ranges');
       ok(Math.abs(rD - 0.05) < band && Math.abs(rA - 0.05) < band,
          `coarse ${what} (step 0.6 of the SD) fitted to ranges: K-S rejects ${(100 * rD).toFixed(1)}%, ` +
          `A-D ${(100 * rA).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   16e. MODELS CUT OFF AT ZERO
+
+   With cut0, a candidate may start (or reach) below 0 and has the part
+   below 0 removed (core section 7c). With floor0 alone, a family with its
+   own minimum holds it at or above 0, and a family that then cannot
+   produce an exact 0 in the data is cut instead. The checks: the cut CDF,
+   density, quantile, sampler, and mean against each other and against
+   closed forms; that cutting never loses to the uncut fit; the limits on
+   the share cut; the minimum hold and its count; ranges, the mirror image,
+   and the options carried into the bootstrap; and the bootstrap's
+   calibration.
+   ══════════════════════════════════════════════════════════════════════ */
+section('16e. models cut off at zero');
+{
+  const D = IA.DISTS, cutOpts = { floor0: true, cut0: true }, floor = { floor0: true };
+  const u = IA.MRG32k3a(16600);
+  const draw = (key, p, g, n) => {
+    const x = [];
+    while (x.length < n) { const v = g + D[key].sample(u, p); if (v >= 0) x.push(v); }
+    return x;
+  };
+
+  /* The truncated normal against its closed forms. */
+  {
+    const f = { dist: D.normal, p: [-2, 2], shift: 0, cut: 0, cutMass: D.normal.cdf(0, [-2, 2]) };
+    const a = 1, phi = Math.exp(-0.5) / Math.sqrt(2 * Math.PI), keep = 1 - f.cutMass;
+    close(IA.fitMean(f), -2 + 2 * phi / keep, 1e-6, 'a normal(-2, 2) cut at 0 has the mean mu + sigma phi(a)/(1 - Phi(a))');
+    close(IA.fitCdf(f)(1), (D.normal.cdf(1, [-2, 2]) - f.cutMass) / keep, 1e-12, 'its CDF is (F(v) - F(0)) / (1 - F(0))');
+    close(IA.fitPdf(f)(1), D.normal.pdf(1, [-2, 2]) / keep, 1e-12, 'its density is f(v) / (1 - F(0))');
+    ok(IA.fitCdf(f)(0) === 0 && IA.fitCdf(f)(-1) === 0 && IA.fitPdf(f)(-1) === 0 && IA.fitLo(f) === 0,
+       'it puts nothing at or below 0 and starts at 0');
+    void a;
+  }
+
+  /* Every cuttable family: fitted to a cut gamma's draws, each cut fit's
+     CDF, quantile, and density agree, and its sampler matches its CDF. */
+  const gx = draw('gamma', [1.5, 2], -1.5, 200);
+  const tol = { cutLimitSeen: 0 };
+  for (const key of IA.CUT_KEYS) {
+    const d = D[key], shifty = d.shiftable;
+    const held = IA.fitDist(d, gx, shifty, false, null, null, false, floor);
+    const f = IA.fitDist(d, gx, shifty, false, null, null, false, cutOpts);
+    if (!f.ok) { ok(false, `${key}: the cut fit fails (${f.msg})`); continue; }
+    ok(!held.ok || f.ll >= held.ll - 1e-7, `${key}: the cut fit is never worse than the held one ` +
+       `(${f.ll.toFixed(3)} against ${held.ok ? held.ll.toFixed(3) : 'no fit'})`);
+    if (!IA.isCut(f)) continue;
+    const cap = IA.CUT_DEEP.indexOf(key) >= 0 ? 0.999 : 0.5;
+    ok(f.cutMass > 0 && f.cutMass <= cap + 1e-9, `${key}: it cuts ${(100 * f.cutMass).toFixed(1)}%, within the limit of ${100 * cap}%`);
+    if (f.cutLimit) tol.cutLimitSeen++;
+    const F = IA.fitCdf(f), Q = IA.fitQuantile(f), pdf = IA.fitPdf(f);
+    let worst = 0;
+    for (const q of [0.01, 0.2, 0.5, 0.8, 0.99]) worst = Math.max(worst, Math.abs(F(Q(q)) - q));
+    const v = Q(0.5), hgt = 1e-5 * (Q(0.9) - Q(0.1));
+    const slope = (F(v + hgt) - F(v - hgt)) / (2 * hgt);
+    ok(worst < 1e-8 && Math.abs(slope / pdf(v) - 1) < 1e-4 && F(0) === 0,
+       `${key}: F(Q(u)) = u to ${worst.toExponential(1)}, the density is the CDF's slope, and F(0) = 0`);
+    const us = IA.MRG32k3a(16700), s = IA.fitSampler(f, us), y = [];
+    for (let i = 0; i < 2000; i++) y.push(s());
+    y.sort((a, b) => a - b);
+    const ks = IA.ksStat(y, F, () => 0).D;
+    ok(y[0] >= 0 && ks < 1.63 / Math.sqrt(2000), `${key}: 2000 draws are all at or above 0 and match the CDF (D = ${ks.toFixed(4)})`);
+    ok(f.k === (d.shiftable ? d.np + 1 : d.np), `${key}: k counts the parameters and any shift, not the bound (k = ${f.k})`);
+  }
+  ok(tol.cutLimitSeen >= 1, `some of these fits stop at their limit (${tol.cutLimitSeen})`);
+
+  /* The normal recovers a truncated normal peaking below 0, and a half-normal. */
+  {
+    const tx = draw('normal', [-2, 2], 0, 4000);
+    const f = IA.fitDist(D.normal, tx, false, false, null, null, false, cutOpts);
+    ok(Math.abs(f.p[0] + 2) < 0.6 && Math.abs(f.p[1] - 2) < 0.3 && !f.cutLimit,
+       `a normal(-2, 2) cut at 0 is recovered from 4000 draws: mu ${f.p[0].toFixed(2)}, sigma ${f.p[1].toFixed(2)}`);
+    const hx = draw('normal', [0, 2], 0, 4000);
+    const h = IA.fitDist(D.normal, hx, false, false, null, null, false, cutOpts);
+    ok(Math.abs(h.cutMass - 0.5) < 0.05, `a half-normal is a normal cut through its middle (cut ${(100 * h.cutMass).toFixed(1)}%)`);
+  }
+
+  /* A model with nothing below 0 is its own cut version. */
+  {
+    const px = draw('gamma', [3, 1], 4, 200);
+    const a = IA.fitDist(D.gamma, px, true, false, null, null, false, floor);
+    const b = IA.fitDist(D.gamma, px, true, false, null, null, false, cutOpts);
+    ok(!IA.isCut(b) && b.shift === a.shift && b.ll === a.ll, 'a gamma starting near 4 is fitted the same with or without the cut');
+    const nx = draw('normal', [50, 5], 0, 200);
+    const c = IA.fitDist(D.normal, nx, false, false, null, null, false, cutOpts);
+    ok(c.cutMass < 1e-12 || !IA.isCut(c), 'and so is a normal with its mean ten SDs above 0');
+  }
+
+  /* Negative values switch both options off. */
+  {
+    const nx = gx.map(v => v - 1);
+    const f = IA.fitDist(D.normal, nx, false, false, null, null, false, cutOpts);
+    ok(f.ok && !IA.isCut(f) && !f.opts.cut0 && !f.opts.floor0, 'with a negative value, nothing is cut or held, and the bootstrap is told so');
+  }
+
+  /* The minimum hold in the default mode. */
+  {
+    const tx = gx.map(v => v + 0.05);
+    for (const key of ['triangular', 'pert', 'beta', 'johnsonSB']) {
+      const d = D[key], j = d.minParam;
+      const free = IA.fitDist(d, tx, false, false), f = IA.fitDist(d, tx, false, false, null, null, false, floor);
+      if (!(free.p[j] < 0)) { ok(f.p[j] === free.p[j], `${key}: a minimum already at or above 0 is untouched`); continue; }
+      ok(f.ok && f.p[j] === 0 && f.floorParam === j && f.k === free.k - 1 && IA.regularCount(f) === IA.regularCount(free) - (d.orderStat && d.orderStat.indexOf(j) >= 0 ? 0 : 1),
+         `${key}: a minimum of ${free.p[j].toFixed(3)} is held at 0 and counted nowhere (k ${free.k} to ${f.k})`);
+      ok(IA.fitCdf(f)(0) === 0, `${key}: and nothing lies below 0`);
+    }
+  }
+
+  /* An exact 0 in the default mode: the families that cannot produce it are cut. */
+  {
+    const zx = gx.map(v => v + 0.3); zx[0] = 0;
+    for (const key of ['gamma', 'weibull', 'lognormal', 'triangular', 'beta']) {
+      const d = D[key], f = IA.fitDist(d, zx, true, false, null, null, false, floor);
+      ok(f.ok && f.cutForZero && IA.isCut(f) && IA.fitCdf(f)(0) === 0 && f.opts.cut0,
+         `${key}: with a value of exactly 0, it is cut off at zero (cut ${f.ok ? (100 * f.cutMass).toFixed(1) : '-'}%) and its bootstrap cuts too`);
+    }
+    const e = IA.fitDist(D.expo, zx, true, false, null, null, false, floor);
+    ok(e.ok && !e.cutForZero && e.shift === 0, 'the exponential produces a 0 itself and is not cut');
+    const g0 = IA.fitDist(D.gamma, zx, false, false, null, null, false, floor);
+    ok(!g0.ok, 'with the shift off, a gamma is left to fail, as it starts at 0 by request');
+  }
+
+  /* Recorded ranges and the mirror image. */
+  {
+    const rx = gx.map(v => Math.round(v)), rec = IA.recordingRec(IA.summarize(rx), 'nearest');
+    const f = IA.fitDist(D.normal, rx, false, false, null, null, false, { floor0: true, cut0: true, rec });
+    ok(f.ok && f.rec && IA.isCut(f) && IA.fitCdf(f)(0) === 0,
+       `a cut normal fits whole-number values to their ranges (cut ${f.ok ? (100 * f.cutMass).toFixed(1) : '-'}%)`);
+    const lx = draw('gamma', [3, 1.5], 0, 200).map(v => Math.max(0, 12 - v)).filter(v => v >= 0);
+    const m = IA.fitDist(D.gamma, lx, true, false, null, null, true, cutOpts);
+    const Fm = IA.fitCdf(m);
+    ok(m.ok && m.reflect && IA.isCut(m) && Fm(0) === 0 && Fm(m.shift) === 1 && IA.fitQuantile(m)(0.001) >= 0,
+       `a mirrored gamma, which always reaches below 0, is cut there (cut ${m.ok ? (100 * m.cutMass).toFixed(2) : '-'}%)`);
+  }
+
+  /* The bootstrap's calibration under a true null (jobs cutCalib). */
+  {
+    const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
+    for (const [what, key] of [['normal(1, 2) cut at 0', 'cutNormal'], ['gamma(2, 1.5) from -1, cut at 0', 'cutGamma'],
+                               ['gamma(2, 3) from -2, cut at 0, recorded to 0.1 (n = 200), in the default mode', 'cutZero']]) {
+      const { rejD, rejA, used, cut } = await pending[key];
+      const rD = rejD / used, rA = rejA / used;
+      ok(Math.abs(rD - 0.05) < band && Math.abs(rA - 0.05) < band,
+         `${what}: K-S rejects ${(100 * rD).toFixed(1)}%, A-D ${(100 * rA).toFixed(1)}% ` +
+         `(nominal 5%, band +/-${(100 * band).toFixed(1)}%; ${cut} of ${used} fits cut${key === 'cutZero' ? ' for an exact 0' : ''})`);
     }
   }
 }

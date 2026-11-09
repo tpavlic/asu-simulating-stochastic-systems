@@ -255,6 +255,44 @@ export const JOBS = {
       if (res.pA < 0.05) rejA++;
     }
     return { rejD, rejA, used, degenerate };
+  },
+
+  /* Section 16e: the bootstrap of a model cut off at zero, replications
+     [from, to). The truth is g + the family at `truth`, kept only at or
+     above zero; each sample is fitted with cut0, and so is every resample.
+     With `step`, the values are recorded to that step and fitted in the
+     default mode (floor0 alone), and a sample holding an exact 0 is fitted
+     cut for that 0 (`cutForZero`). Every sample is kept: a resample holds a
+     0 only as often as the truth makes one, and so keeping only samples with
+     a 0 would penalize the data's A-squared more often than the resamples'. */
+  cutCalib(IA, { n, B, from, to, key, truth, g, useShift, step = 0 }) {
+    const d = IA.DISTS[key];
+    let rejD = 0, rejA = 0, used = 0, cut = 0;
+    for (let rep = from; rep < to; rep++) {
+      const u = IA.MRG32k3a(560000 + rep);
+      const x = [];
+      while (x.length < n) {
+        let v = g + d.sample(u, truth);
+        if (v < 0) continue;
+        if (step) v = Number((Math.round(v / step) * step).toFixed(6));
+        x.push(v);
+      }
+      x.sort((a, b) => a - b);
+      const f = IA.fitDist(d, x, useShift, false, null, null, false, step ? { floor0: true } : { floor0: true, cut0: true });
+      if (!f.ok) continue;
+      if (step ? f.cutForZero : IA.isCut(f)) cut++;
+      const F = IA.gofCdf(f);
+      const grid = step ? IA.recordingGrid(x) : null;
+      if (grid) grid.kind = 'nearest';
+      const run = IA.bootstrapRun(f, n, B, 570000 + rep, useShift, IA.ksStat(x, F, IA.fitAtom(f)).D,
+                                  IA.adStatFit(x, f), null, NaN, 0, null, false, false, grid);
+      run.step(B);
+      const res = run.result();
+      used++;
+      if (res.pD < 0.05) rejD++;
+      if (res.pA < 0.05) rejA++;
+    }
+    return { rejD, rejA, used, cut };
   }
 };
 
