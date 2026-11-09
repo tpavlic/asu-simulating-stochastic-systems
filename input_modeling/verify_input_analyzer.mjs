@@ -106,6 +106,9 @@ for (const [key, truth] of BOOT_FAMILIES)
     pool.run('bootCalib', { key, truth, n: 60, B: CALIB_B, from, to }))).then(sumCounts);
 pending.roundGrid = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
   pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true }))).then(sumCounts);
+pending.roundLogn = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true, key: 'lognormal', truth: [1.015, 0.5] })))
+  .then(sumCounts);
 pending.roundFull = Promise.all(chunks(40, 20).map(([from, to]) =>
   pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: false }))).then(sumCounts);
 pool.start();
@@ -1877,6 +1880,21 @@ section('16b. data recorded to a step');
     ok(fD > 0.5 && fA > 0.5,
        `and drawn at full precision instead, they reject ${(100 * fD).toFixed(0)}% (K-S) and ` +
        `${(100 * fA).toFixed(0)}% (A-D) of correct fits, which is the failure the rounding fixes`);
+  }
+
+  /* A coarser case: 5 + lognormal(1.015, 0.5) to whole numbers, a step of
+     about 0.6 of the SD. Half its shifted fits are degenerate, from the tie
+     block at the minimum, and with the fallback shift 0.001 of the range
+     below that block the rounded bootstrap rejected about 52% of these
+     correct fits; half a step below it, it rejects near 5%. */
+  {
+    const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
+    const { rejD, rejA, used, degenerate } = await pending.roundLogn;
+    const rD = rejD / used, rA = rejA / used;
+    ok(degenerate > used / 4, `coarse lognormal: ${degenerate} of ${used} fits are degenerate, as intended for this check`);
+    ok(Math.abs(rD - 0.05) < band && Math.abs(rA - 0.05) < band,
+       `coarse lognormal, degenerate fits half a step below the minimum: K-S rejects ${(100 * rD).toFixed(1)}%, ` +
+       `A-D ${(100 * rA).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
   }
 
   /* The exported snippets round their resamples the same way, only for a

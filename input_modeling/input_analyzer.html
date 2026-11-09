@@ -4869,8 +4869,16 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect) {
     var deeper = score(dMin * 1e-3);
     if (Number.isFinite(deeper.ll) && deeper.ll - fin.ll > DIVERGE_GAIN) {
       degenerate = true;
-      var safe = score(D_SAFE_FRAC * range);
-      if (Number.isFinite(safe.ll)) { fin = safe; dOpt = D_SAFE_FRAC * range; }
+      /* On data recorded to a step h, the fallback sits h/2 below the
+         smallest value, the bottom of the interval that value stands for.
+         A block of tied values at the minimum is what makes the profile
+         diverge there, and a shifted lognormal held 0.001 of the range
+         below such a block was rejected by its own rounded bootstrap more
+         than half the time on correct models; at h/2 it was not. */
+      var g0 = recordingGrid(s.sorted);
+      var dSafe = Math.max(D_SAFE_FRAC * range, g0 ? g0.h / 2 : 0);
+      var safe = score(dSafe);
+      if (Number.isFinite(safe.ll)) { fin = safe; dOpt = dSafe; }
     }
   }
   /* The shift is itself an estimated parameter, and so it is added to
@@ -11718,6 +11726,12 @@ function bootWorkerSource() {
 /* The step a continuous fit's resamples are rounded to, so that they are
    tied the way the data are; null for a discrete fit, whose resamples are
    already on its outcomes, and for data on no grid. */
+/* Above this step, as a share of the data's standard deviation, the note
+   under the tests says the bootstrap p-values are approximate. Measured on
+   correct shifted fits to whole-unit data, the rounded bootstrap held near
+   its nominal 5% for every family up to about 0.45, and rejected up to about
+   twice as often (a gamma of shape 2) at about 0.6. */
+var COARSE_STEP_SD = 0.5;
 function bootGrid(f) {
   return f.dist.kind === 'discrete' ? null : IA.recordingGrid(ST.s.sorted);
 }
@@ -11911,8 +11925,10 @@ function renderGof() {
     '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
 
   /* The tie caveat has to come before the numbers, not after them. */
-  var tied = ST.s.nUnique < ST.s.n * 0.5 || f.dist.kind === 'discrete';
   var tieGrid = bootGrid(f);
+  var stepSd = tieGrid && ST.s.sd > 0 ? tieGrid.h / ST.s.sd : 0;
+  var coarse = stepSd > COARSE_STEP_SD;
+  var tied = ST.s.nUnique < ST.s.n * 0.5 || f.dist.kind === 'discrete' || coarse;
   var tieNote = tied
     ? '<div class="note quiet" style="margin-top:8px"><strong>' + (f.dist.kind === 'discrete'
         ? 'This is a discrete fit, and ties are unavoidable.'
@@ -11928,7 +11944,14 @@ function renderGof() {
           (tieGrid
             ? 'The bootstrap column is still the one to read: each resample is rounded to the ' +
               'nearest <span class="mono">' + IA.num(tieGrid.h) + '</span>, the step your data are ' +
-              'recorded to, before it is refitted, and so it has ties like yours.'
+              'recorded to, before it is refitted, and so it has ties like yours.' +
+              (coarse
+                ? ' <strong>That step is ' + fmt(stepSd, 2) + ' of your data\'s standard deviation, ' +
+                  'which is coarse.</strong> At that coarseness the bootstrap p-values are only ' +
+                  'approximate, and a correct model can be rejected more often than the stated ' +
+                  'level: about twice as often at a step of 0.6 of the standard deviation, in a ' +
+                  'simulation check. Data recorded to a finer step would remove the problem.'
+                : '')
             : 'The bootstrap column cannot correct for this. Your values do not sit on a decimal ' +
               'step, and so its resamples are drawn at full precision and are not tied the way your ' +
               'data are, which makes its p-value too small where the rounding is coarse. If the ' +

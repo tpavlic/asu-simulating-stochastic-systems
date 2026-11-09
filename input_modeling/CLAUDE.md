@@ -139,7 +139,16 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      distinct values two of which sit one step apart, and so a few irregular outcomes never get a
      coincidental coarse step. Values on no decimal step (seconds written as minutes) get no grid,
      and the tie note says the bootstrap cannot correct for their ties. The grid never enters the
-     choice of family: data that look discrete are fitted as discrete exactly as before.)*
+     choice of family: data that look discrete are fitted as discrete exactly as before. On data
+     with a step, a shifted fit flagged degenerate falls back to a shift h/2 below the smallest
+     value rather than 0.001 of the range below it: a block of tied values at the minimum is what
+     makes the profile diverge there, and at the old fallback a coarse shifted lognormal (step about
+     0.6 of the SD) was rejected by its rounded bootstrap about half the time on correct models
+     (section 16b checks it). Above a step of `COARSE_STEP_SD` (0.5) of the SD, the tie note says
+     the bootstrap p-values are approximate; at about 0.6, a correct shifted gamma was rejected up
+     to about twice as often as nominal. Fitting to interval probabilities would remove the
+     remaining error but would make every continuous fit a numerical search, and it was deferred
+     for that reason.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

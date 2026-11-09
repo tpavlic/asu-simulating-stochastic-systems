@@ -226,19 +226,20 @@ export const JOBS = {
   },
 
   /* Section 16b: the bootstrap on data recorded to whole units, replications
-     [from, to). The truth is 5 + gamma(2, 2) rounded to the nearest whole
-     number, about 13 distinct values in 100, and the fit is a shifted
-     gamma. With `grid` the resamples are rounded the way the data were;
-     without it they are drawn at full precision, as before the fix. */
-  roundCalib(IA, { n, B, from, to, grid }) {
-    const d = IA.DISTS.gamma;
-    let rejD = 0, rejA = 0, used = 0;
+     [from, to). The truth is 5 + the family at `truth`, rounded to the
+     nearest whole number, and the fit is the same family, shifted. With
+     `grid` the resamples are rounded the way the data were; without it they
+     are drawn at full precision, as before the fix. */
+  roundCalib(IA, { n, B, from, to, grid, key = 'gamma', truth = [2, 2] }) {
+    const d = IA.DISTS[key];
+    let rejD = 0, rejA = 0, used = 0, degenerate = 0;
     for (let rep = from; rep < to; rep++) {
       const u = IA.MRG32k3a(530000 + rep), x = [];
-      for (let i = 0; i < n; i++) x.push(Math.round(5 + d.sample(u, [2, 2])));
+      for (let i = 0; i < n; i++) x.push(Math.round(5 + d.sample(u, truth)));
       x.sort((a, b) => a - b);
       const f = IA.fitDist(d, x, true, false);
       if (!f.ok) continue;
+      if (f.degenerate) degenerate++;
       const F = IA.fitCdf(f);
       const run = IA.bootstrapRun(f, n, B, 540000 + rep, true, IA.ksStat(x, F, IA.fitAtom(f)).D,
                                   IA.adStat(x, F), null, NaN, 0, null, false, false,
@@ -249,7 +250,7 @@ export const JOBS = {
       if (res.pD < 0.05) rejD++;
       if (res.pA < 0.05) rejA++;
     }
-    return { rejD, rejA, used };
+    return { rejD, rejA, used, degenerate };
   }
 };
 
