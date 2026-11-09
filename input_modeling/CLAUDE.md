@@ -53,10 +53,10 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
   2. *`verify_input_analyzer.mjs` and its companion `verify_input_analyzer_jobs.mjs` are not shipped
      with the widget and are not linked from the site. Run the first (`node
-     input_modeling/verify_input_analyzer.mjs`, about three minutes on a multi-core machine) after
+     input_modeling/verify_input_analyzer.mjs`, about six minutes on a multi-core machine) after
      touching anything in the core. Its slow Monte Carlo loops live in the jobs module and run on
      worker threads, one fewer than the cores, with the same seeds as a serial loop, and so the output
-     is the same either way; `IA_SERIAL=1` runs them on one thread (about fifteen minutes), and
+     is the same either way; `IA_SERIAL=1` runs them on one thread (several times longer), and
      `IA_WORKERS` sets the thread count. A new slow loop belongs in the jobs module as a job returning
      plain counts. The script checks the special functions against exact identities, recovers known
      parameters for every distribution, and measures the bootstrap's rejection rate under a true
@@ -146,9 +146,8 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      0.6 of the SD) was rejected by its rounded bootstrap more than half the time on correct models
      (section 16b checks it). Above a step of `COARSE_STEP_SD` (0.5) of the SD, the tie note says
      the bootstrap p-values are approximate; at about 0.6, a correct shifted gamma was rejected up
-     to about twice as often as nominal. Fitting to interval probabilities would remove the
-     remaining error but would make every continuous fit a numerical search, and it was deferred
-     for that reason.*
+     to about twice as often as nominal. Item 10 describes the fit to recorded ranges, which
+     replaces these fits on coarse data.*
   9. *`fitDist`'s eighth argument, `opts`, carries two fit options that `rankAll` passes and
      `bootstrapRun` repeats in every refit from flags on the fit. `floor0` ("Keep each model at or
      above zero", on by default) caps the shift search at γ = 0 when no value is negative; a fit
@@ -161,7 +160,38 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      notes any continuous model that puts 0.01% or more of its draws below zero when no value is
      negative (`belowZeroNote`). A frequency table numbered by row can start at 1 (`ST.freq.out`
      of −2). The Phone menu times sample is recorded to whole seconds: it loads as counts, and the
-     count note's floor sentence points to Continuous with the shift.)*
+     count note's floor sentence points to Continuous with the shift.*
+  10. *Values on a step of `INTERVAL_STEP_SD` (0.05) of the SD or more are fitted to the ranges
+     they stand for (core section 7b, `opts.rec` from `recordingRec`): each continuous candidate,
+     the empirical excepted, maximizes the grouped (interval-censored) likelihood by Nelder–Mead
+     from the exact fit, or inside the bootstrap from the parent fit (`FIT_HINT`,
+     `FIT_HINT_SHIFT`), and its `ll`, AIC, and BIC are sums of log-probabilities. The likelihood
+     is bounded, and so no range fit is `degenerate` or `atBound`, and its shift can land above the
+     smallest recorded value (the fit card's `rangeFitNote` says why). "Values were" beside Family
+     (`ST.recKind`: nearest, down, up, or exact) appears only above the cutoff under a continuous
+     family; rounded down and up move each range by half a step, and the bootstrap rounds its
+     resamples the same way (`snapToGrid` reads `grid.kind`). The cutoff was measured on shifted
+     gamma, lognormal, and Weibull fits at n = 150 against the true parameters: at 0.02 the two
+     fits agree; from 0.05 the exact fit's errors grow (the gamma's by 9–16% at 0.05 and 30–50% at
+     0.1), and the range fit's stay at the unrounded data's. Every built-in continuous sample is
+     below 0.01 and fits exactly as before. `reproScripts` hands a range fit to `rangeScripts`, which
+     writes each family's CDF and quantile in R, MATLAB, and Python, maximizes the same likelihood
+     from the page's estimates, and prints each number beside the page's (estimates to three digits,
+     the log-likelihood to six); a Pearson type VI run off to its gamma limit prints MATLAB's without
+     a verdict, because MATLAB's `betainc` parts from R's and SciPy's at a shape near 1e9. The
+     goodness-of-fit statistics of a range fit compare the recorded values with the distribution of
+     a recorded value, a step function on the grid: `gofCdf` (F at the top of each range),
+     `fitAtom` (each range's probability), `cdfBelow` (the chi-square and square-error bins), and
+     `adStatFit`, the grouped-data form of A² summed over the grid. Scored against the smooth F
+     instead, a recorded 5 under a fitted start of 5.2 has F(5) = 0, such values are far commoner in
+     resamples than in the data, and the bootstrap rejected 0 to 4% (K–S) and 0% (A–D) of correct
+     fits; the order-statistic A² on the step CDF still rejected none, its ties swamping it. With
+     both changes, correct shifted gamma, lognormal, and Weibull fits at a step of 0.45 and 0.6 of
+     the SD were rejected 1.5% to 6.5% of the time (200 each), and so the coarse-step warning is
+     given only for a fit of values recorded exactly. The bin
+     slider rescores the square error (`rescoreBins`) rather than refitting. Timings: the verify's
+     `vm` sandbox runs this code 20–50 times slower than a browser; on the page the whole ranking
+     takes about 0.1 s and a 2000-resample bootstrap of a range fit about a second.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

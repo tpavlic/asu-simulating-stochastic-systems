@@ -16,6 +16,9 @@
    source is named on the line.
    ══════════════════════════════════════════════════════════════════════ */
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 /* The core loader and the slow Monte Carlo loops live in the jobs module,
    which also runs them on worker threads; see its header. */
 import { HTML, loadCore, makePool } from './verify_input_analyzer_jobs.mjs';
@@ -31,6 +34,17 @@ const C = process.stdout.isTTY
       d: s => `\x1b[2m${s}\x1b[0m`, b: s => `\x1b[1m${s}\x1b[0m` }
   : { g: s => s, r: s => s, d: s => s, b: s => s };
 
+/* Runs an exported script in a scratch directory; null when the language
+   is not installed. */
+function runScript(cmd, args, code, ext) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ia-range-'));
+  const file = path.join(dir, 'script.' + ext);
+  fs.writeFileSync(file, code);
+  const r = spawnSync(cmd, [...args, file], { encoding: 'utf8', cwd: dir, timeout: 300000 });
+  fs.rmSync(dir, { recursive: true, force: true });
+  if (r.error && r.error.code === 'ENOENT') return null;
+  return { out: (r.stdout || '') + (r.stderr || ''), status: r.status };
+}
 function section(name) { group = name; console.log('\n' + C.b(name)); }
 function ok(cond, label, detail) {
   if (cond) { pass++; console.log('  ' + C.g('PASS') + '  ' + label); }
@@ -111,6 +125,11 @@ pending.roundLogn = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
   .then(sumCounts);
 pending.roundFull = Promise.all(chunks(40, 20).map(([from, to]) =>
   pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: false }))).then(sumCounts);
+pending.roundRecGamma = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true, truth: [2, 1.18], rec: true }))).then(sumCounts);
+pending.roundRecLogn = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true, key: 'lognormal', truth: [1.015, 0.5], rec: true })))
+  .then(sumCounts);
 pool.start();
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1999,6 +2018,146 @@ section('16c. the floor at zero, the exact minimum, and counts from 1');
       if (run.result().pD < 0.05) rej++;
     }
     ok(rej <= 12, `a correct count from 1 is rejected by its bootstrap ${rej} times in 100 (nominal 5)`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   16d. FITTING TO RECORDED RANGES
+
+   Values on a step that is coarse against their spread are fitted to the
+   ranges they stand for (core section 7b). The step triggers it only at
+   INTERVAL_STEP_SD of the SD or more, and so data written to two decimals
+   are fitted exactly as before. The checks: the ranges and their shared
+   ends, the likelihood the search maximizes, how each kind of rounding
+   moves the fit, the mirror image and the holds, the rescored bins, the
+   R and Python scripts against the page, and the bootstrap's calibration.
+   ══════════════════════════════════════════════════════════════════════ */
+section('16d. fitting to recorded ranges');
+{
+  const u = IA.MRG32k3a(16400), raw = [];
+  for (let i = 0; i < 150; i++) raw.push(5 + IA.DISTS.gamma.sample(u, [2, 2]));
+  const x = raw.map(Math.round), s = IA.summarize(x);
+  const rec = IA.recordingRec(s, 'nearest');
+  ok(rec && rec.h === 1 && rec.kind === 'nearest' && rec.stepSd > 0.3,
+     `whole seconds with an SD near 2.8 sit on a step of 1, ${rec && rec.stepSd.toFixed(2)} of the SD`);
+  ok(IA.recordingRec(s, 'sideways').kind === 'nearest' && IA.recordingRec(s, 'down').kind === 'down',
+     'the kind of rounding passes through, and an unknown one reads as nearest');
+  const x2 = raw.map(v => Math.round(v * 100) / 100);
+  ok(IA.recordingRec(IA.summarize(x2), 'nearest') === null,
+     `values to two decimals (step ${(0.01 / IA.summarize(x2).sd).toFixed(4)} of the SD) are below the cutoff of ${IA.INTERVAL_STEP_SD} and get no ranges`);
+  const fl = IA.flipRec(IA.recordingRec(s, 'down'));
+  ok(fl.kind === 'up' && IA.flipRec(fl).kind === 'down' && IA.flipRec(rec).kind === 'nearest',
+     'a mirror image turns rounded down into rounded up and back, and leaves nearest alone');
+
+  const gk = k => ({ h: 1, off: 0, dp: 0, kind: k });
+  ok([5.3, 5.7, -5.3].map(v => IA.snapToGrid(v, gk('nearest'))).join(',') === '5,6,-5' &&
+     [5.3, 5.7, -5.3].map(v => IA.snapToGrid(v, gk('down'))).join(',') === '5,5,-6' &&
+     [5.3, 5.7, -5.3].map(v => IA.snapToGrid(v, gk('up'))).join(',') === '6,6,-5',
+     'a resample is rounded to the nearest step, down, or up, as the data were');
+
+  const C = IA.recCells(x, rec), distinct = new Set(x).size;
+  ok(C.c.length === distinct && C.c.reduce((a, b) => a + b, 0) === x.length,
+     `${distinct} distinct values, their counts summing to ${x.length}`);
+  const u0 = [...new Set(x)].sort((a, b) => a - b), gaps = u0.filter((v, i) => i && v - u0[i - 1] > 1).length;
+  ok(C.edges.length === distinct + 1 + gaps && C.top === s.min + 0.5,
+     `neighboring whole numbers share an end: ${C.edges.length} ends for ${distinct} ranges with ${gaps} gaps between them`);
+  const fe = IA.fitDist(IA.DISTS.gamma, x, true, false, null, null, false, { floor0: true });
+  const Fe = IA.fitCdf(fe);
+  let naive = 0;
+  for (const v of new Set(x)) naive += x.filter(t => t === v).length * Math.log(Fe(v + 0.5) - Fe(v - 0.5));
+  ok(Math.abs(IA.cellLogLik(fe.dist, fe.p, fe.shift, C) - naive) < 1e-9,
+     'the grouped log-likelihood is the sum over values of count times log probability of the range');
+
+  /* Every continuous family: a finite fit that scores at least as well as
+     the exact fit's parameters do on the same ranges, never degenerate. */
+  const keys = IA.CONTINUOUS_KEYS.filter(k => k !== 'empirical').concat(IA.JOHNSON_KEYS);
+  const bad = [];
+  for (const k of keys) {
+    const d = IA.DISTS[k];
+    const fr = IA.fitDist(d, x, true, false, null, null, false, { floor0: true, rec });
+    const fx = IA.fitDist(d, x, true, false, null, null, false, { floor0: true });
+    if (!fr.ok || !Number.isFinite(fr.ll) || fr.degenerate || fr.atBound || !fr.rec) { bad.push(k + ' (no fit)'); continue; }
+    const atExact = fx.ok ? IA.cellLogLik(d, fx.p, fx.shift, IA.recCells(x, rec)) : -Infinity;
+    if (!(fr.ll >= atExact - 1e-6)) bad.push(k + ' ' + fr.ll.toFixed(3) + ' < ' + atExact.toFixed(3));
+  }
+  ok(bad.length === 0, `all ${keys.length} continuous families fit the ranges, each at least as well as the exact fit's parameters do`, bad.join('; '));
+  const fg = IA.fitDist(IA.DISTS.gamma, x, true, false, null, null, false, { floor0: true, rec });
+  ok(fg.k === 3 && fg.shift < s.min + 0.5 && fg.shift > s.min - 2,
+     `the gamma's shift, ${fg.shift.toFixed(3)}, lies below the top of the smallest value's range, and k counts it`);
+  const fd = IA.fitDist(IA.DISTS.gamma, x, true, false, null, null, false, { floor0: true, rec: IA.recordingRec(s, 'down') });
+  ok(Math.abs(fd.shift - fg.shift - 0.5) < 1e-4 && Math.abs(fd.p[0] - fg.p[0]) < 1e-4 * fg.p[0] &&
+     Math.abs(fd.ll - fg.ll) < 1e-6,
+     'rounded down moves every range up half a step, and so the fit moves with it and scores the same');
+  const neg = x.map(v => 30 - v);
+  const fm = IA.fitDist(IA.DISTS.gamma, neg, true, false, null, null, true, { rec: IA.recordingRec(IA.summarize(neg), 'down') });
+  const fu = IA.fitDist(IA.DISTS.gamma, x, true, false, null, null, false, { rec: IA.recordingRec(s, 'up') });
+  ok(fm.reflect && Math.abs((30 - fm.shift) - fu.shift) < 1e-4 && Math.abs(fm.ll - fu.ll) < 1e-6,
+     'the mirror image of 30 - x rounded down is the fit of x rounded up');
+  const fh = IA.fitDist(IA.DISTS.gamma, x, true, false, [2, null], null, false, { floor0: true, rec });
+  const fsh = IA.fitDist(IA.DISTS.gamma, x, true, false, null, 4.5, false, { rec });
+  ok(fh.p[0] === 2 && fh.k === 2 && fsh.shift === 4.5 && fsh.shiftHeld && fsh.k === 2,
+     'a held shape and a held shift stay where they were put and are not counted');
+  const fer = IA.fitDist(IA.DISTS.erlang, x, true, false, null, null, false, { floor0: true, rec });
+  ok(Number.isInteger(fer.p[0]) && fer.k === 3, `the Erlang keeps a whole number of stages (${fer.p[0]})`);
+  const near0 = x.map(v => v - 5);
+  const f0 = IA.fitDist(IA.DISTS.lognormal, near0, true, false, null, null, false, { floor0: true, rec: IA.recordingRec(IA.summarize(near0), 'nearest') });
+  ok(f0.ok && f0.shift >= 0,
+     `kept at or above zero, a lognormal on recorded values from 0 fits, starting at ${f0.ok ? f0.shift.toFixed(3) : f0.msg}`);
+  const fl0 = IA.fitDist(IA.DISTS.lognormal, near0, false, false, null, null, false, { rec: IA.recordingRec(IA.summarize(near0), 'nearest') });
+  ok(fl0.ok && fl0.shift === 0, 'and so does one with no shift, which the exact fit refuses for a value of 0');
+
+  /* Data below the cutoff are ranked exactly as before. */
+  const bins = IA.makeBins(x2, 10);
+  const plain = IA.rankAll(x2, IA.CONTINUOUS_KEYS, true, bins, null, null, false, { floor0: true });
+  const viaRec = IA.rankAll(x2, IA.CONTINUOUS_KEYS, true, bins, null, null, false,
+                            { floor0: true, rec: IA.recordingRec(IA.summarize(x2), 'nearest') });
+  ok(plain.every((r, i) => r.ok === viaRec[i].ok && (!r.ok || r.aic === viaRec[i].aic)),
+     'values to two decimals rank exactly as they did before ranges existed');
+
+  /* New bins rescore the square error without refitting. */
+  const rows = IA.rankAll(x, IA.CONTINUOUS_KEYS, true, IA.makeBins(x, 8), null, null, false, { floor0: true, rec });
+  const b12 = IA.makeBins(x, 12);
+  const fresh = IA.rankAll(x, IA.CONTINUOUS_KEYS, true, b12, null, null, false, { floor0: true, rec });
+  IA.rescoreBins(rows, x, b12);
+  ok(rows.every((r, i) => !r.ok || Math.abs(r.sqe - fresh[i].sqe) < 1e-12),
+     'rescoring the rows for new bins gives the square errors a full refit gives');
+
+  /* The scripts refit the same likelihood from the page's estimates and
+     print each number beside the page's. */
+  const sc = IA.reproScripts(fg, x, 7, 20);
+  ok(sc.r.includes('interval-censored') && sc.python.includes('interval-censored') && sc.matlab.includes('interval-censored'),
+     'a range fit exports scripts that fit the ranges, in all three languages');
+  ok(sc.r.includes('round(v)') && sc.python.includes('np.round(v)') && sc.matlab.includes('round(v)'),
+     'and each rounds its resamples to the nearest step');
+  const sd = IA.reproScripts(fd, x, 7, 20);
+  ok(sd.r.includes('floor(v)') && sd.python.includes('np.floor(v)') && sd.matlab.includes('floor(v)'),
+     'rounded down, they round their resamples down');
+  const runs = [['gamma', fg, x], ['triangular', IA.fitDist(IA.DISTS.triangular, x, true, false, null, null, false, { rec }), x],
+                ['mirrored gamma', fm, neg]];
+  for (const [what, f, data] of runs) {
+    const sp = IA.reproScripts(f, data, 7, 20);
+    for (const [lang, cmd, args, ext, code] of [['R', 'Rscript', ['--vanilla'], 'R', sp.r], ['Python', 'python3', ['-I'], 'py', sp.python]]) {
+      const res = runScript(cmd, args, code, ext);
+      if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+      const agree = (res.out.match(/\bagrees\b/g) || []).length, differ = (res.out.match(/\bDIFFERS\b/g) || []).length;
+      ok(res.status === 0 && differ === 0 && agree >= 6,
+         `${lang} script for a ${what} fitted to ranges: ${agree} values agree with the page, ${differ} differ`,
+         res.out.slice(-600));
+    }
+  }
+
+  /* The measurement: correct shifted fits to whole-number data whose step
+     is about 0.6 of the SD, fitted to ranges, bootstrapped with resamples
+     rounded and fitted the same way (jobs roundCalib with rec). */
+  {
+    const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
+    for (const [what, key] of [['gamma', 'roundRecGamma'], ['lognormal', 'roundRecLogn']]) {
+      const { rejD, rejA, used } = await pending[key];
+      const rD = rejD / used, rA = rejA / used;
+      ok(Math.abs(rD - 0.05) < band && Math.abs(rA - 0.05) < band,
+         `coarse ${what} (step 0.6 of the SD) fitted to ranges: K-S rejects ${(100 * rD).toFixed(1)}%, ` +
+         `A-D ${(100 * rA).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
+    }
   }
 }
 

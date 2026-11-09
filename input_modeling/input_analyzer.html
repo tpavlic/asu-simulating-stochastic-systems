@@ -811,6 +811,17 @@ footer a:hover { text-decoration: underline; }
           <option value="discrete">Discrete</option>
         </select>
       </span>
+      <!-- Shown only when a continuous family meets values on a step that is
+           coarse against their spread (syncRecPick). -->
+      <span class="ctrl-grp" id="rec-grp" style="display:none">
+        <label class="ctrl-lbl" for="rec-pick"><span class="tip" tabindex="0" id="rec-tip" data-tip="">Values were</span></label>
+        <select id="rec-pick">
+          <option value="nearest">rounded to the nearest 1</option>
+          <option value="down">rounded down to 1 (truncated)</option>
+          <option value="up">rounded up to 1</option>
+          <option value="exact">recorded exactly</option>
+        </select>
+      </span>
     </div>
     <!-- The two fit options take a line each under the family: both labels
          are long, and side by side they wrapped at arbitrary points. -->
@@ -978,7 +989,10 @@ footer a:hover { text-decoration: underline; }
       nearest second are still a continuous quantity, and so they still call for a continuous
       distribution, but the recording leaves many values tied. Ties make the table p-values of
       K&ndash;S and A&ndash;D wrong. The bootstrap p-values stay valid because each resample is
-      rounded the same way as your data before it is refitted.</p></div>
+      rounded the same way as your data before it is refitted. Where the step is coarse against the
+      spread, every continuous candidate is also fitted to the range of true values each recorded
+      value stands for (set under <strong>Values were</strong> in section 2), and so is every
+      resample.</p></div>
 
     <div class="plot-wrap" style="margin-top:13px">
       <div style="flex:1 1 340px;min-width:0">
@@ -4773,9 +4787,10 @@ var FIT_FAST = false;
 /* The parent fit's parameters while the bootstrap refits its resamples,
    for a search that can start from them; null otherwise. */
 var FIT_HINT = null;
-/* `opts` carries two fit options: floor0, which keeps a shifted model at or
-   above zero (gamma >= 0) when no value is negative, and start1, which
-   starts a count at 1 (see START1_KEYS). */
+/* `opts` carries three fit options: floor0, which keeps a shifted model at
+   or above zero (gamma >= 0) when no value is negative, start1, which
+   starts a count at 1 (see START1_KEYS), and rec, which fits a continuous
+   candidate to the ranges its recorded values stand for (see 7b). */
 function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   if (!x || x.length < 2) return { ok: false, msg: 'Need at least two observations.' };
   FIT_FAST = !!fast;
@@ -4790,12 +4805,16 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
         return { ok: false, msg: 'c held at ' + fixedShift + ' is not above your largest observation, ' +
           'and so the mirrored model cannot produce that observation.' };
     }
-    var fr = fitDist(dist, neg, true, fast, fixed, cHeld ? -fixedShift : null, false);
+    /* A recorded value's range flips with it: rounded down becomes rounded
+       up on -x. */
+    var negOpts = opts && opts.rec ? { rec: flipRec(opts.rec) } : undefined;
+    var fr = fitDist(dist, neg, true, fast, fixed, cHeld ? -fixedShift : null, false, negOpts);
     /* A message about a held start speaks of gamma' on -x; restate it as c. */
     if (!fr.ok) return { ok: false, msg: fr.msg.replace(/γ held at (-?[0-9.eE+-]+)/, function (m0, v) {
       return 'c held at ' + String(-Number(v)); }).replace(' Try the location shift.', '') };
     fr.shift = -fr.shift;
     fr.reflect = true;
+    if (fr.rec) fr.rec = opts.rec;   /* the recording of x, not of -x */
     return fr;
   }
   var held = hasHolds(fixed);
@@ -4823,6 +4842,9 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
              orderStat: f1.orderStat || null,
              fixed: held ? fixed.slice() : null, allHeld: held && f1.freeCount === 0 };
   }
+
+  if (opts && opts.rec && dist.kind !== 'discrete' && !dist.noCriteria)
+    return fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts);
 
   if (!useShift || !dist.shiftable) {
     var f = fitCore(x);
@@ -4953,6 +4975,192 @@ function fitDist(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
            atBound: atBound && !degenerate, degenerate: degenerate, shiftHeld: false,
            floor0: floor0, floorBound: floorBound,
            fixed: held ? fixed.slice() : null, allHeld: false };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   7b. FITTING TO RECORDED RANGES
+   ─────────────────────────────────────────────────────────────────────
+   A time recorded to the whole second as 5 was somewhere from 4.5 to 5.5.
+   The fits above score a model by its density at exactly 5, which is
+   harmless when the recording step is small against the spread and is
+   not when it is coarse: a block of tied values at the minimum lets a
+   shifted model's density run off to infinity there (section 7's
+   degenerate case), and the ranking of the candidates shifts with it. On
+   rounded draws of a shifted gamma with a step of 0.36 of the SD, the
+   lognormal ranked first by AIC in 53 samples of 200 against 17 of 200
+   before rounding.
+
+   Fitted to the ranges instead, a model is scored by the probability it
+   gives each recorded value's range,
+
+       log L = sum over distinct values v of  count(v) log[F(hi_v) - F(lo_v)],
+
+   which is the grouped-data (interval-censored) likelihood. It is bounded
+   by 0, and so the degenerate case cannot occur, and every candidate's AIC
+   is a log-probability comparable with every other's. A recorded value
+   stands for [v - h/2, v + h/2] rounded to the nearest step, [v, v + h]
+   rounded down (or truncated, for values that are not negative), and
+   [v - h, v] rounded up.
+
+   The parameters, and the shift with them, are found by Nelder-Mead,
+   started from the ordinary fit to the recorded values, or inside the
+   bootstrap from the parent fit. A positive parameter is searched on its
+   log, the shift as gamma = top - e^t, where top is the upper end of the
+   smallest value's range: any start below that leaves every range some
+   probability. The shift can therefore land above the smallest recorded
+   value, which is no contradiction: a recorded 5 may have been 5.3.
+
+   A whole parameter (the Erlang's stages) is held at the ordinary fit's
+   value and at one either side of it, and the best of the three is kept.
+   The empirical distribution is not a model with parameters, and keeps its
+   ordinary fit. */
+/* The step, as a fraction of the SD, at and above which ranges are fitted. */
+var INTERVAL_STEP_SD = 0.05;
+var REC_KINDS = ['nearest', 'down', 'up'];
+/* The parameters searched on their logarithm, by family. */
+var INTERVAL_LOG = {
+  expo: [0], gamma: [0, 1], erlang: [1], weibull: [0, 1], lognormal: [1], loglogistic: [0, 1],
+  pearson5: [0, 1], pearson6: [0, 1, 2], normal: [1], beta: [0, 1], johnsonSB: [1, 3], johnsonSU: [1, 3]
+};
+/* The parent fit's shift while the bootstrap refits, beside FIT_HINT. */
+var FIT_HINT_SHIFT = null;
+
+/* The recording the data's step implies, or null when the step is fine
+   enough that fitting the ranges would change nothing that matters. */
+function recordingRec(s, kind) {
+  var g = recordingGrid(s.sorted);
+  if (!g || !(s.sd > 0)) return null;
+  var r = g.h / s.sd;
+  if (r < INTERVAL_STEP_SD) return null;
+  return { h: g.h, off: g.off, dp: g.dp, kind: REC_KINDS.indexOf(kind) >= 0 ? kind : 'nearest', stepSd: r };
+}
+function flipRec(rec) {
+  var k = rec.kind === 'down' ? 'up' : rec.kind === 'up' ? 'down' : rec.kind;
+  return { h: rec.h, off: -rec.off, dp: rec.dp, kind: k, stepSd: rec.stepSd };
+}
+/* Where the range of recorded value v starts, relative to v. */
+function recLow(rec) { return rec.kind === 'down' ? 0 : rec.kind === 'up' ? -rec.h : -rec.h / 2; }
+
+/* The distinct values, their counts, and their ranges, with an end shared
+   by two neighboring ranges stored once, and so the CDF is evaluated once
+   per end rather than twice. */
+function recCells(x, rec) {
+  var s = x.slice().sort(function (a, b) { return a - b; });
+  var a = recLow(rec), h = rec.h, tol = 1e-9 * h;
+  var c = [], lo = [], hi = [], edges = [], i, j = -1;
+  for (i = 0; i < s.length; i++) {
+    if (i && s[i] === s[i - 1]) { c[j]++; continue; }
+    j++; c.push(1);
+    var e0 = s[i] + a, e1 = e0 + h;
+    if (edges.length && Math.abs(edges[edges.length - 1] - e0) <= tol) lo.push(edges.length - 1);
+    else { edges.push(e0); lo.push(edges.length - 1); }
+    edges.push(e1); hi.push(edges.length - 1);
+  }
+  return { c: c, lo: lo, hi: hi, edges: edges, F: new Array(edges.length), top: s[0] + a + h };
+}
+function cellLogLik(dist, p, g, C) {
+  var e, j, sum = 0;
+  for (e = 0; e < C.edges.length; e++) C.F[e] = dist.cdf(C.edges[e] - g, p);
+  for (j = 0; j < C.c.length; j++) {
+    var q = C.F[C.hi[j]] - C.F[C.lo[j]];
+    if (!(q > 0)) return -Infinity;
+    sum += C.c[j] * Math.log(q);
+  }
+  return sum;
+}
+
+function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
+  var rec = opts.rec, C = recCells(x, rec), np = dist.params.length, i;
+  var held = hasHolds(fixed);
+  var shiftable = useShift && dist.shiftable;
+  var shiftHeld = shiftable && fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
+  var shiftOn = shiftable && !shiftHeld;
+  var floor0 = shiftOn && !!opts.floor0 && C.top - rec.h - recLow(rec) >= 0;
+  var logIdx = INTERVAL_LOG[dist.key] || [];
+  var isHeld = function (j) { return held && fixed[j] !== null && fixed[j] !== undefined; };
+
+  /* The start: the parent fit inside the bootstrap, otherwise the ordinary
+     fit to the recorded values themselves. */
+  var p0, g0, base = null;
+  var hint = fast && FIT_HINT && FIT_HINT.length === np && FIT_HINT.every(Number.isFinite);
+  if (hint) {
+    p0 = FIT_HINT.slice();
+    for (i = 0; i < np; i++) if (isHeld(i)) p0[i] = fixed[i];
+    g0 = shiftHeld ? fixedShift : shiftOn && Number.isFinite(FIT_HINT_SHIFT) ? FIT_HINT_SHIFT : 0;
+  } else {
+    base = fitDist(dist, x, useShift, fast, fixed, fixedShift, false, { floor0: opts.floor0 });
+    var lift = 0;
+    if (!base.ok) {
+      /* A recorded value the ordinary fit cannot take (a 0 for a lognormal)
+         stands for a range the model can, and so the start comes from the
+         tops of the ranges instead. */
+      lift = recLow(rec) + rec.h;
+      var xt = x.map(function (v) { return v + lift; });
+      var b2 = fitDist(dist, xt, useShift, fast, fixed, shiftHeld ? fixedShift + lift : fixedShift, false,
+                       { floor0: opts.floor0 });
+      if (!b2.ok) return base;
+      base = b2;
+    }
+    p0 = base.p.slice();
+    if (p0.some(function (v) { return !Number.isFinite(v); })) return base;
+    g0 = shiftable ? (shiftHeld ? fixedShift : base.shift - lift) : 0;
+  }
+  if (shiftOn && floor0 && g0 < 0) g0 = 0;
+  if (shiftOn && !(g0 < C.top)) g0 = C.top - 0.5 * rec.h;
+
+  var free = [], whole = -1;
+  for (i = 0; i < np; i++) {
+    if (isHeld(i)) continue;
+    if (dist.params[i].whole) { whole = i; continue; }
+    free.push(i);
+  }
+  function run(pStart, gStart, withShift) {
+    var t0 = free.map(function (j) { return logIdx.indexOf(j) >= 0 ? Math.log(pStart[j]) : pStart[j]; });
+    if (withShift) t0.push(Math.log(Math.max(C.top - gStart, 1e-6 * rec.h)));
+    function unpack(t) {
+      var q = pStart.slice();
+      for (var j = 0; j < free.length; j++) q[free[j]] = logIdx.indexOf(free[j]) >= 0 ? Math.exp(t[j]) : t[j];
+      return { p: q, g: withShift ? C.top - Math.exp(t[free.length]) : (shiftHeld ? fixedShift : 0) };
+    }
+    function neg(t) {
+      var u = unpack(t);
+      if (floor0 && u.g < 0) return 1e300;
+      var v = cellLogLik(dist, u.p, u.g, C);
+      return Number.isFinite(v) ? -v : 1e300;
+    }
+    if (!t0.length) { var u0 = unpack(t0); return { p: u0.p, g: u0.g, ll: cellLogLik(dist, u0.p, u0.g, C) }; }
+    if (t0.some(function (v) { return !Number.isFinite(v); })) return { ll: -Infinity };
+    var best = nelderMead(neg, t0, { maxIter: fast ? 400 : 2000, tol: fast ? 1e-7 : 1e-12 });
+    if (!fast) best = nelderMead(neg, best.x, { maxIter: 2000, tol: 1e-13 });
+    var u = unpack(best.x);
+    return { p: u.p, g: u.g, ll: best.f >= 1e299 ? -Infinity : -best.f };
+  }
+  var res = run(p0, g0, shiftOn);
+  if (whole >= 0) {
+    for (var dm = -1; dm <= 1; dm += 2) {
+      var q = p0.slice(); q[whole] = p0[whole] + dm;
+      if (q[whole] < 1) continue;
+      var r = run(q, g0, shiftOn);
+      if (r.ll > res.ll) res = r;
+    }
+  }
+  /* Kept at or above zero, a shift that the search pressed against 0 is
+     compared with the unshifted model itself, which is not counted as an
+     estimate (as in section 7). */
+  var floorBound = false;
+  if (floor0 && Number.isFinite(res.ll) && res.g < 1e-3 * rec.h) {
+    var rz = run(res.p, 0, false);
+    if (rz.ll >= res.ll - 1e-9) { res = rz; res.g = 0; floorBound = true; }
+  }
+  if (!Number.isFinite(res.ll))
+    return { ok: false, msg: 'No parameter values give every recorded range some probability.' };
+  var freeCount = free.length + (whole >= 0 ? 1 : 0);
+  return { ok: true, dist: dist, p: res.p, shift: shiftable ? res.g : 0,
+           k: (held ? freeCount : dist.np) + (shiftOn && !floorBound ? 1 : 0), ll: res.ll,
+           atBound: false, degenerate: false, shiftHeld: shiftHeld,
+           floor0: floor0, floorBound: floorBound, rec: rec,
+           edge: base ? base.edge || null : null,
+           fixed: held ? fixed.slice() : null, allHeld: held && freeCount === 0 && !shiftOn };
 }
 
 /* The fitted model's CDF, pdf, and quantile ON THE DATA'S OWN SCALE, that
@@ -5165,7 +5373,27 @@ function sturges(n) { return Math.max(3, Math.min(40, Math.ceil(Math.log2(n) + 1
    each edge. */
 function cdfBelow(fit) {
   var F = fitCdf(fit);
+  if (fit.rec) {
+    /* A value recorded below v is a grid point below v, and the largest
+       one's range ends at the next grid point's range start. */
+    var rc = fit.rec, a = recLow(rc);
+    return function (v) { return F(rc.off + Math.ceil((v - rc.off) / rc.h - 1e-9) * rc.h + a); };
+  }
   return fit.dist.kind === 'discrete' ? function (v) { return F(v - 1e-9); } : F;
+}
+/* The CDF the goodness-of-fit statistics compare the data with. For a fit
+   to recorded ranges, that is the distribution of a RECORDED value, a step
+   function on the grid: the probability of recording v or less is F at the
+   top of v's range, and fitAtom gives each step's height. Comparing the
+   recorded values with the smooth F instead scores a recorded 5 against
+   F(5), which is 0 when the fitted start is 5.2, and such values are far
+   commoner in the bootstrap's resamples than in the data: on coarse data
+   that made the bootstrap reject a correct fit almost never. */
+function gofCdf(fit) {
+  var F = fitCdf(fit);
+  if (!fit.rec) return F;
+  var top = recLow(fit.rec) + fit.rec.h;
+  return function (v) { return F(v + top); };
 }
 
 /* The first bin runs from minus infinity and the last to plus infinity,
@@ -5312,6 +5540,10 @@ function ksStat(sorted, F, atom) {
 /* The atom function that ksStat wants: the probability the fitted model
    puts on a single point, which is zero for every continuous candidate. */
 function fitAtom(fit) {
+  if (fit.rec) {
+    var F = fitCdf(fit), a = recLow(fit.rec), h = fit.rec.h;
+    return function (v) { return F(v + a + h) - F(v + a); };
+  }
   if (fit.dist.kind !== 'discrete') return function () { return 0; };
   return function (v) { return fit.dist.pdf(v - fit.shift, fit.p); };
 }
@@ -5330,6 +5562,38 @@ function adStat(sorted, F) {
     s += (2 * (i + 1) - 1) * (Math.log(Fv[i]) + Math.log(1 - Fv[n - 1 - i]));
   }
   return -n - s / n;
+}
+
+/* A-squared for a fit, in the form that suits it. A fit to recorded
+   ranges is a distribution on the grid, and so its A-squared is the
+   grouped-data form, summed over the grid points from the smallest
+   recorded value to the largest, empty ones included, with the two tails
+   folded into the end points:
+
+       A^2 = n sum_j (S_j - H_j)^2 p_j / [H_j (1 - H_j)],
+
+   with S_j the share of values recorded at or below grid point j, H_j the
+   model's probability of that, and p_j its probability of j itself; the
+   last point, where H is 1, is left out. The order-statistic form above,
+   fed the step CDF of a recorded value, is dominated by the ties: under a
+   correct shifted gamma recorded to a step of 0.6 of the SD it ran from
+   about 7 to 17 from one resample to the next, and its bootstrap rejected
+   none of 200 correct fits. Every other fit keeps the order-statistic form. */
+function adStatFit(sorted, fit) {
+  if (!fit.rec) return adStat(sorted, fitCdf(fit));
+  var G = gofCdf(fit), rc = fit.rec, n = sorted.length, h = rc.h;
+  var k0 = Math.round((sorted[0] - rc.off) / h), k1 = Math.round((sorted[n - 1] - rc.off) / h);
+  var s = 0, i = 0, Hprev = 0, k;
+  for (k = k0; k < k1; k++) {
+    var g = rc.off + k * h;
+    while (i < n && sorted[i] <= g + 1e-9 * h) i++;
+    var H = G(g), p = H - Hprev;
+    Hprev = H;
+    if (!(H > 0 && H < 1)) continue;
+    var z = i / n - H;
+    s += z * z * p / (H * (1 - H));
+  }
+  return n * s;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -5388,12 +5652,13 @@ function bootstrapRun(fit, n, B, seed, useShift, obsD, obsA, fixed, obsChi, binK
          distribution collapses to the classical one -- which is the point
          of allowing it. */
       FIT_HINT = fit.p;
+      FIT_HINT_SHIFT = fit.reflect ? -fit.shift : fit.shift;
       var rf = fitDist(dist, y, useShift, true, fixed, fixedShift, reflect,
-                       { floor0: !!fit.floor0, start1: !!fit.start1 });
-      FIT_HINT = null;
+                       { floor0: !!fit.floor0, start1: !!fit.start1, rec: fit.rec || null });
+      FIT_HINT = null; FIT_HINT_SHIFT = null;
       if (!rf.ok) continue;                 /* a degenerate resample is skipped */
-      var F = fitCdf(rf);
-      var d = ksStat(y, F, fitAtom(rf)).D, a2 = adStat(y, F);
+      var F = gofCdf(rf);
+      var d = ksStat(y, F, fitAtom(rf)).D, a2 = adStatFit(y, rf);
       nullD.push(d); nullA.push(a2);
       if (d >= obsD) geD++;
       if (a2 >= obsA) geA++;
@@ -5491,11 +5756,13 @@ function recordingGrid(sorted) {
   var step = distinct >= GRID_MIN_DISTINCT && minGap === g ? g : 1;
   return { h: step / sc, off: (((base % step) + step) % step) / sc, dp: dp };
 }
-/* Rounds v to the nearest grid point. Writing the result back through
-   toFixed keeps a value such as 0.30000000000000004 from creating a tie
-   that is not there or failing to create one that is. */
+/* Rounds v to a grid point: the nearest one, or the one below or above it
+   when grid.kind says the data were rounded down or up. Writing the result
+   back through toFixed keeps a value such as 0.30000000000000004 from
+   creating a tie that is not there or failing to create one that is. */
 function snapToGrid(v, grid) {
-  var r = grid.off + Math.round((v - grid.off) / grid.h) * grid.h;
+  var t = (v - grid.off) / grid.h;
+  var r = grid.off + (grid.kind === 'down' ? Math.floor(t) : grid.kind === 'up' ? Math.ceil(t) : Math.round(t)) * grid.h;
   return Math.abs(r) < 1e21 ? Number(r.toFixed(grid.dp)) : r;
 }
 
@@ -5722,6 +5989,13 @@ function rankAll(x, keys, useShift, bins, holds, holdShift, reflect, opts) {
       noCriteria: !!dist.noCriteria, held: hasHolds(f.fixed), allHeld: !!f.allHeld
     });
   }
+  return rows;
+}
+
+/* The bins enter only the square error, and so a new binning rescores the
+   rows already fitted rather than fitting them again. */
+function rescoreBins(rows, x, bins) {
+  for (var i = 0; i < rows.length; i++) if (rows[i].ok) rows[i].sqe = bins ? squareError(x, rows[i].fit, bins) : NaN;
   return rows;
 }
 
@@ -6804,7 +7078,398 @@ function dataLiteral(x, style) {
   return open + (style === 'matlab' ? ' ...' : '') + '\n  ' + lines.join(join) + close;
 }
 
+/* ── Scripts for a fit to recorded ranges ─────────────────────────────
+   No fitting routine in the three languages fits a shifted family to
+   grouped data out of the box, and so each script writes the grouped
+   likelihood itself, maximizes it by Nelder-Mead from this page's
+   estimates, and prints every number beside the page's with "agrees" or
+   "DIFFERS". Each family needs its CDF from 0 (or on its own support) and
+   its quantile, in each language, with the page's parameters as th; the
+   shift, or a mirror image's c, is applied around them. */
+var RANGE_FAM = {
+  expo: { r: ['pexp(z, 1 / th[1])', 'qexp(u, 1 / th[1])'],
+          m: ['expcdf(z, th(1))', 'expinv(u, th(1))'], py: 'stats.expon(scale=th[0])' },
+  gamma: { r: ['pgamma(z, shape = th[1], scale = th[2])', 'qgamma(u, shape = th[1], scale = th[2])'],
+           m: ['gamcdf(z, th(1), th(2))', 'gaminv(u, th(1), th(2))'], py: 'stats.gamma(th[0], scale=th[1])' },
+  weibull: { r: ['pweibull(z, shape = th[2], scale = th[1])', 'qweibull(u, shape = th[2], scale = th[1])'],
+             m: ['wblcdf(z, th(1), th(2))', 'wblinv(u, th(1), th(2))'], py: 'stats.weibull_min(th[1], scale=th[0])' },
+  lognormal: { r: ['plnorm(z, th[1], th[2])', 'qlnorm(u, th[1], th[2])'],
+               m: ['logncdf(z, th(1), th(2))', 'logninv(u, th(1), th(2))'], py: 'stats.lognorm(th[1], scale=np.exp(th[0]))' },
+  loglogistic: { r: ['plogis(log(pmax(z, 0)), log(th[2]), 1 / th[1])', 'th[2] * (u / (1 - u))^(1 / th[1])'],
+                 m: ['1 ./ (1 + (max(z, 0) / th(2)) .^ (-th(1)))', 'th(2) * (u ./ (1 - u)) .^ (1 / th(1))'],
+                 py: 'stats.fisk(th[0], scale=th[1])' },
+  pearson5: { r: ['pgamma(th[2] / pmax(z, 0), th[1], lower.tail = FALSE)', 'th[2] / qgamma(1 - u, th[1])'],
+              m: ["gammainc(th(2) ./ max(z, 0), th(1), 'upper')", 'th(2) ./ gaminv(1 - u, th(1), 1)'],
+              py: 'stats.invgamma(th[0], scale=th[1])' },
+  pearson6: { r: ['pbeta(pmax(z, 0) / (pmax(z, 0) + th[3]), th[1], th[2])', 'th[3] / (1 / qbeta(u, th[1], th[2]) - 1)'],
+              m: ['betainc(max(z, 0) ./ (max(z, 0) + th(3)), th(1), th(2))', 'th(3) ./ (1 ./ betainv(u, th(1), th(2)) - 1)'],
+              py: 'stats.betaprime(th[0], th[1], scale=th[2])' },
+  normal: { r: ['pnorm(z, th[1], th[2])', 'qnorm(u, th[1], th[2])'],
+            m: ['normcdf(z, th(1), th(2))', 'norminv(u, th(1), th(2))'], py: 'stats.norm(th[0], th[1])' },
+  uniform: { r: ['punif(z, th[1], th[2])', 'qunif(u, th[1], th[2])'],
+             m: ['unifcdf(z, th(1), th(2))', 'unifinv(u, th(1), th(2))'], py: 'stats.uniform(th[0], th[1] - th[0])' },
+  triangular: {
+    r: ['ifelse(z <= th[1], 0, ifelse(z >= th[3], 1, ifelse(z <= th[2],\n' +
+        '    (z - th[1])^2 / ((th[3] - th[1]) * (th[2] - th[1])), 1 - (th[3] - z)^2 / ((th[3] - th[1]) * (th[3] - th[2])))))',
+        'ifelse(u < (th[2] - th[1]) / (th[3] - th[1]), th[1] + sqrt(u * (th[3] - th[1]) * (th[2] - th[1])),\n' +
+        '    th[3] - sqrt((1 - u) * (th[3] - th[1]) * (th[3] - th[2])))'],
+    m: ['min(max(((z > th(1)) & (z <= th(2))) .* (z - th(1)).^2 / ((th(3) - th(1)) * (th(2) - th(1))) + ...\n' +
+        '    ((z > th(2)) & (z < th(3))) .* (1 - (th(3) - z).^2 / ((th(3) - th(1)) * (th(3) - th(2)))) + (z >= th(3)), 0), 1)',
+        '(u < (th(2) - th(1)) / (th(3) - th(1))) .* (th(1) + sqrt(u * (th(3) - th(1)) * (th(2) - th(1)))) + ...\n' +
+        '    (u >= (th(2) - th(1)) / (th(3) - th(1))) .* (th(3) - sqrt((1 - u) * (th(3) - th(1)) * (th(3) - th(2))))'],
+    py: 'stats.triang((th[1] - th[0]) / (th[2] - th[0]), th[0], th[2] - th[0])' },
+  pert: {
+    r: ['pbeta((z - th[1]) / (th[3] - th[1]), 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1]))',
+        'th[1] + (th[3] - th[1]) * qbeta(u, 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1]))'],
+    m: ['betacdf(min(max((z - th(1)) / (th(3) - th(1)), 0), 1), 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1)))',
+        'th(1) + (th(3) - th(1)) * betainv(u, 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1)))'],
+    py: 'stats.beta(1 + 4 * (th[1] - th[0]) / (th[2] - th[0]), 1 + 4 * (th[2] - th[1]) / (th[2] - th[0]), th[0], th[2] - th[0])' },
+  beta: { r: ['pbeta((z - th[3]) / (th[4] - th[3]), th[1], th[2])', 'th[3] + (th[4] - th[3]) * qbeta(u, th[1], th[2])'],
+          m: ['betacdf(min(max((z - th(3)) / (th(4) - th(3)), 0), 1), th(1), th(2))', 'th(3) + (th(4) - th(3)) * betainv(u, th(1), th(2))'],
+          py: 'stats.beta(th[0], th[1], th[2], th[3] - th[2])' },
+  johnsonSB: { r: ['pnorm(th[1] + th[2] * qlogis(pmin(pmax((z - th[3]) / th[4], 0), 1)))', 'th[3] + th[4] * plogis((qnorm(u) - th[1]) / th[2])'],
+               m: ['normcdf(th(1) + th(2) * log(min(max((z - th(3)) / th(4), 0), 1) ./ (1 - min(max((z - th(3)) / th(4), 0), 1))))',
+                   'th(3) + th(4) ./ (1 + exp(-(norminv(u) - th(1)) / th(2)))'],
+               py: 'stats.johnsonsb(th[0], th[1], th[2], th[3])' },
+  johnsonSU: { r: ['pnorm(th[1] + th[2] * asinh((z - th[3]) / th[4]))', 'th[3] + th[4] * sinh((qnorm(u) - th[1]) / th[2])'],
+               m: ['normcdf(th(1) + th(2) * asinh((z - th(3)) / th(4)))', 'th(3) + th(4) * sinh((norminv(u) - th(1)) / th(2))'],
+               py: 'stats.johnsonsu(th[0], th[1], th[2], th[3])' }
+};
+RANGE_FAM.erlang = RANGE_FAM.gamma;
+
+function rangeScripts(fit, x, seed, B, src) {
+  var d = fit.dist, rc = fit.rec, F = RANGE_FAM[d.key], np = d.params.length, i;
+  var s = summarize(x), n = x.length, P = pageNum;
+  var a = recLow(rc), refl = !!fit.reflect;
+  /* Which numbers this page estimated: the parameters not held (and not a
+     whole number, held at the page's value), and the shift unless it was
+     held or stopped at 0 by the floor. */
+  var est = [], onLog = [], logIdx = INTERVAL_LOG[d.key] || [];
+  for (i = 0; i < np; i++) {
+    if (fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined) continue;
+    if (d.params[i].whole) continue;
+    est.push(i); onLog.push(logIdx.indexOf(i) >= 0);
+  }
+  var hasS = d.shiftable && (refl || fit.shift !== 0 || fit.floorBound || fit.shiftHeld);
+  var estS = hasS && !fit.shiftHeld && !fit.floorBound;
+  var floor0 = !!fit.floor0 && !refl && estS;
+  var th = fit.p.slice(); if (hasS) th.push(fit.shift);
+  var S = np + 1;   /* the shift's place in th, counted from 1 */
+  var D = ksStat(s.sorted, gofCdf(fit), fitAtom(fit)).D;
+  var ic = infoCriteria(fit.ll, fit.k, n);
+  var how = rc.kind === 'down' ? 'rounded down to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v to v + ' + num(rc.h)
+          : rc.kind === 'up' ? 'rounded up to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h) + ' to v'
+          : 'rounded to the nearest ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h / 2) + ' to v + ' + num(rc.h / 2);
+  var head = function (c) {
+    var L = ['This page fitted the ' + distLower(d) + (refl ? ', mirrored as c - Y,' : hasS ? ' with a location shift' : '') +
+             ' to the ranges your values stand for:',
+             'they are ' + how + '.',
+             'The fit maximizes the probability the model gives those ranges (the grouped-data,',
+             'or interval-censored, likelihood), and so does this script. It starts from the',
+             'page\'s estimates and prints each number beside the page\'s, with "agrees" or "DIFFERS".'];
+    return L.map(function (l) { return c + ' ' + l; }).join('\n') + '\n';
+  };
+  var keptNote = function (c) {
+    var L = [];
+    for (i = 0; i < np; i++) {
+      if (est.indexOf(i) >= 0) continue;
+      L.push(c + ' ' + d.params[i].name + ' is held at ' + num(fit.p[i]) +
+             (d.params[i].whole && !(fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined)
+               ? ', the whole number this page chose; K still counts it.' : ', as on the page.'));
+    }
+    if (hasS && fit.shiftHeld) L.push(c + ' The ' + (refl ? 'end c' : 'shift') + ' is held at ' + num(fit.shift) + ', as on the page.');
+    if (hasS && fit.floorBound) L.push(c + ' The shift is held at 0 by "Keep each model at or above zero", and K does not count it.');
+    if (floor0) L.push(c + ' "Keep each model at or above zero" is on, and so the shift may not go below 0.');
+    return L.length ? L.join('\n') + '\n' : '';
+  };
+  /* The recording, as each language rounds a resample. */
+  function recExpr(lang) {
+    var fn = rc.kind === 'down' ? { r: 'floor', m: 'floor', p: 'np.floor' }[lang]
+           : rc.kind === 'up' ? { r: 'ceiling', m: 'ceil', p: 'np.ceil' }[lang] : { r: 'round', m: 'round', p: 'np.round' }[lang];
+    var v = rc.off ? '(v - ' + num(rc.off) + ')' : 'v';
+    var e = rc.h === 1 ? fn + '(' + v + ')' : fn + '(' + v + ' / ' + num(rc.h) + ') * ' + num(rc.h);
+    return rc.off ? num(rc.off) + ' + ' + e : e;
+  }
+  var labels = d.params.map(function (q) { return q.name; });
+  if (hasS) labels.push(refl ? 'right end c' : 'shift');
+  var src1 = function (c) { return src ? c + ' data source: ' + src + '\n' : ''; };
+  /* The estimates are compared to three digits and the log-likelihood to six:
+     where the likelihood is nearly flat (two ends inside one recorded range,
+     say), two optimizers stop at slightly different points of equal
+     likelihood. A fit that ran off to its limit (fit.edge) has parameters
+     that are not determined at all, and they are printed without a verdict. */
+  function estLines(c, cmp, show) {
+    var L = [c + (fit.edge ? ' This fit runs off toward its ' + fit.edge + ' limit, where these parameters are not\n' +
+                             c + ' determined; compare the log-likelihood instead.'
+                           : ' The estimates are compared to three digits, the log-likelihood to six: where\n' +
+                             c + ' the likelihood is nearly flat, two optimizers stop at slightly different\n' +
+                             c + ' points of equal likelihood.')];
+    labels.forEach(function (lb, j) { L.push(fit.edge ? show(lb, j) : cmp(lb, j)); });
+    return L.join('\n') + '\n';
+  }
+  var out = {};
+
+  /* ── R ── */
+  var xr = dataLiteral(x, 'r');
+  var lit = function (v) { return v.map(function (q) { return P(q); }).join(', '); };
+  out.r = head('#') + keptNote('#') + src1('#') +
+    'x <- ' + (xr || 'read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button') + '\n\n' +
+    'h <- ' + num(rc.h) + '; a <- ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' +
+    '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + S + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
+    'cdf0 <- function(z, th) ' + F.r[0] + '\n' +
+    'q0 <- function(u, th) ' + F.r[1] + '\n' +
+    (refl ? 'cdf <- function(q, th) 1 - cdf0(th[' + S + '] - q, th)\nqf <- function(u, th) th[' + S + '] - q0(1 - u, th)\n'
+     : hasS ? 'cdf <- function(q, th) cdf0(q - th[' + S + '], th)\nqf <- function(u, th) th[' + S + '] + q0(u, th)\n'
+     : 'cdf <- cdf0\nqf <- q0\n') + '\n' +
+    'report <- function(label, value, page, tol = 1e-6) {\n' +
+    '  same <- !is.na(value) && abs(value - page) <= tol * max(1, abs(page))\n' +
+    '  cat(sprintf("%-28s %14.7g   page %14.7g   %s\\n", label, value, page, if (same) "agrees" else "DIFFERS"))\n' +
+    '}\n\n' +
+    '# What is estimated: th[est], searched on the log scale where it must be\n' +
+    '# positive' + (estS ? ', and the ' + (refl ? 'end c' : 'shift') + ', searched as ' +
+      (refl ? 'c = bottom + exp(t), with bottom the lower end of the largest value\'s range'
+            : 'top - exp(t), with top the upper end of the smallest value\'s range') : '') + '.\n' +
+    'est <- c(' + est.map(function (j) { return j + 1; }).join(', ') + '); on_log <- c(' +
+      onLog.map(function (b) { return b ? 'TRUE' : 'FALSE'; }).join(', ') + '); est_s <- ' + (estS ? 'TRUE' : 'FALSE') + '\n' +
+    'cells <- function(v) {\n' +
+    '  tb <- table(v); u <- as.numeric(names(tb))\n' +
+    '  list(lo = u + a, hi = u + a + h, n = as.vector(tb), top = min(u) + a + h, bottom = max(u) + a)\n' +
+    '}\n' +
+    'unpack <- function(t, th0, C) {\n' +
+    '  th <- th0; m <- length(est)\n' +
+    '  v <- t[seq_len(m)]; v[on_log] <- exp(v[on_log]); th[est] <- v\n' +
+    '  if (est_s) th[' + S + '] <- ' + (refl ? 'C$bottom + exp(t[m + 1])' : 'C$top - exp(t[m + 1])') + '\n' +
+    '  th\n' +
+    '}\n' +
+    'pack <- function(th, C) {\n' +
+    '  t <- th[est]; t[on_log] <- log(t[on_log])\n' +
+    '  c(t, if (est_s) log(' + (refl ? 'max(th[' + S + '] - C$bottom, 1e-6 * h)' : 'max(C$top - th[' + S + '], 1e-6 * h)') + '))\n' +
+    '}\n' +
+    'nll <- function(t, th0, C) {\n' +
+    '  th <- unpack(t, th0, C)\n' +
+    (floor0 ? '  if (th[' + S + '] < 0) return(1e300)\n' : '') +
+    '  pr <- cdf(C$hi, th) - cdf(C$lo, th)\n' +
+    '  if (any(!(pr > 0))) return(1e300)\n' +
+    '  -sum(C$n * log(pr))\n' +
+    '}\n' +
+    '# passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
+    'fit_one <- function(v, th0, passes = 3, tol = 1e-14) {\n' +
+    '  C <- cells(v); t <- pack(th0, C)\n' +
+    '  for (i in seq_len(passes))\n' +
+    '    t <- optim(t, nll, th0 = th0, C = C, method = if (length(t) > 1) "Nelder-Mead" else "BFGS",\n' +
+    '               control = list(maxit = 20000, reltol = tol))$par\n' +
+    '  list(th = unpack(t, th0, C), ll = -nll(t, th0, C))\n' +
+    '}\n\n' +
+    'th_page <- c(' + lit(th) + ')\n' +
+    'f <- fit_one(x, th_page)\n' +
+    estLines('#', function (lb, j) { return 'report("' + lb + '", f$th[' + (j + 1) + '], th_page[' + (j + 1) + '], 1e-3)'; },
+             function (lb, j) { return 'cat(sprintf("%-28s %14.7g   page %14.7g\\n", "' + lb + '", f$th[' + (j + 1) + '], th_page[' + (j + 1) + ']))'; }) +
+    'K <- ' + fit.k + '; n <- length(x)\n' +
+    'report("log-likelihood", f$ll, ' + P(ic.ll) + ')\n' +
+    'report("AIC", 2 * K - 2 * f$ll, ' + P(ic.aic) + ')\n' +
+    'report("BIC", K * log(n) - 2 * f$ll, ' + P(ic.bic) + ')\n\n' +
+    '# K-S D of the recorded values against the distribution of a recorded\n' +
+    '# value: the chance of recording v or less is the model\'s probability up to\n' +
+    '# the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
+    '# below records each resample the same way and refits it the same way.\n' +
+    'Dstat <- function(v, th) {\n' +
+    '  tb <- table(v); u <- as.numeric(names(tb)); e <- cumsum(as.vector(tb)) / length(v)\n' +
+    '  max(abs(e - cdf(u + a + h, th)), abs(c(0, head(e, -1)) - cdf(u + a, th)))\n' +
+    '}\n' +
+    'Dobs <- Dstat(x, f$th)\n' +
+    'report("K-S D", Dobs, ' + P(D) + ', 1e-4)\n\n' +
+    'rec <- function(v) ' + recExpr('r') + '\n' +
+    'set.seed(' + seed + '); B <- ' + B + '   # this takes a while: every resample is refitted\n' +
+    'Db <- replicate(B, {\n' +
+    '  y <- rec(qf(runif(n), f$th))\n' +
+    '  g <- tryCatch(fit_one(y, f$th, 1, 1e-10), error = function(e) NULL)\n' +
+    '  if (is.null(g) || !is.finite(g$ll)) NA else Dstat(y, g$th)\n' +
+    '})\n' +
+    'Db <- Db[!is.na(Db)]\n' +
+    'cat("bootstrap p =", (1 + sum(Db >= Dobs)) / (length(Db) + 1), "  usable resamples =", length(Db), "\\n")\n' +
+    '# R\'s generator is not this page\'s MRG32k3a, and so expect agreement to\n' +
+    '# bootstrap noise, not to the last digit.\n';
+
+  /* ── Python ── */
+  var xp = dataLiteral(x, 'python');
+  out.python = head('#') + keptNote('#') + src1('#') +
+    'import numpy as np\nfrom scipy import stats, optimize\n\n' +
+    (xp ? 'x = ' + xp : 'with open("input-analyzer-data.csv") as fh:   # use the CSV download button\n' +
+                       '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])') + '\n\n' +
+    'h, a = ' + num(rc.h) + ', ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' +
+    '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + np + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
+    'def base(th):\n    return ' + F.py + '\n' +
+    (refl ? 'def cdf(q, th):\n    return base(th).sf(th[' + np + '] - q)\ndef qf(u, th):\n    return th[' + np + '] - base(th).ppf(1 - u)\n'
+     : hasS ? 'def cdf(q, th):\n    return base(th).cdf(q - th[' + np + '])\ndef qf(u, th):\n    return th[' + np + '] + base(th).ppf(u)\n'
+     : 'def cdf(q, th):\n    return base(th).cdf(q)\ndef qf(u, th):\n    return base(th).ppf(u)\n') + '\n' +
+    'def report(label, value, page, tol=1e-6):\n' +
+    '    same = np.isfinite(value) and abs(value - page) <= tol * max(1, abs(page))\n' +
+    '    print(f"{label:<28} {value:14.7g}   page {page:14.7g}   {\'agrees\' if same else \'DIFFERS\'}")\n\n' +
+    'est = [' + est.join(', ') + ']; on_log = [' + onLog.map(function (b) { return b ? 'True' : 'False'; }).join(', ') +
+      ']; est_s = ' + (estS ? 'True' : 'False') + '\n' +
+    'def cells(v):\n' +
+    '    u, cnt = np.unique(v, return_counts=True)\n' +
+    '    return dict(lo=u + a, hi=u + a + h, n=cnt, top=u[0] + a + h, bottom=u[-1] + a)\n' +
+    'def unpack(t, th0, C):\n' +
+    '    th = np.array(th0, dtype=float)\n' +
+    '    for i, (j, lg) in enumerate(zip(est, on_log)):\n' +
+    '        th[j] = np.exp(t[i]) if lg else t[i]\n' +
+    '    if est_s:\n' +
+    '        th[' + np + '] = ' + (refl ? 'C["bottom"] + np.exp(t[-1])' : 'C["top"] - np.exp(t[-1])') + '\n' +
+    '    return th\n' +
+    'def pack(th, C):\n' +
+    '    t = [np.log(th[j]) if lg else th[j] for j, lg in zip(est, on_log)]\n' +
+    '    if est_s:\n' +
+    '        t.append(np.log(' + (refl ? 'max(th[' + np + '] - C["bottom"], 1e-6 * h)' : 'max(C["top"] - th[' + np + '], 1e-6 * h)') + '))\n' +
+    '    return np.array(t)\n' +
+    'def nll(t, th0, C):\n' +
+    '    th = unpack(t, th0, C)\n' +
+    (floor0 ? '    if th[' + np + '] < 0:\n        return 1e300\n' : '') +
+    '    with np.errstate(all="ignore"):\n' +
+    '        pr = cdf(C["hi"], th) - cdf(C["lo"], th)\n' +
+    '    if not np.all(pr > 0):\n' +
+    '        return 1e300\n' +
+    '    return -np.sum(C["n"] * np.log(pr))\n' +
+    '# passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
+    'def fit_one(v, th0, passes=3, tol=1e-12):\n' +
+    '    C = cells(v); t = pack(th0, C)\n' +
+    '    for _ in range(passes):\n' +
+    '        t = optimize.minimize(nll, t, args=(th0, C), method="Nelder-Mead",\n' +
+    '                              options={"xatol": tol, "fatol": tol, "maxiter": 40000, "maxfev": 40000}).x\n' +
+    '    return unpack(t, th0, C), -nll(t, th0, C)\n\n' +
+    'th_page = [' + lit(th) + ']\n' +
+    'th, ll = fit_one(x, th_page)\n' +
+    estLines('#', function (lb, j) { return 'report("' + lb + '", th[' + j + '], th_page[' + j + '], 1e-3)'; },
+             function (lb, j) { return 'print(f"{\'' + lb + '\':<28} {th[' + j + ']:14.7g}   page {th_page[' + j + ']:14.7g}")'; }) +
+    'K, n = ' + fit.k + ', len(x)\n' +
+    'report("log-likelihood", ll, ' + P(ic.ll) + ')\n' +
+    'report("AIC", 2 * K - 2 * ll, ' + P(ic.aic) + ')\n' +
+    'report("BIC", K * np.log(n) - 2 * ll, ' + P(ic.bic) + ')\n\n' +
+    '# K-S D of the recorded values against the distribution of a recorded\n' +
+    '# value: the chance of recording v or less is the model\'s probability up to\n' +
+    '# the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
+    '# below records each resample the same way and refits it the same way.\n' +
+    'def Dstat(v, th):\n' +
+    '    u, cnt = np.unique(v, return_counts=True); e = np.cumsum(cnt) / len(v)\n' +
+    '    return max(np.max(np.abs(e - cdf(u + a + h, th))),\n' +
+    '               np.max(np.abs(np.concatenate(([0.0], e[:-1])) - cdf(u + a, th))))\n' +
+    'Dobs = Dstat(x, th)\n' +
+    'report("K-S D", Dobs, ' + P(D) + ', 1e-4)\n\n' +
+    'def rec(v):\n    return ' + recExpr('p') + '\n' +
+    'rng = np.random.default_rng(' + seed + '); B = ' + B + '   # this takes a while: every resample is refitted\n' +
+    'Db = []\n' +
+    'for _ in range(B):\n' +
+    '    y = rec(qf(rng.random(n), th))\n' +
+    '    g, lg = fit_one(y, th, 1, 1e-8)\n' +
+    '    if np.isfinite(lg):\n' +
+    '        Db.append(Dstat(y, g))\n' +
+    'Db = np.array(Db)\n' +
+    'print("bootstrap p =", (1 + np.sum(Db >= Dobs)) / (len(Db) + 1), "  usable resamples =", len(Db))\n' +
+    "# NumPy's generator is not this page's MRG32k3a, and so expect agreement to\n" +
+    '# bootstrap noise, not to the last digit.\n';
+
+  /* ── MATLAB ── */
+  var xm = dataLiteral(x, 'matlab');
+  /* A Pearson type VI run off to its gamma limit has a first shape near
+     1e9, where MATLAB's betainc parts from R's pbeta, SciPy's betainc, and
+     this page (by 0.08 in the log-likelihood on the phone menu sample). */
+  var mOff = d.key === 'pearson6' && !!fit.edge;
+  function mRep(lb, expr, page, tol) {
+    return mOff ? "fprintf('%-28s %14.7g   page %14.7g\\n', '" + lb + "', " + expr + ', ' + P(page) + ');\n'
+                : "report('" + lb + "', " + expr + ', ' + P(page) + ', ' + tol + ');\n';
+  }
+  out.matlab = head('%') + keptNote('%') + src1('%') +
+    '% Needs the Statistics and Machine Learning Toolbox.\n' +
+    (xm ? 'x = ' + xm + "';" : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button\n' +
+                                'x = x(:, 2);                                 % column 1 is the row index') + '\n\n' +
+    'M.h = ' + num(rc.h) + '; M.a = ' + num(a) + ';   % a recorded v stands for [v + a, v + a + h]\n' +
+    '% The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th(' + S + ') the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
+    'cdf0 = @(z, th) ' + F.m[0] + ';\n' +
+    'q0 = @(u, th) ' + F.m[1] + ';\n' +
+    (refl ? 'M.cdf = @(q, th) 1 - cdf0(th(' + S + ') - q, th);\nM.qf = @(u, th) th(' + S + ') - q0(1 - u, th);\n'
+     : hasS ? 'M.cdf = @(q, th) cdf0(q - th(' + S + '), th);\nM.qf = @(u, th) th(' + S + ') + q0(u, th);\n'
+     : 'M.cdf = cdf0;\nM.qf = q0;\n') + '\n' +
+    '% What is estimated: th(M.est), searched on the log scale where it must be positive' +
+      (estS ? ',\n% and the ' + (refl ? 'end c, searched as c = bottom + exp(t)' : 'shift, searched as top - exp(t)') : '') + '.\n' +
+    'M.est = [' + est.map(function (j) { return j + 1; }).join(' ') + ']; M.onLog = logical([' +
+      onLog.map(function (b) { return b ? '1' : '0'; }).join(' ') + ']); M.estS = ' + (estS ? 'true' : 'false') +
+      '; M.S = ' + S + '; M.refl = ' + (refl ? 'true' : 'false') + '; M.floor0 = ' + (floor0 ? 'true' : 'false') + ';\n\n' +
+    'thPage = [' + th.map(function (q) { return P(q); }).join(' ') + '];\n' +
+    '[th, ll] = fit_one(x, thPage, M, 3, 1e-12);\n' +
+    estLines('%', function (lb, j) { return "report('" + lb + "', th(" + (j + 1) + '), thPage(' + (j + 1) + '), 1e-3);'; },
+             function (lb, j) { return "fprintf('%-28s %14.7g   page %14.7g\\n', '" + lb + "', th(" + (j + 1) + '), thPage(' + (j + 1) + '));'; }) +
+    (mOff ? "% At a first shape this large, MATLAB's betainc disagrees with R's pbeta and\n" +
+            "% SciPy's betainc, which agree with this page, and so the numbers below are\n" +
+            '% printed beside the page\'s without a verdict.\n' : '') +
+    'K = ' + fit.k + '; n = numel(x);\n' +
+    mRep('log-likelihood', 'll', ic.ll, '1e-6') +
+    mRep('AIC', '2*K - 2*ll', ic.aic, '1e-6') +
+    mRep('BIC', 'K*log(n) - 2*ll', ic.bic, '1e-6') + '\n' +
+    '% K-S D of the recorded values against the distribution of a recorded\n' +
+    '% value: the chance of recording v or less is the model\'s probability up to\n' +
+    '% the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
+    '% below records each resample the same way and refits it the same way.\n' +
+    'Dobs = Dstat(x, th, M);\n' +
+    mRep('K-S D', 'Dobs', D, '1e-4') + '\n' +
+    'rec = @(v) ' + recExpr('m') + ';\n' +
+    'rng(' + seed + '); B = ' + B + ';   % this takes a while: every resample is refitted\n' +
+    'Db = nan(B, 1);\n' +
+    'for b = 1:B\n' +
+    '  y = rec(M.qf(rand(n, 1), th));\n' +
+    '  [g, lg] = fit_one(y, th, M, 1, 1e-8);\n' +
+    '  if isfinite(lg), Db(b) = Dstat(y, g, M); end\n' +
+    'end\n' +
+    'Db = Db(~isnan(Db));\n' +
+    "fprintf('bootstrap p = %.4f   usable resamples = %d\\n', (1 + sum(Db >= Dobs)) / (numel(Db) + 1), numel(Db));\n" +
+    "% MATLAB's generator is not this page's MRG32k3a, and so expect agreement to\n" +
+    '% bootstrap noise, not to the last digit.\n\n' +
+    'function C = cells(v, M)\n' +
+    '  [u, ~, j] = unique(v(:)); C.n = accumarray(j, 1);\n' +
+    '  C.lo = u + M.a; C.hi = u + M.a + M.h; C.top = u(1) + M.a + M.h; C.bottom = u(end) + M.a;\n' +
+    'end\n' +
+    'function th = unpack(t, th0, C, M)\n' +
+    '  th = th0; m = numel(M.est);\n' +
+    '  v = t(1:m); v(M.onLog) = exp(v(M.onLog)); th(M.est) = v;\n' +
+    '  if M.estS\n' +
+    '    if M.refl, th(M.S) = C.bottom + exp(t(m + 1)); else, th(M.S) = C.top - exp(t(m + 1)); end\n' +
+    '  end\n' +
+    'end\n' +
+    'function t = pack(th, C, M)\n' +
+    '  t = th(M.est); t(M.onLog) = log(t(M.onLog));\n' +
+    '  if M.estS\n' +
+    '    if M.refl, t(end + 1) = log(max(th(M.S) - C.bottom, 1e-6 * M.h));\n' +
+    '    else, t(end + 1) = log(max(C.top - th(M.S), 1e-6 * M.h)); end\n' +
+    '  end\n' +
+    'end\n' +
+    'function f = nll(t, th0, C, M)\n' +
+    '  th = unpack(t, th0, C, M);\n' +
+    '  if M.floor0 && th(M.S) < 0, f = 1e300; return; end\n' +
+    '  pr = M.cdf(C.hi, th) - M.cdf(C.lo, th);\n' +
+    '  if ~all(pr > 0), f = 1e300; return; end\n' +
+    '  f = -sum(C.n .* log(pr));\n' +
+    'end\n' +
+    '% passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
+    'function [th, ll] = fit_one(v, th0, M, passes, tol)\n' +
+    "  C = cells(v, M); t = pack(th0, C, M);\n" +
+    "  opt = optimset('TolX', tol, 'TolFun', tol, 'MaxFunEvals', 4e4, 'MaxIter', 4e4, 'Display', 'off');\n" +
+    '  for i = 1:passes, t = fminsearch(@(s) nll(s, th0, C, M), t, opt); end\n' +
+    '  th = unpack(t, th0, C, M); ll = -nll(t, th0, C, M);\n' +
+    'end\n' +
+    'function D = Dstat(v, th, M)\n' +
+    '  [u, ~, j] = unique(v(:)); e = cumsum(accumarray(j, 1)) / numel(v);\n' +
+    '  D = max([abs(e - M.cdf(u + M.a + M.h, th)); abs([0; e(1:end - 1)] - M.cdf(u + M.a, th))]);\n' +
+    'end\n' +
+    'function report(label, value, page, tol)\n' +
+    '  same = isfinite(value) && abs(value - page) <= tol * max(1, abs(page));\n' +
+    "  if same, word = 'agrees'; else, word = 'DIFFERS'; end\n" +
+    "  fprintf('%-28s %14.7g   page %14.7g   %s\\n', label, value, page, word);\n" +
+    'end\n';
+  return out;
+}
+
 function reproScripts(fit, x, seed, B, src) {
+  /* A fit to recorded ranges has scripts of its own; see rangeScripts. */
+  if (fit.rec && fit.dist.kind !== 'discrete' && RANGE_FAM[fit.dist.key]) return rangeScripts(fit, x, seed, B, src);
   /* A mirrored fit is refitted as what it is underneath: the unmirrored
      family on y = c - x, which starts at zero. Each script says so first,
      and the Python one still counts c when this page estimated it. */
@@ -9057,6 +9722,8 @@ function toCsv(rows) {
    ───────────────────────────────────────────────────────────────────── */
 var IA = {
   MRG32k3a: MRG32k3a,
+  recordingRec: recordingRec, rescoreBins: rescoreBins, gofCdf: gofCdf, recLow: recLow, recCells: recCells, cellLogLik: cellLogLik, flipRec: flipRec,
+  INTERVAL_STEP_SD: INTERVAL_STEP_SD,
   logGamma: logGamma, logBeta: logBeta,
   gammaP: gammaP, gammaQ: gammaQ, betaInc: betaInc,
   erf: erf, erfc: erfc, normPdf: normPdf, normCdf: normCdf, normInv: normInv,
@@ -9076,7 +9743,7 @@ var IA = {
   chiSquareGOF: chiSquareGOF, poolBins: poolBins, CHI_MIN_EXPECTED: CHI_MIN_EXPECTED,
   regularCount: regularCount,
   squareError: squareError,
-  ksStat: ksStat, fitAtom: fitAtom, adStat: adStat, ksTableCritical: ksTableCritical,
+  ksStat: ksStat, fitAtom: fitAtom, adStat: adStat, adStatFit: adStatFit, ksTableCritical: ksTableCritical,
   ksQ: ksQ, ksPvalueClassical: ksPvalueClassical,
   adInf: adInf, adPvalueClassical: adPvalueClassical, AD_TABLE: AD_TABLE,
   bootstrapRun: bootstrapRun, recordingGrid: recordingGrid, snapToGrid: snapToGrid,
@@ -9652,6 +10319,7 @@ var ST = {
   reflect: false,   /* fit each zero-based candidate as c - X instead */
   floor0: true,     /* keep each shifted model at or above zero (gamma >= 0) */
   start1: false,    /* start each count family at 1 instead of 0 */
+  recKind: 'nearest', /* how values on a coarse step were recorded, or 'exact' */
   johnson: false,   /* add the two Johnson members to the continuous ranking */
   rankBy: 'aic',
   rows: [],         /* rankAll() output                                */
@@ -10421,8 +11089,35 @@ function activeFamily() {
 /* The histogram's bins: one per outcome under a discrete family, and
    otherwise the slider's count. */
 function binsFor(k) { return IA.makeBins(ST.x, k, activeFamily() === 'discrete'); }
-/* The two fit options as the core reads them. */
-function fitOpts() { return { floor0: ST.floor0, start1: ST.start1 }; }
+/* The recording a continuous family would be fitted to: the step and how
+   values were rounded to it, or null when the step is fine against the
+   spread (or there is none), when a discrete family is fitted, or when the
+   reader says the values are exact. */
+function recAvail() {
+  return ST.s && ST.s.n >= 2 && activeFamily() === 'continuous' ? IA.recordingRec(ST.s, 'nearest') : null;
+}
+function fitRec() {
+  return recAvail() && ST.recKind !== 'exact' ? IA.recordingRec(ST.s, ST.recKind) : null;
+}
+/* The fit options as the core reads them. */
+function fitOpts() { return { floor0: ST.floor0, start1: ST.start1, rec: fitRec() }; }
+function syncRecPick() {
+  var r = recAvail();
+  $('rec-grp').style.display = r ? '' : 'none';
+  if (!r) return;
+  var h = IA.num(r.h), o = $('rec-pick').options;
+  o[0].textContent = 'rounded to the nearest ' + h;
+  o[1].textContent = 'rounded down to ' + h + ' (truncated)';
+  o[2].textContent = 'rounded up to ' + h;
+  $('rec-pick').value = ST.recKind;
+  setTip($('rec-tip'), 'Your values sit on a step of ' + h + ', which is ' + fmt(r.stepSd, 2) +
+    ' of their standard deviation, and so each one stands for a range of true values: a value recorded ' +
+    'as v was between v − ' + IA.num(r.h / 2) + ' and v + ' + IA.num(r.h / 2) + ' if rounded to the nearest ' +
+    h + ', between v and v + ' + h + ' if rounded down, and between v − ' + h + ' and v if rounded up. ' +
+    'Each continuous candidate is fitted to the probability it gives those ranges. Truncating drops the ' +
+    'digits past the step, which rounds a positive value down and a negative one up. Choose recorded ' +
+    'exactly to fit each value as written, as most fitting tools do.');
+}
 function activeKeys() {
   var fam = activeFamily();
   if (fam === 'discrete') return IA.DISCRETE_KEYS;
@@ -10467,6 +11162,7 @@ function syncFitBoxes() {
   setBoxOff('start1-wrap', 'start1-chk',
     ST.s && !disc ? 'Only the discrete candidates count from 0. Set Family to Discrete to use it.' : null);
   setBoxOff('johnson-wrap', 'johnson-chk', disc ? 'Both Johnson members are continuous.' + toCont : null);
+  syncRecPick();
 }
 
 function currentBinK() {
@@ -10930,7 +11626,7 @@ function renderFit() {
       card('AIC', fmt(ic.aic, 6)) + card('BIC', fmt(ic.bic, 6));
 
   var pin = '';
-  if (d.key === 'beta') {
+  if (d.key === 'beta' && !f.rec) {
     pin += '<div class="note quiet"><strong>The interval was read off your data, not estimated.</strong> ' +
       'A beta needs a bounded interval, and its density is zero or infinite at the two ends; the ' +
       'data cannot sit exactly on them; L and U here are your range widened by half the average gap ' +
@@ -11018,6 +11714,7 @@ function renderFit() {
       'search, where the curve already matches that limit closely. The ' +
       (toGamma ? 'gamma' : 'Pearson type V') + ' row fits the limit itself, with one parameter fewer.</div>';
   }
+  pin += rangeFitNote(r);
   pin += belowZeroNote(r);
   if (r.noCriteria) {
     pin += '<div class="note quiet"><strong>Why this one is not scored.</strong> The empirical ' +
@@ -11041,6 +11738,33 @@ function renderFit() {
         '<div class="sg" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + cards + '</div></div>' +
     '</div>' + pin;
   wireHoldControls();
+}
+/* What a fit to recorded ranges means, and why its ends can sit inside
+   the recorded values. */
+function rangeFitNote(r) {
+  var f = r.fit;
+  if (!f.rec || r.noCriteria) return '';
+  var rc = f.rec, h = IA.num(rc.h), lo = rc.kind === 'down' ? 0 : rc.kind === 'up' ? -rc.h : -rc.h / 2;
+  var v = ST.s.min, how = rc.kind === 'down' ? 'rounded down' : rc.kind === 'up' ? 'rounded up' : 'rounded to the nearest ' + h;
+  var out = '<div class="note quiet"><strong>Fitted to the ranges your values stand for.</strong> ' +
+    'Your values sit on a step of ' + h + ', ' + how + ' (set under <strong>Values were</strong>), and so a ' +
+    'recorded ' + IA.num(v) + ' stands for anything from ' + IA.num(v + lo) + ' to ' + IA.num(v + lo + rc.h) +
+    '. The estimates come from the probability the model gives each of those ranges, not from its ' +
+    'density at the recorded values, and the log-likelihood, AIC, and BIC are sums of those ' +
+    'probabilities\' logarithms. They compare fairly across the candidates here, but not with a fit ' +
+    'of values recorded exactly. Tools that fit each value exactly as recorded, such as Arena\'s Input ' +
+    'Analyzer or R\'s <span class="mono">fitdistr</span> and <span class="mono">ks.test</span>, report ' +
+    'different estimates and test statistics for these data; choose <strong>recorded exactly</strong> ' +
+    'under <strong>Values were</strong> to match them.';
+  var bot = IA.fitLo(f), top = IA.fitQuantile(f)(1), ends = [];
+  if (Number.isFinite(bot) && bot > ST.s.min)
+    ends.push('starts at ' + fmt(bot, 4) + ', above your smallest value of ' + IA.num(ST.s.min));
+  if (Number.isFinite(top) && top < ST.s.max)
+    ends.push('ends at ' + fmt(top, 4) + ', below your largest value of ' + IA.num(ST.s.max));
+  if (ends.length)
+    out += ' The model ' + ends.join(' and ') + '. That is no contradiction: each recorded value stands for ' +
+      'a range, and the model reaches into ' + (ends.length > 1 ? 'both end ranges' : 'that range') + '.';
+  return out + '</div>';
 }
 /* How much of a continuous model falls below zero when none of the data
    do. A simulation drawing from it would produce negative values about that
@@ -11870,7 +12594,7 @@ function bootWorkerSource() {
     '  var dist = DISTS[m.distKey];\n' +
     '  var fit = { dist: dist, p: m.p, shift: m.shift, k: m.k, ll: 0, reflect: m.reflect,\n' +
     '              fixed: m.fixed, shiftHeld: m.fixedShift !== null, atBound: false,\n' +
-    '              floor0: m.floor0, start1: m.start1 };\n' +
+    '              floor0: m.floor0, start1: m.start1, rec: m.rec };\n' +
     '  var run = bootstrapRun(fit, m.n, m.B, m.seed, m.useShift, m.obsD, m.obsA, m.fixed,\n' +
     '                         m.obsChi, m.binK, m.fixedShift, m.reflect, m.perValue, m.grid);\n' +
     '  var CHUNK = Math.max(10, Math.round(m.B / 60));\n' +
@@ -11893,7 +12617,10 @@ function bootWorkerSource() {
    twice as often (a gamma of shape 2) at about 0.6. */
 var COARSE_STEP_SD = 0.5;
 function bootGrid(f) {
-  return f.dist.kind === 'discrete' ? null : IA.recordingGrid(ST.s.sorted);
+  if (f.dist.kind === 'discrete') return null;
+  var g = IA.recordingGrid(ST.s.sorted);
+  if (g) g.kind = f.rec ? f.rec.kind : 'nearest';
+  return g;
 }
 
 function startBootstrap() {
@@ -11904,9 +12631,9 @@ function startBootstrap() {
   $('seed').value = String(seed);
   ST.B = Number($('boot-b').value);
 
-  var f = r.fit, F = IA.fitCdf(f);
+  var f = r.fit, F = IA.gofCdf(f);
   var obsD = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f)).D;
-  var obsA = IA.adStat(ST.s.sorted, F);
+  var obsA = IA.adStatFit(ST.s.sorted, f);
   /* The chi-square is bootstrapped on the same bin COUNT the reader chose,
      with each resample binned on its own range. */
   var obsChi = IA.chiSquareGOF(ST.x, f, ST.bins).stat;
@@ -11922,7 +12649,7 @@ function startBootstrap() {
               obsD: obsD, obsA: obsA, fixed: f.fixed || null,
               obsChi: obsChi, binK: ST.bins.k, perValue: !!ST.bins.perValue,
               fixedShift: f.shiftHeld ? f.shift : null, reflect: !!f.reflect,
-              floor0: !!f.floor0, start1: !!f.start1,
+              floor0: !!f.floor0, start1: !!f.start1, rec: f.rec || null,
               grid: bootGrid(f) };
 
   function finish(res) {
@@ -11970,7 +12697,7 @@ function startBootstrap() {
 function runOnMainThread(msg, obsD, obsA, finish) {
   var fit = { dist: IA.DISTS[msg.distKey], p: msg.p, shift: msg.shift, k: msg.k, ll: 0, reflect: msg.reflect,
               fixed: msg.fixed, shiftHeld: msg.fixedShift !== null, atBound: false,
-              floor0: msg.floor0, start1: msg.start1 };
+              floor0: msg.floor0, start1: msg.start1, rec: msg.rec };
   var run = IA.bootstrapRun(fit, msg.n, msg.B, msg.seed, msg.useShift, obsD, obsA, msg.fixed,
                             msg.obsChi, msg.binK, msg.fixedShift, msg.reflect, msg.perValue, msg.grid);
   var chunk = Math.max(5, Math.round(msg.B / 80));
@@ -12007,7 +12734,7 @@ function fitSignature() {
   if (!r) return null;
   return [r.key, ST.shift, !!r.fit.reflect, ST.s.n, ST.seed, ST.B, r.fit.p.join(','),
           JSON.stringify(r.fit.fixed || null), r.fit.shiftHeld ? r.fit.shift : 'est',
-          ST.floor0 ? 'f' : '', ST.start1 ? 's' : '',
+          ST.floor0 ? 'f' : '', ST.start1 ? 's' : '', r.fit.rec ? r.fit.rec.kind : '',
           ST.bins ? ST.bins.k : 0].join('|');
 }
 
@@ -12057,9 +12784,9 @@ function renderGof() {
       'only confirm that the data agree with themselves.</div>';
     return;
   }
-  var f = r.fit, F = IA.fitCdf(f), n = ST.s.n;
+  var f = r.fit, F = IA.gofCdf(f), n = ST.s.n;
   var D = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f)).D;
-  var A = IA.adStat(ST.s.sorted, F);
+  var A = IA.adStatFit(ST.s.sorted, f);
   var pDtab = IA.ksPvalueClassical(D, n);
   var pAtab = IA.adPvalueClassical(A, n);
   var tableCrit = IA.ksTableCritical(n);
@@ -12090,7 +12817,9 @@ function renderGof() {
   /* The tie caveat has to come before the numbers, not after them. */
   var tieGrid = bootGrid(f);
   var stepSd = tieGrid && ST.s.sd > 0 ? tieGrid.h / ST.s.sd : 0;
-  var coarse = stepSd > COARSE_STEP_SD;
+  /* A fit to recorded ranges, bootstrapped the same way, held its nominal
+     5% at a step of 0.6 of the SD, and so only an exact fit is warned. */
+  var coarse = stepSd > COARSE_STEP_SD && !f.rec;
   var tied = ST.s.nUnique < ST.s.n * 0.5 || f.dist.kind === 'discrete' || coarse;
   var tieNote = tied
     ? '<div class="note quiet" style="margin-top:8px"><strong>' + (f.dist.kind === 'discrete'
@@ -12105,15 +12834,21 @@ function renderGof() {
         : 'Both statistics are built for continuous data with no ties, and ties push them up; ' +
           'neither the usual rules of thumb nor the table column applies here. ' +
           (tieGrid
-            ? 'The bootstrap column is still the one to read: each resample is rounded to the ' +
-              'nearest <span class="mono">' + IA.num(tieGrid.h) + '</span>, the step your data are ' +
+            ? 'The bootstrap column is still the one to read: each resample is rounded ' +
+              (tieGrid.kind === 'down' ? 'down to a multiple of' : tieGrid.kind === 'up' ? 'up to a multiple of' : 'to the nearest') +
+              ' <span class="mono">' + IA.num(tieGrid.h) + '</span>, the step your data are ' +
               'recorded to, before it is refitted, and so it has ties like yours.' +
               (coarse
                 ? ' <strong>That step is ' + fmt(stepSd, 2) + ' of your data\'s standard deviation, ' +
                   'which is coarse.</strong> At that coarseness, the bootstrap p-values are only ' +
                   'approximate, and a correct model can be rejected more often than the stated ' +
                   'level: about twice as often at a step of 0.6 of the standard deviation, in a ' +
-                  'simulation check. Data recorded to a finer step would remove the problem.'
+                  'simulation check. Fitting the ranges your values stand for, set under ' +
+                  '<strong>Values were</strong> in section 2, removes the problem.'
+                : '') +
+              (f.rec
+                ? ' With the fit made to the ranges your values stand for, both statistics compare your recorded values with the ' +
+                  'distribution of a recorded value, which steps where your data step.'
                 : '')
             : 'The bootstrap column cannot correct for this. Your values do not sit on a decimal ' +
               'step, and so its resamples are drawn at full precision and are not tied the way your ' +
@@ -12366,7 +13101,7 @@ function drawCDF() {
   /* Mark D where it occurs: the number in the panel above becomes a place
      on the picture, which is what tells you whether the misfit is in the
      body or in a tail. */
-  var ks = IA.ksStat(ST.s.sorted, F, IA.fitAtom(f));
+  var ks = IA.ksStat(ST.s.sorted, IA.gofCdf(f), IA.fitAtom(f));
   /* A fit that matches every step, as the empirical does, has no gap to
      mark, and the caption says so instead. */
   if (ks.D === 0) {
@@ -12381,14 +13116,19 @@ function drawCDF() {
       heldCaption(stepNote + noGap, stepNote + noGap);
     return;
   }
-  var Fat = F(ks.at);
+  /* For a fit to recorded ranges, the gap after a recorded value's step is
+     against F at the top of its range, and the gap before it against F at
+     the bottom, and so it is drawn there, on the curve. */
+  var gx = ks.at;
+  if (f.rec) gx = ks.at + IA.recLow(f.rec) + (ks.sign > 0 ? f.rec.h : 0);
+  var Fat = F(gx);
   var eLo = 0, eHi = 0;
   for (i = 0; i < n; i++) {
     if (ST.s.sorted[i] < ks.at) { eLo = (i + 1) / n; }
     if (ST.s.sorted[i] <= ks.at) { eHi = (i + 1) / n; }
   }
   var y1 = ks.sign > 0 ? eHi : eLo, y2 = Fat;
-  P.seg(ks.at, y1, ks.at, y2, 'var(--alt)', 3);
+  P.seg(gx, y1, gx, y2, 'var(--alt)', 3);
 
   /* The D label goes in the first of several spots around the gap that
      stays inside the frame, off the legend, and 4 pixels clear of both
@@ -13481,9 +14221,9 @@ function csvGof() {
   rows.push(['distribution', r.dist.name]);
   rows.push([]);
   var chi = r.noCriteria ? null : IA.chiSquareGOF(ST.x, r.fit, ST.bins);
-  var F = IA.fitCdf(r.fit);
+  var F = IA.gofCdf(r.fit);
   var D = IA.ksStat(ST.s.sorted, F, IA.fitAtom(r.fit)).D;
-  var A = IA.adStat(ST.s.sorted, F);
+  var A = IA.adStatFit(ST.s.sorted, r.fit);
   var have = ST.gof && ST.gofFor === fitSignature();
   var res = have ? ST.gof.res : null;
   var n = ST.s.n;
@@ -17043,6 +17783,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('johnson-chk').addEventListener('change', function () { ST.johnson = this.checked; refitAll(); });
   $('floor-chk').addEventListener('change', function () { ST.floor0 = this.checked; refitAll(); });
   $('start1-chk').addEventListener('change', function () { ST.start1 = this.checked; refitAll(); });
+  $('rec-pick').addEventListener('change', function () { ST.recKind = this.value; refitAll(); });
   $('rank-by').addEventListener('change', function () {
     ST.rankBy = this.value;
     if (!ST.userPicked) { ST.pick = IA.bestBy(ST.rows, ST.rankBy) || ST.pick; }
@@ -17072,8 +17813,9 @@ document.addEventListener('DOMContentLoaded', function () {
     ST.bins = binsFor(ST.binK);
     /* Square error is a function of the binning, and so the ranking is
        recomputed too -- and if the reader is sorting by square error, the
-       order on screen can change under the slider. That is the lesson. */
-    ST.rows = IA.rankAll(ST.x, activeKeys(), ST.shift, ST.bins, ST.holds, ST.holdShift, ST.reflect, fitOpts());
+       order on screen can change under the slider. That is the lesson. The
+       fits themselves do not depend on the bins and are kept. */
+    IA.rescoreBins(ST.rows, ST.x, ST.bins);
     if (!ST.userPicked) ST.pick = IA.bestBy(ST.rows, ST.rankBy) || firstOk();
     /* The chi-square null was built on the old bin count, and so it no longer
        describes what is on screen. */

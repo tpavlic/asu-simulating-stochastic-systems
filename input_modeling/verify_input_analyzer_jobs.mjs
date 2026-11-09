@@ -230,20 +230,24 @@ export const JOBS = {
      nearest whole number, and the fit is the same family, shifted. With
      `grid` the resamples are rounded the way the data were; without it they
      are drawn at full precision, as before the fix. */
-  roundCalib(IA, { n, B, from, to, grid, key = 'gamma', truth = [2, 2] }) {
+  /* With rec, each sample is fitted to its recorded ranges (rounded to the
+     nearest step), and so is every bootstrap resample. */
+  roundCalib(IA, { n, B, from, to, grid, key = 'gamma', truth = [2, 2], rec = false }) {
     const d = IA.DISTS[key];
     let rejD = 0, rejA = 0, used = 0, degenerate = 0;
     for (let rep = from; rep < to; rep++) {
       const u = IA.MRG32k3a(530000 + rep), x = [];
       for (let i = 0; i < n; i++) x.push(Math.round(5 + d.sample(u, truth)));
       x.sort((a, b) => a - b);
-      const f = IA.fitDist(d, x, true, false);
+      const opts = rec ? { rec: IA.recordingRec(IA.summarize(x), 'nearest') } : undefined;
+      const f = IA.fitDist(d, x, true, false, null, null, false, opts);
       if (!f.ok) continue;
       if (f.degenerate) degenerate++;
-      const F = IA.fitCdf(f);
+      const F = IA.gofCdf(f);
+      const g = grid ? IA.recordingGrid(x) : null;
+      if (g) g.kind = 'nearest';
       const run = IA.bootstrapRun(f, n, B, 540000 + rep, true, IA.ksStat(x, F, IA.fitAtom(f)).D,
-                                  IA.adStat(x, F), null, NaN, 0, null, false, false,
-                                  grid ? IA.recordingGrid(x) : null);
+                                  IA.adStatFit(x, f), null, NaN, 0, null, false, false, g);
       run.step(B);
       const res = run.result();
       used++;
